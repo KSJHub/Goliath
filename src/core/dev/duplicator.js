@@ -204,7 +204,7 @@ function snapshot(guild, selectedOptions = [...ACTIVE_OPTIONS]) {
   const emojis = selected.has('emojis') ? guild.emojis.cache.map((emoji) => ({ id: emoji.id, name: emoji.name, animated: emoji.animated, url: typeof emoji.imageURL === 'function' ? emoji.imageURL({ extension: emoji.animated ? 'gif' : 'png' }) : emoji.url })) : [];
   const settings = selected.has('serverSettings') ? { name: guild.name, description: guild.description || null, verificationLevel: guild.verificationLevel, explicitContentFilter: guild.explicitContentFilter, defaultMessageNotifications: guild.defaultMessageNotifications, afkTimeout: guild.afkTimeout, iconURL: guild.iconURL({ extension: 'png', size: 1024 }) || null, bannerURL: guild.bannerURL({ extension: 'png', size: 2048 }) || null, splashURL: guild.splashURL({ extension: 'png', size: 2048 }) || null } : null;
   const future = {};
-  for (const key of FUTURE_OPTIONS) if (selected.has(key)) future[key] = { requested: true, supported: false, reason: 'Reserved for Duplicator v2 API expansion.' };
+  for (const key of FUTURE_OPTIONS) if (selected.has(key)) future[key] = { requested: true, supported: false, reason: 'Reserved for Duplicator API expansion.' };
   return { sourceGuild: { id: guild.id, name: guild.name }, options: [...selected], settings, roles, channels, emojis, future, stats: { roles: roles.length, categories: channels.filter((channel) => channel.type === ChannelType.GuildCategory).length, channels: channels.filter((channel) => channel.type !== ChannelType.GuildCategory).length, permissionOverwrites: channels.reduce((total, channel) => total + (channel.permissionOverwrites?.length || 0), 0), emojis: emojis.length } };
 }
 
@@ -525,7 +525,7 @@ async function analyse(interaction) {
   const destChannels = new Set(destinationGuild.channels.cache.map((channel) => `${channel.type}:${channel.name.toLowerCase()}`));
   const destEmojis = new Set(destinationGuild.emojis.cache.map((emoji) => emoji.name.toLowerCase()));
   const permissionLines = REQUIRED_BOT_PERMISSIONS.map(([name, bit]) => `${destinationGuild.members.me?.permissions?.has(bit) ? '✅' : '❌'} ${name}`).join('\n');
-  return interaction.editReply({ embeds: [embed('🔎 Duplicator v2 Analyse', `**Source:** ${sourceGuild.name}\n**Destination:** ${destinationGuild.name}\n\nMissing roles: \`${snap.roles.filter((role) => !destRoles.has(role.name.toLowerCase())).length}\`\nMissing channels: \`${snap.channels.filter((channel) => !destChannels.has(`${channel.type}:${channel.name.toLowerCase()}`)).length}\`\nMissing emojis: \`${snap.emojis.filter((emoji) => !destEmojis.has(emoji.name.toLowerCase())).length}\`\n\n**Bot permissions:**\n${permissionLines}\n\n**Hierarchy:** ${hierarchyWarning(destinationGuild) ? `⚠️ ${hierarchyWarning(destinationGuild)}` : '✅ Goliath role has usable hierarchy.'}`, 0x22c55e)] });
+  return interaction.editReply({ embeds: [embed('🔎 Duplicator Analyse', `**Source:** ${sourceGuild.name}\n**Destination:** ${destinationGuild.name}\n\nMissing roles: \`${snap.roles.filter((role) => !destRoles.has(role.name.toLowerCase())).length}\`\nMissing channels: \`${snap.channels.filter((channel) => !destChannels.has(`${channel.type}:${channel.name.toLowerCase()}`)).length}\`\nMissing emojis: \`${snap.emojis.filter((emoji) => !destEmojis.has(emoji.name.toLowerCase())).length}\`\n\n**Bot permissions:**\n${permissionLines}\n\n**Hierarchy:** ${hierarchyWarning(destinationGuild) ? `⚠️ ${hierarchyWarning(destinationGuild)}` : '✅ Goliath role has usable hierarchy.'}`, 0x22c55e)] });
 }
 
 async function run(interaction) {

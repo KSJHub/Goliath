@@ -28,6 +28,42 @@ const { requirePlanLimit } = require('../middleware/requirePlanLimit');
 
 const router = express.Router();
 
+const MODULE_CATALOG = Object.freeze({
+  verification: {
+    key: 'verification',
+    name: 'Verification',
+    icon: '✅',
+    category: 'Security',
+    summary: 'Verify members, assign roles and deploy a custom verification panel.',
+    apiBase: '/api/verification',
+    dashboardPath: '/modules/verification',
+    maturity: 'in_progress',
+    configurable: true,
+  },
+  autoRoles: {
+    key: 'autoRoles',
+    name: 'Auto Roles',
+    icon: '🤖',
+    category: 'Automation',
+    summary: 'Automatically assign roles to members and bots when they join.',
+    apiBase: '/api/modules/:guildId/auto-roles',
+    dashboardPath: '/modules/auto-roles',
+    maturity: 'in_progress',
+    configurable: true,
+  },
+  embedStudio: {
+    key: 'embedStudio',
+    name: 'Embed Studio',
+    icon: '🖼️',
+    category: 'Utilities',
+    summary: 'Create, save and deploy reusable embed templates.',
+    apiBase: '/api/modules/:guildId/embed-studio',
+    dashboardPath: '/modules/embed-studio',
+    maturity: 'in_progress',
+    configurable: true,
+  },
+});
+
 function success(res, payload = {}) {
   return res.json({ success: true, ...payload });
 }
@@ -92,16 +128,24 @@ function countEmbedPresetsForLimit(req) {
 
 function normalizeModuleMap(modules = {}) {
   const output = {};
-  if (!modules || typeof modules !== 'object' || Array.isArray(modules)) return output;
-
-  for (const [key, value] of Object.entries(modules)) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      output[key] = { ...value, enabled: value.enabled !== false };
-    } else if (typeof value === 'boolean') {
-      output[key] = { enabled: value !== false };
-    } else {
-      output[key] = { enabled: true };
+  if (modules && typeof modules === 'object' && !Array.isArray(modules)) {
+    for (const [key, value] of Object.entries(modules)) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        output[key] = { ...value, enabled: value.enabled !== false };
+      } else if (typeof value === 'boolean') {
+        output[key] = { enabled: value !== false };
+      } else {
+        output[key] = { enabled: true };
+      }
     }
+  }
+
+  for (const [key, meta] of Object.entries(MODULE_CATALOG)) {
+    output[key] = {
+      ...(output[key] || {}),
+      enabled: output[key]?.enabled === undefined ? false : output[key].enabled !== false,
+      meta,
+    };
   }
 
   return output;
@@ -177,12 +221,37 @@ function getEmbedStudioPayload(guildId) {
   };
 }
 
+function getVerificationPayload(guildId) {
+  const status = verificationManager.getVerificationStatus(guildId);
+  const section = verificationStore.getVerificationSection(guildId);
+  const panels = Object.values(section.panels || {});
+  return {
+    guildId,
+    config: section,
+    overview: {
+      enabled: status.enabled === true,
+      panels: panels.length,
+      deployedPanels: panels.filter((panel) => panel?.channelId && panel?.messageId).length,
+      analytics: section.analytics || {},
+      hasTemplate: Boolean(section.panelTemplate),
+    },
+  };
+}
+
 router.get('/:guildId', (req, res) => {
   try {
     const guildId = getGuildId(req);
     const data = getGuildData(guildId) || {};
     const modules = normalizeModuleMap(data.modules || {});
-    return success(res, { guildId, modules, summary: { total: Object.keys(modules).length, enabled: Object.values(modules).filter((module) => module?.enabled !== false).length } });
+    return success(res, {
+      guildId,
+      catalog: MODULE_CATALOG,
+      modules,
+      summary: {
+        total: Object.keys(modules).length,
+        enabled: Object.values(modules).filter((module) => module?.enabled !== false).length,
+      },
+    });
   } catch (error) {
     return failure(res, error, 400);
   }
@@ -196,6 +265,39 @@ router.patch('/:guildId/:moduleKey/enabled', (req, res) => {
     setModuleEnabled(guildId, moduleKey, enabled);
     const modules = normalizeModuleMap(getGuildSection(guildId, 'modules', {}));
     return success(res, { guildId, moduleKey, enabled, modules });
+  } catch (error) {
+    return failure(res, error, 400);
+  }
+});
+
+router.get('/:guildId/verification', (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    return success(res, getVerificationPayload(guildId));
+  } catch (error) {
+    return failure(res, error, 400);
+  }
+});
+
+router.patch('/:guildId/verification/enabled', (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const enabled = req.body?.enabled === true;
+    verificationManager.setVerificationEnabled(guildId, enabled, { actorId: req.body?.actorId });
+    setModuleEnabled(guildId, 'verification', enabled);
+    return success(res, { guildId, enabled, ...getVerificationPayload(guildId) });
+  } catch (error) {
+    return failure(res, error, 400);
+  }
+});
+
+router.patch('/:guildId/verification/settings', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    await guardVerificationRoles(req, guildId, req.body || {});
+    const settings = req.body?.settings || req.body || {};
+    const config = verificationManager.updateVerificationSettings(guildId, settings, { actorId: req.body?.actorId });
+    return success(res, { guildId, config, ...getVerificationPayload(guildId) });
   } catch (error) {
     return failure(res, error, 400);
   }
