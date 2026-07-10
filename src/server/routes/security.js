@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const guildManager = require('../../core/guild/guildManager');
-const notifications = require('../../modules/notifications/notificationStore');
+const notifications = require('../../core/notifications/notificationStore');
 const { requireEntitlement } = require('../middleware/requireEntitlement');
 
 function getGuildId(req) {
@@ -179,39 +179,9 @@ router.get('/:guildId/advanced', requireEntitlement('security.advanced'), async 
   try {
     const guildId = getGuildId(req);
     const overview = buildOverview(guildId);
-    notifySecurity(guildId, overview);
-    const security = guildManager.getSecurityConfig(guildId) || {};
-    const incidents = overview.incidents.recent || [];
-
-    return res.json({
-      success: true,
-      guildId,
-      advanced: {
-        enabled: true,
-        featureKey: 'security.advanced',
-        threatLevel: overview.threatLevel,
-        protectionScore: overview.protectionScore,
-        protectionStatus: overview.protectionStatus,
-        incidents,
-        trends: {
-          totalIncidents: overview.incidents.total,
-          criticalIncidents: overview.incidents.critical,
-          highIncidents: overview.incidents.high,
-          webhookIncidents: overview.incidents.webhook,
-          latestIncidentAt: incidents[0]?.createdAt || incidents[0]?.timestamp || null,
-        },
-        auditViews: {
-          lockdown: overview.lockdown,
-          quarantine: overview.quarantine,
-          webhooks: security.webhooks || {},
-          ownerMonitoring: security.ownerMonitoring || {},
-          protectionModules: overview.protectionModules,
-        },
-      },
-    });
+    return res.json({ ...overview, advanced: true });
   } catch (error) {
-    console.error('[Security Routes] advanced failed:', error);
-    return res.status(500).json({ success: false, error: error.message || 'Failed to load advanced security.' });
+    return res.status(500).json({ ok: false, success: false, error: error.message });
   }
 });
 

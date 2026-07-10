@@ -4,6 +4,7 @@ const embedTemplateManager = require('../../modules/embed/embedTemplateManager')
 const guildManager = require('../../core/guild/guildManager');
 const autoRoleManager = require('../../modules/autoRoles/autoRoleManager');
 const statsManager = require('../../modules/stats/statsManager');
+const verificationManager = require('../../modules/verification/verificationManager');
 
 /* ---------------- SHARED HELPERS ---------------- */
 
@@ -137,23 +138,17 @@ async function sendPublicMemberEmbed(member, type) {
     const guild = member.guild;
     const sharedTemplateData = getSharedTemplateMessageData(member, type);
     const defaultPreset = getDefaultPresetData(guild.id, type);
-
     const sectionConfig = guildManager.getGuildSection(guild.id, type, null) || guildManager.getGuildSection(guild.id, `${type}Settings`, null) || {};
-
     const messageData = {
       ...(TEMPLATES[type] || {}),
       ...(sectionConfig || {}),
       ...(defaultPreset || {}),
       ...(sharedTemplateData || {}),
     };
-
     const channelId = messageData.channelId || sectionConfig.channelId || guildManager.getGuildSection(guild.id, `${type}Settings`, {})?.channelId || guildManager.getGuildSection(guild.id, type, {})?.channelId || null;
-
     if (!channelId) return;
-
     const channel = guild.channels.cache.get(channelId) || (await guild.channels.fetch(channelId).catch(() => null));
     if (!channel?.isTextBased()) return;
-
     const fakeInteraction = { guild, guildId: guild.id, user: member.user, member };
     const content = messageData.content || (messageData.allowUserPing ? `<@${member.user.id}>` : '');
 
@@ -240,7 +235,6 @@ function buildAdminRemovalLog(member, removal) {
   const auditLog = removal?.auditLog || null;
   const reason = auditLog?.reason || removal?.reasonLabel || 'No reason provided';
   const moderator = auditLog?.executor || null;
-
   const embed = new EmbedBuilder()
     .setColor(removal.color || '#ED4245')
     .setTitle(removal.title || '🚪 Member Removed')
@@ -258,7 +252,6 @@ function buildAdminRemovalLog(member, removal) {
     )
     .setFooter({ text: 'Admin Log' })
     .setTimestamp();
-
   if (moderator) embed.addFields({ name: 'Moderator', value: formatUser(moderator), inline: true });
   return embed;
 }
@@ -297,14 +290,31 @@ module.exports = [
     async execute(member) {
       await statsManager.handleGuildMemberAdd(member);
 
+      const verificationResult = await verificationManager.handleMemberJoin(member).catch((error) => {
+        console.error('[verification] Failed to process member join:', error);
+        return { assigned: [] };
+      });
+
       const addedRoles = (await autoRoleManager.applyAutoRoles(member).catch((error) => {
         console.error('[autoRoles] Failed to apply auto roles:', error);
         return [];
       })) || [];
 
+      for (const role of verificationResult?.assigned || []) {
+        if (!addedRoles.some((addedRole) => addedRole.id === role.id)) addedRoles.push(role);
+      }
+
       await sendPublicMemberEmbed(member, 'welcome');
       await sendPublicMemberEmbed(member, 'dmWelcome');
       await sendAdminMemberJoinLog(member, addedRoles);
+    },
+  },
+  {
+    name: 'guildMemberUpdate',
+    async execute(oldMember, newMember) {
+      await verificationManager.handleMemberUpdate(oldMember, newMember).catch((error) => {
+        console.error('[verification] Failed to process member update:', error);
+      });
     },
   },
   {

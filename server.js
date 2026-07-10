@@ -251,6 +251,7 @@ client.once('ready', () => {
   safeLoad('tickets startup', () => require('./src/modules/tickets/ticketStartup').recoverTickets(client));
   safeLoad('roles startup', () => require('./src/modules/roles/rolesStartup').initializeRoles(client));
   safeLoad('translation startup', () => require('./src/modules/translation/translationStartup').recoverTranslationPanels(client));
+  safeLoad('verification startup', () => require('./src/modules/verification/verificationStartup').startupVerification(client));
   safeLoad('giveaways startup', () => require('./src/modules/giveaways/giveawayScheduler').start(client));
   backupScheduler.startBackupScheduler?.();
 });

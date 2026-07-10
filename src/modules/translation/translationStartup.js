@@ -1,7 +1,5 @@
 'use strict';
 
-// src/modules/translation/translationStartup.js
-
 const translationThreadManager = require('./translationThreadManager');
 
 async function startupTranslation(client) {
@@ -29,4 +27,5 @@ async function startupTranslation(client) {
 
 module.exports = {
   startupTranslation,
+  recoverTranslationPanels: startupTranslation,
 };

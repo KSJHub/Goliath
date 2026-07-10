@@ -1,11 +1,5 @@
 'use strict';
 
-/**
- * GOLIATH TICKET STARTUP
- *
- * Runs ticket recovery/bootstrap checks when the bot starts.
- */
-
 const ticketRecovery = require('./ticketRecovery');
 
 async function startupTickets(client) {
@@ -16,10 +10,7 @@ async function startupTickets(client) {
     };
   }
 
-  const results =
-    await ticketRecovery.recoverAllClientGuildTickets(
-      client
-    );
+  const results = await ticketRecovery.recoverAllClientGuildTickets(client);
 
   const summary = {
     ok: true,
@@ -33,8 +24,7 @@ async function startupTickets(client) {
   for (const result of results) {
     summary.totalTickets += result.totalTickets || 0;
     summary.totalActiveTickets += result.activeTickets || 0;
-    summary.totalMissingChannels +=
-      result.missingChannels?.length || 0;
+    summary.totalMissingChannels += result.missingChannels?.length || 0;
   }
 
   console.log(
@@ -46,4 +36,5 @@ async function startupTickets(client) {
 
 module.exports = {
   startupTickets,
+  recoverTickets: startupTickets,
 };

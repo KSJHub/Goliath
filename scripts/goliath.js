@@ -283,10 +283,17 @@ function auditModules() {
     'deployVerificationPanel',
     'refreshVerificationPanel',
     'deleteVerificationPanel',
+    'getPanelHealth',
     'buildHealthReport',
     'verifyMember',
     'handleVerificationInteraction',
   ], errors);
+
+  requireExport('src/modules/verification/verificationStartup.js', [
+    'startupVerification',
+  ], errors);
+
+  requireExport('src/server/routes/verification.js', [], errors);
 
   requireExport('src/core/admin/functions/verificationAdminPanel.js', [
     'buildVerificationAdminPanel',

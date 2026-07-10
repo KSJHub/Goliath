@@ -4,7 +4,7 @@ const path = require('path');
 const router = express.Router();
 
 const { readJsonSafe } = require('../../core/guild/fileStore');
-const notifications = require('../../modules/notifications/notificationStore');
+const notifications = require('../../core/notifications/notificationStore');
 
 const CASES_PATH = path.join(__dirname, '..', 'data', 'modCaseDetails.json');
 const DISCORD_API = 'https://discord.com/api/v10';
@@ -237,396 +237,65 @@ async function fetchBotProfile(req) {
   };
 
   cachedBotProfileExpiresAt = now + BOT_PROFILE_CACHE_TTL_MS;
-
   return cachedBotProfile;
 }
 
-function buildGuildPayloadFromClientGuild(guild) {
-  if (!guild) return null;
-
-  const iconUrl = buildGuildIconUrl(guild.id, guild.icon);
-  const memberCount = Number(guild.memberCount || 0);
-
-  const cachedMembers = guild.members?.cache;
-  const exactMembersAvailable = Boolean(cachedMembers?.size);
-
-  const bots = exactMembersAvailable
-    ? cachedMembers.filter((member) => Boolean(member?.user?.bot)).size
-    : 0;
-
-  const humans = exactMembersAvailable
-    ? Math.max(memberCount - bots, 0)
-    : memberCount;
-
-  return {
-    id: guild.id,
-    name: guild.name,
-    icon: guild.icon || null,
-    iconUrl,
-    iconURL: iconUrl,
-    memberCount,
-    members: memberCount,
-    humans,
-    bots,
-    exactMembersAvailable,
-    connected: true,
-    status: 'connected',
-  };
-}
-
-async function fetchAllGuildMembers(guildId) {
-  const members = [];
-  let after = '0';
-
-  for (let page = 0; page < 20; page += 1) {
-    const batch = await discordBotRequest(
-      `/guilds/${guildId}/members?limit=1000&after=${after}`
-    );
-
-    if (!Array.isArray(batch) || batch.length === 0) break;
-
-    members.push(...batch);
-
-    if (batch.length < 1000) break;
-
-    after = batch[batch.length - 1]?.user?.id || after;
-  }
-
-  return members;
-}
-
-async function fetchGuildStatsFromToken(guildId) {
-  const guild = await discordBotRequest(`/guilds/${guildId}?with_counts=true`);
-
-  let total = Number(
-    guild.approximate_member_count ||
-      guild.member_count ||
-      guild.memberCount ||
-      0
-  );
-
-  let humans = total;
-  let bots = 0;
-  let exactMembersAvailable = false;
-
-  try {
-    const members = await fetchAllGuildMembers(guildId);
-
-    if (members.length > 0) {
-      exactMembersAvailable = true;
-      total = members.length;
-      bots = members.filter((member) => Boolean(member?.user?.bot)).length;
-      humans = members.filter((member) => !member?.user?.bot).length;
-    }
-  } catch (error) {
-    console.warn(
-      `Could not fetch exact members for guild ${guildId}; using approximate count. ${error.message}`
-    );
-  }
-
-  const iconUrl = buildGuildIconUrl(guild.id, guild.icon);
-
-  return {
-    id: guild.id,
-    name: guild.name,
-    icon: guild.icon || null,
-    iconUrl,
-    iconURL: iconUrl,
-    memberCount: total,
-    members: total,
-    humans,
-    bots,
-    exactMembersAvailable,
-    connected: true,
-    status: 'connected',
-  };
-}
-
 async function fetchGuildStats(req, guildId) {
-  const cacheKey = String(guildId);
-  const cached = getCached(guildStatsCache, cacheKey);
-
-  if (cached) {
-    return cached;
-  }
+  const cached = getCached(guildStatsCache, guildId);
+  if (cached) return cached;
 
   const client = getDiscordClient(req);
-  const clientGuild = client?.guilds?.cache?.get(String(guildId));
+  const guild = client?.guilds?.cache?.get(guildId) || await client?.guilds?.fetch?.(guildId).catch(() => null);
 
-  let data = buildGuildPayloadFromClientGuild(clientGuild);
-
-  if (!data || data.memberCount === 0) {
-    data = await fetchGuildStatsFromToken(guildId);
+  if (!guild) {
+    const missing = { connected: false, id: guildId };
+    setCached(guildStatsCache, guildId, missing, GUILD_STATS_CACHE_TTL_MS);
+    return missing;
   }
 
-  setCached(guildStatsCache, cacheKey, data, GUILD_STATS_CACHE_TTL_MS);
+  const data = {
+    connected: true,
+    id: guild.id,
+    name: guild.name,
+    iconUrl: guild.iconURL?.({ extension: 'png', size: 256 }) || buildGuildIconUrl(guild.id, guild.icon),
+    memberCount: guild.memberCount || 0,
+    channels: guild.channels?.cache?.size || 0,
+    roles: guild.roles?.cache?.size || 0,
+  };
 
+  setCached(guildStatsCache, guildId, data, GUILD_STATS_CACHE_TTL_MS);
   return data;
 }
 
-function getCasesData() {
-  return readJsonSafe(CASES_PATH, {});
-}
-
-function normalizeGuildCases(guildCases, guildId) {
-  if (!guildCases || typeof guildCases !== 'object' || Array.isArray(guildCases)) {
-    return [];
-  }
-
-  return Object.values(guildCases)
-    .filter((entry) => entry && typeof entry === 'object')
-    .map((entry) => ({
-      ...entry,
-      guildId: entry.guildId || guildId,
-    }))
-    .sort((a, b) => Number(b.caseNumber || 0) - Number(a.caseNumber || 0));
-}
-
-function getGuildWarningsFromCases(cases) {
-  return cases.filter(
-    (entry) => String(entry.action || '').toLowerCase() === 'warn'
-  );
-}
-
-function buildGuildFallback(guildId) {
-  return {
-    id: guildId,
-    name: null,
-    icon: null,
-    iconUrl: '',
-    iconURL: '',
-    memberCount: 0,
-    members: 0,
-    humans: 0,
-    bots: 0,
-    exactMembersAvailable: false,
-    connected: false,
-    status: 'missing',
-  };
-}
-
-function buildGuildMap(guildId, guildPayload) {
-  if (!guildId || !guildPayload) return {};
-
-  return {
-    [guildId]: {
-      connected: guildPayload.connected,
-      status: guildPayload.status,
-      memberCount: guildPayload.memberCount,
-      members: guildPayload.memberCount,
-      humans: guildPayload.humans,
-      bots: guildPayload.bots,
-      name: guildPayload.name,
-      id: guildPayload.id,
-      icon: guildPayload.icon,
-      iconUrl: guildPayload.iconUrl,
-      iconURL: guildPayload.iconURL,
-      exactMembersAvailable: guildPayload.exactMembersAvailable,
-    },
-  };
-}
-
-async function buildStatusPayload(req, guildId) {
-  let botProfile = emptyBotProfile();
-  let botOnline = false;
-  let statusError = '';
-
+router.get('/bot', async (req, res) => {
   try {
-    botProfile = await fetchBotProfile(req);
-    botOnline = Boolean(botProfile.online);
+    const bot = await fetchBotProfile(req);
+    return res.json({ success: true, bot, ...bot });
   } catch (error) {
-    statusError = error.message;
-    console.error('Bot status check failed', error);
-  }
-
-  let guildPayload = null;
-
-  const memberInfo = {
-    total: 0,
-    humans: 0,
-    bots: 0,
-  };
-
-  if (guildId && botOnline) {
-    try {
-      guildPayload = await fetchGuildStats(req, guildId);
-
-      memberInfo.total = Number(guildPayload.memberCount || 0);
-      memberInfo.humans = Number(guildPayload.humans || 0);
-      memberInfo.bots = Number(guildPayload.bots || 0);
-    } catch (error) {
-      statusError = error.message;
-      console.error('Guild status fetch failed', error);
-      guildPayload = buildGuildFallback(guildId);
-    }
-  }
-
-  return {
-    ok: true,
-    status: botOnline ? 'online' : 'offline',
-
-    backendOnline: true,
-    apiOnline: true,
-    botOnline,
-
-    botLatencyMs: botProfile.latencyMs,
-    latencyMs: botProfile.latencyMs,
-
-    guildId: guildId || null,
-    guild: guildPayload,
-
-    members: memberInfo.total,
-    memberCount: memberInfo.total,
-    humans: memberInfo.humans,
-    bots: memberInfo.bots,
-
-    guilds: buildGuildMap(guildId, guildPayload),
-
-    bot: {
-      ...botProfile,
-      online: botOnline,
-    },
-
-    backend: {
-      online: true,
-      status: 'healthy',
-    },
-
-    api: {
-      online: true,
-      status: 'healthy',
-    },
-
-    error: statusError || null,
-    timestamp: new Date().toISOString(),
-  };
-}
-
-function buildGuildSnapshot(guildId, statusPayload) {
-  const casesData = getCasesData();
-  const guildCases = normalizeGuildCases(casesData[guildId] || {}, guildId);
-  const guildWarnings = getGuildWarningsFromCases(guildCases);
-
-  return {
-    guildId,
-    status: statusPayload,
-    cases: guildCases,
-    warnings: guildWarnings,
-    timestamp: new Date().toISOString(),
-  };
-}
-
-router.get('/', async (req, res) => {
-  try {
-    const guildId = req.query.guildId ? String(req.query.guildId) : null;
-    const payload = await buildStatusPayload(req, guildId);
-    evaluateRuntimeNotifications(guildId, payload);
-
-    return res.json(payload);
-  } catch (error) {
-    console.error('Status route failed', error);
-
-    const guildId = req.query.guildId ? String(req.query.guildId) : null;
-    notifyRuntime(guildId, {
-      level: 'danger',
-      title: 'Runtime status failed',
-      message: error.message || 'Failed to load status.',
-      metadata: { error: error.message || 'Failed to load status.' },
-    }, { fingerprint: `runtime:status-failed:${error.message || 'unknown'}`, windowMs: 10 * 60_000 });
-
-    return res.status(500).json({
-      ok: false,
-      status: 'offline',
-      backendOnline: true,
-      apiOnline: true,
-      botOnline: false,
-      guildId,
-      guild: null,
-      members: 0,
-      memberCount: 0,
-      humans: 0,
-      bots: 0,
-      guilds: {},
-      bot: emptyBotProfile(),
-      backend: {
-        online: true,
-        status: 'healthy',
-      },
-      api: {
-        online: true,
-        status: 'healthy',
-      },
-      error: error.message || 'Failed to load status.',
-      timestamp: new Date().toISOString(),
-    });
+    return res.status(503).json({ success: false, error: error.message, bot: emptyBotProfile() });
   }
 });
 
-router.get('/stream', async (req, res) => {
-  const guildId = req.query.guildId ? String(req.query.guildId) : '';
-
-  if (!guildId) {
-    return res.status(400).json({ error: 'Guild ID is required.' });
+router.get('/overview', async (req, res) => {
+  try {
+    const guildId = String(req.query.guildId || req.session?.guildId || req.session?.selectedGuildId || '').trim();
+    const bot = await fetchBotProfile(req).catch(() => emptyBotProfile());
+    const guild = guildId ? await fetchGuildStats(req, guildId) : null;
+    const payload = {
+      success: true,
+      botOnline: Boolean(bot.online),
+      botLatencyMs: bot.latencyMs,
+      latencyMs: bot.latencyMs,
+      bot,
+      guild,
+      cases: readJsonSafe(CASES_PATH, []),
+      updatedAt: new Date().toISOString(),
+    };
+    evaluateRuntimeNotifications(guildId, payload);
+    return res.json(payload);
+  } catch (error) {
+    return res.status(500).json({ success: false, botOnline: false, error: error.message });
   }
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders?.();
-
-  let closed = false;
-
-  const sendEvent = (eventName, payload) => {
-    if (closed) return;
-
-    res.write(`event: ${eventName}\n`);
-    res.write(`data: ${JSON.stringify(payload)}\n\n`);
-  };
-
-  const sendHeartbeat = () => {
-    if (closed) return;
-    res.write(`: heartbeat ${Date.now()}\n\n`);
-  };
-
-  const pushSnapshot = async () => {
-    try {
-      const statusPayload = await buildStatusPayload(req, guildId);
-      evaluateRuntimeNotifications(guildId, statusPayload);
-      const snapshot = buildGuildSnapshot(guildId, statusPayload);
-
-      sendEvent('status', snapshot.status);
-      sendEvent('cases', snapshot.cases);
-      sendEvent('warnings', snapshot.warnings);
-      sendEvent('snapshot', snapshot);
-    } catch (error) {
-      console.error('SSE status stream failed:', error);
-      notifyRuntime(guildId, {
-        level: 'warning',
-        title: 'Runtime stream warning',
-        message: error.message || 'Failed to refresh live status.',
-        metadata: { error: error.message || 'Failed to refresh live status.' },
-      }, { fingerprint: `runtime:stream:${error.message || 'unknown'}`, windowMs: 10 * 60_000 });
-
-      sendEvent('status', {
-        ok: false,
-        guildId,
-        error: error.message || 'Failed to refresh live status.',
-        timestamp: new Date().toISOString(),
-      });
-    }
-  };
-
-  await pushSnapshot();
-
-  const intervalId = setInterval(pushSnapshot, 5000);
-  const heartbeatId = setInterval(sendHeartbeat, 20000);
-
-  req.on('close', () => {
-    closed = true;
-    clearInterval(intervalId);
-    clearInterval(heartbeatId);
-    res.end();
-  });
 });
 
 module.exports = router;
