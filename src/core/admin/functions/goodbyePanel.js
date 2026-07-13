@@ -11,15 +11,20 @@ const {
   AttachmentBuilder,
 } = require('discord.js');
 const goodbye = require('../../../modules/goodbye');
+const embedTemplateManager = require('../../../modules/embed/embedTemplateManager');
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const button = (customId, label, style = ButtonStyle.Secondary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
 
 function templateMenu(guildId, activeTemplateId) {
-  const templates = goodbye.getGoodbyeTemplates(guildId).slice(0, 25);
+  const templates = Object.values(embedTemplateManager.listTemplates(guildId))
+    .filter(Boolean)
+    .sort((a, b) => String(a.name || a.templateId).localeCompare(String(b.name || b.templateId)))
+    .slice(0, 25);
+
   const menu = new StringSelectMenuBuilder()
     .setCustomId('admin:goodbye:template')
-    .setPlaceholder(templates.length ? 'Choose the Embed Studio goodbye template' : 'No goodbye templates available')
+    .setPlaceholder(templates.length ? 'Choose any Embed Studio template' : 'No Embed Studio templates available')
     .setMinValues(1)
     .setMaxValues(1)
     .setDisabled(templates.length === 0);
@@ -27,7 +32,7 @@ function templateMenu(guildId, activeTemplateId) {
   if (templates.length) {
     menu.addOptions(templates.map((template) => ({
       label: String(template.name || template.templateId).slice(0, 100),
-      description: String(template.embed?.title || template.templateId || 'Goodbye template').slice(0, 100),
+      description: String(template.embed?.title || `${template.module || 'global'} template`).slice(0, 100),
       value: String(template.templateId),
       default: String(template.templateId) === String(activeTemplateId),
     })));

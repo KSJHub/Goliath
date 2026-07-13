@@ -1,7 +1,5 @@
 'use strict';
 
-// src/modules/admin/moduleRouter.js
-
 const path = require('path');
 
 const MODULE_REGISTRY = {
@@ -15,9 +13,8 @@ const MODULE_REGISTRY = {
   autoRoles: {
     key: 'autoRoles',
     label: 'Auto Roles',
-    menuPath: path.join('..', 'autoRoles', 'autoRoleMenu'),
-    managerPath: path.join('..', 'autoRoles', 'autoRoleManager'),
-    storePath: path.join('..', 'autoRoles', 'autoRoleStore'),
+    managerPath: path.join('..', 'autoroles'),
+    storePath: path.join('..', 'autoroles'),
   },
   forms: {
     key: 'forms',

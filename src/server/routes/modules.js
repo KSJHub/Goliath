@@ -11,8 +11,8 @@ const {
   setModuleEnabled,
 } = require('../../core/guild/guildManager');
 
-const autoRoleStore = require('../../modules/autoRoles/autoRoleStore');
-const autoRoleManager = require('../../modules/autoRoles/autoRoleManager');
+const autoRoleStore = require('../../modules/autoroles');
+const autoRoleManager = autoRoleStore;
 const verificationStore = require('../../modules/verification/verificationStore');
 const verificationManager = require('../../modules/verification/verificationManager');
 const embedTemplateManager = require('../../modules/embed/embedTemplateManager');

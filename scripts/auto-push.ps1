@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("dev", "beta", "production")]
     [string]$TargetEnv,
@@ -252,10 +252,11 @@ if (-not $SkipDeploy) {
 Write-Host ""
 Write-Host "========================================"
 Write-Host "SUCCESS"
-Write-Host "Local $TargetEnv:  synchronized"
-Write-Host "GitHub $TargetEnv: synchronized"
+Write-Host "Local ${TargetEnv}:  synchronized"
+Write-Host "GitHub ${TargetEnv}: synchronized"
 if ($vpsVerified) {
-    Write-Host "VPS $TargetEnv:    synchronized and online"
+    Write-Host "VPS ${TargetEnv}:    synchronized and online"
 }
 Write-Host "Commit: $finalLocalSha"
 Write-Host "========================================"
+

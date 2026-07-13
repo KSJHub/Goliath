@@ -4,7 +4,7 @@ const { EmbedBuilder, AuditLogEvent } = require('discord.js');
 const guildManager = require('../../core/guild/guildManager');
 const autoRoleManager = require('../../modules/autoroles');
 const statsManager = require('../../modules/stats/statsManager');
-const verificationManager = require('../../modules/verification/verificationManager');
+const verificationManager = require('../../modules/verification');
 const welcomeManager = require('../../modules/welcome');
 const goodbyeManager = require('../../modules/goodbye');
 

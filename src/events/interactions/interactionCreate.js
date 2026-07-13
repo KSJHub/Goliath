@@ -12,7 +12,7 @@ function optionalRequire(label, modulePath, fallback = {}) {
   }
 }
 
-const verificationManager = optionalRequire('verification manager', '../../modules/verification/verificationManager');
+const verificationManager = optionalRequire('verification manager', '../../modules/verification');
 const ticketInteractionHandler = optionalRequire('tickets', '../../modules/tickets/ticketInteractionHandler');
 const roleInteractionHandler = optionalRequire('roles', '../../modules/roles/roleInteractionHandler');
 const pollsManager = optionalRequire('polls', '../../modules/polls/pollsManager');
@@ -34,10 +34,10 @@ const starboardAdminPanel = optionalRequire('starboard admin', '../../core/admin
 const stickyAdminPanel = optionalRequire('sticky admin', '../../core/admin/functions/stickyAdminPanel');
 const levelingAdminPanel = optionalRequire('leveling admin', '../../core/admin/functions/levelingAdminPanel');
 const socialAdminPanel = optionalRequire('social admin', '../../core/admin/functions/socialAdminPanel');
-const verificationAdminPanel = optionalRequire('verification admin', '../../core/admin/functions/verificationAdminPanel');
-const autoRolesAdminPanel = optionalRequire('auto roles admin', '../../core/admin/functions/autoRolesAdminPanel');
-const welcomeAdminPanel = optionalRequire('welcome admin', '../../core/admin/functions/welcomeAdminPanel');
-const goodbyeAdminPanel = optionalRequire('goodbye admin', '../../core/admin/functions/goodbyeAdminPanel');
+const verificationAdminPanel = optionalRequire('verification admin', '../../modules/verificationPanel');
+const autorolesPanel = optionalRequire('auto roles', '../../modules/autorolesPanel');
+const welcomePanel = optionalRequire('welcome', '../../core/admin/functions/welcomePanel');
+const goodbyePanel = optionalRequire('goodbye', '../../core/admin/functions/goodbyePanel');
 const moduleAdminPanels = optionalRequire('generic module admin', '../../core/admin/functions/moduleAdminPanels');
 
 async function callHandler(target, method, ...args) {
@@ -116,9 +116,9 @@ module.exports = {
         return;
       }
       if (startsWith(interaction, 'admin:verification')) { await callHandler(verificationAdminPanel, 'handleVerificationAdminInteraction', interaction); return; }
-      if (startsWith(interaction, 'admin:autoRoles')) { await callHandler(autoRolesAdminPanel, 'handleAutoRolesAdminInteraction', interaction); return; }
-      if (startsWith(interaction, 'admin:welcome')) { await callHandler(welcomeAdminPanel, 'handleWelcomeAdminInteraction', interaction); return; }
-      if (startsWith(interaction, 'admin:goodbye')) { await callHandler(goodbyeAdminPanel, 'handleGoodbyeAdminInteraction', interaction); return; }
+      if (startsWith(interaction, 'admin:autoRoles')) { await callHandler(autorolesPanel, 'handleAutoRolesInteraction', interaction); return; }
+      if (startsWith(interaction, 'admin:welcome')) { await callHandler(welcomePanel, 'handleWelcomeInteraction', interaction); return; }
+      if (startsWith(interaction, 'admin:goodbye')) { await callHandler(goodbyePanel, 'handleGoodbyeInteraction', interaction); return; }
       if (isVerificationMemberInteraction(interaction)) { await callHandler(verificationManager, 'handleVerificationInteraction', interaction); return; }
       if (await callHandler(statsAdminPanel, 'handleStatsAdminInteraction', interaction)) return;
       if (await callHandler(reactionRolesAdminPanel, 'handleReactionRolesAdminInteraction', interaction)) return;

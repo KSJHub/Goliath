@@ -253,7 +253,7 @@ client.once('clientReady', async () => {
     runStartupTask('Roles', () => require('./src/modules/roles/rolesStartup').initializeRoles(client)),
     runStartupTask('Translation', () => require('./src/modules/translation/translationStartup').startupTranslation(client)),
     runStartupTask('Verification', () => require('./src/modules/verification/verificationStartup').startupVerification(client)),
-    runStartupTask('Goodbye', () => require('./src/modules/goodbye/goodbyeStartup').startupGoodbye(client)),
+    runStartupTask('Goodbye', () => require('./src/modules/goodbye').startupGoodbye(client)),
     runStartupTask('Giveaways', () => require('./src/modules/giveaways/giveawayScheduler').start(client)),
   ]);
 

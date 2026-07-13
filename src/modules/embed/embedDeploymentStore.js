@@ -1,7 +1,5 @@
 'use strict';
 
-// functions/embed/embedDeploymentStore.js
-
 const guildManager = require('../../core/guild/guildManager');
 const {
   emitEmbedUpdated,
@@ -19,42 +17,24 @@ const DEPLOYMENT_STATUS = Object.freeze({
   UNKNOWN: 'unknown',
 });
 
-function now() {
-  return new Date().toISOString();
-}
-
-function clone(value) {
-  return JSON.parse(JSON.stringify(value || {}));
-}
-
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function cleanString(value, maxLength = 500) {
-  return String(value || '').trim().slice(0, maxLength);
-}
-
-function cleanDiscordId(value) {
+const now = () => new Date().toISOString();
+const clone = (value) => JSON.parse(JSON.stringify(value || {}));
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const cleanString = (value, maxLength = 500) => String(value || '').trim().slice(0, maxLength);
+const cleanDiscordId = (value) => {
   const id = String(value || '').replace(/[<@#!&>]/g, '').trim();
   return /^\d{15,25}$/.test(id) ? id : null;
-}
-
-function cleanKey(value) {
-  return cleanString(value || 'custom', 100) || 'custom';
-}
+};
+const cleanKey = (value) => cleanString(value || 'custom', 100) || 'custom';
+const comparable = (value) => cleanKey(value).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 function refreshGuild(guildId) {
-  if (typeof guildManager.reloadGuild === 'function') {
-    guildManager.reloadGuild(guildId);
-  }
+  if (typeof guildManager.reloadGuild === 'function') guildManager.reloadGuild(guildId);
 }
 
 function normalizeDeployment(key, deployment = {}) {
   const source = isPlainObject(deployment) ? deployment : {};
   const createdAt = source.createdAt || source.lastUpdatedAt || now();
-  const lastUpdatedAt = source.lastUpdatedAt || createdAt;
-
   return {
     key: cleanKey(source.key || key),
     guildId: cleanDiscordId(source.guildId),
@@ -67,7 +47,7 @@ function normalizeDeployment(key, deployment = {}) {
       : DEPLOYMENT_STATUS.ACTIVE,
     createdAt,
     createdBy: cleanDiscordId(source.createdBy),
-    lastUpdatedAt,
+    lastUpdatedAt: source.lastUpdatedAt || createdAt,
     lastUpdatedBy: cleanDiscordId(source.lastUpdatedBy || source.updatedBy || source.createdBy),
     lastCheckedAt: source.lastCheckedAt || null,
     missingReason: cleanString(source.missingReason || '', 500) || null,
@@ -84,9 +64,7 @@ function getEmbedBuilderSection(guildId) {
 }
 
 function getAllEmbedDeployments(guildId) {
-  const builder = getEmbedBuilderSection(guildId);
-  const deployments = clone(builder.deployments || {});
-
+  const deployments = clone(getEmbedBuilderSection(guildId).deployments || {});
   return Object.fromEntries(
     Object.entries(deployments)
       .filter(([, deployment]) => isPlainObject(deployment))
@@ -94,24 +72,34 @@ function getAllEmbedDeployments(guildId) {
   );
 }
 
+function findMatchingDeployment(deployments, key) {
+  const safeKey = cleanKey(key);
+  if (deployments[safeKey]) return deployments[safeKey];
+
+  const target = comparable(safeKey);
+  const templateTarget = comparable(safeKey.replace(/^auto[-_:]?/i, ''));
+  const matches = Object.values(deployments).filter(Boolean);
+
+  return matches.find((deployment) => {
+    const values = [deployment.key, deployment.preset, deployment.template];
+    return values.some((value) => {
+      const normalized = comparable(value);
+      return normalized === target || normalized === templateTarget || `auto${normalized}` === target;
+    });
+  }) || null;
+}
+
 function getEmbedDeployment(guildId, key) {
-  const deployments = getAllEmbedDeployments(guildId);
-  return deployments[cleanKey(key)] || null;
+  return findMatchingDeployment(getAllEmbedDeployments(guildId), key);
 }
 
 function saveDeployments(guildId, deployments) {
   if (typeof guildManager.saveGuildSection !== 'function') return null;
-
-  const currentBuilder = getEmbedBuilderSection(guildId);
-  const nextBuilder = {
-    ...currentBuilder,
-    deployments: clone(deployments),
-    updatedAt: now(),
-  };
-
-  guildManager.saveGuildSection(guildId, 'embedBuilder', nextBuilder);
+  const current = getEmbedBuilderSection(guildId);
+  const next = { ...current, deployments: clone(deployments), updatedAt: now() };
+  guildManager.saveGuildSection(guildId, 'embedBuilder', next);
   refreshGuild(guildId);
-  return nextBuilder.deployments;
+  return next.deployments;
 }
 
 function saveEmbedDeployment(guildId, key, deployment) {
@@ -119,7 +107,6 @@ function saveEmbedDeployment(guildId, key, deployment) {
   const deployments = getAllEmbedDeployments(guildId);
   const previous = deployments[safeKey] || {};
   const timestamp = now();
-
   deployments[safeKey] = normalizeDeployment(safeKey, {
     ...previous,
     ...deployment,
@@ -129,156 +116,86 @@ function saveEmbedDeployment(guildId, key, deployment) {
     lastUpdatedAt: timestamp,
     status: deployment.status || DEPLOYMENT_STATUS.ACTIVE,
   });
-
   const saved = saveDeployments(guildId, deployments);
   const result = saved ? deployments[safeKey] : null;
-
-  if (result) {
-    emitEmbedUpdated(guildId, result);
-  }
-
+  if (result) emitEmbedUpdated(guildId, result);
   return result;
 }
 
 function markEmbedDeploymentStatus(guildId, key, status, meta = {}) {
-  const safeKey = cleanKey(key);
   const deployments = getAllEmbedDeployments(guildId);
-
-  if (!deployments[safeKey]) return null;
-
+  const existing = findMatchingDeployment(deployments, key);
+  if (!existing) return null;
+  const safeKey = existing.key;
   deployments[safeKey] = normalizeDeployment(safeKey, {
-    ...deployments[safeKey],
+    ...existing,
     ...meta,
     status,
     lastCheckedAt: now(),
-    missingReason: meta.missingReason || deployments[safeKey].missingReason,
+    missingReason: meta.missingReason === null ? null : (meta.missingReason || existing.missingReason),
   });
-
   const saved = saveDeployments(guildId, deployments);
   const result = saved ? deployments[safeKey] : null;
-
-  if (result) {
-    emitEmbedStatusUpdated(guildId, result);
-  }
-
+  if (result) emitEmbedStatusUpdated(guildId, result);
   return result;
 }
 
 function deleteEmbedDeployment(guildId, key) {
-  const safeKey = cleanKey(key);
   const deployments = getAllEmbedDeployments(guildId);
-
-  if (!deployments[safeKey]) return false;
-
-  delete deployments[safeKey];
+  const existing = findMatchingDeployment(deployments, key);
+  if (!existing) return false;
+  delete deployments[existing.key];
   const deleted = Boolean(saveDeployments(guildId, deployments));
-
-  if (deleted) {
-    emitEmbedDeleted(guildId, safeKey);
-  }
-
+  if (deleted) emitEmbedDeleted(guildId, existing.key);
   return deleted;
 }
 
 function getDeploymentKeyFromState(state = {}) {
-  return cleanKey(state.selectedPreset || `auto-${state.template || 'custom'}`);
+  const template = cleanKey(state.template || 'custom');
+  return cleanKey(`auto-${template}`);
 }
 
 async function resolveEmbedDeployment(guild, key) {
   if (!guild?.id) {
-    return {
-      status: DEPLOYMENT_STATUS.UNKNOWN,
-      deployment: null,
-      channel: null,
-      message: null,
-      reason: 'Guild unavailable.',
-    };
+    return { status: DEPLOYMENT_STATUS.UNKNOWN, deployment: null, channel: null, message: null, reason: 'Guild unavailable.' };
   }
 
   const deployment = getEmbedDeployment(guild.id, key);
-
   if (!deployment) {
-    return {
-      status: DEPLOYMENT_STATUS.NOT_DEPLOYED,
-      deployment: null,
-      channel: null,
-      message: null,
-      reason: 'No deployment record exists.',
-    };
+    return { status: DEPLOYMENT_STATUS.NOT_DEPLOYED, deployment: null, channel: null, message: null, reason: 'No deployment record exists.' };
   }
 
-  const channel = guild.channels.cache.get(deployment.channelId) ||
-    await guild.channels.fetch(deployment.channelId).catch(() => null);
-
+  const channel = guild.channels.cache.get(deployment.channelId)
+    || await guild.channels.fetch(deployment.channelId).catch(() => null);
   if (!channel) {
-    const updated = markEmbedDeploymentStatus(
-      guild.id,
-      key,
-      DEPLOYMENT_STATUS.MISSING_CHANNEL,
-      { missingReason: 'Deployment channel could not be found.' }
-    );
-
-    return {
-      status: DEPLOYMENT_STATUS.MISSING_CHANNEL,
-      deployment: updated || deployment,
-      channel: null,
-      message: null,
-      reason: 'Deployment channel could not be found.',
-    };
+    const updated = markEmbedDeploymentStatus(guild.id, deployment.key, DEPLOYMENT_STATUS.MISSING_CHANNEL, {
+      missingReason: 'Deployment channel could not be found.',
+    });
+    return { status: DEPLOYMENT_STATUS.MISSING_CHANNEL, deployment: updated || deployment, channel: null, message: null, reason: 'Deployment channel could not be found.' };
   }
 
-  const message = await channel.messages?.fetch(deployment.messageId).catch((error) => {
-    if (error?.code === 50013) {
-      return { __permissionError: true };
-    }
-    return null;
-  });
+  const message = await channel.messages?.fetch(deployment.messageId).catch((error) => (
+    error?.code === 50013 ? { __permissionError: true } : null
+  ));
 
   if (message?.__permissionError) {
-    const updated = markEmbedDeploymentStatus(
-      guild.id,
-      key,
-      DEPLOYMENT_STATUS.PERMISSION_ERROR,
-      { missingReason: 'Goliath cannot access the deployment message.' }
-    );
-
-    return {
-      status: DEPLOYMENT_STATUS.PERMISSION_ERROR,
-      deployment: updated || deployment,
-      channel,
-      message: null,
-      reason: 'Goliath cannot access the deployment message.',
-    };
+    const updated = markEmbedDeploymentStatus(guild.id, deployment.key, DEPLOYMENT_STATUS.PERMISSION_ERROR, {
+      missingReason: 'Goliath cannot access the deployment message.',
+    });
+    return { status: DEPLOYMENT_STATUS.PERMISSION_ERROR, deployment: updated || deployment, channel, message: null, reason: 'Goliath cannot access the deployment message.' };
   }
 
   if (!message) {
-    const updated = markEmbedDeploymentStatus(
-      guild.id,
-      key,
-      DEPLOYMENT_STATUS.MISSING_MESSAGE,
-      { missingReason: 'Deployment message could not be found.' }
-    );
-
-    return {
-      status: DEPLOYMENT_STATUS.MISSING_MESSAGE,
-      deployment: updated || deployment,
-      channel,
-      message: null,
-      reason: 'Deployment message could not be found.',
-    };
+    const updated = markEmbedDeploymentStatus(guild.id, deployment.key, DEPLOYMENT_STATUS.MISSING_MESSAGE, {
+      missingReason: 'Deployment message could not be found.',
+    });
+    return { status: DEPLOYMENT_STATUS.MISSING_MESSAGE, deployment: updated || deployment, channel, message: null, reason: 'Deployment message could not be found.' };
   }
 
   const updated = deployment.status === DEPLOYMENT_STATUS.ACTIVE
     ? deployment
-    : markEmbedDeploymentStatus(guild.id, key, DEPLOYMENT_STATUS.ACTIVE, { missingReason: null });
-
-  return {
-    status: DEPLOYMENT_STATUS.ACTIVE,
-    deployment: updated || deployment,
-    channel,
-    message,
-    reason: null,
-  };
+    : markEmbedDeploymentStatus(guild.id, deployment.key, DEPLOYMENT_STATUS.ACTIVE, { missingReason: null });
+  return { status: DEPLOYMENT_STATUS.ACTIVE, deployment: updated || deployment, channel, message, reason: null };
 }
 
 module.exports = {

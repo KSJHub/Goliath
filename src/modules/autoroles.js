@@ -270,18 +270,9 @@ async function applyAutoRoles(member, options = {}) {
 
   for (const roleId of uniqueRoleIds) {
     const role = await fetchRole(guild, roleId);
-    if (!role) {
-      failed += 1;
-      continue;
-    }
-    if (member.roles.cache.has(role.id)) {
-      skipped += 1;
-      continue;
-    }
-    if (!canBotManageRole(guild, role)) {
-      failed += 1;
-      continue;
-    }
+    if (!role) { failed += 1; continue; }
+    if (member.roles.cache.has(role.id)) { skipped += 1; continue; }
+    if (!canBotManageRole(guild, role)) { failed += 1; continue; }
     try {
       await member.roles.add(role, options.reason || 'Goliath Auto Roles');
       addedRoles.push(role);
