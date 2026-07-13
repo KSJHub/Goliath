@@ -4,7 +4,7 @@ const express = require('express');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const notifications = require('../../modules/notifications/notificationStore');
+const notifications = require('../../core/notifications/notificationStore');
 
 const router = express.Router();
 

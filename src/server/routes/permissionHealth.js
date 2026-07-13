@@ -10,7 +10,7 @@ const verificationStore = require('../../modules/verification/verificationStore'
 const formStore = require('../../modules/forms/formStore');
 const ticketStore = require('../../modules/tickets/ticketStore');
 const translationStore = require('../../modules/translation/translationStore');
-const { getAllEmbedDeployments } = require('../../modules/embed/functions/embedDeploymentStore');
+const { getAllEmbedDeployments } = require('../../modules/embed/embedDeploymentStore');
 
 const {
   DEFAULT_BOT_CHANNEL_PERMISSIONS,

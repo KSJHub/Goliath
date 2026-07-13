@@ -13,8 +13,10 @@ const Forms = lazy(() => import('../pages/modules/forms/FormsWorkflowEnhanced'))
 const Modules = lazy(() => import('../pages/modules/Modules'));
 const Automation = lazy(() => import('../pages/modules/Automation'));
 const EmbedStudio = lazy(() => import('../pages/modules/embed/EmbedStudioEnhanced'));
-const Verification = lazy(() => import('../pages/modules/Verification'));
+const Verification = lazy(() => import('../pages/modules/VerificationEnhanced'));
 const AutoRoles = lazy(() => import('../pages/modules/AutoRoles'));
+const Welcome = lazy(() => import('../pages/modules/Welcome'));
+const Goodbye = lazy(() => import('../pages/modules/Goodbye'));
 const Tickets = lazy(() => import('../pages/modules/tickets/TicketsWorkflowEnhanced'));
 const Social = lazy(() => import('../pages/modules/Social'));
 const Giveaways = lazy(() => import('../pages/modules/Giveaways'));
@@ -44,50 +46,29 @@ const OwnerTranslationHub = lazy(() => import('../pages/owner/TranslationHub'));
 const OwnerPermissionHealth = lazy(() => import('../pages/owner/PermissionHealth'));
 
 export const DASHBOARD_LAYOUT = {
-  navbarExpandedWidth: '280px',
-  navbarCollapsedWidth: '72px',
-  topBarHeight: '72px',
-  pageGap: '20px',
-  cardRadius: '20px',
-  cardPadding: '24px',
-  sectionPadding: '18px',
+  navbarExpandedWidth: '280px', navbarCollapsedWidth: '72px', topBarHeight: '72px', pageGap: '20px', cardRadius: '20px', cardPadding: '24px', sectionPadding: '18px',
 };
 
 export const NAV_ITEMS = [
   { key: 'overview', label: 'Overview', icon: 'overview', path: '/overview' },
-  {
-    key: 'administration',
-    label: 'Administration',
-    icon: 'admin',
-    children: [
-      { key: 'adminPage', label: 'Admin', icon: 'admin', path: '/admin' },
-      { key: 'automod', label: 'AutoMod', icon: 'automod', path: '/automod' },
-      { key: 'generalSettings', label: 'General Settings', icon: 'generalSettings', path: '/generalSettings' },
-    ],
-  },
-  {
-    key: 'moderationGroup',
-    label: 'Moderation',
-    icon: 'admin',
-    children: [
-      { key: 'moderation', label: 'Moderation', icon: 'admin', path: '/moderation' },
-      { key: 'cases', label: 'Cases', icon: 'warnings', path: '/cases' },
-      { key: 'warnings', label: 'Warnings', icon: 'warnings', path: '/warnings' },
-    ],
-  },
+  { key: 'administration', label: 'Administration', icon: 'admin', children: [
+    { key: 'adminPage', label: 'Admin', icon: 'admin', path: '/admin' },
+    { key: 'automod', label: 'AutoMod', icon: 'automod', path: '/automod' },
+    { key: 'generalSettings', label: 'General Settings', icon: 'generalSettings', path: '/generalSettings' },
+  ] },
+  { key: 'moderationGroup', label: 'Moderation', icon: 'admin', children: [
+    { key: 'moderation', label: 'Moderation', icon: 'admin', path: '/moderation' },
+    { key: 'cases', label: 'Cases', icon: 'warnings', path: '/cases' },
+    { key: 'warnings', label: 'Warnings', icon: 'warnings', path: '/warnings' },
+  ] },
   { key: 'modules', label: 'Modules', icon: 'modules', path: '/modules' },
 ];
 
 export const NAV_BOTTOM = [
-  {
-    key: 'securityCenter',
-    label: 'Security Center',
-    icon: 'admin',
-    children: [
-      { key: 'restore', label: 'Restore', icon: 'admin', path: '/restore' },
-      { key: 'security', label: 'Security', icon: 'admin', path: '/security' },
-    ],
-  },
+  { key: 'securityCenter', label: 'Security Center', icon: 'admin', children: [
+    { key: 'restore', label: 'Restore', icon: 'admin', path: '/restore' },
+    { key: 'security', label: 'Security', icon: 'admin', path: '/security' },
+  ] },
   { key: 'notifications', label: 'Notifications', icon: 'logs', path: '/notifications' },
   { key: 'mediaTools', label: 'Media Tools', icon: 'modules', path: '/media-tools' },
   { key: 'logs', label: 'Logs', icon: 'logs', path: '/logs' },
@@ -113,6 +94,8 @@ export const ROUTES = [
   { key: 'embedStudio', label: 'Embed Studio', icon: 'modules', path: '/embed-studio', component: EmbedStudio, hidden: true },
   { key: 'verification', label: 'Verification', icon: 'modules', path: '/verification', component: Verification, hidden: true },
   { key: 'autoRoles', label: 'Auto Roles', icon: 'modules', path: '/autoroles', component: AutoRoles, hidden: true },
+  { key: 'welcome', label: 'Welcome', icon: 'modules', path: '/welcome', component: Welcome, hidden: true },
+  { key: 'goodbye', label: 'Goodbye', icon: 'modules', path: '/goodbye', component: Goodbye, hidden: true },
   { key: 'reactionRoles', label: 'Reaction Roles', icon: 'modules', path: '/reaction-roles', component: ReactionRoles, hidden: true },
   { key: 'leveling', label: 'Leveling', icon: 'modules', path: '/leveling', component: Leveling, hidden: true },
   { key: 'forms', label: 'Forms', icon: 'modules', path: '/forms', component: Forms, hidden: true },
@@ -145,79 +128,9 @@ export const PAGE_LAYOUTS = {
   overview: { title: 'Overview', description: 'Server insights and activity', sections: [{ id: 'stats', type: 'stats' }, { id: 'activity', type: 'list' }] },
   billing: { title: 'Billing', description: 'Current plan, subscription status and feature entitlements.', emptyDescription: 'Select a server to view billing.', sections: [{ id: 'billingDashboard', type: 'dashboard' }] },
   notifications: { title: 'Notifications', description: 'Global notification centre.', emptyDescription: 'Select a server to view notifications.', sections: [{ id: 'notificationsDashboard', type: 'dashboard' }] },
-  ownerView: { title: 'Owner View', description: 'Owner-only platform dashboard.', sections: [] },
-  ownerServers: { title: 'Global Servers', description: 'Owner-level server registry across all environments.', sections: [] },
-  ownerRuntime: { title: 'Runtime Monitor', description: 'Owner-level runtime monitoring across DEV, BETA and PRODUCTION.', sections: [] },
-  ownerBilling: { title: 'Billing Admin', description: 'Generate and manage premium access codes.', sections: [] },
-  ownerSecurity: { title: 'Owner Security', description: 'Global security centre across all environments.', sections: [] },
-  ownerPermissionHealth: { title: 'Permission Health', description: 'Owner-level Goliath access and hierarchy scan.', sections: [] },
-  ownerBackups: { title: 'Backup Center', description: 'Owner-level backup and restore monitoring.', sections: [] },
-  ownerDeployments: { title: 'Deployment Center', description: 'Deployment queue, history and environment status.', sections: [] },
-  ownerForms: { title: 'Forms Hub', description: 'Global forms and submissions overview.', sections: [] },
-  ownerTickets: { title: 'Tickets Hub', description: 'Global tickets overview.', sections: [] },
-  ownerTranslation: { title: 'Translation Hub', description: 'Global translation system overview.', sections: [] },
-  modules: { title: 'Modules', description: 'Optional Goliath features in one scalable grid.', emptyDescription: 'Select a server to view modules.', sections: [{ id: 'modulesGrid', type: 'dashboard' }] },
-  automation: { title: 'Automation', description: 'Minimal rules, triggers and safe execution logs.', emptyDescription: 'Select a server to manage automation.', sections: [{ id: 'automationDashboard', type: 'dashboard' }] },
-  embedStudio: { title: 'Embed Studio', description: 'Build, preview and save Discord embeds.', emptyDescription: 'Select a server to manage Embed Studio.', sections: [{ id: 'embedStudioDashboard', type: 'dashboard' }] },
-  verification: { title: 'Verification', description: 'Member verification, role settings, panels and analytics.', emptyDescription: 'Select a server to manage verification.', sections: [{ id: 'verificationDashboard', type: 'dashboard' }] },
-  autoRoles: { title: 'Auto Roles', description: 'Join roles, bot roles and assignment analytics.', emptyDescription: 'Select a server to manage auto roles.', sections: [{ id: 'autoRolesDashboard', type: 'dashboard' }] },
-  reactionRoles: { title: 'Reaction Roles', description: 'Manage role menus, emoji mappings and reaction role panels.', emptyDescription: 'Select a server to manage reaction roles.', sections: [{ id: 'reactionRolesDashboard', type: 'dashboard' }] },
-  leveling: { title: 'Leveling', description: 'Manage XP, levels, rewards and leaderboards.', emptyDescription: 'Select a server to manage leveling.', sections: [{ id: 'levelingDashboard', type: 'dashboard' }] },
-  forms: { title: 'Forms', description: 'Manage universal forms and workflows.', emptyDescription: 'Select a server to manage forms.', sections: [{ id: 'formsManager', type: 'dashboard' }] },
-  giveaways: { title: 'Giveaways', description: 'Create, monitor and review server giveaways.', emptyDescription: 'Select a server to manage giveaways.', sections: [{ id: 'giveawaysDashboard', type: 'dashboard' }] },
-  polls: { title: 'Polls', description: 'Create, deploy and review community polls.', emptyDescription: 'Select a server to manage polls.', sections: [{ id: 'pollsDashboard', type: 'dashboard' }] },
-  stats: { title: 'Stats', description: 'Server, module and workflow statistics.', emptyDescription: 'Select a server to view stats.', sections: [{ id: 'statsDashboard', type: 'dashboard' }] },
-  social: { title: 'Social Alerts', description: 'Creator alerts across Twitch, YouTube, TikTok, Kick and more.', emptyDescription: 'Select a server to manage social alerts.', sections: [{ id: 'socialDashboard', type: 'dashboard' }] },
-  starboard: { title: 'Starboard', description: 'Highlight popular community messages.', emptyDescription: 'Select a server to manage starboard.', sections: [{ id: 'starboardDashboard', type: 'dashboard' }] },
-  sticky: { title: 'Sticky Messages', description: 'Keep important messages visible in channels.', emptyDescription: 'Select a server to manage sticky messages.', sections: [{ id: 'stickyDashboard', type: 'dashboard' }] },
-  tempVoice: { title: 'Temp Voice', description: 'Temporary voice channel creation, limits and cleanup.', emptyDescription: 'Select a server to manage Temp Voice.', sections: [{ id: 'tempVoiceDashboard', type: 'dashboard' }] },
-  tickets: { title: 'Tickets', description: 'Ticket panels, queues and transcripts.', emptyDescription: 'Select a server to manage tickets.', sections: [{ id: 'ticketsDashboard', type: 'dashboard' }] },
-  timeline: { title: 'Timeline', description: 'Timeline and activity feed.', emptyDescription: 'Select a server to manage timeline.', sections: [{ id: 'timelineDashboard', type: 'dashboard' }] },
-  translation: { title: 'Translation', description: 'Translation providers, threads and language preferences.', emptyDescription: 'Select a server to manage translation.', sections: [{ id: 'translationDashboard', type: 'dashboard' }] },
-  generalSettings: { title: 'General Settings', description: 'Manage server configuration.', emptyDescription: 'Select a server to manage settings.', sections: [{ id: 'generalConfig', type: 'config' }] },
-  automod: { title: 'AutoMod', description: 'Manage filters and rules', sections: [{ id: 'rules', type: 'config' }, { id: 'filters', type: 'config' }] },
-  admin: { title: 'Admin', description: 'Core system configuration and control panel.', emptyDescription: 'Select a server to manage admin settings.', sections: [{ id: 'adminHub', type: 'future' }] },
-  moderation: { title: 'Moderation', description: 'Central moderation tools for this server.', emptyDescription: 'Select a server to manage moderation.', sections: [{ id: 'moderationHub', type: 'future' }] },
-  cases: { title: 'Cases', description: 'View moderation case history.', emptyDescription: 'Select a server to view cases.', sections: [{ id: 'caseTable', type: 'table' }] },
-  warnings: { title: 'Warnings', description: 'View and manage warning records.', emptyDescription: 'Select a server to view warnings.', sections: [{ id: 'warningTable', type: 'table' }] },
-  security: { title: 'Security Center', description: 'Live protection and recovery overview.', emptyDescription: 'Select a server to view security status.', sections: [{ id: 'securityOverview', type: 'dashboard' }] },
-  restore: { title: 'Server Restore', description: 'Preview and restore server backups.', emptyDescription: 'Select a server to restore from backup.', sections: [{ id: 'restoreManager', type: 'config' }] },
-  mediaTools: { title: 'Media Tools', description: 'Create Discord-ready GIFs, emojis and role icons.', emptyDescription: 'Select a server to use media tools.', sections: [{ id: 'mediaToolsDashboard', type: 'dashboard' }] },
-  logs: { title: 'Logs', description: 'Manage log channels.', emptyDescription: 'Select a server to manage log channels.', sections: [{ id: 'logManager', type: 'config' }] },
+  ownerView: { title: 'Owner View', description: 'Owner-only platform dashboard.', sections: [] }, ownerServers: { title: 'Global Servers', description: 'Owner-level server registry across all environments.', sections: [] }, ownerRuntime: { title: 'Runtime Monitor', description: 'Owner-level runtime monitoring across DEV, BETA and PRODUCTION.', sections: [] }, ownerBilling: { title: 'Billing Admin', description: 'Generate and manage premium access codes.', sections: [] }, ownerSecurity: { title: 'Owner Security', description: 'Global security centre across all environments.', sections: [] }, ownerPermissionHealth: { title: 'Permission Health', description: 'Owner-level Goliath access and hierarchy scan.', sections: [] }, ownerBackups: { title: 'Backup Center', description: 'Owner-level backup and restore monitoring.', sections: [] }, ownerDeployments: { title: 'Deployment Center', description: 'Deployment queue, history and environment status.', sections: [] }, ownerForms: { title: 'Forms Hub', description: 'Global forms and submissions overview.', sections: [] }, ownerTickets: { title: 'Tickets Hub', description: 'Global tickets overview.', sections: [] }, ownerTranslation: { title: 'Translation Hub', description: 'Global translation system overview.', sections: [] },
+  modules: { title: 'Modules', description: 'Optional Goliath features in one scalable grid.', emptyDescription: 'Select a server to view modules.', sections: [{ id: 'modulesGrid', type: 'dashboard' }] }, automation: { title: 'Automation', description: 'Minimal rules, triggers and safe execution logs.', emptyDescription: 'Select a server to manage automation.', sections: [{ id: 'automationDashboard', type: 'dashboard' }] }, embedStudio: { title: 'Embed Studio', description: 'Build, preview and save Discord embeds.', emptyDescription: 'Select a server to manage Embed Studio.', sections: [{ id: 'embedStudioDashboard', type: 'dashboard' }] }, verification: { title: 'Verification', description: 'Member verification, role settings, panels and analytics.', emptyDescription: 'Select a server to manage verification.', sections: [{ id: 'verificationDashboard', type: 'dashboard' }] }, autoRoles: { title: 'Auto Roles', description: 'Join roles, bot roles and assignment analytics.', emptyDescription: 'Select a server to manage auto roles.', sections: [{ id: 'autoRolesDashboard', type: 'dashboard' }] }, welcome: { title: 'Welcome', description: 'Public welcome messages, DMs, templates and onboarding analytics.', emptyDescription: 'Select a server to manage Welcome.', sections: [{ id: 'welcomeDashboard', type: 'dashboard' }] }, goodbye: { title: 'Goodbye', description: 'Public farewell messages, templates and delivery analytics.', emptyDescription: 'Select a server to manage Goodbye.', sections: [{ id: 'goodbyeDashboard', type: 'dashboard' }] }, reactionRoles: { title: 'Reaction Roles', description: 'Manage role menus, emoji mappings and reaction role panels.', emptyDescription: 'Select a server to manage reaction roles.', sections: [{ id: 'reactionRolesDashboard', type: 'dashboard' }] }, leveling: { title: 'Leveling', description: 'Manage XP, levels, rewards and leaderboards.', emptyDescription: 'Select a server to manage leveling.', sections: [{ id: 'levelingDashboard', type: 'dashboard' }] }, forms: { title: 'Forms', description: 'Manage universal forms and workflows.', emptyDescription: 'Select a server to manage forms.', sections: [{ id: 'formsManager', type: 'dashboard' }] }, giveaways: { title: 'Giveaways', description: 'Create, monitor and review server giveaways.', emptyDescription: 'Select a server to manage giveaways.', sections: [{ id: 'giveawaysDashboard', type: 'dashboard' }] }, polls: { title: 'Polls', description: 'Create, deploy and review community polls.', emptyDescription: 'Select a server to manage polls.', sections: [{ id: 'pollsDashboard', type: 'dashboard' }] }, stats: { title: 'Stats', description: 'Server, module and workflow statistics.', emptyDescription: 'Select a server to view stats.', sections: [{ id: 'statsDashboard', type: 'dashboard' }] }, social: { title: 'Social Alerts', description: 'Multi-platform creator alerts and live status.', emptyDescription: 'Select a server to manage social alerts.', sections: [{ id: 'socialDashboard', type: 'dashboard' }] }, starboard: { title: 'Starboard', description: 'Highlight popular messages in a dedicated channel.', emptyDescription: 'Select a server to manage starboard.', sections: [{ id: 'starboardDashboard', type: 'dashboard' }] }, sticky: { title: 'Sticky Messages', description: 'Keep important messages at the bottom of active channels.', emptyDescription: 'Select a server to manage sticky messages.', sections: [{ id: 'stickyDashboard', type: 'dashboard' }] }, tempVoice: { title: 'Temp Voice', description: 'Temporary voice channels and room automation.', emptyDescription: 'Select a server to manage temp voice.', sections: [{ id: 'tempVoiceDashboard', type: 'dashboard' }] }, tickets: { title: 'Tickets', description: 'Ticket panels, workflows, recovery and analytics.', emptyDescription: 'Select a server to manage tickets.', sections: [{ id: 'ticketsManager', type: 'dashboard' }] }, timeline: { title: 'Timeline', description: 'Timeline-driven server updates and stored events.', emptyDescription: 'Select a server to manage timeline.', sections: [{ id: 'timelineDashboard', type: 'dashboard' }] }, translation: { title: 'Translation', description: 'Language preferences and translation controls.', emptyDescription: 'Select a server to manage translation.', sections: [{ id: 'translationDashboard', type: 'dashboard' }] },
+  generalSettings: { title: 'General Settings', description: 'Core server preferences.', sections: [] }, automod: { title: 'AutoMod', description: 'Automatic moderation controls.', sections: [] }, admin: { title: 'Admin', description: 'Administrative controls.', sections: [] }, moderation: { title: 'Moderation', description: 'Moderation actions and settings.', sections: [] }, cases: { title: 'Cases', description: 'Moderation case records.', sections: [] }, warnings: { title: 'Warnings', description: 'Member warning records.', sections: [] }, security: { title: 'Security', description: 'Server security overview.', sections: [] }, restore: { title: 'Restore', description: 'Backup restore controls.', sections: [] }, mediaTools: { title: 'Media Tools', description: 'Create and manage media assets.', sections: [] }, logs: { title: 'Logs', description: 'Server and platform logs.', sections: [] },
 };
 
-export const SECTION_DEFS = {
-  stats: { title: 'Server Stats', description: 'Live system and guild status.' },
-  activity: { title: 'Recent Activity', description: 'Quick status indicators.' },
-  billingDashboard: { title: 'Billing Dashboard', description: 'Current plan, limits and entitlements.' },
-  modulesGrid: { title: 'Modules Grid', description: 'Browse optional Goliath features.' },
-  notificationsDashboard: { title: 'Notifications', description: 'Unified alert and activity inbox.' },
-  automationDashboard: { title: 'Automation Dashboard', description: 'Rules, triggers and execution history.' },
-  embedStudioDashboard: { title: 'Embed Studio', description: 'Build, preview and save Discord embeds.' },
-  verificationDashboard: { title: 'Verification Dashboard', description: 'Configure verification roles, panels and analytics.' },
-  autoRolesDashboard: { title: 'Auto Roles Dashboard', description: 'Configure join roles, bot roles and analytics.' },
-  reactionRolesDashboard: { title: 'Reaction Roles Dashboard', description: 'Configure reaction role panels and emoji mappings.' },
-  levelingDashboard: { title: 'Leveling Dashboard', description: 'Configure XP, levels, rewards and leaderboards.' },
-  formsManager: { title: 'Forms Manager', description: 'Create and manage forms.' },
-  giveawaysDashboard: { title: 'Giveaways Dashboard', description: 'Create and review server giveaways.' },
-  pollsDashboard: { title: 'Polls Dashboard', description: 'Create, deploy and review community polls.' },
-  statsDashboard: { title: 'Stats Dashboard', description: 'Review server, module and workflow statistics.' },
-  socialDashboard: { title: 'Social Alerts Dashboard', description: 'Manage creator accounts and social notification alerts.' },
-  starboardDashboard: { title: 'Starboard Dashboard', description: 'Configure starboard channel and thresholds.' },
-  stickyDashboard: { title: 'Sticky Messages Dashboard', description: 'Configure sticky channel messages.' },
-  tempVoiceDashboard: { title: 'Temp Voice Dashboard', description: 'Configure temporary voice hubs and settings.' },
-  ticketsDashboard: { title: 'Tickets Dashboard', description: 'Review ticket queues, claims, transcripts and analytics.' },
-  timelineDashboard: { title: 'Timeline Dashboard', description: 'Review and manage timeline events.' },
-  translationDashboard: { title: 'Translation Dashboard', description: 'Configure translation channels and preferences.' },
-  adminHub: { title: 'Admin Hub', description: 'Dashboard roles, permissions, module access and server controls.' },
-  moderationHub: { title: 'Moderation Hub', description: 'Moderation tools, case workflows and staff controls.' },
-  rules: { title: 'Rules', description: 'Manage core automod rules.' },
-  filters: { title: 'Filters', description: 'Manage filters and logs.' },
-  caseTable: { title: 'Cases', description: 'Browse moderation case history.' },
-  warningTable: { title: 'Warnings', description: 'Browse warning history.' },
-  generalConfig: { title: 'General Config', description: 'Core server configuration.' },
-  securityOverview: { title: 'Security Overview', description: 'Live protection status.' },
-  restoreManager: { title: 'Restore Manager', description: 'Preview and restore backups.' },
-  mediaToolsDashboard: { title: 'Media Tools', description: 'Create Discord-ready GIFs, emojis and role icons.' },
-  logManager: { title: 'Log Manager', description: 'Choose log channels.' },
-};
+export default DASHBOARD_LAYOUT;

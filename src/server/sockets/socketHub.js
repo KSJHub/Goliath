@@ -11,7 +11,7 @@ const {
 
 const {
   setSocketProvider: setEmbedSocketProvider,
-} = require('../../modules/embed/functions/embedSocketEvents');
+} = require('../../modules/embed/embedSocketEvents');
 
 const {
   setSocketProvider: setCaseSocketProvider,
@@ -117,100 +117,16 @@ function normaliseSyncEvent(event) {
 function emitDirectSyncEvent(guildId, event, update) {
   const id = String(guildId || '').trim();
   const eventName = normaliseSyncEvent(event);
-
-  if (!io || !id || !eventName || !update) {
-    return;
-  }
+  if (!id || !eventName || !io) return false;
 
   io.to(getRoomName(id)).emit(eventName, update);
-  io.to(getRoomName(id)).emit('goliath_realtime_event', update);
-}
-
-/**
- * GOLIATH STANDARD SYNC LAYER
- * Centralised event emitter for Discord ↔ Dashboard sync.
- *
- * Always emits:
- * - guild:update              legacy/dashboard-wide refresh channel
- * - direct event name         ticket.created, form.submitted, etc.
- * - goliath_realtime_event    global live activity feed
- */
-function emitSyncEvent(event, guildId, payload = {}) {
-  const eventName = normaliseSyncEvent(event);
-
-  if (!eventName) {
-    return null;
-  }
-
-  const update = emitGuildUpdate(guildId, {
-    type: eventName,
-    event: eventName,
-    ...(payload && typeof payload === 'object' ? payload : {}),
-  });
-
-  emitDirectSyncEvent(guildId, eventName, update);
-
-  return update;
-}
-
-function emitSecurityEvent(
-  guildId,
-  payload = {}
-) {
-  emitGuildUpdate(guildId, {
-    type: 'security:event',
-    ...payload,
-  });
-}
-
-function emitSecurityOverview(
-  guildId,
-  payload = {}
-) {
-  emitGuildUpdate(guildId, {
-    type: 'security:overview',
-    ...payload,
-  });
-}
-
-function emitLockdownUpdate(
-  guildId,
-  payload = {}
-) {
-  emitGuildUpdate(guildId, {
-    type: 'security:lockdown',
-    ...payload,
-  });
-}
-
-function emitQuarantineUpdate(
-  guildId,
-  payload = {}
-) {
-  emitGuildUpdate(guildId, {
-    type: 'security:quarantine',
-    ...payload,
-  });
-}
-
-function emitRestoreUpdate(
-  guildId,
-  payload = {}
-) {
-  emitGuildUpdate(guildId, {
-    type: 'security:restore',
-    ...payload,
-  });
+  return true;
 }
 
 module.exports = {
   initSocketHub,
-  emitGuildUpdate,
-  emitSyncEvent,
+  getRoomName,
   onGuildUpdate,
-  emitSecurityEvent,
-  emitSecurityOverview,
-  emitLockdownUpdate,
-  emitQuarantineUpdate,
-  emitRestoreUpdate,
+  emitGuildUpdate,
+  emitDirectSyncEvent,
 };

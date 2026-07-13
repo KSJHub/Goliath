@@ -21,7 +21,7 @@ const suggestionsInteractionHandler = optionalRequire('suggestions', '../../modu
 const giveawaysInteractionHandler = optionalRequire('giveaways', '../../modules/giveaways/giveawaysInteractionHandler');
 const formsInteractionHandler = optionalRequire('forms', '../../modules/forms/formsInteractionHandler');
 const testSecurityCommand = optionalRequire('test security', '../../commands/admin/testsecurity');
-const embedPanel = optionalRequire('embed panel', '../../modules/embed/functions/embedPanel');
+const embedPanel = optionalRequire('embed panel', '../../modules/embed/embedPanel');
 const duplicator = optionalRequire('duplicator', '../../core/dev/duplicator');
 const adminPanel = optionalRequire('admin panel', '../../core/admin/functions/adminPanel');
 const statsAdminPanel = optionalRequire('stats admin', '../../core/admin/functions/statsAdminPanel');
@@ -35,6 +35,9 @@ const stickyAdminPanel = optionalRequire('sticky admin', '../../core/admin/funct
 const levelingAdminPanel = optionalRequire('leveling admin', '../../core/admin/functions/levelingAdminPanel');
 const socialAdminPanel = optionalRequire('social admin', '../../core/admin/functions/socialAdminPanel');
 const verificationAdminPanel = optionalRequire('verification admin', '../../core/admin/functions/verificationAdminPanel');
+const autoRolesAdminPanel = optionalRequire('auto roles admin', '../../core/admin/functions/autoRolesAdminPanel');
+const welcomeAdminPanel = optionalRequire('welcome admin', '../../core/admin/functions/welcomeAdminPanel');
+const goodbyeAdminPanel = optionalRequire('goodbye admin', '../../core/admin/functions/goodbyeAdminPanel');
 const moduleAdminPanels = optionalRequire('generic module admin', '../../core/admin/functions/moduleAdminPanels');
 
 async function callHandler(target, method, ...args) {
@@ -44,10 +47,8 @@ async function callHandler(target, method, ...args) {
 
 function sanitizeComponentPayload(payload) {
   if (!payload || !Array.isArray(payload.components)) return payload;
-
   const seen = new Set();
   const rows = [];
-
   for (const actionRow of payload.components) {
     const rowData = typeof actionRow?.toJSON === 'function' ? actionRow.toJSON() : actionRow;
     const components = Array.isArray(rowData?.components)
@@ -62,17 +63,14 @@ function sanitizeComponentPayload(payload) {
         return true;
       })
       : [];
-
     if (components.length) rows.push({ ...rowData, components });
   }
-
   return { ...payload, components: rows };
 }
 
 function wrapInteractionResponses(interaction) {
   if (!interaction || interaction.__goliathResponsesWrapped) return;
   interaction.__goliathResponsesWrapped = true;
-
   for (const methodName of ['reply', 'update', 'editReply', 'followUp']) {
     if (typeof interaction[methodName] !== 'function') continue;
     const original = interaction[methodName].bind(interaction);
@@ -80,9 +78,7 @@ function wrapInteractionResponses(interaction) {
   }
 }
 
-function isVerificationAdminInteraction(interaction) {
-  return String(interaction?.customId || '').startsWith('admin:verification');
-}
+const startsWith = (interaction, prefix) => String(interaction?.customId || '').startsWith(prefix);
 
 function isVerificationMemberInteraction(interaction) {
   if (!interaction?.isButton?.()) return false;
@@ -91,22 +87,10 @@ function isVerificationMemberInteraction(interaction) {
 }
 
 async function safeInteractionError(interaction) {
-  const payload = {
-    content: '❌ Interaction failed. Check bot logs for details.',
-    flags: MessageFlags.Ephemeral,
-  };
-
+  const payload = { content: '❌ Interaction failed. Check bot logs for details.', flags: MessageFlags.Ephemeral };
   try {
-    if (interaction?.isAutocomplete?.()) {
-      await interaction.respond([]).catch(() => null);
-      return;
-    }
-
-    if (interaction?.deferred || interaction?.replied) {
-      await interaction.followUp(payload).catch(() => null);
-      return;
-    }
-
+    if (interaction?.isAutocomplete?.()) { await interaction.respond([]).catch(() => null); return; }
+    if (interaction?.deferred || interaction?.replied) { await interaction.followUp(payload).catch(() => null); return; }
     await interaction?.reply?.(payload).catch(() => null);
   } catch {
     // Ignore final safety response errors.
@@ -115,40 +99,27 @@ async function safeInteractionError(interaction) {
 
 module.exports = {
   name: Events.InteractionCreate,
-
   async execute(interaction, client) {
     try {
       wrapInteractionResponses(interaction);
-
       if (interaction?.isAutocomplete?.()) {
         const command = client.commands?.get?.(interaction.commandName);
         if (command?.autocomplete) await command.autocomplete(interaction, client);
         else await interaction.respond([]).catch(() => null);
         return;
       }
-
       if (!interaction?.customId && !interaction?.isChatInputCommand?.()) return;
-
       if (interaction.isChatInputCommand?.()) {
         const command = client.commands?.get?.(interaction.commandName);
         if (!command) return;
         await command.execute(interaction, client);
         return;
       }
-
-      // Modal responses must be the first acknowledgement and must happen quickly.
-      // Route Verification interactions before unrelated handlers so showModal()
-      // cannot expire while waiting through the full handler chain.
-      if (isVerificationAdminInteraction(interaction)) {
-        await callHandler(verificationAdminPanel, 'handleVerificationAdminInteraction', interaction);
-        return;
-      }
-
-      if (isVerificationMemberInteraction(interaction)) {
-        await callHandler(verificationManager, 'handleVerificationInteraction', interaction);
-        return;
-      }
-
+      if (startsWith(interaction, 'admin:verification')) { await callHandler(verificationAdminPanel, 'handleVerificationAdminInteraction', interaction); return; }
+      if (startsWith(interaction, 'admin:autoRoles')) { await callHandler(autoRolesAdminPanel, 'handleAutoRolesAdminInteraction', interaction); return; }
+      if (startsWith(interaction, 'admin:welcome')) { await callHandler(welcomeAdminPanel, 'handleWelcomeAdminInteraction', interaction); return; }
+      if (startsWith(interaction, 'admin:goodbye')) { await callHandler(goodbyeAdminPanel, 'handleGoodbyeAdminInteraction', interaction); return; }
+      if (isVerificationMemberInteraction(interaction)) { await callHandler(verificationManager, 'handleVerificationInteraction', interaction); return; }
       if (await callHandler(statsAdminPanel, 'handleStatsAdminInteraction', interaction)) return;
       if (await callHandler(reactionRolesAdminPanel, 'handleReactionRolesAdminInteraction', interaction)) return;
       if (await callHandler(suggestionsAdminPanel, 'handleSuggestionsAdminInteraction', interaction)) return;
@@ -163,13 +134,11 @@ module.exports = {
       if (await callHandler(adminPanel, 'handleAdminNavigation', interaction)) return;
       if (await callHandler(duplicator, 'handleInteraction', interaction)) return;
       if (await callHandler(embedPanel, 'handleInteraction', interaction)) return;
-
       if (interaction.isButton?.() && await callHandler(testSecurityCommand, 'handleButton', interaction)) return;
       if (interaction.isButton?.() && await callHandler(tempVoiceInteractionHandler, 'handleTempVoiceInteraction', interaction, client)) return;
       if (await callHandler(formsInteractionHandler, 'handleFormsInteraction', interaction)) return;
       if (await callHandler(suggestionsInteractionHandler, 'handleSuggestionsInteraction', interaction)) return;
       if (await callHandler(giveawaysInteractionHandler, 'handleGiveawayInteraction', interaction)) return;
-
       if (interaction.isButton?.() && await callHandler(pollsManager, 'vote', interaction)) return;
       if (await callHandler(ticketInteractionHandler, 'handleTicketInteraction', interaction, client)) return;
       if (await callHandler(roleInteractionHandler, 'handleRoleInteraction', interaction)) return;

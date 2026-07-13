@@ -12,9 +12,7 @@ loadEnvironment();
 process.on('warning', (warning) => {
   const message = String(warning?.message || '');
   const isDiscordReadyRenameWarning = warning?.name === 'DeprecationWarning' && message.includes('ready event has been renamed to clientReady');
-
   if (isDiscordReadyRenameWarning) return;
-
   console.warn(warning);
 });
 
@@ -30,14 +28,10 @@ function safeRequire(label, modulePath, fallback = null, options = {}) {
   } catch (error) {
     const optional = options.optional !== false;
     const missingOptionalModule = optional && isMissingOptionalModule(error, modulePath);
-
     if (missingOptionalModule) {
-      if (process.env.GOLIATH_VERBOSE_OPTIONAL_MODULES === 'true') {
-        console.info(`ℹ️ Optional startup module unavailable: ${label}`);
-      }
+      if (process.env.GOLIATH_VERBOSE_OPTIONAL_MODULES === 'true') console.info(`ℹ️ Optional startup module unavailable: ${label}`);
       return fallback;
     }
-
     console.warn(`⚠️ Startup module failed: ${label}`);
     console.warn(error?.stack || error?.message || error);
     return fallback;
@@ -57,7 +51,7 @@ const { bootstrapRuntime, runBootValidation, safeLoad, printStartupFingerprint }
   printStartupFingerprint: () => null,
 }, { optional: false });
 const { initSocketHub } = safeRequire('socketHub', './src/server/sockets/socketHub', { initSocketHub: () => null }, { optional: false });
-safeRequire('backup notification wiring', './src/modules/notifications/wireBackupNotifications', { wireBackupNotifications: () => false }).wireBackupNotifications?.();
+safeRequire('backup notification wiring', './src/core/notifications/wireBackupNotifications', { wireBackupNotifications: () => false }).wireBackupNotifications?.();
 
 const authRoutes = safeRequire('auth routes', './src/server/routes/auth', emptyRouter(), { optional: false });
 const discordRoutes = safeRequire('discord routes', './src/server/routes/discord', emptyRouter(), { optional: false });
@@ -83,6 +77,9 @@ const translationRoutes = safeRequire('translation routes', './src/server/routes
 const permissionHealthRoutes = safeRequire('permission health routes', './src/server/routes/permissionHealth', emptyRouter(), { optional: false });
 const socialRoutes = safeRequire('social routes', './src/server/routes/social', emptyRouter(), { optional: false });
 const verificationRoutes = safeRequire('verification routes', './src/server/routes/verification', emptyRouter(), { optional: false });
+const autoRolesRoutes = safeRequire('auto roles routes', './src/server/routes/autoRoles', emptyRouter(), { optional: false });
+const welcomeRoutes = safeRequire('welcome routes', './src/server/routes/welcome', emptyRouter(), { optional: false });
+const goodbyeRoutes = safeRequire('goodbye routes', './src/server/routes/goodbye', emptyRouter(), { optional: false });
 const modulesRoutes = safeRequire('modules routes', './src/server/routes/modules', emptyRouter(), { optional: false });
 const automationRoutes = safeRequire('automation routes', './src/server/routes/automation', emptyRouter(), { optional: false });
 const notificationRoutes = safeRequire('notification routes', './src/server/routes/notifications', emptyRouter(), { optional: false });
@@ -127,20 +124,12 @@ client.commands = new Collection();
 const app = express();
 const server = http.createServer(app);
 const io = initSocketHub(server) || null;
-
 app.set('trust proxy', 1);
 app.set('goliath.client', client);
 app.set('goliath.io', io);
 
-const allowedOrigins = new Set([
-  'https://goliath.ksjdigital.co.uk',
-  'https://dev.goliath.ksjdigital.co.uk',
-  'https://twotonetaj.ksjdigital.co.uk',
-  'http://localhost:5173',
-  'http://localhost:5174',
-]);
+const allowedOrigins = new Set(['https://goliath.ksjdigital.co.uk', 'https://dev.goliath.ksjdigital.co.uk', 'https://twotonetaj.ksjdigital.co.uk', 'http://localhost:5173', 'http://localhost:5174']);
 [process.env.CLIENT_URL, process.env.DASHBOARD_CLIENT_URL, process.env.DASHBOARD_URL, process.env.VITE_CLIENT_URL, process.env.TWOTONETAJ_CLIENT_URL].filter(Boolean).forEach((origin) => allowedOrigins.add(String(origin).trim()));
-
 app.use(cors({ origin(origin, callback) { if (!origin || allowedOrigins.has(origin)) return callback(null, true); return callback(new Error(`CORS blocked origin: ${origin}`)); }, credentials: true }));
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -174,6 +163,9 @@ app.use('/api/translation', translationRoutes);
 app.use('/api/permissions', permissionHealthRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/verification', verificationRoutes);
+app.use('/api/auto-roles', autoRolesRoutes);
+app.use('/api/welcome', welcomeRoutes);
+app.use('/api/goodbye', goodbyeRoutes);
 app.use('/api/modules', modulesRoutes);
 app.use('/api/automation', automationRoutes);
 app.use('/api/notifications', notificationRoutes);
@@ -231,8 +223,20 @@ function registerEvents() {
 
 registerEvents();
 
+async function runStartupTask(label, fn) {
+  try {
+    await fn();
+    console.log(`✅ ${label} startup complete`);
+  } catch (error) {
+    console.error(`❌ ${label} startup failed`);
+    console.error(error?.stack || error?.message || error);
+  }
+}
+
 client.once('clientReady', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+  console.log(`ℹ Guilds cached: ${client.guilds.cache.size}`);
+
   for (const guild of client.guilds.cache.values()) {
     try {
       await enforceGuildAccess(guild, botMode, config);
@@ -243,16 +247,16 @@ client.once('clientReady', async () => {
       console.error(`Guild startup sync failed for ${guild?.id}:`, error?.message || error);
     }
   }
-});
 
-client.once('ready', () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
-  console.log(`ℹ Guilds cached: ${client.guilds.cache.size}`);
-  safeLoad('tickets startup', () => require('./src/modules/tickets/ticketStartup').recoverTickets(client));
-  safeLoad('roles startup', () => require('./src/modules/roles/rolesStartup').initializeRoles(client));
-  safeLoad('translation startup', () => require('./src/modules/translation/translationStartup').recoverTranslationPanels(client));
-  safeLoad('verification startup', () => require('./src/modules/verification/verificationStartup').startupVerification(client));
-  safeLoad('giveaways startup', () => require('./src/modules/giveaways/giveawayScheduler').start(client));
+  await Promise.all([
+    runStartupTask('Tickets', () => require('./src/modules/tickets/ticketStartup').startupTickets(client)),
+    runStartupTask('Roles', () => require('./src/modules/roles/rolesStartup').initializeRoles(client)),
+    runStartupTask('Translation', () => require('./src/modules/translation/translationStartup').startupTranslation(client)),
+    runStartupTask('Verification', () => require('./src/modules/verification/verificationStartup').startupVerification(client)),
+    runStartupTask('Goodbye', () => require('./src/modules/goodbye/goodbyeStartup').startupGoodbye(client)),
+    runStartupTask('Giveaways', () => require('./src/modules/giveaways/giveawayScheduler').start(client)),
+  ]);
+
   backupScheduler.startBackupScheduler?.();
 });
 

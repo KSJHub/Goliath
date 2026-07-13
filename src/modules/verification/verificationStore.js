@@ -140,9 +140,12 @@ function defaultSettings() {
     pendingRoleTiming: 'after_screening',
     requirePendingRole: false,
     removePendingRoles: true,
+    removePendingRole: true,
 
     verifiedRoleIds: [],
     pendingRoleIds: [],
+    verifiedRoleId: null,
+    unverifiedRoleId: null,
 
     dmOnVerify: true,
     dmOnPendingRole: false,
@@ -221,6 +224,9 @@ function normalizeSettings(settings = {}) {
   const method = String(source.method || base.method).toLowerCase();
   const timing = String(source.pendingRoleTiming || base.pendingRoleTiming).toLowerCase();
   const requirePendingRole = source.requirePendingRole === true;
+  const verifiedRoleIds = cleanDiscordIds(source.verifiedRoleIds?.length ? source.verifiedRoleIds : legacyVerified);
+  const pendingRoleIds = cleanDiscordIds(source.pendingRoleIds?.length ? source.pendingRoleIds : legacyPending);
+  const removePendingRoles = source.removePendingRoles !== false && source.removePendingRole !== false;
 
   return {
     ...base,
@@ -237,10 +243,13 @@ function normalizeSettings(settings = {}) {
     assignPendingRoles: source.assignPendingRoles === true,
     pendingRoleTiming: PENDING_ROLE_TIMINGS.has(timing) ? timing : base.pendingRoleTiming,
     requirePendingRole,
-    removePendingRoles: source.removePendingRoles !== false && source.removePendingRole !== false,
+    removePendingRoles,
+    removePendingRole: removePendingRoles,
 
-    verifiedRoleIds: cleanDiscordIds(source.verifiedRoleIds?.length ? source.verifiedRoleIds : legacyVerified),
-    pendingRoleIds: cleanDiscordIds(source.pendingRoleIds?.length ? source.pendingRoleIds : legacyPending),
+    verifiedRoleIds,
+    pendingRoleIds,
+    verifiedRoleId: verifiedRoleIds[0] || null,
+    unverifiedRoleId: pendingRoleIds[0] || null,
 
     dmOnVerify: source.dmOnVerify !== false,
     dmOnPendingRole: source.dmOnPendingRole === true,

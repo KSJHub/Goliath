@@ -19,7 +19,7 @@ const embedTemplateManager = require('../../modules/embed/embedTemplateManager')
 const {
   getAllEmbedDeployments,
   deleteEmbedDeployment,
-} = require('../../modules/embed/functions/embedDeploymentStore');
+} = require('../../modules/embed/embedDeploymentStore');
 const {
   isGoliathPermissionError,
   validateRoleSelection,

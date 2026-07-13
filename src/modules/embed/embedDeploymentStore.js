@@ -2,7 +2,7 @@
 
 // functions/embed/embedDeploymentStore.js
 
-const guildManager = require('../../../core/guild/guildManager');
+const guildManager = require('../../core/guild/guildManager');
 const {
   emitEmbedUpdated,
   emitEmbedStatusUpdated,

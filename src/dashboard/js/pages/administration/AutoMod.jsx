@@ -12,7 +12,7 @@ import PageShell, {
   StatGrid,
   SummaryStat,
 } from '../../shared/PageShell';
-import { PAGE_LAYOUTS, SECTION_DEFS } from "../../ui/layout";
+import { PAGE_LAYOUTS } from "../../ui/layout";
 import { createAutoModPageStyles } from "../../ui/components";
 
 const PAGE_KEY = 'automod';
@@ -456,8 +456,8 @@ export default function AutoMod({ selectedGuild, theme }) {
 
       <SectionCard
         theme={theme}
-        title={SECTION_DEFS?.rules?.title || 'Rules'}
-        subtitle={SECTION_DEFS?.rules?.description || 'Manage core AutoMod rules.'}
+        title="Rules"
+        subtitle="Manage core AutoMod rules."
         padding="20px"
       >
         {loading ? (

@@ -64,6 +64,16 @@ export const moduleRegistry = [
     summary: 'Create and manage server giveaways.',
   },
   {
+    key: 'goodbye',
+    name: 'Goodbye',
+    icon: 'GB',
+    route: '/goodbye',
+    category: MODULE_CATEGORIES.feature,
+    status: MODULE_STATUSES.backendReady,
+    enabled: false,
+    summary: 'Public farewell messages, Embed Studio templates and delivery analytics.',
+  },
+  {
     key: 'leveling',
     name: 'Leveling',
     icon: 'LV',
@@ -184,6 +194,16 @@ export const moduleRegistry = [
     status: MODULE_STATUSES.backendReady,
     enabled: false,
     summary: 'Member verification and onboarding protection.',
+  },
+  {
+    key: 'welcome',
+    name: 'Welcome',
+    icon: 'WC',
+    route: '/welcome',
+    category: MODULE_CATEGORIES.feature,
+    status: MODULE_STATUSES.backendReady,
+    enabled: false,
+    summary: 'Public welcome messages, member DMs, templates and onboarding analytics.',
   },
 ].sort((a, b) => a.name.localeCompare(b.name));
 

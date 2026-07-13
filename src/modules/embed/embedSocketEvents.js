@@ -1,6 +1,6 @@
 'use strict';
 
-// src/modules/embed/functions/embedSocketEvents.js
+// src/modules/embed/embedSocketEvents.js
 
 const EVENTS = Object.freeze({
   EMBED_CREATED: 'embed_created',

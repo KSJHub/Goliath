@@ -1,7 +1,7 @@
 'use strict';
 
 // src/modules/embed/embedTemplateManager.js
-// Shared Embed Studio template helpers for Welcome/Leave, Tickets, Forms and future modules.
+// Shared Embed Studio template helpers for module-facing Discord messages.
 
 const crypto = require('crypto');
 const {
@@ -21,11 +21,17 @@ const DEFAULT_EMBED = Object.freeze({
   buttons: [],
 });
 
+const MEMBER_VARIABLES = [
+  '{user}', '{userMention}', '{username}', '{userId}', '{userAvatar}', '{memberAvatar}',
+  '{guild}', '{guildName}', '{server}', '{serverName}', '{memberCount}', '{createdAt}',
+];
+
 const MODULE_VARIABLES = Object.freeze({
-  global: ['{guild}', '{guildId}', '{guildIcon}', '{guildBanner}', '{memberCount}', '{createdAt}', '{timestamp}'],
-  welcome: ['{user}', '{userMention}', '{username}', '{userId}', '{guild}', '{memberCount}', '{createdAt}'],
-  leave: ['{user}', '{username}', '{userId}', '{guild}', '{memberCount}', '{joinedAt}', '{leftAt}'],
-  dmWelcome: ['{user}', '{userMention}', '{username}', '{guild}', '{memberCount}'],
+  global: ['{guild}', '{guildName}', '{server}', '{serverName}', '{guildId}', '{guildIcon}', '{guildBanner}', '{memberCount}', '{createdAt}', '{timestamp}'],
+  welcome: [...MEMBER_VARIABLES, '{joinedAt}'],
+  goodbye: [...MEMBER_VARIABLES, '{joinedAt}', '{leftAt}', '{timestamp}'],
+  leave: [...MEMBER_VARIABLES, '{joinedAt}', '{leftAt}', '{timestamp}'],
+  dmWelcome: [...MEMBER_VARIABLES, '{joinedAt}'],
   tickets: ['{ticketId}', '{ticketDisplayId}', '{ticketType}', '{ticketPriority}', '{ticketCreator}', '{ticketChannel}', '{ticketStatus}'],
   forms: ['{formId}', '{formName}', '{submissionId}', '{submitter}', '{submissionStatus}', '{reviewer}'],
   moderation: ['{caseId}', '{moderator}', '{target}', '{reason}', '{duration}', '{action}'],
@@ -45,8 +51,22 @@ const DEFAULT_TEMPLATES = Object.freeze({
       footer: { text: 'Joined {createdAt}', iconURL: '{guildIcon}' },
     },
   },
+  goodbye_default: {
+    name: 'Goodbye Default',
+    module: 'goodbye',
+    templateType: 'goodbye',
+    content: '',
+    embed: {
+      ...DEFAULT_EMBED,
+      title: '{username} left {guild}',
+      description: 'We are sorry to see you go. Member count is now {memberCount}.',
+      color: '#F97316',
+      thumbnailURL: '{userAvatar}',
+      footer: { text: 'Left {leftAt}', iconURL: '{guildIcon}' },
+    },
+  },
   leave_default: {
-    name: 'Leave Default',
+    name: 'Leave Default (Legacy)',
     module: 'welcome',
     templateType: 'leave',
     content: '',
