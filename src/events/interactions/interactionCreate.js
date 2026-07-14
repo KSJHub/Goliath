@@ -12,8 +12,8 @@ function optionalRequire(label, modulePath, fallback = {}) {
   }
 }
 
-const verificationManager = optionalRequire('verification manager', '../../modules/verification');
-const ticketInteractionHandler = optionalRequire('tickets', '../../modules/tickets/ticketInteractionHandler');
+const verificationManager = optionalRequire('verification manager', '../../modules/verification/verification');
+const ticketInteractionHandler = optionalRequire('tickets', '../../modules/tickets/tickets');
 const roleInteractionHandler = optionalRequire('roles', '../../modules/roles/roleInteractionHandler');
 const pollsManager = optionalRequire('polls', '../../modules/polls/pollsManager');
 const tempVoiceInteractionHandler = optionalRequire('temp voice', '../../modules/tempvoice/tempVoiceInteractionHandler');
@@ -25,7 +25,7 @@ const embedPanel = optionalRequire('embed panel', '../../modules/embed/embedPane
 const duplicator = optionalRequire('duplicator', '../../core/dev/duplicator');
 const adminPanel = optionalRequire('admin panel', '../../core/admin/functions/adminPanel');
 const statsAdminPanel = optionalRequire('stats admin', '../../core/admin/functions/statsAdminPanel');
-const reactionRolesAdminPanel = optionalRequire('reaction roles admin', '../../core/admin/functions/reactionRolesAdminPanel');
+const reactionRolesAdminPanel = optionalRequire('reaction roles admin', '../../modules/reactionroles/reactionRolesPanel');
 const suggestionsAdminPanel = optionalRequire('suggestions admin', '../../core/admin/functions/suggestionsAdminPanel');
 const giveawaysAdminPanel = optionalRequire('giveaways admin', '../../core/admin/functions/giveawaysAdminPanel');
 const formsAdminPanel = optionalRequire('forms admin', '../../core/admin/functions/formsAdminPanel');
@@ -34,10 +34,10 @@ const starboardAdminPanel = optionalRequire('starboard admin', '../../core/admin
 const stickyAdminPanel = optionalRequire('sticky admin', '../../core/admin/functions/stickyAdminPanel');
 const levelingAdminPanel = optionalRequire('leveling admin', '../../core/admin/functions/levelingAdminPanel');
 const socialAdminPanel = optionalRequire('social admin', '../../core/admin/functions/socialAdminPanel');
-const verificationAdminPanel = optionalRequire('verification admin', '../../modules/verificationPanel');
-const autorolesPanel = optionalRequire('auto roles', '../../modules/autorolesPanel');
-const welcomePanel = optionalRequire('welcome', '../../core/admin/functions/welcomePanel');
-const goodbyePanel = optionalRequire('goodbye', '../../core/admin/functions/goodbyePanel');
+const verificationAdminPanel = optionalRequire('verification admin', '../../modules/verification/verificationPanel');
+const autorolesPanel = optionalRequire('auto roles', '../../modules/autoroles/autorolesPanel');
+const welcomePanel = optionalRequire('welcome', '../../modules/welcome/welcomePanel');
+const goodbyePanel = optionalRequire('goodbye', '../../modules/goodbye/goodbyePanel');
 const moduleAdminPanels = optionalRequire('generic module admin', '../../core/admin/functions/moduleAdminPanels');
 
 async function callHandler(target, method, ...args) {
@@ -119,9 +119,9 @@ module.exports = {
       if (startsWith(interaction, 'admin:autoRoles')) { await callHandler(autorolesPanel, 'handleAutoRolesInteraction', interaction); return; }
       if (startsWith(interaction, 'admin:welcome')) { await callHandler(welcomePanel, 'handleWelcomeInteraction', interaction); return; }
       if (startsWith(interaction, 'admin:goodbye')) { await callHandler(goodbyePanel, 'handleGoodbyeInteraction', interaction); return; }
+      if (startsWith(interaction, 'admin:reactionRoles')) { await callHandler(reactionRolesAdminPanel, 'handleReactionRolesAdminInteraction', interaction); return; }
       if (isVerificationMemberInteraction(interaction)) { await callHandler(verificationManager, 'handleVerificationInteraction', interaction); return; }
       if (await callHandler(statsAdminPanel, 'handleStatsAdminInteraction', interaction)) return;
-      if (await callHandler(reactionRolesAdminPanel, 'handleReactionRolesAdminInteraction', interaction)) return;
       if (await callHandler(suggestionsAdminPanel, 'handleSuggestionsAdminInteraction', interaction)) return;
       if (await callHandler(giveawaysAdminPanel, 'handleGiveawaysAdminInteraction', interaction)) return;
       if (await callHandler(formsAdminPanel, 'handleFormsAdminInteraction', interaction)) return;

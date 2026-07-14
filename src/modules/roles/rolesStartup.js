@@ -1,11 +1,9 @@
 'use strict';
 
+const { startupRoles } = require('./roleStartup');
+
 async function initializeRoles(client) {
-  return {
-    ok: Boolean(client),
-    guildsChecked: client?.guilds?.cache?.size || 0,
-    delegated: true,
-  };
+  return startupRoles(client);
 }
 
 module.exports = {

@@ -3,7 +3,7 @@
 const express = require('express');
 const guildManager = require('../../core/guild/guildManager');
 const statsStore = require('../../modules/stats/statsStore');
-const verificationStore = require('../../modules/verification/verificationStore');
+const verificationStore = require('../../modules/verification/verification');
 
 const router = express.Router();
 

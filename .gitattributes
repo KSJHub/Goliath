@@ -8,9 +8,12 @@
 *.md text eol=lf
 *.css text eol=lf
 *.html text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
 
 # Keep scripts platform-safe
 *.sh text eol=lf
+*.ps1 text eol=crlf
 *.bat text eol=crlf
 *.cmd text eol=crlf
 

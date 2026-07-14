@@ -7,6 +7,7 @@ const session = require('express-session');
 const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 
 const { loadEnvironment } = require('./src/config/envLoader');
+const { resolveToken } = require('./src/config/tokenResolver');
 loadEnvironment();
 
 process.on('warning', (warning) => {
@@ -42,7 +43,7 @@ function emptyRouter() {
   return express.Router();
 }
 
-const { getBotModeConfig } = safeRequire('botModes', './src/config/botModes', { getBotModeConfig: () => ({ token: process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN || process.env.TOKEN }) }, { optional: false });
+const { getBotModeConfig } = safeRequire('botModes', './src/config/botModes', { getBotModeConfig: () => ({ token: null }) }, { optional: false });
 const { enforceGuildAccess } = safeRequire('guildAccess', './src/config/guildAccess', { enforceGuildAccess: async () => true }, { optional: false });
 const { bootstrapRuntime, runBootValidation, safeLoad, printStartupFingerprint } = safeRequire('runtimeBootstrap', './src/runtime/runtimeBootstrap', {
   bootstrapRuntime: () => ({}),
@@ -70,16 +71,17 @@ const billingRoutes = safeRequire('billing routes', './src/server/routes/billing
 const moderationRoutes = safeRequire('moderation routes', './src/server/routes/moderation', emptyRouter(), { optional: false });
 const serverRestoreRoutes = safeRequire('restore routes', './src/server/routes/serverRestoreRoutes', emptyRouter(), { optional: false });
 const securityRoutes = safeRequire('security routes', './src/server/routes/security', emptyRouter(), { optional: false });
-const ticketRoutes = safeRequire('ticket routes', './src/server/routes/tickets', emptyRouter(), { optional: false });
+const ticketRoutes = safeRequire('ticket routes', './src/modules/tickets/ticketsRoute', emptyRouter(), { optional: false });
 const formsRoutes = safeRequire('forms routes', './src/server/routes/forms', emptyRouter(), { optional: false });
 const transcriptRoutes = safeRequire('transcript routes', './src/server/routes/transcripts', emptyRouter(), { optional: false });
 const translationRoutes = safeRequire('translation routes', './src/server/routes/translation', emptyRouter(), { optional: false });
 const permissionHealthRoutes = safeRequire('permission health routes', './src/server/routes/permissionHealth', emptyRouter(), { optional: false });
 const socialRoutes = safeRequire('social routes', './src/server/routes/social', emptyRouter(), { optional: false });
-const verificationRoutes = safeRequire('verification routes', './src/server/routes/verification', emptyRouter(), { optional: false });
-const autoRolesRoutes = safeRequire('auto roles routes', './src/server/routes/autoRoles', emptyRouter(), { optional: false });
-const welcomeRoutes = safeRequire('welcome routes', './src/server/routes/welcome', emptyRouter(), { optional: false });
-const goodbyeRoutes = safeRequire('goodbye routes', './src/server/routes/goodbye', emptyRouter(), { optional: false });
+const verificationRoutes = safeRequire('verification routes', './src/modules/verification/verificationRoute', emptyRouter(), { optional: false });
+const autoRolesRoutes = safeRequire('auto roles routes', './src/modules/autoroles/autorolesRoute', emptyRouter(), { optional: false });
+const welcomeRoutes = safeRequire('welcome routes', './src/modules/welcome/welcomeRoute', emptyRouter(), { optional: false });
+const goodbyeRoutes = safeRequire('goodbye routes', './src/modules/goodbye/goodbyeRoute', emptyRouter(), { optional: false });
+const reactionRolesRoutes = safeRequire('reaction roles routes', './src/modules/reactionroles/reactionRolesRoute', emptyRouter(), { optional: false });
 const modulesRoutes = safeRequire('modules routes', './src/server/routes/modules', emptyRouter(), { optional: false });
 const automationRoutes = safeRequire('automation routes', './src/server/routes/automation', emptyRouter(), { optional: false });
 const notificationRoutes = safeRequire('notification routes', './src/server/routes/notifications', emptyRouter(), { optional: false });
@@ -166,6 +168,7 @@ app.use('/api/verification', verificationRoutes);
 app.use('/api/auto-roles', autoRolesRoutes);
 app.use('/api/welcome', welcomeRoutes);
 app.use('/api/goodbye', goodbyeRoutes);
+app.use('/api/reaction-roles', reactionRolesRoutes);
 app.use('/api/modules', modulesRoutes);
 app.use('/api/automation', automationRoutes);
 app.use('/api/notifications', notificationRoutes);
@@ -212,7 +215,9 @@ function registerEvents() {
       const handlers = Array.isArray(loaded) ? loaded : [loaded];
       for (const handler of handlers) {
         if (!handler?.name || typeof handler.execute !== 'function') continue;
-        client.on(handler.name, (...args) => handler.execute(...args, client));
+        const listener = (...args) => handler.execute(...args, client);
+        if (handler.once === true) client.once(handler.name, listener);
+        else client.on(handler.name, listener);
       }
     } catch (error) {
       console.warn(`⚠️ Event skipped: ${file}`);
@@ -249,11 +254,12 @@ client.once('clientReady', async () => {
   }
 
   await Promise.all([
-    runStartupTask('Tickets', () => require('./src/modules/tickets/ticketStartup').startupTickets(client)),
+    runStartupTask('Tickets', () => require('./src/modules/tickets/tickets').startup.startupTickets(client)),
     runStartupTask('Roles', () => require('./src/modules/roles/rolesStartup').initializeRoles(client)),
     runStartupTask('Translation', () => require('./src/modules/translation/translationStartup').startupTranslation(client)),
-    runStartupTask('Verification', () => require('./src/modules/verification/verificationStartup').startupVerification(client)),
-    runStartupTask('Goodbye', () => require('./src/modules/goodbye').startupGoodbye(client)),
+    runStartupTask('Verification', () => require('./src/modules/verification/verification').startupVerification(client)),
+    runStartupTask('Goodbye', () => require('./src/modules/goodbye/goodbye').startupGoodbye(client)),
+    runStartupTask('Reaction Roles', () => require('./src/modules/reactionroles/reactionRoles').startup(client)),
     runStartupTask('Giveaways', () => require('./src/modules/giveaways/giveawayScheduler').start(client)),
   ]);
 
@@ -262,7 +268,7 @@ client.once('clientReady', async () => {
 
 server.listen(PORT, () => console.log(`🌐 Dashboard server running on port ${PORT}`));
 
-const token = config?.token || process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN || process.env.TOKEN;
+const token = resolveToken(config);
 if (!token) {
   console.error('❌ Missing Discord token for current BOT_MODE.');
   process.exit(1);

@@ -2,11 +2,11 @@
 
 const { EmbedBuilder, AuditLogEvent } = require('discord.js');
 const guildManager = require('../../core/guild/guildManager');
-const autoRoleManager = require('../../modules/autoroles');
+const autoRoleManager = require('../../modules/autoroles/autoroles');
 const statsManager = require('../../modules/stats/statsManager');
-const verificationManager = require('../../modules/verification');
-const welcomeManager = require('../../modules/welcome');
-const goodbyeManager = require('../../modules/goodbye');
+const verificationManager = require('../../modules/verification/verification');
+const welcomeManager = require('../../modules/welcome/welcome');
+const goodbyeManager = require('../../modules/goodbye/goodbye');
 
 function formatTimestamp(timestamp, style = 'R') {
   return timestamp ? `<t:${Math.floor(timestamp / 1000)}:${style}>` : 'Unknown';

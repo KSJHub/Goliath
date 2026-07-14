@@ -5,7 +5,7 @@
 const express = require('express');
 const { PermissionFlagsBits } = require('discord.js');
 
-const autoRoleStore = require('../../modules/autoRoles/autoRoleStore');
+const autoRoleStore = require('../../modules/autoroles/autoroles');
 const verificationStore = require('../../modules/verification/verificationStore');
 const formStore = require('../../modules/forms/formStore');
 const ticketStore = require('../../modules/tickets/ticketStore');

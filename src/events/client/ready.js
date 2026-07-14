@@ -1,3 +1,4 @@
+const { Events } = require('discord.js');
 const terminal = require('../../core/logging/terminalLogger').createLogger('bot');
 
 const {
@@ -7,22 +8,6 @@ const {
 const {
   startbackupWorker,
 } = require('../../core/security/backup/backupWorker');
-
-const {
-  startupTickets,
-} = require('../../modules/tickets/ticketStartup');
-
-const {
-  startupRoles,
-} = require('../../modules/roles/roleStartup');
-
-const {
-  startupTranslation,
-} = require('../../modules/translation/translationStartup');
-
-const {
-  startGiveawayScheduler,
-} = require('../../modules/giveaways/giveawayManager');
 
 const {
   startStatusRotation,
@@ -39,18 +24,8 @@ function getEnvList(name) {
     .filter(Boolean);
 }
 
-async function runOptionalStartup(label, fn, client) {
-  try {
-    if (typeof fn !== 'function') return;
-    await fn(client);
-    terminal.success(`${label} startup complete`);
-  } catch (error) {
-    terminal.warn(`${label} startup skipped: ${error.message}`);
-  }
-}
-
 module.exports = {
-  name: 'ready',
+  name: Events.ClientReady,
   once: true,
   async execute(client) {
     terminal.success(`Logged in as ${client.user?.tag || 'Unknown bot'}`);
@@ -76,10 +51,5 @@ module.exports = {
     restoreLockdownReminders(client);
     startbackupWorker(client);
     startStatusRotation(client);
-
-    await runOptionalStartup('Tickets', startupTickets, client);
-    await runOptionalStartup('Roles', startupRoles, client);
-    await runOptionalStartup('Translation', startupTranslation, client);
-    await runOptionalStartup('Giveaways', startGiveawayScheduler, client);
   },
 };

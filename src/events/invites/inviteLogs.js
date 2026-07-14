@@ -1,3 +1,6 @@
+'use strict';
+
+const { Events } = require('discord.js');
 const loggingService = require('../../core/logging/service');
 
 const inviteCache = new Map();
@@ -83,8 +86,8 @@ async function logInviteUse(member) {
 }
 
 module.exports = [
-  { name: 'ready', async execute(client) { for (const guild of client.guilds.cache.values()) await refreshInvites(guild); } },
-  { name: 'inviteCreate', async execute(invite) { await logInviteCreate(invite); } },
-  { name: 'inviteDelete', async execute(invite) { await logInviteDelete(invite); } },
-  { name: 'guildMemberAdd', async execute(member) { await logInviteUse(member); } },
+  { name: Events.ClientReady, async execute(client) { for (const guild of client.guilds.cache.values()) await refreshInvites(guild); } },
+  { name: Events.InviteCreate, async execute(invite) { await logInviteCreate(invite); } },
+  { name: Events.InviteDelete, async execute(invite) { await logInviteDelete(invite); } },
+  { name: Events.GuildMemberAdd, async execute(member) { await logInviteUse(member); } },
 ];

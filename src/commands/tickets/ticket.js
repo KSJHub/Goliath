@@ -8,7 +8,7 @@ const {
 
 const {
   sendSetupPanel,
-} = require('../../modules/tickets/ticketSetupPanel');
+} = require('../../modules/tickets/ticketsPanel');
 
 module.exports = {
   data: new SlashCommandBuilder()

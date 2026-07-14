@@ -6,59 +6,58 @@ const MODULE_REGISTRY = {
   verification: {
     key: 'verification',
     label: 'Verification',
-    menuPath: path.join('..', 'verification', 'verificationMenu'),
-    managerPath: path.join('..', 'verification', 'verificationManager'),
-    storePath: path.join('..', 'verification', 'verificationStore'),
+    managerPath: path.join('..', '..', 'modules', 'verification'),
+    storePath: path.join('..', '..', 'modules', 'verification'),
   },
   autoRoles: {
     key: 'autoRoles',
     label: 'Auto Roles',
-    managerPath: path.join('..', 'autoroles'),
-    storePath: path.join('..', 'autoroles'),
+    managerPath: path.join('..', '..', 'modules', 'autoroles'),
+    storePath: path.join('..', '..', 'modules', 'autoroles'),
   },
   forms: {
     key: 'forms',
     label: 'Forms',
-    managerPath: path.join('..', 'forms', 'formManager'),
-    storePath: path.join('..', 'forms', 'formStore'),
+    managerPath: path.join('..', '..', 'modules', 'forms', 'formManager'),
+    storePath: path.join('..', '..', 'modules', 'forms', 'formStore'),
   },
   tickets: {
     key: 'tickets',
     label: 'Tickets',
-    managerPath: path.join('..', 'tickets', 'ticketManager'),
+    managerPath: path.join('..', '..', 'modules', 'tickets', 'ticketManager'),
   },
   giveaways: {
     key: 'giveaways',
     label: 'Giveaways',
-    menuPath: path.join('..', 'giveaways', 'giveawayMenu'),
-    managerPath: path.join('..', 'giveaways', 'giveawayManager'),
-    storePath: path.join('..', 'giveaways', 'giveawayStore'),
+    menuPath: path.join('..', '..', 'modules', 'giveaways', 'giveawayMenu'),
+    managerPath: path.join('..', '..', 'modules', 'giveaways', 'giveawayManager'),
+    storePath: path.join('..', '..', 'modules', 'giveaways', 'giveawayStore'),
   },
   starboard: {
     key: 'starboard',
     label: 'Starboard',
-    menuPath: path.join('..', 'starboard', 'starboardMenu'),
-    managerPath: path.join('..', 'starboard', 'starboardManager'),
-    storePath: path.join('..', 'starboard', 'starboardStore'),
+    menuPath: path.join('..', '..', 'modules', 'starboard', 'starboardMenu'),
+    managerPath: path.join('..', '..', 'modules', 'starboard', 'starboardManager'),
+    storePath: path.join('..', '..', 'modules', 'starboard', 'starboardStore'),
   },
   tempVoice: {
     key: 'tempVoice',
     label: 'Temp Voice',
-    menuPath: path.join('..', 'tempvoice', 'tempVoiceMenu'),
-    managerPath: path.join('..', 'tempvoice', 'tempVoiceManager'),
+    menuPath: path.join('..', '..', 'modules', 'tempvoice', 'tempVoiceMenu'),
+    managerPath: path.join('..', '..', 'modules', 'tempvoice', 'tempVoiceManager'),
   },
   sticky: {
     key: 'sticky',
     label: 'Sticky Messages',
-    menuPath: path.join('..', 'sticky', 'stickyMenu'),
-    managerPath: path.join('..', 'sticky', 'stickyManager'),
-    storePath: path.join('..', 'sticky', 'stickyGuildStore'),
+    menuPath: path.join('..', '..', 'modules', 'sticky', 'stickyMenu'),
+    managerPath: path.join('..', '..', 'modules', 'sticky', 'stickyManager'),
+    storePath: path.join('..', '..', 'modules', 'sticky', 'stickyGuildStore'),
   },
   suggestions: {
     key: 'suggestions',
     label: 'Suggestions',
-    menuPath: path.join('..', 'suggestions', 'suggestionMenu'),
-    managerPath: path.join('..', 'suggestions', 'suggestionManager'),
+    menuPath: path.join('..', '..', 'modules', 'suggestions', 'suggestionMenu'),
+    managerPath: path.join('..', '..', 'modules', 'suggestions', 'suggestionManager'),
   },
   translation: {
     key: 'translation',
@@ -76,9 +75,7 @@ function safeRequire(modulePath) {
   try {
     return require(modulePath);
   } catch (error) {
-    if (error.code !== 'MODULE_NOT_FOUND') {
-      throw error;
-    }
+    if (error.code !== 'MODULE_NOT_FOUND') throw error;
     return null;
   }
 }
@@ -111,9 +108,7 @@ function getAllModuleDefinitions() {
 
 function requireModuleDefinition(moduleKey) {
   const definition = getModuleDefinition(moduleKey);
-  if (!definition) {
-    throw new Error(`Unknown admin module: ${moduleKey}`);
-  }
+  if (!definition) throw new Error(`Unknown admin module: ${moduleKey}`);
   return definition;
 }
 

@@ -1,5 +1,6 @@
 'use strict';
 
+const { Events } = require('discord.js');
 const { handleStickyMessage } = require('../../modules/sticky/stickyManager');
 const { handlePrefixCommand } = require('../../features/prefix/prefixRouter');
 const translationThreadManager = require('../../modules/translation/translationThreadManager');
@@ -16,7 +17,7 @@ try {
 }
 
 module.exports = {
-  name: 'messageCreate',
+  name: Events.MessageCreate,
 
   async execute(message, client) {
     try {
