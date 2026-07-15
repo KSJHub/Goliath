@@ -87,6 +87,7 @@ function normalizeWelcomeSection(section = {}) {
   const base = defaultWelcomeSection();
   const source = section && typeof section === 'object' ? section : {};
   const channelId = cleanDiscordId(source.channelId || source.welcomeChannelId);
+  const legacyDmTemplate = String(source.dmTemplateId || '').trim();
   return {
     ...base,
     ...clone(source),
@@ -94,7 +95,9 @@ function normalizeWelcomeSection(section = {}) {
     channelId,
     templateId: cleanString(source.templateId || base.templateId, base.templateId, 120),
     dmEnabled: source.dmEnabled === true || source.sendDm === true,
-    dmTemplateId: source.dmTemplateId ? cleanString(source.dmTemplateId, '', 120) : null,
+    dmTemplateId: legacyDmTemplate && legacyDmTemplate !== 'dm_welcome_default'
+      ? cleanString(legacyDmTemplate, '', 120)
+      : null,
     allowUserPing: source.allowUserPing !== false,
     ignoreBots: source.ignoreBots !== false,
     analytics: normalizeAnalytics(source.analytics),
@@ -171,25 +174,45 @@ function getAvatar(member) {
     || '';
 }
 
-function getMemberCount(guild, ignoreBots = true) {
-  if (!ignoreBots) return Math.max(0, Number(guild?.memberCount || 0));
-  const cache = guild?.members?.cache;
-  if (cache?.size) return cache.filter((member) => !member.user?.bot).size;
-  return Math.max(0, Number(guild?.memberCount || 0) - 1);
-}
-
-async function refreshMemberCache(guild, ignoreBots) {
-  if (!ignoreBots || !guild?.members?.fetch) return;
+async function refreshMemberCache(guild) {
+  if (!guild?.members?.fetch) return;
   try {
     await guild.members.fetch();
   } catch (error) {
-    console.warn('[Welcome] Could not refresh member cache for human-only count:', error.message || error);
+    console.warn('[Welcome] Could not refresh member cache:', error.message || error);
   }
+}
+
+function eligibleMembers(guild, ignoreBots = true) {
+  const cache = guild?.members?.cache;
+  if (!cache?.size) return [];
+  return [...cache.values()].filter((member) => !ignoreBots || !member.user?.bot);
+}
+
+function getMemberCount(guild, ignoreBots = true) {
+  if (!ignoreBots) return Math.max(0, Number(guild?.memberCount || 0));
+  const members = eligibleMembers(guild, true);
+  return members.length || Math.max(0, Number(guild?.memberCount || 0) - 1);
+}
+
+function getMemberJoinNumber(member, ignoreBots = true) {
+  const candidates = eligibleMembers(member.guild, ignoreBots);
+  if (!candidates.some((candidate) => candidate.id === member.id) && (!ignoreBots || !member.user?.bot)) {
+    candidates.push(member);
+  }
+  candidates.sort((a, b) => {
+    const aJoined = Number(a.joinedTimestamp || Number.MAX_SAFE_INTEGER);
+    const bJoined = Number(b.joinedTimestamp || Number.MAX_SAFE_INTEGER);
+    return aJoined - bJoined || String(a.id).localeCompare(String(b.id));
+  });
+  const index = candidates.findIndex((candidate) => candidate.id === member.id);
+  return index >= 0 ? index + 1 : Math.max(1, candidates.length);
 }
 
 function buildTemplateVariables(member, config = getWelcomeSection(member.guild.id)) {
   const guild = member.guild;
-  const memberCount = getMemberCount(guild, config.ignoreBots);
+  const totalMembers = getMemberCount(guild, config.ignoreBots);
+  const joinNumber = getMemberJoinNumber(member, config.ignoreBots);
   return {
     guild: guild.name,
     guildName: guild.name,
@@ -198,11 +221,12 @@ function buildTemplateVariables(member, config = getWelcomeSection(member.guild.
     guildId: guild.id,
     guildIcon: guild.iconURL?.({ extension: 'png', size: 256 }) || '',
     guildBanner: guild.bannerURL?.({ extension: 'png', size: 1024 }) || '',
-    memberCount,
-    guildMemberCount: memberCount,
+    memberCount: joinNumber,
+    guildMemberCount: joinNumber,
+    totalMemberCount: totalMembers,
     user: String(member.user),
     userMention: `<@${member.user.id}>`,
-    userNoPing: `<@${member.user.id}>`,
+    userNoPing: `@${member.user.username || member.user.id}`,
     username: member.user.username || member.user.tag || member.user.id,
     userDisplay: member.displayName || member.user.globalName || member.user.username || member.user.id,
     userId: member.user.id,
@@ -235,18 +259,27 @@ function bindWelcomeTemplate(guildId, templateId, slot = 'welcome', meta = {}) {
 
 function getAssignedTemplate(guildId, type, config = getWelcomeSection(guildId)) {
   const isDm = type === 'dmWelcome';
-  const slot = isDm ? 'dm_welcome' : 'welcome';
-  const configuredId = isDm ? config.dmTemplateId : config.templateId;
-  return getWelcomeBinding(guildId, slot)
-    || (configuredId ? embedTemplateManager.getTemplate(guildId, configuredId) : null)
-    || (isDm ? getWelcomeBinding(guildId, 'welcome') : null)
-    || (isDm ? embedTemplateManager.getTemplate(guildId, config.templateId) : null);
+  if (!isDm) {
+    return getWelcomeBinding(guildId, 'welcome')
+      || embedTemplateManager.getTemplate(guildId, config.templateId);
+  }
+
+  const explicitDmBinding = getWelcomeBinding(guildId, 'dm_welcome');
+  if (explicitDmBinding) return explicitDmBinding;
+
+  if (config.dmTemplateId) {
+    const configuredDm = embedTemplateManager.getTemplate(guildId, config.dmTemplateId);
+    if (configuredDm) return configuredDm;
+  }
+
+  return getWelcomeBinding(guildId, 'welcome')
+    || embedTemplateManager.getTemplate(guildId, config.templateId);
 }
 
-function renderGuildForCount(guild, count) {
+function renderGuildForNumber(guild, number) {
   return new Proxy(guild, {
     get(target, property, receiver) {
-      if (property === 'memberCount') return count;
+      if (property === 'memberCount') return number;
       return Reflect.get(target, property, receiver);
     },
   });
@@ -278,24 +311,64 @@ function templateToPreviewState(template = {}) {
   };
 }
 
+function replaceTemplateText(text, variables, replacements = {}) {
+  let output = String(text || '');
+  const values = { ...variables, ...replacements };
+  for (const [key, value] of Object.entries(values)) {
+    output = output.replaceAll(`{${key}}`, String(value ?? ''));
+  }
+  return output;
+}
+
+function stripPingPlaceholderFromState(state, variables) {
+  const cleaned = clone(state);
+  const replacements = {
+    userMention: '',
+    usermention: '',
+    user: variables.userDisplay,
+  };
+  cleaned.panels = cleaned.panels.map((panel) => ({
+    ...panel,
+    title: replaceTemplateText(panel.title, variables, replacements),
+    description: replaceTemplateText(panel.description, variables, replacements)
+      .replace(/^\s*\n+/g, '')
+      .replace(/\n{3,}/g, '\n\n'),
+    authorName: replaceTemplateText(panel.authorName, variables, replacements),
+    footer: replaceTemplateText(panel.footer, variables, replacements),
+    fields: (panel.fields || []).map((field) => ({
+      ...field,
+      name: replaceTemplateText(field.name, variables, replacements),
+      value: replaceTemplateText(field.value, variables, replacements),
+    })),
+  }));
+  return cleaned;
+}
+
 function buildDiscordPayload(member, type, config = getWelcomeSection(member.guild.id), options = {}) {
   const isDm = type === 'dmWelcome';
   const template = getAssignedTemplate(member.guild.id, type, config);
   if (!template) throw new Error(`No ${isDm ? 'DM welcome' : 'welcome'} template is assigned.`);
 
-  const count = getMemberCount(member.guild, config.ignoreBots);
+  const variables = buildTemplateVariables(member, config);
   const renderInteraction = {
-    guild: renderGuildForCount(member.guild, count),
+    guild: renderGuildForNumber(member.guild, variables.memberCount),
     guildId: member.guild.id,
     user: member.user,
     member,
   };
-  const state = templateToPreviewState(template);
-  state.allowUserPing = !isDm && config.allowUserPing !== false;
 
-  let content = String(template.content || '').trim();
+  let state = templateToPreviewState(template);
+  const pingEnabled = !isDm && config.allowUserPing !== false;
+  if (pingEnabled) state = stripPingPlaceholderFromState(state, variables);
+
+  let content = replaceTemplateText(template.content || '', variables, {
+    guild: variables.guildName,
+    username: variables.username,
+    userMention: pingEnabled ? `<@${member.user.id}>` : variables.userNoPing,
+  }).trim();
+
   const mention = `<@${member.user.id}>`;
-  if (!isDm && config.allowUserPing !== false && !content.includes(mention)) {
+  if (pingEnabled && !content.includes(mention)) {
     content = content ? `${mention}\n${content}` : mention;
   }
 
@@ -303,7 +376,7 @@ function buildDiscordPayload(member, type, config = getWelcomeSection(member.gui
     content,
     embeds: buildPreviewEmbeds(state, renderInteraction),
     components: options.includeComponents === false ? [] : undefined,
-    allowedMentions: !isDm && config.allowUserPing !== false
+    allowedMentions: pingEnabled
       ? { users: [member.user.id], roles: [], repliedUser: false }
       : { parse: [], repliedUser: false },
   };
@@ -330,7 +403,7 @@ async function sendWelcome(member, options = {}) {
     return { publicSent: false, dmSent: false, skipped: true, reason: 'ignored_bot' };
   }
 
-  await refreshMemberCache(member.guild, config.ignoreBots);
+  await refreshMemberCache(member.guild);
 
   let publicSent = false;
   let dmSent = false;
@@ -486,6 +559,7 @@ module.exports = {
   resetWelcomeSection,
   formatTimestamp,
   getMemberCount,
+  getMemberJoinNumber,
   buildTemplateVariables,
   getWelcomeTemplates,
   getWelcomeBinding,

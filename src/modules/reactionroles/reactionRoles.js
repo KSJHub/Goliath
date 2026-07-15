@@ -341,12 +341,20 @@ async function createFromTemplate({ guild, channelId, templateId, name, mappings
   addAnalytics(guild.id, { created: 1 }, guild);
   return getPanel(guild.id, panel.panelId);
 }
-async function applyTemplateToPanel(guild, panelId, templateId) {
+async function applyTemplateToPanel(guild, panelId, templateId, meta = {}) {
   const panel = getPanel(guild.id, panelId);
   if (!panel) throw new Error('Reaction-role panel not found.');
-  const message = await resolveMessage(guild, panel.messageId, panel.channelId);
-  await message.edit(templatePayload(getReactionTemplate(guild.id, templateId)));
-  return savePanel(guild.id, { ...panel, templateId }, guild);
+  if (panel.enabled === false) throw new Error('Enable this deployment before applying a template.');
+  try {
+    const template = getReactionTemplate(guild.id, templateId);
+    const message = await resolveMessage(guild, panel.messageId, panel.channelId);
+    await message.edit(templatePayload(template));
+    const updated = savePanel(guild.id, { ...panel, templateId, status: 'pending', lastError: null }, meta);
+    return await repairPanel(guild, updated.panelId, meta);
+  } catch (error) {
+    savePanelFailure(guild, panel, error, meta);
+    throw error;
+  }
 }
 async function updatePanelMappings(guild, panelId, mappings, actorId) {
   const current = getPanel(guild.id, panelId);

@@ -145,7 +145,14 @@ async function buildManagedPanel(guild, panelId) {
     ].filter(Boolean).join('\n').slice(0, 4096));
   return { embeds: [embed], components: [
     row(templateSelect(guild.id, panel.templateId, `admin:reactionRoles:manage:template:${panelId}`)),
-    row(btn(`admin:reactionRoles:manage:edit:${panelId}`, '✏️ Edit Mappings', ButtonStyle.Primary), btn(`admin:reactionRoles:manage:${panel.enabled === false ? 'enable' : 'disable'}:${panelId}`, panel.enabled === false ? '▶️ Enable' : '⏸️ Disable', panel.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`admin:reactionRoles:manage:repair:${panelId}`, '🩺 Repair'), btn(`admin:reactionRoles:manage:remove:${panelId}`, '🗑️ Remove', ButtonStyle.Danger), btn('admin:reactionRoles', '⬅️ Back')),
+    row(
+      btn(`admin:reactionRoles:manage:edit:${panelId}`, '✏️ Edit Mappings', ButtonStyle.Primary),
+      btn(`admin:reactionRoles:manage:${panel.enabled === false ? 'enable' : 'disable'}:${panelId}`, panel.enabled === false ? '▶️ Enable' : '⏸️ Disable', panel.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary),
+      btn(`admin:reactionRoles:manage:repair:${panelId}`, '🩺 Repair'),
+      btn(`admin:reactionRoles:manage:redeploy:${panelId}`, '🔄 Redeploy Template', ButtonStyle.Primary, !panel.templateId || panel.enabled === false),
+      btn(`admin:reactionRoles:manage:remove:${panelId}`, '🗑️ Remove', ButtonStyle.Danger)
+    ),
+    row(btn('admin:reactionRoles', '⬅️ Back')),
   ] };
 }
 
@@ -265,7 +272,13 @@ async function handleReactionRolesAdminInteraction(interaction) {
     if (id.startsWith('admin:reactionRoles:manage:repair:')) {
       const panelId = id.split(':').pop();
       await interaction.deferUpdate();
-      await reactionRoles.syncPanelReactions(guild, reactionRoles.getPanel(guild.id, panelId));
+      await reactionRoles.repairPanel(guild, panelId, guild);
+      return interaction.editReply(await buildManagedPanel(guild, panelId));
+    }
+    if (id.startsWith('admin:reactionRoles:manage:redeploy:')) {
+      const panelId = id.split(':').pop();
+      await interaction.deferUpdate();
+      await reactionRoles.redeployPanel(guild, panelId, guild);
       return interaction.editReply(await buildManagedPanel(guild, panelId));
     }
     if (id.startsWith('admin:reactionRoles:manage:remove:')) return show(interaction, buildRemovalChoices(guild, id.split(':').pop()));

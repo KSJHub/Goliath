@@ -103,12 +103,7 @@ router.patch('/:guildId/panels/:panelId/enabled', async (req, res) => {
     const guildId = guildIdFrom(req);
     const guild = await guildFrom(req, guildId);
     panelFrom(guildId, req.params.panelId);
-    const panel = await reactionRoles.setPanelEnabled(
-      guild,
-      req.params.panelId,
-      req.body?.enabled === true,
-      { actorId: actorId(req) }
-    );
+    const panel = await reactionRoles.setPanelEnabled(guild, req.params.panelId, req.body?.enabled === true, { actorId: actorId(req) });
     return success(res, { panel, config: reactionRoles.getSection(guildId) });
   } catch (error) { return respondFailure(res, error); }
 });
@@ -127,11 +122,9 @@ router.post('/:guildId/panels/:panelId/redeploy', async (req, res) => {
   try {
     const guildId = guildIdFrom(req);
     const guild = await guildFrom(req, guildId);
-    const current = panelFrom(guildId, req.params.panelId);
-    if (!current.templateId) throw new Error('This deployment is not linked to an Embed Studio template.');
-    await reactionRoles.applyTemplateToPanel(guild, current.panelId, current.templateId);
-    const result = await reactionRoles.syncPanelReactions(guild, reactionRoles.getPanel(guildId, current.panelId));
-    return success(res, { panel: result.panel, config: reactionRoles.getSection(guildId) });
+    panelFrom(guildId, req.params.panelId);
+    const panel = await reactionRoles.redeployPanel(guild, req.params.panelId, { actorId: actorId(req) });
+    return success(res, { panel, config: reactionRoles.getSection(guildId) });
   } catch (error) { return respondFailure(res, error); }
 });
 
@@ -139,9 +132,9 @@ router.post('/:guildId/panels/:panelId/repair', async (req, res) => {
   try {
     const guildId = guildIdFrom(req);
     const guild = await guildFrom(req, guildId);
-    const panel = panelFrom(guildId, req.params.panelId);
-    const result = await reactionRoles.syncPanelReactions(guild, panel);
-    return success(res, { panel: result.panel, config: reactionRoles.getSection(guildId) });
+    panelFrom(guildId, req.params.panelId);
+    const panel = await reactionRoles.repairPanel(guild, req.params.panelId, { actorId: actorId(req) });
+    return success(res, { panel, config: reactionRoles.getSection(guildId) });
   } catch (error) { return respondFailure(res, error); }
 });
 
