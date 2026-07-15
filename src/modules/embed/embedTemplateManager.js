@@ -1,8 +1,5 @@
 'use strict';
 
-// src/modules/embed/embedTemplateManager.js
-// Shared Embed Studio template helpers for module-facing Discord messages.
-
 const crypto = require('crypto');
 const {
   getGuildSection,
@@ -141,6 +138,45 @@ function asObject(value, fallback = {}) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : fallback;
 }
 
+function panelToEmbed(panel = {}) {
+  return {
+    title: panel.title || '',
+    description: panel.description || '',
+    color: panel.color || '#5865F2',
+    author: {
+      name: panel.authorName || panel.author?.name || '',
+      iconURL: panel.authorIcon || panel.author?.iconURL || '',
+      url: panel.authorUrl || panel.author?.url || '',
+    },
+    thumbnailURL: panel.thumbnail || panel.thumbnailURL || '',
+    imageURL: panel.image || panel.imageURL || '',
+    footer: {
+      text: typeof panel.footer === 'string' ? panel.footer : panel.footer?.text || '',
+      iconURL: panel.footerIcon || panel.footer?.iconURL || '',
+    },
+    fields: Array.isArray(panel.fields) ? panel.fields : [],
+    buttons: Array.isArray(panel.buttons) ? panel.buttons : [],
+  };
+}
+
+function legacyPresetToTemplate(name, preset = {}) {
+  const panel = Array.isArray(preset.panels) && preset.panels.length ? preset.panels[0] : preset;
+  const templateType = cleanKey(preset.template || preset.templateType || 'global');
+  return {
+    ...clone(preset),
+    templateId: cleanKey(preset.templateId || name),
+    name: String(preset.name || name).slice(0, 100),
+    module: templateType === 'custom' ? 'global' : templateType,
+    templateType: templateType === 'custom' ? 'global' : templateType,
+    content: String(preset.content || preset.message || '').slice(0, 2000),
+    embed: panelToEmbed(panel),
+    panels: Array.isArray(preset.panels) ? clone(preset.panels) : [clone(panel)],
+    buttons: Array.isArray(preset.buttons) ? clone(preset.buttons) : [],
+    tags: [...new Set([...(Array.isArray(preset.tags) ? preset.tags : []), 'embed-studio'])],
+    migratedFromPreset: true,
+  };
+}
+
 function normalizeEmbed(embed = {}) {
   const source = asObject(embed, {});
   return {
@@ -190,9 +226,9 @@ function variablesForTemplateType(templateType = 'global') {
 function normalizeTemplate(input = {}) {
   const key = cleanKey(input.templateId || input.id || input.name);
   const templateType = cleanKey(input.templateType || input.module || 'global');
-  const embed = normalizeEmbed(input.embed || input);
+  const embed = normalizeEmbed(input.embed || (Array.isArray(input.panels) ? panelToEmbed(input.panels[0]) : input));
   const content = String(input.content || '').slice(0, 2000);
-  const usedVariables = [...extractVariables({ content, embed })].sort();
+  const usedVariables = [...extractVariables({ content, embed, panels: input.panels })].sort();
   const supportedVariables = variablesForTemplateType(templateType);
 
   return {
@@ -204,6 +240,8 @@ function normalizeTemplate(input = {}) {
     templateType,
     content,
     embed,
+    panels: Array.isArray(input.panels) ? clone(input.panels).slice(0, 10) : input.panels,
+    buttons: Array.isArray(input.buttons) ? clone(input.buttons).slice(0, 20) : input.buttons,
     tags: Array.isArray(input.tags) ? input.tags.slice(0, 20).map(String) : [],
     usedVariables,
     supportedVariables,
@@ -216,10 +254,27 @@ function normalizeTemplate(input = {}) {
 
 function getEmbedSection(guildId) {
   const section = getGuildSection(guildId, 'embedStudio', {});
-  const presets = asObject(section.presets || section.templates, {});
+  const stored = asObject(section.templates || section.presets, {});
+  const legacy = getGuildSection(guildId, 'embedPresets', {});
+  const migrated = {};
+
+  for (const [name, preset] of Object.entries(asObject(legacy, {}))) {
+    if (!preset || name === 'updatedAt') continue;
+    const template = normalizeTemplate(legacyPresetToTemplate(name, preset));
+    if (!stored[template.templateId]) migrated[template.templateId] = template;
+  }
+
+  if (Object.keys(migrated).length) {
+    updateGuildSection(guildId, 'embedStudio', (current = {}) => ({
+      ...current,
+      templates: { ...asObject(current.templates || current.presets, {}), ...migrated },
+      updatedAt: now(),
+    }), {});
+  }
+
   return {
     ...section,
-    templates: { ...clone(DEFAULT_TEMPLATES), ...presets, ...asObject(section.templates, {}) },
+    templates: { ...clone(DEFAULT_TEMPLATES), ...stored, ...migrated },
     bindings: asObject(section.bindings, {}),
     history: Array.isArray(section.history) ? section.history : [],
   };
@@ -299,7 +354,8 @@ function renderTemplate(template = {}, variables = {}) {
   const normalized = normalizeTemplate(template);
   const content = replaceVariables(normalized.content, variables);
   const embed = normalizeEmbed(replaceVariables(normalized.embed, variables));
-  return { ...normalized, content, embed };
+  const panels = Array.isArray(normalized.panels) ? replaceVariables(normalized.panels, variables) : normalized.panels;
+  return { ...normalized, content, embed, panels };
 }
 
 function renderBinding(guildId, moduleKey, slot, variables = {}, fallbackTemplateId = null) {
@@ -326,4 +382,5 @@ module.exports = {
   replaceVariables,
   renderTemplate,
   renderBinding,
+  legacyPresetToTemplate,
 };

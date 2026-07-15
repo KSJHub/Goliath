@@ -13,6 +13,8 @@ const {
 const welcome = require('./welcome');
 const embedTemplateManager = require('../embed/embedTemplateManager');
 
+const selections = new Map();
+
 function row(...components) {
   return new ActionRowBuilder().addComponents(...components);
 }
@@ -21,56 +23,87 @@ function button(customId, label, style = ButtonStyle.Secondary) {
   return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
 }
 
-function templateMenu(guildId, activeTemplateId) {
-  const templates = Object.values(embedTemplateManager.listTemplates(guildId))
-    .filter(Boolean)
-    .sort((a, b) => String(a.name || a.templateId).localeCompare(String(b.name || b.templateId)))
-    .slice(0, 25);
+function selectionKey(interactionOrGuild, userId = 'panel') {
+  const guildId = interactionOrGuild?.guild?.id || interactionOrGuild?.id;
+  const resolvedUserId = interactionOrGuild?.user?.id || userId;
+  return `${guildId}:${resolvedUserId}`;
+}
 
+function templateTypeLabel(template = {}) {
+  const type = String(template.templateType || template.module || 'global');
+  return type === 'global' ? 'General' : type.replace(/([a-z])([A-Z])/g, '$1 $2');
+}
+
+function getTemplateOptions(guildId) {
+  return Object.values(embedTemplateManager.listTemplates(guildId))
+    .filter(Boolean)
+    .sort((a, b) => {
+      const aWelcome = a.templateType === 'welcome' || a.module === 'welcome' ? 0 : 1;
+      const bWelcome = b.templateType === 'welcome' || b.module === 'welcome' ? 0 : 1;
+      return aWelcome - bWelcome || String(a.name || a.templateId).localeCompare(String(b.name || b.templateId));
+    })
+    .slice(0, 25)
+    .map((template) => ({
+      label: String(template.name || template.templateId).slice(0, 100),
+      description: `${templateTypeLabel(template)} · ${template.embed?.title || template.panels?.[0]?.title || 'Embed Studio template'}`.slice(0, 100),
+      value: String(template.templateId),
+    }));
+}
+
+function templateMenu(guild, activeTemplateId, userId) {
+  const options = getTemplateOptions(guild.id);
+  const selected = selections.get(`${guild.id}:${userId}`) || activeTemplateId || null;
   const menu = new StringSelectMenuBuilder()
     .setCustomId('admin:welcome:template')
-    .setPlaceholder(templates.length ? 'Choose any Embed Studio template' : 'No Embed Studio templates available')
+    .setPlaceholder(options.length ? 'Choose an Embed Studio template' : 'No templates available')
     .setMinValues(1)
     .setMaxValues(1)
-    .setDisabled(templates.length === 0);
+    .setDisabled(options.length === 0);
 
-  if (templates.length) {
-    menu.addOptions(templates.map((template) => ({
-      label: String(template.name || template.templateId).slice(0, 100),
-      description: String(template.embed?.title || `${template.module || 'global'} template`).slice(0, 100),
-      value: String(template.templateId),
-      default: String(template.templateId) === String(activeTemplateId),
-    })));
+  if (options.length) {
+    menu.addOptions(options.map((option) => ({ ...option, default: option.value === selected })));
   } else {
     menu.addOptions({ label: 'No templates found', value: 'none' });
   }
   return menu;
 }
 
-async function buildWelcomePanel(guild, memberDisplayName = 'Unknown User') {
+function interactionMember(interaction) {
+  return interaction.member;
+}
+
+async function buildWelcomePanel(guild, memberDisplayName = 'Unknown User', userId = 'panel') {
   const config = welcome.getWelcomeSection(guild.id);
   const health = await welcome.buildHealthReport(guild);
   const analytics = config.analytics || {};
   const binding = welcome.getWelcomeBinding(guild.id, 'welcome');
-  const activeTemplateId = binding?.templateId || config.templateId;
-  const activeTemplateName = binding?.name || health.templateName || activeTemplateId;
+  const activeTemplate = welcome.getAssignedTemplate(guild.id, 'welcome', config);
+  const activeTemplateId = activeTemplate?.templateId || config.templateId;
+  const stagedTemplateId = selections.get(`${guild.id}:${userId}`);
+  const stagedTemplate = stagedTemplateId ? embedTemplateManager.getTemplate(guild.id, stagedTemplateId) : null;
+  const warnings = health.warnings || [];
 
   const embed = new EmbedBuilder()
-    .setColor(health.healthy ? 0x57f287 : 0xfaa61a)
+    .setColor(warnings.length ? 0xfaa61a : 0x57f287)
     .setTitle('👋 Welcome · Setup')
     .setDescription([
       `**Status:** ${config.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
-      `**Welcome Channel:** ${config.channelId ? `<#${config.channelId}>` : '`Not set`'}`,
-      `**Welcome DM:** ${config.dmEnabled ? 'Enabled ✅' : 'Disabled ❌'}`,
-      `**Ping New Member:** ${config.allowUserPing ? 'Yes ✅' : 'No ❌'}`,
-      `**Ignore Bots:** ${config.ignoreBots ? 'Yes ✅' : 'No ❌'}`,
-      `**Active Template:** ${activeTemplateName ? `\`${activeTemplateName}\`` : '`Not set`'}`,
-      `**Embed Studio Binding:** ${binding ? 'Bound ✅' : 'Fallback only ⚠️'}`,
+      `**Channel:** ${config.channelId ? `<#${config.channelId}>` : '`Not set`'}`,
+      `**DM:** ${config.dmEnabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Ping:** ${config.allowUserPing ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Members:** ${config.ignoreBots ? 'Humans only' : 'Humans + bots'}`,
       '',
-      `Public sent: \`${analytics.publicSent || 0}\` | DMs sent: \`${analytics.dmSent || 0}\` | Failed: \`${(analytics.publicFailed || 0) + (analytics.dmFailed || 0)}\``,
+      '**📨 Current Message**',
+      `**Name:** ${activeTemplate ? `\`${activeTemplate.name || activeTemplate.templateId}\`` : '`Not set`'}`,
+      `**Template:** ${activeTemplate ? `\`${activeTemplate.templateId}\`` : '`Not set`'}`,
+      `**Assignment:** ${binding ? 'Assigned ✅' : 'Ready to assign'}`,
+      '**Source:** Embed Studio',
+      stagedTemplate ? `**Selected:** \`${stagedTemplate.name || stagedTemplate.templateId}\` · press **Assign**` : null,
       '',
-      health.warnings.length ? `**Warnings**\n${health.warnings.map((warning) => `• ${warning}`).join('\n')}` : '**Health:** Healthy ✅',
-    ].join('\n').slice(0, 4096))
+      `Public: \`${analytics.publicSent || 0}\` | DMs: \`${analytics.dmSent || 0}\` | Failed: \`${(analytics.publicFailed || 0) + (analytics.dmFailed || 0)}\``,
+      '',
+      warnings.length ? `**Warnings**\n${warnings.map((warning) => `• ${warning}`).join('\n')}` : '**Health:** Healthy ✅',
+    ].filter(Boolean).join('\n').slice(0, 4096))
     .setFooter({ text: `Requested by ${memberDisplayName}` })
     .setTimestamp();
 
@@ -79,30 +112,35 @@ async function buildWelcomePanel(guild, memberDisplayName = 'Unknown User') {
     components: [
       row(new ChannelSelectMenuBuilder()
         .setCustomId('admin:welcome:channel')
-        .setPlaceholder('Select the public welcome channel')
+        .setPlaceholder('Select the welcome channel')
         .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setMinValues(0)
         .setMaxValues(1)),
-      row(templateMenu(guild.id, activeTemplateId)),
+      row(templateMenu(guild, activeTemplateId, userId)),
       row(
-        button(config.enabled ? 'admin:welcome:disable' : 'admin:welcome:enable', config.enabled ? '⏸️ Disable' : '▶️ Enable', config.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button('admin:welcome:toggleDm', config.dmEnabled ? '📨 Disable DM' : '📨 Enable DM'),
-        button('admin:welcome:togglePing', config.allowUserPing ? '🔕 Disable Ping' : '🔔 Enable Ping'),
-        button('admin:welcome:toggleBots', config.ignoreBots ? '🤖 Include Bots' : '🤖 Ignore Bots')
+        button(config.enabled ? 'admin:welcome:disable' : 'admin:welcome:enable', config.enabled ? '⏸ Disable' : '▶ Enable', config.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
+        button('admin:welcome:toggleDm', config.dmEnabled ? '📨 No DM' : '📨 DM'),
+        button('admin:welcome:togglePing', config.allowUserPing ? '🔕 No Ping' : '🔔 Ping'),
+        button('admin:welcome:toggleBots', config.ignoreBots ? '🤖 Include' : '🤖 Exclude')
       ),
       row(
-        button('admin:welcome:test', '👁️ Preview', ButtonStyle.Success),
-        button('admin:welcome:repair', '🩺 Repair', ButtonStyle.Primary),
-        button('admin:welcome:export', '📤 Export'),
-        button('admin:welcome:reset', '♻️ Reset', ButtonStyle.Danger),
-        button('admin:modules', '⬅️ Modules')
+        button('admin:welcome:assign', '✅ Assign', ButtonStyle.Primary),
+        button('admin:welcome:test', '🧪 Test', ButtonStyle.Success),
+        button('admin:welcome:send', '📨 Send', ButtonStyle.Success),
+        button('admin:welcome:repair', '🩺 Repair'),
+        button('admin:welcome:reset', '♻ Reset', ButtonStyle.Danger)
       ),
+      row(button('admin:modules', '⬅ Modules')),
     ],
   };
 }
 
 async function updatePanel(interaction) {
-  const payload = await buildWelcomePanel(interaction.guild, interaction.member?.displayName || interaction.user?.username);
+  const payload = await buildWelcomePanel(
+    interaction.guild,
+    interaction.member?.displayName || interaction.user?.username,
+    interaction.user.id
+  );
   if (interaction.deferred || interaction.replied) return interaction.editReply(payload);
   return interaction.update(payload);
 }
@@ -121,8 +159,22 @@ async function handleWelcomeInteraction(interaction) {
 
     if (interaction.isStringSelectMenu?.() && customId === 'admin:welcome:template') {
       const templateId = interaction.values?.[0];
-      if (!templateId || templateId === 'none') throw new Error('Choose a valid Embed Studio template.');
+      if (!templateId || templateId === 'none' || !embedTemplateManager.getTemplate(interaction.guild.id, templateId)) {
+        throw new Error('Choose a valid Embed Studio template.');
+      }
+      selections.set(selectionKey(interaction), templateId);
+      return updatePanel(interaction);
+    }
+
+    if (customId === 'admin:welcome:assign') {
+      const config = welcome.getWelcomeSection(interaction.guild.id);
+      const existingBinding = welcome.getWelcomeBinding(interaction.guild.id, 'welcome');
+      const templateId = selections.get(selectionKey(interaction)) || existingBinding?.templateId || config.templateId;
+      if (!templateId || !embedTemplateManager.getTemplate(interaction.guild.id, templateId)) {
+        throw new Error('Choose a valid template first.');
+      }
       welcome.bindWelcomeTemplate(interaction.guild.id, templateId, 'welcome', { actorId: interaction.user.id });
+      selections.delete(selectionKey(interaction));
       return updatePanel(interaction);
     }
 
@@ -133,12 +185,37 @@ async function handleWelcomeInteraction(interaction) {
     if (customId === 'admin:welcome:togglePing') welcome.updateConfig(interaction.guild.id, { allowUserPing: !config.allowUserPing }, { actorId: interaction.user.id });
     if (customId === 'admin:welcome:toggleBots') welcome.updateConfig(interaction.guild.id, { ignoreBots: !config.ignoreBots }, { actorId: interaction.user.id });
 
-    if (customId === 'admin:welcome:test') {
-      await interaction.deferUpdate();
-      const current = welcome.getWelcomeSection(interaction.guild.id);
-      if (!current.channelId && !current.dmEnabled) throw new Error('Select a welcome channel or enable welcome DMs before previewing.');
-      await welcome.sendWelcome(interaction.member, { silent: false, force: true, previewOnly: true });
+    if (['admin:welcome:enable', 'admin:welcome:disable', 'admin:welcome:toggleDm', 'admin:welcome:togglePing', 'admin:welcome:toggleBots'].includes(customId)) {
       return updatePanel(interaction);
+    }
+
+    if (customId === 'admin:welcome:test') {
+      const member = interactionMember(interaction);
+      if (!member) throw new Error('Your server member record is unavailable.');
+      const current = welcome.getWelcomeSection(interaction.guild.id);
+      const payload = welcome.buildDiscordPayload(member, 'welcome', current);
+      payload.allowedMentions = { parse: [], repliedUser: false };
+      payload.ephemeral = true;
+      return interaction.reply(payload);
+    }
+
+    if (customId === 'admin:welcome:send') {
+      const member = interactionMember(interaction);
+      if (!member) throw new Error('Your server member record is unavailable.');
+      const result = await welcome.sendWelcome(member, {
+        force: true,
+        previewOnly: true,
+        silent: false,
+      });
+      const lines = [
+        result.publicSent ? `✅ Public welcome sent to <#${welcome.getWelcomeSection(interaction.guild.id).channelId}>.` : null,
+        result.dmSent ? '✅ Welcome DM sent.' : null,
+        result.publicFailed ? '❌ Public welcome failed.' : null,
+        result.dmFailed ? '❌ Welcome DM failed. Check your Discord privacy settings.' : null,
+        ...(result.errors || []).map((error) => `• ${error}`),
+      ].filter(Boolean);
+      if (!lines.length) lines.push('⚠️ Nothing was sent. Enable a channel or DM welcome first.');
+      return interaction.reply({ content: lines.join('\n').slice(0, 2000), ephemeral: true });
     }
 
     if (customId === 'admin:welcome:repair') {
@@ -149,6 +226,7 @@ async function handleWelcomeInteraction(interaction) {
 
     if (customId === 'admin:welcome:reset') {
       await interaction.deferUpdate();
+      selections.delete(selectionKey(interaction));
       welcome.resetWelcome(interaction.guild.id, { actorId: interaction.user.id });
       return updatePanel(interaction);
     }
