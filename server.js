@@ -76,17 +76,18 @@ const formsRoutes = safeRequire('forms routes', './src/server/routes/forms', emp
 const transcriptRoutes = safeRequire('transcript routes', './src/server/routes/transcripts', emptyRouter(), { optional: false });
 const translationRoutes = safeRequire('translation routes', './src/server/routes/translation', emptyRouter(), { optional: false });
 const permissionHealthRoutes = safeRequire('permission health routes', './src/server/routes/permissionHealth', emptyRouter(), { optional: false });
-const socialRoutes = safeRequire('social routes', './src/server/routes/social', emptyRouter(), { optional: false });
+const socialRoutes = safeRequire('social routes', './src/modules/social/socialRoute', emptyRouter(), { optional: false });
 const verificationRoutes = safeRequire('verification routes', './src/modules/verification/verificationRoute', emptyRouter(), { optional: false });
 const autoRolesRoutes = safeRequire('auto roles routes', './src/modules/autoroles/autorolesRoute', emptyRouter(), { optional: false });
 const welcomeRoutes = safeRequire('welcome routes', './src/modules/welcome/welcomeRoute', emptyRouter(), { optional: false });
 const goodbyeRoutes = safeRequire('goodbye routes', './src/modules/goodbye/goodbyeRoute', emptyRouter(), { optional: false });
 const reactionRolesRoutes = safeRequire('reaction roles routes', './src/modules/reactionroles/reactionRolesRoute', emptyRouter(), { optional: false });
+const timedRolesRoutes = safeRequire('timed roles routes', './src/modules/timedroles/timedRolesRoute', emptyRouter(), { optional: false });
 const modulesRoutes = safeRequire('modules routes', './src/server/routes/modules', emptyRouter(), { optional: false });
 const automationRoutes = safeRequire('automation routes', './src/server/routes/automation', emptyRouter(), { optional: false });
 const notificationRoutes = safeRequire('notification routes', './src/server/routes/notifications', emptyRouter(), { optional: false });
 const activityRoutes = safeRequire('activity routes', './src/server/routes/activity', emptyRouter(), { optional: false });
-const pollsRoutes = safeRequire('polls routes', './src/server/routes/polls', emptyRouter(), { optional: false });
+const pollsRoutes = safeRequire('polls routes', './src/modules/polls/pollsRoute', emptyRouter(), { optional: false });
 const statsRoutes = safeRequire('stats routes', './src/server/routes/stats', emptyRouter(), { optional: false });
 const tempVoiceRoutes = safeRequire('temp voice routes', './src/server/routes/tempVoice', emptyRouter(), { optional: false });
 const starboardRoutes = safeRequire('starboard routes', './src/server/routes/starboard', emptyRouter(), { optional: false });
@@ -169,6 +170,7 @@ app.use('/api/auto-roles', autoRolesRoutes);
 app.use('/api/welcome', welcomeRoutes);
 app.use('/api/goodbye', goodbyeRoutes);
 app.use('/api/reaction-roles', reactionRolesRoutes);
+app.use('/api/timed-roles', timedRolesRoutes);
 app.use('/api/modules', modulesRoutes);
 app.use('/api/automation', automationRoutes);
 app.use('/api/notifications', notificationRoutes);
@@ -255,7 +257,7 @@ client.once('clientReady', async () => {
 
   await Promise.all([
     runStartupTask('Tickets', () => require('./src/modules/tickets/tickets').startup.startupTickets(client)),
-    runStartupTask('Roles', () => require('./src/modules/roles/rolesStartup').initializeRoles(client)),
+    runStartupTask('Timed Roles', () => require('./src/modules/timedroles/timedRoles').startup(client)),
     runStartupTask('Translation', () => require('./src/modules/translation/translationStartup').startupTranslation(client)),
     runStartupTask('Verification', () => require('./src/modules/verification/verification').startupVerification(client)),
     runStartupTask('Goodbye', () => require('./src/modules/goodbye/goodbye').startupGoodbye(client)),

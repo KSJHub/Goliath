@@ -76,9 +76,11 @@ async function buildWelcomePanel(guild, memberDisplayName = 'Unknown User', user
   const config = welcome.getWelcomeSection(guild.id);
   const health = await welcome.buildHealthReport(guild);
   const analytics = config.analytics || {};
-  const binding = welcome.getWelcomeBinding(guild.id, 'welcome');
-  const activeTemplate = welcome.getAssignedTemplate(guild.id, 'welcome', config);
-  const activeTemplateId = activeTemplate?.templateId || config.templateId;
+  const publicBinding = welcome.getWelcomeBinding(guild.id, 'welcome');
+  const dmBinding = welcome.getWelcomeBinding(guild.id, 'dm_welcome');
+  const publicTemplate = welcome.getAssignedTemplate(guild.id, 'welcome', config);
+  const dmTemplate = welcome.getAssignedTemplate(guild.id, 'dmWelcome', config);
+  const activeTemplateId = publicTemplate?.templateId || config.templateId;
   const stagedTemplateId = selections.get(`${guild.id}:${userId}`);
   const stagedTemplate = stagedTemplateId ? embedTemplateManager.getTemplate(guild.id, stagedTemplateId) : null;
   const warnings = health.warnings || [];
@@ -90,15 +92,17 @@ async function buildWelcomePanel(guild, memberDisplayName = 'Unknown User', user
       `**Status:** ${config.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
       `**Channel:** ${config.channelId ? `<#${config.channelId}>` : '`Not set`'}`,
       `**DM:** ${config.dmEnabled ? 'Enabled ✅' : 'Disabled ❌'}`,
-      `**Ping:** ${config.allowUserPing ? 'Enabled ✅' : 'Disabled ❌'}`,
-      `**Members:** ${config.ignoreBots ? 'Humans only' : 'Humans + bots'}`,
+      `**Notify:** ${config.allowUserPing ? 'Real ping above embed ✅' : 'No notification'}`,
+      `**Bots:** ${config.ignoreBots ? 'Excluded' : 'Included'}`,
       '',
-      '**📨 Current Message**',
-      `**Name:** ${activeTemplate ? `\`${activeTemplate.name || activeTemplate.templateId}\`` : '`Not set`'}`,
-      `**Template:** ${activeTemplate ? `\`${activeTemplate.templateId}\`` : '`Not set`'}`,
-      `**Assignment:** ${binding ? 'Assigned ✅' : 'Ready to assign'}`,
-      '**Source:** Embed Studio',
-      stagedTemplate ? `**Selected:** \`${stagedTemplate.name || stagedTemplate.templateId}\` · press **Assign**` : null,
+      '**📨 Public Welcome**',
+      `**Template:** ${publicTemplate ? `\`${publicTemplate.name || publicTemplate.templateId}\`` : '`Not set`'}`,
+      `**Assignment:** ${publicBinding ? 'Assigned ✅' : 'Using configured template'}`,
+      '',
+      '**💬 Welcome DM**',
+      `**Template:** ${dmTemplate ? `\`${dmTemplate.name || dmTemplate.templateId}\`` : '`Not set`'}`,
+      `**Source:** ${dmBinding || config.dmTemplateId ? 'Separate DM template' : 'Same as public'}`,
+      stagedTemplate ? `**Selected:** \`${stagedTemplate.name || stagedTemplate.templateId}\`` : null,
       '',
       `Public: \`${analytics.publicSent || 0}\` | DMs: \`${analytics.dmSent || 0}\` | Failed: \`${(analytics.publicFailed || 0) + (analytics.dmFailed || 0)}\``,
       '',
@@ -119,18 +123,23 @@ async function buildWelcomePanel(guild, memberDisplayName = 'Unknown User', user
       row(templateMenu(guild, activeTemplateId, userId)),
       row(
         button(config.enabled ? 'admin:welcome:disable' : 'admin:welcome:enable', config.enabled ? '⏸ Disable' : '▶ Enable', config.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button('admin:welcome:toggleDm', config.dmEnabled ? '📨 No DM' : '📨 DM'),
-        button('admin:welcome:togglePing', config.allowUserPing ? '🔕 No Ping' : '🔔 Ping'),
-        button('admin:welcome:toggleBots', config.ignoreBots ? '🤖 Include' : '🤖 Exclude')
+        button('admin:welcome:toggleDm', config.dmEnabled ? '📨 DM On' : '📨 DM Off', config.dmEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
+        button('admin:welcome:togglePing', config.allowUserPing ? '🔔 Ping On' : '🔕 Ping Off', config.allowUserPing ? ButtonStyle.Success : ButtonStyle.Secondary),
+        button('admin:welcome:toggleBots', config.ignoreBots ? '🤖 Bots Off' : '🤖 Bots On', config.ignoreBots ? ButtonStyle.Secondary : ButtonStyle.Success)
       ),
       row(
-        button('admin:welcome:assign', '✅ Assign', ButtonStyle.Primary),
+        button('admin:welcome:assign', '✅ Public', ButtonStyle.Primary),
+        button('admin:welcome:assignDm', '💬 DM', ButtonStyle.Primary),
         button('admin:welcome:test', '🧪 Test', ButtonStyle.Success),
         button('admin:welcome:send', '📨 Send', ButtonStyle.Success),
-        button('admin:welcome:repair', '🩺 Repair'),
-        button('admin:welcome:reset', '♻ Reset', ButtonStyle.Danger)
+        button('admin:welcome:repair', '🩺 Repair')
       ),
-      row(button('admin:modules', '⬅ Modules')),
+      row(
+        button('admin:welcome:dmPublic', '↩ DM = Public'),
+        button('admin:welcome:reset', '♻ Reset', ButtonStyle.Danger),
+        button('admin:welcome:export', '📤 Export'),
+        button('admin:modules', '⬅ Modules')
+      ),
     ],
   };
 }
@@ -143,6 +152,14 @@ async function updatePanel(interaction) {
   );
   if (interaction.deferred || interaction.replied) return interaction.editReply(payload);
   return interaction.update(payload);
+}
+
+function selectedTemplate(interaction) {
+  const templateId = selections.get(selectionKey(interaction));
+  if (!templateId || !embedTemplateManager.getTemplate(interaction.guild.id, templateId)) {
+    throw new Error('Choose a template from the dropdown first.');
+  }
+  return templateId;
 }
 
 async function handleWelcomeInteraction(interaction) {
@@ -167,13 +184,14 @@ async function handleWelcomeInteraction(interaction) {
     }
 
     if (customId === 'admin:welcome:assign') {
-      const config = welcome.getWelcomeSection(interaction.guild.id);
-      const existingBinding = welcome.getWelcomeBinding(interaction.guild.id, 'welcome');
-      const templateId = selections.get(selectionKey(interaction)) || existingBinding?.templateId || config.templateId;
-      if (!templateId || !embedTemplateManager.getTemplate(interaction.guild.id, templateId)) {
-        throw new Error('Choose a valid template first.');
-      }
-      welcome.bindWelcomeTemplate(interaction.guild.id, templateId, 'welcome', { actorId: interaction.user.id });
+      welcome.bindWelcomeTemplate(interaction.guild.id, selectedTemplate(interaction), 'welcome', { actorId: interaction.user.id });
+      selections.delete(selectionKey(interaction));
+      return updatePanel(interaction);
+    }
+
+    if (customId === 'admin:welcome:assignDm') {
+      welcome.bindWelcomeTemplate(interaction.guild.id, selectedTemplate(interaction), 'dm_welcome', { actorId: interaction.user.id });
+      welcome.updateConfig(interaction.guild.id, { dmEnabled: true }, { actorId: interaction.user.id });
       selections.delete(selectionKey(interaction));
       return updatePanel(interaction);
     }
@@ -189,12 +207,16 @@ async function handleWelcomeInteraction(interaction) {
       return updatePanel(interaction);
     }
 
+    if (customId === 'admin:welcome:dmPublic') {
+      welcome.clearDmTemplate(interaction.guild.id, { actorId: interaction.user.id });
+      return updatePanel(interaction);
+    }
+
     if (customId === 'admin:welcome:test') {
       const member = interactionMember(interaction);
       if (!member) throw new Error('Your server member record is unavailable.');
       const current = welcome.getWelcomeSection(interaction.guild.id);
-      const payload = welcome.buildDiscordPayload(member, 'welcome', current);
-      payload.allowedMentions = { parse: [], repliedUser: false };
+      const payload = welcome.buildDiscordPayload(member, 'welcome', current, { suppressPing: true });
       payload.ephemeral = true;
       return interaction.reply(payload);
     }
@@ -202,16 +224,12 @@ async function handleWelcomeInteraction(interaction) {
     if (customId === 'admin:welcome:send') {
       const member = interactionMember(interaction);
       if (!member) throw new Error('Your server member record is unavailable.');
-      const result = await welcome.sendWelcome(member, {
-        force: true,
-        previewOnly: true,
-        silent: false,
-      });
+      const result = await welcome.sendWelcome(member, { force: true, previewOnly: true, silent: false });
       const lines = [
         result.publicSent ? `✅ Public welcome sent to <#${welcome.getWelcomeSection(interaction.guild.id).channelId}>.` : null,
         result.dmSent ? '✅ Welcome DM sent.' : null,
         result.publicFailed ? '❌ Public welcome failed.' : null,
-        result.dmFailed ? '❌ Welcome DM failed. Check your Discord privacy settings.' : null,
+        result.dmFailed ? '❌ Welcome DM failed. Check the recipient’s Discord privacy settings.' : null,
         ...(result.errors || []).map((error) => `• ${error}`),
       ].filter(Boolean);
       if (!lines.length) lines.push('⚠️ Nothing was sent. Enable a channel or DM welcome first.');

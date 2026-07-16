@@ -49,10 +49,7 @@ function templateMenu(guild, activeTemplateId, userId) {
     .setDisabled(options.length === 0);
 
   if (options.length) {
-    menu.addOptions(options.map((option) => ({
-      ...option,
-      default: option.value === selected,
-    })));
+    menu.addOptions(options.map((option) => ({ ...option, default: option.value === selected })));
   } else {
     menu.addOptions({ label: 'No templates found', value: 'none' });
   }
@@ -64,29 +61,29 @@ async function buildGoodbyePanel(guild, memberDisplayName = 'Unknown User', user
   const health = await goodbye.buildHealthReport(guild);
   const analytics = config.analytics || {};
   const binding = goodbye.getGoodbyeBinding(guild.id);
-  const activeTemplateId = binding?.templateId || config.templateId;
-  const activeTemplate = binding || embedTemplateManager.getTemplate(guild.id, activeTemplateId);
+  const activeTemplate = goodbye.getAssignedTemplate(guild.id, config);
+  const activeTemplateId = activeTemplate?.templateId || config.templateId;
   const stagedTemplateId = selections.get(`${guild.id}:${userId}`);
   const stagedTemplate = stagedTemplateId ? embedTemplateManager.getTemplate(guild.id, stagedTemplateId) : null;
+  const warnings = health.warnings || [];
 
   const embed = new EmbedBuilder()
-    .setColor(health.healthy ? 0x57f287 : 0xfaa61a)
+    .setColor(warnings.length ? 0xfaa61a : 0x57f287)
     .setTitle('👋 Goodbye · Setup')
     .setDescription([
       `**Status:** ${config.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
-      `**Goodbye Channel:** ${config.channelId ? `<#${config.channelId}>` : '`Not set`'}`,
-      `**Members:** ${config.ignoreBots ? 'Humans only' : 'Humans + bots'}`,
+      `**Channel:** ${config.channelId ? `<#${config.channelId}>` : '`Not set`'}`,
+      `**Bots:** ${config.ignoreBots ? 'Excluded' : 'Included'}`,
       '',
-      '**📨 Current Goodbye Message**',
-      `**Name:** ${activeTemplate ? `\`${activeTemplate.name || activeTemplate.templateId}\`` : '`Not set`'}`,
-      `**Template:** ${activeTemplate ? `\`${activeTemplate.templateId}\`` : '`Not set`'}`,
-      `**Assignment:** ${binding ? 'Assigned ✅' : 'Ready to assign'}`,
+      '**📨 Goodbye Message**',
+      `**Template:** ${activeTemplate ? `\`${activeTemplate.name || activeTemplate.templateId}\`` : '`Not set`'}`,
+      `**Assignment:** ${binding ? 'Assigned ✅' : 'Using configured template'}`,
       '**Source:** Embed Studio',
-      stagedTemplate ? `**Selected:** \`${stagedTemplate.name || stagedTemplate.templateId}\` · press **Assign**` : null,
+      stagedTemplate ? `**Selected:** \`${stagedTemplate.name || stagedTemplate.templateId}\`` : null,
       '',
       `Sent: \`${analytics.sent || 0}\` | Failed: \`${analytics.failed || 0}\` | Skipped: \`${analytics.skipped || 0}\``,
       '',
-      health.warnings.length ? `**Warnings**\n${health.warnings.map((warning) => `• ${warning}`).join('\n')}` : '**Health:** Healthy ✅',
+      warnings.length ? `**Warnings**\n${warnings.map((warning) => `• ${warning}`).join('\n')}` : '**Health:** Healthy ✅',
     ].filter(Boolean).join('\n').slice(0, 4096))
     .setFooter({ text: `Requested by ${memberDisplayName}` })
     .setTimestamp();
@@ -96,14 +93,14 @@ async function buildGoodbyePanel(guild, memberDisplayName = 'Unknown User', user
     components: [
       row(new ChannelSelectMenuBuilder()
         .setCustomId('admin:goodbye:channel')
-        .setPlaceholder('Select the public goodbye channel')
+        .setPlaceholder('Select the goodbye channel')
         .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setMinValues(0)
         .setMaxValues(1)),
       row(templateMenu(guild, activeTemplateId, userId)),
       row(
         button(config.enabled ? 'admin:goodbye:disable' : 'admin:goodbye:enable', config.enabled ? '⏸ Disable' : '▶ Enable', config.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button('admin:goodbye:toggleBots', config.ignoreBots ? '🤖 Include' : '🤖 Exclude')
+        button('admin:goodbye:toggleBots', config.ignoreBots ? '🤖 Bots Off' : '🤖 Bots On', config.ignoreBots ? ButtonStyle.Secondary : ButtonStyle.Success)
       ),
       row(
         button('admin:goodbye:assign', '✅ Assign', ButtonStyle.Primary),
@@ -130,6 +127,14 @@ async function updatePanel(interaction) {
   return interaction.update(payload);
 }
 
+function selectedTemplate(interaction) {
+  const templateId = selections.get(selectionKey(interaction));
+  if (!templateId || !embedTemplateManager.getTemplate(interaction.guild.id, templateId)) {
+    throw new Error('Choose a template from the dropdown first.');
+  }
+  return templateId;
+}
+
 async function handleGoodbyeInteraction(interaction) {
   const customId = String(interaction.customId || '');
   if (!customId.startsWith('admin:goodbye')) return false;
@@ -152,13 +157,7 @@ async function handleGoodbyeInteraction(interaction) {
     }
 
     if (customId === 'admin:goodbye:assign') {
-      const config = goodbye.getGoodbyeSection(interaction.guild.id);
-      const existingBinding = goodbye.getGoodbyeBinding(interaction.guild.id);
-      const templateId = selections.get(selectionKey(interaction)) || existingBinding?.templateId || config.templateId;
-      if (!templateId || !embedTemplateManager.getTemplate(interaction.guild.id, templateId)) {
-        throw new Error('Choose a valid template first.');
-      }
-      goodbye.bindGoodbyeTemplate(interaction.guild.id, templateId, { actorId: interaction.user.id });
+      goodbye.bindGoodbyeTemplate(interaction.guild.id, selectedTemplate(interaction), { actorId: interaction.user.id });
       selections.delete(selectionKey(interaction));
       return updatePanel(interaction);
     }
@@ -168,13 +167,13 @@ async function handleGoodbyeInteraction(interaction) {
     if (customId === 'admin:goodbye:disable') goodbye.updateConfig(interaction.guild.id, { enabled: false }, { actorId: interaction.user.id });
     if (customId === 'admin:goodbye:toggleBots') goodbye.updateConfig(interaction.guild.id, { ignoreBots: !config.ignoreBots }, { actorId: interaction.user.id });
 
+    if (['admin:goodbye:enable', 'admin:goodbye:disable', 'admin:goodbye:toggleBots'].includes(customId)) {
+      return updatePanel(interaction);
+    }
+
     if (customId === 'admin:goodbye:test') {
-      const payload = await goodbye.buildDiscordPayload(interaction.member, config);
-      return interaction.reply({
-        ...payload,
-        allowedMentions: { parse: [], repliedUser: false },
-        ephemeral: true,
-      });
+      const payload = await goodbye.buildDiscordPayload(interaction.member, config, { includeComponents: false });
+      return interaction.reply({ ...payload, ephemeral: true });
     }
 
     if (customId === 'admin:goodbye:send') {
@@ -184,8 +183,13 @@ async function handleGoodbyeInteraction(interaction) {
         force: true,
         previewOnly: true,
       });
-      if (!result.sent) throw new Error(result.error || result.reason || 'Goodbye message could not be sent.');
-      return interaction.reply({ content: `✅ Goodbye message sent to <#${result.channelId}>.`, ephemeral: true });
+      const lines = [
+        result.sent ? `✅ Goodbye message sent to <#${result.channelId}>.` : null,
+        result.failed ? '❌ Goodbye message failed.' : null,
+        result.skipped ? `⚠️ Nothing was sent: ${result.reason || 'skipped'}.` : null,
+        ...(result.errors || []).map((error) => `• ${error}`),
+      ].filter(Boolean);
+      return interaction.reply({ content: lines.join('\n').slice(0, 2000), ephemeral: true });
     }
 
     if (customId === 'admin:goodbye:repair') {

@@ -7,16 +7,12 @@ const {
   ButtonStyle,
 } = require('discord.js');
 
-const statsStore = require('../../../modules/stats/statsStore');
-const statsCounters = require('../../../modules/stats/statsCounters');
+const stats = require('./stats');
 
 const PANEL_COLOR = '#5865F2';
 
 function button(customId, label, style = ButtonStyle.Primary) {
-  return new ButtonBuilder()
-    .setCustomId(customId)
-    .setLabel(label)
-    .setStyle(style);
+  return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
 }
 
 function row(...components) {
@@ -24,12 +20,7 @@ function row(...components) {
 }
 
 function getMemberDisplayName(interaction) {
-  return (
-    interaction.member?.displayName ||
-    interaction.user?.displayName ||
-    interaction.user?.username ||
-    'Unknown User'
-  );
+  return interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
 }
 
 function formatNumber(value) {
@@ -38,25 +29,21 @@ function formatNumber(value) {
 
 function formatCounterList(counters = []) {
   if (!counters.length) return 'No counter channels configured yet.';
-
-  return counters
-    .map((counter, index) => {
-      const template = counter.template || statsCounters.defaultTemplate(counter.type);
-      return `**${index + 1}.** <#${counter.channelId}> — \`${counter.type}\` — \`${template}\``;
-    })
-    .join('\n')
-    .slice(0, 1024);
+  return counters.map((counter, index) => {
+    const template = counter.template || stats.counters.defaultTemplate(counter.type);
+    return `**${index + 1}.** <#${counter.channelId}> — \`${counter.type}\` — \`${template}\``;
+  }).join('\n').slice(0, 1024);
 }
 
 function buildStatsAdminPanel(guild, memberDisplayName = 'Unknown User') {
-  const summary = statsStore.getSummary(guild.id);
-  const counters = statsCounters.listCounters(guild.id);
+  const summary = stats.getSummary(guild.id);
+  const counters = stats.counters.listCounters(guild.id);
 
   const embed = new EmbedBuilder()
     .setColor(summary.enabled ? 0x57f287 : PANEL_COLOR)
     .setTitle('📊 Server Stats')
     .setDescription([
-      'Configure Statbot-style counter channels and server activity tracking from the Admin Menu.',
+      'Configure counter channels and server activity tracking from the Admin Menu.',
       '',
       `**Tracking:** ${summary.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
       `**Counters:** \`${counters.length}\` configured`,
@@ -99,12 +86,8 @@ function buildStatsAdminPanel(guild, memberDisplayName = 'Unknown User') {
 }
 
 async function safeUpdate(interaction, payload) {
-  if (interaction.deferred || interaction.replied) {
-    await interaction.editReply(payload);
-    return true;
-  }
-
-  await interaction.update(payload);
+  if (interaction.deferred || interaction.replied) await interaction.editReply(payload);
+  else await interaction.update(payload);
   return true;
 }
 
@@ -114,30 +97,23 @@ async function handleStatsAdminInteraction(interaction) {
 
   const memberDisplayName = getMemberDisplayName(interaction);
 
-  if (interaction.customId === 'admin:stats') {
-    return safeUpdate(interaction, buildStatsAdminPanel(interaction.guild, memberDisplayName));
-  }
+  if (interaction.customId === 'admin:stats') return safeUpdate(interaction, buildStatsAdminPanel(interaction.guild, memberDisplayName));
 
   if (interaction.customId === 'admin:stats:setup') {
     await interaction.deferUpdate().catch(() => null);
-    statsStore.setEnabled(interaction.guild.id, true, interaction.guild);
-    await statsCounters.createCounterSuite(interaction.guild);
+    stats.setEnabled(interaction.guild.id, true, interaction.guild);
+    await stats.counters.createCounterSuite(interaction.guild);
     return safeUpdate(interaction, buildStatsAdminPanel(interaction.guild, memberDisplayName));
   }
 
   if (interaction.customId === 'admin:stats:refresh') {
     await interaction.deferUpdate().catch(() => null);
-    await statsCounters.refreshCounters(interaction.guild);
+    await stats.counters.refreshCounters(interaction.guild);
     return safeUpdate(interaction, buildStatsAdminPanel(interaction.guild, memberDisplayName));
   }
 
-  if (interaction.customId === 'admin:stats:enable') {
-    statsStore.setEnabled(interaction.guild.id, true, interaction.guild);
-    return safeUpdate(interaction, buildStatsAdminPanel(interaction.guild, memberDisplayName));
-  }
-
-  if (interaction.customId === 'admin:stats:disable') {
-    statsStore.setEnabled(interaction.guild.id, false, interaction.guild);
+  if (interaction.customId === 'admin:stats:enable' || interaction.customId === 'admin:stats:disable') {
+    stats.setEnabled(interaction.guild.id, interaction.customId.endsWith(':enable'), interaction.guild);
     return safeUpdate(interaction, buildStatsAdminPanel(interaction.guild, memberDisplayName));
   }
 
@@ -148,7 +124,4 @@ async function handleStatsAdminInteraction(interaction) {
   return false;
 }
 
-module.exports = {
-  buildStatsAdminPanel,
-  handleStatsAdminInteraction,
-};
+module.exports = { buildStatsAdminPanel, handleStatsAdminInteraction };

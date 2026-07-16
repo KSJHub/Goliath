@@ -35,14 +35,14 @@
     "sync:commands:beta": "cross-env BOT_MODE=beta node src/core/commandRegistry/syncCommands.js",
     "sync:commands:production": "cross-env BOT_MODE=production node src/core/commandRegistry/syncCommands.js",
 
-    "doctor": "node scripts/goliath.js check",
-    "audit": "node scripts/goliath.js audit",
+    "doctor": "node scripts/goliath.js check && node scripts/module-manifest-doctor.js && node scripts/social-doctor.js",
+    "audit": "node scripts/goliath.js audit && node scripts/module-manifest-doctor.js",
     "commands:audit": "node scripts/goliath.js commands",
-    "modules:audit": "node scripts/goliath.js modules",
+    "modules:audit": "node scripts/goliath.js modules && node scripts/module-manifest-doctor.js",
     "dashboard:audit": "node scripts/goliath.js dashboard",
     "runtime:check": "node scripts/goliath.js runtime",
     "runtime:imports": "node scripts/goliath.js imports",
-    "modules:standard": "node scripts/goliath.js standards",
+    "modules:standard": "node scripts/goliath.js standards && node scripts/module-manifest-doctor.js",
     "guilds:verify": "node scripts/goliath.js guilds",
     "media:deps": "node scripts/goliath.js media",
 

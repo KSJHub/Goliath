@@ -2,6 +2,7 @@
 
 const MODULE_MATURITY = Object.freeze({
   NOT_STARTED: 'not_started',
+  PAUSED: 'paused',
   IN_PROGRESS: 'in_progress',
   COMPLETE: 'complete',
 });
@@ -58,6 +59,7 @@ const MODULE_STANDARD = Object.freeze({
   ],
   completionRule: [
     'Only one module may be marked in_progress at a time.',
+    'Partially built modules not currently being worked on must be marked paused.',
     'A module cannot be marked complete until every required capability is true.',
     'No new module work starts until the active module is complete unless explicitly approved.',
   ],

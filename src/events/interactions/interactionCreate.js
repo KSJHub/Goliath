@@ -3,9 +3,8 @@
 const { Events, MessageFlags } = require('discord.js');
 
 function optionalRequire(label, modulePath, fallback = {}) {
-  try {
-    return require(modulePath);
-  } catch (error) {
+  try { return require(modulePath); }
+  catch (error) {
     console.warn(`[InteractionCreate] Optional handler unavailable: ${label}`);
     console.warn(error?.stack || error?.message || error);
     return fallback;
@@ -14,8 +13,8 @@ function optionalRequire(label, modulePath, fallback = {}) {
 
 const verificationManager = optionalRequire('verification manager', '../../modules/verification/verification');
 const ticketInteractionHandler = optionalRequire('tickets', '../../modules/tickets/tickets');
-const roleInteractionHandler = optionalRequire('roles', '../../modules/roles/roleInteractionHandler');
-const pollsManager = optionalRequire('polls', '../../modules/polls/pollsManager');
+const legacyReactionRoleButtons = optionalRequire('legacy reaction role buttons', '../../modules/reactionroles/reactionRolesLegacyButtons');
+const polls = optionalRequire('polls', '../../modules/polls/polls');
 const tempVoiceInteractionHandler = optionalRequire('temp voice', '../../modules/tempvoice/tempVoiceInteractionHandler');
 const suggestionsInteractionHandler = optionalRequire('suggestions', '../../modules/suggestions/suggestionsInteractionHandler');
 const giveawaysInteractionHandler = optionalRequire('giveaways', '../../modules/giveaways/giveawaysInteractionHandler');
@@ -24,18 +23,22 @@ const testSecurityCommand = optionalRequire('test security', '../../commands/adm
 const embedPanel = optionalRequire('embed panel', '../../modules/embed/embedPanel');
 const duplicator = optionalRequire('duplicator', '../../core/dev/duplicator');
 const adminPanel = optionalRequire('admin panel', '../../core/admin/functions/adminPanel');
-const statsAdminPanel = optionalRequire('stats admin', '../../core/admin/functions/statsAdminPanel');
+const statsAdminPanel = optionalRequire('stats admin', '../../modules/stats/statsPanel');
 const reactionRolesAdminPanel = optionalRequire('reaction roles admin', '../../modules/reactionroles/reactionRolesPanel');
 const suggestionsAdminPanel = optionalRequire('suggestions admin', '../../core/admin/functions/suggestionsAdminPanel');
 const giveawaysAdminPanel = optionalRequire('giveaways admin', '../../core/admin/functions/giveawaysAdminPanel');
 const formsAdminPanel = optionalRequire('forms admin', '../../core/admin/functions/formsAdminPanel');
-const pollsAdminPanel = optionalRequire('polls admin', '../../core/admin/functions/pollsAdminPanel');
+const pollsAdminPanel = optionalRequire('polls admin', '../../modules/polls/pollsPanel');
 const starboardAdminPanel = optionalRequire('starboard admin', '../../core/admin/functions/starboardAdminPanel');
 const stickyAdminPanel = optionalRequire('sticky admin', '../../core/admin/functions/stickyAdminPanel');
 const levelingAdminPanel = optionalRequire('leveling admin', '../../core/admin/functions/levelingAdminPanel');
-const socialAdminPanel = optionalRequire('social admin', '../../core/admin/functions/socialAdminPanel');
+const socialAdminPanel = optionalRequire('social admin', '../../modules/social/socialPanel');
+const socialCreatorPanel = optionalRequire('social creator hub', '../../modules/social/socialCreatorPanel');
+const schedulePanel = optionalRequire('schedule admin', '../../modules/schedule/schedulePanel');
+const scheduleDeployment = optionalRequire('schedule RSVP', '../../modules/schedule/scheduleDeployment');
 const verificationAdminPanel = optionalRequire('verification admin', '../../modules/verification/verificationPanel');
 const autorolesPanel = optionalRequire('auto roles', '../../modules/autoroles/autorolesPanel');
+const timedRolesPanel = optionalRequire('timed roles', '../../modules/timedroles/timedRolesPanel');
 const welcomePanel = optionalRequire('welcome', '../../modules/welcome/welcomePanel');
 const goodbyePanel = optionalRequire('goodbye', '../../modules/goodbye/goodbyePanel');
 const moduleAdminPanels = optionalRequire('generic module admin', '../../core/admin/functions/moduleAdminPanels');
@@ -92,9 +95,7 @@ async function safeInteractionError(interaction) {
     if (interaction?.isAutocomplete?.()) { await interaction.respond([]).catch(() => null); return; }
     if (interaction?.deferred || interaction?.replied) { await interaction.followUp(payload).catch(() => null); return; }
     await interaction?.reply?.(payload).catch(() => null);
-  } catch {
-    // Ignore final safety response errors.
-  }
+  } catch { /* Ignore final safety response errors. */ }
 }
 
 module.exports = {
@@ -117,9 +118,13 @@ module.exports = {
       }
       if (startsWith(interaction, 'admin:verification')) { await callHandler(verificationAdminPanel, 'handleVerificationAdminInteraction', interaction); return; }
       if (startsWith(interaction, 'admin:autoRoles')) { await callHandler(autorolesPanel, 'handleAutoRolesInteraction', interaction); return; }
+      if (startsWith(interaction, 'admin:timedRoles')) { await callHandler(timedRolesPanel, 'handleTimedRolesInteraction', interaction); return; }
       if (startsWith(interaction, 'admin:welcome')) { await callHandler(welcomePanel, 'handleWelcomeInteraction', interaction); return; }
       if (startsWith(interaction, 'admin:goodbye')) { await callHandler(goodbyePanel, 'handleGoodbyeInteraction', interaction); return; }
       if (startsWith(interaction, 'admin:reactionRoles')) { await callHandler(reactionRolesAdminPanel, 'handleReactionRolesAdminInteraction', interaction); return; }
+      if (startsWith(interaction, 'admin:socialhub')) { await callHandler(socialCreatorPanel, 'handleSocialCreatorInteraction', interaction); return; }
+      if (startsWith(interaction, 'admin:schedule')) { await callHandler(schedulePanel, 'handleScheduleAdminInteraction', interaction); return; }
+      if (startsWith(interaction, 'schedule:rsvp:')) { await callHandler(scheduleDeployment, 'handleMemberInteraction', interaction); return; }
       if (isVerificationMemberInteraction(interaction)) { await callHandler(verificationManager, 'handleVerificationInteraction', interaction); return; }
       if (await callHandler(statsAdminPanel, 'handleStatsAdminInteraction', interaction)) return;
       if (await callHandler(suggestionsAdminPanel, 'handleSuggestionsAdminInteraction', interaction)) return;
@@ -139,9 +144,9 @@ module.exports = {
       if (await callHandler(formsInteractionHandler, 'handleFormsInteraction', interaction)) return;
       if (await callHandler(suggestionsInteractionHandler, 'handleSuggestionsInteraction', interaction)) return;
       if (await callHandler(giveawaysInteractionHandler, 'handleGiveawayInteraction', interaction)) return;
-      if (interaction.isButton?.() && await callHandler(pollsManager, 'vote', interaction)) return;
+      if (interaction.isButton?.() && await callHandler(polls, 'vote', interaction)) return;
       if (await callHandler(ticketInteractionHandler, 'handleTicketInteraction', interaction, client)) return;
-      if (await callHandler(roleInteractionHandler, 'handleRoleInteraction', interaction)) return;
+      if (await callHandler(legacyReactionRoleButtons, 'handleLegacyButtonInteraction', interaction)) return;
     } catch (error) {
       console.error('[InteractionCreate] Failed to handle interaction:', error);
       await safeInteractionError(interaction);

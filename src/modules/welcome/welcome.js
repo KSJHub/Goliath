@@ -249,12 +249,18 @@ function getWelcomeBinding(guildId, slot = 'welcome') {
 }
 
 function bindWelcomeTemplate(guildId, templateId, slot = 'welcome', meta = {}) {
+  const template = embedTemplateManager.getTemplate(guildId, templateId);
+  if (!template) throw new Error('Template not found in Embed Studio.');
   const binding = embedTemplateManager.bindTemplate(guildId, MODULE, slot, templateId);
   const patch = slot === 'dm_welcome'
     ? { dmTemplateId: binding.templateId }
     : { templateId: binding.templateId };
   const config = updateConfig(guildId, patch, { action: 'welcome_template_bind', ...meta });
   return { binding, config };
+}
+
+function clearDmTemplate(guildId, meta = {}) {
+  return updateConfig(guildId, { dmTemplateId: null }, { action: 'welcome_dm_template_clear', ...meta });
 }
 
 function getAssignedTemplate(guildId, type, config = getWelcomeSection(guildId)) {
@@ -264,15 +270,9 @@ function getAssignedTemplate(guildId, type, config = getWelcomeSection(guildId))
       || embedTemplateManager.getTemplate(guildId, config.templateId);
   }
 
-  const explicitDmBinding = getWelcomeBinding(guildId, 'dm_welcome');
-  if (explicitDmBinding) return explicitDmBinding;
-
-  if (config.dmTemplateId) {
-    const configuredDm = embedTemplateManager.getTemplate(guildId, config.dmTemplateId);
-    if (configuredDm) return configuredDm;
-  }
-
-  return getWelcomeBinding(guildId, 'welcome')
+  return getWelcomeBinding(guildId, 'dm_welcome')
+    || (config.dmTemplateId ? embedTemplateManager.getTemplate(guildId, config.dmTemplateId) : null)
+    || getWelcomeBinding(guildId, 'welcome')
     || embedTemplateManager.getTemplate(guildId, config.templateId);
 }
 
@@ -320,19 +320,17 @@ function replaceTemplateText(text, variables, replacements = {}) {
   return output;
 }
 
-function stripPingPlaceholderFromState(state, variables) {
+function displayOnlyMentionState(state, variables) {
   const cleaned = clone(state);
   const replacements = {
-    userMention: '',
-    usermention: '',
+    userMention: variables.userNoPing,
+    usermention: variables.userNoPing,
     user: variables.userDisplay,
   };
   cleaned.panels = cleaned.panels.map((panel) => ({
     ...panel,
     title: replaceTemplateText(panel.title, variables, replacements),
-    description: replaceTemplateText(panel.description, variables, replacements)
-      .replace(/^\s*\n+/g, '')
-      .replace(/\n{3,}/g, '\n\n'),
+    description: replaceTemplateText(panel.description, variables, replacements),
     authorName: replaceTemplateText(panel.authorName, variables, replacements),
     footer: replaceTemplateText(panel.footer, variables, replacements),
     fields: (panel.fields || []).map((field) => ({
@@ -357,20 +355,21 @@ function buildDiscordPayload(member, type, config = getWelcomeSection(member.gui
     member,
   };
 
+  const pingEnabled = !isDm && config.allowUserPing !== false && options.suppressPing !== true;
   let state = templateToPreviewState(template);
-  const pingEnabled = !isDm && config.allowUserPing !== false;
-  if (pingEnabled) state = stripPingPlaceholderFromState(state, variables);
+  if (pingEnabled) state = displayOnlyMentionState(state, variables);
 
   let content = replaceTemplateText(template.content || '', variables, {
     guild: variables.guildName,
     username: variables.username,
-    userMention: pingEnabled ? `<@${member.user.id}>` : variables.userNoPing,
+    userMention: isDm ? variables.userNoPing : (pingEnabled ? `<@${member.user.id}>` : variables.userNoPing),
   }).trim();
 
   const mention = `<@${member.user.id}>`;
   if (pingEnabled && !content.includes(mention)) {
     content = content ? `${mention}\n${content}` : mention;
   }
+  if (options.suppressPing === true && content === mention) content = '';
 
   return {
     content,
@@ -390,17 +389,17 @@ async function resolveWelcomeChannel(guild, channelId) {
 
 async function sendWelcome(member, options = {}) {
   if (!member?.guild?.id || !member?.user?.id) {
-    return { publicSent: false, dmSent: false, skipped: true, reason: 'invalid_member' };
+    return { publicSent: false, dmSent: false, skipped: true, reason: 'invalid_member', errors: [] };
   }
 
   const config = getWelcomeSection(member.guild.id);
   if (!options.force && config.enabled === false) {
     if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 });
-    return { publicSent: false, dmSent: false, skipped: true, reason: 'disabled' };
+    return { publicSent: false, dmSent: false, skipped: true, reason: 'disabled', errors: [] };
   }
   if (config.ignoreBots && member.user.bot) {
     if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 });
-    return { publicSent: false, dmSent: false, skipped: true, reason: 'ignored_bot' };
+    return { publicSent: false, dmSent: false, skipped: true, reason: 'ignored_bot', errors: [] };
   }
 
   await refreshMemberCache(member.guild);
@@ -428,9 +427,12 @@ async function sendWelcome(member, options = {}) {
     }
   }
 
-  if (config.dmEnabled && options.skipDm !== true) {
+  if (config.dmEnabled && options.skipDm !== true && !member.user.bot) {
     try {
-      await member.send(buildDiscordPayload(member, 'dmWelcome', config, { includeComponents: false }));
+      await member.send(buildDiscordPayload(member, 'dmWelcome', config, {
+        includeComponents: false,
+        suppressPing: true,
+      }));
       dmSent = true;
     } catch (error) {
       dmFailed = true;
@@ -465,7 +467,7 @@ async function buildHealthReport(guild) {
   const dmTemplate = config.dmEnabled ? getAssignedTemplate(guild.id, 'dmWelcome', config) : null;
   const warnings = [
     config.enabled === false ? 'Welcome is disabled.' : null,
-    config.enabled && !config.channelId && !config.dmEnabled ? 'No public welcome channel or welcome DM is configured.' : null,
+    config.enabled && !config.channelId && !config.dmEnabled ? 'No welcome channel or welcome DM is configured.' : null,
     config.channelId && !channel ? `Configured welcome channel ${config.channelId} no longer exists or is not text-based.` : null,
     channel && !canView ? 'Goliath cannot view the welcome channel.' : null,
     channel && !canSend ? 'Goliath cannot send messages in the welcome channel.' : null,
@@ -486,6 +488,8 @@ async function buildHealthReport(guild) {
     templateName: publicTemplate?.name || null,
     templateBound: Boolean(getWelcomeBinding(guild.id, 'welcome')),
     dmTemplateId: dmTemplate?.templateId || config.dmTemplateId || config.templateId,
+    dmTemplateName: dmTemplate?.name || null,
+    dmUsesPublicTemplate: !getWelcomeBinding(guild.id, 'dm_welcome') && !config.dmTemplateId,
     countMode: config.ignoreBots ? 'humans_only' : 'all_members',
     warnings,
     healthy: warnings.length === 0,
@@ -496,12 +500,11 @@ async function repairConfiguration(guild, meta = {}) {
   const config = getWelcomeSection(guild.id);
   const channel = config.channelId ? await resolveWelcomeChannel(guild, config.channelId) : null;
   const publicTemplate = getAssignedTemplate(guild.id, 'welcome', config);
+  const dmTemplate = config.dmTemplateId ? embedTemplateManager.getTemplate(guild.id, config.dmTemplateId) : null;
   return updateConfig(guild.id, {
     channelId: channel ? config.channelId : null,
     templateId: publicTemplate?.templateId || config.templateId,
-    dmTemplateId: config.dmTemplateId && embedTemplateManager.getTemplate(guild.id, config.dmTemplateId)
-      ? config.dmTemplateId
-      : null,
+    dmTemplateId: dmTemplate?.templateId || null,
     enabled: Boolean(channel || config.dmEnabled) && config.enabled,
   }, { action: 'welcome_repair', ...meta });
 }
@@ -564,6 +567,7 @@ module.exports = {
   getWelcomeTemplates,
   getWelcomeBinding,
   bindWelcomeTemplate,
+  clearDmTemplate,
   getAssignedTemplate,
   templateToPreviewState,
   buildDiscordPayload,

@@ -1,7 +1,5 @@
 'use strict';
 
-// src/modules/social/providerRegistry.js
-
 const twitchProvider = require('./providers/twitchProvider');
 const youtubeProvider = require('./providers/youtubeProvider');
 const kickProvider = require('./providers/kickProvider');
@@ -13,6 +11,7 @@ const PROVIDER_STATUSES = Object.freeze({
   READY: 'ready',
   NOT_CONFIGURED: 'not_configured',
   NOT_IMPLEMENTED: 'not_implemented',
+  AUTHORIZATION_REQUIRED: 'authorization_required',
   ERROR: 'error',
 });
 
@@ -21,22 +20,27 @@ const providerDefinitions = Object.freeze({
     id: 'instagram',
     label: 'Instagram',
     supportedAlertTypes: ['post'],
-    requiredEnv: ['INSTAGRAM_APP_ID', 'INSTAGRAM_APP_SECRET'],
+    requiredEnv: [],
     handler: instagramProvider,
+    zeroCredentialSupported: false,
+    unavailableReason: 'Instagram monitoring requires authorization from the monitored professional account and is outside Social Studio zero-credential scope.',
   },
   kick: {
     id: 'kick',
     label: 'Kick',
     supportedAlertTypes: ['live'],
-    requiredEnv: [],
+    requiredEnv: ['KICK_CLIENT_ID', 'KICK_CLIENT_SECRET'],
     handler: kickProvider,
+    zeroCredentialSupported: true,
   },
   tiktok: {
     id: 'tiktok',
     label: 'TikTok',
     supportedAlertTypes: ['post', 'live'],
-    requiredEnv: ['TIKTOK_CLIENT_ID', 'TIKTOK_CLIENT_SECRET'],
+    requiredEnv: [],
     handler: tiktokProvider,
+    zeroCredentialSupported: false,
+    unavailableReason: 'TikTok monitored-account access requires creator authorization and is outside Social Studio zero-credential scope.',
   },
   twitch: {
     id: 'twitch',
@@ -44,13 +48,15 @@ const providerDefinitions = Object.freeze({
     supportedAlertTypes: ['live'],
     requiredEnv: ['TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET'],
     handler: twitchProvider,
+    zeroCredentialSupported: true,
   },
   x: {
     id: 'x',
     label: 'X',
     supportedAlertTypes: ['post'],
-    requiredEnv: ['X_CLIENT_ID', 'X_CLIENT_SECRET'],
+    requiredEnv: [],
     handler: xProvider,
+    zeroCredentialSupported: true,
   },
   youtube: {
     id: 'youtube',
@@ -58,6 +64,7 @@ const providerDefinitions = Object.freeze({
     supportedAlertTypes: ['upload', 'short', 'live'],
     requiredEnv: ['YOUTUBE_API_KEY'],
     handler: youtubeProvider,
+    zeroCredentialSupported: true,
   },
 });
 
@@ -69,13 +76,26 @@ function getProvider(platform) {
   const provider = providerDefinitions[String(platform || '').toLowerCase()] || null;
   if (!provider) return null;
 
-  const status = provider.requiredEnv.length && !hasRequiredEnv(provider.requiredEnv)
-    ? PROVIDER_STATUSES.NOT_CONFIGURED
-    : provider.handler?.id === 'twitch'
-      ? PROVIDER_STATUSES.READY
-      : PROVIDER_STATUSES.NOT_IMPLEMENTED;
+  let status;
+  if (provider.zeroCredentialSupported === false) {
+    status = PROVIDER_STATUSES.AUTHORIZATION_REQUIRED;
+  } else if (typeof provider.handler?.isConfigured === 'function' && !provider.handler.isConfigured()) {
+    status = PROVIDER_STATUSES.NOT_CONFIGURED;
+  } else if (provider.requiredEnv.length && !hasRequiredEnv(provider.requiredEnv)) {
+    status = PROVIDER_STATUSES.NOT_CONFIGURED;
+  } else if (provider.handler?.implemented === true || ['twitch', 'youtube'].includes(provider.handler?.id)) {
+    status = PROVIDER_STATUSES.READY;
+  } else {
+    status = PROVIDER_STATUSES.NOT_IMPLEMENTED;
+  }
 
-  return { ...provider, status };
+  return {
+    ...provider,
+    status,
+    productionSupported: status === PROVIDER_STATUSES.READY,
+    ownerManaged: true,
+    userCredentialsRequired: false,
+  };
 }
 
 function listProviders() {
@@ -86,7 +106,6 @@ function listProviders() {
 
 async function checkAccount(account = {}) {
   const provider = getProvider(account.platform);
-
   if (!provider) {
     return {
       success: false,
@@ -96,23 +115,32 @@ async function checkAccount(account = {}) {
     };
   }
 
-  if (provider.handler?.checkAccount) {
-    return provider.handler.checkAccount(account);
+  if (provider.status !== PROVIDER_STATUSES.READY) {
+    const error = provider.status === PROVIDER_STATUSES.AUTHORIZATION_REQUIRED
+      ? provider.unavailableReason
+      : provider.status === PROVIDER_STATUSES.NOT_CONFIGURED
+        ? `${provider.label} provider is missing global Goliath credentials.`
+        : `${provider.label} provider polling is not implemented yet.`;
+    return {
+      success: false,
+      status: provider.status,
+      providerStatus: provider.status,
+      platform: provider.id,
+      provider: provider.label,
+      accountId: account.accountId,
+      username: account.username,
+      supportedAlertTypes: provider.supportedAlertTypes,
+      checkedAt: new Date().toISOString(),
+      error,
+    };
   }
 
+  if (typeof provider.handler?.checkAccount === 'function') return provider.handler.checkAccount(account);
   return {
     success: false,
-    status: provider.status,
-    providerStatus: provider.status,
-    platform: provider.id,
-    provider: provider.label,
-    accountId: account.accountId,
-    username: account.username,
-    supportedAlertTypes: provider.supportedAlertTypes,
-    checkedAt: new Date().toISOString(),
-    error: provider.status === PROVIDER_STATUSES.NOT_CONFIGURED
-      ? `${provider.label} provider is missing global Goliath credentials.`
-      : `${provider.label} provider polling is not implemented yet.`,
+    status: PROVIDER_STATUSES.ERROR,
+    providerStatus: PROVIDER_STATUSES.ERROR,
+    error: `${provider.label} provider handler is unavailable.`,
   };
 }
 

@@ -6,7 +6,7 @@ const {
   saveModuleSection,
   updateModuleSection,
 } = require('../../core/guild/moduleSectionManager');
-const { buildPreviewEmbeds, TEMPLATES } = require('../embed/embedPanel');
+const { buildPreviewEmbeds } = require('../embed/embedPanel');
 const embedTemplateManager = require('../embed/embedTemplateManager');
 
 const MODULE = 'goodbye';
@@ -153,10 +153,20 @@ function getAvatar(member) {
     || '';
 }
 
+async function refreshMemberCache(guild) {
+  if (!guild?.members?.fetch) return;
+  try {
+    await guild.members.fetch();
+  } catch (error) {
+    console.warn('[Goodbye] Could not refresh member cache:', error.message || error);
+  }
+}
+
 async function memberCountFor(guild, ignoreBots) {
+  await refreshMemberCache(guild);
   if (!ignoreBots) return Math.max(0, Number(guild?.memberCount || 0));
-  const members = await guild.members.fetch().catch(() => guild.members?.cache || null);
-  if (members?.filter) return members.filter((member) => !member.user?.bot).size;
+  const cache = guild?.members?.cache;
+  if (cache?.size) return cache.filter((member) => !member.user?.bot).size;
   return Math.max(0, Number(guild?.memberCount || 0) - 1);
 }
 
@@ -174,9 +184,12 @@ async function buildTemplateVariables(member, config = getGoodbyeSection(member.
     guildBanner: guild.bannerURL?.({ extension: 'png', size: 1024 }) || '',
     memberCount,
     guildMemberCount: memberCount,
+    totalMemberCount: Math.max(0, Number(guild?.memberCount || 0)),
     user: String(member.user),
     userMention: `<@${member.user.id}>`,
+    userNoPing: `@${member.user.username || member.user.id}`,
     username: member.user.username || member.user.tag || member.user.id,
+    userDisplay: member.displayName || member.user.globalName || member.user.username || member.user.id,
     userId: member.user.id,
     userAvatar: getAvatar(member),
     memberAvatar: getAvatar(member),
@@ -201,7 +214,14 @@ function getGoodbyeBinding(guildId) {
   return embedTemplateManager.getBinding(guildId, MODULE, MODULE);
 }
 
+function getAssignedTemplate(guildId, config = getGoodbyeSection(guildId)) {
+  return getGoodbyeBinding(guildId)
+    || embedTemplateManager.getTemplate(guildId, config.templateId);
+}
+
 function bindGoodbyeTemplate(guildId, templateId, meta = {}) {
+  const template = embedTemplateManager.getTemplate(guildId, templateId);
+  if (!template) throw new Error('Template not found in Embed Studio.');
   const binding = embedTemplateManager.bindTemplate(guildId, MODULE, MODULE, templateId);
   const config = updateConfig(guildId, { templateId: binding.templateId }, { action: 'goodbye_template_bind', ...meta });
   return { binding, config };
@@ -209,7 +229,7 @@ function bindGoodbyeTemplate(guildId, templateId, meta = {}) {
 
 function templatePreviewState(template = {}) {
   const panels = Array.isArray(template.panels) && template.panels.length
-    ? template.panels
+    ? clone(template.panels)
     : [{
       title: template.embed?.title || '',
       description: template.embed?.description || '',
@@ -221,52 +241,46 @@ function templatePreviewState(template = {}) {
       image: template.embed?.imageURL || '',
       footer: template.embed?.footer?.text || '',
       footerIcon: template.embed?.footer?.iconURL || '',
-      fields: Array.isArray(template.embed?.fields) ? template.embed.fields : [],
+      fields: Array.isArray(template.embed?.fields) ? clone(template.embed.fields) : [],
     }];
   return {
-    ...template,
+    ...clone(template),
     panels,
     selectedPanelIndex: 0,
-    buttons: Array.isArray(template.buttons) ? template.buttons : (template.embed?.buttons || []),
+    buttons: Array.isArray(template.buttons) ? clone(template.buttons) : clone(template.embed?.buttons || []),
     showTimestamp: template.showTimestamp !== false,
     fieldLayout: template.fieldLayout || 'auto',
     allowUserPing: false,
   };
 }
 
-async function buildDiscordPayload(member, config = getGoodbyeSection(member.guild.id)) {
-  const variables = await buildTemplateVariables(member, config);
-  const rendered = embedTemplateManager.renderBinding(
-    member.guild.id,
-    MODULE,
-    MODULE,
-    variables,
-    config.templateId
-  );
-  const template = rendered || embedTemplateManager.getTemplate(member.guild.id, config.templateId);
-  if (!template) throw new Error(`Goodbye template ${config.templateId} could not be found.`);
-
-  const state = templatePreviewState({
-    ...(TEMPLATES.leave || {}),
-    ...template,
-    embed: rendered?.embed || template.embed,
-    content: rendered?.content ?? template.content ?? '',
-  });
-  const renderGuild = new Proxy(member.guild, {
+function renderGuildForCount(guild, count) {
+  return new Proxy(guild, {
     get(target, property, receiver) {
-      if (property === 'memberCount') return variables.memberCount;
+      if (property === 'memberCount') return count;
       return Reflect.get(target, property, receiver);
     },
   });
+}
+
+async function buildDiscordPayload(member, config = getGoodbyeSection(member.guild.id), options = {}) {
+  const template = getAssignedTemplate(member.guild.id, config);
+  if (!template) throw new Error(`Goodbye template ${config.templateId} could not be found.`);
+
+  const variables = await buildTemplateVariables(member, config);
+  const rendered = embedTemplateManager.renderTemplate(template, variables);
+  const state = templatePreviewState(rendered);
   const fakeInteraction = {
-    guild: renderGuild,
+    guild: renderGuildForCount(member.guild, variables.memberCount),
     guildId: member.guild.id,
     user: member.user,
     member,
   };
+
   return {
-    content: state.content || '',
+    content: rendered.content || '',
     embeds: buildPreviewEmbeds(state, fakeInteraction),
+    components: options.includeComponents === false ? [] : undefined,
     allowedMentions: { parse: [], repliedUser: false },
   };
 }
@@ -283,31 +297,38 @@ async function resolveGoodbyeChannel(guild, channelId) {
 }
 
 async function sendGoodbye(member, options = {}) {
-  if (!member?.guild?.id || !member?.user?.id) return { sent: false, skipped: true, reason: 'invalid_member' };
+  if (!member?.guild?.id || !member?.user?.id) {
+    return { sent: false, failed: false, skipped: true, reason: 'invalid_member', errors: [] };
+  }
+
   const config = getGoodbyeSection(member.guild.id);
-  if ((!options.force && config.enabled === false) || (config.ignoreBots && member.user.bot)) {
+  if (!options.force && config.enabled === false) {
     if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 });
-    return { sent: false, skipped: true, reason: config.enabled === false ? 'disabled' : 'ignored_bot' };
+    return { sent: false, failed: false, skipped: true, reason: 'disabled', errors: [] };
+  }
+  if (config.ignoreBots && member.user.bot) {
+    if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 });
+    return { sent: false, failed: false, skipped: true, reason: 'ignored_bot', errors: [] };
   }
   if (!config.channelId) {
     if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 });
-    return { sent: false, skipped: true, reason: 'no_channel' };
+    return { sent: false, failed: false, skipped: true, reason: 'no_channel', errors: [] };
   }
 
   const channel = await resolveGoodbyeChannel(member.guild, config.channelId);
   if (!channel) {
     if (!options.previewOnly) incrementAnalytics(member.guild.id, { failed: 1 });
-    return { sent: false, failed: true, skipped: false, reason: 'channel_unavailable' };
+    return { sent: false, failed: true, skipped: false, reason: 'channel_unavailable', errors: ['Goodbye channel is unavailable.'] };
   }
 
   try {
     await channel.send(await buildDiscordPayload(member, config));
     if (!options.previewOnly) incrementAnalytics(member.guild.id, { sent: 1 });
-    return { sent: true, failed: false, skipped: false, channelId: channel.id };
+    return { sent: true, failed: false, skipped: false, channelId: channel.id, errors: [] };
   } catch (error) {
     if (!options.previewOnly) incrementAnalytics(member.guild.id, { failed: 1 });
     if (!options.silent) console.error('[Goodbye] Failed to send public goodbye:', error);
-    return { sent: false, failed: true, skipped: false, error: error.message || String(error) };
+    return { sent: false, failed: true, skipped: false, error: error.message || String(error), errors: [error.message || String(error)] };
   }
 }
 
@@ -321,17 +342,17 @@ async function buildHealthReport(guild) {
   const canSend = Boolean(permissions?.has(PermissionFlagsBits.SendMessages));
   const canEmbed = Boolean(permissions?.has(PermissionFlagsBits.EmbedLinks));
   const binding = getGoodbyeBinding(guild.id);
-  const configuredTemplate = embedTemplateManager.getTemplate(guild.id, config.templateId);
-  const activeTemplate = binding || configuredTemplate;
+  const activeTemplate = getAssignedTemplate(guild.id, config);
   const warnings = [
     config.enabled === false ? 'Goodbye is disabled.' : null,
-    config.enabled && !config.channelId ? 'No public goodbye channel is configured.' : null,
+    config.enabled && !config.channelId ? 'No goodbye channel is configured.' : null,
     config.channelId && !channel ? `Configured goodbye channel ${config.channelId} no longer exists or is not text-based.` : null,
     channel && !canView ? 'Goliath cannot view the goodbye channel.' : null,
     channel && !canSend ? 'Goliath cannot send messages in the goodbye channel.' : null,
     channel && !canEmbed ? 'Goliath cannot embed links in the goodbye channel.' : null,
     !activeTemplate ? `Goodbye template ${config.templateId} could not be found.` : null,
   ].filter(Boolean);
+
   return {
     enabled: config.enabled !== false,
     channelId: config.channelId,
@@ -343,6 +364,7 @@ async function buildHealthReport(guild) {
     templateId: activeTemplate?.templateId || config.templateId,
     templateName: activeTemplate?.name || null,
     templateBound: Boolean(binding),
+    countMode: config.ignoreBots ? 'humans_only' : 'all_members',
     warnings,
     healthy: warnings.length === 0,
   };
@@ -351,7 +373,7 @@ async function buildHealthReport(guild) {
 async function repairConfiguration(guild, meta = {}) {
   const config = getGoodbyeSection(guild.id);
   const channel = config.channelId ? await resolveGoodbyeChannel(guild, config.channelId) : null;
-  const template = getGoodbyeBinding(guild.id) || embedTemplateManager.getTemplate(guild.id, config.templateId);
+  const template = getAssignedTemplate(guild.id, config);
   return updateConfig(guild.id, {
     channelId: channel ? config.channelId : null,
     templateId: template?.templateId || 'goodbye_default',
@@ -414,6 +436,7 @@ module.exports = {
   buildTemplateVariables,
   getGoodbyeTemplates,
   getGoodbyeBinding,
+  getAssignedTemplate,
   bindGoodbyeTemplate,
   buildMessageData,
   buildDiscordPayload,
