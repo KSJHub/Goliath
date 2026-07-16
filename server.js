@@ -22,32 +22,23 @@ function isMissingOptionalModule(error, modulePath) {
   const message = String(error.message || '');
   return message.includes(modulePath) || message.includes(modulePath.replace(/^\.\//, ''));
 }
-
 function safeRequire(label, modulePath, fallback = null, options = {}) {
-  try {
-    return require(modulePath);
-  } catch (error) {
+  try { return require(modulePath); }
+  catch (error) {
     const optional = options.optional !== false;
     const missingOptionalModule = optional && isMissingOptionalModule(error, modulePath);
-    if (missingOptionalModule) {
-      if (process.env.GOLIATH_VERBOSE_OPTIONAL_MODULES === 'true') console.info(`ℹ️ Optional startup module unavailable: ${label}`);
-      return fallback;
-    }
+    if (missingOptionalModule) { if (process.env.GOLIATH_VERBOSE_OPTIONAL_MODULES === 'true') console.info(`ℹ️ Optional startup module unavailable: ${label}`); return fallback; }
     console.warn(`⚠️ Startup module failed: ${label}`);
     console.warn(error?.stack || error?.message || error);
     return fallback;
   }
 }
-
-function emptyRouter() {
-  return express.Router();
-}
+function emptyRouter() { return express.Router(); }
 
 const { getBotModeConfig } = safeRequire('botModes', './src/config/botModes', { getBotModeConfig: () => ({ token: null }) }, { optional: false });
 const { enforceGuildAccess } = safeRequire('guildAccess', './src/config/guildAccess', { enforceGuildAccess: async () => true }, { optional: false });
 const { bootstrapRuntime, runBootValidation, safeLoad, printStartupFingerprint } = safeRequire('runtimeBootstrap', './src/runtime/runtimeBootstrap', {
-  bootstrapRuntime: () => ({}),
-  runBootValidation: () => true,
+  bootstrapRuntime: () => ({}), runBootValidation: () => true,
   safeLoad: (label, fn) => { try { return { ok: true, result: fn() }; } catch (error) { console.warn(`⚠️ ${label} skipped`, error?.message || error); return { ok: false, result: null, error }; } },
   printStartupFingerprint: () => null,
 }, { optional: false });
@@ -77,6 +68,7 @@ const transcriptRoutes = safeRequire('transcript routes', './src/server/routes/t
 const translationRoutes = safeRequire('translation routes', './src/server/routes/translation', emptyRouter(), { optional: false });
 const permissionHealthRoutes = safeRequire('permission health routes', './src/server/routes/permissionHealth', emptyRouter(), { optional: false });
 const socialRoutes = safeRequire('social routes', './src/modules/social/socialRoute', emptyRouter(), { optional: false });
+const scheduleRoutes = safeRequire('schedule routes', './src/modules/schedule/scheduleRoute', emptyRouter(), { optional: false });
 const verificationRoutes = safeRequire('verification routes', './src/modules/verification/verificationRoute', emptyRouter(), { optional: false });
 const autoRolesRoutes = safeRequire('auto roles routes', './src/modules/autoroles/autorolesRoute', emptyRouter(), { optional: false });
 const welcomeRoutes = safeRequire('welcome routes', './src/modules/welcome/welcomeRoute', emptyRouter(), { optional: false });
@@ -113,7 +105,6 @@ const botMode = String(process.env.BOT_MODE || config?.name || 'DEV').toUpperCas
 const PORT = Number(process.env.PORT || process.env.BOT_API_PORT || 3001);
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.DASHBOARD_SESSION_SECRET || 'goliath-dev-session-secret';
 const isProduction = process.env.NODE_ENV === 'production';
-
 const runtimePaths = bootstrapRuntime(botMode);
 printStartupFingerprint(config, runtimePaths);
 runBootValidation({ requiredPaths: [], requiredEnv: [] });
@@ -123,7 +114,6 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 client.commands = new Collection();
-
 const app = express();
 const server = http.createServer(app);
 const io = initSocketHub(server) || null;
@@ -165,6 +155,7 @@ app.use('/api/transcripts', transcriptRoutes);
 app.use('/api/translation', translationRoutes);
 app.use('/api/permissions', permissionHealthRoutes);
 app.use('/api/social', socialRoutes);
+app.use('/api/schedule', scheduleRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/auto-roles', autoRolesRoutes);
 app.use('/api/welcome', welcomeRoutes);
@@ -193,68 +184,35 @@ app.use('/api/owner/subscription', ownerSubscriptionRoutes);
 const dashboardDist = path.join(process.cwd(), 'dist');
 if (fs.existsSync(dashboardDist)) {
   app.use(express.static(dashboardDist));
-  app.get('*', (req, res) => {
-    if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
-    return res.sendFile(path.join(dashboardDist, 'index.html'));
-  });
+  app.get('*', (req, res) => { if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' }); return res.sendFile(path.join(dashboardDist, 'index.html')); });
 }
-
 safeLoad('commands', () => commandHandler.loadCommands(client));
-
 function registerEvents() {
   const eventsPath = path.join(process.cwd(), 'src', 'events');
   if (!fs.existsSync(eventsPath)) return;
   const files = [];
-  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walk(full);
-    else if (entry.isFile() && entry.name.endsWith('.js')) files.push(full);
-  });
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => { const full = path.join(dir, entry.name); if (entry.isDirectory()) walk(full); else if (entry.isFile() && entry.name.endsWith('.js')) files.push(full); });
   walk(eventsPath);
   for (const file of files) {
     try {
       const loaded = require(file);
       const handlers = Array.isArray(loaded) ? loaded : [loaded];
-      for (const handler of handlers) {
-        if (!handler?.name || typeof handler.execute !== 'function') continue;
-        const listener = (...args) => handler.execute(...args, client);
-        if (handler.once === true) client.once(handler.name, listener);
-        else client.on(handler.name, listener);
-      }
-    } catch (error) {
-      console.warn(`⚠️ Event skipped: ${file}`);
-      console.warn(error?.message || error);
-    }
+      for (const handler of handlers) { if (!handler?.name || typeof handler.execute !== 'function') continue; const listener = (...args) => handler.execute(...args, client); if (handler.once === true) client.once(handler.name, listener); else client.on(handler.name, listener); }
+    } catch (error) { console.warn(`⚠️ Event skipped: ${file}`); console.warn(error?.message || error); }
   }
 }
-
 registerEvents();
-
 async function runStartupTask(label, fn) {
-  try {
-    await fn();
-    console.log(`✅ ${label} startup complete`);
-  } catch (error) {
-    console.error(`❌ ${label} startup failed`);
-    console.error(error?.stack || error?.message || error);
-  }
+  try { await fn(); console.log(`✅ ${label} startup complete`); }
+  catch (error) { console.error(`❌ ${label} startup failed`); console.error(error?.stack || error?.message || error); }
 }
-
 client.once('clientReady', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   console.log(`ℹ Guilds cached: ${client.guilds.cache.size}`);
-
   for (const guild of client.guilds.cache.values()) {
-    try {
-      await enforceGuildAccess(guild, botMode, config);
-      defaultModules.initializeDefaultModules?.(guild.id);
-      guildManager.syncGuildMeta?.(guild);
-      await resourceManager.syncDiscordResources?.(guild);
-    } catch (error) {
-      console.error(`Guild startup sync failed for ${guild?.id}:`, error?.message || error);
-    }
+    try { await enforceGuildAccess(guild, botMode, config); defaultModules.initializeDefaultModules?.(guild.id); guildManager.syncGuildMeta?.(guild); await resourceManager.syncDiscordResources?.(guild); }
+    catch (error) { console.error(`Guild startup sync failed for ${guild?.id}:`, error?.message || error); }
   }
-
   await Promise.all([
     runStartupTask('Tickets', () => require('./src/modules/tickets/tickets').startup.startupTickets(client)),
     runStartupTask('Timed Roles', () => require('./src/modules/timedroles/timedRoles').startup(client)),
@@ -264,15 +222,9 @@ client.once('clientReady', async () => {
     runStartupTask('Reaction Roles', () => require('./src/modules/reactionroles/reactionRoles').startup(client)),
     runStartupTask('Giveaways', () => require('./src/modules/giveaways/giveawayScheduler').start(client)),
   ]);
-
   backupScheduler.startBackupScheduler?.();
 });
-
 server.listen(PORT, () => console.log(`🌐 Dashboard server running on port ${PORT}`));
-
 const token = resolveToken(config);
-if (!token) {
-  console.error('❌ Missing Discord token for current BOT_MODE.');
-  process.exit(1);
-}
+if (!token) { console.error('❌ Missing Discord token for current BOT_MODE.'); process.exit(1); }
 client.login(token);

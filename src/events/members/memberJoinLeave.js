@@ -6,6 +6,7 @@ const autoRoleManager = require('../../modules/autoroles/autoroles');
 const statsManager = require('../../modules/stats/statsManager');
 const verificationManager = require('../../modules/verification/verification');
 const welcomeManager = require('../../modules/welcome/welcome');
+const welcomeAvatarSync = require('../../modules/welcome/welcomeAvatarSync');
 const goodbyeManager = require('../../modules/goodbye/goodbye');
 
 function formatTimestamp(timestamp, style = 'R') {
@@ -165,9 +166,18 @@ module.exports = [
         if (!addedRoles.some((addedRole) => addedRole.id === role.id)) addedRoles.push(role);
       }
 
-      await welcomeManager.sendWelcome(member).catch((error) => {
+      const welcomeStartedAt = Date.now();
+      const welcomeResult = await welcomeManager.sendWelcome(member).catch((error) => {
         console.error('[Welcome] Failed to process member join:', error);
+        return null;
       });
+
+      if (welcomeResult?.publicSent) {
+        await welcomeAvatarSync.trackLatestWelcomeMessage(member, welcomeManager, welcomeStartedAt).catch((error) => {
+          console.warn('[Welcome] Failed to track welcome message for avatar sync:', error.message || error);
+        });
+      }
+
       await sendAdminMemberJoinLog(member, addedRoles);
     },
   },
@@ -176,6 +186,14 @@ module.exports = [
     async execute(oldMember, newMember) {
       await verificationManager.handleMemberUpdate(oldMember, newMember).catch((error) => {
         console.error('[verification] Failed to process member update:', error);
+      });
+    },
+  },
+  {
+    name: 'userUpdate',
+    async execute(oldUser, newUser) {
+      await welcomeAvatarSync.handleUserAvatarUpdate(oldUser, newUser, welcomeManager).catch((error) => {
+        console.warn('[Welcome] Failed to process avatar update:', error.message || error);
       });
     },
   },

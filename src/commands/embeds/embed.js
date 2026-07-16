@@ -7,6 +7,9 @@ const { errorEmbed } = require('../../core/ui/embeds');
 const { buildEmbedPanel } = require('../../modules/embed/embedPanel');
 const { enforceCommandAccess } = require('../../core/ui/commandAccess');
 
+const activeEmbedPanels = new Map();
+const PANEL_SESSION_TTL_MS = 14 * 60 * 1000;
+
 module.exports = {
   category: 'Embeds',
 
@@ -38,15 +41,21 @@ module.exports = {
         });
       }
 
+      const panelKey = `${interaction.guildId}:${interaction.user.id}`;
+      await removePreviousPanel(panelKey, interaction);
+
       const memberDisplayName =
         interaction.member?.displayName ||
         interaction.user?.displayName ||
         interaction.user?.username ||
         'Unknown User';
 
-      return await safeReply(interaction, {
+      const reply = await safeReply(interaction, {
         ...buildEmbedPanel(interaction, memberDisplayName),
       });
+
+      rememberPanel(panelKey, interaction);
+      return reply;
     } catch (error) {
       if (error?.code === 10062 || error?.code === 40060) return;
 
@@ -59,6 +68,32 @@ module.exports = {
     }
   },
 };
+
+async function removePreviousPanel(panelKey, currentInteraction) {
+  const previous = activeEmbedPanels.get(panelKey);
+  if (!previous || previous.interaction === currentInteraction) return;
+
+  activeEmbedPanels.delete(panelKey);
+  if (previous.timeout) clearTimeout(previous.timeout);
+
+  try {
+    await previous.interaction.deleteReply();
+  } catch (error) {
+    if (![10008, 10015, 10062].includes(error?.code)) {
+      console.warn('[Embed] Could not remove the previous ephemeral panel:', error?.message || error);
+    }
+  }
+}
+
+function rememberPanel(panelKey, interaction) {
+  const timeout = setTimeout(() => {
+    const current = activeEmbedPanels.get(panelKey);
+    if (current?.interaction === interaction) activeEmbedPanels.delete(panelKey);
+  }, PANEL_SESSION_TTL_MS);
+  timeout.unref?.();
+
+  activeEmbedPanels.set(panelKey, { interaction, timeout });
+}
 
 async function safeReply(interaction, payload) {
   const safePayload = {

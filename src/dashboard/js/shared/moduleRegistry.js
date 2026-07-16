@@ -1,12 +1,5 @@
-export const MODULE_CATEGORIES = {
-  feature: 'Features',
-};
-
-export const MODULE_STATUSES = {
-  live: 'Live',
-  backendReady: 'Backend Ready',
-};
-
+export const MODULE_CATEGORIES = { feature: 'Features' };
+export const MODULE_STATUSES = { live: 'Live', backendReady: 'Backend Ready' };
 export const MODULE_STATUS_META = {
   [MODULE_STATUSES.live]: { label: 'Live', tone: 'success' },
   [MODULE_STATUSES.backendReady]: { label: 'Dashboard Ready', tone: 'info' },
@@ -22,6 +15,7 @@ export const moduleRegistry = [
   { key: 'leveling', name: 'Leveling', icon: 'LV', route: '/leveling', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: false, summary: 'XP, levels, leaderboards, rewards and level roles.' },
   { key: 'polls', name: 'Polls', icon: 'PL', route: '/polls', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: false, summary: 'Create and manage community choice posts.' },
   { key: 'reactionRoles', name: 'Reaction Roles', icon: 'RR', route: '/reaction-roles', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: false, summary: 'Reaction role panels, emoji mappings, deployments and analytics.' },
+  { key: 'schedule', name: 'Schedule', icon: 'SC', route: '/schedule', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: true, summary: 'Timezone-aware events, recurring schedules, RSVPs, waitlists, reminders and Discord deployments.' },
   { key: 'social', name: 'Social Studio', icon: 'SS', route: '/social', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.live, enabled: true, summary: 'Zero-credential creator monitoring, routing, templates, operations, diagnostics and alerts for Twitch, YouTube, Kick and X.' },
   { key: 'starboard', name: 'Starboard', icon: 'SB', route: '/starboard', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: false, summary: 'Highlight popular server messages in a starboard channel.' },
   { key: 'stats', name: 'Stats', icon: 'ST', route: '/stats', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: false, summary: 'Activity reporting, rankings and Statbot-style counter channels.' },
@@ -35,9 +29,5 @@ export const moduleRegistry = [
 ].sort((a, b) => a.name.localeCompare(b.name));
 
 export const futureModules = [];
-
-export function getModuleStatusMeta(status) {
-  return MODULE_STATUS_META[status] || MODULE_STATUS_META[MODULE_STATUSES.backendReady];
-}
-
+export function getModuleStatusMeta(status) { return MODULE_STATUS_META[status] || MODULE_STATUS_META[MODULE_STATUSES.backendReady]; }
 export default moduleRegistry;
