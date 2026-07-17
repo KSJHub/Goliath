@@ -1,5 +1,6 @@
 'use strict';
 
+const { MessageFlags } = require('discord.js');
 const suggestionsManager = require('./suggestionsManager');
 
 function isSuggestionsInteraction(interaction) {
@@ -7,9 +8,15 @@ function isSuggestionsInteraction(interaction) {
 }
 
 async function safeReply(interaction, content) {
-  const payload = { content, flags: 64 };
-  if (interaction.deferred || interaction.replied) return interaction.followUp(payload).catch(() => null);
-  return interaction.reply(payload).catch(() => null);
+  const payload = { content, flags: MessageFlags.Ephemeral };
+  try {
+    if (interaction.deferred) return await interaction.editReply({ content });
+    if (interaction.replied) return await interaction.followUp(payload);
+    return await interaction.reply(payload);
+  } catch (error) {
+    console.error('[Suggestions] Failed to respond to interaction:', error);
+    return null;
+  }
 }
 
 async function handleSuggestionsInteraction(interaction) {
@@ -24,27 +31,31 @@ async function handleSuggestionsInteraction(interaction) {
     }
 
     if (interaction.isModalSubmit?.() && interaction.customId === 'suggestions:modal:submit') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       await suggestionsManager.submitSuggestion(interaction);
-      await safeReply(interaction, '✅ Suggestion submitted.');
+      await interaction.editReply({ content: '✅ Suggestion submitted.' });
       return true;
     }
 
     if (interaction.isButton?.() && parts[1] === 'vote') {
-      await interaction.deferUpdate().catch(() => null);
+      if (!parts[2] || !['up', 'down'].includes(parts[3])) throw new Error('Invalid vote interaction.');
+      await interaction.deferUpdate();
       await suggestionsManager.vote(interaction, parts[2], parts[3]);
       return true;
     }
 
     if (interaction.isButton?.() && parts[1] === 'review') {
-      await interaction.deferUpdate().catch(() => null);
+      if (!parts[2] || !['approve', 'deny'].includes(parts[3])) throw new Error('Invalid review interaction.');
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       await suggestionsManager.review(interaction, parts[2], parts[3]);
-      await safeReply(interaction, `✅ Suggestion ${parts[3] === 'approve' ? 'approved' : 'denied'}.`);
+      await interaction.editReply({ content: `✅ Suggestion ${parts[3] === 'approve' ? 'approved' : 'denied'}.` });
       return true;
     }
 
     return false;
   } catch (error) {
-    await safeReply(interaction, `❌ Suggestion action failed: ${error.message}`);
+    console.error('[Suggestions] Interaction failed:', error);
+    await safeReply(interaction, `❌ Suggestion action failed: ${error.message || 'Unknown error'}`);
     return true;
   }
 }

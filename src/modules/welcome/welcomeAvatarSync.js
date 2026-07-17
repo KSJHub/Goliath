@@ -26,7 +26,8 @@ function isTrackedAvatarUrl(url, userId, previousAvatarUrl) {
   if (!normalized) return false;
   if (previousAvatarUrl && normalized === normalizeUrl(previousAvatarUrl)) return true;
   return normalized.includes(`/avatars/${userId}/`)
-    || normalized.includes(`/users/${userId}/avatars/`);
+    || normalized.includes(`/users/${userId}/avatars/`)
+    || normalized.includes(`/guilds/`) && normalized.includes(`/users/${userId}/avatars/`);
 }
 
 function replaceAvatarUrls(embed, userId, previousAvatarUrl, nextAvatarUrl) {
@@ -44,6 +45,37 @@ function replaceAvatarUrls(embed, userId, previousAvatarUrl, nextAvatarUrl) {
   replace(data.image, 'url');
   replace(data.author, 'icon_url');
   replace(data.footer, 'icon_url');
+
+  return { data, changed };
+}
+
+function replaceNoPingMentions(embed, member) {
+  const data = embed?.toJSON ? embed.toJSON() : JSON.parse(JSON.stringify(embed || {}));
+  const username = String(member?.user?.username || '').trim();
+  const userId = member?.user?.id;
+  if (!username || !userId) return { data, changed: false };
+
+  const plainMention = `@${username}`;
+  const clickableMention = `<@${userId}>`;
+  let changed = false;
+
+  const replaceText = (value) => {
+    if (typeof value !== 'string' || !value.includes(plainMention)) return value;
+    changed = true;
+    return value.split(plainMention).join(clickableMention);
+  };
+
+  data.title = replaceText(data.title);
+  data.description = replaceText(data.description);
+  if (data.author) data.author.name = replaceText(data.author.name);
+  if (data.footer) data.footer.text = replaceText(data.footer.text);
+  if (Array.isArray(data.fields)) {
+    data.fields = data.fields.map((field) => ({
+      ...field,
+      name: replaceText(field.name),
+      value: replaceText(field.value),
+    }));
+  }
 
   return { data, changed };
 }
@@ -92,6 +124,19 @@ async function trackLatestWelcomeMessage(member, welcomeManager, sentAfter = Dat
   const selected = candidates[0]?.message;
   if (!selected) return null;
 
+  let mentionChanged = false;
+  const mentionEmbeds = selected.embeds.map((embed) => {
+    const result = replaceNoPingMentions(embed, member);
+    mentionChanged ||= result.changed;
+    return result.data;
+  });
+
+  if (mentionChanged) {
+    await selected.edit({ embeds: mentionEmbeds }).catch((error) => {
+      console.warn('[Welcome] Failed to convert welcome username to clickable mention:', error.message || error);
+    });
+  }
+
   const nextRecords = records.filter((record) => record.userId !== member.user.id);
   nextRecords.push({
     userId: member.user.id,
@@ -106,6 +151,56 @@ async function trackLatestWelcomeMessage(member, welcomeManager, sentAfter = Dat
   return selected.id;
 }
 
+async function syncTrackedWelcomeForGuild(guild, userId, nextAvatarUrl, welcomeManager) {
+  if (!guild?.id || !userId || !nextAvatarUrl) return { updated: 0, removed: 0 };
+
+  const records = getRecords(welcomeManager, guild.id);
+  const record = records.find((item) => item.userId === userId);
+  if (!record) return { updated: 0, removed: 0 };
+
+  if (normalizeUrl(record.avatarUrl) === normalizeUrl(nextAvatarUrl)) {
+    return { updated: 0, removed: 0 };
+  }
+
+  const channel = guild.channels.cache.get(record.channelId)
+    || await guild.channels.fetch(record.channelId).catch(() => null);
+  if (!channel?.messages?.fetch) {
+    saveRecords(welcomeManager, guild.id, records.filter((item) => item !== record), 'welcome_avatar_sync_cleanup');
+    return { updated: 0, removed: 1 };
+  }
+
+  const message = await channel.messages.fetch(record.messageId).catch(() => null);
+  if (!message) {
+    saveRecords(welcomeManager, guild.id, records.filter((item) => item !== record), 'welcome_avatar_sync_cleanup');
+    return { updated: 0, removed: 1 };
+  }
+
+  let changed = false;
+  const embeds = message.embeds.map((embed) => {
+    const result = replaceAvatarUrls(embed, userId, record.avatarUrl, nextAvatarUrl);
+    changed ||= result.changed;
+    return result.data;
+  });
+
+  if (!changed) {
+    return { updated: 0, removed: 0 };
+  }
+
+  const edited = await message.edit({ embeds }).then(() => true).catch((error) => {
+    console.warn('[Welcome] Failed to sync updated avatar:', error.message || error);
+    return false;
+  });
+
+  if (!edited) return { updated: 0, removed: 0 };
+
+  const nextRecords = records.map((item) => item === record
+    ? { ...item, avatarUrl: nextAvatarUrl, updatedAt: new Date().toISOString() }
+    : item);
+  saveRecords(welcomeManager, guild.id, nextRecords, 'welcome_avatar_sync_update');
+
+  return { updated: 1, removed: 0 };
+}
+
 async function handleUserAvatarUpdate(oldUser, newUser, welcomeManager) {
   if (!oldUser || !newUser || oldUser.avatar === newUser.avatar) return { updated: 0, removed: 0 };
 
@@ -113,55 +208,43 @@ async function handleUserAvatarUpdate(oldUser, newUser, welcomeManager) {
   let removed = 0;
 
   for (const guild of newUser.client.guilds.cache.values()) {
-    const records = getRecords(welcomeManager, guild.id);
-    const record = records.find((item) => item.userId === newUser.id);
-    if (!record) continue;
-
-    const channel = guild.channels.cache.get(record.channelId)
-      || await guild.channels.fetch(record.channelId).catch(() => null);
-    if (!channel?.messages?.fetch) {
-      saveRecords(welcomeManager, guild.id, records.filter((item) => item !== record), 'welcome_avatar_sync_cleanup');
-      removed += 1;
-      continue;
-    }
-
-    const message = await channel.messages.fetch(record.messageId).catch(() => null);
-    if (!message) {
-      saveRecords(welcomeManager, guild.id, records.filter((item) => item !== record), 'welcome_avatar_sync_cleanup');
-      removed += 1;
-      continue;
-    }
-
     const member = guild.members.cache.get(newUser.id)
       || await guild.members.fetch(newUser.id).catch(() => null);
-    const nextAvatarUrl = member?.displayAvatarURL?.({ extension: 'png', size: 256 })
-      || newUser.displayAvatarURL({ extension: 'png', size: 256 });
+    if (!member) continue;
 
-    let changed = false;
-    const embeds = message.embeds.map((embed) => {
-      const result = replaceAvatarUrls(embed, newUser.id, record.avatarUrl, nextAvatarUrl);
-      changed ||= result.changed;
-      return result.data;
-    });
-
-    if (changed) {
-      await message.edit({ embeds }).catch((error) => {
-        console.warn('[Welcome] Failed to sync updated avatar:', error.message || error);
-      });
-      updated += 1;
-    }
-
-    const nextRecords = records.map((item) => item === record
-      ? { ...item, avatarUrl: nextAvatarUrl, updatedAt: new Date().toISOString() }
-      : item);
-    saveRecords(welcomeManager, guild.id, nextRecords, 'welcome_avatar_sync_update');
+    const nextAvatarUrl = member.displayAvatarURL({ extension: 'png', size: 256 });
+    const result = await syncTrackedWelcomeForGuild(guild, newUser.id, nextAvatarUrl, welcomeManager);
+    updated += result.updated;
+    removed += result.removed;
   }
 
   return { updated, removed };
 }
 
+async function handleGuildMemberAvatarUpdate(oldMember, newMember, welcomeManager) {
+  if (!oldMember?.guild?.id || !newMember?.guild?.id || !newMember?.user?.id) {
+    return { updated: 0, removed: 0 };
+  }
+
+  const oldAvatarUrl = oldMember.displayAvatarURL?.({ extension: 'png', size: 256 }) || '';
+  const nextAvatarUrl = newMember.displayAvatarURL?.({ extension: 'png', size: 256 }) || '';
+  if (!nextAvatarUrl || normalizeUrl(oldAvatarUrl) === normalizeUrl(nextAvatarUrl)) {
+    return { updated: 0, removed: 0 };
+  }
+
+  return syncTrackedWelcomeForGuild(
+    newMember.guild,
+    newMember.user.id,
+    nextAvatarUrl,
+    welcomeManager
+  );
+}
+
 module.exports = {
   trackLatestWelcomeMessage,
   handleUserAvatarUpdate,
+  handleGuildMemberAvatarUpdate,
+  syncTrackedWelcomeForGuild,
   replaceAvatarUrls,
+  replaceNoPingMentions,
 };

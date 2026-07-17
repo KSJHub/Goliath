@@ -8,6 +8,7 @@ const LEGACY_SECTION_MAP = Object.freeze({
   embedBuilder: 'modules.embedBuilder',
   embedDefaults: 'modules.embedDefaults',
   embedPresets: 'modules.embedPresets',
+  embedDeployments: 'modules.embedDeployments',
   serverBackups: 'modules.serverBackups',
   moderation: 'modules.moderation',
   discord: 'modules.discord',

@@ -7,7 +7,8 @@ const {
   emitEmbedDeleted,
 } = require('./embedSocketEvents');
 
-const EMBED_DEPLOYMENTS_SECTION = 'embedBuilder.deployments';
+const EMBED_DEPLOYMENTS_SECTION = 'embedDeployments';
+const LEGACY_EMBED_BUILDER_SECTION = 'embedBuilder';
 const DEPLOYMENT_STATUS = Object.freeze({
   ACTIVE: 'active',
   NOT_DEPLOYED: 'not_deployed',
@@ -17,76 +18,160 @@ const DEPLOYMENT_STATUS = Object.freeze({
   UNKNOWN: 'unknown',
 });
 
+const VALID_STATUSES = new Set(Object.values(DEPLOYMENT_STATUS));
 const now = () => new Date().toISOString();
-const clone = (value) => JSON.parse(JSON.stringify(value || {}));
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-const cleanString = (value, maxLength = 500) => String(value || '').trim().slice(0, maxLength);
-const cleanDiscordId = (value) => {
-  const id = String(value || '').replace(/[<@#!&>]/g, '').trim();
+
+function clone(value, fallback = {}) {
+  try {
+    return JSON.parse(JSON.stringify(value ?? fallback));
+  } catch {
+    return clone(fallback, {});
+  }
+}
+
+function cleanString(value, maxLength = 500) {
+  return String(value ?? '').trim().slice(0, maxLength);
+}
+
+function requireGuildId(value) {
+  const id = String(value ?? '').trim();
+  if (!/^\d{15,25}$/.test(id)) throw new Error('Invalid guild ID.');
+  return id;
+}
+
+function cleanDiscordId(value) {
+  const id = String(value ?? '').replace(/[<@#!&>]/g, '').trim();
   return /^\d{15,25}$/.test(id) ? id : null;
-};
-const cleanKey = (value) => cleanString(value || 'custom', 100) || 'custom';
-const comparable = (value) => cleanKey(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function requireDeploymentKey(value) {
+  const key = cleanString(value, 100)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  if (!key) throw new Error('Invalid deployment key.');
+  return key;
+}
+
+function comparable(value) {
+  return requireDeploymentKey(value).replace(/[^a-z0-9]/g, '');
+}
+
+function safeDate(value, fallback = null) {
+  if (!value) return fallback;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : fallback;
+}
 
 function refreshGuild(guildId) {
   if (typeof guildManager.reloadGuild === 'function') guildManager.reloadGuild(guildId);
 }
 
-function normalizeDeployment(key, deployment = {}) {
+function normalizeDeployment(key, deployment = {}, expectedGuildId = null) {
   const source = isPlainObject(deployment) ? deployment : {};
-  const createdAt = source.createdAt || source.lastUpdatedAt || now();
+  const safeKey = requireDeploymentKey(source.key || key);
+  const guildId = cleanDiscordId(source.guildId) || cleanDiscordId(expectedGuildId);
+  const createdAt = safeDate(source.createdAt || source.lastUpdatedAt, now());
+
   return {
-    key: cleanKey(source.key || key),
-    guildId: cleanDiscordId(source.guildId),
+    key: safeKey,
+    guildId,
     channelId: cleanDiscordId(source.channelId),
     messageId: cleanDiscordId(source.messageId),
-    template: cleanString(source.template || 'custom', 80) || 'custom',
-    preset: cleanString(source.preset || source.presetName || key, 100) || key,
-    status: Object.values(DEPLOYMENT_STATUS).includes(source.status)
-      ? source.status
-      : DEPLOYMENT_STATUS.ACTIVE,
+    template: requireDeploymentKey(source.template || 'custom'),
+    preset: cleanString(source.preset || source.presetName || safeKey, 100) || safeKey,
+    status: VALID_STATUSES.has(source.status) ? source.status : DEPLOYMENT_STATUS.UNKNOWN,
     createdAt,
     createdBy: cleanDiscordId(source.createdBy),
-    lastUpdatedAt: source.lastUpdatedAt || createdAt,
+    lastUpdatedAt: safeDate(source.lastUpdatedAt, createdAt),
     lastUpdatedBy: cleanDiscordId(source.lastUpdatedBy || source.updatedBy || source.createdBy),
-    lastCheckedAt: source.lastCheckedAt || null,
-    missingReason: cleanString(source.missingReason || '', 500) || null,
+    lastCheckedAt: safeDate(source.lastCheckedAt, null),
+    missingReason: cleanString(source.missingReason, 500) || null,
   };
 }
 
-function getEmbedBuilderSection(guildId) {
-  refreshGuild(guildId);
-  return guildManager.getGuildSection(guildId, 'embedBuilder', {
-    draft: {},
-    templates: {},
+function readLegacyDeployments(guildId) {
+  const legacy = guildManager.getGuildSection(guildId, LEGACY_EMBED_BUILDER_SECTION, {});
+  return isPlainObject(legacy?.deployments) ? legacy.deployments : {};
+}
+
+function getDeploymentSection(guildId) {
+  const safeGuildId = requireGuildId(guildId);
+  refreshGuild(safeGuildId);
+
+  const section = guildManager.getGuildSection(safeGuildId, EMBED_DEPLOYMENTS_SECTION, {
     deployments: {},
   });
+  const safeSection = isPlainObject(section) ? section : { deployments: {} };
+  const current = isPlainObject(safeSection.deployments) ? safeSection.deployments : {};
+  if (Object.keys(current).length) return { ...safeSection, deployments: current };
+
+  const legacy = readLegacyDeployments(safeGuildId);
+  if (!Object.keys(legacy).length) return { ...safeSection, deployments: {} };
+
+  const migratedDeployments = {};
+  for (const [key, value] of Object.entries(legacy)) {
+    try {
+      if (!isPlainObject(value)) continue;
+      const normalized = normalizeDeployment(key, value, safeGuildId);
+      if (!normalized.channelId || !normalized.messageId) continue;
+      migratedDeployments[normalized.key] = normalized;
+    } catch (error) {
+      console.warn(`[Embed Deployments] Skipped malformed legacy deployment ${key}:`, error.message);
+    }
+  }
+
+  const migrated = {
+    deployments: migratedDeployments,
+    migratedAt: now(),
+    updatedAt: now(),
+  };
+  guildManager.saveGuildSection(safeGuildId, EMBED_DEPLOYMENTS_SECTION, migrated);
+  refreshGuild(safeGuildId);
+  return migrated;
 }
 
 function getAllEmbedDeployments(guildId) {
-  const deployments = clone(getEmbedBuilderSection(guildId).deployments || {});
-  return Object.fromEntries(
-    Object.entries(deployments)
-      .filter(([, deployment]) => isPlainObject(deployment))
-      .map(([key, deployment]) => [key, normalizeDeployment(key, deployment)])
-  );
+  const safeGuildId = requireGuildId(guildId);
+  const deployments = clone(getDeploymentSection(safeGuildId).deployments, {});
+  const normalized = {};
+
+  for (const [key, deployment] of Object.entries(deployments)) {
+    try {
+      if (!isPlainObject(deployment)) continue;
+      const result = normalizeDeployment(key, deployment, safeGuildId);
+      if (result.guildId && result.guildId !== safeGuildId) continue;
+      normalized[result.key] = { ...result, guildId: safeGuildId };
+    } catch (error) {
+      console.warn(`[Embed Deployments] Skipped malformed deployment ${key}:`, error.message);
+    }
+  }
+
+  return normalized;
 }
 
 function findMatchingDeployment(deployments, key) {
-  const safeKey = cleanKey(key);
+  const safeKey = requireDeploymentKey(key);
   if (deployments[safeKey]) return deployments[safeKey];
 
   const target = comparable(safeKey);
-  const templateTarget = comparable(safeKey.replace(/^auto[-_:]?/i, ''));
-  const matches = Object.values(deployments).filter(Boolean);
+  const aliases = Object.values(deployments).filter((deployment) => {
+    if (!deployment) return false;
+    return [deployment.key, deployment.preset, deployment.template]
+      .filter(Boolean)
+      .some((value) => {
+        try {
+          const normalized = comparable(value);
+          return normalized === target || `auto${normalized}` === target || normalized === target.replace(/^auto/, '');
+        } catch {
+          return false;
+        }
+      });
+  });
 
-  return matches.find((deployment) => {
-    const values = [deployment.key, deployment.preset, deployment.template];
-    return values.some((value) => {
-      const normalized = comparable(value);
-      return normalized === target || normalized === templateTarget || `auto${normalized}` === target;
-    });
-  }) || null;
+  return aliases.length === 1 ? aliases[0] : null;
 }
 
 function getEmbedDeployment(guildId, key) {
@@ -94,65 +179,101 @@ function getEmbedDeployment(guildId, key) {
 }
 
 function saveDeployments(guildId, deployments) {
-  if (typeof guildManager.saveGuildSection !== 'function') return null;
-  const current = getEmbedBuilderSection(guildId);
-  const next = { ...current, deployments: clone(deployments), updatedAt: now() };
-  guildManager.saveGuildSection(guildId, 'embedBuilder', next);
-  refreshGuild(guildId);
-  return next.deployments;
+  const safeGuildId = requireGuildId(guildId);
+  if (typeof guildManager.saveGuildSection !== 'function') {
+    throw new Error('Guild deployment storage is unavailable.');
+  }
+
+  const normalized = {};
+  for (const [key, deployment] of Object.entries(isPlainObject(deployments) ? deployments : {})) {
+    const item = normalizeDeployment(key, deployment, safeGuildId);
+    if (item.guildId && item.guildId !== safeGuildId) throw new Error('Deployment belongs to another guild.');
+    normalized[item.key] = { ...item, guildId: safeGuildId };
+  }
+
+  const current = getDeploymentSection(safeGuildId);
+  const next = { ...current, deployments: normalized, updatedAt: now() };
+  guildManager.saveGuildSection(safeGuildId, EMBED_DEPLOYMENTS_SECTION, next);
+  refreshGuild(safeGuildId);
+
+  const persisted = guildManager.getGuildSection(safeGuildId, EMBED_DEPLOYMENTS_SECTION, {});
+  if (!isPlainObject(persisted?.deployments)) throw new Error('Embed deployment storage did not persist.');
+  return clone(persisted.deployments, {});
 }
 
-function saveEmbedDeployment(guildId, key, deployment) {
-  const safeKey = cleanKey(key);
-  const deployments = getAllEmbedDeployments(guildId);
+function saveEmbedDeployment(guildId, key, deployment = {}) {
+  const safeGuildId = requireGuildId(guildId);
+  const safeKey = requireDeploymentKey(key);
+  if (!isPlainObject(deployment)) throw new Error('Invalid deployment payload.');
+
+  const channelId = cleanDiscordId(deployment.channelId);
+  const messageId = cleanDiscordId(deployment.messageId);
+  if (!channelId || !messageId) throw new Error('A valid deployment channel and message are required.');
+
+  const deployments = getAllEmbedDeployments(safeGuildId);
   const previous = deployments[safeKey] || {};
   const timestamp = now();
   deployments[safeKey] = normalizeDeployment(safeKey, {
     ...previous,
     ...deployment,
-    guildId,
+    guildId: safeGuildId,
+    channelId,
+    messageId,
     key: safeKey,
     createdAt: previous.createdAt || deployment.createdAt || timestamp,
     lastUpdatedAt: timestamp,
     status: deployment.status || DEPLOYMENT_STATUS.ACTIVE,
-  });
-  const saved = saveDeployments(guildId, deployments);
-  const result = saved ? deployments[safeKey] : null;
-  if (result) emitEmbedUpdated(guildId, result);
+    missingReason: deployment.missingReason ?? null,
+  }, safeGuildId);
+
+  const saved = saveDeployments(safeGuildId, deployments);
+  const result = normalizeDeployment(safeKey, saved[safeKey], safeGuildId);
+  emitEmbedUpdated(safeGuildId, result);
   return result;
 }
 
 function markEmbedDeploymentStatus(guildId, key, status, meta = {}) {
-  const deployments = getAllEmbedDeployments(guildId);
+  const safeGuildId = requireGuildId(guildId);
+  if (!VALID_STATUSES.has(status)) throw new Error('Invalid deployment status.');
+
+  const deployments = getAllEmbedDeployments(safeGuildId);
   const existing = findMatchingDeployment(deployments, key);
   if (!existing) return null;
+
   const safeKey = existing.key;
   deployments[safeKey] = normalizeDeployment(safeKey, {
     ...existing,
-    ...meta,
+    ...(isPlainObject(meta) ? meta : {}),
+    guildId: safeGuildId,
     status,
     lastCheckedAt: now(),
-    missingReason: meta.missingReason === null ? null : (meta.missingReason || existing.missingReason),
-  });
-  const saved = saveDeployments(guildId, deployments);
-  const result = saved ? deployments[safeKey] : null;
-  if (result) emitEmbedStatusUpdated(guildId, result);
+    lastUpdatedAt: now(),
+    missingReason: meta.missingReason === null
+      ? null
+      : cleanString(meta.missingReason || existing.missingReason, 500) || null,
+  }, safeGuildId);
+
+  const saved = saveDeployments(safeGuildId, deployments);
+  const result = normalizeDeployment(safeKey, saved[safeKey], safeGuildId);
+  emitEmbedStatusUpdated(safeGuildId, result);
   return result;
 }
 
 function deleteEmbedDeployment(guildId, key) {
-  const deployments = getAllEmbedDeployments(guildId);
+  const safeGuildId = requireGuildId(guildId);
+  const deployments = getAllEmbedDeployments(safeGuildId);
   const existing = findMatchingDeployment(deployments, key);
   if (!existing) return false;
+
   delete deployments[existing.key];
-  const deleted = Boolean(saveDeployments(guildId, deployments));
-  if (deleted) emitEmbedDeleted(guildId, existing.key);
-  return deleted;
+  saveDeployments(safeGuildId, deployments);
+  emitEmbedDeleted(safeGuildId, existing.key);
+  return true;
 }
 
 function getDeploymentKeyFromState(state = {}) {
-  const template = cleanKey(state.template || 'custom');
-  return cleanKey(`auto-${template}`);
+  const template = requireDeploymentKey(state.template || 'custom');
+  return requireDeploymentKey(`auto-${template}`);
 }
 
 async function resolveEmbedDeployment(guild, key) {
@@ -160,41 +281,63 @@ async function resolveEmbedDeployment(guild, key) {
     return { status: DEPLOYMENT_STATUS.UNKNOWN, deployment: null, channel: null, message: null, reason: 'Guild unavailable.' };
   }
 
-  const deployment = getEmbedDeployment(guild.id, key);
+  let guildId;
+  try {
+    guildId = requireGuildId(guild.id);
+  } catch {
+    return { status: DEPLOYMENT_STATUS.UNKNOWN, deployment: null, channel: null, message: null, reason: 'Invalid guild.' };
+  }
+
+  const deployment = getEmbedDeployment(guildId, key);
   if (!deployment) {
-    return { status: DEPLOYMENT_STATUS.NOT_DEPLOYED, deployment: null, channel: null, message: null, reason: 'No deployment record exists.' };
+    return { status: DEPLOYMENT_STATUS.NOT_DEPLOYED, deployment: null, channel: null, message: null, reason: 'No unique deployment record exists.' };
   }
 
-  const channel = guild.channels.cache.get(deployment.channelId)
-    || await guild.channels.fetch(deployment.channelId).catch(() => null);
-  if (!channel) {
-    const updated = markEmbedDeploymentStatus(guild.id, deployment.key, DEPLOYMENT_STATUS.MISSING_CHANNEL, {
-      missingReason: 'Deployment channel could not be found.',
+  if (!deployment.channelId || !deployment.messageId) {
+    const updated = markEmbedDeploymentStatus(guildId, deployment.key, DEPLOYMENT_STATUS.UNKNOWN, {
+      missingReason: 'Deployment record is incomplete.',
     });
-    return { status: DEPLOYMENT_STATUS.MISSING_CHANNEL, deployment: updated || deployment, channel: null, message: null, reason: 'Deployment channel could not be found.' };
+    return { status: DEPLOYMENT_STATUS.UNKNOWN, deployment: updated || deployment, channel: null, message: null, reason: 'Deployment record is incomplete.' };
   }
 
-  const message = await channel.messages?.fetch(deployment.messageId).catch((error) => (
-    error?.code === 50013 ? { __permissionError: true } : null
-  ));
-
-  if (message?.__permissionError) {
-    const updated = markEmbedDeploymentStatus(guild.id, deployment.key, DEPLOYMENT_STATUS.PERMISSION_ERROR, {
-      missingReason: 'Goliath cannot access the deployment message.',
-    });
-    return { status: DEPLOYMENT_STATUS.PERMISSION_ERROR, deployment: updated || deployment, channel, message: null, reason: 'Goliath cannot access the deployment message.' };
+  let channel;
+  try {
+    channel = guild.channels.cache.get(deployment.channelId) || await guild.channels.fetch(deployment.channelId);
+  } catch (error) {
+    const permissionError = error?.code === 50013;
+    const status = permissionError ? DEPLOYMENT_STATUS.PERMISSION_ERROR : DEPLOYMENT_STATUS.MISSING_CHANNEL;
+    const reason = permissionError ? 'Goliath cannot access the deployment channel.' : 'Deployment channel could not be found.';
+    const updated = markEmbedDeploymentStatus(guildId, deployment.key, status, { missingReason: reason });
+    return { status, deployment: updated || deployment, channel: null, message: null, reason };
   }
 
-  if (!message) {
-    const updated = markEmbedDeploymentStatus(guild.id, deployment.key, DEPLOYMENT_STATUS.MISSING_MESSAGE, {
-      missingReason: 'Deployment message could not be found.',
-    });
-    return { status: DEPLOYMENT_STATUS.MISSING_MESSAGE, deployment: updated || deployment, channel, message: null, reason: 'Deployment message could not be found.' };
+  if (!channel?.isTextBased?.() || !channel.messages?.fetch) {
+    const reason = 'Deployment channel is not a supported text channel.';
+    const updated = markEmbedDeploymentStatus(guildId, deployment.key, DEPLOYMENT_STATUS.MISSING_CHANNEL, { missingReason: reason });
+    return { status: DEPLOYMENT_STATUS.MISSING_CHANNEL, deployment: updated || deployment, channel, message: null, reason };
   }
 
-  const updated = deployment.status === DEPLOYMENT_STATUS.ACTIVE
+  let message;
+  try {
+    message = await channel.messages.fetch(deployment.messageId);
+  } catch (error) {
+    const permissionError = error?.code === 50013;
+    const status = permissionError ? DEPLOYMENT_STATUS.PERMISSION_ERROR : DEPLOYMENT_STATUS.MISSING_MESSAGE;
+    const reason = permissionError ? 'Goliath cannot access the deployment message.' : 'Deployment message could not be found.';
+    const updated = markEmbedDeploymentStatus(guildId, deployment.key, status, { missingReason: reason });
+    return { status, deployment: updated || deployment, channel, message: null, reason };
+  }
+
+  if (!message || message.guildId !== guildId || message.channelId !== deployment.channelId) {
+    const reason = 'Deployment message does not match the stored guild or channel.';
+    const updated = markEmbedDeploymentStatus(guildId, deployment.key, DEPLOYMENT_STATUS.MISSING_MESSAGE, { missingReason: reason });
+    return { status: DEPLOYMENT_STATUS.MISSING_MESSAGE, deployment: updated || deployment, channel, message: null, reason };
+  }
+
+  const updated = deployment.status === DEPLOYMENT_STATUS.ACTIVE && !deployment.missingReason
     ? deployment
-    : markEmbedDeploymentStatus(guild.id, deployment.key, DEPLOYMENT_STATUS.ACTIVE, { missingReason: null });
+    : markEmbedDeploymentStatus(guildId, deployment.key, DEPLOYMENT_STATUS.ACTIVE, { missingReason: null });
+
   return { status: DEPLOYMENT_STATUS.ACTIVE, deployment: updated || deployment, channel, message, reason: null };
 }
 

@@ -10,8 +10,8 @@ const {
   RoleSelectMenuBuilder,
 } = require('discord.js');
 
-const formsStore = require('../../../modules/forms/formsStore');
-const formsManager = require('../../../modules/forms/formsManager');
+const formsStore = require('./formsStore');
+const formsManager = require('./formsManager');
 
 function row(...components) {
   return new ActionRowBuilder().addComponents(...components);

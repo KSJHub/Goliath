@@ -21,6 +21,7 @@ const Goodbye = lazy(() => import('../pages/modules/Goodbye'));
 const Tickets = lazy(() => import('../pages/modules/tickets/TicketsWorkflowEnhanced'));
 const Social = lazy(() => import('../pages/modules/Social'));
 const Schedule = lazy(() => import('../pages/modules/Schedule'));
+const Invites = lazy(() => import('../pages/modules/Invites'));
 const Giveaways = lazy(() => import('../pages/modules/Giveaways'));
 const Starboard = lazy(() => import('../pages/modules/Starboard'));
 const Sticky = lazy(() => import('../pages/modules/Sticky'));
@@ -103,6 +104,7 @@ export const ROUTES = [
   { key: 'stats', label: 'Stats', icon: 'overview', path: '/stats', component: Stats, hidden: true },
   { key: 'social', label: 'Social Studio', icon: 'modules', path: '/social', component: Social, hidden: true },
   { key: 'schedule', label: 'Schedule', icon: 'modules', path: '/schedule', component: Schedule, hidden: true },
+  { key: 'invites', label: 'Invite Studio', icon: 'modules', path: '/invites', component: Invites, hidden: true },
   { key: 'starboard', label: 'Starboard', icon: 'modules', path: '/starboard', component: Starboard, hidden: true },
   { key: 'sticky', label: 'Sticky Messages', icon: 'modules', path: '/sticky', component: Sticky, hidden: true },
   { key: 'tempVoice', label: 'Temp Voice', icon: 'modules', path: '/tempvoice', component: TempVoice, hidden: true },
@@ -123,5 +125,5 @@ export const ROUTES = [
 
 export const navItems = NAV_ITEMS;
 export const navBottomItems = NAV_BOTTOM;
-export const PAGE_LAYOUTS = Object.fromEntries(ROUTES.map((route) => [route.key, { title: route.label, description: route.key === 'schedule' ? 'Timezone-aware events, recurring schedules, RSVPs and reminders.' : `${route.label} management.`, emptyDescription: `Select a server to manage ${route.label}.`, sections: [] }]));
+export const PAGE_LAYOUTS = Object.fromEntries(ROUTES.map((route) => [route.key, { title: route.label, description: route.key === 'schedule' ? 'Timezone-aware events, recurring schedules, RSVPs and reminders.' : route.key === 'invites' ? 'Invite attribution, rewards, leaderboard, history and managed invites.' : `${route.label} management.`, emptyDescription: `Select a server to manage ${route.label}.`, sections: [] }]));
 export default DASHBOARD_LAYOUT;

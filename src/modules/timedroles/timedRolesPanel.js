@@ -75,7 +75,7 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User') {
         .addOptions((rules.length ? rules.slice(0, 25) : [{ ruleId: 'none', name: 'No milestones', enabled: false, value: 1, unit: 'day' }]).map((rule) => new StringSelectMenuOptionBuilder()
           .setLabel(String(rule.name || 'Timed role').slice(0, 100))
           .setDescription(`${rule.enabled ? 'Enabled' : 'Disabled'} · ${formatDuration(rule)}`.slice(0, 100))
-          .setValue(rule.ruleId))),
+          .setValue(rule.ruleId)))),
       row(
         button(section.enabled !== false ? `${PREFIX}:disable` : `${PREFIX}:enable`, section.enabled !== false ? '⏸️ Disable' : '▶️ Enable', section.enabled !== false ? ButtonStyle.Secondary : ButtonStyle.Success),
         button(`${PREFIX}:toggleBots`, '🤖 Include Bots'),

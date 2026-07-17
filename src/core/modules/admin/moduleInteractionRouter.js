@@ -10,6 +10,7 @@ const ADMIN_MODULE_IDS = Object.freeze({
   'admin:suggestions': 'suggestions',
   'admin:tickets': 'tickets',
   'admin:embed': 'embedStudio',
+  'admin:invites': 'invites',
 });
 
 function resolveAdminModuleKey(customId) {

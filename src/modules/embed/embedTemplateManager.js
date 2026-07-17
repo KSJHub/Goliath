@@ -6,6 +6,17 @@ const {
   updateGuildSection,
 } = require('../../core/guild/guildManager');
 
+const MAX_EMBED_TOTAL = 6000;
+const MAX_HISTORY = 50;
+const DEFAULT_TEMPLATE_IDS = new Set([
+  'welcome_default',
+  'goodbye_default',
+  'leave_default',
+  'dm_welcome_default',
+  'ticket_panel_default',
+  'form_submission_default',
+]);
+
 const DEFAULT_EMBED = Object.freeze({
   title: '',
   description: '',
@@ -120,6 +131,12 @@ function now() {
   return new Date().toISOString();
 }
 
+function assertGuildId(guildId) {
+  const id = String(guildId || '').trim();
+  if (!/^\d{15,25}$/.test(id)) throw new Error('Invalid guild ID.');
+  return id;
+}
+
 function cleanKey(value = '') {
   return String(value || '')
     .trim()
@@ -127,7 +144,13 @@ function cleanKey(value = '') {
     .replace(/[^a-z0-9_-]/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '')
-    .slice(0, 80) || `template_${crypto.randomUUID()}`;
+    .slice(0, 80);
+}
+
+function requiredKey(value, label = 'Key') {
+  const key = cleanKey(value);
+  if (!key) throw new Error(`${label} is required.`);
+  return key;
 }
 
 function clone(value) {
@@ -136,6 +159,46 @@ function clone(value) {
 
 function asObject(value, fallback = {}) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : fallback;
+}
+
+function cleanText(value, maxLength) {
+  return String(value ?? '').trim().slice(0, maxLength);
+}
+
+function cleanUrl(value, maxLength = 2048) {
+  const url = String(value || '').trim().slice(0, maxLength);
+  if (!url || /^\{[a-zA-Z0-9_.:-]+\}$/.test(url)) return url;
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol) ? url : '';
+  } catch {
+    return '';
+  }
+}
+
+function cleanColor(value) {
+  const color = String(value || '').trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(color)) return color.toUpperCase();
+  if (/^\d{1,8}$/.test(color)) {
+    const numeric = Number(color);
+    if (Number.isInteger(numeric) && numeric >= 0 && numeric <= 0xFFFFFF) {
+      return `#${numeric.toString(16).padStart(6, '0').toUpperCase()}`;
+    }
+  }
+  return '#5865F2';
+}
+
+function normalizeButton(button = {}) {
+  const action = cleanText(button.action || 'link', 64).toLowerCase();
+  const style = cleanText(button.style || 'Link', 24);
+  const url = cleanUrl(button.url, 512);
+  return {
+    label: cleanText(button.label || 'Button', 80) || 'Button',
+    emoji: cleanText(button.emoji, 32),
+    style,
+    url: action === 'link' || style.toLowerCase() === 'link' ? url : '',
+    action,
+  };
 }
 
 function panelToEmbed(panel = {}) {
@@ -161,11 +224,11 @@ function panelToEmbed(panel = {}) {
 
 function legacyPresetToTemplate(name, preset = {}) {
   const panel = Array.isArray(preset.panels) && preset.panels.length ? preset.panels[0] : preset;
-  const templateType = cleanKey(preset.template || preset.templateType || 'global');
+  const templateType = requiredKey(preset.template || preset.templateType || 'global', 'Template type');
   return {
     ...clone(preset),
-    templateId: cleanKey(preset.templateId || name),
-    name: String(preset.name || name).slice(0, 100),
+    templateId: requiredKey(preset.templateId || name, 'Template ID'),
+    name: cleanText(preset.name || name, 100),
     module: templateType === 'custom' ? 'global' : templateType,
     templateType: templateType === 'custom' ? 'global' : templateType,
     content: String(preset.content || preset.message || '').slice(0, 2000),
@@ -179,31 +242,51 @@ function legacyPresetToTemplate(name, preset = {}) {
 
 function normalizeEmbed(embed = {}) {
   const source = asObject(embed, {});
-  return {
+  const authorSource = asObject(source.author, {});
+  const footerSource = asObject(source.footer, {});
+  const fields = Array.isArray(source.fields)
+    ? source.fields.slice(0, 25).map((field) => ({
+      name: cleanText(field?.name || 'Field', 256) || 'Field',
+      value: cleanText(field?.value || 'Value', 1024) || 'Value',
+      inline: field?.inline === true,
+    }))
+    : [];
+
+  const normalized = {
     ...clone(DEFAULT_EMBED),
-    ...source,
-    title: String(source.title || '').slice(0, 256),
-    description: String(source.description || '').slice(0, 4096),
-    color: String(source.color || '#5865F2').slice(0, 16),
-    author: { ...DEFAULT_EMBED.author, ...asObject(source.author, {}) },
-    footer: { ...DEFAULT_EMBED.footer, ...asObject(source.footer, {}) },
-    fields: Array.isArray(source.fields)
-      ? source.fields.slice(0, 25).map((field) => ({
-        name: String(field.name || 'Field').slice(0, 256),
-        value: String(field.value || 'Value').slice(0, 1024),
-        inline: field.inline === true,
-      }))
-      : [],
-    buttons: Array.isArray(source.buttons)
-      ? source.buttons.slice(0, 20).map((button) => ({
-        label: String(button.label || 'Button').slice(0, 80),
-        emoji: String(button.emoji || '').slice(0, 32),
-        style: String(button.style || 'Link').slice(0, 24),
-        url: String(button.url || '').slice(0, 512),
-        action: String(button.action || 'link').slice(0, 64),
-      }))
-      : [],
+    title: cleanText(source.title, 256),
+    description: cleanText(source.description, 4096),
+    color: cleanColor(source.color),
+    author: {
+      name: cleanText(authorSource.name, 256),
+      iconURL: cleanUrl(authorSource.iconURL),
+      url: cleanUrl(authorSource.url),
+    },
+    thumbnailURL: cleanUrl(source.thumbnailURL),
+    imageURL: cleanUrl(source.imageURL),
+    footer: {
+      text: cleanText(footerSource.text, 2048),
+      iconURL: cleanUrl(footerSource.iconURL),
+    },
+    fields,
+    buttons: Array.isArray(source.buttons) ? source.buttons.slice(0, 20).map(normalizeButton) : [],
   };
+
+  const totalLength = normalized.title.length
+    + normalized.description.length
+    + normalized.author.name.length
+    + normalized.footer.text.length
+    + normalized.fields.reduce((total, field) => total + field.name.length + field.value.length, 0);
+
+  if (totalLength > MAX_EMBED_TOTAL) {
+    throw new Error(`Embed content exceeds Discord's ${MAX_EMBED_TOTAL}-character total limit.`);
+  }
+
+  if (!normalized.title && !normalized.description && !normalized.fields.length && !normalized.imageURL && !normalized.thumbnailURL) {
+    throw new Error('Embed must contain a title, description, field, image, or thumbnail.');
+  }
+
+  return normalized;
 }
 
 function extractVariables(value, found = new Set()) {
@@ -220,53 +303,66 @@ function extractVariables(value, found = new Set()) {
 }
 
 function variablesForTemplateType(templateType = 'global') {
-  return [...new Set([...MODULE_VARIABLES.global, ...(MODULE_VARIABLES[templateType] || [])])];
+  const key = cleanKey(templateType) || 'global';
+  return [...new Set([...MODULE_VARIABLES.global, ...(MODULE_VARIABLES[key] || [])])];
 }
 
 function normalizeTemplate(input = {}) {
-  const key = cleanKey(input.templateId || input.id || input.name);
-  const templateType = cleanKey(input.templateType || input.module || 'global');
+  const key = requiredKey(input.templateId || input.id || input.name, 'Template ID');
+  const templateType = requiredKey(input.templateType || input.module || 'global', 'Template type');
+  const moduleName = requiredKey(input.module || templateType || 'global', 'Module');
   const embed = normalizeEmbed(input.embed || (Array.isArray(input.panels) ? panelToEmbed(input.panels[0]) : input));
-  const content = String(input.content || '').slice(0, 2000);
-  const usedVariables = [...extractVariables({ content, embed, panels: input.panels })].sort();
+  const content = String(input.content || '').trim().slice(0, 2000);
+  const panels = Array.isArray(input.panels)
+    ? input.panels.slice(0, 10).map((panel) => normalizeEmbed(panelToEmbed(panel)))
+    : undefined;
+  const usedVariables = [...extractVariables({ content, embed, panels })].sort();
   const supportedVariables = variablesForTemplateType(templateType);
+  const createdAt = input.createdAt && !Number.isNaN(Date.parse(input.createdAt)) ? input.createdAt : now();
 
   return {
-    ...input,
     id: key,
     templateId: key,
-    name: String(input.name || key).slice(0, 100),
-    module: cleanKey(input.module || templateType || 'global'),
+    name: cleanText(input.name || key, 100) || key,
+    module: moduleName,
     templateType,
     content,
     embed,
-    panels: Array.isArray(input.panels) ? clone(input.panels).slice(0, 10) : input.panels,
-    buttons: Array.isArray(input.buttons) ? clone(input.buttons).slice(0, 20) : input.buttons,
-    tags: Array.isArray(input.tags) ? input.tags.slice(0, 20).map(String) : [],
+    panels,
+    buttons: Array.isArray(input.buttons) ? input.buttons.slice(0, 20).map(normalizeButton) : undefined,
+    tags: Array.isArray(input.tags)
+      ? [...new Set(input.tags.map((tag) => cleanText(tag, 40)).filter(Boolean))].slice(0, 20)
+      : [],
     usedVariables,
     supportedVariables,
     unsupportedVariables: usedVariables.filter((variable) => !supportedVariables.includes(variable)),
-    version: Number(input.version || 1),
-    createdAt: input.createdAt || now(),
+    version: Math.max(1, Math.floor(Number(input.version) || 1)),
+    createdAt,
     updatedAt: now(),
+    migratedFromPreset: input.migratedFromPreset === true,
   };
 }
 
 function getEmbedSection(guildId) {
-  const section = getGuildSection(guildId, 'embedStudio', {});
+  const id = assertGuildId(guildId);
+  const section = asObject(getGuildSection(id, 'embedStudio', {}), {});
   const stored = asObject(section.templates || section.presets, {});
-  const legacy = getGuildSection(guildId, 'embedPresets', {});
+  const legacy = asObject(getGuildSection(id, 'embedPresets', {}), {});
   const migrated = {};
 
-  for (const [name, preset] of Object.entries(asObject(legacy, {}))) {
+  for (const [name, preset] of Object.entries(legacy)) {
     if (!preset || name === 'updatedAt') continue;
-    const template = normalizeTemplate(legacyPresetToTemplate(name, preset));
-    if (!stored[template.templateId]) migrated[template.templateId] = template;
+    try {
+      const template = normalizeTemplate(legacyPresetToTemplate(name, preset));
+      if (!stored[template.templateId]) migrated[template.templateId] = template;
+    } catch (error) {
+      console.warn(`[Embed Studio] Skipped invalid legacy preset ${name} in guild ${id}:`, error.message);
+    }
   }
 
   if (Object.keys(migrated).length) {
-    updateGuildSection(guildId, 'embedStudio', (current = {}) => ({
-      ...current,
+    updateGuildSection(id, 'embedStudio', (current = {}) => ({
+      ...asObject(current, {}),
       templates: { ...asObject(current.templates || current.presets, {}), ...migrated },
       updatedAt: now(),
     }), {});
@@ -276,90 +372,151 @@ function getEmbedSection(guildId) {
     ...section,
     templates: { ...clone(DEFAULT_TEMPLATES), ...stored, ...migrated },
     bindings: asObject(section.bindings, {}),
-    history: Array.isArray(section.history) ? section.history : [],
+    history: Array.isArray(section.history) ? section.history.slice(-MAX_HISTORY) : [],
   };
 }
 
 function listTemplates(guildId) {
   const section = getEmbedSection(guildId);
-  return Object.fromEntries(Object.entries(section.templates || {}).map(([key, template]) => [key, normalizeTemplate({ ...template, templateId: key })]));
+  const output = {};
+  for (const [key, template] of Object.entries(section.templates || {})) {
+    try {
+      output[key] = normalizeTemplate({ ...template, templateId: key });
+    } catch (error) {
+      console.warn(`[Embed Studio] Skipped invalid template ${key}:`, error.message);
+    }
+  }
+  return output;
 }
 
 function getTemplate(guildId, templateId) {
-  const templates = listTemplates(guildId);
-  return templates[cleanKey(templateId)] || null;
+  const key = requiredKey(templateId, 'Template ID');
+  return listTemplates(guildId)[key] || null;
 }
 
 function saveTemplate(guildId, input = {}) {
+  const id = assertGuildId(guildId);
   const template = normalizeTemplate(input);
-  const section = updateGuildSection(guildId, 'embedStudio', (current = {}) => {
-    const existingTemplates = asObject(current.templates || current.presets, {});
+  const section = updateGuildSection(id, 'embedStudio', (current = {}) => {
+    const safeCurrent = asObject(current, {});
+    const existingTemplates = asObject(safeCurrent.templates || safeCurrent.presets, {});
     const previous = existingTemplates[template.templateId];
-    const history = Array.isArray(current.history) ? current.history : [];
+    const history = Array.isArray(safeCurrent.history) ? safeCurrent.history : [];
+    const storedTemplate = {
+      ...template,
+      version: Math.max(1, Number(previous?.version || 0) + 1),
+      createdAt: previous?.createdAt || template.createdAt,
+      updatedAt: now(),
+    };
     return {
-      ...current,
-      templates: { ...existingTemplates, [template.templateId]: { ...template, version: Number(previous?.version || 0) + 1 } },
-      history: previous ? [...history.slice(-49), { templateId: template.templateId, version: previous.version || 1, snapshot: previous, archivedAt: now() }] : history,
+      ...safeCurrent,
+      templates: { ...existingTemplates, [template.templateId]: storedTemplate },
+      history: previous
+        ? [...history.slice(-(MAX_HISTORY - 1)), {
+          templateId: template.templateId,
+          version: previous.version || 1,
+          snapshot: clone(previous),
+          archivedAt: now(),
+        }]
+        : history.slice(-MAX_HISTORY),
       updatedAt: now(),
     };
   }, {});
-  return normalizeTemplate(section.templates?.[template.templateId] || template);
+
+  const saved = section?.templates?.[template.templateId];
+  if (!saved) throw new Error('Template save did not persist.');
+  return normalizeTemplate(saved);
 }
 
 function deleteTemplate(guildId, templateId) {
-  const key = cleanKey(templateId);
+  const id = assertGuildId(guildId);
+  const key = requiredKey(templateId, 'Template ID');
+  if (DEFAULT_TEMPLATE_IDS.has(key)) throw new Error('Default templates cannot be deleted.');
+
   let deleted = false;
-  updateGuildSection(guildId, 'embedStudio', (current = {}) => {
-    const templates = { ...asObject(current.templates || current.presets, {}) };
-    if (templates[key]) {
-      delete templates[key];
-      deleted = true;
+  updateGuildSection(id, 'embedStudio', (current = {}) => {
+    const safeCurrent = asObject(current, {});
+    const templates = { ...asObject(safeCurrent.templates || safeCurrent.presets, {}) };
+    if (!templates[key]) return safeCurrent;
+
+    const bindings = {};
+    for (const [moduleName, slots] of Object.entries(asObject(safeCurrent.bindings, {}))) {
+      const filteredSlots = Object.fromEntries(
+        Object.entries(asObject(slots, {})).filter(([, boundId]) => cleanKey(boundId) !== key)
+      );
+      if (Object.keys(filteredSlots).length) bindings[moduleName] = filteredSlots;
     }
-    return { ...current, templates, updatedAt: now() };
+
+    delete templates[key];
+    deleted = true;
+    return { ...safeCurrent, templates, bindings, updatedAt: now() };
   }, {});
   return deleted;
 }
 
 function bindTemplate(guildId, moduleKey, slot, templateId) {
-  const moduleName = cleanKey(moduleKey);
-  const slotName = cleanKey(slot);
-  const template = getTemplate(guildId, templateId);
+  const id = assertGuildId(guildId);
+  const moduleName = requiredKey(moduleKey, 'Module key');
+  const slotName = requiredKey(slot, 'Template slot');
+  const template = getTemplate(id, templateId);
   if (!template) throw new Error('Template not found.');
-  updateGuildSection(guildId, 'embedStudio', (current = {}) => ({
-    ...current,
-    bindings: { ...asObject(current.bindings, {}), [moduleName]: { ...asObject(current.bindings?.[moduleName], {}), [slotName]: template.templateId } },
-    updatedAt: now(),
-  }), {});
+
+  updateGuildSection(id, 'embedStudio', (current = {}) => {
+    const safeCurrent = asObject(current, {});
+    return {
+      ...safeCurrent,
+      bindings: {
+        ...asObject(safeCurrent.bindings, {}),
+        [moduleName]: {
+          ...asObject(safeCurrent.bindings?.[moduleName], {}),
+          [slotName]: template.templateId,
+        },
+      },
+      updatedAt: now(),
+    };
+  }, {});
+
   return { module: moduleName, slot: slotName, templateId: template.templateId, template };
 }
 
 function getBinding(guildId, moduleKey, slot) {
-  const section = getEmbedSection(guildId);
-  const templateId = section.bindings?.[cleanKey(moduleKey)]?.[cleanKey(slot)] || null;
-  return templateId ? getTemplate(guildId, templateId) : null;
+  const id = assertGuildId(guildId);
+  const moduleName = requiredKey(moduleKey, 'Module key');
+  const slotName = requiredKey(slot, 'Template slot');
+  const section = getEmbedSection(id);
+  const templateId = section.bindings?.[moduleName]?.[slotName] || null;
+  if (!templateId) return null;
+  return getTemplate(id, templateId);
 }
 
 function replaceVariables(value, variables = {}) {
+  const safeVariables = asObject(variables, {});
   if (typeof value === 'string') {
-    return value.replace(/\{[a-zA-Z0-9_.:-]+\}/g, (match) => String(variables[match] ?? variables[match.slice(1, -1)] ?? match));
+    return value.replace(/\{[a-zA-Z0-9_.:-]+\}/g, (match) => {
+      const replacement = safeVariables[match] ?? safeVariables[match.slice(1, -1)];
+      return replacement === undefined || replacement === null ? match : String(replacement);
+    });
   }
-  if (Array.isArray(value)) return value.map((item) => replaceVariables(item, variables));
+  if (Array.isArray(value)) return value.map((item) => replaceVariables(item, safeVariables));
   if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceVariables(item, variables)]));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceVariables(item, safeVariables)]));
   }
   return value;
 }
 
 function renderTemplate(template = {}, variables = {}) {
   const normalized = normalizeTemplate(template);
-  const content = replaceVariables(normalized.content, variables);
+  const content = replaceVariables(normalized.content, variables).slice(0, 2000);
   const embed = normalizeEmbed(replaceVariables(normalized.embed, variables));
-  const panels = Array.isArray(normalized.panels) ? replaceVariables(normalized.panels, variables) : normalized.panels;
+  const panels = Array.isArray(normalized.panels)
+    ? normalized.panels.map((panel) => normalizeEmbed(replaceVariables(panel, variables)))
+    : normalized.panels;
   return { ...normalized, content, embed, panels };
 }
 
 function renderBinding(guildId, moduleKey, slot, variables = {}, fallbackTemplateId = null) {
-  const template = getBinding(guildId, moduleKey, slot) || (fallbackTemplateId ? getTemplate(guildId, fallbackTemplateId) : null);
+  const template = getBinding(guildId, moduleKey, slot)
+    || (fallbackTemplateId ? getTemplate(guildId, fallbackTemplateId) : null);
   return template ? renderTemplate(template, variables) : null;
 }
 
