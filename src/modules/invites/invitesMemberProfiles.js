@@ -35,13 +35,9 @@ function statsFor(guildId, userId) {
 function profilePayload(guild, user) {
   const stats = statsFor(guild.id, user.id);
   const inviteUrl = stats.personal?.code ? `https://discord.gg/${stats.personal.code}` : 'No personal invite yet';
-  const achievements = stats.earned.length
-    ? stats.earned.map((item) => `${item.emoji} ${item.name}`).join('\n')
-    : 'No achievements unlocked yet.';
+  const achievements = stats.earned.length ? stats.earned.map((item) => `${item.emoji} ${item.name}`).join('\n') : 'No achievements unlocked yet.';
   const remaining = stats.next ? Math.max(0, stats.next.threshold - stats.score) : 0;
-  const nextReward = stats.next
-    ? `${remaining} more invite${remaining === 1 ? '' : 's'} until ${stats.next.emoji} ${stats.next.name}`
-    : 'All achievements unlocked.';
+  const nextReward = stats.next ? `${remaining} more invite${remaining === 1 ? '' : 's'} until ${stats.next.emoji} ${stats.next.name}` : 'All achievements unlocked.';
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
@@ -54,18 +50,18 @@ function profilePayload(guild, user) {
       { name: 'Active invites', value: String(stats.active), inline: true },
       { name: 'Members left', value: String(stats.left), inline: true },
       { name: 'Bonus', value: String(stats.bonus), inline: true },
-      { name: 'Personal invite', value: inviteUrl, inline: false },
+      { name: 'Your personal link', value: inviteUrl, inline: false },
       { name: 'Achievements', value: achievements, inline: false },
       { name: 'Next achievement', value: nextReward, inline: false },
     )
-    .setFooter({ text: `Invite friends to ${guild.name} and climb the leaderboard.` })
+    .setFooter({ text: `Each member receives one reusable personal link for ${guild.name}.` })
     .setTimestamp();
 
-  const buttons = [
-    new ButtonBuilder().setCustomId('invites:member-personal').setLabel(stats.personal ? 'Resend My Invite' : 'Get My Invite').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('invites:member-personal-delete').setLabel('Delete My Invite').setStyle(ButtonStyle.Danger).setDisabled(!stats.personal),
-  ];
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(...buttons)], flags: MessageFlags.Ephemeral };
+  const inviteButton = new ButtonBuilder()
+    .setCustomId('invites:member-personal')
+    .setLabel(stats.personal ? 'Resend My Link' : 'Get My Link')
+    .setStyle(ButtonStyle.Primary);
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(inviteButton)], flags: MessageFlags.Ephemeral };
 }
 
 async function handleProfileInteraction(interaction) {
@@ -80,13 +76,11 @@ async function notifyInviteUsed(guild, inviterId, joinedMember) {
   if (!inviter?.user) return false;
   const stats = statsFor(guild.id, inviterId);
   const remaining = stats.next ? Math.max(0, stats.next.threshold - stats.score) : 0;
-  const nextReward = stats.next
-    ? `${remaining} more invite${remaining === 1 ? '' : 's'} until ${stats.next.name}`
-    : 'All achievements unlocked';
+  const nextReward = stats.next ? `${remaining} more invite${remaining === 1 ? '' : 's'} until ${stats.next.name}` : 'All achievements unlocked';
   const embed = new EmbedBuilder()
     .setColor(0x57F287)
     .setTitle('🎉 Someone joined using your invite!')
-    .setDescription(`**${joinedMember.user?.tag || joinedMember.id}** joined **${guild.name}** using an invite credited to you.`)
+    .setDescription(`**${joinedMember.user?.tag || joinedMember.id}** joined **${guild.name}** using your personal link.`)
     .addFields(
       { name: 'Current score', value: String(stats.score), inline: true },
       { name: 'Current rank', value: stats.rank ? `#${stats.rank}` : 'Unranked', inline: true },
