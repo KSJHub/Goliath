@@ -8,6 +8,7 @@ const verificationManager = require('../../modules/verification/verification');
 const welcomeManager = require('../../modules/welcome/welcome');
 const welcomeAvatarSync = require('../../modules/welcome/welcomeAvatarSync');
 const goodbyeManager = require('../../modules/goodbye/goodbye');
+const departureTemplateSender = require('../../modules/goodbye/departureTemplateSender');
 
 function formatTimestamp(timestamp, style = 'R') {
   return timestamp ? `<t:${Math.floor(timestamp / 1000)}:${style}>` : 'Unknown';
@@ -41,10 +42,10 @@ function isLogEnabled(guildId, eventName) {
 }
 
 const REMOVAL_TYPES = {
-  left: { key: 'left', title: '👋 Member Left', color: '#ED4245', eventName: 'memberLeave', reasonLabel: 'No reason - user left normally' },
-  kicked: { key: 'kicked', title: '👢 Member Kicked', color: '#FAA61A', eventName: 'memberKick', auditType: AuditLogEvent.MemberKick, reasonLabel: 'No reason provided' },
-  banned: { key: 'banned', title: '🔨 Member Banned', color: '#ED4245', eventName: 'memberBan', auditType: AuditLogEvent.MemberBanAdd, reasonLabel: 'No reason provided' },
-  pruned: { key: 'pruned', title: '🧹 Member Pruned / Removed', color: '#FEE75C', eventName: 'memberPrune', auditType: AuditLogEvent.MemberPrune, reasonLabel: 'Possible prune or bulk removal' },
+  left: { key: 'left', title: '👋 Member Left', color: '#ED4245', eventName: 'memberLeave', reasonLabel: 'No reason — the member left voluntarily.' },
+  kicked: { key: 'kicked', title: '👢 Member Kicked', color: '#FAA61A', eventName: 'memberKick', auditType: AuditLogEvent.MemberKick, reasonLabel: 'No reason provided.' },
+  banned: { key: 'banned', title: '🔨 Member Banned', color: '#ED4245', eventName: 'memberBan', auditType: AuditLogEvent.MemberBanAdd, reasonLabel: 'No reason provided.' },
+  pruned: { key: 'pruned', title: '🧹 Member Pruned / Removed', color: '#FEE75C', eventName: 'memberPrune', auditType: AuditLogEvent.MemberPrune, reasonLabel: 'Member removed during a server prune.' },
 };
 
 async function findRecentAuditLog(guild, userId, auditType, maxAgeMs = 15000) {
@@ -202,8 +203,8 @@ module.exports = [
     async execute(member) {
       await statsManager.handleGuildMemberRemove(member);
       const removal = await detectRemoval(member);
-      await goodbyeManager.sendGoodbye(member).catch((error) => {
-        console.error('[Goodbye] Failed to process member leave:', error);
+      await departureTemplateSender.sendDeparture(member, removal).catch((error) => {
+        console.error('[Goodbye] Failed to process member departure:', error);
       });
       await sendAdminMemberRemovalLog(member, removal);
     },

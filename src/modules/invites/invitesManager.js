@@ -199,31 +199,51 @@ function resetLeaderboard(guildId, meta = {}) {
 }
 
 function useDefaultPanel(guildId, meta = {}) {
-  const defaultSettings = invites.defaults().settings;
-  return updateRawSection(guildId, (current = {}) => {
-    const settings = current.settings || {};
-    const publicPanel = settings.publicPanel || {};
-    const memberInviteTemplate = settings.memberInviteTemplate || {};
-    return {
-      ...current,
-      settings: {
-        ...settings,
-        publicPanel: {
-          ...publicPanel,
-          title: defaultSettings.publicPanel.title,
-          description: defaultSettings.publicPanel.description,
-          color: defaultSettings.publicPanel.color,
-          footer: defaultSettings.publicPanel.footer,
-          buttonLabel: defaultSettings.publicPanel.buttonLabel,
-        },
-        memberInviteTemplate: {
-          ...memberInviteTemplate,
-          dmTitle: defaultSettings.memberInviteTemplate.dmTitle,
-          dmMessage: defaultSettings.memberInviteTemplate.dmMessage,
-        },
-      },
-    };
+  const defaults = invites.defaults().settings;
+  const current = invites.getSection(guildId);
+  const expected = {
+    title: defaults.publicPanel.title,
+    description: defaults.publicPanel.description,
+    color: defaults.publicPanel.color,
+    footer: defaults.publicPanel.footer,
+    buttonLabel: defaults.publicPanel.buttonLabel,
+    dmTitle: defaults.memberInviteTemplate.dmTitle,
+    dmMessage: defaults.memberInviteTemplate.dmMessage,
+  };
+
+  invites.updateSettings(guildId, {
+    publicPanel: {
+      ...current.settings.publicPanel,
+      title: expected.title,
+      description: expected.description,
+      color: expected.color,
+      footer: expected.footer,
+      buttonLabel: expected.buttonLabel,
+    },
+    memberInviteTemplate: {
+      ...current.settings.memberInviteTemplate,
+      dmTitle: expected.dmTitle,
+      dmMessage: expected.dmMessage,
+    },
   }, meta);
+
+  const saved = invites.getSection(guildId).settings;
+  const verified = saved.publicPanel.title === expected.title
+    && saved.publicPanel.description === expected.description
+    && saved.publicPanel.color === expected.color
+    && saved.publicPanel.footer === expected.footer
+    && saved.publicPanel.buttonLabel === expected.buttonLabel
+    && saved.memberInviteTemplate.dmTitle === expected.dmTitle
+    && saved.memberInviteTemplate.dmMessage === expected.dmMessage;
+
+  if (!verified) {
+    throw new Error('Invite Studio could not persist the default panel and member DM values. No success response was sent.');
+  }
+
+  return {
+    publicPanel: saved.publicPanel,
+    memberInviteTemplate: saved.memberInviteTemplate,
+  };
 }
 
 function renderTemplate(text, guild, user, url) {

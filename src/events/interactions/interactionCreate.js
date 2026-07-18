@@ -68,8 +68,64 @@ async function callHandler(target, method, ...args) {
   return Boolean(await target[method](...args));
 }
 
+function isValidHttpUrl(value) {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeEmbedData(embed) {
+  const data = typeof embed?.toJSON === 'function' ? embed.toJSON() : { ...embed };
+  if (!data || typeof data !== 'object') return data;
+
+  const sanitized = { ...data };
+
+  if (sanitized.footer?.icon_url && !isValidHttpUrl(sanitized.footer.icon_url)) {
+    console.warn('[InteractionCreate] Removed invalid embed footer icon URL.');
+    sanitized.footer = { ...sanitized.footer };
+    delete sanitized.footer.icon_url;
+  }
+
+  if (sanitized.author?.icon_url && !isValidHttpUrl(sanitized.author.icon_url)) {
+    console.warn('[InteractionCreate] Removed invalid embed author icon URL.');
+    sanitized.author = { ...sanitized.author };
+    delete sanitized.author.icon_url;
+  }
+
+  if (sanitized.author?.url && !isValidHttpUrl(sanitized.author.url)) {
+    console.warn('[InteractionCreate] Removed invalid embed author URL.');
+    sanitized.author = { ...sanitized.author };
+    delete sanitized.author.url;
+  }
+
+  if (sanitized.thumbnail?.url && !isValidHttpUrl(sanitized.thumbnail.url)) {
+    console.warn('[InteractionCreate] Removed invalid embed thumbnail URL.');
+    delete sanitized.thumbnail;
+  }
+
+  if (sanitized.image?.url && !isValidHttpUrl(sanitized.image.url)) {
+    console.warn('[InteractionCreate] Removed invalid embed image URL.');
+    delete sanitized.image;
+  }
+
+  return sanitized;
+}
+
 function sanitizeComponentPayload(payload) {
-  if (!payload || !Array.isArray(payload.components)) return payload;
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const sanitizedPayload = {
+    ...payload,
+    ...(Array.isArray(payload.embeds)
+      ? { embeds: payload.embeds.map(sanitizeEmbedData) }
+      : {}),
+  };
+
+  if (!Array.isArray(payload.components)) return sanitizedPayload;
+
   const seen = new Set(); const rows = [];
   for (const actionRow of payload.components) {
     const rowData = typeof actionRow?.toJSON === 'function' ? actionRow.toJSON() : actionRow;
@@ -81,7 +137,7 @@ function sanitizeComponentPayload(payload) {
     }) : [];
     if (components.length) rows.push({ ...rowData, components });
   }
-  return { ...payload, components: rows };
+  return { ...sanitizedPayload, components: rows };
 }
 
 function wrapInteractionResponses(interaction) {
