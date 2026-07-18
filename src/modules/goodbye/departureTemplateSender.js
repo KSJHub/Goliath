@@ -57,9 +57,8 @@ function formatDuration(startTimestamp, endTimestamp = Date.now()) {
 }
 
 function formatModerator(user, fallback) {
-  if (!user) return fallback;
-  const name = user.tag || user.username || user.id;
-  return `${user} \`${name}\``;
+  if (!user?.id) return fallback;
+  return `<@${user.id}>`;
 }
 
 function buildDepartureVariables(member, removal = {}) {
@@ -76,7 +75,7 @@ function buildDepartureVariables(member, removal = {}) {
     departureType: type,
     departureLabel: details.label,
     departureIcon: details.icon,
-    departureReason: String(auditLog?.reason || removal.reasonLabel || details.defaultReason).slice(0, 1024),
+    departureReason: String(auditLog?.reason || details.defaultReason).slice(0, 1024),
     departureModerator: formatModerator(moderator, details.moderatorFallback),
     departureModeratorId: moderator?.id || 'N/A',
   };
