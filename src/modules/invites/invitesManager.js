@@ -199,17 +199,30 @@ function resetLeaderboard(guildId, meta = {}) {
 }
 
 function useDefaultPanel(guildId, meta = {}) {
-  const defaults = invites.defaults().settings.publicPanel;
-  const section = invites.getSection(guildId);
-  invites.updateSettings(guildId, {
-    publicPanel: {
-      ...section.settings.publicPanel,
-      title: defaults.title,
-      description: defaults.description,
-      color: defaults.color,
-      footer: defaults.footer,
-      buttonLabel: defaults.buttonLabel,
-    },
+  const defaultSettings = invites.defaults().settings;
+  return updateRawSection(guildId, (current = {}) => {
+    const settings = current.settings || {};
+    const publicPanel = settings.publicPanel || {};
+    const memberInviteTemplate = settings.memberInviteTemplate || {};
+    return {
+      ...current,
+      settings: {
+        ...settings,
+        publicPanel: {
+          ...publicPanel,
+          title: defaultSettings.publicPanel.title,
+          description: defaultSettings.publicPanel.description,
+          color: defaultSettings.publicPanel.color,
+          footer: defaultSettings.publicPanel.footer,
+          buttonLabel: defaultSettings.publicPanel.buttonLabel,
+        },
+        memberInviteTemplate: {
+          ...memberInviteTemplate,
+          dmTitle: defaultSettings.memberInviteTemplate.dmTitle,
+          dmMessage: defaultSettings.memberInviteTemplate.dmMessage,
+        },
+      },
+    };
   }, meta);
 }
 
