@@ -286,26 +286,73 @@ function renderGuildForNumber(guild, number) {
 }
 
 function templateToPreviewState(template = {}) {
+  const normalizePanel = (panel = {}) => {
+    const footer = panel.footer && typeof panel.footer === 'object'
+      ? panel.footer
+      : {};
+    const thumbnail = panel.thumbnail && typeof panel.thumbnail === 'object'
+      ? panel.thumbnail
+      : {};
+    const image = panel.image && typeof panel.image === 'object'
+      ? panel.image
+      : {};
+    const author = panel.author && typeof panel.author === 'object'
+      ? panel.author
+      : {};
+
+    return {
+      ...clone(panel),
+      title: typeof panel.title === 'string' ? panel.title : '',
+      description: typeof panel.description === 'string' ? panel.description : '',
+      color: panel.color || '#5865F2',
+      authorName: panel.authorName || author.name || '',
+      authorIcon: panel.authorIcon || author.iconURL || author.icon_url || '',
+      authorUrl: panel.authorUrl || author.url || '',
+      thumbnail:
+        (typeof panel.thumbnail === 'string' ? panel.thumbnail : '') ||
+        panel.thumbnailURL ||
+        thumbnail.url ||
+        '{userServerAvatar}',
+      image:
+        (typeof panel.image === 'string' ? panel.image : '') ||
+        panel.imageURL ||
+        image.url ||
+        '',
+      footer:
+        (typeof panel.footer === 'string' ? panel.footer : '') ||
+        footer.text ||
+        '',
+      footerIcon:
+        panel.footerIcon ||
+        footer.iconURL ||
+        footer.icon_url ||
+        '',
+      fields: Array.isArray(panel.fields) ? clone(panel.fields) : [],
+    };
+  };
+
   const panels = Array.isArray(template.panels) && template.panels.length
-    ? clone(template.panels)
-    : [{
+    ? template.panels.map(normalizePanel)
+    : [normalizePanel({
       title: template.embed?.title || '',
       description: template.embed?.description || '',
       color: template.embed?.color || '#5865F2',
-      authorName: template.embed?.author?.name || '',
-      authorIcon: template.embed?.author?.iconURL || '',
-      authorUrl: template.embed?.author?.url || '',
-      thumbnail: template.embed?.thumbnailURL || '',
-      image: template.embed?.imageURL || '',
-      footer: template.embed?.footer?.text || '',
-      footerIcon: template.embed?.footer?.iconURL || '',
-      fields: Array.isArray(template.embed?.fields) ? clone(template.embed.fields) : [],
-    }];
+      author: template.embed?.author,
+      thumbnail: template.embed?.thumbnail,
+      thumbnailURL: template.embed?.thumbnailURL,
+      image: template.embed?.image,
+      imageURL: template.embed?.imageURL,
+      footer: template.embed?.footer,
+      fields: template.embed?.fields,
+    })];
+
   return {
     ...clone(template),
     panels,
     selectedPanelIndex: 0,
-    buttons: Array.isArray(template.buttons) ? clone(template.buttons) : clone(template.embed?.buttons || []),
+    buttons: Array.isArray(template.buttons)
+      ? clone(template.buttons)
+      : clone(template.embed?.buttons || []),
     showTimestamp: template.showTimestamp !== false,
     fieldLayout: template.fieldLayout || 'auto',
   };
