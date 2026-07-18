@@ -56,6 +56,29 @@ function templateMenu(guild, activeTemplateId, userId) {
   return menu;
 }
 
+function channelMenu(config) {
+  const menu = new ChannelSelectMenuBuilder()
+    .setCustomId('admin:goodbye:channel')
+    .setPlaceholder('Select the goodbye channel')
+    .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    .setMinValues(0)
+    .setMaxValues(1);
+
+  if (config.channelId) menu.setDefaultChannels(config.channelId);
+  return menu;
+}
+
+function assertPersistedConfig(guildId, expected = {}) {
+  const saved = goodbye.getGoodbyeSection(guildId);
+  if (Object.prototype.hasOwnProperty.call(expected, 'channelId') && saved.channelId !== expected.channelId) {
+    throw new Error('The goodbye channel did not persist. Please try again.');
+  }
+  if (Object.prototype.hasOwnProperty.call(expected, 'templateId') && saved.templateId !== expected.templateId) {
+    throw new Error('The selected template did not persist. Please try again.');
+  }
+  return saved;
+}
+
 async function buildGoodbyePanel(guild, memberDisplayName = 'Unknown User', userId = 'panel') {
   const config = goodbye.getGoodbyeSection(guild.id);
   const health = await goodbye.buildHealthReport(guild);
@@ -91,12 +114,7 @@ async function buildGoodbyePanel(guild, memberDisplayName = 'Unknown User', user
   return {
     embeds: [embed],
     components: [
-      row(new ChannelSelectMenuBuilder()
-        .setCustomId('admin:goodbye:channel')
-        .setPlaceholder('Select the goodbye channel')
-        .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-        .setMinValues(0)
-        .setMaxValues(1)),
+      row(channelMenu(config)),
       row(templateMenu(guild, activeTemplateId, userId)),
       row(
         button(config.enabled ? 'admin:goodbye:disable' : 'admin:goodbye:enable', config.enabled ? '⏸ Disable' : '▶ Enable', config.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
@@ -151,7 +169,9 @@ async function handleGoodbyeInteraction(interaction) {
     if (customId === 'admin:goodbye') return updatePanel(interaction);
 
     if (interaction.isChannelSelectMenu?.() && customId === 'admin:goodbye:channel') {
-      goodbye.updateConfig(interaction.guild.id, { channelId: interaction.values?.[0] || null }, { actorId: interaction.user.id });
+      const channelId = interaction.values?.[0] || null;
+      goodbye.updateConfig(interaction.guild.id, { channelId }, { actorId: interaction.user.id, action: 'goodbye_channel_select' });
+      assertPersistedConfig(interaction.guild.id, { channelId });
       return updatePanel(interaction);
     }
 
@@ -162,12 +182,18 @@ async function handleGoodbyeInteraction(interaction) {
       }
       selections.set(selectionKey(interaction), templateId);
       goodbye.updateConfig(interaction.guild.id, { templateId }, { actorId: interaction.user.id, action: 'goodbye_template_select' });
+      assertPersistedConfig(interaction.guild.id, { templateId });
       return updatePanel(interaction);
     }
 
     if (customId === 'admin:goodbye:assign') {
       const templateId = selectedTemplate(interaction);
       goodbye.bindGoodbyeTemplate(interaction.guild.id, templateId, { actorId: interaction.user.id });
+      const binding = goodbye.getGoodbyeBinding(interaction.guild.id);
+      if (!binding || binding.templateId !== templateId) {
+        throw new Error('The Embed Studio template binding did not persist.');
+      }
+      assertPersistedConfig(interaction.guild.id, { templateId });
       selections.delete(selectionKey(interaction));
       return updatePanel(interaction);
     }

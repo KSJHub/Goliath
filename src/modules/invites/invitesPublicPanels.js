@@ -12,6 +12,7 @@ const invites = require('./invites');
 const memberProfiles = require('./invitesMemberProfiles');
 
 const refreshTimers = new Map();
+const guildRefs = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const button = (id, label, style = ButtonStyle.Secondary) => new ButtonBuilder()
   .setCustomId(id)
@@ -92,6 +93,7 @@ async function resolveChannel(guild, channelId) {
 }
 
 async function deployPublicPanel(guild, meta = {}) {
+  guildRefs.set(guild.id, guild);
   const panel = panelConfig(guild.id);
   const channel = await resolveChannel(guild, panel.channelId);
   let message = panel.messageId ? await channel.messages.fetch(panel.messageId).catch(() => null) : null;
@@ -104,6 +106,7 @@ async function deployPublicPanel(guild, meta = {}) {
 }
 
 async function refreshPublicPanel(guild, meta = {}) {
+  guildRefs.set(guild.id, guild);
   const panel = panelConfig(guild.id);
   if (!panel.channelId || !panel.messageId) return false;
   const channel = guild.channels.cache.get(panel.channelId)
@@ -117,7 +120,43 @@ async function refreshPublicPanel(guild, meta = {}) {
   return true;
 }
 
+function presentationChanged(panelPatch) {
+  if (!panelPatch || typeof panelPatch !== 'object') return false;
+  return ['title', 'description', 'footer', 'buttonLabel', 'color']
+    .some((key) => Object.prototype.hasOwnProperty.call(panelPatch, key));
+}
+
+function queueSettingsRefresh(guildId, meta = {}) {
+  const guild = guildRefs.get(guildId);
+  if (!guild) return;
+  const key = `settings:${guildId}`;
+  clearTimeout(refreshTimers.get(key));
+  refreshTimers.set(key, setTimeout(() => {
+    refreshTimers.delete(key);
+    refreshPublicPanel(guild, {
+      ...meta,
+      action: `${meta.action || 'invite_panel_settings'}_live_sync`,
+    }).catch((error) => console.error('[InviteStudio] Saved panel live-sync failed:', error));
+  }, 150));
+}
+
+if (!invites.__goliathPublicPanelLiveSyncInstalled) {
+  const updateSettings = invites.updateSettings.bind(invites);
+  invites.updateSettings = (guildId, patch = {}, meta = {}) => {
+    const saved = updateSettings(guildId, patch, meta);
+    if (presentationChanged(patch.publicPanel)) queueSettingsRefresh(guildId, meta);
+    return saved;
+  };
+  Object.defineProperty(invites, '__goliathPublicPanelLiveSyncInstalled', {
+    value: true,
+    configurable: false,
+    enumerable: false,
+    writable: false,
+  });
+}
+
 function queueLeaderboardRefresh(guild, delay = 3000) {
+  guildRefs.set(guild.id, guild);
   const key = `queue:${guild.id}`;
   clearTimeout(refreshTimers.get(key));
   refreshTimers.set(key, setTimeout(() => {
@@ -128,6 +167,7 @@ function queueLeaderboardRefresh(guild, delay = 3000) {
 }
 
 function startAutoRefresh(guild, intervalMs = invites.TWO_HOURS_MS) {
+  guildRefs.set(guild.id, guild);
   const key = `interval:${guild.id}`;
   if (refreshTimers.has(key)) return;
   const timer = setInterval(() => {
