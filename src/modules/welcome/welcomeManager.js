@@ -113,7 +113,7 @@ function buildDiscordPayload(member, type, config) {
 
   return {
     content,
-    embeds: [buildPreviewEmbed(messageData, fakeInteraction)],
+    embeds: [buildPreviewEmbed({ ...messageData, panels: [messageData] }, fakeInteraction)],
     allowedMentions: messageData.allowUserPing || content.includes(`<@${member.user.id}>`)
       ? { users: [member.user.id], roles: [], repliedUser: false }
       : { parse: [], repliedUser: false },
