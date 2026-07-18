@@ -128,11 +128,19 @@ async function updatePanel(interaction) {
 }
 
 function selectedTemplate(interaction) {
-  const templateId = selections.get(selectionKey(interaction));
-  if (!templateId || !embedTemplateManager.getTemplate(interaction.guild.id, templateId)) {
-    throw new Error('Choose a template from the dropdown first.');
+  const config = goodbye.getGoodbyeSection(interaction.guild.id);
+  const binding = goodbye.getGoodbyeBinding(interaction.guild.id);
+  const candidates = [
+    selections.get(selectionKey(interaction)),
+    config.templateId,
+    binding?.templateId,
+  ].filter(Boolean);
+
+  for (const templateId of candidates) {
+    if (embedTemplateManager.getTemplate(interaction.guild.id, templateId)) return templateId;
   }
-  return templateId;
+
+  throw new Error('Choose a valid Embed Studio template from the dropdown first.');
 }
 
 async function handleGoodbyeInteraction(interaction) {
@@ -153,11 +161,13 @@ async function handleGoodbyeInteraction(interaction) {
         throw new Error('Choose a valid Embed Studio template.');
       }
       selections.set(selectionKey(interaction), templateId);
+      goodbye.updateConfig(interaction.guild.id, { templateId }, { actorId: interaction.user.id, action: 'goodbye_template_select' });
       return updatePanel(interaction);
     }
 
     if (customId === 'admin:goodbye:assign') {
-      goodbye.bindGoodbyeTemplate(interaction.guild.id, selectedTemplate(interaction), { actorId: interaction.user.id });
+      const templateId = selectedTemplate(interaction);
+      goodbye.bindGoodbyeTemplate(interaction.guild.id, templateId, { actorId: interaction.user.id });
       selections.delete(selectionKey(interaction));
       return updatePanel(interaction);
     }
@@ -172,12 +182,13 @@ async function handleGoodbyeInteraction(interaction) {
     }
 
     if (customId === 'admin:goodbye:test') {
-      const payload = await goodbye.buildDiscordPayload(interaction.member, config, { includeComponents: false });
+      const payload = await goodbye.buildDiscordPayload(interaction.member, goodbye.getGoodbyeSection(interaction.guild.id), { includeComponents: false });
       return interaction.reply({ ...payload, ephemeral: true });
     }
 
     if (customId === 'admin:goodbye:send') {
-      if (!config.channelId) throw new Error('Choose a goodbye channel first.');
+      const latestConfig = goodbye.getGoodbyeSection(interaction.guild.id);
+      if (!latestConfig.channelId) throw new Error('Choose a goodbye channel first.');
       const result = await goodbye.sendGoodbye(interaction.member, {
         silent: false,
         force: true,

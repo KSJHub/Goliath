@@ -9,25 +9,25 @@ const DEPARTURE_DETAILS = Object.freeze({
   left: {
     icon: '👋',
     label: 'Left Voluntarily',
-    defaultReason: 'No reason — the member left voluntarily.',
-    moderatorFallback: 'Not applicable',
+    defaultReason: 'No reason provided',
+    moderatorFallback: 'N/A',
   },
   kicked: {
     icon: '👢',
     label: 'Kicked',
-    defaultReason: 'No reason provided.',
-    moderatorFallback: 'Unknown moderator',
+    defaultReason: 'No reason provided',
+    moderatorFallback: 'N/A',
   },
   banned: {
     icon: '🔨',
     label: 'Banned',
-    defaultReason: 'No reason provided.',
-    moderatorFallback: 'Unknown moderator',
+    defaultReason: 'No reason provided',
+    moderatorFallback: 'N/A',
   },
   pruned: {
     icon: '🧹',
-    label: 'Pruned / Removed',
-    defaultReason: 'Member removed during a server prune.',
+    label: 'Pruned',
+    defaultReason: 'Server prune',
     moderatorFallback: 'System',
   },
 });
@@ -37,23 +37,23 @@ function formatDuration(startTimestamp, endTimestamp = Date.now()) {
 
   let seconds = Math.max(0, Math.floor((Number(endTimestamp) - Number(startTimestamp)) / 1000));
   const units = [
-    ['year', 365 * 24 * 60 * 60],
-    ['month', 30 * 24 * 60 * 60],
-    ['day', 24 * 60 * 60],
-    ['hour', 60 * 60],
-    ['minute', 60],
+    ['y', 365 * 24 * 60 * 60],
+    ['mo', 30 * 24 * 60 * 60],
+    ['d', 24 * 60 * 60],
+    ['h', 60 * 60],
+    ['m', 60],
   ];
   const parts = [];
 
   for (const [label, size] of units) {
     const value = Math.floor(seconds / size);
     if (!value) continue;
-    parts.push(`${value} ${label}${value === 1 ? '' : 's'}`);
+    parts.push(`${value}${label}`);
     seconds -= value * size;
     if (parts.length === 2) break;
   }
 
-  return parts.length ? parts.join(', ') : 'Less than a minute';
+  return parts.length ? parts.join(' ') : '<1m';
 }
 
 function formatModerator(user, fallback) {
@@ -78,7 +78,7 @@ function buildDepartureVariables(member, removal = {}) {
     departureIcon: details.icon,
     departureReason: String(auditLog?.reason || removal.reasonLabel || details.defaultReason).slice(0, 1024),
     departureModerator: formatModerator(moderator, details.moderatorFallback),
-    departureModeratorId: moderator?.id || 'Not applicable',
+    departureModeratorId: moderator?.id || 'N/A',
   };
 }
 
