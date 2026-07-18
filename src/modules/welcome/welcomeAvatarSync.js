@@ -49,6 +49,27 @@ function replaceAvatarUrls(embed, userId, previousAvatarUrl, nextAvatarUrl) {
   return { data, changed };
 }
 
+function ensureWelcomeAvatar(embed, member) {
+  const data = embed?.toJSON ? embed.toJSON() : JSON.parse(JSON.stringify(embed || {}));
+  const avatarUrl = member?.displayAvatarURL?.({ extension: 'png', size: 256 })
+    || member?.user?.displayAvatarURL?.({ extension: 'png', size: 256 })
+    || '';
+  let changed = false;
+
+  if (avatarUrl && !data.thumbnail?.url) {
+    data.thumbnail = { url: avatarUrl };
+    changed = true;
+  }
+
+  // Older Embed Studio data could pass an object into the footer text field.
+  if (data.footer?.text === '[object Object]') {
+    delete data.footer;
+    changed = true;
+  }
+
+  return { data, changed };
+}
+
 function replaceNoPingMentions(embed, member) {
   const data = embed?.toJSON ? embed.toJSON() : JSON.parse(JSON.stringify(embed || {}));
   const username = String(member?.user?.username || '').trim();
@@ -124,16 +145,17 @@ async function trackLatestWelcomeMessage(member, welcomeManager, sentAfter = Dat
   const selected = candidates[0]?.message;
   if (!selected) return null;
 
-  let mentionChanged = false;
-  const mentionEmbeds = selected.embeds.map((embed) => {
-    const result = replaceNoPingMentions(embed, member);
-    mentionChanged ||= result.changed;
-    return result.data;
+  let embedChanged = false;
+  const correctedEmbeds = selected.embeds.map((embed) => {
+    const mentionResult = replaceNoPingMentions(embed, member);
+    const avatarResult = ensureWelcomeAvatar(mentionResult.data, member);
+    embedChanged ||= mentionResult.changed || avatarResult.changed;
+    return avatarResult.data;
   });
 
-  if (mentionChanged) {
-    await selected.edit({ embeds: mentionEmbeds }).catch((error) => {
-      console.warn('[Welcome] Failed to convert welcome username to clickable mention:', error.message || error);
+  if (embedChanged) {
+    await selected.edit({ embeds: correctedEmbeds }).catch((error) => {
+      console.warn('[Welcome] Failed to correct welcome embed:', error.message || error);
     });
   }
 
@@ -247,4 +269,5 @@ module.exports = {
   syncTrackedWelcomeForGuild,
   replaceAvatarUrls,
   replaceNoPingMentions,
+  ensureWelcomeAvatar,
 };

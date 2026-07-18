@@ -10,8 +10,12 @@ function formatTimestamp(timestamp, style = 'F') {
   return timestamp ? `<t:${Math.floor(timestamp / 1000)}:${style}>` : 'Unknown';
 }
 
-function getAvatar(member) {
-  return member?.displayAvatarURL?.({ extension: 'png', size: 256 }) || member?.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || '';
+function getUserAvatar(member) {
+  return member?.user?.displayAvatarURL?.({ extension: 'png', size: 256, forceStatic: false }) || '';
+}
+
+function getMemberAvatar(member) {
+  return member?.displayAvatarURL?.({ extension: 'png', size: 256, forceStatic: false }) || getUserAvatar(member);
 }
 
 function buildTemplateVariables(member) {
@@ -29,8 +33,9 @@ function buildTemplateVariables(member) {
     userMention: `<@${member.user.id}>`,
     username: member.user.username || member.user.tag || member.user.id,
     userId: member.user.id,
-    userAvatar: getAvatar(member),
-    memberAvatar: getAvatar(member),
+    userAvatar: getUserAvatar(member),
+    memberAvatar: getMemberAvatar(member),
+    userServerAvatar: getMemberAvatar(member),
     createdAt: formatTimestamp(member.user.createdTimestamp, 'F'),
     joinedAt: formatTimestamp(member.joinedTimestamp, 'F'),
     timestamp: formatTimestamp(Date.now(), 'F'),
@@ -43,6 +48,22 @@ function getLegacySection(guildId, type) {
 
 function getRenderedTemplate(guildId, slot, variables, fallbackTemplateId) {
   return embedTemplateManager.renderBinding(guildId, 'welcome', slot, variables, fallbackTemplateId);
+}
+
+function normalizeRenderedEmbed(embed = {}) {
+  const author = embed?.author && typeof embed.author === 'object' ? embed.author : {};
+  const footer = embed?.footer && typeof embed.footer === 'object' ? embed.footer : {};
+
+  return {
+    ...embed,
+    authorName: embed.authorName || author.name || '',
+    authorIcon: embed.authorIcon || author.iconURL || author.icon_url || '',
+    authorUrl: embed.authorUrl || author.url || '',
+    footer: typeof embed.footer === 'string' ? embed.footer : footer.text || '',
+    footerIcon: embed.footerIcon || footer.iconURL || footer.icon_url || '',
+    thumbnail: embed.thumbnail || embed.thumbnailURL || embed.thumbnail?.url || '',
+    image: embed.image || embed.imageURL || embed.image?.url || '',
+  };
 }
 
 function getWelcomeTemplates(guildId, templateType = 'welcome') {
@@ -71,11 +92,12 @@ function buildMessageData(member, type, config) {
   const templateId = isDm ? config.dmTemplateId : config.templateId;
   const slot = isDm ? 'dm_welcome' : 'welcome';
   const rendered = getRenderedTemplate(guildId, slot, buildTemplateVariables(member), templateId);
+  const renderedEmbed = normalizeRenderedEmbed(rendered?.embed || {});
 
   return {
     ...(TEMPLATES[type] || {}),
     ...legacy,
-    ...(rendered?.embed || {}),
+    ...renderedEmbed,
     content: rendered?.content || legacy.content || legacy.message || '',
     embed: rendered?.embed || null,
     templateId: rendered?.templateId || templateId,
@@ -106,6 +128,13 @@ async function resolveWelcomeChannel(guild, channelId) {
 
 async function sendWelcome(member, options = {}) {
   if (!member?.guild?.id || !member?.user?.id) return { publicSent: false, dmSent: false, skipped: true };
+
+  const freshMember = await member.guild.members.fetch({
+    user: member.user.id,
+    force: true,
+  }).catch(() => member);
+  member = freshMember || member;
+  await member.user.fetch(true).catch(() => null);
 
   const config = welcomeStore.getWelcomeSection(member.guild.id);
   if ((!options.force && config.enabled === false) || (config.ignoreBots && member.user.bot)) {
