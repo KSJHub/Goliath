@@ -1,6 +1,7 @@
 'use strict';
 
-const { buildPreviewEmbeds } = require('../embed/embedPanel');
+const { EmbedBuilder } = require('discord.js');
+const guildManager = require('../../core/guild/guildManager');
 const embedTemplateManager = require('../embed/embedTemplateManager');
 const goodbyeManager = require('./goodbye');
 
@@ -33,6 +34,7 @@ const DEPARTURE_DETAILS = Object.freeze({
 
 function formatDuration(startTimestamp, endTimestamp = Date.now()) {
   if (!startTimestamp || !Number.isFinite(Number(startTimestamp))) return 'Unknown';
+
   let seconds = Math.max(0, Math.floor((Number(endTimestamp) - Number(startTimestamp)) / 1000));
   const units = [
     ['year', 365 * 24 * 60 * 60],
@@ -42,6 +44,7 @@ function formatDuration(startTimestamp, endTimestamp = Date.now()) {
     ['minute', 60],
   ];
   const parts = [];
+
   for (const [label, size] of units) {
     const value = Math.floor(seconds / size);
     if (!value) continue;
@@ -49,6 +52,7 @@ function formatDuration(startTimestamp, endTimestamp = Date.now()) {
     seconds -= value * size;
     if (parts.length === 2) break;
   }
+
   return parts.length ? parts.join(', ') : 'Less than a minute';
 }
 
@@ -63,12 +67,12 @@ function buildDepartureVariables(member, removal = {}) {
   const details = DEPARTURE_DETAILS[type];
   const auditLog = removal.auditLog || null;
   const moderator = auditLog?.executor || null;
-  const leftAt = Date.now();
+  const departedAt = Date.now();
 
   return {
     userDisplay: member.displayName || member.user.globalName || member.user.username || member.user.id,
-    membershipDuration: formatDuration(member.joinedTimestamp, leftAt),
-    accountAge: formatDuration(member.user.createdTimestamp, leftAt),
+    membershipDuration: formatDuration(member.joinedTimestamp, departedAt),
+    accountAge: formatDuration(member.user.createdTimestamp, departedAt),
     departureType: type,
     departureLabel: details.label,
     departureIcon: details.icon,
@@ -83,7 +87,7 @@ function stripIconFromText(value, iconUrl) {
   if (!text || !iconUrl || !text.includes(iconUrl)) return { text, usedIcon: false };
 
   const cleaned = text
-    .replace(iconUrl, '')
+    .split(iconUrl).join('')
     .replace(/^\s*[•|·—–-]+\s*/, '')
     .replace(/\s*[•|·—–-]+\s*$/, '')
     .trim();
@@ -91,7 +95,36 @@ function stripIconFromText(value, iconUrl) {
   return { text: cleaned, usedIcon: true };
 }
 
-function toPreviewPanel(panel = {}, guildIconUrl = '') {
+function isHttpUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function resolveDepartureTemplate(guildId, config = goodbyeManager.getGoodbyeSection(guildId)) {
+  const binding = goodbyeManager.getGoodbyeBinding(guildId);
+  if (binding) return binding;
+
+  for (const templateKey of ['leave', 'goodbye']) {
+    const activePreset = guildManager.getEmbedDefaultPreset?.(guildId, templateKey);
+    if (!activePreset) continue;
+
+    try {
+      return embedTemplateManager.normalizeTemplate(
+        embedTemplateManager.legacyPresetToTemplate(`active_${templateKey}`, activePreset)
+      );
+    } catch (error) {
+      console.warn(`[Goodbye] Active ${templateKey} preset could not be converted:`, error.message || error);
+    }
+  }
+
+  return goodbyeManager.getAssignedTemplate(guildId, config);
+}
+
+function normalizeRenderedPanel(panel = {}, guildIconUrl = '') {
   const author = panel.author && typeof panel.author === 'object' ? panel.author : {};
   const footer = panel.footer && typeof panel.footer === 'object' ? panel.footer : {};
 
@@ -101,34 +134,68 @@ function toPreviewPanel(panel = {}, guildIconUrl = '') {
   const footerResult = stripIconFromText(rawFooterText, guildIconUrl);
 
   return {
-    title: panel.title || '',
-    description: panel.description || '',
+    title: String(panel.title || '').slice(0, 256),
+    description: String(panel.description || '').slice(0, 4096),
     color: panel.color || '#ED4245',
-    authorName: authorResult.text,
+    authorName: authorResult.text.slice(0, 256),
     authorIcon: panel.authorIcon || author.iconURL || (authorResult.usedIcon ? guildIconUrl : ''),
     authorUrl: panel.authorUrl || author.url || '',
     thumbnail: panel.thumbnail || panel.thumbnailURL || '',
     image: panel.image || panel.imageURL || '',
-    footer: footerResult.text,
+    footer: footerResult.text.slice(0, 2048),
     footerIcon: panel.footerIcon || footer.iconURL || (footerResult.usedIcon ? guildIconUrl : ''),
-    fields: Array.isArray(panel.fields) ? panel.fields : [],
+    fields: Array.isArray(panel.fields) ? panel.fields.slice(0, 25) : [],
   };
 }
 
-function buildPreviewState(rendered, guildIconUrl = '') {
-  const sourcePanels = Array.isArray(rendered.panels) && rendered.panels.length
+function buildDiscordEmbed(panel = {}, options = {}) {
+  const normalized = normalizeRenderedPanel(panel, options.guildIconUrl || '');
+  const embed = new EmbedBuilder().setColor(normalized.color || '#ED4245');
+
+  if (normalized.title) embed.setTitle(normalized.title);
+  if (normalized.description) embed.setDescription(normalized.description);
+
+  if (normalized.authorName || isHttpUrl(normalized.authorIcon)) {
+    embed.setAuthor({
+      name: normalized.authorName || options.guildName || 'Member Departure',
+      ...(isHttpUrl(normalized.authorIcon) ? { iconURL: normalized.authorIcon } : {}),
+      ...(isHttpUrl(normalized.authorUrl) ? { url: normalized.authorUrl } : {}),
+    });
+  }
+
+  if (normalized.footer || isHttpUrl(normalized.footerIcon)) {
+    embed.setFooter({
+      text: normalized.footer || 'Member Logs',
+      ...(isHttpUrl(normalized.footerIcon) ? { iconURL: normalized.footerIcon } : {}),
+    });
+  }
+
+  if (isHttpUrl(normalized.thumbnail)) embed.setThumbnail(normalized.thumbnail);
+  if (isHttpUrl(normalized.image)) embed.setImage(normalized.image);
+
+  const fields = normalized.fields
+    .filter((field) => field?.name && field?.value)
+    .map((field) => ({
+      name: String(field.name).slice(0, 256),
+      value: String(field.value).slice(0, 1024),
+      inline: field.inline === true,
+    }));
+  if (fields.length) embed.addFields(fields);
+
+  if (options.showTimestamp !== false) embed.setTimestamp();
+  return embed;
+}
+
+function buildDiscordEmbeds(rendered = {}, variables = {}) {
+  const panels = Array.isArray(rendered.panels) && rendered.panels.length
     ? rendered.panels
     : [rendered.embed || {}];
 
-  return {
-    ...rendered,
-    panels: sourcePanels.map((panel) => toPreviewPanel(panel, guildIconUrl)),
-    selectedPanelIndex: 0,
-    buttons: Array.isArray(rendered.buttons) ? rendered.buttons : (rendered.embed?.buttons || []),
+  return panels.slice(0, 10).map((panel) => buildDiscordEmbed(panel, {
+    guildIconUrl: variables.guildIcon || '',
+    guildName: variables.guildName || variables.guild || 'Member Departure',
     showTimestamp: rendered.showTimestamp !== false,
-    fieldLayout: rendered.fieldLayout || 'auto',
-    allowUserPing: false,
-  };
+  }));
 }
 
 async function sendDeparture(member, removal = {}, options = {}) {
@@ -140,28 +207,23 @@ async function sendDeparture(member, removal = {}, options = {}) {
   const channel = await goodbyeManager.resolveGoodbyeChannel(member.guild, config.channelId);
   if (!channel) return goodbyeManager.sendGoodbye(member, options);
 
-  const template = goodbyeManager.getAssignedTemplate(member.guild.id, config);
+  const template = resolveDepartureTemplate(member.guild.id, config);
   if (!template) return goodbyeManager.sendGoodbye(member, options);
 
   try {
     const baseVariables = await goodbyeManager.buildTemplateVariables(member, config);
     const variables = { ...baseVariables, ...buildDepartureVariables(member, removal) };
     const rendered = embedTemplateManager.renderTemplate(template, variables);
-    const state = buildPreviewState(rendered, variables.guildIcon || '');
-    const fakeInteraction = {
-      guild: member.guild,
-      guildId: member.guild.id,
-      user: member.user,
-      member,
-    };
+    const embeds = buildDiscordEmbeds(rendered, variables);
 
     await channel.send({
       content: rendered.content || '',
-      embeds: buildPreviewEmbeds(state, fakeInteraction),
+      embeds,
       allowedMentions: { parse: [], repliedUser: false },
     });
+
     if (!options.previewOnly) goodbyeManager.incrementAnalytics(member.guild.id, { sent: 1 });
-    return { sent: true, failed: false, skipped: false, channelId: channel.id, errors: [] };
+    return { sent: true, failed: false, skipped: false, channelId: channel.id, templateId: template.templateId, errors: [] };
   } catch (error) {
     if (!options.previewOnly) goodbyeManager.incrementAnalytics(member.guild.id, { failed: 1 });
     if (!options.silent) console.error('[Goodbye] Failed to send dynamic departure template:', error);
@@ -174,7 +236,9 @@ module.exports = {
   formatDuration,
   buildDepartureVariables,
   stripIconFromText,
-  toPreviewPanel,
-  buildPreviewState,
+  resolveDepartureTemplate,
+  normalizeRenderedPanel,
+  buildDiscordEmbed,
+  buildDiscordEmbeds,
   sendDeparture,
 };

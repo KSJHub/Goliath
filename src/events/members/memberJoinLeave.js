@@ -41,6 +41,10 @@ function isLogEnabled(guildId, eventName) {
   return guildManager.isLogEventEnabled(guildId, eventName) !== false;
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 const REMOVAL_TYPES = {
   left: { key: 'left', title: '👋 Member Left', color: '#ED4245', eventName: 'memberLeave', reasonLabel: 'No reason — the member left voluntarily.' },
   kicked: { key: 'kicked', title: '👢 Member Kicked', color: '#FAA61A', eventName: 'memberKick', auditType: AuditLogEvent.MemberKick, reasonLabel: 'No reason provided.' },
@@ -48,13 +52,15 @@ const REMOVAL_TYPES = {
   pruned: { key: 'pruned', title: '🧹 Member Pruned / Removed', color: '#FEE75C', eventName: 'memberPrune', auditType: AuditLogEvent.MemberPrune, reasonLabel: 'Member removed during a server prune.' },
 };
 
-async function findRecentAuditLog(guild, userId, auditType, maxAgeMs = 15000) {
+async function findRecentAuditLog(guild, userId, auditType, maxAgeMs = 15000, allowTargetless = false) {
   if (!auditType) return null;
+
   try {
     const logs = await guild.fetchAuditLogs({ limit: 10, type: auditType });
     return logs.entries.find((entry) => {
-      const targetId = entry.target?.id;
-      return (!targetId || targetId === userId) && Date.now() - entry.createdTimestamp < maxAgeMs;
+      const targetId = entry.target?.id || null;
+      const targetMatches = targetId === userId || (allowTargetless && !targetId);
+      return targetMatches && Date.now() - entry.createdTimestamp < maxAgeMs;
     }) || null;
   } catch (error) {
     console.warn(`[joinLeave] Audit log check failed for ${auditType}:`, error.message);
@@ -65,12 +71,19 @@ async function findRecentAuditLog(guild, userId, auditType, maxAgeMs = 15000) {
 async function detectRemoval(member) {
   const guild = member.guild;
   const userId = member.user.id;
-  const banLog = await findRecentAuditLog(guild, userId, AuditLogEvent.MemberBanAdd, 20000);
+
+  // Discord can emit guildMemberRemove just before the corresponding audit entry is visible.
+  await delay(1000);
+
+  const banLog = await findRecentAuditLog(guild, userId, AuditLogEvent.MemberBanAdd, 25000);
   if (banLog) return { ...REMOVAL_TYPES.banned, auditLog: banLog };
-  const kickLog = await findRecentAuditLog(guild, userId, AuditLogEvent.MemberKick, 20000);
+
+  const kickLog = await findRecentAuditLog(guild, userId, AuditLogEvent.MemberKick, 25000);
   if (kickLog) return { ...REMOVAL_TYPES.kicked, auditLog: kickLog };
-  const pruneLog = await findRecentAuditLog(guild, userId, AuditLogEvent.MemberPrune, 30000);
+
+  const pruneLog = await findRecentAuditLog(guild, userId, AuditLogEvent.MemberPrune, 30000, true);
   if (pruneLog) return { ...REMOVAL_TYPES.pruned, auditLog: pruneLog };
+
   return { ...REMOVAL_TYPES.left, auditLog: null };
 }
 
