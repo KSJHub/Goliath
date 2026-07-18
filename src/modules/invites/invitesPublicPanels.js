@@ -12,6 +12,7 @@ const invites = require('./invites');
 const memberProfiles = require('./invitesMemberProfiles');
 
 const refreshTimers = new Map();
+const refreshOperations = new Map();
 const guildRefs = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const button = (id, label, style = ButtonStyle.Secondary) => new ButtonBuilder()
@@ -140,10 +141,21 @@ function usableMessageHint(message, panel) {
   return message;
 }
 
-async function refreshPublicPanel(guild, meta = {}, options = {}) {
+function logRefreshTiming(guild, meta, timings) {
+  if (timings.total < 1000) return;
+  const action = String(meta.action || 'invite_panel_refresh');
+  console.info(
+    `[InviteStudio] ${action} completed in ${timings.total}ms for guild ${guild.id} `
+    + `(read=${timings.read}ms resolve=${timings.resolve}ms edit=${timings.edit}ms save=${timings.save}ms).`,
+  );
+}
+
+async function performPublicPanelRefresh(guild, meta = {}, options = {}) {
   const startedAt = Date.now();
   guildRefs.set(guild.id, guild);
+
   const section = invites.getSection(guild.id);
+  const readFinishedAt = Date.now();
   const panel = section.settings.publicPanel;
   if (!panel.channelId || !panel.messageId) return false;
 
@@ -155,6 +167,7 @@ async function refreshPublicPanel(guild, meta = {}, options = {}) {
       ? await channel.messages.fetch(panel.messageId).catch(() => null)
       : null;
   }
+  const resolveFinishedAt = Date.now();
   if (!message) return false;
 
   const refreshedAt = new Date().toISOString();
@@ -167,13 +180,32 @@ async function refreshPublicPanel(guild, meta = {}, options = {}) {
   };
 
   await message.edit(buildPublicPayload(guild.id, nextSection));
+  const editFinishedAt = Date.now();
   savePanelConfig(guild.id, { lastRefreshedAt: refreshedAt }, meta);
+  const saveFinishedAt = Date.now();
 
-  const durationMs = Date.now() - startedAt;
-  if (durationMs >= 1000) {
-    console.info(`[InviteStudio] Public leaderboard refresh completed in ${durationMs}ms for guild ${guild.id}.`);
-  }
+  logRefreshTiming(guild, meta, {
+    total: saveFinishedAt - startedAt,
+    read: readFinishedAt - startedAt,
+    resolve: resolveFinishedAt - readFinishedAt,
+    edit: editFinishedAt - resolveFinishedAt,
+    save: saveFinishedAt - editFinishedAt,
+  });
   return true;
+}
+
+function refreshPublicPanel(guild, meta = {}, options = {}) {
+  const key = guild.id;
+  const active = refreshOperations.get(key);
+  if (active) return active;
+
+  const operation = performPublicPanelRefresh(guild, meta, options)
+    .finally(() => {
+      if (refreshOperations.get(key) === operation) refreshOperations.delete(key);
+    });
+
+  refreshOperations.set(key, operation);
+  return operation;
 }
 
 function presentationChanged(panelPatch) {

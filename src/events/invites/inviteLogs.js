@@ -5,6 +5,7 @@ const loggingService = require('../../core/logging/service');
 const invites = require('../../modules/invites/invites');
 const invitePanels = require('../../modules/invites/invitesPublicPanels');
 const memberProfiles = require('../../modules/invites/invitesMemberProfiles');
+const inviteMigration = require('../../modules/invites/invitesMigration');
 
 async function sendConfiguredLog(guild, payload) {
   const section = invites.getSection(guild.id);
@@ -44,6 +45,11 @@ async function logInviteDelete(invite) {
 async function handleJoin(member) {
   const result = await invites.trackJoin(member, { actorId: member.id, action: 'invite_member_join' });
   if (!result) return;
+  const retiredLegacyInvites = await inviteMigration.retireLegacyIfReplacementUsed(
+    member.guild,
+    result.inviteCode,
+    { actorId: member.id, action: 'invite_migration_replacement_used' },
+  ).catch(() => []);
   invitePanels.queueLeaderboardRefresh(member.guild);
   if (result.inviterId) await memberProfiles.notifyInviteUsed(member.guild, result.inviterId, member).catch(() => null);
   await loggingService.send(member.guild, 'invite.use', {
@@ -52,10 +58,13 @@ async function handleJoin(member) {
       { name: 'Inviter', value: result.inviterId ? `<@${result.inviterId}>` : 'Unknown', inline: true },
       { name: 'Invite', value: result.inviteCode ? `\`${result.inviteCode}\`` : 'Unknown', inline: true },
       { name: 'Account', value: result.fake ? 'New account warning' : 'Established', inline: true },
+      ...(retiredLegacyInvites.length
+        ? [{ name: 'Legacy Links Retired', value: String(retiredLegacyInvites.length), inline: true }]
+        : []),
     ],
   });
   await sendConfiguredLog(member.guild, {
-    content: `📨 ${member} joined using ${result.inviteCode ? `\`${result.inviteCode}\`` : 'an unknown invite'}${result.inviterId ? ` from <@${result.inviterId}>` : ''}.`,
+    content: `📨 ${member} joined using ${result.inviteCode ? `\`${result.inviteCode}\`` : 'an unknown invite'}${result.inviterId ? ` from <@${result.inviterId}>` : ''}.${retiredLegacyInvites.length ? ` Retired ${retiredLegacyInvites.length} previous personal invite link(s).` : ''}`,
     allowedMentions: { users: result.inviterId ? [result.inviterId] : [] },
   });
 }
