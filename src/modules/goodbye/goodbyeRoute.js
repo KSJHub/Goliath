@@ -2,6 +2,7 @@
 
 const express = require('express');
 const goodbye = require('./goodbye');
+const departureDm = require('./goodbyeDepartureDm');
 
 const router = express.Router();
 const success = (res, payload = {}) => res.json({ success: true, ...payload });
@@ -28,6 +29,7 @@ async function getGuild(req, guildId) {
 
 async function buildOverview(req, guildId) {
   const config = goodbye.getGoodbyeSection(guildId);
+  const dmConfig = departureDm.getConfig(guildId);
   const guild = await getGuild(req, guildId);
   const health = guild ? await goodbye.buildHealthReport(guild) : null;
   const templates = goodbye.getGoodbyeTemplates(guildId);
@@ -35,12 +37,15 @@ async function buildOverview(req, guildId) {
   return {
     guildId,
     config,
+    dmConfig,
     templates,
     binding,
     overview: {
       enabled: config.enabled !== false,
       channelId: config.channelId,
       analytics: config.analytics,
+      dmEnabled: dmConfig.enabled,
+      dmAnalytics: dmConfig.analytics,
       health,
       templateId: binding?.templateId || config.templateId,
       templateName: binding?.name || health?.templateName || null,
@@ -70,6 +75,16 @@ router.put('/:guildId/config', async (req, res) => {
       config = goodbye.updateConfig(guildId, patch, { actorId: getActorId(req) });
     }
     return success(res, { config, ...(await buildOverview(req, guildId)) });
+  } catch (error) {
+    return failure(res, error, 400);
+  }
+});
+
+router.put('/:guildId/dm-config', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const dmConfig = departureDm.updateConfig(guildId, req.body || {}, { actorId: getActorId(req) });
+    return success(res, { dmConfig, ...(await buildOverview(req, guildId)) });
   } catch (error) {
     return failure(res, error, 400);
   }
@@ -122,6 +137,33 @@ router.post('/:guildId/test', async (req, res) => {
     if (!config.channelId) throw new Error('Select a goodbye channel before previewing.');
     const result = await goodbye.sendGoodbye(member, { silent: false, force: true, previewOnly: true });
     return success(res, { result, ...(await buildOverview(req, guildId)) });
+  } catch (error) {
+    return failure(res, error, 400);
+  }
+});
+
+router.post('/:guildId/dm-test', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const guild = await getGuild(req, guildId);
+    if (!guild) throw new Error('Guild is unavailable.');
+    const userId = String(req.body?.userId || getActorId(req) || '').trim();
+    if (!/^\d{15,25}$/.test(userId)) throw new Error('A valid test user ID is required.');
+    const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+    if (!member) throw new Error('Test member could not be found in this server.');
+    const eventKey = ['left', 'kicked', 'banned', 'pruned'].includes(req.body?.eventKey) ? req.body.eventKey : 'left';
+    const result = await departureDm.sendDepartureDm(member, { key: eventKey }, { force: true, silent: false });
+    return success(res, { result, ...(await buildOverview(req, guildId)) });
+  } catch (error) {
+    return failure(res, error, 400);
+  }
+});
+
+router.post('/:guildId/dm-reset', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const dmConfig = departureDm.resetConfig(guildId, { actorId: getActorId(req) });
+    return success(res, { dmConfig, ...(await buildOverview(req, guildId)) });
   } catch (error) {
     return failure(res, error, 400);
   }

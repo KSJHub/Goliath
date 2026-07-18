@@ -9,6 +9,7 @@ const welcomeManager = require('../../modules/welcome/welcome');
 const welcomeAvatarSync = require('../../modules/welcome/welcomeAvatarSync');
 const goodbyeManager = require('../../modules/goodbye/goodbye');
 const departureTemplateSender = require('../../modules/goodbye/departureTemplateSender');
+const goodbyeDepartureDm = require('../../modules/goodbye/goodbyeDepartureDm');
 
 function formatTimestamp(timestamp, style = 'R') {
   return timestamp ? `<t:${Math.floor(timestamp / 1000)}:${style}>` : 'Unknown';
@@ -216,6 +217,12 @@ module.exports = [
     async execute(member) {
       await statsManager.handleGuildMemberRemove(member);
       const removal = await detectRemoval(member);
+
+      // User communication is best-effort and must never block the staff audit log.
+      await goodbyeDepartureDm.sendDepartureDm(member, removal).catch((error) => {
+        console.warn('[Goodbye] Failed to process departure DM:', error.message || error);
+      });
+
       await departureTemplateSender.sendDeparture(member, removal).catch((error) => {
         console.error('[Goodbye] Failed to process member departure:', error);
       });
