@@ -78,6 +78,59 @@ function buildDepartureVariables(member, removal = {}) {
   };
 }
 
+function stripIconFromText(value, iconUrl) {
+  const text = String(value || '').trim();
+  if (!text || !iconUrl || !text.includes(iconUrl)) return { text, usedIcon: false };
+
+  const cleaned = text
+    .replace(iconUrl, '')
+    .replace(/^\s*[•|·—–-]+\s*/, '')
+    .replace(/\s*[•|·—–-]+\s*$/, '')
+    .trim();
+
+  return { text: cleaned, usedIcon: true };
+}
+
+function toPreviewPanel(panel = {}, guildIconUrl = '') {
+  const author = panel.author && typeof panel.author === 'object' ? panel.author : {};
+  const footer = panel.footer && typeof panel.footer === 'object' ? panel.footer : {};
+
+  const rawAuthorName = panel.authorName ?? author.name ?? '';
+  const rawFooterText = typeof panel.footer === 'string' ? panel.footer : footer.text || '';
+  const authorResult = stripIconFromText(rawAuthorName, guildIconUrl);
+  const footerResult = stripIconFromText(rawFooterText, guildIconUrl);
+
+  return {
+    title: panel.title || '',
+    description: panel.description || '',
+    color: panel.color || '#ED4245',
+    authorName: authorResult.text,
+    authorIcon: panel.authorIcon || author.iconURL || (authorResult.usedIcon ? guildIconUrl : ''),
+    authorUrl: panel.authorUrl || author.url || '',
+    thumbnail: panel.thumbnail || panel.thumbnailURL || '',
+    image: panel.image || panel.imageURL || '',
+    footer: footerResult.text,
+    footerIcon: panel.footerIcon || footer.iconURL || (footerResult.usedIcon ? guildIconUrl : ''),
+    fields: Array.isArray(panel.fields) ? panel.fields : [],
+  };
+}
+
+function buildPreviewState(rendered, guildIconUrl = '') {
+  const sourcePanels = Array.isArray(rendered.panels) && rendered.panels.length
+    ? rendered.panels
+    : [rendered.embed || {}];
+
+  return {
+    ...rendered,
+    panels: sourcePanels.map((panel) => toPreviewPanel(panel, guildIconUrl)),
+    selectedPanelIndex: 0,
+    buttons: Array.isArray(rendered.buttons) ? rendered.buttons : (rendered.embed?.buttons || []),
+    showTimestamp: rendered.showTimestamp !== false,
+    fieldLayout: rendered.fieldLayout || 'auto',
+    allowUserPing: false,
+  };
+}
+
 async function sendDeparture(member, removal = {}, options = {}) {
   const config = goodbyeManager.getGoodbyeSection(member.guild.id);
   if (!options.force && config.enabled === false) return goodbyeManager.sendGoodbye(member, options);
@@ -94,35 +147,14 @@ async function sendDeparture(member, removal = {}, options = {}) {
     const baseVariables = await goodbyeManager.buildTemplateVariables(member, config);
     const variables = { ...baseVariables, ...buildDepartureVariables(member, removal) };
     const rendered = embedTemplateManager.renderTemplate(template, variables);
-    const state = {
-      ...rendered,
-      panels: Array.isArray(rendered.panels) && rendered.panels.length
-        ? rendered.panels
-        : [{
-          title: rendered.embed?.title || '',
-          description: rendered.embed?.description || '',
-          color: rendered.embed?.color || '#ED4245',
-          authorName: rendered.embed?.author?.name || '',
-          authorIcon: rendered.embed?.author?.iconURL || '',
-          authorUrl: rendered.embed?.author?.url || '',
-          thumbnail: rendered.embed?.thumbnailURL || '',
-          image: rendered.embed?.imageURL || '',
-          footer: rendered.embed?.footer?.text || '',
-          footerIcon: rendered.embed?.footer?.iconURL || '',
-          fields: Array.isArray(rendered.embed?.fields) ? rendered.embed.fields : [],
-        }],
-      selectedPanelIndex: 0,
-      buttons: Array.isArray(rendered.buttons) ? rendered.buttons : (rendered.embed?.buttons || []),
-      showTimestamp: rendered.showTimestamp !== false,
-      fieldLayout: rendered.fieldLayout || 'auto',
-      allowUserPing: false,
-    };
+    const state = buildPreviewState(rendered, variables.guildIcon || '');
     const fakeInteraction = {
       guild: member.guild,
       guildId: member.guild.id,
       user: member.user,
       member,
     };
+
     await channel.send({
       content: rendered.content || '',
       embeds: buildPreviewEmbeds(state, fakeInteraction),
@@ -141,5 +173,8 @@ module.exports = {
   DEPARTURE_DETAILS,
   formatDuration,
   buildDepartureVariables,
+  stripIconFromText,
+  toPreviewPanel,
+  buildPreviewState,
   sendDeparture,
 };
