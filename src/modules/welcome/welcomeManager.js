@@ -2,6 +2,7 @@
 
 const { PermissionFlagsBits } = require('discord.js');
 const { buildPreviewEmbed, TEMPLATES } = require('../embed/embedPanel');
+const { normalizePanelEmbed } = require('../embed/embedPayloadNormalizer');
 const embedTemplateManager = require('../embed/embedTemplateManager');
 const guildManager = require('../../core/guild/guildManager');
 const welcomeStore = require('./welcomeStore');
@@ -43,27 +44,13 @@ function buildTemplateVariables(member) {
 }
 
 function getLegacySection(guildId, type) {
-  return guildManager.getGuildSection(guildId, type, null) || guildManager.getGuildSection(guildId, `${type}Settings`, null) || {};
+  return guildManager.getGuildSection(guildId, type, null)
+    || guildManager.getGuildSection(guildId, `${type}Settings`, null)
+    || {};
 }
 
 function getRenderedTemplate(guildId, slot, variables, fallbackTemplateId) {
   return embedTemplateManager.renderBinding(guildId, 'welcome', slot, variables, fallbackTemplateId);
-}
-
-function normalizeRenderedEmbed(embed = {}) {
-  const author = embed?.author && typeof embed.author === 'object' ? embed.author : {};
-  const footer = embed?.footer && typeof embed.footer === 'object' ? embed.footer : {};
-
-  return {
-    ...embed,
-    authorName: embed.authorName || author.name || '',
-    authorIcon: embed.authorIcon || author.iconURL || author.icon_url || '',
-    authorUrl: embed.authorUrl || author.url || '',
-    footer: typeof embed.footer === 'string' ? embed.footer : footer.text || '',
-    footerIcon: embed.footerIcon || footer.iconURL || footer.icon_url || '',
-    thumbnail: embed.thumbnail || embed.thumbnailURL || embed.thumbnail?.url || '',
-    image: embed.image || embed.imageURL || embed.image?.url || '',
-  };
 }
 
 function getWelcomeTemplates(guildId, templateType = 'welcome') {
@@ -92,12 +79,25 @@ function buildMessageData(member, type, config) {
   const templateId = isDm ? config.dmTemplateId : config.templateId;
   const slot = isDm ? 'dm_welcome' : 'welcome';
   const rendered = getRenderedTemplate(guildId, slot, buildTemplateVariables(member), templateId);
-  const renderedEmbed = normalizeRenderedEmbed(rendered?.embed || {});
+  const memberAvatar = getMemberAvatar(member);
+
+  const renderedEmbed = normalizePanelEmbed(rendered?.embed || {}, {
+    thumbnail: memberAvatar,
+  });
+  const legacyEmbed = normalizePanelEmbed(legacy || {}, {
+    thumbnail: memberAvatar,
+  });
+
+  const merged = normalizePanelEmbed({
+    ...(TEMPLATES[type] || {}),
+    ...legacyEmbed,
+    ...renderedEmbed,
+  }, {
+    thumbnail: memberAvatar,
+  });
 
   return {
-    ...(TEMPLATES[type] || {}),
-    ...legacy,
-    ...renderedEmbed,
+    ...merged,
     content: rendered?.content || legacy.content || legacy.message || '',
     embed: rendered?.embed || null,
     templateId: rendered?.templateId || templateId,
@@ -127,7 +127,9 @@ async function resolveWelcomeChannel(guild, channelId) {
 }
 
 async function sendWelcome(member, options = {}) {
-  if (!member?.guild?.id || !member?.user?.id) return { publicSent: false, dmSent: false, skipped: true };
+  if (!member?.guild?.id || !member?.user?.id) {
+    return { publicSent: false, dmSent: false, skipped: true };
+  }
 
   const freshMember = await member.guild.members.fetch({
     user: member.user.id,
@@ -139,7 +141,12 @@ async function sendWelcome(member, options = {}) {
   const config = welcomeStore.getWelcomeSection(member.guild.id);
   if ((!options.force && config.enabled === false) || (config.ignoreBots && member.user.bot)) {
     if (!options.previewOnly) welcomeStore.incrementAnalytics(member.guild.id, { skipped: 1 });
-    return { publicSent: false, dmSent: false, skipped: true, reason: config.enabled === false ? 'disabled' : 'ignored_bot' };
+    return {
+      publicSent: false,
+      dmSent: false,
+      skipped: true,
+      reason: config.enabled === false ? 'disabled' : 'ignored_bot',
+    };
   }
 
   let publicSent = false;
