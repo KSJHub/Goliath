@@ -1,0 +1,60 @@
+name: Apply verification member-manage fix
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/apply-verification-owner-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Patch verification manager
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/modules/verification/verificationManager.js')
+          text = path.read_text(encoding='utf-8')
+
+          old = """function canBotManageMember(member) {
+  const botMember = getBotMember(member?.guild);
+  if (!botMember || !member || member.id === botMember.id) return false;
+  if (isDevOwnerTestMember(member)) return true;
+  const { isBotOwner } = require('../../core/security/securityCore');
+  return !isBotOwner(member.id);
+}"""
+
+          new = """function canBotManageMember(member) {
+  const botMember = getBotMember(member?.guild);
+  if (!botMember || !member || member.id === botMember.id) return false;
+  return true;
+}"""
+
+          if old not in text:
+              raise SystemExit('Expected canBotManageMember block was not found')
+
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+
+      - name: Remove temporary workflow
+        run: rm .github/workflows/apply-verification-owner-fix.yml
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/modules/verification/verificationManager.js .github/workflows/apply-verification-owner-fix.yml
+          git commit -m "fix: allow verification role updates for bot owner"
+          git push origin dev
+
+# Triggered after workflow registration so GitHub Actions applies the source patch.
