@@ -6,6 +6,7 @@ const {
   StringSelectMenuBuilder,
   ChannelSelectMenuBuilder,
   ChannelType,
+  PermissionFlagsBits,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -18,6 +19,9 @@ const {
 } = require("./embedDeploymentStore");
 
 const guildManager = require("../../core/guild/guildManager");
+const {
+  validateChannelAccess,
+} = require("../../core/security/goliathPermissionGuard");
 
 const PANEL_COLOR = "#5865F2";
 const CUSTOM_HEX_VALUE = "__custom_hex__";
@@ -221,6 +225,32 @@ function clone(v) {
 function trim(v, max = 4096) {
   v = String(v || "");
   return v.length > max ? `${v.slice(0, max - 3)}...` : v;
+}
+function discordErrorCode(error) {
+  return Number(error?.code || error?.rawError?.code || error?.data?.code || 0);
+}
+function discordErrorDetail(error) {
+  return trim(
+    error?.rawError?.message ||
+      error?.data?.message ||
+      error?.message ||
+      "Discord rejected the request.",
+    300,
+  );
+}
+function embedOperationError(error, channelId, operation = "send") {
+  const code = discordErrorCode(error);
+  const detail = discordErrorDetail(error);
+  if (code === 50001 || code === 50013) {
+    return `❌ Discord denied access to <#${channelId}>. Recheck Goliath's effective channel and category permissions.`;
+  }
+  if (code === 50035) {
+    return `❌ Discord rejected part of the embed or its buttons: ${detail}`;
+  }
+  if (code === 10008 && operation === "update") {
+    return "⚠️ The original embed message no longer exists.";
+  }
+  return `❌ Discord could not ${operation} the embed${code ? ` (error ${code})` : ""}: ${detail}`;
 }
 function safeUrl(v) {
   try {
@@ -1578,55 +1608,113 @@ async function handleInteraction(i) {
         flags: 64,
       });
     if (i.customId === "embed:update-existing") {
-      const deployment = getEmbedDeployment(
-        i.guild.id,
-        getDeploymentKeyFromState(s),
-      );
-      if (!deployment)
-        return i.reply({
-          content: "⚠️ No deployed embed found. Use the embed first.",
-          flags: 64,
-        });
-      try {
-        const channel = await i.guild.channels.fetch(deployment.channelId);
-        const message = await channel.messages.fetch(deployment.messageId);
-        await message.edit({
-          content: s.allowUserPing ? `<@${i.user.id}>` : "",
-          embeds: buildPreviewEmbeds(s, i),
-          components: buttonRows(s),
-          allowedMentions: allowedMentions(s, i),
-        });
-        return i.reply({ content: "✅ Existing embed updated.", flags: 64 });
-      } catch (error) {
-        console.error("Failed to update existing embed:", error);
-        return i.reply({
-          content: "⚠️ Original embed not found, or I cannot edit it.",
-          flags: 64,
-        });
-      }
-    }
+  const deployment = getEmbedDeployment(
+    i.guild.id,
+    getDeploymentKeyFromState(s),
+  );
+  if (!deployment)
+    return i.reply({
+      content: "⚠️ No deployed embed found. Use the embed first.",
+      flags: 64,
+    });
+
+  const channel =
+    i.guild.channels.cache.get(deployment.channelId) ||
+    (await i.guild.channels.fetch(deployment.channelId).catch(() => null));
+  if (!channel?.isTextBased())
+    return i.reply({
+      content: "⚠️ The original embed channel no longer exists or is not text-based.",
+      flags: 64,
+    });
+
+  const access = await validateChannelAccess(
+    i.guild,
+    channel.id,
+    [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.ReadMessageHistory,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.EmbedLinks,
+    ],
+    { scope: "embed.update" },
+  );
+  if (!access.ok)
+    return i.reply({ content: trim(access.message, 1800), flags: 64 });
+
+  let payload;
+  try {
+    payload = {
+      content: s.allowUserPing ? `<@${i.user.id}>` : "",
+      embeds: buildPreviewEmbeds(s, i),
+      components: buttonRows(s),
+      allowedMentions: allowedMentions(s, i),
+    };
+  } catch (error) {
+    console.error("Embed update payload build failed:", error);
+    return i.reply({
+      content: `❌ The embed could not be built: ${discordErrorDetail(error)}`,
+      flags: 64,
+    });
+  }
+
+  try {
+    const message = await channel.messages.fetch(deployment.messageId);
+    await message.edit(payload);
+    return i.reply({ content: "✅ Existing embed updated.", flags: 64 });
+  } catch (error) {
+    console.error("Failed to update existing embed:", error);
+    return i.reply({
+      content: embedOperationError(error, channel.id, "update"),
+      flags: 64,
+    });
+  }
+}
     if (i.customId === "embed:use") {
-      const channel =
-        i.guild.channels.cache.get(s.channelId) ||
-        (await i.guild.channels.fetch(s.channelId).catch(() => null));
-      if (!channel?.isTextBased())
-        return i.reply({ content: "Invalid channel.", flags: 64 });
-      let sent;
-      try {
-        sent = await channel.send({
-          content: s.allowUserPing ? `<@${i.user.id}>` : "",
-          embeds: buildPreviewEmbeds(s, i),
-          components: buttonRows(s),
-          allowedMentions: allowedMentions(s, i),
-        });
-      } catch (error) {
-        console.error("Embed send failed:", error);
-        return i.reply({
-          content:
-            "❌ I cannot send messages to that channel. Check Send Messages, Embed Links and View Channel permissions.",
-          flags: 64,
-        });
-      }
+  const channel =
+    i.guild.channels.cache.get(s.channelId) ||
+    (await i.guild.channels.fetch(s.channelId).catch(() => null));
+  if (!channel?.isTextBased())
+    return i.reply({ content: "Invalid channel.", flags: 64 });
+
+  const access = await validateChannelAccess(
+    i.guild,
+    channel.id,
+    [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.EmbedLinks,
+    ],
+    { scope: "embed.deploy" },
+  );
+  if (!access.ok)
+    return i.reply({ content: trim(access.message, 1800), flags: 64 });
+
+  let payload;
+  try {
+    payload = {
+      content: s.allowUserPing ? `<@${i.user.id}>` : "",
+      embeds: buildPreviewEmbeds(s, i),
+      components: buttonRows(s),
+      allowedMentions: allowedMentions(s, i),
+    };
+  } catch (error) {
+    console.error("Embed payload build failed:", error);
+    return i.reply({
+      content: `❌ The embed could not be built: ${discordErrorDetail(error)}`,
+      flags: 64,
+    });
+  }
+
+  let sent;
+  try {
+    sent = await channel.send(payload);
+  } catch (error) {
+    console.error("Embed send failed:", error);
+    return i.reply({
+      content: embedOperationError(error, channel.id, "send"),
+      flags: 64,
+    });
+  }
       const presetName = `auto-${s.template || "custom"}`;
       guildManager.saveEmbedPreset(
         i.guild.id,
