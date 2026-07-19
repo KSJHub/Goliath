@@ -7,8 +7,8 @@ module.exports = {
   async execute(member) {
     const section = timedRoles.getSection(member.guild.id);
     if (section.enabled === false || (member.user?.bot && section.settings.includeBots !== true)) return;
-    for (const rule of timedRoles.listRules(member.guild.id).filter((item) => item.enabled)) {
-      await timedRoles.applyRuleToMember(member, rule).catch(() => null);
-    }
+    await timedRoles.applyProgressionToMember(member, section).catch((error) => {
+      console.warn(`[TimedRoles] Member join progression failed for ${member.id} in ${member.guild.id}: ${error.message}`);
+    });
   },
 };

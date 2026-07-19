@@ -15,7 +15,7 @@ const moduleManifest = Object.freeze({
   invites: { key: 'invites', name: 'Invite Studio', maturity: MODULE_MATURITY.COMPLETE, capabilities: completeCapabilities() },
   leveling: { key: 'leveling', name: 'Leveling', maturity: MODULE_MATURITY.NOT_STARTED, capabilities: createCapabilityMap() },
   polls: { key: 'polls', name: 'Polls', maturity: MODULE_MATURITY.COMPLETE, capabilities: completeCapabilities() },
-  reactionRoles: { key: 'reactionRoles', name: 'Reaction Roles', maturity: MODULE_MATURITY.COMPLETE, capabilities: completeCapabilities() },
+  reactionRoles: { key: 'reactionRoles', name: 'Role Studio', maturity: MODULE_MATURITY.COMPLETE, capabilities: completeCapabilities() },
   social: { key: 'social', name: 'Social Studio', maturity: MODULE_MATURITY.COMPLETE, capabilities: completeCapabilities() },
   schedule: { key: 'schedule', name: 'Schedule', maturity: MODULE_MATURITY.PAUSED, capabilities: createCapabilityMap({ guildStorage: true, runtime: true, adminPanel: true, dashboard: true, api: true, health: true, startupRecovery: true, export: true, reset: true, documentation: true }) },
   starboard: { key: 'starboard', name: 'Starboard', maturity: MODULE_MATURITY.NOT_STARTED, capabilities: createCapabilityMap() },

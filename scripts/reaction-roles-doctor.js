@@ -9,6 +9,7 @@ const required = [
   'src/modules/reactionroles/reactionRolesRoute.js',
   'src/modules/reactionroles/reactionRoleMessageFinder.js',
   'src/modules/reactionroles/reactionRolesPanel.js',
+  'src/modules/reactionroles/reactionRolesPanelV2.js',
   'src/dashboard/js/pages/modules/ReactionRoles.jsx',
   'src/events/messages/messageReactionAdd.js',
   'src/events/messages/messageReactionRemove.js',
@@ -44,6 +45,19 @@ contains('src/modules/reactionroles/reactionRoleMessageFinder.js', [
   'pinnedOnly',
   'botsOnly',
   'messageId',
+]);
+contains('src/modules/reactionroles/reactionRolesPanel.js', [
+  "require('./reactionRolesPanelV2')",
+]);
+contains('src/modules/reactionroles/reactionRolesPanelV2.js', [
+  'Reaction Roles Studio',
+  'Attach Roles to an Existing Message',
+  'Build emoji-to-role mappings',
+  'Add Emoji Mapping',
+  'Select Next Role Above',
+  'Save & Sync',
+  'Open in Discord',
+  'selectedRoleId: null',
 ]);
 contains('src/dashboard/js/pages/modules/ReactionRoles.jsx', [
   'Find a Message',
