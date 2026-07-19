@@ -2,6 +2,7 @@
 
 const express = require('express');
 const reactionRoles = require('./reactionRoles');
+const messageFinder = require('./reactionRoleMessageFinder');
 
 const router = express.Router();
 const success = (res, payload = {}) => res.json({ success: true, ...payload });
@@ -44,6 +45,15 @@ router.get('/:guildId/overview', async (req, res) => {
     const guildId = guildIdFrom(req);
     const guild = await guildFrom(req, guildId);
     return success(res, { config: reactionRoles.getSection(guildId), health: await reactionRoles.buildHealth(guild) });
+  } catch (error) { return respondFailure(res, error); }
+});
+
+router.get('/:guildId/messages/search', async (req, res) => {
+  try {
+    const guildId = guildIdFrom(req);
+    const guild = await guildFrom(req, guildId);
+    const result = await messageFinder.searchGuildMessages(guild, req.query || {});
+    return success(res, result);
   } catch (error) { return respondFailure(res, error); }
 });
 

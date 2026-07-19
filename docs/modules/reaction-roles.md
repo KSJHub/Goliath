@@ -7,6 +7,7 @@ Reaction Roles lets guild members self-assign roles by reacting to managed Disco
 ```text
 src/modules/reactionroles/
 ├── reactionRoles.js
+├── reactionRoleMessageFinder.js
 ├── reactionRolesPanel.js
 ├── reactionRolesRoute.js
 └── reactionRolesLegacyButtons.js
@@ -14,16 +15,52 @@ src/modules/reactionroles/
 
 `reactionRoles.js` is the source of truth for storage, deployments, mappings, runtime role assignment, health, repair, analytics and startup recovery.
 
+`reactionRoleMessageFinder.js` discovers existing messages and embeds across accessible guild channels so administrators can attach reaction roles without copying message links or replacing message content.
+
 `reactionRolesLegacyButtons.js` exists only to preserve previously deployed `role_toggle:*` button messages after the obsolete generic Roles module was removed.
 
 ## Deployment sources
 
 Reaction Roles supports two canonical deployment paths:
 
-1. **Create from Embed Studio template**
-2. **Attach an existing Discord message**
+1. **Attach an existing Discord message or embed**
+2. **Create from an Embed Studio template**
 
-Attaching an existing message does not recreate it. Goliath adds the configured functionality to the selected message and preserves unrelated content and reactions.
+Existing-message attachment is the primary workflow. It does not recreate the selected message. Goliath adds configured reactions and tracking while preserving unrelated content, embeds, components and reactions.
+
+## Guild message finder
+
+The dashboard can search one channel or all accessible text channels using:
+
+- Recent messages
+- Exact message ID
+- Author ID
+- Text contained in message or embed content
+- Embeds only
+- Bot messages only
+- Pinned messages only
+
+Search results include a message preview, channel, author, timestamp, embed status and reaction count. Selecting a result passes its channel and message IDs directly into the canonical attachment transaction.
+
+API endpoint:
+
+```text
+GET /api/reaction-roles/:guildId/messages/search
+```
+
+Supported query parameters:
+
+```text
+channelId
+messageId
+authorId
+query
+botsOnly
+embedsOnly
+pinnedOnly
+scanLimit
+resultLimit
+```
 
 ## Mapping modes
 
@@ -40,6 +77,8 @@ Mappings validate:
 - Discord role hierarchy
 - Managed integration roles
 - Duplicate emoji conflicts
+
+Multiple mappings can be attached in one deployment transaction.
 
 ## Discord administration
 
@@ -77,7 +116,25 @@ API base:
 /api/reaction-roles
 ```
 
-The dashboard supports deployment creation and attachment, mapping management, template changes, enable and disable, health, repair, redeploy, detach, deletion, analytics and export.
+The dashboard supports:
+
+- Guild-wide or channel-specific message discovery
+- Existing message and embed previews
+- Native channel and role selectors
+- Multiple mappings in one attachment transaction
+- Editing mappings on an active deployment
+- Adding, disabling and removing individual mappings
+- Immediate reaction synchronisation after saving
+- Enabling and disabling deployments
+- Duplicating a deployment's mappings into the attachment builder
+- Opening the tracked message directly in Discord
+- Repairing one deployment or all deployments
+- Safe detach without changing the message
+- Detach with removal of Goliath-owned reactions
+- Deletion of Goliath-created deployment messages only
+- Health, analytics and JSON export
+
+Duplicating a deployment copies its mapping configuration only. The administrator must select a destination message before attaching the copy, preventing accidental reuse of the original message.
 
 ## Lifecycle operations
 
@@ -160,6 +217,14 @@ require('./src/modules/reactionroles/reactionRoles').startup(client)
 ```
 
 Startup repairs enabled deployments across cached guilds. There must not be a second Reaction Roles scheduler or startup implementation.
+
+## Doctor
+
+```text
+npm run audit:reactionroles
+```
+
+The doctor verifies the canonical runtime, API route, guild message finder, dashboard attachment and deployment-management workflows, and reaction event registrations.
 
 ## Legacy migration
 
