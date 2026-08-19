@@ -63,8 +63,8 @@ function rolePayload(interaction, requestedPage = 0) {
     ));
   }
   components.push(row(
-    button('admin:birthdays:role:clear', '🧹 Clear Role', ButtonStyle.Secondary, !section.settings.birthdayRoleId),
     button('admin:birthdays:management', '⬅️ Back'),
+    button('admin:birthdays:role:clear', '🧹 Clear Role', ButtonStyle.Secondary, !section.settings.birthdayRoleId),
   ));
   const desc = pages > 1 ? `Page **${page + 1}/${pages}**` : `Current role: ${section.settings.birthdayRoleId ? `<@&${section.settings.birthdayRoleId}>` : '**Not set**'}`;
   return {

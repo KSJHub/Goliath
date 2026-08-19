@@ -32,7 +32,12 @@ async function handleAdmin(interaction) {
   if (id === 'admin:birthdays') { await respond(interaction, adminPayload(interaction)); return true; }
   if (id === 'admin:birthdays:celebration') { await respond(interaction, celebrationPayload(interaction)); return true; }
   if (id === 'admin:birthdays:management') { await respond(interaction, management.managementPayload(interaction)); return true; }
-  if (id === 'admin:birthdays:tools') { await respond(interaction, toolsPayload()); return true; }
+  if (id === 'admin:birthdays:tools') { await respond(interaction, toolsPayload(interaction)); return true; }
+  if (id === 'admin:birthdays:enable' || id === 'admin:birthdays:disable') {
+    const enabled = id.endsWith(':enable');
+    guildManager.setModuleEnabled(interaction.guild.id, 'birthdays', enabled, { ...actor, action: enabled ? 'birthdays_admin_enable' : 'birthdays_admin_disable' });
+    await respond(interaction, toolsPayload(interaction)); return true;
+  }
   if (id === 'admin:birthdays:messages:individual') { await respond(interaction, messagePoolPayload(interaction, 'individual')); return true; }
   if (id === 'admin:birthdays:messages:group') { await respond(interaction, messagePoolPayload(interaction, 'group')); return true; }
   if (id === 'admin:birthdays:card') { await respond(interaction, cardPayload(interaction)); return true; }

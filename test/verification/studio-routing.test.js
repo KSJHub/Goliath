@@ -57,3 +57,12 @@ test('Birthday user panel does not expose admin-only settings', () => {
   assert.doesNotMatch(userPayloadSource, /timezone/);
   assert.doesNotMatch(userPayloadSource, /Server birthday timezone/);
 });
+
+test('Birthday settings panel keeps module toggle and data tools layout', () => {
+  assert.match(birthdaysPanel, /admin:birthdays:enable/);
+  assert.match(birthdaysPanel, /admin:birthdays:disable/);
+  assert.match(birthdaysPanel, /setModuleEnabled\(interaction\.guild\.id, 'birthdays'/);
+  assert.match(birthdaysViews, /button\(`admin:birthdays:\$\{enabled \? 'disable' : 'enable'\}`/);
+  assert.match(birthdaysViews, /button\('admin:birthdays:import', '📥 Import'\), button\('admin:birthdays:export', '📤 Export'\)/);
+  assert.match(birthdaysViews, /row\(button\('admin:birthdays', '⬅️ Back'\)\)/);
+});

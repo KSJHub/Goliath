@@ -8,11 +8,16 @@ const SCAN_INTERVAL_MS = 60 * 1000;
 const SCHEDULER_ID = 'temporaryRoles:expiry-scan:global';
 const installed = Symbol.for('goliath.roleStudio.temporaryRolesScanner');
 
-async function scanAllGuilds(client) {
+async function scanAllGuilds(client, { startup = false } = {}) {
   let checked = 0;
+  let skipped = 0;
   let failed = 0;
   for (const guild of client.guilds.cache.values()) {
     try {
+      if (startup && temporaryRoles.getSection(guild.id).settings.removeExpiredOnStartup === false) {
+        skipped += 1;
+        continue;
+      }
       await temporaryRoles.scanExpired(guild);
       checked += 1;
     } catch (error) {
@@ -23,12 +28,13 @@ async function scanAllGuilds(client) {
   if (failed) {
     sentinelScheduler.fail(SCHEDULER_ID, new Error(`${failed} temporary role expiry scan(s) failed.`), {
       guildsChecked: checked,
+      guildsSkipped: skipped,
       guildFailures: failed,
     });
   } else {
-    sentinelScheduler.beat(SCHEDULER_ID, { guildsChecked: checked, guildFailures: 0 });
+    sentinelScheduler.beat(SCHEDULER_ID, { guildsChecked: checked, guildsSkipped: skipped, guildFailures: 0 });
   }
-  return { checked, failed };
+  return { checked, skipped, failed };
 }
 
 module.exports = {
@@ -44,7 +50,7 @@ module.exports = {
       staleAfterMs: Math.max(SCAN_INTERVAL_MS * 3, 180_000),
       details: { scope: 'all-guilds' },
     });
-    await scanAllGuilds(client);
+    await scanAllGuilds(client, { startup: true });
     const timer = setInterval(() => {
       scanAllGuilds(client).catch((error) => {
         sentinelScheduler.fail(SCHEDULER_ID, error, { phase: 'scheduler-cycle' });

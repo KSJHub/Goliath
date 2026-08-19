@@ -10,6 +10,7 @@ const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js'
 const { loadEnvironment } = require('./src/config/envLoader');
 const { resolveToken } = require('./src/config/tokenResolver');
 const { loginWithRetry } = require('./src/runtime/discordLogin');
+const { createSQLiteSessionStore } = require('./src/server/session/sqliteSessionStore');
 loadEnvironment();
 
 process.on('warning', (warning) => {
@@ -100,9 +101,14 @@ const auditEvents = safeRequire('owner audit intelligence', './src/owner/auditIn
 const config = getBotModeConfig(process.env.BOT_MODE);
 const botMode = String(process.env.BOT_MODE || config?.name || 'DEV').toUpperCase();
 const PORT = Number(process.env.PORT || process.env.BOT_API_PORT || 3001);
-const SESSION_SECRET = process.env.SESSION_SECRET || process.env.DASHBOARD_SESSION_SECRET || 'goliath-dev-session-secret';
 const isProduction = process.env.NODE_ENV === 'production';
 const runtimePaths = bootstrapRuntime(botMode);
+const configuredSessionSecret = process.env.SESSION_SECRET || process.env.DASHBOARD_SESSION_SECRET || '';
+if (isProduction && !configuredSessionSecret) {
+  throw new Error('SESSION_SECRET or DASHBOARD_SESSION_SECRET is required when NODE_ENV=production');
+}
+const SESSION_SECRET = configuredSessionSecret || 'goliath-dev-session-secret';
+const sessionStore = createSQLiteSessionStore(runtimePaths);
 printStartupFingerprint(config, runtimePaths);
 runBootValidation({ requiredPaths: [], requiredEnv: [] });
 
@@ -138,7 +144,7 @@ const allowedOrigins = new Set(['https://goliath.ksjdigital.co.uk', 'https://dev
 app.use(cors({ origin(origin, callback) { if (!origin || allowedOrigins.has(origin)) return callback(null, true); return callback(null, false); }, credentials: true }));
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(session({ secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: isProduction, httpOnly: true, sameSite: isProduction ? 'none' : 'lax', maxAge: 604800000 } }));
+app.use(session({ store: sessionStore, secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: isProduction, httpOnly: true, sameSite: isProduction ? 'none' : 'lax', maxAge: 604800000 } }));
 app.use((req, _res, next) => { req.client = client; req.io = io; next(); });
 
 const mounts = [
