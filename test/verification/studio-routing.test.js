@@ -47,3 +47,13 @@ test('Birthdays admin panel keeps a Community Studio return route', () => {
   assert.match(birthdaysViews, /admin:studio:communityStudio/);
   assert.match(birthdaysPanel, /handleAdmin/);
 });
+
+test('Birthday user panel does not expose admin-only settings', () => {
+  const userPayloadSource = birthdaysViews.match(/function userPayload\(interaction\) \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(userPayloadSource, /Your Birthday/);
+  assert.doesNotMatch(userPayloadSource, /Role:/);
+  assert.doesNotMatch(userPayloadSource, /Channel:/);
+  assert.doesNotMatch(userPayloadSource, /announcementTime/);
+  assert.doesNotMatch(userPayloadSource, /timezone/);
+  assert.doesNotMatch(userPayloadSource, /Server birthday timezone/);
+});
