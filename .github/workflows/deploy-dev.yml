@@ -353,6 +353,6 @@ jobs:
         run: |
           echo "### 🚀 Goliath deployment" >> "$GITHUB_STEP_SUMMARY"
           echo "- Environment: **${{ needs.resolve.outputs.environment }}**" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Source branch: `${{ needs.resolve.outputs.source_branch }}`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Target branch: `${{ needs.resolve.outputs.target_branch }}`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Deployed SHA: `${{ needs.promote.outputs.deploy_sha }}`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source branch: **${{ needs.resolve.outputs.source_branch }}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Target branch: **${{ needs.resolve.outputs.target_branch }}**" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deployed SHA: **${{ needs.promote.outputs.deploy_sha }}**" >> "$GITHUB_STEP_SUMMARY"

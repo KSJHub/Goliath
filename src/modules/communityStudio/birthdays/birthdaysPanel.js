@@ -134,7 +134,15 @@ async function handleUser(interaction) {
   if (id === 'birthdays:user:open') { await respond(interaction, userPayload(interaction)); return true; }
   if (id === 'birthdays:user:privacy') { await respond(interaction, userPrivacyPayload(interaction)); return true; }
   if (id === 'birthdays:user:set') { await interaction.showModal(birthdayModal(record)); return true; }
-  if (id === 'birthdays:user:set:submit') { birthdays.setBirthday(interaction.guildId, interaction.user.id, parseDate(interaction.fields.getTextInputValue('date')), { actorId: interaction.user.id, action: 'birthday_user_set' }); await interaction.reply({ content: '✅ Your birthday has been saved.', flags: 64 }); return true; }
+  if (id === 'birthdays:user:set:submit') {
+    try {
+      birthdays.setBirthday(interaction.guildId, interaction.user.id, parseDate(interaction.fields.getTextInputValue('date')), { actorId: interaction.user.id, action: 'birthday_user_set' });
+      await interaction.reply({ content: '✅ Your birthday has been saved.', flags: 64 });
+    } catch (error) {
+      await interaction.reply({ content: `❌ ${error.message || 'That birthday could not be saved.'}`, flags: 64 });
+    }
+    return true;
+  }
   if (!record) { await interaction.reply({ content: 'Add your birthday first.', flags: 64 }); return true; }
   if (id === 'birthdays:user:list') { birthdays.setBirthday(interaction.guildId, interaction.user.id, { listPublic: !record.listPublic }, { actorId: interaction.user.id, action: 'birthday_user_list' }); await respond(interaction, userPrivacyPayload(interaction)); return true; }
   if (id === 'birthdays:user:announce') { birthdays.setBirthday(interaction.guildId, interaction.user.id, { announce: !record.announce }, { actorId: interaction.user.id, action: 'birthday_user_announce' }); await respond(interaction, userPrivacyPayload(interaction)); return true; }

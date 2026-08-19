@@ -186,6 +186,35 @@ async function createCoreEmoji(client, attachment, requestedName) {
   return { emoji: serialise(created), created: true };
 }
 
+async function replaceCoreEmoji(client, emojiId, attachment) {
+  if (!attachment) throw new Error('A replacement Core emoji image is required.');
+  const manager = requireEmojiManager(client);
+  const existing = await manager.fetch(String(emojiId));
+  if (!existing || !isCoreEmoji(existing)) throw new Error('That application emoji is not part of Goliath Core.');
+  const alias = coreAlias(existing.name);
+  if (!CORE_EMOJI_ALIAS_SET.has(alias)) throw new Error('That Goliath Core emoji uses an unapproved alias and cannot be replaced automatically.');
+
+  const bank = await manager.fetch();
+  if (bank.size >= MAX_APPLICATION_EMOJIS) throw new Error('Goliath application emoji pool is full; free one application emoji slot before replacing a Core emoji.');
+
+  const temporaryName = `${CORE_EMOJI_PREFIX}replacement_${String(existing.id).slice(-8)}`.slice(0, 32);
+  let created = null;
+  try {
+    created = await manager.create({ attachment, name: temporaryName });
+    await manager.delete(existing.id);
+    const renamed = await manager.edit(created.id, { name: `${CORE_EMOJI_PREFIX}${alias}` });
+    return {
+      emoji: serialise(renamed),
+      replaced: serialise(existing),
+    };
+  } catch (error) {
+    if (created?.id) {
+      try { await manager.delete(created.id); } catch (_) { /* best-effort rollback */ }
+    }
+    throw error;
+  }
+}
+
 async function importFromEmojiGG(client, emojiGgId, requestedName = null) {
   const manager = requireEmojiManager(client);
   const bank = await manager.fetch();
@@ -384,6 +413,7 @@ module.exports = {
   listBank,
   overview,
   createCoreEmoji,
+  replaceCoreEmoji,
   importFromEmojiGG,
   removeFromBank,
   renameInBank,

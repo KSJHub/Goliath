@@ -159,6 +159,22 @@ router.patch('/:guildId/core/:emojiId', async (req, res) => {
   } catch (error) { return fail(res, error); }
 });
 
+router.post('/:guildId/core/:emojiId/replace', async (req, res) => {
+  try {
+    const id = guildId(req);
+    const ownerId = requireCoreManager(req);
+    const attachment = await transientCoreAttachment(req.body || {});
+    const result = await emojis.replaceCoreEmoji(client(req), req.params.emojiId, attachment);
+    return ok(res, {
+      actorId: ownerId,
+      result,
+      transientUpload: true,
+      permanentGoliathStorage: 0,
+      ...(await payload(req, id)),
+    });
+  } catch (error) { return fail(res, error); }
+});
+
 router.delete('/:guildId/core/:emojiId', async (req, res) => {
   try {
     const id = guildId(req);
@@ -303,6 +319,32 @@ function coreRenameModal(emoji) {
     ));
 }
 
+function coreReplaceModal(emoji) {
+  return new ModalBuilder()
+    .setCustomId(`admin:module:emojis:core-replace-submit:${emoji.id}`)
+    .setTitle(`Replace :${emoji.alias}: image`)
+    .addComponents(
+      row(
+        new TextInputBuilder()
+          .setCustomId('query')
+          .setLabel('Emoji.gg search (optional)')
+          .setPlaceholder('success, check, ticket...')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setMaxLength(80)
+      ),
+      row(
+        new TextInputBuilder()
+          .setCustomId('imageUrl')
+          .setLabel('OR direct image URL (optional)')
+          .setPlaceholder('https://.../emoji.png')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setMaxLength(1000)
+      )
+    );
+}
+
 function resultLabel(entry) {
   return String(entry?.title || entry?.slug || `Emoji ${entry?.id || ''}`).slice(0, 100);
 }
@@ -371,25 +413,58 @@ function coreSearchResultsPanel(alias, results, query, interaction) {
   return { embeds: [embed], components };
 }
 
+function coreReplaceSearchResultsPanel(emoji, results, query, interaction) {
+  const clean = Array.isArray(results) ? results.slice(0, 25) : [];
+  const embed = new EmbedBuilder()
+    .setColor(PANEL_COLOR)
+    .setTitle(`🔄 Replace :${emoji.alias}: image`)
+    .setDescription(clean.length
+      ? `Found **${clean.length}** Emoji.gg result(s) for **${String(query).slice(0, 80)}**. Select one to replace the current Core image while keeping the alias \`:${emoji.alias}:\`.`
+      : `No Emoji.gg results found for **${String(query).slice(0, 80)}**.`)
+    .setFooter({ text: `Requested by ${memberName(interaction)}` });
+  const components = [];
+  if (clean.length) {
+    components.push(row(
+      new StringSelectMenuBuilder()
+        .setCustomId(`admin:module:emojis:core-replace-search-import:${emoji.id}`)
+        .setPlaceholder(`Choose replacement for :${emoji.alias}:`)
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(clean.map((entry) => ({
+          label: resultLabel(entry),
+          value: String(entry.id),
+          description: resultDescription(entry),
+        })))
+    ));
+  }
+  components.push(row(button('admin:module:emojis:core', '⬅️ Goliath Core', ButtonStyle.Secondary)));
+  return { embeds: [embed], components };
+}
+
 function corePanel(overview, interaction, notice = '') {
   const status = Array.isArray(overview.coreStatus) ? overview.coreStatus : [];
   const missing = status.filter((entry) => !entry.installed);
   const installed = status.filter((entry) => entry.installed && entry.emoji).map((entry) => entry.emoji);
+  const integrity = overview.coreIntegrity || { healthy: true, rogue: [], duplicates: [] };
   const isManager = isCoreManagerId(interaction?.user?.id);
   const statusLine = (entry) => `${entry.installed ? '✅' : '⬜'} **${String(entry.slot).padStart(2, '0')}**  \`:${entry.alias}:\``;
   const firstHalf = status.slice(0, 20).map(statusLine).join('\n') || 'No Core slots found.';
   const secondHalf = status.slice(20, 40).map(statusLine).join('\n') || 'No Core slots found.';
+  const integrityLine = integrity.healthy
+    ? '✅ **Integrity:** Healthy'
+    : `⚠️ **Integrity:** ${integrity.duplicates?.length || 0} duplicate alias(es), ${integrity.rogue?.length || 0} rogue Core name(s)`;
 
   const embed = new EmbedBuilder()
-    .setColor(PANEL_COLOR)
+    .setColor(integrity.healthy ? PANEL_COLOR : 0xFEE75C)
     .setTitle('💠 Goliath Core Emojis')
     .setDescription([
       `**Core usage:** ${overview.coreCapacity.used}/${overview.coreCapacity.max}`,
       `**Missing:** ${missing.length}`,
+      integrityLine,
       '**Availability:** Every Goliath guild automatically',
       '**Guild slots used:** 0',
       '**Server favourites used:** 0',
-      isManager ? '\n**Owner controls:** Add missing aliases from Emoji.gg or a direct image URL, or manage installed Core emojis below.' : '',
+      isManager ? '\n**Owner controls:** Add missing aliases, replace images, rename, delete, or inspect installed Core emojis below.' : '',
       notice ? `\n${notice}` : '',
     ].filter(Boolean).join('\n'))
     .addFields(
@@ -477,6 +552,7 @@ function coreManagePanel(overview, interaction, emoji, notice = '') {
     embeds: [embed],
     components: [
       row(
+        button(`admin:module:emojis:core-replace:${emoji.id}`, '🔄 Replace Image', ButtonStyle.Success),
         button(`admin:module:emojis:core-rename:${emoji.id}`, '✏️ Rename', ButtonStyle.Primary),
         button(`admin:module:emojis:core-delete:${emoji.id}`, '🗑️ Delete', ButtonStyle.Danger),
       ),
@@ -635,6 +711,54 @@ async function handleDiscordInteraction(interaction) {
     const emoji = (overview.core || []).find((entry) => String(entry.id) === String(interaction.values?.[0] || ''));
     if (!emoji) throw new Error('That Goliath Core emoji no longer exists.');
     await sendPanel(interaction, coreManagePanel(overview, interaction, emoji));
+    return true;
+  }
+
+  if (id.startsWith('admin:module:emojis:core-replace:') && interaction.isButton?.()) {
+    requireCoreManagerInteraction(interaction);
+    const emojiId = id.slice('admin:module:emojis:core-replace:'.length);
+    const overview = await discordOverview(interaction);
+    const emoji = (overview.core || []).find((entry) => String(entry.id) === emojiId);
+    if (!emoji) throw new Error('That Goliath Core emoji no longer exists.');
+    await interaction.showModal(coreReplaceModal(emoji));
+    return true;
+  }
+
+  if (id.startsWith('admin:module:emojis:core-replace-submit:') && interaction.isModalSubmit?.()) {
+    requireCoreManagerInteraction(interaction);
+    const emojiId = id.slice('admin:module:emojis:core-replace-submit:'.length);
+    const overview = await discordOverview(interaction);
+    const emoji = (overview.core || []).find((entry) => String(entry.id) === emojiId);
+    if (!emoji) throw new Error('That Goliath Core emoji no longer exists.');
+    const query = String(interaction.fields.getTextInputValue('query') || '').trim();
+    const imageUrl = String(interaction.fields.getTextInputValue('imageUrl') || '').trim();
+    if (!query && !imageUrl) throw new Error('Enter an Emoji.gg search or a direct image URL.');
+
+    if (imageUrl) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const attachment = await emojiApi.downloadAsset(imageUrl);
+      const result = await emojis.replaceCoreEmoji(interaction.client, emojiId, attachment);
+      await interaction.editReply(coreManagePanel(await discordOverview(interaction), interaction, result.emoji, `✅ Replaced image for :${result.emoji.alias}:`));
+      return true;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const results = await emojiApi.search(query, 25);
+    await interaction.editReply(coreReplaceSearchResultsPanel(emoji, results, query, interaction));
+    return true;
+  }
+
+  if (id.startsWith('admin:module:emojis:core-replace-search-import:') && interaction.isStringSelectMenu?.()) {
+    requireCoreManagerInteraction(interaction);
+    const emojiId = id.slice('admin:module:emojis:core-replace-search-import:'.length);
+    await interaction.deferUpdate();
+    const source = await emojiApi.findById(interaction.values?.[0]);
+    if (!source) throw new Error('Emoji.gg emoji was not found.');
+    const url = emojiApi.assetUrl(source);
+    if (!url) throw new Error('Emoji.gg did not provide an image URL for this emoji.');
+    const attachment = await emojiApi.downloadAsset(url);
+    const result = await emojis.replaceCoreEmoji(interaction.client, emojiId, attachment);
+    await interaction.editReply(coreManagePanel(await discordOverview(interaction), interaction, result.emoji, `✅ Replaced image for :${result.emoji.alias}: from Emoji.gg.`));
     return true;
   }
 
