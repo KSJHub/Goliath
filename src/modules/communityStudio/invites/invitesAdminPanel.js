@@ -163,6 +163,42 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
+  if (id === 'invites:panel-channel' && interaction.isChannelSelectMenu()) {
+    nested(interaction, 'publicPanel', {
+      channelId: interaction.values[0],
+    });
+    await update(interaction);
+    return true;
+  }
+
+  if (id === 'invites:panel-limit' && interaction.isStringSelectMenu()) {
+    nested(interaction, 'publicPanel', {
+      leaderboardLimit: Number(interaction.values[0]),
+    });
+    await update(interaction);
+    return true;
+  }
+
+  if (id === 'invites:panel-embed-modal') {
+    await interaction.showModal(panel.embedModal(interaction));
+    return true;
+  }
+
+  if (id === 'invites:panel-embed-submit') {
+    nested(interaction, 'publicPanel', {
+      title: interaction.fields.getTextInputValue('title'),
+      description: interaction.fields.getTextInputValue('description'),
+      footer: interaction.fields.getTextInputValue('footer'),
+      color: interaction.fields.getTextInputValue('color'),
+    });
+
+    await interaction.reply({
+      content: '✅ Public panel text saved.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+
   if (id === 'invites:member-channel') {
     nested(interaction, 'memberInviteTemplate', {
       channelId: interaction.values[0],
@@ -194,10 +230,9 @@ async function handleInviteStudioInteraction(interaction) {
   if (id === 'invites:member-dm-modal') {
     await interaction.showModal(panel.dmModal(interaction));
     return true;
-  }  
-  
-  if (id === 'invites:member-dm-submit') 
-    {
+  }
+
+  if (id === 'invites:member-dm-submit') {
     nested(interaction, 'memberInviteTemplate', {
       dmTitle: interaction.fields.getTextInputValue('title'),
       dmMessage: interaction.fields.getTextInputValue('message'),
@@ -258,6 +293,29 @@ async function handleInviteStudioInteraction(interaction) {
     });
 
     await interaction.editReply('✅ Official invite deleted.');
+
+    return true;
+  }
+
+  if (id === 'invites:panel-deploy') {
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    try {
+      const message = await tracking.deployPublicPanel(
+        interaction.guild,
+        meta(interaction, 'invite_panel_deploy'),
+      );
+
+      await interaction.editReply(
+        `✅ Public invite panel sent / updated in <#${message.channelId}>.`,
+      );
+    } catch (error) {
+      await interaction.editReply(
+        `❌ ${String(error.message || error).slice(0, 1800)}`,
+      );
+    }
 
     return true;
   }

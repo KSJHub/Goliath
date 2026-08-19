@@ -12,6 +12,7 @@ const guildManager = require('../../guild/guildManager');
 const leveling = require('../../../modules/communityStudio/leveling/leveling');
 const levelingTracking = require('../../../modules/communityStudio/leveling/levelingTracking');
 const invites = require('../../../modules/communityStudio/invites/invites');
+const birthdaysPanel = require('../../../modules/communityStudio/birthdays/birthdaysPanel');
 const socialStudio = require('../../../modules/socialStudio/socialAlerts/socialStudio');
 const { normalizeAccountInput, migrateAccount } = require('../../../modules/socialStudio/socialAlerts/accountNormalizer');
 const { checkGuildAccounts, forcePostCreatorLive } = require('../../../modules/socialStudio/socialAlerts/socialStudioMonitor');
@@ -589,6 +590,16 @@ async function delegateModuleUserInteraction(interaction) {
   return false;
 }
 
+async function showBirthdays(interaction) {
+  const originalCustomId = interaction.customId;
+  interaction.customId = 'birthdays:user:open';
+  try {
+    return birthdaysPanel.handleUser(interaction);
+  } finally {
+    interaction.customId = originalCustomId;
+  }
+}
+
 async function handleUserPanelInteraction(interaction) {
   const customId = String(interaction?.customId || '');
   if (!customId.startsWith('user:')) return false;
@@ -640,6 +651,7 @@ async function handleUserPanelInteraction(interaction) {
   if (interaction.isStringSelectMenu?.() && customId === 'user:search') {
     const [moduleKey] = interaction.values || [];
     if (moduleKey === 'notes') return updatePanel(interaction, notesUserPanel.user.buildPanel(interaction));
+    if (moduleKey === 'birthdays') return showBirthdays(interaction);
     if (moduleKey === 'social') return updatePanel(interaction, socialStudio.user.buildLanding(interaction));
     if (moduleKey === 'leveling') return showLeveling(interaction);
     if (moduleKey === 'ping') return executeUtilityCommand(interaction, pingCommand);
@@ -654,6 +666,7 @@ async function handleUserPanelInteraction(interaction) {
   if (moduleMatch && interaction.isButton?.()) {
     const moduleKey = moduleMatch[1];
     if (moduleKey === 'profile') return showProfile(interaction);
+    if (moduleKey === 'birthdays') return showBirthdays(interaction);
     if (moduleKey === 'leveling') return showLeveling(interaction);
     if (moduleKey === 'ping') return executeUtilityCommand(interaction, pingCommand);
     if (moduleKey === 'help') return executeUtilityCommand(interaction, helpCommand);

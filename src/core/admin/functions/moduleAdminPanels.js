@@ -21,7 +21,7 @@ const ADMIN_FIELD_KEYS = new Set(['logChannel', 'managerRoles', 'reviewerRoles',
 
 const CUSTOM_PANEL_KEYS = new Set([
   'autoRoles', 'birthdays', 'embed', 'emojis', 'forms', 'giveaways', 'goodbye', 'invites', 'leveling',
-  'polls', 'reactionRoles', 'schedule', 'social', 'starboard', 'stats', 'sticky',
+  'polls', 'privateRooms', 'reactionRoles', 'schedule', 'social', 'starboard', 'stats', 'sticky',
   'suggestions', 'tempVoice', 'temporaryRoles', 'tickets', 'timedRoles', 'verification', 'welcome',
 ]);
 
@@ -59,6 +59,7 @@ const MODULE_CATALOG = [
 
   // Utility Studio
   { key: 'emojis', studio: 'utilityStudio', route: 'admin:module:emojis:panel', label: '😀 Emoji Bank', title: '😀 Emoji Bank', summary: 'Discord-hosted application emojis from Emoji.gg with up to 100 selected per server.' },
+  { key: 'privateRooms', studio: 'utilityStudio', route: 'admin:privateRooms', label: '🔒 Private Rooms', title: '🔒 Private Rooms', summary: 'Temporary private conversation rooms, requests, approvals and transcripts.' },
   { key: 'schedule', studio: 'utilityStudio', route: 'admin:schedule', label: '📅 Schedule', title: '📅 Schedule', summary: 'Scheduled messages, recurring tasks and timezone-aware automation.' },
   { key: 'stats', studio: 'utilityStudio', route: 'admin:stats', label: '📊 Server Stats', title: '📊 Server Stats', summary: 'Server activity, growth and member statistics.' },
   { key: 'tempVoice', studio: 'utilityStudio', route: 'admin:tempVoice', label: '🔊 Temp Voice', title: '🔊 Temp Voice', summary: 'Temporary voice channels and room automation.' },
@@ -72,7 +73,7 @@ const STUDIO_CATALOG = [
   { key: 'roleStudio', label: '🎭 Roles', title: '🎭 Role Studio', summary: 'Automatic, reaction, temporary and timed role management.' },
   { key: 'securityStudio', label: '🛡️ Security', title: '🛡️ Security Studio', summary: 'Verification and member protection controls.' },
   { key: 'socialStudio', label: '📣 Social', title: '📣 Social Studio', summary: 'Creator and social-platform alerting.' },
-  { key: 'utilityStudio', label: '🧰 Utility', title: '🧰 Utility Studio', summary: 'Scheduling, statistics, translation, temporary voice and Emoji Bank tools.' },
+  { key: 'utilityStudio', label: '🧰 Utility', title: '🧰 Utility Studio', summary: 'Private rooms, scheduling, statistics, translation, temporary voice and Emoji Bank tools.' },
 ];
 
 const MODULE_BY_KEY = Object.fromEntries(MODULE_CATALOG.map((module) => [module.key, module]));

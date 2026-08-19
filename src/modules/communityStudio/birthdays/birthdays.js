@@ -3,9 +3,11 @@
 const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
 const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
+const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js');
 
 const SECTION = 'birthdays';
 const TICK_MS = 60 * 1000;
+const SCHEDULER_ID = 'birthdays:processor:global';
 const UPCOMING_WINDOW_DAYS = 30;
 const LEFT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const LEGACY_MESSAGE_TEMPLATE = '🎂 Happy Birthday {mention}! We hope you have a fantastic day! 🎉';
@@ -535,16 +537,118 @@ async function buildHealth(guild) {
   };
 }
 
-const startedClients = new WeakSet(); const runningClients = new WeakSet();
+const startedClients = new WeakSet();
+const runningClients = new WeakSet();
+const schedulerStates = new WeakMap();
+
+async function runAllGuilds(client, action) {
+  if (!client?.guilds?.cache) return { processed: 0, failed: 0, operationalFailures: 0 };
+  if (runningClients.has(client)) return { skipped: true, processed: 0, failed: 0, operationalFailures: 0 };
+
+  runningClients.add(client);
+  let processed = 0;
+  let failed = 0;
+  let operationalFailures = 0;
+
+  try {
+    for (const guild of client.guilds.cache.values()) {
+      try {
+        const result = await processGuild(guild, { action });
+        if (result?.disabled) continue;
+        processed += 1;
+        operationalFailures += Number(result?.failures || 0);
+      } catch (error) {
+        failed += 1;
+        console.warn(`[birthdays] ${guild.id}: ${error.message}`);
+      }
+    }
+
+    if (failed || operationalFailures) {
+      sentinelScheduler.fail(SCHEDULER_ID, new Error(`${failed + operationalFailures} birthday scheduler failure(s).`), {
+        action,
+        guildsProcessed: processed,
+        guildFailures: failed,
+        operationFailures: operationalFailures,
+      });
+    } else {
+      sentinelScheduler.beat(SCHEDULER_ID, {
+        action,
+        guildsProcessed: processed,
+        guildFailures: 0,
+        operationFailures: 0,
+      });
+    }
+
+    return { processed, failed, operationalFailures };
+  } catch (error) {
+    sentinelScheduler.fail(SCHEDULER_ID, error, { action });
+    throw error;
+  } finally {
+    runningClients.delete(client);
+  }
+}
+
 function start(client) {
-  if (!client || startedClients.has(client)) return; startedClients.add(client);
-  const run = async () => { if (runningClients.has(client)) return; runningClients.add(client); try { for (const guild of client.guilds.cache.values()) await processGuild(guild).catch((e) => console.warn(`[birthdays] ${guild.id}: ${e.message}`)); } finally { runningClients.delete(client); } };
-  const startLoop = () => { run().catch(() => {}); const delay = TICK_MS - (Date.now() % TICK_MS) + 250; const timer = setTimeout(() => { run().catch(() => {}); const interval = setInterval(() => run().catch(() => {}), TICK_MS); interval.unref?.(); }, delay); timer.unref?.(); };
-  if (client.isReady?.()) startLoop(); else client.once('ready', startLoop);
+  if (!client || startedClients.has(client)) return;
+  startedClients.add(client);
+
+  sentinelScheduler.register({
+    id: SCHEDULER_ID,
+    module: SECTION,
+    component: 'processor',
+    intervalMs: TICK_MS,
+    staleAfterMs: Math.max(TICK_MS * 3, 180_000),
+    details: { scope: 'all-guilds' },
+  });
+
+  const state = { alignmentTimer: null, interval: null, readyHandler: null };
+  schedulerStates.set(client, state);
+
+  const startLoop = () => {
+    state.readyHandler = null;
+    runAllGuilds(client, 'birthday_startup_process').catch((error) => {
+      console.warn(`[birthdays] startup: ${error.message}`);
+    });
+
+    const delay = TICK_MS - (Date.now() % TICK_MS) + 250;
+    state.alignmentTimer = setTimeout(() => {
+      runAllGuilds(client, 'birthday_aligned_process').catch((error) => {
+        console.warn(`[birthdays] aligned process: ${error.message}`);
+      });
+
+      state.interval = setInterval(() => {
+        runAllGuilds(client, 'birthday_interval_process').catch((error) => {
+          console.warn(`[birthdays] interval process: ${error.message}`);
+        });
+      }, TICK_MS);
+      state.interval.unref?.();
+    }, delay);
+    state.alignmentTimer.unref?.();
+  };
+
+  if (client.isReady?.()) startLoop();
+  else {
+    state.readyHandler = startLoop;
+    client.once('ready', startLoop);
+  }
+}
+
+function shutdown(client) {
+  const state = schedulerStates.get(client);
+  if (!state && !startedClients.has(client)) return false;
+
+  if (state?.readyHandler) client.off?.('ready', state.readyHandler);
+  if (state?.alignmentTimer) clearTimeout(state.alignmentTimer);
+  if (state?.interval) clearInterval(state.interval);
+  schedulerStates.delete(client);
+  startedClients.delete(client);
+  runningClients.delete(client);
+  sentinelScheduler.stop(SCHEDULER_ID, 'birthday processor shutdown');
+  return true;
 }
 
 module.exports = {
-  SECTION, TICK_MS, start, defaultSection, normalizeSection, normalizeMember,
+  SECTION, TICK_MS, SCHEDULER_ID, start, shutdown, runAllGuilds, defaultSection, normalizeSection, normalizeMember,
   DEFAULT_INDIVIDUAL_TEMPLATES, DEFAULT_GROUP_TEMPLATES, DEFAULT_CARD_IMAGE_URL,
   getSection, saveSection, updateSection, updateSettings, incrementAnalytics,
   getBirthday, setBirthday, removeBirthday, listUpcoming, nextBirthday, ageFor,

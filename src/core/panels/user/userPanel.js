@@ -13,7 +13,7 @@ const ACCOUNT_RECORD_KEYS = new Set(['warnings', 'cases', 'infractions', 'appeal
 
 const CATEGORY_CATALOG = [
   { key: 'account', label: 'Account', emoji: '👤', summary: 'Review your moderation and appeal information.' },
-  { key: 'community', label: 'Community', emoji: '🏘️', summary: 'Giveaways, invites, leveling and polls.' },
+  { key: 'community', label: 'Community', emoji: '🏘️', summary: 'Birthdays, giveaways, invites, leveling and polls.' },
   { key: 'feedback', label: 'Feedback', emoji: '💬', summary: 'Forms, suggestions and tickets.' },
   { key: 'messages', label: 'Messages', emoji: '✉️', summary: 'Member-visible message tools when approved.' },
   { key: 'roles', label: 'Roles', emoji: '🎭', summary: 'Self-assignable roles, role history and requests.' },
@@ -27,6 +27,7 @@ const MODULE_CATALOG = [
   { key: 'cases', category: 'account', label: 'Cases', emoji: '📁', summary: 'Planned view of your own cases.', status: 'planned' },
   { key: 'infractions', category: 'account', label: 'Infractions', emoji: '📋', summary: 'Planned personal infraction history.', status: 'planned' },
   { key: 'appeals', category: 'account', label: 'Appeals', emoji: '📝', summary: 'Planned personal appeal access.', status: 'planned' },
+  { key: 'birthdays', category: 'community', label: 'Birthdays', emoji: '🎂', summary: 'Manage your birthday and privacy settings.', status: 'live' },
   { key: 'giveaways', category: 'community', label: 'Giveaways', emoji: '🎉', summary: 'Member giveaway dashboard plan.', status: 'locked' },
   { key: 'invites', category: 'community', label: 'Invites', emoji: '📨', summary: 'Planned member invite view.', status: 'planned' },
   { key: 'leveling', category: 'community', label: 'Leveling', emoji: '🏆', summary: 'View your XP, rank, rewards and earning rules.', status: 'live' },
@@ -240,7 +241,7 @@ function buildCategoryPanel(categoryKey, interactionOrName = 'Unknown User') {
   const moduleButtons = modules.map((module) => button(
     `user:module:${module.key}`,
     module.label,
-    module.key === 'social' || module.key === 'giveaways' || module.key === 'leveling' ? ButtonStyle.Success : ButtonStyle.Secondary,
+    ButtonStyle.Primary,
     false,
     module.emoji,
   ));

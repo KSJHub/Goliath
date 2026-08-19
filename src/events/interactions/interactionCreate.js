@@ -416,6 +416,10 @@ if (
         if (!await callHandler(birthdaysPanel, 'handleUser', interaction)) throw new Error(`Birthdays user did not handle ${customId}.`);
         return;
       }
+      if (customId.startsWith('user:')) {
+        if (!await callHandler(userPanelInteractions, 'handleUserPanelInteraction', interaction)) throw new Error(`User panel did not handle ${customId}.`);
+        return;
+      }
       if (customId === 'admin:modules' || customId.startsWith('admin:modules:page:') || customId.startsWith('admin:module:') || customId.startsWith('admin:studio:')) {
         if (!await callHandler(moduleAdminPanels, 'handleModuleAdminInteraction', interaction)) throw new Error(`Module admin did not handle ${customId}.`);
         return;
@@ -492,7 +496,6 @@ if (
     }
   },
 };
-
 
 
 
