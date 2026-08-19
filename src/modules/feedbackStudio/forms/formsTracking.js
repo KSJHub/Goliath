@@ -7,6 +7,7 @@ const ticketManager = require('../tickets/tickets');
 const ticketChannelManager = require('../tickets/ticketsChannels');
 const { sendTicketControlMessage } = require('../tickets/ticketsPanel');
 const { updateTicket } = require('../tickets/tickets');
+const emojis = require('../../utilityStudio/emojis/emojis');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
 const {
   TICKET_CHANNEL_PERMISSIONS,
@@ -102,6 +103,14 @@ function buildFormTicketPanel(form = {}) {
   };
 }
 
+async function resolveFormPayload(guild, payload = {}) {
+  return {
+    ...payload,
+    content: payload.content == null ? payload.content : await emojis.resolveText(guild.client, guild.id, payload.content),
+    embeds: await emojis.resolveEmbeds(guild.client, guild.id, payload.embeds || []),
+  };
+}
+
 function addTimeline(guildId, submissionId, entry, guild) {
   try {
     return forms.addSubmissionTimeline(guildId, submissionId, entry, guild);
@@ -128,7 +137,8 @@ async function sendConfirmationDm(interaction, form, submission, bridgeResult) {
     if (bridgeResult?.ticket) lines.push(`Ticket: ${cleanText(bridgeResult.ticket.displayId || bridgeResult.ticket.ticketId, 100)}`);
     if (bridgeResult?.channel?.id) lines.push(`Channel: <#${bridgeResult.channel.id}>`);
 
-    await user.send({ content: lines.join('\n').slice(0, 1900) });
+    const content = await emojis.resolveText(interaction.client, interaction.guildId, lines.join('\n').slice(0, 1900));
+    await user.send({ content });
     forms.incrementAnalytics(interaction.guildId, { dmSent: 1 }, interaction.guild);
     forms.updateSubmission(interaction.guildId, submission.submissionId, {
       workflow: { ...(submission.workflow || {}), confirmationDmSent: true, confirmationDmSentAt: now() },
@@ -266,11 +276,12 @@ async function createTicketForSubmission({ interaction, form, submission } = {})
         }
 
         const roleIds = [...new Set((actions.pingRoleIds || []).map(cleanDiscordId).filter(Boolean))].slice(0, 20);
-        await channel.send({
+        const payload = await resolveFormPayload(interaction.guild, {
           content: buildStaffPingContent(form, freshSubmission),
           embeds: [buildSubmissionTicketEmbed(form, freshSubmission, savedTicket)],
           allowedMentions: { users: cleanDiscordId(freshSubmission.userId) ? [freshSubmission.userId] : [], roles: roleIds },
-        }).catch((error) => console.error('[Forms] Failed to post submission embed in ticket channel:', error));
+        });
+        await channel.send(payload).catch((error) => console.error('[Forms] Failed to post submission embed in ticket channel:', error));
 
         if (actions.notifyStaff !== false && roleIds.length) {
           forms.incrementAnalytics(interaction.guildId, { staffNotified: 1 }, interaction.guild);

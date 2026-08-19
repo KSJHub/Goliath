@@ -22,6 +22,7 @@ let ticketInteractionHandlerApi;
   const ticketTimeline = require('./ticketsTracking');
   const ticketTranscriptManager = require('./ticketsTranscripts');
   const ticketSocketEvents = require('./ticketsTracking');
+  const emojis = require('../../utilityStudio/emojis/emojis');
 
   const {
     getTicket,
@@ -297,7 +298,14 @@ let ticketInteractionHandlerApi;
     }
 
     await message.edit({
-      embeds: payload.embeds || [],
+      content: payload.content != null
+        ? await emojis.resolveText(client, ticket.guildId, payload.content)
+        : undefined,
+      embeds: await emojis.resolveEmbeds(
+        client,
+        ticket.guildId,
+        payload.embeds || []
+      ),
       components,
     });
 
@@ -922,6 +930,7 @@ let ticketInteractionHandlerApi;
   const ticketStore = require('./tickets');
   const ticketTranscriptManager = require('./ticketsTranscripts');
   const ticketPermissions = require('./ticketsChannels');
+  const emojis = require('../../utilityStudio/emojis/emojis');
 
   const {
     handleTicketPanelButton,
@@ -993,13 +1002,39 @@ let ticketInteractionHandlerApi;
     return 'normal';
   }
 
+  async function resolveInteractionPayload(interaction, payload = {}) {
+    if (!interaction?.client || !interaction?.guildId) return payload;
+
+    const resolved = { ...payload };
+
+    if (resolved.content != null) {
+      resolved.content = await emojis.resolveText(
+        interaction.client,
+        interaction.guildId,
+        resolved.content
+      );
+    }
+
+    if (Array.isArray(resolved.embeds)) {
+      resolved.embeds = await emojis.resolveEmbeds(
+        interaction.client,
+        interaction.guildId,
+        resolved.embeds
+      );
+    }
+
+    return resolved;
+  }
+
   async function safeReply(interaction, payload = {}) {
     try {
+      const resolvedPayload = await resolveInteractionPayload(interaction, payload);
+
       if (alreadyHandled(interaction)) {
-        return interaction.followUp(payload).catch(() => null);
+        return interaction.followUp(resolvedPayload).catch(() => null);
       }
 
-      return interaction.reply(payload).catch(() => null);
+      return interaction.reply(resolvedPayload).catch(() => null);
     } catch {
       return null;
     }
@@ -1007,11 +1042,13 @@ let ticketInteractionHandlerApi;
 
   async function safeEditOrReply(interaction, payload = {}) {
     try {
+      const resolvedPayload = await resolveInteractionPayload(interaction, payload);
+
       if (interaction.deferred || interaction.replied) {
-        return interaction.editReply(payload).catch(() => null);
+        return interaction.editReply(resolvedPayload).catch(() => null);
       }
 
-      return interaction.reply(payload).catch(() => null);
+      return interaction.reply(resolvedPayload).catch(() => null);
     } catch {
       return null;
     }
@@ -1056,12 +1093,12 @@ let ticketInteractionHandlerApi;
           ? buildEditorControlsForPanel(panel)
           : buildEditorControls(panelId);
 
-      const payload = {
+      const payload = await resolveInteractionPayload(interaction, {
         embeds: [
           buildEditorEmbed(panel),
         ],
         components: controls,
-      };
+      });
 
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply(payload);
@@ -1771,6 +1808,7 @@ let ticketInteractionHandlerApi;
     getTicketForInteraction,
     findTicketByChannel,
     refreshTicketButtons,
+    resolveInteractionPayload,
   };
 }
 

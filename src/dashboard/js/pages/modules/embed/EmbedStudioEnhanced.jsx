@@ -78,7 +78,7 @@ function EmojiBankStrip({ theme, emojiBank, onCopied }) {
     <section style={{ border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, color: theme.cardText, borderRadius: 22, padding: 18, boxShadow: theme.shadow, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div>
-          <div style={{ color: '#93c5fd', fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Emoji Bank</div>
+          <div style={{ color: '#93c5fd', fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Emoji Studio</div>
           <h3 style={{ margin: '5px 0 0' }}>Guild-selected Goliath emojis</h3>
           <p style={{ margin: '7px 0 0', color: theme.mutedText, lineHeight: 1.5 }}>Use <strong>Text</strong> for message/embed content or <strong>Button / Select</strong> for Discord component emoji fields. Both use the Discord application emoji owned by Goliath; no guild emoji slot is consumed.</p>
         </div>
@@ -113,7 +113,7 @@ function EmojiBankStrip({ theme, emojiBank, onCopied }) {
           ))}
         </div>
       ) : (
-        <div style={{ color: theme.mutedText }}>No Emoji Bank entries are selected for this guild yet.</div>
+        <div style={{ color: theme.mutedText }}>No Emoji Studio entries are selected for this guild yet.</div>
       )}
     </section>
   );

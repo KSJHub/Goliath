@@ -62,7 +62,14 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
       if (result) setData(result);
       setNotice(message);
       return result;
-    } catch (err) { setError(err.message || 'Role Selector action failed.'); return null; }
+    } catch (err) {
+      const unresolved = Array.isArray(err.data?.unresolvedRoles) ? err.data.unresolvedRoles : [];
+      const detail = unresolved.length
+        ? ` ${unresolved.slice(0, 5).map((item) => `${item.label || item.roleId}: ${item.reason || 'unresolved'}`).join(' · ')}`
+        : '';
+      setError(`${err.message || 'Role Selector action failed.'}${detail}`);
+      return null;
+    }
     finally { setBusy(false); }
   }
   const saveConfig = (patch, message = 'Role Selector saved.') => run(() => api.request(`${baseApi(guildId)}/config`, { method: 'PUT', body: JSON.stringify(patch) }), message);
@@ -76,17 +83,29 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   const colours = groups.find((group) => group.id === 'colours');
   const usage = data.usage || { groups: [], totalUsing: 0, totalMembers: 0 };
   const health = data.health || {};
+  const acceptance = health.acceptance || { ready: false, checks: [], failed: [] };
   const selectedUsage = usage.groups?.find((group) => group.groupId === selectedGroupId);
 
-  function chooseGroup(group) { setSelectedGroupId(group.id); setEditDraft(groupDraft(group)); }
+  function chooseGroup(group) { if (!group) return; setSelectedGroupId(group.id); setEditDraft(groupDraft(group)); }
   async function saveSelectedGroup() {
     if (!selectedGroup || selectedGroup.id === 'colours') return;
-    await run(() => api.request(`${baseApi(guildId)}/groups`, { method: 'POST', body: JSON.stringify({ ...selectedGroup, ...editDraft, options: parseOptions(editDraft.optionsText, selectedGroup.options) }) }), 'Selector group saved.');
+    const result = await run(() => api.request(`${baseApi(guildId)}/groups`, { method: 'POST', body: JSON.stringify({ ...selectedGroup, ...editDraft, options: parseOptions(editDraft.optionsText, selectedGroup.options) }) }), 'Selector group saved.');
+    const saved = result?.groups?.find((group) => group.id === selectedGroup.id) || result?.group;
+    if (saved) chooseGroup(saved);
   }
   async function createGroup() {
     const result = await run(() => api.request(`${baseApi(guildId)}/groups`, { method: 'POST', body: JSON.stringify({ ...newDraft, options: parseOptions(newDraft.optionsText, []) }) }), 'Custom selector created.');
     const group = result?.group;
-    if (group) { setSelectedGroupId(group.id); setEditDraft(groupDraft(group)); setNewDraft(blankGroup()); }
+    if (group) { chooseGroup(group); setNewDraft(blankGroup()); }
+  }
+  async function deleteSelectedGroup() {
+    if (!selectedGroup || selectedGroup.id === 'colours') return;
+    if (!window.confirm(`Delete ${selectedGroup.name}? Goliath-created roles for this group will also be deleted.`)) return;
+    const result = await run(() => api.request(`${baseApi(guildId)}/groups/${encodeURIComponent(selectedGroup.id)}`, { method: 'DELETE' }), 'Selector group deleted.');
+    if (!result) return;
+    const fallback = result.groups?.find((group) => group.id === 'colours') || result.groups?.[0];
+    if (fallback) chooseGroup(fallback);
+    else { setSelectedGroupId('colours'); setEditDraft(blankGroup()); }
   }
 
   return <div style={{ display: 'grid', gap: 16 }}>
@@ -104,7 +123,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
       <RoleSelect theme={theme} resources={roles} value={config.style?.anchorRoleId || ''} onChange={(value) => saveConfig({ style: { ...config.style, anchorRoleId: value || null } }, 'Anchor saved.')} label="Divider / Anchor Role" />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button disabled={busy} onClick={() => { const name = window.prompt('Divider role name', '🎭 | ROLE SELECTOR'); if (name) run(() => api.request(`${baseApi(guildId)}/create-divider`, { method: 'POST', body: JSON.stringify({ name }) }), 'Divider created.'); }} style={btn(theme)}>Create Divider</button>
-        <button disabled={busy} onClick={() => saveConfig({ style: { ...config.style, placement: config.style?.placement === 'above' ? 'below' : 'above' } }, 'Placement updated.')} style={btn(theme)}>{config.style?.placement === 'above' ? 'Place Above Anchor' : 'Place Below Anchor'}</button>
+        <button disabled={busy} onClick={() => saveConfig({ style: { ...config.style, placement: config.style?.placement === 'above' ? 'below' : 'above' } }, 'Placement updated.')} style={btn(theme)}>{config.style?.placement === 'above' ? 'Switch to Below Anchor' : 'Switch to Above Anchor'}</button>
         <button disabled={busy} onClick={() => run(() => api.request(`${baseApi(guildId)}/scan-style`, { method: 'POST' }), 'Guild style scanned.')} style={btn(theme)}>Scan Guild Style</button>
         {config.style?.detectedFormat ? <button disabled={busy} onClick={() => run(() => api.request(`${baseApi(guildId)}/apply-style`, { method: 'POST' }), 'Suggested style applied.')} style={btn(theme)}>Apply Suggestion</button> : null}
       </div>
@@ -127,7 +146,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
         <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={editDraft.allowRemove} onChange={(event) => setEditDraft({ ...editDraft, allowRemove: event.target.checked })} /> Members can clear this category</label>
         <textarea value={editDraft.optionsText} onChange={(event) => setEditDraft({ ...editDraft, optionsText: event.target.value })} rows={7} placeholder={'🎮 | Xbox | Xbox players |\n🕹️ | PlayStation | PlayStation players |\n💻 | PC | PC players | 123456789012345678'} style={{ padding: 10, borderRadius: 10, border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText }} />
         <div style={{ color: theme.mutedText, fontSize: 12 }}>Format: emoji | label | description | optional existing role ID. Existing roles must have no permissions and sit below Goliath.</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button disabled={busy || !editDraft.name.trim()} onClick={saveSelectedGroup} style={btn(theme, 'primary')}>Save Group</button><button disabled={busy} onClick={() => { if (window.confirm(`Delete ${selectedGroup.name}? Goliath-created roles for this group will also be deleted.`)) run(() => api.request(`${baseApi(guildId)}/groups/${encodeURIComponent(selectedGroup.id)}`, { method: 'DELETE' }), 'Selector group deleted.'); }} style={btn(theme, 'danger')}>Delete Group</button></div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button disabled={busy || !editDraft.name.trim()} onClick={saveSelectedGroup} style={btn(theme, 'primary')}>Save Group</button><button disabled={busy} onClick={deleteSelectedGroup} style={btn(theme, 'danger')}>Delete Group</button></div>
       </div> : null}
     </section>
 
@@ -143,10 +162,23 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
 
     <section style={{ ...card, display: 'grid', gap: 10 }}>
       <h2 style={{ margin: 0 }}>📊 Selector Stats</h2>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{(usage.groups || []).map((group) => <button key={group.groupId} onClick={() => setSelectedGroupId(group.groupId)} style={btn(theme, group.groupId === selectedGroupId ? 'primary' : 'default')}>{group.emoji} {group.name}</button>)}</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{(usage.groups || []).map((group) => {
+        const target = groups.find((item) => item.id === group.groupId);
+        return <button key={group.groupId} onClick={() => chooseGroup(target)} style={btn(theme, group.groupId === selectedGroupId ? 'primary' : 'default')}>{group.emoji} {group.name}</button>;
+      })}</div>
       {selectedUsage?.rows?.length ? selectedUsage.rows.map((item, index) => <div key={item.id} style={{ borderTop: index ? `1px solid ${theme.cardBorder}` : 'none', paddingTop: index ? 9 : 0 }}><strong>{index + 1}. {item.label} — {item.count}</strong>{item.members?.length ? <div style={{ color: theme.mutedText, fontSize: 12, marginTop: 3 }}>{item.members.slice(0, 30).map((member) => member.name).join(', ')}{item.members.length > 30 ? ` +${item.members.length - 30} more` : ''}</div> : null}</div>) : <div style={{ color: theme.mutedText }}>No selections yet.</div>}
     </section>
 
-    <section style={{ ...card, display: 'grid', gap: 6 }}><h2 style={{ margin: 0 }}>Health</h2><strong style={{ color: health.healthy ? '#86efac' : '#fbbf24' }}>{health.healthy ? '✅ Healthy' : '⚠️ Needs attention'}</strong>{(health.issues || []).map((item, index) => <div key={`i-${index}`} style={{ color: '#fca5a5' }}>• {item}</div>)}{(health.warnings || []).slice(0, 12).map((item, index) => <div key={`w-${index}`} style={{ color: '#fbbf24' }}>• {item}</div>)}</section>
+    <section style={{ ...card, display: 'grid', gap: 8 }}>
+      <h2 style={{ margin: 0 }}>Health & Acceptance</h2>
+      <strong style={{ color: health.healthy ? '#86efac' : '#fbbf24' }}>{health.healthy ? '✅ Healthy' : '⚠️ Needs attention'}</strong>
+      {(health.issues || []).map((item, index) => <div key={`i-${index}`} style={{ color: '#fca5a5' }}>• {item}</div>)}
+      {(health.warnings || []).slice(0, 12).map((item, index) => <div key={`w-${index}`} style={{ color: '#fbbf24' }}>• {item}</div>)}
+      <div style={{ borderTop: `1px solid ${theme.cardBorder}`, marginTop: 4, paddingTop: 10 }}>
+        <strong style={{ color: acceptance.ready ? '#86efac' : '#fbbf24' }}>{acceptance.ready ? '✅ Acceptance Ready' : '⚠️ Acceptance Not Ready'}</strong>
+        <div style={{ color: theme.mutedText, fontSize: 12, marginTop: 3 }}>{acceptance.ready ? 'The guild is configured for the manual Role Selector acceptance run.' : `${acceptance.failed?.length || 0} readiness check(s) still need attention.`}</div>
+      </div>
+      {(acceptance.checks || []).map((check) => <div key={check.id} style={{ display: 'grid', gridTemplateColumns: '22px 1fr', gap: 6, alignItems: 'start' }}><span>{check.passed ? '✅' : '❌'}</span><div><strong>{String(check.id || '').replaceAll('_', ' ')}</strong><div style={{ color: theme.mutedText, fontSize: 12 }}>{check.detail}</div></div></div>)}
+    </section>
   </div>;
 }

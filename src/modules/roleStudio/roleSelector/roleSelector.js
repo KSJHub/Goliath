@@ -105,7 +105,7 @@ function normalizePalette(value) {
     const hex = normalizeHex(item?.hex); const id = slug(item?.id || item?.key || item?.label, 'colour');
     if (!hex || seen.has(id)) continue; seen.add(id);
     const c = classifyHex(hex);
-    out.push({ id, key: id, label: cleanText(item?.label || id, 60), emoji: cleanText(item?.emoji || '🎨', 16), hex, family: cleanText(item?.family || c.family, 20), order: Number.isFinite(Number(item?.order)) ? Number(item.order) : c.familyOrder, enabled: item?.enabled !== false });
+    out.push({ id, key: id, label: cleanText(item?.label || id, 60), emoji: cleanText(item?.emoji || '🎨', 100), hex, family: cleanText(item?.family || c.family, 20), order: Number.isFinite(Number(item?.order)) ? Number(item.order) : c.familyOrder, enabled: item?.enabled !== false });
   }
   return out.length ? out : DEFAULT_PALETTE.map(clone);
 }
@@ -115,7 +115,7 @@ function normalizeStandardOptions(value) {
   for (let i = 0; i < source.length && out.length < 25; i += 1) {
     const item = source[i] || {}; const id = slug(item.id || item.key || item.label, 'option');
     if (seen.has(id)) continue; seen.add(id);
-    out.push({ id, key: id, label: cleanText(item.label || id, 80), emoji: cleanText(item.emoji || '', 16), description: cleanText(item.description || '', 100), roleId: cleanId(item.roleId), enabled: item.enabled !== false, order: Number.isFinite(Number(item.order)) ? Number(item.order) : (i + 1) * 10, managed: item.managed !== false, unusedSince: item.unusedSince || null });
+    out.push({ id, key: id, label: cleanText(item.label || id, 80), emoji: cleanText(item.emoji || '', 100), description: cleanText(item.description || '', 100), roleId: cleanId(item.roleId), enabled: item.enabled !== false, order: Number.isFinite(Number(item.order)) ? Number(item.order) : (i + 1) * 10, managed: item.managed !== false, unusedSince: item.unusedSince || null });
   }
   return out;
 }
@@ -133,7 +133,7 @@ function normalizeGroup(input = {}, idHint = '') {
     }
     return { ...base, ...clone(input), id: COLOUR_GROUP_ID, key: COLOUR_GROUP_ID, name: 'Colours', emoji: input.emoji || '🌈', type: 'colour', builtIn: true, enabled: input.enabled !== false, selectionMode: 'single', allowRemove: input.allowRemove !== false, palette: normalizePalette(input.palette), customHexEnabled: input.customHexEnabled !== false, managedRoles };
   }
-  return { id, key: id, name: cleanText(input.name || id, 80), emoji: cleanText(input.emoji || '🏷️', 16), description: cleanText(input.description || '', 200), type: 'standard', builtIn: false, enabled: input.enabled !== false, selectionMode: input.selectionMode === 'multiple' ? 'multiple' : 'single', allowRemove: input.allowRemove !== false, options: normalizeStandardOptions(input.options), createdAt: input.createdAt || now(), updatedAt: input.updatedAt || now() };
+  return { id, key: id, name: cleanText(input.name || id, 80), emoji: cleanText(input.emoji || '🏷️', 100), description: cleanText(input.description || '', 200), type: 'standard', builtIn: false, enabled: input.enabled !== false, selectionMode: input.selectionMode === 'multiple' ? 'multiple' : 'single', allowRemove: input.allowRemove !== false, options: normalizeStandardOptions(input.options), createdAt: input.createdAt || now(), updatedAt: input.updatedAt || now() };
 }
 function normalizeSection(value = {}) {
   const base = defaultSection(); const source = value && typeof value === 'object' ? value : {};
@@ -161,6 +161,10 @@ function saveSection(guildId, section, meta = {}) { return normalizeSection(save
 function updateSection(guildId, updater, meta = {}) { return normalizeSection(updateModuleSection(guildId, MODULE, (current) => { const normalized = normalizeSection(current); const next = typeof updater === 'function' ? updater(clone(normalized)) : { ...normalized, ...(updater || {}) }; return { ...normalizeSection(next), updatedAt: now() }; }, defaultSection(), meta)); }
 function listGroups(guildId) { const section = getSection(guildId); return section.groupOrder.map((id) => section.groups[id]).filter(Boolean); }
 function getGroup(guildId, groupId) { return getSection(guildId).groups[slug(groupId)] || null; }
+function assertModuleEnabled(guildId) {
+  if (!guildManager.isModuleEnabled(guildId, MODULE)) throw new Error('Role Selector is currently disabled.');
+  return true;
+}
 function saveGroup(guildId, input, meta = {}) {
   const group = normalizeGroup(input, input?.id); if (group.id === COLOUR_GROUP_ID && input?.builtIn === false) throw new Error('The built-in Colours selector cannot be replaced.');
   updateSection(guildId, (section) => ({ ...section, groups: { ...section.groups, [group.id]: { ...(section.groups[group.id] || {}), ...group, updatedAt: now() } }, groupOrder: [...new Set([...section.groupOrder, group.id])] }), meta);
@@ -202,6 +206,7 @@ function suggestRoleStyle(guild) {
 }
 
 async function ensureStandardOptionRole(guild, groupId, optionId) {
+  assertModuleEnabled(guild.id);
   const section = getSection(guild.id); const group = section.groups[slug(groupId)]; if (!group || group.type !== 'standard') throw new Error('Selector group not found.');
   const option = group.options.find((item) => item.id === slug(optionId)); if (!option || !option.enabled) throw new Error('Selector option not found or disabled.');
   let role = option.roleId ? guild.roles.cache.get(option.roleId) || await guild.roles.fetch(option.roleId).catch(() => null) : null;
@@ -213,6 +218,7 @@ async function ensureStandardOptionRole(guild, groupId, optionId) {
   return { role, option: { ...option, roleId: role.id } };
 }
 async function ensureColourRole(guild, hexValue, label = null) {
+  assertModuleEnabled(guild.id);
   const hex = normalizeHex(hexValue); if (!hex) throw new Error('Enter a valid six-digit HEX colour.');
   const section = getSection(guild.id); const group = section.groups[COLOUR_GROUP_ID]; const existing = group.managedRoles?.[hex];
   let role = existing?.roleId ? guild.roles.cache.get(existing.roleId) || await guild.roles.fetch(existing.roleId).catch(() => null) : null;
@@ -233,22 +239,65 @@ function roleIdsForGroup(group) {
 }
 async function deleteManagedGroupRoles(guild, groupId) {
   const group = getGroup(guild.id, groupId);
-  if (!group || group.builtIn) return { deleted: 0, skipped: 0 };
-  let deleted = 0; let skipped = 0;
+  if (!group || group.builtIn) return { deleted: 0, skipped: 0, unresolved: 0, unresolvedRoles: [] };
+
+  let deleted = 0;
+  let skipped = 0;
+  const unresolvedRoles = [];
+  const clearedRoleIds = new Set();
+
   for (const option of group.options || []) {
-    if (!option.roleId || option.managed === false) { skipped += option.roleId ? 1 : 0; continue; }
+    if (!option.roleId) continue;
+    if (option.managed === false) { skipped += 1; continue; }
+
     const role = guild.roles.cache.get(option.roleId) || await guild.roles.fetch(option.roleId).catch(() => null);
-    if (!role) continue;
-    if (!canManageRole(guild, role)) { skipped += 1; continue; }
-    if (await role.delete(`Goliath Role Selector group deleted · ${group.name}`).then(() => true).catch(() => false)) deleted += 1;
+    if (!role) {
+      clearedRoleIds.add(option.roleId);
+      continue;
+    }
+
+    if (!canManageRole(guild, role)) {
+      unresolvedRoles.push({ roleId: role.id, name: role.name, reason: 'unmanageable' });
+      continue;
+    }
+
+    const removed = await role.delete(`Goliath Role Selector group deleted · ${group.name}`).then(() => true).catch(() => false);
+    if (removed) {
+      deleted += 1;
+      clearedRoleIds.add(option.roleId);
+    } else {
+      unresolvedRoles.push({ roleId: role.id, name: role.name, reason: 'delete_failed' });
+    }
   }
-  if (deleted) updateSection(guild.id, (current) => ({ ...current, analytics: { ...current.analytics, rolesDeleted: Number(current.analytics.rolesDeleted || 0) + deleted } }));
-  return { deleted, skipped };
+
+  if (clearedRoleIds.size) {
+    const refreshed = getGroup(guild.id, group.id);
+    if (refreshed) {
+      saveGroup(guild.id, {
+        ...refreshed,
+        options: (refreshed.options || []).map((option) => clearedRoleIds.has(option.roleId)
+          ? { ...option, roleId: null, unusedSince: null }
+          : option),
+      }, { action: 'role_selector_group_delete_reconcile' });
+    }
+  }
+
+  if (deleted) {
+    updateSection(guild.id, (current) => ({ ...current, analytics: { ...current.analytics, rolesDeleted: Number(current.analytics.rolesDeleted || 0) + deleted } }));
+  }
+
+  return {
+    deleted,
+    skipped,
+    unresolved: unresolvedRoles.length,
+    unresolvedRoles,
+  };
 }
 function selectionFor(section, userId, groupId) {
   const value = section.memberSelections?.[userId]?.[groupId]; return Array.isArray(value) ? value : value ? [value] : [];
 }
 async function applyStandardSelection(guild, member, groupId, optionIds = []) {
+  assertModuleEnabled(guild.id);
   const id = slug(groupId); let section = getSection(guild.id); const group = section.groups[id]; if (!group || group.type !== 'standard' || !group.enabled) throw new Error('Selector group is unavailable.');
   let desired = [...new Set(optionIds.map(slug))].filter((optionId) => group.options.some((option) => option.id === optionId && option.enabled));
   if (group.selectionMode === 'single') desired = desired.slice(0, 1);
@@ -267,6 +316,7 @@ async function applyStandardSelection(guild, member, groupId, optionIds = []) {
   return desired;
 }
 async function applyColourSelection(guild, member, hexValue, label = null) {
+  assertModuleEnabled(guild.id);
   const section = getSection(guild.id); const group = section.groups[COLOUR_GROUP_ID]; if (!group.enabled) throw new Error('Colours are disabled.');
   const hex = normalizeHex(hexValue); if (!hex) throw new Error('Invalid colour.');
   const builtIn = group.palette.find((item) => item.hex === hex && item.enabled); if (!builtIn && !group.customHexEnabled) throw new Error('Custom HEX colours are disabled.');
@@ -277,6 +327,7 @@ async function applyColourSelection(guild, member, hexValue, label = null) {
   await syncManagedRoleHierarchy(guild).catch(() => null); return hex;
 }
 async function clearSelection(guild, member, groupId) {
+  assertModuleEnabled(guild.id);
   const id = slug(groupId); const section = getSection(guild.id); const group = section.groups[id]; if (!group) throw new Error('Selector group not found.'); if (!group.allowRemove) throw new Error('This selector does not allow clearing your selection.');
   const previous = selectionFor(section, member.id, id);
   for (const roleId of roleIdsForGroup(group)) if (member.roles.cache.has(roleId)) await member.roles.remove(roleId, `Goliath Role Selector · ${group.name}`).catch(() => null);
@@ -299,8 +350,10 @@ function managedRoleRecords(section) {
 async function syncManagedRoleHierarchy(guild) {
   const section = getSection(guild.id); if (!section.style.keepGrouped || !section.style.anchorRoleId) return { moved: 0, skipped: true };
   const anchor = guild.roles.cache.get(section.style.anchorRoleId) || await guild.roles.fetch(section.style.anchorRoleId).catch(() => null); if (!anchor) return { moved: 0, skipped: true, reason: 'anchor_missing' };
+  const me = guild.members.me;
+  if (!me || anchor.managed || anchor.position >= me.roles.highest.position) return { moved: 0, skipped: true, reason: 'anchor_unmanageable' };
   const roles = managedRoleRecords(section).map((item) => guild.roles.cache.get(item.roleId)).filter((role) => canManageRole(guild, role)); if (!roles.length) return { moved: 0, skipped: true };
-  const maxPosition = Math.max(1, guild.members.me.roles.highest.position - 1); const updates = [];
+  const maxPosition = Math.max(1, me.roles.highest.position - 1); const updates = [];
   for (let i = 0; i < roles.length; i += 1) { const raw = section.style.placement === 'above' ? anchor.position + roles.length - i : anchor.position - 1 - i; updates.push({ role: roles[i], position: Math.min(maxPosition, Math.max(1, raw)) }); }
   await guild.roles.setPositions(updates); return { moved: updates.length };
 }
@@ -328,15 +381,30 @@ async function cleanupUnused(guild) {
   for (const group of listGroups(guild.id)) {
     if (group.type === 'colour') {
       const managedRoles = { ...(group.managedRoles || {}) }; let changed = false;
-      for (const [hex, record] of Object.entries(managedRoles)) { const role = guild.roles.cache.get(record.roleId) || await guild.roles.fetch(record.roleId).catch(() => null); const count = role?.members?.filter?.((m) => !m.user.bot)?.size || 0; if (count) { if (record.unusedSince) { record.unusedSince = null; changed = true; } continue; } if (!record.unusedSince) { record.unusedSince = now(); marked += 1; changed = true; continue; } if (new Date(record.unusedSince).getTime() <= cutoff && canManageRole(guild, role)) { await role.delete('Goliath Role Selector unused role cleanup').catch(() => null); delete managedRoles[hex]; deleted += 1; changed = true; } }
+      for (const [hex, record] of Object.entries(managedRoles)) {
+        const role = guild.roles.cache.get(record.roleId) || await guild.roles.fetch(record.roleId).catch(() => null);
+        if (!role) { delete managedRoles[hex]; changed = true; continue; }
+        const count = role.members?.filter?.((m) => !m.user.bot)?.size || 0;
+        if (count) { if (record.unusedSince) { record.unusedSince = null; changed = true; } continue; }
+        if (!record.unusedSince) { record.unusedSince = now(); marked += 1; changed = true; continue; }
+        if (new Date(record.unusedSince).getTime() <= cutoff && canManageRole(guild, role)) { if (await role.delete('Goliath Role Selector unused role cleanup').then(() => true).catch(() => false)) { delete managedRoles[hex]; deleted += 1; changed = true; } }
+      }
       if (changed) saveGroup(guild.id, { ...group, managedRoles });
     } else {
       const options = clone(group.options); let changed = false;
-      for (const option of options) { if (!option.roleId || option.managed === false) continue; const role = guild.roles.cache.get(option.roleId) || await guild.roles.fetch(option.roleId).catch(() => null); const count = role?.members?.filter?.((m) => !m.user.bot)?.size || 0; if (count) { if (option.unusedSince) { option.unusedSince = null; changed = true; } continue; } if (!option.unusedSince) { option.unusedSince = now(); marked += 1; changed = true; continue; } if (new Date(option.unusedSince).getTime() <= cutoff && canManageRole(guild, role)) { await role.delete('Goliath Role Selector unused role cleanup').catch(() => null); option.roleId = null; option.unusedSince = null; deleted += 1; changed = true; } }
+      for (const option of options) {
+        if (!option.roleId || option.managed === false) continue;
+        const role = guild.roles.cache.get(option.roleId) || await guild.roles.fetch(option.roleId).catch(() => null);
+        if (!role) { option.roleId = null; option.unusedSince = null; changed = true; continue; }
+        const count = role.members?.filter?.((m) => !m.user.bot)?.size || 0;
+        if (count) { if (option.unusedSince) { option.unusedSince = null; changed = true; } continue; }
+        if (!option.unusedSince) { option.unusedSince = now(); marked += 1; changed = true; continue; }
+        if (new Date(option.unusedSince).getTime() <= cutoff && canManageRole(guild, role)) { if (await role.delete('Goliath Role Selector unused role cleanup').then(() => true).catch(() => false)) { option.roleId = null; option.unusedSince = null; deleted += 1; changed = true; } }
+      }
       if (changed) saveGroup(guild.id, { ...group, options });
     }
   }
   if (deleted) updateSection(guild.id, (current) => ({ ...current, analytics: { ...current.analytics, rolesDeleted: Number(current.analytics.rolesDeleted || 0) + deleted } })); return { deleted, marked };
 }
 
-module.exports = { MODULE, COLOUR_GROUP_ID, DEFAULT_PALETTE, defaultSection, normalizeHex, hexToInt, classifyHex, getSection, saveSection, updateSection, listGroups, getGroup, saveGroup, removeGroup, roleNameFor, suggestRoleStyle, canManageRole, assertSafeSelectorRole, ensureColourRole, ensureStandardOptionRole, deleteManagedGroupRoles, applyColourSelection, applyStandardSelection, clearSelection, getUsage, syncManagedRoleHierarchy, syncManagedRoleAppearance, cleanupUnused, roleIdsForGroup };
+module.exports = { MODULE, COLOUR_GROUP_ID, DEFAULT_PALETTE, defaultSection, normalizeHex, hexToInt, classifyHex, getSection, saveSection, updateSection, listGroups, getGroup, assertModuleEnabled, saveGroup, removeGroup, roleNameFor, suggestRoleStyle, canManageRole, assertSafeSelectorRole, ensureColourRole, ensureStandardOptionRole, deleteManagedGroupRoles, applyColourSelection, applyStandardSelection, clearSelection, getUsage, syncManagedRoleHierarchy, syncManagedRoleAppearance, cleanupUnused, roleIdsForGroup };

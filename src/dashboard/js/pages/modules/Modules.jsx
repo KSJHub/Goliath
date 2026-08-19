@@ -65,7 +65,7 @@ function EmojiBankPanel({ theme, guildId, onBack }) {
       const data = await api.request(`/api/emojis/${guildId}/overview`);
       setOverview(data);
     } catch (loadError) {
-      setError(loadError.message || 'Failed to load Emoji Bank.');
+      setError(loadError.message || 'Failed to load Emoji Studio.');
     } finally {
       setLoading(false);
     }
@@ -127,14 +127,14 @@ function EmojiBankPanel({ theme, guildId, onBack }) {
       });
       setOverview(data);
     } catch (saveError) {
-      setError(saveError.message || 'Failed to update this server Emoji Bank.');
+      setError(saveError.message || 'Failed to update this server Emoji Studio.');
     } finally {
       setBusyId('');
     }
   }
 
   if (!guildId) {
-    return <section style={{ ...cardStyle, padding: 24 }}>Select a guild before opening Emoji Bank.</section>;
+    return <section style={{ ...cardStyle, padding: 24 }}>Select a guild before opening Emoji Studio.</section>;
   }
 
   return (
@@ -144,7 +144,7 @@ function EmojiBankPanel({ theme, guildId, onBack }) {
           <div>
             <button type="button" onClick={onBack} style={{ border: 0, background: 'transparent', color: '#93c5fd', padding: 0, cursor: 'pointer', fontWeight: 900 }}>← Modules</button>
             <p style={{ margin: '18px 0 6px', color: '#93c5fd', fontWeight: 950, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Utility Studio</p>
-            <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: '-0.04em' }}>Emoji Bank</h1>
+            <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: '-0.04em' }}>Emoji Studio</h1>
             <p style={{ margin: '10px 0 0', color: theme.mutedText, lineHeight: 1.6, maxWidth: 760 }}>Import from Emoji.gg directly into Goliath's Discord-hosted application emoji bank. No emoji image files are stored on Goliath.</p>
           </div>
         </div>
@@ -158,7 +158,7 @@ function EmojiBankPanel({ theme, guildId, onBack }) {
 
       {(error || loading) ? (
         <section style={{ ...cardStyle, padding: 16, color: error ? '#fca5a5' : theme.mutedText, fontWeight: 850 }}>
-          {error || 'Loading Emoji Bank...'}
+          {error || 'Loading Emoji Studio...'}
         </section>
       ) : null}
 
@@ -198,7 +198,7 @@ function EmojiBankPanel({ theme, guildId, onBack }) {
       </section>
 
       <section style={{ ...cardStyle, padding: 20 }}>
-        <h2 style={{ margin: 0 }}>This Guild's Emoji Bank</h2>
+        <h2 style={{ margin: 0 }}>This Guild's Emoji Studio</h2>
         <p style={{ color: theme.mutedText, margin: '8px 0 0' }}>Up to 100 references. The actual emoji is held once by Discord for the Goliath application.</p>
         <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 12 }}>
           {selected.length ? selected.map((emoji) => (

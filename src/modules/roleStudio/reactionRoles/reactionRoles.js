@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const guildManager = require('../../../core/guild/guildManager');
 const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const embedTemplateManager = require('../../messageStudio/embed/embedTemplates');
+const emojis = require('../../utilityStudio/emojis/emojis');
 
 const SECTION = 'reactionRoles';
 const MODES = Object.freeze({ TOGGLE: 'toggle', ADD: 'add', REMOVE: 'remove' });
@@ -227,6 +228,14 @@ function templatePayload(template) {
     }],
   };
 }
+async function resolvedTemplatePayload(guild, template) {
+  const payload = templatePayload(template);
+  return {
+    ...payload,
+    content: await emojis.resolveText(guild.client, guild.id, payload.content),
+    embeds: await emojis.resolveEmbeds(guild.client, guild.id, payload.embeds),
+  };
+}
 function messagePayload(message) {
   return {
     content: message.content || '',
@@ -347,7 +356,7 @@ async function redeployPanel(guild, panelId, meta = {}) {
   const message = await resolveMessage(guild, panel.messageId, panel.channelId);
   const originalPayload = messagePayload(message);
   try {
-    await message.edit(templatePayload(template));
+    await message.edit(await resolvedTemplatePayload(guild, template));
     return await repairPanel(guild, panel.panelId, meta);
   } catch (error) {
     await restoreTemplateTransaction(guild, message, panel, originalPayload, error, meta);
@@ -369,7 +378,7 @@ async function attachExistingMessage({ guild, messageReference, channelId, name,
   const originalPayload = template ? messagePayload(message) : null;
   let panel = null;
   try {
-    if (template) await message.edit(templatePayload(template));
+    if (template) await message.edit(await resolvedTemplatePayload(guild, template));
     panel = savePanel(guild.id, {
       name, source: DRAFT_TYPES.EXISTING, templateId, channelId: message.channel.id,
       messageId: message.id, mappings: preparedMappings, createdBy, status: 'pending',
@@ -391,7 +400,7 @@ async function createFromTemplate({ guild, channelId, templateId, name, mappings
   let message = null;
   let panel = null;
   try {
-    message = await channel.send(templatePayload(template));
+    message = await channel.send(await resolvedTemplatePayload(guild, template));
     panel = savePanel(guild.id, {
       name: name || template.name, source: DRAFT_TYPES.TEMPLATE, templateId,
       channelId: channel.id, messageId: message.id, mappings: preparedMappings,
@@ -415,7 +424,7 @@ async function applyTemplateToPanel(guild, panelId, templateId, meta = {}) {
   const message = await resolveMessage(guild, panel.messageId, panel.channelId);
   const originalPayload = messagePayload(message);
   try {
-    await message.edit(templatePayload(template));
+    await message.edit(await resolvedTemplatePayload(guild, template));
     const updated = savePanel(guild.id, { ...panel, templateId, status: 'pending', lastError: null }, meta);
     return await repairPanel(guild, updated.panelId, meta);
   } catch (error) {

@@ -448,6 +448,7 @@ let ticketSetupPanelApi;
     EmbedBuilder,
     MessageFlags,
   } = require('discord.js');
+  const emojis = require('../../utilityStudio/emojis/emojis');
 
   const {
     DEFAULT_TICKET_PANEL,
@@ -596,8 +597,11 @@ let ticketSetupPanelApi;
     return embed;
   }
 
-  function buildPanelButtons(panel = DEFAULT_TICKET_PANEL) {
+  function buildPanelButtons(panel = DEFAULT_TICKET_PANEL, buttonEmojiOverride = undefined) {
     const appearance = panel.appearance || {};
+    const buttonEmoji = buttonEmojiOverride === undefined
+      ? appearance.buttonEmoji
+      : buttonEmojiOverride;
 
     const button = new ButtonBuilder()
       .setCustomId(`ticket_open:${panel.panelId}`)
@@ -605,13 +609,44 @@ let ticketSetupPanelApi;
       .setStyle(resolveButtonStyle(panel.buttonStyle))
       .setDisabled(panel.enabled === false);
 
-    if (appearance.buttonEmoji) {
-      button.setEmoji(appearance.buttonEmoji);
+    if (buttonEmoji) {
+      button.setEmoji(buttonEmoji);
     }
 
     return [
       new ActionRowBuilder().addComponents(button),
     ];
+  }
+
+  async function buildResolvedPanelPayload(guild, panel = DEFAULT_TICKET_PANEL) {
+    const appearance = panel.appearance || {};
+    let buttonEmoji = appearance.buttonEmoji || null;
+
+    if (buttonEmoji) {
+      const resolved = await emojis.componentEmojiForGuild(
+        guild.client,
+        guild.id,
+        buttonEmoji
+      );
+
+      if (resolved) {
+        buttonEmoji = resolved;
+      } else if (
+        /^:[a-zA-Z0-9_]{2,32}:$/.test(String(buttonEmoji)) ||
+        /^<a?:[^:>]+:\d{16,20}>$/.test(String(buttonEmoji))
+      ) {
+        buttonEmoji = null;
+      }
+    }
+
+    return {
+      embeds: await emojis.resolveEmbeds(
+        guild.client,
+        guild.id,
+        [buildPanelEmbed(panel)]
+      ),
+      components: buildPanelButtons(panel, buttonEmoji),
+    };
   }
 
   async function cleanupDuplicateDeployments({ guild, panel }) {
@@ -678,10 +713,9 @@ let ticketSetupPanelApi;
           await channel.messages.fetch(existingMessageId);
 
         if (existingMessage) {
-          await existingMessage.edit({
-            embeds: [buildPanelEmbed(panel)],
-            components: buildPanelButtons(panel),
-          });
+          await existingMessage.edit(
+            await buildResolvedPanelPayload(guild, panel)
+          );
 
           const deployed = await markPanelDeployed(
             guild.id,
@@ -705,10 +739,9 @@ let ticketSetupPanelApi;
       }
     }
 
-    const message = await channel.send({
-      embeds: [buildPanelEmbed(panel)],
-      components: buildPanelButtons(panel),
-    });
+    const message = await channel.send(
+      await buildResolvedPanelPayload(guild, panel)
+    );
 
     const deployed = await markPanelDeployed(
       guild.id,
@@ -791,10 +824,9 @@ let ticketSetupPanelApi;
       const message = await channel.messages.fetch(panel.deployMessageId);
       if (!message) return false;
 
-      await message.edit({
-        embeds: [buildPanelEmbed(panel)],
-        components: buildPanelButtons(panel),
-      });
+      await message.edit(
+        await buildResolvedPanelPayload(guild, panel)
+      );
 
       return true;
     } catch {
@@ -859,9 +891,19 @@ let ticketSetupPanelApi;
       )
       .setTimestamp();
 
+    const guildId = ticket.guildId || channel.guild?.id || null;
+    const client = channel.client || channel.guild?.client || null;
+    const content = `<@${user?.id || ticket.creatorId}>`;
+    const resolvedContent = client && guildId
+      ? await emojis.resolveText(client, guildId, content)
+      : content;
+    const resolvedEmbeds = client && guildId
+      ? await emojis.resolveEmbeds(client, guildId, [embed])
+      : [embed];
+
     return channel.send({
-      content: `<@${user?.id || ticket.creatorId}>`,
-      embeds: [embed],
+      content: resolvedContent,
+      embeds: resolvedEmbeds,
       components: getTicketActionRows(ticket, {
         allowReopen: true,
         allowDelete: true,
@@ -1059,6 +1101,7 @@ let ticketSetupPanelApi;
   ticketPanelManagerApi = {
     buildPanelEmbed,
     buildPanelButtons,
+    buildResolvedPanelPayload,
 
     createPanel: (...args) => {
       const panel = createPanel(...args);

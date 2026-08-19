@@ -2,6 +2,7 @@
 
 const { PermissionFlagsBits } = require('discord.js');
 const suggestions = require('./suggestions');
+const emojis = require('../../utilityStudio/emojis/emojis');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
 
 const locks = new Map();
@@ -38,6 +39,14 @@ async function resolveSendableChannel(guild, channelId, label) {
   return channel;
 }
 
+async function resolveSuggestionPayload(guild, payload = {}) {
+  return {
+    ...payload,
+    content: payload.content == null ? payload.content : await emojis.resolveText(guild.client, guild.id, payload.content),
+    embeds: await emojis.resolveEmbeds(guild.client, guild.id, payload.embeds || []),
+  };
+}
+
 async function submitSuggestion(interaction, panel) {
   const guildId = interaction?.guildId;
   const section = assertEnabled(guildId);
@@ -49,7 +58,8 @@ async function submitSuggestion(interaction, panel) {
     const fresh = assertEnabled(guildId);
     const targetId = fresh.requireReview !== false ? fresh.reviewChannelId || fresh.submitChannelId : fresh.submitChannelId;
     const channel = await resolveSendableChannel(interaction.guild, targetId, 'Suggestion channel');
-    const message = await channel.send({ embeds: [panel.buildSuggestionEmbed(interaction.guild, draft, fresh)], components: panel.buildSuggestionRows(draft, fresh) });
+    const payload = await resolveSuggestionPayload(interaction.guild, { embeds: [panel.buildSuggestionEmbed(interaction.guild, draft, fresh)], components: panel.buildSuggestionRows(draft, fresh) });
+    const message = await channel.send(payload);
     const saved = suggestions.saveSuggestion(guildId, { ...draft, channelId: message.channelId, messageId: message.id, reviewMessageId: fresh.requireReview !== false ? message.id : null }, interaction.guild);
     suggestions.incrementAnalytics(guildId, { submitted: 1 }, interaction.guild);
     return saved;
@@ -63,7 +73,8 @@ async function refreshSuggestionMessage(guild, suggestionId, panel) {
   const channel = guild.channels.cache.get(suggestion.channelId) || await guild.channels.fetch(suggestion.channelId).catch(() => null);
   const message = await channel?.messages?.fetch(suggestion.messageId).catch(() => null);
   if (!message?.editable) return null;
-  await message.edit({ embeds: [panel.buildSuggestionEmbed(guild, suggestion, section)], components: panel.buildSuggestionRows(suggestion, section) });
+  const payload = await resolveSuggestionPayload(guild, { embeds: [panel.buildSuggestionEmbed(guild, suggestion, section)], components: panel.buildSuggestionRows(suggestion, section) });
+  await message.edit(payload);
   return suggestion;
 }
 
@@ -98,7 +109,8 @@ async function notifyAuthor(guild, suggestion) {
   if (!member?.user) return false;
   const verdict = suggestion.status === 'approved' ? 'approved ✅' : 'denied ❌';
   const note = suggestion.reviewReason ? `\nDecision note: ${suggestion.reviewReason}` : '';
-  await member.user.send(`Your suggestion in **${guild.name}** was **${verdict}**.${note}\nSuggestion ID: \`${suggestion.suggestionId}\``).catch(() => null);
+  const content = await emojis.resolveText(guild.client, guild.id, `Your suggestion in **${guild.name}** was **${verdict}**.${note}\nSuggestion ID: \`${suggestion.suggestionId}\``);
+  await member.user.send(content).catch(() => null);
   return true;
 }
 
@@ -125,7 +137,10 @@ async function review(interaction, suggestionId, action, panel, reason = '') {
     }, interaction.guild);
     suggestions.incrementAnalytics(guildId, status === 'approved' ? { approved: 1 } : { denied: 1 }, interaction.guild);
     await refreshSuggestionMessage(interaction.guild, suggestionId, panel);
-    if (target) await target.send({ embeds: [panel.buildSuggestionEmbed(interaction.guild, updated, section)] });
+    if (target) {
+      const payload = await resolveSuggestionPayload(interaction.guild, { embeds: [panel.buildSuggestionEmbed(interaction.guild, updated, section)] });
+      await target.send(payload);
+    }
     await notifyAuthor(interaction.guild, updated);
     return updated;
   });

@@ -13,7 +13,7 @@ const MODULE_CONTRACTS = Object.freeze({
   polls: { class: 'event', signals: ['runtime', 'interaction', 'persistence', 'discord-write'] },
   privateRooms: { class: 'background', signals: ['runtime', 'interaction', 'background-worker', 'persistence', 'discord-write'] },
   reactionRoles: { class: 'event', signals: ['runtime', 'interaction', 'persistence', 'discord-write'] },
-  roleSelector: { class: 'event', signals: ['runtime', 'interaction', 'persistence', 'discord-write'] },
+  roleSelector: { class: 'scheduled', signals: ['runtime', 'interaction', 'scheduler', 'persistence', 'discord-write'] },
   schedule: { class: 'scheduled', signals: ['runtime', 'interaction', 'scheduler', 'persistence', 'discord-write'] },
   social: { class: 'provider', signals: ['runtime', 'scheduler', 'provider', 'persistence', 'discord-write'] },
   starboard: { class: 'event', signals: ['runtime', 'persistence', 'discord-write'] },

@@ -117,6 +117,8 @@ Goliath-managed selector roles are created with no permissions, are not hoisted 
 
 Unused Goliath-managed roles can be cleaned after the configured grace period. The default is seven days. Maintenance runs at startup and hourly.
 
+When a custom group is deleted, Goliath first reconciles every managed Discord role owned by that group. Successfully deleted or already-missing managed roles are cleared from the stored group immediately. Existing external roles are preserved. If any Goliath-managed role cannot be deleted because of hierarchy or a Discord failure, the group is retained and deletion is blocked until the unresolved role is fixed. This prevents orphaned Goliath-owned roles.
+
 ## Role styling and hierarchy
 
 Default role format:
@@ -140,6 +142,8 @@ The guild-style scanner is advisory. It records a suggested format but does not 
 
 Admins choose an existing divider/anchor and whether Goliath-managed roles sit above or below it. Only roles owned by Role Selector are included in automatic hierarchy synchronisation. Existing unrelated guild roles keep their relative order.
 
+The anchor must exist, must not be a managed Discord role, and must sit below Goliath's highest role. Unsafe anchors stop hierarchy movement instead of causing selector roles to be clamped into an invalid layout.
+
 Colours are ordered by rainbow family/hue. Standard custom-group roles are ordered by selector group and option order.
 
 Discord's normal role hierarchy still controls which role colour is visually shown for a member; a higher coloured staff role can override a lower Colour selection.
@@ -160,6 +164,10 @@ Example:
 ```
 
 The category-specific controls are ephemeral to the member. Single-choice and multiple-choice rules come from that group's configuration.
+
+The global module state is enforced at the core role-operation boundary as well as the interaction layer. When Role Selector is disabled, existing deployed controls cannot assign, remove or create selector roles.
+
+Disabling the module edits the deployed Goliath-owned selector into an unavailable state with no member controls. Re-enabling restores the same deployment where possible. Moving the selector to another channel retires the old deployment first so only one live selector remains.
 
 ## Stats
 
@@ -202,6 +210,8 @@ The panel includes:
 - Stats
 - Health / Repair
 
+Role Selector admin interactions are protected by Goliath's standard admin security boundary. Member-facing `roleSelector:*` and legacy `colourRoles:*` controls remain available only for self-service actions while the module is enabled.
+
 No standalone slash command is registered.
 
 ## Dashboard
@@ -218,6 +228,10 @@ Canonical API base:
 /api/role-selector/:guildId
 ```
 
+Dashboard Role Selector routes require an authenticated Discord session. The authenticated user must be the Goliath bot owner or have guild-management permission for the target guild. Request-body actor IDs are not trusted as authorization.
+
+Changing the deployment channel retires the previous Goliath-owned deployment, clears its stored message reference, then stores the new target channel for explicit deployment.
+
 A temporary legacy HTTP alias at `/api/colour-roles/:guildId` may be retained during migration, but it routes to the same Role Selector implementation and does not restore the old `colourRoles` source-of-truth key.
 
 ## Health and repair
@@ -226,12 +240,30 @@ Health checks include:
 
 - Manage Roles permission
 - divider/anchor existence
+- divider/anchor hierarchy safety
 - stored managed-role existence
 - role manageability/hierarchy
 - unexpected permissions on self-service roles
 - deployment-channel availability
+- deployment-message existence and ownership
+- stale managed-role references
+- stale member selections
 
-Repair clears dead references, fixes a missing anchor reference, resynchronises managed role appearance/hierarchy and preserves unrelated guild roles.
+Repair can:
+
+- clear missing managed-role references
+- clear missing/unsafe anchor references
+- clear missing deployment references
+- prune stale member selections
+- resynchronise managed role appearance and hierarchy
+- resynchronise the deployed selector state
+- preserve unrelated guild roles and externally owned selector roles
+
+## Sentinel / maintenance
+
+Role Selector registers an hourly maintenance scheduler with Sentinel. Its Sentinel contract is therefore `scheduled` and reports runtime, interaction, scheduler, persistence and Discord-write signals.
+
+Maintenance skips guilds where Role Selector is disabled. Enabled guilds receive appearance sync, hierarchy sync and unused-role cleanup on startup and hourly thereafter.
 
 ## Acceptance
 
@@ -245,9 +277,12 @@ Role Selector should not be marked live-locked until real-guild testing covers:
 - on-demand option role creation
 - switching without touching other groups
 - deployment/update
+- disable/re-enable deployment state
+- moving deployment channels
 - hierarchy placement
 - cleanup
+- safe group deletion with partial failure
 - stats/member lists
-- dashboard configuration
+- dashboard configuration and authorization
 - restart recovery
 - health/repair

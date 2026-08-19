@@ -13,6 +13,8 @@ const {
 } = require('discord.js');
 
 const guildManager = require('../../../core/guild/guildManager');
+const security = require('../../../core/security/securityCore');
+const emojis = require('../../utilityStudio/emojis/emojis');
 const roleSelector = require('./roleSelector');
 const healthService = require('./roleSelectorHealth');
 
@@ -38,6 +40,40 @@ async function respond(interaction, payload) {
   if (interaction.deferred || interaction.replied) return interaction.editReply(payload);
   return interaction.update(payload);
 }
+async function resolveComponentShortcodes(guild, components = []) {
+  const allowed = await emojis.allowedGuildEmojis(guild.client, guild.id);
+  return (components || []).map((entry) => {
+    const data = typeof entry?.toJSON === 'function' ? entry.toJSON() : entry;
+    if (!data || typeof data !== 'object' || !Array.isArray(data.components)) return entry;
+    return {
+      ...data,
+      components: data.components.map((component) => {
+        if (!component || component.type !== 3 || !Array.isArray(component.options)) return component;
+        return {
+          ...component,
+          options: component.options.map((option) => {
+            const rawName = String(option?.emoji?.name || '');
+            const shortcode = rawName.match(/^:([A-Za-z0-9_]{2,32}):$/);
+            if (!shortcode) return option;
+            const emoji = allowed.get(shortcode[1].toLowerCase());
+            if (emoji) return { ...option, emoji: emojis.componentPayload(emoji) };
+            const next = { ...option };
+            delete next.emoji;
+            return next;
+          }),
+        };
+      }),
+    };
+  });
+}
+async function resolveMemberPayload(guild, payload = {}) {
+  return {
+    ...payload,
+    content: payload.content == null ? payload.content : await emojis.resolveText(guild.client, guild.id, payload.content),
+    embeds: await emojis.resolveEmbeds(guild.client, guild.id, payload.embeds || []),
+    components: await resolveComponentShortcodes(guild, payload.components || []),
+  };
+}
 function customGroups(guildId) { return roleSelector.listGroups(guildId).filter((group) => !group.builtIn); }
 function customGroupSelect(guildId, selectedId = null, customId = 'admin:roleSelector:groupSelect') {
   const groups = customGroups(guildId).slice(0, 25);
@@ -52,7 +88,17 @@ function customGroupSelect(guildId, selectedId = null, customId = 'admin:roleSel
   return row(menu);
 }
 
+function memberDisabledPayload() {
+  return {
+    embeds: [new EmbedBuilder()
+      .setColor(0x747F8D)
+      .setTitle('🎭 Role Selector')
+      .setDescription('Role Selector is currently unavailable. An administrator can re-enable it from Role Studio.')],
+    components: [],
+  };
+}
 function memberLauncherPayload(guild) {
+  if (!guildManager.isModuleEnabled(guild.id, roleSelector.MODULE)) return memberDisabledPayload();
   const groups = roleSelector.listGroups(guild.id).filter((group) => group.enabled).slice(0, 25);
   const menu = new StringSelectMenuBuilder().setCustomId('roleSelector:openGroup').setPlaceholder('Choose a category').setMinValues(1).setMaxValues(1);
   if (groups.length) menu.addOptions(groups.map((group) => ({ label: `${group.emoji || '🏷️'} ${group.name}`.slice(0, 100), value: group.id, description: (group.description || (group.selectionMode === 'multiple' ? 'Choose one or more' : 'Choose one')).slice(0, 100) })));
@@ -63,6 +109,7 @@ function memberLauncherPayload(guild) {
   };
 }
 function memberGroupPayload(guild, member, groupId) {
+  roleSelector.assertModuleEnabled(guild.id);
   const group = roleSelector.getGroup(guild.id, groupId);
   if (!group || !group.enabled) throw new Error('That selector is unavailable.');
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`${group.emoji || '🏷️'} ${group.name}`).setDescription([group.description || 'Choose your role.', group.selectionMode === 'multiple' ? 'Select every option that applies.' : 'Select one option.', group.allowRemove ? 'You may clear this category at any time.' : null].filter(Boolean).join('\n'));
@@ -101,6 +148,7 @@ async function buildAdminPanel(guild, requestedBy = 'Unknown User') {
       `**Format:** \`${roleSelector.roleNameFor(section, 'Example Role')}\``,
       `**Anchor:** ${section.style.anchorRoleId ? `<@&${section.style.anchorRoleId}> (${section.style.placement})` : '`Not set`'}`,
       `**Deployed:** ${section.deployment.channelId ? `<#${section.deployment.channelId}>` : '`Not deployed`'}`,
+      `**Acceptance:** ${health.acceptance?.ready ? 'Ready ✅' : `Not ready ⚠️ (${health.acceptance?.failed?.length || 0} blocker(s))`}`,
       '', health.issues.length ? `⚠️ ${health.issues.length} health issue(s)` : '✅ Health checks passed',
     ].join('\n')).setFooter({ text: `Requested by ${requestedBy}` }).setTimestamp()],
     components: [
@@ -140,25 +188,70 @@ async function buildGroupStats(guild, groupId) {
   return { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`📊 ${group?.emoji || '🏷️'} ${group?.name || 'Selector'}`).setDescription(group?.rows?.length ? group.rows.map((item, index) => [`${index + 1}. **${item.label}** — ${item.count}`, item.members.length ? item.members.slice(0, 30).map((member) => `<@${member.id}>`).join(', ') : '`Nobody selected this`'].join('\n')).join('\n\n').slice(0, 4096) : '`No selections yet.`')], components: [row(button('admin:roleSelector:stats', '⬅️ Back to Stats'))] };
 }
 
-function createGroupModal() { return new ModalBuilder().setCustomId('admin:roleSelector:createGroupSubmit').setTitle('Create Role Selector Group').addComponents(row(new TextInputBuilder().setCustomId('name').setLabel('Group name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80).setPlaceholder('Gaming Platform')), row(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji / icon').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(16).setPlaceholder('🎮')), row(new TextInputBuilder().setCustomId('description').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(200)), row(new TextInputBuilder().setCustomId('mode').setLabel('single or multiple').setStyle(TextInputStyle.Short).setRequired(true).setValue('single'))); }
-function optionsModal(group) { return new ModalBuilder().setCustomId('admin:roleSelector:optionsSubmit').setTitle(`Options · ${group.name}`.slice(0, 45)).addComponents(row(new TextInputBuilder().setCustomId('options').setLabel('emoji | label | description | roleId').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000).setValue((group.options || []).map((item) => `${item.emoji || ''} | ${item.label} | ${item.description || ''} | ${item.managed === false ? item.roleId || '' : ''}`).join('\n')).setPlaceholder('🎮 | Xbox | Xbox players |\n🕹️ | PlayStation | PS players | 123456789012345678'))); }
+function createGroupModal() { return new ModalBuilder().setCustomId('admin:roleSelector:createGroupSubmit').setTitle('Create Role Selector Group').addComponents(row(new TextInputBuilder().setCustomId('name').setLabel('Group name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80).setPlaceholder('Gaming Platform')), row(new TextInputBuilder().setCustomId('emoji').setLabel('Emoji / icon').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(100).setPlaceholder('🎮 or :emoji_name:')), row(new TextInputBuilder().setCustomId('description').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(200)), row(new TextInputBuilder().setCustomId('mode').setLabel('single or multiple').setStyle(TextInputStyle.Short).setRequired(true).setValue('single'))); }
+function optionsModal(group) { return new ModalBuilder().setCustomId('admin:roleSelector:optionsSubmit').setTitle(`Options · ${group.name}`.slice(0, 45)).addComponents(row(new TextInputBuilder().setCustomId('options').setLabel('emoji | label | description | roleId').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000).setValue((group.options || []).map((item) => `${item.emoji || ''} | ${item.label} | ${item.description || ''} | ${item.managed === false ? item.roleId || '' : ''}`).join('\n')).setPlaceholder('🎮 | Xbox | Xbox players |\n:playstation: | PlayStation | PS players | 123456789012345678'))); }
 function styleModal(section) { return new ModalBuilder().setCustomId('admin:roleSelector:styleSubmit').setTitle('Role Selector Style').addComponents(row(new TextInputBuilder().setCustomId('format').setLabel('Role format').setStyle(TextInputStyle.Short).setRequired(true).setValue(section.style.format || '🎭 | {role}').setPlaceholder('♥️ | {role}')), row(new TextInputBuilder().setCustomId('icon').setLabel('Default icon / prefix').setStyle(TextInputStyle.Short).setRequired(false).setValue(section.style.icon || '')), row(new TextInputBuilder().setCustomId('separator').setLabel('Separator').setStyle(TextInputStyle.Short).setRequired(false).setValue(section.style.separator || '|'))); }
 function dividerModal() { return new ModalBuilder().setCustomId('admin:roleSelector:createDividerSubmit').setTitle('Create Role Selector Divider').addComponents(row(new TextInputBuilder().setCustomId('name').setLabel('Divider role name').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100).setValue('🎭 | ROLE SELECTOR'))); }
 function hexModal() { return new ModalBuilder().setCustomId('roleSelector:customHexSubmit').setTitle('Pick Your Own Colour').addComponents(row(new TextInputBuilder().setCustomId('hex').setLabel('HEX colour').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('#1EA7FF')), row(new TextInputBuilder().setCustomId('label').setLabel('Colour name').setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder('Sky Blue'))); }
 
+async function fetchDeployment(guild, deployment) {
+  if (!deployment?.channelId) return { channel: null, message: null };
+  const channel = guild.channels.cache.get(deployment.channelId) || await guild.channels.fetch(deployment.channelId).catch(() => null);
+  if (!channel?.messages?.fetch) return { channel, message: null };
+  const message = deployment.messageId ? await channel.messages.fetch(deployment.messageId).catch(() => null) : null;
+  return { channel, message };
+}
+async function syncDeploymentState(guild) {
+  const section = roleSelector.getSection(guild.id);
+  const { message } = await fetchDeployment(guild, section.deployment);
+  if (!message) return { updated: false, reason: section.deployment?.messageId ? 'message_missing' : 'not_deployed' };
+  if (guild.client?.user?.id && message.author?.id !== guild.client.user.id) return { updated: false, reason: 'message_not_owned' };
+  await message.edit(await resolveMemberPayload(guild, memberLauncherPayload(guild)));
+  return { updated: true, messageId: message.id, channelId: message.channel.id };
+}
+async function retireDeployment(guild, deployment) {
+  const { message } = await fetchDeployment(guild, deployment);
+  if (!message) return false;
+  if (guild.client?.user?.id && message.author?.id !== guild.client.user.id) return false;
+  await message.edit(memberDisabledPayload()).catch(() => null);
+  return true;
+}
 async function deploySelector(interaction) {
-  const section = roleSelector.getSection(interaction.guildId); const channelId = section.deployment.channelId || interaction.channelId;
-  const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null); if (!channel?.send) throw new Error('Choose a sendable text channel.');
-  let message = section.deployment.messageId ? await channel.messages.fetch(section.deployment.messageId).catch(() => null) : null; const payload = memberLauncherPayload(interaction.guild); message = message ? await message.edit(payload) : await channel.send(payload);
-  roleSelector.updateSection(interaction.guildId, (current) => ({ ...current, deployment: { channelId: channel.id, messageId: message.id } }), { actorId: interaction.user.id, action: 'role_selector_deploy' }); return message;
+  const section = roleSelector.getSection(interaction.guildId);
+  const channelId = section.deployment.channelId || interaction.channelId;
+  const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null);
+  if (!channel?.send) throw new Error('Choose a sendable text channel.');
+
+  let message = section.deployment.messageId && section.deployment.channelId === channel.id
+    ? await channel.messages.fetch(section.deployment.messageId).catch(() => null)
+    : null;
+
+  if (section.deployment.messageId && section.deployment.channelId && section.deployment.channelId !== channel.id) {
+    await retireDeployment(interaction.guild, section.deployment);
+  }
+
+  const payload = await resolveMemberPayload(interaction.guild, memberLauncherPayload(interaction.guild));
+  message = message ? await message.edit(payload) : await channel.send(payload);
+  roleSelector.updateSection(interaction.guildId, (current) => ({ ...current, deployment: { channelId: channel.id, messageId: message.id } }), { actorId: interaction.user.id, action: 'role_selector_deploy' });
+  return message;
 }
 
 async function handleRoleSelectorInteraction(interaction) {
   const id = String(interaction.customId || ''); const actor = { actorId: interaction.user?.id };
   if (!id.startsWith('admin:roleSelector') && !id.startsWith('roleSelector:') && !id.startsWith('admin:colourRoles') && !id.startsWith('colourRoles:')) return false;
   try {
+    const adminControl = id.startsWith('admin:roleSelector') || id.startsWith('admin:colourRoles');
+    if (adminControl) {
+      const access = await security.enforceInteractionSecurity(interaction, { level: 'admin', guildOnly: true });
+      if (!access.allowed) return true;
+    }
+
     if (id === 'admin:colourRoles' || id === 'admin:roleSelector' || id === 'admin:roleSelector:home') return respond(interaction, await buildAdminPanel(interaction.guild, displayName(interaction)));
-    if (id === 'admin:roleSelector:enable' || id === 'admin:roleSelector:disable') { guildManager.setModuleEnabled(interaction.guildId, roleSelector.MODULE, id.endsWith(':enable'), { ...actor, action: id }); return respond(interaction, await buildAdminPanel(interaction.guild, displayName(interaction))); }
+    if (id === 'admin:roleSelector:enable' || id === 'admin:roleSelector:disable') {
+      guildManager.setModuleEnabled(interaction.guildId, roleSelector.MODULE, id.endsWith(':enable'), { ...actor, action: id });
+      await syncDeploymentState(interaction.guild).catch(() => null);
+      return respond(interaction, await buildAdminPanel(interaction.guild, displayName(interaction)));
+    }
     if (id === 'admin:roleSelector:groups') return respond(interaction, buildGroupsPanel(interaction));
     if (id === 'admin:roleSelector:colours') return respond(interaction, buildColoursPanel(interaction.guild));
     if (id === 'admin:roleSelector:style') return respond(interaction, buildStylePanel(interaction.guild));
@@ -188,7 +281,11 @@ async function handleRoleSelectorInteraction(interaction) {
     if (id === 'admin:roleSelector:toggleRemove') { const group = roleSelector.getGroup(interaction.guildId, getState(interaction).groupId); if (!group) throw new Error('Select a group first.'); roleSelector.saveGroup(interaction.guildId, { ...group, allowRemove: !group.allowRemove }, { ...actor, action: 'role_selector_toggle_remove' }); return respond(interaction, buildGroupsPanel(interaction)); }
     if (id === 'admin:roleSelector:deleteGroup') {
       const group = roleSelector.getGroup(interaction.guildId, getState(interaction).groupId); if (!group) throw new Error('Select a group first.');
-      await roleSelector.deleteManagedGroupRoles(interaction.guild, group.id);
+      const result = await roleSelector.deleteManagedGroupRoles(interaction.guild, group.id);
+      if (result.unresolved) {
+        const names = result.unresolvedRoles.map((item) => `@${item.name}`).join(', ');
+        throw new Error(`Group not deleted because ${result.unresolved} Goliath-managed role(s) could not be removed${names ? `: ${names}` : '.'}. Move them below Goliath or fix Manage Roles, then retry.`);
+      }
       roleSelector.removeGroup(interaction.guildId, group.id, { ...actor, action: 'role_selector_delete_group' }); getState(interaction).groupId = null; return respond(interaction, buildGroupsPanel(interaction));
     }
     if (id === 'admin:roleSelector:palette') { const group = roleSelector.getGroup(interaction.guildId, roleSelector.COLOUR_GROUP_ID); const selected = new Set(interaction.values || []); roleSelector.saveGroup(interaction.guildId, { ...group, palette: group.palette.map((item) => ({ ...item, enabled: selected.has(item.id) })) }, { ...actor, action: 'role_selector_palette' }); return respond(interaction, buildColoursPanel(interaction.guild)); }
@@ -203,9 +300,25 @@ async function handleRoleSelectorInteraction(interaction) {
     if (id === 'admin:roleSelector:scanStyle') { const suggestion = roleSelector.suggestRoleStyle(interaction.guild); roleSelector.updateSection(interaction.guildId, (current) => ({ ...current, style: { ...current.style, detectedFormat: suggestion.format, detectedIcon: suggestion.icon, detectedSeparator: suggestion.separator, detectedConfidence: suggestion.confidence } }), { ...actor, action: 'role_selector_style_scan' }); return respond(interaction, buildStylePanel(interaction.guild)); }
     if (id === 'admin:roleSelector:applyStyle') { roleSelector.updateSection(interaction.guildId, (current) => ({ ...current, style: { ...current.style, format: current.style.detectedFormat || current.style.format, icon: current.style.detectedIcon || '', separator: current.style.detectedSeparator || current.style.separator } }), { ...actor, action: 'role_selector_style_apply' }); await roleSelector.syncManagedRoleAppearance(interaction.guild); return respond(interaction, buildStylePanel(interaction.guild)); }
     if (id === 'admin:roleSelector:deploy') { const message = await deploySelector(interaction); return interaction.reply({ content: `✅ Role Selector deployed in <#${message.channel.id}>.`, flags: 64 }); }
-    if (id === 'admin:roleSelector:health') { const health = await healthService.repair(interaction.guild); return interaction.reply({ content: `Role Selector health: **${health.healthy ? 'Healthy ✅' : 'Needs attention ⚠️'}**\nIssues: ${health.issues.length} · Warnings: ${health.warnings.length}`, flags: 64 }); }
+    if (id === 'admin:roleSelector:health') {
+      const health = await healthService.repair(interaction.guild);
+      const failedChecks = (health.acceptance?.checks || []).filter((check) => !check.passed);
+      const blockers = failedChecks.length
+        ? failedChecks.slice(0, 7).map((check) => `• ${check.detail}`).join('\n')
+        : '• No acceptance blockers detected.';
+      return interaction.reply({
+        content: [
+          `Role Selector health: **${health.healthy ? 'Healthy ✅' : 'Needs attention ⚠️'}**`,
+          `Issues: ${health.issues.length} · Warnings: ${health.warnings.length}`,
+          `Acceptance: **${health.acceptance?.ready ? 'Ready ✅' : 'Not ready ⚠️'}**`,
+          blockers,
+        ].join('\n'),
+        flags: 64,
+      });
+    }
 
-    if (id === 'roleSelector:openGroup') { if (interaction.values?.[0] === '__none__') return interaction.reply({ content: 'No selector groups are available.', flags: 64 }); return interaction.reply({ ...memberGroupPayload(interaction.guild, interaction.member, interaction.values[0]), flags: 64 }); }
+    if (id.startsWith('roleSelector:')) roleSelector.assertModuleEnabled(interaction.guildId);
+    if (id === 'roleSelector:openGroup') { if (interaction.values?.[0] === '__none__') return interaction.reply({ content: 'No selector groups are available.', flags: 64 }); return interaction.reply({ ...(await resolveMemberPayload(interaction.guild, memberGroupPayload(interaction.guild, interaction.member, interaction.values[0]))), flags: 64 }); }
     if (id === 'roleSelector:colourChoose') { await roleSelector.applyColourSelection(interaction.guild, interaction.member, interaction.values[0]); return interaction.reply({ content: '✅ Your colour has been updated.', flags: 64 }); }
     if (id === 'roleSelector:customHex') { await interaction.showModal(hexModal()); return true; }
     if (id === 'roleSelector:customHexSubmit') { await roleSelector.applyColourSelection(interaction.guild, interaction.member, interaction.fields.getTextInputValue('hex'), interaction.fields.getTextInputValue('label')); return interaction.reply({ content: '✅ Your custom colour has been applied.', flags: 64 }); }
@@ -213,6 +326,7 @@ async function handleRoleSelectorInteraction(interaction) {
     if (id.startsWith('roleSelector:clear:')) { await roleSelector.clearSelection(interaction.guild, interaction.member, id.split(':').slice(2).join(':')); return interaction.reply({ content: '✅ Your selection has been cleared.', flags: 64 }); }
 
     // Migration compatibility for already-deployed Colour Roles controls.
+    if (id.startsWith('colourRoles:')) roleSelector.assertModuleEnabled(interaction.guildId);
     if (id === 'colourRoles:choose') { await roleSelector.applyColourSelection(interaction.guild, interaction.member, interaction.values[0]); return interaction.reply({ content: '✅ Your colour has been updated.', flags: 64 }); }
     if (id === 'colourRoles:remove') { await roleSelector.clearSelection(interaction.guild, interaction.member, roleSelector.COLOUR_GROUP_ID); return interaction.reply({ content: '✅ Your colour has been removed.', flags: 64 }); }
     if (id === 'colourRoles:custom') { await interaction.showModal(hexModal()); return true; }
@@ -229,5 +343,8 @@ async function handleRoleSelectorInteraction(interaction) {
 module.exports = {
   buildAdminPanel,
   handleRoleSelectorInteraction,
+  memberDisabledPayload,
   memberLauncherPayload,
+  retireDeployment,
+  syncDeploymentState,
 };

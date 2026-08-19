@@ -302,14 +302,14 @@ async function validateApplicationEmojiUsage(embeds = [], actionRows = [], inter
   if (!usedApplicationIds.length) return true;
 
   const section = emojiStore.getSection(guildId);
-  if (!section.enabled) throw new Error('Emoji Bank must be enabled before a Goliath application emoji can be deployed.');
+  if (!section.enabled) throw new Error('Emoji Studio must be enabled before a Goliath application emoji can be deployed.');
 
   const selected = new Set(section.favourites.map(String));
   const blocked = usedApplicationIds.filter((id) => !selected.has(id));
   if (!blocked.length) return true;
 
   const names = blocked.map((id) => bank.get(id)?.name ? `:${bank.get(id).name}:` : id);
-  throw new Error(`Goliath application emoji not selected for this guild: ${names.join(', ')}. Select it in Emoji Bank first.`);
+  throw new Error(`Goliath application emoji not selected for this guild: ${names.join(', ')}. Select it in Emoji Studio first.`);
 }
 
 async function buildEmbedPayload(options = {}) {

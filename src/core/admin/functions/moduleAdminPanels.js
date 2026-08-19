@@ -58,7 +58,7 @@ const MODULE_CATALOG = [
   { key: 'social', studio: 'socialStudio', route: 'admin:social', label: '📣 Social Alerts', title: '📣 Social Alerts', summary: 'Creator alerts for Twitch, YouTube, TikTok, Kick and more.' },
 
   // Utility Studio
-  { key: 'emojis', studio: 'utilityStudio', route: 'admin:module:emojis:panel', label: '😀 Emoji Bank', title: '😀 Emoji Bank', summary: 'Discord-hosted application emojis from Emoji.gg with up to 100 selected per server.' },
+  { key: 'emojis', studio: 'utilityStudio', route: 'admin:module:emojis:panel', label: '😀 Emoji Studio', title: '😀 Emoji Studio', summary: 'Discord-hosted application emojis from Emoji.gg with up to 100 selected per server.' },
   { key: 'privateRooms', studio: 'utilityStudio', route: 'admin:privateRooms', label: '🔒 Private Rooms', title: '🔒 Private Rooms', summary: 'Temporary private conversation rooms, requests, approvals and transcripts.' },
   { key: 'schedule', studio: 'utilityStudio', route: 'admin:schedule', label: '📅 Schedule', title: '📅 Schedule', summary: 'Scheduled messages, recurring tasks and timezone-aware automation.' },
   { key: 'stats', studio: 'utilityStudio', route: 'admin:stats', label: '📊 Server Stats', title: '📊 Server Stats', summary: 'Server activity, growth and member statistics.' },
@@ -73,7 +73,7 @@ const STUDIO_CATALOG = [
   { key: 'roleStudio', label: '🎭 Roles', title: '🎭 Role Studio', summary: 'Automatic, reaction, temporary and timed role management.' },
   { key: 'securityStudio', label: '🛡️ Security', title: '🛡️ Security Studio', summary: 'Verification and member protection controls.' },
   { key: 'socialStudio', label: '📣 Social', title: '📣 Social Studio', summary: 'Creator and social-platform alerting.' },
-  { key: 'utilityStudio', label: '🧰 Utility', title: '🧰 Utility Studio', summary: 'Private rooms, scheduling, statistics, translation, temporary voice and Emoji Bank tools.' },
+  { key: 'utilityStudio', label: '🧰 Utility', title: '🧰 Utility Studio', summary: 'Private rooms, scheduling, statistics, translation, temporary voice and Emoji Studio tools.' },
 ];
 
 const MODULE_BY_KEY = Object.fromEntries(MODULE_CATALOG.map((module) => [module.key, module]));

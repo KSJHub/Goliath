@@ -4,6 +4,7 @@ const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
 const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js');
+const emojis = require('../../utilityStudio/emojis/emojis');
 
 const SECTION = 'birthdays';
 const TICK_MS = 60 * 1000;
@@ -399,18 +400,23 @@ function cleanupStaleRecords(section) {
   return removed;
 }
 
+async function resolvedBirthdayEmbeds(guild, embeds) {
+  return emojis.resolveEmbeds(guild.client, guild.id, embeds);
+}
+
 async function sendPublicAnnouncement(guild, section, members, year, today, test = false) {
   const channelId = section.settings.announcementChannelId;
   if (!channelId) throw new Error('Birthday announcement channel is not configured.');
   const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.send) throw new Error('Birthday announcement channel is unavailable.');
   if (section.settings.useBirthdayEmbed) {
-    await channel.send({ embeds: [birthdayEmbed(guild, section, members, year, today, test)], allowedMentions: { users: members.map((m) => m.userId) } });
+    await channel.send({ embeds: await resolvedBirthdayEmbeds(guild, [birthdayEmbed(guild, section, members, year, today, test)]), allowedMentions: { users: members.map((m) => m.userId) } });
   } else {
     const content = members.length > 1
       ? renderGroupTemplate(pickGroupTemplate(section.settings, members, today), guild, members)
       : renderTemplate(pickTemplate(section.settings, members[0], today), guild, members[0], year);
-    await channel.send({ content: test ? `🧪 **TEST**\n${content}` : content, allowedMentions: { users: members.map((m) => m.userId) } });
+    const resolvedContent = await emojis.resolveText(guild.client, guild.id, test ? `🧪 **TEST**\n${content}` : content);
+    await channel.send({ content: resolvedContent, allowedMentions: { users: members.map((m) => m.userId) } });
   }
 }
 
@@ -468,7 +474,7 @@ async function processGuild(guild, meta = {}) {
       try {
         const channel = guild.channels.cache.get(section.settings.monthlyBoardChannelId) || await guild.channels.fetch(section.settings.monthlyBoardChannelId).catch(() => null);
         if (!channel?.send) throw new Error('Monthly birthday board channel is unavailable.');
-        await channel.send({ embeds: [monthlyBoardEmbed(guild, section)], allowedMentions: { parse: [] } });
+        await channel.send({ embeds: await resolvedBirthdayEmbeds(guild, [monthlyBoardEmbed(guild, section)]), allowedMentions: { parse: [] } });
         section.monthlyBoard.lastPostedKey = monthKey; section.analytics.monthlyBoardsSent += 1; section.analytics.lastMonthlyBoardAt = now();
       } catch (error) { result.failures += 1; noteFailure(section); console.warn(`[birthdays] monthly ${guild.id}: ${error.message}`); }
     }
@@ -503,7 +509,7 @@ async function testMonthlyBoard(guild) {
   if (!channelId) throw new Error('No monthly board channel is configured.');
   const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.send) throw new Error('Monthly birthday board channel is unavailable.');
-  await channel.send({ embeds: [monthlyBoardEmbed(guild, section)], allowedMentions: { parse: [] } }); return true;
+  await channel.send({ embeds: await resolvedBirthdayEmbeds(guild, [monthlyBoardEmbed(guild, section)]), allowedMentions: { parse: [] } }); return true;
 }
 
 function exportData(guildId) { const section = getSection(guildId); return { version: 2, exportedAt: now(), birthdays: section }; }

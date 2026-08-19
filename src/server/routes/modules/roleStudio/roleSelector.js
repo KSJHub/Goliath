@@ -1,9 +1,13 @@
 'use strict';
 
 const express = require('express');
+const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../../core/guild/guildManager');
+const security = require('../../../../core/security/securityCore');
+const emojis = require('../../../../modules/utilityStudio/emojis/emojis');
 const roleSelector = require('../../../../modules/roleStudio/roleSelector/roleSelector');
 const healthService = require('../../../../modules/roleStudio/roleSelector/roleSelectorHealth');
+const panel = require('../../../../modules/roleStudio/roleSelector/roleSelectorPanel');
 
 const router = express.Router();
 
@@ -12,11 +16,75 @@ function guildId(req) {
   if (!/^\d{15,25}$/.test(value)) throw new Error('Invalid guild ID.');
   return value;
 }
-function actorId(req) { return String(req.session?.user?.id || req.body?.actorId || '').trim() || null; }
+function cleanDiscordId(value) {
+  const id = String(value || '').replace(/[<@#!&>]/g, '').trim();
+  return /^\d{15,25}$/.test(id) ? id : null;
+}
+function actorId(req) { return cleanDiscordId(req.roleSelectorActorId || req.session?.user?.id); }
 function client(req) { return req.client || req.app?.get?.('goliath.client') || req.app?.locals?.client || null; }
 async function guild(req, id) { const c = client(req); return c?.guilds?.cache?.get(id) || await c?.guilds?.fetch?.(id).catch(() => null); }
 function success(res, payload = {}) { return res.json({ success: true, ...payload }); }
 function failure(res, error, status = 400) { return res.status(status).json({ success: false, error: error.message || 'Role Selector request failed.' }); }
+
+async function resolveDashboardMemberPayload(g, payload = {}) {
+  const allowed = await emojis.allowedGuildEmojis(g.client, g.id);
+  const components = (payload.components || []).map((entry) => {
+    const data = typeof entry?.toJSON === 'function' ? entry.toJSON() : entry;
+    if (!data || typeof data !== 'object' || !Array.isArray(data.components)) return entry;
+    return {
+      ...data,
+      components: data.components.map((component) => {
+        if (!component || component.type !== 3 || !Array.isArray(component.options)) return component;
+        return {
+          ...component,
+          options: component.options.map((option) => {
+            const rawName = String(option?.emoji?.name || '');
+            const shortcode = rawName.match(/^:([A-Za-z0-9_]{2,32}):$/);
+            if (!shortcode) return option;
+            const emoji = allowed.get(shortcode[1].toLowerCase());
+            if (emoji) return { ...option, emoji: emojis.componentPayload(emoji) };
+            const next = { ...option };
+            delete next.emoji;
+            return next;
+          }),
+        };
+      }),
+    };
+  });
+  return {
+    ...payload,
+    content: payload.content == null ? payload.content : await emojis.resolveText(g.client, g.id, payload.content),
+    embeds: await emojis.resolveEmbeds(g.client, g.id, payload.embeds || []),
+    components,
+  };
+}
+
+async function requireRoleSelectorGuildAccess(req, res, next) {
+  try {
+    const userId = cleanDiscordId(req.session?.user?.id);
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const id = guildId(req);
+    req.roleSelectorActorId = userId;
+    if (security.isBotOwner(userId)) return next();
+
+    const g = await guild(req, id);
+    if (!g) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
+
+    const member = g.members.cache.get(userId) || await g.members.fetch(userId).catch(() => null);
+    const allowed = Boolean(
+      member?.permissions?.has(PermissionFlagsBits.Administrator) ||
+      member?.permissions?.has(PermissionFlagsBits.ManageGuild)
+    );
+    if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
+
+    return next();
+  } catch (error) {
+    return failure(res, error, 403);
+  }
+}
+
+router.use('/:guildId', requireRoleSelectorGuildAccess);
 
 async function overview(req, id) {
   const g = await guild(req, id);
@@ -49,17 +117,37 @@ router.get('/:guildId/overview', async (req, res) => {
 router.put('/:guildId/config', async (req, res) => {
   try {
     const id = guildId(req); const patch = req.body || {};
+    const before = roleSelector.getSection(id);
+    const g = await guild(req, id);
+    const nextChannelId = patch.deployment && Object.prototype.hasOwnProperty.call(patch.deployment, 'channelId')
+      ? cleanDiscordId(patch.deployment.channelId)
+      : before.deployment?.channelId || null;
+    const deploymentChannelChanged = Boolean(
+      patch.deployment &&
+      Object.prototype.hasOwnProperty.call(patch.deployment, 'channelId') &&
+      nextChannelId !== (before.deployment?.channelId || null)
+    );
+
+    if (deploymentChannelChanged && g && before.deployment?.messageId) {
+      await panel.retireDeployment(g, before.deployment).catch(() => null);
+    }
+
     if (typeof patch.enabled === 'boolean') guildManager.setModuleEnabled(id, roleSelector.MODULE, patch.enabled, { actorId: actorId(req), action: 'role_selector_dashboard_toggle' });
     roleSelector.updateSection(id, (current) => ({
       ...current,
       ...(patch.style ? { style: { ...current.style, ...patch.style } } : {}),
-      ...(patch.deployment ? { deployment: { ...current.deployment, ...patch.deployment } } : {}),
+      ...(patch.deployment ? {
+        deployment: deploymentChannelChanged
+          ? { ...current.deployment, ...patch.deployment, channelId: nextChannelId, messageId: null }
+          : { ...current.deployment, ...patch.deployment },
+      } : {}),
       ...(patch.cleanup ? { cleanup: { ...current.cleanup, ...patch.cleanup } } : {}),
     }), { actorId: actorId(req), action: 'role_selector_dashboard_config' });
-    const g = await guild(req, id);
+
     if (g) {
       await roleSelector.syncManagedRoleAppearance(g).catch(() => null);
       await roleSelector.syncManagedRoleHierarchy(g).catch(() => null);
+      if (!deploymentChannelChanged) await panel.syncDeploymentState(g).catch(() => null);
     }
     return success(res, await overview(req, id));
   } catch (error) { return failure(res, error); }
@@ -86,9 +174,21 @@ router.post('/:guildId/groups', async (req, res) => {
 router.delete('/:guildId/groups/:groupId', async (req, res) => {
   try {
     const id = guildId(req); const g = await guild(req, id);
-    if (g) await roleSelector.deleteManagedGroupRoles(g, req.params.groupId);
+    if (!g) throw new Error('Guild is unavailable.');
+
+    const result = await roleSelector.deleteManagedGroupRoles(g, req.params.groupId);
+    if (result.unresolved) {
+      return res.status(409).json({
+        success: false,
+        error: 'Group was not deleted because one or more Goliath-managed roles could not be removed.',
+        unresolved: result.unresolved,
+        unresolvedRoles: result.unresolvedRoles,
+        deletedRoles: result.deleted,
+      });
+    }
+
     roleSelector.removeGroup(id, req.params.groupId, { actorId: actorId(req), action: 'role_selector_dashboard_delete_group' });
-    return success(res, await overview(req, id));
+    return success(res, { deletion: result, ...(await overview(req, id)) });
   } catch (error) { return failure(res, error); }
 });
 
@@ -141,10 +241,19 @@ router.post('/:guildId/create-divider', async (req, res) => {
 router.post('/:guildId/deploy', async (req, res) => {
   try {
     const id = guildId(req); const g = await guild(req, id); if (!g) throw new Error('Guild is unavailable.');
-    const channelId = String(req.body?.channelId || roleSelector.getSection(id).deployment?.channelId || '').trim(); if (!channelId) throw new Error('Select a deployment channel.');
+    const section = roleSelector.getSection(id);
+    const channelId = String(req.body?.channelId || section.deployment?.channelId || '').trim(); if (!channelId) throw new Error('Select a deployment channel.');
     const channel = g.channels.cache.get(channelId) || await g.channels.fetch(channelId).catch(() => null); if (!channel?.send) throw new Error('Selected channel is unavailable.');
-    const panel = require('../../../../modules/roleStudio/roleSelector/roleSelectorPanel');
-    const section = roleSelector.getSection(id); let message = section.deployment?.messageId ? await channel.messages.fetch(section.deployment.messageId).catch(() => null) : null; const payload = panel.memberLauncherPayload(g);
+
+    let message = section.deployment?.messageId && section.deployment?.channelId === channel.id
+      ? await channel.messages.fetch(section.deployment.messageId).catch(() => null)
+      : null;
+
+    if (section.deployment?.messageId && section.deployment?.channelId && section.deployment.channelId !== channel.id) {
+      await panel.retireDeployment(g, section.deployment).catch(() => null);
+    }
+
+    const payload = await resolveDashboardMemberPayload(g, panel.memberLauncherPayload(g));
     if (message) await message.edit(payload); else message = await channel.send(payload);
     roleSelector.updateSection(id, (current) => ({ ...current, deployment: { channelId: channel.id, messageId: message.id } }), { actorId: actorId(req), action: 'role_selector_dashboard_deploy' });
     return success(res, { messageId: message.id, ...(await overview(req, id)) });
@@ -152,7 +261,7 @@ router.post('/:guildId/deploy', async (req, res) => {
 });
 
 router.post('/:guildId/repair', async (req, res) => {
-  try { const id = guildId(req); const g = await guild(req, id); if (!g) throw new Error('Guild is unavailable.'); const repair = await healthService.repair(g); return success(res, { repair, ...(await overview(req, id)) }); } catch (error) { return failure(res, error); }
+  try { const id = guildId(req); const g = await guild(req, id); if (!g) throw new Error('Guild is unavailable.'); const repair = await healthService.repair(g); await panel.syncDeploymentState(g).catch(() => null); return success(res, { repair, ...(await overview(req, id)) }); } catch (error) { return failure(res, error); }
 });
 router.post('/:guildId/cleanup', async (req, res) => {
   try { const id = guildId(req); const g = await guild(req, id); if (!g) throw new Error('Guild is unavailable.'); const cleanup = await roleSelector.cleanupUnused(g); return success(res, { cleanup, ...(await overview(req, id)) }); } catch (error) { return failure(res, error); }

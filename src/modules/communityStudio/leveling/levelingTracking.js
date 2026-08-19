@@ -3,6 +3,7 @@
 const { PermissionFlagsBits } = require('discord.js');
 const leveling = require('./leveling');
 const panel = require('./levelingPanel');
+const emojis = require('../../utilityStudio/emojis/emojis');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
 const schedulerRegistry = require('../../../owner/sentinel/schedulerRegistry');
 
@@ -103,7 +104,8 @@ async function announceMemberLevelUp(member, section, user, fallbackChannelId = 
   if (section.announceLevelUps === false || !member?.guild) return false;
   const channel = await resolveAnnouncementChannel(member.guild, section, fallbackChannelId);
   if (!channel) return false;
-  await channel.send({ embeds: [panel.buildLevelUpEmbed(member, user)] }).catch(() => null);
+  const embeds = await emojis.resolveEmbeds(member.guild.client, member.guild.id, [panel.buildLevelUpEmbed(member, user)]);
+  await channel.send({ embeds }).catch(() => null);
   return true;
 }
 

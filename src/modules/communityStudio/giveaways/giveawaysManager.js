@@ -12,6 +12,7 @@ const giveawaysStore = require('./giveawaysStore');
 const guildManager = require('../../../core/guild/guildManager');
 const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js');
 const leveling = require('../leveling/leveling');
+const emojis = require('../../utilityStudio/emojis/emojis');
 
 const ENTER_EMOJI = '🎉';
 const GIVEAWAY_SCHEDULER_ID = 'giveaways:expiry:global';
@@ -151,6 +152,17 @@ function buildGiveawayRows(giveaway) {
   ];
 }
 
+async function buildResolvedGiveawayPayload(guild, giveaway, section = {}) {
+  return {
+    embeds: await emojis.resolveEmbeds(
+      guild.client,
+      guild.id,
+      [buildGiveawayEmbed(giveaway, section)]
+    ),
+    components: buildGiveawayRows(giveaway),
+  };
+}
+
 function pickWinners(entries = [], count = 1) {
   const pool = [...new Set(entries)];
   const winners = [];
@@ -182,7 +194,7 @@ async function refreshGiveawayMessage(guild, giveawayId) {
     || await guild.channels.fetch(giveaway.channelId).catch(() => null);
   const message = await channel?.messages?.fetch(giveaway.messageId).catch(() => null);
   if (!message?.editable) return null;
-  await message.edit({ embeds: [buildGiveawayEmbed(giveaway, section)], components: buildGiveawayRows(giveaway) }).catch(() => null);
+  await message.edit(await buildResolvedGiveawayPayload(guild, giveaway, section)).catch(() => null);
   return giveaway;
 }
 
@@ -212,7 +224,7 @@ async function createGiveaway(guildOrChannel, input = {}) {
     status: 'active',
   }, guild);
 
-  const message = await channel.send({ embeds: [buildGiveawayEmbed(giveaway, section)], components: buildGiveawayRows(giveaway) });
+  const message = await channel.send(await buildResolvedGiveawayPayload(guild, giveaway, section));
   await message.react(ENTER_EMOJI).catch(() => null);
   giveaway = giveawaysStore.saveGiveaway(guild.id, { ...giveaway, messageId: message.id, channelId: channel.id }, guild);
   giveawaysStore.incrementAnalytics(guild.id, { created: 1 }, guild);
@@ -300,9 +312,10 @@ async function endGiveawayById(client, guildId, giveawayId, actorMember = null) 
     const channel = guild.channels.cache.get(giveaway.channelId)
       || await guild.channels.fetch(giveaway.channelId).catch(() => null);
     if (channel?.send) {
-      await channel.send(winners.length
+      const winnerText = winners.length
         ? `🎉 Giveaway ended! Winner(s): ${winners.map((id) => `<@${id}>`).join(', ')}`
-        : '🎉 Giveaway ended with no valid entries.').catch(() => null);
+        : '🎉 Giveaway ended with no valid entries.';
+      await channel.send(await emojis.resolveText(client, guildId, winnerText)).catch(() => null);
     }
   }
   return updated;

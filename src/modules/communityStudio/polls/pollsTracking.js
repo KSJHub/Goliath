@@ -2,6 +2,7 @@
 
 const { MessageFlags } = require('discord.js');
 const polls = require('./polls');
+const emojis = require('../../utilityStudio/emojis/emojis');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
 const schedulerRegistry = require('../../../owner/sentinel/schedulerRegistry');
 
@@ -27,8 +28,11 @@ async function resolvePollMessage(guild, poll) {
   if (!channel?.messages?.fetch) return null;
   return channel.messages.fetch(poll.messageId).catch(() => null);
 }
-function pollPayload(poll) {
-  return { embeds: [polls.buildPollEmbed(poll)], components: poll.status === 'active' ? polls.buildPollComponents(poll) : [] };
+async function pollPayload(guild, poll) {
+  return {
+    embeds: await emojis.resolveEmbeds(guild.client, guild.id, [polls.buildPollEmbed(poll)]),
+    components: poll.status === 'active' ? polls.buildPollComponents(poll) : [],
+  };
 }
 async function renderPoll(guild, poll, { required = false } = {}) {
   const message = await resolvePollMessage(guild, poll);
@@ -36,7 +40,7 @@ async function renderPoll(guild, poll, { required = false } = {}) {
     if (required) throw new Error('The deployed poll message is missing or inaccessible.');
     return null;
   }
-  await message.edit(pollPayload(poll));
+  await message.edit(await pollPayload(guild, poll));
   return message;
 }
 async function deployPoll(guild, pollId, channelId, meta = {}) {
@@ -49,14 +53,14 @@ async function deployPoll(guild, pollId, channelId, meta = {}) {
   const existing = await resolvePollMessage(guild, poll);
   poll.status = 'active'; poll.closedAt = null; poll.updatedAt = polls.now();
   if (existing?.edit) {
-    await existing.edit(pollPayload(poll)); section.polls[poll.id] = poll;
+    await existing.edit(await pollPayload(guild, poll)); section.polls[poll.id] = poll;
     return { section: polls.saveSection(guild.id, section, meta), poll, messageId: existing.id, redeployed: true };
   }
   const targetChannelId = polls.cleanSnowflake(channelId || poll.channelId || section.settings?.defaultChannelId);
   if (!targetChannelId) throw new Error('Select a text channel before deploying the poll.');
   const channel = guild.channels.cache.get(targetChannelId) || await guild.channels.fetch(targetChannelId).catch(() => null);
   if (!channel?.send) throw new Error('Selected channel is not sendable.');
-  const message = await channel.send(pollPayload(poll));
+  const message = await channel.send(await pollPayload(guild, poll));
   poll.channelId = channel.id; poll.messageId = message.id; section.polls[poll.id] = poll;
   section.analytics.deployed = Number(section.analytics.deployed || 0) + 1;
   try {
@@ -182,7 +186,7 @@ async function repair(guild, meta = {}) {
     if (poll.status !== 'active') continue;
     try {
       const existing = await resolvePollMessage(guild, poll);
-      if (existing?.edit) { await existing.edit(pollPayload(poll)); repaired.push({ pollId: poll.id, action: 'refreshed' }); }
+      if (existing?.edit) { await existing.edit(await pollPayload(guild, poll)); repaired.push({ pollId: poll.id, action: 'refreshed' }); }
       else {
         const targetChannelId = poll.channelId || section.settings?.defaultChannelId || section.defaultChannelId;
         if (!targetChannelId) throw new Error('No channel is available for redeployment.');

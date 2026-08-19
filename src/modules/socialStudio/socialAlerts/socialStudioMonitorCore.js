@@ -2,6 +2,7 @@
 
 const { EmbedBuilder } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
+const emojis = require('../../utilityStudio/emojis/emojis');
 const { deleteExpiredCreators } = require('./socialStudioStore');
 const { checkAccount, providerInfo } = require('./socialStudioProviders');
 const { normalizeTemplates, resolveTemplate } = require('./socialStudioTemplates');
@@ -723,12 +724,14 @@ async function buildEventPayload(client, guildId, config, account, creator, even
   const mentionMode = account.mentionMode || 'none';
   const content = mentionMode === 'everyone' ? '@everyone' : mentionMode === 'here' ? '@here' : mentionMode === 'role' && account.mentionRoleId ? `<@&${account.mentionRoleId}>` : undefined;
   const quiet = quietHoursActive(config.settings);
+  const resolvedContent = content == null ? content : await emojis.resolveText(client, guildId, content);
+  const resolvedEmbeds = await emojis.resolveEmbeds(client, guildId, [embed]);
   return {
     channel,
     quietHoursPingSuppressed: quiet && Boolean(content),
     payload: {
-      content,
-      embeds: [embed],
+      content: resolvedContent,
+      embeds: resolvedEmbeds,
       components: [],
       allowedMentions: {
         parse: !quiet && (mentionMode === 'everyone' || mentionMode === 'here') ? ['everyone'] : [],
