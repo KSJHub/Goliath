@@ -9,6 +9,7 @@ const {
 } = require('../../../core/guild/moduleSectionManager');
 const { buildPreviewEmbeds } = require('../embed/embedPanel');
 const embedTemplateManager = require('../embed/embedTemplates');
+const emojis = require('../../utilityStudio/emojis/emojis');
 
 const MODULE = 'goodbye';
 
@@ -324,7 +325,10 @@ async function sendGoodbye(member, options = {}) {
   }
 
   try {
-    await channel.send(await buildDiscordPayload(member, config));
+    const payload = await buildDiscordPayload(member, config);
+    payload.content = await emojis.resolveText(member.client, member.guild.id, payload.content);
+    payload.embeds = await emojis.resolveEmbeds(member.client, member.guild.id, payload.embeds);
+    await channel.send(payload);
     if (!options.previewOnly) incrementAnalytics(member.guild.id, { sent: 1 });
     return { sent: true, failed: false, skipped: false, channelId: channel.id, errors: [] };
   } catch (error) {

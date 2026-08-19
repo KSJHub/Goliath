@@ -2,6 +2,7 @@
 
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const stickyStore = require('./stickyStore');
+const emojis = require('../../utilityStudio/emojis/emojis');
 
 const channelLocks = new Map();
 
@@ -82,6 +83,13 @@ function buildStickyPayload(sticky) {
   return { content: sticky.content || 'No sticky content set.', embeds: [] };
 }
 
+async function resolveStickyPayload(channel, sticky) {
+  const payload = buildStickyPayload(sticky);
+  payload.content = await emojis.resolveText(channel.client, channel.guild.id, payload.content);
+  payload.embeds = await emojis.resolveEmbeds(channel.client, channel.guild.id, payload.embeds);
+  return payload;
+}
+
 async function fetchLastSticky(channel, sticky) {
   if (!sticky?.lastMessageId || !channel?.messages?.fetch) return null;
   try {
@@ -110,7 +118,7 @@ async function editOldSticky(channel, sticky) {
   const message = await fetchLastSticky(channel, sticky);
   if (!message?.editable) return null;
   try {
-    const edited = await message.edit(buildStickyPayload(sticky));
+    const edited = await message.edit(await resolveStickyPayload(channel, sticky));
     stickyStore.incrementAnalytics(channel.guild.id, { refreshed: 1 });
     return edited;
   } catch (error) {
@@ -136,7 +144,7 @@ async function repostStickyUnlocked(channel, sticky, client) {
   const deletion = await deleteOldSticky(channel, freshSticky);
   if (!deletion.ok) return null;
 
-  const sent = await channel.send(buildStickyPayload(freshSticky)).catch((error) => {
+  const sent = await channel.send(await resolveStickyPayload(channel, freshSticky)).catch((error) => {
     console.error(`[Sticky] Failed to send sticky in ${channel.guild.id}:${channel.id}:`, error?.message || error);
     return null;
   });

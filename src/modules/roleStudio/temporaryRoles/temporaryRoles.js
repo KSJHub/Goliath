@@ -188,7 +188,7 @@ async function scanExpired(guild, meta = {}) {
   if (!isModuleEnabled(guild.id, SECTION)) return { checked: 0, expired: 0, failed: 0 };
   const section = getSection(guild.id);
   const due = Object.values(section.assignments)
-    .filter((item) => item.status === 'active' && new Date(item.expiresAt).getTime() <= Date.now())
+    .filter((item) => ['active', 'failed'].includes(item.status) && new Date(item.expiresAt).getTime() <= Date.now())
     .sort((a, b) => new Date(a.expiresAt || 0) - new Date(b.expiresAt || 0));
   let expired = 0;
   let failed = 0;

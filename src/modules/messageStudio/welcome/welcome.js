@@ -9,6 +9,7 @@ const {
 } = require('../../../core/guild/moduleSectionManager');
 const { buildPreviewEmbeds } = require('../embed/embedPanel');
 const embedTemplateManager = require('../embed/embedTemplates');
+const emojis = require('../../utilityStudio/emojis/emojis');
 
 const MODULE = 'welcome';
 
@@ -502,7 +503,10 @@ async function sendWelcome(member, options = {}) {
       errors.push('Welcome channel is unavailable.');
     } else {
       try {
-        await channel.send(buildDiscordPayload(member, 'welcome', config));
+        const payload = buildDiscordPayload(member, 'welcome', config);
+        payload.content = await emojis.resolveText(member.client, member.guild.id, payload.content);
+        payload.embeds = await emojis.resolveEmbeds(member.client, member.guild.id, payload.embeds);
+        await channel.send(payload);
         publicSent = true;
       } catch (error) {
         publicFailed = true;
@@ -514,10 +518,13 @@ async function sendWelcome(member, options = {}) {
 
   if (config.dmEnabled && options.skipDm !== true && !member.user.bot) {
     try {
-      await member.send(buildDiscordPayload(member, 'dmWelcome', config, {
+      const payload = buildDiscordPayload(member, 'dmWelcome', config, {
         includeComponents: false,
         suppressPing: true,
-      }));
+      });
+      payload.content = await emojis.resolveText(member.client, member.guild.id, payload.content);
+      payload.embeds = await emojis.resolveEmbeds(member.client, member.guild.id, payload.embeds);
+      await member.send(payload);
       dmSent = true;
     } catch (error) {
       dmFailed = true;
