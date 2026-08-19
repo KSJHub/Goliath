@@ -66,3 +66,13 @@ test('Birthday settings panel keeps module toggle and data tools layout', () => 
   assert.match(birthdaysViews, /button\('admin:birthdays:import', '📥 Import'\), button\('admin:birthdays:export', '📤 Export'\)/);
   assert.match(birthdaysViews, /row\(button\('admin:birthdays', '⬅️ Back'\)\)/);
 });
+
+test('Birthday user action buttons stay routed', () => {
+  assert.match(interactionCreate, /customId\.startsWith\('birthdays:user:'\)/);
+  assert.match(birthdaysPanel, /id === 'birthdays:user:open'/);
+  assert.match(birthdaysPanel, /id === 'birthdays:user:set'/);
+  assert.match(birthdaysPanel, /showModal\(birthdayModal\(record\)\)/);
+  assert.match(birthdaysPanel, /id === 'birthdays:user:privacy'/);
+  assert.match(birthdaysPanel, /id === 'birthdays:user:remove'/);
+  assert.match(birthdaysPanel, /id === 'birthdays:user:upcoming'/);
+});
