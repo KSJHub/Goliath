@@ -64,7 +64,7 @@ const birthdaysPanel = optionalRequire(
 );
 
 const MODULE_STUDIO_PREFIXES = [
-  ['communityStudio', ['admin:invites', 'invites:', 'admin:giveaways', 'giveaways:', 'admin:leveling', 'leveling:', 'admin:polls', 'poll_vote:']],
+  ['communityStudio', ['admin:birthdays', 'birthdays:user:', 'admin:invites', 'invites:', 'admin:giveaways', 'giveaways:', 'admin:leveling', 'leveling:', 'admin:polls', 'poll_vote:']],
   ['feedbackStudio', ['admin:forms', 'forms:', 'admin:suggestions', 'suggestions:', 'admin:tickets', 'tickets:']],
   ['messageStudio', ['admin:embed', 'embed:', 'admin:goodbye', 'goodbye:', 'admin:starboard', 'starboard:', 'admin:sticky', 'sticky:', 'admin:welcome', 'welcome:']],
   ['roleStudio', ['admin:autoRoles', 'autoroles:', 'admin:reactionRoles', 'reactionRoles:', 'admin:temporaryRoles', 'temporaryRoles:', 'admin:timedRoles', 'timedRoles:']],
@@ -408,6 +408,14 @@ if (
         if (!await callHandler(adminPanel, 'handleAdminNavigation', interaction)) throw new Error(`AutoMod admin did not handle ${customId}.`);
         return;
       }
+      if (customId.startsWith('admin:birthdays')) {
+        if (!await callHandler(birthdaysPanel, 'handleAdmin', interaction)) throw new Error(`Birthdays admin did not handle ${customId}.`);
+        return;
+      }
+      if (customId.startsWith('birthdays:user:')) {
+        if (!await callHandler(birthdaysPanel, 'handleUser', interaction)) throw new Error(`Birthdays user did not handle ${customId}.`);
+        return;
+      }
       if (customId === 'admin:modules' || customId.startsWith('admin:modules:page:') || customId.startsWith('admin:module:') || customId.startsWith('admin:studio:')) {
         if (!await callHandler(moduleAdminPanels, 'handleModuleAdminInteraction', interaction)) throw new Error(`Module admin did not handle ${customId}.`);
         return;
@@ -484,7 +492,6 @@ if (
     }
   },
 };
-
 
 
 
