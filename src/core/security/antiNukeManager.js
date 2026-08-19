@@ -7,6 +7,7 @@ const guildManager = require('../guild/guildManager');
 const { enableLockdown, getLockdownState, getLockdownModeFromSeverity } = require('./lockdownSystem');
 const { validateBotHierarchy, hasDangerousPermissions } = require('./securitySystem');
 const { quarantineMember: quarantineSystemMember } = require('./quarantineSystem');
+const schedulerRegistry = require('../../owner/sentinel/schedulerRegistry');
 
 const {
   SEVERITY,
@@ -16,6 +17,8 @@ const {
 } = securitySystem;
 
 const QUARANTINE_ROLE_NAME = 'Goliath Quarantine';
+const CLEANUP_INTERVAL_MS = 60_000;
+const CLEANUP_SCHEDULER_ID = 'security:anti-nuke-bucket-cleanup:global';
 
 const DEFAULT_CONFIG = {
   enabled: true,
@@ -41,14 +44,36 @@ const DEFAULT_CONFIG = {
 
 const actionBuckets = new Map();
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, timestamps] of actionBuckets.entries()) {
-    const fresh = timestamps.filter((timestamp) => now - timestamp < 60_000);
-    if (fresh.length) actionBuckets.set(key, fresh);
-    else actionBuckets.delete(key);
+schedulerRegistry.register({
+  id: CLEANUP_SCHEDULER_ID,
+  module: 'security',
+  component: 'anti-nuke-bucket-cleanup',
+  intervalMs: CLEANUP_INTERVAL_MS,
+  details: { buckets: actionBuckets.size },
+});
+
+const cleanupTimer = setInterval(() => {
+  try {
+    const now = Date.now();
+    let removed = 0;
+    for (const [key, timestamps] of actionBuckets.entries()) {
+      const fresh = timestamps.filter((timestamp) => now - timestamp < CLEANUP_INTERVAL_MS);
+      if (fresh.length) actionBuckets.set(key, fresh);
+      else {
+        actionBuckets.delete(key);
+        removed += 1;
+      }
+    }
+    schedulerRegistry.beat(CLEANUP_SCHEDULER_ID, {
+      buckets: actionBuckets.size,
+      removed,
+    });
+  } catch (error) {
+    schedulerRegistry.fail(CLEANUP_SCHEDULER_ID, error, { buckets: actionBuckets.size });
+    console.error('[AntiNuke] Action bucket cleanup failed:', error);
   }
-}, 60_000).unref?.();
+}, CLEANUP_INTERVAL_MS);
+cleanupTimer.unref?.();
 
 function getAntiNukeConfig(guildId) {
   const saved = guildManager.getGuildSection(guildId, 'antiNuke', {});

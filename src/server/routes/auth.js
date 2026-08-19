@@ -1,5 +1,5 @@
-const fetch = global.fetch || require('node-fetch');
 const express = require('express');
+const security = require('../../core/security/securityCore');
 
 const router = express.Router();
 
@@ -63,28 +63,6 @@ function safeRedirectUrl(url) {
 return String(url || 'https://goliath.ksjdigital.co.uk').replace(/\/+$/, '');
 }
 
-function splitIds(value) {
-return String(value || '')
-.split(',')
-.map((id) => id.trim())
-.filter(Boolean);
-}
-
-function getOwnerIds() {
-return [...new Set([
-...splitIds(process.env.OWNER_ID),
-...splitIds(process.env.OWNER_IDS),
-...splitIds(process.env.BOT_OWNER_ID),
-...splitIds(process.env.BOT_OWNER_IDS),
-])];
-}
-
-function isOwnerUser(userId) {
-if (!userId) return false;
-
-return getOwnerIds().includes(String(userId));
-}
-
 /* ---------------- LOGIN ROUTE ---------------- */
 
 router.get('/login', (req, res) => {
@@ -132,7 +110,7 @@ return res.json({
 authenticated: true,
 user: {
 ...req.session.user,
-isOwner: isOwnerUser(req.session.user.id),
+isOwner: security.isBotOwner(req.session.user.id),
 },
 });
 });
@@ -244,7 +222,7 @@ req.session.user = {
   displayName: userData.global_name || userData.username || 'User',
   avatar: userData.avatar || null,
   avatarUrl: buildAvatarUrl(userData),
-  isOwner: isOwnerUser(userData.id),
+  isOwner: security.isBotOwner(userData.id),
 };
 
 req.session.accessToken = tokenData.access_token;

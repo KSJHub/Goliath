@@ -6,9 +6,9 @@ const {
   EmbedBuilder,
 } = require('discord.js');
 
-const statsStore = require('../../modules/stats/statsStore');
-const statsCounters = require('../../modules/stats/statsCounters');
-const { enforceCommandAccess } = require('../../core/ui/commandAccess');
+const statsStore = require('../../modules/utilityStudio/stats/statsStore');
+const statsCounters = require('../../modules/utilityStudio/stats/statsCounters');
+const { enforceCommandAccess } = require('../../core/commands/commandAccess');
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString('en-GB');
@@ -218,8 +218,8 @@ module.exports = {
   },
 
   access: {
+    level: 'admin',
     ownerOnly: false,
-    permissions: [PermissionFlagsBits.ManageGuild],
   },
 
   data: new SlashCommandBuilder()

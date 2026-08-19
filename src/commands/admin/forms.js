@@ -2,9 +2,9 @@
 
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 
-const formManager = require('../../modules/forms/formManager');
-const formStore = require('../../modules/forms/formStore');
-const { enforceCommandAccess } = require('../../core/ui/commandAccess');
+const formsPanel = require('../../modules/feedbackStudio/forms/formsPanel');
+const forms = require('../../modules/feedbackStudio/forms/forms');
+const { enforceCommandAccess } = require('../../core/commands/commandAccess');
 
 async function safeReply(interaction, payload) {
   const finalPayload = {
@@ -29,8 +29,8 @@ module.exports = {
   },
 
   access: {
+    level: 'admin',
     ownerOnly: false,
-    permissions: [PermissionFlagsBits.ManageGuild],
   },
 
   data: new SlashCommandBuilder()
@@ -61,11 +61,11 @@ module.exports = {
           name: 'Support Request',
           description: 'Ask staff for help through a clean support form.',
           buttonLabel: 'Open Support Form',
-          action: formStore.FORM_ACTIONS.CREATE_TICKET,
+          action: forms.FORM_ACTIONS.CREATE_TICKET,
           ticketType: 'support',
           fields: [
-            { id: 'summary', label: 'What do you need help with?', type: formStore.FIELD_TYPES.SHORT, required: true, maxLength: 100 },
-            { id: 'details', label: 'Describe the issue', type: formStore.FIELD_TYPES.PARAGRAPH, required: true, maxLength: 1000 },
+            { id: 'summary', label: 'What do you need help with?', type: forms.FIELD_TYPES.SHORT, required: true, maxLength: 100 },
+            { id: 'details', label: 'Describe the issue', type: forms.FIELD_TYPES.PARAGRAPH, required: true, maxLength: 1000 },
           ],
         },
         {
@@ -73,11 +73,11 @@ module.exports = {
           name: 'Punishment Appeal',
           description: 'Appeal a timeout, kick, ban or moderation decision.',
           buttonLabel: 'Open Appeal Form',
-          action: formStore.FORM_ACTIONS.CREATE_TICKET,
+          action: forms.FORM_ACTIONS.CREATE_TICKET,
           ticketType: 'appeal',
           fields: [
-            { id: 'punishment', label: 'What are you appealing?', type: formStore.FIELD_TYPES.SHORT, required: true, maxLength: 100 },
-            { id: 'reason', label: 'Why should staff review it?', type: formStore.FIELD_TYPES.PARAGRAPH, required: true, maxLength: 1000 },
+            { id: 'punishment', label: 'What are you appealing?', type: forms.FIELD_TYPES.SHORT, required: true, maxLength: 100 },
+            { id: 'reason', label: 'Why should staff review it?', type: forms.FIELD_TYPES.PARAGRAPH, required: true, maxLength: 1000 },
           ],
         },
         {
@@ -85,17 +85,17 @@ module.exports = {
           name: 'Application Form',
           description: 'Apply for staff, creator, event or community roles.',
           buttonLabel: 'Open Application',
-          action: formStore.FORM_ACTIONS.CREATE_TICKET,
+          action: forms.FORM_ACTIONS.CREATE_TICKET,
           ticketType: 'application',
           fields: [
-            { id: 'role', label: 'What are you applying for?', type: formStore.FIELD_TYPES.SHORT, required: true, maxLength: 100 },
-            { id: 'about', label: 'Tell us about yourself', type: formStore.FIELD_TYPES.PARAGRAPH, required: true, maxLength: 1000 },
+            { id: 'role', label: 'What are you applying for?', type: forms.FIELD_TYPES.SHORT, required: true, maxLength: 100 },
+            { id: 'about', label: 'Tell us about yourself', type: forms.FIELD_TYPES.PARAGRAPH, required: true, maxLength: 1000 },
           ],
         },
       ];
 
       for (const form of defaults) {
-        formStore.saveForm(interaction.guildId, {
+        forms.saveForm(interaction.guildId, {
           ...form,
           createdBy: interaction.user.id,
           updatedBy: interaction.user.id,
@@ -104,13 +104,13 @@ module.exports = {
 
       await safeReply(interaction, {
         content: '✅ Starter forms created: Support, Appeal and Application.',
-        embeds: [formManager.buildFormsOverviewEmbed(interaction.guildId)],
+        embeds: [formsPanel.buildFormsOverviewEmbed(interaction.guildId)],
       });
       return;
     }
 
     await safeReply(interaction, {
-      embeds: [formManager.buildFormsOverviewEmbed(interaction.guildId)],
+      embeds: [formsPanel.buildFormsOverviewEmbed(interaction.guildId)],
     });
   },
 };

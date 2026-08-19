@@ -7,7 +7,7 @@ const {
 const {
   canAccessCommand,
   enforceCommandAccess,
-} = require('../../core/ui/commandAccess');
+} = require('../../core/commands/commandAccess');
 
 const {
   baseEmbed,

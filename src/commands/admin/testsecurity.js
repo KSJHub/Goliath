@@ -15,19 +15,9 @@ const {
 const {
   createServerBackup,
 } = require('../../core/security/serverBackup');
+const security = require('../../core/security/securityCore');
 
 const BUTTON_PREFIX = 'testsecurity:';
-
-function getOwnerIds() {
-  return (process.env.OWNER_IDS || '')
-    .split(',')
-    .map((id) => String(id).trim())
-    .filter(Boolean);
-}
-
-function isOwner(interaction) {
-  return getOwnerIds().includes(String(interaction.user.id));
-}
 
 function incidentType(name, fallback = INCIDENT_TYPES.SUSPICIOUS_ADMIN_ACTION) {
   return INCIDENT_TYPES[name] || fallback;
@@ -293,13 +283,13 @@ async function runTest(interaction, testKey) {
     });
   }
 
-  if (!isOwner(interaction)) {
+  if (!security.isBotOwner(interaction.user.id)) {
     return sendSafe(interaction, {
       content: [
         '❌ Owner only. You cannot run Goliath security tests.',
         '',
         `Your ID: \`${interaction.user.id}\``,
-        `OWNER_IDS loaded: \`${getOwnerIds().join(', ') || 'none'}\``,
+        `OWNER_IDS loaded: \`${security.getBotOwnerIds().join(', ') || 'none'}\``,
       ].join('\n'),
     });
   }
@@ -365,13 +355,13 @@ module.exports = {
       });
     }
 
-    if (!isOwner(interaction)) {
+    if (!security.isBotOwner(interaction.user.id)) {
       return interaction.editReply({
         content: [
           '❌ Owner only. You cannot open Goliath security tests.',
           '',
           `Your ID: \`${interaction.user.id}\``,
-          `OWNER_IDS loaded: \`${getOwnerIds().join(', ') || 'none'}\``,
+          `OWNER_IDS loaded: \`${security.getBotOwnerIds().join(', ') || 'none'}\``,
         ].join('\n'),
       });
     }

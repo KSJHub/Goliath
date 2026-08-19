@@ -1,54 +1,37 @@
 # Tickets
 
-Tickets is a flagship Goliath module. It keeps the standard module entry points while retaining focused internal files for complex runtime responsibilities.
+Tickets is a flagship Goliath module. Its implementation is consolidated into eight canonical files, with one source of truth for each responsibility.
 
-## Canonical entry points
-
-- `src/modules/tickets/tickets.js` — public runtime and business API
-- `src/modules/tickets/ticketsPanel.js` — Discord `/admin` and `/ticket setup` UI
-- `src/modules/tickets/ticketsRoute.js` — dashboard/API router
-
-External code should import one of these three files instead of reaching directly into ticket internals.
-
-## Preserved flagship capabilities
-
-- Multiple ticket panels and ticket types
-- Discord channel creation and ticket controls
-- Claim, assign, close, reopen, archive and delete workflows
-- Ticket numbering, priority, limits and cooldowns
-- Staff, manager and viewer permissions
-- Logs and transcripts
-- Form submission integration
-- Recovery and repair of missing channels
-- Timeline and analytics
-- Dashboard socket updates
-- Startup recovery
-- Embed Studio panel templates
-- Existing-message attachment
-
-## Redevelopment rules
-
-1. Preserve production behaviour before deleting or merging files.
-2. Migrate external imports to the canonical entry points first.
-3. Merge only overlapping internal responsibilities.
-4. Keep recovery, transcripts, analytics and channel operations separate where their complexity justifies it.
-5. Store guild configuration in the established guild module data rather than standalone JSON files.
-6. Keep Discord and dashboard capabilities aligned.
-7. Validate the complete ticket lifecycle before removing compatibility files.
-
-## Target internal structure
+## Canonical structure
 
 ```text
-src/modules/tickets/
+src/modules/feedbackStudio/tickets/
 ├── tickets.js
 ├── ticketsPanel.js
-├── ticketsRoute.js
+├── ticketsInteractions.js
+├── ticketsLifecycle.js
 ├── ticketsChannels.js
-├── ticketsRecovery.js
 ├── ticketsTranscripts.js
-├── ticketsAnalytics.js
-├── ticketsStartup.js
-└── providers or focused helpers only where genuinely required
+├── ticketsTracking.js
+└── ticketsHealth.js
 ```
 
-The final structure may retain additional focused files where combining them would reduce clarity or reliability.
+- `tickets.js` — defaults, persistence, normalisation, public API and module overview.
+- `ticketsPanel.js` — embeds, buttons, menus, modals, setup UI and panel deployment.
+- `ticketsInteractions.js` — Discord interaction routing and ticket actions.
+- `ticketsLifecycle.js` — create, claim, assign, close, reopen, archive and delete workflows.
+- `ticketsChannels.js` — channel creation, naming, Discord permissions and ticket guards.
+- `ticketsTranscripts.js` — transcript creation, storage, reading and upload.
+- `ticketsTracking.js` — socket events, timeline, analytics, recovery and startup recovery.
+- `ticketsHealth.js` — diagnostics and repair operations.
+
+The dashboard/API router lives at `src/server/routes/tickets.js`; it is not a module implementation file.
+
+## Architecture rules
+
+- External consumers import the canonical file that owns the required responsibility.
+- Visible Discord UI belongs in `ticketsPanel.js`.
+- No compatibility layers, bridge files or duplicate ticket implementations.
+- Guild configuration remains in the established guild data store.
+- Discord and dashboard behaviour must remain aligned.
+- Doctor and Audit must pass before Tickets is considered complete.

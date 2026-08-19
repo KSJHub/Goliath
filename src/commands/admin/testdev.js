@@ -1,9 +1,13 @@
+'use strict';
+
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 
-const testDevOverride = require('../../core/dev/testDevOverrideManager');
+const { normalizeBotMode } = require('../../config/botModes');
+const testDevOverride = require('../../owner/dev/DevOverrideManager');
+const security = require('../../core/security/securityCore');
 
 function modeLabel() {
-  return String(process.env.BOT_MODE || 'DEV').toUpperCase();
+  return normalizeBotMode(process.env.BOT_MODE);
 }
 
 module.exports = {
@@ -29,13 +33,13 @@ module.exports = {
       });
     }
 
-    if (!testDevOverride.isOwnerId(interaction.user.id)) {
+    if (!security.isBotOwner(interaction.user.id)) {
       return interaction.editReply({
         content: [
           '❌ Owner only. You cannot toggle DEV test override mode.',
           '',
           `Your ID: \`${interaction.user.id}\``,
-          `OWNER_IDS loaded: \`${testDevOverride.getOwnerIds().join(', ') || 'none'}\``,
+          `OWNER_IDS loaded: \`${security.getBotOwnerIds().join(', ') || 'none'}\``,
         ].join('\n'),
       });
     }

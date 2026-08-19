@@ -1,10 +1,11 @@
 const express = require('express');
-const path = require('path');
+const path = require('node:path');
 
 const router = express.Router();
 
 const { readJsonSafe } = require('../../core/guild/fileStore');
 const notifications = require('../../core/notifications/notificationStore');
+const { resolveToken, getRequiredTokenEnvName } = require('../../config/tokenResolver');
 
 const CASES_PATH = path.join(__dirname, '..', 'data', 'modCaseDetails.json');
 const DISCORD_API = 'https://discord.com/api/v10';
@@ -74,21 +75,14 @@ function evaluateRuntimeNotifications(guildId, statusPayload = {}) {
 }
 
 function getBotToken() {
-  return String(
-    process.env.DISCORD_TOKEN ||
-      process.env.TOKEN ||
-      process.env.DISCORD_BOT_TOKEN ||
-      ''
-  ).trim();
+  return String(resolveToken() || '').trim();
 }
 
 function requireBotToken() {
   const token = getBotToken();
 
   if (!token) {
-    throw new Error(
-      'Missing bot token. Set DISCORD_TOKEN, TOKEN, or DISCORD_BOT_TOKEN in env.'
-    );
+    throw new Error(`Missing bot token. Set ${getRequiredTokenEnvName()} in the active mode env.`);
   }
 
   return token;

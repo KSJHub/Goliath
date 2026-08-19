@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { joinGuildRoom, listenForGuildUpdate } from '../../services/socketClient';
 import { api } from '../../services/apiClient';
-
+import { joinGuildRoom, listenForGuildUpdate } from '../../services/socketClient';
 import PageShell, {
   EmptyState,
   LoadingPanel,
@@ -50,17 +49,16 @@ const SECTION_BLUEPRINTS = [
 ];
 
 const SETTINGS = [
-  ['applyIgnoreToUsersInVoice', 'Apply ignore to users in voice', 'Voice logs are not sent when a user is ignored from Logging.'],
-  ['ignoreEmbeds', 'Ignore embeds', 'Messages containing embeds are ignored from Logging.'],
+  ['applyIgnoreToUsersInVoice', 'Apply ignore to users in voice', 'Voice logs are not sent when a user is ignored from logging.'],
+  ['ignoreEmbeds', 'Ignore embeds', 'Messages containing embeds are ignored from logging.'],
   ['logDeletedForwardedMessages', 'Log deleted forwarded messages', 'Forwarded messages are logged by Message Delete.'],
-  ['logDeletedPollsWithMessageDelete', 'Log deleted polls with Message Delete', 'If disabled, only poll-specific delete logs are used for deleted polls.'],
-  ['logDeletedStickyMessages', 'Log deleted sticky messages', 'Disable this to avoid noisy sticky message delete logs.'],
-  ['logUnrecognizableMessageDeletions', 'Log unrecognizable message deletions', 'Usually noisy. These are old uncached deletions without a known executor.'],
-  ['useWebhooks', 'Use webhooks', 'Goliath can use webhook-style messages for cleaner log output.'],
+  ['logDeletedPollsWithMessageDelete', 'Log deleted polls with Message Delete', 'If disabled, only poll-specific delete logs are used.'],
+  ['logDeletedStickyMessages', 'Log deleted sticky messages', 'Disable this to avoid noisy sticky-message delete logs.'],
+  ['logUnrecognizableMessageDeletions', 'Log unrecognizable message deletions', 'Logs old uncached deletions without a known executor.'],
+  ['useWebhooks', 'Use webhooks', 'Use webhook-style messages for cleaner log output.'],
 ].sort((a, b) => a[1].localeCompare(b[1]));
 
 const TEXT_CHANNEL_TYPES = new Set([0, 5, '0', '5', 'GuildText', 'GuildAnnouncement']);
-const CATEGORY_TYPES = new Set([4, '4', 'GuildCategory']);
 
 function keyFromLabel(label = '') {
   return String(label)
@@ -83,24 +81,30 @@ const LOG_SECTIONS = SECTION_BLUEPRINTS.map(([key, label, description, categorie
       key: categoryKey,
       label: categoryLabel,
       defaultChannelKey,
-      items: labels.map((labelText) => ({
-        label: labelText,
-        eventKey: keyFromLabel(labelText),
-        channelKey: keyFromLabel(labelText),
-      })).sort((a, b) => a.label.localeCompare(b.label)),
+      items: labels
+        .map((labelText) => ({
+          label: labelText,
+          eventKey: keyFromLabel(labelText),
+          channelKey: keyFromLabel(labelText),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
     }))
     .sort((a, b) => a.label.localeCompare(b.label)),
 })).sort((a, b) => a.label.localeCompare(b.label));
 
 const CATEGORY_DATA = LOG_SECTIONS.flatMap((section) => section.categories);
-const CATEGORY_OPEN_DEFAULTS = CATEGORY_DATA.reduce((acc, category) => ({ ...acc, [category.key]: false }), {});
+const ALL_ITEMS = CATEGORY_DATA.flatMap((category) => category.items);
+const OPEN_DEFAULTS = Object.fromEntries([
+  ...LOG_SECTIONS.map((section) => [section.key, false]),
+  ...CATEGORY_DATA.map((category) => [category.key, false]),
+]);
 
-const CHANNEL_DEFAULTS = CATEGORY_DATA.reduce((acc, category) => {
-  acc[category.defaultChannelKey] = null;
+const CHANNEL_DEFAULTS = CATEGORY_DATA.reduce((result, category) => {
+  result[category.defaultChannelKey] = null;
   category.items.forEach((item) => {
-    acc[item.channelKey] = null;
+    result[item.channelKey] = null;
   });
-  return acc;
+  return result;
 }, {
   admin: null,
   automod: null,
@@ -112,13 +116,7 @@ const CHANNEL_DEFAULTS = CATEGORY_DATA.reduce((acc, category) => {
   voice: null,
 });
 
-const EVENT_DEFAULTS = CATEGORY_DATA.reduce((acc, category) => {
-  category.items.forEach((item) => {
-    acc[item.eventKey] = true;
-  });
-  return acc;
-}, {});
-
+const EVENT_DEFAULTS = Object.fromEntries(ALL_ITEMS.map((item) => [item.eventKey, true]));
 const DEFAULT_SETTINGS = {
   applyIgnoreToUsersInVoice: false,
   ignoreEmbeds: false,
@@ -131,64 +129,12 @@ const DEFAULT_SETTINGS = {
   logUnrecognizableMessageDeletions: false,
   useWebhooks: true,
 };
-
 const DEFAULT_LOGS = {
   enabled: true,
   channels: CHANNEL_DEFAULTS,
   events: EVENT_DEFAULTS,
   settings: DEFAULT_SETTINGS,
 };
-
-const logsCss = `
-  .logs-page [data-disclosure-hint] {
-    opacity: 0;
-    transform: translateX(4px);
-    transition: opacity 160ms ease, transform 160ms ease;
-  }
-
-  .logs-page [data-disclosure-button]:hover [data-disclosure-hint],
-  .logs-page [data-disclosure-button]:focus-visible [data-disclosure-hint] {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  .logs-category-head {
-    display: grid;
-    grid-template-columns: minmax(180px, 1fr) auto;
-    gap: 10px;
-    padding: 12px;
-    align-items: center;
-  }
-
-  .logs-category-controls {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-  }
-
-  @media (max-width: 760px) {
-    .logs-page [data-disclosure-hint] {
-      opacity: 1;
-      transform: none;
-    }
-
-    .logs-bulk-row,
-    .logs-category-controls {
-      width: 100%;
-    }
-
-    .logs-category-head {
-      grid-template-columns: 1fr;
-    }
-
-    .logs-category-controls > *,
-    .logs-bulk-row > * {
-      width: 100%;
-    }
-  }
-`;
 
 function normalizeGuildIdValue(value) {
   const raw = String(value || '').trim();
@@ -201,7 +147,7 @@ function getGuildId(selectedGuild, selectedGuildId = '') {
     selectedGuildId ||
       (typeof selectedGuild === 'string'
         ? selectedGuild
-        : selectedGuild?.guildId || selectedGuild?.id || '')
+        : selectedGuild?.guildId || selectedGuild?.id || ''),
   );
 }
 
@@ -224,10 +170,7 @@ function normalizeLogs(config = {}) {
       messageDelete: channels.messageDelete || channels.message || null,
       messageEdit: channels.messageEdit || channels.message || null,
     },
-    events: {
-      ...EVENT_DEFAULTS,
-      ...(safe.events || {}),
-    },
+    events: { ...EVENT_DEFAULTS, ...(safe.events || {}) },
     settings: {
       ...DEFAULT_SETTINGS,
       ...settings,
@@ -251,40 +194,13 @@ function cleanTextChannels(payload = []) {
     .filter((channel) => channel?.id && channel?.name)
     .filter((channel) => TEXT_CHANNEL_TYPES.has(channel.type))
     .sort((a, b) => {
-      const pos = Number(a.position || 0) - Number(b.position || 0);
-      return pos || String(a.name).localeCompare(String(b.name));
-    });
-}
-
-function cleanCategories(payload = []) {
-  return extractList(payload, 'categories')
-    .filter((category) => category?.id && category?.name)
-    .filter((category) => CATEGORY_TYPES.has(category.type) || true)
-    .sort((a, b) => {
-      const pos = Number(a.position || 0) - Number(b.position || 0);
-      return pos || String(a.name).localeCompare(String(b.name));
+      const position = Number(a.position || 0) - Number(b.position || 0);
+      return position || String(a.name).localeCompare(String(b.name));
     });
 }
 
 function normaliseResourcePayload(payload) {
-  return {
-    channels: cleanTextChannels(payload),
-    categories: cleanCategories(payload),
-  };
-}
-
-function hint(isOpen) {
-  return isOpen ? 'Collapse' : 'Expand';
-}
-
-function tooltipHint(isOpen) {
-  return isOpen ? 'Click to collapse' : 'Click to expand';
-}
-
-function findChannelName(channels, channelId) {
-  if (!channelId) return '';
-  const channel = channels.find((item) => String(item.id) === String(channelId));
-  return channel?.name || '';
+  return { channels: cleanTextChannels(payload) };
 }
 
 function Toggle({ checked, onChange, disabled = false }) {
@@ -303,9 +219,7 @@ function Toggle({ checked, onChange, disabled = false }) {
         padding: '8px 12px',
         minWidth: 96,
         fontSize: 12,
-        fontWeight: 950,
-        textTransform: 'uppercase',
-        letterSpacing: '0.04em',
+        fontWeight: 900,
       }}
     >
       {checked ? 'Enabled' : 'Disabled'}
@@ -321,14 +235,13 @@ function Button({ theme, children, onClick, disabled = false }) {
       disabled={disabled}
       style={{
         border: `1px solid ${theme.cardBorder}`,
-        background: disabled ? 'rgba(15,23,42,0.42)' : 'rgba(15,23,42,0.82)',
+        background: disabled ? theme.softBg : 'rgba(15,23,42,0.82)',
         color: disabled ? theme.mutedText : theme.cardText,
         borderRadius: 10,
         padding: '10px 12px',
         cursor: disabled ? 'not-allowed' : 'pointer',
         fontSize: 12,
-        fontWeight: 950,
-        whiteSpace: 'nowrap',
+        fontWeight: 900,
       }}
     >
       {children}
@@ -336,171 +249,37 @@ function Button({ theme, children, onClick, disabled = false }) {
   );
 }
 
-function ChannelPicker({ theme, channels, categories, value, contextLabel, onChange, onRefresh, loadingChannels = false }) {
-  const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState('');
-  const selectedName = findChannelName(channels, value);
-
-  useEffect(() => {
-    if (!open || channels.length) return;
-    onRefresh?.();
-  }, [channels.length, onRefresh, open]);
-
-  const categoryById = useMemo(() => {
-    const map = new Map();
-    categories.forEach((category) => map.set(String(category.id), category));
-    return map;
-  }, [categories]);
-
-  const groupedChannels = useMemo(() => {
-    const term = filter.trim().toLowerCase();
-    const groups = new Map();
-
-    channels
-      .filter((channel) => !term || String(channel.name).toLowerCase().includes(term) || String(categoryById.get(String(channel.parentId))?.name || '').toLowerCase().includes(term))
-      .forEach((channel) => {
-        const category = categoryById.get(String(channel.parentId));
-        const key = category?.id || 'uncategorised';
-        const label = category?.name || 'No Category';
-        if (!groups.has(key)) {
-          groups.set(key, { key, label, channels: [] });
-        }
-        groups.get(key).channels.push(channel);
-      });
-
-    return [...groups.values()].sort((a, b) => {
-      if (a.key === 'uncategorised') return -1;
-      if (b.key === 'uncategorised') return 1;
-      return a.label.localeCompare(b.label);
-    });
-  }, [categoryById, channels, filter]);
-
-  const dialogTitle = contextLabel ? `${contextLabel} log channel` : 'Log channel destination';
-
+function ChannelSelect({ theme, channels, value, onChange, disabled = false }) {
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        style={{
-          width: 230,
-          maxWidth: '100%',
-          minHeight: 42,
-          border: `1px solid ${theme.cardBorder}`,
-          background: 'rgba(15,23,42,0.95)',
-          color: selectedName ? theme.cardText : theme.mutedText,
-          borderRadius: 10,
-          padding: '9px 12px',
-          outline: 'none',
-          fontSize: 12,
-          fontWeight: 900,
-          cursor: 'pointer',
-          textAlign: 'left',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 10,
-        }}
-      >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {selectedName ? `#${selectedName}` : 'Set log channel'}
-        </span>
-        <span>⌄</span>
-      </button>
-
-      {open ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            background: 'rgba(2,6,23,0.82)',
-            display: 'grid',
-            placeItems: 'center',
-            padding: 16,
-          }}
-        >
-          <div style={{ width: 'min(600px, 100%)', maxHeight: 'min(720px, 88dvh)', overflow: 'hidden', border: `1px solid ${theme.cardBorder}`, borderRadius: 20, background: 'rgba(8,15,30,0.98)', boxShadow: theme.shadow, display: 'grid', gridTemplateRows: 'auto auto 1fr auto' }}>
-            <div style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottom: `1px solid ${theme.cardBorder}` }}>
-              <div>
-                <h3 style={{ margin: 0, color: theme.cardText, fontSize: 18 }}>{dialogTitle}</h3>
-                <p style={{ margin: '4px 0 0', color: theme.mutedText, fontSize: 13 }}>
-                  Choose a text channel for {contextLabel || 'this log route'}.
-                </p>
-              </div>
-              <button type="button" onClick={() => setOpen(false)} style={{ border: `1px solid ${theme.cardBorder}`, background: theme.softBg, color: theme.cardText, borderRadius: 12, padding: '9px 12px', fontWeight: 900 }}>Close</button>
-            </div>
-
-            <div style={{ padding: 14, display: 'grid', gap: 10 }}>
-              <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Search text channels or categories" style={{ width: '100%', border: `1px solid ${theme.cardBorder}`, background: 'rgba(2,6,23,0.82)', color: theme.cardText, borderRadius: 12, padding: '12px 14px', outline: 'none', fontWeight: 850 }} />
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <Button theme={theme} onClick={onRefresh} disabled={loadingChannels}>{loadingChannels ? 'Refreshing...' : 'Refresh Channels'}</Button>
-                <Button theme={theme} onClick={() => { onChange(null); setOpen(false); }}>Clear Destination</Button>
-              </div>
-            </div>
-
-            <div style={{ overflowY: 'auto', padding: '0 14px 14px', display: 'grid', gap: 12 }}>
-              {groupedChannels.length ? groupedChannels.map((group) => (
-                <div key={group.key} style={{ display: 'grid', gap: 8 }}>
-                  <div style={{ color: theme.mutedText, fontSize: 12, fontWeight: 950, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 4px' }}>
-                    {group.label}
-                  </div>
-                  {group.channels.map((channel) => {
-                    const selected = String(channel.id) === String(value);
-                    return (
-                      <button
-                        key={channel.id}
-                        type="button"
-                        onClick={() => {
-                          onChange(channel.id);
-                          setOpen(false);
-                        }}
-                        style={{
-                          border: selected ? '1px solid rgba(59,130,246,0.78)' : `1px solid ${theme.cardBorder}`,
-                          background: selected ? 'rgba(59,130,246,0.20)' : 'rgba(15,23,42,0.72)',
-                          color: theme.cardText,
-                          borderRadius: 12,
-                          padding: '13px 14px',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          fontWeight: 900,
-                          display: 'grid',
-                          gap: 3,
-                        }}
-                      >
-                        <span>#{channel.name}</span>
-                        <span style={{ color: theme.mutedText, fontSize: 11, fontWeight: 750 }}>{group.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )) : (
-                <div style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', borderRadius: 14, padding: 16, color: theme.mutedText, lineHeight: 1.5 }}>
-                  No text channels loaded. Tap Refresh Channels. Voice channels and categories are hidden because log destinations must be text channels.
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: 14, borderTop: `1px solid ${theme.cardBorder}`, color: theme.mutedText, fontSize: 12 }}>
-              Showing text channels only, grouped by Discord category.
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </>
+    <select
+      value={value || ''}
+      onChange={(event) => onChange(event.target.value || null)}
+      disabled={disabled}
+      style={{
+        width: 230,
+        maxWidth: '100%',
+        minHeight: 42,
+        border: `1px solid ${theme.cardBorder}`,
+        background: 'rgba(15,23,42,0.95)',
+        color: value ? theme.cardText : theme.mutedText,
+        borderRadius: 10,
+        padding: '9px 12px',
+        fontSize: 12,
+        fontWeight: 800,
+      }}
+    >
+      <option value="">No channel</option>
+      {channels.map((channel) => (
+        <option key={channel.id} value={channel.id}>#{channel.name}</option>
+      ))}
+    </select>
   );
 }
 
-function SettingRow({ theme, title, text, checked, onChange }) {
+function Card({ theme, children }) {
   return (
-    <div style={{ background: 'rgba(15,23,42,0.72)', border: `1px solid ${theme.cardBorder}`, borderRadius: 14, padding: '15px 16px', display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-      <div style={{ display: 'grid', gap: 4, flex: '1 1 360px', minWidth: 0 }}>
-        <h3 style={{ margin: 0, color: theme.cardText, fontSize: 16, fontWeight: 950 }}>{title}</h3>
-        <p style={{ margin: 0, color: theme.mutedText, fontSize: 13, lineHeight: 1.45 }}>{text}</p>
-      </div>
-      <Toggle checked={checked} onChange={onChange} />
+    <div style={{ border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, borderRadius: 18, padding: 16, display: 'grid', gap: 14, minWidth: 0 }}>
+      {children}
     </div>
   );
 }
@@ -511,13 +290,10 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
   const loadedRef = useRef(false);
 
   const [channels, setChannels] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [logs, setLogs] = useState(DEFAULT_LOGS);
   const [search, setSearch] = useState('');
   const [bulkChannel, setBulkChannel] = useState('');
-  const [openPanels, setOpenPanels] = useState({ logging: false, settings: false });
-  const [openSections, setOpenSections] = useState({ adminLogs: false, discordLogs: false, generalLogs: false, modLogs: false, moduleLogs: false });
-  const [openCategories, setOpenCategories] = useState(CATEGORY_OPEN_DEFAULTS);
+  const [open, setOpen] = useState(OPEN_DEFAULTS);
   const [ignoredUser, setIgnoredUser] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingChannels, setLoadingChannels] = useState(false);
@@ -527,7 +303,6 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
 
   const saveNow = useCallback(async (nextLogs, quiet = false) => {
     if (!guildId) return;
-
     try {
       setSaving(true);
       setError('');
@@ -550,55 +325,44 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
   }, [guildId, saveNow]);
 
   const updateLogs = useCallback((updater) => {
-    setLogs((prev) => {
-      const next = normalizeLogs(typeof updater === 'function' ? updater(prev) : updater);
+    setLogs((previous) => {
+      const next = normalizeLogs(typeof updater === 'function' ? updater(previous) : updater);
       queueSave(next);
       return next;
     });
   }, [queueSave]);
 
   const loadResources = useCallback(async () => {
-    if (!guildId) return { channels: [], categories: [] };
-
+    if (!guildId) return [];
     setLoadingChannels(true);
     try {
       const first = normaliseResourcePayload(await api.request(`/api/discord/${guildId}/resources`).catch(() => ({})));
-      if (first.channels.length || first.categories.length) return first;
-
+      if (first.channels.length) return first.channels;
       const synced = normaliseResourcePayload(await api.request(`/api/discord/${guildId}/resources/sync`, { method: 'POST' }).catch(() => ({})));
-      if (synced.channels.length || synced.categories.length) return synced;
-
-      return { channels: cleanTextChannels(await api.getGuildChannels(guildId).catch(() => [])), categories: [] };
+      if (synced.channels.length) return synced.channels;
+      return cleanTextChannels(await api.getGuildChannels(guildId).catch(() => []));
     } finally {
       setLoadingChannels(false);
     }
   }, [guildId]);
 
   const refreshResources = useCallback(async () => {
-    const next = await loadResources();
-    setChannels(next.channels);
-    setCategories(next.categories);
-    if (!next.channels.length) {
-      setSaveMessage('⚠️ No text channels returned. Restart the bot/API or check bot guild access.');
-    }
-    return next;
+    const nextChannels = await loadResources();
+    setChannels(nextChannels);
+    if (!nextChannels.length) setSaveMessage('⚠️ No text channels returned. Check bot guild access.');
   }, [loadResources]);
 
   useEffect(() => {
     let mounted = true;
     loadedRef.current = false;
     clearTimeout(saveTimer.current);
-
-    setOpenPanels({ logging: false, settings: false });
-    setOpenSections({ adminLogs: false, discordLogs: false, generalLogs: false, modLogs: false, moduleLogs: false });
-    setOpenCategories(CATEGORY_OPEN_DEFAULTS);
+    setOpen(OPEN_DEFAULTS);
 
     async function loadData() {
       if (!guildId) {
         if (mounted) {
           setLogs(DEFAULT_LOGS);
           setChannels([]);
-          setCategories([]);
           setError('');
           setSaveMessage('');
           setLoading(false);
@@ -610,31 +374,25 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
         setLoading(true);
         setError('');
         setSaveMessage('');
-
-        const [logsRes, resourceList] = await Promise.all([
+        const [logsResponse, resourceList] = await Promise.all([
           api.getLogConfig(guildId),
           loadResources(),
         ]);
-
         if (!mounted) return;
-
-        setLogs(normalizeLogs(logsRes?.config || logsRes || {}));
-        setChannels(resourceList.channels);
-        setCategories(resourceList.categories);
+        setLogs(normalizeLogs(logsResponse?.config || logsResponse || {}));
+        setChannels(resourceList);
         loadedRef.current = true;
       } catch (err) {
         console.error(err);
         if (!mounted) return;
         setError(err.message || 'Failed to load logging settings.');
         setChannels([]);
-        setCategories([]);
       } finally {
         if (mounted) setLoading(false);
       }
     }
 
     loadData();
-
     return () => {
       mounted = false;
       clearTimeout(saveTimer.current);
@@ -644,213 +402,290 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
   useEffect(() => {
     if (!guildId) return undefined;
     joinGuildRoom(guildId);
-
-    return listenForGuildUpdate(guildId, 'logs', (data, payload = {}) => {
+    return listenForGuildUpdate('logs', (data, payload = {}) => {
       if (payload.source === 'dashboard') return;
       setLogs(normalizeLogs(data));
       setSaveMessage('🔄 Logs updated live.');
     });
   }, [guildId]);
 
-  const allItems = useMemo(() => CATEGORY_DATA.flatMap((category) => category.items), []);
   const filteredSections = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return LOG_SECTIONS;
-
     return LOG_SECTIONS
       .map((section) => ({
         ...section,
         categories: section.categories
           .map((category) => ({
             ...category,
-            items: category.items.filter((item) => (
-              section.label.toLowerCase().includes(term) ||
-              category.label.toLowerCase().includes(term) ||
-              item.label.toLowerCase().includes(term) ||
-              item.eventKey.toLowerCase().includes(term)
-            )),
+            items: category.items.filter((item) =>
+              [section.label, category.label, item.label, item.eventKey]
+                .some((value) => value.toLowerCase().includes(term))),
           }))
           .filter((category) => category.items.length || category.label.toLowerCase().includes(term)),
       }))
       .filter((section) => section.categories.length || section.label.toLowerCase().includes(term));
   }, [search]);
 
-  const enabledEvents = allItems.filter((item) => logs.events?.[item.eventKey] !== false).length;
-  const routedEvents = allItems.filter((item) => Boolean(logs.channels?.[item.channelKey])).length;
-  const configuredCategories = CATEGORY_DATA.filter((category) => Boolean(logs.channels?.[category.items[0]?.channelKey])).length;
+  const enabledEvents = ALL_ITEMS.filter((item) => logs.events?.[item.eventKey] !== false).length;
+  const routedEvents = ALL_ITEMS.filter((item) => Boolean(logs.channels?.[item.channelKey])).length;
+  const configuredCategories = CATEGORY_DATA.filter((category) => Boolean(logs.channels?.[category.defaultChannelKey])).length;
 
-  function setEnabled(enabled) {
-    updateLogs((prev) => ({ ...prev, enabled }));
-  }
+  const applyChannelToItems = useCallback((items, channelId) => {
+    updateLogs((current) => ({
+      ...current,
+      channels: {
+        ...current.channels,
+        ...Object.fromEntries(items.map((item) => [item.channelKey, channelId || null])),
+      },
+    }));
+  }, [updateLogs]);
 
-  function updateEvent(key, enabled) {
-    updateLogs((prev) => ({ ...prev, events: { ...prev.events, [key]: enabled } }));
-  }
+  const setItemsEnabled = useCallback((items, enabled) => {
+    updateLogs((current) => ({
+      ...current,
+      events: {
+        ...current.events,
+        ...Object.fromEntries(items.map((item) => [item.eventKey, enabled])),
+      },
+    }));
+  }, [updateLogs]);
 
-  function updateSetting(key, value) {
-    updateLogs((prev) => ({ ...prev, settings: { ...prev.settings, [key]: value } }));
-  }
-
-  function setAllCategories(channelId) {
-    updateLogs((prev) => {
-      const next = { ...prev.channels };
-      allItems.forEach((item) => { next[item.channelKey] = channelId || null; });
-      return { ...prev, channels: next };
-    });
-  }
-
-  function setCategoryDestination(category, channelId) {
-    updateLogs((prev) => {
-      const next = { ...prev.channels, [category.defaultChannelKey]: channelId || null };
-      category.items.forEach((item) => { next[item.channelKey] = channelId || null; });
-      return { ...prev, channels: next };
-    });
-  }
-
-  function setCategoryEvents(category, enabled) {
-    updateLogs((prev) => {
-      const next = { ...prev.events };
-      category.items.forEach((item) => { next[item.eventKey] = enabled; });
-      return { ...prev, events: next };
-    });
-  }
-
-  function isCategoryEnabled(category) {
-    return category.items.every((item) => logs.events?.[item.eventKey] !== false);
-  }
-
-  function setAllEvents(enabled) {
-    updateLogs((prev) => {
-      const next = { ...prev.events };
-      allItems.forEach((item) => { next[item.eventKey] = enabled; });
-      return { ...prev, events: next };
-    });
-  }
-
-  function addIgnoredUser() {
-    const value = ignoredUser.trim();
-    if (!value) return;
-    updateSetting('ignoredUsers', Array.from(new Set([...(logs.settings.ignoredUsers || []), value])));
+  const addIgnoredUser = useCallback(() => {
+    const userId = ignoredUser.trim();
+    if (!userId) return;
+    updateLogs((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        ignoredUsers: [...new Set([...current.settings.ignoredUsers, userId])],
+      },
+    }));
     setIgnoredUser('');
+  }, [ignoredUser, updateLogs]);
+
+  if (!guildId) {
+    return (
+      <PageShell title="Logging" subtitle="Select a server to configure logging." theme={theme}>
+        <EmptyState theme={theme} title="No server selected" description="Choose a server to manage its logging configuration." />
+      </PageShell>
+    );
+  }
+
+  if (loading) {
+    return (
+      <PageShell title="Logging" subtitle="Loading logging configuration." theme={theme} guild={{ id: guildId, name: 'Logging' }}>
+        <LoadingPanel theme={theme} label="Loading logging settings..." />
+      </PageShell>
+    );
   }
 
   return (
     <PageShell
       title="Logging"
-      subtitle="Configure server logging channels, grouped by Discord category."
+      subtitle="Route Discord and module events to channels and control what Goliath records."
       theme={theme}
-      guild={{ id: guildId, name: selectedGuildData?.name || selectedGuildData?.guildName || selectedGuild?.name || selectedGuild?.guildName || 'Logging' }}
-      actions={<><Toggle checked={logs.enabled} onChange={setEnabled} disabled={!guildId || saving} /><PrimaryButton onClick={() => saveNow(logs)} disabled={!guildId || saving}>{saving ? 'Saving...' : 'Save Now'}</PrimaryButton></>}
+      guild={{ id: guildId, name: 'Logging' }}
+      actions={(
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Button theme={theme} onClick={refreshResources} disabled={loadingChannels}>
+            {loadingChannels ? 'Refreshing...' : 'Refresh Channels'}
+          </Button>
+          <PrimaryButton theme={theme} onClick={() => saveNow(logs)} disabled={saving}>
+            {saving ? 'Saving...' : 'Save Now'}
+          </PrimaryButton>
+        </div>
+      )}
     >
-      <style>{logsCss}</style>
+      <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
+        {error ? <Notice theme={theme} tone="danger">{error}</Notice> : null}
+        {saveMessage ? <Notice theme={theme}>{saveMessage}</Notice> : null}
 
-      {!guildId ? <EmptyState theme={theme} title="Select a guild" text="Select a guild to manage logging." /> : null}
-      {error ? <Notice theme={theme} tone="danger">{error}</Notice> : null}
-      {saveMessage ? <Notice theme={theme} tone={saveMessage.startsWith('❌') || saveMessage.startsWith('⚠️') ? 'danger' : 'success'}>{saveMessage}</Notice> : null}
-      {guildId && loading ? <LoadingPanel theme={theme} text="Loading logging page..." /> : null}
+        <StatGrid>
+          <SummaryStat theme={theme} label="Logging" value={logs.enabled ? 'Enabled' : 'Disabled'} />
+          <SummaryStat theme={theme} label="Enabled Events" value={`${enabledEvents}/${ALL_ITEMS.length}`} />
+          <SummaryStat theme={theme} label="Routed Events" value={routedEvents} />
+          <SummaryStat theme={theme} label="Configured Categories" value={`${configuredCategories}/${CATEGORY_DATA.length}`} />
+        </StatGrid>
 
-      {guildId && !loading ? (
-        <div className="logs-page" style={{ display: 'grid', gap: 16 }}>
-          <StatGrid min="170px">
-            <SummaryStat theme={theme} label="Logging" value={logs.enabled ? 'Enabled' : 'Disabled'} accent={logs.enabled ? theme.success : theme.danger} description="Global logging state" />
-            <SummaryStat theme={theme} label="Types Enabled" value={`${enabledEvents}/${allItems.length}`} accent="#60a5fa" description="Tracked log types" />
-            <SummaryStat theme={theme} label="Types Routed" value={routedEvents} accent="#f59e0b" description="Types with a destination" />
-            <SummaryStat theme={theme} label="Text Channels" value={channels.length} accent="#22c55e" description="Log destinations available" />
-            <SummaryStat theme={theme} label="Categories" value={`${configuredCategories}/${CATEGORY_DATA.length}`} accent="#a78bfa" description="Configured destinations" />
-          </StatGrid>
+        <Card theme={theme}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <h2 style={{ margin: 0, color: theme.cardText, fontSize: 18 }}>Master Logging</h2>
+              <p style={{ margin: '5px 0 0', color: theme.mutedText, fontSize: 13 }}>Enable or disable all logging for this server.</p>
+            </div>
+            <Toggle checked={logs.enabled} onChange={(enabled) => updateLogs((current) => ({ ...current, enabled }))} />
+          </div>
+        </Card>
 
-          <section style={{ background: 'linear-gradient(180deg, rgba(8,15,30,0.98), rgba(6,12,24,0.98))', border: `1px solid ${theme.cardBorder}`, borderRadius: 22, boxShadow: theme.shadow, overflow: 'hidden' }}>
-            <button data-disclosure-button type="button" aria-expanded={openPanels.logging} title={tooltipHint(openPanels.logging)} onClick={() => setOpenPanels((prev) => ({ ...prev, logging: !prev.logging }))} style={{ width: '100%', border: 0, background: 'transparent', color: theme.cardText, padding: 'clamp(16px, 2vw, 22px)', display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', cursor: 'pointer', textAlign: 'left' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 12, fontWeight: 950, fontSize: 26 }}><span style={{ width: 36, height: 36, borderRadius: 10, display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,0.08)' }}>▰</span>Logging</span>
-              <span data-disclosure-hint style={{ color: theme.mutedText, fontWeight: 950 }}>{hint(openPanels.logging)}</span>
-            </button>
+        <Card theme={theme}>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <h2 style={{ margin: 0, color: theme.cardText, fontSize: 18 }}>Bulk Routing</h2>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <ChannelSelect theme={theme} channels={channels} value={bulkChannel} onChange={setBulkChannel} disabled={!logs.enabled} />
+              <Button theme={theme} onClick={() => applyChannelToItems(ALL_ITEMS, bulkChannel)} disabled={!logs.enabled}>Apply to All Events</Button>
+              <Button theme={theme} onClick={() => setItemsEnabled(ALL_ITEMS, true)} disabled={!logs.enabled}>Enable All</Button>
+              <Button theme={theme} onClick={() => setItemsEnabled(ALL_ITEMS, false)} disabled={!logs.enabled}>Disable All</Button>
+            </div>
+          </div>
+        </Card>
 
-            {openPanels.logging ? (
-              <div style={{ display: 'grid', gap: 18, padding: '0 clamp(16px, 2vw, 22px) clamp(16px, 2vw, 22px)' }}>
-                <div className="logs-bulk-row" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <ChannelPicker theme={theme} channels={channels} categories={categories} value={bulkChannel} contextLabel="All logs" onChange={setBulkChannel} onRefresh={refreshResources} loadingChannels={loadingChannels} />
-                  <Button theme={theme} onClick={() => setAllCategories(bulkChannel)} disabled={!bulkChannel}>Apply to all logs</Button>
-                  <Button theme={theme} onClick={() => setAllCategories(null)}>Clear destinations</Button>
-                  <Button theme={theme} onClick={() => setAllEvents(true)}>Enable all</Button>
-                  <Button theme={theme} onClick={() => setAllEvents(false)}>Disable all</Button>
-                  <Button theme={theme} onClick={refreshResources} disabled={loadingChannels}>{loadingChannels ? 'Refreshing...' : 'Refresh Channels'}</Button>
-                </div>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search logging events..."
+          style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, color: theme.cardText, borderRadius: 12, padding: '12px 14px', fontSize: 14 }}
+        />
 
-                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search log groups or events" style={{ width: '100%', border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.86)', color: theme.cardText, borderRadius: 12, padding: '13px 14px', outline: 'none', fontWeight: 850 }} />
+        {filteredSections.map((section) => {
+          const sectionOpen = open[section.key] || Boolean(search.trim());
+          const sectionItems = section.categories.flatMap((category) => category.items);
+          return (
+            <Card key={section.key} theme={theme}>
+              <button
+                type="button"
+                onClick={() => setOpen((current) => ({ ...current, [section.key]: !sectionOpen }))}
+                style={{ border: 0, background: 'transparent', padding: 0, color: 'inherit', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', gap: 14 }}
+              >
+                <span>
+                  <strong style={{ display: 'block', color: theme.cardText, fontSize: 17 }}>{section.label}</strong>
+                  <span style={{ display: 'block', marginTop: 5, color: theme.mutedText, fontSize: 13 }}>{section.description}</span>
+                </span>
+                <span style={{ color: theme.mutedText }}>{sectionOpen ? '▲' : '▼'}</span>
+              </button>
 
-                <div style={{ display: 'grid', gap: 14 }}>
-                  {filteredSections.map((section) => {
-                    const sectionOpen = Boolean(openSections[section.key]);
-                    const sectionItems = section.categories.flatMap((category) => category.items);
-                    const activeCount = sectionItems.filter((item) => logs.events?.[item.eventKey] !== false).length;
+              {sectionOpen ? (
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <Button theme={theme} onClick={() => setItemsEnabled(sectionItems, true)} disabled={!logs.enabled}>Enable Section</Button>
+                    <Button theme={theme} onClick={() => setItemsEnabled(sectionItems, false)} disabled={!logs.enabled}>Disable Section</Button>
+                  </div>
 
+                  {section.categories.map((category) => {
+                    const categoryOpen = open[category.key] || Boolean(search.trim());
+                    const categoryChannel = logs.channels?.[category.defaultChannelKey] || '';
                     return (
-                      <div key={section.key} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 18, overflow: 'hidden', background: 'rgba(15,23,42,0.38)' }}>
-                        <button type="button" aria-expanded={sectionOpen} title={tooltipHint(sectionOpen)} onClick={() => setOpenSections((prev) => ({ ...prev, [section.key]: !sectionOpen }))} style={{ width: '100%', border: 0, background: 'rgba(15,23,42,0.84)', color: theme.cardText, padding: '15px 16px', display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', cursor: 'pointer', textAlign: 'left' }}>
-                          <span style={{ display: 'grid', gap: 4 }}><strong style={{ fontSize: 18 }}>{section.label}</strong><span style={{ color: theme.mutedText, fontSize: 13, lineHeight: 1.4 }}>{section.description}</span></span>
-                          <span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 950, whiteSpace: 'nowrap' }}>{activeCount}/{sectionItems.length}</span>
-                        </button>
+                      <div key={category.key} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 14, overflow: 'hidden' }}>
+                        <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', background: theme.softBg }}>
+                          <button
+                            type="button"
+                            onClick={() => setOpen((current) => ({ ...current, [category.key]: !categoryOpen }))}
+                            style={{ border: 0, background: 'transparent', color: theme.cardText, fontWeight: 900, cursor: 'pointer', padding: 0 }}
+                          >
+                            {categoryOpen ? '▲' : '▼'} {category.label}
+                          </button>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <ChannelSelect
+                              theme={theme}
+                              channels={channels}
+                              value={categoryChannel}
+                              disabled={!logs.enabled}
+                              onChange={(channelId) => updateLogs((current) => ({
+                                ...current,
+                                channels: {
+                                  ...current.channels,
+                                  [category.defaultChannelKey]: channelId,
+                                  ...Object.fromEntries(category.items.map((item) => [item.channelKey, channelId])),
+                                },
+                              }))}
+                            />
+                            <Button theme={theme} onClick={() => setItemsEnabled(category.items, true)} disabled={!logs.enabled}>Enable</Button>
+                            <Button theme={theme} onClick={() => setItemsEnabled(category.items, false)} disabled={!logs.enabled}>Disable</Button>
+                          </div>
+                        </div>
 
-                        {sectionOpen ? (
-                          <div style={{ display: 'grid', gap: 12, padding: 14 }}>
-                            {section.categories.map((category) => {
-                              const categoryOpen = Boolean(openCategories[category.key]);
-                              const firstChannel = logs.channels?.[category.items[0]?.channelKey] || '';
-                              const categoryEnabled = isCategoryEnabled(category);
-                              const categoryActiveCount = category.items.filter((item) => logs.events?.[item.eventKey] !== false).length;
-                              const pickerLabel = `${section.label} / ${category.label}`;
-
-                              return (
-                                <div key={category.key} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 14, overflow: 'hidden', background: 'rgba(6,12,24,0.40)' }}>
-                                  <div className="logs-category-head">
-                                    <button type="button" aria-expanded={categoryOpen} title={tooltipHint(categoryOpen)} onClick={() => setOpenCategories((prev) => ({ ...prev, [category.key]: !categoryOpen }))} style={{ border: 0, background: 'transparent', color: theme.cardText, padding: 0, cursor: 'pointer', textAlign: 'left', display: 'grid', gap: 3 }}><strong>{category.label}</strong><span style={{ color: theme.mutedText, fontSize: 12 }}>{categoryActiveCount}/{category.items.length} enabled</span></button>
-                                    <div className="logs-category-controls">
-                                      <ChannelPicker theme={theme} channels={channels} categories={categories} value={firstChannel} contextLabel={pickerLabel} onChange={(value) => setCategoryDestination(category, value)} onRefresh={refreshResources} loadingChannels={loadingChannels} />
-                                      <Toggle checked={categoryEnabled} onChange={(value) => setCategoryEvents(category, value)} />
-                                    </div>
-                                  </div>
-
-                                  {categoryOpen ? (
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,230px),1fr))', gap: 8, padding: '0 12px 12px' }}>
-                                      {category.items.map((item) => {
-                                        const enabled = logs.events?.[item.eventKey] !== false;
-                                        return <button key={item.eventKey} type="button" onClick={() => updateEvent(item.eventKey, !enabled)} style={{ border: `1px solid ${enabled ? 'rgba(59,130,246,0.32)' : theme.cardBorder}`, background: enabled ? 'rgba(59,130,246,0.12)' : 'rgba(15,23,42,0.44)', color: enabled ? theme.cardText : theme.mutedText, borderRadius: 10, padding: '9px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 900, textAlign: 'left' }}>{item.label}</button>;
-                                      })}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
+                        {categoryOpen ? (
+                          <div style={{ display: 'grid' }}>
+                            {category.items.map((item) => (
+                              <div key={item.eventKey} style={{ padding: 12, display: 'grid', gridTemplateColumns: 'minmax(170px, 1fr) minmax(180px, 230px) auto', gap: 10, alignItems: 'center', borderTop: `1px solid ${theme.cardBorder}` }}>
+                                <span style={{ color: theme.cardText, fontSize: 13, fontWeight: 800 }}>{item.label}</span>
+                                <ChannelSelect
+                                  theme={theme}
+                                  channels={channels}
+                                  value={logs.channels?.[item.channelKey] || ''}
+                                  disabled={!logs.enabled}
+                                  onChange={(channelId) => updateLogs((current) => ({
+                                    ...current,
+                                    channels: { ...current.channels, [item.channelKey]: channelId },
+                                  }))}
+                                />
+                                <Toggle
+                                  checked={logs.events?.[item.eventKey] !== false}
+                                  disabled={!logs.enabled}
+                                  onChange={(enabled) => updateLogs((current) => ({
+                                    ...current,
+                                    events: { ...current.events, [item.eventKey]: enabled },
+                                  }))}
+                                />
+                              </div>
+                            ))}
                           </div>
                         ) : null}
                       </div>
                     );
                   })}
                 </div>
-              </div>
-            ) : null}
-          </section>
+              ) : null}
+            </Card>
+          );
+        })}
 
-          <section style={{ background: 'linear-gradient(180deg, rgba(8,15,30,0.98), rgba(6,12,24,0.98))', border: `1px solid ${theme.cardBorder}`, borderRadius: 22, boxShadow: theme.shadow, overflow: 'hidden' }}>
-            <button data-disclosure-button type="button" aria-expanded={openPanels.settings} title={tooltipHint(openPanels.settings)} onClick={() => setOpenPanels((prev) => ({ ...prev, settings: !prev.settings }))} style={{ width: '100%', border: 0, background: 'transparent', color: theme.cardText, padding: 'clamp(16px, 2vw, 22px)', display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', cursor: 'pointer', textAlign: 'left' }}>
-              <h2 style={{ margin: 0, fontSize: 22 }}>Logging Settings</h2>
-              <span data-disclosure-hint style={{ color: theme.mutedText, fontWeight: 950 }}>{hint(openPanels.settings)}</span>
-            </button>
-
-            {openPanels.settings ? (
-              <div style={{ display: 'grid', gap: 10, padding: '0 clamp(16px, 2vw, 22px) clamp(16px, 2vw, 22px)' }}>
-                {SETTINGS.map(([key, title, text]) => <SettingRow key={key} theme={theme} title={title} text={text} checked={Boolean(logs.settings[key])} onChange={(value) => updateSetting(key, value)} />)}
-                <div style={{ background: 'rgba(15,23,42,0.72)', border: `1px solid ${theme.cardBorder}`, borderRadius: 14, padding: 16, display: 'grid', gap: 10 }}>
-                  <h3 style={{ margin: 0, color: theme.cardText, fontSize: 16, fontWeight: 950 }}>Ignore users</h3>
-                  <p style={{ margin: 0, color: theme.mutedText, fontSize: 13 }}>Actions from users listed below are ignored from Logging.</p>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><input value={ignoredUser} onChange={(event) => setIgnoredUser(event.target.value)} placeholder="User ID" style={{ flex: '1 1 260px', border: `1px solid ${theme.cardBorder}`, background: 'rgba(6,12,24,0.9)', color: theme.cardText, borderRadius: 10, padding: '10px 12px', outline: 'none' }} /><PrimaryButton onClick={addIgnoredUser}>Add</PrimaryButton></div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{logs.settings.ignoredUsers.length ? logs.settings.ignoredUsers.map((value) => <button key={value} type="button" onClick={() => updateSetting('ignoredUsers', logs.settings.ignoredUsers.filter((item) => item !== value))} style={{ border: `1px solid ${theme.cardBorder}`, background: theme.softBg, color: theme.cardText, borderRadius: 999, padding: '7px 10px', cursor: 'pointer', fontWeight: 850 }}>{value} ×</button>) : <span style={{ color: theme.mutedText, fontWeight: 800 }}>No users added</span>}</div>
-                </div>
+        <Card theme={theme}>
+          <h2 style={{ margin: 0, color: theme.cardText, fontSize: 18 }}>Logging Settings</h2>
+          {SETTINGS.map(([key, title, description]) => (
+            <div key={key} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', borderTop: `1px solid ${theme.cardBorder}`, paddingTop: 12 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <strong style={{ color: theme.cardText, fontSize: 14 }}>{title}</strong>
+                <p style={{ margin: '4px 0 0', color: theme.mutedText, fontSize: 13 }}>{description}</p>
               </div>
-            ) : null}
-          </section>
-        </div>
-      ) : null}
+              <Toggle
+                checked={Boolean(logs.settings?.[key])}
+                disabled={!logs.enabled}
+                onChange={(enabled) => updateLogs((current) => ({
+                  ...current,
+                  settings: { ...current.settings, [key]: enabled },
+                }))}
+              />
+            </div>
+          ))}
+        </Card>
+
+        <Card theme={theme}>
+          <h2 style={{ margin: 0, color: theme.cardText, fontSize: 18 }}>Ignored Users</h2>
+          <p style={{ margin: 0, color: theme.mutedText, fontSize: 13 }}>Add Discord user IDs that should be excluded from logging.</p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <input
+              value={ignoredUser}
+              onChange={(event) => setIgnoredUser(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') addIgnoredUser();
+              }}
+              placeholder="Discord user ID"
+              style={{ flex: '1 1 220px', border: `1px solid ${theme.cardBorder}`, background: theme.softBg, color: theme.cardText, borderRadius: 10, padding: '10px 12px' }}
+            />
+            <Button theme={theme} onClick={addIgnoredUser} disabled={!logs.enabled || !ignoredUser.trim()}>Add User</Button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {logs.settings.ignoredUsers.length ? logs.settings.ignoredUsers.map((userId) => (
+              <button
+                key={userId}
+                type="button"
+                onClick={() => updateLogs((current) => ({
+                  ...current,
+                  settings: {
+                    ...current.settings,
+                    ignoredUsers: current.settings.ignoredUsers.filter((id) => id !== userId),
+                  },
+                }))}
+                style={{ border: `1px solid ${theme.cardBorder}`, background: theme.softBg, color: theme.cardText, borderRadius: 999, padding: '8px 11px', cursor: 'pointer' }}
+                title="Remove ignored user"
+              >
+                {userId} ×
+              </button>
+            )) : <span style={{ color: theme.mutedText, fontSize: 13 }}>No ignored users configured.</span>}
+          </div>
+        </Card>
+      </div>
     </PageShell>
   );
 }

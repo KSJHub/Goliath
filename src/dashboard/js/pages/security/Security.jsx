@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient';
-import { joinGuildRoom, onSocketEvent } from '../../services/socketClient';
+import { joinGuildRoom, listenForGuildUpdate } from '../../services/socketClient';
 import PremiumLock from '../../shared/PremiumLock.jsx';
 import PageShell, { SectionCard, StatGrid, SummaryStat, EmptyState, LoadingPanel, Notice } from '../../shared/PageShell';
 
@@ -16,6 +16,12 @@ const INITIAL_STATE = {
   protectionModules: [],
   monitors: {},
 };
+
+function getGuildId(guild) {
+  if (!guild) return '';
+  if (typeof guild === 'string' || typeof guild === 'number') return String(guild).trim();
+  return String(guild.id || guild.guildId || '').trim();
+}
 
 function getGuildAvatar(guild) {
   return guild?.iconUrl || guild?.iconURL || guild?.avatarUrl || guild?.image || '';
@@ -89,13 +95,13 @@ function AdvancedSecurityLock({ theme, entitlements }) {
 }
 
 export default function Security({ selectedGuild, selectedGuildId, theme, guilds = [] }) {
-  const activeGuildId = selectedGuildId || selectedGuild || '';
+  const activeGuildId = getGuildId(selectedGuildId || selectedGuild);
   const [loading, setLoading] = useState(true);
   const [entitlementsLoading, setEntitlementsLoading] = useState(false);
   const [entitlements, setEntitlements] = useState(null);
   const [data, setData] = useState(INITIAL_STATE);
 
-  const selectedGuildData = useMemo(() => guilds.find((guild) => String(guild.id) === String(activeGuildId)) || null, [guilds, activeGuildId]);
+  const selectedGuildData = useMemo(() => guilds.find((guild) => String(guild.id) === activeGuildId) || null, [guilds, activeGuildId]);
   const pageGuild = useMemo(() => ({ id: activeGuildId, name: selectedGuildData?.name || 'Security Center', iconUrl: getGuildAvatar(selectedGuildData) }), [activeGuildId, selectedGuildData]);
   const hasAdvancedSecurity = hasFeature(entitlements, 'security.advanced');
 
@@ -141,7 +147,7 @@ export default function Security({ selectedGuild, selectedGuildId, theme, guilds
   useEffect(() => {
     if (!activeGuildId) return undefined;
     joinGuildRoom(activeGuildId);
-    const unsubscribe = onSocketEvent('guild:update', (update) => {
+    return listenForGuildUpdate('security', (update) => {
       if (!update) return;
       if (update.type === 'security:event' && update.incident) {
         setData((previous) => {
@@ -153,7 +159,6 @@ export default function Security({ selectedGuild, selectedGuildId, theme, guilds
       if (update.type === 'security:lockdown') setData((previous) => ({ ...previous, lockdown: { ...(previous.lockdown || {}), ...(update.lockdown || {}) } }));
       if (update.type === 'security:quarantine') setData((previous) => ({ ...previous, quarantine: { ...(previous.quarantine || {}), ...(update.quarantine || {}) } }));
     });
-    return () => unsubscribe();
   }, [activeGuildId]);
 
   const quarantineCount = Number(data.quarantineCount ?? Object.keys(data.quarantine?.users || {}).length);

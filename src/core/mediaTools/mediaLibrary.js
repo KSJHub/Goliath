@@ -1,7 +1,7 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { MEDIA_ROOT } = require('./mediaConfig');
 
@@ -59,11 +59,12 @@ function writeLibrary(guildId, library) {
 
 function addAsset(guildId, asset) {
   const library = readLibrary(guildId);
+  const cleanGuildId = assertGuildId(guildId);
   const nextAsset = {
-    id: asset.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    guildId: assertGuildId(guildId),
-    createdAt: asset.createdAt || new Date().toISOString(),
     ...asset,
+    id: asset?.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    guildId: cleanGuildId,
+    createdAt: asset?.createdAt || new Date().toISOString(),
   };
 
   const assets = [nextAsset, ...library.assets.filter((item) => item.id !== nextAsset.id)];

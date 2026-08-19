@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { resolveRuntimePath } = require('../../config/runtimePaths');
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -14,9 +15,7 @@ const RESTORE_REQUEST_VERSION = '1E_RISK_APPROVAL_UI';
 
 const BOT_MODE = (process.env.BOT_MODE || 'DEV').toLowerCase();
 
-const RUNTIME_ROOT = path.join(process.cwd(), 'src', 'runtime', BOT_MODE);
-
-const RESTORE_DIR = path.join(RUNTIME_ROOT, 'recovery', 'restoreRequests');
+const RESTORE_DIR = resolveRuntimePath(BOT_MODE, 'recovery', 'restoreRequests');
 
 const PENDING_FILE = path.join(RESTORE_DIR, 'pending.json');
 const HISTORY_FILE = path.join(RESTORE_DIR, 'history.json');

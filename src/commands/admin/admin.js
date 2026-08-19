@@ -1,8 +1,10 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 
 const { buildAdminPanel } = require('../../core/admin/functions/adminPanel');
+const socialStudioPanel = require('../../modules/socialStudio/socialAlerts/socialStudioPanel');
 const { errorEmbed } = require('../../core/ui/embeds');
-const { enforceCommandAccess } = require('../../core/ui/commandAccess');
+const { enforceCommandAccess } = require('../../core/commands/commandAccess');
+const security = require('../../core/security/securityCore');
 
 module.exports = {
   category: 'Admin',
@@ -21,13 +23,9 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('admin')
     .setDescription('Open Goliath admin controls and server tools')
-    .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDMPermission(false),
 
   async execute(interaction) {
-    const denied = await enforceCommandAccess(interaction, module.exports);
-    if (denied) return;
-
     try {
       if (!interaction.guild) {
         return await safeReply(interaction, {
@@ -40,6 +38,16 @@ module.exports = {
         interaction.user?.displayName ||
         interaction.user?.username ||
         'Unknown User';
+
+      const isFullAdmin = security.hasPermission(interaction, 'admin');
+      const canManageSocial = typeof socialStudioPanel.canManageSocialStudio === 'function' && socialStudioPanel.canManageSocialStudio(interaction);
+      if (!isFullAdmin && canManageSocial) {
+        const payload = socialStudioPanel.buildSocialAdminPanel(interaction.guild, memberDisplayName);
+        return await safeReply(interaction, payload);
+      }
+
+      const denied = await enforceCommandAccess(interaction, module.exports);
+      if (denied) return;
 
       const payload = buildAdminPanel(interaction.guild, memberDisplayName);
 

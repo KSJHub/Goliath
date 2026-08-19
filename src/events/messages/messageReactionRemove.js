@@ -1,8 +1,10 @@
 'use strict';
 
-const { handleReactionRemove } = require('../../modules/reactionroles/reactionRoles');
-const { leaveGiveaway } = require('../../modules/giveaways/giveawayManager');
-const { handleStarReactionRemove } = require('../../modules/starboard/starboardManager');
+const { handleReactionRemove } = require('../../modules/roleStudio/reactionRoles/reactionRoles');
+const { leaveGiveawayReaction } = require('../../modules/communityStudio/giveaways/giveawaysManager');
+const giveawaysStore = require('../../modules/communityStudio/giveaways/giveawaysStore');
+const { handleStarReactionRemove } = require('../../modules/messageStudio/starboard/starboard');
+const starboardStore = require('../../modules/messageStudio/starboard/starboardStore');
 const { isModuleEnabled } = require('../../core/guild/guildManager');
 
 async function getReactionGuildId(reaction) {
@@ -11,16 +13,32 @@ async function getReactionGuildId(reaction) {
   return reaction?.message?.guild?.id || null;
 }
 
+async function runHandler(label, handler) {
+  try {
+    await handler();
+  } catch (error) {
+    console.error(`[EVENT: messageReactionRemove] ${label} failed:`, error);
+  }
+}
+
 module.exports = {
   name: 'messageReactionRemove',
   async execute(reaction, user, client) {
-    try {
-      const guildId = await getReactionGuildId(reaction);
-      await handleReactionRemove(reaction, user, client);
-      if (isModuleEnabled(guildId, 'giveaways')) await leaveGiveaway(reaction, user, client);
-      if (isModuleEnabled(guildId, 'starboard')) await handleStarReactionRemove(reaction, user, client);
-    } catch (error) {
-      console.error('[EVENT: messageReactionRemove]', error);
+    const guildId = await getReactionGuildId(reaction).catch((error) => {
+      console.error('[EVENT: messageReactionRemove] Failed to resolve guild:', error);
+      return null;
+    });
+
+    if (!guildId) return;
+
+    if (isModuleEnabled(guildId, 'reactionRoles')) {
+      await runHandler('Reaction Roles', () => handleReactionRemove(reaction, user, client));
+    }
+    if (giveawaysStore.isEnabled(guildId)) {
+      await runHandler('Giveaways', () => leaveGiveawayReaction(reaction, user));
+    }
+    if (starboardStore.isEnabled(guildId)) {
+      await runHandler('Starboard', () => handleStarReactionRemove(reaction, user));
     }
   },
 };

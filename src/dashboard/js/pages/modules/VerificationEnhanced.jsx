@@ -4,8 +4,24 @@ import EmptyState from '../../shared/EmptyState.jsx';
 import { api } from '../../services/apiClient.js';
 import { ChannelSelect, RoleSelect } from '../../ui/DiscordResourceSelects.jsx';
 
+const DEFAULT_PANEL_DRAFT = Object.freeze({
+  channelId: '',
+  title: 'Server Verification',
+  description: 'Press the button below to verify and unlock the server.',
+  color: '#57f287',
+  footer: 'Goliath Verification',
+  buttonLabel: 'Verify',
+  buttonEmoji: '',
+  buttonStyle: 'success',
+  imageUrl: '',
+  thumbnailUrl: '',
+});
+
 function guildIdFrom(selectedGuild, selectedGuildData) {
-  return String(selectedGuildData?.guildId || selectedGuildData?.id || selectedGuild || '').split(':').pop().trim();
+  return String(selectedGuildData?.guildId || selectedGuildData?.id || selectedGuild || '')
+    .split(':')
+    .pop()
+    .trim();
 }
 
 function list(payload, key) {
@@ -13,6 +29,22 @@ function list(payload, key) {
   if (Array.isArray(payload?.[key])) return payload[key];
   if (Array.isArray(payload?.data)) return payload.data;
   return [];
+}
+
+function panelDraft(panel, moduleConfig, adminConfig) {
+  const template = panel || moduleConfig.panelTemplate || {};
+  return {
+    channelId: panel?.channelId || adminConfig.verificationChannelId || DEFAULT_PANEL_DRAFT.channelId,
+    title: template.title || DEFAULT_PANEL_DRAFT.title,
+    description: template.description || DEFAULT_PANEL_DRAFT.description,
+    color: template.color || DEFAULT_PANEL_DRAFT.color,
+    footer: template.footer || DEFAULT_PANEL_DRAFT.footer,
+    buttonLabel: template.buttonLabel || DEFAULT_PANEL_DRAFT.buttonLabel,
+    buttonEmoji: template.buttonEmoji || DEFAULT_PANEL_DRAFT.buttonEmoji,
+    buttonStyle: template.buttonStyle || DEFAULT_PANEL_DRAFT.buttonStyle,
+    imageUrl: template.imageUrl || DEFAULT_PANEL_DRAFT.imageUrl,
+    thumbnailUrl: template.thumbnailUrl || DEFAULT_PANEL_DRAFT.thumbnailUrl,
+  };
 }
 
 function buttonStyle(theme, tone = 'default') {
@@ -69,18 +101,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   const [roles, setRoles] = useState([]);
   const [channels, setChannels] = useState([]);
   const [selectedPanelId, setSelectedPanelId] = useState('');
-  const [draft, setDraft] = useState({
-    channelId: '',
-    title: 'Server Verification',
-    description: 'Press the button below to verify and unlock the server.',
-    color: '#57f287',
-    footer: 'Goliath Verification',
-    buttonLabel: 'Verify',
-    buttonEmoji: '',
-    buttonStyle: 'success',
-    imageUrl: '',
-    thumbnailUrl: '',
-  });
+  const [draft, setDraft] = useState(() => ({ ...DEFAULT_PANEL_DRAFT }));
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -97,25 +118,19 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   const moduleConfig = data?.moduleConfig || {};
   const adminConfig = data?.adminConfig || {};
   const settings = moduleConfig.settings || {};
-  const panels = data?.status?.panels || Object.values(moduleConfig.panels || {});
+  const panels = useMemo(
+    () => data?.status?.panels || Object.values(moduleConfig.panels || {}),
+    [data?.status?.panels, moduleConfig.panels]
+  );
   const analytics = data?.status?.analytics || moduleConfig.analytics || {};
   const health = data?.health || null;
-  const usableRoles = roles.filter((role) => String(role.id) !== String(guildId));
+  const usableRoles = useMemo(
+    () => roles.filter((role) => String(role.id) !== String(guildId)),
+    [roles, guildId]
+  );
 
   function applyPanel(panel) {
-    const template = panel || moduleConfig.panelTemplate || {};
-    setDraft({
-      channelId: panel?.channelId || adminConfig.verificationChannelId || '',
-      title: template.title || 'Server Verification',
-      description: template.description || 'Press the button below to verify and unlock the server.',
-      color: template.color || '#57f287',
-      footer: template.footer || 'Goliath Verification',
-      buttonLabel: template.buttonLabel || 'Verify',
-      buttonEmoji: template.buttonEmoji || '',
-      buttonStyle: template.buttonStyle || 'success',
-      imageUrl: template.imageUrl || '',
-      thumbnailUrl: template.thumbnailUrl || '',
-    });
+    setDraft(panelDraft(panel, moduleConfig, adminConfig));
   }
 
   async function load() {
@@ -134,7 +149,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       const currentPanels = overview?.status?.panels || [];
       const current = currentPanels.find((panel) => String(panel.panelId) === String(selectedPanelId)) || currentPanels[0] || null;
       if (current && !selectedPanelId) setSelectedPanelId(current.panelId || current.id || '');
-      applyPanel(current);
+      setDraft(panelDraft(current, overview?.moduleConfig || {}, overview?.adminConfig || {}));
     } catch (loadError) {
       setError(loadError.message || 'Failed to load verification.');
     } finally {

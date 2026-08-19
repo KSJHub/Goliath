@@ -2,8 +2,9 @@
 
 const { SlashCommandBuilder } = require('discord.js');
 
-const translationStore = require('../../modules/translation/translationStore');
-const translationManager = require('../../modules/translation/translationManager');
+const translationStore = require('../../modules/utilityStudio/translation/translationStore');
+const translation = require('../../modules/utilityStudio/translation/translation');
+const { isModuleEnabled } = require('../../core/guild/guildManager');
 
 async function reply(interaction, payload) {
   const data = { ...payload, flags: 64 };
@@ -47,7 +48,7 @@ module.exports = {
     const guildId = interaction.guildId;
     const config = translationStore.getTranslationSection(guildId);
 
-    if (config.enabled !== true) {
+    if (!isModuleEnabled(guildId, 'translation')) {
       await reply(interaction, {
         content: '⚠️ Translation is not enabled in this server yet. Ask an admin to run `/translation enable`.',
       });
@@ -55,14 +56,14 @@ module.exports = {
     }
 
     const text = interaction.options.getString('text', true);
-    const targetLanguage = translationManager.normalizeLanguage(
+    const targetLanguage = translation.normalizeLanguage(
       interaction.options.getString('target') || config.settings?.defaultTargetLanguage || 'en'
     );
-    const sourceLanguage = translationManager.normalizeLanguage(
+    const sourceLanguage = translation.normalizeLanguage(
       interaction.options.getString('source') || config.settings?.defaultSourceLanguage || 'auto'
     );
 
-    const result = await translationManager.translateText({
+    const result = await translation.translateText({
       guildId,
       text,
       targetLanguage,
@@ -72,10 +73,11 @@ module.exports = {
 
     if (!result.ok) {
       await reply(interaction, {
-        embeds: [translationManager.buildProviderNotConnectedEmbed({
+        embeds: [translation.buildProviderNotConnectedEmbed({
           text,
           targetLanguage,
           sourceLanguage,
+          result,
         })],
       });
       return;
@@ -83,7 +85,7 @@ module.exports = {
 
     await reply(interaction, {
       content: [
-        `🌐 **${translationManager.languageLabel(result.sourceLanguage)} → ${translationManager.languageLabel(result.targetLanguage)}**`,
+        `🌐 **${translation.languageLabel(result.sourceLanguage)} → ${translation.languageLabel(result.targetLanguage)}**`,
         '',
         result.translatedText,
       ].join('\n'),

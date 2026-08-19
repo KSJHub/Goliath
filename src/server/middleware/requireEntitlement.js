@@ -1,6 +1,6 @@
 'use strict';
 
-const entitlementManager = require('../billing/entitlementManager');
+const entitlementManager = require('../../core/billing/entitlementManager');
 const { getRequiredPlanForFeature } = require('../../config/plans');
 
 function resolveGuildId(req) {

@@ -1,5 +1,6 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
+const { resolveBotMode, getRuntimePaths } = require('../config/runtimePaths');
 
 /* ---------------- DIRECTORY HELPERS ---------------- */
 
@@ -49,6 +50,102 @@ function safeLoad(label, loadFn, logger = console) {
   }
 }
 
+/* ---------------- EVENT REGISTRATION ---------------- */
+
+function registerEvents(client, options = {}) {
+  const eventsPath = options.eventsPath || path.join(process.cwd(), 'src', 'events');
+  const prepareInteraction = typeof options.prepareInteraction === 'function'
+    ? options.prepareInteraction
+    : async () => null;
+
+  if (!fs.existsSync(eventsPath)) return { files: 0, groups: 0 };
+
+  const files = [];
+  const grouped = new Map();
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(full);
+    else if (entry.isFile() && entry.name.endsWith('.js')) files.push(full);
+  });
+
+  walk(eventsPath);
+  files.sort((a, b) => a.localeCompare(b));
+
+  for (const file of files) {
+    try {
+      const loaded = require(file);
+      for (const handler of (Array.isArray(loaded) ? loaded : [loaded])) {
+        if (!handler?.name || typeof handler.execute !== 'function') continue;
+        const eventName = String(handler.name);
+        const groupKey = `${eventName}:${handler.once === true ? 'once' : 'on'}`;
+        if (!grouped.has(groupKey)) grouped.set(groupKey, { eventName, once: handler.once === true, handlers: [] });
+        grouped.get(groupKey).handlers.push({ file, execute: handler.execute });
+      }
+    } catch (error) {
+      console.warn(`⚠️ Event skipped: ${file}`);
+      console.warn(error?.message || error);
+    }
+  }
+
+  for (const { eventName, once, handlers } of grouped.values()) {
+    const listener = async (...args) => {
+      if (eventName === 'interactionCreate') await prepareInteraction(args[0]);
+      for (const handler of handlers) {
+        try { await handler.execute(...args, client); }
+        catch (error) {
+          console.error(`[Events] ${eventName} handler failed: ${handler.file}`);
+          console.error(error?.stack || error?.message || error);
+        }
+      }
+    };
+    if (once) client.once(eventName, listener); else client.on(eventName, listener);
+  }
+
+  return { files: files.length, groups: grouped.size };
+}
+
+/* ---------------- GUILD STARTUP SYNC ---------------- */
+
+async function syncStartupGuilds(client, options = {}) {
+  const enforceGuildAccess = typeof options.enforceGuildAccess === 'function'
+    ? options.enforceGuildAccess
+    : async () => true;
+  const guildManager = options.guildManager || {};
+  const resourceManager = options.resourceManager || {};
+  const botMode = options.botMode;
+  const config = options.config;
+
+  const results = [];
+
+  for (const guild of client?.guilds?.cache?.values?.() || []) {
+    try {
+      await enforceGuildAccess(guild, botMode, config);
+      guildManager.syncGuildMeta?.(guild);
+      await resourceManager.syncDiscordResources?.(guild);
+      results.push({ guildId: guild.id, ok: true });
+    } catch (error) {
+      console.error(`Guild startup sync failed for ${guild?.id}:`, error?.message || error);
+      results.push({ guildId: guild?.id || null, ok: false, error });
+    }
+  }
+
+  return results;
+}
+
+/* ---------------- STARTUP TASKS ---------------- */
+
+async function runStartupTask(label, fn, logger = console) {
+  try {
+    const result = await fn();
+    logger.log(`✅ ${label} startup complete`);
+    return { ok: true, label, result, error: null };
+  } catch (error) {
+    logger.error(`❌ ${label} startup failed`);
+    logger.error(error?.stack || error?.message || error);
+    return { ok: false, label, result: null, error };
+  }
+}
+
 /* ---------------- MODE / RUNTIME ---------------- */
 
 function normalizeModeValue(mode) {
@@ -59,25 +156,17 @@ function normalizeModeValue(mode) {
   return mode || 'DEV';
 }
 
-function getModeKey(mode) {
-  const value = String(normalizeModeValue(mode)).toUpperCase();
-
-  if (value === 'PRODUCTION') return 'production';
-  if (value === 'BETA') return 'beta';
-  return 'dev';
-}
-
 function bootstrapRuntime(mode = 'DEV') {
-  const modeKey = getModeKey(mode);
-  const modeRoot = path.join(process.cwd(), 'src', 'runtime', modeKey);
+  const modeKey = resolveBotMode(mode);
+  const runtimePaths = getRuntimePaths(modeKey);
 
   const paths = {
-    root: modeRoot,
-    backups: path.join(modeRoot, 'backups'),
-    data: path.join(modeRoot, 'data'),
-    guilds: path.join(modeRoot, 'guilds'),
-    logs: path.join(modeRoot, 'logs'),
-    security: path.join(modeRoot, 'security'),
+    root: runtimePaths.root,
+    backups: runtimePaths.backups,
+    data: runtimePaths.data,
+    guilds: runtimePaths.guilds,
+    logs: runtimePaths.logs,
+    security: runtimePaths.security,
   };
 
   const requiredDirectories = [
@@ -93,7 +182,7 @@ function bootstrapRuntime(mode = 'DEV') {
     ensureDir(dir);
   }
 
-  console.log(`✅ Runtime folders ready: ${modeRoot}`);
+  console.log(`✅ Runtime folders ready: ${paths.root}`);
 
   return {
     mode: modeKey,
@@ -159,6 +248,8 @@ module.exports = {
   bootstrapRuntime,
   runBootValidation,
   safeLoad,
-  getStartupFingerprint,
+  registerEvents,
+  syncStartupGuilds,
+  runStartupTask,
   printStartupFingerprint,
 };

@@ -1,10 +1,5 @@
 const { MessageFlags } = require('discord.js');
-const {
-  successEmbed,
-  errorEmbed,
-  warningEmbed,
-  infoEmbed
-} = require('./embeds');
+const { errorEmbed } = require('./embeds');
 
 // ✅ Generic safe reply
 async function safeReply(interaction, payload = {}) {
@@ -26,16 +21,16 @@ async function safeReply(interaction, payload = {}) {
 // ✅ Generic safe update
 async function safeUpdate(interaction, payload = {}) {
   try {
+    if (interaction.replied || interaction.deferred) {
+      return await interaction.editReply(payload);
+    }
+
     if (
       interaction.isButton?.() ||
       interaction.isStringSelectMenu?.() ||
       interaction.isUserSelectMenu?.()
     ) {
       return await interaction.update(payload);
-    }
-
-    if (interaction.replied || interaction.deferred) {
-      return await interaction.editReply(payload);
     }
 
     return await safeReply(interaction, {
@@ -73,36 +68,9 @@ function ephemeralError(content) {
   };
 }
 
-// ⚠️ Simple ephemeral warning response
-function ephemeralWarning(content) {
-  return {
-    embeds: [warningEmbed(content)],
-    flags: MessageFlags.Ephemeral
-  };
-}
-
-// ✅ Simple ephemeral success response
-function ephemeralSuccess(content) {
-  return {
-    embeds: [successEmbed(content)],
-    flags: MessageFlags.Ephemeral
-  };
-}
-
-// ℹ️ Simple ephemeral info response
-function ephemeralInfo(title, content) {
-  return {
-    embeds: [infoEmbed(title, content)],
-    flags: MessageFlags.Ephemeral
-  };
-}
-
 module.exports = {
   safeReply,
   safeUpdate,
   safeEditReply,
-  ephemeralError,
-  ephemeralWarning,
-  ephemeralSuccess,
-  ephemeralInfo
+  ephemeralError
 };

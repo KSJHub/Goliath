@@ -87,6 +87,7 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
   const botRoles = config?.botRoles || [];
   const analytics = overview.analytics || config?.analytics || {};
   const health = overview.health || null;
+  const moduleEnabled = typeof overview.enabled === 'boolean' ? overview.enabled : config?.enabled === true;
 
   const cardStyle = useMemo(() => ({
     border: `1px solid ${theme.cardBorder}`,
@@ -145,7 +146,7 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
   }
 
   async function toggleEnabled() {
-    const nextEnabled = !(overview.enabled === true || config?.enabled === true);
+    const nextEnabled = !moduleEnabled;
     await runAction('enabled', () => api.request(`/api/auto-roles/${guildId}/enabled`, { method: 'PATCH', body: JSON.stringify({ enabled: nextEnabled }) }), `Auto Roles ${nextEnabled ? 'enabled' : 'disabled'}.`);
   }
 
@@ -187,7 +188,7 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
       </section>
 
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: 12 }}>
-        <StatCard theme={theme} label="Status" value={overview.enabled || config?.enabled ? 'Enabled' : 'Disabled'} hint={loading ? 'Loading...' : 'GuildManager'} />
+        <StatCard theme={theme} label="Status" value={moduleEnabled ? 'Enabled' : 'Disabled'} hint={loading ? 'Loading...' : 'GuildManager'} />
         <StatCard theme={theme} label="Join Roles" value={overview.joinRoleCount ?? joinRoles.length} />
         <StatCard theme={theme} label="Bot Roles" value={overview.botRoleCount ?? botRoles.length} />
         <StatCard theme={theme} label="Assigned" value={analytics.assigned || 0} />
@@ -201,7 +202,7 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div><h2 style={{ margin: 0 }}>Module Controls</h2><p style={{ margin: '6px 0 0', color: theme.mutedText }}>Manage runtime behaviour and recovery.</p></div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button type="button" onClick={toggleEnabled} disabled={saving === 'enabled'} style={buttonStyle(theme, 'primary')}>{saving === 'enabled' ? 'Saving...' : overview.enabled || config?.enabled ? 'Disable' : 'Enable'}</button>
+            <button type="button" onClick={toggleEnabled} disabled={saving === 'enabled'} style={buttonStyle(theme, 'primary')}>{saving === 'enabled' ? 'Saving...' : moduleEnabled ? 'Disable' : 'Enable'}</button>
             <button type="button" onClick={() => runAction('repair', () => api.request(`/api/auto-roles/${guildId}/repair`, { method: 'POST' }), 'Configuration repaired.')} disabled={saving} style={buttonStyle(theme, 'primary')}>Repair</button>
             <button type="button" onClick={() => runAction('reapply', () => api.request(`/api/auto-roles/${guildId}/reapply`, { method: 'POST' }), 'Roles reapplied across the server.')} disabled={saving} style={buttonStyle(theme, 'success')}>Reapply Now</button>
             <a href={`/api/auto-roles/${guildId}/export`} style={{ ...buttonStyle(theme), textDecoration: 'none' }}>Export JSON</a>

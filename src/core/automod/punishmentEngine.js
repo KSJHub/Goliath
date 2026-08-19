@@ -1,7 +1,8 @@
 const { sendAutoModDM } = require('./automodDm');
-const { shouldBlockOwnerDestructiveAction } = require('../security/testModeGuard');
+const { shouldBlockOwnerDestructiveAction } = require('../../owner/dev/DevOverrideManager');
 
 const VALID_PUNISHMENTS = ['dm', 'delete', 'warn', 'timeout', 'kick', 'ban'];
+const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000;
 
 const ACTION_LABELS = {
   dm: 'DM user',
@@ -14,7 +15,6 @@ const ACTION_LABELS = {
 
 function normalizePunishments(value, fallback = ['delete']) {
   const base = Array.isArray(value) ? value : value ? [value] : fallback;
-
   const cleaned = base
     .map((entry) => String(entry || '').trim().toLowerCase())
     .filter((entry) => VALID_PUNISHMENTS.includes(entry));
@@ -44,6 +44,26 @@ function formatActionList(punishments = []) {
     .join(', ');
 }
 
+function buildActionReason(source, reason, moderator) {
+  const finalReason = moderator?.tag
+    ? `${reason} | By ${moderator.tag}`
+    : reason;
+
+  return `${source === 'automod' ? 'AutoMod' : 'Moderation'}: ${finalReason}`;
+}
+
+function resolveTimeoutDuration(durationMs, timeoutMinutes) {
+  const requestedMs = Number(durationMs);
+  const requestedMinutes = Number(timeoutMinutes);
+  const rawDuration = Number.isFinite(requestedMs) && requestedMs > 0
+    ? requestedMs
+    : Number.isFinite(requestedMinutes) && requestedMinutes > 0
+      ? requestedMinutes * 60 * 1000
+      : 10 * 60 * 1000;
+
+  return Math.min(MAX_TIMEOUT_MS, Math.max(1, Math.trunc(rawDuration)));
+}
+
 function shouldBlockDestructiveAction(context, punishment) {
   return shouldBlockOwnerDestructiveAction({
     guild: context.guild,
@@ -53,10 +73,13 @@ function shouldBlockDestructiveAction(context, punishment) {
   });
 }
 
+function recordOutcome(result, punishment, ok) {
+  result[ok ? 'applied' : 'failed'].push(punishment);
+}
+
 async function safeDelete(message) {
   try {
     if (!message?.deletable) return false;
-
     await message.delete();
     return true;
   } catch (error) {
@@ -68,7 +91,6 @@ async function safeDelete(message) {
 async function safeTimeout(member, durationMs, reason) {
   try {
     if (!member?.moderatable) return false;
-
     await member.timeout(durationMs, reason);
     return true;
   } catch (error) {
@@ -80,7 +102,6 @@ async function safeTimeout(member, durationMs, reason) {
 async function safeKick(member, reason) {
   try {
     if (!member?.kickable) return false;
-
     await member.kick(reason);
     return true;
   } catch (error) {
@@ -93,8 +114,13 @@ async function safeBan(member, reason, deleteDays = 0) {
   try {
     if (!member?.bannable) return false;
 
+    const rawDeleteDays = Number(deleteDays);
+    const safeDeleteDays = Number.isFinite(rawDeleteDays)
+      ? Math.min(7, Math.max(0, Math.trunc(rawDeleteDays)))
+      : 0;
+
     await member.ban({
-      deleteMessageSeconds: Number(deleteDays || 0) * 24 * 60 * 60,
+      deleteMessageSeconds: safeDeleteDays * 24 * 60 * 60,
       reason,
     });
 
@@ -124,6 +150,52 @@ async function safeWarnChannel(message, reason) {
   }
 }
 
+async function sendPunishmentDm(context, options, punishments) {
+  if (!context.user || !context.guild) return false;
+
+  const action = formatActionList(punishments);
+  return sendAutoModDM(context.user, context.guild, {
+    rule: options.rule,
+    reason: options.reason,
+    action,
+    messageContent:
+      options.messageContent
+      || context.message?.content
+      || `Moderation action: ${action}`,
+    channel: context.channel,
+  });
+}
+
+async function executePunishment(punishment, context, options) {
+  if (punishment === 'delete') {
+    return safeDelete(context.message);
+  }
+
+  if (punishment === 'warn') {
+    return context.message
+      ? safeWarnChannel(context.message, options.reason)
+      : true;
+  }
+
+  if (punishment === 'timeout') {
+    return safeTimeout(
+      context.member,
+      options.timeoutDurationMs,
+      options.actionReason
+    );
+  }
+
+  if (punishment === 'kick') {
+    return safeKick(context.member, options.actionReason);
+  }
+
+  if (punishment === 'ban') {
+    return safeBan(context.member, options.actionReason, options.deleteDays);
+  }
+
+  return false;
+}
+
 async function applyPunishmentEngine(input = {}, options = {}) {
   const {
     punishments,
@@ -139,39 +211,28 @@ async function applyPunishmentEngine(input = {}, options = {}) {
 
   const context = getContext(input);
   const list = normalizePunishments(punishments);
+  const result = {
+    applied: [],
+    failed: [],
+    blockedActions: [],
+    dmSent: false,
+    deleted: false,
+  };
 
-  const applied = [];
-  const failed = [];
-  const blockedActions = [];
-
-  let deleted = false;
-  let dmSent = false;
-
-  const finalReason = moderator?.tag
-    ? `${reason} | By ${moderator.tag}`
-    : reason;
-
-  const timeoutDurationMs =
-    Number(durationMs || 0) > 0
-      ? Number(durationMs)
-      : Number(timeoutMinutes || 10) * 60 * 1000;
+  const executionOptions = {
+    reason,
+    deleteDays,
+    timeoutDurationMs: resolveTimeoutDuration(durationMs, timeoutMinutes),
+    actionReason: buildActionReason(source, reason, moderator),
+  };
 
   if (list.includes('dm')) {
-    if (context.user && context.guild) {
-      dmSent = await sendAutoModDM(context.user, context.guild, {
-        rule,
-        reason,
-        action: formatActionList(list),
-        messageContent:
-          messageContent ||
-          context.message?.content ||
-          `Moderation action: ${formatActionList(list)}`,
-        channel: context.channel,
-      });
-    }
-
-    if (dmSent) applied.push('dm');
-    else failed.push('dm');
+    result.dmSent = await sendPunishmentDm(
+      context,
+      { rule, reason, messageContent },
+      list
+    );
+    recordOutcome(result, 'dm', result.dmSent);
   }
 
   for (const punishment of list) {
@@ -182,88 +243,41 @@ async function applyPunishmentEngine(input = {}, options = {}) {
         `[TEST MODE] ${punishment} blocked for protected owner ${context.user?.tag || context.member?.id || 'unknown'} in guild ${context.guild?.id || 'unknown'}`
       );
 
-      applied.push(punishment);
-      blockedActions.push(punishment);
+      result.applied.push(punishment);
+      result.blockedActions.push(punishment);
       continue;
     }
 
-    if (punishment === 'delete') {
-      const ok = await safeDelete(context.message);
+    const ok = await executePunishment(
+      punishment,
+      context,
+      executionOptions
+    );
 
-      if (ok) {
-        deleted = true;
-        applied.push('delete');
-      } else {
-        failed.push('delete');
-      }
-
-      continue;
+    if (punishment === 'delete' && ok) {
+      result.deleted = true;
     }
 
-    if (punishment === 'warn') {
-      const ok = context.message
-        ? await safeWarnChannel(context.message, reason)
-        : true;
-
-      if (ok) applied.push('warn');
-      else failed.push('warn');
-
-      continue;
-    }
-
-    if (punishment === 'timeout') {
-      const ok = await safeTimeout(
-        context.member,
-        timeoutDurationMs,
-        `${source === 'automod' ? 'AutoMod' : 'Moderation'}: ${finalReason}`
-      );
-
-      if (ok) applied.push('timeout');
-      else failed.push('timeout');
-
-      continue;
-    }
-
-    if (punishment === 'kick') {
-      const ok = await safeKick(
-        context.member,
-        `${source === 'automod' ? 'AutoMod' : 'Moderation'}: ${finalReason}`
-      );
-
-      if (ok) applied.push('kick');
-      else failed.push('kick');
-
-      continue;
-    }
-
-    if (punishment === 'ban') {
-      const ok = await safeBan(
-        context.member,
-        `${source === 'automod' ? 'AutoMod' : 'Moderation'}: ${finalReason}`,
-        deleteDays
-      );
-
-      if (ok) applied.push('ban');
-      else failed.push('ban');
-    }
+    recordOutcome(result, punishment, ok);
   }
 
-  const uniqueApplied = [...new Set(applied)];
-  const uniqueFailed = [...new Set(failed)];
-  const uniqueBlockedActions = [...new Set(blockedActions)];
+  const applied = [...new Set(result.applied)];
+  const failed = [...new Set(result.failed)];
+  const blockedActions = [...new Set(result.blockedActions)];
+  const blocked = blockedActions.length > 0;
 
   return {
-    ok: uniqueFailed.length === 0,
+    ok: failed.length === 0,
     punishments: list,
-    applied: uniqueApplied,
-    failed: uniqueFailed,
-    blocked: uniqueBlockedActions.length > 0,
-    testMode: uniqueBlockedActions.length > 0,
-    blockedActions: uniqueBlockedActions,
-    dmSent,
-    deleted,
-    actionText: uniqueApplied.length ? uniqueApplied.join(', ') : 'none',
-    failedText: uniqueFailed.length ? uniqueFailed.join(', ') : 'none',
+    applied,
+    failed,
+    blocked,
+    testMode: blocked,
+    blockedActions,
+    dmSent: result.dmSent,
+    deleted: result.deleted,
+    actionText: applied.length ? applied.join(', ') : 'none',
+    failedText: failed.length ? failed.join(', ') : 'none',
   };
 }
 

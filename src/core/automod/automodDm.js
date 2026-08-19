@@ -1,6 +1,11 @@
-// src/functions/automod/automodDm.js
+// src/core/automod/automodDm.js
 
 const { EmbedBuilder } = require('discord.js');
+
+const clean = (value, fallback, maxLength) => {
+  const text = String(value ?? '').trim().slice(0, maxLength);
+  return text || fallback;
+};
 
 function buildAutoModDMEmbed({
   guild,
@@ -10,9 +15,14 @@ function buildAutoModDMEmbed({
   messageContent,
   channel,
 }) {
+  const safeRule = clean(rule, 'Unknown Rule', 240);
+  const safeReason = clean(reason, 'Rule triggered', 1024);
+  const safeAction = clean(action, 'Action taken', 1024);
+  const safeMessageContent = clean(messageContent, 'None', 1000);
+
   return new EmbedBuilder()
     .setColor('#ED4245')
-    .setTitle(`🤖 AutoMod: ${rule}`)
+    .setTitle(`🤖 AutoMod: ${safeRule}`)
     .addFields(
       {
         name: 'Server',
@@ -26,23 +36,21 @@ function buildAutoModDMEmbed({
       },
       {
         name: 'Rule',
-        value: rule,
+        value: safeRule,
         inline: true,
       },
       {
         name: 'Actions Taken',
-        value: action,
+        value: safeAction,
         inline: true,
       },
       {
         name: 'Reason',
-        value: reason,
+        value: safeReason,
       },
       {
         name: 'Message Content',
-        value: messageContent
-          ? messageContent.slice(0, 1000)
-          : 'None',
+        value: safeMessageContent,
       }
     )
     .setThumbnail(guild.iconURL({ size: 256 }))

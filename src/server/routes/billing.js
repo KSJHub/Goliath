@@ -6,11 +6,12 @@ const {
   PLAN_DEFINITIONS,
   getPlanDefinition,
 } = require('../../config/plans');
-const subscriptionManager = require('../billing/subscriptionManager');
-const entitlementManager = require('../billing/entitlementManager');
-const redemptionManager = require('../billing/redemptionManager');
-const subscriptionAdminManager = require('../billing/subscriptionAdminManager');
-const billingSettingsManager = require('../billing/billingSettingsManager');
+const security = require('../../core/security/securityCore');
+const subscriptionManager = require('../../core/billing/subscriptionManager');
+const entitlementManager = require('../../core/billing/entitlementManager');
+const redemptionManager = require('../../core/billing/redemptionManager');
+const subscriptionAdminManager = require('../../core/billing/subscriptionAdminManager');
+const billingSettingsManager = require('../../core/billing/billingSettingsManager');
 
 const router = express.Router();
 
@@ -35,16 +36,8 @@ function getGuildId(req) {
   return guildId;
 }
 
-function getOwnerIds() {
-  return String(process.env.OWNER_IDS || '')
-    .split(',')
-    .map((id) => id.trim())
-    .filter(Boolean);
-}
-
 function isOwnerRequest(req) {
-  const userId = req.session?.user?.id;
-  return Boolean(userId && getOwnerIds().includes(String(userId)));
+  return security.isBotOwner(req.session?.user?.id);
 }
 
 function requireOwner(req, res, next) {
@@ -53,7 +46,7 @@ function requireOwner(req, res, next) {
     return res.status(401).json({ success: false, error: 'Not authenticated.' });
   }
 
-  if (!getOwnerIds().includes(String(userId))) {
+  if (!security.isBotOwner(userId)) {
     return res.status(403).json({ success: false, error: 'Owner access required.' });
   }
 
@@ -113,10 +106,14 @@ router.get('/settings', requireOwner, (req, res) => {
 
 router.patch('/settings', requireOwner, (req, res) => {
   try {
-    const settings = billingSettingsManager.updateBillingSettings({
-      publicLifetimeEnabled: req.body?.publicLifetimeEnabled === true,
+    const updates = {
       pricing: req.body?.pricing || {},
-    }, actor(req));
+    };
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'publicLifetimeEnabled')) {
+      updates.publicLifetimeEnabled = req.body.publicLifetimeEnabled === true;
+    }
+
+    const settings = billingSettingsManager.updateBillingSettings(updates, actor(req));
 
     return success(res, { settings });
   } catch (error) {

@@ -3,9 +3,15 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 
-const { enforceCommandAccess } = require('../../core/ui/commandAccess');
+const { enforceCommandAccess } = require('../../core/commands/commandAccess');
 const { errorEmbed } = require('../../core/ui/embeds');
-const modPanel = require('../../features/moderation/functions/modPanel');
+const { safeEditReply } = require('../../core/ui/interactionResponse');
+const modPanel = require('../../core/panels/mod/modPanel');
+
+const MOD_COMMAND_PERMISSIONS =
+  PermissionFlagsBits.ModerateMembers |
+  PermissionFlagsBits.KickMembers |
+  PermissionFlagsBits.BanMembers;
 
 module.exports = {
   category: 'Moderation',
@@ -24,7 +30,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('mod')
     .setDescription('🔐 Open Goliath’s moderation hub and staff tools')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    .setDefaultMemberPermissions(MOD_COMMAND_PERMISSIONS),
 
   async execute(interaction) {
     const denied = await enforceCommandAccess(interaction, module.exports);
@@ -32,33 +38,28 @@ module.exports = {
 
     try {
       if (!interaction.guild) {
-        return await safeReply(interaction, {
+        return await safeEditReply(interaction, {
           embeds: [
             errorEmbed('This command can only be used inside a server.'),
           ],
         });
       }
 
-      // Defer for panel loading
       if (!interaction.deferred && !interaction.replied) {
         await interaction.deferReply({ flags: 64 });
       }
 
-      if (typeof modPanel.openModPanel === 'function') {
-        return await modPanel.openModPanel(interaction);
+      if (typeof modPanel.openModPanel !== 'function') {
+        throw new Error('Moderation panel opener was not found.');
       }
 
-      if (typeof modPanel === 'function') {
-        return await modPanel(interaction);
-      }
-
-      throw new Error('Moderation panel opener was not found.');
+      return await modPanel.openModPanel(interaction);
     } catch (error) {
       if (error?.code === 10062 || error?.code === 40060) return;
 
       console.error('❌ Mod command failed:', error);
 
-      return await safeReply(interaction, {
+      return await safeEditReply(interaction, {
         embeds: [
           errorEmbed('Failed to open the moderation hub. Please try again.'),
         ],
@@ -67,16 +68,3 @@ module.exports = {
     }
   },
 };
-
-async function safeReply(interaction, payload) {
-  const safePayload = {
-    ...payload,
-    flags: 64,
-  };
-
-  if (interaction.deferred || interaction.replied) {
-    return interaction.editReply(safePayload);
-  }
-
-  return interaction.reply(safePayload);
-}

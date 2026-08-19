@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 
-import {
-  createRestoreModalStyles,
-  getTheme,
-} from '../ui/system';
+import { createRestoreModalStyles } from '../ui/components';
+import { getTheme } from '../ui/theme';
 
 export default function RestoreConfirmModal({
   theme: providedTheme,

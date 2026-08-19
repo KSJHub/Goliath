@@ -1,4 +1,4 @@
-const db = require('../../../features/moderation/functions/moderationStore');
+const db = require('../stores/moderationStore');
 
 function mapWarning(row) {
   if (!row) return null;
@@ -20,9 +20,14 @@ function addWarning({
   userId,
   moderatorId,
   reason = 'No reason provided',
-  caseId = null,
+  caseId,
   expiresAt = null,
 }) {
+  const normalizedCaseId = Number(caseId);
+  if (!Number.isInteger(normalizedCaseId) || normalizedCaseId <= 0) {
+    throw new Error('Warning case ID must be a positive integer.');
+  }
+
   const createdAt = new Date().toISOString();
 
   const stmt = db.prepare(`
@@ -37,7 +42,7 @@ function addWarning({
     userId,
     moderatorId,
     reason,
-    caseId,
+    normalizedCaseId,
     createdAt,
     expiresAt
   );

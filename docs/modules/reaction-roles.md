@@ -5,7 +5,7 @@ Reaction Roles lets guild members self-assign roles by reacting to managed Disco
 ## Canonical module
 
 ```text
-src/modules/reactionroles/
+src/modules/roleStudio/reactionRoles/
 ├── reactionRoles.js
 ├── reactionRoleMessageFinder.js
 ├── reactionRolesPanel.js
@@ -213,7 +213,7 @@ Repair restores missing reactions and refreshes the deployment health state. Red
 The canonical startup operation is:
 
 ```js
-require('./src/modules/reactionroles/reactionRoles').startup(client)
+require('./src/modules/roleStudio/reactionRoles/reactionRoles').startup(client)
 ```
 
 Startup repairs enabled deployments across cached guilds. There must not be a second Reaction Roles scheduler or startup implementation.

@@ -25,12 +25,8 @@ const {
 } = require('./defaults');
 
 const {
-  LEGACY_SECTION_MAP,
-  LEGACY_TOP_LEVEL_SECTIONS,
   getRoutedSection,
   setRoutedSection,
-  removeLegacyTopLevelSections,
-  hasLegacyTopLevelSections,
 } = require('./sectionRouting');
 
 const runtimePaths = getRuntimePaths(process.env.BOT_MODE || 'DEV');
@@ -49,16 +45,6 @@ const LOG_CHANNEL_ALIASES = {
   messageEdit: 'messageEdit',
   voice: 'voice',
 };
-
-const LEGACY_LOG_FIELDS = [
-  'logsChannelId',
-  'modLogChannelId',
-  'adminLogChannelId',
-  'automodLogChannelId',
-  'memberLogChannelId',
-  'messageLogChannelId',
-  'voiceLogChannelId',
-];
 
 const guildCache = new Map();
 
@@ -273,18 +259,14 @@ function normalizeLogs(source = {}) {
   logs.channels = mergeDeep(DEFAULT_LOGS.channels || {}, channels);
   logs.events = mergeDeep(DEFAULT_LOGS.events || {}, events);
 
-  const legacyMessageChannelId = normalizeChannelId(source.messageLogChannelId);
-  const oldMessageChannelId = normalizeChannelId(logs.channels.message);
-
-  logs.channels.general = normalizeChannelId(logs.channels.general) || normalizeChannelId(source.logsChannelId);
-  logs.channels.moderation = normalizeChannelId(logs.channels.moderation) || normalizeChannelId(source.modLogChannelId);
-  logs.channels.admin = normalizeChannelId(logs.channels.admin) || normalizeChannelId(source.adminLogChannelId);
-  logs.channels.automod = normalizeChannelId(logs.channels.automod) || normalizeChannelId(source.automodLogChannelId);
-  logs.channels.member = normalizeChannelId(logs.channels.member) || normalizeChannelId(source.memberLogChannelId);
-  logs.channels.messageDelete = normalizeChannelId(logs.channels.messageDelete) || oldMessageChannelId || legacyMessageChannelId;
-  logs.channels.messageEdit = normalizeChannelId(logs.channels.messageEdit) || oldMessageChannelId || legacyMessageChannelId;
-  logs.channels.voice = normalizeChannelId(logs.channels.voice) || normalizeChannelId(source.voiceLogChannelId);
-  delete logs.channels.message;
+  logs.channels.general = normalizeChannelId(logs.channels.general);
+  logs.channels.moderation = normalizeChannelId(logs.channels.moderation);
+  logs.channels.admin = normalizeChannelId(logs.channels.admin);
+  logs.channels.automod = normalizeChannelId(logs.channels.automod);
+  logs.channels.member = normalizeChannelId(logs.channels.member);
+  logs.channels.messageDelete = normalizeChannelId(logs.channels.messageDelete);
+  logs.channels.messageEdit = normalizeChannelId(logs.channels.messageEdit);
+  logs.channels.voice = normalizeChannelId(logs.channels.voice);
 
   return logs;
 }
@@ -345,9 +327,9 @@ function buildModules(source = {}) {
 
 function mergeDefaults(data = {}) {
   const source = isPlainObject(data) ? data : {};
-  const base = removeLegacyTopLevelSections(mergeDeep(DEFAULT_GUILD_DATA, source));
+  const base = mergeDeep(DEFAULT_GUILD_DATA, source);
 
-  const merged = {
+  return {
     guildId: source.guildId || base.guildId || null,
     guildName: cleanGuildName(source.guildName || source.name || base.guildName),
     createdAt: source.createdAt || base.createdAt || now(),
@@ -355,9 +337,6 @@ function mergeDefaults(data = {}) {
     subscription: normalizeSubscription(source.subscription || base.subscription),
     modules: buildModules(source),
   };
-
-  for (const field of LEGACY_LOG_FIELDS) delete merged[field];
-  return merged;
 }
 
 function hasMissingDefaultModules(rawData = {}) {
@@ -391,9 +370,7 @@ function getGuildData(guildId, options = {}) {
     !exists ||
     !isPlainObject(rawData.modules) ||
     !isPlainObject(rawData.subscription) ||
-    hasMissingDefaultModules(rawData) ||
-    hasLegacyTopLevelSections(rawData) ||
-    LEGACY_LOG_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(rawData, field));
+    hasMissingDefaultModules(rawData);
 
   if (needsRewrite) {
     data.updatedAt = now();
@@ -413,7 +390,6 @@ function saveGuildData(guildId, data = {}, guildOrMeta = {}) {
     ...current,
     ...(isPlainObject(data) ? data : {}),
   });
-
   nextData.guildId = safeGuildId;
   nextData.guildName = meta.guildName || cleanGuildName(nextData.guildName) || null;
   nextData.updatedAt = now();
@@ -732,9 +708,6 @@ module.exports = {
   DEFAULT_GENERAL_SETTINGS,
   DEFAULT_TICKETS,
   DEFAULT_MODULES,
-
-  LEGACY_SECTION_MAP,
-  LEGACY_TOP_LEVEL_SECTIONS,
 
   getGuildFilePath,
 

@@ -1,10 +1,20 @@
-const db = require('../../../features/moderation/functions/moderationStore');
+const db = require('../stores/moderationStore');
 const {
   emitCaseCreated,
   emitCaseUpdated,
   emitCaseStatusUpdated,
   emitCaseNoteUpdated,
 } = require('./caseSocketEvents');
+
+function parseMetadata(value) {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 function mapCase(row) {
   if (!row) return null;
@@ -16,7 +26,7 @@ function mapCase(row) {
     moderatorId: row.moderator_id,
     action: row.action,
     reason: row.reason,
-    metadata: row.metadata ? JSON.parse(row.metadata) : {},
+    metadata: parseMetadata(row.metadata),
     status: row.status,
     relatedCaseId: row.related_case_id,
     note: row.note || null,

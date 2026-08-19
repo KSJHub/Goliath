@@ -1,0 +1,1256 @@
+{
+  "createdAt": "2026-07-25T02:42:27.034Z",
+  "guildId": "1515201360386068642",
+  "guildName": "💎・KSJ Development・💎",
+  "modules": {
+    "autoRoles": {
+      "analytics": {
+        "assigned": 0,
+        "removed": 0
+      },
+      "botRoles": [],
+      "createdAt": "2026-07-29T01:07:23.167Z",
+      "enabled": true,
+      "joinRoles": {},
+      "settings": {
+        "allowSelfRemove": true,
+        "auditLog": true,
+        "dailyTimedRoleCheck": true
+      },
+      "updatedAt": "2026-07-29T01:07:23.172Z"
+    },
+    "discord": {
+      "categories": [
+        {
+          "id": "1515509866196635871",
+          "manageable": true,
+          "name": "Testing",
+          "parentId": null,
+          "position": 0,
+          "type": 4,
+          "viewable": true
+        },
+        {
+          "id": "1529555263273828382",
+          "manageable": true,
+          "name": "Testing1",
+          "parentId": null,
+          "position": 1,
+          "type": 4,
+          "viewable": true
+        },
+        {
+          "id": "1515201361871114392",
+          "manageable": true,
+          "name": "Text channels",
+          "parentId": null,
+          "position": 3,
+          "type": 4,
+          "viewable": true
+        },
+        {
+          "id": "1515201361871114393",
+          "manageable": true,
+          "name": "Voice channels",
+          "parentId": null,
+          "position": 4,
+          "type": 4,
+          "viewable": true
+        }
+      ],
+      "channels": [
+        {
+          "id": "1532892611356922048",
+          "manageable": true,
+          "name": "todo",
+          "parentId": null,
+          "position": 0,
+          "type": 0,
+          "viewable": true
+        },
+        {
+          "id": "1532161957380227112",
+          "manageable": true,
+          "name": "goliath-system",
+          "parentId": null,
+          "position": 1,
+          "type": 0,
+          "viewable": true
+        },
+        {
+          "id": "1515509745220325490",
+          "manageable": true,
+          "name": "test",
+          "parentId": "1515509866196635871",
+          "position": 2,
+          "type": 0,
+          "viewable": true
+        },
+        {
+          "id": "1521624276371898409",
+          "manageable": true,
+          "name": "setup",
+          "parentId": "1515509866196635871",
+          "position": 3,
+          "type": 0,
+          "viewable": true
+        },
+        {
+          "id": "1515201361871114395",
+          "manageable": true,
+          "name": "General",
+          "parentId": "1515201361871114393",
+          "position": 4,
+          "type": 2,
+          "viewable": true
+        },
+        {
+          "id": "1529555185553248256",
+          "manageable": true,
+          "name": "test1",
+          "parentId": "1529555263273828382",
+          "position": 4,
+          "type": 0,
+          "viewable": true
+        },
+        {
+          "id": "1527828385353568416",
+          "manageable": true,
+          "name": "setup1",
+          "parentId": "1529555263273828382",
+          "position": 5,
+          "type": 0,
+          "viewable": true
+        },
+        {
+          "id": "1515201361871114394",
+          "manageable": true,
+          "name": "general",
+          "parentId": "1515201361871114392",
+          "position": 6,
+          "type": 0,
+          "viewable": true
+        }
+      ],
+      "emojis": [
+        {
+          "animated": false,
+          "available": true,
+          "id": "1530791005459316746",
+          "managed": false,
+          "name": "DiscordEpicEmoji",
+          "requiresColons": true
+        },
+        {
+          "animated": false,
+          "available": true,
+          "id": "1530791067409190942",
+          "managed": false,
+          "name": "DiscordFBEmoji",
+          "requiresColons": true
+        }
+      ],
+      "guild": {
+        "banner": null,
+        "description": null,
+        "icon": "b8b55112e92a46c174e97933e5e14ff4",
+        "id": "1515201360386068642",
+        "memberCount": 6,
+        "name": "💎・KSJ Development・💎",
+        "ownerId": "1168285714732036096",
+        "preferredLocale": "en-US",
+        "premiumTier": 0
+      },
+      "lastSync": "2026-08-05T03:58:24.618Z",
+      "roles": [
+        {
+          "color": "#000000",
+          "hoist": false,
+          "id": "1515201360386068642",
+          "managed": false,
+          "mentionable": false,
+          "name": "@everyone",
+          "position": 0
+        },
+        {
+          "color": "#000000",
+          "hoist": false,
+          "id": "1531885801162408140",
+          "managed": true,
+          "mentionable": false,
+          "name": "FAQ Bot Pro",
+          "position": 1
+        },
+        {
+          "color": "#000000",
+          "hoist": false,
+          "id": "1531423584768233566",
+          "managed": true,
+          "mentionable": false,
+          "name": "Maid",
+          "position": 1
+        },
+        {
+          "color": "#000000",
+          "hoist": false,
+          "id": "1517774255998242987",
+          "managed": false,
+          "mentionable": false,
+          "name": "Unverified",
+          "position": 1
+        },
+        {
+          "color": "#000000",
+          "hoist": false,
+          "id": "1517774305100959814",
+          "managed": false,
+          "mentionable": false,
+          "name": "Verified",
+          "position": 2
+        },
+        {
+          "color": "#000000",
+          "hoist": false,
+          "id": "1517773297239199805",
+          "managed": false,
+          "mentionable": false,
+          "name": "Test",
+          "position": 3
+        },
+        {
+          "color": "#000000",
+          "hoist": false,
+          "id": "1520273120504582164",
+          "managed": false,
+          "mentionable": false,
+          "name": "▬ ▬ ▬ ▬ ▬ ▬ ▬ ▬",
+          "position": 4
+        },
+        {
+          "color": "#22c55e",
+          "hoist": false,
+          "id": "1520274218154065972",
+          "managed": false,
+          "mentionable": false,
+          "name": "🟢・Kick",
+          "position": 5
+        },
+        {
+          "color": "#22c55e",
+          "hoist": false,
+          "id": "1520274145575829524",
+          "managed": false,
+          "mentionable": false,
+          "name": "🔴・Currently Live",
+          "position": 6
+        },
+        {
+          "color": "#e5e7eb",
+          "hoist": false,
+          "id": "1520274081394593845",
+          "managed": false,
+          "mentionable": false,
+          "name": "📸・Streamer",
+          "position": 7
+        },
+        {
+          "color": "#e5e7eb",
+          "hoist": false,
+          "id": "1520274041670467606",
+          "managed": false,
+          "mentionable": false,
+          "name": "Tiktok",
+          "position": 8
+        },
+        {
+          "color": "#ef4444",
+          "hoist": false,
+          "id": "1520273932450791536",
+          "managed": false,
+          "mentionable": false,
+          "name": "Youtube",
+          "position": 9
+        },
+        {
+          "color": "#a855f7",
+          "hoist": false,
+          "id": "1520273872795078836",
+          "managed": false,
+          "mentionable": false,
+          "name": "Twitch",
+          "position": 10
+        },
+        {
+          "color": "#000000",
+          "hoist": false,
+          "id": "1520273231721009213",
+          "managed": false,
+          "mentionable": false,
+          "name": "▬ ▬ ▬ ▬ ▬ ▬ ▬ ▬",
+          "position": 11
+        },
+        {
+          "color": "#3b82f6",
+          "hoist": false,
+          "id": "1520273720667672729",
+          "managed": false,
+          "mentionable": false,
+          "name": "💎・Gems",
+          "position": 12
+        },
+        {
+          "color": "#000000",
+          "hoist": false,
+          "id": "1520273261328466100",
+          "managed": false,
+          "mentionable": false,
+          "name": "▬ ▬ ▬ ▬ ▬ ▬ ▬ ▬",
+          "position": 13
+        },
+        {
+          "color": "#e67e22",
+          "hoist": false,
+          "id": "1517773234806984784",
+          "managed": false,
+          "mentionable": false,
+          "name": "Bots",
+          "position": 14
+        },
+        {
+          "color": "#000000",
+          "hoist": false,
+          "id": "1529556787030917141",
+          "managed": false,
+          "mentionable": false,
+          "name": "▬ ▬ ▬ ▬ ▬ ▬ ▬ ▬",
+          "position": 15
+        },
+        {
+          "color": "#f1c40f",
+          "hoist": false,
+          "id": "1515496230665453641",
+          "managed": true,
+          "mentionable": true,
+          "name": "🤖・Goliath",
+          "position": 16
+        },
+        {
+          "color": "#f1c40f",
+          "hoist": true,
+          "id": "1529556644873113751",
+          "managed": false,
+          "mentionable": false,
+          "name": "🤖・Operations",
+          "position": 17
+        }
+      ],
+      "updatedAt": "2026-08-05T03:58:24.618Z"
+    },
+    "duplicator": {
+      "allowedGuildIds": [],
+      "allowedUserIds": [],
+      "analytics": {
+        "builds": 0,
+        "copies": 0,
+        "exports": 0,
+        "failedRuns": 0,
+        "runs": 0,
+        "successfulRuns": 0
+      },
+      "enabled": true,
+      "hidden": true,
+      "logChannelId": null,
+      "ownerOnly": true,
+      "settings": {
+        "createRollbackBackup": true,
+        "maxSessionMinutes": 20,
+        "requireFinalConfirm": true
+      },
+      "templates": {}
+    },
+    "embedBuilder": {
+      "draft": {
+        "author": {
+          "iconURL": "",
+          "name": "",
+          "url": ""
+        },
+        "buttons": [],
+        "color": "#5865F2",
+        "description": "",
+        "fields": [],
+        "footer": {
+          "iconURL": "",
+          "text": ""
+        },
+        "imageURL": "",
+        "thumbnailURL": "",
+        "title": ""
+      },
+      "templates": {}
+    },
+    "embedDefaults": {
+      "announcements": null,
+      "appeals": null,
+      "leave": null,
+      "logs": null,
+      "moderation": null,
+      "tickets": null,
+      "welcome": null
+    },
+    "embedPresets": {},
+    "forms": {
+      "analytics": {
+        "approved": 0,
+        "denied": 0,
+        "submitted": 0,
+        "ticketsCreated": 0
+      },
+      "enabled": true,
+      "forms": {},
+      "panels": {},
+      "settings": {
+        "defaultAction": "create_ticket",
+        "dmSubmitter": true,
+        "requireStaffReview": true
+      },
+      "submissions": {}
+    },
+    "generalSettings": {
+      "appealUrl": "",
+      "commandCooldownEnabled": true,
+      "commandManagerRoleIds": [],
+      "commandNotFoundEnabled": true,
+      "dashboardAccessRoleIds": [],
+      "dashboardEnabled": true,
+      "disabledInChannelEnabled": false,
+      "instantDeleteDataEnabled": false,
+      "managerRoleIds": [],
+      "noCommandPermissionsEnabled": true,
+      "prefix": "!",
+      "restrictedChannelIds": [],
+      "wrongCommandUsageEnabled": true
+    },
+    "giveaways": {
+      "enabled": true,
+      "giveaways": {},
+      "settings": {
+        "allowBotEntries": false,
+        "defaultWinnerCount": 1
+      }
+    },
+    "goodbye": {
+      "analytics": {
+        "failed": 0,
+        "lastFailedAt": null,
+        "lastSentAt": null,
+        "sent": 0,
+        "skipped": 0
+      },
+      "channelId": null,
+      "createdAt": "2026-07-29T01:07:24.115Z",
+      "enabled": false,
+      "ignoreBots": true,
+      "templateId": "goodbye_default",
+      "updatedAt": "2026-07-29T01:07:24.115Z"
+    },
+    "invites": {
+      "analytics": {
+        "failures": 0,
+        "fake": 0,
+        "inviteRoleFailures": 0,
+        "inviteRolesGranted": 0,
+        "joins": 0,
+        "lastJoinAt": null,
+        "lastLeaveAt": null,
+        "lastSyncAt": "2026-07-27T04:01:53.124Z",
+        "leaves": 0,
+        "linksCreated": 0,
+        "official": 0,
+        "rewardsGranted": 0,
+        "tracked": 0,
+        "unknown": 0
+      },
+      "createdAt": "2026-07-25T02:42:27.320Z",
+      "enabled": false,
+      "history": [],
+      "inviteLinks": {},
+      "inviters": {},
+      "members": {},
+      "settings": {
+        "autoRepair": true,
+        "ignoreBots": true,
+        "logChannelId": null,
+        "memberInviteTemplate": {
+          "autoReplaceMissing": true,
+          "channelId": null,
+          "dmMessage": "Share this link with friends. Every valid join counts towards your Invite Studio score.\n\n{invite}",
+          "dmTitle": "🔗 Your personal invite for {server}",
+          "enabled": true,
+          "maxAge": 0,
+          "maxUses": 0,
+          "roleIds": [],
+          "temporary": false
+        },
+        "officialInvite": {
+          "channelId": null,
+          "code": null,
+          "roleIds": []
+        },
+        "publicPanel": {
+          "buttonLabel": "Join Server",
+          "channelId": null,
+          "color": "#5865F2",
+          "description": "Use our official server invite below, or create your own personal link to compete on the leaderboard.",
+          "footer": "Leaderboard refreshes automatically every 2 hours",
+          "lastRefreshedAt": null,
+          "leaderboardLimit": 10,
+          "messageId": null,
+          "title": "🌍 Join Our Community"
+        },
+        "removeOnLeave": true,
+        "rewardRoles": [],
+        "templates": {
+          "memberInviteDM": {
+            "dmMessage": "Share this link with friends. Every valid join counts towards your Invite Studio score.\n\n{invite}",
+            "dmTitle": "🔗 Your personal invite for {server}"
+          },
+          "publicPanel": {
+            "buttonLabel": "Join Server",
+            "color": "#5865F2",
+            "description": "Use our official server invite below, or create your own personal link to compete on the leaderboard.",
+            "footer": "Leaderboard refreshes automatically every 2 hours",
+            "title": "🌍 Join Our Community"
+          }
+        },
+        "trackingEnabled": true
+      },
+      "updatedAt": "2026-07-27T04:01:53.124Z"
+    },
+    "logs": {
+      "channels": {
+        "admin": null,
+        "automod": null,
+        "general": null,
+        "member": null,
+        "messageDelete": null,
+        "messageEdit": null,
+        "moderation": null,
+        "voice": null
+      },
+      "enabled": true,
+      "events": {}
+    },
+    "polls": {
+      "analytics": {
+        "closed": 0,
+        "created": 0,
+        "deployed": 0,
+        "votes": 0
+      },
+      "enabled": false,
+      "polls": {},
+      "settings": {
+        "allowMultipleVotes": false,
+        "anonymousVotes": false,
+        "autoCloseHours": 24,
+        "defaultChannelId": null
+      }
+    },
+    "reactionRoles": {
+      "analytics": {
+        "assigned": 0,
+        "removed": 0
+      },
+      "createdAt": "2026-07-29T01:07:24.127Z",
+      "drafts": {},
+      "enabled": true,
+      "panels": {},
+      "settings": {
+        "allowSelfRemove": true,
+        "auditLog": true,
+        "dailyTimedRoleCheck": true
+      },
+      "updatedAt": "2026-07-29T01:07:24.128Z"
+    },
+    "roles": {
+      "analytics": {
+        "assigned": 0,
+        "removed": 0
+      },
+      "enabled": true,
+      "joinRoles": {},
+      "reactionPanels": {},
+      "settings": {
+        "allowSelfRemove": true,
+        "auditLog": true,
+        "dailyTimedRoleCheck": true
+      },
+      "timedRoles": {}
+    },
+    "schedule": {
+      "analytics": {
+        "cancelled": 0,
+        "completed": 0,
+        "created": 0,
+        "failures": 0,
+        "lastProcessedAt": "2026-08-05T03:58:23.397Z",
+        "remindersSent": 0,
+        "rsvps": 0,
+        "waitlisted": 0
+      },
+      "createdAt": "2026-07-25T02:42:27.331Z",
+      "enabled": true,
+      "events": {},
+      "settings": {
+        "createDiscordEvents": false,
+        "defaultReminderMinutes": [
+          1440,
+          60,
+          10
+        ],
+        "defaultTimezone": "UTC"
+      },
+      "templates": {},
+      "updatedAt": "2026-08-05T03:58:23.402Z"
+    },
+    "security": {
+      "criticalIncidents": 0,
+      "enabled": true,
+      "incidents": [],
+      "lockdown": {
+        "active": false,
+        "bypassRoleIds": [],
+        "channels": []
+      },
+      "ownerMonitoring": {
+        "enabled": true,
+        "webhookMirrorEnabled": true
+      },
+      "threatLevel": "low",
+      "totalIncidents": 0
+    },
+    "serverBackups": {
+      "enabled": true,
+      "retention": {
+        "autoCleanup": true,
+        "maxBackups": 3
+      },
+      "storage": {
+        "path": "F:\\MyDrive\\Goliath Backups\\dev"
+      }
+    },
+    "starboard": {
+      "allowBotMessages": false,
+      "allowSelfStar": false,
+      "channelId": null,
+      "emoji": "⭐",
+      "enabled": true,
+      "posts": {},
+      "threshold": 3
+    },
+    "stats": {
+      "analytics": {
+        "viewed": 0
+      },
+      "counters": [],
+      "data": {
+        "members": {
+          "joins": 0,
+          "leaves": 0,
+          "snapshots": []
+        },
+        "messages": {},
+        "voice": {}
+      },
+      "enabled": false,
+      "ignoreBots": true,
+      "ignoredChannels": [],
+      "ignoredRoles": [],
+      "settings": {
+        "retentionDays": 30,
+        "showLiveGuildStats": true,
+        "showModuleStats": true,
+        "showStoredWorkflowStats": true
+      },
+      "snapshots": [],
+      "trackMembers": true,
+      "trackMessages": true,
+      "trackVoice": true
+    },
+    "sticky": {
+      "channels": {},
+      "enabled": true
+    },
+    "suggestions": {
+      "enabled": true,
+      "items": {}
+    },
+    "temporaryRoles": {
+      "analytics": {
+        "assigned": 0,
+        "expired": 0,
+        "failed": 0,
+        "lastScanAt": "2026-08-05T03:58:23.343Z",
+        "removed": 0
+      },
+      "assignments": {},
+      "createdAt": "2026-07-25T02:42:27.064Z",
+      "enabled": true,
+      "settings": {
+        "auditLog": true,
+        "removeExpiredOnStartup": true
+      },
+      "updatedAt": "2026-08-05T03:58:23.346Z"
+    },
+    "tempVoice": {
+      "channels": {},
+      "enabled": true,
+      "hubs": {},
+      "settings": {
+        "defaultUserLimit": 0,
+        "deleteWhenEmpty": true
+      }
+    },
+    "tickets": {
+      "analytics": {},
+      "panels": [],
+      "settings": {
+        "dashboard": {
+          "allowRealtimeSync": true,
+          "realtimeEnabled": true
+        },
+        "discord": {
+          "archiveCategoryId": null,
+          "categoryId": null,
+          "logsChannelId": null,
+          "transcriptsChannelId": null
+        },
+        "enabled": true,
+        "numbering": {
+          "nextNumber": 1,
+          "padding": 4,
+          "prefix": "ticket"
+        },
+        "permissions": {
+          "allowCreatorView": true,
+          "allowUserClose": false,
+          "managerRoleIds": [],
+          "staffRoleIds": [],
+          "viewerRoleIds": []
+        },
+        "tickets": {
+          "allowMultipleTickets": true,
+          "cooldownMs": 60000,
+          "defaultPriority": "low",
+          "defaultStatus": "open",
+          "maxActiveTicketsPerUser": 5,
+          "oneActivePerType": true
+        },
+        "transcripts": {
+          "autoGenerateOnArchive": true,
+          "autoGenerateOnClose": true,
+          "enabled": true,
+          "includeAttachments": true,
+          "includeEmbeds": true,
+          "saveHtml": true,
+          "saveJson": true,
+          "uploadToDiscord": true
+        }
+      },
+      "tickets": []
+    },
+    "timedRoles": {
+      "analytics": {
+        "assigned": 0,
+        "removed": 0
+      },
+      "createdAt": "2026-07-29T01:07:23.228Z",
+      "enabled": true,
+      "rules": {},
+      "settings": {
+        "allowSelfRemove": true,
+        "auditLog": true,
+        "dailyTimedRoleCheck": true
+      },
+      "updatedAt": "2026-07-29T01:07:23.228Z"
+    },
+    "timeline": {
+      "enabled": true,
+      "events": [],
+      "settings": {
+        "auditEnabled": true,
+        "maxEvents": 250
+      },
+      "stats": {
+        "clearedEvents": 0,
+        "totalEvents": 0
+      }
+    },
+    "translation": {
+      "analytics": {
+        "autoTranslations": 0,
+        "failedTranslations": 0,
+        "manualTranslations": 0,
+        "threadsCreated": 0
+      },
+      "cache": {},
+      "channels": {},
+      "enabled": false,
+      "settings": {
+        "autoDetect": true,
+        "cooldownMs": 10000,
+        "createThreadForAuto": true,
+        "createThreadForManual": true,
+        "defaultSourceLanguage": "auto",
+        "defaultTargetLanguage": "en",
+        "logTranslations": true,
+        "maxCharacters": 1500,
+        "provider": "manual",
+        "targetLanguages": [
+          "en"
+        ],
+        "threadMode": true,
+        "translateEdits": false
+      },
+      "userPreferences": {}
+    },
+    "updatedAt": "2026-08-05T03:58:23.402Z",
+    "verification": {
+      "activePanelId": null,
+      "analytics": {
+        "accountAgeBlocked": 0,
+        "alreadyVerified": 0,
+        "botBlocked": 0,
+        "cooldownBlocked": 0,
+        "failed": 0,
+        "lastFailedAt": null,
+        "lastPendingRoleAssignedAt": null,
+        "lastScreeningCompletedAt": null,
+        "lastVerificationAt": null,
+        "membershipAgeBlocked": 0,
+        "pendingRolesAssigned": 0,
+        "requirementBlocked": 0,
+        "roleManageFailed": 0,
+        "screeningBlocked": 0,
+        "unavailable": 0,
+        "verified": 0
+      },
+      "attempts": {},
+      "configHistory": [
+        {
+          "activePanelId": null,
+          "messages": {
+            "accountTooNew": "Your Discord account must be at least {minimumAccountAgeDays} day(s) old.",
+            "alreadyVerified": "You are already verified.",
+            "botBlocked": "Bot accounts cannot use this verification flow.",
+            "cooldown": "Please wait {cooldownSeconds} second(s) before trying again.",
+            "dmSuccess": "You are now verified in {server}.",
+            "failed": "Verification failed. Please contact a management member if this continues.",
+            "failureLog": "❌ {user} failed verification: {reason}",
+            "membershipTooNew": "You must remain in the server for at least {minimumMembershipAgeMinutes} minute(s) before verifying.",
+            "pendingAssigned": "Your pending verification role has been assigned in {server}.",
+            "pendingRoleRequired": "You do not currently have the required pending role.",
+            "screeningCompletedLog": "📜 {user} completed Discord Membership Screening.",
+            "screeningRequired": "Please complete Discord Membership Screening before continuing.",
+            "success": "Verification complete. Welcome to {server}.",
+            "successLog": "✅ {user} completed verification.",
+            "unavailable": "Verification is currently unavailable. Please contact a management member."
+          },
+          "panels": {},
+          "panelTemplate": {
+            "buttonEmoji": null,
+            "buttonLabel": "Verify",
+            "buttonStyle": "success",
+            "color": "#57f287",
+            "description": "Press the button below to verify and unlock the server.",
+            "footer": "Goliath Verification",
+            "imageUrl": null,
+            "thumbnailUrl": null,
+            "title": "Server Verification"
+          },
+          "revision": 29,
+          "savedAt": "2026-08-05T03:50:07.470Z",
+          "settings": {
+            "allowReverification": true,
+            "allowStaffBypass": false,
+            "assignPendingRoles": true,
+            "attemptCooldownSeconds": 10,
+            "blockBots": true,
+            "dmOnPendingRole": false,
+            "dmOnVerify": true,
+            "logChannelId": null,
+            "logFailure": true,
+            "logScreeningCompletion": true,
+            "logSuccess": true,
+            "maximumFailedAttempts": 0,
+            "method": "button",
+            "minimumAccountAgeDays": 0,
+            "minimumMembershipAgeMinutes": 0,
+            "pendingRoleIds": [],
+            "pendingRoleTiming": "manual",
+            "removePendingRole": false,
+            "removePendingRoles": false,
+            "requirePendingRole": true,
+            "skipScreeningIfUnavailable": true,
+            "unverifiedRoleId": null,
+            "usePendingRoles": true,
+            "verificationChannelId": null,
+            "verifiedRoleId": null,
+            "verifiedRoleIds": [],
+            "waitForDiscordScreening": false
+          },
+          "status": "last_known_good"
+        },
+        {
+          "activePanelId": null,
+          "messages": {
+            "accountTooNew": "Your Discord account must be at least {minimumAccountAgeDays} day(s) old.",
+            "alreadyVerified": "You are already verified.",
+            "botBlocked": "Bot accounts cannot use this verification flow.",
+            "cooldown": "Please wait {cooldownSeconds} second(s) before trying again.",
+            "dmSuccess": "You are now verified in {server}.",
+            "failed": "Verification failed. Please contact a management member if this continues.",
+            "failureLog": "❌ {user} failed verification: {reason}",
+            "membershipTooNew": "You must remain in the server for at least {minimumMembershipAgeMinutes} minute(s) before verifying.",
+            "pendingAssigned": "Your pending verification role has been assigned in {server}.",
+            "pendingRoleRequired": "You do not currently have the required pending role.",
+            "screeningCompletedLog": "📜 {user} completed Discord Membership Screening.",
+            "screeningRequired": "Please complete Discord Membership Screening before continuing.",
+            "success": "Verification complete. Welcome to {server}.",
+            "successLog": "✅ {user} completed verification.",
+            "unavailable": "Verification is currently unavailable. Please contact a management member."
+          },
+          "panels": {},
+          "panelTemplate": {
+            "buttonEmoji": null,
+            "buttonLabel": "Verify",
+            "buttonStyle": "success",
+            "color": "#57f287",
+            "description": "Press the button below to verify and unlock the server.",
+            "footer": "Goliath Verification",
+            "imageUrl": null,
+            "thumbnailUrl": null,
+            "title": "Server Verification"
+          },
+          "revision": 28,
+          "savedAt": "2026-08-05T03:50:04.464Z",
+          "settings": {
+            "allowReverification": true,
+            "allowStaffBypass": false,
+            "assignPendingRoles": true,
+            "attemptCooldownSeconds": 10,
+            "blockBots": true,
+            "dmOnPendingRole": false,
+            "dmOnVerify": true,
+            "logChannelId": null,
+            "logFailure": true,
+            "logScreeningCompletion": true,
+            "logSuccess": true,
+            "maximumFailedAttempts": 0,
+            "method": "button",
+            "minimumAccountAgeDays": 0,
+            "minimumMembershipAgeMinutes": 0,
+            "pendingRoleIds": [],
+            "pendingRoleTiming": "after_screening",
+            "removePendingRole": false,
+            "removePendingRoles": false,
+            "requirePendingRole": true,
+            "skipScreeningIfUnavailable": true,
+            "unverifiedRoleId": null,
+            "usePendingRoles": true,
+            "verificationChannelId": null,
+            "verifiedRoleId": null,
+            "verifiedRoleIds": [],
+            "waitForDiscordScreening": false
+          },
+          "status": "last_known_good"
+        },
+        {
+          "activePanelId": null,
+          "messages": {
+            "accountTooNew": "Your Discord account must be at least {minimumAccountAgeDays} day(s) old.",
+            "alreadyVerified": "You are already verified.",
+            "botBlocked": "Bot accounts cannot use this verification flow.",
+            "cooldown": "Please wait {cooldownSeconds} second(s) before trying again.",
+            "dmSuccess": "You are now verified in {server}.",
+            "failed": "Verification failed. Please contact a management member if this continues.",
+            "failureLog": "❌ {user} failed verification: {reason}",
+            "membershipTooNew": "You must remain in the server for at least {minimumMembershipAgeMinutes} minute(s) before verifying.",
+            "pendingAssigned": "Your pending verification role has been assigned in {server}.",
+            "pendingRoleRequired": "You do not currently have the required pending role.",
+            "screeningCompletedLog": "📜 {user} completed Discord Membership Screening.",
+            "screeningRequired": "Please complete Discord Membership Screening before continuing.",
+            "success": "Verification complete. Welcome to {server}.",
+            "successLog": "✅ {user} completed verification.",
+            "unavailable": "Verification is currently unavailable. Please contact a management member."
+          },
+          "panels": {},
+          "panelTemplate": {
+            "buttonEmoji": null,
+            "buttonLabel": "Verify",
+            "buttonStyle": "success",
+            "color": "#57f287",
+            "description": "Press the button below to verify and unlock the server.",
+            "footer": "Goliath Verification",
+            "imageUrl": null,
+            "thumbnailUrl": null,
+            "title": "Server Verification"
+          },
+          "revision": 27,
+          "savedAt": "2026-08-05T03:50:02.021Z",
+          "settings": {
+            "allowReverification": true,
+            "allowStaffBypass": false,
+            "assignPendingRoles": true,
+            "attemptCooldownSeconds": 10,
+            "blockBots": true,
+            "dmOnPendingRole": false,
+            "dmOnVerify": true,
+            "logChannelId": null,
+            "logFailure": true,
+            "logScreeningCompletion": true,
+            "logSuccess": true,
+            "maximumFailedAttempts": 0,
+            "method": "button",
+            "minimumAccountAgeDays": 0,
+            "minimumMembershipAgeMinutes": 0,
+            "pendingRoleIds": [],
+            "pendingRoleTiming": "on_join",
+            "removePendingRole": false,
+            "removePendingRoles": false,
+            "requirePendingRole": true,
+            "skipScreeningIfUnavailable": true,
+            "unverifiedRoleId": null,
+            "usePendingRoles": true,
+            "verificationChannelId": null,
+            "verifiedRoleId": null,
+            "verifiedRoleIds": [],
+            "waitForDiscordScreening": false
+          },
+          "status": "last_known_good"
+        },
+        {
+          "activePanelId": null,
+          "messages": {
+            "accountTooNew": "Your Discord account must be at least {minimumAccountAgeDays} day(s) old.",
+            "alreadyVerified": "You are already verified.",
+            "botBlocked": "Bot accounts cannot use this verification flow.",
+            "cooldown": "Please wait {cooldownSeconds} second(s) before trying again.",
+            "dmSuccess": "You are now verified in {server}.",
+            "failed": "Verification failed. Please contact a management member if this continues.",
+            "failureLog": "❌ {user} failed verification: {reason}",
+            "membershipTooNew": "You must remain in the server for at least {minimumMembershipAgeMinutes} minute(s) before verifying.",
+            "pendingAssigned": "Your pending verification role has been assigned in {server}.",
+            "pendingRoleRequired": "You do not currently have the required pending role.",
+            "screeningCompletedLog": "📜 {user} completed Discord Membership Screening.",
+            "screeningRequired": "Please complete Discord Membership Screening before continuing.",
+            "success": "Verification complete. Welcome to {server}.",
+            "successLog": "✅ {user} completed verification.",
+            "unavailable": "Verification is currently unavailable. Please contact a management member."
+          },
+          "panels": {},
+          "panelTemplate": {
+            "buttonEmoji": null,
+            "buttonLabel": "Verify",
+            "buttonStyle": "success",
+            "color": "#57f287",
+            "description": "Press the button below to verify and unlock the server.",
+            "footer": "Goliath Verification",
+            "imageUrl": null,
+            "thumbnailUrl": null,
+            "title": "Server Verification"
+          },
+          "revision": 26,
+          "savedAt": "2026-08-05T03:49:59.261Z",
+          "settings": {
+            "allowReverification": true,
+            "allowStaffBypass": false,
+            "assignPendingRoles": true,
+            "attemptCooldownSeconds": 10,
+            "blockBots": true,
+            "dmOnPendingRole": false,
+            "dmOnVerify": true,
+            "logChannelId": null,
+            "logFailure": true,
+            "logScreeningCompletion": true,
+            "logSuccess": true,
+            "maximumFailedAttempts": 0,
+            "method": "button",
+            "minimumAccountAgeDays": 0,
+            "minimumMembershipAgeMinutes": 0,
+            "pendingRoleIds": [],
+            "pendingRoleTiming": "manual",
+            "removePendingRole": false,
+            "removePendingRoles": false,
+            "requirePendingRole": true,
+            "skipScreeningIfUnavailable": true,
+            "unverifiedRoleId": null,
+            "usePendingRoles": true,
+            "verificationChannelId": null,
+            "verifiedRoleId": null,
+            "verifiedRoleIds": [],
+            "waitForDiscordScreening": false
+          },
+          "status": "last_known_good"
+        },
+        {
+          "activePanelId": null,
+          "messages": {
+            "accountTooNew": "Your Discord account must be at least {minimumAccountAgeDays} day(s) old.",
+            "alreadyVerified": "You are already verified.",
+            "botBlocked": "Bot accounts cannot use this verification flow.",
+            "cooldown": "Please wait {cooldownSeconds} second(s) before trying again.",
+            "dmSuccess": "You are now verified in {server}.",
+            "failed": "Verification failed. Please contact a management member if this continues.",
+            "failureLog": "❌ {user} failed verification: {reason}",
+            "membershipTooNew": "You must remain in the server for at least {minimumMembershipAgeMinutes} minute(s) before verifying.",
+            "pendingAssigned": "Your pending verification role has been assigned in {server}.",
+            "pendingRoleRequired": "You do not currently have the required pending role.",
+            "screeningCompletedLog": "📜 {user} completed Discord Membership Screening.",
+            "screeningRequired": "Please complete Discord Membership Screening before continuing.",
+            "success": "Verification complete. Welcome to {server}.",
+            "successLog": "✅ {user} completed verification.",
+            "unavailable": "Verification is currently unavailable. Please contact a management member."
+          },
+          "panels": {},
+          "panelTemplate": {
+            "buttonEmoji": null,
+            "buttonLabel": "Verify",
+            "buttonStyle": "success",
+            "color": "#57f287",
+            "description": "Press the button below to verify and unlock the server.",
+            "footer": "Goliath Verification",
+            "imageUrl": null,
+            "thumbnailUrl": null,
+            "title": "Server Verification"
+          },
+          "revision": 25,
+          "savedAt": "2026-08-05T03:49:55.299Z",
+          "settings": {
+            "allowReverification": true,
+            "allowStaffBypass": false,
+            "assignPendingRoles": true,
+            "attemptCooldownSeconds": 10,
+            "blockBots": true,
+            "dmOnPendingRole": false,
+            "dmOnVerify": true,
+            "logChannelId": null,
+            "logFailure": true,
+            "logScreeningCompletion": true,
+            "logSuccess": true,
+            "maximumFailedAttempts": 0,
+            "method": "button",
+            "minimumAccountAgeDays": 0,
+            "minimumMembershipAgeMinutes": 0,
+            "pendingRoleIds": [],
+            "pendingRoleTiming": "after_screening",
+            "removePendingRole": false,
+            "removePendingRoles": false,
+            "requirePendingRole": true,
+            "skipScreeningIfUnavailable": true,
+            "unverifiedRoleId": null,
+            "usePendingRoles": true,
+            "verificationChannelId": null,
+            "verifiedRoleId": null,
+            "verifiedRoleIds": [],
+            "waitForDiscordScreening": false
+          },
+          "status": "last_known_good"
+        }
+      ],
+      "configRevision": 30,
+      "createdAt": "2026-07-29T01:07:24.136Z",
+      "enabled": false,
+      "lastKnownGoodRevision": 1,
+      "messages": {
+        "accountTooNew": "Your Discord account must be at least {minimumAccountAgeDays} day(s) old.",
+        "alreadyVerified": "You are already verified.",
+        "botBlocked": "Bot accounts cannot use this verification flow.",
+        "cooldown": "Please wait {cooldownSeconds} second(s) before trying again.",
+        "dmSuccess": "You are now verified in {server}.",
+        "failed": "Verification failed. Please contact a management member if this continues.",
+        "failureLog": "❌ {user} failed verification: {reason}",
+        "membershipTooNew": "You must remain in the server for at least {minimumMembershipAgeMinutes} minute(s) before verifying.",
+        "pendingAssigned": "Your pending verification role has been assigned in {server}.",
+        "pendingRoleRequired": "You do not currently have the required pending role.",
+        "screeningCompletedLog": "📜 {user} completed Discord Membership Screening.",
+        "screeningRequired": "Please complete Discord Membership Screening before continuing.",
+        "success": "Verification complete. Welcome to {server}.",
+        "successLog": "✅ {user} completed verification.",
+        "unavailable": "Verification is currently unavailable. Please contact a management member."
+      },
+      "panels": {},
+      "panelTemplate": {
+        "buttonEmoji": null,
+        "buttonLabel": "Verify",
+        "buttonStyle": "success",
+        "color": "#57f287",
+        "description": "Press the button below to verify and unlock the server.",
+        "footer": "Goliath Verification",
+        "imageUrl": null,
+        "thumbnailUrl": null,
+        "title": "Server Verification"
+      },
+      "schemaVersion": 2,
+      "settings": {
+        "allowReverification": true,
+        "allowStaffBypass": false,
+        "assignPendingRoles": true,
+        "attemptCooldownSeconds": 10,
+        "blockBots": true,
+        "dmOnPendingRole": false,
+        "dmOnVerify": true,
+        "logChannelId": null,
+        "logFailure": true,
+        "logScreeningCompletion": true,
+        "logSuccess": true,
+        "maximumFailedAttempts": 0,
+        "method": "button",
+        "minimumAccountAgeDays": 0,
+        "minimumMembershipAgeMinutes": 0,
+        "pendingRoleIds": [],
+        "pendingRoleTiming": "after_screening",
+        "removePendingRole": false,
+        "removePendingRoles": false,
+        "requirePendingRole": true,
+        "skipScreeningIfUnavailable": true,
+        "unverifiedRoleId": null,
+        "usePendingRoles": true,
+        "verificationChannelId": null,
+        "verifiedRoleId": null,
+        "verifiedRoleIds": [],
+        "waitForDiscordScreening": false
+      },
+      "updatedAt": "2026-08-05T03:50:07.472Z"
+    },
+    "welcome": {
+      "allowUserPing": true,
+      "analytics": {
+        "dmFailed": 0,
+        "dmSent": 0,
+        "lastDmSentAt": null,
+        "lastFailedAt": null,
+        "lastPublicSentAt": null,
+        "publicFailed": 0,
+        "publicSent": 0,
+        "skipped": 0
+      },
+      "channelId": null,
+      "createdAt": "2026-07-29T01:07:23.254Z",
+      "dmEnabled": false,
+      "dmTemplateId": null,
+      "enabled": false,
+      "ignoreBots": true,
+      "templateId": "welcome_default",
+      "updatedAt": "2026-07-29T01:07:23.255Z"
+    }
+  },
+  "subscription": {
+    "expiresAt": null,
+    "plan": "free",
+    "source": "system",
+    "status": "active"
+  },
+  "updatedAt": "2026-08-05T03:58:24.620Z"
+}

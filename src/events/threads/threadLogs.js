@@ -95,9 +95,19 @@ async function logThreadMemberRemove(member) {
   });
 }
 
+async function logThreadMembersUpdate(oldMembers, newMembers) {
+  for (const [memberId, member] of newMembers) {
+    if (!oldMembers.has(memberId)) await logThreadMemberAdd(member);
+  }
+
+  for (const [memberId, member] of oldMembers) {
+    if (!newMembers.has(memberId)) await logThreadMemberRemove(member);
+  }
+}
+
 module.exports = [
   { name: 'threadCreate', async execute(thread) { await logThreadCreate(thread); } },
   { name: 'threadDelete', async execute(thread) { await logThreadDelete(thread); } },
   { name: 'threadUpdate', async execute(oldThread, newThread) { await logThreadUpdate(oldThread, newThread); } },
-  { name: 'threadMembersUpdate', async execute(_oldMembers, newMembers) { for (const member of newMembers.values()) await logThreadMemberAdd(member); } },
+  { name: 'threadMembersUpdate', async execute(oldMembers, newMembers) { await logThreadMembersUpdate(oldMembers, newMembers); } },
 ];

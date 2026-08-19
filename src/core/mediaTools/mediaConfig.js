@@ -1,6 +1,6 @@
 'use strict';
 
-const path = require('path');
+const path = require('node:path');
 
 const ROOT_DIR = process.cwd();
 const MEDIA_ROOT = process.env.GOLIATH_MEDIA_ROOT || path.join(ROOT_DIR, 'data', 'guilds');
@@ -41,10 +41,15 @@ const UPLOAD_LIMITS = {
   },
 };
 
+function positiveMs(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 const RETENTION = {
-  uploadMaxAgeMs: Number(process.env.GOLIATH_MEDIA_UPLOAD_MAX_AGE_MS || 1000 * 60 * 60 * 24),
-  orphanOutputMaxAgeMs: Number(process.env.GOLIATH_MEDIA_ORPHAN_OUTPUT_MAX_AGE_MS || 1000 * 60 * 60 * 24 * 7),
-  cleanupIntervalMs: Number(process.env.GOLIATH_MEDIA_CLEANUP_INTERVAL_MS || 1000 * 60 * 60 * 6),
+  uploadMaxAgeMs: positiveMs(process.env.GOLIATH_MEDIA_UPLOAD_MAX_AGE_MS, 1000 * 60 * 60 * 24),
+  orphanOutputMaxAgeMs: positiveMs(process.env.GOLIATH_MEDIA_ORPHAN_OUTPUT_MAX_AGE_MS, 1000 * 60 * 60 * 24 * 7),
+  cleanupIntervalMs: positiveMs(process.env.GOLIATH_MEDIA_CLEANUP_INTERVAL_MS, 1000 * 60 * 60 * 6),
 };
 
 const TOOL_PRESETS = {

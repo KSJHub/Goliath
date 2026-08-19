@@ -6,22 +6,14 @@ Server administrators only enter public creator information: a username, handle,
 
 ## Canonical structure
 
-- `social.js` — canonical runtime entry
-- `socialPanel.js` — Discord Social Studio
-- `socialCreatorPanel.js` — Discord Creator Hub and simulator
-- `socialRoute.js` — primary API route
-- `socialCreatorRoute.js` — Creator Hub, diagnostics, and simulator API
-- `socialManager.js` — account lifecycle and live-alert compatibility
-- `socialDelivery.js` — canonical live, upload, Short, and post delivery
-- `socialScheduler.js` — provider polling and dispatch
-- `socialQueue.js` — restart-safe retries
-- `socialHistory.js` — operational ledger
-- `socialHealth.js` — health, repair, export, and reset
-- `socialDiagnostics.js` — provider, account, and creator health scores
-- `socialCreators.js` — unified creator profiles
-- `socialSimulator.js` — provider-free notification simulation
-- `providerRegistry.js` — provider readiness, policy, and dispatch
-- `providers/` — provider implementations
+Social Studio's canonical backend implementation lives under `src/modules/social/`.
+
+- `social.js` — canonical module entry and public runtime contract
+- `socialRoute.js` — canonical Social Studio API route
+- colocated Social runtime files — storage, providers, polling, creators, simulation, delivery, queue, history, diagnostics, health, repair, export, and reset
+- `src/dashboard/js/pages/modules/Social.jsx` — dashboard management surface
+
+The storage key remains `social`. Runtime helpers may remain separated where they own a distinct responsibility, but duplicate module roots, compatibility wrappers, duplicate Creator Hub routes, and parallel provider implementations are not permitted.
 
 ## Zero-credential setup
 
@@ -73,9 +65,9 @@ They are not reported as broken or unfinished. They may be added later only when
 
 The first content item discovered for a newly configured account becomes its baseline and is not announced. This prevents old uploads, existing live streams, or previous posts from creating false alerts during setup or restart recovery.
 
-## Creator Hub
+## Creator profiles
 
-Creator Hub groups multiple platform accounts under one creator profile. Profiles support:
+Creator profiles group multiple platform accounts under one creator. Profiles support:
 
 - Display names
 - Notes
@@ -87,7 +79,7 @@ Creator Hub groups multiple platform accounts under one creator profile. Profile
 - Safe profile rebuilding
 - Provider-free simulation
 
-Discord access is available through `/socialhub` for members with Manage Server permission.
+Discord access is available through `/socialhub`, which opens the canonical Social Studio panel for members with Manage Server permission.
 
 ## Alert delivery
 
@@ -106,13 +98,52 @@ Every supported content type follows one canonical path:
 
 Supported routes are live, upload, short, and post, with fallback to the account's default alert channel.
 
+## History API
+
+Operational and provider-incident history is available through:
+
+```text
+GET /api/social/:guildId/history
+```
+
+Supported query filters are:
+
+- `limit` — maximum records returned, clamped between 1 and 500
+- `status` — sent, failed, skipped, suppressed, queued, retried, or test
+- `eventType` — exact event type, including `provider_incident`
+- `accountId` — exact Social account ID
+- `platform` — platform identifier such as `twitch`
+- `alertType` — live, upload, short, or post
+
+Example provider-incident request:
+
+```text
+GET /api/social/123456789/history?eventType=provider_incident&status=failed&limit=25
+```
+
+The response includes the filtered `history` records and an unfiltered guild-level `summary`. The summary reports normal delivery totals together with provider-incident retention usage:
+
+```json
+{
+  "providerIncidents": 37,
+  "incidentCapacity": {
+    "used": 37,
+    "limit": 100,
+    "remaining": 63,
+    "saturated": false
+  }
+}
+```
+
+History retains at most 500 total records. Provider incidents are independently capped at 100 records so repeated provider failures cannot crowd operational delivery history out of storage. Records remain newest-first.
+
 ## Flagship management surfaces
 
 Discord and dashboard management include:
 
 - Overview
 - Account library
-- Creator Hub
+- Creator profiles
 - Alert Studio
 - Provider Centre
 - Operations Centre
@@ -136,24 +167,20 @@ Accounts, creator profiles, and the module receive scores based on identifiers, 
 
 ## Doctor
 
-`npm run doctor` runs the main repository Doctor and `scripts/social-doctor.js`.
+`npm run doctor` runs the main repository Doctor and the Social Studio checks.
 
-The Social Doctor validates:
+The Social Studio Doctor contract validates:
 
-- Canonical runtime and routes
-- Discord Social Studio and Creator Hub
-- Dashboard surface
-- Creator profiles and simulator
-- Delivery, queue, history, health, repair, and diagnostics
-- Twitch, YouTube, Kick, and X production handlers
-- Provider-scope policy
-- Module manifest maturity
-- Dashboard registry status
-- Documentation
+- The canonical backend module lives at `src/modules/social/`
+- No duplicate Social Studio module root exists
+- No duplicate Creator Hub panel or route remains
+- No compatibility wrapper or nested duplicate provider implementation remains
+- The canonical module entry and route import successfully
+- The dashboard surface and module registry remain connected
+- The storage key remains `social`
+- Documentation matches the deployed architecture
 
 ## Completion state
-
-**Social Studio v1 is complete.**
 
 The supported zero-credential production scope is:
 

@@ -28,6 +28,15 @@ function cleanString(value, maxLength = 500) {
   return String(value || '').trim().slice(0, maxLength);
 }
 
+function finiteNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function nonNegativeInteger(value, fallback = 0) {
+  return Math.max(0, Math.trunc(finiteNumber(value, fallback)));
+}
+
 function toArray(collection) {
   if (!collection) return [];
   if (Array.isArray(collection)) return collection;
@@ -37,8 +46,8 @@ function toArray(collection) {
 }
 
 function sortByPositionThenName(a, b) {
-  const positionA = Number.isFinite(a.position) ? a.position : 0;
-  const positionB = Number.isFinite(b.position) ? b.position : 0;
+  const positionA = finiteNumber(a.position);
+  const positionB = finiteNumber(b.position);
 
   if (positionA !== positionB) return positionA - positionB;
   return String(a.name || '').localeCompare(String(b.name || ''));
@@ -54,9 +63,9 @@ function normalizeGuild(guild) {
     banner: guild.banner || null,
     description: cleanString(guild.description, 500) || null,
     ownerId: guild.ownerId || null,
-    memberCount: Number(guild.memberCount || 0),
+    memberCount: nonNegativeInteger(guild.memberCount),
     preferredLocale: guild.preferredLocale || null,
-    premiumTier: Number(guild.premiumTier || 0),
+    premiumTier: nonNegativeInteger(guild.premiumTier),
   };
 }
 
@@ -66,7 +75,7 @@ function normalizeChannel(channel) {
     name: cleanString(channel.name, 120),
     type: channel.type,
     parentId: channel.parentId || null,
-    position: Number(channel.rawPosition ?? channel.position ?? 0),
+    position: finiteNumber(channel.rawPosition ?? channel.position ?? 0),
     manageable: Boolean(channel.manageable),
     viewable: channel.viewable !== false,
   };
@@ -77,7 +86,7 @@ function normalizeRole(role) {
     id: role.id,
     name: cleanString(role.name, 120),
     color: role.hexColor || null,
-    position: Number(role.rawPosition ?? role.position ?? 0),
+    position: finiteNumber(role.rawPosition ?? role.position ?? 0),
     managed: Boolean(role.managed),
     mentionable: Boolean(role.mentionable),
     hoist: Boolean(role.hoist),
@@ -186,9 +195,6 @@ async function syncDiscordResources(guild) {
 }
 
 module.exports = {
-  DISCORD_RESOURCE_FALLBACK,
-  buildDiscordResourceSnapshot,
   getDiscordResources,
-  saveDiscordResources,
   syncDiscordResources,
 };

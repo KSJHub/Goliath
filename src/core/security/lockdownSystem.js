@@ -2,6 +2,7 @@
 
 const { ChannelType } = require('discord.js');
 const guildManager = require('../guild/guildManager');
+const schedulerRegistry = require('../../owner/sentinel/schedulerRegistry');
 
 const {
   emitLockdownUpdate,
@@ -11,6 +12,14 @@ const activeReminderIntervals = new Map();
 
 const REMINDER_INTERVAL_MS = 5 * 60 * 1000;
 const REMINDER_DELETE_MS = 60 * 1000;
+
+function lockdownReminderSchedulerId(guildId) {
+  return schedulerRegistry.schedulerId({
+    module: 'security',
+    component: 'lockdown-reminder',
+    guildId,
+  });
+}
 
 function emptyLockdownState() {
   return {
@@ -122,6 +131,11 @@ function stopLockdownReminder(guildId) {
     clearInterval(interval);
     activeReminderIntervals.delete(guildId);
   }
+
+  schedulerRegistry.stop(
+    lockdownReminderSchedulerId(guildId),
+    'lockdown reminder stopped'
+  );
 }
 
 function getTextLockPermissions() {
@@ -425,6 +439,21 @@ function startLockdownReminder(guild, reminderChannelId, reminderUserId) {
 
   stopLockdownReminder(guild.id);
 
+  const schedulerId = lockdownReminderSchedulerId(guild.id);
+  schedulerRegistry.register({
+    id: schedulerId,
+    module: 'security',
+    component: 'lockdown-reminder',
+    guildId: guild.id,
+    guildName: guild.name,
+    intervalMs: REMINDER_INTERVAL_MS,
+    staleAfterMs: REMINDER_INTERVAL_MS * 3,
+    details: {
+      reminderChannelId,
+      reminderUserId,
+    },
+  });
+
   const interval = setInterval(async () => {
     try {
       const latest = getLockdownState(guild.id);
@@ -451,7 +480,13 @@ function startLockdownReminder(guild, reminderChannelId, reminderUserId) {
         .fetch(latest.reminderChannelId || reminderChannelId)
         .catch(() => null);
 
-      if (!channel || !channel.isTextBased()) return;
+      if (!channel || !channel.isTextBased()) {
+        schedulerRegistry.beat(schedulerId, {
+          reminderSent: false,
+          reason: 'reminder channel unavailable',
+        });
+        return;
+      }
 
       const reminderMessage = await channel.send({
         content:
@@ -464,14 +499,24 @@ function startLockdownReminder(guild, reminderChannelId, reminderUserId) {
         lastReminderAt: Date.now(),
       });
 
+      schedulerRegistry.beat(schedulerId, {
+        reminderSent: true,
+        reminderChannelId: channel.id,
+      });
+
       setTimeout(() => {
         reminderMessage.delete().catch(() => null);
       }, REMINDER_DELETE_MS);
     } catch (error) {
+      schedulerRegistry.fail(schedulerId, error, {
+        guildId: guild.id,
+        guildName: guild.name,
+      });
       console.warn('[LockdownSystem] Reminder interval failed:', error.message);
     }
   }, REMINDER_INTERVAL_MS);
 
+  interval.unref?.();
   activeReminderIntervals.set(guild.id, interval);
   return true;
 }

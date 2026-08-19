@@ -1,6 +1,8 @@
 const { AuditLogEvent } = require('discord.js');
 
+const guildManager = require('../../core/guild/guildManager');
 const securitySystem = require('../../core/security/securitySystem');
+const antiNukeManager = require('../../core/security/antiNukeManager');
 const {
   emitSyncEvent,
 } = require('../../server/sockets/socketHub');
@@ -31,8 +33,13 @@ function emitChannelEvent(eventName, channel, extra = {}) {
 async function handleChannelDelete(channel) {
   if (!channel?.guild) return;
 
-  if (typeof securitySystem.handleChannelDelete === 'function') {
-    await securitySystem.handleChannelDelete(channel);
+  if (!guildManager.isModuleEnabled(channel.guild.id, 'security')) {
+    emitChannelEvent('channel.deleted', channel);
+    return;
+  }
+
+  if (typeof antiNukeManager.handleChannelDelete === 'function') {
+    await antiNukeManager.handleChannelDelete(channel);
     emitChannelEvent('channel.deleted', channel);
     return;
   }

@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { resolveRuntimePath } = require('../../../config/runtimePaths');
 
 // ======================================================
 // BACKUP SYNC SYSTEM
@@ -29,15 +30,8 @@ const BOT_MODE = (
   'DEV'
 ).toLowerCase();
 
-const RUNTIME_ROOT = path.join(
-  process.cwd(),
-  'src',
-  'runtime',
-  BOT_MODE
-);
-
-const BACKUP_SYNC_DIR = path.join(
-  RUNTIME_ROOT,
+const BACKUP_SYNC_DIR = resolveRuntimePath(
+  BOT_MODE,
   'backups',
   'sync'
 );

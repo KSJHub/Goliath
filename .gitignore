@@ -25,7 +25,9 @@ pnpm-debug.log*
 # ======================
 tmp/
 temp/
-runtime/
+/src/runtime/dev/
+/src/runtime/beta/
+/src/runtime/production/
 backups/
 *.tmp
 *.temp
@@ -53,15 +55,10 @@ vite.config.timestamp-*
 # ======================
 # Local Runtime Data
 # ======================
-data/
+/data/
 src/guild/data/
 server/data/guilds/
 dashboard/server/data/guilds/
-
-# Keep runtime bootstrap source tracked, ignore generated runtime state
-src/runtime/*
-!src/runtime/runtimeBootstrap.js
-!src/runtime/.gitkeep
 
 # ======================
 # SQLite / Database Files
@@ -105,4 +102,3 @@ Thumbs.db
 # ======================
 !.gitkeep
 !important-runtime-files-if-needed
-package-lock.json

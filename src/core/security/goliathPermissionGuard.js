@@ -1,7 +1,7 @@
 'use strict';
 
 const { ChannelType, PermissionFlagsBits, PermissionsBitField } = require('discord.js');
-const testDevOverride = require('../dev/testDevOverrideManager');
+const testDevOverride = require('../../owner/dev/DevOverrideManager');
 
 const DEFAULT_BOT_CHANNEL_PERMISSIONS = [
   PermissionFlagsBits.ViewChannel,

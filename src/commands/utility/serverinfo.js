@@ -3,7 +3,7 @@ const {
   ChannelType,
 } = require('discord.js');
 
-const { enforceCommandAccess } = require('../../core/ui/commandAccess');
+const { enforceCommandAccess } = require('../../core/commands/commandAccess');
 const { baseEmbed } = require('../../core/ui/embeds');
 
 module.exports = {

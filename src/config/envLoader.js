@@ -1,19 +1,14 @@
-const path = require('path');
+'use strict';
+
+require('../runtime/warningFilter');
+
+const path = require('node:path');
 const dotenv = require('dotenv');
 
 const { normalizeBotMode, isValidBotMode } = require('./botModes');
 
-function loadEnvironment() {
-  const cwd = process.cwd().toLowerCase();
-
-const fallbackMode =
-  cwd.includes('/production') ? 'PRODUCTION'
-  : cwd.includes('/beta') ? 'BETA'
-  : 'DEV';
-
-const requestedMode = normalizeBotMode(
-  process.env.BOT_MODE || fallbackMode
-);
+function loadEnvironment(mode = process.env.BOT_MODE) {
+  const requestedMode = normalizeBotMode(mode);
 
   if (!isValidBotMode(requestedMode)) {
     console.error(`❌ Invalid BOT_MODE: ${requestedMode}`);

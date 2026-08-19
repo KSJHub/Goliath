@@ -1,6 +1,6 @@
 const { getRuntimePaths } = require('../../config/runtimePaths');
 
-const runtimePaths = getRuntimePaths(process.env.BOT_MODE || 'DEV');
+const runtimePaths = getRuntimePaths(process.env.BOT_MODE);
 
 const DEFAULT_GENERAL_SETTINGS = Object.freeze({
   prefix: '!',
@@ -195,21 +195,6 @@ const DEFAULT_MODULES = Object.freeze({
     settings: {
       defaultUserLimit: 0,
       deleteWhenEmpty: true,
-    },
-  },
-  roles: {
-    enabled: true,
-    settings: {
-      allowSelfRemove: true,
-      auditLog: true,
-      dailyTimedRoleCheck: true,
-    },
-    reactionPanels: {},
-    timedRoles: {},
-    joinRoles: {},
-    analytics: {
-      assigned: 0,
-      removed: 0,
     },
   },
   suggestions: {

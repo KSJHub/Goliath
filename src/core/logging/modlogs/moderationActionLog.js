@@ -204,10 +204,11 @@ async function logModerationAction({
     fields.push(...normalizeDetails(details));
 
     const actionLabel = formatModerationAction(action) || 'Moderation Action';
+    const embedTitle = String(title || `🔐 ${actionLabel}`).slice(0, 256);
 
     const embed = new EmbedBuilder()
       .setColor(color)
-      .setTitle(title || `🔐 ${actionLabel}`)
+      .setTitle(embedTitle)
       .setTimestamp();
 
     if (fields.length > 0) {

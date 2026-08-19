@@ -1,7 +1,6 @@
 'use strict';
 
 const { MessageFlags, PermissionFlagsBits, SlashCommandBuilder } = require('discord.js');
-const duplicator = require('../../core/dev/duplicator');
 
 async function safeReply(interaction, content) {
   const payload = { content, flags: MessageFlags.Ephemeral };
@@ -78,6 +77,7 @@ module.exports = {
 
   async execute(interaction) {
     try {
+      const duplicator = require('../../owner/dev/duplicator');
       return await duplicator.run(interaction);
     } catch (error) {
       console.error('[ServerCommand] Failed:', error);

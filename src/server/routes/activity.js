@@ -1,7 +1,8 @@
 'use strict';
 
 const express = require('express');
-const activity = require('../../features/activity/activityStore');
+const activity = require('../../core/activity/activityStore');
+const guildManager = require('../../core/guild/guildManager');
 
 const router = express.Router();
 
@@ -12,6 +13,7 @@ function guildId(req) {
   if (!/^\d{15,25}$/.test(id)) throw new Error('Invalid guild ID.');
   return id;
 }
+function timelineEnabled(id) { return guildManager.isModuleEnabled(id, 'timeline'); }
 
 router.get('/:guildId', (req, res) => {
   try {
@@ -22,7 +24,7 @@ router.get('/:guildId', (req, res) => {
       search: req.query.search || '',
       limit: req.query.limit || 100,
     });
-    return ok(res, { guildId: id, entries, summary: activity.summary(id) });
+    return ok(res, { guildId: id, enabled: timelineEnabled(id), entries, summary: activity.summary(id) });
   } catch (error) { return fail(res, error); }
 });
 
@@ -30,14 +32,14 @@ router.post('/:guildId', (req, res) => {
   try {
     const id = guildId(req);
     const entry = activity.logActivity(id, req.body || {});
-    return ok(res, { guildId: id, entry, entries: activity.getTimeline(id), summary: activity.summary(id) });
+    return ok(res, { guildId: id, enabled: timelineEnabled(id), entry, entries: activity.getTimeline(id), summary: activity.summary(id) });
   } catch (error) { return fail(res, error); }
 });
 
 router.delete('/:guildId', (req, res) => {
   try {
     const id = guildId(req);
-    return ok(res, { guildId: id, entries: activity.clearTimeline(id), summary: activity.summary(id) });
+    return ok(res, { guildId: id, enabled: timelineEnabled(id), entries: activity.clearTimeline(id), summary: activity.summary(id) });
   } catch (error) { return fail(res, error); }
 });
 
@@ -52,7 +54,7 @@ router.post('/:guildId/test', (req, res) => {
       severity: 'info',
       route: '/timeline',
     });
-    return ok(res, { guildId: id, entry, entries: activity.getTimeline(id), summary: activity.summary(id) });
+    return ok(res, { guildId: id, enabled: timelineEnabled(id), entry, entries: activity.getTimeline(id), summary: activity.summary(id) });
   } catch (error) { return fail(res, error); }
 });
 

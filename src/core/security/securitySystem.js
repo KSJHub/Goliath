@@ -10,6 +10,7 @@ const {
 } = require('discord.js');
 
 const guildManager = require('../guild/guildManager');
+const schedulerRegistry = require('../../owner/sentinel/schedulerRegistry');
 
 const {
   enableLockdown,
@@ -250,32 +251,55 @@ const DEFAULT_CONFIG = {
 // CLEANUP LOOP
 // ======================================================
 
-setInterval(() => {
-  const now = Date.now();
+const SECURITY_CLEANUP_INTERVAL_MS = 60_000;
+const SECURITY_CLEANUP_SCHEDULER_ID = schedulerRegistry.register({
+  module: 'security',
+  component: 'action-bucket-cleanup',
+  intervalMs: SECURITY_CLEANUP_INTERVAL_MS,
+  staleAfterMs: SECURITY_CLEANUP_INTERVAL_MS * 3,
+});
 
-  for (const [
-    key,
-    timestamps,
-  ] of actionBuckets.entries()) {
-    const fresh =
-      timestamps.filter(
-        (timestamp) =>
-          now - timestamp <
-          60000
-      );
+const securityCleanupTimer = setInterval(() => {
+  try {
+    const now = Date.now();
+    const before = actionBuckets.size;
 
-    if (fresh.length) {
-      actionBuckets.set(
-        key,
-        fresh
-      );
-    } else {
-      actionBuckets.delete(
-        key
-      );
+    for (const [
+      key,
+      timestamps,
+    ] of actionBuckets.entries()) {
+      const fresh =
+        timestamps.filter(
+          (timestamp) =>
+            now - timestamp <
+            SECURITY_CLEANUP_INTERVAL_MS
+        );
+
+      if (fresh.length) {
+        actionBuckets.set(
+          key,
+          fresh
+        );
+      } else {
+        actionBuckets.delete(
+          key
+        );
+      }
     }
+
+    schedulerRegistry.beat(SECURITY_CLEANUP_SCHEDULER_ID, {
+      bucketsBefore: before,
+      bucketsAfter: actionBuckets.size,
+      bucketsRemoved: Math.max(0, before - actionBuckets.size),
+    });
+  } catch (error) {
+    schedulerRegistry.fail(SECURITY_CLEANUP_SCHEDULER_ID, error, {
+      buckets: actionBuckets.size,
+    });
+    console.warn('[SecuritySystem] Action bucket cleanup failed:', error?.message || error);
   }
-}, 60000);
+}, SECURITY_CLEANUP_INTERVAL_MS);
+securityCleanupTimer.unref?.();
 
 // ======================================================
 // UTILITIES

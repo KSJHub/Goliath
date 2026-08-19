@@ -2,14 +2,13 @@
 
 const { EmbedBuilder, AuditLogEvent } = require('discord.js');
 const guildManager = require('../../core/guild/guildManager');
-const autoRoleManager = require('../../modules/autoroles/autoroles');
-const statsManager = require('../../modules/stats/statsManager');
-const verificationManager = require('../../modules/verification/verification');
-const welcomeManager = require('../../modules/welcome/welcome');
-const welcomeAvatarSync = require('../../modules/welcome/welcomeAvatarSync');
-const goodbyeManager = require('../../modules/goodbye/goodbye');
-const departureTemplateSender = require('../../modules/goodbye/departureTemplateSender');
-const goodbyeDepartureDm = require('../../modules/goodbye/goodbyeDepartureDm');
+const autoRoleManager = require('../../modules/roleStudio/autoRoles/autoRoles');
+const statsManager = require('../../modules/utilityStudio/stats/statsManager');
+const verificationManager = require('../../modules/securityStudio/verificationManager');
+const welcomeManager = require('../../modules/messageStudio/welcome/welcome');
+const welcomeAvatarSync = require('../../modules/messageStudio/welcome/welcomeAvatarSync');
+const goodbyeManager = require('../../modules/messageStudio/goodbye/goodbye');
+const goodbyeDeparture = require('../../modules/messageStudio/goodbye/goodbyeDeparture');
 
 function formatTimestamp(timestamp, style = 'R') {
   return timestamp ? `<t:${Math.floor(timestamp / 1000)}:${style}>` : 'Unknown';
@@ -69,20 +68,75 @@ async function findRecentAuditLog(guild, userId, auditType, maxAgeMs = 15000, al
   }
 }
 
+async function findRecentAuditLogWithRetry(guild, userId, auditType, options = {}) {
+  const {
+    maxAgeMs = 30000,
+    allowTargetless = false,
+    attempts = 4,
+    retryDelayMs = 750,
+  } = options;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const entry = await findRecentAuditLog(guild, userId, auditType, maxAgeMs, allowTargetless);
+    if (entry) return entry;
+    if (attempt < attempts - 1) await delay(retryDelayMs * (attempt + 1));
+  }
+
+  return null;
+}
+
+async function fetchActiveBan(guild, userId) {
+  try {
+    return await guild.bans.fetch(userId);
+  } catch (error) {
+    if (error?.code !== 10026) {
+      console.warn('[joinLeave] Active ban check failed:', error.message || error);
+    }
+    return null;
+  }
+}
+
 async function detectRemoval(member) {
   const guild = member.guild;
   const userId = member.user.id;
 
-  // Discord can emit guildMemberRemove just before the corresponding audit entry is visible.
-  await delay(1000);
+  await delay(750);
 
-  const banLog = await findRecentAuditLog(guild, userId, AuditLogEvent.MemberBanAdd, 25000);
+  const activeBan = await fetchActiveBan(guild, userId);
+  if (activeBan) {
+    const banLog = await findRecentAuditLogWithRetry(guild, userId, AuditLogEvent.MemberBanAdd, {
+      maxAgeMs: 45000,
+      attempts: 4,
+      retryDelayMs: 750,
+    });
+
+    return {
+      ...REMOVAL_TYPES.banned,
+      auditLog: banLog,
+      reasonLabel: activeBan.reason || REMOVAL_TYPES.banned.reasonLabel,
+    };
+  }
+
+  const banLog = await findRecentAuditLogWithRetry(guild, userId, AuditLogEvent.MemberBanAdd, {
+    maxAgeMs: 45000,
+    attempts: 4,
+    retryDelayMs: 750,
+  });
   if (banLog) return { ...REMOVAL_TYPES.banned, auditLog: banLog };
 
-  const kickLog = await findRecentAuditLog(guild, userId, AuditLogEvent.MemberKick, 25000);
+  const kickLog = await findRecentAuditLogWithRetry(guild, userId, AuditLogEvent.MemberKick, {
+    maxAgeMs: 35000,
+    attempts: 3,
+    retryDelayMs: 600,
+  });
   if (kickLog) return { ...REMOVAL_TYPES.kicked, auditLog: kickLog };
 
-  const pruneLog = await findRecentAuditLog(guild, userId, AuditLogEvent.MemberPrune, 30000, true);
+  const pruneLog = await findRecentAuditLogWithRetry(guild, userId, AuditLogEvent.MemberPrune, {
+    maxAgeMs: 45000,
+    allowTargetless: true,
+    attempts: 2,
+    retryDelayMs: 500,
+  });
   if (pruneLog) return { ...REMOVAL_TYPES.pruned, auditLog: pruneLog };
 
   return { ...REMOVAL_TYPES.left, auditLog: null };
@@ -167,10 +221,12 @@ module.exports = [
     async execute(member) {
       await statsManager.handleGuildMemberAdd(member);
 
-      const verificationResult = await verificationManager.handleMemberJoin(member).catch((error) => {
-        console.error('[verification] Failed to process member join:', error);
-        return { assigned: [] };
-      });
+      const verificationResult = guildManager.isModuleEnabled(member.guild.id, 'verification')
+        ? await verificationManager.handleMemberJoin(member).catch((error) => {
+          console.error('[verification] Failed to process member join:', error);
+          return { assigned: [] };
+        })
+        : { assigned: [] };
 
       const addedRoles = await autoRoleManager.applyAutoRoles(member).catch((error) => {
         console.error('[autoRoles] Failed to apply auto roles:', error);
@@ -182,10 +238,12 @@ module.exports = [
       }
 
       const welcomeStartedAt = Date.now();
-      const welcomeResult = await welcomeManager.sendWelcome(member).catch((error) => {
-        console.error('[Welcome] Failed to process member join:', error);
-        return null;
-      });
+      const welcomeResult = guildManager.isModuleEnabled(member.guild.id, 'welcome')
+        ? await welcomeManager.sendWelcome(member).catch((error) => {
+          console.error('[Welcome] Failed to process member join:', error);
+          return null;
+        })
+        : null;
 
       if (welcomeResult?.publicSent) {
         await welcomeAvatarSync.trackLatestWelcomeMessage(member, welcomeManager, welcomeStartedAt).catch((error) => {
@@ -199,16 +257,9 @@ module.exports = [
   {
     name: 'guildMemberUpdate',
     async execute(oldMember, newMember) {
+      if (!guildManager.isModuleEnabled(newMember.guild.id, 'verification')) return;
       await verificationManager.handleMemberUpdate(oldMember, newMember).catch((error) => {
         console.error('[verification] Failed to process member update:', error);
-      });
-    },
-  },
-  {
-    name: 'userUpdate',
-    async execute(oldUser, newUser) {
-      await welcomeAvatarSync.handleUserAvatarUpdate(oldUser, newUser, welcomeManager).catch((error) => {
-        console.warn('[Welcome] Failed to process avatar update:', error.message || error);
       });
     },
   },
@@ -218,14 +269,16 @@ module.exports = [
       await statsManager.handleGuildMemberRemove(member);
       const removal = await detectRemoval(member);
 
-      // User communication is best-effort and must never block the staff audit log.
-      await goodbyeDepartureDm.sendDepartureDm(member, removal).catch((error) => {
-        console.warn('[Goodbye] Failed to process departure DM:', error.message || error);
-      });
+      if (guildManager.isModuleEnabled(member.guild.id, 'goodbye')) {
+        await goodbyeDeparture.sendDepartureDm(member, removal).catch((error) => {
+          console.warn('[Goodbye] Failed to process departure DM:', error.message || error);
+        });
 
-      await departureTemplateSender.sendDeparture(member, removal).catch((error) => {
-        console.error('[Goodbye] Failed to process member departure:', error);
-      });
+        await goodbyeDeparture.sendDeparture(member, removal).catch((error) => {
+          console.error('[Goodbye] Failed to process member departure:', error);
+        });
+      }
+
       await sendAdminMemberRemovalLog(member, removal);
     },
   },

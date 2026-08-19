@@ -161,9 +161,10 @@ function normalizeFields(fields = []) {
 }
 
 function buildEmbed(type, data = {}) {
+  const title = String(data.title || formatType(type)).slice(0, 256);
   const embed = new EmbedBuilder()
     .setColor(data.color || '#5865F2')
-    .setTitle(data.title || formatType(type))
+    .setTitle(title)
     .setTimestamp();
 
   const fields = [];
@@ -175,7 +176,7 @@ function buildEmbed(type, data = {}) {
 
   fields.push(...normalizeFields(data.fields));
 
-  if (fields.length) embed.addFields(fields);
+  if (fields.length) embed.addFields(fields.slice(0, 25));
   if (data.description) embed.setDescription(String(data.description).slice(0, 4096));
   if (data.url) embed.setURL(data.url);
 

@@ -1,11 +1,19 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { MEDIA_ROOT } = require('./mediaConfig');
 
-function cleanupMediaTempFiles({ maxAgeMs = 1000 * 60 * 60 * 24 } = {}) {
+const DEFAULT_MAX_AGE_MS = 1000 * 60 * 60 * 24;
+
+function positiveMs(value, fallback = DEFAULT_MAX_AGE_MS) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function cleanupMediaTempFiles({ maxAgeMs = DEFAULT_MAX_AGE_MS } = {}) {
+  const retentionMs = positiveMs(maxAgeMs);
   const now = Date.now();
   let deleted = 0;
 
@@ -20,7 +28,7 @@ function cleanupMediaTempFiles({ maxAgeMs = 1000 * 60 * 60 * 24 } = {}) {
 
       if (!full.includes(`${path.sep}uploads${path.sep}`)) continue;
       const stats = fs.statSync(full);
-      if (now - stats.mtimeMs > maxAgeMs) {
+      if (now - stats.mtimeMs > retentionMs) {
         fs.unlinkSync(full);
         deleted += 1;
       }

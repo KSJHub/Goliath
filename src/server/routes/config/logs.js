@@ -4,7 +4,7 @@ const guildManager = require('../../../core/guild/guildManager');
 const { emitGuildUpdate } = require('../../sockets/socketHub');
 
 const router = express.Router();
-
+const MODULE_KEY = 'logging';
 const DEFAULT_LOG_SETTINGS = Object.freeze({
   useWebhooks: true,
   ignoreEmbeds: false,
@@ -93,26 +93,34 @@ function normalizeLogSettings(bodySettings = {}, currentSettings = {}) {
 }
 
 function getDefaultLogsConfig() {
-  return {
-    enabled: true,
+  const defaults = {
     channels: {},
     events: {},
     settings: DEFAULT_LOG_SETTINGS,
     ...(guildManager.DEFAULT_LOGS || {}),
   };
+  delete defaults.enabled;
+  return defaults;
 }
 
 function normalizeLogsConfig(config = {}) {
   const defaults = getDefaultLogsConfig();
   const safeConfig = isPlainObject(config) ? config : {};
-
-  return {
+  const normalized = {
     ...defaults,
     ...safeConfig,
-    enabled: safeConfig.enabled !== false,
     channels: normalizeLogChannels(safeConfig.channels || {}, defaults.channels || {}),
     events: normalizeLogEvents(safeConfig.events || {}, defaults.events || {}),
     settings: normalizeLogSettings(safeConfig.settings || {}, defaults.settings || {}),
+  };
+  delete normalized.enabled;
+  return normalized;
+}
+
+function canonicalConfig(guildId, config = {}) {
+  return {
+    ...normalizeLogsConfig(config),
+    enabled: guildManager.isModuleEnabled(guildId, MODULE_KEY),
   };
 }
 
@@ -128,7 +136,7 @@ router.get('/:guildId', (req, res) => {
     }
 
     const current = guildManager.getGuildSection(guildId, 'logs', getDefaultLogsConfig());
-    const config = normalizeLogsConfig(current);
+    const config = canonicalConfig(guildId, current);
 
     return res.json({
       ok: true,
@@ -162,15 +170,19 @@ router.post('/:guildId', (req, res) => {
       guildManager.getGuildSection(guildId, 'logs', getDefaultLogsConfig())
     );
 
+    if (typeof body.enabled === 'boolean') {
+      guildManager.setModuleEnabled(guildId, MODULE_KEY, body.enabled);
+    }
+
     const payload = normalizeLogsConfig({
       ...current,
-      enabled: body.enabled !== false,
       channels: normalizeLogChannels(body.channels, current.channels),
       events: normalizeLogEvents(body.events, current.events),
       settings: normalizeLogSettings(body.settings, current.settings),
     });
 
-    const config = guildManager.saveGuildSection(guildId, 'logs', payload);
+    const saved = guildManager.saveGuildSection(guildId, 'logs', payload);
+    const config = canonicalConfig(guildId, saved);
 
     emitGuildUpdate(guildId, {
       section: 'logs',

@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { PermissionFlagsBits } = require('discord.js');
 
 const {
   getGuildData,
@@ -9,21 +10,23 @@ const {
   deleteEmbedPreset,
   saveEmbedBuilderDraft,
   setModuleEnabled,
+  isModuleEnabled,
 } = require('../../core/guild/guildManager');
 
-const autoRoleStore = require('../../modules/autoroles/autoroles');
+const autoRoleStore = require('../../modules/roleStudio/autoRoles/autoRoles');
 const autoRoleManager = autoRoleStore;
-const verificationStore = require('../../modules/verification/verificationStore');
-const verificationManager = require('../../modules/verification/verificationManager');
-const embedTemplateManager = require('../../modules/embed/embedTemplateManager');
+const verificationStore = require('../../modules/securityStudio/verificationStore');
+const verificationManager = require('../../modules/securityStudio/verificationManager');
+const embedTemplateManager = require('../../modules/messageStudio/embed/embedTemplates');
 const {
   getAllEmbedDeployments,
   deleteEmbedDeployment,
-} = require('../../modules/embed/embedDeploymentStore');
+} = require('../../modules/messageStudio/embed/embedDeployments');
 const {
   isGoliathPermissionError,
   validateRoleSelection,
 } = require('../../core/security/goliathPermissionGuard');
+const security = require('../../core/security/securityCore');
 const { requirePlanLimit } = require('../middleware/requirePlanLimit');
 
 const router = express.Router();
@@ -32,18 +35,18 @@ const MODULE_CATALOG = Object.freeze({
   verification: {
     key: 'verification',
     name: 'Verification',
-    icon: '✅',
+    icon: '\u2705',
     category: 'Security',
     summary: 'Verify members, assign roles and deploy a custom verification panel.',
     apiBase: '/api/verification',
-    dashboardPath: '/modules/verification',
+    dashboardPath: '/modules/securityStudio/verification',
     maturity: 'in_progress',
     configurable: true,
   },
   autoRoles: {
     key: 'autoRoles',
     name: 'Auto Roles',
-    icon: '🤖',
+    icon: '\uD83E\uDD16',
     category: 'Automation',
     summary: 'Automatically assign roles to members and bots when they join.',
     apiBase: '/api/modules/:guildId/auto-roles',
@@ -54,7 +57,7 @@ const MODULE_CATALOG = Object.freeze({
   embedStudio: {
     key: 'embedStudio',
     name: 'Embed Studio',
-    icon: '🖼️',
+    icon: '\uD83D\uDDBC\uFE0F',
     category: 'Utilities',
     summary: 'Create, save and deploy reusable embed templates.',
     apiBase: '/api/modules/:guildId/embed-studio',
@@ -101,6 +104,11 @@ function getGuildId(req) {
   return guildId;
 }
 
+function cleanDiscordId(value) {
+  const id = String(value || '').replace(/[<@#!&>]/g, '').trim();
+  return /^\d{15,25}$/.test(id) ? id : null;
+}
+
 function cleanModuleKey(value) {
   const key = String(value || '').trim();
   if (!/^[a-zA-Z0-9_-]{2,80}$/.test(key)) throw new Error('Invalid module key.');
@@ -130,6 +138,12 @@ function normalizeModuleMap(modules = {}) {
   const output = {};
   if (modules && typeof modules === 'object' && !Array.isArray(modules)) {
     for (const [key, value] of Object.entries(modules)) {
+      if (key === 'verification') {
+        output[key] = {
+          enabled: typeof value === 'boolean' ? value !== false : value?.enabled !== false,
+        };
+        continue;
+      }
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         output[key] = { ...value, enabled: value.enabled !== false };
       } else if (typeof value === 'boolean') {
@@ -161,6 +175,37 @@ async function fetchGuild(req, guildId) {
   return client.guilds.cache.get(guildId) || client.guilds.fetch(guildId).catch(() => null);
 }
 
+async function requireVerificationGuildAccess(req, res, next) {
+  try {
+    const userId = cleanDiscordId(req.session?.user?.id);
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required.' });
+    }
+
+    const guildId = getGuildId(req);
+    req.verificationActorId = userId;
+    if (security.isBotOwner(userId)) return next();
+
+    const guild = await fetchGuild(req, guildId);
+    if (!guild) {
+      return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
+    }
+
+    const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+    const allowed = Boolean(
+      member?.permissions?.has(PermissionFlagsBits.Administrator) ||
+      member?.permissions?.has(PermissionFlagsBits.ManageGuild)
+    );
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
+    }
+
+    return next();
+  } catch (error) {
+    return failure(res, error, 403);
+  }
+}
+
 async function guardManageableRoles(guild, roleIds = [], scope = 'roles') {
   const cleanRoleIds = autoRoleStore.cleanRoleIds(roleIds);
   if (!cleanRoleIds.length) return null;
@@ -184,7 +229,12 @@ async function guardAutoRoleConfig(req, guildId, input = {}) {
 
 async function guardVerificationRoles(req, guildId, input = {}) {
   const settings = input.settings && typeof input.settings === 'object' ? input.settings : input;
-  const roleIds = [settings?.verifiedRoleId, settings?.unverifiedRoleId].filter(Boolean);
+  const roleIds = [
+    settings?.verifiedRoleId,
+    settings?.unverifiedRoleId,
+    ...(Array.isArray(settings?.verifiedRoleIds) ? settings.verifiedRoleIds : []),
+    ...(Array.isArray(settings?.pendingRoleIds) ? settings.pendingRoleIds : []),
+  ].filter(Boolean);
   if (!roleIds.length) return null;
 
   const guild = await fetchGuild(req, guildId);
@@ -238,6 +288,11 @@ function getVerificationPayload(guildId) {
   };
 }
 
+// Protect both the legacy verification endpoints below and the generic module
+// enabled route when moduleKey === "verification". This middleware is declared
+// before the generic route so /:guildId/verification/enabled cannot bypass it.
+router.use('/:guildId/verification', requireVerificationGuildAccess);
+
 router.get('/:guildId', (req, res) => {
   try {
     const guildId = getGuildId(req);
@@ -262,7 +317,7 @@ router.patch('/:guildId/:moduleKey/enabled', (req, res) => {
     const guildId = getGuildId(req);
     const moduleKey = cleanModuleKey(req.params.moduleKey);
     const enabled = req.body?.enabled === true;
-    setModuleEnabled(guildId, moduleKey, enabled);
+    setModuleEnabled(guildId, moduleKey, enabled, moduleKey === 'verification' ? { actorId: req.verificationActorId } : {});
     const modules = normalizeModuleMap(getGuildSection(guildId, 'modules', {}));
     return success(res, { guildId, moduleKey, enabled, modules });
   } catch (error) {
@@ -279,24 +334,12 @@ router.get('/:guildId/verification', (req, res) => {
   }
 });
 
-router.patch('/:guildId/verification/enabled', (req, res) => {
-  try {
-    const guildId = getGuildId(req);
-    const enabled = req.body?.enabled === true;
-    verificationManager.setVerificationEnabled(guildId, enabled, { actorId: req.body?.actorId });
-    setModuleEnabled(guildId, 'verification', enabled);
-    return success(res, { guildId, enabled, ...getVerificationPayload(guildId) });
-  } catch (error) {
-    return failure(res, error, 400);
-  }
-});
-
 router.patch('/:guildId/verification/settings', async (req, res) => {
   try {
     const guildId = getGuildId(req);
     await guardVerificationRoles(req, guildId, req.body || {});
     const settings = req.body?.settings || req.body || {};
-    const config = verificationManager.updateVerificationSettings(guildId, settings, { actorId: req.body?.actorId });
+    const config = verificationManager.updateVerificationSettings(guildId, settings, { actorId: req.verificationActorId });
     return success(res, { guildId, config, ...getVerificationPayload(guildId) });
   } catch (error) {
     return failure(res, error, 400);
@@ -400,7 +443,7 @@ router.get('/:guildId/auto-roles', (req, res) => {
   try {
     const guildId = getGuildId(req);
     const config = autoRoleStore.getAutoRolesSection(guildId);
-    return success(res, { guildId, config, overview: { enabled: config.enabled !== false, joinRoleCount: (config.joinRoles || []).length, botRoleCount: (config.botRoles || []).length, applyToBots: config.settings?.applyToBots === true, analytics: config.analytics || {} } });
+    return success(res, { guildId, config, overview: { enabled: isModuleEnabled(guildId, 'autoRoles'), joinRoleCount: (config.joinRoles || []).length, botRoleCount: (config.botRoles || []).length, applyToBots: config.settings?.applyToBots === true, analytics: config.analytics || {} } });
   } catch (error) {
     return failure(res, error, 400);
   }

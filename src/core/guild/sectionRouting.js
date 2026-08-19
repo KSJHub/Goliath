@@ -1,6 +1,6 @@
 'use strict';
 
-const LEGACY_SECTION_MAP = Object.freeze({
+const SECTION_PATHS = Object.freeze({
   tickets: 'modules.tickets',
   security: 'modules.security',
   logs: 'modules.logs',
@@ -13,12 +13,14 @@ const LEGACY_SECTION_MAP = Object.freeze({
   serverBackups: 'modules.serverBackups',
   moderation: 'modules.moderation',
   discord: 'modules.discord',
+  automod: 'modules.automod',
   polls: 'modules.polls',
   stats: 'modules.stats',
+  social: 'modules.social',
   templates: 'modules.serverCopy.templates',
 });
 
-const LEGACY_TOP_LEVEL_SECTIONS = Object.freeze(Object.keys(LEGACY_SECTION_MAP));
+const UNSAFE_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -30,8 +32,18 @@ function clone(value) {
 
 function getPathParts(sectionName) {
   const rawSection = String(sectionName || '').trim();
-  const routedSection = LEGACY_SECTION_MAP[rawSection] || rawSection;
-  return routedSection.split('.').map((part) => part.trim()).filter(Boolean);
+  const routedSection = SECTION_PATHS[rawSection] || rawSection;
+  const pathParts = routedSection.split('.').map((part) => part.trim()).filter(Boolean);
+
+  if (pathParts.length === 0) {
+    throw new Error('Guild section path is required.');
+  }
+
+  if (pathParts.some((part) => UNSAFE_PATH_SEGMENTS.has(part))) {
+    throw new Error('Invalid guild section path.');
+  }
+
+  return pathParts;
 }
 
 function getValueAtPath(source, pathParts) {
@@ -73,26 +85,7 @@ function setRoutedSection(source, sectionName, sectionData = {}) {
   return setValueAtPath(source, resolveSectionPath(sectionName), isPlainObject(sectionData) ? sectionData : {});
 }
 
-function removeLegacyTopLevelSections(source = {}) {
-  if (!isPlainObject(source)) return {};
-  const clean = clone(source);
-  for (const sectionName of LEGACY_TOP_LEVEL_SECTIONS) {
-    delete clean[sectionName];
-  }
-  return clean;
-}
-
-function hasLegacyTopLevelSections(source = {}) {
-  if (!isPlainObject(source)) return false;
-  return LEGACY_TOP_LEVEL_SECTIONS.some((sectionName) => Object.prototype.hasOwnProperty.call(source, sectionName));
-}
-
 module.exports = {
-  LEGACY_SECTION_MAP,
-  LEGACY_TOP_LEVEL_SECTIONS,
-  resolveSectionPath,
   getRoutedSection,
   setRoutedSection,
-  removeLegacyTopLevelSections,
-  hasLegacyTopLevelSections,
 };

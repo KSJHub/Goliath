@@ -11,9 +11,9 @@ const {
   setGuildPrefix,
   resetGuildPrefix,
   normalizePrefix,
-} = require('../../features/prefix/prefixStore');
+} = require('../../core/commands/prefixStore');
 
-const { enforceCommandAccess } = require('../../core/ui/commandAccess');
+const { enforceCommandAccess } = require('../../core/commands/commandAccess');
 
 function buildPrefixEmbed(interaction) {
   const info = getPrefixInfo(interaction.guild.id);
@@ -59,8 +59,8 @@ module.exports = {
   },
 
   access: {
+    level: 'admin',
     ownerOnly: false,
-    permissions: [PermissionFlagsBits.ManageGuild],
   },
 
   data: new SlashCommandBuilder()

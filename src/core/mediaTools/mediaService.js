@@ -1,7 +1,7 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const { DISCORD_LIMITS, UPLOAD_LIMITS } = require('./mediaConfig');
 const {
@@ -27,14 +27,21 @@ function decodeDataUrl(dataUrl) {
   const match = value.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) throw new Error('Upload must be a base64 data URL.');
 
+  const encoded = String(match[2] || '').replace(/\s+/g, '');
+  if (!encoded || encoded.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
+    throw new Error('Upload data could not be decoded.');
+  }
+
   let buffer;
   try {
-    buffer = Buffer.from(match[2], 'base64');
+    buffer = Buffer.from(encoded, 'base64');
   } catch {
     throw new Error('Upload data could not be decoded.');
   }
 
-  if (!buffer.length) throw new Error('Uploaded file is empty.');
+  if (!buffer.length || buffer.toString('base64') !== encoded) {
+    throw new Error('Upload data could not be decoded.');
+  }
 
   return {
     mimeType: String(match[1] || '').toLowerCase(),

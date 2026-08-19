@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 
-const { enforceCommandAccess } = require('../../core/ui/commandAccess');
+const { enforceCommandAccess } = require('../../core/commands/commandAccess');
 const {
   baseEmbed,
   statusText,

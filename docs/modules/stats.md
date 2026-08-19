@@ -19,13 +19,13 @@ Timeline does not duplicate this responsibility. Timeline is internal audit-hist
 
 ## Canonical files
 
-- `src/modules/stats/stats.js` — canonical module entry
-- `src/modules/stats/statsPanel.js` — Discord administration
-- `src/modules/stats/statsRoute.js` — dashboard and API surface
-- `src/modules/stats/statsHealth.js` — health, repair, export and reset
-- `src/modules/stats/statsManager.js` — event tracking and counter refresh runtime
-- `src/modules/stats/statsStore.js` — guild configuration and activity data
-- `src/modules/stats/statsCounters.js` — Discord counter-channel lifecycle
+- `src/modules/utilityStudio/stats/stats.js` — canonical module entry
+- `src/modules/utilityStudio/stats/statsPanel.js` — Discord administration
+- `src/modules/utilityStudio/stats/statsRoute.js` — dashboard and API surface
+- `src/modules/utilityStudio/stats/statsHealth.js` — health, repair, export and reset
+- `src/modules/utilityStudio/stats/statsManager.js` — event tracking and counter refresh runtime
+- `src/modules/utilityStudio/stats/statsStore.js` — guild configuration and activity data
+- `src/modules/utilityStudio/stats/statsCounters.js` — Discord counter-channel lifecycle
 
 `src/server/routes/stats.js` is temporarily a one-line compatibility shim until `server.js` is pointed directly at the canonical route.
 

@@ -1,5 +1,5 @@
 const { PermissionFlagsBits, MessageFlags } = require('discord.js');
-const { isDevOwnerHierarchyOverride } = require('./testModeGuard');
+const { isDevOwnerHierarchyOverride } = require('../../owner/dev/DevOverrideManager');
 
 const DEFAULT_COOLDOWN_MS = Number(process.env.SECURITY_COOLDOWN_MS || 2500);
 const MAX_COOLDOWN_MS = 60 * 60 * 1000;

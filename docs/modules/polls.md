@@ -4,11 +4,11 @@ Polls provides stored, deployable Discord community polls with button voting, au
 
 ## Canonical files
 
-- `src/modules/polls/polls.js` — runtime and deployment lifecycle
-- `src/modules/polls/pollsPanel.js` — Discord administration
-- `src/modules/polls/pollsRoute.js` — dashboard/API surface
-- `src/modules/polls/pollsHealth.js` — health, repair, export, and reset
-- `src/modules/polls/pollsManager.js` — storage normalization and Discord message builders
+- `src/modules/communityStudio/polls/polls.js` — runtime and deployment lifecycle
+- `src/modules/communityStudio/polls/pollsPanel.js` — Discord administration
+- `src/modules/communityStudio/polls/pollsRoute.js` — dashboard/API surface
+- `src/modules/communityStudio/polls/pollsHealth.js` — health, repair, export, and reset
+- `src/modules/communityStudio/polls/pollsManager.js` — storage normalization and Discord message builders
 
 ## Storage
 
@@ -36,7 +36,7 @@ Health checks validate configured channels and every active poll deployment. Rep
 
 ## API
 
-The module is mounted directly from `src/modules/polls/pollsRoute.js` at `/api/polls` and provides configuration, creation, update, deployment, status, deletion, health, repair, export, and reset operations.
+The module is mounted directly from `src/modules/communityStudio/polls/pollsRoute.js` at `/api/polls` and provides configuration, creation, update, deployment, status, deletion, health, repair, export, and reset operations.
 
 ## Discord administration
 
