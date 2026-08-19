@@ -430,8 +430,34 @@ function corePanel(overview, interaction, notice = '') {
       ));
     });
   }
-  components.push(row(button('admin:module:emojis:panel', '⬅️ Emoji Studio', ButtonStyle.Secondary)));
+  components.push(row(
+    button('admin:module:emojis:core-preview', '👁️ Preview Core', ButtonStyle.Primary),
+    button('admin:module:emojis:panel', '⬅️ Emoji Studio', ButtonStyle.Secondary),
+  ));
   return { embeds: [embed], components };
+}
+
+function corePreviewPanel(overview, interaction) {
+  const installed = (Array.isArray(overview.coreStatus) ? overview.coreStatus : []).filter((entry) => entry.installed && entry.emoji);
+  const lines = installed.map((entry) => `${entry.mention || entry.emoji.mention || `:${entry.alias}:`}  \`:${entry.alias}:\`  •  ${entry.animated ? 'Animated' : 'Static'}`);
+  const embed = new EmbedBuilder()
+    .setColor(PANEL_COLOR)
+    .setTitle('👁️ Goliath Core Emoji Preview')
+    .setDescription([
+      `**Installed:** ${installed.length}/${overview.coreCapacity.max}`,
+      'These are the real Discord application emoji mentions Goliath will render.',
+      '',
+      lines.length ? lines.join('\n') : 'No Goliath Core emojis are installed yet.',
+    ].join('\n'))
+    .setFooter({ text: `Requested by ${memberName(interaction)}` })
+    .setTimestamp();
+  return {
+    embeds: [embed],
+    components: [row(
+      button('admin:module:emojis:core-preview', '🔄 Refresh Preview', ButtonStyle.Primary),
+      button('admin:module:emojis:core', '⬅️ Goliath Core', ButtonStyle.Secondary),
+    )],
+  };
 }
 
 function coreManagePanel(overview, interaction, emoji, notice = '') {
@@ -550,6 +576,11 @@ async function handleDiscordInteraction(interaction) {
 
   if (id === 'admin:module:emojis:core' && interaction.isButton?.()) {
     await sendPanel(interaction, corePanel(await discordOverview(interaction), interaction));
+    return true;
+  }
+
+  if (id === 'admin:module:emojis:core-preview' && interaction.isButton?.()) {
+    await sendPanel(interaction, corePreviewPanel(await discordOverview(interaction), interaction));
     return true;
   }
 

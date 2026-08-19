@@ -71,6 +71,33 @@ function serialise(emoji) {
   };
 }
 
+function buildCoreIntegrity(core = []) {
+  const byAlias = new Map();
+  const rogue = [];
+
+  for (const emoji of core) {
+    const alias = String(emoji?.alias || '').toLowerCase();
+    if (!CORE_EMOJI_ALIAS_SET.has(alias)) {
+      rogue.push(emoji);
+      continue;
+    }
+    const group = byAlias.get(alias) || [];
+    group.push(emoji);
+    byAlias.set(alias, group);
+  }
+
+  const duplicates = [...byAlias.entries()]
+    .filter(([, entries]) => entries.length > 1)
+    .map(([alias, entries]) => ({ alias, emojiIds: entries.map((entry) => String(entry.id)) }));
+
+  return {
+    healthy: rogue.length === 0 && duplicates.length === 0,
+    rogue,
+    duplicates,
+    approvedInstalled: [...byAlias.keys()].length,
+  };
+}
+
 async function listBank(client) {
   const emojis = await requireEmojiManager(client).fetch();
   return [...emojis.values()].map(serialise).sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -80,7 +107,13 @@ async function overview(client, guildId) {
   const bank = await listBank(client);
   const core = bank.filter((emoji) => emoji.core === true);
   const studio = bank.filter((emoji) => emoji.core !== true);
-  const installedCoreByAlias = new Map(core.map((emoji) => [String(emoji.alias || '').toLowerCase(), emoji]));
+  const coreIntegrity = buildCoreIntegrity(core);
+  const installedCoreByAlias = new Map();
+  for (const emoji of core) {
+    const alias = String(emoji.alias || '').toLowerCase();
+    if (!CORE_EMOJI_ALIAS_SET.has(alias) || installedCoreByAlias.has(alias)) continue;
+    installedCoreByAlias.set(alias, emoji);
+  }
   const installedCoreAliases = new Set(installedCoreByAlias.keys());
   const missingCore = CORE_EMOJI_ALIASES.filter((alias) => !installedCoreAliases.has(alias));
   const coreStatus = CORE_EMOJI_ALIASES.map((alias, index) => {
@@ -125,6 +158,7 @@ async function overview(client, guildId) {
     core,
     coreCatalog: CORE_EMOJI_ALIASES,
     coreStatus,
+    coreIntegrity,
     missingCore,
     studio,
     favourites,
@@ -197,7 +231,11 @@ async function renameInBank(client, emojiId, name, options = {}) {
   if (isCoreEmoji(existing) && options.allowCore === true) {
     const alias = isCoreEmojiName(clean) ? coreAlias(clean) : clean;
     if (!CORE_EMOJI_ALIAS_SET.has(alias)) throw new Error(`Unknown Goliath Core emoji alias: ${alias}.`);
-    const edited = await manager.edit(String(emojiId), { name: `${CORE_EMOJI_PREFIX}${alias}` });
+    const targetName = `${CORE_EMOJI_PREFIX}${alias}`;
+    const bank = await manager.fetch();
+    const collision = [...bank.values()].find((emoji) => String(emoji.id) !== String(existing.id) && String(emoji.name).toLowerCase() === targetName);
+    if (collision) throw new Error(`Goliath Core alias :${alias}: is already installed.`);
+    const edited = await manager.edit(String(emojiId), { name: targetName });
     return serialise(edited);
   }
   if (isCoreEmojiName(clean) && options.allowCore !== true) throw new Error(`Names beginning with ${CORE_EMOJI_PREFIX} are reserved for Goliath Core emojis.`);
@@ -231,7 +269,10 @@ async function resolveGuildEmoji(client, guildId, reference) {
   const bank = await requireEmojiManager(client).fetch();
   const emoji = findByReference(bank, reference);
   if (!emoji) return null;
-  if (isCoreEmoji(emoji)) return serialise(emoji);
+  if (isCoreEmoji(emoji)) {
+    if (!CORE_EMOJI_ALIAS_SET.has(coreAlias(emoji.name))) return null;
+    return serialise(emoji);
+  }
   if (!section.enabled) return null;
 
   const favourites = new Set(section.favourites.map(String));
@@ -249,9 +290,10 @@ async function allowedGuildEmojis(client, guildId) {
     if (!emoji?.name) continue;
     const name = String(emoji.name).toLowerCase();
     if (isCoreEmoji(emoji)) {
-      allowed.set(name, emoji);
       const alias = coreAlias(name);
-      if (alias) allowed.set(alias, emoji);
+      if (!CORE_EMOJI_ALIAS_SET.has(alias)) continue;
+      allowed.set(name, emoji);
+      allowed.set(alias, emoji);
       continue;
     }
     if (section.enabled && selected.has(String(emoji.id))) allowed.set(name, emoji);
