@@ -14,6 +14,10 @@ const giveawaysAdminPanel = read('src/modules/communityStudio/giveaways/giveaway
 const privateRoomsPanel = read('src/modules/utilityStudio/privateRooms/privateRoomsPanel.js');
 const birthdaysPanel = read('src/modules/communityStudio/birthdays/birthdaysPanel.js');
 const birthdaysViews = read('src/modules/communityStudio/birthdays/birthdaysViews.js');
+const embedPanel = read('src/modules/messageStudio/embed/embedPanel.js');
+const embedInteractions = read('src/modules/messageStudio/embed/embedInteractions.js');
+const embedState = read('src/modules/messageStudio/embed/embedState.js');
+const warningFilter = read('src/runtime/warningFilter.js');
 
 test('Community Studio keeps Birthdays and Giveaways entry routes', () => {
   assert.match(moduleAdminPanels, /key: 'birthdays', studio: 'communityStudio', route: 'admin:birthdays'/);
@@ -75,4 +79,55 @@ test('Birthday user action buttons stay routed', () => {
   assert.match(birthdaysPanel, /id === 'birthdays:user:privacy'/);
   assert.match(birthdaysPanel, /id === 'birthdays:user:remove'/);
   assert.match(birthdaysPanel, /id === 'birthdays:user:upcoming'/);
+});
+
+test('Embed preset UI is owned by embedPanel', () => {
+  for (const customId of [
+    'embed:preset-select',
+    'embed:preset-load',
+    'embed:preset-save',
+    'embed:preset-new',
+    'embed:preset-rename',
+    'embed:preset-duplicate',
+    'embed:preset-delete',
+    'embed:preset-default',
+  ]) {
+    assert.match(embedPanel, new RegExp(customId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('Embed named preset actions are owned by embedInteractions', () => {
+  assert.match(embedInteractions, /async function handlePresetInteraction\(/);
+  assert.match(embedInteractions, /if \(await handlePresetInteraction\(interaction\)\) return true/);
+  for (const customId of [
+    'embed:preset-select',
+    'embed:preset-load',
+    'embed:preset-save',
+    'embed:preset-new',
+    'embed:preset-rename',
+    'embed:preset-duplicate',
+    'embed:preset-delete',
+    'embed:preset-default',
+    'embed:preset-overwrite-confirm',
+    'embed:preset-overwrite-cancel',
+  ]) {
+    assert.match(embedInteractions, new RegExp(customId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('Embed state stays free of preset runtime monkey patches', () => {
+  assert.doesNotMatch(embedState, /installPresetCompatibility/);
+  assert.doesNotMatch(embedState, /presetCompatibilityInstalled/);
+  assert.doesNotMatch(embedState, /__namedPresetCompatibility/);
+  assert.doesNotMatch(embedState, /buildPresetsPanel\s*=/);
+  assert.doesNotMatch(embedState, /handleInteraction\s*=/);
+});
+
+test('Embed preset compatibility is not installed from global warning filter', () => {
+  assert.doesNotMatch(warningFilter, /embedPresetManagerCompat/);
+  assert.doesNotMatch(warningFilter, /Enhanced preset manager/);
+  assert.equal(
+    fs.existsSync(path.join(ROOT, 'src/modules/messageStudio/embed/embedPresetManagerCompat.js')),
+    false,
+  );
 });

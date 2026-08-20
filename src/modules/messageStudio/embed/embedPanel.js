@@ -917,20 +917,47 @@ function buildButtonOptionsPanel(interaction) {
     components: rows.filter(Boolean).slice(0, EMBED_COMPONENT_LIMITS.maxActionRows),
   };
 }
-function buildPresetsPanel(i, presets = {}, defaultName = null) {
+function cleanPresetName(value) {
+  return String(value || "").trim().slice(0, 50);
+}
+function buildPresetsPanel(i, presets = null, defaultName = null) {
   const s = getSession(i), rows = [];
-  const entries = Object.entries(presets || {}).slice(0, 25);
+  const guildId = i?.guildId || i?.guild?.id || null;
+  const resolvedPresets = presets && typeof presets === "object" && !Array.isArray(presets)
+    ? presets
+    : (guildId && typeof guildManager.getEmbedPresets === "function" ? guildManager.getEmbedPresets(guildId) || {} : {});
+  const resolvedDefault = defaultName != null
+    ? defaultName
+    : (guildId && typeof guildManager.getEmbedDefaults === "function"
+      ? (guildManager.getEmbedDefaults(guildId) || {})[s.template || "custom"] || null
+      : null);
+  const entries = Object.entries(resolvedPresets || {}).slice(0, 25);
   if (entries.length) rows.push(new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId("embed:preset-select").setPlaceholder("💾 Select preset").addOptions(entries.map(([name]) => ({ label: name.slice(0, 100), value: name.slice(0, 100), description: defaultName === name ? "Default preset" : "Saved preset", default: s.selectedPreset === name }))),
+    new StringSelectMenuBuilder()
+      .setCustomId("embed:preset-select")
+      .setPlaceholder("💾 Select preset")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(entries.map(([key, preset]) => ({
+        label: (cleanPresetName(preset?.name || key) || key).slice(0, 100),
+        value: key.slice(0, 100),
+        description: resolvedDefault === key ? "Default preset" : "Saved preset",
+        default: s.selectedPreset === key,
+      }))),
   ));
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("embed:preset-load").setLabel("📂 Load").setStyle(ButtonStyle.Primary).setDisabled(!s.selectedPreset),
     new ButtonBuilder().setCustomId("embed:preset-save").setLabel("💾 Save Current").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("embed:preset-new").setLabel("➕ New").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("embed:preset-rename").setLabel("✏️ Rename").setStyle(ButtonStyle.Secondary).setDisabled(!s.selectedPreset),
+    new ButtonBuilder().setCustomId("embed:preset-duplicate").setLabel("📄 Duplicate").setStyle(ButtonStyle.Secondary).setDisabled(!s.selectedPreset),
+  ));
+  rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("embed:preset-delete").setLabel("🗑️ Delete").setStyle(ButtonStyle.Danger).setDisabled(!s.selectedPreset),
     new ButtonBuilder().setCustomId("embed:preset-default").setLabel("⭐ Set Default").setStyle(ButtonStyle.Secondary).setDisabled(!s.selectedPreset),
+    new ButtonBuilder().setCustomId("embed:back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
   ));
-  rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("embed:back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary)));
-  return { embeds: [simplePanel("💾 Embed Presets", `Saved presets: ${entries.length}.\nDefault: ${defaultName || "None"}.`, s, memberName(i))], components: rows };
+  return { embeds: [simplePanel("💾 Embed Presets", `Saved presets: ${entries.length}.\nDefault: ${resolvedDefault || "None"}.`, s, memberName(i))], components: rows.slice(0, 5) };
 }
 function buildHelpersPanel(i) {
   const s = getSession(i);

@@ -345,6 +345,11 @@ module.exports = {
       const interactionAgeMs = Math.max(0, Date.now() - Number(interaction.createdTimestamp || Date.now()));
 const customId = String(interaction.customId || '');
 
+      if (isVerificationMemberInteraction(interaction)) {
+        await handleVerificationMemberInteraction(interaction);
+        return;
+      }
+
       if (customId === 'admin:studio:roleStudio') {
   interaction.customId = 'admin:roleStudio:handled';
 

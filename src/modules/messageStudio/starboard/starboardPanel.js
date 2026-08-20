@@ -25,8 +25,7 @@ function buildStarboardAdminPanel(guild, memberDisplayName = 'Unknown User') {
       `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`,
       `**Emoji:** ${section.emoji || '⭐'}`,
       `**Threshold:** \`${section.threshold || 3}\``,
-      `**Self Star:** ${section.allowSelfStar ? 'Allowed ✅' : 'Blocked ❌'}`,
-      `**Unique Users:** ${section.requireUniqueUsers !== false ? 'Required ✅' : 'Not Required ❌'}`, '',
+      `**Self Star:** ${section.allowSelfStar ? 'Allowed ✅' : 'Blocked ❌'}`, '',
       `Posts: \`${posts.length}\` | Posted: \`${section.analytics?.posted || 0}\` | Updated: \`${section.analytics?.updated || 0}\``,
     ].join('\n'))
     .setFooter({ text: `Requested by ${memberDisplayName}` })
@@ -40,8 +39,7 @@ function buildStarboardAdminPanel(guild, memberDisplayName = 'Unknown User') {
       button(enabled ? 'admin:starboard:disable' : 'admin:starboard:enable', enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
       button('admin:starboard:thresholdDown', '➖ Threshold', ButtonStyle.Secondary),
       button('admin:starboard:thresholdUp', '➕ Threshold', ButtonStyle.Secondary),
-      button('admin:starboard:toggleSelf', '⭐ Self Star', ButtonStyle.Secondary),
-      button('admin:starboard:toggleUnique', '👥 Unique', ButtonStyle.Secondary)
+      button('admin:starboard:toggleSelf', '⭐ Self Star', ButtonStyle.Secondary)
     ),
     row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary)),
   ] };
@@ -78,8 +76,6 @@ async function handleStarboardAdminInteraction(interaction) {
       save(interaction.guild, (section) => ({ ...section, threshold: Math.max(1, Number(section.threshold || 3) - 1) }));
     } else if (id === 'admin:starboard:toggleSelf') {
       save(interaction.guild, (section) => ({ ...section, allowSelfStar: !section.allowSelfStar }));
-    } else if (id === 'admin:starboard:toggleUnique') {
-      save(interaction.guild, (section) => ({ ...section, requireUniqueUsers: !section.requireUniqueUsers }));
     }
     return safeUpdate(interaction, buildStarboardAdminPanel(interaction.guild, member));
   } catch (error) {

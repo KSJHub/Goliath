@@ -60,6 +60,16 @@ function registerEvents(client, options = {}) {
 
   if (!fs.existsSync(eventsPath)) return { files: 0, groups: 0 };
 
+  // Embed interactions import embedPanel directly, so install the shared media
+  // runtime before event modules are required. This guarantees every consumer
+  // sees the same initialized panel API (including buildMediaManagerPanel).
+  try {
+    require('../modules/messageStudio/embed/embed');
+  } catch (error) {
+    console.warn('⚠️ Embed Studio runtime initialization failed before event registration');
+    console.warn(error?.stack || error?.message || error);
+  }
+
   const files = [];
   const grouped = new Map();
   const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
@@ -106,6 +116,44 @@ function registerEvents(client, options = {}) {
 
 /* ---------------- GUILD STARTUP SYNC ---------------- */
 
+function archiveStaleGuildFiles(client, botMode, logger = console) {
+  const runtimePaths = getRuntimePaths(resolveBotMode(botMode || process.env.BOT_MODE || 'DEV'));
+  const guildsDir = runtimePaths.guilds;
+  if (!guildsDir || !fs.existsSync(guildsDir)) return { active: 0, archived: 0, skipped: 0 };
+
+  const activeIds = new Set(
+    [...(client?.guilds?.cache?.keys?.() || [])].map((id) => String(id)),
+  );
+  const candidates = fs.readdirSync(guildsDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /^\d{16,20}\.json$/.test(entry.name));
+  const stale = candidates.filter((entry) => !activeIds.has(entry.name.replace(/\.json$/, '')));
+
+  if (!stale.length) {
+    logger.log(`[Guild Runtime] Active guild JSONs aligned: ${candidates.length}/${activeIds.size}.`);
+    return { active: candidates.length, archived: 0, skipped: 0 };
+  }
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const archiveDir = ensureDir(path.join(guildsDir, 'archived', stamp));
+  let archived = 0;
+  let skipped = 0;
+
+  for (const entry of stale) {
+    const source = path.join(guildsDir, entry.name);
+    const target = path.join(archiveDir, entry.name);
+    try {
+      fs.renameSync(source, target);
+      archived += 1;
+    } catch (error) {
+      skipped += 1;
+      logger.warn(`[Guild Runtime] Could not archive stale guild file ${entry.name}: ${error?.message || error}`);
+    }
+  }
+
+  logger.log(`[Guild Runtime] Archived ${archived} stale guild JSON file(s); ${activeIds.size} live guild(s) remain.${skipped ? ` ${skipped} file(s) could not be moved.` : ''}`);
+  return { active: activeIds.size, archived, skipped, archiveDir };
+}
+
 async function syncStartupGuilds(client, options = {}) {
   const enforceGuildAccess = typeof options.enforceGuildAccess === 'function'
     ? options.enforceGuildAccess
@@ -127,6 +175,12 @@ async function syncStartupGuilds(client, options = {}) {
       console.error(`Guild startup sync failed for ${guild?.id}:`, error?.message || error);
       results.push({ guildId: guild?.id || null, ok: false, error });
     }
+  }
+
+  try {
+    archiveStaleGuildFiles(client, botMode, options.logger || console);
+  } catch (error) {
+    console.warn('[Guild Runtime] Stale guild archive pass failed:', error?.message || error);
   }
 
   return results;
@@ -251,6 +305,7 @@ module.exports = {
   runBootValidation,
   safeLoad,
   registerEvents,
+  archiveStaleGuildFiles,
   syncStartupGuilds,
   runStartupTask,
   printStartupFingerprint,

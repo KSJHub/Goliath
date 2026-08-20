@@ -9,10 +9,10 @@ const MAX_STUDIO_EMOJIS = MAX_APPLICATION_EMOJIS - MAX_CORE_EMOJIS;
 const CORE_EMOJI_PREFIX = 'goliath_';
 const CORE_EMOJI_ALIASES = Object.freeze([
   'success', 'error', 'warning', 'info', 'yes', 'no',
-  'home', 'settings', 'back', 'next', 'previous', 'close', 'refresh', 'search', 'edit', 'delete', 'save',
-  'user', 'role', 'channel', 'ticket', 'lock', 'unlock', 'bell', 'calendar', 'clock', 'link',
-  'twitch', 'youtube', 'tiktok', 'kick', 'discord', 'xbox', 'playstation', 'steam', 'pc',
-  'party', 'heart', 'star', 'gift',
+  'home', 'settings', 'back', 'next', 'close', 'search', 'edit', 'delete', 'save',
+  'user', 'role', 'channel', 'ticket', 'link', 'heart', 'star',
+  'activision', 'blizzard', 'discord', 'epic', 'facebook', 'instagram', 'kick', 'nintendo', 'pc',
+  'playstation', 'snapchat', 'steam', 'tiktok', 'twitch', 'whatsapp', 'x', 'xbox', 'youtube',
 ]);
 const CORE_EMOJI_ALIAS_SET = new Set(CORE_EMOJI_ALIASES);
 
@@ -46,6 +46,11 @@ function coreAlias(name) {
 
 function isApprovedCoreAlias(value) {
   return CORE_EMOJI_ALIAS_SET.has(cleanEmojiName(value));
+}
+
+function coreArtifactName(kind, alias) {
+  const marker = kind === 'backup' ? 'b' : 'r';
+  return `${CORE_EMOJI_PREFIX}${marker}_${alias}`.slice(0, 32);
 }
 
 function componentPayload(emoji) {
@@ -98,12 +103,58 @@ function buildCoreIntegrity(core = []) {
   };
 }
 
+async function recoverCoreArtifacts(client) {
+  const manager = requireEmojiManager(client);
+  const bank = await manager.fetch();
+  const byName = new Map([...bank.values()].filter((emoji) => emoji?.name).map((emoji) => [String(emoji.name).toLowerCase(), emoji]));
+  const actions = [];
+
+  for (const alias of CORE_EMOJI_ALIASES) {
+    const targetName = `${CORE_EMOJI_PREFIX}${alias}`;
+    const backupName = coreArtifactName('backup', alias);
+    const replacementName = coreArtifactName('replacement', alias);
+    const target = byName.get(targetName) || null;
+    const backup = byName.get(backupName) || null;
+    const replacement = byName.get(replacementName) || null;
+
+    if (target) {
+      if (backup) {
+        await manager.delete(backup.id);
+        actions.push({ alias, action: 'deleted_stale_backup', emojiId: String(backup.id) });
+      }
+      if (replacement) {
+        await manager.delete(replacement.id);
+        actions.push({ alias, action: 'deleted_stale_replacement', emojiId: String(replacement.id) });
+      }
+      continue;
+    }
+
+    if (backup) {
+      const restored = await manager.edit(backup.id, { name: targetName });
+      actions.push({ alias, action: 'restored_backup', emojiId: String(restored.id) });
+      if (replacement) {
+        await manager.delete(replacement.id);
+        actions.push({ alias, action: 'deleted_unfinished_replacement', emojiId: String(replacement.id) });
+      }
+      continue;
+    }
+
+    if (replacement) {
+      const completed = await manager.edit(replacement.id, { name: targetName });
+      actions.push({ alias, action: 'completed_replacement', emojiId: String(completed.id) });
+    }
+  }
+
+  return actions;
+}
+
 async function listBank(client) {
   const emojis = await requireEmojiManager(client).fetch();
   return [...emojis.values()].map(serialise).sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
 
 async function overview(client, guildId) {
+  const coreRecovery = await recoverCoreArtifacts(client);
   const bank = await listBank(client);
   const core = bank.filter((emoji) => emoji.core === true);
   const studio = bank.filter((emoji) => emoji.core !== true);
@@ -159,6 +210,7 @@ async function overview(client, guildId) {
     coreCatalog: CORE_EMOJI_ALIASES,
     coreStatus,
     coreIntegrity,
+    coreRecovery,
     missingCore,
     studio,
     favourites,
@@ -197,19 +249,49 @@ async function replaceCoreEmoji(client, emojiId, attachment) {
   const bank = await manager.fetch();
   if (bank.size >= MAX_APPLICATION_EMOJIS) throw new Error('Goliath application emoji pool is full; free one application emoji slot before replacing a Core emoji.');
 
-  const temporaryName = `${CORE_EMOJI_PREFIX}replacement_${String(existing.id).slice(-8)}`.slice(0, 32);
+  const targetName = `${CORE_EMOJI_PREFIX}${alias}`;
+  const temporaryName = coreArtifactName('replacement', alias);
+  const backupName = coreArtifactName('backup', alias);
   let created = null;
+  let originalStaged = false;
+
+  const staleTemporary = [...bank.values()].find((emoji) => String(emoji.name).toLowerCase() === temporaryName);
+  const staleBackup = [...bank.values()].find((emoji) => String(emoji.name).toLowerCase() === backupName);
+  if (staleTemporary || staleBackup) {
+    throw new Error(`Core emoji :${alias}: has an unfinished replacement state. Open Goliath Core once to run automatic recovery, then try again.`);
+  }
+
   try {
     created = await manager.create({ attachment, name: temporaryName });
-    await manager.delete(existing.id);
-    const renamed = await manager.edit(created.id, { name: `${CORE_EMOJI_PREFIX}${alias}` });
-    return {
-      emoji: serialise(renamed),
-      replaced: serialise(existing),
-    };
+    await manager.edit(existing.id, { name: backupName });
+    originalStaged = true;
+
+    try {
+      const renamed = await manager.edit(created.id, { name: targetName });
+      await manager.delete(existing.id);
+      return {
+        emoji: serialise(renamed),
+        replaced: serialise(existing),
+      };
+    } catch (swapError) {
+      let restoreError = null;
+      if (originalStaged) {
+        try { await manager.edit(existing.id, { name: targetName }); }
+        catch (error) { restoreError = error; }
+      }
+      if (created?.id) {
+        try { await manager.delete(created.id); } catch (_) { /* best-effort cleanup */ }
+      }
+      if (restoreError) {
+        const error = new Error(`Core emoji replacement failed and automatic rollback could not restore :${alias}:. ${swapError?.message || 'Replacement failed.'}`);
+        error.cause = restoreError;
+        throw error;
+      }
+      throw swapError;
+    }
   } catch (error) {
-    if (created?.id) {
-      try { await manager.delete(created.id); } catch (_) { /* best-effort rollback */ }
+    if (!originalStaged && created?.id) {
+      try { await manager.delete(created.id); } catch (_) { /* best-effort cleanup */ }
     }
     throw error;
   }
@@ -410,6 +492,7 @@ module.exports = {
   isCoreEmoji,
   coreAlias,
   isApprovedCoreAlias,
+  recoverCoreArtifacts,
   listBank,
   overview,
   createCoreEmoji,

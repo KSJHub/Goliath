@@ -18,17 +18,19 @@ const { getCachedAsset, saveCachedAsset, ensureAssetCached } = require('./embedM
 const { replaceVars } = require('./embedPanel');
 const emojiStore = require('../../utilityStudio/emojis/emojisStore');
 
-const CANVAS_WIDTH = 600;
+const CANVAS_WIDTH = 520;
 const PORTRAIT_WIDTH = 320;
 const PORTRAIT_SHIFT_RIGHT = 0;
+const SINGLE_IMAGE_CANVAS_WIDTH = 900;
+const SINGLE_IMAGE_VISIBLE_WIDTH = 520;
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 8000;
 const PANEL_BG = { r: 19, g: 20, b: 22, alpha: 1 };
 const STATIC_RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg']);
 const NATIVE_IMAGE_TYPES = new Set(['image/gif', 'image/webp', 'image/avif', 'image/svg+xml']);
 
-const LEGACY_TARGET_WIDTH = 299;
-const LEGACY_PORTRAIT_VISIBLE_WIDTH = 212;
+const LEGACY_TARGET_WIDTH = 520;
+const LEGACY_PORTRAIT_VISIBLE_WIDTH = 520;
 const LEGACY_PORTRAIT_RIGHT_INSET = 0;
 
 function isHttpsUrl(value) {
@@ -98,19 +100,38 @@ async function sourceImage(url, guildId = 'global') {
   saveCachedAsset(guildId, url, remote.buffer, { contentType: remote.contentType });
   return remote;
 }
-function circleMaskSvg(size) {
-  const radius = size / 2;
-  return Buffer.from(`<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg"><circle cx="${radius}" cy="${radius}" r="${radius}" fill="white"/></svg>`);
-}
 async function makeCenteredPortrait(buffer) {
-  const meta = await sharp(buffer, { failOn: 'warning' }).metadata();
-  const width = Number(meta.width || 0), height = Number(meta.height || 0);
+  const source = sharp(buffer, { failOn: 'warning' });
+  const meta = await source.metadata();
+  const width = Number(meta.width || 0);
+  const height = Number(meta.height || 0);
   if (!width || !height) return null;
-  if ((width / height) > 1.25) return sharp(buffer, { failOn: 'warning' }).resize({ width: CANVAS_WIDTH, withoutEnlargement: false }).png().toBuffer();
-  const portrait = await sharp(buffer, { failOn: 'warning' }).resize(PORTRAIT_WIDTH, PORTRAIT_WIDTH, { fit: 'cover', position: 'centre', withoutEnlargement: false }).ensureAlpha().composite([{ input: circleMaskSvg(PORTRAIT_WIDTH), blend: 'dest-in' }]).png().toBuffer();
-  const naturalLeft = Math.floor((CANVAS_WIDTH - PORTRAIT_WIDTH) / 2);
-  const left = Math.min(CANVAS_WIDTH - PORTRAIT_WIDTH, Math.max(0, naturalLeft + PORTRAIT_SHIFT_RIGHT));
-  return sharp({ create: { width: CANVAS_WIDTH, height: PORTRAIT_WIDTH, channels: 4, background: PANEL_BG } }).composite([{ input: portrait, left, top: 0 }]).png().toBuffer();
+
+  // Components V2 media galleries left-align a lone image. Put the visible
+  // artwork on a wider transparent canvas so Discord renders the gallery at
+  // full panel width while the artwork itself stays exactly centered.
+  const targetVisibleWidth = Math.min(width, SINGLE_IMAGE_VISIBLE_WIDTH);
+  const visible = await source
+    .resize({ width: targetVisibleWidth, withoutEnlargement: true, fit: 'inside' })
+    .ensureAlpha()
+    .png()
+    .toBuffer();
+  const visibleMeta = await sharp(visible).metadata();
+  const visibleWidth = Number(visibleMeta.width || targetVisibleWidth);
+  const visibleHeight = Number(visibleMeta.height || height);
+  const left = Math.floor((SINGLE_IMAGE_CANVAS_WIDTH - visibleWidth) / 2);
+
+  return sharp({
+    create: {
+      width: SINGLE_IMAGE_CANVAS_WIDTH,
+      height: visibleHeight,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: visible, left, top: 0 }])
+    .png()
+    .toBuffer();
 }
 function cleanFooter(text) { return String(text || '').replace(/\u200B/g, '').trim(); }
 function panelText(data) {
@@ -174,7 +195,7 @@ async function addMediaFiles(container, media, interaction, payloadFiles, panelI
       if (entry?.spoiler) attachment.setSpoiler(true);
       payloadFiles.push(attachment);
       container.addFileComponents(new FileBuilder().setURL(`attachment://${name}`).setSpoiler(entry?.spoiler === true));
-    } catch (error) { throw new Error(`Attached file "${entry?.name || sourceFilename(source, 'file')}" could not be prepared: ${error?.message || error}`); }
+    } catch (error) { throw new Error(`Attached file \"${entry?.name || sourceFilename(source, 'file')}\" could not be prepared: ${error?.message || error}`); }
   }
 }
 function nativeImageShouldPassThrough(contentType) {
@@ -357,19 +378,7 @@ async function buildEmbedPayload(options = {}) {
 }
 
 async function centerOnLegacyEmbedCanvas(buffer) {
-  const input = sharp(buffer, { failOn: 'warning' });
-  const metadata = await input.metadata();
-  const width = Number(metadata.width || 0), height = Number(metadata.height || 0);
-  if (!width || !height) return null;
-  const aspect = width / height;
-  if (aspect > 1.25) return sharp(buffer, { failOn: 'warning' }).resize({ width: LEGACY_TARGET_WIDTH, withoutEnlargement: false }).png().toBuffer();
-  const visibleWidth = Math.min(LEGACY_PORTRAIT_VISIBLE_WIDTH, LEGACY_TARGET_WIDTH);
-  const resized = await sharp(buffer, { failOn: 'warning' }).resize({ width: visibleWidth, withoutEnlargement: false }).ensureAlpha().png().toBuffer();
-  const resizedMeta = await sharp(resized).metadata();
-  const renderedWidth = Number(resizedMeta.width || visibleWidth);
-  const right = Math.min(LEGACY_PORTRAIT_RIGHT_INSET, Math.max(0, LEGACY_TARGET_WIDTH - renderedWidth));
-  const left = Math.max(0, LEGACY_TARGET_WIDTH - renderedWidth - right);
-  return sharp(resized).extend({ top: 0, bottom: 0, left, right, background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+  return makeCenteredPortrait(buffer);
 }
 
 async function prepareEmbedMedia(embeds = [], options = {}) {

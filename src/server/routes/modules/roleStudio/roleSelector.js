@@ -8,6 +8,7 @@ const emojis = require('../../../../modules/utilityStudio/emojis/emojis');
 const roleSelector = require('../../../../modules/roleStudio/roleSelector/roleSelector');
 const healthService = require('../../../../modules/roleStudio/roleSelector/roleSelectorHealth');
 const panel = require('../../../../modules/roleStudio/roleSelector/roleSelectorPanel');
+const { withDeploymentLock } = require('../../../../modules/roleStudio/roleSelector/roleSelectorLocks');
 
 const router = express.Router();
 
@@ -72,12 +73,8 @@ async function requireRoleSelectorGuildAccess(req, res, next) {
     if (!g) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
 
     const member = g.members.cache.get(userId) || await g.members.fetch(userId).catch(() => null);
-    const allowed = Boolean(
-      member?.permissions?.has(PermissionFlagsBits.Administrator) ||
-      member?.permissions?.has(PermissionFlagsBits.ManageGuild)
-    );
+    const allowed = Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || member?.permissions?.has(PermissionFlagsBits.ManageGuild));
     if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
-
     return next();
   } catch (error) {
     return failure(res, error, 403);
@@ -109,6 +106,15 @@ async function validateExistingRoles(g, options = []) {
   }
   return output;
 }
+function ownedByGoliath(g, message) { return Boolean(message && (!g.client?.user?.id || message.author?.id === g.client.user.id)); }
+async function retireDeploymentUnlocked(g, deployment) {
+  if (!deployment?.channelId || !deployment?.messageId) return false;
+  const channel = g.channels.cache.get(deployment.channelId) || await g.channels.fetch(deployment.channelId).catch(() => null);
+  const message = channel?.messages?.fetch ? await channel.messages.fetch(deployment.messageId).catch(() => null) : null;
+  if (!ownedByGoliath(g, message)) return false;
+  await message.edit(panel.memberDisabledPayload()).catch(() => null);
+  return true;
+}
 
 router.get('/:guildId/overview', async (req, res) => {
   try { return success(res, await overview(req, guildId(req))); } catch (error) { return failure(res, error); }
@@ -119,30 +125,30 @@ router.put('/:guildId/config', async (req, res) => {
     const id = guildId(req); const patch = req.body || {};
     const before = roleSelector.getSection(id);
     const g = await guild(req, id);
-    const nextChannelId = patch.deployment && Object.prototype.hasOwnProperty.call(patch.deployment, 'channelId')
-      ? cleanDiscordId(patch.deployment.channelId)
-      : before.deployment?.channelId || null;
-    const deploymentChannelChanged = Boolean(
-      patch.deployment &&
-      Object.prototype.hasOwnProperty.call(patch.deployment, 'channelId') &&
-      nextChannelId !== (before.deployment?.channelId || null)
-    );
+    const actor = { actorId: actorId(req) };
 
-    if (deploymentChannelChanged && g && before.deployment?.messageId) {
-      await panel.retireDeployment(g, before.deployment).catch(() => null);
-    }
+    const nextChannelId = patch.deployment && Object.prototype.hasOwnProperty.call(patch.deployment, 'channelId') ? cleanDiscordId(patch.deployment.channelId) : before.deployment?.channelId || null;
+    const deploymentChannelChanged = Boolean(patch.deployment && Object.prototype.hasOwnProperty.call(patch.deployment, 'channelId') && nextChannelId !== (before.deployment?.channelId || null));
+    if (deploymentChannelChanged && g && before.deployment?.messageId) await panel.retireDeployment(g, before.deployment).catch(() => null);
 
-    if (typeof patch.enabled === 'boolean') guildManager.setModuleEnabled(id, roleSelector.MODULE, patch.enabled, { actorId: actorId(req), action: 'role_selector_dashboard_toggle' });
+    if (typeof patch.enabled === 'boolean') guildManager.setModuleEnabled(id, roleSelector.MODULE, patch.enabled, { ...actor, action: 'role_selector_dashboard_toggle' });
+
+    const stylePatch = patch.style && typeof patch.style === 'object' ? { ...patch.style } : null;
+    const hasAnchorPatch = Boolean(stylePatch && Object.prototype.hasOwnProperty.call(stylePatch, 'anchorRoleId'));
+    const requestedAnchor = hasAnchorPatch ? cleanDiscordId(stylePatch.anchorRoleId) : null;
+    if (stylePatch) delete stylePatch.anchorRoleId;
+
     roleSelector.updateSection(id, (current) => ({
       ...current,
-      ...(patch.style ? { style: { ...current.style, ...patch.style } } : {}),
-      ...(patch.deployment ? {
-        deployment: deploymentChannelChanged
-          ? { ...current.deployment, ...patch.deployment, channelId: nextChannelId, messageId: null }
-          : { ...current.deployment, ...patch.deployment },
-      } : {}),
+      ...(stylePatch ? { style: { ...current.style, ...stylePatch } } : {}),
+      ...(patch.deployment ? { deployment: { ...current.deployment, channelId: nextChannelId, messageId: deploymentChannelChanged ? null : current.deployment?.messageId || null } } : {}),
       ...(patch.cleanup ? { cleanup: { ...current.cleanup, ...patch.cleanup } } : {}),
-    }), { actorId: actorId(req), action: 'role_selector_dashboard_config' });
+    }), { ...actor, action: 'role_selector_dashboard_config' });
+
+    if (hasAnchorPatch) {
+      if (!g) throw new Error('Guild is unavailable for anchor validation.');
+      await roleSelector.setAnchorRole(g, requestedAnchor, { managed: false, meta: { ...actor, action: 'role_selector_dashboard_anchor' } });
+    }
 
     if (g) {
       await roleSelector.syncManagedRoleAppearance(g).catch(() => null);
@@ -156,17 +162,12 @@ router.put('/:guildId/config', async (req, res) => {
 router.post('/:guildId/groups', async (req, res) => {
   try {
     const id = guildId(req); const body = req.body || {};
-    if (body.id === roleSelector.COLOUR_GROUP_ID || body.type === 'colour') throw new Error('Use the Colours settings endpoint for the built-in Colours selector.');
+    if (String(body.id || '').toLowerCase() === roleSelector.COLOUR_GROUP_ID || body.type === 'colour') throw new Error('Use the Colours settings endpoint for the built-in Colours selector.');
     const g = await guild(req, id);
     const options = await validateExistingRoles(g, body.options || []);
-    const group = roleSelector.saveGroup(id, {
-      ...body,
-      options,
-      selectionMode: body.selectionMode === 'multiple' ? 'multiple' : 'single',
-      allowRemove: body.allowRemove !== false,
-      builtIn: false,
-      type: 'standard',
-    }, { actorId: actorId(req), action: 'role_selector_dashboard_save_group' });
+    const input = { ...body, options, selectionMode: body.selectionMode === 'multiple' ? 'multiple' : 'single', allowRemove: body.allowRemove !== false, builtIn: false, type: 'standard' };
+    const meta = { actorId: actorId(req), action: 'role_selector_dashboard_save_group' };
+    const group = g ? await roleSelector.saveGroupSafe(g, input, meta) : roleSelector.saveGroup(id, input, meta);
     return success(res, { group, ...(await overview(req, id)) });
   } catch (error) { return failure(res, error); }
 });
@@ -175,18 +176,8 @@ router.delete('/:guildId/groups/:groupId', async (req, res) => {
   try {
     const id = guildId(req); const g = await guild(req, id);
     if (!g) throw new Error('Guild is unavailable.');
-
     const result = await roleSelector.deleteManagedGroupRoles(g, req.params.groupId);
-    if (result.unresolved) {
-      return res.status(409).json({
-        success: false,
-        error: 'Group was not deleted because one or more Goliath-managed roles could not be removed.',
-        unresolved: result.unresolved,
-        unresolvedRoles: result.unresolvedRoles,
-        deletedRoles: result.deleted,
-      });
-    }
-
+    if (result.unresolved) return res.status(409).json({ success: false, error: 'Group was not deleted because one or more Goliath-managed roles could not be removed.', unresolved: result.unresolved, unresolvedRoles: result.unresolvedRoles, deletedRoles: result.deleted });
     roleSelector.removeGroup(id, req.params.groupId, { actorId: actorId(req), action: 'role_selector_dashboard_delete_group' });
     return success(res, { deletion: result, ...(await overview(req, id)) });
   } catch (error) { return failure(res, error); }
@@ -194,13 +185,10 @@ router.delete('/:guildId/groups/:groupId', async (req, res) => {
 
 router.put('/:guildId/colours', async (req, res) => {
   try {
-    const id = guildId(req); const current = roleSelector.getGroup(id, roleSelector.COLOUR_GROUP_ID); const patch = req.body || {};
-    roleSelector.saveGroup(id, {
-      ...current,
-      ...(Array.isArray(patch.palette) ? { palette: patch.palette } : {}),
-      ...(patch.customHexEnabled === undefined ? {} : { customHexEnabled: patch.customHexEnabled === true }),
-      ...(patch.allowRemove === undefined ? {} : { allowRemove: patch.allowRemove !== false }),
-    }, { actorId: actorId(req), action: 'role_selector_dashboard_colours' });
+    const id = guildId(req); const current = roleSelector.getGroup(id, roleSelector.COLOUR_GROUP_ID); const patch = req.body || {}; const g = await guild(req, id);
+    const input = { ...current, ...(Array.isArray(patch.palette) ? { palette: patch.palette } : {}), ...(patch.customHexEnabled === undefined ? {} : { customHexEnabled: patch.customHexEnabled === true }), ...(patch.allowRemove === undefined ? {} : { allowRemove: patch.allowRemove !== false }) };
+    const meta = { actorId: actorId(req), action: 'role_selector_dashboard_colours' };
+    if (g) await roleSelector.saveGroupSafe(g, input, meta); else roleSelector.saveGroup(id, input, meta);
     return success(res, await overview(req, id));
   } catch (error) { return failure(res, error); }
 });
@@ -228,12 +216,8 @@ router.post('/:guildId/create-divider', async (req, res) => {
     const id = guildId(req); const g = await guild(req, id); if (!g) throw new Error('Guild is unavailable.');
     const name = String(req.body?.name || '🎭 | ROLE SELECTOR').trim().slice(0, 100);
     const divider = await g.roles.create({ name, permissions: [], hoist: false, mentionable: false, reason: 'Goliath Role Selector divider' });
-    if (!roleSelector.canManageRole(g, divider)) {
-      await divider.delete('Unsafe Role Selector divider').catch(() => null);
-      throw new Error('Goliath cannot safely manage the new divider because of role hierarchy.');
-    }
-    roleSelector.updateSection(id, (current) => ({ ...current, style: { ...current.style, anchorRoleId: divider.id } }), { actorId: actorId(req), action: 'role_selector_dashboard_create_divider' });
-    await roleSelector.syncManagedRoleHierarchy(g);
+    try { await roleSelector.setAnchorRole(g, divider.id, { managed: true, meta: { actorId: actorId(req), action: 'role_selector_dashboard_create_divider' } }); }
+    catch (error) { await divider.delete('Unsafe Role Selector divider').catch(() => null); throw error; }
     return success(res, { divider: { id: divider.id, name: divider.name }, ...(await overview(req, id)) });
   } catch (error) { return failure(res, error); }
 });
@@ -241,22 +225,19 @@ router.post('/:guildId/create-divider', async (req, res) => {
 router.post('/:guildId/deploy', async (req, res) => {
   try {
     const id = guildId(req); const g = await guild(req, id); if (!g) throw new Error('Guild is unavailable.');
-    const section = roleSelector.getSection(id);
-    const channelId = String(req.body?.channelId || section.deployment?.channelId || '').trim(); if (!channelId) throw new Error('Select a deployment channel.');
-    const channel = g.channels.cache.get(channelId) || await g.channels.fetch(channelId).catch(() => null); if (!channel?.send) throw new Error('Selected channel is unavailable.');
-
-    let message = section.deployment?.messageId && section.deployment?.channelId === channel.id
-      ? await channel.messages.fetch(section.deployment.messageId).catch(() => null)
-      : null;
-
-    if (section.deployment?.messageId && section.deployment?.channelId && section.deployment.channelId !== channel.id) {
-      await panel.retireDeployment(g, section.deployment).catch(() => null);
-    }
-
-    const payload = await resolveDashboardMemberPayload(g, panel.memberLauncherPayload(g));
-    if (message) await message.edit(payload); else message = await channel.send(payload);
-    roleSelector.updateSection(id, (current) => ({ ...current, deployment: { channelId: channel.id, messageId: message.id } }), { actorId: actorId(req), action: 'role_selector_dashboard_deploy' });
-    return success(res, { messageId: message.id, ...(await overview(req, id)) });
+    const result = await withDeploymentLock(id, async () => {
+      const section = roleSelector.getSection(id);
+      const channelId = cleanDiscordId(req.body?.channelId || section.deployment?.channelId); if (!channelId) throw new Error('Select a deployment channel.');
+      const channel = g.channels.cache.get(channelId) || await g.channels.fetch(channelId).catch(() => null); if (!channel?.send) throw new Error('Selected channel is unavailable.');
+      let message = section.deployment?.messageId && section.deployment?.channelId === channel.id ? await channel.messages.fetch(section.deployment.messageId).catch(() => null) : null;
+      if (message && !ownedByGoliath(g, message)) message = null;
+      if (section.deployment?.messageId && section.deployment?.channelId && section.deployment.channelId !== channel.id) await retireDeploymentUnlocked(g, section.deployment);
+      const payload = await resolveDashboardMemberPayload(g, panel.memberLauncherPayload(g));
+      message = message ? await message.edit(payload) : await channel.send(payload);
+      roleSelector.updateSection(id, (current) => ({ ...current, deployment: { channelId: channel.id, messageId: message.id } }), { actorId: actorId(req), action: 'role_selector_dashboard_deploy' });
+      return message;
+    });
+    return success(res, { messageId: result.id, ...(await overview(req, id)) });
   } catch (error) { return failure(res, error); }
 });
 

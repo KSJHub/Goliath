@@ -3,6 +3,7 @@ const terminal = require('../../core/logging/terminalLogger').createLogger('bot'
 const levelingTracking = require('../../modules/communityStudio/leveling/levelingTracking');
 const { startupTranslation } = require('../../modules/utilityStudio/translation/translationStartup');
 const scheduleStartup = require('../../modules/utilityStudio/schedule/scheduleStartup');
+const emojis = require('../../modules/utilityStudio/emojis/emojis');
 const auditStore = require('../../owner/auditIntelligence/auditStore');
 const auditRouter = require('../../owner/auditIntelligence/auditRouter');
 const sentinelSchedulers = require('../../owner/sentinel/schedulerRegistry');
@@ -293,6 +294,13 @@ module.exports = {
 
     if (client.botMode === 'PRODUCTION' && prodGuildIds.length) {
       terminal.info(`PRODUCTION guild scope: ${prodGuildIds.join(', ')}`);
+    }
+
+    try {
+      const recovered = await emojis.recoverCoreArtifacts(client);
+      if (recovered.length > 0) terminal.info(`Goliath Core emoji recovery repaired ${recovered.length} interrupted replacement artifact(s).`);
+    } catch (error) {
+      terminal.error(`Failed to recover Goliath Core emoji replacement artifacts: ${error?.message || error}`);
     }
 
     await refreshAuditGuildRegistry(client);

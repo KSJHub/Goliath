@@ -3,6 +3,7 @@
 const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
 const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
+const { withManagedRoleLock, withMemberGroupLock } = require('./roleSelectorLocks');
 
 const MODULE = 'roleSelector';
 const COLOUR_GROUP_ID = 'colours';
@@ -206,30 +207,81 @@ function suggestRoleStyle(guild) {
 }
 
 async function ensureStandardOptionRole(guild, groupId, optionId) {
-  assertModuleEnabled(guild.id);
-  const section = getSection(guild.id); const group = section.groups[slug(groupId)]; if (!group || group.type !== 'standard') throw new Error('Selector group not found.');
-  const option = group.options.find((item) => item.id === slug(optionId)); if (!option || !option.enabled) throw new Error('Selector option not found or disabled.');
-  let role = option.roleId ? guild.roles.cache.get(option.roleId) || await guild.roles.fetch(option.roleId).catch(() => null) : null;
-  if (role) return { role: assertSafeSelectorRole(guild, role), option };
-  if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('Goliath needs Manage Roles to create selector roles.');
-  role = await guild.roles.create({ name: roleNameFor(section, option.label, group), permissions: [], hoist: false, mentionable: false, reason: `Goliath Role Selector · ${group.name}` });
-  saveGroup(guild.id, { ...group, options: group.options.map((item) => item.id === option.id ? { ...item, roleId: role.id, managed: true, unusedSince: null } : item) }, { actorId: guild.members.me?.id, action: 'role_selector_create_option_role' });
-  updateSection(guild.id, (current) => ({ ...current, analytics: { ...current.analytics, rolesCreated: Number(current.analytics.rolesCreated || 0) + 1 } }));
-  return { role, option: { ...option, roleId: role.id } };
+  const safeGroupId = slug(groupId);
+  const safeOptionId = slug(optionId);
+  return withManagedRoleLock(guild.id, `standard:${safeGroupId}:${safeOptionId}`, async () => {
+    assertModuleEnabled(guild.id);
+    let section = getSection(guild.id); let group = section.groups[safeGroupId]; if (!group || group.type !== 'standard') throw new Error('Selector group not found.');
+    let option = group.options.find((item) => item.id === safeOptionId); if (!option || !option.enabled) throw new Error('Selector option not found or disabled.');
+    let role = option.roleId ? guild.roles.cache.get(option.roleId) || await guild.roles.fetch(option.roleId).catch(() => null) : null;
+    if (role) return { role: assertSafeSelectorRole(guild, role), option };
+    if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('Goliath needs Manage Roles to create selector roles.');
+
+    assertModuleEnabled(guild.id);
+    role = await guild.roles.create({ name: roleNameFor(section, option.label, group), permissions: [], hoist: false, mentionable: false, reason: `Goliath Role Selector · ${group.name}` });
+
+    try {
+      let persistedOption = null;
+      updateSection(guild.id, (current) => {
+        const latestGroup = current.groups[safeGroupId];
+        if (!latestGroup || latestGroup.type !== 'standard') throw new Error('Selector group changed while the role was being created.');
+        const latestOption = latestGroup.options.find((item) => item.id === safeOptionId);
+        if (!latestOption || !latestOption.enabled) throw new Error('Selector option changed while the role was being created.');
+        const options = latestGroup.options.map((item) => item.id === safeOptionId ? { ...item, roleId: role.id, managed: true, unusedSince: null } : item);
+        persistedOption = { ...latestOption, roleId: role.id, managed: true, unusedSince: null };
+        return {
+          ...current,
+          groups: { ...current.groups, [safeGroupId]: { ...latestGroup, options, updatedAt: now() } },
+          analytics: { ...current.analytics, rolesCreated: Number(current.analytics.rolesCreated || 0) + 1 },
+        };
+      }, { actorId: guild.members.me?.id, action: 'role_selector_create_option_role' });
+      return { role, option: persistedOption || { ...option, roleId: role.id } };
+    } catch (error) {
+      await role.delete('Goliath Role Selector creation rollback').catch(() => null);
+      throw error;
+    }
+  });
 }
 async function ensureColourRole(guild, hexValue, label = null) {
-  assertModuleEnabled(guild.id);
   const hex = normalizeHex(hexValue); if (!hex) throw new Error('Enter a valid six-digit HEX colour.');
-  const section = getSection(guild.id); const group = section.groups[COLOUR_GROUP_ID]; const existing = group.managedRoles?.[hex];
-  let role = existing?.roleId ? guild.roles.cache.get(existing.roleId) || await guild.roles.fetch(existing.roleId).catch(() => null) : null;
-  if (role) return { role, hex };
-  if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('Goliath needs Manage Roles to create colour roles.');
-  const builtIn = group.palette.find((item) => item.hex === hex); const finalLabel = cleanText(label || builtIn?.label || hex, 60); const c = classifyHex(hex);
-  role = await guild.roles.create({ name: roleNameFor(section, finalLabel, group), color: hexToInt(hex), permissions: [], hoist: false, mentionable: false, reason: 'Goliath Role Selector · Colours' });
-  const nextGroup = { ...group, managedRoles: { ...(group.managedRoles || {}), [hex]: { roleId: role.id, hex, label: finalLabel, family: c.family, hue: c.hue, createdAt: now(), unusedSince: null } } };
-  saveGroup(guild.id, nextGroup, { actorId: guild.members.me?.id, action: 'role_selector_create_colour_role' });
-  updateSection(guild.id, (current) => ({ ...current, analytics: { ...current.analytics, rolesCreated: Number(current.analytics.rolesCreated || 0) + 1 } }));
-  return { role, hex };
+  return withManagedRoleLock(guild.id, `colour:${hex}`, async () => {
+    assertModuleEnabled(guild.id);
+    let section = getSection(guild.id); let group = section.groups[COLOUR_GROUP_ID]; const existing = group.managedRoles?.[hex];
+    let role = existing?.roleId ? guild.roles.cache.get(existing.roleId) || await guild.roles.fetch(existing.roleId).catch(() => null) : null;
+    if (role) return { role, hex };
+    if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('Goliath needs Manage Roles to create colour roles.');
+    const builtIn = group.palette.find((item) => item.hex === hex); const finalLabel = cleanText(label || builtIn?.label || hex, 60); const c = classifyHex(hex);
+
+    assertModuleEnabled(guild.id);
+    role = await guild.roles.create({ name: roleNameFor(section, finalLabel, group), color: hexToInt(hex), permissions: [], hoist: false, mentionable: false, reason: 'Goliath Role Selector · Colours' });
+
+    try {
+      updateSection(guild.id, (current) => {
+        const latestGroup = current.groups[COLOUR_GROUP_ID];
+        if (!latestGroup || !latestGroup.enabled) throw new Error('Colours changed while the role was being created.');
+        const existingLatest = latestGroup.managedRoles?.[hex];
+        if (existingLatest?.roleId && existingLatest.roleId !== role.id) throw new Error('Another managed colour role was recorded while this role was being created.');
+        return {
+          ...current,
+          groups: {
+            ...current.groups,
+            [COLOUR_GROUP_ID]: {
+              ...latestGroup,
+              managedRoles: {
+                ...(latestGroup.managedRoles || {}),
+                [hex]: { roleId: role.id, hex, label: finalLabel, family: c.family, hue: c.hue, createdAt: now(), unusedSince: null },
+              },
+            },
+          },
+          analytics: { ...current.analytics, rolesCreated: Number(current.analytics.rolesCreated || 0) + 1 },
+        };
+      }, { actorId: guild.members.me?.id, action: 'role_selector_create_colour_role' });
+      return { role, hex };
+    } catch (error) {
+      await role.delete('Goliath Role Selector creation rollback').catch(() => null);
+      throw error;
+    }
+  });
 }
 
 function roleIdsForGroup(group) {
@@ -297,42 +349,60 @@ function selectionFor(section, userId, groupId) {
   const value = section.memberSelections?.[userId]?.[groupId]; return Array.isArray(value) ? value : value ? [value] : [];
 }
 async function applyStandardSelection(guild, member, groupId, optionIds = []) {
-  assertModuleEnabled(guild.id);
-  const id = slug(groupId); let section = getSection(guild.id); const group = section.groups[id]; if (!group || group.type !== 'standard' || !group.enabled) throw new Error('Selector group is unavailable.');
-  let desired = [...new Set(optionIds.map(slug))].filter((optionId) => group.options.some((option) => option.id === optionId && option.enabled));
-  if (group.selectionMode === 'single') desired = desired.slice(0, 1);
-  const previous = selectionFor(section, member.id, id); const desiredRoles = [];
-  for (const optionId of desired) desiredRoles.push((await ensureStandardOptionRole(guild, id, optionId)).role);
-  section = getSection(guild.id); const refreshed = section.groups[id]; const groupRoleIds = roleIdsForGroup(refreshed);
-  const desiredRoleIds = new Set(desiredRoles.map((role) => role.id));
-  for (const roleId of groupRoleIds) if (member.roles.cache.has(roleId) && !desiredRoleIds.has(roleId)) await member.roles.remove(roleId, `Goliath Role Selector · ${refreshed.name}`).catch(() => null);
-  for (const role of desiredRoles) if (!member.roles.cache.has(role.id)) await member.roles.add(role, `Goliath Role Selector · ${refreshed.name}`);
-  updateSection(guild.id, (current) => {
-    const memberSelections = clone(current.memberSelections); memberSelections[member.id] = { ...(memberSelections[member.id] || {}), [id]: desired };
-    const switched = previous.length && desired.length && previous.join('|') !== desired.join('|');
-    return { ...current, memberSelections, analytics: { ...current.analytics, selections: Number(current.analytics.selections || 0) + (desired.length ? 1 : 0), switches: Number(current.analytics.switches || 0) + (switched ? 1 : 0), removals: Number(current.analytics.removals || 0) + (!desired.length && previous.length ? 1 : 0), lastSelectionAt: now() } };
-  }, { actorId: member.id, action: 'role_selector_member_selection' });
-  await syncManagedRoleHierarchy(guild).catch(() => null);
-  return desired;
+  const id = slug(groupId);
+  return withMemberGroupLock(guild.id, member.id, id, async () => {
+    assertModuleEnabled(guild.id);
+    let section = getSection(guild.id); const group = section.groups[id]; if (!group || group.type !== 'standard' || !group.enabled) throw new Error('Selector group is unavailable.');
+    let desired = [...new Set(optionIds.map(slug))].filter((optionId) => group.options.some((option) => option.id === optionId && option.enabled));
+    if (group.selectionMode === 'single') desired = desired.slice(0, 1);
+    const previous = selectionFor(section, member.id, id);
+    if (!desired.length && previous.length && !group.allowRemove) throw new Error('This selector does not allow clearing your selection.');
+    const desiredRoles = [];
+    for (const optionId of desired) desiredRoles.push((await ensureStandardOptionRole(guild, id, optionId)).role);
+    assertModuleEnabled(guild.id);
+    section = getSection(guild.id); const refreshed = section.groups[id]; if (!refreshed || !refreshed.enabled) throw new Error('Selector group became unavailable.');
+    const groupRoleIds = roleIdsForGroup(refreshed);
+    const desiredRoleIds = new Set(desiredRoles.map((role) => role.id));
+    for (const roleId of groupRoleIds) if (member.roles.cache.has(roleId) && !desiredRoleIds.has(roleId)) await member.roles.remove(roleId, `Goliath Role Selector · ${refreshed.name}`);
+    for (const role of desiredRoles) if (!member.roles.cache.has(role.id)) await member.roles.add(role, `Goliath Role Selector · ${refreshed.name}`);
+    updateSection(guild.id, (current) => {
+      const memberSelections = clone(current.memberSelections); memberSelections[member.id] = { ...(memberSelections[member.id] || {}), [id]: desired };
+      const changed = previous.join('|') !== desired.join('|');
+      const switched = previous.length && desired.length && changed;
+      return { ...current, memberSelections, analytics: { ...current.analytics, selections: Number(current.analytics.selections || 0) + (changed && desired.length ? 1 : 0), switches: Number(current.analytics.switches || 0) + (switched ? 1 : 0), removals: Number(current.analytics.removals || 0) + (changed && !desired.length && previous.length ? 1 : 0), lastSelectionAt: changed ? now() : current.analytics.lastSelectionAt } };
+    }, { actorId: member.id, action: 'role_selector_member_selection' });
+    await syncManagedRoleHierarchy(guild).catch(() => null);
+    return desired;
+  });
 }
 async function applyColourSelection(guild, member, hexValue, label = null) {
-  assertModuleEnabled(guild.id);
-  const section = getSection(guild.id); const group = section.groups[COLOUR_GROUP_ID]; if (!group.enabled) throw new Error('Colours are disabled.');
-  const hex = normalizeHex(hexValue); if (!hex) throw new Error('Invalid colour.');
-  const builtIn = group.palette.find((item) => item.hex === hex && item.enabled); if (!builtIn && !group.customHexEnabled) throw new Error('Custom HEX colours are disabled.');
-  const previous = selectionFor(section, member.id, COLOUR_GROUP_ID); const { role } = await ensureColourRole(guild, hex, label || builtIn?.label);
-  const currentSection = getSection(guild.id); for (const roleId of roleIdsForGroup(currentSection.groups[COLOUR_GROUP_ID])) if (roleId !== role.id && member.roles.cache.has(roleId)) await member.roles.remove(roleId, 'Goliath Role Selector · Colours').catch(() => null);
-  if (!member.roles.cache.has(role.id)) await member.roles.add(role, 'Goliath Role Selector · Colours');
-  updateSection(guild.id, (current) => { const memberSelections = clone(current.memberSelections); memberSelections[member.id] = { ...(memberSelections[member.id] || {}), [COLOUR_GROUP_ID]: [hex] }; return { ...current, memberSelections, analytics: { ...current.analytics, selections: Number(current.analytics.selections || 0) + 1, switches: Number(current.analytics.switches || 0) + (previous.length && previous[0] !== hex ? 1 : 0), lastSelectionAt: now() } }; }, { actorId: member.id, action: 'role_selector_colour_selection' });
-  await syncManagedRoleHierarchy(guild).catch(() => null); return hex;
+  return withMemberGroupLock(guild.id, member.id, COLOUR_GROUP_ID, async () => {
+    assertModuleEnabled(guild.id);
+    const section = getSection(guild.id); const group = section.groups[COLOUR_GROUP_ID]; if (!group.enabled) throw new Error('Colours are disabled.');
+    const hex = normalizeHex(hexValue); if (!hex) throw new Error('Invalid colour.');
+    const builtIn = group.palette.find((item) => item.hex === hex && item.enabled); if (!builtIn && !group.customHexEnabled) throw new Error('Custom HEX colours are disabled.');
+    const previous = selectionFor(section, member.id, COLOUR_GROUP_ID); const { role } = await ensureColourRole(guild, hex, label || builtIn?.label);
+    assertModuleEnabled(guild.id);
+    const currentSection = getSection(guild.id); for (const roleId of roleIdsForGroup(currentSection.groups[COLOUR_GROUP_ID])) if (roleId !== role.id && member.roles.cache.has(roleId)) await member.roles.remove(roleId, 'Goliath Role Selector · Colours');
+    if (!member.roles.cache.has(role.id)) await member.roles.add(role, 'Goliath Role Selector · Colours');
+    updateSection(guild.id, (current) => {
+      const memberSelections = clone(current.memberSelections); memberSelections[member.id] = { ...(memberSelections[member.id] || {}), [COLOUR_GROUP_ID]: [hex] };
+      const changed = previous[0] !== hex;
+      return { ...current, memberSelections, analytics: { ...current.analytics, selections: Number(current.analytics.selections || 0) + (changed ? 1 : 0), switches: Number(current.analytics.switches || 0) + (previous.length && changed ? 1 : 0), lastSelectionAt: changed ? now() : current.analytics.lastSelectionAt } };
+    }, { actorId: member.id, action: 'role_selector_colour_selection' });
+    await syncManagedRoleHierarchy(guild).catch(() => null); return hex;
+  });
 }
 async function clearSelection(guild, member, groupId) {
-  assertModuleEnabled(guild.id);
-  const id = slug(groupId); const section = getSection(guild.id); const group = section.groups[id]; if (!group) throw new Error('Selector group not found.'); if (!group.allowRemove) throw new Error('This selector does not allow clearing your selection.');
-  const previous = selectionFor(section, member.id, id);
-  for (const roleId of roleIdsForGroup(group)) if (member.roles.cache.has(roleId)) await member.roles.remove(roleId, `Goliath Role Selector · ${group.name}`).catch(() => null);
-  updateSection(guild.id, (current) => { const memberSelections = clone(current.memberSelections); memberSelections[member.id] = { ...(memberSelections[member.id] || {}), [id]: [] }; return { ...current, memberSelections, analytics: { ...current.analytics, removals: Number(current.analytics.removals || 0) + (previous.length ? 1 : 0) } }; }, { actorId: member.id, action: 'role_selector_clear_selection' });
-  return true;
+  const id = slug(groupId);
+  return withMemberGroupLock(guild.id, member.id, id, async () => {
+    assertModuleEnabled(guild.id);
+    const section = getSection(guild.id); const group = section.groups[id]; if (!group) throw new Error('Selector group not found.'); if (!group.allowRemove) throw new Error('This selector does not allow clearing your selection.');
+    const previous = selectionFor(section, member.id, id);
+    for (const roleId of roleIdsForGroup(group)) if (member.roles.cache.has(roleId)) await member.roles.remove(roleId, `Goliath Role Selector · ${group.name}`);
+    updateSection(guild.id, (current) => { const memberSelections = clone(current.memberSelections); memberSelections[member.id] = { ...(memberSelections[member.id] || {}), [id]: [] }; return { ...current, memberSelections, analytics: { ...current.analytics, removals: Number(current.analytics.removals || 0) + (previous.length ? 1 : 0) } }; }, { actorId: member.id, action: 'role_selector_clear_selection' });
+    return true;
+  });
 }
 
 function managedRoleRecords(section) {
