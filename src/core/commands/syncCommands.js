@@ -12,6 +12,12 @@ const { BETA_GUILD_IDS: CONFIGURED_BETA_GUILD_IDS = [] } = require('../../config
 const auditStore = require('../../owner/auditIntelligence/auditStore');
 
 const ALLOWED_MODES = new Set(['dev', 'beta', 'production']);
+const OWNER_COMMAND_NAME = 'owner';
+const RETIRED_GUILD_COMMAND_NAMES = new Set(['owner', 'commandcenter', 'Convert Emoji Shortcodes']);
+const PUBLIC_COMMAND_NAMES = new Set(
+  [...CANONICAL_COMMAND_NAMES].filter((name) => !RETIRED_GUILD_COMMAND_NAMES.has(name)),
+);
+const ALLOWED_GLOBAL_COMMAND_NAMES = new Set([...PUBLIC_COMMAND_NAMES, OWNER_COMMAND_NAME]);
 
 function resolveMode() {
   const fromArg = String(process.argv[2] || '').trim().toLowerCase();
@@ -84,7 +90,7 @@ function loadCanonicalCommands() {
   }
 
   if (seen.size !== CANONICAL_COMMAND_NAMES.size) {
-    throw new Error(`Expected /admin, /mod, /user, /emoji and /e; loaded ${[...seen].join(', ')}`);
+    throw new Error(`Expected /admin, /mod, /user, /owner and /e; loaded ${[...seen].join(', ')}`);
   }
 
   return commands;
@@ -103,25 +109,39 @@ function timeoutMs() {
   return Number.isFinite(value) && value >= 1000 ? value : 30000;
 }
 
-async function putGuildCommands(rest, clientId, guildId, commands, privateGuildId, dryRun) {
-  let privateCommands = [];
-  if (guildId === privateGuildId) {
-    const existing = await rest.get(Routes.applicationGuildCommands(clientId, guildId));
-    privateCommands = (existing || []).filter((command) => command?.name === 'commandcenter');
+function buildUserInstalledOwnerCommand(ownerCommand) {
+  if (!ownerCommand || ownerCommand.name !== OWNER_COMMAND_NAME) {
+    throw new Error('Missing canonical /owner command.');
   }
 
-  const body = [
-    ...commands,
-    ...privateCommands.filter((privateCommand) => !commands.some((command) => command.name === privateCommand.name)),
-  ];
+  const command = { ...ownerCommand };
+  command.integration_types = [1];
+  command.contexts = [0];
+  delete command.default_member_permissions;
+  delete command.default_permission;
+  delete command.dm_permission;
+  return command;
+}
 
+function assertOwnerCommandUserInstall(ownerCommand) {
+  if (!ownerCommand) throw new Error('Missing /owner command payload.');
+  const integrationTypes = Array.isArray(ownerCommand.integration_types) ? ownerCommand.integration_types : [];
+  const contexts = Array.isArray(ownerCommand.contexts) ? ownerCommand.contexts : [];
+  if (integrationTypes.length !== 1 || integrationTypes[0] !== 1) {
+    throw new Error('Refusing to sync /owner unless it is USER_INSTALL only.');
+  }
+  if (contexts.length !== 1 || contexts[0] !== 0) {
+    throw new Error('Refusing to sync /owner outside guild interaction context.');
+  }
+}
+
+async function putGuildCommands(rest, clientId, guildId, publicCommands, dryRun) {
   if (dryRun) {
-    console.log(`[CommandSync] DRY RUN guild ${guildId}: ${body.map((command) => `/${command.name}`).join(', ')}`);
+    console.log(`[CommandSync] DRY RUN guild ${guildId}: ${publicCommands.map((command) => `/${command.name}`).join(', ')}`);
     return;
   }
-
-  await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
-  console.log(`[CommandSync] Guild ${guildId}: ${body.map((command) => `/${command.name}`).join(', ')}`);
+  await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: publicCommands });
+  console.log(`[CommandSync] Guild ${guildId}: ${publicCommands.map((command) => `/${command.name}`).join(', ')}`);
 }
 
 async function putGlobalCommands(rest, clientId, commands, dryRun) {
@@ -133,9 +153,30 @@ async function putGlobalCommands(rest, clientId, commands, dryRun) {
   console.log(`[CommandSync] Global: ${commands.map((command) => `/${command.name}`).join(', ')}`);
 }
 
+async function upsertGlobalOwnerCommand(rest, clientId, ownerCommand, dryRun = false) {
+  assertOwnerCommandUserInstall(ownerCommand);
+  const existing = await rest.get(Routes.applicationCommands(clientId));
+  const current = (existing || []).find((command) => command?.name === OWNER_COMMAND_NAME);
+
+  if (dryRun) {
+    console.log(`[CommandSync] DRY RUN ${current ? 'update' : 'create'} USER_INSTALL /owner globally`);
+    return true;
+  }
+
+  if (current) {
+    await rest.patch(Routes.applicationCommand(clientId, current.id), { body: ownerCommand });
+  } else {
+    await rest.post(Routes.applicationCommands(clientId), { body: ownerCommand });
+  }
+  console.log(`[CommandSync] USER_INSTALL /owner ${current ? 'updated' : 'created'} globally.`);
+  return true;
+}
+
 async function cleanupStaleGlobalCommands(rest, clientId, dryRun = false) {
   const commands = await rest.get(Routes.applicationCommands(clientId));
-  const stale = (commands || []).filter((command) => !CANONICAL_COMMAND_NAMES.has(String(command?.name || '')));
+  const stale = (commands || []).filter(
+    (command) => !ALLOWED_GLOBAL_COMMAND_NAMES.has(String(command?.name || '')),
+  );
 
   for (const command of stale) {
     if (dryRun) {
@@ -149,20 +190,28 @@ async function cleanupStaleGlobalCommands(rest, clientId, dryRun = false) {
   return stale.map((command) => command.name);
 }
 
-async function cleanupCommandCenterScope(rest, clientId, guildIds, privateGuildId, dryRun = false) {
-  for (const guildId of guildIds) {
-    if (!guildId || guildId === privateGuildId) continue;
+async function cleanupRetiredGuildCommands(rest, clientId, guildIds, dryRun = false) {
+  const scopes = uniqueGuildIds([guildIds]);
+  const removed = [];
+
+  for (const guildId of scopes) {
     const commands = await rest.get(Routes.applicationGuildCommands(clientId, guildId));
-    const stale = (commands || []).filter((command) => command?.name === 'commandcenter');
+    const stale = (commands || []).filter((command) =>
+      RETIRED_GUILD_COMMAND_NAMES.has(String(command?.name || '')),
+    );
+
     for (const command of stale) {
+      removed.push({ guildId, name: command.name });
       if (dryRun) {
-        console.log(`[CommandSync] DRY RUN remove stale /commandcenter from ${guildId}`);
+        console.log(`[CommandSync] DRY RUN remove guild /${command.name} from ${guildId}`);
         continue;
       }
       await rest.delete(Routes.applicationGuildCommand(clientId, guildId, command.id));
-      console.log(`[CommandSync] Removed stale /commandcenter from ${guildId}`);
+      console.log(`[CommandSync] Removed guild /${command.name} from ${guildId}`);
     }
   }
+
+  return removed;
 }
 
 async function syncCommands() {
@@ -183,28 +232,40 @@ async function syncCommands() {
 
   const dryRun = ['1', 'true', 'yes', 'on'].includes(String(process.env.COMMAND_SYNC_DRY_RUN || '').toLowerCase());
   const commands = loadCanonicalCommands();
+  const publicCommands = commands.filter((command) => PUBLIC_COMMAND_NAMES.has(command.name));
+  const canonicalOwner = commands.find((command) => command.name === OWNER_COMMAND_NAME) || null;
+  const ownerCommand = buildUserInstalledOwnerCommand(canonicalOwner);
+  assertOwnerCommandUserInstall(ownerCommand);
+
   const guildIds = configuredGuildIds(mode);
   const privateGuildId = commandCenterGuildId();
+  const cleanupGuildIds = uniqueGuildIds([guildIds, privateGuildId]);
   const rest = new REST({ version: '10', timeout: timeoutMs() }).setToken(token);
   let removedGlobalCommands = [];
+  let removedGuildCommands = [];
 
   if (commandMode === 'global') {
-    await putGlobalCommands(rest, clientId, commands, dryRun);
+    await putGlobalCommands(rest, clientId, publicCommands, dryRun);
+    await upsertGlobalOwnerCommand(rest, clientId, ownerCommand, dryRun);
   } else {
     if (!guildIds.length) throw new Error(`No guild IDs configured for ${mode}`);
     for (const guildId of guildIds) {
-      await putGuildCommands(rest, clientId, guildId, commands, privateGuildId, dryRun);
+      await putGuildCommands(rest, clientId, guildId, publicCommands, dryRun);
     }
-    await cleanupCommandCenterScope(rest, clientId, guildIds, privateGuildId, dryRun);
-    removedGlobalCommands = await cleanupStaleGlobalCommands(rest, clientId, dryRun);
+    await upsertGlobalOwnerCommand(rest, clientId, ownerCommand, dryRun);
   }
+
+  removedGuildCommands = await cleanupRetiredGuildCommands(rest, clientId, cleanupGuildIds, dryRun);
+  removedGlobalCommands = await cleanupStaleGlobalCommands(rest, clientId, dryRun);
 
   return {
     mode,
     commandMode,
     dryRun,
     guildIds,
-    commands: commands.map((command) => command.name),
+    commands: publicCommands.map((command) => command.name),
+    userInstalledCommands: [OWNER_COMMAND_NAME],
+    removedGuildCommands,
     removedGlobalCommands,
   };
 }
@@ -220,10 +281,15 @@ if (require.main === module) {
 
 module.exports = {
   CANONICAL_COMMAND_NAMES,
+  PUBLIC_COMMAND_NAMES,
+  RETIRED_GUILD_COMMAND_NAMES,
   getCanonicalCommandFiles,
   loadCanonicalCommands,
   configuredGuildIds,
+  buildUserInstalledOwnerCommand,
+  assertOwnerCommandUserInstall,
   cleanupStaleGlobalCommands,
-  cleanupCommandCenterScope,
+  cleanupRetiredGuildCommands,
+  upsertGlobalOwnerCommand,
   syncCommands,
 };
