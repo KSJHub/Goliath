@@ -9,18 +9,26 @@ const {
 } = require('discord.js');
 const { resolveTokenDetails } = require('../../config/tokenResolver');
 
+const OWNER_CONTEXTS = [
+  InteractionContextType.Guild,
+  InteractionContextType.BotDM,
+  InteractionContextType.PrivateChannel,
+];
+
 function desiredOwnerCommand(client) {
   const command = client?.commands?.get?.('owner');
   if (!command?.data?.toJSON) return null;
 
   const payload = command.data.toJSON();
-  return {
+  const desired = {
     ...payload,
     integration_types: [ApplicationIntegrationType.UserInstall],
-    contexts: [InteractionContextType.Guild],
-    default_member_permissions: null,
-    dm_permission: undefined,
+    contexts: [...OWNER_CONTEXTS],
   };
+  delete desired.default_member_permissions;
+  delete desired.default_permission;
+  delete desired.dm_permission;
+  return desired;
 }
 
 function matchesUserInstall(command) {
@@ -28,8 +36,8 @@ function matchesUserInstall(command) {
   const contexts = Array.isArray(command?.contexts) ? command.contexts : [];
   return integrations.length === 1
     && integrations[0] === ApplicationIntegrationType.UserInstall
-    && contexts.length === 1
-    && contexts[0] === InteractionContextType.Guild;
+    && contexts.length === OWNER_CONTEXTS.length
+    && OWNER_CONTEXTS.every((value) => contexts.includes(value));
 }
 
 module.exports = {
@@ -43,8 +51,6 @@ module.exports = {
       return;
     }
 
-    // Let the normal command-sync startup event run first, then verify the actual
-    // global application-command record Discord retained.
     await new Promise((resolve) => setTimeout(resolve, 2500));
 
     try {
@@ -62,9 +68,9 @@ module.exports = {
         console.log('[OwnerInstall] Created global USER_INSTALL /owner command.');
       } else if (!matchesUserInstall(owner)) {
         await rest.patch(Routes.applicationCommand(applicationId, owner.id), { body: payload });
-        console.log('[OwnerInstall] Corrected /owner to USER_INSTALL-only guild context.');
+        console.log('[OwnerInstall] Corrected /owner to USER_INSTALL with complete interaction contexts.');
       } else {
-        console.log('[OwnerInstall] Verified /owner: USER_INSTALL only, guild context only.');
+        console.log('[OwnerInstall] Verified /owner: USER_INSTALL only with Guild, BotDM and PrivateChannel contexts.');
       }
 
       const verified = await rest.get(Routes.applicationCommands(applicationId));
