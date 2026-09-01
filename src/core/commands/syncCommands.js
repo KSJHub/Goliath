@@ -18,6 +18,7 @@ const PUBLIC_COMMAND_NAMES = new Set(
   [...CANONICAL_COMMAND_NAMES].filter((name) => !RETIRED_GUILD_COMMAND_NAMES.has(name)),
 );
 const ALLOWED_GLOBAL_COMMAND_NAMES = new Set([...PUBLIC_COMMAND_NAMES, OWNER_COMMAND_NAME]);
+const OWNER_USER_CONTEXTS = [0, 1, 2];
 
 function resolveMode() {
   const fromArg = String(process.argv[2] || '').trim().toLowerCase();
@@ -116,7 +117,7 @@ function buildUserInstalledOwnerCommand(ownerCommand) {
 
   const command = { ...ownerCommand };
   command.integration_types = [1];
-  command.contexts = [0];
+  command.contexts = [...OWNER_USER_CONTEXTS];
   delete command.default_member_permissions;
   delete command.default_permission;
   delete command.dm_permission;
@@ -126,12 +127,12 @@ function buildUserInstalledOwnerCommand(ownerCommand) {
 function assertOwnerCommandUserInstall(ownerCommand) {
   if (!ownerCommand) throw new Error('Missing /owner command payload.');
   const integrationTypes = Array.isArray(ownerCommand.integration_types) ? ownerCommand.integration_types : [];
-  const contexts = Array.isArray(ownerCommand.contexts) ? ownerCommand.contexts : [];
+  const contexts = Array.isArray(ownerCommand.contexts) ? [...ownerCommand.contexts].sort() : [];
   if (integrationTypes.length !== 1 || integrationTypes[0] !== 1) {
     throw new Error('Refusing to sync /owner unless it is USER_INSTALL only.');
   }
-  if (contexts.length !== 1 || contexts[0] !== 0) {
-    throw new Error('Refusing to sync /owner outside guild interaction context.');
+  if (contexts.length !== OWNER_USER_CONTEXTS.length || !OWNER_USER_CONTEXTS.every((value) => contexts.includes(value))) {
+    throw new Error('Refusing to sync /owner without the complete USER_INSTALL interaction-context set.');
   }
 }
 
