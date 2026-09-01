@@ -44,6 +44,7 @@ function ownerHomePayload(interaction, notice = null) {
   const billing = devOverride.getPaywallBypassState();
   const isDev = currentMode === 'DEV';
   const ownersLoaded = security.getBotOwnerIds().length;
+  const guildAvailable = Boolean(interaction?.guild);
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
@@ -57,6 +58,7 @@ function ownerHomePayload(interaction, notice = null) {
       { name: 'Environment', value: `\`${currentMode}\``, inline: true },
       { name: 'Owner Gate', value: `**${ownersLoaded}** configured owner IDs`, inline: true },
       { name: 'Panel Visibility', value: 'Ephemeral • owner ID checked on every action', inline: true },
+      { name: 'Current Context', value: guildAvailable ? `Server • ${interaction.guild.name}` : 'User-installed external context', inline: true },
       { name: 'DEV Override', value: isDev ? (devState.enabled ? '🟢 Enabled' : '🔴 Disabled') : '⚪ DEV only', inline: true },
       { name: 'DEV Billing Unlock', value: isDev ? (billing.active ? `🟢 ${billing.plan || 'enabled'}` : '🔴 Disabled') : '⚪ DEV only', inline: true },
       { name: 'Owner Tools', value: isDev ? '🟢 Security • Server Tools • Command Center' : '⚪ DEV only', inline: true },
@@ -294,19 +296,13 @@ module.exports = {
   access: { ownerOnly: true },
   data: new SlashCommandBuilder()
     .setName('owner')
-    .setDescription('Open the private Goliath owner control panel.')
-    .setDMPermission(false)
-    .setDefaultMemberPermissions(0n),
+    .setDescription('Open the private Goliath owner control panel.'),
 
   wireClient,
   handleOwnerPanelInteraction,
 
   async execute(interaction, client) {
     wireClient(client || interaction.client);
-
-    if (!interaction.guild) {
-      return interaction.reply({ content: '❌ /owner can only be used inside a server.', flags: MessageFlags.Ephemeral });
-    }
 
     if (!ownerAllowed(interaction)) {
       return interaction.reply(ownerDeniedPayload());
