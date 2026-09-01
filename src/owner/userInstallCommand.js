@@ -7,14 +7,18 @@ const {
 } = require('discord.js');
 const ownerPanel = require('./command');
 
-// Keep /owner completely out of guild-installed command sets. Discord exposes
-// this command only through a USER_INSTALL of the application, while the
-// owner panel itself still performs the OWNER_IDS runtime gate on every use.
+// /owner follows the configured Goliath owner account rather than a guild
+// installation. Keep it USER_INSTALL-only and expose it in every Discord
+// interaction context supported for user-installed application commands.
 const data = new SlashCommandBuilder()
   .setName('owner')
   .setDescription('Open the private Goliath owner control panel.')
   .setIntegrationTypes(ApplicationIntegrationType.UserInstall)
-  .setContexts(InteractionContextType.Guild);
+  .setContexts(
+    InteractionContextType.Guild,
+    InteractionContextType.BotDM,
+    InteractionContextType.PrivateChannel,
+  );
 
 module.exports = {
   ...ownerPanel,
