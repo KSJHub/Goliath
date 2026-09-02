@@ -342,6 +342,7 @@ async function prepareEmbedMedia(embeds = [], options = {}) {
     if (!imageUrl || !isHttpsUrl(imageUrl)) continue;
     try {
       const source = await sourceImage(imageUrl, guildId);
+      if (nativeImageShouldPassThrough(source.contentType)) continue;
       const processed = await centerOnLegacyEmbedCanvas(source.buffer);
       if (!processed) continue;
       const name = `embed-panel-${index + 1}-large.png`;
