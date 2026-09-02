@@ -23,6 +23,7 @@ const auditEvents = require('./auditIntelligence/auditEvents');
 const OWNER_PREFIX = 'ownerpanel:';
 const SERVER_CONTEXT_MARKER = ':guild:';
 const OWNER_CONTEXT_TTL_MS = 30 * 60 * 1000;
+const DEVELOPMENT_TEST_GUILD_ID = process.env.TEST_GUILD_ID || '1515201360386068642';
 const wiredClients = new WeakSet();
 const ownerGuildContexts = new Map();
 
@@ -194,6 +195,10 @@ async function resolveInteractionGuild(interaction, explicitGuildId = null) {
   }
 }
 
+function isDevelopmentGuild(interaction, explicitGuildId = null) {
+  return interactionGuildId(interaction, explicitGuildId) === validGuildId(DEVELOPMENT_TEST_GUILD_ID);
+}
+
 function ownerHomePayload(interaction, notice = null) {
   const currentMode = mode();
   const devState = devOverride.readState();
@@ -202,6 +207,7 @@ function ownerHomePayload(interaction, notice = null) {
   const ownersLoaded = security.getBotOwnerIds().length;
   const guild = cachedInteractionGuild(interaction);
   const guildId = interactionGuildId(interaction);
+  const showCommandCenter = isDev && isDevelopmentGuild(interaction, guildId);
   const guildContext = guild
     ? `${guild.name} • ${guild.id}`
     : guildId
@@ -212,7 +218,7 @@ function ownerHomePayload(interaction, notice = null) {
     .setColor(0x5865F2)
     .setTitle('👑 Goliath Owner Control Panel')
     .setDescription([
-      'Private owner-only controls for Goliath development, security testing, server tooling and the Command Center.',
+      'Private owner-only controls for Goliath development, security testing and server tooling.',
       '',
       notice ? `**Status:** ${notice}` : null,
     ].filter(Boolean).join('\n'))
@@ -223,12 +229,12 @@ function ownerHomePayload(interaction, notice = null) {
       { name: 'Context', value: guildContext, inline: false },
       { name: 'DEV Override', value: isDev ? (devState.enabled ? '🟢 Enabled' : '🔴 Disabled') : '⚪ DEV only', inline: true },
       { name: 'DEV Billing Unlock', value: isDev ? (billing.active ? `🟢 ${billing.plan || 'enabled'}` : '🔴 Disabled') : '⚪ DEV only', inline: true },
-      { name: 'Owner Tools', value: isDev ? '🟢 Server Tools • Security • Command Center' : '🟢 Server Tools • owner only', inline: true },
+      { name: 'Owner Tools', value: showCommandCenter ? '🟢 Server Tools • Security • Command Center' : '🟢 Server Tools • Security', inline: true },
     )
     .setFooter({ text: 'Goliath Owner • OWNER_IDS protected' })
     .setTimestamp();
 
-  const primary = new ActionRowBuilder().addComponents(
+  const primaryComponents = [
     new ButtonBuilder()
       .setCustomId(`${OWNER_PREFIX}dev-toggle`)
       .setLabel(devState.enabled ? 'Disable DEV Override' : 'Enable DEV Override')
@@ -236,23 +242,28 @@ function ownerHomePayload(interaction, notice = null) {
       .setStyle(devState.enabled ? ButtonStyle.Danger : ButtonStyle.Success)
       .setDisabled(!isDev),
     new ButtonBuilder()
-      .setCustomId(`${OWNER_PREFIX}security`)
+      .setCustomId(contextualOwnerId('security', guildId))
       .setLabel('Security Tests')
       .setEmoji('🛡️')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!isDev),
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(contextualOwnerId('server-tools', interaction))
       .setLabel('Server Tools')
       .setEmoji('🧰')
       .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`${OWNER_PREFIX}commandcenter`)
-      .setLabel('Command Center')
-      .setEmoji('📡')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!isDev)
-  );
+  ];
+
+  if (showCommandCenter) {
+    primaryComponents.push(
+      new ButtonBuilder()
+        .setCustomId(contextualOwnerId('commandcenter', guildId))
+        .setLabel('Command Center')
+        .setEmoji('📡')
+        .setStyle(ButtonStyle.Secondary)
+    );
+  }
+
+  const primary = new ActionRowBuilder().addComponents(...primaryComponents);
 
   const navigation = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -311,6 +322,15 @@ function noConnectedGuildsPayload(guildId = null) {
     content: guildId
       ? `❌ Goliath can identify server \`${guildId}\`, but this bot instance cannot access it and is not connected to any other guild it can use for Server Tools.`
       : '❌ This Goliath bot instance is not connected to any guilds available to Server Tools.',
+    flags: MessageFlags.Ephemeral,
+  };
+}
+
+function securityUnavailablePayload(guildId = null) {
+  return {
+    content: guildId
+      ? `❌ Goliath can identify server \`${guildId}\`, but this bot instance cannot access a connected guild for Security Tests.`
+      : '❌ This Goliath bot instance is not connected to a guild available for Security Tests.',
     flags: MessageFlags.Ephemeral,
   };
 }
@@ -374,6 +394,54 @@ function firstConnectedGuild(interaction) {
   return cache.values().next().value || null;
 }
 
+async function preferredOwnerControlGuild(interaction, explicitGuildId = null) {
+  const requestedGuildId = interactionGuildId(interaction, explicitGuildId);
+  const requested = await resolveInteractionGuild(interaction, requestedGuildId);
+  if (requested.guild) return { guild: requested.guild, requestedGuildId, error: null };
+
+  const devGuildId = validGuildId(DEVELOPMENT_TEST_GUILD_ID);
+  if (devGuildId && devGuildId !== requestedGuildId) {
+    const cachedDev = interaction?.client?.guilds?.cache?.get?.(devGuildId) || null;
+    if (cachedDev) return { guild: cachedDev, requestedGuildId, error: requested.error };
+    if (interaction?.client?.guilds?.fetch) {
+      try {
+        const fetchedDev = await interaction.client.guilds.fetch(devGuildId);
+        if (fetchedDev) return { guild: fetchedDev, requestedGuildId, error: requested.error };
+      } catch {
+        // Fall through to any connected guild.
+      }
+    }
+  }
+
+  return { guild: firstConnectedGuild(interaction), requestedGuildId, error: requested.error };
+}
+
+async function runSecurityTests(interaction, explicitGuildId = null, button = false) {
+  const resolved = await preferredOwnerControlGuild(interaction, explicitGuildId);
+  const controlGuild = resolved.guild;
+
+  if (!controlGuild) {
+    const payload = securityUnavailablePayload(resolved.requestedGuildId);
+    if (interaction.deferred || interaction.replied) await interaction.editReply(payload).catch(() => null);
+    else await interaction.reply(payload).catch(() => null);
+    return null;
+  }
+
+  if (resolved.requestedGuildId && resolved.requestedGuildId !== controlGuild.id) {
+    console.warn('[OwnerPanel] Requested guild is unavailable to this bot instance; using a connected guild as Security Test control context.', {
+      mode: mode(),
+      requestedGuildId: resolved.requestedGuildId,
+      fallbackGuildId: controlGuild.id,
+      errorCode: resolved.error?.code || resolved.error?.rawError?.code || null,
+      errorStatus: resolved.error?.status || null,
+      errorMessage: resolved.error?.message || null,
+    });
+  }
+
+  const proxied = withOwnerOptions(interaction, {}, controlGuild, controlGuild.id);
+  return button ? testSecurity.handleButton(proxied) : testSecurity.execute(proxied);
+}
+
 async function runDuplicator(interaction, values, explicitGuildId = null) {
   const requestedGuildId = interactionGuildId(interaction, explicitGuildId);
   const resolved = await resolveInteractionGuild(interaction, requestedGuildId);
@@ -419,7 +487,7 @@ async function handleOwnerPanelInteraction(interaction) {
   if (contextGuildId) rememberOwnerGuild(interaction, contextGuildId);
 
   if (id.startsWith('testsecurity:')) {
-    await testSecurity.handleButton(interaction);
+    await runSecurityTests(interaction, contextGuildId, true);
     return true;
   }
 
@@ -444,11 +512,7 @@ async function handleOwnerPanelInteraction(interaction) {
   }
 
   if (id === `${OWNER_PREFIX}security`) {
-    if (!devOverride.isDevMode()) {
-      await interaction.update(ownerHomePayload(interaction, 'Security test controls are DEV only.'));
-      return true;
-    }
-    await testSecurity.execute(interaction);
+    await runSecurityTests(interaction, contextGuildId, false);
     return true;
   }
 
@@ -507,8 +571,8 @@ async function handleOwnerPanelInteraction(interaction) {
   }
 
   if (id === `${OWNER_PREFIX}commandcenter`) {
-    if (!devOverride.isDevMode()) {
-      await interaction.update(ownerHomePayload(interaction, 'Command Center controls are owned by the DEV control plane.'));
+    if (!devOverride.isDevMode() || !isDevelopmentGuild(interaction, contextGuildId)) {
+      await interaction.update(ownerHomePayload(interaction, 'Command Center is only available inside the configured DEV guild.'));
       return true;
     }
     await auditEvents.execute(interaction);

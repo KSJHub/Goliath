@@ -13,6 +13,7 @@ const CORE_EMOJI_ALIASES = Object.freeze([
   'playstation', 'snapchat', 'steam', 'tiktok', 'twitch', 'whatsapp', 'x', 'xbox', 'youtube',
 ]);
 const CORE_EMOJI_ALIAS_SET = new Set(CORE_EMOJI_ALIASES);
+const GENERIC_POLICY_CONTEXTS = new Set(['unknown', 'text', 'embed', 'render', 'component', 'picker', 'editor']);
 
 function requireEmojiManager(client) {
   const manager = client?.application?.emojis;
@@ -37,6 +38,25 @@ function coreAlias(name) {
 }
 function isApprovedCoreAlias(value) { return CORE_EMOJI_ALIAS_SET.has(cleanEmojiName(value)); }
 function coreArtifactName(kind, alias) { return `${CORE_EMOJI_PREFIX}${kind === 'backup' ? 'b' : 'r'}_${alias}`.slice(0, 32); }
+
+function resolvePolicyContext(context = 'unknown') {
+  const clean = emojiStore.cleanKey(context, 60) || 'unknown';
+  if (!GENERIC_POLICY_CONTEXTS.has(clean)) return clean;
+
+  const stack = String(new Error().stack || '').replace(/\\/g, '/');
+  const moduleMatches = [...stack.matchAll(/\/src\/modules\/[^/]+\/([^/]+)\//g)]
+    .map((match) => emojiStore.cleanKey(match[1], 60))
+    .filter((value) => value && value !== 'emojis');
+  if (moduleMatches.length) return moduleMatches[0];
+
+  const routeMatch = stack.match(/\/src\/server\/routes\/modules\/[^/]+\/([^/.]+)\.js/);
+  if (routeMatch?.[1]) return emojiStore.cleanKey(routeMatch[1], 60) || clean;
+
+  const eventMatch = stack.match(/\/src\/events\/([^/]+)\/([^/.]+)\.js/);
+  if (eventMatch) return emojiStore.cleanKey(`${eventMatch[1]}_${eventMatch[2]}`, 60) || clean;
+
+  return clean;
+}
 
 function componentPayload(emoji) {
   if (!emoji?.id || !emoji?.name) return null;
@@ -286,23 +306,25 @@ function findByReference(bank, reference, aliases = {}) {
 }
 
 async function resolveGuildEmoji(client, guildId, reference, context = 'unknown') {
+  const resolvedContext = resolvePolicyContext(context);
   const section = emojiStore.getSection(guildId);
   const bank = await requireEmojiManager(client).fetch();
   const emoji = findByReference(bank, reference, section.aliases);
   if (!emoji) return null;
   if (isCoreEmoji(emoji)) {
     if (!CORE_EMOJI_ALIAS_SET.has(coreAlias(emoji.name))) return null;
-    emojiStore.recordUsage(guildId, emoji.id, context);
+    emojiStore.recordUsage(guildId, emoji.id, resolvedContext);
     return serialise(emoji);
   }
   if (!section.enabled) return null;
   const selected = studioService.effectiveFavouriteIds(section);
-  if (!selected.has(String(emoji.id)) || !studioService.policyAllows(section, emoji.id, context)) return null;
-  emojiStore.recordUsage(guildId, emoji.id, context);
+  if (!selected.has(String(emoji.id)) || !studioService.policyAllows(section, emoji.id, resolvedContext)) return null;
+  emojiStore.recordUsage(guildId, emoji.id, resolvedContext);
   return serialise(emoji);
 }
 
 async function allowedGuildEmojis(client, guildId, context = 'unknown') {
+  const resolvedContext = resolvePolicyContext(context);
   const section = emojiStore.getSection(guildId);
   const bank = await requireEmojiManager(client).fetch();
   const selected = studioService.effectiveFavouriteIds(section);
@@ -317,7 +339,7 @@ async function allowedGuildEmojis(client, guildId, context = 'unknown') {
       allowed.set(alias, emoji);
       continue;
     }
-    if (!section.enabled || !selected.has(String(emoji.id)) || !studioService.policyAllows(section, emoji.id, context)) continue;
+    if (!section.enabled || !selected.has(String(emoji.id)) || !studioService.policyAllows(section, emoji.id, resolvedContext)) continue;
     allowed.set(name, emoji);
     for (const [alias, id] of Object.entries(section.aliases)) if (String(id) === String(emoji.id)) allowed.set(alias.toLowerCase(), emoji);
   }
@@ -347,8 +369,9 @@ function usageRecorder(guildId, context) {
 
 async function resolveText(client, guildId, value, context = 'text') {
   if (value == null) return value;
-  const allowed = await allowedGuildEmojis(client, guildId, context);
-  const recorder = usageRecorder(guildId, context);
+  const resolvedContext = resolvePolicyContext(context);
+  const allowed = await allowedGuildEmojis(client, guildId, resolvedContext);
+  const recorder = usageRecorder(guildId, resolvedContext);
   const result = replaceShortcodes(value, allowed, recorder.onUse);
   recorder.flush();
   return result;
@@ -367,18 +390,20 @@ function resolveDataWithAllowed(data, allowed, recorder) {
 
 async function resolveEmbedData(client, guildId, embed, context = 'embed') {
   const data = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed;
-  const allowed = await allowedGuildEmojis(client, guildId, context);
+  const resolvedContext = resolvePolicyContext(context);
+  const allowed = await allowedGuildEmojis(client, guildId, resolvedContext);
   if (!allowed.size) return data;
-  const recorder = usageRecorder(guildId, context);
+  const recorder = usageRecorder(guildId, resolvedContext);
   const resolved = resolveDataWithAllowed(data, allowed, recorder);
   recorder.flush();
   return resolved;
 }
 
 async function resolveEmbeds(client, guildId, embeds = [], context = 'embed') {
-  const allowed = await allowedGuildEmojis(client, guildId, context);
+  const resolvedContext = resolvePolicyContext(context);
+  const allowed = await allowedGuildEmojis(client, guildId, resolvedContext);
   if (!allowed.size) return embeds;
-  const recorder = usageRecorder(guildId, context);
+  const recorder = usageRecorder(guildId, resolvedContext);
   const resolved = (embeds || []).map((embed) => resolveDataWithAllowed(typeof embed?.toJSON === 'function' ? embed.toJSON() : embed, allowed, recorder));
   recorder.flush();
   return resolved;
@@ -395,8 +420,8 @@ async function componentEmojiForGuild(client, guildId, reference, context = 'com
 }
 
 async function catalog(client, guildId, query = '', options = {}) { return studioService.searchCatalog(await listBank(client), guildId, query, options); }
-async function picker(client, guildId, query = '', context = 'picker') { return studioService.pickerData(await listBank(client), guildId, query, context); }
-async function suggest(client, guildId, query = '', context = 'editor', limit = 25) { return studioService.shortcodeSuggestions(await listBank(client), guildId, query, context, limit); }
+async function picker(client, guildId, query = '', context = 'picker') { return studioService.pickerData(await listBank(client), guildId, query, resolvePolicyContext(context)); }
+async function suggest(client, guildId, query = '', context = 'editor', limit = 25) { return studioService.shortcodeSuggestions(await listBank(client), guildId, query, resolvePolicyContext(context), limit); }
 async function dependencies(client, emojiId) { return studioService.dependencyReport(await listBank(client), emojiId); }
 async function analytics(client) { return studioService.aggregateUsage(await listBank(client)); }
 async function cleanupCandidates(client, unusedDays = 90) { return studioService.cleanupCandidates(await listBank(client), unusedDays); }
@@ -467,5 +492,6 @@ module.exports = {
   exportGuildConfig,
   importGuildConfig,
   processExpiredTemporary,
+  resolvePolicyContext,
   BUILTIN_PACKS: studioService.BUILTIN_PACKS,
 };
