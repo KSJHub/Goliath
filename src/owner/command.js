@@ -173,22 +173,24 @@ function cachedInteractionGuild(interaction, explicitGuildId = null) {
 
 async function resolveInteractionGuild(interaction, explicitGuildId = null) {
   const guildId = interactionGuildId(interaction, explicitGuildId);
-  if (!guildId) return null;
+  if (!guildId) return { guild: null, guildId: null, error: null };
 
   const cached = cachedInteractionGuild(interaction, guildId);
   if (cached) {
     rememberOwnerGuild(interaction, cached.id);
-    return cached;
+    return { guild: cached, guildId, error: null };
   }
 
-  if (!interaction?.client?.guilds?.fetch) return null;
+  if (!interaction?.client?.guilds?.fetch) {
+    return { guild: null, guildId, error: new Error('Guild manager fetch is unavailable.') };
+  }
 
   try {
     const guild = await interaction.client.guilds.fetch(guildId);
     if (guild) rememberOwnerGuild(interaction, guild.id);
-    return guild;
-  } catch {
-    return null;
+    return { guild: guild || null, guildId, error: null };
+  } catch (error) {
+    return { guild: null, guildId, error };
   }
 }
 
@@ -304,6 +306,15 @@ function serverContextRequiredPayload() {
   };
 }
 
+function noConnectedGuildsPayload(guildId = null) {
+  return {
+    content: guildId
+      ? `❌ Goliath can identify server \`${guildId}\`, but this bot instance cannot access it and is not connected to any other guild it can use for Server Tools.`
+      : '❌ This Goliath bot instance is not connected to any guilds available to Server Tools.',
+    flags: MessageFlags.Ephemeral,
+  };
+}
+
 function analyseModal(interaction, explicitGuildId = null) {
   const guildId = interactionGuildId(interaction, explicitGuildId);
   return new ModalBuilder()
@@ -350,35 +361,47 @@ function withOwnerOptions(interaction, values = {}, guildOverride = null, explic
     get(target, property) {
       if (property === 'options') return options;
       if (property === 'guild') return guildOverride || cachedInteractionGuild(target, explicitGuildId);
-      if (property === 'guildId') return interactionGuildId(target, explicitGuildId);
+      if (property === 'guildId') return validGuildId(guildOverride?.id) || interactionGuildId(target, explicitGuildId);
       const value = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
     },
   });
 }
 
+function firstConnectedGuild(interaction) {
+  const cache = interaction?.client?.guilds?.cache;
+  if (!cache?.values) return null;
+  return cache.values().next().value || null;
+}
+
 async function runDuplicator(interaction, values, explicitGuildId = null) {
-  const guildId = interactionGuildId(interaction, explicitGuildId);
-  const guild = await resolveInteractionGuild(interaction, guildId);
-  if (!guild) {
-    console.warn('[OwnerPanel] Unable to resolve server context for Duplicator.', {
+  const requestedGuildId = interactionGuildId(interaction, explicitGuildId);
+  const resolved = await resolveInteractionGuild(interaction, requestedGuildId);
+  let controlGuild = resolved.guild;
+
+  if (!controlGuild) {
+    controlGuild = firstConnectedGuild(interaction);
+    console.warn('[OwnerPanel] Requested guild is unavailable to this bot instance; using a connected guild as Duplicator control context.', {
       mode: mode(),
+      requestedGuildId,
+      fallbackGuildId: controlGuild?.id || null,
+      errorCode: resolved.error?.code || resolved.error?.rawError?.code || null,
+      errorStatus: resolved.error?.status || null,
+      errorMessage: resolved.error?.message || null,
       customId: String(interaction?.customId || ''),
-      embeddedGuildId: embeddedGuildId(interaction?.customId),
-      explicitGuildId: validGuildId(explicitGuildId),
-      interactionGuildId: validGuildId(interaction?.guildId),
       channelId: String(interaction?.channelId || ''),
     });
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply(serverContextRequiredPayload()).catch(() => null);
-    } else {
-      await interaction.reply(serverContextRequiredPayload()).catch(() => null);
-    }
+  }
+
+  if (!controlGuild) {
+    const payload = noConnectedGuildsPayload(requestedGuildId);
+    if (interaction.deferred || interaction.replied) await interaction.editReply(payload).catch(() => null);
+    else await interaction.reply(payload).catch(() => null);
     return null;
   }
 
-  rememberOwnerGuild(interaction, guild.id);
-  return duplicator.run(withOwnerOptions(interaction, values, guild, guild.id));
+  rememberOwnerGuild(interaction, requestedGuildId || controlGuild.id);
+  return duplicator.run(withOwnerOptions(interaction, values, controlGuild, controlGuild.id));
 }
 
 async function handleOwnerPanelInteraction(interaction) {

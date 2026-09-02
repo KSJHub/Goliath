@@ -44,9 +44,9 @@ function userId(interaction) { return String(interaction?.user?.id || '').trim()
 function guildId(interaction) { return String(interaction?.guildId || interaction?.guild?.id || '').trim(); }
 function displayName(interaction) { return interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User'; }
 
-async function availableCatalog(interaction) {
-  const overview = await emojis.overview(interaction.client, guildId(interaction));
-  return (overview.catalog || []).filter((emoji) => emoji.core || (overview.enabled && emoji.selected));
+async function availableCatalog(interaction, context = 'member') {
+  const picker = await emojis.picker(interaction.client, guildId(interaction), '', context);
+  return [...(picker.core || []), ...(picker.studio || [])];
 }
 
 function emojiShortcode(emoji) {
@@ -149,7 +149,7 @@ function buildLauncher() {
 }
 
 async function buildPanel(interaction, selectedPage = 'all:0') {
-  const catalog = sortAlphabetically(await availableCatalog(interaction));
+  const catalog = sortAlphabetically(await availableCatalog(interaction, 'member_browser'));
   const pages = browserPages(catalog);
   const active = pages.find((page) => page.key === selectedPage) || pages[0] || { key: 'all:0', label: 'All Emojis', items: [] };
 
@@ -200,7 +200,7 @@ async function buildPanel(interaction, selectedPage = 'all:0') {
 async function autocomplete(interaction) {
   if (!interaction?.guildId || !interaction?.client) return interaction.respond([]).catch(() => null);
   const focused = String(interaction.options.getFocused?.() || '').trim();
-  const catalog = await availableCatalog(interaction);
+  const catalog = await availableCatalog(interaction, 'member_command');
   const matches = searchEmoji(catalog, focused)
     .sort((a, b) => matchScore(b, focused) - matchScore(a, focused)
       || Number(b.usage?.count || 0) - Number(a.usage?.count || 0)
@@ -216,7 +216,7 @@ async function commandSelection(interaction, reference) {
   const raw = String(reference || '').trim();
   if (!raw) return null;
 
-  const catalog = await availableCatalog(interaction);
+  const catalog = await availableCatalog(interaction, 'member_command');
   let emoji = null;
 
   if (raw.toLowerCase().startsWith('core:')) {
@@ -270,7 +270,7 @@ async function buildMessageConversionPreview(interaction, message) {
 }
 
 async function postSelectedEmoji(interaction, emojiId) {
-  const catalog = await availableCatalog(interaction);
+  const catalog = await availableCatalog(interaction, 'member_browser');
   const emoji = catalog.find((entry) => String(entry.id) === String(emojiId));
   if (!emoji) throw new Error('That emoji is no longer available here.');
   recordMemberUse(interaction, emoji, 'member_browser');
