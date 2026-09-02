@@ -1,6 +1,10 @@
 'use strict';
 
+const dns = require('node:dns').promises;
 const fs = require('node:fs');
+const http = require('node:http');
+const https = require('node:https');
+const net = require('node:net');
 const path = require('node:path');
 const fetch = require('node-fetch');
 const emojiProcessor = require('../../../core/mediaTools/emojiMaker/emojiProcessor');
@@ -8,8 +12,12 @@ const emojiProcessor = require('../../../core/mediaTools/emojiMaker/emojiProcess
 const API_URL = 'https://emoji.gg/api';
 const MAX_BYTES = 256 * 1024;
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
+const MAX_REDIRECTS = 5;
+const CATALOGUE_CACHE_MS = 60 * 1000;
 const CORE_ASSET_DIR = path.join(__dirname, 'assets');
 const SUPPORTED_CORE_ASSET_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+
+let catalogueCache = { expiresAt: 0, data: null, pending: null };
 
 const CORE_FILENAME_PATTERNS = Object.freeze({
   activision: /\b(?:actiid|activid|activision)\b/,
@@ -32,8 +40,99 @@ const CORE_FILENAME_PATTERNS = Object.freeze({
   youtube: /\b(?:youtube|yt)\b/,
 });
 
+function isPrivateIpv4(address) {
+  const parts = String(address).split('.').map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  const [a, b] = parts;
+  return a === 0
+    || a === 10
+    || a === 127
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168)
+    || (a === 100 && b >= 64 && b <= 127)
+    || (a === 198 && (b === 18 || b === 19))
+    || a >= 224;
+}
+
+function isPrivateIpv6(address) {
+  const value = String(address || '').toLowerCase().split('%')[0];
+  if (!value || value === '::' || value === '::1') return true;
+  if (value.startsWith('fc') || value.startsWith('fd') || /^fe[89ab]/.test(value)) return true;
+  if (value.startsWith('::ffff:')) {
+    const mapped = value.slice(7);
+    return net.isIP(mapped) === 4 ? isPrivateIpv4(mapped) : true;
+  }
+  return false;
+}
+
+function isPrivateAddress(address) {
+  const family = net.isIP(String(address || ''));
+  if (family === 4) return isPrivateIpv4(address);
+  if (family === 6) return isPrivateIpv6(address);
+  return true;
+}
+
+async function validateRemoteUrl(rawUrl) {
+  let parsed;
+  try { parsed = new URL(String(rawUrl || '').trim()); }
+  catch { throw new Error('Invalid emoji asset URL.'); }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Emoji links must use http or https.');
+  if (parsed.username || parsed.password) throw new Error('Emoji links cannot contain credentials.');
+  if (parsed.port && !['80', '443'].includes(parsed.port)) throw new Error('Emoji links can only use standard web ports.');
+
+  const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
+  if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')) {
+    throw new Error('Emoji links cannot target local network hosts.');
+  }
+
+  let addresses;
+  if (net.isIP(hostname)) {
+    addresses = [{ address: hostname, family: net.isIP(hostname) }];
+  } else {
+    try { addresses = await dns.lookup(hostname, { all: true, verbatim: true }); }
+    catch { throw new Error('Emoji link hostname could not be resolved.'); }
+  }
+
+  if (!addresses.length || addresses.some((entry) => isPrivateAddress(entry.address))) {
+    throw new Error('Emoji links cannot target private, loopback, link-local, or reserved network addresses.');
+  }
+
+  return { parsed, addresses };
+}
+
+function pinnedAgent(parsed, addresses) {
+  const selected = addresses[0];
+  const Agent = parsed.protocol === 'https:' ? https.Agent : http.Agent;
+  return new Agent({
+    lookup(hostname, options, callback) {
+      callback(null, selected.address, selected.family);
+    },
+  });
+}
+
+async function safeFetch(rawUrl, options = {}, redirects = 0) {
+  if (redirects > MAX_REDIRECTS) throw new Error(`Emoji download exceeded ${MAX_REDIRECTS} redirects.`);
+  const { parsed, addresses } = await validateRemoteUrl(rawUrl);
+  const response = await fetch(parsed.toString(), {
+    ...options,
+    redirect: 'manual',
+    agent: pinnedAgent(parsed, addresses),
+  });
+
+  if ([301, 302, 303, 307, 308].includes(response.status)) {
+    const location = response.headers.get('location');
+    if (!location) throw new Error(`Emoji download redirect (${response.status}) did not include a destination.`);
+    const nextUrl = new URL(location, parsed).toString();
+    return safeFetch(nextUrl, options, redirects + 1);
+  }
+
+  return response;
+}
+
 async function requestJson(url) {
-  const response = await fetch(url, {
+  const response = await safeFetch(url, {
     headers: {
       'User-Agent': 'KSJHub-Goliath/1.0 (+https://github.com/KSJHub/Goliath)',
       Accept: 'application/json',
@@ -44,9 +143,23 @@ async function requestJson(url) {
   return response.json();
 }
 
-async function fetchCatalogue() {
-  const data = await requestJson(API_URL);
-  return Array.isArray(data) ? data : [];
+async function fetchCatalogue(options = {}) {
+  const now = Date.now();
+  if (!options.force && Array.isArray(catalogueCache.data) && catalogueCache.expiresAt > now) return catalogueCache.data;
+  if (!options.force && catalogueCache.pending) return catalogueCache.pending;
+
+  const pending = requestJson(API_URL)
+    .then((data) => {
+      const catalogue = Array.isArray(data) ? data : [];
+      catalogueCache = { data: catalogue, expiresAt: Date.now() + CATALOGUE_CACHE_MS, pending: null };
+      return catalogue;
+    })
+    .catch((error) => {
+      catalogueCache.pending = null;
+      throw error;
+    });
+  catalogueCache.pending = pending;
+  return pending;
 }
 
 function normaliseId(value) { return String(value || '').trim().replace(/[^0-9]/g, ''); }
@@ -70,9 +183,8 @@ async function search(query, limit = 25) {
 function assetUrl(entry) { return entry ? (entry.image || entry.url || entry.src || null) : null; }
 
 async function downloadAsset(url, options = {}) {
-  if (!url || !/^https?:\/\//i.test(url)) throw new Error('Invalid emoji asset URL.');
   const maxBytes = Math.max(MAX_BYTES, Math.min(MAX_SOURCE_BYTES, Number(options.maxBytes) || MAX_BYTES));
-  const response = await fetch(url, { headers: { 'User-Agent': 'KSJHub-Goliath/1.0' }, timeout: 15000 });
+  const response = await safeFetch(url, { headers: { 'User-Agent': 'KSJHub-Goliath/1.0' }, timeout: 15000 });
   if (!response.ok) throw new Error(`Emoji download failed (${response.status})`);
   const contentLength = Number(response.headers.get('content-length')) || 0;
   if (contentLength > maxBytes) throw new Error(`Emoji source is too large (${contentLength} bytes; max ${maxBytes}).`);
@@ -150,6 +262,7 @@ module.exports = {
   API_URL,
   MAX_BYTES,
   MAX_SOURCE_BYTES,
+  CATALOGUE_CACHE_MS,
   CORE_ASSET_DIR,
   fetchCatalogue,
   findById,
@@ -160,4 +273,5 @@ module.exports = {
   listCoreAssetFiles,
   coreAssetForAlias,
   syncCoreAssets,
+  validateRemoteUrl,
 };

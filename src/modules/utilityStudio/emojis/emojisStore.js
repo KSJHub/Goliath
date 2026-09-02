@@ -9,6 +9,7 @@ const MAX_RECENT = 25;
 const MAX_USAGE_CONTEXTS = 50;
 const USAGE_FLUSH_MS = 2000;
 const pendingUsage = new Map();
+let shutdownHooksInstalled = false;
 
 function uniqueIds(values, max = Number.MAX_SAFE_INTEGER) {
   return [...new Set((Array.isArray(values) ? values : []).map((value) => String(value || '').trim()).filter((value) => /^\d{16,20}$/.test(value)))].slice(0, max);
@@ -244,10 +245,15 @@ function deletePack(guildId, packKey, guildOrMeta = {}) {
   return saveSection(guildId, { packs }, guildOrMeta);
 }
 
-function flushUsage(guildId) {
+function flushUsage(guildId, options = {}) {
   const guildKey = String(guildId);
   const queued = pendingUsage.get(guildKey);
-  if (!queued) return;
+  if (!queued) return true;
+
+  if (queued.timer) {
+    clearTimeout(queued.timer);
+    queued.timer = null;
+  }
 
   try {
     const current = getSection(guildId);
@@ -273,10 +279,42 @@ function flushUsage(guildId) {
       recent: [...recent, ...current.recent.filter((entry) => !recentIds.has(entry.id))],
     });
     pendingUsage.delete(guildKey);
+    return true;
   } catch (error) {
     console.warn(`[Emoji Studio] Usage flush failed for ${guildId}: ${error?.message || error}`);
-    queued.timer = setTimeout(() => flushUsage(guildKey), USAGE_FLUSH_MS);
-    queued.timer.unref?.();
+    if (options.retry !== false) {
+      queued.timer = setTimeout(() => flushUsage(guildKey), USAGE_FLUSH_MS);
+      queued.timer.unref?.();
+    }
+    return false;
+  }
+}
+
+function flushAllUsage(options = {}) {
+  let flushed = 0;
+  let failed = 0;
+  for (const guildId of [...pendingUsage.keys()]) {
+    if (flushUsage(guildId, options)) flushed += 1;
+    else failed += 1;
+  }
+  return { flushed, failed, remaining: pendingUsage.size };
+}
+
+function installShutdownHooks() {
+  if (shutdownHooksInstalled) return;
+  shutdownHooksInstalled = true;
+
+  const flushForExit = () => { flushAllUsage({ retry: false }); };
+  process.once('beforeExit', flushForExit);
+  process.once('exit', flushForExit);
+
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    const handler = () => {
+      flushForExit();
+      process.removeListener(signal, handler);
+      process.kill(process.pid, signal);
+    };
+    process.once(signal, handler);
   }
 }
 
@@ -321,6 +359,8 @@ function clearTemporary(guildId, emojiId, guildOrMeta = {}) {
   return saveSection(guildId, { temporary }, guildOrMeta);
 }
 
+installShutdownHooks();
+
 module.exports = {
   MAX_GUILD_EMOJIS,
   getSection,
@@ -332,6 +372,8 @@ module.exports = {
   savePack,
   deletePack,
   recordUsage,
+  flushUsage,
+  flushAllUsage,
   setTemporary,
   clearTemporary,
   cleanKey,
