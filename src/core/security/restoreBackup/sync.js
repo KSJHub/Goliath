@@ -57,11 +57,27 @@ function queueBackupSync(options = {}) {
   const queue = getSyncQueue();
   const existing = queue.find((item) => item.backupId === backupId && item.backupPath === backupPath);
   if (existing) return existing;
+
+  const createdAt = nowIso();
+  if (!fs.existsSync(backupPath)) {
+    const entry = {
+      syncId: generateSyncId(guildId), version: SYNC_MANAGER_VERSION, guildId, backupId, backupPath, environment,
+      backupType, status: STATUS.FAILED, algorithm: 'SHA256', hash: null, remoteVerified: false,
+      remoteHash: null, syncAttempts: 1, lastSyncAttemptAt: createdAt, syncedAt: null, failedAt: createdAt,
+      failureReason: `Backup file disappeared before sync queueing: ${backupPath}`,
+      createdBy, metadata, createdAt, updatedAt: createdAt,
+    };
+    queue.unshift(entry);
+    saveQueue(queue);
+    console.warn(`[Backup Sync] Skipped missing backup file for ${backupId}: ${backupPath}`);
+    return entry;
+  }
+
   const entry = {
     syncId: generateSyncId(guildId), version: SYNC_MANAGER_VERSION, guildId, backupId, backupPath, environment,
     backupType, status: STATUS.PENDING, algorithm: 'SHA256', hash: calculateFileHash(backupPath), remoteVerified: false,
     remoteHash: null, syncAttempts: 0, lastSyncAttemptAt: null, syncedAt: null, failedAt: null, failureReason: null,
-    createdBy, metadata, createdAt: nowIso(), updatedAt: nowIso(),
+    createdBy, metadata, createdAt, updatedAt: createdAt,
   };
   queue.unshift(entry); saveQueue(queue); return entry;
 }

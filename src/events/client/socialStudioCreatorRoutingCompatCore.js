@@ -41,6 +41,16 @@ function setSession(interaction, patch) {
   return next;
 }
 
+async function respondValidation(interaction, content) {
+  const payload = { content: `⚠️ ${content}`, flags: 64 };
+  if (interaction.deferred || interaction.replied) {
+    await interaction.followUp(payload).catch(() => null);
+  } else {
+    await interaction.reply(payload).catch(() => null);
+  }
+  return true;
+}
+
 function row(...components) {
   return new ActionRowBuilder().addComponents(...components);
 }
@@ -160,7 +170,7 @@ async function handleCreatorCreate(interaction) {
   }
 
   const displayName = clean(interaction.fields.getTextInputValue('displayName'), 120);
-  if (!displayName) throw new Error('Creator display name is required.');
+  if (!displayName) return respondValidation(interaction, 'Creator display name is required.');
 
   const config = store.getConfig(interaction.guildId);
   config.creators = config.creators && typeof config.creators === 'object' ? { ...config.creators } : {};
@@ -223,7 +233,7 @@ async function handleAccountCreateFlow(interaction) {
   const state = getSession(interaction);
   const config = store.getConfig(interaction.guildId);
   const creator = config.creators?.[state.creatorId] || null;
-  if (!creator) throw new Error('Select a creator profile first.');
+  if (!creator) return respondValidation(interaction, 'Select a creator profile first.');
 
   if (id === `${P}account:platforms`) {
     const platforms = (interaction.values || []).filter((platform) => PLATFORMS.includes(platform)).slice(0, 5);
@@ -236,18 +246,18 @@ async function handleAccountCreateFlow(interaction) {
 
   if (id === `${P}account:continue`) {
     const platforms = state.platforms.filter((platform) => PLATFORMS.includes(platform)).slice(0, 5);
-    if (!platforms.length) throw new Error('Select at least one platform first.');
+    if (!platforms.length) return respondValidation(interaction, 'Select at least one platform first.');
     await interaction.showModal(accountModal(platforms));
     return true;
   }
 
   if (!interaction.isModalSubmit?.()) return false;
   const platforms = state.platforms.filter((platform) => PLATFORMS.includes(platform)).slice(0, 5);
-  if (!platforms.length) throw new Error('The selected platforms expired. Open New Account and choose the platforms again.');
+  if (!platforms.length) return respondValidation(interaction, 'The selected platforms expired. Open New Account and choose the platforms again.');
 
   const latest = store.getConfig(interaction.guildId);
   const latestCreator = latest.creators?.[state.creatorId];
-  if (!latestCreator) throw new Error('The selected creator profile no longer exists.');
+  if (!latestCreator) return respondValidation(interaction, 'The selected creator profile no longer exists.');
 
   let created = 0;
   let updated = 0;
@@ -326,9 +336,6 @@ async function handleAccountCreateFlow(interaction) {
 async function handle(interaction) {
   if (await handleCreatorCreate(interaction)) return true;
   if (await handleAccountCreateFlow(interaction)) return true;
-
-  // The user/content/channel router owns the new usable multi-user flow and
-  // must run before the older creator-wide compatibility screens.
   if (await userChannelRouting.handle(interaction)) return true;
   if (await creatorRoutingCompat.handle(interaction)) return true;
   if (await accountManagement.handle(interaction)) return true;
