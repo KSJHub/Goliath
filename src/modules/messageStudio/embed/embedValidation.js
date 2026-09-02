@@ -99,7 +99,13 @@ function getUrlValidationErrors(state = {}) {
 
   urlFields.forEach(([label, value]) => {
     const text = toCleanString(value);
-    if (text && !isUsableUrl(text)) errors.push(`${label} must be a valid http(s) URL or supported variable.`);
+    if (!text) return;
+    if (label === 'Thumbnail' || label === 'Image') {
+      const media = validateSource(text, { type: 'image' });
+      if (!media.valid) errors.push(`${label} must be a valid HTTPS URL or supported variable.`);
+      return;
+    }
+    if (!isUsableUrl(text)) errors.push(`${label} must be a valid http(s) URL or supported variable.`);
   });
 
   return errors;
@@ -145,7 +151,7 @@ function validateSource(source = '', options = {}) {
   }
 
   if (url.protocol === 'https:') return { status: 'ready', valid: true, kind, message: kind === 'auto' ? 'HTTPS source — media type detected when sent' : `HTTPS ${kind} source` };
-  if (url.protocol === 'http:') return { status: 'warning', valid: true, kind, message: 'HTTP source — HTTPS is recommended' };
+  if (url.protocol === 'http:') return { status: 'invalid', valid: false, kind, message: 'Media sources must use HTTPS' };
   return { status: 'invalid', valid: false, kind, message: `Unsupported ${url.protocol} source` };
 }
 
@@ -241,7 +247,11 @@ function getReadinessReport(interaction, state = {}, options = {}) {
       if (!toCleanString(field?.value)) pushUnique(errors, `Panel ${number}, field ${fieldIndex + 1} is missing content.`);
     });
     [['Author icon', item?.authorIcon], ['Author URL', item?.authorUrl], ['Footer icon', item?.footerIcon], ['Thumbnail', item?.thumbnail], ['Image', item?.image]].forEach(([label, value]) => {
-      if (toCleanString(value) && !isUsableUrl(value)) pushUnique(errors, `Panel ${number} ${label.toLowerCase()} is not a valid URL or variable.`);
+      const text = toCleanString(value);
+      if (!text) return;
+      if (label === 'Thumbnail' || label === 'Image') {
+        if (!validateSource(text, { type: 'image' }).valid) pushUnique(errors, `Panel ${number} ${label.toLowerCase()} must use a valid HTTPS URL or variable.`);
+      } else if (!isUsableUrl(text)) pushUnique(errors, `Panel ${number} ${label.toLowerCase()} is not a valid URL or variable.`);
     });
 
     const media = mediaForPanel(state, index) || { thumbnail: {}, gallery: [], files: [] };
@@ -249,9 +259,9 @@ function getReadinessReport(interaction, state = {}, options = {}) {
     const files = Array.isArray(media.files) ? media.files : [];
     if (gallery.length > maxGalleryItems) pushUnique(errors, `Panel ${number} exceeds the gallery limit.`);
     if (files.length > maxFiles) pushUnique(errors, `Panel ${number} exceeds the attached-file limit.`);
-    if (toCleanString(media.thumbnail?.source) && !isUsableUrl(media.thumbnail.source)) pushUnique(errors, `Panel ${number} thumbnail media source is invalid.`);
-    gallery.forEach((entry, mediaIndex) => { if (!isUsableUrl(entry?.source)) pushUnique(errors, `Panel ${number}, media ${mediaIndex + 1} has an invalid source.`); });
-    files.forEach((entry, fileIndex) => { if (!isUsableUrl(entry?.source)) pushUnique(errors, `Panel ${number}, file ${fileIndex + 1} has an invalid source.`); });
+    if (toCleanString(media.thumbnail?.source) && !validateSource(media.thumbnail.source, { type: 'image' }).valid) pushUnique(errors, `Panel ${number} thumbnail media source must use HTTPS.`);
+    gallery.forEach((entry, mediaIndex) => { if (!validateSource(entry?.source, { type: entry?.type || 'auto' }).valid) pushUnique(errors, `Panel ${number}, media ${mediaIndex + 1} must use a valid HTTPS source.`); });
+    files.forEach((entry, fileIndex) => { if (!validateSource(entry?.source).valid) pushUnique(errors, `Panel ${number}, file ${fileIndex + 1} must use a valid HTTPS source.`); });
   });
 
   checks.push(`${panels.length}/${MAX_PANELS} panels`);
