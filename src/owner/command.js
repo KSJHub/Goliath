@@ -21,7 +21,10 @@ const duplicator = require('./dev/duplicator');
 const auditEvents = require('./auditIntelligence/auditEvents');
 
 const OWNER_PREFIX = 'ownerpanel:';
+const SERVER_CONTEXT_MARKER = ':guild:';
+const OWNER_CONTEXT_TTL_MS = 30 * 60 * 1000;
 const wiredClients = new WeakSet();
+const ownerGuildContexts = new Map();
 
 function mode() {
   return normalizeBotMode(process.env.BOT_MODE);
@@ -38,8 +41,89 @@ function ownerDeniedPayload() {
   };
 }
 
+function validGuildId(value) {
+  const id = String(value || '').trim();
+  return /^\d{16,25}$/.test(id) ? id : null;
+}
+
+function embeddedGuildId(customId) {
+  const id = String(customId || '');
+  const index = id.lastIndexOf(SERVER_CONTEXT_MARKER);
+  if (index < 0) return null;
+  return validGuildId(id.slice(index + SERVER_CONTEXT_MARKER.length));
+}
+
+function baseOwnerCustomId(customId) {
+  const id = String(customId || '');
+  const index = id.lastIndexOf(SERVER_CONTEXT_MARKER);
+  return index < 0 ? id : id.slice(0, index);
+}
+
+function pruneOwnerGuildContexts() {
+  const now = Date.now();
+  for (const [ownerId, entry] of ownerGuildContexts.entries()) {
+    if (!entry || entry.expiresAt <= now) ownerGuildContexts.delete(ownerId);
+  }
+}
+
+function rememberOwnerGuild(interaction, guildId) {
+  const ownerId = String(interaction?.user?.id || '').trim();
+  const resolvedGuildId = validGuildId(guildId);
+  if (!ownerId || !resolvedGuildId) return resolvedGuildId;
+  ownerGuildContexts.set(ownerId, {
+    guildId: resolvedGuildId,
+    expiresAt: Date.now() + OWNER_CONTEXT_TTL_MS,
+  });
+  return resolvedGuildId;
+}
+
+function rememberedOwnerGuildId(interaction) {
+  pruneOwnerGuildContexts();
+  const ownerId = String(interaction?.user?.id || '').trim();
+  if (!ownerId) return null;
+  return validGuildId(ownerGuildContexts.get(ownerId)?.guildId);
+}
+
+function guildIdFromChannel(interaction) {
+  const direct = validGuildId(
+    interaction?.channel?.guildId
+      || interaction?.channel?.guild?.id
+      || interaction?.message?.channel?.guildId
+      || interaction?.message?.channel?.guild?.id
+  );
+  if (direct) return direct;
+
+  const channelId = String(interaction?.channelId || interaction?.channel?.id || '').trim();
+  if (!channelId) return null;
+
+  const guilds = interaction?.client?.guilds?.cache;
+  if (!guilds?.values) return null;
+
+  for (const guild of guilds.values()) {
+    if (guild?.channels?.cache?.has?.(channelId)) return validGuildId(guild.id);
+  }
+
+  return null;
+}
+
 function interactionGuildId(interaction) {
-  return String(interaction?.guildId || interaction?.guild?.id || '').trim() || null;
+  const guildId = validGuildId(interaction?.guildId)
+    || validGuildId(interaction?.guild?.id)
+    || guildIdFromChannel(interaction)
+    || embeddedGuildId(interaction?.customId)
+    || rememberedOwnerGuildId(interaction);
+
+  if (guildId) rememberOwnerGuild(interaction, guildId);
+  return guildId;
+}
+
+function contextualOwnerId(action, interactionOrGuildId) {
+  const guildId = typeof interactionOrGuildId === 'string'
+    ? validGuildId(interactionOrGuildId)
+    : interactionGuildId(interactionOrGuildId);
+  return guildId
+    ? `${OWNER_PREFIX}${action}${SERVER_CONTEXT_MARKER}${guildId}`
+    : `${OWNER_PREFIX}${action}`;
 }
 
 function cachedInteractionGuild(interaction) {
@@ -50,13 +134,18 @@ function cachedInteractionGuild(interaction) {
 
 async function resolveInteractionGuild(interaction) {
   const cached = cachedInteractionGuild(interaction);
-  if (cached) return cached;
+  if (cached) {
+    rememberOwnerGuild(interaction, cached.id);
+    return cached;
+  }
 
   const guildId = interactionGuildId(interaction);
   if (!guildId || !interaction?.client?.guilds?.fetch) return null;
 
   try {
-    return await interaction.client.guilds.fetch(guildId);
+    const guild = await interaction.client.guilds.fetch(guildId);
+    if (guild) rememberOwnerGuild(interaction, guild.id);
+    return guild;
   } catch {
     return null;
   }
@@ -114,7 +203,7 @@ function ownerHomePayload(interaction, notice = null) {
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!isDev),
     new ButtonBuilder()
-      .setCustomId(`${OWNER_PREFIX}server-tools`)
+      .setCustomId(contextualOwnerId('server-tools', interaction))
       .setLabel('Server Tools')
       .setEmoji('🧰')
       .setStyle(ButtonStyle.Secondary)
@@ -129,7 +218,7 @@ function ownerHomePayload(interaction, notice = null) {
 
   const navigation = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`${OWNER_PREFIX}refresh`)
+      .setCustomId(contextualOwnerId('refresh', interaction))
       .setLabel('Refresh')
       .setEmoji('🔄')
       .setStyle(ButtonStyle.Secondary)
@@ -139,7 +228,10 @@ function ownerHomePayload(interaction, notice = null) {
 }
 
 function serverToolsPayload(interaction) {
-  const guildContextAvailable = hasGuildContext(interaction);
+  const guildId = interactionGuildId(interaction);
+  const guildContextAvailable = Boolean(guildId);
+  if (guildId) rememberOwnerGuild(interaction, guildId);
+
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
     .setTitle('🧰 Owner Server Tools')
@@ -156,14 +248,16 @@ function serverToolsPayload(interaction) {
     .setFooter({ text: 'DEV only • Duplicator retains its own owner and safety checks' });
 
   const tools = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`${OWNER_PREFIX}server-copy`).setLabel('Copy').setEmoji('📋').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable),
-    new ButtonBuilder().setCustomId(`${OWNER_PREFIX}server-analyse`).setLabel('Analyse').setEmoji('🔎').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable),
-    new ButtonBuilder().setCustomId(`${OWNER_PREFIX}server-export`).setLabel('Export').setEmoji('📤').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable),
-    new ButtonBuilder().setCustomId(`${OWNER_PREFIX}server-build`).setLabel('Build').setEmoji('🏗️').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable)
+    new ButtonBuilder().setCustomId(contextualOwnerId('server-copy', guildId)).setLabel('Copy').setEmoji('📋').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable),
+    new ButtonBuilder().setCustomId(contextualOwnerId('server-analyse', guildId)).setLabel('Analyse').setEmoji('🔎').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable),
+    new ButtonBuilder().setCustomId(contextualOwnerId('server-export', guildId)).setLabel('Export').setEmoji('📤').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable),
+    new ButtonBuilder().setCustomId(contextualOwnerId('server-build', guildId)).setLabel('Build').setEmoji('🏗️').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable)
   );
+
   const navigation = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`${OWNER_PREFIX}home`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(contextualOwnerId('home', guildId)).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)
   );
+
   return { embeds: [embed], components: [tools, navigation] };
 }
 
@@ -174,9 +268,9 @@ function serverContextRequiredPayload() {
   };
 }
 
-function analyseModal() {
+function analyseModal(interaction) {
   return new ModalBuilder()
-    .setCustomId(`${OWNER_PREFIX}server-analyse-submit`)
+    .setCustomId(contextualOwnerId('server-analyse-submit', interaction))
     .setTitle('Analyse Servers')
     .addComponents(
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('source_server').setLabel('Source server ID').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)),
@@ -184,9 +278,9 @@ function analyseModal() {
     );
 }
 
-function exportModal() {
+function exportModal(interaction) {
   return new ModalBuilder()
-    .setCustomId(`${OWNER_PREFIX}server-export-submit`)
+    .setCustomId(contextualOwnerId('server-export-submit', interaction))
     .setTitle('Export Server Template')
     .addComponents(
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('source_server').setLabel('Source server ID (blank = current)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)),
@@ -198,8 +292,11 @@ function exportModal() {
 }
 
 function readModalValue(interaction, key) {
-  try { return String(interaction.fields.getTextInputValue(key) || '').trim() || null; }
-  catch { return null; }
+  try {
+    return String(interaction.fields.getTextInputValue(key) || '').trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 function withOwnerOptions(interaction, values = {}, guildOverride = null) {
@@ -210,6 +307,7 @@ function withOwnerOptions(interaction, values = {}, guildOverride = null) {
       return value;
     },
   };
+
   return new Proxy(interaction, {
     get(target, property) {
       if (property === 'options') return options;
@@ -224,15 +322,21 @@ function withOwnerOptions(interaction, values = {}, guildOverride = null) {
 async function runDuplicator(interaction, values) {
   const guild = await resolveInteractionGuild(interaction);
   if (!guild) {
-    if (interaction.deferred || interaction.replied) await interaction.editReply(serverContextRequiredPayload()).catch(() => null);
-    else await interaction.reply(serverContextRequiredPayload()).catch(() => null);
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(serverContextRequiredPayload()).catch(() => null);
+    } else {
+      await interaction.reply(serverContextRequiredPayload()).catch(() => null);
+    }
     return null;
   }
+
+  rememberOwnerGuild(interaction, guild.id);
   return duplicator.run(withOwnerOptions(interaction, values, guild));
 }
 
 async function handleOwnerPanelInteraction(interaction) {
-  const id = String(interaction?.customId || '');
+  const rawId = String(interaction?.customId || '');
+  const id = baseOwnerCustomId(rawId);
   if (!id.startsWith(OWNER_PREFIX) && !id.startsWith('testsecurity:')) return false;
 
   if (!ownerAllowed(interaction)) {
@@ -257,7 +361,12 @@ async function handleOwnerPanelInteraction(interaction) {
       return true;
     }
     const state = devOverride.toggle(interaction.user.id);
-    await interaction.update(ownerHomePayload(interaction, state.blocked ? `❌ ${state.reason || 'Toggle blocked.'}` : (state.enabled ? '🟢 DEV Override enabled.' : '🔴 DEV Override disabled.')));
+    await interaction.update(ownerHomePayload(
+      interaction,
+      state.blocked
+        ? `❌ ${state.reason || 'Toggle blocked.'}`
+        : (state.enabled ? '🟢 DEV Override enabled.' : '🔴 DEV Override disabled.')
+    ));
     return true;
   }
 
@@ -275,6 +384,8 @@ async function handleOwnerPanelInteraction(interaction) {
       await interaction.update(ownerHomePayload(interaction, 'Server developer tools are DEV only.'));
       return true;
     }
+    const guildId = interactionGuildId(interaction);
+    if (guildId) rememberOwnerGuild(interaction, guildId);
     await interaction.update(serverToolsPayload(interaction));
     return true;
   }
@@ -287,6 +398,7 @@ async function handleOwnerPanelInteraction(interaction) {
     await runDuplicator(interaction, { action: 'copy' });
     return true;
   }
+
   if (id === `${OWNER_PREFIX}server-build`) {
     if (!hasGuildContext(interaction)) {
       await interaction.reply(serverContextRequiredPayload());
@@ -295,22 +407,25 @@ async function handleOwnerPanelInteraction(interaction) {
     await runDuplicator(interaction, { action: 'build' });
     return true;
   }
+
   if (id === `${OWNER_PREFIX}server-analyse`) {
     if (!hasGuildContext(interaction)) {
       await interaction.reply(serverContextRequiredPayload());
       return true;
     }
-    await interaction.showModal(analyseModal());
+    await interaction.showModal(analyseModal(interaction));
     return true;
   }
+
   if (id === `${OWNER_PREFIX}server-export`) {
     if (!hasGuildContext(interaction)) {
       await interaction.reply(serverContextRequiredPayload());
       return true;
     }
-    await interaction.showModal(exportModal());
+    await interaction.showModal(exportModal(interaction));
     return true;
   }
+
   if (id === `${OWNER_PREFIX}server-analyse-submit`) {
     if (!hasGuildContext(interaction)) {
       await interaction.reply(serverContextRequiredPayload());
@@ -323,6 +438,7 @@ async function handleOwnerPanelInteraction(interaction) {
     });
     return true;
   }
+
   if (id === `${OWNER_PREFIX}server-export-submit`) {
     if (!hasGuildContext(interaction)) {
       await interaction.reply(serverContextRequiredPayload());
@@ -354,16 +470,21 @@ async function handleOwnerPanelInteraction(interaction) {
 function wireClient(client) {
   if (!client || wiredClients.has(client)) return false;
   wiredClients.add(client);
+
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
       await handleOwnerPanelInteraction(interaction);
     } catch (error) {
       console.error('[OwnerPanel] Interaction failed:', error?.stack || error?.message || error);
       if (!interaction?.replied && !interaction?.deferred) {
-        await interaction?.reply?.({ content: '❌ Owner control action failed.', flags: MessageFlags.Ephemeral }).catch(() => null);
+        await interaction?.reply?.({
+          content: '❌ Owner control action failed.',
+          flags: MessageFlags.Ephemeral,
+        }).catch(() => null);
       }
     }
   });
+
   return true;
 }
 
@@ -386,6 +507,12 @@ module.exports = {
       return interaction.reply(ownerDeniedPayload());
     }
 
-    return interaction.reply({ ...ownerHomePayload(interaction), flags: MessageFlags.Ephemeral });
+    const guildId = interactionGuildId(interaction);
+    if (guildId) rememberOwnerGuild(interaction, guildId);
+
+    return interaction.reply({
+      ...ownerHomePayload(interaction),
+      flags: MessageFlags.Ephemeral,
+    });
   },
 };
