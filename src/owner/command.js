@@ -102,7 +102,6 @@ function guildIdFromChannel(interaction) {
   for (const guild of guilds.values()) {
     if (guild?.channels?.cache?.has?.(channelId)) return validGuildId(guild.id);
   }
-
   return null;
 }
 
@@ -184,7 +183,7 @@ function ownerHomePayload(interaction, notice = null) {
       { name: 'Context', value: guildContext, inline: false },
       { name: 'DEV Override', value: isDev ? (devState.enabled ? '🟢 Enabled' : '🔴 Disabled') : '⚪ DEV only', inline: true },
       { name: 'DEV Billing Unlock', value: isDev ? (billing.active ? `🟢 ${billing.plan || 'enabled'}` : '🔴 Disabled') : '⚪ DEV only', inline: true },
-      { name: 'Owner Tools', value: isDev ? '🟢 Security • Server Tools • Command Center' : '⚪ DEV only', inline: true },
+      { name: 'Owner Tools', value: isDev ? '🟢 Server Tools • Security • Command Center' : '🟢 Server Tools • owner only', inline: true },
     )
     .setFooter({ text: 'Goliath Owner • OWNER_IDS protected' })
     .setTimestamp();
@@ -206,8 +205,7 @@ function ownerHomePayload(interaction, notice = null) {
       .setCustomId(contextualOwnerId('server-tools', interaction))
       .setLabel('Server Tools')
       .setEmoji('🧰')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!isDev),
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`${OWNER_PREFIX}commandcenter`)
       .setLabel('Command Center')
@@ -236,7 +234,7 @@ function serverToolsPayload(interaction) {
     .setColor(0x5865F2)
     .setTitle('🧰 Owner Server Tools')
     .setDescription([
-      'The original owner-only server developer tools are consolidated here.',
+      'Developer-only server tools. Access is restricted to configured Goliath owner IDs.',
       '',
       '**Copy** — copy selected server structure/settings.',
       '**Analyse** — compare a source and destination server.',
@@ -245,7 +243,7 @@ function serverToolsPayload(interaction) {
       '',
       guildContextAvailable ? null : '⚠️ **Server context required.** Open `/owner` from a server channel to use these tools.',
     ].filter(Boolean).join('\n'))
-    .setFooter({ text: 'DEV only • Duplicator retains its own owner and safety checks' });
+    .setFooter({ text: 'Owner only • Duplicator retains its own owner and safety checks' });
 
   const tools = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(contextualOwnerId('server-copy', guildId)).setLabel('Copy').setEmoji('📋').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable),
@@ -380,10 +378,6 @@ async function handleOwnerPanelInteraction(interaction) {
   }
 
   if (id === `${OWNER_PREFIX}server-tools`) {
-    if (!devOverride.isDevMode()) {
-      await interaction.update(ownerHomePayload(interaction, 'Server developer tools are DEV only.'));
-      return true;
-    }
     const guildId = interactionGuildId(interaction);
     if (guildId) rememberOwnerGuild(interaction, guildId);
     await interaction.update(serverToolsPayload(interaction));
