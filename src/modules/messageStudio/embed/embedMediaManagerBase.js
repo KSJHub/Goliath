@@ -99,6 +99,9 @@ function installMediaManagerBase(panel, media) {
       `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'}`,
       `🎞️ **Gallery** — ${panelMedia.gallery.length}/${media.mediaModel.MAX_GALLERY_ITEMS}`,
       `📎 **Files** — ${panelMedia.files.length}/${media.mediaModel.MAX_FILES}`,
+      '',
+      '✨ **Images** — PNG · JPG · GIF · WEBP · AVIF (animated GIFs stay animated)',
+      '🔒 **Remote media** — HTTPS required · 8 MB processing limit',
     ];
 
     if (selectedMedia) {
