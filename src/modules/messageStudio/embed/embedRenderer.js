@@ -150,15 +150,17 @@ function footerText(data) {
   return bits.length ? `-# ${bits.join(' · ')}` : '';
 }
 function panelMedia(mediaState, index) { return Array.isArray(mediaState?.panels) ? (mediaState.panels[index] || null) : null; }
+function itemPlacement(item) { return String(item?.placement || '').toLowerCase() === 'above' ? 'above' : 'below'; }
 function isEnhancedMedia(media) {
   if (!media) return false;
   const gallery = Array.isArray(media.gallery) ? media.gallery : [];
   const first = gallery[0] || {};
-  return gallery.length > 1 || Boolean(first.alt) || first.spoiler === true || first.type === 'video' || Boolean(media.thumbnail?.alt) || (Array.isArray(media.files) && media.files.length > 0);
+  return gallery.length > 1 || Boolean(first.alt) || first.spoiler === true || first.type === 'video' || itemPlacement(first) === 'above' || Boolean(media.thumbnail?.alt) || (Array.isArray(media.files) && media.files.length > 0);
 }
-async function galleryItems(media, interaction) {
+async function galleryItems(media, interaction, placement = null) {
   const output = [];
   for (const item of (Array.isArray(media?.gallery) ? media.gallery : []).slice(0, 10)) {
+    if (placement && itemPlacement(item) !== placement) continue;
     const source = resolveSource(item?.source, interaction);
     if (!source) continue;
     const expected = item?.type === 'image' ? 'image' : item?.type === 'video' ? 'video' : 'media';
@@ -301,15 +303,18 @@ async function buildEmbedPayload(options = {}) {
     const text = panelText(data);
     const thumbSource = resolveSource(media?.thumbnail?.source || data.thumbnail?.url, interaction);
     if (thumbSource) await probeRemoteSource(thumbSource, 'thumbnail');
+    const enhanced = isEnhancedMedia(media);
+    const aboveItems = enhanced ? await galleryItems(media, interaction, 'above') : [];
+    if (aboveItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...aboveItems));
     if (text && isHttpsUrl(thumbSource)) {
       const thumbnail = new ThumbnailBuilder().setURL(thumbSource);
       if (media?.thumbnail?.alt) thumbnail.setDescription(String(media.thumbnail.alt).slice(0, 1024));
       container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)).setThumbnailAccessory(thumbnail));
     } else if (text) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
-    const enhanced = isEnhancedMedia(media);
-    const items = enhanced ? await galleryItems(media, interaction) : [];
-    if (items.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...items));
-    else {
+    if (enhanced) {
+      const belowItems = await galleryItems(media, interaction, 'below');
+      if (belowItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...belowItems));
+    } else {
       const imageUrl = resolveSource(media?.gallery?.[0]?.source || data.image?.url, interaction);
       if (isHttpsUrl(imageUrl)) {
         try { await addLegacyImage(container, imageUrl, files, index); }

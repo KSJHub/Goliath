@@ -145,11 +145,13 @@ function normalizeThumbnail(value = {}, legacySource = '') {
 }
 function normalizeGalleryItem(value = {}) {
   const source = typeof value === 'string' ? value : value?.source || value?.url || value?.attachment || '';
+  const placement = String(value?.placement || '').toLowerCase() === 'above' ? 'above' : 'below';
   return {
     source: cleanSource(source),
     alt: cleanString(value?.alt || value?.description || '', 1024),
     spoiler: value?.spoiler === true,
     type: ['auto', 'image', 'video'].includes(String(value?.type || '').toLowerCase()) ? String(value.type).toLowerCase() : 'auto',
+    placement,
   };
 }
 function normalizeFile(value = {}) {
@@ -474,13 +476,15 @@ function installMediaOptionsUi(panel) {
     const item = index == null ? null : media.gallery[index];
     if (!item) return panel.buildMediaManagerPanel(interaction, panel.memberName(interaction));
     const type = ['auto', 'image', 'video'].includes(item.type) ? item.type : 'auto';
+    const placement = item.placement === 'above' ? 'above' : 'below';
     return {
       embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ Media Options').setDescription([
         `**Gallery item:** ${index + 1} / ${media.gallery.length}`,
         `**Type handling:** ${type === 'auto' ? 'Auto detect' : type === 'image' ? 'Image' : 'Video'}`,
+        `**Placement:** ${placement === 'above' ? 'Above Content' : 'Below Content'}`,
         `**Spoiler:** ${item.spoiler ? 'On' : 'Off'}`,
         '',
-        'Use the buttons below instead of typing media settings manually. Auto Detect is recommended unless you need to force image or video validation.',
+        'Use placement to position media before or after the panel text. Duplicate Media copies the complete selected item, including its source and current settings.',
       ].join('\n'))],
       components: enforceLimits([
         new ActionRowBuilder().addComponents(
@@ -491,6 +495,13 @@ function installMediaOptionsUi(panel) {
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('embed:media-spoiler:off').setLabel('👁️ Normal').setStyle(item.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary),
           new ButtonBuilder().setCustomId('embed:media-spoiler:on').setLabel('🙈 Spoiler').setStyle(item.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        ),
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('embed:media-placement:above').setLabel('⬆️ Above Content').setStyle(placement === 'above' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId('embed:media-placement:below').setLabel('⬇️ Below Content').setStyle(placement === 'below' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        ),
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('embed:media-duplicate').setLabel('📑 Duplicate Media').setStyle(ButtonStyle.Success).setDisabled(media.gallery.length >= MAX_GALLERY_ITEMS),
         ),
         new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:media-options-back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)),
       ]),
@@ -535,7 +546,10 @@ function installMediaManagerUi(panel) {
     const report = validatePanelMedia(media);
     const lines = ['**Media status**'];
     if (media.thumbnail?.source) lines.push(`${statusIcon(report.thumbnail.status)} Thumbnail — ${report.thumbnail.message}`);
-    for (const entry of report.gallery) lines.push(`${statusIcon(entry.status)} Gallery ${entry.index + 1} — ${entry.kind === 'auto' ? 'media' : entry.kind} — ${entry.message}`);
+    for (const entry of report.gallery) {
+      const placement = media.gallery?.[entry.index]?.placement === 'above' ? 'Above Content' : 'Below Content';
+      lines.push(`${statusIcon(entry.status)} Gallery ${entry.index + 1} — ${entry.kind === 'auto' ? 'media' : entry.kind} — ${placement} — ${entry.message}`);
+    }
     for (const entry of report.files) lines.push(`${statusIcon(entry.status)} File ${entry.index + 1} — ${entry.kind === 'auto' ? 'file' : entry.kind} — ${entry.message}`);
     if (!media.thumbnail?.source && !report.gallery.length && !report.files.length) lines.push('➖ No media configured yet.');
     lines.push(`Ready: **${report.ready}** • Warnings: **${report.warnings}** • Invalid: **${report.invalid}**`);
@@ -548,14 +562,15 @@ function installMediaManagerUi(panel) {
     const selectedSource = resolveSource(panel, selected?.source, interaction);
     const thumbnailSource = resolveSource(panel, media.thumbnail?.source, interaction);
     const selectedType = String(selected?.type || 'auto').toLowerCase();
+    const placement = selected?.placement === 'above' ? 'Above Content' : 'Below Content';
     if (selected && selectedType === 'video') {
-      const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('🎬 Selected Video Preview');
+      const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`🎬 Selected Video Preview • ${placement}`);
       if (selectedSource) embed.setDescription(`[Open selected video](${selectedSource})${selected.alt ? `\n\n${String(selected.alt).slice(0, 800)}` : ''}`);
       else embed.setDescription('The selected video uses a variable or source that cannot be previewed here yet. It will be resolved when the message is sent.');
       return embed;
     }
     if (selectedSource) {
-      const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('🖼️ Selected Media Preview').setImage(selectedSource);
+      const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`🖼️ Selected Media Preview • ${placement}`).setImage(selectedSource);
       if (selected?.alt) embed.setDescription(String(selected.alt).slice(0, 800));
       return embed;
     }
