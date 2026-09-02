@@ -2,9 +2,8 @@
 
 const { Events } = require('discord.js');
 const terminal = require('../../core/logging/terminalLogger').createLogger('commands');
-const auditStore = require('../../owner/auditIntelligence/auditStore');
 
-const PRIVATE_GUILD_COMMANDS = new Set(['commandcenter']);
+const RETIRED_GUILD_COMMANDS = new Set(['owner', 'commandcenter', 'Convert Emoji Shortcodes']);
 const inFlightGuilds = new Map();
 
 function resolvedBotMode(client) {
@@ -17,28 +16,15 @@ function resolvedCommandMode(client) {
   return resolvedBotMode(client) === 'PRODUCTION' ? 'global' : 'guild';
 }
 
-function commandCenterGuildId() {
-  return String(
-    auditStore.getConfig?.()?.commandCenter?.guildId
-    || process.env.COMMAND_CENTER_GUILD_ID
-    || ''
-  ).trim();
-}
-
 function normalCommandPayloads(client) {
   return [...(client?.commands?.values?.() || [])]
-    .filter((command) => command?.data?.name && !PRIVATE_GUILD_COMMANDS.has(command.data.name))
+    .filter((command) => command?.data?.name && !RETIRED_GUILD_COMMANDS.has(command.data.name))
     .filter((command) => resolvedCommandMode(client) !== 'global' || command.devOnly !== true)
     .map((command) => command.data.toJSON());
 }
 
-function privateCommandsToPreserve(existingCommands, guildId) {
-  if (String(guildId) !== commandCenterGuildId()) return [];
-  return [...existingCommands.values()].filter((command) => PRIVATE_GUILD_COMMANDS.has(command.name));
-}
-
 async function reconcileGuildCommands(guild, client, reason = 'manual') {
-  if (!guild?.id || !guild?.commands?.fetch || !guild?.commands?.set) {
+  if (!guild?.id || !guild?.commands?.set) {
     return { guildId: guild?.id || null, skipped: true, reason: 'invalid-guild' };
   }
 
@@ -55,21 +41,20 @@ async function reconcileGuildCommands(guild, client, reason = 'manual') {
       return { guildId: guild.id, skipped: true, reason: 'no-commands' };
     }
 
-    const existingCommands = await guild.commands.fetch();
-    const protectedCommands = privateCommandsToPreserve(existingCommands, guild.id);
-    const desired = [...normalCommands, ...protectedCommands];
-
-    await guild.commands.set(desired);
+    // SET is authoritative for this guild. Do not preserve any retired/private
+    // commands here: /owner is USER_INSTALL only and /commandcenter plus the
+    // message context shortcut are intentionally absent from guild integrations.
+    await guild.commands.set(normalCommands);
 
     terminal.success(
       `Guild commands reconciled for ${guild.name || guild.id} (${guild.id}) — `
-      + `${normalCommands.length} normal, ${protectedCommands.length} protected (${reason}).`
+      + `${normalCommands.length} public command(s), 0 retired/private (${reason}).`
     );
 
     return {
       guildId: guild.id,
       commands: normalCommands.length,
-      protectedCommands: protectedCommands.length,
+      protectedCommands: 0,
       skipped: false,
       reason,
     };

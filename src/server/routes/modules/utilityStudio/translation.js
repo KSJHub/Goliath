@@ -11,7 +11,7 @@ const {
   DEFAULT_BOT_CHANNEL_PERMISSIONS,
   guardChannelAccess,
   isGoliathPermissionError,
-} = require('../../../../core/security/goliathPermissionGuard');
+} = require('../../../../core/security/protection/permissions');
 
 const router = express.Router();
 

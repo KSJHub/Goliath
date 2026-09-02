@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { normalizeBotMode } = require('../../../config/botModes');
-const security = require('../../../core/security/securityCore');
+const security = require('../../../core/security/protection/core');
 const guildManager = require('../../../core/guild/guildManager');
 const translationStore = require('../../../modules/utilityStudio/translation/translationStore');
 

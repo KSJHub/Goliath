@@ -359,6 +359,18 @@ async function handleDiagnosticsAction(interaction, id) {
 
   if (id === `${P}data:refresh`) return updatePanel(interaction, diagnosticsPayload(interaction));
 
+  if (id === `${P}test`) {
+    if (!config.alertsChannelId) throw new Error('Choose an alert channel first.');
+    return followUp(interaction, {
+      embeds: [new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('🧪 Social Studio Test')
+        .setDescription(`✅ Notification routing is working.\n\nThis private preview was opened from ${interaction.channelId ? `<#${interaction.channelId}>` : 'this setup channel'}.\n\nThumbnails, platform metadata and template variables will be applied to real provider events.`)
+        .setFooter({ text: 'Social Studio • Test' })
+        .setTimestamp()],
+    });
+  }
+
   if (id === `${P}testing:last`) {
     const latest = history.at(-1);
     const content = latest
@@ -427,6 +439,7 @@ async function handle(interaction) {
   ) return true;
 
   if ([
+    `${P}test`,
     `${P}testing:last`,
     `${P}testing:diagnostics`,
     `${P}data:refresh`,

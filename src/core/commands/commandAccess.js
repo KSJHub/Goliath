@@ -1,4 +1,4 @@
-const security = require('../security/securityCore');
+const security = require('../security/protection/core');
 
 function canAccessCommand(interaction, command) {
   if (!command) return false;

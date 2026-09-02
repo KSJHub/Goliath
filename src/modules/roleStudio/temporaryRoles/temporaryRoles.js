@@ -16,7 +16,17 @@ function defaultSection() {
   return {
     assignments: {},
     settings: { removeExpiredOnStartup: true, auditLog: true },
-    analytics: { assigned: 0, expired: 0, removed: 0, failed: 0, lastScanAt: null },
+    analytics: {
+      assigned: 0,
+      renewed: 0,
+      expired: 0,
+      removed: 0,
+      departed: 0,
+      externallyRemoved: 0,
+      roleDeleted: 0,
+      failed: 0,
+      lastScanAt: null,
+    },
     createdAt: now(),
     updatedAt: now(),
   };
@@ -24,6 +34,7 @@ function defaultSection() {
 
 function normalizeAssignment(item = {}) {
   const assignmentId = String(item.assignmentId || item.id || `tmp_${crypto.randomUUID().slice(0, 8)}`);
+  const retryCount = Number(item.retryCount || 0);
   return {
     assignmentId,
     memberId: cleanId(item.memberId),
@@ -34,7 +45,10 @@ function normalizeAssignment(item = {}) {
     expiresAt: item.expiresAt || null,
     status: ['active', 'expired', 'removed', 'failed'].includes(item.status) ? item.status : 'active',
     lastError: item.lastError ? String(item.lastError).slice(0, 500) : null,
-    updatedAt: now(),
+    retryCount: Number.isFinite(retryCount) && retryCount > 0 ? Math.floor(retryCount) : 0,
+    nextRetryAt: item.nextRetryAt || null,
+    removalSource: item.removalSource ? String(item.removalSource).slice(0, 80) : null,
+    updatedAt: item.updatedAt || now(),
   };
 }
 
@@ -136,11 +150,13 @@ async function assignTemporaryRole({ guild, memberId, roleId, value, unit, reaso
       expiresAt,
       status: 'active',
       lastError: null,
+      retryCount: 0,
+      nextRetryAt: null,
     });
     return updateSection(guild.id, (section) => ({
       ...section,
       assignments: { ...section.assignments, [existing.assignmentId]: renewed },
-      analytics: { ...section.analytics, assigned: Number(section.analytics.assigned || 0) + 1 },
+      analytics: { ...section.analytics, renewed: Number(section.analytics.renewed || 0) + 1 },
       updatedAt: now(),
     }), { actorId: assignedBy }).assignments[existing.assignmentId];
   }
@@ -175,7 +191,7 @@ async function removeAssignment(guild, assignmentId, { actorId = null, expired =
   const status = expired ? 'expired' : 'removed';
   return updateSection(guild.id, (current) => ({
     ...current,
-    assignments: { ...current.assignments, [assignmentId]: { ...assignment, status, updatedAt: now(), lastError: null } },
+    assignments: { ...current.assignments, [assignmentId]: { ...assignment, status, updatedAt: now(), lastError: null, retryCount: 0, nextRetryAt: null } },
     analytics: {
       ...current.analytics,
       [expired ? 'expired' : 'removed']: Number(current.analytics[expired ? 'expired' : 'removed'] || 0) + 1,

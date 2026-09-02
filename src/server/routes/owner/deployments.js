@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { resolveBotMode, resolveRuntimePath } = require('../../../config/runtimePaths');
 const notifications = require('../../../core/notifications/notificationStore');
-const security = require('../../../core/security/securityCore');
+const security = require('../../../core/security/protection/core');
 
 const router = express.Router();
 const RUNTIME_MODE = resolveBotMode(process.env.BOT_MODE).toUpperCase();

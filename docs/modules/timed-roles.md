@@ -1,203 +1,111 @@
 # Timed Roles
 
-Timed Roles awards Discord roles when a member reaches a configured amount of time in a guild.
+Timed Roles awards Discord roles when a member reaches a configured amount of time in a guild. The member's real Discord join date is the source of tenure.
 
-## Canonical module
+## Canonical files
 
 ```text
 src/modules/roleStudio/timedRoles/
 ├── timedRoles.js
+├── timedRolesService.js
+├── timedRolesLocks.js
+├── timedRolesCompat.js
 ├── timedRolesHealth.js
 └── timedRolesPanel.js
 
 src/server/routes/modules/roleStudio/timedRoles.js
 src/events/client/timedRolesStartup.js
-src/events/timedroles/timedRolesMemberJoin.js
+src/events/members/timedRolesMemberJoin.js
+src/events/roles/timedRolesSync.js
 src/dashboard/js/pages/modules/TimedRoles.jsx
 ```
 
-`timedRoles.js` is the source of truth for configuration storage, duration calculations, progression, scans, analytics and startup scheduling.
+`timedRoles.js` remains the canonical persistence and duration model. `timedRolesService.js` owns mutation safety, state convergence, scans and scheduler hardening. `timedRolesLocks.js` serializes conflicting guild mutations. `timedRolesCompat.js` safely routes legacy/live consumers through hardened operations and enforces Discord admin security without overwriting persistence primitives.
 
-`timedRolesHealth.js` is the single health and repair service used by the Discord panel, Role Studio and dashboard API.
+## Progression
 
-## Example
+Supported duration units are minutes, hours, days, weeks, months and years. Months and years use calendar-aware calculations.
 
-A guild can configure:
-
-```text
-Name: Veteran
-Award role: @Veteran
-Duration: 1 year
-Remove roles: @Regular
-```
-
-Goliath uses the member's real Discord guild join date. Existing members who already meet the milestone are awarded the role during the next scan.
-
-## Supported durations
-
-- Minutes
-- Hours
-- Days
-- Weeks
-- Months
-- Years
-
-Months and years use calendar-aware date calculations.
-
-## Progression modes
-
-Timed Roles supports two progression modes:
+Progression modes:
 
 - `highest_only` — keep only the highest earned milestone role.
 - `keep_all` — keep every earned milestone role.
 
-A milestone can also define cleanup roles that are removed when that milestone is applied. The milestone's own award role is rejected from its cleanup-role set.
+A milestone may also remove cleanup roles. Cleanup never removes another role that is part of the desired current progression state.
 
-## Runtime behaviour
+Each Discord award role may belong to only one Timed Roles milestone. Duplicate target-role milestones are rejected because they make progression ambiguous.
 
-- Scans all existing members at startup.
-- Runs periodic scans using the guild's configured scan interval.
-- Checks new members when they join.
-- Ignores bots unless `includeBots` is enabled.
-- Does not assign a role a member already has.
-- Can remove earlier progression roles when a later milestone is reached.
-- Validates `Manage Roles`, managed roles and Discord role hierarchy.
-- Can announce newly awarded milestones in a configured text channel.
+## Runtime safety
 
-## Promotion announcements
+Timed Roles scans existing members at startup, then checks each guild according to its configured scan interval. New members are checked on join. Bots are ignored unless explicitly enabled.
 
-Promotion announcements are optional. When enabled, a guild can configure an announcement channel and message.
+Progression mutations are serialized per guild. Before a Discord write, Goliath validates Manage Roles, target-role hierarchy, integration-managed roles, server-owner/member manageability and cleanup-role hierarchy. After the mutation, the member is refreshed and the desired final role state is verified. A second corrective pass is attempted before the operation is treated as failed.
 
-Supported placeholders:
+Promotion announcements are sent only after confirmed role convergence, so a failed role mutation cannot produce a false success announcement.
 
-- `{member}`
-- `{role}`
-- `{duration}`
-- `{server}`
+## Simulation
 
-Allowed mentions are restricted to the promoted member and awarded role.
+Simulation uses the same desired-state model as live progression. It reports both award roles and cleanup/highest-only removals without changing Discord state.
 
 ## Discord administration
 
-Open **Admin → Modules → Timed Roles**.
+All `admin:timedRoles` interactions pass through central Goliath admin security. Role selections used to create milestones or configure cleanup roles are validated for safe manageability. Duration values are bounded and units must be supported.
 
-Discord controls support:
-
-- Creating a milestone with a native role selector.
-- Editing milestone name and duration.
-- Enabling or disabling individual milestones.
-- Selecting cleanup roles.
-- Choosing highest-only or keep-all progression.
-- Changing the scan interval.
-- Enabling or disabling the module.
-- Including or excluding bots.
-- Configuring promotion announcements.
-- Previewing a member's current and next milestone.
-- Applying the correct progression roles to a selected member.
-- Simulating a guild scan without changing roles.
-- Running a scan immediately.
-- Health repair.
-- Export.
+The Discord panel supports milestone creation/editing, enable/disable, cleanup roles, progression mode, scan interval, announcements, member preview, apply-correct-roles, simulation, manual scan, repair and export.
 
 ## Dashboard
-
-The dashboard page is available at:
-
-```text
-/timed-roles
-```
 
 API base:
 
 ```text
-/api/timed-roles
+/api/timed-roles/:guildId
 ```
 
-The dashboard supports:
+Dashboard routes require an authenticated Discord session. The user must be Goliath's owner or hold Administrator/Manage Server in the target guild. Request-body actor IDs are not trusted. Rule-role selections are validated through the central Goliath permission guard, and scans use the hardened Timed Roles service.
 
-- Enable and disable.
-- Milestone creation, editing, enabling, disabling and deletion.
-- Award-role and cleanup-role selection.
-- Minutes, hours, days, weeks, months and years.
-- Highest-only and keep-all progression.
-- Bot inclusion settings.
-- Scan interval configuration.
-- Promotion announcement channel and message configuration.
-- Analytics and health status.
-- Health repair.
-- Manual scans.
-- JSON export.
+## Role deletion reconciliation
 
-## Health and repair
+When Discord deletes a configured target role, the corresponding Timed Roles rule is removed immediately. When a cleanup role is deleted, that stale cleanup reference is removed from affected rules.
 
-Health verifies:
+## Health and Repair
 
-- Goliath has `Manage Roles`.
-- Target roles still exist.
-- Target roles are below Goliath's highest role.
-- Target roles are not managed integration roles.
-- Cleanup roles still exist.
-- Cleanup roles are manageable by Goliath.
-- Promotion announcement channels are valid.
-- Goliath can send messages in the configured announcement channel.
-- Previous runtime failures are visible.
+Health checks Manage Roles, target-role existence/manageability, duplicate target bindings, cleanup-role existence/manageability, prior scan errors, announcement-channel validity, View Channel and Send Messages.
 
-Repair removes rules whose target role no longer exists, removes invalid cleanup-role references and clears invalid announcement-channel references.
+Warnings count as unhealthy rather than allowing a green status with known problems.
 
-## Analytics
+Repair runs inside the Timed Roles mutation lane. It removes rules whose target role no longer exists, removes invalid/unmanageable cleanup references, and disables/clears an unusable announcement channel.
 
-Timed Roles records:
+## Analytics and Sentinel
 
-- Scans
-- Simulations
-- Members checked
-- Roles awarded
-- Roles removed
-- Promotions announced
-- Skipped operations
-- Failed operations
-- Last scan time
+Timed Roles records scans, simulations, members checked, awarded roles, removed roles, announcements, skipped operations, failed operations and last scan time.
 
-## Guild source of truth
+Sentinel classifies Timed Roles as scheduled and covers runtime, interaction, scheduler, persistence and Discord-write signals.
 
-Timed Roles persists through the canonical guild configuration system under:
+## Source of truth
+
+Configuration remains under:
 
 ```text
 modules.timedRoles
 ```
 
-Module enabled state is managed through the same guild source of truth. Timed Roles must not introduce a separate JSON store or database-backed configuration source.
+No separate Timed Roles datastore is introduced. Legacy `modules.roles.timedRoles` migration remains owned by `src/core/guild/moduleSectionManager.js`.
 
-## Legacy Role Studio compatibility
+## Acceptance
 
-The old standalone migration runner has been retired. Compatibility for an older guild JSON that still contains `modules.roles` now lives in:
+Before production lock, test at minimum:
 
-```text
-src/core/guild/moduleSectionManager.js
-```
-
-When a canonical Role Studio module is first loaded, the manager can absorb the matching legacy payload:
-
-- `modules.roles.timedRoles` → `modules.timedRoles.rules`
-- `modules.roles.joinRoles` → `modules.autoRoles.joinRoles`
-- `modules.roles.reactionPanels` → `modules.reactionRoles.panels`
-
-The legacy `modules.roles` object is removed only after every non-empty legacy payload has a corresponding canonical module section. This preserves compatibility for old guild data while ensuring the retired generic role section does not remain after absorption.
-
-The retired generic `modules.roles` section is no longer seeded by guild defaults and must not be reintroduced as an active source of truth.
-
-## Startup
-
-The canonical startup operation is registered by:
-
-```text
-src/events/client/timedRolesStartup.js
-```
-
-which calls:
-
-```js
-require('../../modules/roleStudio/timedRoles/timedRoles').startup(client)
-```
-
-Only the canonical Timed Roles scheduler should run.
+- existing-member backfill;
+- member join progression;
+- highest-only and keep-all modes;
+- cleanup-role removal;
+- duplicate award-role rejection;
+- role/member hierarchy failures;
+- manual member apply;
+- simulation parity;
+- announcement success/failure permissions;
+- manual and scheduled scan overlap;
+- role deletion reconciliation;
+- dashboard authorization;
+- restart/startup scan recovery;
+- Health/Repair.

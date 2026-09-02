@@ -5,13 +5,6 @@ const {
   saveGuildSection,
 } = require('../../../core/guild/guildManager');
 
-const {
-  DEFAULT_PREFIX,
-  LEGACY_UNSET_PREFIX,
-  getGuildPrefix,
-  normalizePrefix,
-} = require('../../../core/commands/prefixStore');
-
 const router = express.Router();
 
 const DEFAULT_DASHBOARD_PERMISSIONS = {
@@ -31,7 +24,6 @@ const DEFAULT_DASHBOARD_PERMISSIONS = {
 };
 
 const DEFAULT_GENERAL_SETTINGS = {
-  prefix: DEFAULT_PREFIX,
   appealUrl: '',
   dashboardEnabled: true,
   managerRoleIds: [],
@@ -81,16 +73,8 @@ function normalizeDashboardPermissions(value = {}) {
   };
 }
 
-function normalizePrefixForSave(value) {
-  const raw = String(value || '').trim();
-  if (!raw || raw === LEGACY_UNSET_PREFIX) return DEFAULT_PREFIX;
-  return normalizePrefix(raw);
-}
-
-function normalize(data = {}, options = {}) {
-  const prefix = options.guildId ? getGuildPrefix(options.guildId) : normalizePrefixForSave(data.prefix || DEFAULT_PREFIX);
+function normalize(data = {}) {
   return {
-    prefix,
     appealUrl: data.appealUrl || '',
     dashboardEnabled: data.dashboardEnabled !== false,
     managerRoleIds: safeArray(data.managerRoleIds),
@@ -111,7 +95,7 @@ router.get('/:guildId', (req, res) => {
   try {
     const { guildId } = req.params;
     const config = getGuildSection(guildId, 'generalSettings', DEFAULT_GENERAL_SETTINGS);
-    return res.json({ success: true, guildId, config: { ...DEFAULT_GENERAL_SETTINGS, ...normalize(config || {}, { guildId }) } });
+    return res.json({ success: true, guildId, config: { ...DEFAULT_GENERAL_SETTINGS, ...normalize(config || {}) } });
   } catch (error) {
     console.error('Failed to load general settings');
     console.error(error);
@@ -122,9 +106,9 @@ router.get('/:guildId', (req, res) => {
 router.post('/:guildId', (req, res) => {
   try {
     const { guildId } = req.params;
-    const updatedConfig = normalize({ ...DEFAULT_GENERAL_SETTINGS, ...(req.body || {}), prefix: normalizePrefixForSave(req.body?.prefix) });
+    const updatedConfig = normalize({ ...DEFAULT_GENERAL_SETTINGS, ...(req.body || {}) });
     const savedConfig = saveGuildSection(guildId, 'generalSettings', { ...updatedConfig, updatedAt: new Date().toISOString() });
-    return res.json({ success: true, guildId, config: normalize(savedConfig, { guildId }) });
+    return res.json({ success: true, guildId, config: normalize(savedConfig) });
   } catch (error) {
     console.error('Failed to save general settings');
     console.error(error);

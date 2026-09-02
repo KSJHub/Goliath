@@ -10,20 +10,43 @@ let timer = null;
 let schedulerTickMs = 60_000;
 const GLOBAL_SCHEDULER = 'social:monitor:global';
 
-function projectLiveRefreshState(account) {
+function projectLiveRefreshState(account, history = []) {
   if (!account || typeof account !== 'object') return account;
   const state = account.state && typeof account.state === 'object' ? account.state : null;
   if (!state) return account;
-  const raw = state.lastLiveMessageUpdateAt || state.lastLiveMessageUpdatedAt;
-  if (!raw || typeof raw !== 'string') return account;
-  const parsed = Date.parse(raw);
-  if (!Number.isFinite(parsed)) return account;
+
+  const liveHistory = [...(Array.isArray(history) ? history : [])].reverse().find((entry) =>
+    entry?.accountId && String(entry.accountId) === String(account.accountId)
+    && (entry.status === 'alert_sent' || entry.status === 'alert_updated')
+    && entry.alertType === 'live'
+    && entry.messageId
+    && entry.channelId
+  );
+
+  const recoveredLiveMessage = state.isLive === true && liveHistory
+    ? {
+      lastAlertMessageId: liveHistory.messageId,
+      lastAlertChannelId: liveHistory.channelId,
+      lastAlertKey: state.liveEventId ? `live:${state.liveEventId}` : state.lastAlertKey,
+      lastLiveMessageUpdatedAt: liveHistory.createdAt || state.lastLiveMessageUpdatedAt,
+    }
+    : {};
+
+  const effectiveState = { ...state, ...recoveredLiveMessage };
+  const raw = effectiveState.lastLiveMessageUpdateAt || effectiveState.lastLiveMessageUpdatedAt;
+  const parsed = typeof raw === 'string' ? Date.parse(raw) : NaN;
+  const hasTrackedLiveMessage = effectiveState.isLive === true && Boolean(effectiveState.lastAlertMessageId && effectiveState.lastAlertChannelId);
+  const alertTypes = Array.isArray(account.alertTypes)
+    ? account.alertTypes.filter((type) => !(hasTrackedLiveMessage && String(type).toLowerCase() === 'ended'))
+    : account.alertTypes;
+
   return {
     ...account,
+    ...(Array.isArray(alertTypes) ? { alertTypes } : {}),
     state: {
-      ...state,
-      ...(state.lastLiveMessageUpdateAt === raw ? { lastLiveMessageUpdateAt: new Date(parsed) } : {}),
-      ...(state.lastLiveMessageUpdatedAt === raw ? { lastLiveMessageUpdatedAt: new Date(parsed) } : {}),
+      ...effectiveState,
+      ...(Number.isFinite(parsed) && effectiveState.lastLiveMessageUpdateAt === raw ? { lastLiveMessageUpdateAt: new Date(parsed) } : {}),
+      ...(Number.isFinite(parsed) && effectiveState.lastLiveMessageUpdatedAt === raw ? { lastLiveMessageUpdatedAt: new Date(parsed) } : {}),
     },
   };
 }
@@ -34,9 +57,10 @@ function projectGuildConfig(guildConfig) {
   const social = modules.social && typeof modules.social === 'object' ? modules.social : null;
   if (!social) return guildConfig;
   const effectiveAccounts = projectEffectiveAccounts(social);
+  const history = Array.isArray(social.history) ? social.history : [];
   const projectedAccounts = Object.fromEntries(
     Object.entries(effectiveAccounts && typeof effectiveAccounts === 'object' ? effectiveAccounts : {})
-      .map(([accountId, account]) => [accountId, projectLiveRefreshState(account)])
+      .map(([accountId, account]) => [accountId, projectLiveRefreshState(account, history)])
   );
   return {
     ...guildConfig,

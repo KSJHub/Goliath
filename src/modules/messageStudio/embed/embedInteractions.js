@@ -16,7 +16,7 @@ const guildManager = require('../../../core/guild/guildManager');
 const {
   validateChannelAccess,
   canManageRole,
-} = require('../../../core/security/goliathPermissionGuard');
+} = require('../../../core/security/protection/permissions');
 const {
   EMBED_BUTTON_ACTIONS,
   EMBED_ROLE_BUTTON_ACTIONS,

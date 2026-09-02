@@ -16,7 +16,7 @@ const path = require('node:path');
 const sharp = require('sharp');
 const { getCachedAsset, saveCachedAsset, ensureAssetCached } = require('./embedMedia');
 const { replaceVars } = require('./embedPanel');
-const emojiStore = require('../../utilityStudio/emojis/emojisStore');
+const emojis = require('../../utilityStudio/emojis/emojis');
 
 const CANVAS_WIDTH = 520;
 const PORTRAIT_WIDTH = 320;
@@ -107,9 +107,6 @@ async function makeCenteredPortrait(buffer) {
   const height = Number(meta.height || 0);
   if (!width || !height) return null;
 
-  // Components V2 media galleries left-align a lone image. Put the visible
-  // artwork on a wider transparent canvas so Discord renders the gallery at
-  // full panel width while the artwork itself stays exactly centered.
   const targetVisibleWidth = Math.min(width, SINGLE_IMAGE_VISIBLE_WIDTH);
   const visible = await source
     .resize({ width: targetVisibleWidth, withoutEnlargement: true, fit: 'inside' })
@@ -255,57 +252,11 @@ function textEmojiIds(embeds = []) {
   return [...ids];
 }
 
-function replaceEmojiShortcodes(value, allowedByName) {
-  const text = String(value || '');
-  if (!text || !allowedByName?.size) return text;
-  return text.replace(/:([a-zA-Z0-9_]{2,32}):/g, (match, name, offset, source) => {
-    const prefix = source.slice(Math.max(0, offset - 2), offset);
-    if (prefix.endsWith('<') || prefix === '<a') return match;
-    const emoji = allowedByName.get(name);
-    if (!emoji) return match;
-    return `<${emoji.animated ? 'a' : ''}:${emoji.name}:${emoji.id}>`;
-  });
-}
-
 async function resolveApplicationEmojiShortcodes(embeds = [], interaction = null) {
-  const manager = interaction?.client?.application?.emojis;
+  const client = interaction?.client || null;
   const guildId = String(interaction?.guildId || interaction?.guild?.id || '').trim();
-  if (!manager || !guildId) return embeds;
-
-  const section = emojiStore.getSection(guildId);
-  if (!section.enabled || !section.favourites.length) return embeds;
-
-  let bank = manager.cache;
-  if (!bank?.size) bank = await manager.fetch();
-  const selected = new Set(section.favourites.map(String));
-  const allowedByName = new Map();
-  for (const emoji of bank.values()) {
-    if (!selected.has(String(emoji.id)) || !emoji.name) continue;
-    allowedByName.set(String(emoji.name), emoji);
-  }
-  if (!allowedByName.size) return embeds;
-
-  return (embeds || []).map((embed) => {
-    const data = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed;
-    if (!data || typeof data !== 'object') return embed;
-    const resolved = { ...data };
-    if (data.title != null) resolved.title = replaceEmojiShortcodes(data.title, allowedByName);
-    if (data.description != null) resolved.description = replaceEmojiShortcodes(data.description, allowedByName);
-    if (data.author && typeof data.author === 'object') {
-      resolved.author = { ...data.author, name: replaceEmojiShortcodes(data.author.name, allowedByName) };
-    }
-    if (data.footer && typeof data.footer === 'object') {
-      resolved.footer = { ...data.footer, text: replaceEmojiShortcodes(data.footer.text, allowedByName) };
-    }
-    if (Array.isArray(data.fields)) {
-      resolved.fields = data.fields.map((field) => ({
-        ...field,
-        name: replaceEmojiShortcodes(field?.name, allowedByName),
-        value: replaceEmojiShortcodes(field?.value, allowedByName),
-      }));
-    }
-    return resolved;
-  });
+  if (!client || !guildId) return embeds;
+  return emojis.resolveEmbeds(client, guildId, embeds);
 }
 
 async function validateApplicationEmojiUsage(embeds = [], actionRows = [], interaction = null) {
@@ -313,8 +264,9 @@ async function validateApplicationEmojiUsage(embeds = [], actionRows = [], inter
   if (!usedIds.length) return true;
 
   const manager = interaction?.client?.application?.emojis;
+  const client = interaction?.client || null;
   const guildId = String(interaction?.guildId || interaction?.guild?.id || '').trim();
-  if (!manager || !guildId) return true;
+  if (!manager || !client || !guildId) return true;
 
   let bank = manager.cache;
   if (!bank?.size) bank = await manager.fetch();
@@ -322,15 +274,13 @@ async function validateApplicationEmojiUsage(embeds = [], actionRows = [], inter
   const usedApplicationIds = usedIds.filter((id) => applicationIds.has(id));
   if (!usedApplicationIds.length) return true;
 
-  const section = emojiStore.getSection(guildId);
-  if (!section.enabled) throw new Error('Emoji Studio must be enabled before a Goliath application emoji can be deployed.');
-
-  const selected = new Set(section.favourites.map(String));
-  const blocked = usedApplicationIds.filter((id) => !selected.has(id));
+  const allowedByName = await emojis.allowedGuildEmojis(client, guildId);
+  const allowedIds = new Set([...allowedByName.values()].map((emoji) => String(emoji.id)));
+  const blocked = usedApplicationIds.filter((id) => !allowedIds.has(id));
   if (!blocked.length) return true;
 
   const names = blocked.map((id) => bank.get(id)?.name ? `:${bank.get(id).name}:` : id);
-  throw new Error(`Goliath application emoji not selected for this guild: ${names.join(', ')}. Select it in Emoji Studio first.`);
+  throw new Error(`Goliath application emoji not available for this guild: ${names.join(', ')}. Core emojis are automatic; optional Emoji Studio emojis must be selected for the guild.`);
 }
 
 async function buildEmbedPayload(options = {}) {

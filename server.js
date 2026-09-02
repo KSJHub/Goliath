@@ -6,7 +6,7 @@ const express = require('express');
 const http = require('node:http');
 const cors = require('cors');
 const session = require('express-session');
-const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, Partials, PermissionFlagsBits } = require('discord.js');
 const { loadEnvironment } = require('./src/config/envLoader');
 const { resolveToken } = require('./src/config/tokenResolver');
 const { loginWithRetry } = require('./src/runtime/discordLogin');
@@ -51,15 +51,16 @@ const statusRoutes = route('status routes', './src/server/routes/status');
 const ownerRoutes = route('owner routes', './src/server/routes/owner/owner');
 const ownerDiagnosticsRoutes = route('owner diagnostics routes', './src/server/routes/owner/diagnostics');
 const ownerTranslationRoutes = route('owner translation routes', './src/server/routes/owner/translation');
-const automodRoutes = route('automod routes', './src/server/routes/config/automod');
+const automodRoutes = route('automod routes', './src/core/administration/automod/route');
 const generalSettingsRoutes = route('general settings routes', './src/server/routes/config/generalSettings');
 const logsRoutes = route('logs routes', './src/server/routes/config/logs');
 const messagesRoutes = route('messages routes', './src/server/routes/config/messages');
 const embedsRoutes = route('embeds routes', './src/server/routes/modules/messageStudio/embeds');
 const billingRoutes = route('billing routes', './src/server/routes/billing');
-const moderationRoutes = route('moderation routes', './src/server/routes/discord/moderation');
+const moderationCommand = safeRequire('moderation system', './src/core/administration/mod/command', { router: emptyRouter() }, { optional: false });
+const moderationRoutes = moderationCommand.router || emptyRouter();
 const serverRestoreRoutes = route('restore routes', './src/server/routes/discord/serverRestoreRoutes');
-const securityRoutes = route('security routes', './src/server/routes/discord/security');
+const securityRoutes = route('security routes', './src/core/security/protection/route');
 const ticketRoutes = route('ticket routes', './src/server/routes/modules/feedbackStudio/tickets');
 const formsRoutes = route('forms routes', './src/server/routes/modules/feedbackStudio/forms');
 const transcriptRoutes = route('transcript routes', './src/server/routes/modules/feedbackStudio/transcripts');
@@ -71,7 +72,7 @@ const scheduleRoutes = route('schedule routes', './src/server/routes/modules/uti
 const invitesRoutes = route('invite routes', './src/server/routes/modules/communityStudio/invites');
 const birthdaysRoutes = route('birthdays routes', './src/server/routes/modules/communityStudio/birthdays');
 const privateRoomsRoutes = route('private rooms routes', './src/server/routes/modules/utilityStudio/privateRooms');
-const emojisRoutes = route('emoji routes', './src/modules/utilityStudio/emojis/emojisPanel');
+const emojisRoutes = route('emoji routes', './src/server/routes/modules/utilityStudio/emojis');
 const verificationRoutes = route('verification routes', './src/server/routes/modules/securityStudio/verification');
 const autoRolesRoutes = route('auto roles routes', './src/server/routes/modules/roleStudio/autoRoles');
 const welcomeRoutes = route('welcome routes', './src/server/routes/modules/messageStudio/welcome');
@@ -93,10 +94,11 @@ const ownerDeploymentRoutes = route('owner deployment routes', './src/server/rou
 const publicCommunityRoutes = route('public community routes', './src/server/routes/publicCommunity');
 
 const commandHandler = safeRequire('command handler', './src/core/commands/commandLoader', { loadCommands: () => null });
-const backupScheduler = safeRequire('backup scheduler', './src/core/security/serverBackupScheduler', { startServerBackupScheduler: () => null });
+const backupScheduler = safeRequire('backup scheduler', './src/core/security/restoreBackup/scheduler', { startServerBackupScheduler: () => null });
 const guildManager = safeRequire('guild manager', './src/core/guild/guildManager', { syncGuildMeta: () => null }, { optional: false });
 const resourceManager = safeRequire('discord resource manager', './src/core/guild/discordResourceManager', { syncDiscordResources: async () => null }, { optional: false });
 const auditEvents = safeRequire('owner audit intelligence', './src/owner/auditIntelligence/auditEvents', { registerAuditEvents: () => false }, { optional: false });
+const security = safeRequire('security core', './src/core/security/protection/core', { isBotOwner: () => false }, { optional: false });
 
 const config = getBotModeConfig(process.env.BOT_MODE);
 const botMode = String(process.env.BOT_MODE || config?.name || 'DEV').toUpperCase();
@@ -146,6 +148,39 @@ app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(session({ store: sessionStore, secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: isProduction, httpOnly: true, sameSite: isProduction ? 'none' : 'lax', maxAge: 604800000 } }));
 app.use((req, _res, next) => { req.client = client; req.io = io; next(); });
+
+function cleanDiscordId(value) {
+  const id = String(value || '').replace(/[<@#!&>]/g, '').trim();
+  return /^\d{15,25}$/.test(id) ? id : null;
+}
+
+async function requireEmojiGuildAccess(req, res, next) {
+  try {
+    const userId = cleanDiscordId(req.session?.user?.id);
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required.' });
+
+    const guildId = cleanDiscordId(req.params?.guildId);
+    if (!guildId) return res.status(400).json({ success: false, error: 'Invalid guild ID.' });
+    if (security.isBotOwner(userId)) return next();
+
+    const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+    if (!guild) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
+
+    const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+    const allowed = Boolean(
+      member?.permissions?.has(PermissionFlagsBits.Administrator) ||
+      member?.permissions?.has(PermissionFlagsBits.ManageGuild)
+    );
+    if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
+
+    return next();
+  } catch (error) {
+    console.error('[Emoji API access]', error);
+    return res.status(403).json({ success: false, error: 'Unable to verify server access.' });
+  }
+}
+
+app.use('/api/emojis/:guildId', requireEmojiGuildAccess);
 
 const mounts = [
   ['/auth', authRoutes], ['/api/auth', authRoutes], ['/api/discord', discordRoutes], ['/api/discord', discordRoleEditorRoutes], ['/api/discord', discordResourceRoutes], ['/api/status', statusRoutes], ['/api/public/community', publicCommunityRoutes], ['/api/owner', ownerRoutes], ['/api/owner/diagnostics', ownerDiagnosticsRoutes], ['/api/owner/translation', ownerTranslationRoutes], ['/api/config/automod', automodRoutes], ['/api/config/general', generalSettingsRoutes], ['/api/config/logs', logsRoutes], ['/api/config/messages', messagesRoutes], ['/api/config/embeds', embedsRoutes], ['/api/billing', billingRoutes], ['/api/moderation', moderationRoutes], ['/api/cases', moderationRoutes], ['/api/restore', serverRestoreRoutes], ['/api/security', securityRoutes], ['/api/tickets', ticketRoutes], ['/api/forms', formsRoutes], ['/api/transcripts', transcriptRoutes], ['/api/suggestions', suggestionsRoutes], ['/api/translation', translationRoutes], ['/api/permissions', permissionHealthRoutes], ['/api/social', socialRoutes], ['/api/schedule', scheduleRoutes], ['/api/invites', invitesRoutes], ['/api/birthdays', birthdaysRoutes], ['/api/private-rooms', privateRoomsRoutes], ['/api/emojis', emojisRoutes], ['/api/verification', verificationRoutes], ['/api/auto-roles', autoRolesRoutes], ['/api/welcome', welcomeRoutes], ['/api/goodbye', goodbyeRoutes], ['/api/reaction-roles', reactionRolesRoutes], ['/api/timed-roles', timedRolesRoutes], ['/api/temporary-roles', temporaryRolesRoutes], ['/api/role-selector', roleSelectorRoutes], ['/api/colour-roles', roleSelectorRoutes], ['/api/modules', modulesRoutes], ['/api/automation', automationRoutes], ['/api/notifications', notificationRoutes], ['/api/activity', activityRoutes], ['/api/polls', pollsRoutes], ['/api/stats', statsRoutes], ['/api/temp-voice', tempVoiceRoutes], ['/api/starboard', starboardRoutes], ['/api/media', mediaRoutes], ['/api/owner/deployments', ownerDeploymentRoutes], ['/api/resources', discordResourceRoutes],

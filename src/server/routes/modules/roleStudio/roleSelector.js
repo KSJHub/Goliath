@@ -3,7 +3,7 @@
 const express = require('express');
 const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../../core/guild/guildManager');
-const security = require('../../../../core/security/securityCore');
+const security = require('../../../../core/security/protection/core');
 const emojis = require('../../../../modules/utilityStudio/emojis/emojis');
 const roleSelector = require('../../../../modules/roleStudio/roleSelector/roleSelector');
 const healthService = require('../../../../modules/roleStudio/roleSelector/roleSelectorHealth');

@@ -242,16 +242,40 @@ async function handleAccountUpdate(interaction, id) {
   const rawValue = String(interaction.fields.getTextInputValue('accountValue') || '').trim();
   if (!rawValue) throw new Error('Enter a username, channel ID or profile URL.');
   const normalized = normalizeAccountInput(account.platform, rawValue);
-  const updated = store.updateAccount(interaction.guildId, accountId, (current) => ({
-    ...current,
-    username: normalized.username,
-    normalizedUsername: normalized.normalizedUsername,
-    externalId: normalized.externalId || current.externalId || null,
-    inputType: normalized.inputType,
-    canonicalIdentity: normalized.canonicalIdentity,
-    profileUrl: normalized.profileUrl,
-    sourceInput: normalized.sourceInput,
-  }), { actorId: interaction.user?.id || null, guild: interaction.guild });
+  const updated = store.updateAccount(interaction.guildId, accountId, (current) => {
+    const currentIdentity = String(
+      current.canonicalIdentity ||
+      current.normalizedUsername ||
+      current.username ||
+      ''
+    ).toLowerCase();
+
+    const nextIdentity = String(
+      normalized.canonicalIdentity ||
+      normalized.normalizedUsername ||
+      normalized.username ||
+      ''
+    ).toLowerCase();
+
+    const identityChanged =
+      Boolean(currentIdentity) &&
+      Boolean(nextIdentity) &&
+      currentIdentity !== nextIdentity;
+
+    return {
+      ...current,
+      username: normalized.username,
+      normalizedUsername: normalized.normalizedUsername,
+      externalId:
+        normalized.externalId ||
+        (identityChanged ? null : current.externalId) ||
+        null,
+      inputType: normalized.inputType,
+      canonicalIdentity: normalized.canonicalIdentity,
+      profileUrl: normalized.profileUrl,
+      sourceInput: normalized.sourceInput,
+    };
+  }, { actorId: interaction.user?.id || null, guild: interaction.guild });
   setSession(interaction, { creatorId: creator.creatorId, accountId });
 
   const message = `✅ Updated ${LABEL[updated.platform] || updated.platform || 'social'} account.`;

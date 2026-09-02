@@ -9,7 +9,6 @@ const {
   ChannelType,
   EmbedBuilder,
   ModalBuilder,
-  RoleSelectMenuBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   TextInputBuilder,
@@ -17,6 +16,13 @@ const {
   UserSelectMenuBuilder,
 } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
+const {
+  buildRolePicker,
+  mergeRolePickerSelection,
+  parseRolePickerId,
+  rolePickerCustomId,
+  rolePickerPageCount,
+} = require('../../../core/ui/panelNavigation');
 const timedRoles = require('./timedRoles');
 const timedRolesHealth = require('./timedRolesHealth');
 
@@ -32,12 +38,22 @@ function formatTimestamp(value, style = 'R') {
 }
 function displayName(interaction) { return interaction.member?.displayName || interaction.user?.username || 'Unknown User'; }
 
-async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User') {
+async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
   const section = timedRoles.getSection(guild.id);
   const enabled = guildManager.isModuleEnabled(guild.id, 'timedRoles');
   const rules = timedRoles.listRules(guild.id);
   const health = await timedRolesHealth.buildTimedRolesHealth(guild);
   const mode = section.settings.progressionMode === 'keep_all' ? 'Keep every earned milestone role' : 'Keep highest milestone role only';
+  const pageCount = rolePickerPageCount(guild);
+  const safePage = Math.min(Math.max(0, Number(rolePage) || 0), pageCount - 1);
+  const createPicker = buildRolePicker(guild, {
+    customId: `${PREFIX}:createRole`,
+    placeholder: 'Choose any role to create a milestone',
+    minValues: 1,
+    maxValues: 1,
+    page: safePage,
+    pagination: false,
+  });
   const lines = rules.length
     ? rules.slice(0, 15).map((rule, index) => [
       `**${index + 1}. ${rule.enabled ? '✅' : '⏸️'} ${rule.name}**`,
@@ -74,7 +90,7 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User') {
   return {
     embeds: [embed],
     components: [
-      row(new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:createRole`).setPlaceholder('Choose any role to create a milestone').setMinValues(1).setMaxValues(1)),
+      createPicker.rows[0],
       row(new StringSelectMenuBuilder()
         .setCustomId(`${PREFIX}:manage`)
         .setPlaceholder(rules.length ? 'Manage a milestone' : 'No milestones to manage')
@@ -91,17 +107,27 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User') {
         button(`${PREFIX}:repair`, '🩺 Repair'),
       ),
       row(
+        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.max(0, safePage - 1)), '⬅️ Roles', ButtonStyle.Secondary, safePage <= 0) : null,
         button(enabled ? `${PREFIX}:disable` : `${PREFIX}:enable`, enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
         button(`${PREFIX}:export`, '📤 Export'),
         button('admin:reactionRoles', '⬅️ Role Studio'),
+        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.min(pageCount - 1, safePage + 1)), 'Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
       ),
     ],
   };
 }
 
-function buildRulePanel(guildId, ruleId) {
-  const rule = timedRoles.getRule(guildId, ruleId);
+function buildRulePanel(guild, ruleId, rolePage = 0) {
+  const rule = timedRoles.getRule(guild.id, ruleId);
   if (!rule) throw new Error('Timed role milestone not found.');
+  const cleanupPicker = buildRolePicker(guild, {
+    customId: `${PREFIX}:cleanup:${rule.ruleId}`,
+    placeholder: 'Optional: roles to remove at this milestone',
+    selectedIds: rule.removeRoleIds,
+    minValues: 0,
+    maxValues: 10,
+    page: rolePage,
+  });
   return {
     embeds: [new EmbedBuilder()
       .setColor(rule.enabled ? 0x5865F2 : 0x747F8D)
@@ -116,7 +142,7 @@ function buildRulePanel(guildId, ruleId) {
         rule.lastError ? `**Last error:** ${rule.lastError}` : '',
       ].filter(Boolean).join('\n'))],
     components: [
-      row(new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:cleanup:${rule.ruleId}`).setPlaceholder('Optional: roles to remove at this milestone').setMinValues(0).setMaxValues(10)),
+      ...cleanupPicker.rows,
       row(
         button(`${PREFIX}:edit:${rule.ruleId}`, '✏️ Edit', ButtonStyle.Primary),
         button(`${PREFIX}:duplicate:${rule.ruleId}`, '📋 Duplicate'),
@@ -238,8 +264,8 @@ function buildSimulationPanel(result) {
   };
 }
 
-async function refresh(interaction, payload = null) {
-  const next = payload || await buildTimedRolesPanel(interaction.guild, displayName(interaction));
+async function refresh(interaction, payload = null, rolePage = 0) {
+  const next = payload || await buildTimedRolesPanel(interaction.guild, displayName(interaction), rolePage);
   if (interaction.deferred || interaction.replied) return interaction.editReply(next);
   return interaction.update(next);
 }
@@ -250,17 +276,24 @@ async function handleTimedRolesInteraction(interaction) {
   try {
     if (customId === PREFIX) return refresh(interaction);
 
-    if (interaction.isRoleSelectMenu?.()) {
-      if (customId === `${PREFIX}:createRole`) {
-        return interaction.showModal(buildRuleModal(`${PREFIX}:createSubmit:${interaction.values[0]}`, 'Create Tenure Milestone'));
-      }
-      if (customId.startsWith(`${PREFIX}:cleanup:`)) {
-        const ruleId = customId.split(':').pop();
-        const rule = timedRoles.getRule(interaction.guild.id, ruleId);
-        if (!rule) throw new Error('Timed role milestone not found.');
-        timedRoles.saveRule(interaction.guild.id, { ...rule, removeRoleIds: interaction.values }, { actorId: interaction.user.id });
-        return refresh(interaction, buildRulePanel(interaction.guild.id, ruleId));
-      }
+    const rolePicker = parseRolePickerId(customId);
+    if (rolePicker?.baseId === `${PREFIX}:createRolePage` && rolePicker.kind === 'page') {
+      return refresh(interaction, null, rolePicker.page);
+    }
+    if (rolePicker?.baseId === `${PREFIX}:createRole` && rolePicker.kind === 'select') {
+      const roleId = interaction.values?.[0];
+      if (!roleId || roleId === '__none__') throw new Error('Choose a role.');
+      return interaction.showModal(buildRuleModal(`${PREFIX}:createSubmit:${roleId}`, 'Create Tenure Milestone'));
+    }
+    if (rolePicker?.baseId?.startsWith(`${PREFIX}:cleanup:`)) {
+      const ruleId = rolePicker.baseId.slice(`${PREFIX}:cleanup:`.length);
+      const rule = timedRoles.getRule(interaction.guild.id, ruleId);
+      if (!rule) throw new Error('Timed role milestone not found.');
+      if (rolePicker.kind === 'page') return refresh(interaction, buildRulePanel(interaction.guild, ruleId, rolePicker.page));
+      const removeRoleIds = mergeRolePickerSelection(interaction.guild, rule.removeRoleIds, interaction.values || [], rolePicker.page);
+      if (removeRoleIds.length > 10) throw new Error('A milestone can remove up to 10 roles. Remove a role before adding another.');
+      timedRoles.saveRule(interaction.guild.id, { ...rule, removeRoleIds }, { actorId: interaction.user.id });
+      return refresh(interaction, buildRulePanel(interaction.guild, ruleId, rolePicker.page));
     }
 
     if (interaction.isChannelSelectMenu?.() && customId === `${PREFIX}:announcementChannel`) {
@@ -273,7 +306,7 @@ async function handleTimedRolesInteraction(interaction) {
     }
 
     if (interaction.isStringSelectMenu?.() && customId === `${PREFIX}:manage`) {
-      return refresh(interaction, buildRulePanel(interaction.guild.id, interaction.values[0]));
+      return refresh(interaction, buildRulePanel(interaction.guild, interaction.values[0]));
     }
 
     if (interaction.isModalSubmit?.()) {
@@ -298,7 +331,7 @@ async function handleTimedRolesInteraction(interaction) {
           value: interaction.fields.getTextInputValue('value'),
           unit: interaction.fields.getTextInputValue('unit'),
         }, { actorId: interaction.user.id });
-        return refresh(interaction, buildRulePanel(interaction.guild.id, ruleId));
+        return refresh(interaction, buildRulePanel(interaction.guild, ruleId));
       }
       if (customId === `${PREFIX}:intervalSubmit`) {
         timedRoles.updateSettings(interaction.guild.id, { scanIntervalMinutes: interaction.fields.getTextInputValue('minutes') }, { actorId: interaction.user.id });
@@ -384,7 +417,7 @@ async function handleTimedRolesInteraction(interaction) {
       const rule = timedRoles.getRule(interaction.guild.id, ruleId);
       if (!rule) throw new Error('Timed role milestone not found.');
       timedRoles.saveRule(interaction.guild.id, { ...rule, enabled: !rule.enabled }, { actorId: interaction.user.id });
-      return refresh(interaction, buildRulePanel(interaction.guild.id, ruleId));
+      return refresh(interaction, buildRulePanel(interaction.guild, ruleId));
     }
     if (customId.startsWith(`${PREFIX}:delete:`)) {
       const ruleId = customId.split(':').pop();

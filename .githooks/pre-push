@@ -1,0 +1,6 @@
+#!/bin/sh
+
+set -eu
+
+echo "🔎 Goliath pre-push: checking backend JavaScript syntax..."
+npm run syntax

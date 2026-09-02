@@ -9,7 +9,7 @@ const guildManager = require('../../../core/guild/guildManager');
 const {
   DEFAULT_BOT_CHANNEL_PERMISSIONS,
   guardChannelAccess,
-} = require('../../../core/security/goliathPermissionGuard');
+} = require('../../../core/security/protection/permissions');
 
 const TRANSLATION_SOURCE_PERMISSIONS = [
   ...DEFAULT_BOT_CHANNEL_PERMISSIONS,

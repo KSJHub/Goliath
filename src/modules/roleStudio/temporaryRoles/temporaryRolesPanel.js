@@ -6,18 +6,25 @@ const {
   ButtonStyle,
   EmbedBuilder,
   ModalBuilder,
-  RoleSelectMenuBuilder,
   UserSelectMenuBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
-const temporaryRoles = require('./temporaryRoles');
+const temporaryRoles = require('./temporaryRolesService');
 const temporaryRolesHealth = require('./temporaryRolesHealth');
+const security = require('../../../core/security/protection/core');
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
+const {
+  buildRolePicker,
+  parseRolePickerId,
+  rolePickerCustomId,
+  rolePickerPageCount,
+} = require('../../../core/ui/panelNavigation');
 
 const PREFIX = 'admin:temporaryRoles';
+const SESSION_TTL_MS = 30 * 60 * 1000;
 const selections = new Map();
 const keyFor = (guildId, userId) => `${guildId}:${userId}`;
 const row = (...components) => new ActionRowBuilder().addComponents(...components.filter(Boolean));
@@ -29,21 +36,40 @@ function formatExpiry(value) {
   return Number.isFinite(timestamp) && timestamp > 0 ? `<t:${Math.floor(timestamp / 1000)}:R>` : 'Unknown';
 }
 
+function pruneSelections() {
+  const cutoff = Date.now() - SESSION_TTL_MS;
+  for (const [key, value] of selections.entries()) if (Number(value?.touchedAt || 0) < cutoff) selections.delete(key);
+}
+
 function getSelection(interaction) {
-  return selections.get(keyFor(interaction.guild.id, interaction.user.id)) || { memberId: null, roleId: null };
+  pruneSelections();
+  const value = selections.get(keyFor(interaction.guild.id, interaction.user.id));
+  return value ? { memberId: value.memberId || null, roleId: value.roleId || null } : { memberId: null, roleId: null };
 }
 
 function setSelection(interaction, patch) {
   const key = keyFor(interaction.guild.id, interaction.user.id);
-  selections.set(key, { ...getSelection(interaction), ...patch });
-  return selections.get(key);
+  selections.set(key, { ...getSelection(interaction), ...patch, touchedAt: Date.now() });
+  return getSelection(interaction);
 }
 
-function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown User') {
+function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown User', rolePage = 0) {
+  pruneSelections();
   const section = temporaryRoles.getSection(guild.id);
-  const enabled = isModuleEnabled(guild.id, 'temporaryRoles');
+  const enabled = isModuleEnabled(guild.id, temporaryRoles.SECTION);
   const assignments = temporaryRoles.listAssignments(guild.id, { activeOnly: true });
   const selection = selections.get(keyFor(guild.id, userId)) || { memberId: null, roleId: null };
+  const pageCount = rolePickerPageCount(guild);
+  const safePage = Math.min(Math.max(0, Number(rolePage) || 0), pageCount - 1);
+  const rolePicker = buildRolePicker(guild, {
+    customId: `${PREFIX}:role`,
+    placeholder: 'Choose a temporary role',
+    selectedIds: selection.roleId ? [selection.roleId] : [],
+    minValues: 1,
+    maxValues: 1,
+    page: safePage,
+    pagination: false,
+  });
   const lines = assignments.length
     ? assignments.slice(0, 12).map((item) => `• <@${item.memberId}> → <@&${item.roleId}> • expires ${formatExpiry(item.expiresAt)}`)
     : ['No active temporary roles.'];
@@ -62,7 +88,7 @@ function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown Us
       '### Active assignments',
       ...lines,
       '',
-      `Assigned: \`${section.analytics.assigned || 0}\` • Expired: \`${section.analytics.expired || 0}\` • Removed early: \`${section.analytics.removed || 0}\` • Failed: \`${section.analytics.failed || 0}\``,
+      `Assigned: \`${section.analytics.assigned || 0}\` • Renewed: \`${section.analytics.renewed || 0}\` • Expired: \`${section.analytics.expired || 0}\` • Removed early: \`${section.analytics.removed || 0}\` • Failed: \`${section.analytics.failed || 0}\``,
       `Last expiry scan: ${section.analytics.lastScanAt ? formatExpiry(section.analytics.lastScanAt) : 'Never'}`,
     ].join('\n').slice(0, 4096))
     .setFooter({ text: `Requested by ${memberDisplayName}` })
@@ -81,7 +107,7 @@ function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown Us
     embeds: [embed],
     components: [
       row(new UserSelectMenuBuilder().setCustomId(`${PREFIX}:member`).setPlaceholder('Choose a member').setMinValues(1).setMaxValues(1)),
-      row(new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:role`).setPlaceholder('Choose a temporary role').setMinValues(1).setMaxValues(1)),
+      rolePicker.rows[0],
       row(
         button(`${PREFIX}:assign`, 'Assign Temporary Role', ButtonStyle.Success, !enabled || !(selection.memberId && selection.roleId)),
         button(`${PREFIX}:scan`, 'Scan Expired Now', ButtonStyle.Primary),
@@ -89,7 +115,12 @@ function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown Us
         button(enabled ? `${PREFIX}:disable` : `${PREFIX}:enable`, enabled ? 'Disable' : 'Enable'),
       ),
       row(manage),
-      row(button('admin:studio:roleStudio', 'Back to Role Studio')),
+      row(
+        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:rolePage`, 'page', Math.max(0, safePage - 1)), '⬅️ Previous Roles', ButtonStyle.Secondary, safePage <= 0) : null,
+        pageCount > 1 ? button(`${PREFIX}:rolePageInfo:${safePage}`, `Page ${safePage + 1}/${pageCount}`, ButtonStyle.Secondary, true) : null,
+        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:rolePage`, 'page', Math.min(pageCount - 1, safePage + 1)), 'Next Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
+        button('admin:studio:roleStudio', 'Back to Role Studio'),
+      ),
     ],
   };
 }
@@ -120,15 +151,15 @@ function buildAssignmentPanel(guildId, assignmentId) {
         `**Status:** ${assignment.status}`,
       ].join('\n'))],
     components: [row(
-      button(`${PREFIX}:remove:${assignment.assignmentId}`, 'Remove Role Now', ButtonStyle.Danger),
+      button(`${PREFIX}:remove:${assignment.assignmentId}`, 'Remove Role Now', ButtonStyle.Danger, assignment.status !== 'active'),
       button(PREFIX, 'Back'),
       button('admin:studio:roleStudio', 'Role Studio'),
     )],
   };
 }
 
-async function refresh(interaction, payload = null) {
-  const next = payload || buildTemporaryRolesPanel(interaction.guild, interaction.user.id, interaction.member?.displayName || interaction.user?.username);
+async function refresh(interaction, payload = null, rolePage = 0) {
+  const next = payload || buildTemporaryRolesPanel(interaction.guild, interaction.user.id, interaction.member?.displayName || interaction.user?.username, rolePage);
   if (interaction.deferred || interaction.replied) return interaction.editReply(next);
   return interaction.update(next);
 }
@@ -137,22 +168,23 @@ async function handleTemporaryRolesInteraction(interaction) {
   const id = String(interaction.customId || '');
   if (!id.startsWith(PREFIX)) return false;
 
-  if (id === PREFIX) return refresh(interaction);
+  const access = await security.enforceInteractionSecurity(interaction, { level: 'admin', guildOnly: true });
+  if (!access.allowed) return true;
 
+  if (id === PREFIX) return refresh(interaction);
+  const rolePicker = parseRolePickerId(id);
+  if (rolePicker?.baseId === `${PREFIX}:rolePage` && rolePicker.kind === 'page') return refresh(interaction, null, rolePicker.page);
+  if (rolePicker?.baseId === `${PREFIX}:role` && rolePicker.kind === 'select') {
+    const roleId = interaction.values?.[0];
+    if (!roleId || roleId === '__none__') throw new Error('Choose a temporary role.');
+    setSelection(interaction, { roleId });
+    return refresh(interaction, null, rolePicker.page);
+  }
   if (interaction.isUserSelectMenu?.() && id === `${PREFIX}:member`) {
     setSelection(interaction, { memberId: interaction.values[0] });
     return refresh(interaction);
   }
-
-  if (interaction.isRoleSelectMenu?.() && id === `${PREFIX}:role`) {
-    setSelection(interaction, { roleId: interaction.values[0] });
-    return refresh(interaction);
-  }
-
-  if (interaction.isStringSelectMenu?.() && id === `${PREFIX}:manage`) {
-    return refresh(interaction, buildAssignmentPanel(interaction.guild.id, interaction.values[0]));
-  }
-
+  if (interaction.isStringSelectMenu?.() && id === `${PREFIX}:manage`) return refresh(interaction, buildAssignmentPanel(interaction.guild.id, interaction.values[0]));
   if (id === `${PREFIX}:assign`) return interaction.showModal(buildDurationModal());
 
   if (interaction.isModalSubmit?.() && id === `${PREFIX}:assignSubmit`) {
@@ -173,25 +205,22 @@ async function handleTemporaryRolesInteraction(interaction) {
 
   if (id === `${PREFIX}:scan`) {
     await interaction.deferUpdate();
-    await temporaryRoles.scanExpired(interaction.guild, { actorId: interaction.user.id });
+    await temporaryRoles.scanExpired(interaction.guild, { actorId: interaction.user.id, action: 'temporary_roles_discord_scan' });
     return refresh(interaction);
   }
-
   if (id === `${PREFIX}:repair`) {
     await interaction.deferUpdate();
-    await temporaryRolesHealth.repair(interaction.guild, { actorId: interaction.user.id });
+    await temporaryRolesHealth.repair(interaction.guild, { actorId: interaction.user.id, action: 'temporary_roles_discord_repair' });
     return refresh(interaction);
   }
-
-  if (id === `${PREFIX}:enable`) setModuleEnabled(interaction.guild.id, 'temporaryRoles', true, { actorId: interaction.user.id, action: id });
-  if (id === `${PREFIX}:disable`) setModuleEnabled(interaction.guild.id, 'temporaryRoles', false, { actorId: interaction.user.id, action: id });
+  if (id === `${PREFIX}:enable`) setModuleEnabled(interaction.guild.id, temporaryRoles.SECTION, true, { actorId: interaction.user.id, action: id });
+  if (id === `${PREFIX}:disable`) setModuleEnabled(interaction.guild.id, temporaryRoles.SECTION, false, { actorId: interaction.user.id, action: id });
 
   if (id.startsWith(`${PREFIX}:remove:`)) {
     await interaction.deferUpdate();
     await temporaryRoles.removeAssignment(interaction.guild, id.split(':').pop(), { actorId: interaction.user.id });
     return refresh(interaction);
   }
-
   return refresh(interaction);
 }
 

@@ -19,7 +19,7 @@ const {
 const audit = require('./auditIntelligence');
 const auditRouter = require('./auditRouter');
 const auditStore = require('./auditStore');
-const security = require('../../core/security/securityCore');
+const security = require('../../core/security/protection/core');
 const { snapshotMember, buildReport } = require('./userIntelligence');
 const { buildUserIntelligenceEmbed, buildUserIntelligenceSectionEmbed, buildCommandCenterSetup } = require('./auditEmbeds');
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const serverBackup = require('../security/serverBackup');
+const serverBackup = require('../security/restoreBackup/backup');
 const backupNotifications = require('./backupNotifications');
 
 let wired = false;

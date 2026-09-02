@@ -487,7 +487,9 @@ async function setAnchorRole(guild, roleId, options = {}) {
     if (previousManaged && previousId && previousId !== nextId) { const previous = guild.roles.cache.get(previousId) || await guild.roles.fetch(previousId).catch(() => null); if (previous && base.canManageRole(guild, previous)) await previous.delete('Goliath Role Selector replaced divider').catch(() => null); }
     return role;
   });
-  await syncManagedRoleHierarchy(guild).catch(() => null);
+  void syncManagedRoleHierarchy(guild).catch((error) => {
+    console.error('[RoleSelector] Deferred hierarchy sync failed:', error);
+  });
   return result;
 }
 async function runMaintenance(guild) {

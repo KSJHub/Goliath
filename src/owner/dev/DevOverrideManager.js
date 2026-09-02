@@ -26,7 +26,7 @@ function text(value) {
 }
 
 function isBotOwner(userId) {
-  const security = require('../../core/security/securityCore');
+  const security = require('../../core/security/protection/core');
   return typeof security.isBotOwner === 'function' && security.isBotOwner(userId);
 }
 

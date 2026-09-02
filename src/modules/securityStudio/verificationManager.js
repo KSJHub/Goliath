@@ -105,7 +105,7 @@ function canBotManageMember(member) {
   const botMember = getBotMember(member?.guild);
   if (!botMember || !member || member.id === botMember.id) return false;
   if (isDevOwnerTestMember(member)) return true;
-  const { isBotOwner } = require('../../core/security/securityCore');
+  const { isBotOwner } = require('../../core/security/protection/core');
   return !isBotOwner(member.id);
 }
 

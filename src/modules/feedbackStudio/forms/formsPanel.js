@@ -20,7 +20,7 @@ const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guild
 const {
   DEFAULT_BOT_CHANNEL_PERMISSIONS,
   guardChannelAccess,
-} = require('../../../core/security/goliathPermissionGuard');
+} = require('../../../core/security/protection/permissions');
 
 const CUSTOM_ID_PREFIX = 'form';
 const MAX_MODAL_FIELDS = 5;

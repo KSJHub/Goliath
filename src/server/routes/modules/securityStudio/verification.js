@@ -4,7 +4,7 @@ const express = require('express');
 const { PermissionFlagsBits } = require('discord.js');
 
 const guildManager = require('../../../../core/guild/guildManager');
-const { isBotOwner } = require('../../../../core/security/securityCore');
+const { isBotOwner } = require('../../../../core/security/protection/core');
 const verificationHealth = require('../../../../modules/securityStudio/verificationHealth');
 const verificationManager = require('../../../../modules/securityStudio/verificationManager');
 const verificationStore = require('../../../../modules/securityStudio/verificationStore');

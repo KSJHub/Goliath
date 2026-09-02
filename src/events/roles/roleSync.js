@@ -1,5 +1,5 @@
 const guildManager = require('../../core/guild/guildManager');
-const antiNukeManager = require('../../core/security/antiNukeManager');
+const antiNukeManager = require('../../core/security/protection/antiNuke');
 const {
   emitSyncEvent,
 } = require('../../server/sockets/socketHub');

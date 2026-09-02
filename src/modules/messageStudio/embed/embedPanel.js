@@ -25,7 +25,7 @@ const embedState = require("./embedState");
 const guildManager = require("../../../core/guild/guildManager");
 const {
   validateChannelAccess,
-} = require("../../../core/security/goliathPermissionGuard");
+} = require("../../../core/security/protection/permissions");
 
 const {
   HELPERS,

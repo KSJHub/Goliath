@@ -2,7 +2,7 @@
 
 const { PermissionFlagsBits } = require('discord.js');
 const crypto = require('node:crypto');
-const security = require('../../../core/security/securityCore');
+const security = require('../../../core/security/protection/core');
 const { normalizeAccountInput, migrateAccount } = require('./accountNormalizer');
 const { providerInfo } = require('./socialStudioProviders');
 const store = require('./socialStudioStore');

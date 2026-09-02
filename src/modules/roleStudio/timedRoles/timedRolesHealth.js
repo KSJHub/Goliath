@@ -2,7 +2,8 @@
 
 const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
-const timedRoles = require('./timedRoles');
+const timedRoles = require('./timedRolesService');
+const base = require('./timedRoles');
 
 const now = () => new Date().toISOString();
 
@@ -30,12 +31,18 @@ async function buildTimedRolesHealth(guild) {
   const section = timedRoles.getSection(guild.id);
   const rules = timedRoles.listRules(guild.id);
   const me = guild.members.me;
+  const targetOwners = new Map();
 
   if (!me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
     issues.push('Goliath requires Manage Roles.');
   }
 
   for (const rule of rules) {
+    const existingOwner = targetOwners.get(rule.roleId);
+    if (existingOwner && existingOwner !== rule.ruleId) {
+      issues.push(`${rule.name}: award role is also used by another Timed Roles milestone.`);
+    } else if (rule.roleId) targetOwners.set(rule.roleId, rule.ruleId);
+
     const role = await resolveRole(guild, rule.roleId);
     if (!role) issues.push(`${rule.name}: target role no longer exists.`);
     else if (!canManageRole(guild, role)) issues.push(`${rule.name}: target role is above Goliath or managed by an integration.`);
@@ -58,19 +65,21 @@ async function buildTimedRolesHealth(guild) {
       warnings.push('Promotion announcements are enabled but the configured channel is missing or invalid.');
     } else {
       const permissions = channel.permissionsFor?.(me);
-      if (permissions && !permissions.has(PermissionFlagsBits.SendMessages)) {
-        warnings.push('Goliath cannot send promotion announcements in the configured channel.');
+      if (permissions && (!permissions.has(PermissionFlagsBits.ViewChannel) || !permissions.has(PermissionFlagsBits.SendMessages))) {
+        warnings.push('Goliath cannot view/send promotion announcements in the configured channel.');
       }
     }
   }
 
+  const uniqueIssues = [...new Set(issues)];
+  const uniqueWarnings = [...new Set(warnings)];
   return {
-    healthy: issues.length === 0,
-    enabled: guildManager.isModuleEnabled(guild.id, 'timedRoles'),
+    healthy: uniqueIssues.length === 0 && uniqueWarnings.length === 0,
+    enabled: guildManager.isModuleEnabled(guild.id, timedRoles.SECTION),
     rules: rules.length,
     activeRules: rules.filter((rule) => rule.enabled !== false).length,
-    issues: [...new Set(issues)],
-    warnings: [...new Set(warnings)],
+    issues: uniqueIssues,
+    warnings: uniqueWarnings,
     checkedAt: now(),
   };
 }
@@ -78,43 +87,50 @@ async function buildTimedRolesHealth(guild) {
 async function repairTimedRoles(guild, meta = {}) {
   if (!guild?.id) throw new Error('Guild is required.');
 
-  const section = timedRoles.getSection(guild.id);
-  const removedRuleIds = [];
-  const repairedRuleIds = [];
+  return timedRoles.withTimedRolesLock(guild.id, async () => {
+    const section = base.getSection(guild.id);
+    const removedRuleIds = [];
+    const repairedRuleIds = [];
 
-  for (const rule of timedRoles.listRules(guild.id)) {
-    const targetRole = await resolveRole(guild, rule.roleId);
-    if (!targetRole) {
-      timedRoles.removeRule(guild.id, rule.ruleId, meta);
-      removedRuleIds.push(rule.ruleId);
-      continue;
+    for (const rule of base.listRules(guild.id)) {
+      const targetRole = await resolveRole(guild, rule.roleId);
+      if (!targetRole) {
+        base.removeRule(guild.id, rule.ruleId, { ...meta, action: meta.action || 'timed_roles_repair_missing_target' });
+        removedRuleIds.push(rule.ruleId);
+        continue;
+      }
+
+      const validCleanupRoleIds = [];
+      for (const roleId of rule.removeRoleIds || []) {
+        const cleanupRole = await resolveRole(guild, roleId);
+        if (cleanupRole && canManageRole(guild, cleanupRole)) validCleanupRoleIds.push(roleId);
+      }
+
+      if (validCleanupRoleIds.length !== (rule.removeRoleIds || []).length) {
+        base.saveRule(guild.id, { ...rule, removeRoleIds: validCleanupRoleIds }, { ...meta, action: meta.action || 'timed_roles_repair_cleanup_roles' });
+        repairedRuleIds.push(rule.ruleId);
+      }
     }
 
-    const validCleanupRoleIds = [];
-    for (const roleId of rule.removeRoleIds || []) {
-      if (await resolveRole(guild, roleId)) validCleanupRoleIds.push(roleId);
+    const settingsPatch = {};
+    if (section.settings.announcementChannelId) {
+      const channel = guild.channels.cache.get(section.settings.announcementChannelId)
+        || await guild.channels.fetch(section.settings.announcementChannelId).catch(() => null);
+      const permissions = channel?.permissionsFor?.(guild.members.me);
+      if (!channel?.isTextBased?.() || !permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions?.has(PermissionFlagsBits.SendMessages)) {
+        settingsPatch.announcementChannelId = null;
+        settingsPatch.announcePromotions = false;
+      }
     }
+    if (Object.keys(settingsPatch).length) base.updateSettings(guild.id, settingsPatch, { ...meta, action: meta.action || 'timed_roles_repair_settings' });
 
-    if (validCleanupRoleIds.length !== (rule.removeRoleIds || []).length) {
-      timedRoles.saveRule(guild.id, { ...rule, removeRoleIds: validCleanupRoleIds }, meta);
-      repairedRuleIds.push(rule.ruleId);
-    }
-  }
-
-  const settingsPatch = {};
-  if (section.settings.announcementChannelId) {
-    const channel = guild.channels.cache.get(section.settings.announcementChannelId)
-      || await guild.channels.fetch(section.settings.announcementChannelId).catch(() => null);
-    if (!channel?.isTextBased?.()) settingsPatch.announcementChannelId = null;
-  }
-  if (Object.keys(settingsPatch).length) timedRoles.updateSettings(guild.id, settingsPatch, meta);
-
-  return {
-    removedRuleIds,
-    repairedRuleIds,
-    settingsUpdated: Object.keys(settingsPatch).length > 0,
-    health: await buildTimedRolesHealth(guild),
-  };
+    return {
+      removedRuleIds,
+      repairedRuleIds,
+      settingsUpdated: Object.keys(settingsPatch).length > 0,
+      health: await buildTimedRolesHealth(guild),
+    };
+  });
 }
 
 module.exports = {

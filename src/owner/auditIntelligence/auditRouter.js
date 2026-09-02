@@ -4,7 +4,7 @@ const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const { buildAuditEmbed, buildUserIntelligenceEmbed, buildUserIntelligenceControls, buildCommandCenterHome } = require('./auditEmbeds');
 const { buildReport } = require('./userIntelligence');
 const auditStore = require('./auditStore');
-const security = require('../../core/security/securityCore');
+const security = require('../../core/security/protection/core');
 
 const MAX_CATEGORY_CHILDREN = 50;
 const SUMMARY_REFRESH_MS = 60000;

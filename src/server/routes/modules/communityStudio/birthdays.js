@@ -3,7 +3,7 @@
 const express = require('express');
 const guildManager = require('../../../../core/guild/guildManager');
 const birthdays = require('../../../../modules/communityStudio/birthdays/birthdays');
-const { validateRoleSelection, isGoliathPermissionError } = require('../../../../core/security/goliathPermissionGuard');
+const { validateRoleSelection, isGoliathPermissionError } = require('../../../../core/security/protection/permissions');
 
 const router = express.Router();
 const ok = (res, payload = {}) => res.json({ success: true, ...payload });

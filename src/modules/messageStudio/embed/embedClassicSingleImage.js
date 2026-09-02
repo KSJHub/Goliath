@@ -104,13 +104,21 @@ async function buildCenteredGalleryAttachment(sourceUrl, name) {
   const sourceBuffer = await fetchSourceBuffer(sourceUrl);
   if (!sourceBuffer) return null;
 
-  const source = sharp(sourceBuffer, { failOn: 'warning' });
-  const meta = await source.metadata();
+  // Center the visible artwork, not the source file's outer bounds. Uploaded
+  // PNGs often contain unequal transparent padding, which makes a mathematically
+  // centered source rectangle still look visibly off-center in Discord.
+  const trimmed = await sharp(sourceBuffer, { failOn: 'warning' })
+    .ensureAlpha()
+    .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+
+  const meta = await sharp(trimmed).metadata();
   const width = Number(meta.width || 0);
   const height = Number(meta.height || 0);
   if (!width || !height) return null;
 
-  const visible = await source
+  const visible = await sharp(trimmed, { failOn: 'warning' })
     .resize({
       width: VISIBLE_WIDTH,
       height: VISIBLE_WIDTH,
@@ -175,7 +183,7 @@ function installClassicSingleImagePayload(renderer) {
   };
 
   renderer.__classicSingleImagePayloadInstalled = true;
-  console.log('[Embed Renderer] Media Manager gallery source-centering installed.');
+  console.log('[Embed Renderer] Media Manager visible-artwork centering installed.');
   return renderer;
 }
 

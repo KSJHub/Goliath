@@ -236,7 +236,7 @@ function ensureGuildIntelligenceControls(client) {
   client.on('interactionCreate', async (interaction) => {
     const customId = String(interaction?.customId || '');
     if (!customId.startsWith('owner:guildintelligence:')) return;
-    const security = require('../../core/security/securityCore');
+    const security = require('../../core/security/protection/core');
     const auditStore = require('./auditStore');
     if (!security.isBotOwner(interaction.user?.id)) {
       if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ Owner-only control.', flags: MessageFlags.Ephemeral }).catch(() => null);

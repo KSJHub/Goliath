@@ -1,7 +1,7 @@
 'use strict';
 
 const { Events } = require('discord.js');
-const temporaryRoles = require('../../modules/roleStudio/temporaryRoles/temporaryRoles');
+const temporaryRoles = require('../../modules/roleStudio/temporaryRoles/temporaryRolesService');
 const sentinelScheduler = require('../../owner/sentinel/schedulerRegistry.js');
 
 const SCAN_INTERVAL_MS = 60 * 1000;
@@ -18,7 +18,7 @@ async function scanAllGuilds(client, { startup = false } = {}) {
         skipped += 1;
         continue;
       }
-      await temporaryRoles.scanExpired(guild);
+      await temporaryRoles.scanExpired(guild, { action: startup ? 'temporary_roles_startup_scan' : 'temporary_roles_scheduled_scan' });
       checked += 1;
     } catch (error) {
       failed += 1;

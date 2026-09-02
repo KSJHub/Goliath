@@ -7,7 +7,7 @@ const path = require('path');
 const { getRuntimeRoot, resolveRuntimePath } = require('../../../config/runtimePaths');
 
 const guildManager = require('../../../core/guild/guildManager');
-const serverBackup = require('../../../core/security/serverBackup');
+const serverBackup = require('../../../core/security/restoreBackup/backup');
 
 const router = express.Router();
 

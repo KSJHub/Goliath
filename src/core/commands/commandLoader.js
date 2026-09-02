@@ -1,96 +1,51 @@
 'use strict';
 
-const fs = require('node:fs');
 const path = require('node:path');
 
-const ALLOWED_COMMAND_NAMES = new Set(['admin', 'mod', 'user']);
+const CANONICAL_COMMAND_NAMES = new Set(['admin', 'mod', 'user', 'owner', 'e', 'Convert Emoji Shortcodes']);
 
-function getAllJsFiles(dir) {
-  if (!fs.existsSync(dir)) return [];
-
-  const files = [];
-
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const fullPath = path.join(dir, entry.name);
-
-    if (entry.isDirectory()) {
-      files.push(...getAllJsFiles(fullPath));
-      continue;
-    }
-
-    if (entry.isFile() && entry.name.endsWith('.js') && !entry.name.endsWith('.test.js') && !entry.name.endsWith('.spec.js')) {
-      files.push(fullPath);
-    }
-  }
-
-  return files.sort((a, b) => a.localeCompare(b));
+function getCanonicalCommandFiles() {
+  const root = process.cwd();
+  return [
+    path.join(root, 'src', 'core', 'administration', 'admin', 'command.js'),
+    path.join(root, 'src', 'core', 'administration', 'mod', 'command.js'),
+    path.join(root, 'src', 'core', 'administration', 'user', 'command.js'),
+    path.join(root, 'src', 'owner', 'userInstallCommand.js'),
+    path.join(root, 'src', 'modules', 'utilityStudio', 'emojis', 'emojiAliasCommand.js'),
+    path.join(root, 'src', 'modules', 'utilityStudio', 'emojis', 'emojiMessageCommand.js'),
+  ];
 }
 
-function loadCommands(client, options = {}) {
-  const commandsPath = options.commandsPath || path.join(process.cwd(), 'src', 'commands');
-  const ownerCommandModule = path.join(process.cwd(), 'src', 'owner', 'auditIntelligence', 'auditEvents.js');
-  const files = [
-    ...getAllJsFiles(commandsPath),
-    ...(fs.existsSync(ownerCommandModule) ? [ownerCommandModule] : []),
-  ];
-  const loaded = [];
-  const skipped = [];
-
-  if (!client?.commands?.set) {
-    throw new Error('Command collection is not available on Discord client.');
-  }
+function loadCommands(client) {
+  if (!client?.commands?.set) throw new Error('Command collection is not available on Discord client.');
 
   client.commands.clear();
+  const loaded = [];
 
-  for (const filePath of files) {
-    try {
-      delete require.cache[require.resolve(filePath)];
-      const command = require(filePath);
-      const name = command?.data?.name;
+  for (const filePath of getCanonicalCommandFiles()) {
+    delete require.cache[require.resolve(filePath)];
+    const command = require(filePath);
+    const name = String(command?.data?.name || '').trim();
 
-      if (!name || typeof command.execute !== 'function') {
-        skipped.push({ filePath, reason: 'Missing command data name or execute function.' });
-        continue;
-      }
+    if (!CANONICAL_COMMAND_NAMES.has(name)) throw new Error(`Unexpected canonical command name in ${filePath}: ${name || 'missing'}`);
+    if (typeof command.execute !== 'function') throw new Error(`Canonical command is missing execute(): ${filePath}`);
+    if (client.commands.has(name)) throw new Error(`Duplicate canonical command: ${name}`);
 
-      if (!ALLOWED_COMMAND_NAMES.has(name)) {
-        skipped.push({
-          filePath,
-          reason: `Command is not part of the canonical /admin, /mod, /user surface: ${name}`,
-          intentional: true,
-        });
-        continue;
-      }
-
-      if (client.commands.has(name)) {
-        skipped.push({ filePath, reason: `Duplicate command name: ${name}` });
-        continue;
-      }
-
-      client.commands.set(name, command);
-      loaded.push(name);
-    } catch (error) {
-      skipped.push({ filePath, reason: error?.message || String(error) });
-    }
+    client.commands.set(name, command);
+    command.wireClient?.(client);
+    loaded.push(name);
   }
 
-  const unexpectedSkips = skipped.filter((item) => item.intentional !== true);
-  for (const item of unexpectedSkips) {
-    console.warn(`⚠️ Skipped command: ${item.filePath} — ${item.reason}`);
+  if (loaded.length !== CANONICAL_COMMAND_NAMES.size) {
+    throw new Error(`Expected admin, mod, user, owner, e and Convert Emoji Shortcodes; loaded ${loaded.join(', ')}`);
   }
 
   console.log(`✅ commands loaded (${loaded.length}): ${loaded.join(', ')}`);
-
-  return {
-    loaded,
-    skipped,
-    count: loaded.length,
-    commandsPath,
-  };
+  return { loaded, count: loaded.length };
 }
 
 module.exports = {
-  ALLOWED_COMMAND_NAMES,
-  getAllJsFiles,
+  CANONICAL_COMMAND_NAMES,
+  getCanonicalCommandFiles,
   loadCommands,
 };

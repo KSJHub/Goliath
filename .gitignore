@@ -61,6 +61,11 @@ server/data/guilds/
 dashboard/server/data/guilds/
 
 # ======================
+# Tests (not part of Goliath repository)
+# ======================
+/test/
+
+# ======================
 # SQLite / Database Files
 # ======================
 *.db

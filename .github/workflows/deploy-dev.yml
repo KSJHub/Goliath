@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - dev
+    # Temporary one-shot source-mutation workflows/scripts must never trigger the
+    # canonical deployment pipeline. They caused duplicate/racing dev runs and
+    # polluted Actions history while applying short-lived layout patches.
+    paths-ignore:
+      - '.github/workflows/*-once.yml'
+      - 'scripts/*-once.js'
+      - 'scripts/*-temp.js'
   workflow_dispatch:
     inputs:
       environment:
@@ -25,6 +32,7 @@ permissions:
 concurrency:
   group: deploy-${{ github.event_name == 'push' && 'dev' || inputs.environment }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   resolve:
@@ -208,7 +216,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Deploy affected components
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1
         env:
           ENVIRONMENT: ${{ needs.resolve.outputs.environment }}
           TARGET_BRANCH: ${{ needs.resolve.outputs.target_branch }}
@@ -224,6 +232,9 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
+          timeout: 60s
+          retry_attempts: 3
+          retry_delay: 10s
           command_timeout: 25m
           envs: ENVIRONMENT,TARGET_BRANCH,DEPLOY_SCRIPT,APP_DIR,RUNTIME_DIR,PM2_NAME,EXPECTED_SHA,FORCE_COMMAND_SYNC,PUSH_TRIGGERED
           script: |
@@ -269,7 +280,18 @@ jobs:
             cleanup() { status=$?; restore_runtime; rm -rf "$BACKUP_DIR"; exit "$status"; }
             trap cleanup EXIT
 
-            git checkout "$TARGET_BRANCH"
+            # A previous manual/hotfix edit must never block deployment of the
+            # GitHub source of truth. Preserve it in a local stash before resetting
+            # the checkout; runtime state is already protected separately above.
+            if [ -n "$(git status --porcelain -- . ':!src/runtime/')" ]; then
+              STASH_MESSAGE="goliath-deploy-preserve-$(date -u +%Y%m%dT%H%M%SZ)-${EXPECTED_SHA:0:12}"
+              echo "Local source changes detected; preserving them in git stash: $STASH_MESSAGE"
+              git stash push --include-untracked --message "$STASH_MESSAGE"
+            fi
+
+            # Runtime files are live state and are restored from BACKUP_DIR after the
+            # checkout. Reset directly to the validated commit so a dirty worktree can
+            # never prevent deployment.
             git reset --hard "$EXPECTED_SHA"
             restore_runtime
 
@@ -299,8 +321,8 @@ jobs:
             fi
 
             if [ -n "$OLD_SHA" ] && git cat-file -e "$OLD_SHA^{commit}" 2>/dev/null; then
-              if git diff --name-only "$OLD_SHA" "$EXPECTED_SHA" | grep -Eq '^src/core/panels/(user/user|mod/mod)\.js$'; then
-                echo "Special command definition changed: forcing Discord command reconciliation."
+              if git diff --name-only "$OLD_SHA" "$EXPECTED_SHA" | grep -Eq '^(src/core/commands/|src/core/administration/(admin|mod|user)/command\.js$)'; then
+                echo "Canonical command definition or sync infrastructure changed: forcing Discord command reconciliation."
                 NEED_COMMAND_SYNC=true
               fi
             fi

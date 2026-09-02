@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const { Events, MessageFlags } = require('discord.js');
 
@@ -12,6 +12,7 @@ function optionalRequire(label, modulePath, fallback = {}) {
 }
 
 const guildManager = optionalRequire('guild manager', '../../core/guild/guildManager');
+const panelNavigation = optionalRequire('panel navigation', '../../core/ui/panelNavigation');
 const verificationManager = optionalRequire('verification manager', '../../modules/securityStudio/verificationManager');
 const ticketInteractionHandler = optionalRequire('tickets', '../../modules/feedbackStudio/tickets/tickets');
 const pollsInteractions = optionalRequire('polls', '../../modules/communityStudio/polls/pollsInteractions');
@@ -19,11 +20,12 @@ const tempVoiceInteractionHandler = optionalRequire('temp voice', '../../modules
 const suggestionsInteractions = optionalRequire('suggestions', '../../modules/feedbackStudio/suggestions/suggestionsInteractions');
 const giveawaysInteractionHandler = optionalRequire('giveaways', '../../modules/communityStudio/giveaways/giveawaysInteractionHandler');
 const formsInteractions = optionalRequire('forms', '../../modules/feedbackStudio/forms/formsInteractions');
-const testSecurityCommand = optionalRequire('test security', '../../commands/admin/testsecurity');
 const embedPanel = optionalRequire('embed interactions', '../../modules/messageStudio/embed/embedInteractions');
 const duplicator = optionalRequire('duplicator', '../../owner/dev/duplicator');
-const adminPanel = optionalRequire('admin panel', '../../core/admin/functions/adminPanel');
-const restoreRequestManager = optionalRequire('restore requests', '../../core/security/restoreRequestManager');
+const adminPanel = optionalRequire('admin panel', '../../core/administration/admin/panel');
+const automodPanel = optionalRequire('automod panel', '../../core/administration/automod/panel');
+const modInteractions = optionalRequire('mod interactions', '../../core/administration/mod/interactions');
+const restoreRequestManager = optionalRequire('restore requests', '../../core/security/restoreBackup/requests');
 const statsAdminPanel = optionalRequire('stats admin', '../../modules/utilityStudio/stats/statsPanel');
 const reactionRolesAdminPanel = optionalRequire('reaction roles admin', '../../modules/roleStudio/reactionRoles/reactionRolesPanel');
 const temporaryRolesPanel = optionalRequire('temporary roles', '../../modules/roleStudio/temporaryRoles/temporaryRolesPanel');
@@ -40,9 +42,8 @@ const autorolesPanel = optionalRequire('auto roles', '../../modules/roleStudio/a
 const timedRolesPanel = optionalRequire('timed roles', '../../modules/roleStudio/timedRoles/timedRolesPanel');
 const welcomePanel = optionalRequire('welcome', '../../modules/messageStudio/welcome/welcomePanel');
 const goodbyePanel = optionalRequire('goodbye', '../../modules/messageStudio/goodbye/goodbyePanel');
-const moduleAdminPanels = optionalRequire('generic module admin', '../../core/admin/functions/moduleAdminPanels');
-const userPanelInteractions = optionalRequire('user panel', '../../core/panels/user/userInteractions');
-const modInteractions = optionalRequire('mod interactions', '../../core/panels/mod/modInteractions');
+const moduleAdminPanels = optionalRequire('generic module admin', '../../core/administration/admin/modules');
+const userPanelInteractions = optionalRequire('user panel', '../../core/administration/user/interactions');
 const roleSelectorPanel = optionalRequire(
   'role selector',
   '../../modules/roleStudio/roleSelector/roleSelectorPanel'
@@ -73,6 +74,41 @@ const MODULE_STUDIO_PREFIXES = [
   ['utilityStudio', ['admin:schedule', 'schedule:', 'admin:stats', 'stats:', 'admin:translation', 'translation:', 'admin:tempVoice', 'tempVoice:']],
 ];
 
+const ADMIN_MODULE_PREFIXES = Object.freeze([
+  ['birthdays', 'admin:birthdays'], ['giveaways', 'admin:giveaways'], ['invites', 'admin:invites'], ['leveling', 'admin:leveling'], ['polls', 'admin:polls'],
+  ['forms', 'admin:forms'], ['suggestions', 'admin:suggestions'], ['tickets', 'admin:tickets'],
+  ['goodbye', 'admin:goodbye'], ['embed', 'admin:embed'], ['starboard', 'admin:starboard'], ['sticky', 'admin:sticky'], ['welcome', 'admin:welcome'],
+  ['autoRoles', 'admin:autoRoles'], ['reactionRoles', 'admin:reactionRoles'], ['temporaryRoles', 'admin:temporaryRoles'], ['timedRoles', 'admin:timedRoles'],
+  ['verification', 'admin:verification'], ['social', 'admin:social'],
+  ['emojis', 'admin:module:emojis'], ['privateRooms', 'admin:privateRooms'], ['schedule', 'admin:schedule'], ['stats', 'admin:stats'], ['tempVoice', 'admin:tempVoice'], ['translation', 'admin:translation'],
+]);
+
+function resolveAdminModuleKey(customId) {
+  const id = String(customId || '');
+  const generic = id.match(/^admin:module:([a-zA-Z0-9_-]+)/);
+  if (generic) return generic[1];
+  const catalogMatch = (moduleAdminPanels.MODULE_CATALOG || []).find((module) => id === module.route || id.startsWith(`${module.route}:`));
+  if (catalogMatch) return catalogMatch.key;
+  return ADMIN_MODULE_PREFIXES.find(([, prefix]) => id === prefix || id.startsWith(`${prefix}:`))?.[0] || null;
+}
+
+async function enforceAdminModuleAuthority(interaction) {
+  const id = String(interaction?.customId || '');
+  if (!id.startsWith('admin:')) return false;
+  const studio = id.match(/^admin:studio:([a-zA-Z0-9_-]+)$/);
+  if (studio) {
+    if (typeof adminPanel.canManageStudio !== 'function' || adminPanel.canManageStudio(interaction, studio[1])) return false;
+  } else {
+    const moduleKey = resolveAdminModuleKey(id);
+    if (!moduleKey) return false;
+    if (typeof adminPanel.canManageModule !== 'function' || adminPanel.canManageModule(interaction, moduleKey)) return false;
+  }
+  const payload = { content: '❌ Your guild authority profile does not permit this Studio or module.', flags: MessageFlags.Ephemeral };
+  if (interaction.deferred || interaction.replied) await interaction.editReply(payload);
+  else await interaction.reply(payload);
+  return true;
+}
+
 let invitesAdminPanel = null;
 let invitesAdminPanelError = null;
 function loadInvitesAdminPanel() {
@@ -93,6 +129,9 @@ function loadInvitesAdminPanel() {
 
 const verificationLocks = new Map();
 const handledInteractions = new WeakSet();
+const legacyRoleSelections = new Map();
+const LEGACY_ROLE_PAGE_SIZE = 25;
+const LEGACY_ROLE_TTL_MS = 30 * 60 * 1000;
 
 async function callHandler(target, method, ...args) {
   if (typeof target?.[method] !== 'function') return false;
@@ -208,6 +247,190 @@ function normalizeVerificationRows(payload, rows) {
 
   return rows;
 }
+
+function pruneLegacyRoleSelections() {
+  const cutoff = Date.now() - LEGACY_ROLE_TTL_MS;
+  for (const [key, value] of legacyRoleSelections.entries()) {
+    if (Number(value?.touchedAt || 0) < cutoff) legacyRoleSelections.delete(key);
+  }
+}
+function legacyRoleKey(interaction, baseId) {
+  return `${interaction?.guildId || interaction?.guild?.id || 'noguild'}:${interaction?.user?.id || 'nouser'}:${baseId}`;
+}
+function parseLegacyRoleId(customId) {
+  const match = String(customId || '').match(/^(.*)\|grole\|select\|(\d+)$/);
+  return match ? { baseId: match[1], page: Math.max(0, Number.parseInt(match[2], 10) || 0) } : null;
+}
+function legacyRoleCustomId(baseId, page) {
+  const suffix = `|grole|select|${Math.max(0, Number(page) || 0)}`;
+  return `${String(baseId || 'role').slice(0, Math.max(1, 100 - suffix.length))}${suffix}`;
+}
+function guildRolesByHierarchy(guild) {
+  if (typeof panelNavigation.guildRolesByHierarchy === 'function') return panelNavigation.guildRolesByHierarchy(guild);
+  if (!guild?.roles?.cache) return [];
+  return [...guild.roles.cache.values()]
+    .filter((role) => role.id !== guild.id)
+    .sort((a, b) => Number(b.rawPosition ?? b.position ?? 0) - Number(a.rawPosition ?? a.position ?? 0));
+}
+function rolePageCount(guild) {
+  return Math.max(1, Math.ceil(guildRolesByHierarchy(guild).length / LEGACY_ROLE_PAGE_SIZE));
+}
+function roleIdsOnLegacyPage(guild, page) {
+  const roles = guildRolesByHierarchy(guild);
+  const count = Math.max(1, Math.ceil(roles.length / LEGACY_ROLE_PAGE_SIZE));
+  const safePage = Math.min(Math.max(0, Number(page) || 0), count - 1);
+  return roles.slice(safePage * LEGACY_ROLE_PAGE_SIZE, (safePage + 1) * LEGACY_ROLE_PAGE_SIZE).map((role) => role.id);
+}
+function legacyRoleState(interaction, baseId, defaults = null) {
+  pruneLegacyRoleSelections();
+  const key = legacyRoleKey(interaction, baseId);
+  let state = legacyRoleSelections.get(key);
+  const isSameSource = interaction?.__goliathLegacyRoleBase === baseId;
+  if (Array.isArray(defaults) && defaults.length) {
+    state = { ids: new Set(defaults.map(String)), maxValues: state?.maxValues || null, touchedAt: Date.now() };
+  } else if (!state || (!isSameSource && Array.isArray(defaults))) {
+    state = { ids: new Set(), maxValues: state?.maxValues || null, touchedAt: Date.now() };
+  } else {
+    state.touchedAt = Date.now();
+  }
+  legacyRoleSelections.set(key, state);
+  return state;
+}
+function nativeRoleDefaults(component) {
+  return Array.isArray(component?.default_values)
+    ? component.default_values.filter((entry) => entry?.type === 'role' || entry?.type === 1).map((entry) => String(entry.id)).filter(Boolean)
+    : [];
+}
+function roleOptionDescription(role) {
+  if (role.managed) return 'Managed by Discord / integration';
+  return `Hierarchy position ${Number(role.rawPosition ?? role.position ?? 0)}`.slice(0, 100);
+}
+function convertRoleComponent(component, interaction, requestedPage) {
+  const marked = parseLegacyRoleId(componentId(component));
+  const native = Number(component?.type) === 6;
+  if (!native && !marked) return component;
+  const baseId = marked?.baseId || componentId(component);
+  if (!baseId || !interaction?.guild) return component;
+  const pageCount = rolePageCount(interaction.guild);
+  const page = Math.min(Math.max(0, Number(requestedPage ?? marked?.page) || 0), pageCount - 1);
+  const defaults = native ? nativeRoleDefaults(component) : null;
+  const state = legacyRoleState(interaction, baseId, defaults);
+  const roles = guildRolesByHierarchy(interaction.guild).slice(page * LEGACY_ROLE_PAGE_SIZE, (page + 1) * LEGACY_ROLE_PAGE_SIZE);
+  const maxRequested = Math.max(1, Number(component?.max_values ?? state.maxValues ?? 1) || 1);
+  if (native || !state.maxValues) state.maxValues = maxRequested;
+  const maxValues = Math.max(1, Math.min(maxRequested, roles.length || 1));
+  const minRequested = Math.max(0, Number(component?.min_values ?? 1) || 0);
+  const minValues = Math.min(minRequested, maxValues);
+  const rawPlaceholder = String(component?.placeholder || 'Choose a role').replace(/ · Page \d+\/\d+$/, '');
+  return {
+    type: 3,
+    custom_id: legacyRoleCustomId(baseId, page),
+    placeholder: `${rawPlaceholder}${pageCount > 1 ? ` · Page ${page + 1}/${pageCount}` : ''}`.slice(0, 150),
+    min_values: minValues,
+    max_values: maxValues,
+    disabled: Boolean(component?.disabled || !roles.length),
+    options: roles.length ? roles.map((role) => ({
+      label: String(role.name || 'Unnamed role').slice(0, 100),
+      value: role.id,
+      description: roleOptionDescription(role),
+      default: state.ids.has(role.id),
+    })) : [{ label: 'No roles available', value: '__none__' }],
+  };
+}
+function paginationButton(customId, label, disabled = false) {
+  return { type: 2, style: 2, custom_id: customId, label, disabled };
+}
+function normalizeLegacyRoleRows(rows, interaction) {
+  if (!interaction?.guild || !Array.isArray(rows)) return rows;
+  const requestedPage = Math.max(0, Number(interaction.__goliathLegacyRolePage) || 0);
+  let found = false;
+  let nextRows = rows.map((rowData) => ({
+    ...rowData,
+    components: (rowData.components || []).filter((component) => {
+      const id = componentId(component);
+      return !String(id || '').startsWith('grole:page:') && !String(id || '').startsWith('grole:info:');
+    }).map((component) => {
+      const converted = convertRoleComponent(component, interaction, requestedPage);
+      if (converted !== component) found = true;
+      return converted;
+    }),
+  })).filter((rowData) => rowData.components.length);
+  if (!found) return nextRows;
+
+  const pageCount = rolePageCount(interaction.guild);
+  if (pageCount <= 1) return nextRows;
+  const page = Math.min(requestedPage, pageCount - 1);
+  const controls = [
+    paginationButton(`grole:page:${Math.max(0, page - 1)}`, '⬅️ Previous', page <= 0),
+    paginationButton(`grole:info:${page}`, `Page ${page + 1}/${pageCount}`, true),
+    paginationButton(`grole:page:${Math.min(pageCount - 1, page + 1)}`, 'Next ➡️', page >= pageCount - 1),
+  ];
+
+  let target = -1;
+  for (let index = nextRows.length - 1; index >= 0; index -= 1) {
+    const components = nextRows[index]?.components || [];
+    if (components.length <= 2 && components.every((component) => Number(component.type) === 2)) { target = index; break; }
+  }
+  if (target >= 0) {
+    nextRows[target] = { ...nextRows[target], components: [...nextRows[target].components, ...controls] };
+  } else if (nextRows.length < 5) {
+    nextRows.push({ type: 1, components: controls });
+  } else {
+    for (let index = nextRows.length - 1; index >= 0; index -= 1) {
+      const components = nextRows[index]?.components || [];
+      if (components.length <= 3 && components.every((component) => Number(component.type) === 2)) {
+        nextRows[index] = { ...nextRows[index], components: [...components, controls[0], controls[2]] };
+        break;
+      }
+    }
+  }
+  return nextRows;
+}
+function prepareLegacyRoleInteraction(interaction) {
+  const parsed = parseLegacyRoleId(interaction?.customId);
+  if (!parsed || !interaction?.guild) return false;
+  const rows = interaction.message?.components || [];
+  let sourceComponent = null;
+  for (const actionRow of rows) {
+    const rowData = typeof actionRow?.toJSON === 'function' ? actionRow.toJSON() : actionRow;
+    sourceComponent = (rowData?.components || []).find((component) => componentId(component) === interaction.customId);
+    if (sourceComponent) break;
+  }
+  const state = legacyRoleState(interaction, parsed.baseId, null);
+  const maxValues = Math.max(1, Number(state.maxValues ?? sourceComponent?.max_values ?? 1) || 1);
+  const selectedNow = (interaction.values || []).filter((id) => id !== '__none__').map(String);
+  if (maxValues <= 1) {
+    state.ids = new Set(selectedNow.slice(0, 1));
+  } else {
+    const visible = new Set(roleIdsOnLegacyPage(interaction.guild, parsed.page));
+    for (const id of visible) state.ids.delete(id);
+    for (const id of selectedNow) state.ids.add(id);
+  }
+  state.touchedAt = Date.now();
+  const ordered = guildRolesByHierarchy(interaction.guild).map((role) => role.id).filter((id) => state.ids.has(id));
+  const limited = ordered.slice(0, maxValues);
+  state.ids = new Set(limited);
+  legacyRoleSelections.set(legacyRoleKey(interaction, parsed.baseId), state);
+  interaction.values = limited;
+  interaction.__goliathLegacyRolePage = parsed.page;
+  interaction.__goliathLegacyRoleBase = parsed.baseId;
+  interaction.customId = parsed.baseId;
+  try {
+    Object.defineProperty(interaction, 'isRoleSelectMenu', { value: () => true, configurable: true });
+  } catch {
+    interaction.isRoleSelectMenu = () => true;
+  }
+  return true;
+}
+async function handleLegacyRolePage(interaction) {
+  const match = String(interaction?.customId || '').match(/^grole:page:(\d+)$/);
+  if (!match || !interaction?.message) return false;
+  interaction.__goliathLegacyRolePage = Math.max(0, Number.parseInt(match[1], 10) || 0);
+  const components = interaction.message.components.map((actionRow) => typeof actionRow?.toJSON === 'function' ? actionRow.toJSON() : actionRow);
+  await interaction.update({ components });
+  return true;
+}
+
 function sanitizeComponentPayload(payload, interaction) {
   if (!payload || typeof payload !== 'object') return payload;
   const sanitizedPayload = {
@@ -230,9 +453,10 @@ function sanitizeComponentPayload(payload, interaction) {
       : [];
     if (components.length) rows.push({ ...rowData, components });
   }
+  const verifiedRows = normalizeVerificationRows(sanitizedPayload, rows);
   return {
     ...sanitizedPayload,
-    components: normalizeVerificationRows(sanitizedPayload, rows),
+    components: normalizeLegacyRoleRows(verifiedRows, interaction),
   };
 }
 function wrapInteractionResponses(interaction) {
@@ -342,63 +566,72 @@ module.exports = {
         await command.execute(interaction, client);
         return;
       }
-      const interactionAgeMs = Math.max(0, Date.now() - Number(interaction.createdTimestamp || Date.now()));
-const customId = String(interaction.customId || '');
+      if (await handleLegacyRolePage(interaction)) return;
+      prepareLegacyRoleInteraction(interaction);
+      const customId = String(interaction.customId || '');
+
+      if (customId.startsWith('mod_') || customId.startsWith('mod:')) {
+        if (!await callHandler(modInteractions, 'handleModInteraction', interaction)) {
+          throw new Error(`Mod did not handle ${customId}.`);
+        }
+        return;
+      }
 
       if (isVerificationMemberInteraction(interaction)) {
         await handleVerificationMemberInteraction(interaction);
         return;
       }
 
+      if (await enforceAdminModuleAuthority(interaction)) return;
+
       if (customId === 'admin:studio:roleStudio') {
-  interaction.customId = 'admin:roleStudio:handled';
+        interaction.customId = 'admin:roleStudio:handled';
 
-  const payload = await roleStudioPanel.buildRoleStudioPanel(
-    interaction.guild,
-    interaction.member?.displayName ||
-      interaction.user?.username ||
-      'Unknown User'
-  );
+        const payload = await roleStudioPanel.buildRoleStudioPanel(
+          interaction.guild,
+          interaction.member?.displayName ||
+            interaction.user?.username ||
+            'Unknown User'
+        );
 
-  if (interaction.deferred || interaction.replied) {
-    await interaction.editReply(payload);
-  } else {
-    await interaction.update(payload);
-  }
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply(payload);
+        } else {
+          await interaction.update(payload);
+        }
+        return;
+      }
 
-  return;
-}
+      if (
+        customId.startsWith('admin:roleSelector') ||
+        customId.startsWith('roleSelector:') ||
+        customId.startsWith('admin:colourRoles') ||
+        customId.startsWith('colourRoles:')
+      ) {
+        await roleSelectorPanel.handleRoleSelectorInteraction(interaction);
+        return;
+      }
 
-if (
-  customId.startsWith('admin:roleSelector') ||
-  customId.startsWith('roleSelector:') ||
-  customId.startsWith('admin:colourRoles') ||
-  customId.startsWith('colourRoles:')
-) {
-  await roleSelectorPanel.handleRoleSelectorInteraction(interaction);
-  return;
-}
+      if (
+        customId.startsWith('admin:privateRooms') ||
+        customId.startsWith('user:privateRooms:') ||
+        customId.startsWith('privateRooms:')
+      ) {
+        if (customId.startsWith('admin:privateRooms')) {
+          await privateRoomsPanel.handleAdminInteraction(interaction);
+          return;
+        }
 
-if (
-  customId.startsWith('admin:privateRooms') ||
-  customId.startsWith('user:privateRooms:') ||
-  customId.startsWith('privateRooms:')
-) {
-  if (customId.startsWith('admin:privateRooms')) {
-    await privateRoomsPanel.handleAdminInteraction(interaction);
-    return;
-  }
+        if (customId.startsWith('user:privateRooms:')) {
+          await privateRoomsPanel.handleUserInteraction(interaction);
+          return;
+        }
 
-  if (customId.startsWith('user:privateRooms:')) {
-    await privateRoomsPanel.handleUserInteraction(interaction);
-    return;
-  }
-
-  if (typeof privateRoomsPanel.handleInteraction === 'function') {
-    await privateRoomsPanel.handleInteraction(interaction);
-    return;
-  }
-}
+        if (typeof privateRoomsPanel.handleInteraction === 'function') {
+          await privateRoomsPanel.handleInteraction(interaction);
+          return;
+        }
+      }
 
       const isTicketRuntimeInteraction = customId.startsWith('ticket_') || customId.startsWith('goliath_ticket_');
       if (isTicketRuntimeInteraction && interaction.guildId && guildManager.isModuleEnabled?.(interaction.guildId, 'tickets') === false) {
@@ -409,8 +642,13 @@ if (
         if (!await callHandler(restoreRequestManager, 'handleRestoreButton', interaction)) throw new Error(`Restore request handler did not handle ${customId}.`);
         return;
       }
-      if (customId.startsWith('admin:automod')) {
-        if (!await callHandler(adminPanel, 'handleAdminNavigation', interaction)) throw new Error(`AutoMod admin did not handle ${customId}.`);
+      if (
+        customId.startsWith('admin:automod') ||
+        customId === 'admin:setautomodlog' ||
+        customId === 'admin:selectautomodlog' ||
+        customId === 'admin:channel:automodlog'
+      ) {
+        if (!await callHandler(automodPanel, 'handleAutomodInteraction', interaction)) throw new Error(`AutoMod did not handle ${customId}.`);
         return;
       }
       if (customId.startsWith('admin:birthdays')) {
@@ -426,7 +664,7 @@ if (
         return;
       }
       if (customId === 'admin:modules' || customId.startsWith('admin:modules:page:') || customId.startsWith('admin:module:') || customId.startsWith('admin:studio:')) {
-        if (!await callHandler(moduleAdminPanels, 'handleModuleAdminInteraction', interaction)) throw new Error(`Module admin did not handle ${customId}.`);
+        if (!await callHandler(adminPanel, 'handleAdminNavigation', interaction)) throw new Error(`Admin authority router did not handle ${customId}.`);
         return;
       }
       if (customId === 'admin:invites') {
@@ -489,7 +727,6 @@ if (
       if (await callHandler(levelingInteractions, 'handleLevelingInteraction', interaction)) return;
       if (await callHandler(adminPanel, 'handleAdminNavigation', interaction)) return;
       if (await callHandler(duplicator, 'handleInteraction', interaction)) return;
-      if (interaction.isButton?.() && await callHandler(testSecurityCommand, 'handleButton', interaction)) return;
       if (interaction.isButton?.() && await callHandler(tempVoiceInteractionHandler, 'handleTempVoiceInteraction', interaction, client)) return;
       if (await callHandler(formsInteractions, 'handleFormsInteraction', interaction)) return;
       if (await callHandler(suggestionsInteractions, 'handleSuggestionsInteraction', interaction)) return;
@@ -501,7 +738,3 @@ if (
     }
   },
 };
-
-
-
-

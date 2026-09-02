@@ -13,7 +13,7 @@ const {
   TICKET_CHANNEL_PERMISSIONS,
   guardCategoryAccess,
   isGoliathPermissionError,
-} = require('../../../core/security/goliathPermissionGuard');
+} = require('../../../core/security/protection/permissions');
 
 const workflowLocks = new Map();
 const MAX_DESCRIPTION_LENGTH = 4000;

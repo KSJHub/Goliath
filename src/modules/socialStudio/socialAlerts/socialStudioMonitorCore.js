@@ -9,6 +9,7 @@ const { normalizeTemplates, resolveTemplate } = require('./socialStudioTemplates
 
 const runningGuilds = new Set();
 const LIVE_MESSAGE_REFRESH_MS = 60 * 60 * 1000;
+const KICK_LIVE_MESSAGE_REFRESH_MS = 5 * 60 * 1000;
 let timer = null;
 
 const PLATFORM = {
@@ -65,10 +66,66 @@ function stripTrailingDivider(value) {
 function cacheBustedImageUrl(value) {
   const raw = clean(value, 1000);
   if (!/^https?:\/\//i.test(raw)) return '';
-  if (/static-cdn\.jtvnw\.net|static-cdn\.twitchcdn\.net/i.test(raw)) return raw;
+  if (/static-cdn\.jtvnw\.net|static-cdn\.twitchcdn\.net|images\.kick\.com/i.test(raw)) return raw;
   const separator = raw.includes('?') ? '&' : '?';
   return `${raw}${separator}snapshot=${Date.now()}`;
 }
+
+async function fetchKickPreviewAttachment(account, event) {
+  if (
+    String(account?.platform || '').toLowerCase() !== 'kick' ||
+    event?.type !== 'live'
+  ) return null;
+
+  const raw = clean(event?.thumbnail, 1000);
+  if (!/^https?:\/\//i.test(raw)) return null;
+
+  const separator = raw.includes('?') ? '&' : '?';
+
+  const urls = [
+    `${raw}${separator}goliathPreview=${Date.now()}`,
+    raw,
+  ];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'cache-control': 'no-cache',
+          'pragma': 'no-cache',
+          'user-agent': 'Goliath Social Studio',
+        },
+      });
+
+      if (!response.ok) continue;
+
+      const contentType =
+        String(response.headers.get('content-type') || '').toLowerCase();
+
+      if (!contentType.startsWith('image/')) continue;
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+
+      if (!buffer.length || buffer.length > 8 * 1024 * 1024) continue;
+
+      let ext = 'webp';
+
+      if (contentType.includes('png')) ext = 'png';
+      else if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = 'jpg';
+      else if (contentType.includes('gif')) ext = 'gif';
+
+      return {
+        attachment: buffer,
+        name: `kick-live-${Date.now()}.${ext}`,
+      };
+    } catch {
+      // Fall back to the remote thumbnail URL.
+    }
+  }
+
+  return null;
+}
+
 
 function embedActionBlock(lines = []) {
   const actions = lines.map((line) => clean(line, 300)).filter(Boolean);
@@ -495,16 +552,31 @@ function liveAccountsForCreator(config, creator) {
     .sort((a, b) => new Date(b.state?.lastCheckedAt || 0) - new Date(a.state?.lastCheckedAt || 0));
 }
 
-function liveMessageUpdateDue(previous, checked) {
+function liveMessageUpdateDue(account, previous, checked) {
   if (
     checked.isLive !== true ||
     previous.isLive !== true ||
     !checked.event
   ) return false;
 
-  const last = Number(previous.lastLiveMessageUpdateAt || previous.lastLiveMessageUpdatedAt || 0);
+  const rawLast =
+    previous.lastLiveMessageUpdateAt ||
+    previous.lastLiveMessageUpdatedAt ||
+    0;
 
-  return Date.now() - last >= LIVE_MESSAGE_REFRESH_MS;
+  const numericLast = Number(rawLast);
+  const parsedLast = Number.isFinite(numericLast)
+    ? numericLast
+    : Date.parse(String(rawLast));
+
+  if (!Number.isFinite(parsedLast)) return true;
+
+  const refreshMs =
+    String(account?.platform || '').toLowerCase() === 'kick'
+      ? KICK_LIVE_MESSAGE_REFRESH_MS
+      : LIVE_MESSAGE_REFRESH_MS;
+
+  return Date.now() - parsedLast >= refreshMs;
 }
 
 async function forcePostCreatorLive(client, guildId, creatorId, options = {}) {
@@ -641,7 +713,16 @@ async function buildEventPayload(client, guildId, config, account, creator, even
   const creatorName = vars.creator;
   const url = vars.url;
   const profileUrl = account.profileUrl || account.url || '';
-  const durationText = vars.duration;
+  const kickLiveSeconds =
+    account.platform === 'kick' &&
+    event.type === 'live' &&
+    event.startedAt
+      ? secondsBetween(event.startedAt, event.endedAt || now())
+      : null;
+
+  const durationText =
+    vars.duration ||
+    (kickLiveSeconds !== null ? humanDuration(kickLiveSeconds) : '');
   const previousVod = event.previousVod && typeof event.previousVod === 'object' ? event.previousVod : null;
   const embedColor = parseTemplateColor(render(template.color || '', vars), platform.color);
 
@@ -670,7 +751,11 @@ async function buildEventPayload(client, guildId, config, account, creator, even
 
   const embed = new EmbedBuilder()
     .setColor(embedColor)
-    .setTitle(clean(render(template.title, vars), 256) || `${creatorName} update`)
+    .setTitle(
+      account.platform === 'kick' && liveStatus === 'OFFLINE'
+        ? clean(`🔴 ${creatorName} is OFFLINE`, 256)
+        : clean(render(template.title, vars), 256) || `${creatorName} update`
+    )
     .setDescription(clean(stripTrailingDivider(baseDescription) + embedCallToAction, 4096))
     .setFooter({ text: clean(render(template.footer || `Social Studio • ${platform.label}`, vars), 2048) || `Social Studio • ${platform.label}` })
     .setTimestamp();
@@ -681,7 +766,12 @@ async function buildEventPayload(client, guildId, config, account, creator, even
   if (/^https?:\/\//i.test(profileUrl)) author.url = profileUrl;
   embed.setAuthor(author);
 
-  const previewImage = cacheBustedImageUrl(event.thumbnail);
+  const previewAttachment = await fetchKickPreviewAttachment(account, event);
+
+  const previewImage = previewAttachment
+    ? `attachment://${previewAttachment.name}`
+    : cacheBustedImageUrl(event.thumbnail);
+
   if (previewImage) embed.setImage(previewImage);
   if (/^https?:\/\//i.test(account.avatar || '')) embed.setThumbnail(account.avatar);
 
@@ -691,10 +781,131 @@ async function buildEventPayload(client, guildId, config, account, creator, even
   const published = discordTimestamp(event.publishedAt);
 
   if (event.type === 'live') {
-    if (account.platform !== 'tiktok' && (event.category || event.game)) fields.push({ name: '🎮 Game', value: clean(event.category || event.game, 1024), inline: true });
-    if (account.platform === 'tiktok') fields.push({ name: '📱 Platform', value: liveStatus === 'OFFLINE' ? 'TikTok' : 'TikTok LIVE', inline: true });
-    if (vars.viewers) fields.push({ name: '👥 Viewers', value: vars.viewers, inline: true });
-    if (started) fields.push({ name: '⏲️ Started', value: started, inline: true });
+    if (account.platform !== 'tiktok' && (event.category || event.game)) {
+      fields.push({
+        name: '🎮 Game',
+        value: clean(event.category || event.game, 1024),
+        inline: true
+      });
+    }
+
+    if (account.platform === 'tiktok') {
+      fields.push({
+        name: '📱 Platform',
+        value: liveStatus === 'OFFLINE' ? 'TikTok' : 'TikTok LIVE',
+        inline: true
+      });
+    }
+
+    if (account.platform === 'kick') {
+      const kickName = clean(event.kickUsername || account.username, 100);
+      const kickOffline = liveStatus === 'OFFLINE';
+
+      if (kickName) {
+        fields.push({
+          name: '🟢 Kick',
+          value: `@${kickName.replace(/^@/, '')}`,
+          inline: true
+        });
+      }
+
+      if (kickOffline) {
+        const peak = Number(
+          account.state?.peakViewers ||
+          vars.peakViewers ||
+          event.viewerCount ||
+          0
+        );
+
+        if (peak > 0) {
+          fields.push({
+            name: '📈 Peak Viewers',
+            value: intText(peak),
+            inline: true
+          });
+        }
+
+        if (started) {
+          fields.push({
+            name: '🕐 Started',
+            value: started,
+            inline: true
+          });
+        }
+
+        if (durationText) {
+          fields.push({
+            name: '⏱️ Streamed For',
+            value: durationText,
+            inline: true
+          });
+        }
+
+        if (ended) {
+          fields.push({
+            name: '⚫ Ended',
+            value: ended,
+            inline: true
+          });
+        }
+      } else {
+        if (vars.viewers) {
+          fields.push({
+            name: '👥 Viewers',
+            value: vars.viewers,
+            inline: true
+          });
+        }
+
+        if (started) {
+          fields.push({
+            name: '🕐 Started',
+            value: started,
+            inline: true
+          });
+        }
+
+        if (durationText) {
+          fields.push({
+            name: '⏱️ Live For',
+            value: durationText,
+            inline: true
+          });
+        }
+
+        if (event.language) {
+          fields.push({
+            name: '🌐 Language',
+            value: clean(String(event.language).toUpperCase(), 100),
+            inline: true
+          });
+        }
+
+        if (event.hasMatureContent === true) {
+          fields.push({
+            name: '🔞 Mature',
+            value: 'Yes',
+            inline: true
+          });
+        }
+      }
+    } else {
+      if (vars.viewers) {
+        fields.push({
+          name: '👥 Viewers',
+          value: vars.viewers,
+          inline: true
+        });
+      }
+
+      if (started) {
+        fields.push({
+          name: '⏲️ Started',
+          value: started,
+          inline: true
+        });
+      }
+    }
   } else if (event.type === 'ended') {
     const currentVod = event.currentVod && typeof event.currentVod === 'object' ? event.currentVod : null;
     if (account.platform !== 'tiktok' && (event.category || event.game)) fields.push({ name: '🎮 Game', value: clean(event.category || event.game, 1024), inline: true });
@@ -709,10 +920,30 @@ async function buildEventPayload(client, guildId, config, account, creator, even
     if (started) fields.push({ name: '⏲️ Started', value: started, inline: true });
   }
 
-  if (event.type !== 'ended' && vars.peakViewers) fields.push({ name: '📈 Peak', value: vars.peakViewers, inline: true });
+  if (
+    event.type !== 'ended' &&
+    vars.peakViewers &&
+    !(account.platform === 'kick' && liveStatus === 'OFFLINE')
+  ) {
+    fields.push({
+      name: '📈 Peak',
+      value: vars.peakViewers,
+      inline: true
+    });
+  }
   if (Number(event.viewCount) > 0) fields.push({ name: '👁️ Views', value: intText(event.viewCount), inline: true });
-  if (event.type !== 'ended' && durationText) fields.push({ name: '⏱️ Duration', value: durationText, inline: true });
-  if (event.type !== 'ended' && ended) fields.push({ name: '⚫ Ended', value: ended, inline: true });
+  if (event.type !== 'ended' && account.platform !== 'kick' && durationText) fields.push({ name: '⏱️ Duration', value: durationText, inline: true });
+  if (
+    event.type !== 'ended' &&
+    ended &&
+    !(account.platform === 'kick' && liveStatus === 'OFFLINE')
+  ) {
+    fields.push({
+      name: '⚫ Ended',
+      value: ended,
+      inline: true
+    });
+  }
   if (published) fields.push({ name: '📅 Published', value: published, inline: true });
   if (event.type === 'live' && /^https?:\/\//i.test(previousVod?.url || '')) {
     const vodTitle = clean(previousVod.title || 'Previous stream replay', 180);
@@ -733,6 +964,7 @@ async function buildEventPayload(client, guildId, config, account, creator, even
       content: resolvedContent,
       embeds: resolvedEmbeds,
       components: [],
+      files: previewAttachment ? [previewAttachment] : [],
       allowedMentions: {
         parse: !quiet && (mentionMode === 'everyone' || mentionMode === 'here') ? ['everyone'] : [],
         roles: !quiet && account.mentionRoleId ? [account.mentionRoleId] : [],
@@ -759,7 +991,12 @@ async function updateLiveMessage(client, guildId, config, account, creator, even
   const message = await channel.messages.fetch(messageId).catch(() => null);
   if (!message) throw new Error('The saved LIVE post could not be found.');
   const { payload } = await buildEventPayload(client, guildId, config, account, creator, event, { channel });
-  await message.edit({ embeds: payload.embeds, components: payload.components });
+  await message.edit({
+    embeds: payload.embeds,
+    components: payload.components,
+    attachments: [],
+    files: payload.files || [],
+  });
   message.socialStudioChannelId = channel.id;
   return message;
 }
@@ -897,7 +1134,7 @@ async function checkGuildAccounts(client, guildId, options = {}) {
           config.analytics.failures = Number(config.analytics.failures || 0) + 1;
           addHistory(config, { status: 'delivery_failed', accountId: account.accountId, platform: account.platform, alertType: 'live_status_update', contentId: previous.liveEventId || null, error: error.message });
         }
-      } else if (liveMessageUpdateDue(previous, checked)) {
+      } else if (liveMessageUpdateDue(account, previous, checked)) {
         try {
           const updateEvent = { ...checked.event, type: 'live', id: checked.event.id || state.liveEventId || previous.liveEventId || account.accountId, liveStatus: 'LIVE' };
           await updateLiveMessage(client, guildId, config, account, creator, updateEvent, previous);
