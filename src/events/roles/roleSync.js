@@ -1,3 +1,4 @@
+const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../core/guild/guildManager');
 const antiNukeManager = require('../../core/security/protection/antiNuke');
 const {
@@ -6,6 +7,7 @@ const {
 
 const ROLE_SYNC_LOG_COOLDOWN_MS = 5000;
 const roleSyncLogState = new Map();
+const antiNukePermissionWarnings = new Set();
 
 function shouldLogRoleSync(guildId) {
   const now = Date.now();
@@ -79,10 +81,23 @@ async function refreshGuildRoles(guild, context = {}) {
   }
 }
 
+function canReadAuditLog(guild) {
+  return Boolean(guild?.members?.me?.permissions?.has?.(PermissionFlagsBits.ViewAuditLog));
+}
+
 async function runAntiNuke(handlerName, ...args) {
   try {
     const guild = args.find((arg) => arg?.guild)?.guild || args.find((arg) => arg?.id && arg?.client?.guilds);
     if (guild?.id && !guildManager.isModuleEnabled(guild.id, 'security')) return null;
+
+    if (guild?.id && !canReadAuditLog(guild)) {
+      if (!antiNukePermissionWarnings.has(guild.id)) {
+        antiNukePermissionWarnings.add(guild.id);
+        console.warn(`[roleSync] Anti-Nuke audit attribution disabled for ${guild.name || guild.id}: bot is missing View Audit Log.`);
+      }
+      return null;
+    }
+    if (guild?.id) antiNukePermissionWarnings.delete(guild.id);
 
     const handler = antiNukeManager?.[handlerName];
 
