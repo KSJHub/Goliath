@@ -48,15 +48,48 @@ function validGuildId(value) {
 
 function embeddedGuildId(customId) {
   const id = String(customId || '');
-  const index = id.lastIndexOf(SERVER_CONTEXT_MARKER);
-  if (index < 0) return null;
-  return validGuildId(id.slice(index + SERVER_CONTEXT_MARKER.length));
+  const match = id.match(/:guild:(\d{16,25})$/);
+  return validGuildId(match?.[1]);
 }
 
 function baseOwnerCustomId(customId) {
   const id = String(customId || '');
   const index = id.lastIndexOf(SERVER_CONTEXT_MARKER);
   return index < 0 ? id : id.slice(0, index);
+}
+
+function componentCustomId(component) {
+  return String(
+    component?.customId
+      || component?.custom_id
+      || component?.data?.custom_id
+      || component?.data?.customId
+      || ''
+  );
+}
+
+function guildIdFromMessageComponents(interaction) {
+  const rows = interaction?.message?.components;
+  if (!Array.isArray(rows)) return null;
+
+  for (const row of rows) {
+    const components = row?.components || row?.data?.components;
+    if (!Array.isArray(components)) continue;
+    for (const component of components) {
+      const guildId = embeddedGuildId(componentCustomId(component));
+      if (guildId) return guildId;
+    }
+  }
+  return null;
+}
+
+function guildIdFromMessageMetadata(interaction) {
+  return validGuildId(
+    interaction?.message?.guildId
+      || interaction?.message?.guild?.id
+      || interaction?.message?.interactionMetadata?.guildId
+      || interaction?.message?.interaction?.guildId
+  );
 }
 
 function pruneOwnerGuildContexts() {
@@ -96,6 +129,10 @@ function guildIdFromChannel(interaction) {
   const channelId = String(interaction?.channelId || interaction?.channel?.id || '').trim();
   if (!channelId) return null;
 
+  const directChannel = interaction?.client?.channels?.cache?.get?.(channelId);
+  const directChannelGuildId = validGuildId(directChannel?.guildId || directChannel?.guild?.id);
+  if (directChannelGuildId) return directChannelGuildId;
+
   const guilds = interaction?.client?.guilds?.cache;
   if (!guilds?.values) return null;
 
@@ -105,11 +142,14 @@ function guildIdFromChannel(interaction) {
   return null;
 }
 
-function interactionGuildId(interaction) {
-  const guildId = validGuildId(interaction?.guildId)
+function interactionGuildId(interaction, explicitGuildId = null) {
+  const guildId = validGuildId(explicitGuildId)
+    || validGuildId(interaction?.guildId)
     || validGuildId(interaction?.guild?.id)
-    || guildIdFromChannel(interaction)
     || embeddedGuildId(interaction?.customId)
+    || guildIdFromMessageComponents(interaction)
+    || guildIdFromMessageMetadata(interaction)
+    || guildIdFromChannel(interaction)
     || rememberedOwnerGuildId(interaction);
 
   if (guildId) rememberOwnerGuild(interaction, guildId);
@@ -125,21 +165,23 @@ function contextualOwnerId(action, interactionOrGuildId) {
     : `${OWNER_PREFIX}${action}`;
 }
 
-function cachedInteractionGuild(interaction) {
+function cachedInteractionGuild(interaction, explicitGuildId = null) {
   if (interaction?.guild) return interaction.guild;
-  const guildId = interactionGuildId(interaction);
+  const guildId = interactionGuildId(interaction, explicitGuildId);
   return guildId ? interaction?.client?.guilds?.cache?.get?.(guildId) || null : null;
 }
 
-async function resolveInteractionGuild(interaction) {
-  const cached = cachedInteractionGuild(interaction);
+async function resolveInteractionGuild(interaction, explicitGuildId = null) {
+  const guildId = interactionGuildId(interaction, explicitGuildId);
+  if (!guildId) return null;
+
+  const cached = cachedInteractionGuild(interaction, guildId);
   if (cached) {
     rememberOwnerGuild(interaction, cached.id);
     return cached;
   }
 
-  const guildId = interactionGuildId(interaction);
-  if (!guildId || !interaction?.client?.guilds?.fetch) return null;
+  if (!interaction?.client?.guilds?.fetch) return null;
 
   try {
     const guild = await interaction.client.guilds.fetch(guildId);
@@ -148,10 +190,6 @@ async function resolveInteractionGuild(interaction) {
   } catch {
     return null;
   }
-}
-
-function hasGuildContext(interaction) {
-  return Boolean(interactionGuildId(interaction));
 }
 
 function ownerHomePayload(interaction, notice = null) {
@@ -225,8 +263,8 @@ function ownerHomePayload(interaction, notice = null) {
   return { embeds: [embed], components: [primary, navigation] };
 }
 
-function serverToolsPayload(interaction) {
-  const guildId = interactionGuildId(interaction);
+function serverToolsPayload(interaction, explicitGuildId = null) {
+  const guildId = interactionGuildId(interaction, explicitGuildId);
   const guildContextAvailable = Boolean(guildId);
   if (guildId) rememberOwnerGuild(interaction, guildId);
 
@@ -266,9 +304,10 @@ function serverContextRequiredPayload() {
   };
 }
 
-function analyseModal(interaction) {
+function analyseModal(interaction, explicitGuildId = null) {
+  const guildId = interactionGuildId(interaction, explicitGuildId);
   return new ModalBuilder()
-    .setCustomId(contextualOwnerId('server-analyse-submit', interaction))
+    .setCustomId(contextualOwnerId('server-analyse-submit', guildId))
     .setTitle('Analyse Servers')
     .addComponents(
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('source_server').setLabel('Source server ID').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(25)),
@@ -276,9 +315,10 @@ function analyseModal(interaction) {
     );
 }
 
-function exportModal(interaction) {
+function exportModal(interaction, explicitGuildId = null) {
+  const guildId = interactionGuildId(interaction, explicitGuildId);
   return new ModalBuilder()
-    .setCustomId(contextualOwnerId('server-export-submit', interaction))
+    .setCustomId(contextualOwnerId('server-export-submit', guildId))
     .setTitle('Export Server Template')
     .addComponents(
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('source_server').setLabel('Source server ID (blank = current)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(25)),
@@ -297,7 +337,7 @@ function readModalValue(interaction, key) {
   }
 }
 
-function withOwnerOptions(interaction, values = {}, guildOverride = null) {
+function withOwnerOptions(interaction, values = {}, guildOverride = null, explicitGuildId = null) {
   const options = {
     getString(name, required = false) {
       const value = values[name] === undefined || values[name] === null ? null : String(values[name]);
@@ -309,17 +349,26 @@ function withOwnerOptions(interaction, values = {}, guildOverride = null) {
   return new Proxy(interaction, {
     get(target, property) {
       if (property === 'options') return options;
-      if (property === 'guild') return guildOverride || cachedInteractionGuild(target);
-      if (property === 'guildId') return interactionGuildId(target);
+      if (property === 'guild') return guildOverride || cachedInteractionGuild(target, explicitGuildId);
+      if (property === 'guildId') return interactionGuildId(target, explicitGuildId);
       const value = Reflect.get(target, property, target);
       return typeof value === 'function' ? value.bind(target) : value;
     },
   });
 }
 
-async function runDuplicator(interaction, values) {
-  const guild = await resolveInteractionGuild(interaction);
+async function runDuplicator(interaction, values, explicitGuildId = null) {
+  const guildId = interactionGuildId(interaction, explicitGuildId);
+  const guild = await resolveInteractionGuild(interaction, guildId);
   if (!guild) {
+    console.warn('[OwnerPanel] Unable to resolve server context for Duplicator.', {
+      mode: mode(),
+      customId: String(interaction?.customId || ''),
+      embeddedGuildId: embeddedGuildId(interaction?.customId),
+      explicitGuildId: validGuildId(explicitGuildId),
+      interactionGuildId: validGuildId(interaction?.guildId),
+      channelId: String(interaction?.channelId || ''),
+    });
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply(serverContextRequiredPayload()).catch(() => null);
     } else {
@@ -329,7 +378,7 @@ async function runDuplicator(interaction, values) {
   }
 
   rememberOwnerGuild(interaction, guild.id);
-  return duplicator.run(withOwnerOptions(interaction, values, guild));
+  return duplicator.run(withOwnerOptions(interaction, values, guild, guild.id));
 }
 
 async function handleOwnerPanelInteraction(interaction) {
@@ -342,6 +391,9 @@ async function handleOwnerPanelInteraction(interaction) {
     else await interaction.reply(ownerDeniedPayload()).catch(() => null);
     return true;
   }
+
+  const contextGuildId = interactionGuildId(interaction, embeddedGuildId(rawId));
+  if (contextGuildId) rememberOwnerGuild(interaction, contextGuildId);
 
   if (id.startsWith('testsecurity:')) {
     await testSecurity.handleButton(interaction);
@@ -378,66 +430,48 @@ async function handleOwnerPanelInteraction(interaction) {
   }
 
   if (id === `${OWNER_PREFIX}server-tools`) {
-    const guildId = interactionGuildId(interaction);
-    if (guildId) rememberOwnerGuild(interaction, guildId);
-    await interaction.update(serverToolsPayload(interaction));
+    await interaction.update(serverToolsPayload(interaction, contextGuildId));
     return true;
   }
 
   if (id === `${OWNER_PREFIX}server-copy`) {
-    if (!hasGuildContext(interaction)) {
-      await interaction.reply(serverContextRequiredPayload());
-      return true;
-    }
-    await runDuplicator(interaction, { action: 'copy' });
+    await runDuplicator(interaction, { action: 'copy' }, contextGuildId);
     return true;
   }
 
   if (id === `${OWNER_PREFIX}server-build`) {
-    if (!hasGuildContext(interaction)) {
-      await interaction.reply(serverContextRequiredPayload());
-      return true;
-    }
-    await runDuplicator(interaction, { action: 'build' });
+    await runDuplicator(interaction, { action: 'build' }, contextGuildId);
     return true;
   }
 
   if (id === `${OWNER_PREFIX}server-analyse`) {
-    if (!hasGuildContext(interaction)) {
+    if (!contextGuildId) {
       await interaction.reply(serverContextRequiredPayload());
       return true;
     }
-    await interaction.showModal(analyseModal(interaction));
+    await interaction.showModal(analyseModal(interaction, contextGuildId));
     return true;
   }
 
   if (id === `${OWNER_PREFIX}server-export`) {
-    if (!hasGuildContext(interaction)) {
+    if (!contextGuildId) {
       await interaction.reply(serverContextRequiredPayload());
       return true;
     }
-    await interaction.showModal(exportModal(interaction));
+    await interaction.showModal(exportModal(interaction, contextGuildId));
     return true;
   }
 
   if (id === `${OWNER_PREFIX}server-analyse-submit`) {
-    if (!hasGuildContext(interaction)) {
-      await interaction.reply(serverContextRequiredPayload());
-      return true;
-    }
     await runDuplicator(interaction, {
       action: 'analyse',
       source_server: readModalValue(interaction, 'source_server'),
       destination_server: readModalValue(interaction, 'destination_server'),
-    });
+    }, contextGuildId);
     return true;
   }
 
   if (id === `${OWNER_PREFIX}server-export-submit`) {
-    if (!hasGuildContext(interaction)) {
-      await interaction.reply(serverContextRequiredPayload());
-      return true;
-    }
     await runDuplicator(interaction, {
       action: 'export',
       source_server: readModalValue(interaction, 'source_server'),
@@ -445,7 +479,7 @@ async function handleOwnerPanelInteraction(interaction) {
       template_id: readModalValue(interaction, 'template_id'),
       version: readModalValue(interaction, 'version'),
       description: readModalValue(interaction, 'description'),
-    });
+    }, contextGuildId);
     return true;
   }
 
