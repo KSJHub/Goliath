@@ -104,6 +104,40 @@ async function recoverCoreArtifacts(client) {
   return actions;
 }
 
+async function replaceCoreEmoji(client, alias, attachment) {
+  const cleanAlias = cleanEmojiName(alias);
+  if (!CORE_EMOJI_ALIAS_SET.has(cleanAlias)) throw new Error('That is not an approved Goliath Core emoji.');
+  if (!attachment) throw new Error('A replacement emoji image is required.');
+
+  const manager = requireEmojiManager(client);
+  await recoverCoreArtifacts(client);
+
+  const bank = await manager.fetch();
+  const targetName = `${CORE_EMOJI_PREFIX}${cleanAlias}`;
+  const backupName = coreArtifactName('backup', cleanAlias);
+  const replacementName = coreArtifactName('replacement', cleanAlias);
+  const current = [...bank.values()].find((emoji) => String(emoji?.name || '').toLowerCase() === targetName);
+  if (!current) throw new Error(`Core emoji :${cleanAlias}: is not currently installed.`);
+
+  let backup = null;
+  let replacement = null;
+  try {
+    backup = await manager.edit(current.id, { name: backupName });
+    replacement = await manager.create({ attachment, name: replacementName });
+    const installed = await manager.edit(replacement.id, { name: targetName });
+    try {
+      await manager.delete(backup.id);
+    } catch (cleanupError) {
+      console.warn(`[Emoji Core] Replacement succeeded but backup cleanup failed for ${cleanAlias}:`, cleanupError?.message || cleanupError);
+    }
+    return { alias: cleanAlias, previousEmojiId: String(current.id), emoji: serialise(installed) };
+  } catch (error) {
+    try { if (replacement?.id) await manager.delete(replacement.id); } catch (_) {}
+    try { if (backup?.id) await manager.edit(backup.id, { name: targetName }); } catch (_) {}
+    throw error;
+  }
+}
+
 async function listBank(client) {
   const bank = await requireEmojiManager(client).fetch();
   return [...bank.values()].map(serialise).sort((a, b) => String(a.name).localeCompare(String(b.name)));
@@ -402,6 +436,7 @@ module.exports = {
   coreAlias,
   isApprovedCoreAlias,
   recoverCoreArtifacts,
+  replaceCoreEmoji,
   listBank,
   overview,
   createStudioEmoji,

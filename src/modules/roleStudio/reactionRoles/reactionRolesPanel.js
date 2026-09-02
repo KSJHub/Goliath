@@ -10,11 +10,17 @@ const {
   TextInputStyle,
   StringSelectMenuBuilder,
   ChannelSelectMenuBuilder,
-  RoleSelectMenuBuilder,
   ChannelType,
 } = require('discord.js');
 
 const guildManager = require('../../../core/guild/guildManager');
+const {
+  buildRolePicker,
+  mergeRolePickerSelection,
+  parseRolePickerId,
+  rolePickerCustomId,
+  rolePickerPageCount,
+} = require('../../../core/ui/panelNavigation');
 const { getAllEmbedDeployments } = require('../../messageStudio/embed/embedDeployments');
 const reactionRoles = require('./reactionRoles');
 const reactionRolesHealth = require('./reactionRolesHealth');
@@ -394,7 +400,7 @@ function buildProgress(draft, existing) {
   ].join('\n');
 }
 
-function buildWizard(guild, userId, showRemove = false, notice = '') {
+function buildWizard(guild, userId, showRemove = false, notice = '', rolePage = 0) {
   const draft = reactionRoles.getDraft(guild.id, userId);
   if (!draft) throw new Error('Your setup session has expired. Start again.');
   const existing = draft.type === reactionRoles.DRAFT_TYPES.EXISTING;
@@ -404,6 +410,8 @@ function buildWizard(guild, userId, showRemove = false, notice = '') {
   const roles = selectedRoleIds(draft);
   const ready = Boolean(sourceReady && draft.mappings.length);
   const components = [];
+  const pageCount = rolePickerPageCount(guild);
+  const safePage = Math.min(Math.max(0, Number(rolePage) || 0), pageCount - 1);
 
   if (!existing) {
     components.push(row(
@@ -418,15 +426,18 @@ function buildWizard(guild, userId, showRemove = false, notice = '') {
     components.push(row(button('admin:reactionRoles:source', '🔄 Change Source Message')));
   }
 
-  const roleMenu = new RoleSelectMenuBuilder()
-    .setCustomId('admin:reactionRoles:wizard:roles')
-    .setPlaceholder(roles.length ? `${roles.length} role${roles.length === 1 ? '' : 's'} selected` : '2. Select up to 5 roles')
-    .setMinValues(1)
-    .setMaxValues(5);
-  if (roles.length && typeof roleMenu.setDefaultRoles === 'function') roleMenu.setDefaultRoles(...roles);
+  const rolePicker = buildRolePicker(guild, {
+    customId: 'admin:reactionRoles:wizard:roles',
+    placeholder: roles.length ? `${roles.length} role${roles.length === 1 ? '' : 's'} selected` : '2. Select up to 5 roles',
+    selectedIds: roles,
+    minValues: 0,
+    maxValues: 5,
+    page: safePage,
+    pagination: false,
+  });
 
   components.push(
-    row(roleMenu),
+    rolePicker.rows[0],
     row(showRemove && draft.mappings.length ? removeMappingSelect(draft, guild) : modeSelect(draft.selectedMode)),
     row(
       button('admin:reactionRoles:wizard:name', '✏️ Name', ButtonStyle.Primary),
@@ -436,6 +447,9 @@ function buildWizard(guild, userId, showRemove = false, notice = '') {
     ),
     row(
       button(existing ? 'admin:reactionRoles:existing' : 'admin:reactionRoles', '⬅️ Back'),
+      pageCount > 1 ? button(rolePickerCustomId('admin:reactionRoles:wizard:rolePage', 'page', Math.max(0, safePage - 1)), '⬅️ Roles', ButtonStyle.Secondary, safePage <= 0) : null,
+      pageCount > 1 ? button(`admin:reactionRoles:wizard:rolePageInfo:${safePage}`, `Page ${safePage + 1}/${pageCount}`, ButtonStyle.Secondary, true) : null,
+      pageCount > 1 ? button(rolePickerCustomId('admin:reactionRoles:wizard:rolePage', 'page', Math.min(pageCount - 1, safePage + 1)), 'Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
       button('admin:reactionRoles:settings', '⚙️ Settings'),
     ),
   );
@@ -732,9 +746,16 @@ async function handleReactionRolesAdminInteraction(interaction) {
       reactionRoles.saveDraft(guild.id, userId, { channelId: interaction.values[0] }, guild);
       return respond(interaction, buildWizard(guild, userId));
     }
-    if (interaction.isRoleSelectMenu?.() && id === 'admin:reactionRoles:wizard:roles') {
-      reactionRoles.saveDraft(guild.id, userId, { selectedRoleId: interaction.values[0] || null, selectedRoleIds: interaction.values.slice(0, 5) }, guild);
-      return respond(interaction, buildWizard(guild, userId));
+    const rolePicker = parseRolePickerId(id);
+    if (rolePicker?.baseId === 'admin:reactionRoles:wizard:rolePage' && rolePicker.kind === 'page') {
+      return respond(interaction, buildWizard(guild, userId, false, '', rolePicker.page));
+    }
+    if (rolePicker?.baseId === 'admin:reactionRoles:wizard:roles' && rolePicker.kind === 'select') {
+      const draft = reactionRoles.getDraft(guild.id, userId);
+      const merged = mergeRolePickerSelection(guild, selectedRoleIds(draft), interaction.values || [], rolePicker.page).slice(0, 6);
+      if (merged.length > 5) throw new Error('Reaction Roles supports up to 5 roles in one batch. Remove a role before adding another.');
+      reactionRoles.saveDraft(guild.id, userId, { selectedRoleId: merged[0] || null, selectedRoleIds: merged }, guild);
+      return respond(interaction, buildWizard(guild, userId, false, '', rolePicker.page));
     }
     if (interaction.isStringSelectMenu?.() && id === 'admin:reactionRoles:wizard:mode') {
       reactionRoles.saveDraft(guild.id, userId, { selectedMode: interaction.values[0] }, guild);

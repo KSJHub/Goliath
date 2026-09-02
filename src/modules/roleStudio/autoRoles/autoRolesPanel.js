@@ -5,11 +5,17 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  RoleSelectMenuBuilder,
   AttachmentBuilder,
 } = require('discord.js');
 const security = require('../../../core/security/protection/core');
 const { validateRoleSelection } = require('../../../core/security/protection/permissions');
+const {
+  buildRolePicker,
+  buildRolePickerPagination,
+  mergeRolePickerSelection,
+  parseRolePickerId,
+  rolePickerPageCount,
+} = require('../../../core/ui/panelNavigation');
 const autoRoles = require('./autoRolesService');
 
 function row(...components) {
@@ -24,10 +30,30 @@ function formatRoles(ids = []) {
   return ids.length ? ids.map((id) => `<@&${id}>`).join(', ') : '`None`';
 }
 
-async function buildAutoRolesPanel(guild, memberDisplayName = 'Unknown User') {
+async function buildAutoRolesPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
   const config = autoRoles.getAutoRolesSection(guild.id);
   const moduleEnabled = autoRoles.isAutoRolesEnabled(guild.id);
   const health = await autoRoles.buildHealthReport(guild);
+  const pageCount = rolePickerPageCount(guild);
+  const safePage = Math.min(Math.max(0, Number(rolePage) || 0), pageCount - 1);
+  const joinPicker = buildRolePicker(guild, {
+    customId: 'admin:autoRoles:joinRoles',
+    placeholder: 'Select join roles',
+    selectedIds: config.joinRoles,
+    minValues: 0,
+    maxValues: 10,
+    page: safePage,
+    pagination: false,
+  });
+  const botPicker = buildRolePicker(guild, {
+    customId: 'admin:autoRoles:botRoles',
+    placeholder: 'Select bot roles',
+    selectedIds: config.botRoles,
+    minValues: 0,
+    maxValues: 10,
+    page: safePage,
+    pagination: false,
+  });
 
   const embed = new EmbedBuilder()
     .setColor(health.healthy ? 0x57f287 : 0xfaa61a)
@@ -50,8 +76,9 @@ async function buildAutoRolesPanel(guild, memberDisplayName = 'Unknown User') {
   return {
     embeds: [embed],
     components: [
-      row(new RoleSelectMenuBuilder().setCustomId('admin:autoRoles:joinRoles').setPlaceholder('Select join roles').setMinValues(0).setMaxValues(10)),
-      row(new RoleSelectMenuBuilder().setCustomId('admin:autoRoles:botRoles').setPlaceholder('Select bot roles').setMinValues(0).setMaxValues(10)),
+      joinPicker.rows[0],
+      botPicker.rows[0],
+      ...(pageCount > 1 ? [buildRolePickerPagination('admin:autoRoles:rolePage', safePage, pageCount)] : []),
       row(
         button(moduleEnabled ? 'admin:autoRoles:disable' : 'admin:autoRoles:enable', moduleEnabled ? '⏸️ Disable' : '▶️ Enable', moduleEnabled ? ButtonStyle.Secondary : ButtonStyle.Success),
         button('admin:autoRoles:toggleBots', '🤖 Apply To Bots'),
@@ -68,8 +95,8 @@ async function buildAutoRolesPanel(guild, memberDisplayName = 'Unknown User') {
   };
 }
 
-async function updatePanel(interaction) {
-  const payload = await buildAutoRolesPanel(interaction.guild, interaction.member?.displayName || interaction.user?.username);
+async function updatePanel(interaction, rolePage = 0) {
+  const payload = await buildAutoRolesPanel(interaction.guild, interaction.member?.displayName || interaction.user?.username, rolePage);
   if (interaction.deferred || interaction.replied) return interaction.editReply(payload);
   return interaction.update(payload);
 }
@@ -83,15 +110,23 @@ async function handleAutoRolesInteraction(interaction) {
     if (!allowed) return true;
     if (customId === 'admin:autoRoles') return updatePanel(interaction);
 
-    if (interaction.isRoleSelectMenu?.()) {
-      const roleIds = autoRoles.cleanRoleIds(interaction.values || []);
+    const rolePicker = parseRolePickerId(customId);
+    if (rolePicker?.baseId === 'admin:autoRoles:rolePage' && rolePicker.kind === 'page') {
+      return updatePanel(interaction, rolePicker.page);
+    }
+    if (rolePicker && ['admin:autoRoles:joinRoles', 'admin:autoRoles:botRoles'].includes(rolePicker.baseId) && rolePicker.kind === 'select') {
+      await interaction.deferUpdate();
+      const config = autoRoles.getAutoRolesSection(interaction.guild.id);
+      const current = rolePicker.baseId.endsWith(':joinRoles') ? config.joinRoles : config.botRoles;
+      const roleIds = autoRoles.cleanRoleIds(mergeRolePickerSelection(interaction.guild, current, interaction.values || [], rolePicker.page));
+      if (roleIds.length > 10) throw new Error('Auto Roles supports up to 10 roles in each list. Remove a role before adding another.');
       if (roleIds.length) {
         const validation = await validateRoleSelection(interaction.guild, roleIds, { scope: 'auto_roles.discord', requireManageable: true });
         if (!validation.ok) throw validation.toError();
       }
-      if (customId === 'admin:autoRoles:joinRoles') await autoRoles.setConfiguredRoles(interaction.guild, 'join', roleIds, { actorId: interaction.user.id, action: 'auto_roles_discord_join_roles' });
-      if (customId === 'admin:autoRoles:botRoles') await autoRoles.setConfiguredRoles(interaction.guild, 'bot', roleIds, { actorId: interaction.user.id, action: 'auto_roles_discord_bot_roles' });
-      return updatePanel(interaction);
+      if (rolePicker.baseId === 'admin:autoRoles:joinRoles') await autoRoles.setConfiguredRoles(interaction.guild, 'join', roleIds, { actorId: interaction.user.id, action: 'auto_roles_discord_join_roles' });
+      if (rolePicker.baseId === 'admin:autoRoles:botRoles') await autoRoles.setConfiguredRoles(interaction.guild, 'bot', roleIds, { actorId: interaction.user.id, action: 'auto_roles_discord_bot_roles' });
+      return updatePanel(interaction, rolePicker.page);
     }
 
     if (customId === 'admin:autoRoles:enable') autoRoles.setAutoRolesEnabled(interaction.guild.id, true, { actorId: interaction.user.id });

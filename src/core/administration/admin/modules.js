@@ -173,7 +173,7 @@ function buildFieldList(module, config, scope) {
 function buildModuleListPanel(memberDisplayName = 'Unknown User') {
   const embed = new EmbedBuilder()
     .setColor(PANEL_COLOR)
-    .setTitle('🧩 Goliath Modules')
+    .setTitle('🧩 Goliath Studios')
     .setDescription('\n🧩 Select a category to manage its modules.')
     .setFooter({ text: `Requested by ${memberDisplayName}` })
     .setTimestamp();

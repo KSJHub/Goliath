@@ -13,7 +13,7 @@ const auditStore = require('../../owner/auditIntelligence/auditStore');
 
 const ALLOWED_MODES = new Set(['dev', 'beta', 'production']);
 const OWNER_COMMAND_NAME = 'owner';
-const RETIRED_GUILD_COMMAND_NAMES = new Set(['owner', 'commandcenter', 'Convert Emoji Shortcodes']);
+const RETIRED_GUILD_COMMAND_NAMES = new Set(['owner', 'commandcenter']);
 const PUBLIC_COMMAND_NAMES = new Set(
   [...CANONICAL_COMMAND_NAMES].filter((name) => !RETIRED_GUILD_COMMAND_NAMES.has(name)),
 );
@@ -91,7 +91,7 @@ function loadCanonicalCommands() {
   }
 
   if (seen.size !== CANONICAL_COMMAND_NAMES.size) {
-    throw new Error(`Expected /admin, /mod, /user, /owner and /e; loaded ${[...seen].join(', ')}`);
+    throw new Error(`Expected /admin, /mod, /user, /owner, /e and Convert Emoji Shortcodes; loaded ${[...seen].join(', ')}`);
   }
 
   return commands;
@@ -116,11 +116,18 @@ function buildUserInstalledOwnerCommand(ownerCommand) {
   }
 
   const command = { ...ownerCommand };
-  command.integration_types = [1];
-  command.contexts = [...OWNER_USER_CONTEXTS];
+
+  // /owner is deliberately NOT a guild-installed command. A guild owner or
+  // administrator must never be able to expose it through Server Settings >
+  // Integrations. Publish it globally for USER_INSTALL only. Discord's own
+  // user-install tutorial uses all three supported interaction contexts for a
+  // user-installed command that must be discoverable from guild channels.
+  command.integration_types = [1]; // ApplicationIntegrationType.UserInstall
+  command.contexts = [...OWNER_USER_CONTEXTS]; // Guild, BotDM, PrivateChannel
   delete command.default_member_permissions;
   delete command.default_permission;
   delete command.dm_permission;
+
   return command;
 }
 
@@ -141,6 +148,7 @@ async function putGuildCommands(rest, clientId, guildId, publicCommands, dryRun)
     console.log(`[CommandSync] DRY RUN guild ${guildId}: ${publicCommands.map((command) => `/${command.name}`).join(', ')}`);
     return;
   }
+
   await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: publicCommands });
   console.log(`[CommandSync] Guild ${guildId}: ${publicCommands.map((command) => `/${command.name}`).join(', ')}`);
 }
@@ -256,7 +264,12 @@ async function syncCommands() {
     await upsertGlobalOwnerCommand(rest, clientId, ownerCommand, dryRun);
   }
 
-  removedGuildCommands = await cleanupRetiredGuildCommands(rest, clientId, cleanupGuildIds, dryRun);
+  removedGuildCommands = await cleanupRetiredGuildCommands(
+    rest,
+    clientId,
+    cleanupGuildIds,
+    dryRun,
+  );
   removedGlobalCommands = await cleanupStaleGlobalCommands(rest, clientId, dryRun);
 
   return {

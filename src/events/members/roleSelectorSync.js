@@ -1,6 +1,8 @@
 'use strict';
 
-const roleSelector = require('../../modules/roleStudio/roleSelector/roleSelector');
+// Event reconciliation must use the hardened service directly. Importing the base
+// compatibility module here made these lifecycle hooks depend on runtime patch order.
+const roleSelector = require('../../modules/roleStudio/roleSelector/roleSelectorService');
 
 function selectorRoleIds(guildId) {
   const section = roleSelector.getSection(guildId);

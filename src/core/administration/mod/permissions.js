@@ -11,6 +11,19 @@ const ACTION_REQUIREMENTS = {
   view_dashboard: STAFF_LEVELS.JUNIOR_MOD,
   view_cases: STAFF_LEVELS.JUNIOR_MOD,
   view_case_detail: STAFF_LEVELS.JUNIOR_MOD,
+  search_cases: STAFF_LEVELS.JUNIOR_MOD,
+  view_analytics: STAFF_LEVELS.JUNIOR_MOD,
+  view_appeals: STAFF_LEVELS.MOD,
+  decide_appeals: STAFF_LEVELS.ADMIN,
+  manage_evidence: STAFF_LEVELS.ADMIN,
+  scan_run: STAFF_LEVELS.JUNIOR_MOD,
+  scan_history: STAFF_LEVELS.JUNIOR_MOD,
+  scan_compare: STAFF_LEVELS.JUNIOR_MOD,
+  scan_suspects: STAFF_LEVELS.MOD,
+  scan_network: STAFF_LEVELS.MOD,
+  scan_notes: STAFF_LEVELS.MOD,
+  scan_watch: STAFF_LEVELS.MOD,
+  scan_links: STAFF_LEVELS.ADMIN,
   warn: STAFF_LEVELS.JUNIOR_MOD,
   add_case_note: STAFF_LEVELS.JUNIOR_MOD,
   timeout: STAFF_LEVELS.JUNIOR_MOD,
@@ -38,6 +51,40 @@ const ACTION_DISCORD_PERMISSIONS = {
   bulk_kick: PermissionFlagsBits.KickMembers,
   bulk_ban: PermissionFlagsBits.BanMembers,
 };
+
+const ACTION_AUTHORITY_PERMISSIONS = Object.freeze({
+  view_dashboard: { key: 'mod.panel.view' },
+  view_cases: { key: 'mod.cases.view' },
+  view_case_detail: { key: 'mod.cases.view' },
+  search_cases: { key: 'mod.cases.search', fallback: 'mod.cases.view' },
+  view_analytics: { key: 'mod.analytics.view', fallback: 'mod.cases.view' },
+  view_appeals: { key: 'mod.appeals.view', fallback: 'mod.cases.view' },
+  decide_appeals: { key: 'mod.appeals.decide', fallback: 'mod.cases.manage' },
+  manage_evidence: { key: 'mod.evidence.manage', fallback: 'mod.cases.manage' },
+  warn: { key: 'mod.warn' },
+  timeout: { key: 'mod.timeout' },
+  remove_timeout: { key: 'mod.timeout.remove' },
+  kick: { key: 'mod.kick' },
+  ban: { key: 'mod.ban' },
+  remove_warning: { key: 'mod.cases.manage' },
+  add_case_note: { key: 'mod.cases.manage' },
+  edit_case: { key: 'mod.cases.manage' },
+  export_cases: { key: 'mod.cases.export', fallback: 'mod.cases.view' },
+  bulk_warn: { key: 'mod.bulk' },
+  bulk_timeout: { key: 'mod.bulk' },
+  bulk_remove_timeout: { key: 'mod.bulk' },
+  bulk_remove_warning: { key: 'mod.bulk' },
+  bulk_kick: { key: 'mod.bulk' },
+  bulk_ban: { key: 'mod.bulk' },
+  scan_run: { key: 'mod.scan.run', fallback: 'mod.cases.view' },
+  scan_history: { key: 'mod.scan.history', fallback: 'mod.cases.view' },
+  scan_compare: { key: 'mod.scan.compare', fallback: 'mod.cases.view' },
+  scan_suspects: { key: 'mod.scan.suspectedAccounts', fallback: 'mod.analytics.view' },
+  scan_network: { key: 'mod.scan.network', fallback: 'mod.analytics.view' },
+  scan_notes: { key: 'mod.scan.notes', fallback: 'mod.cases.manage' },
+  scan_watch: { key: 'mod.scan.watch', fallback: 'mod.cases.manage' },
+  scan_links: { key: 'mod.scan.links', fallback: 'mod.evidence.manage' },
+});
 
 const DOCTOR_INDEXES = Object.freeze([
   'CREATE INDEX IF NOT EXISTS idx_cases_guild_moderator ON cases(guild_id, moderator_id, case_id DESC)',
@@ -104,7 +151,7 @@ function runModerationDoctor({ record = true } = {}) {
     checks.pendingActions = db.prepare('SELECT COUNT(*) AS count FROM pending_actions').get().count;
     checks.orphanWarnings = db.prepare('SELECT COUNT(*) AS count FROM warnings w LEFT JOIN cases c ON c.guild_id = w.guild_id AND c.case_id = w.case_id WHERE c.case_id IS NULL').get().count;
     checks.activeWarningCasesMissingStrike = db.prepare("SELECT COUNT(*) AS count FROM cases c LEFT JOIN warnings w ON w.guild_id = c.guild_id AND w.case_id = c.case_id WHERE c.action = 'warn' AND c.status = 'active' AND w.id IS NULL").get().count;
-    checks.warningRowsOnNonWarningCases = db.prepare("SELECT COUNT(*) AS count FROM warnings w JOIN cases c ON c.guild_id = w.guild_id AND c.case_id = w.case_id WHERE c.action <> 'warn'").get().count;
+    checks.warningRowsOnNonWarningCases = db.prepare("SELECT COUNT(*) AS count FROM warnings w JOIN cases c ON c.guild_id = w.guild_id AND w.case_id = c.case_id WHERE c.action <> 'warn'").get().count;
     checks.invalidStatuses = db.prepare("SELECT COUNT(*) AS count FROM cases WHERE status NOT IN ('active','reversed','expired') OR status IS NULL").get().count;
     checks.systemAuditRows = db.prepare('SELECT COUNT(*) AS count FROM case_audit WHERE case_id = 0').get().count;
     checks.indexCount = db.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND tbl_name IN ('cases','warnings','pending_actions','case_audit')").get().count;
@@ -133,7 +180,55 @@ scheduleModerationDoctor();
 function getId(memberOrUserId) { return typeof memberOrUserId === 'string' ? memberOrUserId : memberOrUserId?.id; }
 function isGuildOwner(memberOrUserId, guildOwnerId) { const id = getId(memberOrUserId); return Boolean(id && guildOwnerId && String(id) === String(guildOwnerId)); }
 function hasPermission(member, permission) { return Boolean(member?.permissions?.has(permission)); }
-function hasModPermission(member) { return security.isBotOwner(getId(member)) || hasPermission(member, PermissionFlagsBits.ModerateMembers) || hasPermission(member, PermissionFlagsBits.KickMembers) || hasPermission(member, PermissionFlagsBits.BanMembers) || hasPermission(member, PermissionFlagsBits.Administrator); }
+function legacyHasModPermission(member) { return security.isBotOwner(getId(member)) || hasPermission(member, PermissionFlagsBits.ModerateMembers) || hasPermission(member, PermissionFlagsBits.KickMembers) || hasPermission(member, PermissionFlagsBits.BanMembers) || hasPermission(member, PermissionFlagsBits.Administrator); }
+function buildAuthorityInteraction(member, guild, interaction = null) {
+  if (interaction) return interaction;
+  return { guild, member, user: member?.user || (member?.id ? { id: member.id } : null), customId: null };
+}
+function getAuthorityPanel() {
+  try { return require('../admin/panel'); }
+  catch (error) { console.error('❌ Goliath authority resolver unavailable:', error); return null; }
+}
+function resolveActionFromInteraction(action, interaction) {
+  if (action !== 'view_case_detail') return action;
+  const id = String(interaction?.customId || '');
+  if (id === 'mod_select_user' || id === 'mod_member_scan' || id.startsWith('mod_member_scan:') || id === 'mod_scan_user_select') return 'scan_run';
+  if (id.startsWith('mod_scan_history:')) return 'scan_history';
+  if (id.startsWith('mod_scan_compare:') || id.startsWith('mod_scan_compare_select:')) return 'scan_compare';
+  if (id.startsWith('mod_scan_note:') || id.startsWith('mod_scan_note_submit:')) return 'scan_notes';
+  if (id.startsWith('mod_scan_watch:')) return 'scan_watch';
+  if (id.startsWith('mod_scan_links:')) return 'scan_links';
+  return action;
+}
+function resolveAuthorityPermission(member, guild, action, interaction = null) {
+  if (!member || !guild) return null;
+  const panel = getAuthorityPanel();
+  if (!panel?.getAuthorityContext || !panel?.hasGuildPermission) return null;
+  const authorityInteraction = buildAuthorityInteraction(member, guild, interaction);
+  const context = panel.getAuthorityContext(authorityInteraction);
+  if (!context || context.source === 'legacy' || context.source === 'none') return null;
+  const resolvedAction = resolveActionFromInteraction(action, authorityInteraction);
+  const mapping = ACTION_AUTHORITY_PERMISSIONS[resolvedAction];
+  if (!mapping) return null;
+  const catalog = Array.isArray(panel.GUILD_PERMISSION_CATALOG) ? panel.GUILD_PERMISSION_CATALOG : [];
+  const primaryExists = catalog.some((entry) => entry?.key === mapping.key);
+  const permissionKey = primaryExists ? mapping.key : mapping.fallback || mapping.key;
+  return {
+    handled: true,
+    allowed: panel.hasGuildPermission(authorityInteraction, permissionKey),
+    permissionKey,
+    action: resolvedAction,
+    source: context.source,
+  };
+}
+function hasModPermission(member, guild = member?.guild) {
+  if (security.isBotOwner(getId(member))) return true;
+  if (guild) {
+    const authority = resolveAuthorityPermission(member, guild, 'view_dashboard');
+    if (authority?.handled) return authority.allowed;
+  }
+  return legacyHasModPermission(member);
+}
 function getStaffLevel(member, guild) {
   if (!member || !guild) return STAFF_LEVELS.NONE;
   if (security.isBotOwner(getId(member)) || isGuildOwner(member, guild.ownerId)) return STAFF_LEVELS.OWNER;
@@ -159,7 +254,9 @@ function hasNativeActionPermission(member, guild, action) {
   const requiredPermission = ACTION_DISCORD_PERMISSIONS[action];
   return !requiredPermission || hasPermission(member, requiredPermission);
 }
-function canUseModAction(member, guild, action) {
+function canUseModAction(member, guild, action, interaction = null) {
+  const authority = resolveAuthorityPermission(member, guild, action, interaction);
+  if (authority?.handled) return authority.allowed;
   const staffLevel = getStaffLevel(member, guild);
   const requiredLevel = getRequiredStaffLevel(action);
   return getStaffLevelRank(staffLevel) >= getStaffLevelRank(requiredLevel) && hasNativeActionPermission(member, guild, action);
@@ -199,13 +296,15 @@ async function fetchTarget(guild, userId) {
   return guild.members.fetch(id).catch(() => guild.members.cache.get(id) || null);
 }
 function ensurePanelAccess(interaction) {
-  if (hasModPermission(interaction?.member)) return null;
+  if (canUseModAction(interaction?.member, interaction?.guild, 'view_dashboard', interaction)) return null;
   recordModerationSystemEvent({ interaction, event: 'moderation.access.denied', action: 'view_dashboard', reason: 'No moderation panel permission.' });
   return safeReply(interaction, ephemeralError('No permission to use moderation panel.'));
 }
 async function ensureActionAccess(interaction, action, deniedMessage = null) {
-  if (canUseModAction(interaction?.member, interaction?.guild, action)) return true;
-  recordModerationSystemEvent({ interaction, event: 'moderation.action.denied', action, reason: deniedMessage || getModActionDeniedMessage(action), metadata: { requiredLevel: getRequiredStaffLevel(action), staffLevel: getStaffLevel(interaction?.member, interaction?.guild) } });
+  if (canUseModAction(interaction?.member, interaction?.guild, action, interaction)) return true;
+  const resolvedAction = resolveActionFromInteraction(action, interaction);
+  const authority = resolveAuthorityPermission(interaction?.member, interaction?.guild, action, interaction);
+  recordModerationSystemEvent({ interaction, event: 'moderation.action.denied', action: resolvedAction, reason: deniedMessage || getModActionDeniedMessage(action), metadata: { requiredLevel: getRequiredStaffLevel(action), staffLevel: getStaffLevel(interaction?.member, interaction?.guild), authorityPermission: authority?.permissionKey || null, authoritySource: authority?.source || 'legacy' } });
   await safeReply(interaction, { content: deniedMessage || getModActionDeniedMessage(action), flags: 64 });
   return false;
 }
@@ -238,10 +337,12 @@ async function requireModeratableTarget(interaction, targetId, action) {
 }
 
 module.exports = {
+  ACTION_AUTHORITY_PERMISSIONS,
   hasModPermission,
   getStaffDisplay,
   canUseModAction,
   getModActionDeniedMessage,
+  resolveAuthorityPermission,
   checkHierarchy,
   checkHierarchyForBulk,
   fetchTarget,

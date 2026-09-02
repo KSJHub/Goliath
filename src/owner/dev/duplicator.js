@@ -112,6 +112,19 @@ function guildById(client, id) {
   return client.guilds.cache.get(String(id || '').trim()) || null;
 }
 
+async function fetchGuildById(client, id) {
+  const guildId = String(id || '').trim();
+  if (!/^\d{16,25}$/.test(guildId)) return { guild: null, reason: 'invalid' };
+  const cached = guildById(client, guildId);
+  if (cached) return { guild: cached, reason: null };
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    return { guild, reason: null };
+  } catch (error) {
+    return { guild: null, reason: 'unavailable', error };
+  }
+}
+
 async function fetchGuildState(guild) {
   await guild.roles.fetch().catch(() => null);
   await guild.channels.fetch().catch(() => null);
@@ -514,10 +527,30 @@ async function exportTemplate(interaction) {
 async function analyse(interaction) {
   const access = assertAccess(interaction);
   if (!access.allowed) return interaction.reply({ content: `❌ ${access.reason}`, flags: MessageFlags.Ephemeral });
-  const sourceGuild = guildById(interaction.client, interaction.options.getString('source_server'));
-  const destinationGuild = guildById(interaction.client, interaction.options.getString('destination_server'));
-  if (!sourceGuild || !destinationGuild) return interaction.reply({ content: '❌ Analyse needs valid `source_server` and `destination_server` IDs.', flags: MessageFlags.Ephemeral });
+
+  const sourceGuildId = String(interaction.options.getString('source_server') || '').trim();
+  const destinationGuildId = String(interaction.options.getString('destination_server') || '').trim();
+  if (!/^\d{16,25}$/.test(sourceGuildId)) return interaction.reply({ content: '❌ `source_server` must be a valid Discord server ID.', flags: MessageFlags.Ephemeral });
+  if (!/^\d{16,25}$/.test(destinationGuildId)) return interaction.reply({ content: '❌ `destination_server` must be a valid Discord server ID.', flags: MessageFlags.Ephemeral });
+
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const [sourceResult, destinationResult] = await Promise.all([
+    fetchGuildById(interaction.client, sourceGuildId),
+    fetchGuildById(interaction.client, destinationGuildId),
+  ]);
+  const sourceGuild = sourceResult.guild;
+  const destinationGuild = destinationResult.guild;
+  const mode = String(process.env.BOT_MODE || 'dev').toUpperCase();
+
+  if (!sourceGuild) {
+    console.warn(`[Duplicator] Analyse source unavailable: ${sourceGuildId}`, sourceResult.error?.message || sourceResult.reason);
+    return interaction.editReply({ content: `❌ Source server \`${sourceGuildId}\` could not be accessed by Goliath ${mode}. Check that this bot instance is in that server and that the ID is correct.` });
+  }
+  if (!destinationGuild) {
+    console.warn(`[Duplicator] Analyse destination unavailable: ${destinationGuildId}`, destinationResult.error?.message || destinationResult.reason);
+    return interaction.editReply({ content: `❌ Destination server \`${destinationGuildId}\` could not be accessed by Goliath ${mode}. Check that this bot instance is in that server and that the ID is correct.` });
+  }
+
   await fetchGuildState(sourceGuild);
   await fetchGuildState(destinationGuild);
   const snap = snapshot(sourceGuild, [...ACTIVE_OPTIONS]);

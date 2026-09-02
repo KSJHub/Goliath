@@ -54,7 +54,7 @@ module.exports = {
     await new Promise((resolve) => setTimeout(resolve, 2500));
 
     try {
-      const mode = String(process.env.BOT_MODE || 'BETA').trim().toUpperCase();
+      const mode = String(process.env.BOT_MODE || 'DEV').trim().toUpperCase();
       const token = String(resolveTokenDetails({ mode })?.token || '').trim();
       const applicationId = String(client.application?.id || client.user?.id || '').trim();
       if (!token || !applicationId) throw new Error('Missing bot token or application ID.');

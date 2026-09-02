@@ -1,6 +1,8 @@
 'use strict';
 
-const roleSelector = require('../../modules/roleStudio/roleSelector/roleSelector');
+// Role lifecycle events must use the hardened service directly so reconciliation
+// never depends on the compatibility module being patched first during startup.
+const roleSelector = require('../../modules/roleStudio/roleSelector/roleSelectorService');
 
 function isRelevantRole(role) {
   if (!role?.guild?.id) return false;

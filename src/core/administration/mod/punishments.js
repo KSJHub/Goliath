@@ -44,7 +44,7 @@ const ENGINE_ACTIONS = Object.freeze({
 const PENDING_ACTION_PERMISSIONS = Object.freeze({ ban: 'ban', kick: 'kick', 'remove-warning': 'remove_warning', 'remove-timeout': 'remove_timeout' });
 const VALID_BULK_ACTIONS = new Set(Object.keys(ACTION_LABELS));
 const PROGRESS_UPDATE_EVERY = 2;
-const DEFAULT_DASHBOARD_CONTEXT = Object.freeze({ view: 'cases', actionFilter: 'all', statusFilter: 'all', page: 0 });
+const DEFAULT_DASHBOARD_CONTEXT = Object.freeze({ view: 'actions', actionFilter: 'all', statusFilter: 'all', page: 0 });
 
 function parseDuration(value) {
   const match = String(value || '').trim().toLowerCase().match(/^(\d+(?:\.\d+)?)\s*([smhdw])$/);
@@ -108,12 +108,14 @@ function getPendingAction(guildId, token) {
   return { token: row.token, moderatorId: row.moderator_id, targetId: row.target_id, type: row.type, payload, createdAt: row.created_at, expiresAt: row.expires_at };
 }
 function deletePendingAction(guildId, token) { return db.prepare('DELETE FROM pending_actions WHERE guild_id = ? AND token = ?').run(String(guildId), String(token)).changes > 0; }
-function normalizeDashboardContext(context = {}) { return { view: context.view || 'cases', actionFilter: context.actionFilter || 'all', statusFilter: context.statusFilter || 'all', page: Math.max(0, Math.trunc(Number(context.page) || 0)) }; }
+function normalizeDashboardContext(context = {}) { return { view: context.view || 'actions', actionFilter: context.actionFilter || 'all', statusFilter: context.statusFilter || 'all', page: Math.max(0, Math.trunc(Number(context.page) || 0)) }; }
 function buildConfirmCustomId(token, context = DEFAULT_DASHBOARD_CONTEXT) { const c = normalizeDashboardContext(context); return ['mod_confirm_action', token, c.view, c.actionFilter, c.statusFilter, c.page].join(':'); }
-function buildConfirmRow(confirmId) { return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(confirmId).setLabel('⚠️ Confirm').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId('mod_cancel_action').setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary))]; }
+function buildCancelCustomId(targetId, context = DEFAULT_DASHBOARD_CONTEXT) { const c = normalizeDashboardContext(context); return ['mod_cancel_action', targetId || 'none', c.view, c.actionFilter, c.statusFilter, c.page].join(':'); }
+function buildConfirmRow(confirmId, cancelId) { return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(confirmId).setLabel('⚠️ Confirm').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(cancelId).setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary))]; }
 async function createConfirmation(interaction, targetId, type, payload, message, context = DEFAULT_DASHBOARD_CONTEXT) {
+  const normalizedContext = normalizeDashboardContext(context);
   const token = createPendingAction(interaction.guild.id, { moderatorId: interaction.user.id, targetId, type, payload });
-  return safeReply(interaction, { content: message, components: buildConfirmRow(buildConfirmCustomId(token, context)), flags: 64 });
+  return safeReply(interaction, { content: message, components: buildConfirmRow(buildConfirmCustomId(token, normalizedContext), buildCancelCustomId(targetId, normalizedContext)), flags: 64 });
 }
 function createModerationCase(interaction, targetId, action, reason, metadata = {}, extras = {}) { return createCase({ guildId: interaction.guild.id, userId: targetId, moderatorId: interaction.user.id, action, reason, metadata, actorId: interaction.user.id, ...extras }); }
 async function logAction(interaction, target, action, reason, caseId, metadata = {}) { return target ? sendModLog({ guild: interaction.guild, target, moderator: interaction.user, action, reason, caseId, metadata }) : null; }
@@ -341,7 +343,15 @@ async function executePendingAction(discord, interaction, token, returnContext =
     deletePendingAction(interaction.guild.id, token);
     if (result?.error) return safeReply(interaction, ephemeralError(result.error));
     await interaction.update({ content: result.content, embeds: [], components: [] });
-    if (result.target) { const { refreshDashboard } = require('./panel'); if (typeof refreshDashboard === 'function') await refreshDashboard(discord, interaction, result.target, normalizeDashboardContext(returnContext)); }
+    const targetDeparted = pending.type === 'kick' || pending.type === 'ban';
+    const dashboardTarget = targetDeparted ? null : result.target;
+    const dashboardContext = targetDeparted
+      ? { view: 'member', actionFilter: 'all', statusFilter: 'all', page: 0 }
+      : normalizeDashboardContext(returnContext);
+    if (dashboardTarget || targetDeparted) {
+      const { refreshDashboard } = require('./panel');
+      if (typeof refreshDashboard === 'function') await refreshDashboard(discord, interaction, dashboardTarget, dashboardContext);
+    }
     return true;
   } catch (error) {
     console.error('❌ Pending action execution error:', error);

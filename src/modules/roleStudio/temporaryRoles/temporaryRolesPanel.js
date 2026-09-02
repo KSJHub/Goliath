@@ -6,7 +6,6 @@ const {
   ButtonStyle,
   EmbedBuilder,
   ModalBuilder,
-  RoleSelectMenuBuilder,
   UserSelectMenuBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
@@ -17,6 +16,12 @@ const temporaryRoles = require('./temporaryRolesService');
 const temporaryRolesHealth = require('./temporaryRolesHealth');
 const security = require('../../../core/security/protection/core');
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
+const {
+  buildRolePicker,
+  parseRolePickerId,
+  rolePickerCustomId,
+  rolePickerPageCount,
+} = require('../../../core/ui/panelNavigation');
 
 const PREFIX = 'admin:temporaryRoles';
 const SESSION_TTL_MS = 30 * 60 * 1000;
@@ -48,12 +53,23 @@ function setSelection(interaction, patch) {
   return getSelection(interaction);
 }
 
-function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown User') {
+function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown User', rolePage = 0) {
   pruneSelections();
   const section = temporaryRoles.getSection(guild.id);
   const enabled = isModuleEnabled(guild.id, temporaryRoles.SECTION);
   const assignments = temporaryRoles.listAssignments(guild.id, { activeOnly: true });
   const selection = selections.get(keyFor(guild.id, userId)) || { memberId: null, roleId: null };
+  const pageCount = rolePickerPageCount(guild);
+  const safePage = Math.min(Math.max(0, Number(rolePage) || 0), pageCount - 1);
+  const rolePicker = buildRolePicker(guild, {
+    customId: `${PREFIX}:role`,
+    placeholder: 'Choose a temporary role',
+    selectedIds: selection.roleId ? [selection.roleId] : [],
+    minValues: 1,
+    maxValues: 1,
+    page: safePage,
+    pagination: false,
+  });
   const lines = assignments.length
     ? assignments.slice(0, 12).map((item) => `• <@${item.memberId}> → <@&${item.roleId}> • expires ${formatExpiry(item.expiresAt)}`)
     : ['No active temporary roles.'];
@@ -91,7 +107,7 @@ function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown Us
     embeds: [embed],
     components: [
       row(new UserSelectMenuBuilder().setCustomId(`${PREFIX}:member`).setPlaceholder('Choose a member').setMinValues(1).setMaxValues(1)),
-      row(new RoleSelectMenuBuilder().setCustomId(`${PREFIX}:role`).setPlaceholder('Choose a temporary role').setMinValues(1).setMaxValues(1)),
+      rolePicker.rows[0],
       row(
         button(`${PREFIX}:assign`, 'Assign Temporary Role', ButtonStyle.Success, !enabled || !(selection.memberId && selection.roleId)),
         button(`${PREFIX}:scan`, 'Scan Expired Now', ButtonStyle.Primary),
@@ -99,7 +115,12 @@ function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown Us
         button(enabled ? `${PREFIX}:disable` : `${PREFIX}:enable`, enabled ? 'Disable' : 'Enable'),
       ),
       row(manage),
-      row(button('admin:studio:roleStudio', 'Back to Role Studio')),
+      row(
+        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:rolePage`, 'page', Math.max(0, safePage - 1)), '⬅️ Previous Roles', ButtonStyle.Secondary, safePage <= 0) : null,
+        pageCount > 1 ? button(`${PREFIX}:rolePageInfo:${safePage}`, `Page ${safePage + 1}/${pageCount}`, ButtonStyle.Secondary, true) : null,
+        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:rolePage`, 'page', Math.min(pageCount - 1, safePage + 1)), 'Next Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
+        button('admin:studio:roleStudio', 'Back to Role Studio'),
+      ),
     ],
   };
 }
@@ -137,8 +158,8 @@ function buildAssignmentPanel(guildId, assignmentId) {
   };
 }
 
-async function refresh(interaction, payload = null) {
-  const next = payload || buildTemporaryRolesPanel(interaction.guild, interaction.user.id, interaction.member?.displayName || interaction.user?.username);
+async function refresh(interaction, payload = null, rolePage = 0) {
+  const next = payload || buildTemporaryRolesPanel(interaction.guild, interaction.user.id, interaction.member?.displayName || interaction.user?.username, rolePage);
   if (interaction.deferred || interaction.replied) return interaction.editReply(next);
   return interaction.update(next);
 }
@@ -151,12 +172,16 @@ async function handleTemporaryRolesInteraction(interaction) {
   if (!access.allowed) return true;
 
   if (id === PREFIX) return refresh(interaction);
+  const rolePicker = parseRolePickerId(id);
+  if (rolePicker?.baseId === `${PREFIX}:rolePage` && rolePicker.kind === 'page') return refresh(interaction, null, rolePicker.page);
+  if (rolePicker?.baseId === `${PREFIX}:role` && rolePicker.kind === 'select') {
+    const roleId = interaction.values?.[0];
+    if (!roleId || roleId === '__none__') throw new Error('Choose a temporary role.');
+    setSelection(interaction, { roleId });
+    return refresh(interaction, null, rolePicker.page);
+  }
   if (interaction.isUserSelectMenu?.() && id === `${PREFIX}:member`) {
     setSelection(interaction, { memberId: interaction.values[0] });
-    return refresh(interaction);
-  }
-  if (interaction.isRoleSelectMenu?.() && id === `${PREFIX}:role`) {
-    setSelection(interaction, { roleId: interaction.values[0] });
     return refresh(interaction);
   }
   if (interaction.isStringSelectMenu?.() && id === `${PREFIX}:manage`) return refresh(interaction, buildAssignmentPanel(interaction.guild.id, interaction.values[0]));

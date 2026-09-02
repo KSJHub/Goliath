@@ -1,5 +1,7 @@
 'use strict';
 
+// Moderation panel layout contract: feature rows first; the final row is navigation,
+// with Back first and Export immediately after it when export is available.
 const { SlashCommandBuilder } = require('discord.js');
 const { enforceCommandAccess } = require('../../commands/commandAccess');
 const { errorEmbed } = require('../../ui/embeds');

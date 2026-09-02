@@ -270,16 +270,25 @@ async function imageHash(emoji) {
 }
 
 async function duplicateGroups(bank) {
+  const candidates = (bank || []).filter((entry) => !entry.core);
   const groups = new Map();
-  for (const emoji of (bank || []).filter((entry) => !entry.core)) {
-    try {
-      const hash = await imageHash(emoji);
-      if (!hash) continue;
-      const list = groups.get(hash) || [];
-      list.push(emoji);
-      groups.set(hash, list);
-    } catch (_) { /* one failed CDN request does not fail the audit */ }
-  }
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < candidates.length) {
+      const emoji = candidates[cursor++];
+      try {
+        const hash = await imageHash(emoji);
+        if (!hash) continue;
+        const list = groups.get(hash) || [];
+        list.push(emoji);
+        groups.set(hash, list);
+      } catch (_) { /* one failed CDN request does not fail the audit */ }
+    }
+  };
+
+  const concurrency = Math.min(8, candidates.length);
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
   return [...groups.entries()].filter(([, entries]) => entries.length > 1).map(([hash, entries]) => ({ hash, entries }));
 }
 

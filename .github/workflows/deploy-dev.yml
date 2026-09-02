@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - dev
+    # Temporary one-shot source-mutation workflows/scripts must never trigger the
+    # canonical deployment pipeline. They caused duplicate/racing dev runs and
+    # polluted Actions history while applying short-lived layout patches.
+    paths-ignore:
+      - '.github/workflows/*-once.yml'
+      - 'scripts/*-once.js'
+      - 'scripts/*-temp.js'
   workflow_dispatch:
     inputs:
       environment:
@@ -25,6 +32,7 @@ permissions:
 concurrency:
   group: deploy-${{ github.event_name == 'push' && 'dev' || inputs.environment }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   resolve:
@@ -208,7 +216,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Deploy affected components
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1
         env:
           ENVIRONMENT: ${{ needs.resolve.outputs.environment }}
           TARGET_BRANCH: ${{ needs.resolve.outputs.target_branch }}
@@ -224,6 +232,9 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
+          timeout: 60s
+          retry_attempts: 3
+          retry_delay: 10s
           command_timeout: 25m
           envs: ENVIRONMENT,TARGET_BRANCH,DEPLOY_SCRIPT,APP_DIR,RUNTIME_DIR,PM2_NAME,EXPECTED_SHA,FORCE_COMMAND_SYNC,PUSH_TRIGGERED
           script: |

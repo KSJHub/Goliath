@@ -15,7 +15,6 @@ const {
   db,
   getAllCases,
   getCaseById,
-  searchCases,
   updateCaseReason,
   updateCaseNote,
   clearCaseNote,
@@ -34,7 +33,6 @@ const STATUS_LABELS = Object.freeze({
   reversed: '🔁 Reversed',
   expired: '⌛ Expired',
 });
-const TRACKED_ACTIONS = Object.freeze(['warn', 'timeout', 'kick', 'ban', 'unwarn', 'remove-timeout']);
 const APPEALABLE_ACTIONS = new Set(['warn', 'timeout', 'kick', 'ban']);
 const APPEAL_PAGE_SIZE = 5;
 const MAX_APPEALS_PER_CASE = 20;
@@ -51,50 +49,20 @@ function getCaseTimestamp(dateValue) {
   return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : Math.floor(Date.now() / 1000);
 }
 function formatCaseSummary(modCase = {}) { return [`#${modCase.caseId || '?'}`, modCase.action || 'unknown', getStatusLabel(modCase), `<t:${getCaseTimestamp(modCase.createdAt)}:R>`].join(' • '); }
-function countCasesByAction(cases = [], action) { return cases.filter((modCase) => modCase.action === action).length; }
-function countCasesByStatus(cases = [], status) { return cases.filter((modCase) => getStatus(modCase) === status).length; }
-function buildTopList(itemsMap = {}, limit = 5, formatter = (id, count) => `${id} — ${count}`) {
-  return Object.entries(itemsMap).filter(([id]) => Boolean(id)).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([id, count]) => formatter(id, count));
-}
-function incrementCount(map, key) { if (key) map[key] = (map[key] || 0) + 1; }
-function getRecentCases(cases = [], limit = 5) { return cases.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit); }
-function getActionCounts(cases = []) {
-  return TRACKED_ACTIONS.reduce((counts, action) => { counts[`${action.replace(/-/g, '')}Count`] = countCasesByAction(cases, action); return counts; }, {});
-}
-function getModerationAnalytics(guildId) {
-  const allCases = getAllCases(guildId) || [];
-  const moderatorCounts = {};
-  const userCounts = {};
-  for (const modCase of allCases) { incrementCount(moderatorCounts, modCase.moderatorId); incrementCount(userCounts, modCase.userId); }
-  return {
-    totalCases: allCases.length,
-    activeCases: countCasesByStatus(allCases, 'active'),
-    reversedCases: countCasesByStatus(allCases, 'reversed'),
-    expiredCases: countCasesByStatus(allCases, 'expired'),
-    ...getActionCounts(allCases),
-    topModerators: buildTopList(moderatorCounts, 5, (id, count) => `<@${id}> • ${count} case${count === 1 ? '' : 's'}`),
-    topUsers: buildTopList(userCounts, 5, (id, count) => `<@${id}> • ${count} case${count === 1 ? '' : 's'}`),
-    recentCases: getRecentCases(allCases, 5),
-  };
-}
-
-function buildCaseFilterButtons(targetId, actionFilter = 'all', statusFilter = 'all', page = 0) {
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:all:${statusFilter}:${page}`).setLabel('📂 All').setStyle(actionFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:warn:${statusFilter}:${page}`).setLabel(`${EMOJIS.WARNING} Warns`).setStyle(actionFilter === 'warn' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:timeout:${statusFilter}:${page}`).setLabel(`${EMOJIS.TIMEOUT} Timeouts`).setStyle(actionFilter === 'timeout' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:note:${statusFilter}:${page}`).setLabel(`${EMOJIS.NOTE} Notes`).setStyle(actionFilter === 'note' ? ButtonStyle.Primary : ButtonStyle.Secondary)
-  );
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:${actionFilter}:active:${page}`).setLabel(`${EMOJIS.ACTIVE} Active`).setStyle(statusFilter === 'active' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:${actionFilter}:reversed:${page}`).setLabel(`${EMOJIS.REVERSED} Reversed`).setStyle(statusFilter === 'reversed' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:${actionFilter}:expired:${page}`).setLabel(`${EMOJIS.EXPIRED} Expired`).setStyle(statusFilter === 'expired' ? ButtonStyle.Primary : ButtonStyle.Secondary)
-  );
-  return [row1, row2];
-}
+function buildCaseFilterButtons() { return []; }
 function buildCasesPageButtons(targetId, page, totalPages, actionFilter = 'all', statusFilter = 'all') {
+  const actionOrder = ['all', 'warn', 'timeout', 'kick', 'ban', 'note'];
+  const statusOrder = ['all', 'active', 'reversed', 'expired'];
+  const actionIndex = Math.max(0, actionOrder.indexOf(actionFilter));
+  const statusIndex = Math.max(0, statusOrder.indexOf(statusFilter));
+  const nextAction = actionOrder[(actionIndex + 1) % actionOrder.length];
+  const nextStatus = statusOrder[(statusIndex + 1) % statusOrder.length];
+  const actionLabel = actionFilter === 'all' ? 'All' : actionFilter[0].toUpperCase() + actionFilter.slice(1);
+  const statusLabel = statusFilter === 'all' ? 'All' : statusFilter[0].toUpperCase() + statusFilter.slice(1);
   return [new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`mod_case_page:${targetId}:${actionFilter}:${statusFilter}:${page - 1}`).setLabel(`${EMOJIS.BACK} Prev`).setStyle(ButtonStyle.Secondary).setDisabled(page <= 0),
+    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:${nextAction}:${statusFilter}:0`).setLabel(`Action: ${actionLabel}`).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:${actionFilter}:${nextStatus}:0`).setLabel(`Status: ${statusLabel}`).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_case_page:${targetId}:${actionFilter}:${statusFilter}:${page + 1}`).setLabel(`Next ${EMOJIS.NEXT}`).setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1)
   )];
 }
@@ -384,58 +352,6 @@ function buildAppealQueueFilterModal(token) {
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('moderator_id').setLabel('Case Moderator ID').setStyle(TextInputStyle.Short).setPlaceholder('Optional moderator ID').setRequired(false).setMaxLength(20))
   );
 }
-function buildCaseSearchModal(customId = 'mod_submit_case_search') {
-  return new ModalBuilder().setCustomId(customId).setTitle('Search Moderation Cases').addComponents(
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('case_or_user').setLabel('Case ID or Member/User ID').setStyle(TextInputStyle.Short).setPlaceholder('123456789012345678 or 42').setRequired(false).setMaxLength(20)),
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('filters').setLabel('Advanced filters').setStyle(TextInputStyle.Paragraph).setPlaceholder('moderator:123 action:warn status:active from:2026-08-01 to:2026-08-28 text:spam').setRequired(false).setMaxLength(1000))
-  );
-}
-function parseCaseSearchInput(interaction) {
-  const caseOrUser = String(interaction.fields.getTextInputValue('case_or_user') || '').trim();
-  const rawFilters = String(interaction.fields.getTextInputValue('filters') || '').trim();
-  const filters = { page: 0, pageSize: 5 };
-  if (caseOrUser) {
-    if (/^\d+$/.test(caseOrUser) && caseOrUser.length <= 10) filters.caseId = Number(caseOrUser);
-    else if (/^\d{16,20}$/.test(caseOrUser)) filters.userId = caseOrUser;
-    else return { error: 'Case ID or Member/User ID is invalid.' };
-  }
-  const tokenPattern = /(moderator|mod|action|status|from|to|text):("[^"]*"|'[^']*'|\S+)/gi;
-  let match;
-  while ((match = tokenPattern.exec(rawFilters))) {
-    const key = match[1].toLowerCase();
-    const value = String(match[2] || '').replace(/^("|')|("|')$/g, '').trim();
-    if (!value) continue;
-    if (key === 'moderator' || key === 'mod') filters.moderatorId = value;
-    else if (key === 'action') filters.action = value.toLowerCase();
-    else if (key === 'status') filters.status = value.toLowerCase();
-    else if (key === 'from') filters.createdFrom = value;
-    else if (key === 'to') filters.createdTo = value;
-    else if (key === 'text') filters.text = value;
-  }
-  return { filters };
-}
-function buildCaseSearchResultsEmbed(result = {}, filters = {}) {
-  const results = Array.isArray(result.results) ? result.results : [];
-  const description = results.length ? results.map((modCase, index) => `${index + 1}. ${formatCaseSummary(modCase)}\n   <@${modCase.userId}> • ${String(modCase.reason || 'No reason provided').slice(0, 160)}`).join('\n\n') : 'No moderation cases matched the supplied filters.';
-  const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle('🔎 Case Search').setDescription(description.slice(0, 4096)).setFooter({ text: `${result.total || 0} result${result.total === 1 ? '' : 's'} • Page ${(Number(result.page) || 0) + 1}/${Math.max(1, Number(result.totalPages) || 1)}` }).setTimestamp();
-  const activeFilters = Object.entries(filters).filter(([key, value]) => !['page', 'pageSize'].includes(key) && value !== undefined && value !== null && value !== '').map(([key, value]) => `${key}: ${value}`);
-  if (activeFilters.length) embed.addFields({ name: 'Filters', value: activeFilters.join(' • ').slice(0, 1024), inline: false });
-  return embed;
-}
-function buildCaseSearchResultButtons(result = {}) {
-  const results = Array.isArray(result.results) ? result.results.slice(0, 5) : [];
-  if (!results.length) return [];
-  return [new ActionRowBuilder().addComponents(...results.map((modCase) => new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel(`#${modCase.caseId}`).setStyle(ButtonStyle.Secondary)))];
-}
-function buildCaseSearchPaginationButtons(page = 0, totalPages = 0) {
-  const safePage = Math.max(0, Number(page) || 0);
-  const pages = Math.max(0, Number(totalPages) || 0);
-  if (pages <= 1) return [];
-  return [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_search_page:${Math.max(0, safePage - 1)}`).setLabel(`${EMOJIS.BACK} Prev`).setStyle(ButtonStyle.Secondary).setDisabled(safePage <= 0),
-    new ButtonBuilder().setCustomId(`mod_search_page:${safePage + 1}`).setLabel(`Next ${EMOJIS.NEXT}`).setStyle(ButtonStyle.Secondary).setDisabled(safePage >= pages - 1)
-  )];
-}
 function buildCaseDetailEmbed(modCase) {
   const embed = new EmbedBuilder().setColor('#5865F2').setTitle(`🧾 Case #${modCase.caseId}`).addFields(
     { name: 'Action', value: modCase.action, inline: true }, { name: 'Status', value: getStatusLabel(modCase), inline: true }, { name: 'User ID', value: modCase.userId, inline: true }, { name: 'Moderator ID', value: modCase.moderatorId, inline: true }, { name: 'Reason', value: modCase.reason || 'No reason provided', inline: false }, { name: 'Created', value: `<t:${getCaseTimestamp(modCase.createdAt)}:F>`, inline: true }, { name: 'Updated', value: modCase.updatedAt ? `<t:${getCaseTimestamp(modCase.updatedAt)}:F>` : 'Never', inline: true }
@@ -508,20 +424,55 @@ function buildAppealDetailPayload(modCase, appeal) {
   return { embeds: [embed], components };
 }
 function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status: 'pending' }, token = null) {
-  const results = listAppeals(guildId, filters);
+  const normalizedStatus = ['pending', 'approved', 'denied', 'all'].includes(String(filters.status || '').toLowerCase()) ? String(filters.status).toLowerCase() : 'pending';
+  const activeFilters = { ...filters, status: normalizedStatus };
+  const results = listAppeals(guildId, activeFilters);
+  const allAppeals = listAppeals(guildId, { status: 'all' });
+  const counts = { pending: 0, approved: 0, denied: 0 };
+  for (const { appeal } of allAppeals) if (Object.prototype.hasOwnProperty.call(counts, appeal.status)) counts[appeal.status] += 1;
   const totalPages = Math.max(1, Math.ceil(results.length / APPEAL_PAGE_SIZE));
   const page = Math.max(0, Math.min(Math.trunc(Number(requestedPage) || 0), totalPages - 1));
   const slice = results.slice(page * APPEAL_PAGE_SIZE, (page + 1) * APPEAL_PAGE_SIZE);
-  const activeToken = token || rememberAppealQueue(guildId, filters);
-  const filterText = [`status:${filters.status || 'pending'}`, filters.userId ? `user:${filters.userId}` : null, filters.caseId ? `case:${filters.caseId}` : null, filters.moderatorId ? `moderator:${filters.moderatorId}` : null].filter(Boolean).join(' • ');
-  const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle('📥 Appeal Queue').setDescription(slice.length ? slice.map(({ case: modCase, appeal }, index) => `${page * APPEAL_PAGE_SIZE + index + 1}. **Case #${modCase.caseId}** • ${modCase.action} • **${appeal.status}** • <@${appeal.appellantId}>\n${String(appeal.grounds || '').replace(/\s+/g, ' ').slice(0, 180)}`).join('\n\n') : 'No appeals matched these filters.').addFields({ name: 'Filters', value: filterText || 'status:pending', inline: false }).setFooter({ text: `${results.length} matching appeal${results.length === 1 ? '' : 's'} • Page ${page + 1}/${totalPages}` }).setTimestamp();
-  const rows = [new ActionRowBuilder().addComponents(
+  const activeToken = token || rememberAppealQueue(guildId, activeFilters);
+  const extraFilters = [activeFilters.userId ? `User <@${activeFilters.userId}>` : null, activeFilters.caseId ? `Case #${activeFilters.caseId}` : null, activeFilters.moderatorId ? `Moderator <@${activeFilters.moderatorId}>` : null].filter(Boolean);
+  const emptyText = normalizedStatus === 'pending' && !extraFilters.length
+    ? '**📭 No Pending Appeals**\nThere are currently no moderation appeals awaiting review.'
+    : `**📭 No Appeals Found**\nNo ${normalizedStatus === 'all' ? '' : normalizedStatus + ' '}appeals matched the current filters.`;
+  const description = slice.length
+    ? ['Review and manage appeals submitted against moderation cases.', '', ...slice.map(({ case: modCase, appeal }) => {
+        const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:f>` : 'Unknown';
+        return [`**Case #${modCase.caseId} • ${String(modCase.action || 'case').toUpperCase()} Appeal**`, `Member: <@${appeal.appellantId}>`, `Moderator: <@${modCase.moderatorId}>`, `Submitted: ${submitted}`, `Status: **${String(appeal.status || 'pending').toUpperCase()}**`, `Appeal: ${String(appeal.grounds || 'No grounds recorded').replace(/\s+/g, ' ').slice(0, 220)}`].join('\n');
+      })].join('\n\n')
+    : ['Review and manage appeals submitted against moderation cases.', '', emptyText].join('\n');
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.PRIMARY)
+    .setTitle('⚖️ Moderation Appeals')
+    .setDescription(description)
+    .addFields(
+      { name: '⏳ Pending', value: `**${counts.pending}**`, inline: true },
+      { name: '✅ Approved', value: `**${counts.approved}**`, inline: true },
+      { name: '❌ Denied', value: `**${counts.denied}**`, inline: true },
+    );
+  if (extraFilters.length) embed.addFields({ name: '🔎 Additional Filters', value: extraFilters.join(' • '), inline: false });
+  embed.setFooter({ text: `${results.length} matching appeal${results.length === 1 ? '' : 's'} • Page ${page + 1}/${totalPages}` }).setTimestamp();
+  const statusRow = new ActionRowBuilder().addComponents(
+    ...['pending', 'approved', 'denied'].map((status) => new ButtonBuilder()
+      .setCustomId(`mod_case_appeal_queue_status:${activeToken}:${status}`)
+      .setLabel(status === 'pending' ? 'Pending' : status === 'approved' ? 'Approved' : 'Denied')
+      .setStyle(normalizedStatus === status ? ButtonStyle.Primary : ButtonStyle.Secondary))
+  );
+  const pageRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`mod_case_appeal_queue:${activeToken}:${Math.max(0, page - 1)}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(page <= 0),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_queue:${activeToken}:${Math.min(totalPages - 1, page + 1)}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_filter:${activeToken}`).setLabel('🔎 Filter').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('mod_case_appeal_queue:0').setLabel('Reset').setStyle(ButtonStyle.Secondary)
-  )];
+    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_status:${activeToken}:all`).setLabel('All').setStyle(normalizedStatus === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_case_appeal_queue:${activeToken}:${Math.min(totalPages - 1, page + 1)}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1)
+  );
+  const rows = [statusRow, pageRow];
   if (slice.length) rows.push(new ActionRowBuilder().addComponents(...slice.map(({ case: modCase, appeal }) => new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`).setLabel(`#${modCase.caseId}`).setStyle(ButtonStyle.Primary))));
+  rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('mod_dashboard:none:analytics').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_refresh:${activeToken}:${page}`).setLabel('🔄 Refresh').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_filter:${activeToken}`).setLabel('🔎 Filter').setStyle(ButtonStyle.Secondary)
+  ));
   return { embeds: [embed], components: rows };
 }
 
@@ -594,11 +545,6 @@ async function openCaseTool(interaction) {
     if (targetId === 'none') return safeReply(interaction, ephemeralError('No user selected.'));
     await interaction.showModal(buildEditCaseModal(`mod_submit_edit_case:${targetId}`)); return true;
   }
-  if (id === 'mod_search_cases') {
-    if (!canUseModAction(interaction.member, interaction.guild, 'view_cases')) return safeReply(interaction, ephemeralError('No permission to search cases.'));
-    await interaction.showModal(buildCaseSearchModal());
-    return true;
-  }
   return false;
 }
 
@@ -620,6 +566,24 @@ async function handleCaseAction(interaction, { fetchTarget, createConfirmation }
     const modCase = getCaseById(interaction.guild.id, Number(caseIdRaw));
     if (!modCase) return safeReply(interaction, ephemeralError('Case not found.'));
     return safeReply(interaction, { ...buildAppealHistoryEmbed(modCase, pageRaw), flags: 64 });
+  }
+  if (id.startsWith('mod_case_appeal_queue_status:')) {
+    if (!canUseModAction(interaction.member, interaction.guild, 'view_cases')) return safeReply(interaction, ephemeralError('No permission to filter appeals.'));
+    const [, token, status] = id.split(':');
+    const state = getAppealQueueState(token, interaction.guild.id);
+    if (!state) return safeReply(interaction, ephemeralError('This appeal queue session expired. Open the queue again.'));
+    if (!['pending', 'approved', 'denied', 'all'].includes(status)) return safeReply(interaction, ephemeralError('That appeal status filter is invalid.'));
+    state.filters = { ...state.filters, status };
+    state.createdAt = Date.now();
+    return interaction.update(buildAppealQueuePayload(interaction.guild.id, 0, state.filters, token));
+  }
+  if (id.startsWith('mod_case_appeal_queue_refresh:')) {
+    if (!canUseModAction(interaction.member, interaction.guild, 'view_cases')) return safeReply(interaction, ephemeralError('No permission to view the appeal queue.'));
+    const [, token, pageRaw] = id.split(':');
+    const state = getAppealQueueState(token, interaction.guild.id);
+    if (!state) return safeReply(interaction, ephemeralError('This appeal queue session expired. Open the queue again.'));
+    state.createdAt = Date.now();
+    return interaction.update(buildAppealQueuePayload(interaction.guild.id, pageRaw, state.filters, token));
   }
   if (id.startsWith('mod_case_appeal_queue_filter:')) {
     if (!canUseModAction(interaction.member, interaction.guild, 'view_cases')) return safeReply(interaction, ephemeralError('No permission to filter appeals.'));
@@ -760,13 +724,6 @@ async function submitCaseModal(interaction, { fetchTarget, refreshCasesDashboard
     if (target && typeof refreshCasesDashboard === 'function') await refreshCasesDashboard(interaction, target);
     return true;
   }
-  if (id.startsWith('mod_submit_case_search')) {
-    if (!canUseModAction(interaction.member, interaction.guild, 'view_cases')) return safeReply(interaction, ephemeralError('No permission to search cases.'));
-    const parsed = parseCaseSearchInput(interaction);
-    if (parsed.error) return safeReply(interaction, ephemeralError(parsed.error));
-    const result = searchCases(interaction.guild.id, parsed.filters);
-    return safeReply(interaction, { embeds: [buildCaseSearchResultsEmbed(result, parsed.filters)], components: [...buildCaseSearchResultButtons(result), ...buildCaseSearchPaginationButtons(result.page, result.totalPages)], flags: 64 });
-  }
   if (id.startsWith('mod_submit_case_note:')) {
     const [, caseIdRaw] = id.split(':');
     if (!/^\d+$/.test(caseIdRaw)) return safeReply(interaction, ephemeralError('Case ID must be a number.'));
@@ -790,15 +747,9 @@ function getBulkActionSummaryEmbed({ actionLabel, total, success, failed }) { re
 module.exports = {
   getStatusLabel,
   formatCaseSummary,
-  getModerationAnalytics,
   buildCaseFilterButtons,
   buildCasesPageButtons,
   buildCaseDetailButtons,
-  buildCaseSearchModal,
-  parseCaseSearchInput,
-  buildCaseSearchResultsEmbed,
-  buildCaseSearchResultButtons,
-  buildCaseSearchPaginationButtons,
   openCaseTool,
   handleCaseAction,
   submitCaseModal,

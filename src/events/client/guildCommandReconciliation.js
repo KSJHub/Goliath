@@ -41,6 +41,9 @@ async function reconcileGuildCommands(guild, client, reason = 'manual') {
       return { guildId: guild.id, skipped: true, reason: 'no-commands' };
     }
 
+    // SET is authoritative for this guild. Do not preserve any retired/private
+    // commands here: /owner is USER_INSTALL only and /commandcenter plus the
+    // message context shortcut are intentionally absent from guild integrations.
     await guild.commands.set(normalCommands);
 
     terminal.success(
