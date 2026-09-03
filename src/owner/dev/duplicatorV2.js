@@ -586,7 +586,7 @@ async function executeSnapshot(interaction, session, snap, title) {
     guildInfo = { id: result.guild.id, name: result.guild.name };
     log = await executeSnapshotOnGuild(result.guild, session, snap, title, interaction.user.id);
   } else {
-    const response = await bridgeRequest(route.environment, 'POST', '/apply', { guildId: session.destinationGuildId, session: { dryRun: session.dryRun, conflictMode: session.conflictMode }, snapshot: snap, title, actorId: interaction.user.id }, 120000);
+    const response = await bridgeRequest(route.environment, 'POST', '/apply', { guildId: session.destinationGuildId, session: { dryRun: session.dryRun, conflictMode: session.conflictMode, destinationGuildId: session.destinationGuildId }, snapshot: snap, title, actorId: interaction.user.id }, 120000);
     guildInfo = response.guild;
     log = response.log;
   }
@@ -611,7 +611,7 @@ function initializeBridge(client) {
       if (!bridgeAuthorized(req)) return bridgeJson(res, 403, { error: 'Forbidden' });
       if (req.method === 'GET' && req.url === '/guilds') return bridgeJson(res, 200, { environment: mode(), guilds: localGuildDirectory(bridgeClient) });
       if (req.method === 'POST' && req.url === '/snapshot') { const body = await readBridgeBody(req); const result = await fetchGuildById(bridgeClient, body.guildId); if (!result.guild) return bridgeJson(res, 404, { error: 'Guild unavailable' }); await fetchGuildState(result.guild); return bridgeJson(res, 200, { snapshot: snapshot(result.guild, body.selectedOptions || [...ACTIVE_OPTIONS]) }); }
-      if (req.method === 'POST' && req.url === '/apply') { const body = await readBridgeBody(req); const result = await fetchGuildById(bridgeClient, body.guildId); if (!result.guild) return bridgeJson(res, 404, { error: 'Guild unavailable' }); const log = await executeSnapshotOnGuild(result.guild, body.session || { dryRun: true, conflictMode: 'skip' }, body.snapshot, body.title || 'Copy', body.actorId || 'bridge'); return bridgeJson(res, 200, { guild: { id: result.guild.id, name: result.guild.name }, log }); }
+      if (req.method === 'POST' && req.url === '/apply') { const body = await readBridgeBody(req); const result = await fetchGuildById(bridgeClient, body.guildId); if (!result.guild) return bridgeJson(res, 404, { error: 'Guild unavailable' }); const bridgeSession = { dryRun: true, conflictMode: 'skip', ...(body.session || {}), destinationGuildId: body.guildId }; const log = await executeSnapshotOnGuild(result.guild, bridgeSession, body.snapshot, body.title || 'Copy', body.actorId || 'bridge'); return bridgeJson(res, 200, { guild: { id: result.guild.id, name: result.guild.name }, log }); }
       return bridgeJson(res, 404, { error: 'Not found' });
     } catch (error) { console.error('[Duplicator Bridge]', error); return bridgeJson(res, 500, { error: error.message || String(error) }); }
   });
