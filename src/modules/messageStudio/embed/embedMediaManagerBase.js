@@ -26,6 +26,26 @@ function sourceLabel(value, fallback = 'Not set') {
 function installMediaManagerBase(panel, media) {
   if (!panel || !media || typeof panel.buildMediaManagerPanel === 'function') return panel;
 
+  // `mediaV2` is the live editor state. Mirror it into the compatibility `media`
+  // key before older storage wrappers run so newly edited media cannot be replaced
+  // by a stale copy during saveSession().
+  if (!panel.__mediaSessionMirrorPatched && typeof panel.saveSession === 'function') {
+    const originalSaveSession = panel.saveSession.bind(panel);
+    panel.saveSession = (interaction, stateValue) => {
+      if (!stateValue || typeof stateValue !== 'object') return originalSaveSession(interaction, stateValue);
+      const authoritative = stateValue.mediaV2 || stateValue.media || null;
+      if (!authoritative) return originalSaveSession(interaction, stateValue);
+      const mediaV2 = typeof media.clone === 'function'
+        ? media.clone(authoritative)
+        : JSON.parse(JSON.stringify(authoritative));
+      const legacyMedia = typeof media.clone === 'function'
+        ? media.clone(mediaV2)
+        : JSON.parse(JSON.stringify(mediaV2));
+      return originalSaveSession(interaction, { ...stateValue, media: legacyMedia, mediaV2 });
+    };
+    panel.__mediaSessionMirrorPatched = true;
+  }
+
   panel.buildMediaManagerPanel = (interaction, who = 'Unknown User') => {
     const state = panel.getSession(interaction);
     const panelMedia = media.getPanelMedia(state);
@@ -42,12 +62,15 @@ function installMediaManagerBase(panel, media) {
         new StringSelectMenuBuilder()
           .setCustomId('embed:media-gallery-select')
           .setPlaceholder('🖼️ Select gallery item')
-          .addOptions(panelMedia.gallery.slice(0, 25).map((item, index) => ({
-            label: `${index + 1}. ${panel.trim(item.alt || sourceLabel(item.source, 'Media item'), 90)}`,
-            value: String(index),
-            description: panel.trim(`${item.type || 'auto'}${item.spoiler ? ' • spoiler' : ''} • ${item.source || ''}`, 100),
-            default: galleryIndex === index,
-          }))),
+          .addOptions(panelMedia.gallery.slice(0, 25).map((item, index) => {
+            const placement = item.placement === 'above' ? 'above content' : 'below content';
+            return {
+              label: `${index + 1}. ${panel.trim(item.alt || sourceLabel(item.source, 'Media item'), 90)}`,
+              value: String(index),
+              description: panel.trim(`${item.type || 'auto'} • ${placement}${item.spoiler ? ' • spoiler' : ''} • ${item.source || ''}`, 100),
+              default: galleryIndex === index,
+            };
+          })),
       ));
     }
 
