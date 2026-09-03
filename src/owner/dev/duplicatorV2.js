@@ -330,6 +330,57 @@ async function applyChannels(guild, snap, maps, log, conflictMode) { const names
 async function applyPermissions(guild, snap, maps, log) { for (const sourceChannel of snap.channels || []) { try { const targetId = maps.channels.get(sourceChannel.id); if (!targetId) continue; const channel = guild.channels.cache.get(targetId) || await guild.channels.fetch(targetId).catch(() => null); if (!channel?.permissionOverwrites?.set) continue; const overwrites = []; for (const overwrite of sourceChannel.permissionOverwrites || []) { const mappedId = overwrite.id === snap.sourceGuild?.id ? guild.id : maps.roles.get(overwrite.id); if (!mappedId) continue; overwrites.push({ id: mappedId, type: overwrite.type, allow: new PermissionsBitField(BigInt(overwrite.allow || 0)), deny: new PermissionsBitField(BigInt(overwrite.deny || 0)) }); } await channel.permissionOverwrites.set(overwrites, 'Goliath duplicator: permissions'); log.copied.permissionOverwrites += overwrites.length; } catch (error) { pushError(log, `Permissions ${sourceChannel.name}`, error); log.skipped.push(`Permissions failed: ${sourceChannel.name}`); } } }
 async function applyEmojis(guild, snap, log, conflictMode) { const names = new Set(guild.emojis.cache.map((e) => e.name.toLowerCase())); for (const emoji of snap.emojis || []) { try { if (!emoji.url || !emoji.name) continue; if (names.has(emoji.name.toLowerCase()) && conflictMode === 'skip') { log.skipped.push(`Emoji exists: ${emoji.name}`); continue; } const name = names.has(emoji.name.toLowerCase()) && conflictMode === 'rename' ? uniqueName(names, emoji.name, 32).replace(/[^A-Za-z0-9_]/g, '_').slice(0, 32) : emoji.name; await guild.emojis.create({ attachment: emoji.url, name, reason: 'Goliath duplicator: emoji' }); names.add(name.toLowerCase()); log.copied.emojis += 1; } catch (error) { pushError(log, `Emoji ${emoji.name}`, error); log.skipped.push(`Emoji failed: ${emoji.name}`); } } }
 function resultEmbed(title, guild, log) { return embed(title, [`**Destination:** ${guild.name}`, `**Status:** \`${log.status}\``, `**Conflict:** \`${log.conflictMode}\``, `**Rollback:** \`${log.rollbackBackupId || (log.dryRun ? 'dry-run' : 'none')}\``, '', `Settings \`${log.copied.serverSettings}\` • Roles \`${log.copied.roles}\` • Categories \`${log.copied.categories}\` • Channels \`${log.copied.channels}\` • Permissions \`${log.copied.permissionOverwrites}\` • Emojis \`${log.copied.emojis}\``, log.deleted.roles || log.deleted.channels ? `Deleted: roles \`${log.deleted.roles}\`, channels \`${log.deleted.channels}\`` : '', log.skipped.length ? `Skipped:\n${log.skipped.slice(0, 8).map((i) => `• ${i}`).join('\n')}` : '', log.notes.length ? `Notes:\n${log.notes.slice(0, 8).map((i) => `• ${i}`).join('\n')}` : '', log.errors.length ? `Warnings/Errors:\n${log.errors.slice(0, 8).map((e) => `⚠️ ${e}`).join('\n')}` : ''].filter(Boolean).join('\n'), log.errors.length ? 0xf59e0b : 0x22c55e); }
+function dryRunFollowupPayload(session) {
+  const last = session.lastDryRun;
+  if (!last) return { embeds: [embed('❌ Dry Run Unavailable', 'The previous dry-run result is no longer available.', 0xef4444)], components: [] };
+  return {
+    embeds: [resultEmbed('🧪 Copy Dry-Run Complete', last.guildInfo, last.log)],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(componentId(COPY_PREFIX, session.id, 'proceed')).setLabel('Run Copy').setEmoji('▶️').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(componentId(COPY_PREFIX, session.id, 'edit')).setLabel('Edit Options').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(componentId(COPY_PREFIX, session.id, 'cancel')).setLabel('Cancel').setStyle(ButtonStyle.Danger)
+    )],
+  };
+}
+function copyFinalConfirmPayload(interaction, session) {
+  return {
+    embeds: [embed('⚠️ Final Copy Confirmation', [
+      `**Source:** ${guildDisplay(session, interaction.client, session.sourceGuildId)}`,
+      `**Destination:** ${guildDisplay(session, interaction.client, session.destinationGuildId)}`,
+      `**Conflict:** \`${session.conflictMode}\``,
+      '',
+      '**The dry run is complete.** Press the red **Confirm Copy** button to apply these exact settings to the destination.',
+      '',
+      ...session.selectedOptions.map((key) => `• ${COPY_OPTIONS[key] || key}`),
+    ].join('\n'), 0xf59e0b)],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(componentId(COPY_PREFIX, session.id, 'confirm')).setLabel('Confirm Copy').setEmoji('⚠️').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(componentId(COPY_PREFIX, session.id, 'back-dryrun')).setLabel('Back').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(componentId(COPY_PREFIX, session.id, 'cancel')).setLabel('Cancel').setStyle(ButtonStyle.Secondary)
+    )],
+  };
+}
+function analyseResultComponents(session) {
+  if (!session?.id) return [];
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(componentId(ANALYSE_PREFIX, session.id, 'dryrun')).setLabel('Run Copy Dry-Run').setEmoji('🧪').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(componentId(ANALYSE_PREFIX, session.id, 'copy')).setLabel('Continue to Copy').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(componentId(ANALYSE_PREFIX, session.id, 'back')).setLabel('Analyse Again').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(componentId(ANALYSE_PREFIX, session.id, 'cancel')).setLabel('Cancel').setStyle(ButtonStyle.Danger)
+  )];
+}
+function copySessionFromAnalyse(interaction, analyseSession, dryRun = false) {
+  const session = makeSession(interaction, 'copy');
+  session.sourceGuildId = analyseSession.sourceGuildId;
+  session.destinationGuildId = analyseSession.destinationGuildId;
+  session.guildDirectory = [...(analyseSession.guildDirectory || [])];
+  session.selectedOptions = [...ACTIVE_OPTIONS];
+  session.conflictMode = 'skip';
+  session.dryRun = dryRun;
+  session.pendingConfirm = false;
+  session.expiresAt = Date.now() + SESSION_TTL_MS;
+  return session;
+}
 async function executeStage(name, log, fn) { console.log(`[Duplicator] Stage start: ${name}`); try { await fn(); console.log(`[Duplicator] Stage complete: ${name}`); } catch (error) { pushError(log, name, error); } }
 async function executeSnapshotOnGuild(guild, session, snap, title, actorId = 'bridge') {
   await fetchGuildState(guild); const log = runLog(session, snap); const missing = missingPermissions(guild); if (missing.length) log.errors.push(`Preflight missing permissions: ${missing.join(', ')}`); const hierarchy = hierarchyWarning(guild); if (hierarchy) log.errors.push(`Preflight hierarchy warning: ${hierarchy} Discord does not allow bots to bypass role hierarchy.`); for (const [key, item] of Object.entries(snap.future || {})) if (item?.requested && !item.supported) log.notes.push(`${COPY_OPTIONS[key] || key}: ${item.reason}`); if (session.dryRun) { applyDryRunPlan(log, dryRunPlan(guild, snap, session.conflictMode)); log.status = 'dry-run'; return log; }
@@ -339,7 +390,29 @@ async function executeSnapshotOnGuild(guild, session, snap, title, actorId = 'br
   await executeStage('Server settings', log, () => applySettings(guild, snap, log)); await executeStage('Roles', log, () => applyRoles(guild, snap, maps, log, session.conflictMode)); await executeStage('Channels', log, () => applyChannels(guild, snap, maps, log, session.conflictMode)); await executeStage('Permissions', log, () => applyPermissions(guild, snap, maps, log)); await executeStage('Emojis', log, () => applyEmojis(guild, snap, log, session.conflictMode)); log.status = log.errors.length ? 'completed-with-warnings' : 'success'; return log;
 }
 async function snapshotForGuild(client, guildId, selectedOptions, session = null) { const route = await resolveGuildRoute(client, guildId, session); if (!route) throw new Error('Source server is unavailable to every Goliath environment.'); if (route.local) { const result = await fetchGuildById(client, guildId); if (!result.guild) throw new Error('Source server is unavailable.'); await fetchGuildState(result.guild); return snapshot(result.guild, selectedOptions); } const response = await bridgeRequest(route.environment, 'POST', '/snapshot', { guildId, selectedOptions }, 10000); return response.snapshot; }
-async function executeSnapshot(interaction, session, snap, title) { const route = await resolveGuildRoute(interaction.client, session.destinationGuildId, session); if (!route) throw new Error('Destination server is unavailable to every Goliath environment.'); let guildInfo; let log; if (route.local) { const result = await fetchGuildById(interaction.client, session.destinationGuildId); if (!result.guild) throw new Error('Destination server is unavailable.'); guildInfo = { id: result.guild.id, name: result.guild.name }; log = await executeSnapshotOnGuild(result.guild, session, snap, title, interaction.user.id); } else { const response = await bridgeRequest(route.environment, 'POST', '/apply', { guildId: session.destinationGuildId, session: { dryRun: session.dryRun, conflictMode: session.conflictMode }, snapshot: snap, title, actorId: interaction.user.id }, 120000); guildInfo = response.guild; log = response.log; } return interaction.editReply({ embeds: [resultEmbed(`${log.status === 'dry-run' ? '🧪' : '✅'} ${title} ${log.status === 'dry-run' ? 'Dry-Run Complete' : 'Complete'}`, guildInfo, log)], components: [] }); }
+async function executeSnapshot(interaction, session, snap, title) {
+  const route = await resolveGuildRoute(interaction.client, session.destinationGuildId, session);
+  if (!route) throw new Error('Destination server is unavailable to every Goliath environment.');
+  let guildInfo;
+  let log;
+  if (route.local) {
+    const result = await fetchGuildById(interaction.client, session.destinationGuildId);
+    if (!result.guild) throw new Error('Destination server is unavailable.');
+    guildInfo = { id: result.guild.id, name: result.guild.name };
+    log = await executeSnapshotOnGuild(result.guild, session, snap, title, interaction.user.id);
+  } else {
+    const response = await bridgeRequest(route.environment, 'POST', '/apply', { guildId: session.destinationGuildId, session: { dryRun: session.dryRun, conflictMode: session.conflictMode }, snapshot: snap, title, actorId: interaction.user.id }, 120000);
+    guildInfo = response.guild;
+    log = response.log;
+  }
+  if (log.status === 'dry-run') {
+    session.lastDryRun = { guildInfo, log };
+    session.expiresAt = Date.now() + SESSION_TTL_MS;
+    return interaction.editReply(dryRunFollowupPayload(session));
+  }
+  return interaction.editReply({ embeds: [resultEmbed(`✅ ${title} Complete`, guildInfo, log)], components: [] });
+}
+
 
 async function readBridgeBody(req) { const chunks = []; for await (const chunk of req) chunks.push(chunk); if (!chunks.length) return {}; return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
 function bridgeAuthorized(req) { const configured = bridgeSecret(); return !configured || req.headers['x-goliath-duplicator-secret'] === configured; }
@@ -376,7 +449,18 @@ async function performAnalyse(interaction, sourceGuildId, destinationGuildId, se
   const snap = await snapshotForGuild(interaction.client, sourceGuildId, [...ACTIVE_OPTIONS], routeSession);
   const destinationRoute = await resolveGuildRoute(interaction.client, destinationGuildId, routeSession);
   if (!destinationRoute) return interaction.editReply({ content: '❌ Destination server is unavailable to every Goliath environment.', embeds: [], components: [] });
-  if (!destinationRoute.local) return interaction.editReply({ embeds: [embed('🔎 Duplicator Analyse', `**Source:** ${snap.sourceGuild?.name || sourceGuildId}\n**Destination:** ${guildDisplay(routeSession, interaction.client, destinationGuildId)}\n\n✅ Both servers are reachable across Goliath environments.\n\nDetailed destination conflict analysis is performed by the destination instance during dry-run.`, 0x22c55e)], components: [] });
+  const buttons = analyseResultComponents(session);
+  if (!destinationRoute.local) {
+    const response = await bridgeRequest(destinationRoute.environment, 'POST', '/apply', { guildId: destinationGuildId, session: { dryRun: true, conflictMode: 'skip' }, snapshot: snap, title: 'Analyse', actorId: interaction.user.id }, 120000);
+    return interaction.editReply({ embeds: [embed('🔎 Duplicator Analyse', [
+      `**Source:** ${snap.sourceGuild?.name || sourceGuildId}`,
+      `**Destination:** ${response.guild?.name || guildDisplay(routeSession, interaction.client, destinationGuildId)}`,
+      '',
+      `Would create: roles \`${response.log.copied.roles}\`, categories \`${response.log.copied.categories}\`, channels \`${response.log.copied.channels}\`, permissions \`${response.log.copied.permissionOverwrites}\`, emojis \`${response.log.copied.emojis}\``,
+      response.log.notes?.length ? `Notes:\n${response.log.notes.slice(0, 6).map((n) => `• ${n}`).join('\n')}` : '',
+      response.log.errors?.length ? `Warnings:\n${response.log.errors.slice(0, 6).map((e) => `⚠️ ${e}`).join('\n')}` : '',
+    ].filter(Boolean).join('\n'), response.log.errors?.length ? 0xf59e0b : 0x22c55e)], components: buttons });
+  }
   const result = await fetchGuildById(interaction.client, destinationGuildId);
   const destinationGuild = result.guild;
   await fetchGuildState(destinationGuild);
@@ -384,8 +468,9 @@ async function performAnalyse(interaction, sourceGuildId, destinationGuildId, se
   const destChannels = new Set(destinationGuild.channels.cache.map((c) => `${c.type}:${c.name.toLowerCase()}`));
   const destEmojis = new Set(destinationGuild.emojis.cache.map((e) => e.name.toLowerCase()));
   const permissionLines = REQUIRED_BOT_PERMISSIONS.map(([name, bit]) => `${destinationGuild.members.me?.permissions?.has(bit) ? '✅' : '❌'} ${name}`).join('\n');
-  return interaction.editReply({ embeds: [embed('🔎 Duplicator Analyse', `**Source:** ${snap.sourceGuild?.name}\n**Destination:** ${destinationGuild.name}\n\nMissing roles: \`${snap.roles.filter((r) => !destRoles.has(r.name.toLowerCase())).length}\`\nMissing channels: \`${snap.channels.filter((c) => !destChannels.has(`${c.type}:${c.name.toLowerCase()}`)).length}\`\nMissing emojis: \`${snap.emojis.filter((e) => !destEmojis.has(e.name.toLowerCase())).length}\`\n\n**Bot permissions:**\n${permissionLines}\n\n**Hierarchy:** ${hierarchyWarning(destinationGuild) ? `⚠️ ${hierarchyWarning(destinationGuild)}` : '✅ Goliath role has usable hierarchy.'}`, 0x22c55e)], components: [] });
+  return interaction.editReply({ embeds: [embed('🔎 Duplicator Analyse', `**Source:** ${snap.sourceGuild?.name}\n**Destination:** ${destinationGuild.name}\n\nMissing roles: \`${snap.roles.filter((r) => !destRoles.has(r.name.toLowerCase())).length}\`\nMissing channels: \`${snap.channels.filter((c) => !destChannels.has(`${c.type}:${c.name.toLowerCase()}`)).length}\`\nMissing emojis: \`${snap.emojis.filter((e) => !destEmojis.has(e.name.toLowerCase())).length}\`\n\n**Bot permissions:**\n${permissionLines}\n\n**Hierarchy:** ${hierarchyWarning(destinationGuild) ? `⚠️ ${hierarchyWarning(destinationGuild)}` : '✅ Goliath role has usable hierarchy.'}`, 0x22c55e)], components: buttons });
 }
+
 
 async function analyse(interaction) {
   const access = assertAccess(interaction);
@@ -400,26 +485,74 @@ async function analyse(interaction) {
 }
 
 async function run(interaction) { const action = interaction.options.getString('action', true); if (action === 'copy') return startCopy(interaction); if (action === 'analyse') return analyse(interaction); if (action === 'export') return exportTemplate(interaction); if (action === 'build') return startBuild(interaction); return interaction.reply({ content: '❌ Unknown server action.', flags: MessageFlags.Ephemeral }); }
-async function handleCopy(interaction, data) { initializeBridge(interaction.client); const session = getSession(copySessions, interaction, data.sessionId); if (!session) return interaction.reply({ content: '❌ Copy session expired or you do not own it.', flags: MessageFlags.Ephemeral }).catch(() => null); if (data.action === 'source') { session.sourceGuildId = interaction.values?.[0]; session.pendingConfirm = false; } else if (data.action === 'destination') { session.destinationGuildId = interaction.values?.[0]; session.pendingConfirm = false; } else if (data.action === 'options') { session.selectedOptions = interaction.values || [...ACTIVE_OPTIONS]; session.pendingConfirm = false; } else if (data.action === 'conflict') { session.conflictMode = interaction.values?.[0] || 'skip'; session.pendingConfirm = false; } else if (data.action === 'refresh') { await refreshSessionDirectory(interaction.client, session); session.pendingConfirm = false; } else if (data.action === 'dryrun') { session.dryRun = !session.dryRun; session.pendingConfirm = false; } else if (data.action === 'cancel') { copySessions.delete(session.id); return interaction.update({ embeds: [embed('❌ Copy Cancelled', 'No changes were made.', 0xef4444)], components: [] }); } else if (data.action === 'start') { if (!session.dryRun && !session.pendingConfirm) { session.pendingConfirm = true; return interaction.update(await copyPanel(interaction, session)); } const snap = await snapshotForGuild(interaction.client, session.sourceGuildId, session.selectedOptions, session); await interaction.update({ embeds: [embed('🚧 Copy Running', 'Working...', 0x5865f2)], components: [] }); await executeSnapshot(interaction, session, snap, 'Copy'); copySessions.delete(session.id); return true; } return interaction.update(await copyPanel(interaction, session)); }
+async function handleCopy(interaction, data) {
+  initializeBridge(interaction.client);
+  const session = getSession(copySessions, interaction, data.sessionId);
+  if (!session) return interaction.reply({ content: '❌ Copy session expired or you do not own it.', flags: MessageFlags.Ephemeral }).catch(() => null);
+  const reset = () => { session.pendingConfirm = false; session.lastDryRun = null; session.expiresAt = Date.now() + SESSION_TTL_MS; };
+  if (data.action === 'source') { session.sourceGuildId = interaction.values?.[0]; reset(); }
+  else if (data.action === 'destination') { session.destinationGuildId = interaction.values?.[0]; reset(); }
+  else if (data.action === 'options') { session.selectedOptions = interaction.values || [...ACTIVE_OPTIONS]; reset(); }
+  else if (data.action === 'conflict') { session.conflictMode = interaction.values?.[0] || 'skip'; reset(); }
+  else if (data.action === 'refresh') { await refreshSessionDirectory(interaction.client, session); reset(); }
+  else if (data.action === 'dryrun') { session.dryRun = !session.dryRun; reset(); }
+  else if (data.action === 'cancel') { copySessions.delete(session.id); return interaction.update({ embeds: [embed('❌ Copy Cancelled', 'No changes were made.', 0xef4444)], components: [] }); }
+  else if (data.action === 'edit') { session.dryRun = true; session.pendingConfirm = false; return interaction.update(await copyPanel(interaction, session)); }
+  else if (data.action === 'proceed') { session.dryRun = false; session.pendingConfirm = true; session.expiresAt = Date.now() + SESSION_TTL_MS; return interaction.update(copyFinalConfirmPayload(interaction, session)); }
+  else if (data.action === 'back-dryrun') { session.dryRun = true; session.pendingConfirm = false; return interaction.update(dryRunFollowupPayload(session)); }
+  else if (data.action === 'confirm') {
+    session.dryRun = false;
+    session.pendingConfirm = true;
+    const snap = await snapshotForGuild(interaction.client, session.sourceGuildId, session.selectedOptions, session);
+    await interaction.update({ embeds: [embed('🚧 Copy Running', 'Working...', 0x5865f2)], components: [] });
+    await executeSnapshot(interaction, session, snap, 'Copy');
+    copySessions.delete(session.id);
+    return true;
+  }
+  else if (data.action === 'start') {
+    if (!session.dryRun && !session.pendingConfirm) { session.pendingConfirm = true; return interaction.update(await copyPanel(interaction, session)); }
+    const wasDryRun = session.dryRun;
+    const snap = await snapshotForGuild(interaction.client, session.sourceGuildId, session.selectedOptions, session);
+    await interaction.update({ embeds: [embed(wasDryRun ? '🧪 Dry Run Running' : '🚧 Copy Running', 'Working...', 0x5865f2)], components: [] });
+    await executeSnapshot(interaction, session, snap, 'Copy');
+    if (!wasDryRun) copySessions.delete(session.id);
+    return true;
+  }
+  return interaction.update(await copyPanel(interaction, session));
+}
+
 async function handleBuild(interaction, data) { initializeBridge(interaction.client); const session = getSession(buildSessions, interaction, data.sessionId); if (!session) return interaction.reply({ content: '❌ Build session expired or you do not own it.', flags: MessageFlags.Ephemeral }).catch(() => null); if (data.action === 'template') { session.templateId = interaction.values?.[0] === 'none' ? null : interaction.values?.[0]; session.pendingConfirm = false; } else if (data.action === 'destination') { session.destinationGuildId = interaction.values?.[0]; session.pendingConfirm = false; } else if (data.action === 'conflict') { session.conflictMode = interaction.values?.[0] || 'skip'; session.pendingConfirm = false; } else if (data.action === 'refresh') { await refreshSessionDirectory(interaction.client, session); session.pendingConfirm = false; } else if (data.action === 'dryrun') { session.dryRun = !session.dryRun; session.pendingConfirm = false; } else if (data.action === 'cancel') { buildSessions.delete(session.id); return interaction.update({ embeds: [embed('❌ Build Cancelled', 'No changes were made.', 0xef4444)], components: [] }); } else if (data.action === 'start') { if (!session.dryRun && !session.pendingConfirm) { session.pendingConfirm = true; return interaction.update(await buildPanel(interaction, session)); } const template = templates(session.controlGuildId)[session.templateId]; if (!template?.snapshot) return interaction.update({ content: '❌ Template not found.', embeds: [], components: [] }); await interaction.update({ embeds: [embed('🏗️ Build Running', 'Working...', 0x5865f2)], components: [] }); await executeSnapshot(interaction, session, template.snapshot, 'Build'); buildSessions.delete(session.id); return true; } return interaction.update(await buildPanel(interaction, session)); }
 async function handleAnalyse(interaction, data) {
   initializeBridge(interaction.client);
   const session = getSession(analyseSessions, interaction, data.sessionId);
   if (!session) return interaction.reply({ content: '❌ Analyse session expired or you do not own it.', flags: MessageFlags.Ephemeral }).catch(() => null);
+  session.expiresAt = Date.now() + SESSION_TTL_MS;
   if (data.action === 'source') session.sourceGuildId = interaction.values?.[0];
   else if (data.action === 'destination') session.destinationGuildId = interaction.values?.[0];
   else if (data.action === 'refresh') await refreshSessionDirectory(interaction.client, session);
+  else if (data.action === 'back') return interaction.update(await analysePanel(interaction, session));
   else if (data.action === 'cancel') { analyseSessions.delete(session.id); return interaction.update({ embeds: [embed('❌ Analyse Cancelled', 'No changes were made.', 0xef4444)], components: [] }); }
-  else if (data.action === 'start') {
-    const sourceGuildId = session.sourceGuildId;
-    const destinationGuildId = session.destinationGuildId;
-    await interaction.update({ embeds: [embed('🔎 Analysing Servers', 'Working...', 0x5865f2)], components: [] });
-    await performAnalyse(interaction, sourceGuildId, destinationGuildId, session);
+  else if (data.action === 'copy') {
+    const copySession = copySessionFromAnalyse(interaction, session, false);
     analyseSessions.delete(session.id);
+    return interaction.update(await copyPanel(interaction, copySession));
+  }
+  else if (data.action === 'dryrun') {
+    const copySession = copySessionFromAnalyse(interaction, session, true);
+    analyseSessions.delete(session.id);
+    const snap = await snapshotForGuild(interaction.client, copySession.sourceGuildId, copySession.selectedOptions, copySession);
+    await interaction.update({ embeds: [embed('🧪 Dry Run Running', 'Working...', 0x5865f2)], components: [] });
+    await executeSnapshot(interaction, copySession, snap, 'Copy');
+    return true;
+  }
+  else if (data.action === 'start') {
+    await interaction.update({ embeds: [embed('🔎 Analysing Servers', 'Working...', 0x5865f2)], components: [] });
+    await performAnalyse(interaction, session.sourceGuildId, session.destinationGuildId, session);
     return true;
   }
   return interaction.update(await analysePanel(interaction, session));
 }
+
 
 async function handleInteraction(interaction) {
   if (!interaction?.customId) return false;
