@@ -20,11 +20,13 @@ const { createServerBackup } = require('../../core/security/restoreBackup/backup
 
 const COPY_PREFIX = 'duplicator-copy';
 const BUILD_PREFIX = 'duplicator-build';
+const ANALYSE_PREFIX = 'duplicator-analyse';
 const SESSION_TTL_MS = 20 * 60 * 1000;
 const BRIDGE_HOST = '127.0.0.1';
 const BRIDGE_PORTS = Object.freeze({ DEV: 3002, BETA: 3012, PRODUCTION: 3022 });
 const copySessions = new Map();
 const buildSessions = new Map();
+const analyseSessions = new Map();
 let bridgeServer = null;
 let bridgeClient = null;
 
@@ -152,6 +154,42 @@ function makeSession(interaction, type) {
   (type === 'build' ? buildSessions : copySessions).set(session.id, session); return session;
 }
 
+function makeAnalyseSession(interaction) {
+  const session = {
+    id: `${interaction.user.id}-${Date.now().toString(36)}`,
+    ownerId: interaction.user.id,
+    controlGuildId: interaction.guild.id,
+    sourceGuildId: null,
+    destinationGuildId: interaction.guild.id,
+    guildDirectory: [],
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  };
+  analyseSessions.set(session.id, session);
+  return session;
+}
+
+async function analysePanel(interaction, session) {
+  if (!session.guildDirectory?.length) await refreshSessionDirectory(interaction.client, session);
+  return {
+    embeds: [embed('🔎 Server Duplicator — Analyse', [
+      `**Source:** ${guildDisplay(session, interaction.client, session.sourceGuildId)}`,
+      `**Destination:** ${guildDisplay(session, interaction.client, session.destinationGuildId)}`,
+      '',
+      'Choose the source and destination servers from Goliath’s connected guilds, then press **Analyse Servers**.',
+    ].join('\n'))],
+    components: [
+      new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(componentId(ANALYSE_PREFIX, session.id, 'source')).setPlaceholder('Source server').addOptions(guildChoices(session, session.sourceGuildId))),
+      new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(componentId(ANALYSE_PREFIX, session.id, 'destination')).setPlaceholder('Destination server').addOptions(guildChoices(session, session.destinationGuildId))),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(componentId(ANALYSE_PREFIX, session.id, 'start')).setLabel('Analyse Servers').setEmoji('🔎').setStyle(ButtonStyle.Primary).setDisabled(!session.sourceGuildId || !session.destinationGuildId || session.sourceGuildId === session.destinationGuildId),
+        new ButtonBuilder().setCustomId(componentId(ANALYSE_PREFIX, session.id, 'refresh')).setLabel('Refresh Guilds').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(componentId(ANALYSE_PREFIX, session.id, 'cancel')).setLabel('Cancel').setStyle(ButtonStyle.Danger)
+      ),
+    ],
+    flags: MessageFlags.Ephemeral,
+  };
+}
+
 function channelTemplate(id, name, type, parentId, position) { return { id, name, type, parentId, position, topic: null, nsfw: false, rateLimitPerUser: 0, bitrate: null, userLimit: 0, rtcRegion: null, videoQualityMode: null, defaultAutoArchiveDuration: null, defaultThreadRateLimitPerUser: 0, availableTags: [], permissionOverwrites: [] }; }
 function makeTemplate(templateId, name, description, roleDefs, categoryDefs) {
   const roles = roleDefs.map(([roleName, color], index) => ({ id: `template:${templateId}:role:${slugify(roleName)}`, name: roleName, color, hoist: index < 3, mentionable: false, permissions: '0', position: index + 1 }));
@@ -263,10 +301,71 @@ function initializeBridge(client) {
 async function startCopy(interaction) { const access = assertAccess(interaction); if (!access.allowed) return interaction.reply({ content: `❌ ${access.reason}`, flags: MessageFlags.Ephemeral }); initializeBridge(interaction.client); const session = makeSession(interaction, 'copy'); await refreshSessionDirectory(interaction.client, session); return interaction.reply(await copyPanel(interaction, session)); }
 async function startBuild(interaction) { const access = assertAccess(interaction); if (!access.allowed) return interaction.reply({ content: `❌ ${access.reason}`, flags: MessageFlags.Ephemeral }); initializeBridge(interaction.client); templates(interaction.guild.id, interaction.guild); const session = makeSession(interaction, 'build'); await refreshSessionDirectory(interaction.client, session); return interaction.reply(await buildPanel(interaction, session)); }
 async function exportTemplate(interaction) { const access = assertAccess(interaction); if (!access.allowed) return interaction.reply({ content: `❌ ${access.reason}`, flags: MessageFlags.Ephemeral }); initializeBridge(interaction.client); const name = interaction.options.getString('name'); if (!name) return interaction.reply({ content: '❌ Export needs `name`.', flags: MessageFlags.Ephemeral }); const sourceGuildId = interaction.options.getString('source_server') || interaction.guild.id; await interaction.deferReply({ flags: MessageFlags.Ephemeral }); const directory = await getGuildDirectory(interaction.client); const snap = await snapshotForGuild(interaction.client, sourceGuildId, [...ACTIVE_OPTIONS], { guildDirectory: directory }); const sourceEntry = directory.find((g) => g.id === sourceGuildId) || { id: sourceGuildId, name: snap.sourceGuild?.name || sourceGuildId, environment: mode() }; const templateId = slugify(interaction.options.getString('template_id') || name); const all = templates(interaction.guild.id, interaction.guild); const existing = all[templateId]; all[templateId] = { meta: { id: templateId, name, description: interaction.options.getString('description') || '', version: interaction.options.getString('version') || '2.0.0', sourceGuildId, sourceGuildName: sourceEntry.name, createdAt: existing?.meta?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString(), createdBy: existing?.meta?.createdBy || interaction.user.id, updatedBy: interaction.user.id, environment: sourceEntry.environment || mode(), schemaVersion: 2, defaultTemplate: false }, snapshot: snap }; saveTemplates(interaction.guild.id, all, interaction.guild); return interaction.editReply({ embeds: [embed('✅ Template Exported', `**Template:** ${name}\n**ID:** \`${templateId}\`\n**Saved:** \`modules.duplicator.templates.${templateId}\`\n\nRoles \`${snap.stats.roles}\` • Channels \`${snap.stats.channels}\` • Emojis \`${snap.stats.emojis}\``, 0x22c55e)] }); }
-async function analyse(interaction) { const access = assertAccess(interaction); if (!access.allowed) return interaction.reply({ content: `❌ ${access.reason}`, flags: MessageFlags.Ephemeral }); initializeBridge(interaction.client); const sourceGuildId = String(interaction.options.getString('source_server') || '').trim(); const destinationGuildId = String(interaction.options.getString('destination_server') || '').trim(); if (!/^\d{16,25}$/.test(sourceGuildId) || !/^\d{16,25}$/.test(destinationGuildId)) return interaction.reply({ content: '❌ Source and destination must be valid Discord server IDs.', flags: MessageFlags.Ephemeral }); await interaction.deferReply({ flags: MessageFlags.Ephemeral }); const directory = await getGuildDirectory(interaction.client); const session = { guildDirectory: directory }; const snap = await snapshotForGuild(interaction.client, sourceGuildId, [...ACTIVE_OPTIONS], session); const destinationRoute = await resolveGuildRoute(interaction.client, destinationGuildId, session); if (!destinationRoute) return interaction.editReply({ content: '❌ Destination server is unavailable to every Goliath environment.' }); if (!destinationRoute.local) return interaction.editReply({ embeds: [embed('🔎 Duplicator Analyse', `**Source:** ${snap.sourceGuild?.name || sourceGuildId}\n**Destination:** ${guildDisplay(session, interaction.client, destinationGuildId)}\n\n✅ Both servers are reachable across Goliath environments.\n\nDetailed destination conflict analysis is performed by the destination instance during dry-run.`, 0x22c55e)] }); const result = await fetchGuildById(interaction.client, destinationGuildId); const destinationGuild = result.guild; await fetchGuildState(destinationGuild); const destRoles = new Set(destinationGuild.roles.cache.map((r) => r.name.toLowerCase())); const destChannels = new Set(destinationGuild.channels.cache.map((c) => `${c.type}:${c.name.toLowerCase()}`)); const destEmojis = new Set(destinationGuild.emojis.cache.map((e) => e.name.toLowerCase())); const permissionLines = REQUIRED_BOT_PERMISSIONS.map(([name, bit]) => `${destinationGuild.members.me?.permissions?.has(bit) ? '✅' : '❌'} ${name}`).join('\n'); return interaction.editReply({ embeds: [embed('🔎 Duplicator Analyse', `**Source:** ${snap.sourceGuild?.name}\n**Destination:** ${destinationGuild.name}\n\nMissing roles: \`${snap.roles.filter((r) => !destRoles.has(r.name.toLowerCase())).length}\`\nMissing channels: \`${snap.channels.filter((c) => !destChannels.has(`${c.type}:${c.name.toLowerCase()}`)).length}\`\nMissing emojis: \`${snap.emojis.filter((e) => !destEmojis.has(e.name.toLowerCase())).length}\`\n\n**Bot permissions:**\n${permissionLines}\n\n**Hierarchy:** ${hierarchyWarning(destinationGuild) ? `⚠️ ${hierarchyWarning(destinationGuild)}` : '✅ Goliath role has usable hierarchy.'}`, 0x22c55e)] }); }
+async function performAnalyse(interaction, sourceGuildId, destinationGuildId, session = null) {
+  const access = assertAccess(interaction);
+  if (!access.allowed) return interaction.reply({ content: `❌ ${access.reason}`, flags: MessageFlags.Ephemeral });
+  initializeBridge(interaction.client);
+  if (!/^\d{16,25}$/.test(String(sourceGuildId || '')) || !/^\d{16,25}$/.test(String(destinationGuildId || ''))) return interaction.reply({ content: '❌ Source and destination must be valid Discord servers.', flags: MessageFlags.Ephemeral });
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const directory = session?.guildDirectory?.length ? session.guildDirectory : await getGuildDirectory(interaction.client);
+  const routeSession = { guildDirectory: directory };
+  const snap = await snapshotForGuild(interaction.client, sourceGuildId, [...ACTIVE_OPTIONS], routeSession);
+  const destinationRoute = await resolveGuildRoute(interaction.client, destinationGuildId, routeSession);
+  if (!destinationRoute) return interaction.editReply({ content: '❌ Destination server is unavailable to every Goliath environment.', embeds: [], components: [] });
+  if (!destinationRoute.local) return interaction.editReply({ embeds: [embed('🔎 Duplicator Analyse', `**Source:** ${snap.sourceGuild?.name || sourceGuildId}\n**Destination:** ${guildDisplay(routeSession, interaction.client, destinationGuildId)}\n\n✅ Both servers are reachable across Goliath environments.\n\nDetailed destination conflict analysis is performed by the destination instance during dry-run.`, 0x22c55e)], components: [] });
+  const result = await fetchGuildById(interaction.client, destinationGuildId);
+  const destinationGuild = result.guild;
+  await fetchGuildState(destinationGuild);
+  const destRoles = new Set(destinationGuild.roles.cache.map((r) => r.name.toLowerCase()));
+  const destChannels = new Set(destinationGuild.channels.cache.map((c) => `${c.type}:${c.name.toLowerCase()}`));
+  const destEmojis = new Set(destinationGuild.emojis.cache.map((e) => e.name.toLowerCase()));
+  const permissionLines = REQUIRED_BOT_PERMISSIONS.map(([name, bit]) => `${destinationGuild.members.me?.permissions?.has(bit) ? '✅' : '❌'} ${name}`).join('\n');
+  return interaction.editReply({ embeds: [embed('🔎 Duplicator Analyse', `**Source:** ${snap.sourceGuild?.name}\n**Destination:** ${destinationGuild.name}\n\nMissing roles: \`${snap.roles.filter((r) => !destRoles.has(r.name.toLowerCase())).length}\`\nMissing channels: \`${snap.channels.filter((c) => !destChannels.has(`${c.type}:${c.name.toLowerCase()}`)).length}\`\nMissing emojis: \`${snap.emojis.filter((e) => !destEmojis.has(e.name.toLowerCase())).length}\`\n\n**Bot permissions:**\n${permissionLines}\n\n**Hierarchy:** ${hierarchyWarning(destinationGuild) ? `⚠️ ${hierarchyWarning(destinationGuild)}` : '✅ Goliath role has usable hierarchy.'}`, 0x22c55e)], components: [] });
+}
+
+async function analyse(interaction) {
+  const access = assertAccess(interaction);
+  if (!access.allowed) return interaction.reply({ content: `❌ ${access.reason}`, flags: MessageFlags.Ephemeral });
+  initializeBridge(interaction.client);
+  const sourceGuildId = String(interaction.options.getString('source_server') || '').trim();
+  const destinationGuildId = String(interaction.options.getString('destination_server') || '').trim();
+  if (sourceGuildId && destinationGuildId) return performAnalyse(interaction, sourceGuildId, destinationGuildId);
+  const session = makeAnalyseSession(interaction);
+  await refreshSessionDirectory(interaction.client, session);
+  return interaction.reply(await analysePanel(interaction, session));
+}
+
 async function run(interaction) { const action = interaction.options.getString('action', true); if (action === 'copy') return startCopy(interaction); if (action === 'analyse') return analyse(interaction); if (action === 'export') return exportTemplate(interaction); if (action === 'build') return startBuild(interaction); return interaction.reply({ content: '❌ Unknown server action.', flags: MessageFlags.Ephemeral }); }
 async function handleCopy(interaction, data) { initializeBridge(interaction.client); const session = getSession(copySessions, interaction, data.sessionId); if (!session) return interaction.reply({ content: '❌ Copy session expired or you do not own it.', flags: MessageFlags.Ephemeral }).catch(() => null); if (data.action === 'source') { session.sourceGuildId = interaction.values?.[0]; session.pendingConfirm = false; } else if (data.action === 'destination') { session.destinationGuildId = interaction.values?.[0]; session.pendingConfirm = false; } else if (data.action === 'options') { session.selectedOptions = interaction.values || [...ACTIVE_OPTIONS]; session.pendingConfirm = false; } else if (data.action === 'conflict') { session.conflictMode = interaction.values?.[0] || 'skip'; session.pendingConfirm = false; } else if (data.action === 'refresh') { await refreshSessionDirectory(interaction.client, session); session.pendingConfirm = false; } else if (data.action === 'dryrun') { session.dryRun = !session.dryRun; session.pendingConfirm = false; } else if (data.action === 'cancel') { copySessions.delete(session.id); return interaction.update({ embeds: [embed('❌ Copy Cancelled', 'No changes were made.', 0xef4444)], components: [] }); } else if (data.action === 'start') { if (!session.dryRun && !session.pendingConfirm) { session.pendingConfirm = true; return interaction.update(await copyPanel(interaction, session)); } const snap = await snapshotForGuild(interaction.client, session.sourceGuildId, session.selectedOptions, session); await interaction.update({ embeds: [embed('🚧 Copy Running', 'Working...', 0x5865f2)], components: [] }); await executeSnapshot(interaction, session, snap, 'Copy'); copySessions.delete(session.id); return true; } return interaction.update(await copyPanel(interaction, session)); }
 async function handleBuild(interaction, data) { initializeBridge(interaction.client); const session = getSession(buildSessions, interaction, data.sessionId); if (!session) return interaction.reply({ content: '❌ Build session expired or you do not own it.', flags: MessageFlags.Ephemeral }).catch(() => null); if (data.action === 'template') { session.templateId = interaction.values?.[0] === 'none' ? null : interaction.values?.[0]; session.pendingConfirm = false; } else if (data.action === 'destination') { session.destinationGuildId = interaction.values?.[0]; session.pendingConfirm = false; } else if (data.action === 'conflict') { session.conflictMode = interaction.values?.[0] || 'skip'; session.pendingConfirm = false; } else if (data.action === 'refresh') { await refreshSessionDirectory(interaction.client, session); session.pendingConfirm = false; } else if (data.action === 'dryrun') { session.dryRun = !session.dryRun; session.pendingConfirm = false; } else if (data.action === 'cancel') { buildSessions.delete(session.id); return interaction.update({ embeds: [embed('❌ Build Cancelled', 'No changes were made.', 0xef4444)], components: [] }); } else if (data.action === 'start') { if (!session.dryRun && !session.pendingConfirm) { session.pendingConfirm = true; return interaction.update(await buildPanel(interaction, session)); } const template = templates(session.controlGuildId)[session.templateId]; if (!template?.snapshot) return interaction.update({ content: '❌ Template not found.', embeds: [], components: [] }); await interaction.update({ embeds: [embed('🏗️ Build Running', 'Working...', 0x5865f2)], components: [] }); await executeSnapshot(interaction, session, template.snapshot, 'Build'); buildSessions.delete(session.id); return true; } return interaction.update(await buildPanel(interaction, session)); }
-async function handleInteraction(interaction) { if (!interaction?.customId) return false; const copy = parseComponentId(interaction.customId, COPY_PREFIX); if (copy) { await handleCopy(interaction, copy); return true; } const build = parseComponentId(interaction.customId, BUILD_PREFIX); if (build) { await handleBuild(interaction, build); return true; } return false; }
+async function handleAnalyse(interaction, data) {
+  initializeBridge(interaction.client);
+  const session = getSession(analyseSessions, interaction, data.sessionId);
+  if (!session) return interaction.reply({ content: '❌ Analyse session expired or you do not own it.', flags: MessageFlags.Ephemeral }).catch(() => null);
+  if (data.action === 'source') session.sourceGuildId = interaction.values?.[0];
+  else if (data.action === 'destination') session.destinationGuildId = interaction.values?.[0];
+  else if (data.action === 'refresh') await refreshSessionDirectory(interaction.client, session);
+  else if (data.action === 'cancel') { analyseSessions.delete(session.id); return interaction.update({ embeds: [embed('❌ Analyse Cancelled', 'No changes were made.', 0xef4444)], components: [] }); }
+  else if (data.action === 'start') {
+    const sourceGuildId = session.sourceGuildId;
+    const destinationGuildId = session.destinationGuildId;
+    await interaction.update({ embeds: [embed('🔎 Analysing Servers', 'Working...', 0x5865f2)], components: [] });
+    await performAnalyse(interaction, sourceGuildId, destinationGuildId, session);
+    analyseSessions.delete(session.id);
+    return true;
+  }
+  return interaction.update(await analysePanel(interaction, session));
+}
+
+async function handleInteraction(interaction) {
+  if (!interaction?.customId) return false;
+  const analyseData = parseComponentId(interaction.customId, ANALYSE_PREFIX);
+  if (analyseData) { await handleAnalyse(interaction, analyseData); return true; }
+  const copy = parseComponentId(interaction.customId, COPY_PREFIX);
+  if (copy) { await handleCopy(interaction, copy); return true; }
+  const build = parseComponentId(interaction.customId, BUILD_PREFIX);
+  if (build) { await handleBuild(interaction, build); return true; }
+  return false;
+}
 
 module.exports = { run, handleInteraction, assertAccess, snapshot, templates, templateList, DEFAULT_TEMPLATES, initializeBridge, getGuildDirectory };

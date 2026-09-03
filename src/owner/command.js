@@ -532,11 +532,7 @@ async function handleOwnerPanelInteraction(interaction) {
   }
 
   if (id === `${OWNER_PREFIX}server-analyse`) {
-    if (!contextGuildId) {
-      await interaction.reply(serverContextRequiredPayload());
-      return true;
-    }
-    await interaction.showModal(analyseModal(interaction, contextGuildId));
+    await runDuplicator(interaction, { action: 'analyse' }, contextGuildId);
     return true;
   }
 
