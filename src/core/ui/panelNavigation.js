@@ -237,11 +237,6 @@ function buildRolePickerPagination(customId, page = 0, pageCount = 1) {
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safePage <= 0),
     new ButtonBuilder()
-      .setCustomId(`${String(customId || 'role').slice(0, 70)}|rpinfo|${safePage}`.slice(0, 100))
-      .setLabel(`Page ${safePage + 1}/${safeCount}`)
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(true),
-    new ButtonBuilder()
       .setCustomId(rolePickerCustomId(customId, 'page', Math.min(safeCount - 1, safePage + 1)))
       .setLabel('Next')
       .setEmoji('➡️')
