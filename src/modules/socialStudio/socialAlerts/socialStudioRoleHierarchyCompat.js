@@ -19,7 +19,7 @@ function sessionKey(interaction) {
 }
 
 function getSession(interaction) {
-  return sessions.get(sessionKey(interaction)) || { managerPage: 0, userPage: 0 };
+  return sessions.get(sessionKey(interaction)) || { rolePage: 0 };
 }
 
 function setSession(interaction, patch) {
@@ -59,6 +59,10 @@ function sortedRoles(interaction) {
 
 function clampPage(page, pageCount) {
   return Math.max(0, Math.min(Number(page) || 0, Math.max(0, pageCount - 1)));
+}
+
+function rolePageCount(interaction) {
+  return Math.max(1, Math.ceil(sortedRoles(interaction).length / PAGE_SIZE));
 }
 
 function roleSelect(interaction, customId, placeholder, selectedIds, page) {
@@ -126,9 +130,11 @@ function currentRoleNames(interaction, ids = []) {
 function payload(interaction) {
   const config = store.getConfig(interaction.guildId);
   const state = getSession(interaction);
-  const manager = roleSelect(interaction, `${P}roles:select`, 'Select Social Studio manager roles', config.managerRoleIds || [], state.managerPage);
-  const user = roleSelect(interaction, `${P}userroles:select`, 'Select Social Studio user access roles', config.userRoleIds || [], state.userPage);
-  setSession(interaction, { managerPage: manager.page, userPage: user.page });
+  const pageCount = rolePageCount(interaction);
+  const safePage = clampPage(state.rolePage, pageCount);
+  const manager = roleSelect(interaction, `${P}roles:select`, 'Select Social Studio manager roles', config.managerRoleIds || [], safePage);
+  const user = roleSelect(interaction, `${P}userroles:select`, 'Select Social Studio user access roles', config.userRoleIds || [], safePage);
+  setSession(interaction, { rolePage: safePage });
 
   const description = [
     '👥 **Manager roles**',
@@ -143,6 +149,17 @@ function payload(interaction) {
     'Role menus are ordered by Discord hierarchy, highest role first.',
   ].join('\n');
 
+  const navigation = [
+    button(`${P}settings`, '⬅️ Back'),
+    button(`${P}main`, '🏠 Social Studio'),
+  ];
+  if (pageCount > 1) {
+    navigation.push(
+      button(`${P}roles:page:prev`, '⬅️ Previous', safePage <= 0),
+      button(`${P}roles:page:next`, 'Next ➡️', safePage >= pageCount - 1),
+    );
+  }
+
   return {
     embeds: [new EmbedBuilder()
       .setColor(config.enabled ? 0x5865F2 : 0x747F8D)
@@ -154,7 +171,7 @@ function payload(interaction) {
       manager.row,
       user.row,
       notificationSelect(interaction, config),
-      row(button(`${P}settings`, '⬅️ Back'), button(`${P}main`, '🏠 Social Studio')),
+      row(...navigation),
     ],
   };
 }
@@ -188,22 +205,29 @@ async function handle(interaction) {
   if (!interaction.guildId) return false;
 
   if (id === `${P}permissions`) {
-    setSession(interaction, { managerPage: 0, userPage: 0 });
+    setSession(interaction, { rolePage: 0 });
     return update(interaction);
   }
 
   const state = getSession(interaction);
 
+  if (id === `${P}roles:page:prev` || id === `${P}roles:page:next`) {
+    const delta = id.endsWith(':next') ? 1 : -1;
+    const pageCount = rolePageCount(interaction);
+    setSession(interaction, { rolePage: clampPage(state.rolePage + delta, pageCount) });
+    return update(interaction);
+  }
+
   if (id === `${P}roles:select`) {
     const config = store.getConfig(interaction.guildId);
-    config.managerRoleIds = mergePageSelection(interaction, config.managerRoleIds || [], interaction.values || [], state.managerPage);
+    config.managerRoleIds = mergePageSelection(interaction, config.managerRoleIds || [], interaction.values || [], state.rolePage);
     save(interaction, config);
     return update(interaction);
   }
 
   if (id === `${P}userroles:select`) {
     const config = store.getConfig(interaction.guildId);
-    config.userRoleIds = mergePageSelection(interaction, config.userRoleIds || [], interaction.values || [], state.userPage);
+    config.userRoleIds = mergePageSelection(interaction, config.userRoleIds || [], interaction.values || [], state.rolePage);
     save(interaction, config);
     return update(interaction);
   }
