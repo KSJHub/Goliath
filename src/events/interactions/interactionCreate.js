@@ -362,28 +362,49 @@ function normalizeLegacyRoleRows(rows, interaction) {
   const page = Math.min(requestedPage, pageCount - 1);
   const controls = [
     paginationButton(`grole:page:${Math.max(0, page - 1)}`, '⬅️ Previous', page <= 0),
-    paginationButton(`grole:info:${page}`, `Page ${page + 1}/${pageCount}`, true),
     paginationButton(`grole:page:${Math.min(pageCount - 1, page + 1)}`, 'Next ➡️', page >= pageCount - 1),
   ];
 
   let target = -1;
   for (let index = nextRows.length - 1; index >= 0; index -= 1) {
     const components = nextRows[index]?.components || [];
-    if (components.length <= 2 && components.every((component) => Number(component.type) === 2)) { target = index; break; }
+    if (components.length <= 3 && components.every((component) => Number(component.type) === 2)) { target = index; break; }
   }
   if (target >= 0) {
     nextRows[target] = { ...nextRows[target], components: [...nextRows[target].components, ...controls] };
   } else if (nextRows.length < 5) {
     nextRows.push({ type: 1, components: controls });
-  } else {
-    for (let index = nextRows.length - 1; index >= 0; index -= 1) {
-      const components = nextRows[index]?.components || [];
-      if (components.length <= 3 && components.every((component) => Number(component.type) === 2)) {
-        nextRows[index] = { ...nextRows[index], components: [...components, controls[0], controls[2]] };
-        break;
+  }
+  return nextRows;
+}
+function isModernRolePaginationButton(component) {
+  const id = String(componentId(component) || '');
+  return Number(component?.type) === 2 && (id.includes('|rp|page|') || id.includes('|rpinfo|'));
+}
+function compactModernRolePaginationRows(rows) {
+  if (!Array.isArray(rows)) return rows;
+  const controls = [];
+  const nextRows = [];
+  for (const rowData of rows) {
+    const components = Array.isArray(rowData?.components) ? rowData.components : [];
+    if (components.length && components.every(isModernRolePaginationButton)) {
+      for (const component of components) {
+        if (String(componentId(component) || '').includes('|rp|page|')) controls.push(component);
       }
+      continue;
+    }
+    nextRows.push(rowData);
+  }
+  if (!controls.length) return rows;
+  const paging = controls.slice(0, 2);
+  for (let index = nextRows.length - 1; index >= 0; index -= 1) {
+    const components = nextRows[index]?.components || [];
+    if (components.length <= 3 && components.every((component) => Number(component.type) === 2)) {
+      nextRows[index] = { ...nextRows[index], components: [...components, ...paging] };
+      return nextRows;
     }
   }
+  if (nextRows.length < 5) nextRows.push({ type: 1, components: paging });
   return nextRows;
 }
 function prepareLegacyRoleInteraction(interaction) {
@@ -454,9 +475,10 @@ function sanitizeComponentPayload(payload, interaction) {
     if (components.length) rows.push({ ...rowData, components });
   }
   const verifiedRows = normalizeVerificationRows(sanitizedPayload, rows);
+  const roleRows = normalizeLegacyRoleRows(verifiedRows, interaction);
   return {
     ...sanitizedPayload,
-    components: normalizeLegacyRoleRows(verifiedRows, interaction),
+    components: compactModernRolePaginationRows(roleRows),
   };
 }
 function wrapInteractionResponses(interaction) {
