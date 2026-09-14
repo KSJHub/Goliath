@@ -367,6 +367,27 @@ function renderCounterName(guild, summary, input) {
   return safeString(name.replace(/\s+/g, ' '), 100) || 'Counter';
 }
 
+async function getBotMember(guild) {
+  return guild.members.me || await guild.members.fetchMe().catch(() => null);
+}
+
+async function ensureManageChannels(guild, channel, reason = 'manage Stats counters') {
+  if (!channel) throw new Error('Stats channel is unavailable.');
+  const me = await getBotMember(guild);
+  if (!me) throw new Error('Goliath could not resolve its Discord member permissions.');
+  if (channel.permissionsFor?.(me)?.has(PermissionFlagsBits.ManageChannels)) return true;
+
+  if (channel.permissionOverwrites?.edit) {
+    await channel.permissionOverwrites.edit(me.id, {
+      ViewChannel: true,
+      ManageChannels: true,
+    }, { reason: `Goliath Stats: ${reason}` }).catch(() => null);
+  }
+
+  if (channel.permissionsFor?.(me)?.has(PermissionFlagsBits.ManageChannels)) return true;
+  throw new Error(`Goliath needs Manage Channels in ${channel.name || 'this channel/category'} before it can ${reason}.`);
+}
+
 async function refreshCounters(guild) {
   if (!guild?.id) return [];
   await guild.channels.fetch().catch(() => null);
@@ -393,8 +414,25 @@ async function refreshCounters(guild) {
 async function findOrCreateCategory(guild, name = '📊 SERVER STATS') {
   const wanted = safeString(name, 100) || '📊 SERVER STATS';
   const existing = guild.channels.cache.find((channel) => channel.type === ChannelType.GuildCategory && channel.name.toLowerCase() === wanted.toLowerCase());
-  if (existing) return existing;
-  return guild.channels.create({ name: wanted, type: ChannelType.GuildCategory, reason: 'Goliath Stats setup' });
+  if (existing) {
+    await ensureManageChannels(guild, existing, 'manage the Stats category');
+    return existing;
+  }
+
+  const me = await getBotMember(guild);
+  const permissionOverwrites = me ? [{
+    id: me.id,
+    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels],
+  }] : [];
+
+  const created = await guild.channels.create({
+    name: wanted,
+    type: ChannelType.GuildCategory,
+    permissionOverwrites,
+    reason: 'Goliath Stats setup',
+  });
+  await ensureManageChannels(guild, created, 'manage the Stats category');
+  return created;
 }
 
 async function createCounterChannel(guild, input, parentId = null) {
@@ -402,16 +440,30 @@ async function createCounterChannel(guild, input, parentId = null) {
   const summary = statsStore.getSummary(guild.id);
   const name = renderCounterName(guild, summary, dock);
   const isText = dock.channelType === 'text';
-  return guild.channels.create({
+  const me = await getBotMember(guild);
+  const parent = parentId ? guild.channels.cache.get(parentId) || await guild.channels.fetch(parentId).catch(() => null) : null;
+  if (parent) await ensureManageChannels(guild, parent, 'create Stats counters here');
+
+  const permissionOverwrites = [{
+    id: guild.roles.everyone.id,
+    deny: [isText ? PermissionFlagsBits.SendMessages : PermissionFlagsBits.Connect],
+  }];
+  if (me) {
+    permissionOverwrites.push({
+      id: me.id,
+      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels],
+    });
+  }
+
+  const channel = await guild.channels.create({
     name,
     type: isText ? ChannelType.GuildText : ChannelType.GuildVoice,
     parent: parentId || dock.categoryId || undefined,
-    permissionOverwrites: [{
-      id: guild.roles.everyone.id,
-      deny: [isText ? PermissionFlagsBits.SendMessages : PermissionFlagsBits.Connect],
-    }],
+    permissionOverwrites,
     reason: 'Goliath Stats counter setup',
   });
+  await ensureManageChannels(guild, channel, 'manage this Stats counter');
+  return channel;
 }
 
 async function createDock(guild, input = {}, guildOrMeta = {}) {
@@ -420,6 +472,7 @@ async function createDock(guild, input = {}, guildOrMeta = {}) {
   const category = base.categoryId
     ? guild.channels.cache.get(base.categoryId) || await guild.channels.fetch(base.categoryId).catch(() => null)
     : await findOrCreateCategory(guild, input.categoryName || statsStore.getStats(guild.id).settings?.categoryName || '📊 SERVER STATS');
+  if (category) await ensureManageChannels(guild, category, 'create Stats counters here');
   const channel = await createCounterChannel(guild, base, category?.id || null);
   const dock = { ...base, channelId: channel.id, categoryId: category?.id || null, enabled: true };
   saveDock(guild.id, dock, guildOrMeta || guild);
@@ -434,7 +487,11 @@ async function updateDock(guild, id, changes = {}, guildOrMeta = {}) {
   if (existing.channelId && existing.channelType !== next.channelType) {
     const oldChannel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null);
     const parentId = oldChannel?.parentId || existing.categoryId || null;
-    if (oldChannel?.deletable) await oldChannel.delete('Goliath Stats counter channel type changed').catch(() => null);
+    if (oldChannel) {
+      await ensureManageChannels(guild, oldChannel, 'change this counter channel type');
+      if (!oldChannel.deletable) throw new Error(`Goliath cannot replace ${oldChannel.name} because Discord will not allow the channel to be deleted.`);
+      await oldChannel.delete('Goliath Stats counter channel type changed');
+    }
     const replacement = await createCounterChannel(guild, { ...next, channelId: null }, parentId);
     next = { ...next, channelId: replacement.id, categoryId: parentId || next.categoryId };
   }
@@ -455,7 +512,11 @@ async function setDockEnabled(guild, id, enabled, guildOrMeta = {}) {
 
   if (!enabled && existing.channelId) {
     const channel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null);
-    if (channel?.deletable) await channel.delete('Goliath Stats counter disabled').catch(() => null);
+    if (channel) {
+      await ensureManageChannels(guild, channel, 'disable this counter');
+      if (!channel.deletable) throw new Error(`Goliath cannot disable ${channel.name} because Discord will not allow the channel to be deleted.`);
+      await channel.delete('Goliath Stats counter disabled');
+    }
     const next = { ...existing, channelId: null, enabled: false };
     saveDock(guild.id, next, guildOrMeta || guild);
     return next;
@@ -471,7 +532,11 @@ async function deleteDock(guild, id, guildOrMeta = {}) {
   if (!existing) return false;
   if (existing.channelId) {
     const channel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null);
-    if (channel?.deletable) await channel.delete('Goliath Stats counter deleted').catch(() => null);
+    if (channel) {
+      await ensureManageChannels(guild, channel, 'delete this counter');
+      if (!channel.deletable) throw new Error(`Goliath cannot delete ${channel.name} because Discord will not allow the channel to be deleted.`);
+      await channel.delete('Goliath Stats counter deleted');
+    }
   }
   removeCounter(guild.id, existing.id, guildOrMeta || guild);
   return true;
@@ -533,4 +598,5 @@ module.exports = {
   previewDock,
   defaultTemplate,
   renderCounterName,
+  ensureManageChannels,
 };
