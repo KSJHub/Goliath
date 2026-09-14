@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { api } from '../../services/apiClient';
 import ModuleShell, { MODULE_TABS } from '../../shared/ModuleShell.jsx';
@@ -37,10 +37,24 @@ function defaultSegment(type = 'members') {
   if (type === 'voice') return { type, options: { mode: 'all', channelIds: [] } };
   if (type === 'role') return { type, options: { roleIds: [], statuses: [] } };
   if (type === 'countdown') return { type, options: { timestamp: Date.now() + 86400000, includeDays: true, includeHours: true, includeMinutes: true, endText: 'Countdown complete!' } };
+  if (type === 'messages' || type === 'voiceMinutes') return { type, options: { periodDays: null } };
   return { type, options: {} };
 }
 function newDraft(settings = {}) {
   return { name: 'Members', channelType: 'voice', template: '👥 Members: {value}', frequencyMinutes: Number(settings.defaultFrequencyMinutes || 10), segments: [defaultSegment('members')] };
+}
+function presenceDraft(settings = {}) {
+  return {
+    name: 'Presence Trio',
+    channelType: 'voice',
+    template: '🟢 {1} ⛔ {2} 🌙 {3}',
+    frequencyMinutes: Number(settings.defaultFrequencyMinutes || 10),
+    segments: [
+      { type: 'status', options: { statuses: ['online'] } },
+      { type: 'status', options: { statuses: ['dnd'] } },
+      { type: 'status', options: { statuses: ['idle'] } },
+    ],
+  };
 }
 function normalizeDraft(counter, settings = {}) {
   if (!counter) return newDraft(settings);
@@ -134,6 +148,12 @@ function SegmentEditor({ theme, segment, index, roles, channels, onChange, onRem
         <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Text when finished<input value={options.endText || ''} onChange={(event) => updateOptions({ endText: event.target.value })} style={control(theme)} /></label>
       </div> : null}
 
+      {(segment.type === 'messages' || segment.type === 'voiceMinutes') ? <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Time period
+        <select value={options.periodDays || 0} onChange={(event) => updateOptions({ periodDays: Number(event.target.value) || null })} style={control(theme)}>
+          <option value="0">All tracked time</option><option value="1">Last 24 hours</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option>
+        </select>
+      </label> : null}
+
       {isGoalType ? <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Countdown to a goal <span style={{ color: theme.mutedText, fontWeight: 600 }}>Optional — leave blank for the normal count.</span><input type="number" min="1" value={options.goal || ''} onChange={(event) => updateOptions({ goal: event.target.value ? Number(event.target.value) : null })} style={control(theme)} /></label> : null}
     </div>
   );
@@ -145,6 +165,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
   const [config, setConfig] = useState(null);
   const [draft, setDraft] = useState(null);
   const [preview, setPreview] = useState('');
+  const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -161,7 +182,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     } catch (loadError) { setError(loadError.message || 'Could not load server counters.'); }
     finally { setLoading(false); }
   }
-  useEffect(() => { load(); }, [guildId]);
+  useEffect(() => { load(); setHealth(null); }, [guildId]);
 
   const live = overview?.live || {};
   const counters = config?.counters || [];
@@ -196,6 +217,27 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     const result = await request(`/api/stats/${guildId}/config`, { method: 'PATCH', body: JSON.stringify({ settings: next }) });
     setConfig(result.config || config);
   }
+  async function saveTrackingFilters() {
+    const payload = {
+      trackMessages: config?.trackMessages !== false,
+      trackVoice: config?.trackVoice !== false,
+      trackMembers: config?.trackMembers !== false,
+      ignoreBots: config?.ignoreBots !== false,
+      ignoredChannels: config?.ignoredChannels || [],
+      ignoredRoles: config?.ignoredRoles || [],
+    };
+    const result = await request(`/api/stats/${guildId}/config`, { method: 'PATCH', body: JSON.stringify(payload) });
+    setConfig(result.config || config);
+  }
+  async function runHealthCheck() {
+    const result = await request(`/api/stats/${guildId}/health`);
+    setHealth(result.health || null);
+  }
+  async function repairStats() {
+    const result = await request(`/api/stats/${guildId}/repair`, { method: 'POST', body: '{}' });
+    setHealth(result.result?.health || null);
+    await load();
+  }
 
   if (!guildId) return <EmptyState theme={theme} title="Select a server" text="Select a server to manage its counters." />;
   if (loading && !overview) return <LoadingPanel theme={theme} text="Loading server counters..." />;
@@ -210,7 +252,12 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
         <SummaryStat theme={theme} label="Counters" value={activeCounters} accent="#f59e0b" description={`${counters.length} saved`} />
       </StatGrid>
       <SectionCard theme={theme} title="Server Counter Setup" subtitle="Live read-only text or voice channels that display your server numbers at a glance.">
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><PrimaryButton onClick={quickSetup} disabled={busy}>⚡ Quick Setup</PrimaryButton><SecondaryButton onClick={refreshCounters} disabled={busy}>🔄 Refresh Now</SecondaryButton><SecondaryButton onClick={() => setDraft(newDraft(config?.settings))} disabled={busy}>➕ Create Counter</SecondaryButton></div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <PrimaryButton onClick={quickSetup} disabled={busy}>⚡ Quick Setup</PrimaryButton>
+          <SecondaryButton onClick={() => { setDraft(presenceDraft(config?.settings)); setPreview(''); }} disabled={busy}>🟢⛔🌙 Presence Trio</SecondaryButton>
+          <SecondaryButton onClick={refreshCounters} disabled={busy}>🔄 Refresh Now</SecondaryButton>
+          <SecondaryButton onClick={() => { setDraft(newDraft(config?.settings)); setPreview(''); }} disabled={busy}>➕ Create Counter</SecondaryButton>
+        </div>
       </SectionCard>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,300px),1fr))', gap: 16 }}>
         <SectionCard theme={theme} title="Presence"><Row theme={theme} label="Online" value={statusTotal.online || 0} /><Row theme={theme} label="Idle" value={statusTotal.idle || 0} /><Row theme={theme} label="Do Not Disturb" value={statusTotal.dnd || 0} /><Row theme={theme} label="Offline" value={statusTotal.offline || 0} /></SectionCard>
@@ -223,7 +270,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     <div style={{ display: 'grid', gap: 16 }}>
       <SectionCard theme={theme} title="Your Counters" subtitle="Turn counters on or off, edit them, choose text or voice output, or combine up to four values in one channel name.">
         {counters.length ? <div style={{ display: 'grid', gap: 10 }}>{counters.map((counter) => <div key={counter.id} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 12, padding: 14, display: 'grid', gap: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><strong>{counter.enabled ? '🟢' : '⚫'} {counter.channelType === 'text' ? '#️⃣' : '🔊'} {counter.name || 'Counter'}</strong><div style={{ color: theme.mutedText, marginTop: 4 }}>{counter.segments?.map((segment) => TYPE_LABEL[segment.type] || segment.type).join(' + ')}</div></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><SecondaryButton onClick={() => setDraft(normalizeDraft(counter, config?.settings))}>Edit</SecondaryButton><SecondaryButton onClick={() => toggleCounter(counter)} disabled={busy}>{counter.enabled ? 'Turn Off' : 'Turn On'}</SecondaryButton><SecondaryButton danger onClick={() => deleteCounter(counter)} disabled={busy}>Delete</SecondaryButton></div></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><strong>{counter.enabled ? '🟢' : '⚫'} {counter.channelType === 'text' ? '#️⃣' : '🔊'} {counter.name || 'Counter'}</strong><div style={{ color: theme.mutedText, marginTop: 4 }}>{counter.segments?.map((segment) => TYPE_LABEL[segment.type] || segment.type).join(' + ')} · every {counter.frequencyMinutes || 10}m</div></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><SecondaryButton onClick={() => { setDraft(normalizeDraft(counter, config?.settings)); setPreview(''); }}>Edit</SecondaryButton><SecondaryButton onClick={() => toggleCounter(counter)} disabled={busy}>{counter.enabled ? 'Turn Off' : 'Turn On'}</SecondaryButton><SecondaryButton danger onClick={() => deleteCounter(counter)} disabled={busy}>Delete</SecondaryButton></div></div>
           <div style={{ borderRadius: 9, padding: '9px 11px', background: 'rgba(148,163,184,0.10)', fontWeight: 800 }}>{counter.template}</div>
         </div>)}</div> : <div style={{ color: theme.mutedText }}>No counters yet. Use Quick Setup or create your first one.</div>}
       </SectionCard>
@@ -235,10 +282,10 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
             <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel type<select value={draft.channelType || 'voice'} onChange={(event) => setDraft({ ...draft, channelType: event.target.value })} style={control(theme)}><option value="voice">🔊 Voice Channel</option><option value="text">#️⃣ Text Channel</option></select></label>
             <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Update frequency<select value={draft.frequencyMinutes} onChange={(event) => setDraft({ ...draft, frequencyMinutes: Number(event.target.value) })} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></label>
           </div>
-          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel text<input value={draft.template} onChange={(event) => setDraft({ ...draft, template: event.target.value })} maxLength={100} style={control(theme)} /><span style={{ color: theme.mutedText, fontWeight: 600 }}>Use <code>{'{value}'}</code> for one counter. With multiple counters use <code>{'{1}'}</code>, <code>{'{2}'}</code>, <code>{'{3}'}</code>, <code>{'{4}'}</code>.</span></label>
+          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel text<input value={draft.template} onChange={(event) => setDraft({ ...draft, template: event.target.value })} maxLength={100} style={control(theme)} /><span style={{ color: theme.mutedText, fontWeight: 600 }}>Use <code>{'{value}'}</code> for one counter. With multiple counters use <code>{'{1}'}</code>, <code>{'{2}'}</code>, <code>{'{3}'}</code>, <code>{'{4}'}</code>. Emojis and normal text are supported.</span></label>
           {draft.segments.map((segment, index) => <SegmentEditor key={index} theme={theme} segment={segment} index={index} roles={roles} channels={channels} canRemove={draft.segments.length > 1} onRemove={() => setDraft({ ...draft, segments: draft.segments.filter((_, itemIndex) => itemIndex !== index) })} onChange={(next) => setDraft({ ...draft, segments: draft.segments.map((item, itemIndex) => itemIndex === index ? next : item) })} />)}
           {draft.segments.length < 4 ? <SecondaryButton onClick={() => setDraft({ ...draft, segments: [...draft.segments, defaultSegment('members')], template: draft.segments.length === 1 && draft.template.includes('{value}') ? '{1} · {2}' : draft.template })}>➕ Add another value</SecondaryButton> : null}
-          {preview ? <div style={{ padding: 14, borderRadius: 12, border: `1px solid ${theme.cardBorder}` }}><div style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900, textTransform: 'uppercase', marginBottom: 6 }}>Preview</div><strong>{preview}</strong></div> : null}
+          {preview ? <div style={{ padding: 14, borderRadius: 12, border: `1px solid ${theme.cardBorder}` }}><div style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900, textTransform: 'uppercase', marginBottom: 6 }}>Discord channel preview</div><strong>{preview}</strong></div> : null}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><PrimaryButton onClick={saveDraft} disabled={busy}>{busy ? 'Saving...' : 'Save Counter'}</PrimaryButton><SecondaryButton onClick={previewDraft} disabled={busy}>Preview</SecondaryButton><SecondaryButton onClick={() => { setDraft(null); setPreview(''); }}>Cancel</SecondaryButton></div>
         </div>
       </SectionCard> : null}
@@ -251,8 +298,44 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
         <div style={{ display: 'grid', gap: 12 }}>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Counter category name<input value={config?.settings?.categoryName || '📊 SERVER STATS'} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), categoryName: event.target.value } })} onBlur={(event) => saveSettings({ categoryName: event.target.value })} style={control(theme)} /></label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default timezone<input value={config?.settings?.timeZone || 'Europe/London'} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), timeZone: event.target.value } })} onBlur={(event) => saveSettings({ timeZone: event.target.value })} style={control(theme)} /></label>
+          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default update frequency<select value={config?.settings?.defaultFrequencyMinutes || 10} onChange={(event) => { const value = Number(event.target.value); setConfig({ ...config, settings: { ...(config?.settings || {}), defaultFrequencyMinutes: value } }); saveSettings({ defaultFrequencyMinutes: value }); }} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></label>
         </div>
       </SectionCard>
+
+      <SectionCard theme={theme} title="Tracking Filters" subtitle="Choose what Goliath should ignore when it builds message and voice activity statistics.">
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <Toggle label="Track messages" checked={config?.trackMessages !== false} onChange={(checked) => setConfig({ ...config, trackMessages: checked })} />
+            <Toggle label="Track voice" checked={config?.trackVoice !== false} onChange={(checked) => setConfig({ ...config, trackVoice: checked })} />
+            <Toggle label="Track joins/leaves" checked={config?.trackMembers !== false} onChange={(checked) => setConfig({ ...config, trackMembers: checked })} />
+            <Toggle label="Ignore bots" checked={config?.ignoreBots !== false} onChange={(checked) => setConfig({ ...config, ignoreBots: checked })} />
+          </div>
+          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Ignored channels
+            <select multiple value={config?.ignoredChannels || []} onChange={(event) => setConfig({ ...config, ignoredChannels: [...event.target.selectedOptions].map((item) => item.value) })} style={{ ...control(theme), minHeight: 140 }}>
+              {channels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name}</option>)}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Ignored roles
+            <select multiple value={config?.ignoredRoles || []} onChange={(event) => setConfig({ ...config, ignoredRoles: [...event.target.selectedOptions].map((item) => item.value) })} style={{ ...control(theme), minHeight: 140 }}>
+              {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+            </select>
+          </label>
+          <div><PrimaryButton onClick={saveTrackingFilters} disabled={busy}>Save Filters</PrimaryButton></div>
+        </div>
+      </SectionCard>
+
+      <SectionCard theme={theme} title="Diagnostics" subtitle="Check missing counter channels and tracking configuration before they become a problem.">
+        <div style={{ display: 'grid', gap: 10 }}>
+          {health ? <>
+            <Row theme={theme} label="Health" value={health.healthy ? '✅ Healthy' : '⚠️ Needs attention'} />
+            <Row theme={theme} label="Configured counters" value={health.counters?.configured ?? 0} />
+            <Row theme={theme} label="Missing channels" value={health.counters?.missing ?? 0} />
+            {health.issues?.length ? <div style={{ padding: 12, borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>{health.issues.map((issue, index) => <div key={`${issue.code}-${index}`}>• {issue.code.replaceAll('_', ' ')}</div>)}</div> : <div style={{ color: theme.mutedText }}>No issues found.</div>}
+          </> : <div style={{ color: theme.mutedText }}>Run a health check to inspect the live counter setup.</div>}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><SecondaryButton onClick={runHealthCheck} disabled={busy}>🩺 Run Health Check</SecondaryButton><SecondaryButton onClick={repairStats} disabled={busy}>🔧 Repair Issues</SecondaryButton></div>
+        </div>
+      </SectionCard>
+
       <SectionCard theme={theme} title="Activity Tracking"><Row theme={theme} label="Messages tracked" value={overview?.stored?.activity?.totals?.messages || 0} /><Row theme={theme} label="Voice minutes tracked" value={overview?.stored?.activity?.totals?.voiceMinutes || 0} /><Row theme={theme} label="Joins tracked" value={overview?.stored?.activity?.totals?.joins || 0} /><Row theme={theme} label="Leaves tracked" value={overview?.stored?.activity?.totals?.leaves || 0} /></SectionCard>
     </div>
   );
@@ -260,7 +343,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
   return (
     <ModuleShell
       title="Server Counters"
-      subtitle="Statbot-style live Discord counters, built directly into Goliath."
+      subtitle="Live Discord server counters with multi-value Statdock-style channels."
       theme={theme}
       guild={guild}
       actions={<PrimaryButton onClick={load} disabled={loading || busy}>{loading ? 'Refreshing...' : 'Refresh'}</PrimaryButton>}
