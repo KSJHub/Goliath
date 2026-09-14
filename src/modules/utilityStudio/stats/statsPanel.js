@@ -422,20 +422,16 @@ function buildSettingsPanel(guild, requester = 'Management', notice = '') {
       ].filter((line) => line !== null).join('\n')), requester)],
     components: [
       row(
-        button(enabled ? 'admin:stats:disable' : 'admin:stats:enable', enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-        button('admin:stats:health', '🩺 Health', ButtonStyle.Primary)
-      ),
-      row(
-        button('admin:stats:settings:timezone', '🌍 Time Zone'),
-        button('admin:stats:settings:frequency', '⏱️ Refresh')
-      ),
-      row(
         button('admin:stats:settings:messages', '💬 Track Messages', messagesOn ? ButtonStyle.Success : ButtonStyle.Secondary),
-        button('admin:stats:settings:voice', '🎙️ Track Voice', voiceOn ? ButtonStyle.Success : ButtonStyle.Secondary)
-      ),
-      row(
+        button('admin:stats:settings:voice', '🎙️ Track Voice', voiceOn ? ButtonStyle.Success : ButtonStyle.Secondary),
         button('admin:stats:settings:members', '👥 Member Events', membersOn ? ButtonStyle.Success : ButtonStyle.Secondary),
         button('admin:stats:settings:bots', '🤖 Ignore Bots', ignoreBots ? ButtonStyle.Success : ButtonStyle.Secondary)
+      ),
+      row(
+        button(enabled ? 'admin:stats:disable' : 'admin:stats:enable', enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+        button('admin:stats:health', '🩺 Health', ButtonStyle.Primary),
+        button('admin:stats:settings:timezone', '🌍 Time Zone'),
+        button('admin:stats:settings:frequency', '⏱️ Refresh')
       ),
       navigation('admin:stats', false),
     ],
