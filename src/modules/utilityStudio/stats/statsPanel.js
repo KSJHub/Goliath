@@ -48,7 +48,6 @@ const STATUSES = Object.freeze({
 });
 
 const bulkSelections = new Map();
-
 const row = (...components) => new ActionRowBuilder().addComponents(...components.filter(Boolean));
 const button = (customId, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder()
   .setCustomId(customId)
@@ -80,7 +79,7 @@ function footer(embed, requester) {
   return embed.setFooter({ text: `Requested by ${requester}` }).setTimestamp();
 }
 
-function navigation(backId, includeSettings = true, backLabel = '⬅️ Back') {
+function navigation(backId, includeSettings = true, backLabel = '< Back') {
   return row(button(backId, backLabel), includeSettings ? button('admin:stats:settings', '⚙️ Settings') : null);
 }
 
@@ -395,12 +394,11 @@ function buildSettingsPanel(guild, requester = 'Management', notice = '') {
   const summary = stats.getSummary(guild.id);
   const settings = config.settings || {};
   const enabled = summary.enabled !== false;
-  const tracking = [
-    `**Messages:** ${config.trackMessages !== false ? '✅ On' : '❌ Off'}`,
-    `**Voice:** ${config.trackVoice !== false ? '✅ On' : '❌ Off'}`,
-    `**Member Events:** ${config.trackMembers !== false ? '✅ On' : '❌ Off'}`,
-    `**Ignore Bots:** ${config.ignoreBots !== false ? '✅ Yes' : '❌ No'}`,
-  ].join('\n');
+  const messagesOn = config.trackMessages !== false;
+  const voiceOn = config.trackVoice !== false;
+  const membersOn = config.trackMembers !== false;
+  const ignoreBots = config.ignoreBots !== false;
+
   return {
     embeds: [footer(new EmbedBuilder()
       .setColor(enabled ? PANEL_COLOR : DISABLED_COLOR)
@@ -408,30 +406,38 @@ function buildSettingsPanel(guild, requester = 'Management', notice = '') {
       .setDescription([
         notice ? `> ${notice}` : null,
         notice ? '' : null,
-        'Configure how Server Counters behaves. Counter and category management stays under **Manage**.',
+        'These settings control **how Server Counters collects and updates data**. They do **not** create, hide or delete individual counters — use **Manage** for that.',
         '',
         `**Module:** ${enabled ? '🟢 Enabled' : '🔴 Disabled'}`,
-        `**Default Time Zone:** ${settings.timeZone || 'Europe/London'}`,
-        `**Default Refresh:** ${settings.defaultFrequencyMinutes || 10} minutes`,
+        `**Default Time Zone:** ${settings.timeZone || 'Europe/London'} — used by new date/time counters.`,
+        `**Default Refresh:** ${settings.defaultFrequencyMinutes || 10} minutes — used when new counters are created.`,
         '',
-        tracking,
+        '**Activity Tracking**',
+        `${messagesOn ? '✅' : '❌'} **Messages** — records message activity for message-based counters.`,
+        `${voiceOn ? '✅' : '❌'} **Voice** — records voice activity and voice minutes.`,
+        `${membersOn ? '✅' : '❌'} **Member Events** — records joins and leaves for member-event counters.`,
+        `${ignoreBots ? '✅' : '❌'} **Ignore Bots** — excludes bot activity from tracked activity statistics.`,
+        '',
+        '**Health Check** scans the Stats setup for missing channels, permission problems and configuration issues.',
       ].filter((line) => line !== null).join('\n')), requester)],
     components: [
       row(
-        button(enabled ? 'admin:stats:disable' : 'admin:stats:enable', enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-        button('admin:stats:health', '🩺 Check Health', ButtonStyle.Primary)
+        button(enabled ? 'admin:stats:disable' : 'admin:stats:enable', enabled ? '⏸️ Disable Server Counters' : '▶️ Enable Server Counters', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+        button('admin:stats:health', '🩺 Check Health & Permissions', ButtonStyle.Primary)
       ),
       row(
-        button('admin:stats:settings:timezone', '🌍 Time Zone'),
-        button('admin:stats:settings:frequency', '⏱️ Default Refresh')
+        button('admin:stats:settings:timezone', '🌍 Change Default Time Zone'),
+        button('admin:stats:settings:frequency', '⏱️ Change Default Refresh')
       ),
       row(
-        button('admin:stats:settings:messages', config.trackMessages !== false ? '💬 Messages: On' : '💬 Messages: Off', config.trackMessages !== false ? ButtonStyle.Success : ButtonStyle.Secondary),
-        button('admin:stats:settings:voice', config.trackVoice !== false ? '🎙️ Voice: On' : '🎙️ Voice: Off', config.trackVoice !== false ? ButtonStyle.Success : ButtonStyle.Secondary),
-        button('admin:stats:settings:members', config.trackMembers !== false ? '👥 Members: On' : '👥 Members: Off', config.trackMembers !== false ? ButtonStyle.Success : ButtonStyle.Secondary)
+        button('admin:stats:settings:messages', messagesOn ? '💬 Track Messages: On' : '💬 Track Messages: Off', messagesOn ? ButtonStyle.Success : ButtonStyle.Secondary),
+        button('admin:stats:settings:voice', voiceOn ? '🎙️ Track Voice: On' : '🎙️ Track Voice: Off', voiceOn ? ButtonStyle.Success : ButtonStyle.Secondary)
       ),
-      row(button('admin:stats:settings:bots', config.ignoreBots !== false ? '🤖 Ignore Bots: Yes' : '🤖 Ignore Bots: No', config.ignoreBots !== false ? ButtonStyle.Success : ButtonStyle.Secondary)),
-      navigation('admin:stats', false, '⬅️ Back to Server Counters'),
+      row(
+        button('admin:stats:settings:members', membersOn ? '👥 Track Member Events: On' : '👥 Track Member Events: Off', membersOn ? ButtonStyle.Success : ButtonStyle.Secondary),
+        button('admin:stats:settings:bots', ignoreBots ? '🤖 Ignore Bot Activity: Yes' : '🤖 Ignore Bot Activity: No', ignoreBots ? ButtonStyle.Success : ButtonStyle.Secondary)
+      ),
+      navigation('admin:stats', false),
     ],
   };
 }
@@ -563,7 +569,7 @@ function buildValuePanel(guild, item, index, requester = 'Management') {
   }
   components.push(row(
     button(`admin:stats:remove:${item.id}:${index}`, '🗑️ Remove Value', ButtonStyle.Danger, item.segments.length <= 1),
-    button(`admin:stats:edit:${item.id}`, '⬅️ Back')
+    button(`admin:stats:edit:${item.id}`, '< Back')
   ));
   return {
     embeds: [footer(new EmbedBuilder()
@@ -577,7 +583,7 @@ function buildValuePanel(guild, item, index, requester = 'Management') {
 function buildAddPanel(item, requester = 'Management') {
   return {
     embeds: [footer(new EmbedBuilder().setColor(SUCCESS_COLOR).setTitle('➕ Add Counter Value').setDescription(`This counter displays **${item.segments.length} / 4** values. Choose another value to add.`), requester)],
-    components: [row(select(`admin:stats:addtype:${item.id}`, 'Choose a value to add…', typeOptions())), row(button(`admin:stats:open:${item.id}`, '⬅️ Cancel'))],
+    components: [row(select(`admin:stats:addtype:${item.id}`, 'Choose a value to add…', typeOptions())), row(button(`admin:stats:open:${item.id}`, '< Back'))],
   };
 }
 
@@ -692,7 +698,7 @@ function buildBulkDeleteConfirm(interaction, requester = 'Management') {
 }
 
 function buildErrorPanel(title, message, requester = 'Management', backId = 'admin:stats:manager') {
-  return { embeds: [footer(new EmbedBuilder().setColor(DANGER_COLOR).setTitle(`⚠️ ${title}`).setDescription(String(message || 'Something went wrong.').slice(0, 4000)), requester)], components: [row(button(backId, '⬅️ Back'))] };
+  return { embeds: [footer(new EmbedBuilder().setColor(DANGER_COLOR).setTitle(`⚠️ ${title}`).setDescription(String(message || 'Something went wrong.').slice(0, 4000)), requester)], components: [row(button(backId, '< Back'))] };
 }
 
 async function send(interaction, payload) {
