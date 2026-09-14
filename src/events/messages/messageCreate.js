@@ -5,6 +5,7 @@ const { handleStickyMessage } = require('../../modules/messageStudio/sticky/stic
 const translationThreadManager = require('../../modules/utilityStudio/translation/translationThreadManager');
 const statsManager = require('../../modules/utilityStudio/stats/statsManager');
 const levelingTracking = require('../../modules/communityStudio/leveling/levelingTracking');
+const counting = require('../../modules/communityStudio/counting/counting');
 const emojis = require('../../modules/utilityStudio/emojis/emojis');
 const guildManager = require('../../core/guild/guildManager');
 const { handleAutoMod } = require('../../core/administration/automod/events');
@@ -97,6 +98,9 @@ module.exports = {
 
     const autoModHandled = await runHandler('AutoMod', handleAutoMod, message);
     if (autoModHandled) return;
+
+    const countingHandled = await runHandler('Counting', counting.handleMessageCreate, message);
+    if (countingHandled) return;
 
     const emojiMessageHandled = await runHandler('EmojiMessage', handleEmojiMessage, message, client);
     if (emojiMessageHandled) return;

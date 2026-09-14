@@ -19,7 +19,12 @@ const DEFAULT_STATS = {
   ignoredChannels: [],
   ignoredRoles: [],
   counters: [],
-  settings: { retentionDays: 30 },
+  settings: {
+    retentionDays: 30,
+    categoryName: '📊 SERVER STATS',
+    timeZone: 'Europe/London',
+    defaultFrequencyMinutes: 10,
+  },
   data: {
     messages: {},
     voice: {},
@@ -51,6 +56,12 @@ function merge(defaults = {}, source = {}) {
 function normalizeStats(value = {}) {
   const normalized = merge(DEFAULT_STATS, value);
   delete normalized.enabled;
+  normalized.settings = isObject(normalized.settings) ? normalized.settings : copy(DEFAULT_STATS.settings);
+  normalized.settings.retentionDays = Math.max(1, Math.min(365, Number(normalized.settings.retentionDays || 30) || 30));
+  normalized.settings.categoryName = String(normalized.settings.categoryName || DEFAULT_STATS.settings.categoryName).trim().slice(0, 100) || DEFAULT_STATS.settings.categoryName;
+  normalized.settings.timeZone = String(normalized.settings.timeZone || DEFAULT_STATS.settings.timeZone).trim().slice(0, 64) || DEFAULT_STATS.settings.timeZone;
+  normalized.settings.defaultFrequencyMinutes = Math.max(10, Math.min(1440, Number(normalized.settings.defaultFrequencyMinutes || 10) || 10));
+  normalized.counters = Array.isArray(normalized.counters) ? normalized.counters.slice(0, 100) : [];
   return normalized;
 }
 

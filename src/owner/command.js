@@ -18,6 +18,7 @@ const security = require('../core/security/protection/core');
 const devOverride = require('./dev/DevOverrideManager');
 const testSecurity = require('./dev/testsecurity');
 const duplicator = require('./dev/duplicator');
+const maintenanceStatus = require('./dev/maintenanceStatus');
 const auditEvents = require('./auditIntelligence/auditEvents');
 
 const OWNER_PREFIX = 'ownerpanel:';
@@ -229,7 +230,7 @@ function ownerHomePayload(interaction, notice = null) {
       { name: 'Context', value: guildContext, inline: false },
       { name: 'DEV Override', value: isDev ? (devState.enabled ? '🟢 Enabled' : '🔴 Disabled') : '⚪ DEV only', inline: true },
       { name: 'DEV Billing Unlock', value: isDev ? (billing.active ? `🟢 ${billing.plan || 'enabled'}` : '🔴 Disabled') : '⚪ DEV only', inline: true },
-      { name: 'Owner Tools', value: showCommandCenter ? '🟢 Server Tools • Security • DEV Sync • Command Center' : (isDev ? '🟢 Server Tools • Security • DEV Sync' : '🟢 Server Tools • Security'), inline: true },
+      { name: 'Owner Tools', value: showCommandCenter ? '🟢 Server Tools • Security • Maintenance • DEV Sync • Command Center' : (isDev ? '🟢 Server Tools • Security • Maintenance • DEV Sync' : '🟢 Server Tools • Security • Maintenance'), inline: true },
     )
     .setFooter({ text: 'Goliath Owner • OWNER_IDS protected' })
     .setTimestamp();
@@ -250,6 +251,11 @@ function ownerHomePayload(interaction, notice = null) {
       .setCustomId(contextualOwnerId('server-tools', interaction))
       .setLabel('Server Tools')
       .setEmoji('🧰')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(contextualOwnerId('maintenance', guildId))
+      .setLabel('Maintenance')
+      .setEmoji('🚨')
       .setStyle(ButtonStyle.Secondary),
   ];
 
@@ -330,6 +336,74 @@ function serverToolsPayload(interaction, explicitGuildId = null) {
   );
 
   return { embeds: [embed], components: [primaryTools, secondaryTools, navigation] };
+}
+
+function maintenancePayload(interaction, explicitGuildId = null, notice = null) {
+  const guildId = interactionGuildId(interaction, explicitGuildId);
+  const guild = cachedInteractionGuild(interaction, guildId);
+  const currentChannel = guild ? maintenanceStatus.findMaintenanceChannel(guild) : null;
+  const connectedGuilds = interaction?.client?.guilds?.cache?.size || 0;
+
+  const embed = new EmbedBuilder()
+    .setColor(currentChannel ? 0xED4245 : 0x5865F2)
+    .setTitle('🚨 Goliath Maintenance Control')
+    .setDescription([
+      'Owner-only controls for Goliath maintenance notices and recovery.',
+      '',
+      'Automatic mode is wired to controlled `SIGTERM` / `SIGINT` shutdowns. On restart, Goliath converts existing maintenance notices to **All Systems Operational** and removes the temporary channel after 5 minutes.',
+      '',
+      notice ? `**Status:** ${notice}` : null,
+    ].filter(Boolean).join('\n'))
+    .addFields(
+      { name: 'Automatic shutdown notices', value: '🟢 Enabled', inline: true },
+      { name: 'Connected guilds', value: `**${connectedGuilds}**`, inline: true },
+      { name: 'Current server', value: guild ? `${guild.name}\n\`${guild.id}\`` : 'No server context', inline: false },
+      { name: 'Current server notice', value: currentChannel ? `🔴 Active • <#${currentChannel.id}>` : '🟢 No temporary maintenance channel', inline: false },
+      { name: 'Private visibility', value: 'Guild owner + every role with the Discord **Administrator** permission + Goliath. `@everyone` is denied.', inline: false },
+    )
+    .setFooter({ text: 'Owner only • Temporary channels self-delete after recovery' })
+    .setTimestamp();
+
+  const currentGuildActions = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(contextualOwnerId('maintenance-start-guild', guildId))
+      .setLabel('Start This Server')
+      .setEmoji('🔴')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(!guild),
+    new ButtonBuilder()
+      .setCustomId(contextualOwnerId('maintenance-complete-guild', guildId))
+      .setLabel('Restore This Server')
+      .setEmoji('🟢')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(!guild),
+    new ButtonBuilder()
+      .setCustomId(contextualOwnerId('maintenance-clear-guild', guildId))
+      .setLabel('Delete Status Channel')
+      .setEmoji('🗑️')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!guild)
+  );
+
+  const globalActions = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(contextualOwnerId('maintenance-start-all', guildId))
+      .setLabel('Start All Guilds')
+      .setEmoji('🚨')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(contextualOwnerId('maintenance-complete-all', guildId))
+      .setLabel('Restore All Guilds')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success)
+  );
+
+  const navigation = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(contextualOwnerId('home', guildId)).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(contextualOwnerId('maintenance', guildId)).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary)
+  );
+
+  return { embeds: [embed], components: [currentGuildActions, globalActions, navigation] };
 }
 
 function serverContextRequiredPayload() {
@@ -483,6 +557,11 @@ async function runDuplicator(interaction, values, explicitGuildId = null) {
   return duplicator.run(withOwnerOptions(interaction, values, controlGuild, controlGuild.id));
 }
 
+async function resolveMaintenanceGuild(interaction, explicitGuildId = null) {
+  const resolved = await resolveInteractionGuild(interaction, explicitGuildId);
+  return resolved.guild || null;
+}
+
 async function handleOwnerPanelInteraction(interaction) {
   const rawId = String(interaction?.customId || '');
   const id = baseOwnerCustomId(rawId);
@@ -524,6 +603,62 @@ async function handleOwnerPanelInteraction(interaction) {
 
   if (id === `${OWNER_PREFIX}security`) {
     await runSecurityTests(interaction, contextGuildId, false);
+    return true;
+  }
+
+  if (id === `${OWNER_PREFIX}maintenance`) {
+    await interaction.update(maintenancePayload(interaction, contextGuildId));
+    return true;
+  }
+
+  if (id === `${OWNER_PREFIX}maintenance-start-guild`) {
+    const guild = await resolveMaintenanceGuild(interaction, contextGuildId);
+    if (!guild) {
+      await interaction.update(maintenancePayload(interaction, contextGuildId, '❌ Current server is unavailable.'));
+      return true;
+    }
+    await maintenanceStatus.beginGuildMaintenance(guild, { reason: `Manual maintenance triggered by ${interaction.user.tag || interaction.user.id}` });
+    await interaction.update(maintenancePayload(interaction, guild.id, `🔴 Maintenance notice started in **${guild.name}**.`));
+    return true;
+  }
+
+  if (id === `${OWNER_PREFIX}maintenance-complete-guild`) {
+    const guild = await resolveMaintenanceGuild(interaction, contextGuildId);
+    if (!guild) {
+      await interaction.update(maintenancePayload(interaction, contextGuildId, '❌ Current server is unavailable.'));
+      return true;
+    }
+    const result = await maintenanceStatus.completeGuildMaintenance(guild);
+    await interaction.update(maintenancePayload(interaction, guild.id, result.found ? `✅ **${guild.name}** marked operational. Channel deletion scheduled in 5 minutes.` : `ℹ️ **${guild.name}** has no active maintenance channel.`));
+    return true;
+  }
+
+  if (id === `${OWNER_PREFIX}maintenance-clear-guild`) {
+    const guild = await resolveMaintenanceGuild(interaction, contextGuildId);
+    if (!guild) {
+      await interaction.update(maintenancePayload(interaction, contextGuildId, '❌ Current server is unavailable.'));
+      return true;
+    }
+    const result = await maintenanceStatus.deleteGuildMaintenanceChannel(guild);
+    await interaction.update(maintenancePayload(interaction, guild.id, result.found ? `🗑️ Temporary status channel deleted from **${guild.name}**.` : `ℹ️ **${guild.name}** has no active maintenance channel.`));
+    return true;
+  }
+
+  if (id === `${OWNER_PREFIX}maintenance-start-all`) {
+    await interaction.deferUpdate();
+    const results = await maintenanceStatus.beginMaintenanceForAll(interaction.client, { reason: `Manual global maintenance triggered by ${interaction.user.tag || interaction.user.id}` });
+    const ok = results.filter((result) => result.ok).length;
+    const failed = results.length - ok;
+    await interaction.editReply(maintenancePayload(interaction, contextGuildId, `🔴 Maintenance notices started in **${ok}/${results.length}** guilds${failed ? ` • **${failed}** failed` : ''}.`));
+    return true;
+  }
+
+  if (id === `${OWNER_PREFIX}maintenance-complete-all`) {
+    await interaction.deferUpdate();
+    const results = await maintenanceStatus.recoverAll(interaction.client);
+    const recovered = results.filter((result) => result?.found).length;
+    const failed = results.filter((result) => result?.ok === false).length;
+    await interaction.editReply(maintenancePayload(interaction, contextGuildId, `✅ **${recovered}** active maintenance channel(s) marked operational and scheduled for deletion${failed ? ` • **${failed}** failed` : ''}.`));
     return true;
   }
 

@@ -28,6 +28,7 @@ const CUSTOM_PANEL_KEYS = new Set([
 const MODULE_CATALOG = [
   // Community Studio
   { key: 'birthdays', studio: 'communityStudio', route: 'admin:birthdays', label: '🎂 Birthdays', title: '🎂 Birthdays', summary: 'Birthday registration, celebrations and member birthday tools.' },
+  { key: 'counting', studio: 'communityStudio', route: 'admin:module:counting:main:0', label: '🔢 Counting', title: '🔢 Counting', summary: 'Sequential community counting with configurable rules, hints and milestones.' },
   { key: 'giveaways', studio: 'communityStudio', route: 'admin:giveaways', label: '🎉 Giveaways', title: '🎉 Giveaways', summary: 'Giveaway creation, entries, winners and rerolls.' },
   { key: 'invites', studio: 'communityStudio', route: 'admin:invites', label: '📨 Invite Studio', title: '📨 Invite Studio', summary: 'Create invite links, attach roles and track member joins.' },
   { key: 'leveling', studio: 'communityStudio', route: 'admin:leveling', label: '🏆 Leveling', title: '🏆 Leveling', summary: 'XP, levels, leaderboards and level roles.' },
@@ -272,6 +273,10 @@ async function handleModuleAdminInteraction(interaction) {
   if (id.startsWith('admin:module:emojis:')) {
     const emojiPanel = require('../../../modules/utilityStudio/emojis/emojisPanel');
     return emojiPanel.handleDiscordInteraction?.(interaction) || false;
+  }
+  if (id.startsWith('admin:module:counting:')) {
+    const countingPanel = require('../../../modules/communityStudio/counting/panel');
+    return Boolean(await countingPanel.handleInteraction(interaction));
   }
   const main = id.match(/^admin:module:([a-zA-Z0-9_-]+):main:(\d+)$/);
   if (main && interaction.isButton?.()) return safeUpdate(interaction, buildModuleMainPanel(interaction.guild, main[1], name, Number(main[2])));
