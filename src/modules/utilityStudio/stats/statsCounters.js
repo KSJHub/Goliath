@@ -21,12 +21,25 @@ const COUNTER_TYPES = Object.freeze([
   'emojis',
 ]);
 
+const PRESENCE_TRIO_PRESET = Object.freeze({
+  name: 'Presence Trio',
+  template: '🟢 {1} ⛔ {2} 🌙 {3}',
+  segments: [
+    { type: 'status', options: { statuses: ['online'] } },
+    { type: 'status', options: { statuses: ['dnd'] } },
+    { type: 'status', options: { statuses: ['idle'] } },
+  ],
+});
+
 const DEFAULT_COUNTER_SUITE = Object.freeze([
-  { type: 'datetime', template: '📅 {value}', options: { format: 'weekday-short' } },
-  { type: 'members', template: '👥 Members: {value}', options: { humans: true, bots: true } },
-  { type: 'status', template: '🟢 Online: {value}', options: { statuses: ['online'] } },
-  { type: 'voice', template: '🔊 In Voice: {value}', options: {} },
+  { name: 'Date & Time', template: '📅 {value}', segments: [{ type: 'datetime', options: { format: 'weekday-short' } }] },
+  { name: 'Members', template: '👥 Members: {value}', segments: [{ type: 'members', options: { humans: true, bots: true } }] },
+  PRESENCE_TRIO_PRESET,
+  { name: 'In Voice', template: '🔊 In Voice: {value}', segments: [{ type: 'voice', options: {} }] },
 ]);
+
+const dockSchedules = new Map();
+const dockRefreshInFlight = new Set();
 
 function safeString(value, max = 100) {
   return String(value ?? '').trim().slice(0, max);
@@ -128,6 +141,11 @@ function normalizeCounterOptions(type, options = {}) {
     clean.channelIds = [...new Set((Array.isArray(input.channelIds) ? input.channelIds : []).map(String).filter(validId))].slice(0, 25);
   }
 
+  if (type === 'messages' || type === 'voiceMinutes') {
+    const periodDays = Number(input.periodDays || 0);
+    clean.periodDays = Number.isFinite(periodDays) && periodDays > 0 ? Math.max(1, Math.min(365, Math.floor(periodDays))) : null;
+  }
+
   if (['channels', 'members', 'status', 'role', 'roles', 'voice', 'messages', 'voiceMinutes', 'joins', 'leaves', 'boosts', 'emojis'].includes(type)) {
     const goal = Number(input.goal);
     clean.goal = Number.isFinite(goal) && goal > 0 ? Math.floor(goal) : null;
@@ -164,6 +182,7 @@ function cleanDock(input = {}) {
   const defaultText = segments.length === 1 ? defaultTemplate(segments[0].type) : segments.map((_, index) => `{${index + 1}}`).join(' · ');
   const template = safeString(input.template || input.channelText || defaultText, 100) || defaultText;
   const frequencyMinutes = Math.max(10, Math.min(1440, Number(input.frequencyMinutes || 10) || 10));
+  const now = new Date().toISOString();
 
   return {
     id: safeString(input.id, 40) || channelId || `dock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -176,8 +195,8 @@ function cleanDock(input = {}) {
     segments,
     frequencyMinutes,
     source: safeString(input.source || 'custom', 30) || 'custom',
-    createdAt: input.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: input.createdAt || now,
+    updatedAt: input.updatedAt || now,
   };
 }
 
@@ -195,7 +214,7 @@ function listCounters(guildId) {
 }
 
 function saveDock(guildId, input = {}, guildOrMeta = {}) {
-  const dock = cleanDock(input);
+  const dock = cleanDock({ ...input, updatedAt: new Date().toISOString() });
   return statsStore.updateStats(guildId, (stats) => ({
     ...stats,
     counters: [
@@ -327,6 +346,20 @@ function applyGoal(value, options = {}) {
   return Math.max(0, goal - Number(value || 0));
 }
 
+function rollingActivityTotal(guildId, type, periodDays) {
+  const days = Math.max(1, Math.min(365, Number(periodDays || 0) || 0));
+  if (!days) return null;
+  const stats = statsStore.getStats(guildId);
+  const source = type === 'messages' ? stats.data?.messages : stats.data?.voice;
+  if (!source || typeof source !== 'object') return 0;
+  const cutoff = Date.now() - (days - 1) * 86400000;
+  return Object.entries(source).reduce((total, [day, value]) => {
+    const timestamp = Date.parse(`${day}T00:00:00Z`);
+    if (!Number.isFinite(timestamp) || timestamp < cutoff) return total;
+    return total + Number(type === 'messages' ? value?.total : value?.totalMinutes || 0);
+  }, 0);
+}
+
 function counterValue(guild, summary, segment) {
   const type = segment.type;
   const options = segment.options || {};
@@ -340,8 +373,8 @@ function counterValue(guild, summary, segment) {
   else if (type === 'role') value = countMembersInRoles(guild, options);
   else if (type === 'roles') value = countRoles(guild, options);
   else if (type === 'voice') value = countVoice(guild, options);
-  else if (type === 'messages') value = summary.totals.messages;
-  else if (type === 'voiceMinutes') value = summary.totals.voiceMinutes;
+  else if (type === 'messages') value = options.periodDays ? rollingActivityTotal(guild.id, 'messages', options.periodDays) : summary.totals.messages;
+  else if (type === 'voiceMinutes') value = options.periodDays ? rollingActivityTotal(guild.id, 'voiceMinutes', options.periodDays) : summary.totals.voiceMinutes;
   else if (type === 'joins') value = summary.totals.joins;
   else if (type === 'leaves') value = summary.totals.leaves;
   else if (type === 'boosts') value = guild.premiumSubscriptionCount || 0;
@@ -388,26 +421,109 @@ async function ensureManageChannels(guild, channel, reason = 'manage Stats count
   throw new Error(`Goliath needs Manage Channels in ${channel.name || 'this channel/category'} before it can ${reason}.`);
 }
 
-async function refreshCounters(guild) {
+function scheduleKey(guildId, dockId) {
+  return `${guildId}:${dockId}`;
+}
+
+function clearDockSchedule(guildId, dockId) {
+  const key = scheduleKey(guildId, dockId);
+  const current = dockSchedules.get(key);
+  if (current?.timer) clearInterval(current.timer);
+  dockSchedules.delete(key);
+  dockRefreshInFlight.delete(key);
+}
+
+function markNextDue(guildId, dock) {
+  const key = scheduleKey(guildId, dock.id);
+  const current = dockSchedules.get(key) || {};
+  current.nextDue = Date.now() + Math.max(10, Number(dock.frequencyMinutes || 10)) * 60000;
+  dockSchedules.set(key, current);
+}
+
+async function refreshDock(guild, dockInput, { force = false, fetchMembers = true } = {}) {
+  const dock = typeof dockInput === 'string'
+    ? listCounters(guild.id).find((item) => item.id === dockInput || item.channelId === dockInput)
+    : normalizeStoredDock(dockInput);
+  if (!dock?.enabled || !dock.channelId) return null;
+
+  const key = scheduleKey(guild.id, dock.id);
+  const schedule = dockSchedules.get(key);
+  if (!force && schedule?.nextDue && Date.now() < schedule.nextDue) return { id: dock.id, skipped: true };
+  if (dockRefreshInFlight.has(key)) return { id: dock.id, skipped: true };
+
+  dockRefreshInFlight.add(key);
+  try {
+    if (fetchMembers) await guild.members.fetch({ withPresences: true }).catch(() => guild.members.fetch().catch(() => null));
+    const channel = guild.channels.cache.get(dock.channelId) || await guild.channels.fetch(dock.channelId).catch(() => null);
+    if (!channel?.setName) return null;
+    const summary = statsStore.getSummary(guild.id);
+    const name = renderCounterName(guild, summary, dock);
+    const changed = channel.name !== name;
+    if (changed) await channel.setName(name, 'Goliath Stats counter refresh').catch(() => null);
+    markNextDue(guild.id, dock);
+    return { id: dock.id, channelId: dock.channelId, name, changed, skipped: false };
+  } finally {
+    dockRefreshInFlight.delete(key);
+  }
+}
+
+function ensureDockSchedule(guild, dock) {
+  if (!dock?.enabled || !dock.channelId) {
+    if (dock?.id) clearDockSchedule(guild.id, dock.id);
+    return null;
+  }
+
+  const key = scheduleKey(guild.id, dock.id);
+  const frequencyMinutes = Math.max(10, Number(dock.frequencyMinutes || 10));
+  const current = dockSchedules.get(key);
+  if (current?.timer && current.frequencyMinutes === frequencyMinutes) return current;
+  if (current?.timer) clearInterval(current.timer);
+
+  const timer = setInterval(() => {
+    refreshDock(guild, dock.id, { force: true, fetchMembers: true }).catch((error) => {
+      console.error(`[Stats] Scheduled refresh failed for ${dock.id}:`, error);
+    });
+  }, frequencyMinutes * 60000);
+  timer.unref?.();
+
+  const next = {
+    timer,
+    frequencyMinutes,
+    nextDue: current?.nextDue || (Date.now() + frequencyMinutes * 60000),
+  };
+  dockSchedules.set(key, next);
+  return next;
+}
+
+function syncDockSchedules(guild, docks) {
+  const activeKeys = new Set();
+  for (const dock of docks) {
+    if (!dock.enabled || !dock.channelId) continue;
+    const key = scheduleKey(guild.id, dock.id);
+    activeKeys.add(key);
+    ensureDockSchedule(guild, dock);
+  }
+  for (const [key, current] of dockSchedules.entries()) {
+    if (!key.startsWith(`${guild.id}:`) || activeKeys.has(key)) continue;
+    if (current?.timer) clearInterval(current.timer);
+    dockSchedules.delete(key);
+  }
+}
+
+async function refreshCounters(guild, options = {}) {
   if (!guild?.id) return [];
   await guild.channels.fetch().catch(() => null);
   await guild.members.fetch({ withPresences: true }).catch(() => guild.members.fetch().catch(() => null));
   await guild.roles.fetch().catch(() => null);
 
-  const summary = statsStore.getSummary(guild.id);
   const docks = listCounters(guild.id);
   const results = [];
-
   for (const dock of docks) {
     if (!dock.enabled || !dock.channelId) continue;
-    const channel = guild.channels.cache.get(dock.channelId) || await guild.channels.fetch(dock.channelId).catch(() => null);
-    if (!channel?.setName) continue;
-    const name = renderCounterName(guild, summary, dock);
-    const changed = channel.name !== name;
-    if (changed) await channel.setName(name, 'Goliath Stats counter refresh').catch(() => null);
-    results.push({ id: dock.id, channelId: dock.channelId, name, changed });
+    const result = await refreshDock(guild, dock, { force: options.force === true, fetchMembers: false });
+    if (result && !result.skipped) results.push(result);
   }
-
+  syncDockSchedules(guild, docks);
   return results;
 }
 
@@ -476,6 +592,7 @@ async function createDock(guild, input = {}, guildOrMeta = {}) {
   const channel = await createCounterChannel(guild, base, category?.id || null);
   const dock = { ...base, channelId: channel.id, categoryId: category?.id || null, enabled: true };
   saveDock(guild.id, dock, guildOrMeta || guild);
+  ensureDockSchedule(guild, dock);
   return dock;
 }
 
@@ -497,7 +614,9 @@ async function updateDock(guild, id, changes = {}, guildOrMeta = {}) {
   }
 
   saveDock(guild.id, next, guildOrMeta || guild);
-  await refreshCounters(guild);
+  clearDockSchedule(guild.id, next.id);
+  ensureDockSchedule(guild, next);
+  await refreshDock(guild, next, { force: true, fetchMembers: true });
   return next;
 }
 
@@ -517,6 +636,7 @@ async function setDockEnabled(guild, id, enabled, guildOrMeta = {}) {
       if (!channel.deletable) throw new Error(`Goliath cannot disable ${channel.name} because Discord will not allow the channel to be deleted.`);
       await channel.delete('Goliath Stats counter disabled');
     }
+    clearDockSchedule(guild.id, existing.id);
     const next = { ...existing, channelId: null, enabled: false };
     saveDock(guild.id, next, guildOrMeta || guild);
     return next;
@@ -524,6 +644,7 @@ async function setDockEnabled(guild, id, enabled, guildOrMeta = {}) {
 
   const next = { ...existing, enabled: Boolean(enabled) };
   saveDock(guild.id, next, guildOrMeta || guild);
+  if (next.enabled) ensureDockSchedule(guild, next); else clearDockSchedule(guild.id, next.id);
   return next;
 }
 
@@ -538,8 +659,16 @@ async function deleteDock(guild, id, guildOrMeta = {}) {
       await channel.delete('Goliath Stats counter deleted');
     }
   }
+  clearDockSchedule(guild.id, existing.id);
   removeCounter(guild.id, existing.id, guildOrMeta || guild);
   return true;
+}
+
+function samePreset(dock, preset) {
+  if (!dock || !preset) return false;
+  const dockTypes = (dock.segments || []).map((segment) => `${segment.type}:${JSON.stringify(segment.options || {})}`);
+  const presetTypes = (preset.segments || []).map((segment) => `${segment.type}:${JSON.stringify(normalizeCounterOptions(segment.type, segment.options || {}))}`);
+  return JSON.stringify(dockTypes) === JSON.stringify(presetTypes);
 }
 
 async function createCounterSuite(guild, options = {}) {
@@ -553,23 +682,24 @@ async function createCounterSuite(guild, options = {}) {
   const reused = [];
 
   for (const preset of DEFAULT_COUNTER_SUITE) {
-    const existing = listCounters(guild.id).find((dock) => dock.segments?.length === 1 && dock.segments[0].type === preset.type && dock.source === 'default-suite');
+    const existing = listCounters(guild.id).find((dock) => dock.source === 'default-suite' && samePreset(dock, preset));
     if (existing?.channelId) {
       const channel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null);
-      if (channel) { reused.push(existing); continue; }
+      if (channel) { reused.push(existing); ensureDockSchedule(guild, existing); continue; }
     }
     const dock = await createDock(guild, {
-      name: preset.type,
+      name: preset.name || 'Counter',
       template: preset.template,
-      segments: [{ type: preset.type, options: preset.options || {} }],
+      segments: preset.segments,
       categoryId: category.id,
       channelType: options.channelType || 'voice',
+      frequencyMinutes: Number(options.frequencyMinutes || statsStore.getStats(guild.id).settings?.defaultFrequencyMinutes || 10),
       source: 'default-suite',
     }, guild);
     created.push(dock);
   }
 
-  await refreshCounters(guild);
+  await refreshCounters(guild, { force: true });
   return { categoryId: category.id, created, reused };
 }
 
@@ -581,6 +711,7 @@ module.exports = {
   COUNTER_TYPES,
   STATUS_VALUES,
   DEFAULT_COUNTER_SUITE,
+  PRESENCE_TRIO_PRESET,
   cleanCounter,
   cleanDock,
   cleanSegment,
@@ -590,6 +721,7 @@ module.exports = {
   upsertCounterByType,
   removeCounter,
   refreshCounters,
+  refreshDock,
   createCounterSuite,
   createDock,
   updateDock,
