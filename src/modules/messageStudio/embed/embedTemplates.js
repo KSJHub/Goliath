@@ -105,6 +105,11 @@ let presetStoreApi;
     '{guild}', '{guildName}', '{server}', '{serverName}', '{memberCount}', '{createdAt}',
   ];
 
+  const SUGGESTION_VARIABLES = [
+    '{suggestion}', '{suggestionAuthor}', '{suggestionStatus}', '{upVotes}', '{downVotes}',
+    '{teamResponse}', '{submittedAt}', '{decisionAt}', '{suggestionsEnabled}', '{anonymousMode}',
+  ];
+
   const MODULE_VARIABLES = Object.freeze({
     global: ['{guild}', '{guildName}', '{server}', '{serverName}', '{guildId}', '{guildIcon}', '{guildBanner}', '{memberCount}', '{createdAt}', '{timestamp}'],
     welcome: [...MEMBER_VARIABLES, '{joinedAt}'],
@@ -114,6 +119,12 @@ let presetStoreApi;
     tickets: ['{ticketId}', '{ticketDisplayId}', '{ticketType}', '{ticketPriority}', '{ticketCreator}', '{ticketChannel}', '{ticketStatus}'],
     forms: ['{formId}', '{formName}', '{submissionId}', '{submitter}', '{submissionStatus}', '{reviewer}'],
     moderation: ['{caseId}', '{moderator}', '{target}', '{reason}', '{duration}', '{action}'],
+    suggestions: SUGGESTION_VARIABLES,
+    suggestion_panel: SUGGESTION_VARIABLES,
+    suggestion_pending: SUGGESTION_VARIABLES,
+    suggestion_accepted: SUGGESTION_VARIABLES,
+    suggestion_denied: SUGGESTION_VARIABLES,
+    suggestion_archived: SUGGESTION_VARIABLES,
   });
 
   const DEFAULT_TEMPLATES = Object.freeze({

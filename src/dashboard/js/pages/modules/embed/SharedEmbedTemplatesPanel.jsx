@@ -4,8 +4,8 @@ const MODULE_TEMPLATE_GROUPS = [
   {
     key: 'suggestions',
     label: 'Suggestions',
-    description: 'Messages used by the Suggestions module for submissions, votes and decisions.',
-    slots: ['suggestion_panel', 'suggestion_accepted', 'suggestion_denied', 'suggestion_archived'],
+    description: 'Public suggestion panel, open suggestions and final decision messages.',
+    slots: ['suggestion_panel', 'suggestion_pending', 'suggestion_accepted', 'suggestion_denied'],
   },
   {
     key: 'welcome',
@@ -233,7 +233,7 @@ export default function SharedEmbedTemplatesPanel({ theme, payload = {}, busy = 
         <div>
           <div style={{ color: theme.mutedText, fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Embed Studio</div>
           <h3 style={{ margin: '6px 0 0' }}>Module Message Templates</h3>
-          <p style={{ margin: '8px 0 0', color: theme.mutedText, lineHeight: 1.5, maxWidth: 880 }}>Modules keep their logic. Embed Studio owns the Discord-facing messages, panels, buttons and template bindings used by those modules.</p>
+          <p style={{ margin: '8px 0 0', color: theme.mutedText, lineHeight: 1.5, maxWidth: 880 }}>Modules keep their logic and interactive controls. Embed Studio owns the Discord-facing message content and template bindings used by those modules.</p>
         </div>
         <button type="button" onClick={onReload} style={buttonStyle(theme, 'soft', busy)} disabled={busy}>Reload</button>
       </div>
@@ -257,6 +257,7 @@ export default function SharedEmbedTemplatesPanel({ theme, payload = {}, busy = 
               <div>
                 <strong>Editing: {labelFromKey(moduleKey)} / {labelFromKey(slot)}</strong>
                 <p style={{ margin: '5px 0 0', color: theme.mutedText, fontSize: 13 }}>This template is used by the module when it posts to Discord.</p>
+                {moduleKey === 'suggestions' ? <p style={{ margin: '6px 0 0', color: '#fde68a', fontSize: 12, lineHeight: 1.45 }}>Suggestions always keeps its yellow module colour and its Share, My Suggestions, voting and Team Review buttons. Templates control the message content, not the workflow.</p> : null}
               </div>
               <Pill tone="#86efac">Module Linked</Pill>
             </div>
@@ -275,7 +276,7 @@ export default function SharedEmbedTemplatesPanel({ theme, payload = {}, busy = 
 
           <div style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.24)', borderRadius: 16, padding: 14, display: 'grid', gap: 12 }}>
             <strong>Discord Preview</strong>
-            <div style={{ border: `1px solid ${theme.cardBorder}`, background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.76))', borderRadius: 16, padding: 16, borderLeft: '4px solid #7c3aed', display: 'grid', gap: 10 }}>
+            <div style={{ border: `1px solid ${theme.cardBorder}`, background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.76))', borderRadius: 16, padding: 16, borderLeft: `4px solid ${moduleKey === 'suggestions' ? '#FEE75C' : '#7c3aed'}`, display: 'grid', gap: 10 }}>
               <strong>{selectedTemplate.embed?.title || selectedTemplate.title || labelFromKey(slot)}</strong>
               <p style={{ margin: 0, color: theme.mutedText, lineHeight: 1.5 }}>{selectedTemplate.embed?.description || selectedTemplate.description || `Preview for ${labelFromKey(slot)}.`}</p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

@@ -11,14 +11,14 @@ const router = express.Router();
 function success(res, payload = {}) { return res.json({ success: true, ...payload }); }
 function failure(res, error, status = 500) {
   console.error('[Stats API]', error);
-  return res.status(status).json({ success: false, error: error.message || 'Stats API request failed.' });
+  return res.status(status).json({ success: false, error: error.message || 'Stats request failed.' });
 }
 function getGuildId(req) {
   const guildId = String(req.params.guildId || req.query?.guildId || '').trim();
   if (!/^\d{15,25}$/.test(guildId)) throw new Error('Invalid guild ID.');
   return guildId;
 }
-function getClient(req) { return req.client || req.app?.get?.('goliath.client') || req.app?.locals?.client || global.client || null; }
+function getClient(req) { return req.client || req.app?.get?.('goliath.client') || req.app?.locals?.client || global.client || global.discordClient || null; }
 async function getGuild(req, guildId) {
   const client = getClient(req);
   if (!client?.guilds) return null;
@@ -64,18 +64,54 @@ function buildStoredStats(data, guildId) {
     security: { enabled: guildManager.isModuleEnabled(guildId, 'security'), threatLevel: security.threatLevel || 'low', totalIncidents: Number(security.totalIncidents || 0), criticalIncidents: Number(security.criticalIncidents || 0), incidents: countArray(security.incidents) },
   };
 }
+
 async function buildLiveStats(req, guildId) {
   const guild = await getGuild(req, guildId);
   if (!guild) return { available: false, guild: null, members: null, channels: null, roles: null, emojis: null };
+
+  await guild.channels.fetch().catch(() => null);
+  await guild.roles.fetch().catch(() => null);
+  await guild.members.fetch({ withPresences: true }).catch(() => guild.members.fetch().catch(() => null));
+
   const channels = [...guild.channels.cache.values()];
-  const roles = [...guild.roles.cache.values()].filter((role) => role.id !== guild.id);
+  const roles = [...guild.roles.cache.values()].filter((role) => role.id !== guild.id).sort((a, b) => b.position - a.position);
   const emojis = [...guild.emojis.cache.values()];
+  const members = [...guild.members.cache.values()];
+  const statuses = { online: 0, idle: 0, dnd: 0, offline: 0 };
+  members.forEach((member) => { const key = member.presence?.status || 'offline'; statuses[key] = Number(statuses[key] || 0) + 1; });
+
   return {
     available: true,
-    guild: { id: guild.id, name: guild.name, iconUrl: guild.iconURL?.({ extension: 'png', size: 128 }) || null, createdAt: guild.createdAt?.toISOString?.() || null, ownerId: guild.ownerId || null, premiumTier: guild.premiumTier || 0, premiumSubscriptionCount: guild.premiumSubscriptionCount || 0 },
-    members: { total: guild.memberCount || 0 },
-    channels: { total: channels.length, text: channels.filter((channel) => channel.type === 0 || channel.type === 5).length, voice: channels.filter((channel) => channel.type === 2 || channel.type === 13).length, categories: channels.filter((channel) => channel.type === 4).length, threads: channels.filter((channel) => channel.isThread?.()).length },
-    roles: { total: roles.length, managed: roles.filter((role) => role.managed).length, mentionable: roles.filter((role) => role.mentionable).length },
+    guild: {
+      id: guild.id,
+      name: guild.name,
+      iconUrl: guild.iconURL?.({ extension: 'png', size: 128 }) || null,
+      createdAt: guild.createdAt?.toISOString?.() || null,
+      ownerId: guild.ownerId || null,
+      premiumTier: guild.premiumTier || 0,
+      premiumSubscriptionCount: guild.premiumSubscriptionCount || 0,
+    },
+    members: {
+      total: guild.memberCount || 0,
+      humans: members.filter((member) => !member.user?.bot).length,
+      bots: members.filter((member) => member.user?.bot).length,
+      statuses,
+      inVoice: members.filter((member) => member.voice?.channelId).length,
+    },
+    channels: {
+      total: channels.length,
+      text: channels.filter((channel) => (channel.type === 0 || channel.type === 5) && !channel.isThread?.()).length,
+      voice: channels.filter((channel) => channel.type === 2 || channel.type === 13).length,
+      categories: channels.filter((channel) => channel.type === 4).length,
+      threads: channels.filter((channel) => channel.isThread?.()).length,
+      items: channels.filter((channel) => !channel.isThread?.()).sort((a, b) => (a.rawPosition || 0) - (b.rawPosition || 0)).map((channel) => ({ id: channel.id, name: channel.name, type: channel.type, parentId: channel.parentId || null })),
+    },
+    roles: {
+      total: roles.length,
+      managed: roles.filter((role) => role.managed).length,
+      mentionable: roles.filter((role) => role.mentionable).length,
+      items: roles.map((role) => ({ id: role.id, name: role.name, position: role.position, managed: role.managed, color: role.hexColor || null, memberCount: role.members?.size || 0 })),
+    },
     emojis: { total: emojis.length, animated: emojis.filter((emoji) => emoji.animated).length, static: emojis.filter((emoji) => !emoji.animated).length },
   };
 }
@@ -84,15 +120,29 @@ router.get('/:guildId/overview', async (req, res) => {
   try {
     const guildId = getGuildId(req);
     const data = guildManager.getGuildData(guildId);
-    return success(res, { guildId, updatedAt: new Date().toISOString(), live: await buildLiveStats(req, guildId), modules: buildModuleStats(data, guildId), stored: buildStoredStats(data, guildId) });
+    return success(res, {
+      guildId,
+      updatedAt: new Date().toISOString(),
+      live: await buildLiveStats(req, guildId),
+      modules: buildModuleStats(data, guildId),
+      stored: buildStoredStats(data, guildId),
+      counterTypes: stats.counters.COUNTER_TYPES,
+      statusValues: stats.counters.STATUS_VALUES,
+    });
   } catch (error) { return failure(res, error, 400); }
 });
+
 router.get('/:guildId/config', (req, res) => {
   try {
     const guildId = getGuildId(req);
-    return success(res, { guildId, config: { ...stats.getConfig(guildId), enabled: guildManager.isModuleEnabled(guildId, 'stats') }, summary: stats.getSummary(guildId) });
+    return success(res, {
+      guildId,
+      config: { ...stats.getConfig(guildId), enabled: guildManager.isModuleEnabled(guildId, 'stats'), counters: stats.counters.listCounters(guildId) },
+      summary: stats.getSummary(guildId),
+    });
   } catch (error) { return failure(res, error, 400); }
 });
+
 router.patch('/:guildId/config', (req, res) => {
   try {
     const guildId = getGuildId(req);
@@ -100,25 +150,30 @@ router.patch('/:guildId/config', (req, res) => {
     if (typeof req.body?.enabled === 'boolean') guildManager.setModuleEnabled(guildId, 'stats', req.body.enabled, actor(req, 'stats_config_enabled'));
     const updates = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
     const stored = stats.store.updateStats(guildId, (current) => ({ ...current, ...updates, settings: updates.settings ? { ...(current.settings || {}), ...updates.settings } : current.settings }), actor(req, 'stats_config_update'));
-    return success(res, { guildId, config: { ...stored, enabled: guildManager.isModuleEnabled(guildId, 'stats') } });
+    return success(res, { guildId, config: { ...stored, enabled: guildManager.isModuleEnabled(guildId, 'stats'), counters: stats.counters.listCounters(guildId) } });
   } catch (error) { return failure(res, error, 400); }
 });
+
 router.get('/:guildId/health', async (req, res) => {
   try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); return success(res, { guildId, health: await statsHealth.buildHealth(guild) }); }
   catch (error) { return failure(res, error, 400); }
 });
+
 router.get('/:guildId/export', (req, res) => {
   try { const guildId = getGuildId(req); return success(res, { export: statsHealth.exportConfig(guildId) }); }
   catch (error) { return failure(res, error, 400); }
 });
+
 router.post('/:guildId/repair', async (req, res) => {
   try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); return success(res, { guildId, result: await statsHealth.repair(guild) }); }
   catch (error) { return failure(res, error, 400); }
 });
+
 router.post('/:guildId/refresh', async (req, res) => {
   try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); return success(res, { guildId, refreshed: await stats.refreshGuildCounters(guild, 'dashboard') }); }
   catch (error) { return failure(res, error, 400); }
 });
+
 router.post('/:guildId/counters/setup', async (req, res) => {
   try {
     const guildId = getGuildId(req);
@@ -128,9 +183,63 @@ router.post('/:guildId/counters/setup', async (req, res) => {
     return success(res, { guildId, result: await stats.counters.createCounterSuite(guild, req.body || {}) });
   } catch (error) { return failure(res, error, 400); }
 });
+
+router.post('/:guildId/counters/preview', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const guild = await getGuild(req, guildId);
+    if (!guild) throw new Error('Guild is unavailable.');
+    return success(res, { guildId, preview: stats.counters.previewDock(guild, req.body || {}) });
+  } catch (error) { return failure(res, error, 400); }
+});
+
+router.post('/:guildId/counters', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const guild = await getGuild(req, guildId);
+    if (!guild) throw new Error('Guild is unavailable.');
+    guildManager.setModuleEnabled(guildId, 'stats', true, actor(req, 'stats_counter_create'));
+    const counter = await stats.counters.createDock(guild, req.body || {}, actor(req, 'stats_counter_create'));
+    return success(res, { guildId, counter, counters: stats.counters.listCounters(guildId) });
+  } catch (error) { return failure(res, error, 400); }
+});
+
+router.patch('/:guildId/counters/:counterId', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const guild = await getGuild(req, guildId);
+    if (!guild) throw new Error('Guild is unavailable.');
+    const counter = await stats.counters.updateDock(guild, String(req.params.counterId || ''), req.body || {}, actor(req, 'stats_counter_update'));
+    return success(res, { guildId, counter, counters: stats.counters.listCounters(guildId) });
+  } catch (error) { return failure(res, error, 400); }
+});
+
+router.post('/:guildId/counters/:counterId/toggle', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const guild = await getGuild(req, guildId);
+    if (!guild) throw new Error('Guild is unavailable.');
+    const counter = await stats.counters.setDockEnabled(guild, String(req.params.counterId || ''), req.body?.enabled === true, actor(req, 'stats_counter_toggle'));
+    return success(res, { guildId, counter, counters: stats.counters.listCounters(guildId) });
+  } catch (error) { return failure(res, error, 400); }
+});
+
+router.delete('/:guildId/counters/:counterId', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const guild = await getGuild(req, guildId);
+    if (!guild) throw new Error('Guild is unavailable.');
+    await stats.counters.deleteDock(guild, String(req.params.counterId || ''), actor(req, 'stats_counter_delete'));
+    return success(res, { guildId, counters: stats.counters.listCounters(guildId) });
+  } catch (error) { return failure(res, error, 400); }
+});
+
 router.post('/:guildId/reset', (req, res) => {
-  try { const guildId = getGuildId(req); if (req.body?.confirm !== true) return failure(res, new Error('Reset confirmation is required.'), 400); return success(res, { guildId, config: statsHealth.reset(guildId, actor(req, 'stats_reset')) }); }
-  catch (error) { return failure(res, error, 400); }
+  try {
+    const guildId = getGuildId(req);
+    if (req.body?.confirm !== true) return failure(res, new Error('Reset confirmation is required.'), 400);
+    return success(res, { guildId, config: statsHealth.reset(guildId, actor(req, 'stats_reset')) });
+  } catch (error) { return failure(res, error, 400); }
 });
 
 module.exports = router;
