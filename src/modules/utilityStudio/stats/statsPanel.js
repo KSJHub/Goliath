@@ -79,7 +79,7 @@ function footer(embed, requester) {
   return embed.setFooter({ text: `Requested by ${requester}` }).setTimestamp();
 }
 
-function navigation(backId, includeSettings = true, backLabel = '< Back') {
+function navigation(backId, includeSettings = true, backLabel = '⬅️ Back') {
   return row(button(backId, backLabel), includeSettings ? button('admin:stats:settings', '⚙️ Settings') : null);
 }
 
@@ -422,20 +422,20 @@ function buildSettingsPanel(guild, requester = 'Management', notice = '') {
       ].filter((line) => line !== null).join('\n')), requester)],
     components: [
       row(
-        button(enabled ? 'admin:stats:disable' : 'admin:stats:enable', enabled ? '⏸️ Disable Server Counters' : '▶️ Enable Server Counters', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-        button('admin:stats:health', '🩺 Check Health & Permissions', ButtonStyle.Primary)
+        button(enabled ? 'admin:stats:disable' : 'admin:stats:enable', enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+        button('admin:stats:health', '🩺 Health', ButtonStyle.Primary)
       ),
       row(
-        button('admin:stats:settings:timezone', '🌍 Change Default Time Zone'),
-        button('admin:stats:settings:frequency', '⏱️ Change Default Refresh')
+        button('admin:stats:settings:timezone', '🌍 Time Zone'),
+        button('admin:stats:settings:frequency', '⏱️ Refresh')
       ),
       row(
-        button('admin:stats:settings:messages', messagesOn ? '💬 Track Messages: On' : '💬 Track Messages: Off', messagesOn ? ButtonStyle.Success : ButtonStyle.Secondary),
-        button('admin:stats:settings:voice', voiceOn ? '🎙️ Track Voice: On' : '🎙️ Track Voice: Off', voiceOn ? ButtonStyle.Success : ButtonStyle.Secondary)
+        button('admin:stats:settings:messages', '💬 Track Messages', messagesOn ? ButtonStyle.Success : ButtonStyle.Secondary),
+        button('admin:stats:settings:voice', '🎙️ Track Voice', voiceOn ? ButtonStyle.Success : ButtonStyle.Secondary)
       ),
       row(
-        button('admin:stats:settings:members', membersOn ? '👥 Track Member Events: On' : '👥 Track Member Events: Off', membersOn ? ButtonStyle.Success : ButtonStyle.Secondary),
-        button('admin:stats:settings:bots', ignoreBots ? '🤖 Ignore Bot Activity: Yes' : '🤖 Ignore Bot Activity: No', ignoreBots ? ButtonStyle.Success : ButtonStyle.Secondary)
+        button('admin:stats:settings:members', '👥 Member Events', membersOn ? ButtonStyle.Success : ButtonStyle.Secondary),
+        button('admin:stats:settings:bots', '🤖 Ignore Bots', ignoreBots ? ButtonStyle.Success : ButtonStyle.Secondary)
       ),
       navigation('admin:stats', false),
     ],
@@ -569,7 +569,7 @@ function buildValuePanel(guild, item, index, requester = 'Management') {
   }
   components.push(row(
     button(`admin:stats:remove:${item.id}:${index}`, '🗑️ Remove Value', ButtonStyle.Danger, item.segments.length <= 1),
-    button(`admin:stats:edit:${item.id}`, '< Back')
+    button(`admin:stats:edit:${item.id}`, '⬅️ Back')
   ));
   return {
     embeds: [footer(new EmbedBuilder()
@@ -583,7 +583,7 @@ function buildValuePanel(guild, item, index, requester = 'Management') {
 function buildAddPanel(item, requester = 'Management') {
   return {
     embeds: [footer(new EmbedBuilder().setColor(SUCCESS_COLOR).setTitle('➕ Add Counter Value').setDescription(`This counter displays **${item.segments.length} / 4** values. Choose another value to add.`), requester)],
-    components: [row(select(`admin:stats:addtype:${item.id}`, 'Choose a value to add…', typeOptions())), row(button(`admin:stats:open:${item.id}`, '< Back'))],
+    components: [row(select(`admin:stats:addtype:${item.id}`, 'Choose a value to add…', typeOptions())), row(button(`admin:stats:open:${item.id}`, '⬅️ Back'))],
   };
 }
 
@@ -698,7 +698,7 @@ function buildBulkDeleteConfirm(interaction, requester = 'Management') {
 }
 
 function buildErrorPanel(title, message, requester = 'Management', backId = 'admin:stats:manager') {
-  return { embeds: [footer(new EmbedBuilder().setColor(DANGER_COLOR).setTitle(`⚠️ ${title}`).setDescription(String(message || 'Something went wrong.').slice(0, 4000)), requester)], components: [row(button(backId, '< Back'))] };
+  return { embeds: [footer(new EmbedBuilder().setColor(DANGER_COLOR).setTitle(`⚠️ ${title}`).setDescription(String(message || 'Something went wrong.').slice(0, 4000)), requester)], components: [row(button(backId, '⬅️ Back'))] };
 }
 
 async function send(interaction, payload) {
