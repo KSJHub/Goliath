@@ -1,6 +1,6 @@
 'use strict';
 
-const MODULE_CONTRACTS = Object.freeze({
+const BASE_CONTRACTS = {
   autoRoles: { class: 'event', signals: ['runtime', 'interaction', 'persistence', 'discord-write'] },
   birthdays: { class: 'scheduled', signals: ['runtime', 'scheduler', 'persistence', 'discord-write'] },
   embed: { class: 'event', signals: ['runtime', 'interaction', 'discord-write'] },
@@ -27,14 +27,18 @@ const MODULE_CONTRACTS = Object.freeze({
   translation: { class: 'provider', signals: ['runtime', 'provider', 'persistence', 'discord-write'] },
   verification: { class: 'event', signals: ['runtime', 'interaction', 'persistence', 'discord-write'] },
   welcome: { class: 'scheduled', signals: ['runtime', 'scheduler', 'persistence', 'discord-write'] },
-});
+};
 
-function getModuleContract(moduleKey) {
-  return MODULE_CONTRACTS[String(moduleKey || '')] || null;
-}
+// Every supported module must be observable at the universal Sentinel action
+// boundary in addition to its module-specific health signals.
+const MODULE_CONTRACTS = Object.freeze(Object.fromEntries(
+  Object.entries(BASE_CONTRACTS).map(([key, contract]) => [key, Object.freeze({
+    ...contract,
+    signals: Object.freeze([...new Set([...contract.signals, 'sentinel-action'])]),
+  })])
+));
 
-function moduleKeys() {
-  return Object.keys(MODULE_CONTRACTS).sort();
-}
+function getModuleContract(moduleKey) { return MODULE_CONTRACTS[String(moduleKey || '')] || null; }
+function moduleKeys() { return Object.keys(MODULE_CONTRACTS).sort(); }
 
 module.exports = { MODULE_CONTRACTS, getModuleContract, moduleKeys };
