@@ -1,35 +1,24 @@
 'use strict';
 
-/**
- * Sentinel event/action pipeline.
- * Sentinel is the single observation boundary for owner-level intelligence.
- * Every normal event/action is retained; only stateful incidents use the
- * existing Sentinel incident/reminder/recovery deduplication lifecycle.
- */
-
 const crypto = require('node:crypto');
 const { KINDS, familyFor } = require('./taxonomy');
 
 const PIPELINE_VERSION = 1;
 const VALID_KINDS = new Set(Object.values(KINDS));
+let installed = false;
+let originals = null;
 
 function environment(client) {
   return String(client?.botMode || process.env.BOT_MODE || 'DEV').toUpperCase();
 }
-
 function pipelineId() {
   return `SEN-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 }
-
-function audit() {
-  return require('../auditIntelligence/auditIntelligence');
-}
-
+function audit() { return require('../auditIntelligence/auditIntelligence'); }
 function normalizeKind(input = {}, fallback = KINDS.EVENT) {
   const requested = String(input.sentinelKind || input.kind || fallback).toLowerCase();
   return VALID_KINDS.has(requested) ? requested : fallback;
 }
-
 function sentinelMetadata(client, input = {}, kind = KINDS.EVENT) {
   const env = environment(client);
   return {
@@ -45,7 +34,6 @@ function sentinelMetadata(client, input = {}, kind = KINDS.EVENT) {
     },
   };
 }
-
 function prepare(client, input = {}, fallbackKind = KINDS.EVENT) {
   const kind = normalizeKind(input, fallbackKind);
   const type = String(input.type || 'unknown');
@@ -55,25 +43,35 @@ function prepare(client, input = {}, fallbackKind = KINDS.EVENT) {
     metadata: sentinelMetadata(client, input, kind),
   };
 }
-
+function originalCapture() {
+  if (!originals) {
+    const target = audit();
+    originals = { capture: target.capture.bind(target), captureGoliathAction: target.captureGoliathAction.bind(target) };
+  }
+  return originals;
+}
 async function capture(client, input = {}) {
-  return audit().capture(client, prepare(client, input, KINDS.EVENT));
+  return originalCapture().capture(client, prepare(client, input, KINDS.EVENT));
 }
-
 async function captureEvent(client, input = {}) {
-  return audit().capture(client, prepare(client, { ...input, sentinelKind: KINDS.EVENT }, KINDS.EVENT));
+  return originalCapture().capture(client, prepare(client, { ...input, sentinelKind: KINDS.EVENT }, KINDS.EVENT));
 }
-
 async function captureAction(client, input = {}) {
-  return audit().captureGoliathAction(client, prepare(client, { ...input, sentinelKind: KINDS.ACTION }, KINDS.ACTION));
+  return originalCapture().captureGoliathAction(client, prepare(client, { ...input, sentinelKind: KINDS.ACTION }, KINDS.ACTION));
 }
+async function captureGoliathAction(client, input = {}) { return captureAction(client, input); }
 
-async function captureGoliathAction(client, input = {}) {
-  return captureAction(client, input);
+function installBoundary() {
+  if (installed) return false;
+  const target = audit();
+  originalCapture();
+  target.capture = capture;
+  target.captureGoliathAction = captureGoliathAction;
+  installed = true;
+  return true;
 }
+function boundaryInstalled() { return installed; }
 
-// Compatibility helpers allow the mature gateway collectors/correlation code
-// to move behind Sentinel incrementally without duplicating Audit Intelligence.
 function correlate(...args) { return audit().correlate(...args); }
 function normalize(...args) { return audit().normalize(...args); }
 function confirmGoliathOutcome(...args) { return audit().confirmGoliathOutcome(...args); }
@@ -88,23 +86,9 @@ function actorMemberSnapshot(...args) { return audit().actorMemberSnapshot(...ar
 function buildOperationalSummary(...args) { return audit().buildOperationalSummary(...args); }
 
 module.exports = {
-  PIPELINE_VERSION,
-  environment,
-  prepare,
-  capture,
-  captureEvent,
-  captureAction,
-  captureGoliathAction,
-  correlate,
-  normalize,
-  confirmGoliathOutcome,
-  ensureGoliathOutputCapture,
-  outputMessageState,
-  registerOperation,
-  findOperationForOutput,
-  findOperationForConfirmedOutcome,
-  identifyGoliathSystem,
-  buildActorSnapshot,
-  actorMemberSnapshot,
-  buildOperationalSummary,
+  PIPELINE_VERSION, environment, prepare, capture, captureEvent, captureAction, captureGoliathAction,
+  installBoundary, boundaryInstalled, correlate, normalize, confirmGoliathOutcome,
+  ensureGoliathOutputCapture, outputMessageState, registerOperation, findOperationForOutput,
+  findOperationForConfirmedOutcome, identifyGoliathSystem, buildActorSnapshot,
+  actorMemberSnapshot, buildOperationalSummary,
 };
