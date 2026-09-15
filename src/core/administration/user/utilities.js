@@ -13,6 +13,11 @@ const {
 const translationStore = require('../../../modules/utilityStudio/translation/translationStore');
 const translation = require('../../../modules/utilityStudio/translation/translation');
 const guildManager = require('../../guild/guildManager');
+const { canAccessCommand } = require('../../commands/commandAccess');
+const { CATEGORY_CATALOG, MODULE_CATALOG: USER_MODULES } = require('./panel');
+const { STUDIO_CATALOG, MODULE_CATALOG: ADMIN_MODULES } = require('../admin/modules');
+
+const HIDDEN_HELP_COMMANDS = new Set(['owner', 'commandcenter']);
 
 function backRow() {
   return new ActionRowBuilder().addComponents(
@@ -65,17 +70,8 @@ async function showPing(interaction) {
     .setColor(0x5865F2)
     .setTitle('🏓 Goliath Status')
     .setDescription([
-      `**Status:** ${health}`,
-      '',
-      '**Bot Latency**',
-      `\`${clientLatency}ms\``,
-      latencyBar(clientLatency),
-      '',
-      '**Discord API**',
-      `\`${apiLatency}ms\``,
-      latencyBar(apiLatency),
-      '',
-      '**Uptime**',
+      `**Status:** ${health}`, '', '**Bot Latency**', `\`${clientLatency}ms\``, latencyBar(clientLatency),
+      '', '**Discord API**', `\`${apiLatency}ms\``, latencyBar(apiLatency), '', '**Uptime**',
       `\`${formatUptime(process.uptime())}\``,
     ].join('\n'))
     .setTimestamp();
@@ -97,42 +93,77 @@ async function showServerInfo(interaction) {
     .setTitle('🏰 Server Overview')
     .setThumbnail(guild.iconURL({ size: 256 }))
     .setDescription([
-      `**${guild.name}**`,
-      '',
-      `**Owner:** ${owner ? `<@${owner.id}>` : 'Unknown'}`,
-      `**Server ID:** \`${guild.id}\``,
-      `**Created:** <t:${Math.floor(guild.createdTimestamp / 1000)}:F>`,
-      '',
-      '**Members**',
-      `Total: \`${guild.memberCount}\` • Humans: \`${humans}\` • Bots: \`${bots}\``,
-      '',
-      '**Channels**',
-      `Text: \`${textChannels}\` • Voice: \`${voiceChannels}\` • Categories: \`${categories}\``,
-      '',
-      `**Roles:** \`${guild.roles.cache.size}\``,
+      `**${guild.name}**`, '', `**Owner:** ${owner ? `<@${owner.id}>` : 'Unknown'}`,
+      `**Server ID:** \`${guild.id}\``, `**Created:** <t:${Math.floor(guild.createdTimestamp / 1000)}:F>`,
+      '', '**Members**', `Total: \`${guild.memberCount}\` • Humans: \`${humans}\` • Bots: \`${bots}\``,
+      '', '**Channels**', `Text: \`${textChannels}\` • Voice: \`${voiceChannels}\` • Categories: \`${categories}\``,
+      '', `**Roles:** \`${guild.roles.cache.size}\``,
     ].join('\n'))
     .setTimestamp();
   return replaceComponent(interaction, { embeds: [embed] });
 }
 
-async function showHelp(interaction) {
-  const commands = [...(interaction.client?.commands?.values?.() || [])]
-    .filter((command) => command?.data?.name)
+function visibleCommands(interaction) {
+  return [...(interaction.client?.commands?.values?.() || [])]
+    .filter((command) => {
+      const name = String(command?.data?.name || '').trim();
+      if (!name || HIDDEN_HELP_COMMANDS.has(name.toLowerCase())) return false;
+      const json = command.data?.toJSON?.() || {};
+      if (json.type && json.type !== 1) return false;
+      return canAccessCommand(interaction, command);
+    })
     .sort((a, b) => String(a.data.name).localeCompare(String(b.data.name)));
-  const lines = commands.length
-    ? commands.map((command) => `**/${command.data.name}** — ${command.data.description || 'Open Goliath panel'}`)
-    : ['**/admin** — Administration panel', '**/mod** — Moderation panel', '**/user** — User panel'];
+}
+
+function userFeatureLines() {
+  const live = USER_MODULES.filter((module) => ['live', 'approved'].includes(module.status));
+  return CATEGORY_CATALOG.map((category) => {
+    const modules = live.filter((module) => module.category === category.key);
+    if (!modules.length) return null;
+    return `${category.emoji} **${category.label}** — ${modules.map((module) => module.label).join(', ')}`;
+  }).filter(Boolean);
+}
+
+function adminFeatureLines(interaction, commands) {
+  if (!commands.some((command) => command.data.name === 'admin')) return [];
+  return STUDIO_CATALOG.map((studio) => {
+    const modules = ADMIN_MODULES.filter((module) => module.studio === studio.key);
+    if (!modules.length) return null;
+    return `${studio.label} — ${modules.map((module) => module.label.replace(/^\S+\s*/, '')).join(', ')}`;
+  }).filter(Boolean);
+}
+
+async function showHelp(interaction, options = {}) {
+  const commands = visibleCommands(interaction);
+  const commandLines = commands.map((command) => {
+    const help = command.help || {};
+    return `**/${command.data.name}** — ${help.description || command.data.description || 'Open Goliath'}`;
+  });
+  const features = userFeatureLines();
+  const adminFeatures = adminFeatureLines(interaction, commands);
+  const description = [
+    'Need help finding something? Here’s what Goliath can do.',
+    '',
+    '**Commands**',
+    ...(commandLines.length ? commandLines : ['**/user** — Open your Goliath user panel.']),
+    '',
+    '**Features**',
+    ...features,
+    ...(adminFeatures.length ? ['', '**Server Tools**', ...adminFeatures] : []),
+  ].join('\n').slice(0, 4096);
+
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('📚 Goliath Command Centre')
-    .setDescription([
-      'Goliath now uses three canonical Discord entry commands.',
-      '',
-      ...lines,
-      '',
-      'Features are opened from the relevant interactive panel instead of separate slash commands.',
-    ].join('\n'))
+    .setTitle('❓ Goliath Help')
+    .setDescription(description)
+    .setFooter({ text: 'Goliath Help' })
     .setTimestamp();
+
+  if (options.standalone) {
+    const payload = { embeds: [embed], flags: 64 };
+    if (interaction.deferred || interaction.replied) return interaction.editReply(payload);
+    return interaction.reply(payload);
+  }
   return replaceComponent(interaction, { embeds: [embed] });
 }
 
@@ -142,45 +173,15 @@ function buildTranslateModal(interaction) {
     .setCustomId('user:utility:translate:submit')
     .setTitle('Translate Text')
     .addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('text')
-          .setLabel('Text to translate')
-          .setStyle(TextInputStyle.Paragraph)
-          .setMaxLength(1500)
-          .setRequired(true),
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('target')
-          .setLabel('Target language code')
-          .setPlaceholder('en, es, de, fr')
-          .setStyle(TextInputStyle.Short)
-          .setMaxLength(20)
-          .setRequired(false)
-          .setValue(String(config.settings?.defaultTargetLanguage || 'en').slice(0, 20)),
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('source')
-          .setLabel('Source language code')
-          .setPlaceholder('auto')
-          .setStyle(TextInputStyle.Short)
-          .setMaxLength(20)
-          .setRequired(false)
-          .setValue(String(config.settings?.defaultSourceLanguage || 'auto').slice(0, 20)),
-      ),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('text').setLabel('Text to translate').setStyle(TextInputStyle.Paragraph).setMaxLength(1500).setRequired(true)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('target').setLabel('Target language code').setPlaceholder('en, es, de, fr').setStyle(TextInputStyle.Short).setMaxLength(20).setRequired(false).setValue(String(config.settings?.defaultTargetLanguage || 'en').slice(0, 20))),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('source').setLabel('Source language code').setPlaceholder('auto').setStyle(TextInputStyle.Short).setMaxLength(20).setRequired(false).setValue(String(config.settings?.defaultSourceLanguage || 'auto').slice(0, 20))),
     );
 }
 
 async function showTranslate(interaction) {
   if (!guildManager.isModuleEnabled(interaction.guildId, 'translation')) {
-    return replaceComponent(interaction, {
-      embeds: [new EmbedBuilder()
-        .setColor(0xFEE75C)
-        .setTitle('🌐 Translation Unavailable')
-        .setDescription('Translation is not enabled for this server. An administrator can enable it from the Admin panel.')],
-    });
+    return replaceComponent(interaction, { embeds: [new EmbedBuilder().setColor(0xFEE75C).setTitle('🌐 Translation Unavailable').setDescription('Translation is not enabled for this server. An administrator can enable it from the Admin panel.')] });
   }
   await interaction.showModal(buildTranslateModal(interaction));
   return true;
@@ -194,33 +195,15 @@ async function submitTranslate(interaction) {
   }
   const config = translationStore.getTranslationSection(interaction.guildId);
   const text = interaction.fields.getTextInputValue('text').trim();
-  const targetLanguage = translation.normalizeLanguage(
-    interaction.fields.getTextInputValue('target').trim() || config.settings?.defaultTargetLanguage || 'en',
-  );
-  const sourceLanguage = translation.normalizeLanguage(
-    interaction.fields.getTextInputValue('source').trim() || config.settings?.defaultSourceLanguage || 'auto',
-  );
+  const targetLanguage = translation.normalizeLanguage(interaction.fields.getTextInputValue('target').trim() || config.settings?.defaultTargetLanguage || 'en');
+  const sourceLanguage = translation.normalizeLanguage(interaction.fields.getTextInputValue('source').trim() || config.settings?.defaultSourceLanguage || 'auto');
   await interaction.deferReply({ flags: 64 });
-  const result = await translation.translateText({
-    guildId: interaction.guildId,
-    text,
-    targetLanguage,
-    sourceLanguage,
-    mode: 'manual',
-  });
+  const result = await translation.translateText({ guildId: interaction.guildId, text, targetLanguage, sourceLanguage, mode: 'manual' });
   if (!result.ok) {
-    await interaction.editReply({
-      embeds: [translation.buildProviderNotConnectedEmbed({ text, targetLanguage, sourceLanguage, result })],
-    });
+    await interaction.editReply({ embeds: [translation.buildProviderNotConnectedEmbed({ text, targetLanguage, sourceLanguage, result })] });
     return true;
   }
-  await interaction.editReply({
-    content: [
-      `🌐 **${translation.languageLabel(result.sourceLanguage)} → ${translation.languageLabel(result.targetLanguage)}**`,
-      '',
-      result.translatedText,
-    ].join('\n'),
-  });
+  await interaction.editReply({ content: [`🌐 **${translation.languageLabel(result.sourceLanguage)} → ${translation.languageLabel(result.targetLanguage)}**`, '', result.translatedText].join('\n') });
   return true;
 }
 
@@ -231,11 +214,4 @@ const adapters = {
   translate: { execute: showTranslate },
 };
 
-module.exports = {
-  adapters,
-  showPing,
-  showHelp,
-  showServerInfo,
-  showTranslate,
-  submitTranslate,
-};
+module.exports = { adapters, showPing, showHelp, showServerInfo, showTranslate, submitTranslate };
