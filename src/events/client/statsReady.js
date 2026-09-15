@@ -1,12 +1,12 @@
 'use strict';
 
 const { Events } = require('discord.js');
-const statsStartup = require('../../modules/utilityStudio/stats/statsStartup');
+const stats = require('../../modules/utilityStudio/stats/stats');
 
 module.exports = {
   name: Events.ClientReady,
   once: true,
   async execute(client) {
-    await statsStartup.startup(client);
+    await stats.startup(client);
   },
 };
