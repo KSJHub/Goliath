@@ -2,17 +2,16 @@
 
 /**
  * Sentinel event/action pipeline.
- *
  * Sentinel is the single observation boundary for owner-level intelligence.
- * Normal Discord/Goliath events are NOT deduplicated here: every occurrence
- * is forwarded to Audit Intelligence. Stateful health incidents continue to
- * use Sentinel's incident store/report/recovery lifecycle.
+ * Every normal event/action is retained; only stateful incidents use the
+ * existing Sentinel incident/reminder/recovery deduplication lifecycle.
  */
 
 const crypto = require('node:crypto');
+const { KINDS, familyFor } = require('./taxonomy');
 
 const PIPELINE_VERSION = 1;
-const VALID_KINDS = new Set(['event', 'action', 'incident', 'recovery', 'health']);
+const VALID_KINDS = new Set(Object.values(KINDS));
 
 function environment(client) {
   return String(client?.botMode || process.env.BOT_MODE || 'DEV').toUpperCase();
@@ -23,58 +22,58 @@ function pipelineId() {
 }
 
 function audit() {
-  // Lazy require keeps Sentinel independent during bootstrap and avoids a
-  // hard circular dependency while Audit Intelligence provisions Control.
   return require('../auditIntelligence/auditIntelligence');
 }
 
-function normalizeKind(input = {}, fallback = 'event') {
+function normalizeKind(input = {}, fallback = KINDS.EVENT) {
   const requested = String(input.sentinelKind || input.kind || fallback).toLowerCase();
   return VALID_KINDS.has(requested) ? requested : fallback;
 }
 
-function sentinelMetadata(client, input = {}, kind = 'event') {
+function sentinelMetadata(client, input = {}, kind = KINDS.EVENT) {
+  const env = environment(client);
   return {
     ...(input.metadata || {}),
+    environment: input.metadata?.environment || env,
     sentinel: {
       pipelineVersion: PIPELINE_VERSION,
       pipelineId: input.metadata?.sentinel?.pipelineId || pipelineId(),
       kind,
-      environment: environment(client),
+      environment: env,
       observedAt: input.metadata?.sentinel?.observedAt || new Date().toISOString(),
       ...(input.metadata?.sentinel || {}),
     },
-    environment: input.metadata?.environment || environment(client),
   };
 }
 
-function prepare(client, input = {}, fallbackKind = 'event') {
+function prepare(client, input = {}, fallbackKind = KINDS.EVENT) {
   const kind = normalizeKind(input, fallbackKind);
+  const type = String(input.type || 'unknown');
   return {
     ...input,
+    category: input.category || familyFor(type, kind === KINDS.ACTION ? 'goliath' : 'guild'),
     metadata: sentinelMetadata(client, input, kind),
   };
 }
 
 async function capture(client, input = {}) {
-  return audit().capture(client, prepare(client, input, 'event'));
+  return audit().capture(client, prepare(client, input, KINDS.EVENT));
 }
 
 async function captureEvent(client, input = {}) {
-  return audit().capture(client, prepare(client, { ...input, sentinelKind: 'event' }, 'event'));
+  return audit().capture(client, prepare(client, { ...input, sentinelKind: KINDS.EVENT }, KINDS.EVENT));
 }
 
 async function captureAction(client, input = {}) {
-  return audit().captureGoliathAction(client, prepare(client, { ...input, sentinelKind: 'action' }, 'action'));
+  return audit().captureGoliathAction(client, prepare(client, { ...input, sentinelKind: KINDS.ACTION }, KINDS.ACTION));
 }
 
 async function captureGoliathAction(client, input = {}) {
   return captureAction(client, input);
 }
 
-// Compatibility helpers used by the existing Audit Intelligence gateway
-// collectors. Keeping these here lets collectors move behind Sentinel now
-// without duplicating mature correlation/snapshot logic.
+// Compatibility helpers allow the mature gateway collectors/correlation code
+// to move behind Sentinel incrementally without duplicating Audit Intelligence.
 function correlate(...args) { return audit().correlate(...args); }
 function normalize(...args) { return audit().normalize(...args); }
 function confirmGoliathOutcome(...args) { return audit().confirmGoliathOutcome(...args); }
