@@ -2,7 +2,7 @@
 
 const path = require('node:path');
 
-const CANONICAL_COMMAND_NAMES = new Set(['admin', 'mod', 'user', 'help', 'owner', 'e', 'Convert Emoji Shortcodes']);
+const CANONICAL_COMMAND_NAMES = new Set(['admin', 'mod', 'user', 'help', 'investigation-access', 'owner', 'e', 'Convert Emoji Shortcodes']);
 
 function getCanonicalCommandFiles() {
   const root = process.cwd();
@@ -11,6 +11,7 @@ function getCanonicalCommandFiles() {
     path.join(root, 'src', 'core', 'administration', 'mod', 'command.js'),
     path.join(root, 'src', 'core', 'administration', 'user', 'command.js'),
     path.join(root, 'src', 'core', 'administration', 'user', 'helpCommand.js'),
+    path.join(root, 'src', 'core', 'administration', 'mod', 'investigationAccess.js'),
     path.join(root, 'src', 'owner', 'userInstallCommand.js'),
     path.join(root, 'src', 'modules', 'utilityStudio', 'emojis', 'emojiAliasCommand.js'),
     path.join(root, 'src', 'modules', 'utilityStudio', 'emojis', 'emojiMessageCommand.js'),
@@ -38,7 +39,7 @@ function loadCommands(client) {
   }
 
   if (loaded.length !== CANONICAL_COMMAND_NAMES.size) {
-    throw new Error(`Expected admin, mod, user, help, owner, e and Convert Emoji Shortcodes; loaded ${loaded.join(', ')}`);
+    throw new Error(`Expected admin, mod, user, help, investigation-access, owner, e and Convert Emoji Shortcodes; loaded ${loaded.join(', ')}`);
   }
 
   console.log(`✅ commands loaded (${loaded.length}): ${loaded.join(', ')}`);
