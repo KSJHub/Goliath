@@ -1,25 +1,20 @@
 'use strict';
 
-// Canonical Sentinel families. These map observation types onto the existing
-// Goliath Control audit routes without changing guild-facing logging.
+// Canonical Sentinel categories align with the existing Goliath Control
+// router. They describe owner-level intelligence only; guild-facing logging
+// remains independently configurable.
 const FAMILY_RULES = Object.freeze([
-  ['members', /^(member\.|invite\.used|verification\.)/],
   ['moderation', /^(moderation\.|member\.(kick|ban|unban|timeout|prune)|quarantine\.)/],
   ['security', /^(security\.|automod\.|anti-nuke\.|sentinel\.security|verification\.security)/],
-  ['messages', /^(message\.|reaction\.|embed\.|sticky\.|starboard\.)/],
+  ['member', /^(member\.|user\.|invite\.used|verification\.)/],
+  ['message', /^(message\.|reaction\.|embed\.|sticky\.|starboard\.)/],
   ['voice', /^(voice\.|stage\.|tempvoice\.|private-room\.voice)/],
-  ['roles', /^(role\.|permission\.|emoji\.|sticker\.)/],
-  ['goliath', /^(goliath\.|sentinel\.|runtime\.|scheduler\.|provider\.|persistence\.|module\.|config\.|maintenance\.)/],
-  ['guild', /^(guild\.|channel\.|thread\.|forum\.|invite\.|webhook\.|scheduled-event\.)/],
+  ['role', /^(role\.|permission\.|emoji\.|sticker\.)/],
+  ['goliath', /^(goliath\.|sentinel\.|runtime\.|scheduler\.|provider\.|persistence\.|module\.|config\.|maintenance\.|audit\.)/],
+  ['guild', /^(guild\.|channel\.|thread\.|forum\.|invite\.|webhook\.|scheduled-event\.|scheduledevent\.)/],
 ]);
 
-const KINDS = Object.freeze({
-  EVENT: 'event',
-  ACTION: 'action',
-  INCIDENT: 'incident',
-  RECOVERY: 'recovery',
-  HEALTH: 'health',
-});
+const KINDS = Object.freeze({ EVENT: 'event', ACTION: 'action', INCIDENT: 'incident', RECOVERY: 'recovery', HEALTH: 'health' });
 
 const ACTION_SURFACE = Object.freeze({
   members: ['join', 'leave', 'kick', 'ban', 'unban', 'timeout', 'untimeout', 'nickname', 'roles', 'screening', 'update'],
