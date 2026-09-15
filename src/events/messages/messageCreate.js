@@ -22,22 +22,12 @@ async function runHandler(label, handler, ...args) {
 }
 
 function hasUserMedia(message) {
-  return Boolean(
-    message?.attachments?.size
-    || message?.stickers?.size
-    || message?.embeds?.length,
-  );
+  return Boolean(message?.attachments?.size || message?.stickers?.size || message?.embeds?.length);
 }
 
 async function postResolvedEmojiMessage(message, resolved, { deleteSource = true } = {}) {
-  await message.channel.send({
-    content: resolved,
-    allowedMentions: { parse: [] },
-  });
-
-  if (deleteSource && !hasUserMedia(message)) {
-    await message.delete().catch(() => null);
-  }
+  await message.channel.send({ content: resolved, allowedMentions: { parse: [] } });
+  if (deleteSource && !hasUserMedia(message)) await message.delete().catch(() => null);
 }
 
 async function handleEmojiMessage(message, client) {
@@ -48,44 +38,18 @@ async function handleEmojiMessage(message, client) {
   if (legacyMatch) {
     const text = String(legacyMatch[1] || '').trim();
     if (!text) return false;
-
-    const resolved = await emojis.resolveText(
-      client,
-      message.guild.id,
-      text,
-      'member_typed_emoji_message',
-    );
-
+    const resolved = await emojis.resolveText(client, message.guild.id, text, 'member_typed_emoji_message');
     if (resolved === text) {
-      await message.reply({
-        content: 'No available Emoji Studio shortcodes were found. Try `:discord:`, `:youtube:` or `:twitch:`.',
-        allowedMentions: { parse: [], repliedUser: false },
-      });
+      await message.reply({ content: 'No available Emoji Studio shortcodes were found. Try `:discord:`, `:youtube:` or `:twitch:`.', allowedMentions: { parse: [], repliedUser: false } });
       return true;
     }
-
     await postResolvedEmojiMessage(message, resolved);
     return true;
   }
 
-  // Fast-path ordinary messages so we do not fetch the application emoji bank
-  // unless the message actually contains something shaped like a shortcode.
   if (!EMOJI_SHORTCODE_PATTERN.test(source)) return false;
-
-  const resolved = await emojis.resolveText(
-    client,
-    message.guild.id,
-    source,
-    'member_message_auto_convert',
-  );
-
-  // Unknown/unavailable shortcodes remain untouched and normal message
-  // processing continues.
+  const resolved = await emojis.resolveText(client, message.guild.id, source, 'member_message_auto_convert');
   if (resolved === source) return false;
-
-  // Discord bots cannot edit another member's message. Repost the resolved
-  // content and remove the source when it is safe to do so. Messages carrying
-  // attachments, stickers or embeds are preserved to avoid deleting media.
   await postResolvedEmojiMessage(message, resolved, { deleteSource: !hasUserMedia(message) });
   return true;
 }
@@ -95,6 +59,8 @@ module.exports = {
 
   async execute(message, client) {
     if (!message.guild || !message.member || message.author?.bot) return;
+
+    counting.registerProtectionEvents(client);
 
     const autoModHandled = await runHandler('AutoMod', handleAutoMod, message);
     if (autoModHandled) return;
