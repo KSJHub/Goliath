@@ -109,7 +109,21 @@ function wireGuildControlsFirst(client) {
   if (runtimeMode() !== 'DEV') return;
   client.prependListener('interactionCreate', (interaction) => {
     const id = String(interaction?.customId || '');
-    if (!id.startsWith('owner:commandcenter:guildcontrols:')) return;
+    if (!id.startsWith('owner:commandcenter:')) return;
+
+    // The Command Center home can be rebuilt by several Audit Intelligence
+    // handlers. Re-attach the owner Guild Controls entry after any Command
+    // Center navigation action so a refresh/back action can never remove it.
+    if (!id.startsWith('owner:commandcenter:guildcontrols:')) {
+      const timer = setTimeout(() => {
+        maintenanceStatus.ensureCommandCenterControls?.(client).catch((error) => {
+          console.warn('[CommandCenter Guild Controls] Could not restore home entry:', error?.message || error);
+        });
+      }, 350);
+      timer.unref?.();
+      return;
+    }
+
     maintenanceStatus.handleControlInteraction(client, interaction).catch((error) => {
       console.warn('[CommandCenter Guild Controls]', error?.stack || error?.message || error);
     });
