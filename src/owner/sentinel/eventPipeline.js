@@ -3,8 +3,11 @@
 const crypto = require('node:crypto');
 const { KINDS, familyFor } = require('./taxonomy');
 
-const PIPELINE_VERSION = 1;
+const PIPELINE_VERSION = 2;
 const VALID_KINDS = new Set(Object.values(KINDS));
+const DEDUPE_WINDOW_MS = 1800;
+const DEDUPE_LIMIT = 5000;
+const recentFingerprints = new Map();
 let installed = false;
 let originals = null;
 let storeOriginal = null;
@@ -18,6 +21,30 @@ function normalizeKind(input = {}, fallback = KINDS.EVENT) {
   const requested = String(input.sentinelKind || input.kind || fallback).toLowerCase();
   return VALID_KINDS.has(requested) ? requested : fallback;
 }
+function stable(value) {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
+  if (typeof value === 'object') return `{${Object.keys(value).sort().map((key) => `${key}:${stable(value[key])}`).join(',')}}`;
+  return String(value);
+}
+function fingerprint(input = {}, kind = KINDS.EVENT) {
+  const metadata = input.metadata || {};
+  if (metadata.discordAuditLog && metadata.auditLogEntryId) return `audit:${input.guildId || input.guild?.id || ''}:${metadata.auditLogEntryId}`;
+  const parts = [kind, input.type, input.guildId || input.guild?.id, input.channel?.id || input.channelId, input.user?.id, input.actor?.id, input.target?.id, input.action, stable(input.before), stable(input.after)];
+  return crypto.createHash('sha1').update(parts.map((part) => String(part ?? '')).join('|')).digest('hex');
+}
+function duplicate(input = {}, kind = KINDS.EVENT) {
+  if (input.metadata?.sentinel?.allowDuplicate === true) return false;
+  const now = Date.now();
+  const fp = fingerprint(input, kind);
+  const previous = recentFingerprints.get(fp) || 0;
+  recentFingerprints.set(fp, now);
+  if (recentFingerprints.size > DEDUPE_LIMIT) {
+    for (const [key, at] of recentFingerprints) if (now - at > 30000) recentFingerprints.delete(key);
+    while (recentFingerprints.size > DEDUPE_LIMIT) recentFingerprints.delete(recentFingerprints.keys().next().value);
+  }
+  return now - previous <= DEDUPE_WINDOW_MS;
+}
 function sentinelMetadata(client, input = {}, kind = KINDS.EVENT) {
   const env = environment(client);
   return {
@@ -29,6 +56,7 @@ function sentinelMetadata(client, input = {}, kind = KINDS.EVENT) {
       kind,
       environment: env,
       observedAt: input.metadata?.sentinel?.observedAt || new Date().toISOString(),
+      evidenceSource: input.metadata?.sentinel?.evidenceSource || input.metadata?.evidenceSource || 'Discord gateway / Goliath runtime',
       ...(input.metadata?.sentinel || {}),
     },
   };
@@ -45,9 +73,15 @@ function originalCapture() {
   }
   return originals;
 }
-async function capture(client, input = {}) { return originalCapture().capture(client, prepare(client, input, KINDS.EVENT)); }
-async function captureEvent(client, input = {}) { return originalCapture().capture(client, prepare(client, { ...input, sentinelKind: KINDS.EVENT }, KINDS.EVENT)); }
-async function captureAction(client, input = {}) { return originalCapture().captureGoliathAction(client, prepare(client, { ...input, sentinelKind: KINDS.ACTION }, KINDS.ACTION)); }
+async function capturePrepared(client, input, fallbackKind, action = false) {
+  const prepared = prepare(client, input, fallbackKind);
+  const kind = prepared.metadata?.sentinel?.kind || fallbackKind;
+  if (duplicate(prepared, kind)) return { deduplicated: true, type: prepared.type, guildId: prepared.guildId || prepared.guild?.id || null };
+  return action ? originalCapture().captureGoliathAction(client, prepared) : originalCapture().capture(client, prepared);
+}
+async function capture(client, input = {}) { return capturePrepared(client, input, KINDS.EVENT, false); }
+async function captureEvent(client, input = {}) { return capturePrepared(client, { ...input, sentinelKind: KINDS.EVENT }, KINDS.EVENT, false); }
+async function captureAction(client, input = {}) { return capturePrepared(client, { ...input, sentinelKind: KINDS.ACTION }, KINDS.ACTION, true); }
 async function captureGoliathAction(client, input = {}) { return captureAction(client, input); }
 
 function enforceStoredRecord(event) {
@@ -66,9 +100,9 @@ function installBoundary(client = null) {
   target.capture = capture;
   target.captureGoliathAction = captureGoliathAction;
 
-  // Audit Intelligence has a few mature internal/lexical capture paths (for
-  // example Goliath output correlation). Enforcing at appendEvent guarantees
-  // those records also cross Sentinel before persistence and Control delivery.
+  // Audit Intelligence has mature lexical/internal capture paths. Enforcing at
+  // appendEvent guarantees every stored record has Sentinel provenance even if
+  // it did not enter through the public capture functions.
   const store = auditStore();
   if (!storeOriginal && typeof store.appendEvent === 'function') {
     storeOriginal = store.appendEvent.bind(store);
@@ -78,6 +112,7 @@ function installBoundary(client = null) {
   return true;
 }
 function boundaryInstalled() { return installed; }
+function diagnostics() { return { installed, pipelineVersion: PIPELINE_VERSION, environment: environment(), dedupeWindowMs: DEDUPE_WINDOW_MS, recentFingerprintCount: recentFingerprints.size }; }
 
 function correlate(...args) { return audit().correlate(...args); }
 function normalize(...args) { return audit().normalize(...args); }
@@ -94,7 +129,7 @@ function buildOperationalSummary(...args) { return audit().buildOperationalSumma
 
 module.exports = {
   PIPELINE_VERSION, environment, prepare, capture, captureEvent, captureAction, captureGoliathAction,
-  installBoundary, boundaryInstalled, enforceStoredRecord, correlate, normalize, confirmGoliathOutcome,
+  installBoundary, boundaryInstalled, diagnostics, enforceStoredRecord, correlate, normalize, confirmGoliathOutcome,
   ensureGoliathOutputCapture, outputMessageState, registerOperation, findOperationForOutput,
   findOperationForConfirmedOutcome, identifyGoliathSystem, buildActorSnapshot, actorMemberSnapshot, buildOperationalSummary,
 };
