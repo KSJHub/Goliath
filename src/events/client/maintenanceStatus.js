@@ -12,12 +12,17 @@ module.exports = {
   async execute(client) {
     if (!processHandlersWired) {
       maintenanceStatus.wireProcessHandlers(client);
+      maintenanceStatus.wireCommandCenterControls?.(client);
       processHandlersWired = true;
     }
 
     const results = await maintenanceStatus.recoverAll(client).catch((error) => {
       console.warn('[MaintenanceStatus] Startup recovery pass failed:', error?.stack || error?.message || error);
       return [];
+    });
+
+    await maintenanceStatus.ensureCommandCenterControls?.(client).catch((error) => {
+      console.warn('[MaintenanceStatus] Command Center controls bootstrap failed:', error?.message || error);
     });
 
     const recovered = results.filter((result) => result?.found).length;
