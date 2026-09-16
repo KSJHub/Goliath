@@ -105,6 +105,16 @@ function startAuditRelay(client) {
   relayTimer.unref?.();
   console.log('[Audit Relay] DEV Command Center cross-environment relay active for BETA + PRODUCTION.');
 }
+function wireGuildControlsFirst(client) {
+  if (runtimeMode() !== 'DEV') return;
+  client.prependListener('interactionCreate', (interaction) => {
+    const id = String(interaction?.customId || '');
+    if (!id.startsWith('owner:commandcenter:guildcontrols:')) return;
+    maintenanceStatus.handleControlInteraction(client, interaction).catch((error) => {
+      console.warn('[CommandCenter Guild Controls]', error?.stack || error?.message || error);
+    });
+  });
+}
 
 module.exports = {
   name: Events.ClientReady,
@@ -112,7 +122,7 @@ module.exports = {
   async execute(client) {
     if (!processHandlersWired) {
       maintenanceStatus.wireProcessHandlers(client);
-      maintenanceStatus.wireCommandCenterControls?.(client);
+      wireGuildControlsFirst(client);
       processHandlersWired = true;
     }
     auditStore.publishGuildRegistry?.(client);
