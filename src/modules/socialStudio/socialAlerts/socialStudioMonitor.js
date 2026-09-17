@@ -15,13 +15,19 @@ function projectLiveRefreshState(account, history = []) {
   const state = account.state && typeof account.state === 'object' ? account.state : null;
   if (!state) return account;
 
-  const liveHistory = [...(Array.isArray(history) ? history : [])].reverse().find((entry) =>
-    entry?.accountId && String(entry.accountId) === String(account.accountId)
-    && (entry.status === 'alert_sent' || entry.status === 'alert_updated')
-    && entry.alertType === 'live'
-    && entry.messageId
-    && entry.channelId
-  );
+  const hasPersistedLiveMessage =
+    state.isLive === true
+    && Boolean(state.lastAlertMessageId && state.lastAlertChannelId);
+
+  const liveHistory = !hasPersistedLiveMessage
+    ? [...(Array.isArray(history) ? history : [])].reverse().find((entry) =>
+      entry?.accountId && String(entry.accountId) === String(account.accountId)
+      && (entry.status === 'alert_sent' || entry.status === 'alert_updated')
+      && entry.alertType === 'live'
+      && entry.messageId
+      && entry.channelId
+    )
+    : null;
 
   const recoveredLiveMessage = state.isLive === true && liveHistory
     ? {
