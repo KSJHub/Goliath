@@ -2,8 +2,11 @@
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, Events } = require('discord.js');
 const auditStore = require('../../owner/auditIntelligence/auditStore');
+const schedulerRegistry = require('../../owner/sentinel/schedulerRegistry');
 
 const OPEN_ID = 'owner:commandcenter:globalnotices:open';
+const REFRESH_INTERVAL_MS = 10 * 1000;
+const SCHEDULER_ID = 'commandCenter:global-notices-guard:global';
 let guardWired = false;
 let refreshTimer = null;
 
@@ -38,14 +41,14 @@ async function commandCenterMessage(client) {
 
 async function ensureGlobalNoticesButton(client) {
   const message = await commandCenterMessage(client);
-  if (!message) return false;
+  if (!message) return { ok: false, reason: 'command-center-message-unavailable', restored: false };
 
   const rows = message.components.map((row) => ActionRowBuilder.from(row));
   const exists = rows.some((row) => row.components.some((component) => {
     const id = component.customId || component.data?.custom_id;
     return id === OPEN_ID;
   }));
-  if (exists) return true;
+  if (exists) return { ok: true, restored: false, messageId: message.id };
 
   const button = new ButtonBuilder()
     .setCustomId(OPEN_ID)
@@ -53,24 +56,34 @@ async function ensureGlobalNoticesButton(client) {
     .setEmoji('🚨')
     .setStyle(ButtonStyle.Danger);
 
-  // Prefer the final partially-filled row so the established Command Center
-  // layout stays intact. Discord permits at most 5 rows and 5 buttons per row.
   const row = [...rows].reverse().find((item) => item.components.length < 5);
   if (row) row.addComponents(button);
   else if (rows.length < 5) rows.push(new ActionRowBuilder().addComponents(button));
   else {
     console.warn('[Global Notice Controls] Command Center has no component slot for Global Notices.');
-    return false;
+    return { ok: false, reason: 'no-component-slot', restored: false, messageId: message.id };
   }
 
   await message.edit({ components: rows });
   console.log('[Global Notice Controls] Global Notices button restored on Command Center home.');
-  return true;
+  return { ok: true, restored: true, messageId: message.id };
+}
+
+async function runGuard(client, phase) {
+  try {
+    const result = await ensureGlobalNoticesButton(client);
+    if (result.ok) schedulerRegistry.beat(SCHEDULER_ID, { phase, restored: result.restored, messageId: result.messageId || null });
+    else schedulerRegistry.fail(SCHEDULER_ID, new Error(`Global Notices guard unavailable: ${result.reason || 'unknown'}`), { phase, reason: result.reason || 'unknown' });
+    return result;
+  } catch (error) {
+    schedulerRegistry.fail(SCHEDULER_ID, error, { phase });
+    throw error;
+  }
 }
 
 function scheduleEnsure(client, delay = 250) {
   const timer = setTimeout(() => {
-    ensureGlobalNoticesButton(client).catch((error) => {
+    runGuard(client, 'navigation-refresh').catch((error) => {
       console.warn('[Global Notice Controls] Home button guard failed:', error?.message || error);
     });
   }, delay);
@@ -83,7 +96,16 @@ module.exports = {
   async execute(client) {
     if (runtimeMode() !== 'DEV') return;
 
-    await ensureGlobalNoticesButton(client).catch((error) => {
+    schedulerRegistry.register({
+      id: SCHEDULER_ID,
+      module: 'commandCenter',
+      component: 'global-notices-guard',
+      intervalMs: REFRESH_INTERVAL_MS,
+      staleAfterMs: REFRESH_INTERVAL_MS * 3,
+      environment: runtimeMode(),
+    });
+
+    await runGuard(client, 'startup').catch((error) => {
       console.warn('[Global Notice Controls] Initial home button guard failed:', error?.message || error);
     });
 
@@ -92,16 +114,16 @@ module.exports = {
       client.prependListener(Events.InteractionCreate, (interaction) => {
         const id = String(interaction?.customId || '');
         if (!id.startsWith('owner:commandcenter:')) return;
-        // Any Command Center navigation can rebuild the home message. Restore
-        // the entry immediately afterwards instead of waiting for a restart.
         scheduleEnsure(client, 350);
       });
     }
 
     if (!refreshTimer) {
       refreshTimer = setInterval(() => {
-        ensureGlobalNoticesButton(client).catch(() => null);
-      }, 10 * 1000);
+        runGuard(client, 'scheduled').catch((error) => {
+          console.warn('[Global Notice Controls] Scheduled guard failed:', error?.message || error);
+        });
+      }, REFRESH_INTERVAL_MS);
       refreshTimer.unref?.();
     }
   },
