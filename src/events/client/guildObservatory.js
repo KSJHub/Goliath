@@ -3,8 +3,10 @@
 const { Events } = require('discord.js');
 const observatory = require('../../owner/auditIntelligence/guildObservatory');
 const auditStore = require('../../owner/auditIntelligence/auditStore');
+const sentinelScheduler = require('../../owner/sentinel/schedulerRegistry');
 
 const RESCAN_INTERVAL_MS = 15 * 60 * 1000;
+const SCHEDULER_ID = 'auditIntelligence:guild-observatory:global';
 
 function runtimeMode() {
   const mode = String(auditStore.runtimeMode?.() || process.env.BOT_MODE || 'DEV').toUpperCase();
@@ -44,7 +46,19 @@ async function scanAll(client, reason) {
       console.warn(`[GuildObservatory] ${reason} scan failed for ${item.name} (${item.guildId}):`, error?.message || error);
     }
   }
+  const details = {
+    reason,
+    collector: runtimeMode(),
+    localGuilds: local.length,
+    scanned: ok,
+    remoteGuilds: remote.length,
+    registeredGuilds: known.length,
+    failed,
+  };
+  if (failed > 0) sentinelScheduler.fail(SCHEDULER_ID, new Error(`${failed} Guild Observatory scan(s) failed.`), details);
+  else sentinelScheduler.beat(SCHEDULER_ID, details);
   console.log(`[GuildObservatory] ${reason}: local monitored guilds ${local.length} • scanned ${ok} • remote registered guilds ${remote.length} • total registered ${known.length}${failed ? ` • failed ${failed}` : ''} • collector ${runtimeMode()}.`);
+  return details;
 }
 
 module.exports = {
@@ -53,8 +67,22 @@ module.exports = {
   async execute(client) {
     observatory.wire(client);
     auditStore.publishGuildRegistry?.(client);
+    sentinelScheduler.register({
+      id: SCHEDULER_ID,
+      module: 'auditIntelligence',
+      component: 'guild-observatory',
+      intervalMs: RESCAN_INTERVAL_MS,
+      staleAfterMs: Math.max(RESCAN_INTERVAL_MS * 3, 45 * 60 * 1000),
+      environment: runtimeMode(),
+      details: { scope: 'registered-guilds' },
+    });
     await scanAll(client, 'startup-baseline');
-    const timer = setInterval(() => { void scanAll(client, 'scheduled-baseline'); }, RESCAN_INTERVAL_MS);
+    const timer = setInterval(() => {
+      scanAll(client, 'scheduled-baseline').catch((error) => {
+        sentinelScheduler.fail(SCHEDULER_ID, error, { phase: 'scheduled-baseline', collector: runtimeMode() });
+        console.warn('[GuildObservatory] scheduled baseline cycle failed:', error?.stack || error?.message || error);
+      });
+    }, RESCAN_INTERVAL_MS);
     timer.unref?.();
     console.log(`[GuildObservatory] ${runtimeMode()} collector online • persistent baseline every 15 minutes.`);
   },
