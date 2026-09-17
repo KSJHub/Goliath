@@ -9,8 +9,8 @@ const {
   recoverGuildQuarantine,
   syncQuarantineIsolation,
   enforceQuarantineOnMember,
-  startQuarantineExpiryScheduler,
 } = require('../../core/security/protection/quarantine');
+const { startQuarantineExpiryScheduler } = require('../../core/security/protection/quarantine/expiryScheduler');
 const { ensureInitiatorInterviewAccess } = require('../../core/administration/mod/quarantineInteractions');
 
 function hasActiveQuarantine(guildId) {
