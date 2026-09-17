@@ -4,6 +4,7 @@ const { Events } = require('discord.js');
 const quarantine = require('../quarantine');
 const { QUARANTINE_MODES, getQuarantineState, getQuarantineMode } = require('./state');
 const { ensureQuarantineRole } = require('./roleManager');
+const { syncQuarantineIsolation } = require('./isolation');
 const { startQuarantineExpiryScheduler } = require('./expiryScheduler');
 const { ensureInitiatorInterviewAccess } = require('../../../administration/mod/quarantineInteractions');
 
@@ -48,7 +49,7 @@ module.exports = [
     name: Events.ChannelCreate,
     async execute(channel) {
       if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
-      try { await quarantine.syncQuarantineIsolation(channel.guild); }
+      try { await syncQuarantineIsolation(channel.guild); }
       catch (error) { console.warn(`[QuarantineSystem] Failed to secure new channel ${channel.id}:`, error.message); }
     },
   },
