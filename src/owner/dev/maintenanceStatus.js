@@ -88,7 +88,7 @@ async function ensureMaintenanceChannel(guild) {
   await channel.setPosition(0, { reason: 'Keep Goliath maintenance notice visible near the top' }).catch(() => null); return channel;
 }
 async function findStatusMessage(channel) {
-  const pinned = await channel.messages.fetchPinned().catch(() => null); const pinnedMessage = pinned?.find?.((message) => message.author?.id === channel.client.user?.id);
+  const pinnedResult = await channel.messages.fetchPins().catch(() => null); const pinned = pinnedResult?.items || pinnedResult; const pinnedMessage = pinned?.find?.((message) => message.author?.id === channel.client.user?.id);
   if (pinnedMessage) return pinnedMessage;
   const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null); return recent?.find?.((message) => message.author?.id === channel.client.user?.id) || null;
 }
