@@ -58,7 +58,7 @@ function maintenanceEmbed(startedAt = Date.now(), reason = 'Scheduled maintenanc
       { name: '🔴 Status', value: 'Offline / Maintenance', inline: true }, { name: '🤖 Service', value: 'Goliath', inline: true },
       { name: '🛠️ Reason', value: String(reason || 'Scheduled maintenance').slice(0, 1024) },
       { name: '🕒 Started', value: `<t:${unixSeconds(startedAt)}:F>\n<t:${unixSeconds(startedAt)}:R>` },
-    ).setFooter({ text: 'Goliath System Status • Automated Notice • No action is required' }).setTimestamp(startedAt);
+    ).setFooter({ text: `Goliath System Status • Started ${unixSeconds(startedAt)} • Automated Notice` }).setTimestamp(startedAt);
 }
 function operationalEmbed(startedAt = Date.now(), restoredAt = Date.now()) {
   return new EmbedBuilder().setColor(0x57F287).setTitle('✅ GOLIATH SYSTEM NOTICE')
@@ -68,6 +68,23 @@ function operationalEmbed(startedAt = Date.now(), restoredAt = Date.now()) {
       { name: '⏱️ Downtime', value: formatDuration(restoredAt - startedAt) },
       { name: '🕒 Restored', value: `<t:${unixSeconds(restoredAt)}:F>\n<t:${unixSeconds(restoredAt)}:R>` },
     ).setFooter({ text: 'Goliath System Status • Automated Recovery Notice' }).setTimestamp(restoredAt);
+}
+function maintenanceStartedAt(message, fallback = Date.now()) {
+  const footer = String(message?.embeds?.[0]?.footer?.text || '');
+  const footerMatch = footer.match(/Started\s+(\d{9,13})/i);
+  if (footerMatch) {
+    const raw = Number(footerMatch[1]);
+    const ms = raw < 1e12 ? raw * 1000 : raw;
+    if (Number.isFinite(ms) && ms > 0) return ms;
+  }
+  const startedField = message?.embeds?.[0]?.fields?.find?.((field) => String(field?.name || '').includes('Started'));
+  const fieldMatch = String(startedField?.value || '').match(/<t:(\d{9,13})(?::[A-Za-z])?>/);
+  if (fieldMatch) {
+    const raw = Number(fieldMatch[1]);
+    const ms = raw < 1e12 ? raw * 1000 : raw;
+    if (Number.isFinite(ms) && ms > 0) return ms;
+  }
+  return Number(message?.editedTimestamp || message?.createdTimestamp || fallback);
 }
 function isMaintenanceChannel(channel) { return Boolean(channel && channel.type === ChannelType.GuildText && (channel.topic === CHANNEL_TOPIC || channel.name === CHANNEL_NAME)); }
 function findMaintenanceChannel(guild) { return guild?.channels?.cache?.find?.((channel) => isMaintenanceChannel(channel)) || null; }
@@ -96,6 +113,7 @@ async function beginGuildMaintenance(guild, options = {}) {
   const kind = options.kind === 'restart' ? 'restart' : 'maintenance';
   if (options.force !== true && !noticeAllowed(guild.id, kind)) return { ok: true, skipped: true, guildId: guild.id, reason: 'operational-notices-disabled' };
   const startedAt = Number(options.startedAt || Date.now()); const reason = options.reason || 'Scheduled maintenance'; const channel = await ensureMaintenanceChannel(guild);
+  const timer = activeTimers.get(channel.id); if (timer) clearTimeout(timer); activeTimers.delete(channel.id);
   let message = await findStatusMessage(channel); if (message) await message.edit({ embeds: [maintenanceEmbed(startedAt, reason)] }); else message = await channel.send({ embeds: [maintenanceEmbed(startedAt, reason)] });
   await message.pin().catch(() => null); return { ok: true, guildId: guild.id, channelId: channel.id, messageId: message.id, startedAt };
 }
@@ -114,9 +132,9 @@ function scheduleChannelDeletion(channel, delayMs = RECOVERY_DELETE_DELAY_MS) {
 async function recoverGuild(guild, options = {}) {
   const channel = findMaintenanceChannel(guild); if (!channel) return { ok: true, guildId: guild.id, found: false };
   if (options.force !== true && !noticeAllowed(guild.id, 'recovery')) { scheduleChannelDeletion(channel, 5000); return { ok: true, guildId: guild.id, found: true, skipped: true, reason: 'recovery-notice-disabled', channelId: channel.id }; }
-  const restoredAt = Number(options.restoredAt || Date.now()); let message = await findStatusMessage(channel); const startedAt = message?.createdTimestamp || restoredAt;
+  const restoredAt = Number(options.restoredAt || Date.now()); let message = await findStatusMessage(channel); const startedAt = maintenanceStartedAt(message, restoredAt);
   if (message) await message.edit({ embeds: [operationalEmbed(startedAt, restoredAt)] }); else { message = await channel.send({ embeds: [operationalEmbed(startedAt, restoredAt)] }); await message.pin().catch(() => null); }
-  scheduleChannelDeletion(channel, options.deleteDelayMs); return { ok: true, guildId: guild.id, found: true, channelId: channel.id, messageId: message.id };
+  scheduleChannelDeletion(channel, options.deleteDelayMs); return { ok: true, guildId: guild.id, found: true, channelId: channel.id, messageId: message.id, startedAt, restoredAt };
 }
 async function recoverAll(client, options = {}) { const results = []; for (const guild of client?.guilds?.cache?.values?.() || []) { try { results.push(await recoverGuild(guild, options)); } catch (error) { results.push({ ok: false, guildId: guild?.id || null, error: error?.message || String(error) }); } } return results; }
 async function completeGuildMaintenance(guild, options = {}) { return recoverGuild(guild, options); }
@@ -197,6 +215,7 @@ async function handleControlInteraction(client, interaction) {
   if (action === 'open') { await interaction.reply({ ...guildControlPayload(client, interaction), flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
   if (action === 'guild' && interaction.isStringSelectMenu?.()) setSession(interaction, { guildId: interaction.values[0], scan: null });
   else if (action === 'family' && interaction.isStringSelectMenu?.()) setSession(interaction, { family: interaction.values[0] });
+  else if (action === 'refresh') notice = 'Guild controls refreshed.';
   else if (!state.guildId) { await interaction.reply({ content: 'Select a guild first.', flags: MessageFlags.Ephemeral }).catch(() => null); return true; }
   else if (action === 'pause') { const n = noticeSettings(state.guildId); const next = updateNoticeSettings(state.guildId, { paused: !n.paused }); notice = next.paused ? 'Operational notices paused for this guild.' : 'Operational notices resumed for this guild.'; }
   else if (['maintenance', 'restart', 'recovery'].includes(action)) { const n = noticeSettings(state.guildId); const next = updateNoticeSettings(state.guildId, { [action]: !n[action] }); notice = `${action[0].toUpperCase()}${action.slice(1)} notices ${next[action] ? 'enabled' : 'disabled'} for this guild.`; }
