@@ -53,6 +53,11 @@ jobs:
             }
             trap cleanup_remote EXIT
 
+            # A historical/manual fetch left this Git metadata scratch file in
+            # the checkout root. It is never application state and must not
+            # make an otherwise clean deployment fail its worktree guard.
+            rm -f -- FETCH_HEAD
+
             git fetch --no-tags origin dev
             LATEST_SHA="$(git rev-parse origin/dev)"
 
