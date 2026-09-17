@@ -44,7 +44,7 @@ async function scanAll(client, reason) {
       console.warn(`[GuildObservatory] ${reason} scan failed for ${item.name} (${item.guildId}):`, error?.message || error);
     }
   }
-  console.log(`[GuildObservatory] ${reason} coverage: local ${ok}/${local.length} scanned • remote ${remote.length} known • total ${known.length} known${failed ? ` • ${failed} failed` : ''} • collector ${runtimeMode()}.`);
+  console.log(`[GuildObservatory] ${reason}: local monitored guilds ${local.length} • scanned ${ok} • remote registered guilds ${remote.length} • total registered ${known.length}${failed ? ` • failed ${failed}` : ''} • collector ${runtimeMode()}.`);
 }
 
 module.exports = {
