@@ -4,6 +4,7 @@ const { Events } = require('discord.js');
 const guildManager = require('../../core/guild/guildManager');
 const roleSelector = require('../../modules/roleStudio/roleSelector/roleSelector');
 const sentinelScheduler = require('../../owner/sentinel/schedulerRegistry.js');
+const audit = require('../../owner/auditIntelligence/auditIntelligence');
 
 const INTERVAL_MS = 60 * 60 * 1000;
 const TIMER_KEY = Symbol.for('goliath.roleSelector.maintenanceTimer');
@@ -16,7 +17,7 @@ async function maintainGuild(guild) {
   return result;
 }
 
-async function maintainAll(client) {
+async function maintainAll(client, { startup = false } = {}) {
   let checked = 0;
   let failures = 0;
   for (const guild of client.guilds.cache.values()) {
@@ -28,6 +29,20 @@ async function maintainAll(client) {
     sentinelScheduler.fail(SCHEDULER_ID, new Error(`${failures} Role Selector maintenance operation(s) failed.`), { guildsChecked: checked, failures });
   } else {
     sentinelScheduler.beat(SCHEDULER_ID, { guildsChecked: checked, failures: 0 });
+  }
+
+  // Keep routine healthy hourly cycles quiet, but make startup state and any
+  // background failure visible in Goliath Actions without an interaction.
+  if (startup || failures > 0) {
+    await audit.captureGoliathAction(client, {
+      type: startup ? 'goliath.scheduler.role_selector.startup' : 'goliath.scheduler.role_selector.maintenance',
+      category: 'goliath',
+      action: 'execute',
+      system: 'Role Studio',
+      result: failures > 0 ? 'Partial / Failed' : 'Success',
+      summary: `Role Selector ${startup ? 'startup ' : ''}maintenance checked ${checked} enabled guild(s) and recorded ${failures} failure(s).`,
+      metadata: { schedulerId: SCHEDULER_ID, startup, guildsChecked: checked, failures },
+    }).catch((error) => console.warn('[RoleSelector] Could not record scheduler audit action:', error?.message || error));
   }
   return { checked, failures };
 }
@@ -45,7 +60,7 @@ module.exports = {
     });
 
     try {
-      await maintainAll(client);
+      await maintainAll(client, { startup: true });
     } catch (error) {
       sentinelScheduler.fail(SCHEDULER_ID, error, { phase: 'startup' });
       throw error;
