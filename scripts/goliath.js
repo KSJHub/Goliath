@@ -393,19 +393,75 @@ function doctor(target = '') {
 }
 function promote(target) {
   const environment = String(target || '').toLowerCase();
-  const plan = { beta: { source: 'dev' }, production: { source: 'beta' } }[environment];
-  if (!plan) { console.error(`Invalid promotion target: ${environment}`); return false; }
-  section(`Promote ${plan.source} -> ${environment}`);
+
+  if (!['beta', 'production'].includes(environment)) {
+    console.error(`Invalid promotion target: ${environment}`);
+    return false;
+  }
+
+  section(`Promote dev -> ${environment}`);
+
   if (!run('git', ['fetch', 'origin'])) return false;
-  if (output('git', ['status', '--porcelain'])) { console.error('Working tree is not clean.'); return false; }
-  const sourceRef = `origin/${plan.source}`; const targetRef = `origin/${environment}`;
-  const sourceSha = output('git', ['rev-parse', sourceRef]); const targetSha = output('git', ['rev-parse', targetRef]);
-  if (!sourceSha || !targetSha) return false;
-  if (sourceSha === targetSha) { console.log(`${environment} already matches ${plan.source}.`); return true; }
-  if (!run('git', ['merge-base', '--is-ancestor', targetRef, sourceRef])) { console.error(`${environment} cannot fast-forward to ${plan.source}; promotion aborted.`); return false; }
-  if (!run('git', ['checkout', '-B', environment, targetRef])) return false;
-  if (!run('git', ['merge', '--ff-only', sourceRef])) return false;
-  if (!run('git', ['push', 'origin', environment])) return false;
+
+  if (output('git', ['status', '--porcelain'])) {
+    console.error('Working tree is not clean.');
+    return false;
+  }
+
+  const sourceRef = 'origin/dev';
+  const targetRef = `origin/${environment}`;
+
+  const sourceSha = output('git', ['rev-parse', sourceRef]);
+  const targetSha = output('git', ['rev-parse', targetRef]);
+  const sourceTree = output('git', ['show', '-s', '--format=%T', sourceSha]);
+
+  if (!sourceSha || !targetSha || !sourceTree) return false;
+
+  const targetTree = output('git', ['show', '-s', '--format=%T', targetSha]);
+
+  if (sourceTree === targetTree) {
+    console.log(`${environment} already has the DEV application tree.`);
+    return true;
+  }
+
+  const message = `Promote DEV ${sourceSha} to ${environment}`;
+
+  const promotedSha = output(
+    'git',
+    ['commit-tree', sourceTree, '-p', targetSha, '-m', message]
+  );
+
+  if (!promotedSha) {
+    console.error(`Failed to create ${environment} promotion commit.`);
+    return false;
+  }
+
+  if (!run('git', [
+    'push',
+    'origin',
+    `${promotedSha}:refs/heads/${environment}`,
+  ])) {
+    return false;
+  }
+
+  if (!run('git', ['fetch', 'origin', environment])) return false;
+
+  const remoteSha = output(
+    'git',
+    ['rev-parse', `origin/${environment}`]
+  );
+
+  if (remoteSha !== promotedSha) {
+    console.error(
+      `Promotion verification failed: ${remoteSha} != ${promotedSha}`
+    );
+    return false;
+  }
+
+  console.log(
+    `✅ DEV ${sourceSha} promoted to ${environment} at ${promotedSha}`
+  );
+
   return true;
 }
 
