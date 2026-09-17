@@ -107,6 +107,7 @@ async function execute(interaction) {
   const existing = [...new Set((snapshot.allowedChannelIds || []).map(String))];
   const before = new Set(existing);
   const next = new Set(existing);
+  const changedDuringClear = [];
 
   try {
     if (action === 'add') {
@@ -118,7 +119,9 @@ async function execute(interaction) {
     } else {
       for (const channelId of existing) {
         const current = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null);
-        if (current) await editAccess(current, target.id, false, `Investigation returned to private-room-only by ${interaction.user.tag}`);
+        if (!current) continue;
+        await editAccess(current, target.id, false, `Investigation returned to private-room-only by ${interaction.user.tag}`);
+        changedDuringClear.push(current);
       }
       next.clear();
     }
@@ -135,8 +138,15 @@ async function execute(interaction) {
       : '**Private investigation room only**';
     return interaction.editReply({ content: `✅ **${target.user.tag}** investigation access updated.\nAllowed: ${allowed}` });
   } catch (error) {
-    // Best-effort rollback of the single changed channel. State is not saved until Discord succeeds.
-    if (channel && action !== 'clear') {
+    // Keep Discord permissions and persisted state in sync if any multi-channel reset fails part-way through.
+    if (action === 'clear' && changedDuringClear.length) {
+      await Promise.allSettled(changedDuringClear.map(current => editAccess(
+        current,
+        target.id,
+        true,
+        'Rollback incomplete investigation access reset'
+      )));
+    } else if (channel) {
       await editAccess(channel, target.id, before.has(String(channel.id)), 'Rollback failed investigation access change').catch(() => null);
     }
     return interaction.editReply({ content: `❌ I couldn't change that access: ${error.message}` });
