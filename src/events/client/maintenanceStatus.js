@@ -111,9 +111,6 @@ function wireGuildControlsFirst(client) {
     const id = String(interaction?.customId || '');
     if (!id.startsWith('owner:commandcenter:')) return;
 
-    // The Command Center home can be rebuilt by several Audit Intelligence
-    // handlers. Re-attach the owner Guild Controls entry after any Command
-    // Center navigation action so a refresh/back action can never remove it.
     if (!id.startsWith('owner:commandcenter:guildcontrols:')) {
       const timer = setTimeout(() => {
         maintenanceStatus.ensureCommandCenterControls?.(client).catch((error) => {
@@ -124,7 +121,13 @@ function wireGuildControlsFirst(client) {
       return;
     }
 
-    maintenanceStatus.handleControlInteraction(client, interaction).catch((error) => {
+    // IMPORTANT: Audit Intelligence owns the broad owner:commandcenter:* namespace
+    // and has a generic fallback. Start the real guild-control handler first, then
+    // hide this interaction from that fallback. The real handler captures the
+    // original custom id synchronously before its first await.
+    const task = maintenanceStatus.handleControlInteraction(client, interaction);
+    try { interaction.customId = `owner:guildcontrols:handled:${interaction.id}`; } catch {}
+    Promise.resolve(task).catch((error) => {
       console.warn('[CommandCenter Guild Controls]', error?.stack || error?.message || error);
     });
   });
