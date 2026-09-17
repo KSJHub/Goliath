@@ -15,6 +15,7 @@ const {
 
 const guildManager = require('../../guild/guildManager');
 const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js');
+const auditIntelligence = require('../../../owner/auditIntelligence/auditIntelligence.js');
 
 const CHECK_EVERY_MS = 60 * 60 * 1000;
 const INITIAL_DELAY_MS = 30 * 1000;
@@ -81,6 +82,34 @@ function cleanupOldBackups(guildId) {
   return deleted;
 }
 
+async function recordAutomaticBackupAction(guild, result, error = null) {
+  if (!guild?.client || !guild?.id) return;
+  const success = !error && Boolean(result?.backupId);
+  await auditIntelligence.captureGoliathAction(guild.client, {
+    guild,
+    guildId: guild.id,
+    type: 'goliath.background.server_backup',
+    category: 'backup',
+    action: success ? 'create' : 'failure',
+    result: success ? 'Success' : 'Failure',
+    summary: success
+      ? `Goliath created automatic server backup **${result.backupId}** for **${guild.name}**${result.deletedOldBackups ? ` and removed **${result.deletedOldBackups}** expired backup(s)` : ''}.`
+      : `Goliath automatic server backup failed for **${guild.name}**: **${String(error?.message || error || 'Unknown error').slice(0, 500)}**.`,
+    target: success ? { type: 'backup', id: result.backupId, label: result.backupId } : { type: 'guild', id: guild.id, label: guild.name },
+    reason: success ? 'Automatic scheduled server disaster backup' : String(error?.message || error || 'Automatic backup failure').slice(0, 500),
+    metadata: {
+      schedulerId: BACKUP_SCHEDULER_ID,
+      backupId: result?.backupId || null,
+      deletedOldBackups: Number(result?.deletedOldBackups || 0),
+      backupIntervalDays: getIntervalDays(),
+      retentionLimit: getRetentionLimit(),
+      automatic: true,
+    },
+  }).catch((auditError) => {
+    console.warn(`[Server Backups] Could not record automatic backup audit action for ${guild.name}:`, auditError?.message || auditError);
+  });
+}
+
 async function backupGuild(guild) {
   if (!guild) return null;
 
@@ -98,12 +127,14 @@ async function backupGuild(guild) {
     type: 'scheduled',
   });
 
-  return {
+  const result = {
     guildId: guild.id,
     guildName: guild.name,
     backupId: backup.backupId,
     deletedOldBackups: cleanupOldBackups(guild.id),
   };
+  await recordAutomaticBackupAction(guild, result);
+  return result;
 }
 
 function registerBackupScheduler() {
@@ -154,6 +185,7 @@ async function runServerBackupCycle(client) {
       }
     } catch (error) {
       failures += 1;
+      await recordAutomaticBackupAction(guild, null, error);
       console.error(`❌ Backup failed for ${guild.name} (${guild.id}):`, error);
     }
   }
