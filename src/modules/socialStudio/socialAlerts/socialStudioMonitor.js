@@ -15,11 +15,29 @@ function projectLiveRefreshState(account, history = []) {
   const state = account.state && typeof account.state === 'object' ? account.state : null;
   if (!state) return account;
 
-  const hasPersistedLiveMessage =
+  const hasDedicatedLiveMessage =
     state.isLive === true
     && Boolean(
-      (state.lastLiveMessageId || state.lastAlertMessageId)
-      && (state.lastLiveMessageChannelId || state.lastAlertChannelId)
+      state.lastLiveMessageId
+      && state.lastLiveMessageChannelId
+    );
+
+  const legacyLiveMessage =
+    state.isLive === true
+    && !hasDedicatedLiveMessage
+    && state.lastAlertMessageId
+    && state.lastAlertChannelId
+      ? {
+        lastLiveMessageId: state.lastAlertMessageId,
+        lastLiveMessageChannelId: state.lastAlertChannelId,
+      }
+      : {};
+
+  const hasPersistedLiveMessage =
+    hasDedicatedLiveMessage
+    || Boolean(
+      legacyLiveMessage.lastLiveMessageId
+      && legacyLiveMessage.lastLiveMessageChannelId
     );
 
   const liveHistory = !hasPersistedLiveMessage
@@ -43,7 +61,11 @@ function projectLiveRefreshState(account, history = []) {
     }
     : {};
 
-  const effectiveState = { ...state, ...recoveredLiveMessage };
+  const effectiveState = {
+    ...state,
+    ...legacyLiveMessage,
+    ...recoveredLiveMessage,
+  };
   const raw = effectiveState.lastLiveMessageUpdateAt || effectiveState.lastLiveMessageUpdatedAt;
   const parsed = typeof raw === 'string' ? Date.parse(raw) : NaN;
   const hasTrackedLiveMessage =
