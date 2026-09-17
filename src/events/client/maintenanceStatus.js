@@ -6,6 +6,7 @@ const { Events } = require('discord.js');
 const maintenanceStatus = require('../../owner/dev/maintenanceStatus');
 const auditRouter = require('../../owner/auditIntelligence/auditRouter');
 const auditStore = require('../../owner/auditIntelligence/auditStore');
+const schedulerRegistry = require('../../owner/sentinel/schedulerRegistry');
 const { PROJECT_ROOT } = require('../../config/runtimePaths');
 
 let processHandlersWired = false;
@@ -13,6 +14,7 @@ let relayTimer = null;
 let relayBusy = false;
 const RELAY_INTERVAL_MS = 1500;
 const RELAY_BATCH_LIMIT = 250;
+const RELAY_SCHEDULER_ID = 'auditIntelligence:cross-environment-relay:global';
 const SHARED_ROOT = path.dirname(PROJECT_ROOT);
 const RELAY_CURSOR_FILE = path.join(auditStore.getRoot(), 'command-center-relay-cursors.json');
 
@@ -34,19 +36,10 @@ function logRecoveryResults(client, results) {
   let sent = 0; let suppressed = 0; let none = 0; let failed = 0;
   for (const result of results || []) {
     const guild = client?.guilds?.cache?.get?.(String(result?.guildId || ''));
-    if (!result?.ok) {
-      failed += 1;
-      console.warn(`[MaintenanceStatus] ${guildLabel(guild || { id: result?.guildId })} • RECOVERY → FAILED • ${result?.error || result?.reason || 'unknown error'} • ${runtimeMode()}`);
-    } else if (result?.skipped) {
-      suppressed += 1;
-      console.log(`[MaintenanceStatus] ${guildLabel(guild || { id: result?.guildId })} • RECOVERY → SUPPRESSED • Recovery notices disabled/paused • ${runtimeMode()}`);
-    } else if (result?.found) {
-      sent += 1;
-      console.log(`[MaintenanceStatus] ${guildLabel(guild || { id: result?.guildId })} • RECOVERY → SENT • channel ${result?.channelId || 'unknown'} • ${runtimeMode()}`);
-    } else {
-      none += 1;
-      console.log(`[MaintenanceStatus] ${guildLabel(guild || { id: result?.guildId })} • RECOVERY → NOT NEEDED • no maintenance channel • ${runtimeMode()}`);
-    }
+    if (!result?.ok) { failed += 1; console.warn(`[MaintenanceStatus] ${guildLabel(guild || { id: result?.guildId })} • RECOVERY → FAILED • ${result?.error || result?.reason || 'unknown error'} • ${runtimeMode()}`); }
+    else if (result?.skipped) { suppressed += 1; console.log(`[MaintenanceStatus] ${guildLabel(guild || { id: result?.guildId })} • RECOVERY → SUPPRESSED • Recovery notices disabled/paused • ${runtimeMode()}`); }
+    else if (result?.found) { sent += 1; console.log(`[MaintenanceStatus] ${guildLabel(guild || { id: result?.guildId })} • RECOVERY → SENT • channel ${result?.channelId || 'unknown'} • ${runtimeMode()}`); }
+    else { none += 1; console.log(`[MaintenanceStatus] ${guildLabel(guild || { id: result?.guildId })} • RECOVERY → NOT NEEDED • no maintenance channel • ${runtimeMode()}`); }
   }
   console.log(`[MaintenanceStatus] Startup recovery summary: ${sent} sent • ${suppressed} suppressed • ${none} not needed • ${failed} failed • ${runtimeMode()}.`);
   return { sent, suppressed, none, failed };
@@ -80,12 +73,16 @@ function registryGuild(guildId, event) {
   const known = (auditStore.getGuildRegistry?.() || []).find((item) => String(item?.guildId || '') === String(guildId));
   return { id: String(guildId), name: event?.guildName || known?.name || String(guildId), ownerId: known?.ownerId || null, memberCount: known?.memberCount ?? null };
 }
-async function relayRemoteAuditEvents(client) {
-  if (runtimeMode() !== 'DEV' || relayBusy) return; relayBusy = true;
+async function relayRemoteAuditEvents(client, phase = 'scheduled') {
+  if (runtimeMode() !== 'DEV') return { skipped: true, reason: 'not-dev' };
+  if (relayBusy) return { skipped: true, reason: 'busy' };
+  relayBusy = true;
   try {
-    const cursors = readJson(RELAY_CURSOR_FILE, { version: 1, files: {} }); cursors.files ||= {}; let delivered = 0;
-    for (const source of remoteAuditRoots()) {
+    const sources = remoteAuditRoots();
+    const cursors = readJson(RELAY_CURSOR_FILE, { version: 1, files: {} }); cursors.files ||= {}; let delivered = 0; let filesChecked = 0;
+    for (const source of sources) {
       for (const item of eventFiles(source.root)) {
+        filesChecked += 1;
         if (delivered >= RELAY_BATCH_LIMIT) break;
         const key = cursorKey(source.mode, item.file); const existing = cursors.files[key];
         if (!existing) { cursors.files[key] = { offset: fs.statSync(item.file).size, mode: source.mode, guildId: item.guildId, updatedAt: new Date().toISOString() }; continue; }
@@ -94,18 +91,29 @@ async function relayRemoteAuditEvents(client) {
           if (delivered >= RELAY_BATCH_LIMIT) break; let event; try { event = JSON.parse(line); } catch { continue; }
           if (!event?.guildId || String(event.guildId) === String(auditRouter.getOwnerAuditGuildId?.() || '')) continue;
           event.metadata = { ...(event.metadata || {}), collectorEnvironment: source.mode, relayedToCommandCenter: true };
-          await auditRouter.deliver(client, registryGuild(event.guildId, event), event).catch((error) => console.warn(`[Audit Relay] ${source.mode} -> DEV delivery failed for ${event.guildId}:`, error?.message || error)); delivered += 1;
+          await auditRouter.deliver(client, registryGuild(event.guildId, event), event);
+          delivered += 1;
         }
         if (delivered < RELAY_BATCH_LIMIT || chunk.lines.length === 0) existing.offset = chunk.nextOffset;
         existing.mode = source.mode; existing.guildId = item.guildId; existing.updatedAt = new Date().toISOString();
       }
       if (delivered >= RELAY_BATCH_LIMIT) break;
     }
-    writeJsonAtomic(RELAY_CURSOR_FILE, cursors); if (delivered) console.log(`[Audit Relay] Mirrored ${delivered} BETA/PRODUCTION event(s) into the DEV Command Center.`);
-  } catch (error) { console.warn('[Audit Relay] Cross-environment relay pass failed:', error?.stack || error?.message || error); } finally { relayBusy = false; }
+    writeJsonAtomic(RELAY_CURSOR_FILE, cursors);
+    schedulerRegistry.beat(RELAY_SCHEDULER_ID, { phase, delivered, filesChecked, sources: sources.map((source) => source.mode), batchLimitReached: delivered >= RELAY_BATCH_LIMIT });
+    if (delivered) console.log(`[Audit Relay] Mirrored ${delivered} BETA/PRODUCTION event(s) into the DEV Command Center.`);
+    return { delivered, filesChecked };
+  } catch (error) {
+    schedulerRegistry.fail(RELAY_SCHEDULER_ID, error, { phase });
+    console.warn('[Audit Relay] Cross-environment relay pass failed:', error?.stack || error?.message || error);
+    return { error };
+  } finally { relayBusy = false; }
 }
 function startAuditRelay(client) {
-  if (runtimeMode() !== 'DEV' || relayTimer) return; void relayRemoteAuditEvents(client); relayTimer = setInterval(() => { void relayRemoteAuditEvents(client); }, RELAY_INTERVAL_MS); relayTimer.unref?.();
+  if (runtimeMode() !== 'DEV' || relayTimer) return;
+  schedulerRegistry.register({ id: RELAY_SCHEDULER_ID, module: 'auditIntelligence', component: 'cross-environment-relay', intervalMs: RELAY_INTERVAL_MS, staleAfterMs: Math.max(15_000, RELAY_INTERVAL_MS * 5), environment: runtimeMode(), details: { sources: ['BETA', 'PRODUCTION'], batchLimit: RELAY_BATCH_LIMIT } });
+  void relayRemoteAuditEvents(client, 'startup');
+  relayTimer = setInterval(() => { void relayRemoteAuditEvents(client, 'scheduled'); }, RELAY_INTERVAL_MS); relayTimer.unref?.();
   console.log('[Audit Relay] DEV Command Center cross-environment relay active for BETA + PRODUCTION.');
 }
 function wireGuildControlsFirst(client) {
@@ -126,8 +134,6 @@ module.exports = {
   async execute(client) {
     if (!processHandlersWired) {
       maintenanceStatus.wireProcessHandlers(client);
-      // Decision observer: logs the exact per-guild policy that the shutdown sender uses.
-      // Registered after the sender so it cannot alter or intercept shutdown behavior.
       process.once('SIGTERM', () => logShutdownNoticePolicy(client, 'SIGTERM'));
       process.once('SIGINT', () => logShutdownNoticePolicy(client, 'SIGINT'));
       wireGuildControlsFirst(client);
