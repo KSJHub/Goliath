@@ -3,6 +3,7 @@
 const { AuditLogEvent } = require('discord.js');
 const socialStore = require('../../modules/socialStudio/socialAlerts/socialStudioStore');
 const schedulerRegistry = require('../../owner/sentinel/schedulerRegistry');
+const audit = require('../../owner/auditIntelligence/auditIntelligence');
 
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const CLEANUP_SCHEDULER_ID = 'social:creator-lifecycle-cleanup:global';
@@ -40,13 +41,36 @@ async function cleanupAllGuilds(client) {
   return { guilds: client.guilds.cache.size, cleaned };
 }
 
+async function recordLifecycleAction(client, input = {}) {
+  return audit.captureGoliathAction(client, {
+    category: 'goliath',
+    action: 'execute',
+    system: 'Social Studio',
+    result: 'Success',
+    ...input,
+  }).catch((error) => console.warn('[Social Studio] Could not record lifecycle audit action:', error?.message || error));
+}
+
 async function runCleanup(client, phase = 'scheduled') {
   try {
     const result = await cleanupAllGuilds(client);
     schedulerRegistry.beat(CLEANUP_SCHEDULER_ID, { phase, ...result });
+    if (phase === 'startup' || result.cleaned > 0) {
+      await recordLifecycleAction(client, {
+        type: `goliath.scheduler.social_creator_cleanup.${phase}`,
+        summary: `Social Studio ${phase} creator cleanup checked ${result.guilds} guild(s) and removed ${result.cleaned} expired creator record(s).`,
+        metadata: { schedulerId: CLEANUP_SCHEDULER_ID, phase, ...result },
+      });
+    }
     return result;
   } catch (error) {
     schedulerRegistry.fail(CLEANUP_SCHEDULER_ID, error, { phase });
+    await audit.captureGoliathAction(client, {
+      type: `goliath.scheduler.social_creator_cleanup.${phase}`,
+      category: 'goliath', action: 'execute', system: 'Social Studio', result: 'Failed',
+      summary: `Social Studio ${phase} creator cleanup failed: ${String(error?.message || error).slice(0, 300)}`,
+      metadata: { schedulerId: CLEANUP_SCHEDULER_ID, phase },
+    }).catch(() => null);
     throw error;
   }
 }
@@ -92,15 +116,34 @@ module.exports = [
       socialStore.markCreatorDeparted(member.guild.id, member.user.id, departureType, {
         actorId: 'system:social-studio-lifecycle',
       });
+      await recordLifecycleAction(member.client, {
+        type: 'goliath.automation.social_creator_departed',
+        guildId: member.guild.id,
+        guildName: member.guild.name,
+        target: { id: member.user.id, label: member.user.tag || member.user.username },
+        summary: `Social Studio marked creator ${member.user.tag || member.user.id} as ${departureType} after their guild membership ended.`,
+        metadata: { departureType },
+      });
     },
   },
   {
     name: 'guildBanAdd',
     async execute(ban) {
       if (ban.user?.bot) return;
-      socialStore.deleteCreatorByOwner(ban.guild.id, ban.user.id, {
+      const result = socialStore.deleteCreatorByOwner(ban.guild.id, ban.user.id, {
         actorId: 'system:social-studio-ban',
       });
+      const changed = Number(result?.deleted || result?.removed || 0);
+      if (changed > 0) {
+        await recordLifecycleAction(ban.client, {
+          type: 'goliath.automation.social_creator_ban_cleanup',
+          guildId: ban.guild.id,
+          guildName: ban.guild.name,
+          target: { id: ban.user.id, label: ban.user.tag || ban.user.username },
+          summary: `Social Studio removed ${changed} creator record(s) after ${ban.user.tag || ban.user.id} was banned.`,
+          metadata: { removed: changed },
+        });
+      }
     },
   },
 ];
