@@ -2,19 +2,20 @@
 
 const { Events } = require('discord.js');
 const quarantine = require('../quarantine');
+const { QUARANTINE_MODES, getQuarantineState, getQuarantineMode } = require('./state');
 const { startQuarantineExpiryScheduler } = require('./expiryScheduler');
 const { ensureInitiatorInterviewAccess } = require('../../../administration/mod/quarantineInteractions');
 
 function hasActiveQuarantine(guildId) {
-  return Object.keys(quarantine.getQuarantineState(guildId)?.users || {}).length > 0;
+  return Object.keys(getQuarantineState(guildId)?.users || {}).length > 0;
 }
 
 async function recoverInvestigationInitiatorAccess(guild) {
   if (!guild) return { checked: 0, restored: 0, failed: 0 };
-  const state = quarantine.getQuarantineState(guild.id);
+  const state = getQuarantineState(guild.id);
   const result = { checked: 0, restored: 0, failed: 0 };
   for (const snapshot of Object.values(state.users || {})) {
-    if (quarantine.getQuarantineMode(snapshot) !== quarantine.QUARANTINE_MODES.INVESTIGATION) continue;
+    if (getQuarantineMode(snapshot) !== QUARANTINE_MODES.INVESTIGATION) continue;
     if (!snapshot.interviewChannelId || !snapshot.quarantinedBy) continue;
     result.checked += 1;
     const access = await ensureInitiatorInterviewAccess(guild, snapshot.interviewChannelId, snapshot.quarantinedBy);
@@ -54,9 +55,9 @@ module.exports = [
     name: Events.ChannelDelete,
     async execute(channel) {
       if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
-      const state = quarantine.getQuarantineState(channel.guild.id);
+      const state = getQuarantineState(channel.guild.id);
       const affected = Object.values(state.users || {}).filter((snapshot) => (
-        quarantine.getQuarantineMode(snapshot) === quarantine.QUARANTINE_MODES.INVESTIGATION
+        getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION
         && String(snapshot.interviewChannelId || '') === String(channel.id)
       ));
       for (const snapshot of affected) {
@@ -81,15 +82,15 @@ module.exports = [
   {
     name: Events.GuildMemberAdd,
     async execute(member) {
-      if (!member?.guild || !quarantine.getQuarantineState(member.guild.id)?.users?.[member.id]) return;
+      if (!member?.guild || !getQuarantineState(member.guild.id)?.users?.[member.id]) return;
       try {
-        const snapshot = quarantine.getQuarantineState(member.guild.id)?.users?.[member.id];
+        const snapshot = getQuarantineState(member.guild.id)?.users?.[member.id];
         const result = await quarantine.enforceQuarantineOnMember(member);
         if (!result.success) {
           console.warn(`[QuarantineSystem] Failed to reapply quarantine to ${member.id}: ${result.error || result.reason}`);
           return;
         }
-        if (quarantine.getQuarantineMode(snapshot) === quarantine.QUARANTINE_MODES.INVESTIGATION && result.interviewChannelId && snapshot.quarantinedBy) {
+        if (getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION && result.interviewChannelId && snapshot.quarantinedBy) {
           const access = await ensureInitiatorInterviewAccess(member.guild, result.interviewChannelId, snapshot.quarantinedBy);
           if (!access.success) console.warn(`[InvestigationIsolation] Failed to restore initiator access after rejoin for ${member.id}: ${access.reason}`);
         }
@@ -102,7 +103,7 @@ module.exports = [
     name: Events.GuildRoleDelete,
     async execute(role) {
       if (!role?.guild || !hasActiveQuarantine(role.guild.id)) return;
-      const state = quarantine.getQuarantineState(role.guild.id);
+      const state = getQuarantineState(role.guild.id);
       if (String(state.roleId || '') !== String(role.id) && String(state.roleName || '') !== String(role.name || '')) return;
       try {
         const result = await quarantine.recoverGuildQuarantine(role.guild);
