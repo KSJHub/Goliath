@@ -3,6 +3,7 @@
 const { Events } = require('discord.js');
 const quarantine = require('../quarantine');
 const { QUARANTINE_MODES, getQuarantineState, getQuarantineMode } = require('./state');
+const { ensureQuarantineRole } = require('./roleManager');
 const { startQuarantineExpiryScheduler } = require('./expiryScheduler');
 const { ensureInitiatorInterviewAccess } = require('../../../administration/mod/quarantineInteractions');
 
@@ -106,6 +107,7 @@ module.exports = [
       const state = getQuarantineState(role.guild.id);
       if (String(state.roleId || '') !== String(role.id) && String(state.roleName || '') !== String(role.name || '')) return;
       try {
+        await ensureQuarantineRole(role.guild);
         const result = await quarantine.recoverGuildQuarantine(role.guild);
         if (!result.success) console.warn(`[QuarantineSystem] Quarantine role recovery incomplete in ${role.guild.id}.`);
         await recoverInvestigationInitiatorAccess(role.guild);
