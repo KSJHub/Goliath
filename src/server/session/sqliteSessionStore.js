@@ -4,9 +4,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Database = require('better-sqlite3');
 const session = require('express-session');
+const sentinelScheduler = require('../../owner/sentinel/schedulerRegistry');
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 15 * 60 * 1000;
+const CLEANUP_SCHEDULER_ID = 'dashboard:session-cleanup:global';
 
 function sessionExpiry(sessionData, now = Date.now()) {
   const cookie = sessionData?.cookie || {};
@@ -54,16 +56,33 @@ class SQLiteSessionStore extends session.Store {
       cleanup: this.db.prepare('DELETE FROM dashboard_sessions WHERE expire <= ?'),
     };
 
-    this.cleanup();
-    this.cleanupTimer = setInterval(() => this.cleanup(), CLEANUP_INTERVAL_MS);
+    sentinelScheduler.register({
+      id: CLEANUP_SCHEDULER_ID,
+      module: 'dashboard',
+      component: 'session-cleanup',
+      intervalMs: CLEANUP_INTERVAL_MS,
+      staleAfterMs: CLEANUP_INTERVAL_MS * 3,
+      details: { store: 'sqlite', database: path.basename(this.dbPath) },
+    });
+    this.cleanup('startup');
+    this.cleanupTimer = setInterval(() => this.cleanup('scheduled'), CLEANUP_INTERVAL_MS);
     this.cleanupTimer.unref?.();
   }
 
-  cleanup(now = Date.now()) {
+  cleanup(phase = 'manual', now = Date.now()) {
+    if (typeof phase === 'number') { now = phase; phase = 'manual'; }
     try {
-      this.statements.cleanup.run(now);
+      const result = this.statements.cleanup.run(now);
+      sentinelScheduler.beat(CLEANUP_SCHEDULER_ID, {
+        phase,
+        deleted: Number(result?.changes || 0),
+        database: path.basename(this.dbPath),
+      });
+      return Number(result?.changes || 0);
     } catch (error) {
+      sentinelScheduler.fail(CLEANUP_SCHEDULER_ID, error, { phase, database: path.basename(this.dbPath) });
       console.warn(`[SessionStore] Cleanup failed: ${error?.message || error}`);
+      return 0;
     }
   }
 
@@ -76,81 +95,50 @@ class SQLiteSessionStore extends session.Store {
         return;
       }
       callback?.(null, JSON.parse(row.sess));
-    } catch (error) {
-      callback?.(error);
-    }
+    } catch (error) { callback?.(error); }
   }
 
   set(sid, sessionData, callback) {
-    try {
-      this.statements.set.run(sid, JSON.stringify(sessionData), sessionExpiry(sessionData));
-      callback?.(null);
-    } catch (error) {
-      callback?.(error);
-    }
+    try { this.statements.set.run(sid, JSON.stringify(sessionData), sessionExpiry(sessionData)); callback?.(null); }
+    catch (error) { callback?.(error); }
   }
 
   destroy(sid, callback) {
-    try {
-      this.statements.destroy.run(sid);
-      callback?.(null);
-    } catch (error) {
-      callback?.(error);
-    }
+    try { this.statements.destroy.run(sid); callback?.(null); }
+    catch (error) { callback?.(error); }
   }
 
   touch(sid, sessionData, callback) {
-    try {
-      this.statements.touch.run(sessionExpiry(sessionData), sid);
-      callback?.(null);
-    } catch (error) {
-      callback?.(error);
-    }
+    try { this.statements.touch.run(sessionExpiry(sessionData), sid); callback?.(null); }
+    catch (error) { callback?.(error); }
   }
 
   clear(callback) {
-    try {
-      this.statements.clear.run();
-      callback?.(null);
-    } catch (error) {
-      callback?.(error);
-    }
+    try { this.statements.clear.run(); callback?.(null); }
+    catch (error) { callback?.(error); }
   }
 
   length(callback) {
-    try {
-      const row = this.statements.length.get(Date.now());
-      callback?.(null, Number(row?.count || 0));
-    } catch (error) {
-      callback?.(error);
-    }
+    try { const row = this.statements.length.get(Date.now()); callback?.(null, Number(row?.count || 0)); }
+    catch (error) { callback?.(error); }
   }
 
   all(callback) {
-    try {
-      const sessions = this.statements.all.all(Date.now()).map((row) => JSON.parse(row.sess));
-      callback?.(null, sessions);
-    } catch (error) {
-      callback?.(error);
-    }
+    try { const sessions = this.statements.all.all(Date.now()).map((row) => JSON.parse(row.sess)); callback?.(null, sessions); }
+    catch (error) { callback?.(error); }
   }
 
   close() {
     if (this.cleanupTimer) clearInterval(this.cleanupTimer);
     this.cleanupTimer = null;
+    sentinelScheduler.stop(CLEANUP_SCHEDULER_ID, 'SQLite session store closed', { database: path.basename(this.dbPath) });
     this.db?.close();
   }
 }
 
 function createSQLiteSessionStore(runtimePaths) {
   if (!runtimePaths?.database) throw new Error('Runtime database path is unavailable');
-  return new SQLiteSessionStore({
-    dbPath: path.join(runtimePaths.database, 'sessions.sqlite'),
-  });
+  return new SQLiteSessionStore({ dbPath: path.join(runtimePaths.database, 'sessions.sqlite') });
 }
 
-module.exports = {
-  SQLiteSessionStore,
-  createSQLiteSessionStore,
-  sessionExpiry,
-};
+module.exports = { SQLiteSessionStore, createSQLiteSessionStore, sessionExpiry };
