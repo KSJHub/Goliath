@@ -2,43 +2,10 @@
 
 const quarantine = require('../quarantine');
 const schedulerRegistry = require('../../../../owner/sentinel/schedulerRegistry');
-const auditIntelligence = require('../../../../owner/auditIntelligence/auditIntelligence');
 
 const QUARANTINE_SWEEP_INTERVAL_MS = Number(quarantine.QUARANTINE_SWEEP_INTERVAL_MS || 60_000);
 const QUARANTINE_SCHEDULER_ID = 'security:quarantine-expiry:global';
 let quarantineSweepTimer = null;
-
-async function recordExpiryActions(client, phase, result) {
-  if (!client || !result) return;
-  const changed = Number(result.restored || 0) + Number(result.clearedAbsent || 0);
-  const failed = Number(result.failed || 0);
-  if (!changed && !failed) return;
-
-  for (const guild of client.guilds.cache.values()) {
-    await auditIntelligence.captureGoliathAction(client, {
-      guild,
-      guildId: guild.id,
-      type: 'goliath.background.quarantine_expiry',
-      category: 'security',
-      action: failed ? 'expiry_cycle_attention' : 'expiry_cycle',
-      result: failed ? 'Warning' : 'Success',
-      summary: `Goliath quarantine expiry ${phase} cycle processed ${Number(result.checked || 0)} expired snapshot(s): ${Number(result.restored || 0)} member(s) restored, ${Number(result.clearedAbsent || 0)} absent snapshot(s) cleared, ${failed} failure(s).`,
-      target: { type: 'guild', id: guild.id, label: guild.name },
-      reason: 'Automatic quarantine expiry and safe restoration cycle',
-      metadata: {
-        schedulerId: QUARANTINE_SCHEDULER_ID,
-        phase,
-        checked: Number(result.checked || 0),
-        restored: Number(result.restored || 0),
-        clearedAbsent: Number(result.clearedAbsent || 0),
-        failed,
-        automatic: true,
-      },
-    }).catch((error) => {
-      console.warn(`[QuarantineSystem] Could not record expiry audit action for ${guild.id}:`, error?.message || error);
-    });
-  }
-}
 
 async function runExpiryCycle(client, phase = 'scheduled') {
   try {
@@ -52,7 +19,6 @@ async function runExpiryCycle(client, phase = 'scheduled') {
     } else {
       schedulerRegistry.beat(QUARANTINE_SCHEDULER_ID, { phase, ...result });
     }
-    await recordExpiryActions(client, phase, result);
     return result;
   } catch (error) {
     schedulerRegistry.fail(QUARANTINE_SCHEDULER_ID, error, { phase });
