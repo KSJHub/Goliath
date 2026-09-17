@@ -47,6 +47,8 @@ function patchedGuildForRecovery(guildConfig, accountId, currentEventId) {
               lastAlertKey: null,
               lastAlertMessageId: null,
               lastAlertChannelId: null,
+              lastLiveMessageId: null,
+              lastLiveMessageChannelId: null,
               lastLiveMessageUpdateAt: null,
               lastLiveMessageUpdatedAt: null,
               lastDeliveryError: null,
@@ -73,8 +75,10 @@ async function recoverAccount(client, guild, guildConfig, account) {
     details: {
       accountId: account.accountId,
       currentEventId: String(currentEventId),
-      missingMessageId: state.lastAlertMessageId || null,
-      missingChannelId: state.lastAlertChannelId || null,
+      missingMessageId:
+        state.lastLiveMessageId || state.lastAlertMessageId || null,
+      missingChannelId:
+        state.lastLiveMessageChannelId || state.lastAlertChannelId || null,
       deliveryError: state.lastDeliveryError || null,
     },
   });

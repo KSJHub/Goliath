@@ -17,7 +17,10 @@ function projectLiveRefreshState(account, history = []) {
 
   const hasPersistedLiveMessage =
     state.isLive === true
-    && Boolean(state.lastAlertMessageId && state.lastAlertChannelId);
+    && Boolean(
+      (state.lastLiveMessageId || state.lastAlertMessageId)
+      && (state.lastLiveMessageChannelId || state.lastAlertChannelId)
+    );
 
   const liveHistory = !hasPersistedLiveMessage
     ? [...(Array.isArray(history) ? history : [])].reverse().find((entry) =>
@@ -33,6 +36,8 @@ function projectLiveRefreshState(account, history = []) {
     ? {
       lastAlertMessageId: liveHistory.messageId,
       lastAlertChannelId: liveHistory.channelId,
+      lastLiveMessageId: liveHistory.messageId,
+      lastLiveMessageChannelId: liveHistory.channelId,
       lastAlertKey: state.liveEventId ? `live:${state.liveEventId}` : state.lastAlertKey,
       lastLiveMessageUpdatedAt: liveHistory.createdAt || state.lastLiveMessageUpdatedAt,
     }
@@ -41,7 +46,12 @@ function projectLiveRefreshState(account, history = []) {
   const effectiveState = { ...state, ...recoveredLiveMessage };
   const raw = effectiveState.lastLiveMessageUpdateAt || effectiveState.lastLiveMessageUpdatedAt;
   const parsed = typeof raw === 'string' ? Date.parse(raw) : NaN;
-  const hasTrackedLiveMessage = effectiveState.isLive === true && Boolean(effectiveState.lastAlertMessageId && effectiveState.lastAlertChannelId);
+  const hasTrackedLiveMessage =
+    effectiveState.isLive === true
+    && Boolean(
+      (effectiveState.lastLiveMessageId || effectiveState.lastAlertMessageId)
+      && (effectiveState.lastLiveMessageChannelId || effectiveState.lastAlertChannelId)
+    );
   const alertTypes = Array.isArray(account.alertTypes)
     ? account.alertTypes.filter((type) => !(hasTrackedLiveMessage && String(type).toLowerCase() === 'ended'))
     : account.alertTypes;
@@ -92,13 +102,17 @@ function rolloverIncident(guild, account) {
 }
 
 async function removeStaleLivePost(client, guildId, previous) {
-  if (!previous?.lastAlertChannelId || !previous?.lastAlertMessageId) return false;
+  const channelId =
+    previous?.lastLiveMessageChannelId || previous?.lastAlertChannelId;
+  const messageId =
+    previous?.lastLiveMessageId || previous?.lastAlertMessageId;
+  if (!channelId || !messageId) return false;
   const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
   if (!guild) return false;
-  const channel = guild.channels.cache.get(previous.lastAlertChannelId)
-    || await guild.channels.fetch(previous.lastAlertChannelId).catch(() => null);
+  const channel = guild.channels.cache.get(channelId)
+    || await guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.messages?.fetch) return false;
-  const message = await channel.messages.fetch(previous.lastAlertMessageId).catch(() => null);
+  const message = await channel.messages.fetch(messageId).catch(() => null);
   if (!message) return false;
   await message.delete();
   return true;
@@ -132,8 +146,10 @@ async function repairLiveRollovers(client, guildId, beforeConfig, result) {
         accountId: item.accountId,
         previousEventId,
         currentEventId,
-        previousMessageId: previous.lastAlertMessageId || null,
-        previousChannelId: previous.lastAlertChannelId || null,
+        previousMessageId:
+          previous.lastLiveMessageId || previous.lastAlertMessageId || null,
+        previousChannelId:
+          previous.lastLiveMessageChannelId || previous.lastAlertChannelId || null,
       },
     });
 
@@ -161,6 +177,8 @@ async function repairLiveRollovers(client, guildId, beforeConfig, result) {
                   lastAlertKey: previous.lastAlertKey || null,
                   lastAlertMessageId: null,
                   lastAlertChannelId: null,
+                  lastLiveMessageId: null,
+                  lastLiveMessageChannelId: null,
                 },
               },
             },

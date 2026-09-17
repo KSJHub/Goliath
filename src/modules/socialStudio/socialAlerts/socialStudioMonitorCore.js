@@ -623,6 +623,8 @@ async function forcePostCreatorLive(client, guildId, creatorId, options = {}) {
           lastAlertAt: item.sentAt,
           lastAlertMessageId: item.message.id,
           lastAlertChannelId: item.channelId,
+          lastLiveMessageId: item.message.id,
+          lastLiveMessageChannelId: item.channelId,
           lastLiveMessageUpdatedAt: item.sentAt,
           lastDeliveryError: null,
         },
@@ -984,8 +986,10 @@ async function sendEvent(client, guildId, config, account, creator, event) {
 async function updateLiveMessage(client, guildId, config, account, creator, event, previous) {
   const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
   if (!discordGuild) throw new Error('Discord guild is unavailable.');
-  const channelId = previous.lastAlertChannelId;
-  const messageId = previous.lastAlertMessageId;
+  const channelId =
+    previous.lastLiveMessageChannelId || previous.lastAlertChannelId;
+  const messageId =
+    previous.lastLiveMessageId || previous.lastAlertMessageId;
   const channel = discordGuild.channels.cache.get(channelId) || await discordGuild.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased?.() || !channel.messages?.fetch) throw new Error('The saved LIVE post channel is unavailable.');
   const message = await channel.messages.fetch(messageId).catch(() => null);
@@ -1102,6 +1106,11 @@ async function checkGuildAccounts(client, guildId, options = {}) {
           state.lastAlertAt = now();
           state.lastAlertMessageId = message.id;
           state.lastAlertChannelId = message.socialStudioChannelId || message.channelId || null;
+          if (event.type === 'live') {
+            state.lastLiveMessageId = message.id;
+            state.lastLiveMessageChannelId = state.lastAlertChannelId;
+            state.lastLiveMessageUpdatedAt = state.lastAlertAt;
+          }
           state.lastDeliveryError = null;
           config.analytics.alertsSent = Number(config.analytics.alertsSent || 0) + 1;
           addHistory(config, { status: 'alert_sent', accountId: account.accountId, creatorId: creator?.creatorId || null, creator: creator?.displayName || account.displayName, platform: account.platform, alertType: event.type, contentId: event.id || null, messageId: message.id, channelId: state.lastAlertChannelId, quietHoursPingSuppressed: message.socialStudioQuietHoursPingSuppressed === true });
@@ -1113,7 +1122,12 @@ async function checkGuildAccounts(client, guildId, options = {}) {
         }
       }
 
-      if (checked.isLive === false && previous.isLive === true && previous.lastAlertMessageId && previous.lastAlertChannelId) {
+      if (
+        checked.isLive === false
+        && previous.isLive === true
+        && (previous.lastLiveMessageId || previous.lastAlertMessageId)
+        && (previous.lastLiveMessageChannelId || previous.lastAlertChannelId)
+      ) {
         try {
           const prior = previous.lastLiveEvent && typeof previous.lastLiveEvent === 'object' ? previous.lastLiveEvent : {};
           const offlineEvent = {
@@ -1127,7 +1141,7 @@ async function checkGuildAccounts(client, guildId, options = {}) {
           state.lastLiveMessageUpdatedAt = now();
           state.lastDeliveryError = null;
           liveMessageUpdated = true;
-          addHistory(config, { status: 'alert_updated', accountId: account.accountId, creatorId: creator?.creatorId || null, creator: creator?.displayName || account.displayName, platform: account.platform, alertType: 'live', contentId: offlineEvent.id || null, messageId: previous.lastAlertMessageId, channelId: previous.lastAlertChannelId, liveStatus: 'offline' });
+          addHistory(config, { status: 'alert_updated', accountId: account.accountId, creatorId: creator?.creatorId || null, creator: creator?.displayName || account.displayName, platform: account.platform, alertType: 'live', contentId: offlineEvent.id || null, messageId: previous.lastLiveMessageId || previous.lastAlertMessageId, channelId: previous.lastLiveMessageChannelId || previous.lastAlertChannelId, liveStatus: 'offline' });
         } catch (error) {
           state.lastLiveMessageUpdatedAt = now();
           state.lastDeliveryError = error.message;
@@ -1141,7 +1155,7 @@ async function checkGuildAccounts(client, guildId, options = {}) {
           state.lastLiveMessageUpdatedAt = now();
           state.lastDeliveryError = null;
           liveMessageUpdated = true;
-          addHistory(config, { status: 'alert_updated', accountId: account.accountId, creatorId: creator?.creatorId || null, creator: creator?.displayName || account.displayName, platform: account.platform, alertType: 'live', contentId: updateEvent.id || null, messageId: previous.lastAlertMessageId, channelId: previous.lastAlertChannelId });
+          addHistory(config, { status: 'alert_updated', accountId: account.accountId, creatorId: creator?.creatorId || null, creator: creator?.displayName || account.displayName, platform: account.platform, alertType: 'live', contentId: updateEvent.id || null, messageId: previous.lastLiveMessageId || previous.lastAlertMessageId, channelId: previous.lastLiveMessageChannelId || previous.lastAlertChannelId });
         } catch (error) {
           state.lastLiveMessageUpdatedAt = now();
           state.lastDeliveryError = error.message;
