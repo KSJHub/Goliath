@@ -53,10 +53,10 @@ jobs:
             }
             trap cleanup_remote EXIT
 
-            # A historical/manual fetch left this Git metadata scratch file in
-            # the checkout root. It is never application state and must not
-            # make an otherwise clean deployment fail its worktree guard.
-            rm -f -- FETCH_HEAD
+            # Known root-level scratch artifacts from earlier manual shell/npm
+            # commands. Neither is repository or runtime state; remove only
+            # these exact names before enforcing the strict worktree guard.
+            rm -f -- FETCH_HEAD 'goliath@1.0.0'
 
             git fetch --no-tags origin dev
             LATEST_SHA="$(git rev-parse origin/dev)"
@@ -106,9 +106,6 @@ jobs:
             rm -rf dist
             npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
 
-            # DEV nginx serves the dashboard as static files. Give the standalone
-            # Appeals SPA route a concrete static entry so /appeals works even if
-            # the active nginx server block has no generic SPA try_files fallback.
             mkdir -p dist/appeals
             cp dist/index.html dist/appeals/index.html
 
