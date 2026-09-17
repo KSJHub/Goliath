@@ -5,6 +5,7 @@ const quarantine = require('../quarantine');
 const { QUARANTINE_MODES, getQuarantineState, getQuarantineMode } = require('./state');
 const { ensureQuarantineRole } = require('./roleManager');
 const { syncQuarantineIsolation } = require('./isolation');
+const { ensureInvestigationRoomForSnapshot } = require('./investigationRooms');
 const { startQuarantineExpiryScheduler } = require('./expiryScheduler');
 const { ensureInitiatorInterviewAccess } = require('../../../administration/mod/quarantineInteractions');
 
@@ -25,6 +26,15 @@ async function recoverInvestigationInitiatorAccess(guild) {
     else result.failed += 1;
   }
   return result;
+}
+
+async function recoverInvestigationRoom(guild, member, snapshot) {
+  if (getQuarantineMode(snapshot) !== QUARANTINE_MODES.INVESTIGATION) return null;
+  const role = await ensureQuarantineRole(guild);
+  return ensureInvestigationRoomForSnapshot(guild, member, role, snapshot, {
+    reason: snapshot?.reason,
+    quarantinedBy: snapshot?.quarantinedBy,
+  });
 }
 
 module.exports = [
@@ -66,13 +76,10 @@ module.exports = [
         const member = await channel.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
         if (!member) continue;
         try {
-          const result = await quarantine.enforceQuarantineOnMember(member);
-          if (!result.success) {
-            console.warn(`[QuarantineSystem] Failed to recreate deleted interview room for ${member.id}: ${result.error || result.reason}`);
-            continue;
-          }
-          if (result.interviewChannelId && snapshot.quarantinedBy) {
-            const access = await ensureInitiatorInterviewAccess(channel.guild, result.interviewChannelId, snapshot.quarantinedBy);
+          const room = await recoverInvestigationRoom(channel.guild, member, { ...snapshot, interviewChannelId: null });
+          if (!room) continue;
+          if (snapshot.quarantinedBy) {
+            const access = await ensureInitiatorInterviewAccess(channel.guild, room.id, snapshot.quarantinedBy);
             if (!access.success) console.warn(`[InvestigationIsolation] Failed to restore initiator access after room recreation for ${member.id}: ${access.reason}`);
           }
         } catch (error) {
@@ -84,17 +91,21 @@ module.exports = [
   {
     name: Events.GuildMemberAdd,
     async execute(member) {
-      if (!member?.guild || !getQuarantineState(member.guild.id)?.users?.[member.id]) return;
+      const snapshot = member?.guild ? getQuarantineState(member.guild.id)?.users?.[member.id] : null;
+      if (!member?.guild || !snapshot) return;
       try {
-        const snapshot = getQuarantineState(member.guild.id)?.users?.[member.id];
         const result = await quarantine.enforceQuarantineOnMember(member);
         if (!result.success) {
           console.warn(`[QuarantineSystem] Failed to reapply quarantine to ${member.id}: ${result.error || result.reason}`);
           return;
         }
-        if (getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION && result.interviewChannelId && snapshot.quarantinedBy) {
-          const access = await ensureInitiatorInterviewAccess(member.guild, result.interviewChannelId, snapshot.quarantinedBy);
-          if (!access.success) console.warn(`[InvestigationIsolation] Failed to restore initiator access after rejoin for ${member.id}: ${access.reason}`);
+        if (getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION) {
+          const room = await recoverInvestigationRoom(member.guild, member, snapshot);
+          const roomId = room?.id || result.interviewChannelId;
+          if (roomId && snapshot.quarantinedBy) {
+            const access = await ensureInitiatorInterviewAccess(member.guild, roomId, snapshot.quarantinedBy);
+            if (!access.success) console.warn(`[InvestigationIsolation] Failed to restore initiator access after rejoin for ${member.id}: ${access.reason}`);
+          }
         }
       } catch (error) {
         console.warn(`[QuarantineSystem] Failed join enforcement for ${member.id}:`, error.message);
