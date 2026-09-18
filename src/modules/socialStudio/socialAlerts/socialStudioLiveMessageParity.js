@@ -61,6 +61,20 @@ function socialSettings(config) {
     || {};
 }
 
+function updateStamp(account) {
+  return account?.state?.lastLiveMessageUpdatedAt
+    || account?.state?.lastLiveMessageUpdateAt
+    || null;
+}
+
+function stampChanged(beforeAccount, afterAccount) {
+  const before = updateStamp(beforeAccount);
+  const after = updateStamp(afterAccount);
+  if (!after) return false;
+  if (!before) return true;
+  return String(before) !== String(after);
+}
+
 async function fetchMessage(client, guildId, state) {
   const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
   if (!guild) return null;
@@ -82,7 +96,7 @@ function liveEventFor(result, beforeAccount, afterAccount) {
   if (beforeAccount?.state?.isLive === true && result?.isLive === false) {
     return {
       ...(beforeAccount.state.lastLiveEvent || {}),
-      endedAt: afterAccount?.state?.lastLiveEndedAt || result?.checkedAt || new Date().toISOString(),
+      endedAt: afterAccount?.state?.lastLiveEndedAt || new Date().toISOString(),
     };
   }
   return null;
@@ -136,9 +150,9 @@ async function applyOne(client, guildId, account, event, liveStatus, settings) {
   const extras = retainedExtraFields(embed);
   embed.setFields([...fields, ...extras].slice(0, 25));
 
-  // Keep the locked card structure and force a new preview URL for providers
-  // that expose a remote LIVE thumbnail. Kick's attachment refresh remains
-  // handled by monitor core and is intentionally left untouched here.
+  // Kick already uploads a fresh attachment in monitor core. For providers
+  // using remote thumbnails, force a unique URL only when the configured LIVE
+  // refresh actually runs, preventing Discord/CDN cache reuse.
   const imageUrl = embed.data?.image?.url;
   if (liveStatus === 'LIVE' && /^https?:\/\//i.test(imageUrl || '')) {
     embed.setImage(cacheBust(event?.thumbnail || imageUrl));
@@ -163,6 +177,14 @@ async function applyLiveMessageParity(client, guildId, beforeConfig, monitorResu
 
     const liveStatus = liveStatusFor(result, beforeAccount);
     if (!liveStatus) continue;
+
+    // Only touch Discord when monitor core actually created/updated the LIVE
+    // message. This preserves Refresh Off and every configured 10-60m cadence.
+    const deliveredLive = Array.isArray(result.delivered)
+      && result.delivered.some((item) => item?.type === 'live');
+    const offlineTransition = beforeAccount?.state?.isLive === true && result?.isLive === false;
+    if (!deliveredLive && !offlineTransition && !stampChanged(beforeAccount, afterAccount)) continue;
+
     const event = liveEventFor(result, beforeAccount, afterAccount);
     if (!event) continue;
 
