@@ -35,7 +35,7 @@ jobs:
         run: npm run doctor
 
       - name: Audit Embed Graphic Headers
-        run: node scripts/auditEmbedGraphicHeaders.js
+        run: node test/auditEmbedGraphicHeaders.js
 
       - name: Build dashboard
         run: npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
