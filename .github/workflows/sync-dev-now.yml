@@ -4,20 +4,20 @@ on:
   push:
     branches:
       - dev
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-# Never cancel a sync after it may have entered the VPS. Serialise pushes instead;
-# each queued run checks origin/dev before touching the checkout, so stale runs exit
-# without restarting the bot and only the newest DEV commit is deployed.
+# DEV has one pipeline: validate -> hardening checks -> build -> deploy -> restart -> health checks.
+# Runs are serialised and stale queued commits exit before touching PM2.
 concurrency:
   group: sync-goliath-dev
   cancel-in-progress: false
 
 jobs:
   sync-dev:
-    name: Sync GitHub DEV to DEV VPS
+    name: Validate, build and sync DEV
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -106,9 +106,27 @@ jobs:
             git reset --hard "$EXPECTED_SHA"
             restore_runtime
 
+            echo "🔎 Installing and validating DEV"
             npm ci
             BOT_MODE=dev npm run doctor
+            node test/auditEmbedGraphicHeaders.js
 
+            node <<'NODE'
+            const fs = require('node:fs');
+            const assert = require('node:assert/strict');
+            const maintenance = fs.readFileSync('src/owner/dev/maintenanceStatus.js', 'utf8');
+            assert(maintenance.includes('message.system !== true'));
+            assert(maintenance.includes('message.editable !== false'));
+            const bootstrap = fs.readFileSync('src/runtime/runtimeBootstrap.js', 'utf8');
+            assert(bootstrap.includes('setMaxListeners'));
+            assert(bootstrap.includes('Math.max(client.getMaxListeners(), 25)'));
+            const duplicator = fs.readFileSync('src/owner/dev/duplicator/core.js', 'utf8');
+            assert(duplicator.includes('bridgeUnavailable'));
+            assert(duplicator.includes("error?.code === 'EADDRINUSE'"));
+            console.log('✅ DEV runtime hardening invariants verified');
+            NODE
+
+            echo "🏗️ Building DEV dashboard"
             rm -rf dist
             npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
 
@@ -119,6 +137,14 @@ jobs:
               echo "Appeals frontend marker missing from DEV bundle." >&2
               exit 1
             }
+
+            # Do not deploy/restart an obsolete build if DEV advanced during validation.
+            git fetch --no-tags origin dev
+            LATEST_AFTER_BUILD="$(git rev-parse origin/dev)"
+            if [ "$EXPECTED_SHA" != "$LATEST_AFTER_BUILD" ]; then
+              echo "DEV advanced to $LATEST_AFTER_BUILD during validation/build; skipping deployment for stale $EXPECTED_SHA."
+              exit 0
+            fi
 
             NGINX_DUMP="$(nginx -T 2>&1)"
             DASHBOARD_ROOT="$(printf '%s\n' "$NGINX_DUMP" | awk -v host="$DEV_HOST" '
@@ -166,9 +192,7 @@ jobs:
               COMMAND_SYNC_UPDATE_EXISTING=true \
               node -e "require('./src/core/commands/syncCommands').syncCommands().then(() => process.exit(0)).catch((error) => { console.error(error); process.exit(1); })"
 
-            # Re-check immediately before restart. If DEV moved while this run was
-            # building, do not restart into an already-stale checkout; the queued
-            # newest run will deploy it instead.
+            # Final freshness gate immediately before PM2 restart.
             git fetch --no-tags origin dev
             LATEST_BEFORE_RESTART="$(git rev-parse origin/dev)"
             if [ "$EXPECTED_SHA" != "$LATEST_BEFORE_RESTART" ]; then
@@ -231,7 +255,7 @@ jobs:
             rm -f "$APPEALS_BODY"
             trap sync_cleanup EXIT
 
-            echo "✅ DEV synchronized"
+            echo "✅ DEV validated, built and synchronized"
             echo "   GitHub dev:     $REMOTE_SHA"
             echo "   DEV VPS:        $FINAL_SHA"
             echo "   Dashboard root: $DASHBOARD_ROOT"
