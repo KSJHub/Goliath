@@ -38,9 +38,7 @@ function projectLiveRefreshState(account, history = [], settings = {}) {
   const effectiveState = { ...state, ...legacy, ...recovered };
   const tracked = effectiveState.isLive === true && Boolean((effectiveState.lastLiveMessageId || effectiveState.lastAlertMessageId) && (effectiveState.lastLiveMessageChannelId || effectiveState.lastAlertChannelId));
   const configuredTypes = Array.isArray(account.alertTypes) ? account.alertTypes : null;
-  const alertTypes = configuredTypes && tracked && configuredTypes.some((type) => String(type).toLowerCase() === 'live')
-    ? [...new Set([...configuredTypes, 'ended'])]
-    : configuredTypes;
+  const alertTypes = configuredTypes && tracked && configuredTypes.some((type) => String(type).toLowerCase() === 'live') ? [...new Set([...configuredTypes, 'ended'])] : configuredTypes;
   return { ...account, ...(Array.isArray(alertTypes) ? { alertTypes } : {}), state: effectiveState };
 }
 function projectGuildConfig(guildConfig) {
@@ -118,12 +116,15 @@ async function applyLiveMessageParity(client, guildId, beforeConfig, result) {
 async function checkGuild(client, guildId, options = {}) {
   const beforeConfig = options.guildConfig && typeof options.guildConfig === 'object' ? options.guildConfig : guildManager.reloadGuild(guildId); const result = await core.checkGuildAccounts(client, guildId, projectedOptions(guildId, { ...options, guildConfig: beforeConfig })); const repaired = await repairLiveRollovers(client, guildId, beforeConfig, result); return applyLiveMessageParity(client, guildId, beforeConfig, repaired);
 }
+async function checkGuildAccounts(client, guildId, options = {}) { return checkGuild(client, guildId, options); }
+async function forcePostCreatorLive(client, guildId, creatorId, options = {}) { return core.forcePostCreatorLive(client, guildId, creatorId, projectedOptions(guildId, options)); }
 async function tick(client) {
   const results = []; for (const guild of client.guilds.cache.values()) { try { results.push({ guildId: guild.id, result: await checkGuild(client, guild.id) }); } catch (error) { console.error(`[Social Studio] Monitor failed for guild ${guild.id}:`, error); } } return results;
 }
 function start(client, intervalMs = 60000) {
   if (timer) return timer; schedulerTickMs = Math.max(15000, Number(intervalMs) || 60000); const run = () => tick(client).catch((error) => console.error('[Social Studio] Monitor tick failed:', error)); timer = sentinelScheduler.registerInterval(GLOBAL_SCHEDULER, run, schedulerTickMs, { replace: true }); if (typeof timer?.unref === 'function') timer.unref(); setTimeout(run, 5000).unref?.(); return timer;
 }
+function startupSocialStudio(client) { return start(client, Math.max(30000, Number(process.env.SOCIAL_STUDIO_TICK_MS || 60000))); }
 function stop() { if (!timer) return; sentinelScheduler.clear(GLOBAL_SCHEDULER); timer = null; }
 function status(guildId = null) {
   const nextRunAt = timer && Number.isFinite(Number(timer._idleStart)) && Number.isFinite(Number(timer._idleTimeout)) ? new Date(Date.now() + Math.max(0, Number(timer._idleTimeout))).toISOString() : null;
@@ -132,4 +133,26 @@ function status(guildId = null) {
   return { running: Boolean(timer), intervalMs: schedulerTickMs, nextRunAt, enabled: social.enabled !== false, accounts: accounts.length, enabledAccounts: enabledAccounts.length, liveAccounts: liveAccounts.length, liveMessageRefreshEnabled: refreshEnabled, liveMessageRefreshMs: refreshMs, trackedLiveMessages: projected.length, nextLiveRefreshAt: nextRefreshAt ? nextRefreshAt.toISOString() : null, liveMessages: projected.map((entry) => ({ ...entry, nextRefreshAt: entry.nextRefreshAt ? entry.nextRefreshAt.toISOString() : null })) };
 }
 
-module.exports = { checkGuild, tick, start, stop, status, projectGuildConfig, projectLiveRefreshState, projectedOptions, repairLiveRollovers, applyLiveMessageParity, LIVE_REFRESH_INTERVALS, DEFAULT_LIVE_REFRESH_MS };
+module.exports = {
+  startupSocialStudio,
+  checkGuildAccounts,
+  forcePostCreatorLive,
+  checkGuild,
+  tick,
+  start,
+  stop,
+  status,
+  projectGuildConfig,
+  projectLiveRefreshState,
+  projectedOptions,
+  projectedRefreshTimestamp,
+  repairLiveRollovers,
+  applyLiveMessageParity,
+  buildLiveFields,
+  livePlatformField,
+  liveRefreshEnabled,
+  liveRefreshMs,
+  parityFields,
+  LIVE_REFRESH_INTERVALS,
+  DEFAULT_LIVE_REFRESH_MS,
+};
