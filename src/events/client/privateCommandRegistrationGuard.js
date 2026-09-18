@@ -3,10 +3,12 @@
 const { Events, REST, Routes } = require('discord.js');
 const { resolveTokenDetails } = require('../../config/tokenResolver');
 
+// Keep this list aligned with syncCommands.RETIRED_GUILD_COMMAND_NAMES.
+// "Convert Emoji Shortcodes" is a canonical public context command and must
+// never be removed by the private-owner command guard.
 const RETIRED_GUILD_COMMANDS = new Set([
   'owner',
   'commandcenter',
-  'Convert Emoji Shortcodes',
 ]);
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -50,13 +52,10 @@ module.exports = {
   once: true,
 
   async execute(client) {
-    // Audit Intelligence historically self-registered /commandcenter after the
-    // central command sync. Run after ready listeners settle, then once more to
-    // catch any delayed startup self-registration. This guard is authoritative:
-    // private owner tooling belongs behind /owner buttons, never guild slash commands.
-    await wait(8000);
-    await runGuard(client);
-    await wait(22000);
+    // Central command sync is authoritative. This delayed guard is only a
+    // safety net for legacy/private command self-registration that may happen
+    // shortly after ready; a second full-guild REST sweep is unnecessary.
+    await wait(12000);
     await runGuard(client);
   },
 };
