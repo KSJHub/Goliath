@@ -9,17 +9,17 @@ on:
 permissions:
   contents: read
 
-# DEV has one pipeline: validate -> hardening checks -> build -> deploy -> restart -> health checks.
-# Runs are serialised and stale queued commits exit before touching PM2.
+# DEV has one automatic deployment path. New commits cancel obsolete runs so an old
+# build can never arrive later and restart PM2 underneath the current checkout.
 concurrency:
   group: sync-goliath-dev
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   sync-dev:
     name: Validate, build and sync DEV
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     steps:
       - name: Sync and verify DEV
         uses: appleboy/ssh-action@v1
@@ -32,7 +32,7 @@ jobs:
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
           timeout: 60s
-          command_timeout: 30m
+          command_timeout: 20m
           envs: EXPECTED_SHA,GITHUB_DEPLOY_TOKEN
           script: |
             set -euo pipefail
@@ -41,47 +41,38 @@ jobs:
             RUNTIME_DIR="$APP_DIR/src/runtime/dev"
             PM2_NAME="goliath-dev"
             DEV_HOST="dev.goliath.ksjdigital.co.uk"
+            BACKUP_DIR="/home/goliath/.goliath-dev-runtime-sync-backup"
 
-            [ -d "$APP_DIR/.git" ] || {
-              echo "Missing DEV checkout: $APP_DIR" >&2
-              exit 1
-            }
-
+            [ -d "$APP_DIR/.git" ] || { echo "Missing DEV checkout: $APP_DIR" >&2; exit 1; }
             cd "$APP_DIR"
+
             AUTH_URL="https://x-access-token:${GITHUB_DEPLOY_TOKEN}@github.com/${{ github.repository }}.git"
             git remote set-url origin "$AUTH_URL"
-
-            cleanup_remote() {
-              git remote set-url origin "https://github.com/${{ github.repository }}.git" || true
-            }
+            cleanup_remote() { git remote set-url origin "https://github.com/${{ github.repository }}.git" || true; }
             trap cleanup_remote EXIT
 
             rm -f -- FETCH_HEAD 'goliath@1.0.0'
-
             git fetch --no-tags origin dev
             LATEST_SHA="$(git rev-parse origin/dev)"
-
             if [ "$EXPECTED_SHA" != "$LATEST_SHA" ]; then
-              echo "Superseding stale DEV sync for $EXPECTED_SHA; latest DEV is $LATEST_SHA."
+              echo "Superseded before sync: $EXPECTED_SHA -> $LATEST_SHA"
               exit 0
             fi
 
             CURRENT_SHA="$(git rev-parse HEAD)"
             if [ "$CURRENT_SHA" = "$EXPECTED_SHA" ]; then
-              echo "DEV VPS already runs checkout $EXPECTED_SHA; skipping destructive sync/restart."
+              echo "DEV already at $EXPECTED_SHA; no restart required."
               exit 0
             fi
 
             if [ -n "$(git status --porcelain -- . ':!src/runtime/')" ]; then
-              echo "DEV VPS has changes outside src/runtime; refusing to overwrite them." >&2
+              echo "DEV VPS has changes outside src/runtime; refusing to overwrite." >&2
               git status --short -- . ':!src/runtime/' >&2
               exit 1
             fi
 
-            BACKUP_DIR="/home/goliath/.goliath-dev-runtime-sync-backup"
             rm -rf "$BACKUP_DIR"
             mkdir -p "$BACKUP_DIR"
-
             if [ -d "$RUNTIME_DIR" ]; then
               tar --warning=no-file-changed --ignore-failed-read --exclude='*.tmp' -C "$RUNTIME_DIR" -cf - . | tar -C "$BACKUP_DIR" -xf -
             fi
@@ -89,25 +80,37 @@ jobs:
             restore_runtime() {
               mkdir -p "$RUNTIME_DIR"
               rm -rf "$RUNTIME_DIR"/* "$RUNTIME_DIR"/.[!.]* "$RUNTIME_DIR"/..?* 2>/dev/null || true
-              if [ -d "$BACKUP_DIR" ]; then
-                tar -C "$BACKUP_DIR" -cf - . | tar -C "$RUNTIME_DIR" -xf -
-              fi
+              [ ! -d "$BACKUP_DIR" ] || tar -C "$BACKUP_DIR" -cf - . | tar -C "$RUNTIME_DIR" -xf -
             }
-
-            sync_cleanup() {
+            finish() {
               status=$?
-              restore_runtime
+              restore_runtime || true
               rm -rf "$BACKUP_DIR"
               cleanup_remote
               exit "$status"
             }
-            trap sync_cleanup EXIT
+            trap finish EXIT
 
             git reset --hard "$EXPECTED_SHA"
             restore_runtime
 
-            echo "🔎 Installing and validating DEV"
-            npm ci
+            echo "📦 Installing locked dependencies"
+            npm ci --no-audit --no-fund
+
+            echo "🔬 Dependency/runtime smoke test"
+            BOT_MODE=dev node - <<'NODE'
+            const required = ['discord.js', 'googleapis', 'better-sqlite3', 'express', 'sharp', 'socket.io'];
+            for (const name of required) {
+              try { require(name); console.log(`✅ ${name}`); }
+              catch (error) { console.error(`❌ ${name}: ${error.message}`); process.exitCode = 1; }
+            }
+            if (process.exitCode) process.exit(process.exitCode);
+            require('./src/runtime/warningFilter.js');
+            require('./src/modules/socialStudio/socialAlerts/socialStudioMonitor');
+            console.log('✅ Core runtime imports load');
+            NODE
+
+            echo "🔎 Running full DEV validation"
             BOT_MODE=dev npm run doctor
             node test/auditEmbedGraphicHeaders.js
 
@@ -129,137 +132,88 @@ jobs:
             echo "🏗️ Building DEV dashboard"
             rm -rf dist
             npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
-
             mkdir -p dist/appeals
             cp dist/index.html dist/appeals/index.html
+            grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js || { echo "Appeals frontend marker missing." >&2; exit 1; }
 
-            grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js || {
-              echo "Appeals frontend marker missing from DEV bundle." >&2
-              exit 1
-            }
-
-            # Do not deploy/restart an obsolete build if DEV advanced during validation.
+            # No deploy/restart if this commit became obsolete while validation ran.
             git fetch --no-tags origin dev
             LATEST_AFTER_BUILD="$(git rev-parse origin/dev)"
             if [ "$EXPECTED_SHA" != "$LATEST_AFTER_BUILD" ]; then
-              echo "DEV advanced to $LATEST_AFTER_BUILD during validation/build; skipping deployment for stale $EXPECTED_SHA."
+              echo "Superseded during validation: $EXPECTED_SHA -> $LATEST_AFTER_BUILD"
               exit 0
             fi
 
             NGINX_DUMP="$(nginx -T 2>&1)"
             DASHBOARD_ROOT="$(printf '%s\n' "$NGINX_DUMP" | awk -v host="$DEV_HOST" '
-              $1 == "server_name" {
-                for (i = 2; i <= NF; i++) {
-                  name = $i
-                  gsub(/;/, "", name)
-                  if (name == host) found = 1
-                }
-                next
-              }
-              found && $1 == "root" {
-                root = $2
-                gsub(/;/, "", root)
-                print root
-                exit
-              }
+              $1 == "server_name" { for (i=2;i<=NF;i++) { name=$i; gsub(/;/,"",name); if (name==host) found=1 } next }
+              found && $1 == "root" { root=$2; gsub(/;/,"",root); print root; exit }
             ')"
+            [ -n "$DASHBOARD_ROOT" ] || { echo "Could not resolve nginx root for $DEV_HOST" >&2; exit 1; }
+            case "$DASHBOARD_ROOT" in /var/www/*) ;; *) echo "Unsafe DEV dashboard root: $DASHBOARD_ROOT" >&2; exit 1;; esac
 
-            [ -n "$DASHBOARD_ROOT" ] || {
-              echo "Could not resolve active nginx root for $DEV_HOST" >&2
-              printf '%s\n' "$NGINX_DUMP" | grep -n -A20 -B5 "$DEV_HOST" || true
-              exit 1
-            }
-            case "$DASHBOARD_ROOT" in
-              /var/www/*) ;;
-              *) echo "Unsafe DEV dashboard root: $DASHBOARD_ROOT" >&2; exit 1 ;;
-            esac
-
-            echo "🌐 Active DEV nginx root: $DASHBOARD_ROOT"
+            echo "🌐 Deploying dashboard to $DASHBOARD_ROOT"
             rm -rf "$DASHBOARD_ROOT"
             mkdir -p "$DASHBOARD_ROOT"
             cp -a dist/. "$DASHBOARD_ROOT/"
-
-            [ -f "$DASHBOARD_ROOT/appeals/index.html" ] || {
-              echo "Appeals static entry was not deployed." >&2
-              exit 1
-            }
-
+            [ -f "$DASHBOARD_ROOT/appeals/index.html" ] || { echo "Appeals entry missing after deploy." >&2; exit 1; }
             nginx -t
             systemctl reload nginx
 
-            BOT_MODE=dev \
-              COMMAND_SYNC_DELETE_STALE=true \
-              COMMAND_SYNC_UPDATE_EXISTING=true \
-              node -e "require('./src/core/commands/syncCommands').syncCommands().then(() => process.exit(0)).catch((error) => { console.error(error); process.exit(1); })"
+            echo "🤖 Syncing Discord commands"
+            BOT_MODE=dev COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true \
+              node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch((e)=>{console.error(e);process.exit(1)})"
 
-            # Final freshness gate immediately before PM2 restart.
+            # Last freshness gate. PM2 is not touched before this point.
             git fetch --no-tags origin dev
             LATEST_BEFORE_RESTART="$(git rev-parse origin/dev)"
             if [ "$EXPECTED_SHA" != "$LATEST_BEFORE_RESTART" ]; then
-              echo "DEV advanced to $LATEST_BEFORE_RESTART during sync; skipping PM2 restart for stale $EXPECTED_SHA."
+              echo "Superseded before restart: $EXPECTED_SHA -> $LATEST_BEFORE_RESTART"
               exit 0
             fi
 
+            OLD_PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | tail -n1 | tr -d '[:space:]' || true)"
+            echo "♻️ Performing the single DEV restart (old pid: ${OLD_PID:-none})"
             if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
               pm2 restart "$PM2_NAME" --update-env
             else
               BOT_MODE=dev NODE_ENV=dev pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env
             fi
             pm2 save
-            sleep 3
+
+            NEW_PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | tail -n1 | tr -d '[:space:]')"
+            [ -n "$NEW_PID" ] && [ "$NEW_PID" != "0" ] || { echo "PM2 failed to start $PM2_NAME" >&2; exit 1; }
+
+            # A process that only survives the first second is not a successful deployment.
+            echo "⏱️ Verifying restart stability"
+            sleep 8
+            STABLE_PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | tail -n1 | tr -d '[:space:]')"
+            [ "$STABLE_PID" = "$NEW_PID" ] || { echo "DEV restarted/crashed during stability window: $NEW_PID -> $STABLE_PID" >&2; pm2 logs "$PM2_NAME" --lines 80 --nostream || true; exit 1; }
+            kill -0 "$STABLE_PID" 2>/dev/null || { echo "DEV PID $STABLE_PID is not alive" >&2; exit 1; }
 
             FINAL_SHA="$(git rev-parse HEAD)"
             REMOTE_SHA="$(git rev-parse origin/dev)"
-            [ "$FINAL_SHA" = "$EXPECTED_SHA" ] || {
-              echo "DEV checkout verification failed: $FINAL_SHA != $EXPECTED_SHA" >&2
-              exit 1
-            }
-            [ "$FINAL_SHA" = "$REMOTE_SHA" ] || {
-              echo "DEV VPS/GitHub mismatch: $FINAL_SHA != $REMOTE_SHA" >&2
-              exit 1
-            }
+            [ "$FINAL_SHA" = "$EXPECTED_SHA" ] || { echo "DEV checkout mismatch: $FINAL_SHA != $EXPECTED_SHA" >&2; exit 1; }
+            [ "$FINAL_SHA" = "$REMOTE_SHA" ] || { echo "DEV/GitHub mismatch: $FINAL_SHA != $REMOTE_SHA" >&2; exit 1; }
 
-            PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
-            [ -n "$PID" ] && [ "$PID" != "0" ] || {
-              echo "PM2 process $PM2_NAME is not running." >&2
-              exit 1
-            }
-            PROCESS_CWD="$(readlink -f "/proc/$PID/cwd")"
-            [ "$PROCESS_CWD" = "$APP_DIR" ] || {
-              echo "PM2 cwd mismatch: $PROCESS_CWD != $APP_DIR" >&2
-              exit 1
-            }
+            PROCESS_CWD="$(readlink -f "/proc/$STABLE_PID/cwd")"
+            [ "$PROCESS_CWD" = "$APP_DIR" ] || { echo "PM2 cwd mismatch: $PROCESS_CWD != $APP_DIR" >&2; exit 1; }
 
             PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' "https://$DEV_HOST/api/auth/me" || true)"
             DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3001/api/auth/me" || true)"
-            case "$DIRECT_STATUS" in
-              200|401) ;;
-              *) echo "Direct DEV backend health check failed with HTTP $DIRECT_STATUS" >&2; exit 1 ;;
-            esac
-            case "$PUBLIC_STATUS" in
-              200|401) ;;
-              *) echo "Public DEV backend health check failed with HTTP $PUBLIC_STATUS" >&2; exit 1 ;;
-            esac
+            case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct backend health failed: HTTP $DIRECT_STATUS" >&2; exit 1;; esac
+            case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public backend health failed: HTTP $PUBLIC_STATUS" >&2; exit 1;; esac
 
             APPEALS_BODY="$(mktemp)"
-            trap 'rm -f "$APPEALS_BODY"; sync_cleanup' EXIT
             APPEALS_STATUS="$(curl -ksSL -o "$APPEALS_BODY" -w '%{http_code}' "https://$DEV_HOST/appeals" || true)"
-            [ "$APPEALS_STATUS" = "200" ] || {
-              echo "Public DEV Appeals page failed with HTTP $APPEALS_STATUS" >&2
-              exit 1
-            }
-            grep -Eq '<div[^>]+id=["'\'' ]root["'\'' ]' "$APPEALS_BODY" || grep -q 'id="root"' "$APPEALS_BODY" || {
-              echo "Public DEV Appeals page did not return the dashboard entry document." >&2
-              exit 1
-            }
+            [ "$APPEALS_STATUS" = "200" ] || { rm -f "$APPEALS_BODY"; echo "Appeals page failed: HTTP $APPEALS_STATUS" >&2; exit 1; }
+            grep -q 'id="root"' "$APPEALS_BODY" || { rm -f "$APPEALS_BODY"; echo "Appeals did not return dashboard entry." >&2; exit 1; }
             rm -f "$APPEALS_BODY"
-            trap sync_cleanup EXIT
 
-            echo "✅ DEV validated, built and synchronized"
-            echo "   GitHub dev:     $REMOTE_SHA"
-            echo "   DEV VPS:        $FINAL_SHA"
-            echo "   Dashboard root: $DASHBOARD_ROOT"
-            echo "   PM2:            $PM2_NAME"
+            echo "✅ DEV validated, deployed and stable"
+            echo "   GitHub/VPS SHA: $FINAL_SHA"
+            echo "   PM2 PID:        $STABLE_PID"
+            echo "   Dashboard:      $DASHBOARD_ROOT"
             echo "   Backend HTTP:   public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
             echo "   Appeals HTTP:   $APPEALS_STATUS"
 
