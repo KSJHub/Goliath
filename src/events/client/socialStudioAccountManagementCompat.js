@@ -344,9 +344,53 @@ async function handle(interaction) {
   }
 
   if (id === `${P}account:toggle`) {
-    const updated = store.updateAccount(interaction.guildId, account.accountId, (current) => ({ ...current, enabled: current.enabled === false }), { actorId: interaction.user?.id || null, guild: interaction.guild });
+    const updated = store.updateAccount(
+      interaction.guildId,
+      account.accountId,
+      (current) => {
+        const enabled = current.enabled === false;
+
+        if (enabled) {
+          return {
+            ...current,
+            enabled: true,
+          };
+        }
+
+        return {
+          ...current,
+          enabled: false,
+          state: {
+            ...(current.state || {}),
+            isLive: null,
+            liveEventId: null,
+            lastLiveEvent: null,
+            lastLiveMessageId: null,
+            lastLiveMessageChannelId: null,
+            lastLiveMessageUpdateAt: null,
+            lastLiveMessageUpdatedAt: null,
+            lastDeliveryError: null,
+            lastError: null,
+          },
+        };
+      },
+      {
+        actorId: interaction.user?.id || null,
+        guild: interaction.guild,
+      },
+    );
+
     const latest = store.getConfig(interaction.guildId);
-    return render(interaction, accountDetailPayload(interaction, latest, creatorFor(latest, creator.creatorId), updated));
+
+    return render(
+      interaction,
+      accountDetailPayload(
+        interaction,
+        latest,
+        creatorFor(latest, creator.creatorId),
+        updated,
+      ),
+    );
   }
 
   if (id === `${P}account:delete`) {
