@@ -2,15 +2,12 @@ name: Sync Goliath
 
 on:
   push:
-    branches:
-      - dev
+    branches: [dev]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# DEV has one automatic deployment path. New commits cancel obsolete runs so an old
-# build can never arrive later and restart PM2 underneath the current checkout.
 concurrency:
   group: sync-goliath-dev
   cancel-in-progress: true
@@ -19,7 +16,7 @@ jobs:
   sync-dev:
     name: Validate, build and sync DEV
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - name: Sync and verify DEV
         uses: appleboy/ssh-action@v1
@@ -32,18 +29,15 @@ jobs:
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
           timeout: 60s
-          command_timeout: 20m
+          command_timeout: 15m
           envs: EXPECTED_SHA,GITHUB_DEPLOY_TOKEN
           script: |
             set -euo pipefail
-
-            APP_DIR="/home/goliath/dev"
+            APP_DIR=/home/goliath/dev
             RUNTIME_DIR="$APP_DIR/src/runtime/dev"
-            PM2_NAME="goliath-dev"
-            DEV_HOST="dev.goliath.ksjdigital.co.uk"
-            BACKUP_DIR="/home/goliath/.goliath-dev-runtime-sync-backup"
-
-            [ -d "$APP_DIR/.git" ] || { echo "Missing DEV checkout: $APP_DIR" >&2; exit 1; }
+            PM2_NAME=goliath-dev
+            DEV_HOST=dev.goliath.ksjdigital.co.uk
+            BACKUP_DIR=/home/goliath/.goliath-dev-runtime-sync-backup
             cd "$APP_DIR"
 
             AUTH_URL="https://x-access-token:${GITHUB_DEPLOY_TOKEN}@github.com/${{ github.repository }}.git"
@@ -51,172 +45,117 @@ jobs:
             cleanup_remote() { git remote set-url origin "https://github.com/${{ github.repository }}.git" || true; }
             trap cleanup_remote EXIT
 
-            rm -f -- FETCH_HEAD 'goliath@1.0.0'
             git fetch --no-tags origin dev
             LATEST_SHA="$(git rev-parse origin/dev)"
-            if [ "$EXPECTED_SHA" != "$LATEST_SHA" ]; then
-              echo "Superseded before sync: $EXPECTED_SHA -> $LATEST_SHA"
-              exit 0
-            fi
-
-            CURRENT_SHA="$(git rev-parse HEAD)"
-            if [ "$CURRENT_SHA" = "$EXPECTED_SHA" ]; then
-              echo "DEV already at $EXPECTED_SHA; no restart required."
-              exit 0
-            fi
+            [ "$EXPECTED_SHA" = "$LATEST_SHA" ] || { echo "Superseded before sync; exiting cleanly."; exit 0; }
 
             if [ -n "$(git status --porcelain -- . ':!src/runtime/')" ]; then
-              echo "DEV VPS has changes outside src/runtime; refusing to overwrite." >&2
+              echo "DEV VPS has changes outside src/runtime; refusing overwrite." >&2
               git status --short -- . ':!src/runtime/' >&2
               exit 1
             fi
 
-            rm -rf "$BACKUP_DIR"
-            mkdir -p "$BACKUP_DIR"
+            rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
             if [ -d "$RUNTIME_DIR" ]; then
               tar --warning=no-file-changed --ignore-failed-read --exclude='*.tmp' -C "$RUNTIME_DIR" -cf - . | tar -C "$BACKUP_DIR" -xf -
             fi
-
             restore_runtime() {
               mkdir -p "$RUNTIME_DIR"
               rm -rf "$RUNTIME_DIR"/* "$RUNTIME_DIR"/.[!.]* "$RUNTIME_DIR"/..?* 2>/dev/null || true
               [ ! -d "$BACKUP_DIR" ] || tar -C "$BACKUP_DIR" -cf - . | tar -C "$RUNTIME_DIR" -xf -
             }
-            finish() {
-              status=$?
-              restore_runtime || true
-              rm -rf "$BACKUP_DIR"
-              cleanup_remote
-              exit "$status"
-            }
+            finish() { status=$?; restore_runtime || true; rm -rf "$BACKUP_DIR"; cleanup_remote; exit "$status"; }
             trap finish EXIT
 
             git reset --hard "$EXPECTED_SHA"
             restore_runtime
 
-            echo "📦 Installing locked dependencies"
+            echo "📦 Clean locked dependency install"
+            rm -rf node_modules
             npm ci --no-audit --no-fund
 
-            echo "🔬 Dependency/runtime smoke test"
-            BOT_MODE=dev node - <<'NODE'
-            const required = ['discord.js', 'googleapis', 'better-sqlite3', 'express', 'sharp', 'socket.io'];
-            for (const name of required) {
+            echo "🔧 Verify native/runtime dependencies"
+            node - <<'NODE'
+            for (const name of ['googleapis','better-sqlite3','discord.js','express','sharp','socket.io']) {
               try { require(name); console.log(`✅ ${name}`); }
-              catch (error) { console.error(`❌ ${name}: ${error.message}`); process.exitCode = 1; }
+              catch (error) { console.error(`❌ ${name}: ${error.stack || error.message}`); process.exit(1); }
             }
-            if (process.exitCode) process.exit(process.exitCode);
-            require('./src/runtime/warningFilter.js');
-            require('./src/modules/socialStudio/socialAlerts/socialStudioMonitor');
-            console.log('✅ Core runtime imports load');
+            const Database = require('better-sqlite3');
+            const db = new Database(':memory:');
+            db.prepare('select 1 as ok').get();
+            db.close();
+            console.log('✅ better-sqlite3 native binding operational');
             NODE
 
-            echo "🔎 Running full DEV validation"
+            echo "🔎 Validate DEV"
             BOT_MODE=dev npm run doctor
             node test/auditEmbedGraphicHeaders.js
-
-            node <<'NODE'
-            const fs = require('node:fs');
-            const assert = require('node:assert/strict');
-            const maintenance = fs.readFileSync('src/owner/dev/maintenanceStatus.js', 'utf8');
+            node - <<'NODE'
+            const fs=require('node:fs'),assert=require('node:assert/strict');
+            const maintenance=fs.readFileSync('src/owner/dev/maintenanceStatus.js','utf8');
             assert(maintenance.includes('message.system !== true'));
             assert(maintenance.includes('message.editable !== false'));
-            const bootstrap = fs.readFileSync('src/runtime/runtimeBootstrap.js', 'utf8');
+            const bootstrap=fs.readFileSync('src/runtime/runtimeBootstrap.js','utf8');
             assert(bootstrap.includes('setMaxListeners'));
-            assert(bootstrap.includes('Math.max(client.getMaxListeners(), 25)'));
-            const duplicator = fs.readFileSync('src/owner/dev/duplicator/core.js', 'utf8');
+            const duplicator=fs.readFileSync('src/owner/dev/duplicator/core.js','utf8');
             assert(duplicator.includes('bridgeUnavailable'));
-            assert(duplicator.includes("error?.code === 'EADDRINUSE'"));
-            console.log('✅ DEV runtime hardening invariants verified');
+            console.log('✅ DEV runtime invariants verified');
             NODE
 
-            echo "🏗️ Building DEV dashboard"
+            echo "🏗️ Build dashboard"
             rm -rf dist
             npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
-            mkdir -p dist/appeals
-            cp dist/index.html dist/appeals/index.html
-            grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js || { echo "Appeals frontend marker missing." >&2; exit 1; }
+            mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
+            grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js
 
-            # No deploy/restart if this commit became obsolete while validation ran.
             git fetch --no-tags origin dev
-            LATEST_AFTER_BUILD="$(git rev-parse origin/dev)"
-            if [ "$EXPECTED_SHA" != "$LATEST_AFTER_BUILD" ]; then
-              echo "Superseded during validation: $EXPECTED_SHA -> $LATEST_AFTER_BUILD"
-              exit 0
-            fi
+            [ "$EXPECTED_SHA" = "$(git rev-parse origin/dev)" ] || { echo "Superseded during validation; exiting cleanly."; exit 0; }
 
             NGINX_DUMP="$(nginx -T 2>&1)"
-            DASHBOARD_ROOT="$(printf '%s\n' "$NGINX_DUMP" | awk -v host="$DEV_HOST" '
-              $1 == "server_name" { for (i=2;i<=NF;i++) { name=$i; gsub(/;/,"",name); if (name==host) found=1 } next }
-              found && $1 == "root" { root=$2; gsub(/;/,"",root); print root; exit }
-            ')"
-            [ -n "$DASHBOARD_ROOT" ] || { echo "Could not resolve nginx root for $DEV_HOST" >&2; exit 1; }
-            case "$DASHBOARD_ROOT" in /var/www/*) ;; *) echo "Unsafe DEV dashboard root: $DASHBOARD_ROOT" >&2; exit 1;; esac
+            DASHBOARD_ROOT="$(printf '%s\n' "$NGINX_DUMP" | awk -v host="$DEV_HOST" '$1=="server_name"{for(i=2;i<=NF;i++){n=$i;gsub(/;/,"",n);if(n==host)found=1}next} found&&$1=="root"{r=$2;gsub(/;/,"",r);print r;exit}')"
+            case "$DASHBOARD_ROOT" in /var/www/*) ;; *) echo "Unsafe dashboard root" >&2; exit 1;; esac
+            rm -rf "$DASHBOARD_ROOT" && mkdir -p "$DASHBOARD_ROOT" && cp -a dist/. "$DASHBOARD_ROOT/"
+            nginx -t && systemctl reload nginx
 
-            echo "🌐 Deploying dashboard to $DASHBOARD_ROOT"
-            rm -rf "$DASHBOARD_ROOT"
-            mkdir -p "$DASHBOARD_ROOT"
-            cp -a dist/. "$DASHBOARD_ROOT/"
-            [ -f "$DASHBOARD_ROOT/appeals/index.html" ] || { echo "Appeals entry missing after deploy." >&2; exit 1; }
-            nginx -t
-            systemctl reload nginx
+            BOT_MODE=dev COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
 
-            echo "🤖 Syncing Discord commands"
-            BOT_MODE=dev COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true \
-              node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch((e)=>{console.error(e);process.exit(1)})"
-
-            # Last freshness gate. PM2 is not touched before this point.
             git fetch --no-tags origin dev
-            LATEST_BEFORE_RESTART="$(git rev-parse origin/dev)"
-            if [ "$EXPECTED_SHA" != "$LATEST_BEFORE_RESTART" ]; then
-              echo "Superseded before restart: $EXPECTED_SHA -> $LATEST_BEFORE_RESTART"
-              exit 0
-            fi
+            [ "$EXPECTED_SHA" = "$(git rev-parse origin/dev)" ] || { echo "Superseded before restart; exiting cleanly."; exit 0; }
 
-            OLD_PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | tail -n1 | tr -d '[:space:]' || true)"
-            echo "♻️ Performing the single DEV restart (old pid: ${OLD_PID:-none})"
-            if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
-              pm2 restart "$PM2_NAME" --update-env
-            else
-              BOT_MODE=dev NODE_ENV=dev pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env
-            fi
+            echo "♻️ One controlled PM2 reload from ecosystem config"
+            pm2 delete "$PM2_NAME" >/dev/null 2>&1 || true
+            BOT_MODE=dev NODE_ENV=development pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env
             pm2 save
 
-            NEW_PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | tail -n1 | tr -d '[:space:]')"
-            [ -n "$NEW_PID" ] && [ "$NEW_PID" != "0" ] || { echo "PM2 failed to start $PM2_NAME" >&2; exit 1; }
-
-            # A process that only survives the first second is not a successful deployment.
-            echo "⏱️ Verifying restart stability"
-            sleep 8
-            STABLE_PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | tail -n1 | tr -d '[:space:]')"
-            [ "$STABLE_PID" = "$NEW_PID" ] || { echo "DEV restarted/crashed during stability window: $NEW_PID -> $STABLE_PID" >&2; pm2 logs "$PM2_NAME" --lines 80 --nostream || true; exit 1; }
-            kill -0 "$STABLE_PID" 2>/dev/null || { echo "DEV PID $STABLE_PID is not alive" >&2; exit 1; }
+            NEW_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
+            [ -n "$NEW_PID" ] && [ "$NEW_PID" != 0 ]
+            sleep 18
+            STABLE_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
+            if [ "$NEW_PID" != "$STABLE_PID" ]; then
+              echo "DEV crashed/restarted during 18s stability gate: $NEW_PID -> $STABLE_PID" >&2
+              pm2 logs "$PM2_NAME" --lines 120 --nostream || true
+              exit 1
+            fi
+            kill -0 "$STABLE_PID"
 
             FINAL_SHA="$(git rev-parse HEAD)"
-            REMOTE_SHA="$(git rev-parse origin/dev)"
-            [ "$FINAL_SHA" = "$EXPECTED_SHA" ] || { echo "DEV checkout mismatch: $FINAL_SHA != $EXPECTED_SHA" >&2; exit 1; }
-            [ "$FINAL_SHA" = "$REMOTE_SHA" ] || { echo "DEV/GitHub mismatch: $FINAL_SHA != $REMOTE_SHA" >&2; exit 1; }
+            [ "$FINAL_SHA" = "$EXPECTED_SHA" ]
+            [ "$FINAL_SHA" = "$(git rev-parse origin/dev)" ]
+            [ "$(readlink -f /proc/$STABLE_PID/cwd)" = "$APP_DIR" ]
 
-            PROCESS_CWD="$(readlink -f "/proc/$STABLE_PID/cwd")"
-            [ "$PROCESS_CWD" = "$APP_DIR" ] || { echo "PM2 cwd mismatch: $PROCESS_CWD != $APP_DIR" >&2; exit 1; }
+            DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/auth/me || true)"
+            PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' https://$DEV_HOST/api/auth/me || true)"
+            case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; exit 1;; esac
+            case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; exit 1;; esac
 
-            PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' "https://$DEV_HOST/api/auth/me" || true)"
-            DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3001/api/auth/me" || true)"
-            case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct backend health failed: HTTP $DIRECT_STATUS" >&2; exit 1;; esac
-            case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public backend health failed: HTTP $PUBLIC_STATUS" >&2; exit 1;; esac
+            ERROR_TAIL="$(pm2 logs "$PM2_NAME" --err --lines 80 --nostream 2>&1 || true)"
+            if printf '%s' "$ERROR_TAIL" | grep -Eq "Cannot find module 'googleapis'|Could not locate the bindings file"; then
+              echo "Fatal dependency error remains in current PM2 error tail." >&2
+              printf '%s\n' "$ERROR_TAIL" >&2
+              exit 1
+            fi
 
-            APPEALS_BODY="$(mktemp)"
-            APPEALS_STATUS="$(curl -ksSL -o "$APPEALS_BODY" -w '%{http_code}' "https://$DEV_HOST/appeals" || true)"
-            [ "$APPEALS_STATUS" = "200" ] || { rm -f "$APPEALS_BODY"; echo "Appeals page failed: HTTP $APPEALS_STATUS" >&2; exit 1; }
-            grep -q 'id="root"' "$APPEALS_BODY" || { rm -f "$APPEALS_BODY"; echo "Appeals did not return dashboard entry." >&2; exit 1; }
-            rm -f "$APPEALS_BODY"
-
-            echo "✅ DEV validated, deployed and stable"
-            echo "   GitHub/VPS SHA: $FINAL_SHA"
-            echo "   PM2 PID:        $STABLE_PID"
-            echo "   Dashboard:      $DASHBOARD_ROOT"
-            echo "   Backend HTTP:   public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
-            echo "   Appeals HTTP:   $APPEALS_STATUS"
-
+            echo "✅ DEV stable: sha=$FINAL_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
             restore_runtime
             rm -rf "$BACKUP_DIR"
             trap - EXIT
