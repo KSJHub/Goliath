@@ -1,6 +1,7 @@
 'use strict';
 
 const {
+  clean,
   handle,
   request,
   unavailable,
@@ -21,6 +22,17 @@ function isoSeconds(value) {
   return match ? Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0) : null;
 }
 
+async function videoDetails(ids, key) {
+  const list = [...new Set((ids || []).filter(Boolean))];
+  if (!list.length) return new Map();
+  try {
+    const { json } = await request(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,liveStreamingDetails,statistics&id=${encodeURIComponent(list.join(','))}&key=${encodeURIComponent(key)}`);
+    return new Map((json?.items || []).map((video) => [video.id, video]));
+  } catch {
+    return new Map();
+  }
+}
+
 async function checkYouTube(account) {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) return unavailable('youtube', 'Set YOUTUBE_API_KEY.', 'configuration_required');
@@ -32,21 +44,15 @@ async function checkYouTube(account) {
   const uploadReq = uploadsId ? request(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(uploadsId)}&maxResults=5&key=${encodeURIComponent(key)}`) : Promise.resolve({ json: null });
   const [{ json: liveJson }, { json: uploadJson }] = await Promise.all([liveReq, uploadReq]);
   const live = liveJson?.items?.[0] || null;
+  const liveId = live?.id?.videoId || null;
   const uploadItems = Array.isArray(uploadJson?.items) ? uploadJson.items : [];
-  const videoIds = uploadItems.map((item) => item.contentDetails?.videoId).filter(Boolean).slice(0, 5);
-  let detailsById = new Map();
-
-  if (videoIds.length) {
-    try {
-      const { json: detailsJson } = await request(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,liveStreamingDetails,statistics&id=${encodeURIComponent(videoIds.join(','))}&key=${encodeURIComponent(key)}`);
-      detailsById = new Map((detailsJson?.items || []).map((video) => [video.id, video]));
-    } catch { }
-  }
+  const uploadIds = uploadItems.map((item) => item.contentDetails?.videoId).filter(Boolean).slice(0, 5);
+  const detailsById = await videoDetails([liveId, ...uploadIds], key);
 
   const contentItems = [];
   for (const item of uploadItems) {
     const id = item.contentDetails?.videoId;
-    if (!id || id === live?.id?.videoId) continue;
+    if (!id || id === liveId) continue;
     const details = detailsById.get(id) || {};
     const snippet = details.snippet || item.snippet || {};
     const seconds = isoSeconds(details.contentDetails?.duration);
@@ -61,13 +67,21 @@ async function checkYouTube(account) {
     });
   }
 
+  const liveDetails = liveId ? detailsById.get(liveId) || {} : {};
+  const liveSnippet = liveDetails.snippet || live?.snippet || {};
+  const liveStreaming = liveDetails.liveStreamingDetails || {};
   const channelUrl = `https://www.youtube.com/channel/${channel.id}`;
+
   return result('youtube', {
-    isLive: Boolean(live?.id?.videoId), externalId: channel.id, resolvedUsername: channel.snippet?.customUrl?.replace(/^@/, '') || handle(account),
+    isLive: Boolean(liveId), externalId: channel.id, resolvedUsername: channel.snippet?.customUrl?.replace(/^@/, '') || handle(account),
     url: channelUrl, avatar: youtubeThumbnail({ thumbnails: channel.snippet?.thumbnails || {} }), contentItems, latestContent: contentItems[0] || null,
-    event: live?.id?.videoId ? {
-      type: 'live', id: live.id.videoId, title: live.snippet?.title || 'YouTube LIVE', url: `https://www.youtube.com/watch?v=${live.id.videoId}`,
-      thumbnail: youtubeThumbnail(live.snippet), startedAt: live.snippet?.publishedAt || null, category: null,
+    event: liveId ? {
+      type: 'live', id: liveId, title: liveSnippet.title || 'YouTube LIVE', url: `https://www.youtube.com/watch?v=${liveId}`,
+      thumbnail: youtubeThumbnail(liveSnippet),
+      startedAt: liveStreaming.actualStartTime || live?.snippet?.publishedAt || null,
+      category: liveSnippet.categoryId || null,
+      language: liveSnippet.defaultAudioLanguage || liveSnippet.defaultLanguage || null,
+      viewerCount: liveStreaming.concurrentViewers ? Number(liveStreaming.concurrentViewers) : null,
     } : null,
   });
 }
