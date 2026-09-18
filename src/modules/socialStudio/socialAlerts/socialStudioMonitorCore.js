@@ -9,6 +9,7 @@ const { normalizeTemplates, resolveTemplate } = require('./socialStudioTemplates
 
 const runningGuilds = new Set();
 const LIVE_MESSAGE_REFRESH_MS = 10 * 60 * 1000;
+const LIVE_MESSAGE_REFRESH_INTERVALS = new Set([600000, 900000, 1200000, 1800000, 2700000, 3600000]);
 let timer = null;
 
 const PLATFORM = {
@@ -461,8 +462,10 @@ function buildEmbed(account, event, template, creator, settings = {}, options = 
   } else {
     const renderedTitle = render(template.title, vars) || `${platform.icon} ${platform.label}`;
     embed.setTitle(renderedTitle.slice(0, 256));
-    const description = render(template.description, vars) || vars.title;
-    embed.setDescription(description.slice(0, 4096));
+    const description = stripTrailingDivider(render(template.description, vars) || vars.title);
+    const actionLabel = clean(template.buttonLabel || 'View Post', 80);
+    const actionLines = vars.url ? [`▶️ **[${actionLabel}](${vars.url})**`] : [];
+    embed.setDescription(`${description}${embedActionBlock(actionLines)}`.slice(0, 4096));
   }
 
   const thumbnail = liveStatus === 'LIVE' ? cacheBustedImageUrl(event.thumbnail) : clean(event.thumbnail, 1000);
@@ -513,6 +516,9 @@ async function updateLiveAlert(client, guildId, config, account, event, previous
     embed.setImage(`attachment://${previewAttachment.name}`);
     payload.files = [previewAttachment];
     payload.attachments = [];
+  } else if (String(account?.platform || '').toLowerCase() === 'kick') {
+    const existingImage = message.embeds?.[0]?.image?.url || message.embeds?.[0]?.data?.image?.url || '';
+    if (existingImage) embed.setImage(existingImage);
   }
   await message.edit(payload);
   return { channelId, messageId };
@@ -586,7 +592,7 @@ function liveMessageUpdateDue(account, previous, checked, settings = {}) {
   if (!Number.isFinite(parsedLast)) return true;
 
   const requested = Number(settings.liveMessageRefreshMs);
-  const refreshMs = Number.isFinite(requested) && requested >= 60 * 1000
+  const refreshMs = LIVE_MESSAGE_REFRESH_INTERVALS.has(requested)
     ? requested
     : LIVE_MESSAGE_REFRESH_MS;
 
