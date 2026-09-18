@@ -5,6 +5,7 @@ const deployments = require('./embedDeployments');
 const panel = require('./embedPanel');
 const media = require('./embedMedia');
 const renderer = require('./embedRenderer');
+const sessionStore = require('./embedSessionStore');
 const { installMediaManagerBase } = require('./embedMediaManagerBase');
 const { installClassicSingleImagePayload } = require('./embedClassicSingleImage');
 const { installGraphicHeaders } = require('./embedGraphicHeaders');
@@ -33,11 +34,6 @@ function canonicalMediaState(state = {}) {
   const fromStored = media.mediaModel.normalizeMediaV2(state?.media || {}, panels);
   let canonical = mediaWeight(fromV2) >= mediaWeight(fromStored) ? fromV2 : fromStored;
 
-  // Recover sessions created while the legacy `media` mirror could overwrite a
-  // newer mediaV2 value. The panel's legacy image field still carries the source,
-  // so normalizeMediaV2 can rebuild the gallery. If the title is currently hidden
-  // and a graphic-header title backup exists, this was Graphic-only mode and the
-  // recovered image belongs above the text.
   canonical = media.mediaModel.normalizeMediaV2(canonical, panels);
   canonical.panels = canonical.panels.map((entry, index) => {
     const panelData = panels[index] || {};
@@ -79,11 +75,66 @@ function installCanonicalMediaSessions(targetPanel) {
   return targetPanel;
 }
 
+function installPersistentEmbedSessions(targetPanel) {
+  if (!targetPanel || targetPanel.__persistentEmbedSessionsInstalled) return targetPanel;
+  if (typeof targetPanel.sessionKey !== 'function') return targetPanel;
+
+  const originalGetSession = targetPanel.getSession?.bind(targetPanel);
+  const originalSaveSession = targetPanel.saveSession?.bind(targetPanel);
+  const originalResetSession = targetPanel.resetSession?.bind(targetPanel);
+  const originalClearSession = targetPanel.clearSession?.bind(targetPanel);
+  const hydrated = new Set();
+
+  if (originalGetSession && originalSaveSession) {
+    targetPanel.getSession = (interaction) => {
+      const key = targetPanel.sessionKey(interaction);
+      if (!hydrated.has(key)) {
+        hydrated.add(key);
+        const restored = sessionStore.load(key);
+        if (restored) return originalSaveSession(interaction, restored);
+      }
+      return originalGetSession(interaction);
+    };
+
+    targetPanel.saveSession = (interaction, state) => {
+      const saved = originalSaveSession(interaction, state);
+      const key = targetPanel.sessionKey(interaction);
+      hydrated.add(key);
+      sessionStore.save(key, saved);
+      return saved;
+    };
+  }
+
+  if (originalResetSession) {
+    targetPanel.resetSession = (interaction) => {
+      const key = targetPanel.sessionKey(interaction);
+      sessionStore.remove(key);
+      hydrated.add(key);
+      const next = originalResetSession(interaction);
+      sessionStore.save(key, next);
+      return next;
+    };
+  }
+
+  if (originalClearSession) {
+    targetPanel.clearSession = (interaction) => {
+      const key = targetPanel.sessionKey(interaction);
+      hydrated.delete(key);
+      sessionStore.remove(key);
+      return originalClearSession(interaction);
+    };
+  }
+
+  targetPanel.__persistentEmbedSessionsInstalled = true;
+  return targetPanel;
+}
+
 function installMediaRuntime(targetPanel) {
   media.installStateCompatibility(targetPanel);
   media.installPersistentMediaCompatibility(targetPanel);
   media.installStorageNormalization(targetPanel);
   installCanonicalMediaSessions(targetPanel);
+  installPersistentEmbedSessions(targetPanel);
   media.installUploadModals(targetPanel);
   installMediaManagerBase(targetPanel, media);
   media.installMediaOptionsUi(targetPanel);
@@ -132,7 +183,6 @@ module.exports = {
   handleInteraction: interactions.handleInteraction,
   installMediaRuntime,
 
-  // Backwards compatibility for any external imports
   installMediaBoundary: installMediaRuntime,
 
   mediaStateApi,
