@@ -2,10 +2,18 @@
 
 const templates = require('./embedTemplates');
 const deployments = require('./embedDeployments');
+const embedState = require('./embedState');
+const sessionPersistence = require('./embedSessionPersistence');
+
+// IMPORTANT: install persistence before embedPanel is required. embedPanel
+// destructures the state API at module load, so installing later only patches
+// exported panel properties and leaves the builder using the original in-memory
+// functions. This ordering makes restart recovery part of the actual builder path.
+sessionPersistence.install(embedState);
+
 const panel = require('./embedPanel');
 const media = require('./embedMedia');
 const renderer = require('./embedRenderer');
-const sessionStore = require('./embedSessionStore');
 const { installMediaManagerBase } = require('./embedMediaManagerBase');
 const { installClassicSingleImagePayload } = require('./embedClassicSingleImage');
 const { installGraphicHeaders } = require('./embedGraphicHeaders');
@@ -75,66 +83,11 @@ function installCanonicalMediaSessions(targetPanel) {
   return targetPanel;
 }
 
-function installPersistentEmbedSessions(targetPanel) {
-  if (!targetPanel || targetPanel.__persistentEmbedSessionsInstalled) return targetPanel;
-  if (typeof targetPanel.sessionKey !== 'function') return targetPanel;
-
-  const originalGetSession = targetPanel.getSession?.bind(targetPanel);
-  const originalSaveSession = targetPanel.saveSession?.bind(targetPanel);
-  const originalResetSession = targetPanel.resetSession?.bind(targetPanel);
-  const originalClearSession = targetPanel.clearSession?.bind(targetPanel);
-  const hydrated = new Set();
-
-  if (originalGetSession && originalSaveSession) {
-    targetPanel.getSession = (interaction) => {
-      const key = targetPanel.sessionKey(interaction);
-      if (!hydrated.has(key)) {
-        hydrated.add(key);
-        const restored = sessionStore.load(key);
-        if (restored) return originalSaveSession(interaction, restored);
-      }
-      return originalGetSession(interaction);
-    };
-
-    targetPanel.saveSession = (interaction, state) => {
-      const saved = originalSaveSession(interaction, state);
-      const key = targetPanel.sessionKey(interaction);
-      hydrated.add(key);
-      sessionStore.save(key, saved);
-      return saved;
-    };
-  }
-
-  if (originalResetSession) {
-    targetPanel.resetSession = (interaction) => {
-      const key = targetPanel.sessionKey(interaction);
-      sessionStore.remove(key);
-      hydrated.add(key);
-      const next = originalResetSession(interaction);
-      sessionStore.save(key, next);
-      return next;
-    };
-  }
-
-  if (originalClearSession) {
-    targetPanel.clearSession = (interaction) => {
-      const key = targetPanel.sessionKey(interaction);
-      hydrated.delete(key);
-      sessionStore.remove(key);
-      return originalClearSession(interaction);
-    };
-  }
-
-  targetPanel.__persistentEmbedSessionsInstalled = true;
-  return targetPanel;
-}
-
 function installMediaRuntime(targetPanel) {
   media.installStateCompatibility(targetPanel);
   media.installPersistentMediaCompatibility(targetPanel);
   media.installStorageNormalization(targetPanel);
   installCanonicalMediaSessions(targetPanel);
-  installPersistentEmbedSessions(targetPanel);
   media.installUploadModals(targetPanel);
   installMediaManagerBase(targetPanel, media);
   media.installMediaOptionsUi(targetPanel);
