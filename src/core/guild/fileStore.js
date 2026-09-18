@@ -5,6 +5,22 @@ const EXPECTED_WINDOWS_SYNC_ERRORS = new Set(['EPERM', 'EBUSY']);
 const warnedSyncPaths = new Set();
 let writeSequence = 0;
 
+const DEFAULT_MAX_JSON_BYTES = 16 * 1024 * 1024;
+const DEFAULT_STALE_TEMP_AGE_MS = 10 * 60 * 1000;
+
+function positiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function maxJsonBytes() {
+  return positiveNumber(process.env.FILESTORE_MAX_JSON_BYTES, DEFAULT_MAX_JSON_BYTES);
+}
+
+function staleTempAgeMs() {
+  return positiveNumber(process.env.FILESTORE_STALE_TEMP_AGE_MS, DEFAULT_STALE_TEMP_AGE_MS);
+}
+
 function clone(value) {
   try {
     return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -27,23 +43,59 @@ function sortKeys(value) {
 
 function ensureDir(dirPath) {
   if (!dirPath || typeof dirPath !== 'string') return false;
-
   fs.mkdirSync(dirPath, { recursive: true });
   return true;
+}
+
+function stagedFilePattern(filePath) {
+  const base = path.basename(filePath).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${base}\\.(?:write|backup|restore)\\.\\d+\\.\\d+\\.\\d+\\.tmp$`);
+}
+
+function cleanupStaleTemps(filePath, options = {}) {
+  if (!filePath || typeof filePath !== 'string') return { removed: 0, bytes: 0 };
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) return { removed: 0, bytes: 0 };
+  const maxAgeMs = positiveNumber(options.maxAgeMs, staleTempAgeMs());
+  const cutoff = Date.now() - maxAgeMs;
+  const pattern = stagedFilePattern(filePath);
+  let removed = 0;
+  let bytes = 0;
+
+  for (const name of fs.readdirSync(dir)) {
+    if (!pattern.test(name)) continue;
+    const candidate = path.join(dir, name);
+    try {
+      const stat = fs.statSync(candidate);
+      if (!stat.isFile() || stat.mtimeMs > cutoff) continue;
+      fs.unlinkSync(candidate);
+      removed += 1;
+      bytes += stat.size;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') console.warn(`[fileStore] Could not remove stale staging file ${candidate}: ${error.message}`);
+    }
+  }
+
+  if (removed) console.warn(`[fileStore] Removed ${removed} stale staging file(s) for ${filePath} (${(bytes / 1024 / 1024).toFixed(1)} MiB).`);
+  return { removed, bytes };
 }
 
 function read(filePath, fallback = {}) {
   if (!filePath || typeof filePath !== 'string') return clone(fallback);
   if (!fs.existsSync(filePath)) return clone(fallback);
 
+  cleanupStaleTemps(filePath);
+
   try {
+    const stat = fs.statSync(filePath);
+    const limit = maxJsonBytes();
+    if (stat.size > limit) {
+      throw new Error(`[fileStore] Refusing to load oversized JSON (${(stat.size / 1024 / 1024).toFixed(1)} MiB > ${(limit / 1024 / 1024).toFixed(1)} MiB): ${filePath}`);
+    }
     const raw = fs.readFileSync(filePath, 'utf8');
     if (!raw || !raw.trim()) return clone(fallback);
-
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed
-      : clone(fallback);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : clone(fallback);
   } catch (error) {
     console.error(`[fileStore] Failed to read file: ${filePath}`, error);
     throw error;
@@ -51,34 +103,29 @@ function read(filePath, fallback = {}) {
 }
 
 function validateJsonFile(filePath) {
+  const stat = fs.statSync(filePath);
+  const limit = maxJsonBytes();
+  if (stat.size > limit) throw new Error(`JSON file exceeds persistence limit (${stat.size} > ${limit} bytes).`);
   const raw = fs.readFileSync(filePath, 'utf8');
   if (!raw || !raw.trim()) throw new Error('JSON file is empty after write.');
   const parsed = JSON.parse(raw);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('JSON root is not an object.');
-  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('JSON root is not an object.');
   return true;
 }
 
 function syncFile(filePath) {
   let fd;
-
   try {
-    // Windows' FlushFileBuffers requires a handle opened with write access.
-    // A read-only descriptor can surface EPERM on OneDrive-backed paths even
-    // though the file itself is writable, so use r+ there without truncation.
     fd = fs.openSync(filePath, process.platform === 'win32' ? 'r+' : 'r');
     fs.fsyncSync(fd);
     return true;
   } catch (error) {
     const expectedWindowsLock = process.platform === 'win32' && EXPECTED_WINDOWS_SYNC_ERRORS.has(error?.code);
     if (!expectedWindowsLock) throw error;
-
     if (!warnedSyncPaths.has(filePath)) {
       warnedSyncPaths.add(filePath);
       console.warn(`[fileStore] Durability sync skipped for OneDrive-locked file: ${filePath} (${error.code})`);
     }
-
     return false;
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
@@ -93,16 +140,13 @@ function tempPathFor(filePath, purpose = 'write') {
 function restoreBackup(filePath, backupPath = `${filePath}.bak`) {
   if (!filePath || typeof filePath !== 'string') return false;
   if (!backupPath || typeof backupPath !== 'string' || !fs.existsSync(backupPath)) return false;
-
   validateJsonFile(backupPath);
   ensureDir(path.dirname(filePath));
-
   const restoreTempPath = tempPathFor(filePath, 'restore');
   try {
     fs.copyFileSync(backupPath, restoreTempPath);
     validateJsonFile(restoreTempPath);
     syncFile(restoreTempPath);
-
     try {
       fs.renameSync(restoreTempPath, filePath);
     } catch (error) {
@@ -110,104 +154,81 @@ function restoreBackup(filePath, backupPath = `${filePath}.bak`) {
       fs.copyFileSync(backupPath, filePath);
       validateJsonFile(filePath);
       syncFile(filePath);
-      try {
-        if (fs.existsSync(restoreTempPath)) fs.unlinkSync(restoreTempPath);
-      } catch {}
+      try { if (fs.existsSync(restoreTempPath)) fs.unlinkSync(restoreTempPath); } catch {}
     }
-
     validateJsonFile(filePath);
     return true;
   } catch (error) {
     console.error(`[fileStore] Failed to restore backup: ${backupPath} -> ${filePath}`, error);
-    try {
-      if (fs.existsSync(restoreTempPath)) fs.unlinkSync(restoreTempPath);
-    } catch {}
+    try { if (fs.existsSync(restoreTempPath)) fs.unlinkSync(restoreTempPath); } catch {}
     return false;
   }
 }
 
 function write(filePath, data = {}) {
   if (!filePath || typeof filePath !== 'string') return false;
-
   ensureDir(path.dirname(filePath));
+  cleanupStaleTemps(filePath);
 
-  // Every write gets its own staging paths. A shared `${filePath}.tmp` allowed
-  // overlapping runtime processes/restarts to rename or delete another writer's
-  // temporary file, producing ENOENT and occasionally breaking the backup step.
   const tempPath = tempPathFor(filePath, 'write');
   const backupPath = `${filePath}.bak`;
   const backupTempPath = tempPathFor(filePath, 'backup');
   const json = JSON.stringify(sortKeys(data ?? {}), null, 2);
+  const jsonBytes = Buffer.byteLength(json, 'utf8');
+  const limit = maxJsonBytes();
+  if (jsonBytes > limit) {
+    throw new Error(`[fileStore] Refusing oversized JSON write (${(jsonBytes / 1024 / 1024).toFixed(1)} MiB > ${(limit / 1024 / 1024).toFixed(1)} MiB): ${filePath}`);
+  }
   const hadExisting = fs.existsSync(filePath);
 
   try {
     fs.writeFileSync(tempPath, json, 'utf8');
     validateJsonFile(tempPath);
     syncFile(tempPath);
-
-    // Stage the backup independently too, then atomically publish it. This keeps
-    // concurrent writers from copying over or validating one another's backup.
     if (hadExisting && fs.existsSync(filePath)) {
       fs.copyFileSync(filePath, backupTempPath);
       validateJsonFile(backupTempPath);
       syncFile(backupTempPath);
       fs.renameSync(backupTempPath, backupPath);
     }
-
     try {
       fs.renameSync(tempPath, filePath);
     } catch (error) {
       if (error.code !== 'EPERM' && error.code !== 'EBUSY') throw error;
-
-      // Windows can occasionally block atomic rename. Preserve the backup and
-      // still validate the replacement before accepting it as successful.
       fs.writeFileSync(filePath, json, 'utf8');
       validateJsonFile(filePath);
       syncFile(filePath);
-
-      try {
-        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-      } catch {}
+      try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch {}
     }
-
     validateJsonFile(filePath);
     return true;
   } catch (error) {
     console.error(`[fileStore] Failed to write file: ${filePath}`, error);
-
     for (const stagedPath of [tempPath, backupTempPath]) {
-      try {
-        if (fs.existsSync(stagedPath)) fs.unlinkSync(stagedPath);
-      } catch {}
+      try { if (fs.existsSync(stagedPath)) fs.unlinkSync(stagedPath); } catch {}
     }
-
-    // If the active file became invalid during a fallback write, restore the
-    // last-known-good copy automatically rather than leaving client data broken.
     try {
       if (fs.existsSync(backupPath)) {
         let activeValid = false;
-        try {
-          activeValid = validateJsonFile(filePath);
-        } catch {}
+        try { activeValid = validateJsonFile(filePath); } catch {}
         if (!activeValid) restoreBackup(filePath, backupPath);
       }
     } catch (restoreError) {
       console.error(`[fileStore] Failed to restore backup: ${filePath}`, restoreError);
     }
-
     throw error;
   } finally {
     for (const stagedPath of [tempPath, backupTempPath]) {
-      try {
-        if (fs.existsSync(stagedPath)) fs.unlinkSync(stagedPath);
-      } catch {}
+      try { if (fs.existsSync(stagedPath)) fs.unlinkSync(stagedPath); } catch {}
     }
   }
 }
 
 module.exports = {
+  cleanupStaleTemps,
   clone,
   ensureDir,
+  maxJsonBytes,
   read,
   write,
 };
