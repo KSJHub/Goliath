@@ -145,16 +145,12 @@ jobs:
 
             DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/auth/me || true)"
             PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' https://$DEV_HOST/api/auth/me || true)"
-            case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; exit 1;; esac
-            case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; exit 1;; esac
+            case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
+            case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
 
-            ERROR_TAIL="$(pm2 logs "$PM2_NAME" --err --lines 80 --nostream 2>&1 || true)"
-            if printf '%s' "$ERROR_TAIL" | grep -Eq "Cannot find module 'googleapis'|Could not locate the bindings file"; then
-              echo "Fatal dependency error remains in current PM2 error tail." >&2
-              printf '%s\n' "$ERROR_TAIL" >&2
-              exit 1
-            fi
-
+            # Do not grep the persistent PM2 error log for historical failures here.
+            # npm dependency/native-binding checks above validate the freshly installed tree,
+            # while the same-PID stability gate and HTTP checks validate this exact process.
             echo "✅ DEV stable: sha=$FINAL_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
             restore_runtime
             rm -rf "$BACKUP_DIR"
