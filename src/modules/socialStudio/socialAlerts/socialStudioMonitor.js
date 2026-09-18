@@ -34,7 +34,7 @@ function projectLiveRefreshState(account, history = [], settings = {}) {
   const legacy = state.isLive === true && !dedicated && state.lastAlertMessageId && state.lastAlertChannelId ? { lastLiveMessageId: state.lastAlertMessageId, lastLiveMessageChannelId: state.lastAlertChannelId } : {};
   const persisted = dedicated || Boolean(legacy.lastLiveMessageId && legacy.lastLiveMessageChannelId);
   const historyHit = !persisted ? [...(Array.isArray(history) ? history : [])].reverse().find((entry) => entry?.accountId && String(entry.accountId) === String(account.accountId) && (entry.status === 'alert_sent' || entry.status === 'alert_updated') && entry.alertType === 'live' && entry.messageId && entry.channelId) : null;
-  const recovered = state.isLive === true && historyHit ? { lastAlertMessageId: historyHit.messageId, lastAlertChannelId: historyHit.channelId, lastLiveMessageId: historyHit.messageId, lastLiveMessageChannelId: historyHit.channelId, lastAlertKey: state.liveEventId ? `live:${state.liveEventId}` : state.lastAlertKey, lastLiveMessageUpdatedAt: historyHit.createdAt || state.lastLiveMessageUpdatedAt } : {};
+  const recovered = state.isLive === true && historyHit ? { lastAlertMessageId: historyHit.messageId, lastAlertMessageChannelId: historyHit.channelId, lastLiveMessageId: historyHit.messageId, lastLiveMessageChannelId: historyHit.channelId, lastAlertKey: state.liveEventId ? `live:${state.liveEventId}` : state.lastAlertKey, lastLiveMessageUpdatedAt: historyHit.createdAt || state.lastLiveMessageUpdatedAt } : {};
   const effectiveState = { ...state, ...legacy, ...recovered };
   const tracked = effectiveState.isLive === true && Boolean((effectiveState.lastLiveMessageId || effectiveState.lastAlertMessageId) && (effectiveState.lastLiveMessageChannelId || effectiveState.lastAlertChannelId));
   const configuredTypes = Array.isArray(account.alertTypes) ? account.alertTypes : null;
@@ -105,7 +105,7 @@ async function applyOne(client, guildId, account, event, liveStatus) {
   const creator = clean(event.creator || account.displayName || account.username || 'Creator', 256); const avatar = clean(event.avatarUrl || account.avatarUrl, 1000); if (creator) embed.setAuthor(avatar && /^https?:\/\//i.test(avatar) ? { name: creator, iconURL: avatar } : { name: creator });
   if (settings.includeThumbnails !== false) { const image = cacheBust(event.thumbnail || event.thumbnailUrl || event.previewImage || ''); if (image) embed.setImage(image); }
   if (liveStatus === 'OFFLINE') { const title = clean(event.title || account?.state?.lastLiveEvent?.title || 'Stream', 200); embed.setTitle(`⚫ ${title} • Stream Ended`); }
-  await message.edit({ embeds: [embed] }); return true;
+  await message.edit({ embeds: [embed], attachments: [] }); return true;
 }
 async function applyLiveMessageParity(client, guildId, beforeConfig, result) {
   if (!result || result.skipped) return result; const afterConfig = guildManager.reloadGuild(guildId); const updates = [];
