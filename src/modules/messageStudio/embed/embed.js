@@ -7,6 +7,7 @@ const media = require('./embedMedia');
 const renderer = require('./embedRenderer');
 const { installMediaManagerBase } = require('./embedMediaManagerBase');
 const { installClassicSingleImagePayload } = require('./embedClassicSingleImage');
+const { installGraphicHeaders } = require('./embedGraphicHeaders');
 
 const mediaStateApi = Object.freeze({
   getPanelMedia: media.getPanelMedia,
@@ -35,6 +36,7 @@ installMediaRuntime(panel);
 installClassicSingleImagePayload(renderer);
 
 const interactions = require('./embedInteractions');
+installGraphicHeaders(panel, media, interactions);
 const validation = require('./embedValidation');
 
 function getOverview(guildId) {
