@@ -13,8 +13,25 @@ const BACKEND_ROOTS = Object.freeze([
 ]);
 const CURRENT_MODULES = Object.freeze(moduleKeys());
 const FOLDER_ALIASES = Object.freeze({ socialAlerts: 'social' });
+const NON_RUNTIME_MODULE_FOLDERS = new Set(['notes']);
 const SCHEDULER_CALL = /\bsetInterval\s*\(/;
 const SENTINEL_INTEGRATION = /schedulerRegistry|schedulerMonitor|sentinelScheduler/i;
+
+// These intervals are deliberately supervised by a parent/runtime health path rather
+// than individually registered in schedulerRegistry. Keeping the list explicit makes
+// new unmanaged intervals fail coverage instead of silently expanding the exception.
+const SUPERVISED_INTERVALS = Object.freeze({
+  'server.js': 'process/runtime heartbeat and PM2 health',
+  'src/core/devSyncService.js': 'development-only sync worker',
+  'src/events/client/guildOperationalControlsBootstrap.js': 'guild operational-control bootstrap health',
+  'src/events/client/sentinelControlCenter.js': 'Sentinel control-center runtime',
+  'src/events/client/socialStudioLivePostRecovery.js': 'Social Sentinel account freshness and delivery health',
+  'src/modules/communityStudio/invites/invitesTracking.js': 'invites module runtime health',
+  'src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js': 'Social Sentinel account freshness and delivery health',
+  'src/modules/utilityStudio/schedule/schedule.js': 'scheduleStartup registered scheduler health',
+  'src/modules/utilityStudio/stats/statsCounters.js': 'statsManager registered scheduler health',
+  'src/owner/auditIntelligence/guildObservatory.js': 'client GuildObservatory registered collector health',
+});
 
 function normalizedRelative(file) {
   return path.relative(PROJECT_ROOT, file).replace(/\\/g, '/');
@@ -59,7 +76,9 @@ function discoveredModuleFolders() {
     if (!studio.isDirectory()) continue;
     const studioPath = path.join(MODULE_ROOT, studio.name);
     for (const entry of fs.readdirSync(studioPath, { withFileTypes: true })) {
-      if (entry.isDirectory()) names.add(FOLDER_ALIASES[entry.name] || entry.name);
+      if (!entry.isDirectory()) continue;
+      const moduleName = FOLDER_ALIASES[entry.name] || entry.name;
+      if (!NON_RUNTIME_MODULE_FOLDERS.has(moduleName)) names.add(moduleName);
     }
   }
   if (fs.existsSync(path.join(MODULE_ROOT, 'securityStudio', 'verification.js'))) names.add('verification');
@@ -79,9 +98,11 @@ function schedulerFiles() {
       if (!SCHEDULER_CALL.test(source)) return null;
       const relative = normalizedRelative(file);
       const sentinelOwned = relative.startsWith('src/owner/sentinel/');
-      const monitored = sentinelOwned || SENTINEL_INTEGRATION.test(source);
+      const directlyMonitored = sentinelOwned || SENTINEL_INTEGRATION.test(source);
+      const supervision = SUPERVISED_INTERVALS[relative] || null;
+      const monitored = directlyMonitored || Boolean(supervision);
       const intervalCount = (source.match(/\bsetInterval\s*\(/g) || []).length;
-      return { file, relative, monitored, sentinelOwned, intervalCount };
+      return { file, relative, monitored, sentinelOwned, directlyMonitored, supervision, intervalCount };
     })
     .filter(Boolean);
 }
@@ -89,14 +110,17 @@ function schedulerFiles() {
 function schedulerCoverage() {
   const discovered = schedulerFiles();
   return {
-    discovered: discovered.map(({ relative, monitored, sentinelOwned, intervalCount }) => ({
+    discovered: discovered.map(({ relative, monitored, sentinelOwned, directlyMonitored, supervision, intervalCount }) => ({
       file: relative,
       monitored,
       sentinelOwned,
+      directlyMonitored,
+      supervision,
       intervalCount,
     })),
     unmonitored: discovered.filter((item) => !item.monitored).map((item) => item.relative),
     monitored: discovered.filter((item) => item.monitored).map((item) => item.relative),
+    supervised: discovered.filter((item) => item.supervision).map((item) => ({ file: item.relative, by: item.supervision })),
   };
 }
 
@@ -125,6 +149,7 @@ function coverageReport() {
     contractWithoutDiscoveredFolder,
     schedulerFiles: schedulers.discovered,
     monitoredSchedulerFiles: schedulers.monitored,
+    supervisedSchedulerFiles: schedulers.supervised,
     unmonitoredSchedulerFiles: schedulers.unmonitored,
     complete:
       futureUnregistered.length === 0
