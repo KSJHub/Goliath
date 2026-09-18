@@ -11,6 +11,7 @@ const { loadEnvironment } = require('./src/config/envLoader');
 const { resolveToken } = require('./src/config/tokenResolver');
 const { loginWithRetry } = require('./src/runtime/discordLogin');
 const { createSQLiteSessionStore } = require('./src/server/session/sqliteSessionStore');
+const PROCESS_STARTED_AT = Date.now();
 loadEnvironment();
 
 process.on('warning', (warning) => {
@@ -106,32 +107,14 @@ const PORT = Number(process.env.PORT || process.env.BOT_API_PORT || 3001);
 const isProduction = process.env.NODE_ENV === 'production';
 const runtimePaths = bootstrapRuntime(botMode);
 const configuredSessionSecret = process.env.SESSION_SECRET || process.env.DASHBOARD_SESSION_SECRET || '';
-if (isProduction && !configuredSessionSecret) {
-  throw new Error('SESSION_SECRET or DASHBOARD_SESSION_SECRET is required when NODE_ENV=production');
-}
+if (isProduction && !configuredSessionSecret) throw new Error('SESSION_SECRET or DASHBOARD_SESSION_SECRET is required when NODE_ENV=production');
 const SESSION_SECRET = configuredSessionSecret || 'goliath-dev-session-secret';
 const sessionStore = createSQLiteSessionStore(runtimePaths);
 printStartupFingerprint(config, runtimePaths);
 runBootValidation({ requiredPaths: [], requiredEnv: [] });
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildPresences,
-    GatewayIntentBits.GuildModeration,
-    GatewayIntentBits.GuildExpressions,
-    GatewayIntentBits.GuildIntegrations,
-    GatewayIntentBits.GuildWebhooks,
-    GatewayIntentBits.GuildInvites,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildScheduledEvents,
-    GatewayIntentBits.AutoModerationConfiguration,
-    GatewayIntentBits.AutoModerationExecution,
-    GatewayIntentBits.MessageContent,
-  ].filter((intent) => intent !== undefined),
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildPresences, GatewayIntentBits.GuildModeration, GatewayIntentBits.GuildExpressions, GatewayIntentBits.GuildIntegrations, GatewayIntentBits.GuildWebhooks, GatewayIntentBits.GuildInvites, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.GuildScheduledEvents, GatewayIntentBits.AutoModerationConfiguration, GatewayIntentBits.AutoModerationExecution, GatewayIntentBits.MessageContent].filter((intent) => intent !== undefined),
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 client.commands = new Collection();
@@ -150,37 +133,25 @@ app.use(express.urlencoded({ extended: true }));
 app.use(session({ store: sessionStore, secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: isProduction, httpOnly: true, sameSite: isProduction ? 'none' : 'lax', maxAge: 604800000 } }));
 app.use((req, _res, next) => { req.client = client; req.io = io; next(); });
 
-function cleanDiscordId(value) {
-  const id = String(value || '').replace(/[<@#!&>]/g, '').trim();
-  return /^\d{15,25}$/.test(id) ? id : null;
-}
-
+function cleanDiscordId(value) { const id = String(value || '').replace(/[<@#!&>]/g, '').trim(); return /^\d{15,25}$/.test(id) ? id : null; }
 async function requireEmojiGuildAccess(req, res, next) {
   try {
     const userId = cleanDiscordId(req.session?.user?.id);
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required.' });
-
     const guildId = cleanDiscordId(req.params?.guildId);
     if (!guildId) return res.status(400).json({ success: false, error: 'Invalid guild ID.' });
     if (security.isBotOwner(userId)) return next();
-
     const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
     if (!guild) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
-
     const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
-    const allowed = Boolean(
-      member?.permissions?.has(PermissionFlagsBits.Administrator) ||
-      member?.permissions?.has(PermissionFlagsBits.ManageGuild)
-    );
+    const allowed = Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || member?.permissions?.has(PermissionFlagsBits.ManageGuild));
     if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
-
     return next();
   } catch (error) {
     console.error('[Emoji API access]', error);
     return res.status(403).json({ success: false, error: 'Unable to verify server access.' });
   }
 }
-
 app.use('/api/emojis/:guildId', requireEmojiGuildAccess);
 
 const mounts = [
@@ -193,9 +164,7 @@ if (fs.existsSync(dashboardDist)) {
   app.use(express.static(dashboardDist));
   app.use((req, res, next) => {
     if (req.method !== 'GET') return next();
-    return req.path.startsWith('/api/')
-      ? res.status(404).json({ error: 'Not found' })
-      : res.sendFile(path.join(dashboardDist, 'index.html'));
+    return req.path.startsWith('/api/') ? res.status(404).json({ error: 'Not found' }) : res.sendFile(path.join(dashboardDist, 'index.html'));
   });
 }
 
@@ -209,14 +178,12 @@ async function startConfiguredModules(client) {
     runStartupTask('Translation', () => require('./src/modules/utilityStudio/translation/translationStartup').startupTranslation(client)),
     runStartupTask('Goodbye', () => {
       const enabledGuilds = client.guilds.cache.filter((guild) => guildManager.isModuleEnabled(guild.id, 'goodbye'));
-      if (!enabledGuilds.size) {
-        console.log('[Goodbye] Startup check skipped: no enabled guilds.');
-        return null;
-      }
+      if (!enabledGuilds.size) { console.log('[Goodbye] Startup check skipped: no enabled guilds.'); return null; }
       return require('./src/modules/messageStudio/goodbye/goodbye').startupGoodbye({ guilds: { cache: enabledGuilds } });
     }),
     runStartupTask('Reaction Roles', () => {
       const enabledGuilds = client.guilds.cache.filter((guild) => guildManager.isModuleEnabled(guild.id, 'reactionRoles'));
+      if (!enabledGuilds.size) { console.log('[Reaction Roles] Startup check skipped: no enabled guilds.'); return null; }
       return require('./src/modules/roleStudio/reactionRoles/reactionRoles').startup({ guilds: { cache: enabledGuilds } });
     }),
     runStartupTask('Verification', () => require('./src/modules/securityStudio/verification').startupVerification(client)),
@@ -224,11 +191,7 @@ async function startConfiguredModules(client) {
       const birthdays = require('./src/modules/communityStudio/birthdays/birthdays');
       const runSweep = async () => {
         const enabledGuilds = client.guilds.cache.filter((guild) => guildManager.isModuleEnabled(guild.id, 'birthdays'));
-        for (const guild of enabledGuilds.values()) {
-          await birthdays.processGuild(guild, { action: 'birthday_scheduler_tick' }).catch((error) => {
-            console.warn(`[Birthdays] ${guild.id}: ${error?.message || error}`);
-          });
-        }
+        for (const guild of enabledGuilds.values()) await birthdays.processGuild(guild, { action: 'birthday_scheduler_tick' }).catch((error) => console.warn(`[Birthdays] ${guild.id}: ${error?.message || error}`));
       };
       await runSweep();
       const timer = setInterval(runSweep, birthdays.TICK_MS);
@@ -238,12 +201,30 @@ async function startConfiguredModules(client) {
   ]);
 }
 
-client.once('clientReady', async () => {
+function memorySummary() {
+  const memory = process.memoryUsage();
+  return `RSS ${(memory.rss / 1024 / 1024).toFixed(1)} MB | Heap ${(memory.heapUsed / 1024 / 1024).toFixed(1)} MB`;
+}
+
+client.once('clientReady', () => {
+  const readyMs = Date.now() - PROCESS_STARTED_AT;
   console.log(`✅ Logged in as ${client.user.tag}`);
   console.log(`ℹ️ Guilds cached: ${client.guilds.cache.size}`);
-  await syncStartupGuilds(client, { enforceGuildAccess, guildManager, resourceManager, botMode, config });
-  await startConfiguredModules(client);
-  backupScheduler.startServerBackupScheduler?.(client);
+  console.log(`🚀 Goliath gateway ready in ${(readyMs / 1000).toFixed(2)}s | ${memorySummary()}`);
+
+  // Guild reconciliation and module recovery are important, but Discord is
+  // already connected and the dashboard/interactions should not wait for them.
+  void (async () => {
+    const recoveryStartedAt = Date.now();
+    try {
+      await syncStartupGuilds(client, { enforceGuildAccess, guildManager, resourceManager, botMode, config });
+      await startConfiguredModules(client);
+      backupScheduler.startServerBackupScheduler?.(client);
+      console.log(`✅ Goliath background recovery complete in ${((Date.now() - recoveryStartedAt) / 1000).toFixed(2)}s | ${memorySummary()}`);
+    } catch (error) {
+      console.error('[Startup] Background recovery failed:', error?.stack || error?.message || error);
+    }
+  })();
 });
 
 const token = resolveToken(botMode, config);
