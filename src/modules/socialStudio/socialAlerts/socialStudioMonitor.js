@@ -5,6 +5,7 @@ const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js'
 const core = require('./socialStudioMonitorCore');
 const { projectedOptions } = require('./socialStudioMonitorProjection');
 const { repairLiveRollovers } = require('./socialStudioLiveRollover');
+const { applyLiveMessageParity } = require('./socialStudioLiveMessageParity');
 
 let timer = null;
 let schedulerTickMs = 60_000;
@@ -13,11 +14,28 @@ const GLOBAL_SCHEDULER = 'social:monitor:global';
 async function checkGuildAccounts(client, guildId, options = {}) {
   const beforeConfig = options.guildConfig && typeof options.guildConfig === 'object' ? options.guildConfig : guildManager.reloadGuild(guildId);
   const result = await core.checkGuildAccounts(client, guildId, projectedOptions(guildId, options));
-  return repairLiveRollovers(client, guildId, beforeConfig, result, { checkCore: core.checkGuildAccounts, projectedOptions });
+  const repaired = await repairLiveRollovers(client, guildId, beforeConfig, result, { checkCore: core.checkGuildAccounts, projectedOptions });
+  await applyLiveMessageParity(client, guildId, beforeConfig, repaired);
+  return repaired;
 }
 
-function forcePostCreatorLive(client, guildId, creatorId, options = {}) {
-  return core.forcePostCreatorLive(client, guildId, creatorId, projectedOptions(guildId, options));
+async function forcePostCreatorLive(client, guildId, creatorId, options = {}) {
+  const beforeConfig = options.guildConfig && typeof options.guildConfig === 'object' ? options.guildConfig : guildManager.reloadGuild(guildId);
+  const result = await core.forcePostCreatorLive(client, guildId, creatorId, projectedOptions(guildId, options));
+
+  // A forced LIVE post bypasses the normal provider-result shape, so perform a
+  // focused follow-up check to bring the new message onto the same locked card
+  // layout without creating another notification.
+  await checkGuildAccounts(client, guildId, {
+    guildConfig: guildManager.reloadGuild(guildId),
+    accountIds: (result?.sent || []).map((item) => item.accountId).filter(Boolean),
+    manual: true,
+    force: true,
+  }).catch((error) => {
+    console.error('[Social Studio] forced LIVE parity check failed:', error?.message || error);
+  });
+
+  return result;
 }
 
 function guildScheduler(guild) {
