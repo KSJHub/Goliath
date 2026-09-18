@@ -302,6 +302,34 @@ function vodMatchesEndedStream(item, startedAt, endedAt) {
   return publishedMs >= startedMs - margin && publishedMs <= endedMs + margin;
 }
 
+const DELIVERED_CONTENT_LEDGER_LIMIT = 500;
+const CONTENT_ALERT_TYPES = new Set(['vod', 'clip', 'upload', 'short', 'post', 'reel']);
+
+function deliveredContentLedger(previous, config, accountId) {
+  const keys = [];
+  const add = (key) => {
+    const value = clean(key, 500);
+    if (!value || keys.includes(value)) return;
+    keys.push(value);
+  };
+  for (const key of Array.isArray(previous?.deliveredContentKeys) ? previous.deliveredContentKeys : []) add(key);
+  if (previous?.lastAlertKey && !String(previous.lastAlertKey).startsWith('live:') && !String(previous.lastAlertKey).startsWith('ended:')) add(previous.lastAlertKey);
+  for (const item of Array.isArray(config?.history) ? config.history : []) {
+    if (String(item?.accountId || '') !== String(accountId || '')) continue;
+    if (!CONTENT_ALERT_TYPES.has(String(item?.alertType || '').toLowerCase())) continue;
+    if (!item?.eventId) continue;
+    add(`${String(item.alertType).toLowerCase()}:${String(item.eventId)}`);
+  }
+  return keys.slice(-DELIVERED_CONTENT_LEDGER_LIMIT);
+}
+
+function rememberDeliveredContent(state, key) {
+  const keys = Array.isArray(state.deliveredContentKeys) ? state.deliveredContentKeys.filter(Boolean) : [];
+  const value = clean(key, 500);
+  if (!value) return;
+  state.deliveredContentKeys = [...keys.filter((item) => item !== value), value].slice(-DELIVERED_CONTENT_LEDGER_LIMIT);
+}
+
 function eventCandidates(account, previous, checked) {
   const events = [];
   const contentItems = Array.isArray(checked.contentItems) && checked.contentItems.length
@@ -658,9 +686,11 @@ async function checkGuildAccounts(client, guildId, options = {}) {
 
       const delivered = [];
       const events = eventCandidates(account, previous, checked);
+      state.deliveredContentKeys = deliveredContentLedger(previous, config, accountId);
       for (const event of events) {
         const key = eventKey(event);
-        if (config.settings.suppressDuplicates !== false && previous.lastAlertKey === key && event.type !== 'ended') continue;
+        const contentEvent = CONTENT_ALERT_TYPES.has(String(event.type || '').toLowerCase());
+        if (config.settings.suppressDuplicates !== false && event.type !== 'ended' && (previous.lastAlertKey === key || (contentEvent && state.deliveredContentKeys.includes(key)))) continue;
         if (quiet && !options.manual && event.type !== 'ended') continue;
 
         if (event.type === 'ended' && previous.isLive === true) {
@@ -682,6 +712,7 @@ async function checkGuildAccounts(client, guildId, options = {}) {
         delivered.push({ type: event.type, id: event.id, ...delivery });
         state.lastAlertKey = key;
         state.lastAlertAt = now();
+        if (CONTENT_ALERT_TYPES.has(String(event.type || '').toLowerCase())) rememberDeliveredContent(state, key);
         state.lastAlertMessageId = delivery.messageId;
         state.lastAlertChannelId = delivery.channelId;
         if (event.type === 'live') {

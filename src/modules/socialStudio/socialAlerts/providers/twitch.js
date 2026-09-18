@@ -61,7 +61,7 @@ async function checkTwitch(account) {
     const bt = Date.parse(b.publishedAt || '') || 0;
     return bt - at;
   });
-  const contentItems = candidates.slice(0, 1);
+  const contentItems = candidates;
 
   return result('twitch', {
     isLive: Boolean(stream), externalId: String(user.id), resolvedUsername: user.login, url: channelUrl, avatar: user.profile_image_url || null,
