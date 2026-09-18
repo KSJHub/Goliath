@@ -8,8 +8,7 @@ const { checkAccount, providerInfo } = require('./socialStudioProviders');
 const { normalizeTemplates, resolveTemplate } = require('./socialStudioTemplates');
 
 const runningGuilds = new Set();
-const LIVE_MESSAGE_REFRESH_MS = 60 * 60 * 1000;
-const KICK_LIVE_MESSAGE_REFRESH_MS = 5 * 60 * 1000;
+const LIVE_MESSAGE_REFRESH_MS = 10 * 60 * 1000;
 let timer = null;
 
 const PLATFORM = {
@@ -326,222 +325,236 @@ function eventCandidates(account, previous, checked) {
       startedAt,
       endedAt,
       durationSeconds: durationToSeconds(currentVod?.durationSeconds ?? currentVod?.duration) || secondsBetween(startedAt, endedAt),
-      peakViewers: previous.peakViewers || prior.viewerCount || null,
-      currentVod,
+      vod: currentVod,
     });
   }
 
-  const previousIds = previous.contentIds && typeof previous.contentIds === 'object' ? previous.contentIds : {};
-
   for (const item of contentItems) {
-    if (!item?.type || !item?.id || !isPostableContentItem(item)) continue;
-    if (item.type === 'vod' && endedVodId && String(item.id) === endedVodId) continue;
-    const oldId = previousIds[item.type] || (previous.latestContentType === item.type ? previous.latestContentId : null);
-    if (oldId && String(oldId) !== String(item.id)) events.push(item);
+    if (!item?.type || !item?.id) continue;
+    if (endedVodId && item.type === 'vod' && String(item.id) === endedVodId) continue;
+    if (item.type === 'live' || item.type === 'ended') continue;
+    if (!enabledAlert(account, item.type)) continue;
+    events.push(item);
   }
-
-  return events.filter((event) => enabledAlert(account, event.type));
+  return events;
 }
 
-function discordTimestamp(value, style = 'R') {
-  const ms = new Date(value).getTime();
-  const earliest = Date.UTC(2020, 0, 1);
-  const latest = Date.now() + 24 * 60 * 60 * 1000;
-  return Number.isFinite(ms) && ms >= earliest && ms <= latest ? `<t:${Math.floor(ms / 1000)}:${style}>` : '';
+function eventKey(event) {
+  return `${event.type}:${event.id}`;
+}
+
+function accountChannelOverride(account, type) {
+  return account.alertChannels?.[type] || account.alertChannelId || null;
+}
+
+function alertChannelId(config, account, type) {
+  return accountChannelOverride(account, type)
+    || config.alertChannels?.[type]
+    || config.platformChannels?.[account.platform]
+    || config.alertsChannelId
+    || null;
+}
+
+function mentionFor(account) {
+  if (account.mentionMode === 'everyone') return '@everyone';
+  if (account.mentionMode === 'here') return '@here';
+  if (account.mentionMode === 'role' && account.mentionRoleId) return `<@&${account.mentionRoleId}>`;
+  return '';
+}
+
+function durationToSeconds(value) {
+  if (Number.isFinite(Number(value))) return Number(value);
+  const match = String(value || '').match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
+  if (!match) return null;
+  return Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0);
 }
 
 function humanDuration(seconds) {
   const value = Number(seconds);
   if (!Number.isFinite(value) || value < 0) return '';
-  const h = Math.floor(value / 3600);
-  const m = Math.floor((value % 3600) / 60);
-  const s = Math.floor(value % 60);
-  return [h ? `${h}h` : '', m ? `${m}m` : '', !h && s ? `${s}s` : ''].filter(Boolean).join(' ');
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  const secs = Math.floor(value % 60);
+  return [hours ? `${hours}h` : '', minutes ? `${minutes}m` : '', !hours && secs ? `${secs}s` : ''].filter(Boolean).join(' ');
 }
 
-function durationToSeconds(value) {
-  if (Number.isFinite(Number(value))) return Number(value);
-  const match = String(value || '').trim().match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
-  if (!match || !match[0]) return null;
-  return Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0);
+function discordTimestamp(value, style = 'R') {
+  const ms = new Date(value).getTime();
+  if (!Number.isFinite(ms) || ms < Date.UTC(2020, 0, 1) || ms > Date.now() + 86400000) return '';
+  return `<t:${Math.floor(ms / 1000)}:${style}>`;
 }
 
-function isPostableContentItem(item) {
-  if (item?.type !== 'vod') return true;
-  const seconds = durationToSeconds(item.durationSeconds ?? item.duration);
-  return seconds === null || seconds >= 60;
+function buildLiveFields({ account, event, vars, liveStatus, durationText, started, ended }) {
+  const fields = [];
+  const platform = String(account?.platform || '').toLowerCase();
+  const offline = liveStatus === 'OFFLINE';
+  if (platform !== 'tiktok' && vars.game) fields.push({ name: '🎮 Game', value: vars.game, inline: true });
+  if (platform === 'kick') fields.push({ name: '🟢 Kick', value: vars.kickUsername ? `@${vars.kickUsername}` : (vars.creator || 'Kick'), inline: true });
+  else if (platform === 'twitch') fields.push({ name: '🟣 Twitch', value: vars.username ? `@${vars.username}` : (vars.creator || 'Twitch'), inline: true });
+  else if (platform === 'youtube') fields.push({ name: '🔴 YouTube', value: vars.username ? `@${vars.username}` : (vars.creator || 'YouTube'), inline: true });
+  else if (platform === 'tiktok') fields.push({ name: '⚫ TikTok', value: vars.username ? `@${vars.username}` : 'TikTok LIVE', inline: true });
+  else if (platform === 'facebook') fields.push({ name: '🔵 Facebook', value: vars.username ? `@${vars.username}` : (vars.creator || 'Facebook'), inline: true });
+  else if (platform === 'instagram') fields.push({ name: '🟠 Instagram', value: vars.username ? `@${vars.username}` : (vars.creator || 'Instagram'), inline: true });
+  else if (platform === 'x') fields.push({ name: '⚪ X', value: vars.username ? `@${vars.username}` : (vars.creator || 'X'), inline: true });
+  if (offline) {
+    const peak = Number(account?.state?.peakViewers || vars.peakViewers || event?.viewerCount || 0);
+    if (peak > 0) fields.push({ name: '📈 Peak Viewers', value: intText(peak), inline: true });
+  } else if (vars.viewers) fields.push({ name: '👥 Viewers', value: vars.viewers, inline: true });
+  if (started) fields.push({ name: '🕐 Started', value: started, inline: true });
+  if (durationText) fields.push({ name: offline ? '⏱️ Streamed For' : '⏱️ Live For', value: durationText, inline: true });
+  if (offline) {
+    if (ended) fields.push({ name: '⚫ Ended', value: ended, inline: true });
+  } else if (event?.language) fields.push({ name: '🌐 Language', value: clean(String(event.language).toUpperCase(), 100), inline: true });
+  if (!offline && event?.hasMatureContent === true) fields.push({ name: '🔞 Mature', value: 'Yes', inline: true });
+  return fields;
 }
 
-function colorHex(color) {
-  return `#${Number(color || 0).toString(16).padStart(6, '0').toUpperCase()}`;
-}
-
-function parseTemplateColor(value, fallback) {
-  const raw = clean(value, 16).replace(/^#/, '');
-  return /^[0-9a-f]{6}$/i.test(raw) ? Number.parseInt(raw, 16) : fallback;
-}
-
-function accountAge(createdAt) {
-  const created = new Date(createdAt).getTime();
-  if (!Number.isFinite(created)) return '';
-  return humanDuration(Math.floor((Date.now() - created) / 1000));
-}
-
-async function resolveLinkedMember(discordGuild, account, creator) {
-  const id = clean(account.discordUserId || creator?.discordUserId || creator?.userId);
-  if (!/^\d{15,22}$/.test(id)) return null;
-  return discordGuild.members.cache.get(id) || await discordGuild.members.fetch(id).catch(() => null);
-}
-
-function variableMap(discordGuild, member, account, creator, event) {
-  const platform = PLATFORM[account.platform] || { label: account.platform || 'Unknown', icon: '🌐', color: 0x5865F2 };
-  const creatorName = creator?.displayName || account.displayName || account.username || 'Creator';
-  const profile = account.profileUrl || account.url || '';
-  const url = event.url || profile;
-  const duration = clean(event.duration) || humanDuration(event.durationSeconds);
-  const viewers = Number(event.viewerCount) > 0 ? intText(event.viewerCount) : '';
-  const views = Number(event.viewCount) > 0 ? intText(event.viewCount) : '';
-  const peak = Number(event.peakViewers) > 0 ? intText(event.peakViewers) : '';
-  const started = discordTimestamp(event.startedAt);
-  const published = discordTimestamp(event.publishedAt);
-  const user = member?.user || null;
-  const userCreated = user?.createdAt || null;
-  const joined = member?.joinedAt || null;
-  const timestampValue = event.publishedAt || event.startedAt || event.endedAt || now();
-  const thumb = event.thumbnail || '';
-  const description = clean(event.description || event.summary || '');
-
+function eventVars(account, event, creator, options = {}) {
+  const username = clean(event.kickUsername || account.username || account.normalizedUsername || account.externalId, 100).replace(/^@/, '');
+  const creatorName = creator?.displayName || account.displayName || username || 'Creator';
+  const title = clean(event.title || `${creatorName} has a new ${event.type}`, 256);
+  const url = clean(event.url || account.profileUrl || account.url, 1000);
+  const game = clean(event.category || event.game || '', 200);
+  const viewers = options.includeViewerCount === false || !Number.isFinite(Number(event.viewerCount)) || Number(event.viewerCount) <= 0 ? '' : intText(event.viewerCount);
+  const durationSeconds = Number.isFinite(Number(event.durationSeconds)) ? Number(event.durationSeconds) : secondsBetween(event.startedAt, event.endedAt || new Date().toISOString());
+  const duration = options.includeLiveDuration === false ? '' : humanDuration(durationSeconds);
   return {
     creator: creatorName,
-    creatorName,
-    creatorDisplayName: creatorName,
-    creatorAvatar: account.avatar || creator?.avatar || '',
-    creatorBanner: creator?.banner || '',
-    creatorDescription: creator?.description || creator?.notes || '',
-    platform: platform.label,
-    platformIcon: platform.icon,
-    platformColor: colorHex(platform.color),
-    username: account.username || '',
-    displayName: account.displayName || creatorName,
-    channelId: account.externalId || '',
-    profileUrl: profile,
-    title: event.title || '',
-    description,
-    game: event.category || event.game || '',
-    category: event.category || event.game || '',
-    viewers,
-    views,
-    peakViewers: peak,
-    started,
-    duration,
-    liveThumbnail: event.type === 'live' ? thumb : '',
-    thumbnail: thumb,
-    liveUrl: event.type === 'live' ? url : profile,
-    videoTitle: ['vod', 'upload'].includes(event.type) ? event.title || '' : '',
-    videoDescription: ['vod', 'upload'].includes(event.type) ? description : '',
-    videoDuration: ['vod', 'upload'].includes(event.type) ? duration : '',
-    videoViews: ['vod', 'upload'].includes(event.type) ? views : '',
-    videoThumbnail: ['vod', 'upload'].includes(event.type) ? thumb : '',
-    videoUrl: ['vod', 'upload'].includes(event.type) ? url : '',
-    clipTitle: event.type === 'clip' ? event.title || '' : '',
-    clipCreator: event.type === 'clip' ? event.creatorName || event.creator || creatorName : '',
-    clipViews: event.type === 'clip' ? views : '',
-    clipUrl: event.type === 'clip' ? url : '',
-    uploadTitle: event.type === 'upload' ? event.title || '' : '',
-    uploadDescription: event.type === 'upload' ? description : '',
-    uploadThumbnail: event.type === 'upload' ? thumb : '',
-    uploadUrl: event.type === 'upload' ? url : '',
-    shortTitle: event.type === 'short' ? event.title || '' : '',
-    shortThumbnail: event.type === 'short' ? thumb : '',
-    shortUrl: event.type === 'short' ? url : '',
+    username,
+    platform: PLATFORM[account.platform]?.label || account.platform,
+    platformIcon: PLATFORM[account.platform]?.icon || '🔔',
+    type: event.type,
+    title,
     url,
-    published,
-    userId: user?.id || '',
-    userTag: user?.tag || user?.username || '',
-    userName: user?.username || '',
-    userGlobalName: user?.globalName || '',
-    userMention: user?.id ? `<@${user.id}>` : '',
-    userNoPing: user?.id ? `<@${user.id}>`.replace('@', '@\u200b') : '',
-    userAvatar: user?.displayAvatarURL?.({ size: 1024 }) || '',
-    userServerAvatar: member?.displayAvatarURL?.({ size: 1024 }) || '',
-    userNickname: member?.nickname || '',
-    userDisplay: member?.displayName || user?.globalName || user?.username || '',
-    userCreatedAt: userCreated ? userCreated.toISOString() : '',
-    userCreatedTimestamp: userCreated ? `<t:${Math.floor(userCreated.getTime() / 1000)}:F>` : '',
-    userJoinedAt: joined ? joined.toISOString() : '',
-    userJoinedTimestamp: joined ? `<t:${Math.floor(joined.getTime() / 1000)}:F>` : '',
-    createdAt: event.publishedAt || event.startedAt || event.endedAt || '',
-    joinedAt: joined ? joined.toISOString() : '',
-    leftAt: event.leftAt || '',
-    timestamp: discordTimestamp(timestampValue, 'F'),
-    accountAge: accountAge(userCreated),
-    membershipDuration: accountAge(joined),
-    departureIcon: event.departureIcon || '',
-    departureType: event.departureType || '',
-    departureLabel: event.departureLabel || '',
-    departureReason: event.departureReason || '',
-    departureModerator: event.departureModerator || '',
-    departureModeratorId: event.departureModeratorId || '',
-    nowTimestamp: `<t:${Math.floor(Date.now() / 1000)}:F>`,
-    successEmoji: '✅',
-    warningEmoji: '⚠️',
-    errorEmoji: '❌',
-    proofVerifiedEmoji: '✅',
-    successColor: '#57F287',
-    warningColor: '#FEE75C',
-    errorColor: '#ED4245',
-    proofVerifiedColor: '#57F287',
-    guildId: discordGuild.id,
-    guildName: discordGuild.name,
-    server: discordGuild.name,
-    guildIcon: discordGuild.iconURL?.({ size: 1024 }) || '',
-    serverIcon: discordGuild.iconURL?.({ size: 1024 }) || '',
-    guildBanner: discordGuild.bannerURL?.({ size: 2048 }) || '',
-    guildMemberCount: String(discordGuild.memberCount || ''),
-    memberCount: String(discordGuild.memberCount || ''),
-    guildVanityCode: discordGuild.vanityURLCode || '',
+    game,
+    category: game,
+    viewers,
+    peakViewers: intText(account.state?.peakViewers || event.peakViewers || event.viewerCount || 0),
+    duration,
+    started: discordTimestamp(event.startedAt),
+    ended: discordTimestamp(event.endedAt),
+    published: discordTimestamp(event.publishedAt),
+    kickUsername: String(account.platform || '').toLowerCase() === 'kick' ? username : '',
   };
 }
 
-async function resolveAlertChannel(discordGuild, config, account, eventType) {
-  const platform = String(account.platform || '').toLowerCase();
-  const candidates = [
-    account.alertChannels?.[eventType],
-    account.alertChannelId,
-    config.platformChannels?.[platform],
-    config.alertChannels?.[eventType],
-    config.alertsChannelId,
-  ].filter(Boolean);
+function buildEmbed(account, event, template, creator, settings = {}, options = {}) {
+  const vars = eventVars(account, event, creator, settings);
+  const platform = PLATFORM[account.platform] || { color: 0x5865F2, icon: '🔔', label: account.platform || 'Social' };
+  const embed = new EmbedBuilder().setColor(event.type === 'ended' ? 0x747F8D : platform.color);
+  const liveStatus = event.type === 'ended' ? 'OFFLINE' : event.type === 'live' ? 'LIVE' : '';
+  const creatorName = vars.creator || vars.username || 'Creator';
+  const authorIcon = clean(creator?.avatar || account.avatar || event.avatar || '', 1000);
+  const author = { name: creatorName };
+  if (/^https?:\/\//i.test(authorIcon)) author.iconURL = authorIcon;
+  if (/^https?:\/\//i.test(vars.url)) author.url = vars.url;
+  embed.setAuthor(author);
 
-  for (const channelId of [...new Set(candidates)]) {
-    const channel = discordGuild.channels.cache.get(channelId) || await discordGuild.channels.fetch(channelId).catch(() => null);
-    if (channel?.isTextBased?.() && typeof channel.send === 'function') return channel;
+  if (liveStatus) {
+    const headline = liveStatus === 'LIVE' ? '🔴 **LIVE NOW**' : '⚫ **STREAM ENDED**';
+    const actionLines = [];
+    if (liveStatus === 'LIVE' && vars.url) actionLines.push(`▶️ **[Watch Live](${vars.url})** · 🔴 **LIVE**`);
+    if (liveStatus === 'OFFLINE' && event.vod?.url) actionLines.push(`▶️ **[Watch VOD](${event.vod.url})** · ⚫ **OFFLINE**`);
+    embed.setDescription(`${headline}\n${stripTrailingDivider(vars.title)}${embedActionBlock(actionLines)}`);
+    embed.addFields(buildLiveFields({ account, event, vars, liveStatus, durationText: vars.duration, started: vars.started, ended: vars.ended }));
+    if (event.vod?.url) embed.addFields({ name: '📼 VOD', value: `[Watch the recording](${event.vod.url})`, inline: false });
+  } else {
+    const renderedTitle = render(template.title, vars) || `${platform.icon} ${platform.label}`;
+    embed.setTitle(renderedTitle.slice(0, 256));
+    const description = render(template.description, vars) || vars.title;
+    embed.setDescription(description.slice(0, 4096));
   }
-  if (!candidates.length) throw new Error(`No Social Studio notification channel is configured for ${eventType}.`);
-  throw new Error(`No configured Social Studio channel for ${eventType} is currently available.`);
+
+  const thumbnail = liveStatus === 'LIVE' ? cacheBustedImageUrl(event.thumbnail) : clean(event.thumbnail, 1000);
+  if (thumbnail && /^https?:\/\//i.test(thumbnail)) embed.setImage(thumbnail);
+  if (!liveStatus && vars.url && /^https?:\/\//i.test(vars.url)) embed.setURL(vars.url);
+  embed.setFooter({ text: `Goliath Social Studio • ${platform.label} • ${liveStatus || event.type.toUpperCase()}` });
+  embed.setTimestamp(new Date(event.endedAt || event.publishedAt || event.startedAt || Date.now()));
+  return embed;
 }
 
-const FORCE_LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
+async function sendAlert(client, guildId, config, account, event, options = {}) {
+  const channelId = alertChannelId(config, account, event.type);
+  if (!channelId) throw new Error(`No alert channel configured for ${account.platform}/${event.type}.`);
+  const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId);
+  const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId);
+  if (!channel?.isTextBased?.()) throw new Error('Configured alert channel is not text based.');
+  const creator = creatorFor(config, account.accountId);
+  const template = templateFor(config, event.type);
+  const embed = buildEmbed(account, event, template, creator, config.settings);
+  const content = mentionFor(account);
+  const payload = { content: content || null, embeds: [embed] };
+  const previewAttachment = await fetchKickPreviewAttachment(account, event);
+  if (previewAttachment) {
+    embed.setImage(`attachment://${previewAttachment.name}`);
+    payload.files = [previewAttachment];
+  }
+  const message = await channel.send(payload);
+  return { channelId, messageId: message.id };
+}
 
-function livePostInWindow(config, creator, windowMs = FORCE_LIVE_WINDOW_MS) {
-  const accountIds = new Set((creator?.accountIds || []).map(String));
+async function updateLiveAlert(client, guildId, config, account, event, previous) {
+  const channelId = previous.lastLiveMessageChannelId || previous.lastAlertChannelId || alertChannelId(config, account, 'live');
+  const messageId = previous.lastLiveMessageId || previous.lastAlertMessageId;
+  if (!channelId || !messageId) return null;
+
+  const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId);
+  const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId);
+  if (!channel?.isTextBased?.()) return null;
+  const message = await channel.messages.fetch(messageId).catch(() => null);
+  if (!message) return null;
+
+  const creator = creatorFor(config, account.accountId);
+  const template = templateFor(config, 'live');
+  const embed = buildEmbed(account, event, template, creator, config.settings);
+  const payload = { embeds: [embed] };
+  const previewAttachment = await fetchKickPreviewAttachment(account, event);
+  if (previewAttachment) {
+    embed.setImage(`attachment://${previewAttachment.name}`);
+    payload.files = [previewAttachment];
+    payload.attachments = [];
+  }
+  await message.edit(payload);
+  return { channelId, messageId };
+}
+
+async function updateEndedAlert(client, guildId, config, account, event, previous) {
+  const channelId = previous.lastLiveMessageChannelId || previous.lastAlertChannelId || alertChannelId(config, account, 'ended');
+  const messageId = previous.lastLiveMessageId || previous.lastAlertMessageId;
+  if (!channelId || !messageId) return null;
+  const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId);
+  const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId);
+  if (!channel?.isTextBased?.()) return null;
+  const message = await channel.messages.fetch(messageId).catch(() => null);
+  if (!message) return null;
+  const creator = creatorFor(config, account.accountId);
+  const template = templateFor(config, 'ended');
+  const embed = buildEmbed(account, event, template, creator, config.settings);
+  await message.edit({ content: null, embeds: [embed], attachments: [] });
+  return { channelId, messageId };
+}
+
+async function deleteEndedAlert(client, guildId, previous) {
+  const channelId = previous.lastLiveMessageChannelId || previous.lastAlertChannelId;
+  const messageId = previous.lastLiveMessageId || previous.lastAlertMessageId;
+  if (!channelId || !messageId) return false;
+  const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId);
+  const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId);
+  if (!channel?.isTextBased?.()) return false;
+  const message = await channel.messages.fetch(messageId).catch(() => null);
+  if (!message) return false;
+  await message.delete();
+  return true;
+}
+
+function livePostInWindow(config, creator, windowMs = 2 * 60 * 60 * 1000) {
+  const accountIds = new Set(creator?.accountIds || []);
   const cutoff = Date.now() - windowMs;
-  const stateMatch = (creator?.accountIds || [])
-    .map((id) => config.accounts?.[id])
-    .filter(Boolean)
-    .find((account) => {
-      if (!String(account.state?.lastAlertKey || '').startsWith('live:')) return false;
-      const sent = new Date(account.state?.lastAlertAt || '').getTime();
-      return Number.isFinite(sent) && sent >= cutoff;
-    });
-  if (stateMatch) return { status: 'alert_sent', alertType: 'live', accountId: stateMatch.accountId, createdAt: stateMatch.state.lastAlertAt, source: 'account_state' };
-  return [...(config.history || [])].reverse().find((entry) => {
-    if (entry?.status !== 'alert_sent' || entry?.alertType !== 'live') return false;
-    const created = new Date(entry.createdAt).getTime();
-    if (!Number.isFinite(created) || created < cutoff) return false;
-    if (entry.creatorId && String(entry.creatorId) === String(creator.creatorId)) return true;
-    if (entry.accountId && accountIds.has(String(entry.accountId))) return true;
-    return false;
+  return [...(config.history || [])].reverse().find((item) => {
+    if (!accountIds.has(item.accountId)) return false;
+    if (!['alert_sent', 'alert_updated'].includes(item.status) || item.alertType !== 'live') return false;
+    const created = new Date(item.createdAt || 0).getTime();
+    return Number.isFinite(created) && created >= cutoff;
   }) || null;
 }
 
@@ -552,16 +565,17 @@ function liveAccountsForCreator(config, creator) {
     .sort((a, b) => new Date(b.state?.lastCheckedAt || 0) - new Date(a.state?.lastCheckedAt || 0));
 }
 
-function liveMessageUpdateDue(account, previous, checked) {
+function liveMessageUpdateDue(account, previous, checked, settings = {}) {
   if (
     checked.isLive !== true ||
     previous.isLive !== true ||
-    !checked.event
+    !checked.event ||
+    settings.liveMessageRefreshEnabled === false
   ) return false;
 
   const rawLast =
-    previous.lastLiveMessageUpdateAt ||
     previous.lastLiveMessageUpdatedAt ||
+    previous.lastLiveMessageUpdateAt ||
     0;
 
   const numericLast = Number(rawLast);
@@ -571,10 +585,10 @@ function liveMessageUpdateDue(account, previous, checked) {
 
   if (!Number.isFinite(parsedLast)) return true;
 
-  const refreshMs =
-    String(account?.platform || '').toLowerCase() === 'kick'
-      ? KICK_LIVE_MESSAGE_REFRESH_MS
-      : LIVE_MESSAGE_REFRESH_MS;
+  const requested = Number(settings.liveMessageRefreshMs);
+  const refreshMs = Number.isFinite(requested) && requested >= 60 * 1000
+    ? requested
+    : LIVE_MESSAGE_REFRESH_MS;
 
   return Date.now() - parsedLast >= refreshMs;
 }
@@ -590,648 +604,144 @@ async function forcePostCreatorLive(client, guildId, creatorId, options = {}) {
   if (!liveAccounts.length) throw new Error('No checked LIVE account is available for this creator yet.');
 
   const sent = [];
-  const failed = [];
   for (const account of liveAccounts) {
-    try {
-      const sourceEvent = account.state.lastLiveEvent;
-      const event = { ...sourceEvent, type: 'live', id: sourceEvent.id || account.state.liveEventId || 'manual-live:' + account.accountId, liveStatus: 'LIVE' };
-      const message = await sendEvent(client, guildId, config, account, creator, event);
-      const sentAt = now();
-      const channelId = message.socialStudioChannelId || message.channelId || null;
-      const alertKey = 'live:' + (event.id || event.url || event.title);
-      sent.push({ account, event, message, sentAt, channelId, alertKey });
-    } catch (error) {
-      failed.push({ account, error: error.message || String(error) });
-    }
+    const event = { ...account.state.lastLiveEvent, type: 'live' };
+    const delivered = await sendAlert(client, guildId, config, account, event, options);
+    sent.push({ accountId: account.accountId, platform: account.platform, ...delivered });
   }
-
-  if (!sent.length) {
-    const details = failed.map((item) => item.account?.username || item.account?.externalId || item.account?.platform || 'account').join(', ');
-    throw new Error(details ? 'No LIVE posts could be sent for: ' + details : 'No LIVE posts could be sent.');
-  }
-
-  guildManager.updateGuildSection(guildId, 'social', (latest = {}) => {
-    const accounts = latest.accounts && typeof latest.accounts === 'object' ? { ...latest.accounts } : {};
-    for (const item of sent) {
-      const account = item.account;
-      const current = accounts[account.accountId] && typeof accounts[account.accountId] === 'object' ? accounts[account.accountId] : account;
-      accounts[account.accountId] = {
-        ...current,
-        state: {
-          ...(current.state && typeof current.state === 'object' ? current.state : {}),
-          lastAlertKey: item.alertKey,
-          lastAlertAt: item.sentAt,
-          lastAlertMessageId: item.message.id,
-          lastAlertChannelId: item.channelId,
-          lastLiveMessageId: item.message.id,
-          lastLiveMessageChannelId: item.channelId,
-          lastLiveMessageUpdatedAt: item.sentAt,
-          lastDeliveryError: null,
-        },
-        updatedAt: item.sentAt,
-      };
-    }
-    for (const item of failed) {
-      const account = item.account;
-      if (!account?.accountId) continue;
-      const current = accounts[account.accountId] && typeof accounts[account.accountId] === 'object' ? accounts[account.accountId] : account;
-      accounts[account.accountId] = {
-        ...current,
-        state: {
-          ...(current.state && typeof current.state === 'object' ? current.state : {}),
-          lastDeliveryError: item.error,
-        },
-        updatedAt: now(),
-      };
-    }
-    const analytics = latest.analytics && typeof latest.analytics === 'object' ? { ...latest.analytics } : {};
-    analytics.alertsSent = Number(analytics.alertsSent || 0) + sent.length;
-    if (failed.length) analytics.failures = Number(analytics.failures || 0) + failed.length;
-    const historyItems = [];
-    for (const item of sent) {
-      const account = item.account;
-      historyItems.push({
-        id: 'history_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-        createdAt: item.sentAt,
-        status: 'alert_sent',
-        manual: true,
-        actorId: options.actorId || null,
-        creatorId: creator.creatorId,
-        creator: creator.displayName || account.displayName,
-        accountId: account.accountId,
-        platform: account.platform,
-        alertType: 'live',
-        contentId: item.event.id || null,
-        messageId: item.message.id,
-        channelId: item.channelId,
-      });
-    }
-    for (const item of failed) {
-      const account = item.account || {};
-      historyItems.push({
-        id: 'history_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-        createdAt: now(),
-        status: 'delivery_failed',
-        manual: true,
-        actorId: options.actorId || null,
-        creatorId: creator.creatorId,
-        creator: creator.displayName || account.displayName,
-        accountId: account.accountId || null,
-        platform: account.platform || null,
-        alertType: 'live',
-        error: item.error,
-      });
-    }
-    const history = [...(Array.isArray(latest.history) ? latest.history : []), ...historyItems].slice(-1000);
-    return { ...latest, accounts, analytics, history, updatedAt: now() };
-  }, {}, options.guild || { guildId });
-
-  return {
-    creatorId,
-    sent: sent.map((item) => ({
-      accountId: item.account.accountId,
-      platform: item.account.platform,
-      username: item.account.username || item.account.externalId || null,
-      messageId: item.message.id,
-      channelId: item.channelId,
-    })),
-    failed: failed.map((item) => ({
-      accountId: item.account?.accountId || null,
-      platform: item.account?.platform || null,
-      username: item.account?.username || item.account?.externalId || null,
-      error: item.error,
-    })),
-  };
-}
-
-async function buildEventPayload(client, guildId, config, account, creator, event, options = {}) {
-  const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-  if (!discordGuild) throw new Error('Discord guild is unavailable.');
-  const channel = options.channel || await resolveAlertChannel(discordGuild, config, account, event.type);
-  const member = await resolveLinkedMember(discordGuild, account, creator);
-  const vars = variableMap(discordGuild, member, account, creator, event);
-  const template = templateFor(config, event.type);
-  const platform = PLATFORM[account.platform] || { label: account.platform || 'Unknown', icon: '🌐', color: 0x5865F2 };
-  const creatorName = vars.creator;
-  const url = vars.url;
-  const profileUrl = account.profileUrl || account.url || '';
-  const kickLiveSeconds =
-    account.platform === 'kick' &&
-    event.type === 'live' &&
-    event.startedAt
-      ? secondsBetween(event.startedAt, event.endedAt || now())
-      : null;
-
-  const durationText =
-    vars.duration ||
-    (kickLiveSeconds !== null ? humanDuration(kickLiveSeconds) : '');
-  const previousVod = event.previousVod && typeof event.previousVod === 'object' ? event.previousVod : null;
-  const embedColor = parseTemplateColor(render(template.color || '', vars), platform.color);
-
-  const renderedDescription = clean(render(template.description, vars), 3800);
-  const statusType = event.type === 'live' || event.type === 'ended' ? event.type : null;
-  const liveStatus = statusType === 'ended'
-    ? 'OFFLINE'
-    : statusType === 'live'
-      ? String(event.liveStatus || 'LIVE').toUpperCase() === 'OFFLINE' ? 'OFFLINE' : 'LIVE'
-      : null;
-  const baseDescription = (event.type === 'ended' || (event.type === 'live' && liveStatus === 'OFFLINE')) && account.platform === 'tiktok'
-    ? `${creatorName} has ended their TikTok stream.`
-    : renderedDescription || clean(event.title, 3800) || `${creatorName} has a new ${event.type}.`;
-  const defaultActionLabel = event.type === 'live' && liveStatus === 'OFFLINE' ? 'View Channel' : event.type === 'live' ? 'Watch Live' : 'Open';
-  const actionLabelTemplate = event.type === 'live' && liveStatus === 'OFFLINE' ? defaultActionLabel : template.buttonLabel || defaultActionLabel;
-  const actionLabel = clean(render(actionLabelTemplate, vars), 80) || defaultActionLabel;
-  const actionLines = [];
-  const liveStatusText = liveStatus === 'OFFLINE' ? '🔴 **OFFLINE**' : liveStatus === 'LIVE' ? '🟢 **LIVE**' : '';
-  const profileLink = /^https?:\/\//i.test(profileUrl) && profileUrl !== url ? '👤 [Creator Profile](' + profileUrl + ')' : '';
-  if (/^https?:\/\//i.test(url)) {
-    const rightAction = liveStatusText || profileLink;
-    const rightSpacer = rightAction ? '\u2003'.repeat(liveStatusText ? 9 : 8) : '';
-    actionLines.push('🚀 **[' + actionLabel + '](' + url + ')**' + rightSpacer + rightAction);
-  } else if (profileLink) actionLines.push(profileLink);
-  const embedCallToAction = embedActionBlock(actionLines);
-
-  const embed = new EmbedBuilder()
-    .setColor(embedColor)
-    .setTitle(
-      account.platform === 'kick' && liveStatus === 'OFFLINE'
-        ? clean(`🔴 ${creatorName} is OFFLINE`, 256)
-        : clean(render(template.title, vars), 256) || `${creatorName} update`
-    )
-    .setDescription(clean(stripTrailingDivider(baseDescription) + embedCallToAction, 4096))
-    .setFooter({ text: clean(render(template.footer || `Social Studio • ${platform.label}`, vars), 2048) || `Social Studio • ${platform.label}` })
-    .setTimestamp();
-
-  const authorIcon = account.avatar || creator?.avatar || null;
-  const author = { name: creatorName };
-  if (/^https?:\/\//i.test(authorIcon || '')) author.iconURL = authorIcon;
-  if (/^https?:\/\//i.test(profileUrl)) author.url = profileUrl;
-  embed.setAuthor(author);
-
-  const previewAttachment = await fetchKickPreviewAttachment(account, event);
-
-  const previewImage = previewAttachment
-    ? `attachment://${previewAttachment.name}`
-    : cacheBustedImageUrl(event.thumbnail);
-
-  if (previewImage) embed.setImage(previewImage);
-  if (/^https?:\/\//i.test(account.avatar || '')) embed.setThumbnail(account.avatar);
-
-  const fields = [];
-  const started = discordTimestamp(event.startedAt);
-  const ended = discordTimestamp(event.endedAt);
-  const published = discordTimestamp(event.publishedAt);
-
-  if (event.type === 'live') {
-    if (account.platform !== 'tiktok' && (event.category || event.game)) {
-      fields.push({
-        name: '🎮 Game',
-        value: clean(event.category || event.game, 1024),
-        inline: true
-      });
-    }
-
-    if (account.platform === 'tiktok') {
-      fields.push({
-        name: '📱 Platform',
-        value: liveStatus === 'OFFLINE' ? 'TikTok' : 'TikTok LIVE',
-        inline: true
-      });
-    }
-
-    if (account.platform === 'kick') {
-      const kickName = clean(event.kickUsername || account.username, 100);
-      const kickOffline = liveStatus === 'OFFLINE';
-
-      if (kickName) {
-        fields.push({
-          name: '🟢 Kick',
-          value: `@${kickName.replace(/^@/, '')}`,
-          inline: true
-        });
-      }
-
-      if (kickOffline) {
-        const peak = Number(
-          account.state?.peakViewers ||
-          vars.peakViewers ||
-          event.viewerCount ||
-          0
-        );
-
-        if (peak > 0) {
-          fields.push({
-            name: '📈 Peak Viewers',
-            value: intText(peak),
-            inline: true
-          });
-        }
-
-        if (started) {
-          fields.push({
-            name: '🕐 Started',
-            value: started,
-            inline: true
-          });
-        }
-
-        if (durationText) {
-          fields.push({
-            name: '⏱️ Streamed For',
-            value: durationText,
-            inline: true
-          });
-        }
-
-        if (ended) {
-          fields.push({
-            name: '⚫ Ended',
-            value: ended,
-            inline: true
-          });
-        }
-      } else {
-        if (vars.viewers) {
-          fields.push({
-            name: '👥 Viewers',
-            value: vars.viewers,
-            inline: true
-          });
-        }
-
-        if (started) {
-          fields.push({
-            name: '🕐 Started',
-            value: started,
-            inline: true
-          });
-        }
-
-        if (durationText) {
-          fields.push({
-            name: '⏱️ Live For',
-            value: durationText,
-            inline: true
-          });
-        }
-
-        if (event.language) {
-          fields.push({
-            name: '🌐 Language',
-            value: clean(String(event.language).toUpperCase(), 100),
-            inline: true
-          });
-        }
-
-        if (event.hasMatureContent === true) {
-          fields.push({
-            name: '🔞 Mature',
-            value: 'Yes',
-            inline: true
-          });
-        }
-      }
-    } else {
-      if (vars.viewers) {
-        fields.push({
-          name: '👥 Viewers',
-          value: vars.viewers,
-          inline: true
-        });
-      }
-
-      if (started) {
-        fields.push({
-          name: '⏲️ Started',
-          value: started,
-          inline: true
-        });
-      }
-    }
-  } else if (event.type === 'ended') {
-    const currentVod = event.currentVod && typeof event.currentVod === 'object' ? event.currentVod : null;
-    if (account.platform !== 'tiktok' && (event.category || event.game)) fields.push({ name: '🎮 Game', value: clean(event.category || event.game, 1024), inline: true });
-    if (account.platform === 'tiktok') fields.push({ name: '📱 Platform', value: 'TikTok', inline: true });
-    if (vars.peakViewers) fields.push({ name: '📈 Peak', value: vars.peakViewers, inline: true });
-    if (started) fields.push({ name: '⏲️ Started', value: started, inline: true });
-    if (/^https?:\/\//i.test(currentVod?.url || '')) fields.push({ name: '🎞️ VOD', value: `[**Click to view**](${currentVod.url})`, inline: true });
-    if (durationText) fields.push({ name: '⏱️ Duration', value: durationText, inline: true });
-  } else {
-    if (account.platform !== 'tiktok' && (event.category || event.game)) fields.push({ name: '🎮 Game', value: clean(event.category || event.game, 1024), inline: true });
-    if (vars.viewers) fields.push({ name: '👥 Viewers', value: vars.viewers, inline: true });
-    if (started) fields.push({ name: '⏲️ Started', value: started, inline: true });
-  }
-
-  if (
-    event.type !== 'ended' &&
-    vars.peakViewers &&
-    !(account.platform === 'kick' && liveStatus === 'OFFLINE')
-  ) {
-    fields.push({
-      name: '📈 Peak',
-      value: vars.peakViewers,
-      inline: true
-    });
-  }
-  if (Number(event.viewCount) > 0) fields.push({ name: '👁️ Views', value: intText(event.viewCount), inline: true });
-  if (event.type !== 'ended' && account.platform !== 'kick' && durationText) fields.push({ name: '⏱️ Duration', value: durationText, inline: true });
-  if (
-    event.type !== 'ended' &&
-    ended &&
-    !(account.platform === 'kick' && liveStatus === 'OFFLINE')
-  ) {
-    fields.push({
-      name: '⚫ Ended',
-      value: ended,
-      inline: true
-    });
-  }
-  if (published) fields.push({ name: '📅 Published', value: published, inline: true });
-  if (event.type === 'live' && /^https?:\/\//i.test(previousVod?.url || '')) {
-    const vodTitle = clean(previousVod.title || 'Previous stream replay', 180);
-    fields.push({ name: '\u200B', value: `🎞️ **[Watch Latest VOD](${previousVod.url})**${vodTitle ? `\n${vodTitle}` : ''}`, inline: false });
-  }
-
-  if (fields.length) embed.addFields(fields.slice(0, 25));
-
-  const mentionMode = account.mentionMode || 'none';
-  const content = mentionMode === 'everyone' ? '@everyone' : mentionMode === 'here' ? '@here' : mentionMode === 'role' && account.mentionRoleId ? `<@&${account.mentionRoleId}>` : undefined;
-  const quiet = quietHoursActive(config.settings);
-  const resolvedContent = content == null ? content : await emojis.resolveText(client, guildId, content);
-  const resolvedEmbeds = await emojis.resolveEmbeds(client, guildId, [embed]);
-  return {
-    channel,
-    quietHoursPingSuppressed: quiet && Boolean(content),
-    payload: {
-      content: resolvedContent,
-      embeds: resolvedEmbeds,
-      components: [],
-      files: previewAttachment ? [previewAttachment] : [],
-      allowedMentions: {
-        parse: !quiet && (mentionMode === 'everyone' || mentionMode === 'here') ? ['everyone'] : [],
-        roles: !quiet && account.mentionRoleId ? [account.mentionRoleId] : [],
-      },
-    },
-  };
-}
-
-async function sendEvent(client, guildId, config, account, creator, event) {
-  const { channel, payload, quietHoursPingSuppressed } = await buildEventPayload(client, guildId, config, account, creator, event);
-  const message = await channel.send(payload);
-  message.socialStudioChannelId = channel.id;
-  message.socialStudioQuietHoursPingSuppressed = quietHoursPingSuppressed === true;
-  return message;
-}
-
-async function updateLiveMessage(client, guildId, config, account, creator, event, previous) {
-  const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-  if (!discordGuild) throw new Error('Discord guild is unavailable.');
-  const channelId =
-    previous.lastLiveMessageChannelId || previous.lastAlertChannelId;
-  const messageId =
-    previous.lastLiveMessageId || previous.lastAlertMessageId;
-  const channel = discordGuild.channels.cache.get(channelId) || await discordGuild.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased?.() || !channel.messages?.fetch) throw new Error('The saved LIVE post channel is unavailable.');
-  const message = await channel.messages.fetch(messageId).catch(() => null);
-  if (!message) throw new Error('The saved LIVE post could not be found.');
-  const { payload } = await buildEventPayload(client, guildId, config, account, creator, event, { channel });
-  await message.edit({
-    embeds: payload.embeds,
-    components: payload.components,
-    attachments: [],
-    files: payload.files || [],
-  });
-  message.socialStudioChannelId = channel.id;
-  return message;
+  return { creatorId, sent };
 }
 
 async function checkGuildAccounts(client, guildId, options = {}) {
-  if (!client || !guildId) throw new Error('Social Studio check requires a Discord client and guild ID.');
-  if (runningGuilds.has(guildId)) return { guildId, skipped: true, reason: 'check_already_running', results: [] };
-  runningGuilds.add(guildId);
-  try {
-    const config = configFor(guildId, options.guildConfig);
-    if (!config.enabled && !options.manual) return { guildId, skipped: true, reason: 'module_disabled', results: [] };
-    const interval = Math.max(60000, Number(config.settings?.checkIntervalMs || 300000));
-    const accountFilter = new Set((options.accountIds || []).map(String));
-    const creatorFilter = new Set((options.creatorIds || []).map(String));
-    const results = [];
-    const monitorUpdates = new Map();
-    const duplicateMerges = new Map();
-    const analyticsStart = { ...config.analytics };
-    const historyStartLength = config.history.length;
+  const config = configFor(guildId, options.guildConfig);
+  if (!config.enabled && !options.force) return { skipped: true, reason: 'disabled' };
+  const quiet = quietHoursActive(config.settings);
+  const monitorUpdates = new Map();
+  const duplicateMerges = new Map();
+  const analyticsDelta = {};
+  const historyEntries = [];
+  const results = [];
+  const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+  if (!guild) return { skipped: true, reason: 'guild_unavailable' };
 
-    for (const account of Object.values(config.accounts)) {
-      if (!account) continue;
-      if (duplicateMerges.has(account.accountId)) continue;
-      if (accountFilter.size && !accountFilter.has(String(account.accountId))) continue;
-      const creator = creatorFor(config, account.accountId);
-      if (creatorFilter.size && !creatorFilter.has(String(creator?.creatorId || ''))) continue;
-      if (account.enabled === false && !options.includeDisabled) continue;
-      if (creator?.enabled === false && !options.includeDisabled) continue;
-
+  const accountIds = options.accountIds?.length ? options.accountIds : Object.keys(config.accounts);
+  for (const accountId of accountIds) {
+    const account = config.accounts[accountId];
+    if (!account || account.enabled === false) continue;
+    if (runningGuilds.has(`${guildId}:${accountId}`)) continue;
+    runningGuilds.add(`${guildId}:${accountId}`);
+    try {
       const previous = account.state && typeof account.state === 'object' ? { ...account.state } : {};
-      const lastChecked = previous.lastCheckedAt ? new Date(previous.lastCheckedAt).getTime() : 0;
-      if (!options.manual && !options.force && lastChecked && Date.now() - lastChecked < interval) continue;
-
       const checked = await checkAccount(account);
-      const provider = providerInfo(account.platform);
-      const events = eventCandidates(account, previous, checked);
-      const state = {
-        ...previous,
-        lastCheckedAt: checked.checkedAt || now(),
-        lastCheckStatus: checked.status,
-        providerStatus: provider.status,
-        providerSource: checked.providerSource || null,
-        confidence: checked.confidence || null,
-        lastError: checked.reason || null,
-      };
-
-      if (typeof checked.isLive === 'boolean') {
-        state.isLive = checked.isLive;
-        state.liveEventId = checked.isLive ? checked.event?.id || previous.liveEventId || null : null;
-        if (checked.isLive) {
-          state.lastLiveEvent = checked.event ? { ...checked.event } : previous.lastLiveEvent || null;
-          const viewers = Number(checked.event?.viewerCount);
-          if (Number.isFinite(viewers) && viewers > 0) state.peakViewers = previous.isLive === true ? Math.max(Number(previous.peakViewers || 0), viewers) : viewers;
-        }
-        if (checked.isLive && previous.isLive !== true) {
-          state.liveStartedAt = checked.event?.startedAt || checked.checkedAt || now();
-          state.peakViewers = Number(checked.event?.viewerCount) > 0 ? Number(checked.event.viewerCount) : null;
-        }
-        if (!checked.isLive && previous.isLive === true) state.lastLiveEndedAt = checked.checkedAt || now();
+      const state = { ...previous, lastCheckedAt: checked.checkedAt || now(), lastStatus: checked.status, lastError: checked.status === 'unavailable' || checked.status === 'configuration_required' ? checked.reason : null };
+      if (checked.isLive === true) {
+        state.isLive = true;
+        state.liveEventId = checked.event?.id || state.liveEventId || null;
+        state.liveStartedAt = checked.event?.startedAt || state.liveStartedAt || null;
+        state.lastLiveEvent = checked.event || state.lastLiveEvent || null;
+        const viewers = Number(checked.event?.viewerCount);
+        if (Number.isFinite(viewers) && viewers >= 0) state.peakViewers = Math.max(Number(previous.peakViewers || 0), viewers);
+      } else if (checked.isLive === false) {
+        state.isLive = false;
+        if (previous.isLive === true) state.lastLiveEndedAt = checked.checkedAt || now();
       }
 
-      const contentItems = Array.isArray(checked.contentItems) && checked.contentItems.length
-        ? checked.contentItems
-        : checked.latestContent ? [checked.latestContent] : [];
-      const contentIds = { ...(previous.contentIds && typeof previous.contentIds === 'object' ? previous.contentIds : {}) };
-      for (const item of contentItems) {
-        if (!item?.type || !item?.id || !isPostableContentItem(item)) continue;
-        contentIds[item.type] = String(item.id);
-      }
-      state.contentIds = contentIds;
-      if (checked.latestContent?.id) {
-        state.latestContentId = checked.latestContent.id;
-        state.latestContentType = checked.latestContent.type;
-        state.latestContentAt = checked.latestContent.publishedAt || null;
-      }
-
-      account.state = state;
-      if (checked.externalId) account.externalId = String(checked.externalId);
-      if (checked.resolvedUsername) {
-        account.username = String(checked.resolvedUsername);
-        account.normalizedUsername = String(checked.resolvedUsername).toLowerCase();
-      }
-      if (checked.url) account.profileUrl = String(checked.url);
-      if (checked.avatar) account.avatar = String(checked.avatar);
-      account.updatedAt = now();
-      config.analytics.checks = Number(config.analytics.checks || 0) + 1;
-
-      const resolvedDuplicates = resolvedDuplicateIds(config, account, checked, creator);
-      for (const duplicateId of resolvedDuplicates) {
-        duplicateMerges.set(duplicateId, account.accountId);
-        monitorUpdates.delete(duplicateId);
-        addHistory(config, { status: 'account_merged', platform: account.platform, duplicateAccountId: duplicateId, accountId: account.accountId, externalId: account.externalId || null, username: account.username || null });
-      }
+      const creator = creatorFor(config, accountId);
+      const duplicateIds = resolvedDuplicateIds(config, account, checked, creator);
+      for (const duplicateId of duplicateIds) duplicateMerges.set(duplicateId, accountId);
 
       const delivered = [];
-      let liveMessageUpdated = false;
+      const events = eventCandidates(account, previous, checked);
       for (const event of events) {
-        try {
-          const key = `${event.type}:${event.id || event.url || event.title}`;
-          if (config.settings?.suppressDuplicates !== false && previous.lastAlertKey === key) continue;
-          const message = await sendEvent(client, guildId, config, account, creator, event);
+        const key = eventKey(event);
+        if (config.settings.suppressDuplicates !== false && previous.lastAlertKey === key && event.type !== 'ended') continue;
+        if (quiet && !options.manual && event.type !== 'ended') continue;
+
+        if (event.type === 'ended' && previous.isLive === true) {
+          let updated = null;
+          if (config.settings.deleteEndedNotifications !== false) {
+            await deleteEndedAlert(client, guildId, previous).catch(() => false);
+          } else if (config.settings.editLiveNotifications !== false) {
+            updated = await updateEndedAlert(client, guildId, config, account, event, previous).catch(() => null);
+          }
+          if (updated) delivered.push({ type: 'ended', id: event.id, ...updated });
           state.lastAlertKey = key;
           state.lastAlertAt = now();
-          state.lastAlertMessageId = message.id;
-          state.lastAlertChannelId = message.socialStudioChannelId || message.channelId || null;
-          if (event.type === 'live') {
-            state.lastLiveMessageId = message.id;
-            state.lastLiveMessageChannelId = state.lastAlertChannelId;
-            state.lastLiveMessageUpdatedAt = state.lastAlertAt;
-          }
-          state.lastDeliveryError = null;
-          config.analytics.alertsSent = Number(config.analytics.alertsSent || 0) + 1;
-          addHistory(config, { status: 'alert_sent', accountId: account.accountId, creatorId: creator?.creatorId || null, creator: creator?.displayName || account.displayName, platform: account.platform, alertType: event.type, contentId: event.id || null, messageId: message.id, channelId: state.lastAlertChannelId, quietHoursPingSuppressed: message.socialStudioQuietHoursPingSuppressed === true });
-          delivered.push({ type: event.type, id: event.id || null, messageId: message.id, channelId: state.lastAlertChannelId, quietHoursPingSuppressed: message.socialStudioQuietHoursPingSuppressed === true });
-        } catch (error) {
-          state.lastDeliveryError = error.message;
-          config.analytics.failures = Number(config.analytics.failures || 0) + 1;
-          addHistory(config, { status: 'delivery_failed', accountId: account.accountId, platform: account.platform, alertType: event.type, contentId: event.id || null, error: error.message });
+          state.lastLiveMessageId = null;
+          state.lastLiveMessageChannelId = null;
+          continue;
+        }
+
+        const delivery = await sendAlert(client, guildId, config, account, event, options);
+        delivered.push({ type: event.type, id: event.id, ...delivery });
+        state.lastAlertKey = key;
+        state.lastAlertAt = now();
+        state.lastAlertMessageId = delivery.messageId;
+        state.lastAlertChannelId = delivery.channelId;
+        if (event.type === 'live') {
+          state.lastLiveMessageId = delivery.messageId;
+          state.lastLiveMessageChannelId = delivery.channelId;
+          state.lastLiveMessageUpdatedAt = now();
         }
       }
 
-      if (
-        checked.isLive === false
-        && previous.isLive === true
-        && (previous.lastLiveMessageId || previous.lastAlertMessageId)
-        && (previous.lastLiveMessageChannelId || previous.lastAlertChannelId)
-      ) {
-        try {
-          const prior = previous.lastLiveEvent && typeof previous.lastLiveEvent === 'object' ? previous.lastLiveEvent : {};
-          const offlineEvent = {
-            ...prior,
-            type: 'live',
-            id: previous.liveEventId || prior.id || account.accountId,
-            liveStatus: 'OFFLINE',
-            endedAt: checked.checkedAt || now(),
-          };
-          await updateLiveMessage(client, guildId, config, account, creator, offlineEvent, previous);
+      if (liveMessageUpdateDue(account, previous, checked, config.settings)) {
+        const updated = config.settings.editLiveNotifications === false
+          ? null
+          : await updateLiveAlert(client, guildId, config, account, checked.event, previous).catch(() => null);
+        if (updated) {
+          state.lastLiveMessageId = updated.messageId;
+          state.lastLiveMessageChannelId = updated.channelId;
           state.lastLiveMessageUpdatedAt = now();
-          state.lastDeliveryError = null;
-          liveMessageUpdated = true;
-          addHistory(config, { status: 'alert_updated', accountId: account.accountId, creatorId: creator?.creatorId || null, creator: creator?.displayName || account.displayName, platform: account.platform, alertType: 'live', contentId: offlineEvent.id || null, messageId: previous.lastLiveMessageId || previous.lastAlertMessageId, channelId: previous.lastLiveMessageChannelId || previous.lastAlertChannelId, liveStatus: 'offline' });
-        } catch (error) {
-          state.lastLiveMessageUpdatedAt = now();
-          state.lastDeliveryError = error.message;
-          config.analytics.failures = Number(config.analytics.failures || 0) + 1;
-          addHistory(config, { status: 'delivery_failed', accountId: account.accountId, platform: account.platform, alertType: 'live_status_update', contentId: previous.liveEventId || null, error: error.message });
-        }
-      } else if (liveMessageUpdateDue(account, previous, checked)) {
-        try {
-          const updateEvent = { ...checked.event, type: 'live', id: checked.event.id || state.liveEventId || previous.liveEventId || account.accountId, liveStatus: 'LIVE' };
-          await updateLiveMessage(client, guildId, config, account, creator, updateEvent, previous);
-          state.lastLiveMessageUpdatedAt = now();
-          state.lastDeliveryError = null;
-          liveMessageUpdated = true;
-          addHistory(config, { status: 'alert_updated', accountId: account.accountId, creatorId: creator?.creatorId || null, creator: creator?.displayName || account.displayName, platform: account.platform, alertType: 'live', contentId: updateEvent.id || null, messageId: previous.lastLiveMessageId || previous.lastAlertMessageId, channelId: previous.lastLiveMessageChannelId || previous.lastAlertChannelId });
-        } catch (error) {
-          state.lastLiveMessageUpdatedAt = now();
-          state.lastDeliveryError = error.message;
-          config.analytics.failures = Number(config.analytics.failures || 0) + 1;
-          addHistory(config, { status: 'delivery_failed', accountId: account.accountId, platform: account.platform, alertType: 'live_update', contentId: checked.event?.id || null, error: error.message });
+          delivered.push({ type: 'live', id: checked.event.id, refreshed: true, ...updated });
         }
       }
 
-      addHistory(config, { status: 'checked', accountId: account.accountId, platform: account.platform, providerStatus: checked.status, isLive: checked.isLive, detectedEvents: events.map((event) => event.type), delivered: delivered.length, updated: liveMessageUpdated });
-      monitorUpdates.set(account.accountId, {
-        state: { ...state },
-        externalId: account.externalId ? String(account.externalId) : null,
-        resolvedUsername: account.username || null,
-        profileUrl: account.profileUrl || null,
-        avatar: account.avatar || null,
-        updatedAt: account.updatedAt,
+      monitorUpdates.set(accountId, {
+        state,
+        externalId: checked.externalId || null,
+        resolvedUsername: checked.resolvedUsername || null,
+        profileUrl: checked.url || null,
+        avatar: checked.avatar || null,
+        updatedAt: now(),
       });
-      results.push({
-        accountId: account.accountId,
-        creatorId: creator?.creatorId || null,
-        creator: creator?.displayName || account.displayName || null,
-        platform: account.platform,
-        username: account.username,
-        externalId: account.externalId || null,
-        profileUrl: account.profileUrl || null,
-        status: checked.status,
-        isLive: checked.isLive,
-        reason: checked.reason || null,
-        providerSource: checked.providerSource || null,
-        confidence: checked.confidence || null,
-        live: checked.event || null,
-        contentItems,
-        events: events.map((event) => ({ type: event.type, id: event.id })),
-        delivered,
-      });
-    }
-
-    if (monitorUpdates.size || duplicateMerges.size) {
-      const analyticsDelta = {};
-      for (const key of new Set([...Object.keys(analyticsStart), ...Object.keys(config.analytics)])) {
-        const delta = Number(config.analytics[key] || 0) - Number(analyticsStart[key] || 0);
-        if (delta) analyticsDelta[key] = delta;
+      results.push({ accountId, platform: account.platform, status: checked.status, isLive: checked.isLive, live: checked.event || null, delivered });
+      analyticsDelta.checks = Number(analyticsDelta.checks || 0) + 1;
+      if (delivered.length) analyticsDelta.alerts = Number(analyticsDelta.alerts || 0) + delivered.length;
+      for (const item of delivered) {
+        historyEntries.push({ id: `history_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, createdAt: now(), accountId, platform: account.platform, status: item.refreshed ? 'alert_updated' : 'alert_sent', alertType: item.type, eventId: item.id, messageId: item.messageId, channelId: item.channelId });
       }
-      const historyEntries = config.history.slice(historyStartLength);
-      saveMonitorState(guildId, config, monitorUpdates, analyticsDelta, historyEntries, client.guilds.cache.get(guildId) || null, duplicateMerges);
-    }
-    const finalResults = results.filter((item) => !duplicateMerges.has(item.accountId));
-    return { guildId, checked: finalResults.length, results: finalResults, merged: duplicateMerges.size };
-  } finally {
-    runningGuilds.delete(guildId);
-  }
-}
-
-async function sweep(client) {
-  for (const guild of client.guilds.cache.values()) {
-    try {
-      deleteExpiredCreators(guild.id, Date.now(), { actorId: 'system' });
     } catch (error) {
-      console.error(`[Social Studio] creator cleanup failed for guild ${guild.id}:`, error?.message || error);
-    }
-    try {
-      await checkGuildAccounts(client, guild.id, { force: true });
-    } catch (error) {
-      console.error(`[Social Studio] automatic check failed for guild ${guild.id}:`, error?.message || error);
+      analyticsDelta.errors = Number(analyticsDelta.errors || 0) + 1;
+      results.push({ accountId, platform: account.platform, status: 'error', error: error?.message || String(error), delivered: [] });
+    } finally {
+      runningGuilds.delete(`${guildId}:${accountId}`);
     }
   }
+
+  const saved = saveMonitorState(guildId, config, monitorUpdates, analyticsDelta, historyEntries, guild, duplicateMerges);
+  return { guildId, checked: results.length, results, savedAt: saved.updatedAt || now() };
 }
 
 function startupSocialStudio(client) {
   if (timer) return timer;
-  const tickMs = Math.max(30000, Number(process.env.SOCIAL_STUDIO_TICK_MS || 60000));
-  setTimeout(() => sweep(client).catch((error) => console.error('[Social Studio] initial sweep failed:', error)), 5000).unref?.();
-  timer = setInterval(() => sweep(client).catch((error) => console.error('[Social Studio] sweep failed:', error)), tickMs);
+  const interval = Math.max(30000, Number(process.env.SOCIAL_STUDIO_TICK_MS || 60000));
+  const run = () => {
+    for (const guild of client.guilds.cache.values()) {
+      checkGuildAccounts(client, guild.id).catch((error) => console.error(`[Social Studio] monitor failed for guild ${guild.id}:`, error));
+    }
+  };
+  const initial = setTimeout(run, 5000);
+  initial.unref?.();
+  timer = setInterval(run, interval);
   timer.unref?.();
-  console.log(`✅ Social Studio monitor started (${tickMs}ms scheduler tick)`);
+  console.log(`✅ Social Studio monitor started (${interval}ms)`);
   return timer;
 }
 
-module.exports = { startupSocialStudio, checkGuildAccounts, forcePostCreatorLive, providerInfo };
+module.exports = {
+  startupSocialStudio,
+  checkGuildAccounts,
+  forcePostCreatorLive,
+  buildLiveFields,
+};
