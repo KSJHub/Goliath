@@ -471,18 +471,65 @@ async function handleUserManageAccountEditSubmit(interaction) {
 
 async function handleUserManageAccountToggle(interaction) {
   const context = getSelectedOwnedAccount(interaction);
+
   if (context.error) {
-    await interaction.reply({ content: context.error, flags: 64 });
+    await interaction.reply({
+      content: context.error,
+      flags: 64,
+    });
     return true;
   }
-  const section = guildManager.getGuildSection(interaction.guildId, 'social', {});
-  const account = section.accounts?.[context.account.accountId];
-  if (!account) throw new Error('The selected account no longer exists.');
-  account.enabled = account.enabled === false;
+
+  const section = guildManager.getGuildSection(
+    interaction.guildId,
+    'social',
+    {},
+  );
+
+  const account =
+    section.accounts?.[context.account.accountId];
+
+  if (!account) {
+    throw new Error(
+      'The selected account no longer exists.'
+    );
+  }
+
+  const enabled = account.enabled === false;
+
+  account.enabled = enabled;
+
+  if (!enabled) {
+    account.state = {
+      ...(account.state || {}),
+      isLive: null,
+      liveEventId: null,
+      lastLiveEvent: null,
+      lastLiveMessageId: null,
+      lastLiveMessageChannelId: null,
+      lastLiveMessageUpdateAt: null,
+      lastLiveMessageUpdatedAt: null,
+      lastDeliveryError: null,
+      lastError: null,
+    };
+  }
+
   account.updatedAt = new Date().toISOString();
+
   saveUserSocialSection(interaction, section);
-  const refreshed = getOwnedCreatorAndAccounts(interaction);
-  return updatePanel(interaction, buildUserManageAccountPanel(interaction, refreshed.creator, refreshed.accounts, account.accountId));
+
+  const refreshed =
+    getOwnedCreatorAndAccounts(interaction);
+
+  return updatePanel(
+    interaction,
+    buildUserManageAccountPanel(
+      interaction,
+      refreshed.creator,
+      refreshed.accounts,
+      account.accountId,
+    ),
+  );
 }
 
 async function handleUserManageAccountCheck(interaction) {
