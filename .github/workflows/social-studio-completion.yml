@@ -1,0 +1,133 @@
+name: Social Studio Completion
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: social-studio-completion
+  cancel-in-progress: false
+
+jobs:
+  finish:
+    if: ${{ !contains(github.event.head_commit.message, '[social-finish]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DEV
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Apply completion patches
+        shell: python
+        run: |
+          from pathlib import Path
+
+          root = Path('.')
+          alerts = root / 'src/modules/socialStudio/socialAlerts'
+
+          # Discord supports up to 25 string-select values. Social Studio has seven
+          # providers, so never artificially cap the Add Account platform picker at five.
+          changed = 0
+          for path in alerts.glob('*.js'):
+              text = path.read_text(encoding='utf-8')
+              new = text.replace(
+                  ".setMaxValues(5).addOptions(PLATFORMS.map",
+                  ".setMaxValues(Math.min(PLATFORMS.length, 25)).addOptions(PLATFORMS.map",
+              )
+              if new != text:
+                  path.write_text(new, encoding='utf-8')
+                  changed += 1
+          if changed == 0:
+              panel = (alerts / 'socialStudioPanel.js').read_text(encoding='utf-8')
+              if '.setMaxValues(Math.min(PLATFORMS.length, 25)).addOptions(PLATFORMS.map' not in panel:
+                  raise SystemExit('Platform selector completion patch did not match the DEV implementation.')
+
+          core_path = alerts / 'socialStudioMonitorCore.js'
+          core = core_path.read_text(encoding='utf-8')
+
+          # Enforce the public 10/15/20/30/45/60-minute contract in the core too,
+          # so no direct caller can accidentally revive the legacy 5-minute policy.
+          old = "const LIVE_MESSAGE_REFRESH_MS = 10 * 60 * 1000;\n"
+          new = "const LIVE_MESSAGE_REFRESH_MS = 10 * 60 * 1000;\nconst LIVE_MESSAGE_REFRESH_INTERVALS = new Set([600000, 900000, 1200000, 1800000, 2700000, 3600000]);\n"
+          if 'LIVE_MESSAGE_REFRESH_INTERVALS' not in core:
+              if old not in core:
+                  raise SystemExit('LIVE refresh constant anchor not found.')
+              core = core.replace(old, new, 1)
+
+          old = """  const requested = Number(settings.liveMessageRefreshMs);\n  const refreshMs = Number.isFinite(requested) && requested >= 60 * 1000\n    ? requested\n    : LIVE_MESSAGE_REFRESH_MS;\n"""
+          new = """  const requested = Number(settings.liveMessageRefreshMs);\n  const refreshMs = LIVE_MESSAGE_REFRESH_INTERVALS.has(requested)\n    ? requested\n    : LIVE_MESSAGE_REFRESH_MS;\n"""
+          if old in core:
+              core = core.replace(old, new, 1)
+          elif 'const refreshMs = LIVE_MESSAGE_REFRESH_INTERVALS.has(requested)' not in core:
+              raise SystemExit('LIVE refresh decision anchor not found.')
+
+          # Give every non-LIVE alert the same visual action/divider language as the
+          # locked LIVE card while retaining each alert type's own template and title.
+          old = """  } else {\n    const renderedTitle = render(template.title, vars) || `${platform.icon} ${platform.label}`;\n    embed.setTitle(renderedTitle.slice(0, 256));\n    const description = render(template.description, vars) || vars.title;\n    embed.setDescription(description.slice(0, 4096));\n  }\n"""
+          new = """  } else {\n    const renderedTitle = render(template.title, vars) || `${platform.icon} ${platform.label}`;\n    embed.setTitle(renderedTitle.slice(0, 256));\n    const description = stripTrailingDivider(render(template.description, vars) || vars.title);\n    const actionLabel = clean(template.buttonLabel || 'View Post', 80);\n    const actionLines = vars.url ? [`▶️ **[${actionLabel}](${vars.url})**`] : [];\n    embed.setDescription(`${description}${embedActionBlock(actionLines)}`.slice(0, 4096));\n  }\n"""
+          if old in core:
+              core = core.replace(old, new, 1)
+          elif "const actionLabel = clean(template.buttonLabel || 'View Post', 80);" not in core:
+              raise SystemExit('Non-LIVE renderer anchor not found.')
+
+          # If a fresh Kick preview download fails during a refresh, retain the image
+          # already on the Discord message rather than replacing it with a stale/broken URL.
+          old = """  const previewAttachment = await fetchKickPreviewAttachment(account, event);\n  if (previewAttachment) {\n    embed.setImage(`attachment://${previewAttachment.name}`);\n    payload.files = [previewAttachment];\n    payload.attachments = [];\n  }\n  await message.edit(payload);\n"""
+          new = """  const previewAttachment = await fetchKickPreviewAttachment(account, event);\n  if (previewAttachment) {\n    embed.setImage(`attachment://${previewAttachment.name}`);\n    payload.files = [previewAttachment];\n    payload.attachments = [];\n  } else if (String(account?.platform || '').toLowerCase() === 'kick') {\n    const existingImage = message.embeds?.[0]?.image?.url || message.embeds?.[0]?.data?.image?.url || '';\n    if (existingImage) embed.setImage(existingImage);\n  }\n  await message.edit(payload);\n"""
+          # Only replace the updateLiveAlert occurrence: the send path has no message object.
+          marker = 'async function updateLiveAlert'
+          pos = core.find(marker)
+          if pos < 0:
+              raise SystemExit('updateLiveAlert not found.')
+          prefix, suffix = core[:pos], core[pos:]
+          if old in suffix:
+              suffix = suffix.replace(old, new, 1)
+              core = prefix + suffix
+          elif "const existingImage = message.embeds?.[0]?.image?.url" not in suffix:
+              raise SystemExit('Kick refresh fallback anchor not found.')
+
+          core_path.write_text(core, encoding='utf-8')
+
+      - name: Verify Social Studio completion contracts
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const assert = require('assert/strict');
+          const panel = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioPanel.js', 'utf8');
+          const core = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js', 'utf8');
+          const normalizer = require('./src/modules/socialStudio/socialAlerts/accountNormalizer');
+          assert(panel.includes('.setMaxValues(Math.min(PLATFORMS.length, 25)).addOptions(PLATFORMS.map'));
+          assert(!panel.includes('.setMaxValues(5).addOptions(PLATFORMS.map'));
+          assert(core.includes('LIVE_MESSAGE_REFRESH_INTERVALS.has(requested)'));
+          assert(core.includes("const actionLabel = clean(template.buttonLabel || 'View Post', 80);"));
+          assert(core.includes("const existingImage = message.embeds?.[0]?.image?.url"));
+          const fb = normalizer.normalizeAccountInput('facebook', 'https://www.facebook.com/profile.php?id=1234567890');
+          assert.equal(fb.externalId, '1234567890');
+          console.log('✅ Social Studio completion contracts');
+          NODE
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Full DEV validation
+        run: |
+          npm run doctor
+          npm run build
+
+      - name: Commit completion pass and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/social-studio-completion.yml
+          git add src/modules/socialStudio/socialAlerts
+          if git diff --cached --quiet; then
+            echo "No Social Studio completion changes required."
+            exit 0
+          fi
+          git commit -m "fix(social): complete alert parity and lifecycle hardening [social-finish]"
+          git push origin HEAD:dev
