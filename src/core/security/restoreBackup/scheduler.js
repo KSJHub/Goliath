@@ -110,6 +110,36 @@ async function recordAutomaticBackupAction(guild, result, error = null) {
   });
 }
 
+async function recordRemoteSyncAction(client, entry, result) {
+  if (!client || !entry || !result || result.skipped) return;
+  const guild = client.guilds?.cache?.get(String(entry.guildId)) || null;
+  const success = result.success === true;
+  await auditIntelligence.captureGoliathAction(client, {
+    guild,
+    guildId: entry.guildId,
+    type: 'goliath.background.server_backup_remote_sync',
+    category: 'backup',
+    action: success ? 'update' : 'failure',
+    result: success ? 'Success' : 'Failure',
+    summary: success
+      ? `Goliath remotely synced backup **${entry.backupId}**${result.verified ? ' and verified its remote hash' : ''}.`
+      : `Goliath remote sync failed for backup **${entry.backupId}**: **${String(result.reason || result.error?.message || result.error || 'Unknown sync failure').slice(0, 500)}**.`,
+    target: { type: 'backup', id: entry.backupId, label: entry.backupId },
+    reason: success ? 'Automatic remote backup synchronization' : String(result.reason || result.error?.message || result.error || 'Remote backup sync failure').slice(0, 500),
+    metadata: {
+      schedulerId: SYNC_SCHEDULER_ID,
+      syncId: entry.syncId,
+      backupId: entry.backupId,
+      environment: entry.environment || null,
+      backupType: entry.backupType || null,
+      remoteVerified: result.verified === true,
+      automatic: true,
+    },
+  }).catch((auditError) => {
+    console.warn(`[Backup Sync] Could not record remote sync audit action for ${entry.backupId}:`, auditError?.message || auditError);
+  });
+}
+
 async function backupGuild(guild) {
   if (!guild) return null;
 
@@ -280,7 +310,7 @@ async function processSyncEntry(entry) {
   }
 }
 
-async function processPendingSyncs() {
+async function processPendingSyncs(client = null) {
   if (workerRunning) {
     return { skipped: true, reason: 'Sync worker already running.' };
   }
@@ -293,6 +323,7 @@ async function processPendingSyncs() {
 
     for (const entry of pending) {
       const result = await processSyncEntry(entry);
+      await recordRemoteSyncAction(client, entry, result);
       results.push({
         syncId: entry.syncId,
         backupId: entry.backupId,
@@ -317,11 +348,11 @@ function registerSyncScheduler(intervalMs) {
   });
 }
 
-async function runMonitoredSyncCycle(intervalMs) {
+async function runMonitoredSyncCycle(intervalMs, client = null) {
   const schedulerId = registerSyncScheduler(intervalMs);
 
   try {
-    const result = await processPendingSyncs();
+    const result = await processPendingSyncs(client);
 
     if (result?.skipped) {
       sentinelScheduler.beat(schedulerId, {
@@ -356,6 +387,7 @@ async function runMonitoredSyncCycle(intervalMs) {
 
 function startBackupWorker(options = {}) {
   const intervalMs = Number(options.intervalMs || process.env.BACKUP_SYNC_INTERVAL_MS) || DEFAULT_SYNC_INTERVAL_MS;
+  const client = options.client || null;
 
   if (syncInterval) {
     return {
@@ -369,7 +401,7 @@ function startBackupWorker(options = {}) {
 
   syncInterval = setInterval(async () => {
     try {
-      await runMonitoredSyncCycle(intervalMs);
+      await runMonitoredSyncCycle(intervalMs, client);
     } catch (error) {
       console.error('[Backup Sync Worker Error]', error);
     }
