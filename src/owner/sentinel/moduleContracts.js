@@ -14,6 +14,7 @@ const BASE_CONTRACTS = {
   polls: { class: 'event', signals: ['runtime', 'interaction', 'persistence', 'discord-write'] },
   privateRooms: { class: 'background', signals: ['runtime', 'interaction', 'background-worker', 'persistence', 'discord-write'] },
   reactionRoles: { class: 'event', signals: ['runtime', 'interaction', 'persistence', 'discord-write'] },
+  roleSelector: { class: 'event', signals: ['runtime', 'interaction', 'persistence', 'discord-write'] },
   schedule: { class: 'scheduled', signals: ['runtime', 'interaction', 'scheduler', 'persistence', 'discord-write'] },
   social: { class: 'provider', signals: ['runtime', 'scheduler', 'provider', 'persistence', 'discord-write'] },
   starboard: { class: 'event', signals: ['runtime', 'persistence', 'discord-write'] },
@@ -29,8 +30,6 @@ const BASE_CONTRACTS = {
   welcome: { class: 'scheduled', signals: ['runtime', 'scheduler', 'persistence', 'discord-write'] },
 };
 
-// Every supported module must be observable at the universal Sentinel action
-// boundary in addition to its module-specific health signals.
 const MODULE_CONTRACTS = Object.freeze(Object.fromEntries(
   Object.entries(BASE_CONTRACTS).map(([key, contract]) => [key, Object.freeze({
     ...contract,
