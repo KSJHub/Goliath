@@ -3,11 +3,24 @@
 const guildManager = require('../../../core/guild/guildManager');
 const { projectEffectiveAccounts } = require('./socialStudioRoutingResolver');
 
-function projectLiveRefreshState(account, history = []) {
+const LIVE_REFRESH_INTERVALS = new Set([600000, 900000, 1200000, 1800000, 2700000, 3600000]);
+
+function projectedRefreshTimestamp(account, state, settings = {}) {
+  if (state?.isLive !== true) return null;
+  const actualRaw = state.lastLiveMessageUpdatedAt || state.lastLiveMessageUpdateAt || null;
+  const actualMs = typeof actualRaw === 'number' ? actualRaw : Date.parse(String(actualRaw || ''));
+  if (!Number.isFinite(actualMs)) return null;
+  if (settings.liveMessageRefreshEnabled === false) return new Date();
+  const requested = Number(settings.liveMessageRefreshMs);
+  const refreshMs = LIVE_REFRESH_INTERVALS.has(requested) ? requested : 600000;
+  const platformBaseMs = String(account?.platform || '').toLowerCase() === 'kick' ? 5 * 60 * 1000 : 60 * 60 * 1000;
+  return new Date(actualMs + (refreshMs - platformBaseMs));
+}
+
+function projectLiveRefreshState(account, history = [], settings = {}) {
   if (!account || typeof account !== 'object') return account;
   const state = account.state && typeof account.state === 'object' ? account.state : null;
   if (!state) return account;
-
   const hasDedicatedLiveMessage = state.isLive === true && Boolean(state.lastLiveMessageId && state.lastLiveMessageChannelId);
   const legacyLiveMessage = state.isLive === true && !hasDedicatedLiveMessage && state.lastAlertMessageId && state.lastAlertChannelId
     ? { lastLiveMessageId: state.lastAlertMessageId, lastLiveMessageChannelId: state.lastAlertChannelId }
@@ -17,32 +30,13 @@ function projectLiveRefreshState(account, history = []) {
     ? [...(Array.isArray(history) ? history : [])].reverse().find((entry) => entry?.accountId && String(entry.accountId) === String(account.accountId) && (entry.status === 'alert_sent' || entry.status === 'alert_updated') && entry.alertType === 'live' && entry.messageId && entry.channelId)
     : null;
   const recoveredLiveMessage = state.isLive === true && liveHistory
-    ? {
-      lastAlertMessageId: liveHistory.messageId,
-      lastAlertChannelId: liveHistory.channelId,
-      lastLiveMessageId: liveHistory.messageId,
-      lastLiveMessageChannelId: liveHistory.channelId,
-      lastAlertKey: state.liveEventId ? `live:${state.liveEventId}` : state.lastAlertKey,
-      lastLiveMessageUpdatedAt: liveHistory.createdAt || state.lastLiveMessageUpdatedAt,
-    }
+    ? { lastAlertMessageId: liveHistory.messageId, lastAlertChannelId: liveHistory.channelId, lastLiveMessageId: liveHistory.messageId, lastLiveMessageChannelId: liveHistory.channelId, lastAlertKey: state.liveEventId ? `live:${state.liveEventId}` : state.lastAlertKey, lastLiveMessageUpdatedAt: liveHistory.createdAt || state.lastLiveMessageUpdatedAt }
     : {};
   const effectiveState = { ...state, ...legacyLiveMessage, ...recoveredLiveMessage };
-  const raw = effectiveState.lastLiveMessageUpdateAt || effectiveState.lastLiveMessageUpdatedAt;
-  const parsed = typeof raw === 'string' ? Date.parse(raw) : NaN;
   const hasTrackedLiveMessage = effectiveState.isLive === true && Boolean((effectiveState.lastLiveMessageId || effectiveState.lastAlertMessageId) && (effectiveState.lastLiveMessageChannelId || effectiveState.lastAlertChannelId));
-  const alertTypes = Array.isArray(account.alertTypes)
-    ? account.alertTypes.filter((type) => !(hasTrackedLiveMessage && String(type).toLowerCase() === 'ended'))
-    : account.alertTypes;
-
-  return {
-    ...account,
-    ...(Array.isArray(alertTypes) ? { alertTypes } : {}),
-    state: {
-      ...effectiveState,
-      ...(Number.isFinite(parsed) && effectiveState.lastLiveMessageUpdateAt === raw ? { lastLiveMessageUpdateAt: new Date(parsed) } : {}),
-      ...(Number.isFinite(parsed) && effectiveState.lastLiveMessageUpdatedAt === raw ? { lastLiveMessageUpdatedAt: new Date(parsed) } : {}),
-    },
-  };
+  const alertTypes = Array.isArray(account.alertTypes) ? account.alertTypes.filter((type) => !(hasTrackedLiveMessage && String(type).toLowerCase() === 'ended')) : account.alertTypes;
+  const projectedTimestamp = hasTrackedLiveMessage ? projectedRefreshTimestamp(account, effectiveState, settings) : null;
+  return { ...account, ...(Array.isArray(alertTypes) ? { alertTypes } : {}), state: { ...effectiveState, ...(projectedTimestamp ? { lastLiveMessageUpdateAt: projectedTimestamp } : {}) } };
 }
 
 function projectGuildConfig(guildConfig) {
@@ -52,7 +46,8 @@ function projectGuildConfig(guildConfig) {
   if (!social) return guildConfig;
   const effectiveAccounts = projectEffectiveAccounts(social);
   const history = Array.isArray(social.history) ? social.history : [];
-  const projectedAccounts = Object.fromEntries(Object.entries(effectiveAccounts && typeof effectiveAccounts === 'object' ? effectiveAccounts : {}).map(([accountId, account]) => [accountId, projectLiveRefreshState(account, history)]));
+  const settings = social.settings && typeof social.settings === 'object' ? social.settings : {};
+  const projectedAccounts = Object.fromEntries(Object.entries(effectiveAccounts && typeof effectiveAccounts === 'object' ? effectiveAccounts : {}).map(([accountId, account]) => [accountId, projectLiveRefreshState(account, history, settings)]));
   return { ...guildConfig, modules: { ...modules, social: { ...social, accounts: projectedAccounts } } };
 }
 
@@ -61,4 +56,4 @@ function projectedOptions(guildId, options = {}) {
   return { ...options, guildConfig: projectGuildConfig(sourceGuildConfig) };
 }
 
-module.exports = { projectLiveRefreshState, projectGuildConfig, projectedOptions };
+module.exports = { LIVE_REFRESH_INTERVALS, projectedRefreshTimestamp, projectLiveRefreshState, projectGuildConfig, projectedOptions };
