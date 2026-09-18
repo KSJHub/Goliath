@@ -70,8 +70,15 @@ function extractUsername(platform, rawValue) {
       return firstUsefulSegment(parsed.pathname, ['categories', 'search']);
     case 'instagram':
       return firstUsefulSegment(parsed.pathname, ['accounts', 'explore', 'reel', 'reels', 'p', 'stories']);
-    case 'facebook':
-      return firstUsefulSegment(parsed.pathname, ['people', 'profile.php', 'watch', 'gaming']);
+    case 'facebook': {
+      const path = String(parsed.pathname || '').toLowerCase();
+      if (path === '/profile.php' || path === '/profile.php/') {
+        return cleanHandle(parsed.searchParams.get('id') || '');
+      }
+      const peopleIndex = segments.findIndex((value) => value.toLowerCase() === 'people');
+      if (peopleIndex >= 0 && segments[peopleIndex + 2]) return cleanHandle(segments[peopleIndex + 2]);
+      return firstUsefulSegment(parsed.pathname, ['people', 'profile.php', 'watch', 'gaming', 'reel', 'reels', 'videos']);
+    }
     case 'x':
       return firstUsefulSegment(parsed.pathname, ['home', 'explore', 'notifications', 'messages', 'i']);
     default:
@@ -97,6 +104,10 @@ function classifyInput(platform, rawValue) {
     return { inputType: 'channel_id', username: '', externalId: extracted, sourceUrl: fromUrl ? parsed.toString() : null };
   }
 
+  if (platform === 'facebook' && /^\d{4,30}$/.test(extracted)) {
+    return { inputType: 'channel_id', username: extracted, externalId: extracted, sourceUrl: fromUrl ? parsed.toString() : null };
+  }
+
   return {
     inputType: fromUrl ? 'url' : 'username',
     username: extracted,
@@ -118,7 +129,10 @@ function buildProfileUrl(platform, username, externalId = null) {
     }
     case 'tiktok': return value ? `https://www.tiktok.com/@${encoded.replace(/^%40/i, '')}` : '';
     case 'kick': return value ? `https://kick.com/${encoded}` : '';
-    case 'facebook': return value ? `https://www.facebook.com/${encoded}` : '';
+    case 'facebook': {
+      const id = cleanRaw(externalId);
+      return id ? `https://www.facebook.com/profile.php?id=${encodeURIComponent(id)}` : value ? `https://www.facebook.com/${encoded}` : '';
+    }
     case 'instagram': return value ? `https://www.instagram.com/${encoded}` : '';
     case 'x': return value ? `https://x.com/${encoded}` : '';
     default: return '';
