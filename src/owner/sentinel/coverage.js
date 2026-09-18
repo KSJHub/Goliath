@@ -126,7 +126,10 @@ function coverageReport() {
     schedulerFiles: schedulers.discovered,
     monitoredSchedulerFiles: schedulers.monitored,
     unmonitoredSchedulerFiles: schedulers.unmonitored,
-    complete: futureUnregistered.length === 0 && schedulers.unmonitored.length === 0,
+    complete:
+      futureUnregistered.length === 0
+      && contractWithoutDiscoveredFolder.length === 0
+      && schedulers.unmonitored.length === 0,
   };
 }
 
