@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
+# Never cancel a sync after it may have entered the VPS. Serialise pushes instead;
+# each queued run checks origin/dev before touching the checkout, so stale runs exit
+# without restarting the bot and only the newest DEV commit is deployed.
 concurrency:
   group: sync-goliath-dev
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   sync-dev:
@@ -53,9 +56,6 @@ jobs:
             }
             trap cleanup_remote EXIT
 
-            # Known root-level scratch artifacts from earlier manual shell/npm
-            # commands. Neither is repository or runtime state; remove only
-            # these exact names before enforcing the strict worktree guard.
             rm -f -- FETCH_HEAD 'goliath@1.0.0'
 
             git fetch --no-tags origin dev
@@ -63,6 +63,12 @@ jobs:
 
             if [ "$EXPECTED_SHA" != "$LATEST_SHA" ]; then
               echo "Superseding stale DEV sync for $EXPECTED_SHA; latest DEV is $LATEST_SHA."
+              exit 0
+            fi
+
+            CURRENT_SHA="$(git rev-parse HEAD)"
+            if [ "$CURRENT_SHA" = "$EXPECTED_SHA" ]; then
+              echo "DEV VPS already runs checkout $EXPECTED_SHA; skipping destructive sync/restart."
               exit 0
             fi
 
@@ -159,6 +165,16 @@ jobs:
               COMMAND_SYNC_DELETE_STALE=true \
               COMMAND_SYNC_UPDATE_EXISTING=true \
               node -e "require('./src/core/commands/syncCommands').syncCommands().then(() => process.exit(0)).catch((error) => { console.error(error); process.exit(1); })"
+
+            # Re-check immediately before restart. If DEV moved while this run was
+            # building, do not restart into an already-stale checkout; the queued
+            # newest run will deploy it instead.
+            git fetch --no-tags origin dev
+            LATEST_BEFORE_RESTART="$(git rev-parse origin/dev)"
+            if [ "$EXPECTED_SHA" != "$LATEST_BEFORE_RESTART" ]; then
+              echo "DEV advanced to $LATEST_BEFORE_RESTART during sync; skipping PM2 restart for stale $EXPECTED_SHA."
+              exit 0
+            fi
 
             if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
               pm2 restart "$PM2_NAME" --update-env
