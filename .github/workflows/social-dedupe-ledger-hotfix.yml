@@ -1,4 +1,3 @@
-# trigger
 name: Social Studio persistent dedupe ledger hotfix
 on:
   push:
@@ -11,4 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo 'workflow trigger active'
+        with:
+          ref: beta
+      - run: python scripts/socialDedupeLedgerPatch.py
+      - run: node --check src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js && node --check src/modules/socialStudio/socialAlerts/providers/twitch.js
+      - run: |
+          git config user.name goliath-hotfix
+          git config user.email actions@users.noreply.github.com
+          git add src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js src/modules/socialStudio/socialAlerts/providers/twitch.js
+          git commit -m 'fix(social): persist delivered content ledger' || exit 0
+          git push origin beta
