@@ -37,7 +37,10 @@ function projectLiveRefreshState(account, history = [], settings = {}) {
   const recovered = state.isLive === true && historyHit ? { lastAlertMessageId: historyHit.messageId, lastAlertChannelId: historyHit.channelId, lastLiveMessageId: historyHit.messageId, lastLiveMessageChannelId: historyHit.channelId, lastAlertKey: state.liveEventId ? `live:${state.liveEventId}` : state.lastAlertKey, lastLiveMessageUpdatedAt: historyHit.createdAt || state.lastLiveMessageUpdatedAt } : {};
   const effectiveState = { ...state, ...legacy, ...recovered };
   const tracked = effectiveState.isLive === true && Boolean((effectiveState.lastLiveMessageId || effectiveState.lastAlertMessageId) && (effectiveState.lastLiveMessageChannelId || effectiveState.lastAlertChannelId));
-  const alertTypes = Array.isArray(account.alertTypes) ? account.alertTypes.filter((type) => !(tracked && String(type).toLowerCase() === 'ended')) : account.alertTypes;
+  const configuredTypes = Array.isArray(account.alertTypes) ? account.alertTypes : null;
+  const alertTypes = configuredTypes && tracked && configuredTypes.some((type) => String(type).toLowerCase() === 'live')
+    ? [...new Set([...configuredTypes, 'ended'])]
+    : configuredTypes;
   return { ...account, ...(Array.isArray(alertTypes) ? { alertTypes } : {}), state: effectiveState };
 }
 function projectGuildConfig(guildConfig) {
@@ -47,9 +50,10 @@ function projectGuildConfig(guildConfig) {
   if (!social) return guildConfig;
   const effectiveAccounts = projectEffectiveAccounts(social);
   const history = Array.isArray(social.history) ? social.history : [];
-  const settings = social.settings && typeof social.settings === 'object' ? social.settings : {};
+  const rawSettings = social.settings && typeof social.settings === 'object' ? social.settings : {};
+  const settings = { ...rawSettings, liveMessageRefreshEnabled: rawSettings.liveMessageRefreshEnabled !== false, liveMessageRefreshMs: liveRefreshMs(rawSettings) };
   const accounts = Object.fromEntries(Object.entries(effectiveAccounts && typeof effectiveAccounts === 'object' ? effectiveAccounts : {}).map(([id, account]) => [id, projectLiveRefreshState(account, history, settings)]));
-  return { ...guildConfig, modules: { ...modules, social: { ...social, accounts } } };
+  return { ...guildConfig, modules: { ...modules, social: { ...social, settings, accounts } } };
 }
 function projectedOptions(guildId, options = {}) { const source = options.guildConfig && typeof options.guildConfig === 'object' ? options.guildConfig : guildManager.reloadGuild(guildId); return { ...options, guildConfig: projectGuildConfig(source) }; }
 
