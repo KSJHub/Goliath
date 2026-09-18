@@ -198,14 +198,14 @@ async function cleanupRetiredGuildCommands(rest, clientId, guildIds, dryRun = fa
   const scopes = uniqueGuildIds([guildIds]);
   const removed = [];
 
-  for (const guildId of scopes) {
+  const results = await Promise.all(scopes.map(async (guildId) => {
     let commands;
     try {
       commands = await rest.get(Routes.applicationGuildCommands(clientId, guildId));
     } catch (error) {
       if (isInaccessibleGuildError(error)) {
         console.warn(`[CommandSync] Skipped retired-command cleanup for inaccessible guild ${guildId} (Discord ${discordErrorCode(error)}).`);
-        continue;
+        return [];
       }
       throw error;
     }
@@ -213,9 +213,10 @@ async function cleanupRetiredGuildCommands(rest, clientId, guildIds, dryRun = fa
     const stale = (commands || []).filter((command) =>
       RETIRED_GUILD_COMMAND_NAMES.has(String(command?.name || '')),
     );
+    const guildRemoved = [];
 
     for (const command of stale) {
-      removed.push({ guildId, name: command.name });
+      guildRemoved.push({ guildId, name: command.name });
       if (dryRun) {
         console.log(`[CommandSync] DRY RUN remove guild /${command.name} from ${guildId}`);
         continue;
@@ -231,8 +232,10 @@ async function cleanupRetiredGuildCommands(rest, clientId, guildIds, dryRun = fa
         throw error;
       }
     }
-  }
+    return guildRemoved;
+  }));
 
+  for (const guildRemoved of results) removed.push(...guildRemoved);
   return removed;
 }
 
@@ -271,12 +274,16 @@ async function syncCommands() {
     await upsertGlobalOwnerCommand(rest, clientId, ownerCommand, dryRun);
   } else {
     if (!guildIds.length) throw new Error(`No guild IDs configured for ${mode}`);
-    for (const guildId of guildIds) await putGuildCommands(rest, clientId, guildId, publicCommands, dryRun);
+    await Promise.all(guildIds.map((guildId) => putGuildCommands(rest, clientId, guildId, publicCommands, dryRun)));
     await upsertGlobalOwnerCommand(rest, clientId, ownerCommand, dryRun);
   }
 
-  removedGuildCommands = await cleanupRetiredGuildCommands(rest, clientId, cleanupGuildIds, dryRun);
-  removedGlobalCommands = await cleanupStaleGlobalCommands(rest, clientId, dryRun);
+  // Cleanup is independent of global stale-command cleanup; perform both in
+  // parallel so maintenance time does not scale linearly with guild count.
+  [removedGuildCommands, removedGlobalCommands] = await Promise.all([
+    cleanupRetiredGuildCommands(rest, clientId, cleanupGuildIds, dryRun),
+    cleanupStaleGlobalCommands(rest, clientId, dryRun),
+  ]);
 
   return {
     mode,
