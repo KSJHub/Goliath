@@ -39,18 +39,29 @@ async function checkTwitch(account) {
   const video = stream ? previousVideo || null : videos[0] || null;
   const clip = clipRes.json?.data?.[0] || null;
   const channelUrl = `https://www.twitch.tv/${encodeURIComponent(user.login)}`;
-  const contentItems = [];
+  const candidates = [];
 
-  if (!stream && video?.id) contentItems.push({
+  if (!stream && video?.id) candidates.push({
     type: 'vod', id: String(video.id), title: video.title || `${user.display_name || user.login} VOD`, url: video.url || `${channelUrl}/videos`,
     thumbnail: clean(video.thumbnail_url).replace('%{width}', '1280').replace('%{height}', '720'), duration: video.duration || null,
     viewCount: video.view_count, publishedAt: video.published_at || video.created_at || null,
     category: account.state?.lastLiveEvent?.category || account.state?.lastLiveEvent?.game || null,
   });
-  if (clip?.id) contentItems.push({
+  if (clip?.id) candidates.push({
     type: 'clip', id: String(clip.id), title: clip.title || `${user.display_name || user.login} clip`, url: clip.url,
     thumbnail: clip.thumbnail_url || null, viewCount: clip.view_count, publishedAt: clip.created_at || null, duration: clip.duration || null,
   });
+
+  // Social Studio's persisted duplicate guard currently tracks one lastAlertKey.
+  // Returning both a VOD and clip lets that key oscillate forever (vod -> clip -> vod),
+  // replaying old Twitch content every monitor cycle. Until the monitor owns a bounded
+  // delivered-content ledger, expose only the newest Twitch content item per check.
+  candidates.sort((a, b) => {
+    const at = Date.parse(a.publishedAt || '') || 0;
+    const bt = Date.parse(b.publishedAt || '') || 0;
+    return bt - at;
+  });
+  const contentItems = candidates.slice(0, 1);
 
   return result('twitch', {
     isLive: Boolean(stream), externalId: String(user.id), resolvedUsername: user.login, url: channelUrl, avatar: user.profile_image_url || null,
