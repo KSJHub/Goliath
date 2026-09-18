@@ -1,6 +1,6 @@
 'use strict';
 
-const auditIntelligence = require('../../../owner/auditIntelligence/auditIntelligence');
+const auditIntelligence = require('../../../../owner/auditIntelligence/auditIntelligence');
 const {
   QUARANTINE_MODES,
   getQuarantineState,
