@@ -92,9 +92,11 @@ function resolveSocialRoute(config, account, eventType, creatorInput = null) {
   const serverPlatformChannels = isObject(config?.platformChannels) ? config.platformChannels : {};
   const serverAlertChannels = isObject(config?.alertChannels) ? config.alertChannels : {};
   const candidates = [
-    [creatorPlatformChannels[platform], 'Creator Platform Override'],
+    // Explicit per-user routing is the highest-priority Social Studio destination.
     [userRoutes[eventType], 'User Content Override'],
     [userRoutes.all, 'User All Content'],
+    // Creator/account overrides remain above server-wide routing, but must never mask a user route.
+    [creatorPlatformChannels[platform], 'Creator Platform Override'],
     [creator?.alertChannelId, 'Creator Override'],
     [accountRoutes.channels[eventType], 'Account Content Override'],
     [accountRoutes.channelId, 'Account Override'],
