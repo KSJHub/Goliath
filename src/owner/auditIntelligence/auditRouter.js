@@ -156,22 +156,13 @@ async function ensureReportFeedHeader(channel, sourceGuild, routeKey, label) {
   const pinned = pinnedItems(pinnedResult);
   let message = pinned?.find?.((item) => item.author?.bot && item.system !== true && String(item.content || '').includes(marker)) || null;
   const content = [
-    `${delivery.healthy ? '🟢' : '🟠'} **Goliath Audit Feed ${delivery.healthy ? 'Live' : 'Needs Attention'} — ${label}**`,
-    '',
-    `**Source Guild:** ${sourceGuild.name || 'Unknown Guild'}`,
-    `**Guild ID:** \`${sourceGuild.id}\``,
-    `**Feed:** ${label}`,
+    `${delivery.healthy ? '🟢' : '🟠'} **Goliath Audit Feed ${delivery.healthy ? 'Live' : 'Needs Attention'} — ${label}**`, '',
+    `**Source Guild:** ${sourceGuild.name || 'Unknown Guild'}`, `**Guild ID:** \`${sourceGuild.id}\``, `**Feed:** ${label}`,
     `**Status:** ${delivery.healthy ? 'Active — monitored events are delivered here automatically.' : 'Permission issue detected — check the feed health below.'}`,
-    `**Goliath Permissions:** View ${delivery.view ? '🟢' : '🔴'} • Send ${delivery.send ? '🟢' : '🔴'} • History ${delivery.history ? '🟢' : '🔴'}`,
-    '',
-    'Manage this feed from **Goliath Command Center → Routing**. Renaming or moving this channel is safe; Goliath tracks managed feeds by internal markers.',
-    '',
-    `\`${marker}\``,
+    `**Goliath Permissions:** View ${delivery.view ? '🟢' : '🔴'} • Send ${delivery.send ? '🟢' : '🔴'} • History ${delivery.history ? '🟢' : '🔴'}`, '',
+    'Manage this feed from **Goliath Command Center → Routing**. Renaming or moving this channel is safe; Goliath tracks managed feeds by internal markers.', '', `\`${marker}\``,
   ].join('\n');
-  if (message) {
-    if (message.content !== content) await message.edit({ content, allowedMentions: { parse: [] } }).catch(() => null);
-    return message;
-  }
+  if (message) { if (message.content !== content) await message.edit({ content, allowedMentions: { parse: [] } }).catch(() => null); return message; }
   message = await channel.send({ content, allowedMentions: { parse: [] } }).catch(() => null);
   if (message) await message.pin('Goliath Audit feed status').catch(() => null);
   return message;
@@ -191,9 +182,7 @@ async function ensureReportRoutes(client, sourceGuild) {
   for (const [routeKey, definition] of Object.entries(REPORT_ROUTE_CHANNELS)) {
     let channel = await resolveTextChannel(ownerGuild, routes[routeKey]);
     if (!channel) channel = findReportRouteChannel(ownerGuild, sourceGuild, routeKey);
-    if (!channel && autoProvisionEnabled()) {
-      channel = await ownerGuild.channels.create({ name: definition.name, type: ChannelType.GuildText, parent: category?.id || null, topic: `${reportRouteMarker(sourceGuild, routeKey)} • ${sourceGuild.name} • ${definition.label} audit reports`.slice(0, 1024), permissionOverwrites: category ? undefined : privateOverwrites(ownerGuild), reason: `Goliath ${definition.label} audit route for ${sourceGuild.name}` });
-    }
+    if (!channel && autoProvisionEnabled()) channel = await ownerGuild.channels.create({ name: definition.name, type: ChannelType.GuildText, parent: category?.id || null, topic: `${reportRouteMarker(sourceGuild, routeKey)} • ${sourceGuild.name} • ${definition.label} audit reports`.slice(0, 1024), permissionOverwrites: category ? undefined : privateOverwrites(ownerGuild), reason: `Goliath ${definition.label} audit route for ${sourceGuild.name}` });
     if (channel?.isTextBased?.()) {
       routes[routeKey] = channel.id;
       if (String(channel.topic || '').includes(reportRouteMarker(sourceGuild, routeKey))) {
@@ -212,39 +201,24 @@ function findUserChannel(ownerGuild, sourceGuild, userId) {
   const marker = userMarker(sourceGuild, userId);
   return ownerGuild.channels.cache.find((channel) => channel.type === ChannelType.GuildText && String(channel.topic || '').includes(marker)) || null;
 }
-async function chooseUserCategory(ownerGuild, sourceGuild, firstCategory) {
-  const categories = findGuildCategories(ownerGuild, sourceGuild);
-  if (firstCategory && !categories.has(firstCategory.id)) categories.set(firstCategory.id, firstCategory);
-  const available = categories.find((category) => categoryChildCount(ownerGuild, category.id) < MAX_CATEGORY_CHILDREN);
-  if (available) return available;
-  if (!autoProvisionEnabled()) return firstCategory || categories.first?.() || null;
-  return ensureGuildCategory(ownerGuild, sourceGuild, Math.max(1, categories.size + 1));
-}
-function profileMessageId(channel) { return String(channel?.topic || '').match(/GOLIATH_AUDIT_PROFILE:(\d+)/)?.[1] || null; }
-async function findProfileMessage(channel, userId) {
-  const knownId = profileMessageId(channel);
-  if (knownId) { const known = await channel.messages.fetch(knownId).catch(() => null); if (known && known.system !== true && known.editable !== false) return known; }
+async function refreshUserSummary(client, sourceGuild, channel, userId, force = false) {
+  if (!channel?.isTextBased?.()) return null;
+  const key = `${sourceGuild.id}:${userId}`; const now = Date.now();
+  if (!force && now - Number(summaryRefresh.get(key) || 0) < SUMMARY_REFRESH_MS) return null;
+  summaryRefresh.set(key, now);
+  const report = await buildReport(client, sourceGuild, userId, { forceLive: force });
+  const marker = profileMarker(userId);
   const pinnedResult = await channel.messages.fetchPins().catch(() => null);
   const pinned = pinnedItems(pinnedResult);
-  return pinned?.find?.((message) => message.author?.id === channel.client.user?.id && message.system !== true && message.editable !== false && message.embeds?.some((embed) => String(embed.footer?.text || '') === `Goliath User Intelligence • ${userId}`)) || null;
+  let message = pinned?.find?.((item) => item.author?.id === client.user?.id && String(item.content || '').includes(marker)) || null;
+  const payload = { content: marker, embeds: [buildUserIntelligenceEmbed(report)], components: buildUserIntelligenceControls(sourceGuild.id, userId), allowedMentions: { parse: [] } };
+  if (message) await message.edit(payload).catch(() => null); else { message = await channel.send(payload); await message.pin('Goliath user intelligence profile').catch(() => null); }
+  return message;
 }
-async function refreshUserSummary(client, sourceGuild, channel, userId, force = false) {
-  if (!channel?.isTextBased?.() || !userId) return false;
-  const now = Date.now();
-  if (!force && now - Number(summaryRefresh.get(channel.id) || 0) < SUMMARY_REFRESH_MS) return true;
-  summaryRefresh.set(channel.id, now);
-  try {
-    const report = await buildReport(client, userId);
-    const payload = { embeds: [buildUserIntelligenceEmbed(report, sourceGuild)], components: buildUserIntelligenceControls(), allowedMentions: { parse: [] } };
-    let message = await findProfileMessage(channel, userId);
-    if (message) { await message.edit(payload); return true; }
-    message = await channel.send(payload);
-    await message.pin('Goliath User Intelligence summary').catch(() => null);
-    const baseTopic = String(channel.topic || '').replace(/\s*•?\s*GOLIATH_AUDIT_PROFILE:\d+/g, '').trim();
-    const nextTopic = `${baseTopic} • ${profileMarker(message.id)}`.slice(0, 1024);
-    if (nextTopic !== channel.topic) await channel.setTopic(nextTopic, 'Track Goliath User Intelligence summary').catch(() => null);
-    return true;
-  } catch (error) { console.warn('[Audit Intelligence] user summary refresh failed:', error?.message || error); return false; }
+async function chooseUserCategory(ownerGuild, sourceGuild, firstCategory) {
+  const categories = findGuildCategories(ownerGuild, sourceGuild);
+  for (const category of categories.values()) if (categoryChildCount(ownerGuild, category.id) < MAX_CATEGORY_CHILDREN) return category;
+  return ensureGuildCategory(ownerGuild, sourceGuild, Math.max(2, categories.size + 1));
 }
 async function ensureUserAuditChannel(client, sourceGuild, event) {
   const userId = eventUserId(event);
@@ -293,4 +267,4 @@ async function deliver(client, sourceGuild, event) {
   return true;
 }
 
-module.exports = { ensureCommandCenter, ensureAuditContext, ensureAuditChannel, ensureReportRoutes, deliver, refreshUserSummary };
+module.exports = { getOwnerAuditGuildId, ensureCommandCenter, ensureAuditContext, ensureAuditChannel, ensureReportRoutes, deliver, refreshUserSummary };
