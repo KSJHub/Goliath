@@ -49,8 +49,34 @@ jobs:
       - name: Validate DEV
         run: |
           set -euo pipefail
-          npm run doctor
+          BOT_MODE=dev npm run doctor
+          node test/auditEmbedGraphicHeaders.js
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const maintenance = fs.readFileSync('src/owner/dev/maintenanceStatus.js', 'utf8');
+          assert(maintenance.includes('message.system !== true'));
+          assert(maintenance.includes('message.editable !== false'));
+          const bootstrap = fs.readFileSync('src/runtime/runtimeBootstrap.js', 'utf8');
+          assert(bootstrap.includes('setMaxListeners'));
+          assert(bootstrap.includes('Math.max(client.getMaxListeners(), 25)'));
+          const duplicator = fs.readFileSync('src/owner/dev/duplicator/core.js', 'utf8');
+          assert(duplicator.includes('bridgeUnavailable'));
+          assert(duplicator.includes("error?.code === 'EADDRINUSE'"));
+          console.log('✅ DEV runtime hardening invariants verified');
+          NODE
+
+          rm -rf dist
           npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
+
+          mkdir -p dist/appeals
+          cp dist/index.html dist/appeals/index.html
+
+          grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js || {
+            echo "Appeals frontend marker missing from DEV bundle." >&2
+            exit 1
+          }
 
   promote:
     needs: preflight
