@@ -19,14 +19,12 @@ function clean(value, max = 2000) { return String(value ?? '').trim().slice(0, m
 function intText(value) { return Number.isFinite(Number(value)) ? Number(value).toLocaleString('en-GB') : ''; }
 function liveRefreshEnabled(settings = {}) { return settings.liveMessageRefreshEnabled !== false; }
 function liveRefreshMs(settings = {}) { const requested = Number(settings.liveMessageRefreshMs); return LIVE_REFRESH_INTERVAL_SET.has(requested) ? requested : DEFAULT_LIVE_REFRESH_MS; }
-function coreRefreshBaseMs(account) { return String(account?.platform || '').toLowerCase() === 'kick' ? 300000 : 3600000; }
 function projectedRefreshTimestamp(account, state, settings = {}, dateNow = Date.now()) {
-  if (state?.isLive !== true) return null;
+  if (state?.isLive !== true || !liveRefreshEnabled(settings)) return null;
   const raw = state.lastLiveMessageUpdatedAt || state.lastLiveMessageUpdateAt || null;
   const actualMs = typeof raw === 'number' ? raw : raw instanceof Date ? raw.getTime() : Date.parse(String(raw || ''));
   if (!Number.isFinite(actualMs)) return null;
-  if (!liveRefreshEnabled(settings)) return new Date(dateNow);
-  return new Date(actualMs + (liveRefreshMs(settings) - coreRefreshBaseMs(account)));
+  return new Date(actualMs + liveRefreshMs(settings));
 }
 function projectLiveRefreshState(account, history = [], settings = {}) {
   if (!account || typeof account !== 'object') return account;
@@ -40,8 +38,7 @@ function projectLiveRefreshState(account, history = [], settings = {}) {
   const effectiveState = { ...state, ...legacy, ...recovered };
   const tracked = effectiveState.isLive === true && Boolean((effectiveState.lastLiveMessageId || effectiveState.lastAlertMessageId) && (effectiveState.lastLiveMessageChannelId || effectiveState.lastAlertChannelId));
   const alertTypes = Array.isArray(account.alertTypes) ? account.alertTypes.filter((type) => !(tracked && String(type).toLowerCase() === 'ended')) : account.alertTypes;
-  const projected = tracked ? projectedRefreshTimestamp(account, effectiveState, settings) : null;
-  return { ...account, ...(Array.isArray(alertTypes) ? { alertTypes } : {}), state: { ...effectiveState, ...(projected ? { lastLiveMessageUpdateAt: projected } : {}) } };
+  return { ...account, ...(Array.isArray(alertTypes) ? { alertTypes } : {}), state: effectiveState };
 }
 function projectGuildConfig(guildConfig) {
   if (!guildConfig || typeof guildConfig !== 'object') return guildConfig;
