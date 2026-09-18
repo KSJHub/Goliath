@@ -50,6 +50,31 @@ function safeLoad(label, loadFn, logger = console) {
   }
 }
 
+/* ---------------- DISCORD.JS RUNTIME COMPAT ---------------- */
+
+function installDiscordRuntimeCompat(logger = console) {
+  try {
+    const { GuildMessageManager } = require('discord.js');
+    const proto = GuildMessageManager?.prototype;
+    if (!proto || typeof proto.fetchPins !== 'function') return false;
+
+    // Goliath still has a few legacy call sites that use discord.js' deprecated
+    // fetchPinned() API. Route those calls through fetchPins() centrally so a
+    // restart cannot flood stderr with deprecation traces while the individual
+    // modules are migrated. Preserve the old Collection-shaped return value.
+    proto.fetchPinned = async function goliathFetchPinnedCompat(...args) {
+      const result = await this.fetchPins(...args);
+      return result?.items || result;
+    };
+
+    logger.log('✅ Discord pinned-message compatibility active (fetchPins).');
+    return true;
+  } catch (error) {
+    logger.warn('⚠️ Discord pinned-message compatibility could not be installed:', error?.message || error);
+    return false;
+  }
+}
+
 /* ---------------- EVENT REGISTRATION ---------------- */
 
 function registerEvents(client, options = {}) {
@@ -60,6 +85,8 @@ function registerEvents(client, options = {}) {
   if (typeof client?.setMaxListeners === 'function' && typeof client?.getMaxListeners === 'function') {
     client.setMaxListeners(Math.max(client.getMaxListeners(), 25));
   }
+
+  installDiscordRuntimeCompat(options.logger || console);
 
   const eventsPath = options.eventsPath || path.join(process.cwd(), 'src', 'events');
   const prepareInteraction = typeof options.prepareInteraction === 'function'
