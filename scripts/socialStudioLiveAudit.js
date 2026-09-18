@@ -22,7 +22,8 @@ const baseEvent = {
   startedAt: new Date(Date.now() - 3600000).toISOString(),
   language: 'en',
 };
-for (const platform of ['kick', 'twitch', 'youtube', 'tiktok']) {
+const livePlatforms = ['kick', 'twitch', 'youtube', 'tiktok', 'facebook'];
+for (const platform of livePlatforms) {
   const fields = monitor.buildLiveFields({
     account: { platform, username: 'creator', state: { peakViewers: 1500 } },
     event: baseEvent,
@@ -34,7 +35,8 @@ for (const platform of ['kick', 'twitch', 'youtube', 'tiktok']) {
   });
   const names = fields.map((field) => field.name);
   if (platform !== 'tiktok') assert.equal(names[0], '🎮 Game', `${platform} must begin with the Game field.`);
-  assert(names.some((name) => name.includes({ kick: 'Kick', twitch: 'Twitch', youtube: 'YouTube', tiktok: 'TikTok' }[platform])), `${platform} must expose its platform field.`);
+  const label = { kick: 'Kick', twitch: 'Twitch', youtube: 'YouTube', tiktok: 'TikTok', facebook: 'Facebook' }[platform];
+  assert(names.some((name) => name.includes(label)), `${platform} must expose its platform field.`);
   assert(names.includes('👥 Viewers'), `${platform} must expose viewers when supplied.`);
   assert(names.includes('🕐 Started'), `${platform} must expose start time when supplied.`);
   assert(names.includes('⏱️ Live For'), `${platform} must expose live duration when supplied.`);
@@ -55,19 +57,13 @@ assert(offlineNames.includes('📈 Peak Viewers'), 'OFFLINE card must expose pea
 assert(offlineNames.includes('⏱️ Streamed For'), 'OFFLINE card must expose total stream duration.');
 assert(offlineNames.includes('⚫ Ended'), 'OFFLINE card must expose ended time.');
 
-const expectedProviderTypes = {
-  kick: 'live',
-  twitch: 'live',
-  youtube: 'live',
-  tiktok: 'live',
-  facebook: null,
-  instagram: null,
-  x: null,
-};
-for (const [platform, liveType] of Object.entries(expectedProviderTypes)) {
+for (const platform of livePlatforms) {
   const info = providers.providerInfo(platform);
-  const supportsLive = (info.supportedAlertTypes || []).includes('live');
-  assert.equal(supportsLive, liveType === 'live', `${platform} LIVE capability changed; update the Social Studio parity contract deliberately.`);
+  assert((info.supportedAlertTypes || []).includes('live'), `${platform} must remain registered as a LIVE provider.`);
+}
+for (const platform of ['instagram', 'x']) {
+  const info = providers.providerInfo(platform);
+  assert(!(info.supportedAlertTypes || []).includes('live'), `${platform} must not advertise LIVE until its provider really implements it.`);
 }
 
 const corePath = path.join(__dirname, '../src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js');
