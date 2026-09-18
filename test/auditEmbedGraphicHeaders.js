@@ -38,10 +38,14 @@ function run() {
   assert(embedRuntime.includes('installCanonicalMediaSessions(targetPanel)'));
   assert(embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"));
 
-  // Persistence must be installed before embedPanel captures/destructures the
-  // state API. This is the regression that caused drafts to disappear after a
-  // PM2 restart even though the durable store itself was working correctly.
-  assert(embedRuntime.indexOf('sessionPersistence.install(embedState)') < embedRuntime.indexOf("require('./embedPanel')"));
+  // Persistence now lives at the canonical embedState boundary itself rather
+  // than being installed as a wrapper from embed.js. Keep this audit focused
+  // on the invariant: every state load/save path must cross the durable store.
+  const embedState = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embedState'), 'utf8');
+  assert(embedState.includes("require('./embedSessionStore')"), 'embedState must own the durable session store');
+  assert(embedState.includes('sessionStore.load(key)'), 'getSession must hydrate from durable storage');
+  assert(embedState.includes('sessionStore.save(key, synced)'), 'saveSession must persist canonical state');
+  assert(embedState.includes('sessionStore.remove(key)'), 'clearSession must remove durable state');
 
   console.log('✅ Embed Graphic Header regression audit passed.');
 }
