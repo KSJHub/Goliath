@@ -1,145 +1,24 @@
 'use strict';
 
 const guildManager = require('../../../core/guild/guildManager');
-const sentinel = require('../../../owner/sentinel');
 const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js');
 const core = require('./socialStudioMonitorCore');
-const { projectEffectiveAccounts } = require('./socialStudioRoutingResolver');
+const { projectedOptions } = require('./socialStudioMonitorProjection');
+const { repairLiveRollovers } = require('./socialStudioLiveRollover');
 
 let timer = null;
 let schedulerTickMs = 60_000;
 const GLOBAL_SCHEDULER = 'social:monitor:global';
-const LIVE_REFRESH_INTERVALS = new Set([600000, 900000, 1200000, 1800000, 2700000, 3600000]);
-
-function projectedRefreshTimestamp(account, state, settings = {}) {
-  if (state?.isLive !== true) return null;
-  const actualRaw = state.lastLiveMessageUpdatedAt || state.lastLiveMessageUpdateAt || null;
-  const actualMs = typeof actualRaw === 'number' ? actualRaw : Date.parse(String(actualRaw || ''));
-  if (!Number.isFinite(actualMs)) return null;
-  if (settings.liveMessageRefreshEnabled === false) return new Date();
-  const requested = Number(settings.liveMessageRefreshMs);
-  const refreshMs = LIVE_REFRESH_INTERVALS.has(requested) ? requested : 600000;
-  const platformBaseMs = String(account?.platform || '').toLowerCase() === 'kick' ? 5 * 60 * 1000 : 60 * 60 * 1000;
-  return new Date(actualMs + (refreshMs - platformBaseMs));
-}
-
-function projectLiveRefreshState(account, history = [], settings = {}) {
-  if (!account || typeof account !== 'object') return account;
-  const state = account.state && typeof account.state === 'object' ? account.state : null;
-  if (!state) return account;
-
-  const hasDedicatedLiveMessage = state.isLive === true && Boolean(state.lastLiveMessageId && state.lastLiveMessageChannelId);
-  const legacyLiveMessage = state.isLive === true && !hasDedicatedLiveMessage && state.lastAlertMessageId && state.lastAlertChannelId
-    ? { lastLiveMessageId: state.lastAlertMessageId, lastLiveMessageChannelId: state.lastAlertChannelId }
-    : {};
-  const hasPersistedLiveMessage = hasDedicatedLiveMessage || Boolean(legacyLiveMessage.lastLiveMessageId && legacyLiveMessage.lastLiveMessageChannelId);
-  const liveHistory = !hasPersistedLiveMessage
-    ? [...(Array.isArray(history) ? history : [])].reverse().find((entry) => entry?.accountId && String(entry.accountId) === String(account.accountId) && (entry.status === 'alert_sent' || entry.status === 'alert_updated') && entry.alertType === 'live' && entry.messageId && entry.channelId)
-    : null;
-  const recoveredLiveMessage = state.isLive === true && liveHistory
-    ? { lastAlertMessageId: liveHistory.messageId, lastAlertChannelId: liveHistory.channelId, lastLiveMessageId: liveHistory.messageId, lastLiveMessageChannelId: liveHistory.channelId, lastAlertKey: state.liveEventId ? `live:${state.liveEventId}` : state.lastAlertKey, lastLiveMessageUpdatedAt: liveHistory.createdAt || state.lastLiveMessageUpdatedAt }
-    : {};
-  const effectiveState = { ...state, ...legacyLiveMessage, ...recoveredLiveMessage };
-  const hasTrackedLiveMessage = effectiveState.isLive === true && Boolean((effectiveState.lastLiveMessageId || effectiveState.lastAlertMessageId) && (effectiveState.lastLiveMessageChannelId || effectiveState.lastAlertChannelId));
-  const alertTypes = Array.isArray(account.alertTypes) ? account.alertTypes.filter((type) => !(hasTrackedLiveMessage && String(type).toLowerCase() === 'ended')) : account.alertTypes;
-  const projectedTimestamp = hasTrackedLiveMessage ? projectedRefreshTimestamp(account, effectiveState, settings) : null;
-
-  return {
-    ...account,
-    ...(Array.isArray(alertTypes) ? { alertTypes } : {}),
-    state: {
-      ...effectiveState,
-      ...(projectedTimestamp ? { lastLiveMessageUpdateAt: projectedTimestamp } : {}),
-    },
-  };
-}
-
-function projectGuildConfig(guildConfig) {
-  if (!guildConfig || typeof guildConfig !== 'object') return guildConfig;
-  const modules = guildConfig.modules && typeof guildConfig.modules === 'object' ? guildConfig.modules : {};
-  const social = modules.social && typeof modules.social === 'object' ? modules.social : null;
-  if (!social) return guildConfig;
-  const effectiveAccounts = projectEffectiveAccounts(social);
-  const history = Array.isArray(social.history) ? social.history : [];
-  const settings = social.settings && typeof social.settings === 'object' ? social.settings : {};
-  const projectedAccounts = Object.fromEntries(Object.entries(effectiveAccounts && typeof effectiveAccounts === 'object' ? effectiveAccounts : {}).map(([accountId, account]) => [accountId, projectLiveRefreshState(account, history, settings)]));
-  return { ...guildConfig, modules: { ...modules, social: { ...social, accounts: projectedAccounts } } };
-}
-
-function projectedOptions(guildId, options = {}) {
-  const sourceGuildConfig = options.guildConfig && typeof options.guildConfig === 'object' ? options.guildConfig : guildManager.reloadGuild(guildId);
-  return { ...options, guildConfig: projectGuildConfig(sourceGuildConfig) };
-}
-
-function rolloverIncident(guild, account) {
-  return { guildId: guild?.id || null, guildName: guild?.name || null, module: 'social', component: `${account?.platform || 'unknown'}:${account?.username || account?.externalId || account?.accountId || 'account'}`, code: 'live-event-rollover-missed' };
-}
-
-async function removeStaleLivePost(client, guildId, previous) {
-  const channelId = previous?.lastLiveMessageChannelId || previous?.lastAlertChannelId;
-  const messageId = previous?.lastLiveMessageId || previous?.lastAlertMessageId;
-  if (!channelId || !messageId) return false;
-  const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-  if (!guild) return false;
-  const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
-  if (!channel?.messages?.fetch) return false;
-  const message = await channel.messages.fetch(messageId).catch(() => null);
-  if (!message) return false;
-  await message.delete();
-  return true;
-}
-
-async function repairLiveRollovers(client, guildId, beforeConfig, result) {
-  if (!result || result.skipped) return result;
-  const guild = client.guilds.cache.get(guildId) || null;
-  const beforeSocial = beforeConfig?.modules?.social || {};
-  const latestGuild = guildManager.reloadGuild(guildId) || {};
-  const latestSocial = latestGuild?.modules?.social || {};
-  const repairs = [];
-
-  for (const item of result.results || []) {
-    if (item?.isLive !== true || !item.accountId) continue;
-    const beforeAccount = beforeSocial.accounts?.[item.accountId];
-    const currentAccount = latestSocial.accounts?.[item.accountId];
-    const previous = beforeAccount?.state || {};
-    const current = currentAccount?.state || {};
-    const previousEventId = previous.liveEventId ? String(previous.liveEventId) : '';
-    const currentEventId = current.liveEventId ? String(current.liveEventId) : '';
-    if (previous.isLive !== true || !previousEventId || !currentEventId || previousEventId === currentEventId) continue;
-    if (String(current.lastAlertKey || '') === `live:${currentEventId}`) continue;
-
-    const incident = rolloverIncident(guild || { id: guildId }, currentAccount || beforeAccount);
-    await sentinel.report(client, { ...incident, severity: 'warning', message: 'A provider returned a new LIVE event while Social Studio still held the previous LIVE session. Automatic rollover repair started.', details: { accountId: item.accountId, previousEventId, currentEventId, previousMessageId: previous.lastLiveMessageId || previous.lastAlertMessageId || null, previousChannelId: previous.lastLiveMessageChannelId || previous.lastAlertChannelId || null } });
-
-    try {
-      const repairGuild = guildManager.reloadGuild(guildId) || latestGuild;
-      const repairSocial = repairGuild?.modules?.social || {};
-      const repairAccount = repairSocial.accounts?.[item.accountId];
-      if (!repairAccount) throw new Error('The rollover account disappeared before repair could run.');
-      const patchedGuild = { ...repairGuild, modules: { ...(repairGuild.modules || {}), social: { ...repairSocial, accounts: { ...(repairSocial.accounts || {}), [item.accountId]: { ...repairAccount, state: { ...(repairAccount.state || {}), isLive: false, liveEventId: previousEventId, lastLiveEvent: previous.lastLiveEvent || repairAccount.state?.lastLiveEvent || null, lastAlertKey: previous.lastAlertKey || null, lastAlertMessageId: null, lastAlertChannelId: null, lastLiveMessageId: null, lastLiveMessageChannelId: null } } } } } };
-      const repaired = await core.checkGuildAccounts(client, guildId, projectedOptions(guildId, { force: true, accountIds: [item.accountId], guildConfig: patchedGuild }));
-      const repairedItem = (repaired.results || []).find((entry) => String(entry.accountId) === String(item.accountId));
-      const delivered = repairedItem?.delivered || [];
-      const liveDelivery = delivered.find((entry) => entry.type === 'live' && String(entry.id || '') === currentEventId);
-      if (!liveDelivery) throw new Error('Rollover repair completed without delivering the new LIVE event.');
-      const stalePostRemoved = await removeStaleLivePost(client, guildId, previous).catch(() => false);
-      repairs.push({ accountId: item.accountId, previousEventId, currentEventId, stalePostRemoved, repaired: true });
-      await sentinel.recover(client, incident, { accountId: item.accountId, previousEventId, currentEventId, stalePostRemoved, deliveredMessageId: liveDelivery.messageId || null });
-    } catch (error) {
-      repairs.push({ accountId: item.accountId, previousEventId, currentEventId, repaired: false, error: error?.message || String(error) });
-      await sentinel.report(client, { ...incident, severity: 'error', message: 'Social Studio detected a LIVE event rollover but automatic repair failed.', details: { accountId: item.accountId, previousEventId, currentEventId, error: error?.stack || error?.message || String(error) } });
-    }
-  }
-  return repairs.length ? { ...result, rolloverRepairs: repairs } : result;
-}
 
 async function checkGuildAccounts(client, guildId, options = {}) {
   const beforeConfig = options.guildConfig && typeof options.guildConfig === 'object' ? options.guildConfig : guildManager.reloadGuild(guildId);
   const result = await core.checkGuildAccounts(client, guildId, projectedOptions(guildId, options));
-  return repairLiveRollovers(client, guildId, beforeConfig, result);
+  return repairLiveRollovers(client, guildId, beforeConfig, result, { checkCore: core.checkGuildAccounts, projectedOptions });
 }
 
-function forcePostCreatorLive(client, guildId, creatorId, options = {}) { return core.forcePostCreatorLive(client, guildId, creatorId, projectedOptions(guildId, options)); }
+function forcePostCreatorLive(client, guildId, creatorId, options = {}) {
+  return core.forcePostCreatorLive(client, guildId, creatorId, projectedOptions(guildId, options));
+}
 
 function guildScheduler(guild) {
   return sentinelScheduler.register({ module: 'social', component: 'automatic-monitor', guildId: guild.id, guildName: guild.name, intervalMs: schedulerTickMs, staleAfterMs: Math.max(schedulerTickMs * 3, 180_000) });
@@ -165,7 +44,10 @@ async function sweep(client) {
 }
 
 function runSweep(client, label) {
-  return sweep(client).catch((error) => { sentinelScheduler.fail(GLOBAL_SCHEDULER, error, { phase: label }); console.error(`[Social Studio] ${label} sweep failed:`, error); });
+  return sweep(client).catch((error) => {
+    sentinelScheduler.fail(GLOBAL_SCHEDULER, error, { phase: label });
+    console.error(`[Social Studio] ${label} sweep failed:`, error);
+  });
 }
 
 function startupSocialStudio(client) {
