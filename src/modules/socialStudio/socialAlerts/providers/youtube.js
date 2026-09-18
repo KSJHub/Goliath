@@ -33,6 +33,16 @@ async function videoDetails(ids, key) {
   }
 }
 
+async function categoryName(categoryId, key) {
+  if (!categoryId) return null;
+  try {
+    const { json } = await request(`https://www.googleapis.com/youtube/v3/videoCategories?part=snippet&id=${encodeURIComponent(categoryId)}&key=${encodeURIComponent(key)}`);
+    return clean(json?.items?.[0]?.snippet?.title) || null;
+  } catch {
+    return null;
+  }
+}
+
 async function checkYouTube(account) {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) return unavailable('youtube', 'Set YOUTUBE_API_KEY.', 'configuration_required');
@@ -70,6 +80,7 @@ async function checkYouTube(account) {
   const liveDetails = liveId ? detailsById.get(liveId) || {} : {};
   const liveSnippet = liveDetails.snippet || live?.snippet || {};
   const liveStreaming = liveDetails.liveStreamingDetails || {};
+  const liveCategory = liveId ? await categoryName(liveSnippet.categoryId, key) : null;
   const channelUrl = `https://www.youtube.com/channel/${channel.id}`;
 
   return result('youtube', {
@@ -79,7 +90,7 @@ async function checkYouTube(account) {
       type: 'live', id: liveId, title: liveSnippet.title || 'YouTube LIVE', url: `https://www.youtube.com/watch?v=${liveId}`,
       thumbnail: youtubeThumbnail(liveSnippet),
       startedAt: liveStreaming.actualStartTime || live?.snippet?.publishedAt || null,
-      category: liveSnippet.categoryId || null,
+      category: liveCategory,
       language: liveSnippet.defaultAudioLanguage || liveSnippet.defaultLanguage || null,
       viewerCount: liveStreaming.concurrentViewers ? Number(liveStreaming.concurrentViewers) : null,
     } : null,
