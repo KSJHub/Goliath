@@ -11,7 +11,11 @@ const surfaces = [
 ];
 
 function load(file) {
-  return require(path.join(ROOT, file));
+  // Runtime contract paths are repository-root-relative. require() resolves
+  // relative specifiers from this test file, so always convert them to an
+  // absolute path first; otherwise nested callers can accidentally resolve
+  // ./src from test/ and fail with MODULE_NOT_FOUND.
+  return require(path.resolve(ROOT, file));
 }
 
 let failed = false;
