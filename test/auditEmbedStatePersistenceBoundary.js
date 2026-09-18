@@ -4,61 +4,69 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
-const originalCwd = process.cwd();
-const originalMode = process.env.BOT_MODE;
+const repo = path.resolve(__dirname, '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-embed-state-boundary-'));
+const statePath = path.join(repo, 'src/modules/messageStudio/embed/embedState.js');
+const persistencePath = path.join(repo, 'src/modules/messageStudio/embed/embedSessionPersistence.js');
+
+function run(source) {
+  const result = spawnSync(process.execPath, ['-e', source], {
+    cwd: tmp,
+    env: { ...process.env, BOT_MODE: 'dev' },
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    process.stderr.write(result.stdout || '');
+    process.stderr.write(result.stderr || '');
+    process.exit(result.status || 1);
+  }
+  return String(result.stdout || '').trim();
+}
 
 try {
-  process.chdir(tmp);
-  process.env.BOT_MODE = 'dev';
+  const common = `
+    const state = require(${JSON.stringify(statePath)});
+    const persistence = require(${JSON.stringify(persistencePath)});
+    state.configure({
+      defaultState: () => ({ panels: [{ title: 'Default' }], selectedPanelIndex: 0, hasUnsavedChanges: false }),
+      sync: (value) => value,
+      basePanel: () => ({ title: 'Template' }),
+    });
+    persistence.install(state);
+    const interaction = { guildId: 'guild-1', user: { id: 'user-1' } };
+  `;
 
-  const embedState = require('../src/modules/messageStudio/embed/embedState');
-  const persistence = require('../src/modules/messageStudio/embed/embedSessionPersistence');
-  const store = require('../src/modules/messageStudio/embed/embedSessionStore');
+  run(`${common}
+    const saved = state.markUnsaved(interaction, {
+      panels: [{ title: '', graphicHeaderTitle: 'FAQ', image: 'https://example.test/faq.gif' }],
+      mediaV2: { panels: [{ gallery: [{ source: 'https://example.test/faq.gif', placement: 'above' }] }] },
+      selectedPanelIndex: 0,
+    });
+    if (!saved.hasUnsavedChanges) process.exit(2);
+  `);
 
-  embedState.configure({
-    defaultState: () => ({ panels: [{ title: 'Default' }], selectedPanelIndex: 0, hasUnsavedChanges: false }),
-    sync: (state) => state,
-    basePanel: () => ({ title: 'Template' }),
-  });
-  persistence.install(embedState);
-
-  const interaction = { guildId: 'guild-1', user: { id: 'user-1' } };
-  const key = embedState.sessionKey(interaction);
-  const saved = embedState.markUnsaved(interaction, {
-    panels: [{ title: '', graphicHeaderTitle: 'FAQ', image: 'https://example.test/faq.gif' }],
-    mediaV2: { panels: [{ gallery: [{ source: 'https://example.test/faq.gif', placement: 'above' }] }] },
-    selectedPanelIndex: 0,
-  });
-
-  assert.equal(saved.hasUnsavedChanges, true);
-  assert.deepEqual(store.load(key), saved);
-
-  // Simulate a process-memory loss while leaving the durable runtime file intact.
-  embedState.sessions.delete(key);
-  // A fresh process would have a fresh hydration set. Re-load the persistence
-  // module to model that boundary without requiring Discord.
-  delete require.cache[require.resolve('../src/modules/messageStudio/embed/embedSessionPersistence')];
-  delete embedState.__persistentSessionsInstalled;
-  const freshPersistence = require('../src/modules/messageStudio/embed/embedSessionPersistence');
-  freshPersistence.install(embedState);
-
-  const restored = embedState.getSession(interaction);
+  const restored = JSON.parse(run(`${common}
+    process.stdout.write(JSON.stringify(state.getSession(interaction)));
+  `));
   assert.equal(restored.panels[0].graphicHeaderTitle, 'FAQ');
   assert.equal(restored.mediaV2.panels[0].gallery[0].placement, 'above');
   assert.equal(restored.hasUnsavedChanges, true);
 
-  embedState.clearSession(interaction);
-  assert.equal(store.load(key), null);
+  run(`${common}
+    state.clearSession(interaction);
+  `);
 
-  const entry = fs.readFileSync(path.join(originalCwd, 'src/modules/messageStudio/embed/embed.js'), 'utf8');
-  assert(entry.indexOf("sessionPersistence.install(embedState)") < entry.indexOf("require('./embedPanel')"));
+  const afterClear = JSON.parse(run(`${common}
+    process.stdout.write(JSON.stringify(state.getSession(interaction)));
+  `));
+  assert.equal(afterClear.panels[0].title, 'Default');
+
+  const entry = fs.readFileSync(path.join(repo, 'src/modules/messageStudio/embed/embed.js'), 'utf8');
+  assert(entry.indexOf('sessionPersistence.install(embedState)') < entry.indexOf("require('./embedPanel')"));
 
   console.log('✅ Embed Studio state persistence boundary audit passed');
 } finally {
-  process.chdir(originalCwd);
-  if (originalMode === undefined) delete process.env.BOT_MODE;
-  else process.env.BOT_MODE = originalMode;
   fs.rmSync(tmp, { recursive: true, force: true });
 }
