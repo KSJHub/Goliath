@@ -1,0 +1,80 @@
+name: DEV Runtime Hardening
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/dev-runtime-hardening.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply runtime fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          # 1) Discord maintenance recovery: never select/edit system messages.
+          p = Path('src/owner/dev/maintenanceStatus.js')
+          s = p.read_text(encoding='utf-8')
+          old = "const pinnedMessage = pinned?.find?.((message) => message.author?.id === channel.client.user?.id);"
+          new = "const pinnedMessage = pinned?.find?.((message) => message.author?.id === channel.client.user?.id && message.system !== true && message.editable !== false);"
+          assert old in s, 'pinned status selector changed'
+          s = s.replace(old, new, 1)
+          old = "return recent?.find?.((message) => message.author?.id === channel.client.user?.id) || null;"
+          new = "return recent?.find?.((message) => message.author?.id === channel.client.user?.id && message.system !== true && message.editable !== false) || null;"
+          assert old in s, 'recent status selector changed'
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # 2) EventEmitter warning: Goliath intentionally has several priority interaction guards
+          # outside the grouped event registry. Give the Discord client an explicit design budget
+          # instead of leaving Node's generic default of 10 and producing a false leak warning.
+          p = Path('src/runtime/runtimeBootstrap.js')
+          s = p.read_text(encoding='utf-8')
+          needle = "function registerEvents(client, options = {}) {\n  const eventsPath"
+          repl = "function registerEvents(client, options = {}) {\n  // Goliath uses the grouped event registry plus a small set of deliberately ordered\n  // Command Center/security guards that attach directly to the Discord client.\n  // Declare that listener budget explicitly so Node's default threshold does not\n  // misreport the intentional router topology as a memory leak.\n  if (typeof client?.setMaxListeners === 'function' && typeof client?.getMaxListeners === 'function') {\n    client.setMaxListeners(Math.max(client.getMaxListeners(), 25));\n  }\n\n  const eventsPath"
+          assert needle in s, 'registerEvents signature changed'
+          s = s.replace(needle, repl, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # 3) Duplicator bridge: EADDRINUSE should not dump a stack/retry forever. Probe the
+          # existing endpoint; if it is another Goliath DEV bridge, reuse it. Otherwise disable
+          # this process' bridge cleanly and explain the conflict once.
+          p = Path('src/owner/dev/duplicator/core.js')
+          s = p.read_text(encoding='utf-8')
+          old = "let bridgeServer = null;\nlet bridgeClient = null;"
+          new = "let bridgeServer = null;\nlet bridgeClient = null;\nlet bridgeUnavailable = false;"
+          assert old in s, 'bridge state changed'
+          s = s.replace(old, new, 1)
+          old = "  if (bridgeServer) return bridgeServer;\n  const port = Number(process.env.BOT_API_PORT || bridgePort(mode()));"
+          new = "  if (bridgeServer) return bridgeServer;\n  if (bridgeUnavailable) return null;\n  const port = Number(process.env.BOT_API_PORT || bridgePort(mode()));"
+          assert old in s, 'initializeBridge guard changed'
+          s = s.replace(old, new, 1)
+          old = "  bridgeServer.on('error', (error) => { console.error(`[Duplicator] Bridge failed on ${BRIDGE_HOST}:${port}:`, error); bridgeServer = null; });"
+          new = "  bridgeServer.on('error', (error) => {\n    bridgeServer = null;\n    bridgeUnavailable = true;\n    if (error?.code === 'EADDRINUSE') {\n      void bridgeRequestAtPort(mode(), port, 'GET', '/guilds', null, 1500)\n        .then((response) => {\n          if (String(response?.environment || '').toUpperCase() === mode()) {\n            resolvedBridgePorts.set(mode(), port);\n            console.log(`[Duplicator] ${mode()} bridge already active on ${BRIDGE_HOST}:${port}; reusing the existing endpoint.`);\n          } else {\n            console.warn(`[Duplicator] Bridge port ${BRIDGE_HOST}:${port} is occupied by another process; local bridge disabled for this process.`);\n          }\n        })\n        .catch(() => console.warn(`[Duplicator] Bridge port ${BRIDGE_HOST}:${port} is occupied by another process; local bridge disabled for this process.`));\n      return;\n    }\n    console.error(`[Duplicator] Bridge failed on ${BRIDGE_HOST}:${port}:`, error?.message || error);\n  });"
+          assert old in s, 'bridge error handler changed'
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+      - run: npm ci
+      - run: npm run doctor
+      - run: npm run build
+      - name: Commit fixes
+        run: |
+          git config user.name "Goliath DEV Builder"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/owner/dev/maintenanceStatus.js src/runtime/runtimeBootstrap.js src/owner/dev/duplicator/core.js
+          git commit -m "fix(dev): harden runtime startup and recovery" || true
+          git push origin dev
