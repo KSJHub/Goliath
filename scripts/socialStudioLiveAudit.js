@@ -15,6 +15,34 @@ assert.equal(monitor.liveRefreshMs({ liveMessageRefreshMs: 1200000 }), 1200000, 
 assert.equal(monitor.liveRefreshEnabled({ liveMessageRefreshEnabled: false }), false, 'Refresh Off must be respected.');
 assert.equal(monitor.liveRefreshEnabled({}), true, 'Refresh defaults to On.');
 
+const projected = monitor.projectGuildConfig({
+  modules: {
+    social: {
+      settings: { liveMessageRefreshEnabled: false, liveMessageRefreshMs: 300000 },
+      accounts: {
+        a1: {
+          accountId: 'a1',
+          platform: 'kick',
+          username: 'creator',
+          enabled: true,
+          alertTypes: ['live'],
+          state: {
+            isLive: true,
+            liveEventId: 'room-1',
+            lastLiveMessageId: 'message-1',
+            lastLiveMessageChannelId: 'channel-1',
+          },
+        },
+      },
+      creators: {},
+      history: [],
+    },
+  },
+});
+assert.equal(projected.modules.social.settings.liveMessageRefreshEnabled, false, 'Projected runtime settings must preserve Refresh Off.');
+assert.equal(projected.modules.social.settings.liveMessageRefreshMs, 600000, 'Projected runtime settings must normalize invalid/legacy refresh rates to 10 minutes.');
+assert(projected.modules.social.accounts.a1.alertTypes.includes('ended'), 'A tracked LIVE alert must retain synthetic ended handling so LIVE→OFFLINE cleanup/edit always runs.');
+
 const baseEvent = {
   type: 'live',
   category: 'Call of Duty',
