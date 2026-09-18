@@ -15,10 +15,75 @@ const mediaStateApi = Object.freeze({
   mediaModel: media.mediaModel,
 });
 
+function clone(value) {
+  try { return JSON.parse(JSON.stringify(value)); } catch { return value; }
+}
+
+function mediaWeight(value) {
+  const panels = Array.isArray(value?.panels) ? value.panels : [];
+  return panels.reduce((total, entry) => total
+    + (entry?.thumbnail?.source ? 1 : 0)
+    + (Array.isArray(entry?.gallery) ? entry.gallery.filter((item) => item?.source).length : 0)
+    + (Array.isArray(entry?.files) ? entry.files.filter((item) => item?.source).length : 0), 0);
+}
+
+function canonicalMediaState(state = {}) {
+  const panels = Array.isArray(state?.panels) ? state.panels : [];
+  const fromV2 = media.mediaModel.normalizeMediaV2(state?.mediaV2 || {}, panels);
+  const fromStored = media.mediaModel.normalizeMediaV2(state?.media || {}, panels);
+  let canonical = mediaWeight(fromV2) >= mediaWeight(fromStored) ? fromV2 : fromStored;
+
+  // Recover sessions created while the legacy `media` mirror could overwrite a
+  // newer mediaV2 value. The panel's legacy image field still carries the source,
+  // so normalizeMediaV2 can rebuild the gallery. If the title is currently hidden
+  // and a graphic-header title backup exists, this was Graphic-only mode and the
+  // recovered image belongs above the text.
+  canonical = media.mediaModel.normalizeMediaV2(canonical, panels);
+  canonical.panels = canonical.panels.map((entry, index) => {
+    const panelData = panels[index] || {};
+    if (!panelData?.graphicHeaderTitle || String(panelData?.title || '').trim()) return entry;
+    if (!Array.isArray(entry?.gallery) || !entry.gallery.length) return entry;
+    if (entry.gallery.some((item) => item?.placement === 'above')) return entry;
+    return {
+      ...entry,
+      gallery: entry.gallery.map((item, itemIndex) => ({
+        ...item,
+        placement: itemIndex === 0 ? 'above' : 'below',
+      })),
+    };
+  });
+  return canonical;
+}
+
+function installCanonicalMediaSessions(targetPanel) {
+  if (!targetPanel || targetPanel.__canonicalMediaSessionsInstalled) return targetPanel;
+
+  if (typeof targetPanel.getSession === 'function') {
+    const originalGetSession = targetPanel.getSession.bind(targetPanel);
+    targetPanel.getSession = (interaction) => {
+      const state = originalGetSession(interaction);
+      const canonical = canonicalMediaState(state);
+      return { ...state, media: clone(canonical), mediaV2: clone(canonical) };
+    };
+  }
+
+  if (typeof targetPanel.saveSession === 'function') {
+    const originalSaveSession = targetPanel.saveSession.bind(targetPanel);
+    targetPanel.saveSession = (interaction, state) => {
+      const canonical = canonicalMediaState(state);
+      return originalSaveSession(interaction, { ...state, media: clone(canonical), mediaV2: clone(canonical) });
+    };
+  }
+
+  targetPanel.__canonicalMediaSessionsInstalled = true;
+  return targetPanel;
+}
+
 function installMediaRuntime(targetPanel) {
   media.installStateCompatibility(targetPanel);
   media.installPersistentMediaCompatibility(targetPanel);
   media.installStorageNormalization(targetPanel);
+  installCanonicalMediaSessions(targetPanel);
   media.installUploadModals(targetPanel);
   installMediaManagerBase(targetPanel, media);
   media.installMediaOptionsUi(targetPanel);
