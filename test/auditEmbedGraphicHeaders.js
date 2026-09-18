@@ -37,6 +37,15 @@ function run() {
   assert(renderer.includes("'image/gif'"));
   assert(renderer.includes('nativeImageShouldPassThrough'));
 
+  // Media Manager navigation must not let the legacy `media` mirror overwrite
+  // a newer mediaV2 gallery. The runtime installs a final canonical session
+  // boundary and chooses the richer state before every get/save operation.
+  const embedRuntime = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embed'), 'utf8');
+  assert(embedRuntime.includes('function canonicalMediaState'));
+  assert(embedRuntime.includes('mediaWeight(fromV2) >= mediaWeight(fromStored)'));
+  assert(embedRuntime.includes('installCanonicalMediaSessions(targetPanel)'));
+  assert(embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"));
+
   console.log('✅ Embed Graphic Header regression audit passed.');
 }
 
