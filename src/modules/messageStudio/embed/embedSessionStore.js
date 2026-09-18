@@ -5,13 +5,17 @@ const path = require('node:path');
 
 const VERSION = 1;
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// Durable state must not depend on the caller's working directory. PM2, tests
+// and maintenance commands can launch the same checkout from different cwd
+// values. This module is always four directories below the application root.
+const APP_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 
 function mode() {
   return String(process.env.BOT_MODE || process.env.NODE_ENV || 'dev').toLowerCase();
 }
 
 function rootDir() {
-  return path.join(process.cwd(), 'src', 'runtime', mode(), 'data', 'messageStudio', 'embedSessions');
+  return path.join(APP_ROOT, 'src', 'runtime', mode(), 'data', 'messageStudio', 'embedSessions');
 }
 
 function safeKey(key) {
@@ -76,4 +80,4 @@ function remove(key) {
   }
 }
 
-module.exports = { load, save, remove, fileFor };
+module.exports = { load, save, remove, fileFor, rootDir };
