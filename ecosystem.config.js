@@ -14,6 +14,8 @@ module.exports = {
 
       watch: false,
       autorestart: true,
+      min_uptime: '15s',
+      max_restarts: 5,
       max_memory_restart: '500M',
       restart_delay: 5000,
       time: true,
@@ -33,6 +35,8 @@ module.exports = {
 
       watch: false,
       autorestart: true,
+      min_uptime: '15s',
+      max_restarts: 5,
       max_memory_restart: '1G',
       restart_delay: 5000,
       time: true,
@@ -52,6 +56,8 @@ module.exports = {
 
       watch: false,
       autorestart: true,
+      min_uptime: '15s',
+      max_restarts: 5,
       max_memory_restart: '1G',
       restart_delay: 5000,
       time: true,
