@@ -143,6 +143,12 @@ function registerInterval(idOrInput, callback, intervalMs, options = {}) {
 }
 
 function clear(idOrInput) {
+  if (arguments.length === 0 || idOrInput == null) {
+    for (const timer of timers.values()) clearInterval(timer);
+    timers.clear();
+    registry.clear();
+    return true;
+  }
   const id = schedulerId(idOrInput);
   if (!id) return false;
   const timer = timers.get(id);
@@ -162,12 +168,6 @@ function snapshot() {
   return Object.fromEntries(entries().map((entry) => [entry.id, entry]));
 }
 
-function clearRegistry() {
-  for (const timer of timers.values()) clearInterval(timer);
-  timers.clear();
-  registry.clear();
-}
-
 module.exports = {
   register,
   registerInterval,
@@ -178,6 +178,5 @@ module.exports = {
   clear,
   entries,
   snapshot,
-  clearRegistry,
   schedulerId,
 };
