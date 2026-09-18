@@ -48,8 +48,9 @@ function run() {
 
 run();
 
-// Sync Goliath and Deploy Goliath already execute this audit as their Embed
-// Studio validation gate. Keep restart persistence inside that same gate so a
-// broken draft-recovery path blocks deployment without creating extra Actions.
+// Sync Goliath and Deploy Goliath execute this file as the shared deep
+// regression gate. Keep restart persistence and critical runtime API contracts
+// here so a broken cross-module surface cannot reach DEV, BETA or PRODUCTION.
 require('./auditEmbedSessionPersistence');
 require('./auditEmbedStatePersistenceBoundary');
+require('./auditRuntimeContracts');
