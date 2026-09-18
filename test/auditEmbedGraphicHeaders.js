@@ -23,30 +23,33 @@ function run() {
   const cleared = normalizeHeaderPlacements(base, null);
   assert(cleared.every((item) => item.placement === 'below'));
 
-  // Components V2 controls the intrinsic spacing between adjacent MediaGallery
-  // and TextDisplay components. Guard our side of the contract: header gallery
-  // must be inserted immediately before panel text with no Separator component.
   const renderer = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embedRenderer'), 'utf8');
   const above = renderer.indexOf('if (aboveItems.length) container.addMediaGalleryComponents');
   const text = renderer.indexOf('if (text && isHttpsUrl(thumbSource))', above);
   assert(above >= 0 && text > above, 'graphic header must render before panel text');
   assert(!renderer.slice(above, text).includes('Separator'), 'do not add artificial spacing below graphic headers');
 
-  // Native animated formats must remain URL pass-through so GIF animation and
-  // larger remote headers are not forced through the static 8 MB processor.
   assert(renderer.includes("'image/gif'"));
   assert(renderer.includes('nativeImageShouldPassThrough'));
 
-  // Media Manager navigation must not let the legacy `media` mirror overwrite
-  // a newer mediaV2 gallery. The runtime installs a final canonical session
-  // boundary and chooses the richer state before every get/save operation.
   const embedRuntime = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embed'), 'utf8');
   assert(embedRuntime.includes('function canonicalMediaState'));
   assert(embedRuntime.includes('mediaWeight(fromV2) >= mediaWeight(fromStored)'));
   assert(embedRuntime.includes('installCanonicalMediaSessions(targetPanel)'));
   assert(embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"));
 
+  // Persistence must be installed before embedPanel captures/destructures the
+  // state API. This is the regression that caused drafts to disappear after a
+  // PM2 restart even though the durable store itself was working correctly.
+  assert(embedRuntime.indexOf('sessionPersistence.install(embedState)') < embedRuntime.indexOf("require('./embedPanel')"));
+
   console.log('✅ Embed Graphic Header regression audit passed.');
 }
 
 run();
+
+// Sync Goliath and Deploy Goliath already execute this audit as their Embed
+// Studio validation gate. Keep restart persistence inside that same gate so a
+// broken draft-recovery path blocks deployment without creating extra Actions.
+require('./auditEmbedSessionPersistence');
+require('./auditEmbedStatePersistenceBoundary');
