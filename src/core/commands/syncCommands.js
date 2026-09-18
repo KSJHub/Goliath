@@ -9,7 +9,6 @@ const { REST, Routes } = require('discord.js');
 const { loadEnvironment } = require('../../config/envLoader');
 const { resolveTokenDetails, getRequiredTokenEnvName } = require('../../config/tokenResolver');
 const { BETA_GUILD_IDS: CONFIGURED_BETA_GUILD_IDS = [] } = require('../../config/betaGuilds');
-const auditStore = require('../../owner/auditIntelligence/auditStore');
 
 const ALLOWED_MODES = new Set(['dev', 'beta', 'production']);
 const OWNER_COMMAND_NAME = 'owner';
@@ -96,14 +95,6 @@ function loadCanonicalCommands() {
   }
 
   return commands;
-}
-
-function commandCenterGuildId() {
-  return String(
-    auditStore.getConfig()?.commandCenter?.guildId
-      || process.env.COMMAND_CENTER_GUILD_ID
-      || ''
-  ).trim();
 }
 
 function timeoutMs() {
@@ -204,7 +195,7 @@ async function cleanupRetiredGuildCommands(rest, clientId, guildIds, dryRun = fa
       commands = await rest.get(Routes.applicationGuildCommands(clientId, guildId));
     } catch (error) {
       if (isInaccessibleGuildError(error)) {
-        console.warn(`[CommandSync] Skipped retired-command cleanup for inaccessible guild ${guildId} (Discord ${discordErrorCode(error)}).`);
+        console.warn(`[CommandSync] Skipped retired-command cleanup for inaccessible configured guild ${guildId} (Discord ${discordErrorCode(error)}).`);
         return [];
       }
       throw error;
@@ -226,7 +217,7 @@ async function cleanupRetiredGuildCommands(rest, clientId, guildIds, dryRun = fa
         console.log(`[CommandSync] Removed guild /${command.name} from ${guildId}`);
       } catch (error) {
         if (isInaccessibleGuildError(error)) {
-          console.warn(`[CommandSync] Could not remove guild /${command.name} from inaccessible guild ${guildId} (Discord ${discordErrorCode(error)}).`);
+          console.warn(`[CommandSync] Could not remove guild /${command.name} from inaccessible configured guild ${guildId} (Discord ${discordErrorCode(error)}).`);
           continue;
         }
         throw error;
@@ -263,8 +254,10 @@ async function syncCommands() {
   assertOwnerCommandUserInstall(ownerCommand);
 
   const guildIds = configuredGuildIds(mode);
-  const privateGuildId = commandCenterGuildId();
-  const cleanupGuildIds = uniqueGuildIds([guildIds, privateGuildId]);
+  // Retired guild commands are an environment-local concern. Do not reach
+  // into Audit Intelligence's command-center guild from another bot/runtime;
+  // that guild may intentionally be inaccessible to this environment token.
+  const cleanupGuildIds = guildIds;
   const rest = new REST({ version: '10', timeout: timeoutMs() }).setToken(token);
   let removedGlobalCommands = [];
   let removedGuildCommands = [];
