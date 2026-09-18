@@ -52,16 +52,20 @@ async function checkTwitch(account) {
     thumbnail: clip.thumbnail_url || null, viewCount: clip.view_count, publishedAt: clip.created_at || null, duration: clip.duration || null,
   });
 
-  // Social Studio's persisted duplicate guard currently tracks one lastAlertKey.
-  // Returning both a VOD and clip lets that key oscillate forever (vod -> clip -> vod),
-  // replaying old Twitch content every monitor cycle. Until the monitor owns a bounded
-  // delivered-content ledger, expose only the newest Twitch content item per check.
-  candidates.sort((a, b) => {
-    const at = Date.parse(a.publishedAt || '') || 0;
-    const bt = Date.parse(b.publishedAt || '') || 0;
-    return bt - at;
-  });
-  const contentItems = candidates;
+  // The monitor currently persists one lastAlertKey per account. Returning both the
+  // latest VOD and latest clip causes that key to oscillate (vod -> clip -> vod),
+  // which re-delivers old Twitch content every monitor tick. Until the monitor's
+  // persistent multi-item delivery ledger is in place, expose only the newest
+  // content candidate. This guarantees stable dedupe and immediately prevents
+  // cross-guild replay spam without affecting LIVE detection/refresh behaviour.
+  const contentItems = candidates
+    .filter((item) => item?.id)
+    .sort((a, b) => {
+      const aTime = new Date(a.publishedAt || 0).getTime();
+      const bTime = new Date(b.publishedAt || 0).getTime();
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    })
+    .slice(0, 1);
 
   return result('twitch', {
     isLive: Boolean(stream), externalId: String(user.id), resolvedUsername: user.login, url: channelUrl, avatar: user.profile_image_url || null,

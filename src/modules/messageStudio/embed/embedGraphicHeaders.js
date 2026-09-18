@@ -9,26 +9,26 @@ function selectedPanel(state) {
 
 function selectedMediaIndex(state, panelMedia) {
   const index = Number(state?.selectedMediaIndex);
-  return Number.isInteger(index) && index >= 0 && index < (panelMedia?.gallery?.length || 0)
-    ? index
-    : null;
+  return Number.isInteger(index) && index >= 0 && index < (panelMedia?.gallery?.length || 0) ? index : null;
+}
+
+function graphicHeaderIndex(panelMedia) {
+  const gallery = Array.isArray(panelMedia?.gallery) ? panelMedia.gallery : [];
+  const index = gallery.findIndex((item) => String(item?.placement || '').toLowerCase() === 'above');
+  return index >= 0 ? index : null;
 }
 
 function headerMode(state, media) {
   const panelData = selectedPanel(state);
   const panelMedia = media.getPanelMedia(state, state?.selectedPanelIndex || 0);
-  const index = selectedMediaIndex(state, panelMedia);
-  if (index == null) return 'text';
-  const above = panelMedia.gallery[index]?.placement === 'above';
-  const titleVisible = Boolean(String(panelData.title || '').trim());
-  if (!above) return 'text';
-  return titleVisible ? 'both' : 'graphic';
+  if (graphicHeaderIndex(panelMedia) == null) return 'text';
+  return String(panelData.title || '').trim() ? 'both' : 'graphic';
 }
 
 function modeLabel(mode) {
-  if (mode === 'graphic') return '🖼️ Header: Graphic';
-  if (mode === 'both') return '🖼️ Header: Graphic + Text';
-  return '📝 Header: Text';
+  if (mode === 'graphic') return 'Header: Graphic';
+  if (mode === 'both') return 'Header: Graphic + Text';
+  return 'Header: Text';
 }
 
 function componentId(component) {
@@ -39,8 +39,25 @@ function headerButton(mode, disabled = false) {
   return new ButtonBuilder()
     .setCustomId('embed:graphic-header-cycle')
     .setLabel(modeLabel(mode))
+    .setEmoji(mode === 'text' ? '📝' : '🖼️')
     .setStyle(mode === 'graphic' ? ButtonStyle.Success : mode === 'both' ? ButtonStyle.Primary : ButtonStyle.Secondary)
     .setDisabled(disabled);
+}
+
+function sourceLabel(value, fallback = 'Media item') {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  try {
+    const url = new URL(text);
+    return decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || fallback).slice(0, 80);
+  } catch { return text.slice(0, 80); }
+}
+
+function normalizeHeaderPlacements(gallery, headerIndex = null) {
+  return (Array.isArray(gallery) ? gallery : []).map((item, index) => ({
+    ...item,
+    placement: headerIndex != null && index === headerIndex ? 'above' : 'below',
+  }));
 }
 
 function installGraphicHeaders(panel, media, interactions) {
@@ -52,41 +69,32 @@ function installGraphicHeaders(panel, media, interactions) {
       const payload = originalBuildMediaManagerPanel(interaction, who);
       const state = panel.getSession(interaction);
       const panelMedia = media.getPanelMedia(state, state.selectedPanelIndex || 0);
-      const index = selectedMediaIndex(state, panelMedia);
+      const selectedIndex = selectedMediaIndex(state, panelMedia);
+      const activeIndex = graphicHeaderIndex(panelMedia);
       const mode = headerMode(state, media);
       const rows = Array.isArray(payload?.components) ? payload.components : [];
 
-      // Locate the media-actions row by component ID instead of relying on a
-      // fixed row index. Media Manager can insert/remove select rows depending
-      // on whether gallery/files exist, so positional assumptions are unsafe.
+      // Replace the old placement shortcut with the three-state header control.
+      // This keeps the Media Manager within Discord's 5x5 component limits and
+      // avoids two controls fighting over the same placement state.
       let mediaRow = rows.find((row) => Array.isArray(row?.components)
         && row.components.some((component) => componentId(component) === 'embed:media-options'));
-
-      if (mediaRow?.addComponents && (mediaRow.components?.length || 0) < 5) {
-        mediaRow.addComponents(headerButton(mode, index == null));
+      if (mediaRow?.components) {
+        mediaRow.components = mediaRow.components.filter((component) => !String(componentId(component) || '').startsWith('embed:media-placement:'));
+        if (mediaRow.components.length < 5) mediaRow.addComponents(headerButton(mode, selectedIndex == null));
       } else if (rows.length < 5) {
-        rows.push(new ActionRowBuilder().addComponents(headerButton(mode, index == null)));
-      } else {
-        // Five Discord rows are already occupied. Keep the control visible by
-        // placing it in the media-actions row and dropping only the redundant
-        // base placement shortcut if one exists.
-        mediaRow = mediaRow || rows.find((row) => Array.isArray(row?.components)
-          && row.components.some((component) => String(componentId(component) || '').startsWith('embed:media-placement:')));
-        if (mediaRow?.components) {
-          const withoutLegacyHeader = mediaRow.components.filter((component) => !String(componentId(component) || '').startsWith('embed:media-placement:'));
-          if (withoutLegacyHeader.length < 5) {
-            mediaRow.components = withoutLegacyHeader;
-            mediaRow.addComponents(headerButton(mode, index == null));
-          }
-        }
+        rows.push(new ActionRowBuilder().addComponents(headerButton(mode, selectedIndex == null)));
       }
 
       const embed = payload?.embeds?.[0];
       if (embed?.data?.description != null) {
-        const hint = index == null
-          ? '\n\n🪧 **Graphic Header** — select a gallery image/GIF first.'
-          : `\n\n🪧 **Graphic Header** — ${mode === 'text' ? 'Text title' : mode === 'graphic' ? 'Graphic replaces the text title' : 'Graphic plus text title'}. Use the Header button to cycle modes.`;
-        embed.setDescription(`${embed.data.description}${hint}`.slice(0, 4096));
+        const active = activeIndex == null ? null : panelMedia.gallery[activeIndex];
+        const activeName = active ? sourceLabel(active.alt || active.source, `Item ${activeIndex + 1}`) : null;
+        const selectedIsActive = selectedIndex != null && selectedIndex === activeIndex;
+        const lines = activeName
+          ? [`🪧 **Graphic Header** — ${activeName}`, `**Mode:** ${mode === 'graphic' ? 'Graphic only' : mode === 'both' ? 'Graphic + Text' : 'Text only'}${selectedIsActive ? ' • selected' : ''}`]
+          : ['🪧 **Graphic Header** — none selected.', selectedIndex == null ? 'Select a gallery image/GIF to enable the Header control.' : 'Press **Header: Text** to use the selected media as the graphic header.'];
+        embed.setDescription(`${embed.data.description}\n\n${lines.join('\n')}`.slice(0, 4096));
       }
       return { ...payload, components: rows.slice(0, 5) };
     };
@@ -125,32 +133,30 @@ function installGraphicHeaders(panel, media, interactions) {
     }
 
     const currentMode = headerMode(state, media);
-    const gallery = panelMedia.gallery.map((item) => ({ ...item }));
+    const activeIndex = graphicHeaderIndex(panelMedia);
+    let gallery = panelMedia.gallery.map((item) => ({ ...item }));
     let patch = {};
 
     if (currentMode === 'text') {
-      gallery[mediaIndex].placement = 'above';
-      patch = {
-        graphicHeaderTitle: String(panelData.title || panelData.graphicHeaderTitle || ''),
-        title: '',
-      };
+      // Selecting a new header atomically demotes any previous header. There can
+      // only be one graphic header per panel.
+      gallery = normalizeHeaderPlacements(gallery, mediaIndex);
+      patch = { graphicHeaderTitle: String(panelData.title || panelData.graphicHeaderTitle || ''), title: '' };
     } else if (currentMode === 'graphic') {
-      patch = {
-        title: String(panelData.graphicHeaderTitle || ''),
-        graphicHeaderTitle: String(panelData.graphicHeaderTitle || ''),
-      };
+      // If the user selected a different gallery item while Graphic mode is
+      // active, switch the header to that item without losing the saved title.
+      if (activeIndex !== mediaIndex) gallery = normalizeHeaderPlacements(gallery, mediaIndex);
+      patch = { title: String(panelData.graphicHeaderTitle || ''), graphicHeaderTitle: String(panelData.graphicHeaderTitle || '') };
     } else {
-      gallery[mediaIndex].placement = 'below';
-      patch = {
-        title: String(panelData.title || panelData.graphicHeaderTitle || ''),
-        graphicHeaderTitle: String(panelData.graphicHeaderTitle || panelData.title || ''),
-      };
+      // Graphic + Text -> Text. Demote the actual active header, regardless of
+      // which gallery item is currently selected.
+      gallery = normalizeHeaderPlacements(gallery, null);
+      patch = { title: String(panelData.title || panelData.graphicHeaderTitle || ''), graphicHeaderTitle: String(panelData.graphicHeaderTitle || panelData.title || '') };
     }
 
     let next = panel.saveSelected(state, patch);
     next = media.setPanelMedia(next, panelIndex, { ...panelMedia, gallery });
     panel.saveSession(interaction, { ...next, hasUnsavedChanges: true });
-
     await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
     return true;
   };
@@ -161,4 +167,6 @@ function installGraphicHeaders(panel, media, interactions) {
 module.exports = {
   installGraphicHeaders,
   headerMode,
+  graphicHeaderIndex,
+  normalizeHeaderPlacements,
 };

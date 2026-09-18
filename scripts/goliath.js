@@ -5,14 +5,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
-function resolveRuntimeMode() {
-  const explicit = String(process.env.BOT_MODE || '').trim().toLowerCase();
-  if (['dev', 'beta', 'production'].includes(explicit)) return explicit;
-  const checkout = path.basename(root).toLowerCase();
-  if (['dev', 'beta', 'production'].includes(checkout)) return checkout;
-  return 'dev';
-}
-const mode = resolveRuntimeMode();
+const mode = process.env.BOT_MODE || 'dev';
 const JS_EXTENSIONS = ['.js', '.jsx', '.mjs', '.cjs'];
 const CANONICAL_COMMANDS = [
   ['admin', 'src/core/administration/admin/command.js'],
@@ -320,61 +313,71 @@ function classifyDeploymentChanges(files) {
   return plan;
 }
 
-function deployPlan(before, after, environment = mode) {
+function deployPlan(fromSha, toSha, format = 'human') {
+  const from = String(fromSha || '').trim();
+  const to = String(toSha || '').trim();
+  let files = [];
+  let forceFallback = false;
+  if (!to || !output('git', ['cat-file', '-t', to])) {
+    console.error(`Invalid deployment target commit: ${to || '(missing)'}`); return false;
+  }
+  if (!from || !output('git', ['cat-file', '-t', from])) forceFallback = true;
+  else {
+    const changed = output('git', ['diff', '--name-only', from, to]);
+    files = changed ? changed.split(/\r?\n/).filter(Boolean) : [];
+  }
+  const plan = classifyDeploymentChanges(files);
+  if (forceFallback) {
+    plan.fullFallback = true; plan.needsDeps = true; plan.needsCommandSync = true;
+    plan.needsDashboardBuild = true; plan.needsAppReload = true; plan.needsDoctor = true; plan.affected.add('fallback');
+  }
+  if (format === '--env') {
+    const line = (name, value) => console.log(`${name}=${value}`);
+    line('NEED_DEPS', plan.needsDeps); line('NEED_COMMAND_SYNC', plan.needsCommandSync);
+    line('NEED_DASHBOARD_BUILD', plan.needsDashboardBuild); line('NEED_APP_RELOAD', plan.needsAppReload);
+    line('NEED_DOCTOR', plan.needsDoctor); line('FULL_FALLBACK', plan.fullFallback);
+    line('CHANGED_COUNT', plan.changedFiles.length); line('AFFECTED_SYSTEMS', [...plan.affected].join(','));
+    line('AFFECTED_COMMANDS', [...plan.commands].join(',')); return true;
+  }
   section('Deployment plan');
-  const env = String(environment || mode).toLowerCase();
-  if (!['dev', 'beta', 'production'].includes(env)) { console.error(`Invalid deployment environment: ${env}`); return false; }
-  const from = String(before || '').trim(); const to = String(after || 'HEAD').trim();
-  if (!from) { console.error('Usage: node scripts/goliath.js deploy-plan <before-sha> <after-sha> [environment]'); return false; }
-  const changed = output('git', ['diff', '--name-only', `${from}..${to}`]).split(/\r?\n/).map((v) => v.trim()).filter(Boolean);
-  const plan = classifyDeploymentChanges(changed);
-  console.log(`Environment: ${env}`); console.log(`Changed files: ${changed.length}`);
-  if (!changed.length) { console.log('No deployment work required.'); return true; }
-  console.log(`Affected: ${[...plan.affected].sort().join(', ') || 'none'}`);
-  if (plan.commands.size) console.log(`Commands: ${[...plan.commands].sort().map((name) => `/${name}`).join(', ')}`);
-  const steps = [];
-  if (plan.needsDeps) steps.push('npm ci');
-  if (plan.needsCommandSync) steps.push(`BOT_MODE=${env} npm run sync:commands`);
-  if (plan.needsDashboardBuild) steps.push('npm run build');
-  else if (plan.needsDoctor) steps.push('npm run doctor');
-  if (plan.needsAppReload) steps.push(`pm2 restart goliath-${env} --update-env`);
-  if (!steps.length) steps.push('No runtime action required');
-  steps.forEach((step, index) => console.log(`${index + 1}. ${step}`));
+  console.log(`From: ${from || 'unknown'}`); console.log(`To:   ${to}`); console.log(`Changed files: ${plan.changedFiles.length}`);
+  for (const file of plan.changedFiles) console.log(` - ${file}`);
+  console.log(`Affected: ${[...plan.affected].join(', ') || 'repository only'}`);
+  console.log(`Commands: ${[...plan.commands].map((name) => `/${name}`).join(', ') || 'none'}`);
+  console.log(`Dependencies: ${plan.needsDeps}`); console.log(`Dashboard: ${plan.needsDashboardBuild}`);
+  console.log(`Command sync: ${plan.needsCommandSync}`); console.log(`App reload: ${plan.needsAppReload}`);
+  console.log(`Doctor: ${plan.needsDoctor}`); console.log(`Full fallback: ${plan.fullFallback}`);
   return true;
+}
+
+function syncCommands(target = mode) {
+  const environment = String(target || mode).toLowerCase();
+  if (!['dev', 'beta', 'production'].includes(environment)) {
+    console.error(`Invalid command-sync environment: ${environment}`); return false;
+  }
+  section(`Sync Discord commands (${environment})`);
+  const result = spawnSync(process.execPath, [absolute('src/core/commands/syncCommands.js')], {
+    cwd: root, stdio: 'inherit', env: { ...process.env, BOT_MODE: environment },
+  });
+  return result.status === 0;
 }
 
 function dashboardImportAudit() {
   section('Dashboard imports');
-  const dashboardRoot = absolute('src/dashboard');
-  const files = walk(dashboardRoot, ['.js', '.jsx', '.mjs', '.cjs']);
+  const files = walk(absolute('src/dashboard'), JS_EXTENSIONS);
   const errors = [];
-  const patterns = [
-    /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /\b(?:import|export)\s+(?:[^'";]+?\s+from\s+)?['"]([^'"]+)['"]/g,
-  ];
-  const candidates = (base) => [base, ...['.js', '.jsx', '.mjs', '.cjs', '.json'].map((ext) => `${base}${ext}`), ...['index.js', 'index.jsx', 'index.mjs', 'index.cjs'].map((name) => path.join(base, name))];
   for (const filePath of files) {
     const source = read(filePath);
-    for (const pattern of patterns) {
-      for (const match of source.matchAll(pattern)) {
-        const spec = match[1];
-        if (!spec.startsWith('.')) continue;
-        const base = path.resolve(path.dirname(filePath), spec);
-        if (!candidates(base).some((candidate) => fs.existsSync(candidate))) errors.push(`${relative(filePath)} -> ${spec}`);
-      }
+    const imports = [...source.matchAll(/(?:import|export).*?from\s+['"]([^'"]+)['"]/g)].map((match) => match[1]);
+    for (const specification of imports) {
+      if (!specification.startsWith('.')) continue;
+      const resolved = path.resolve(path.dirname(filePath), specification);
+      const candidates = [resolved, `${resolved}.js`, `${resolved}.jsx`, path.join(resolved, 'index.js'), path.join(resolved, 'index.jsx')];
+      if (!candidates.some((candidate) => fs.existsSync(candidate))) errors.push(`${relative(filePath)} -> ${specification}`);
     }
   }
-  console.log(`${errors.length ? '❌' : '✅'} checked ${files.length} dashboard files`);
-  for (const error of [...new Set(errors)]) console.log(` - missing ${error}`);
+  for (const error of errors) console.log(` - ${error}`);
   return errors.length === 0;
-}
-
-function syncCommands(targetMode = mode) {
-  const environment = String(targetMode || mode).toLowerCase();
-  if (!['dev', 'beta', 'production'].includes(environment)) { console.error(`Invalid command sync environment: ${environment}`); return false; }
-  section(`Sync commands (${environment})`);
-  const result = spawnSync(process.execPath, ['src/core/commands/syncCommands.js', environment], { cwd: root, stdio: 'inherit', env: { ...process.env, BOT_MODE: environment } });
-  return result.status === 0;
 }
 
 function auditCommand() {

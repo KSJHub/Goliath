@@ -91,12 +91,17 @@ async function checkKick(account) {
       ? channel.custom_tags
       : [];
   const category = first(stream.category?.name, channel.category?.name);
+  // Kick can intermittently omit the stream thumbnail on a later LIVE poll.
+  // Keep the last known image for the same monitored LIVE state so editing the
+  // Discord card never strips a previously valid preview image.
   const thumbnail = first(
     stream.thumbnail,
     stream.thumbnail_url,
     streamFromChannel?.thumbnail,
     streamFromChannel?.thumbnail_url,
+    account.state?.lastLiveEvent?.thumbnail,
     stream.channel?.profile_picture,
+    channel.profile_picture,
   );
 
   return result('kick', {
