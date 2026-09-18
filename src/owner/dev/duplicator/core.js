@@ -29,6 +29,7 @@ const buildSessions = new Map();
 const analyseSessions = new Map();
 let bridgeServer = null;
 let bridgeClient = null;
+let bridgeUnavailable = false;
 
 const COPY_OPTIONS = Object.freeze({
   roles: 'Roles', categories: 'Categories', channels: 'Channels', permissions: 'Channel Permissions',
@@ -818,6 +819,7 @@ function bridgeJson(res, status, value) { const body = Buffer.from(JSON.stringif
 function initializeBridge(client) {
   bridgeClient = client;
   if (bridgeServer) return bridgeServer;
+  if (bridgeUnavailable) return null;
   const port = Number(process.env.BOT_API_PORT || bridgePort(mode()));
   bridgeServer = http.createServer(async (req, res) => {
     try {
@@ -830,7 +832,24 @@ function initializeBridge(client) {
       return bridgeJson(res, 404, { error: 'Not found' });
     } catch (error) { console.error('[Duplicator Bridge]', error); return bridgeJson(res, 500, { error: error.message || String(error) }); }
   });
-  bridgeServer.on('error', (error) => { console.error(`[Duplicator] Bridge failed on ${BRIDGE_HOST}:${port}:`, error); bridgeServer = null; });
+  bridgeServer.on('error', (error) => {
+    bridgeServer = null;
+    bridgeUnavailable = true;
+    if (error?.code === 'EADDRINUSE') {
+      void bridgeRequestAtPort(mode(), port, 'GET', '/guilds', null, 1500)
+        .then((response) => {
+          if (String(response?.environment || '').toUpperCase() === mode()) {
+            resolvedBridgePorts.set(mode(), port);
+            console.log(`[Duplicator] ${mode()} bridge already active on ${BRIDGE_HOST}:${port}; reusing the existing endpoint.`);
+          } else {
+            console.warn(`[Duplicator] Bridge port ${BRIDGE_HOST}:${port} is occupied by another process; local bridge disabled for this process.`);
+          }
+        })
+        .catch(() => console.warn(`[Duplicator] Bridge port ${BRIDGE_HOST}:${port} is occupied by another process; local bridge disabled for this process.`));
+      return;
+    }
+    console.error(`[Duplicator] Bridge failed on ${BRIDGE_HOST}:${port}:`, error?.message || error);
+  });
   bridgeServer.listen(port, BRIDGE_HOST, () => console.log(`[Duplicator] ${mode()} bridge listening on ${BRIDGE_HOST}:${port}`));
   bridgeServer.unref?.();
   return bridgeServer;

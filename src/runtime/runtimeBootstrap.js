@@ -53,6 +53,14 @@ function safeLoad(label, loadFn, logger = console) {
 /* ---------------- EVENT REGISTRATION ---------------- */
 
 function registerEvents(client, options = {}) {
+  // Goliath uses the grouped event registry plus a small set of deliberately ordered
+  // Command Center/security guards that attach directly to the Discord client.
+  // Declare that listener budget explicitly so Node's default threshold does not
+  // misreport the intentional router topology as a memory leak.
+  if (typeof client?.setMaxListeners === 'function' && typeof client?.getMaxListeners === 'function') {
+    client.setMaxListeners(Math.max(client.getMaxListeners(), 25));
+  }
+
   const eventsPath = options.eventsPath || path.join(process.cwd(), 'src', 'events');
   const prepareInteraction = typeof options.prepareInteraction === 'function'
     ? options.prepareInteraction
