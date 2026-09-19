@@ -1,0 +1,165 @@
+name: Embed Studio Hardening Pass
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/embed-studio-hardening-pass.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install
+        run: npm ci
+      - name: Harden studio preview contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/modules/messageStudio/embed/embedPanel.js')
+          s = p.read_text()
+          old = '''function buildStudioPreviewEmbeds(s, i) {
+            const index = Math.max(0, Number(s?.selectedPanelIndex) || 0);
+            const panel = s?.panels?.[index] || {};
+            const mediaPanel = Array.isArray(s?.mediaV2?.panels) ? (s.mediaV2.panels[index] || {}) : {};
+            const gallery = Array.isArray(mediaPanel?.gallery) ? mediaPanel.gallery : [];
+            const header = gallery.find((item) => String(item?.placement || '').toLowerCase() === 'above');
+            const source = header ? String(replaceVars(header.source || '', i) || '').trim() : '';
+
+            if (!source) return [buildPreviewEmbed(s, i)];
+
+            const headerPreview = new EmbedBuilder()
+              .setColor(panel.color || s.color || PANEL_COLOR)
+              .setImage(source);
+
+            // The live Components V2 renderer places an "above" gallery before the
+            // panel text. Keep the builder preview in that same visual order without
+            // changing the canonical deployment preview used by the renderer.
+            const contentPanel = { ...panel, image: '' };
+            const contentState = { ...s, panels: [contentPanel], selectedPanelIndex: 0 };
+            const contentPreview = buildPreviewEmbed(contentState, i);
+
+            return [headerPreview, contentPreview];
+          }'''.replace('          ', '')
+          new = '''function buildStudioPreviewEmbeds(s, i) {
+            const index = Math.max(0, Number(s?.selectedPanelIndex) || 0);
+            const panel = s?.panels?.[index] || {};
+            const mediaPanel = Array.isArray(s?.mediaV2?.panels) ? (s.mediaV2.panels[index] || {}) : {};
+            const gallery = Array.isArray(mediaPanel?.gallery) ? mediaPanel.gallery : [];
+            const header = gallery.find((item) => String(item?.placement || '').toLowerCase() === 'above');
+            const source = header ? String(replaceVars(header.source || '', i) || '').trim() : '';
+
+            if (!source) return [buildPreviewEmbed(s, i)];
+
+            // Discord's legacy embed preview cannot place its large image before its
+            // text. Render the graphic header as the first preview card so Studio
+            // mirrors the live Components V2 order: graphic header, then content.
+            const headerPreview = new EmbedBuilder()
+              .setColor(panel.color || s.color || PANEL_COLOR)
+              .setImage(source);
+
+            // Do not echo a legacy panel image underneath the content when the same
+            // media item is acting as the graphic header.
+            const contentPanel = { ...panel, image: '' };
+            const contentState = { ...s, panels: [contentPanel], selectedPanelIndex: 0 };
+            const contentPreview = buildPreviewEmbed(contentState, i);
+
+            return [headerPreview, contentPreview];
+          }'''.replace('          ', '')
+          if old not in s:
+              raise SystemExit('buildStudioPreviewEmbeds anchor did not match current DEV')
+          s = s.replace(old, new, 1)
+          export_anchor = '  buildPreviewEmbed,\n'
+          if '  buildStudioPreviewEmbeds,\n' not in s:
+              if export_anchor not in s:
+                  raise SystemExit('preview export anchor missing')
+              s = s.replace(export_anchor, export_anchor + '  buildStudioPreviewEmbeds,\n', 1)
+          p.write_text(s)
+          PY
+      - name: Add regression audit
+        run: |
+          cat > test/auditEmbedStudioPreview.js <<'EOF'
+          'use strict';
+
+          const assert = require('node:assert/strict');
+          const panel = require('../src/modules/messageStudio/embed/embedPanel');
+
+          const interaction = {
+            guild: { id: 'guild-preview', name: 'Preview Guild', memberCount: 42 },
+            user: { id: 'user-preview', username: 'Preview User', displayAvatarURL: () => 'https://example.com/user.png' },
+            member: { displayName: 'Preview User' },
+          };
+
+          function state(placement = 'above') {
+            return {
+              selectedPanelIndex: 0,
+              showTimestamp: false,
+              fieldLayout: 'auto',
+              color: '#5865F2',
+              panels: [{
+                title: 'FAQ & Support Centre',
+                description: 'Find an answer below.',
+                color: '#5865F2',
+                image: 'https://example.com/legacy-bottom.png',
+                fields: [],
+                buttons: [],
+              }],
+              mediaV2: { version: 2, panels: [{ gallery: [{ source: 'https://example.com/faq.gif', placement }], files: [], thumbnail: { source: '' } }] },
+            };
+          }
+
+          const above = panel.buildStudioPreviewEmbeds(state('above'), interaction);
+          assert.equal(above.length, 2, 'graphic header preview must be a separate first card');
+          assert.equal(above[0].data.image.url, 'https://example.com/faq.gif', 'first preview card must be the graphic header');
+          assert.equal(above[0].data.title, undefined, 'graphic header card must not duplicate panel text');
+          assert.equal(above[1].data.title, 'FAQ & Support Centre', 'content must follow the graphic header');
+          assert.equal(above[1].data.image, undefined, 'content preview must not duplicate a legacy bottom image');
+
+          const below = panel.buildStudioPreviewEmbeds(state('below'), interaction);
+          assert.equal(below.length, 1, 'below-content media must never be promoted to graphic header in preview');
+          assert.equal(below[0].data.title, 'FAQ & Support Centre');
+
+          const none = state('below');
+          none.mediaV2.panels[0].gallery = [];
+          none.panels[0].image = '';
+          assert.equal(panel.buildStudioPreviewEmbeds(none, interaction).length, 1, 'ordinary embeds keep the normal single-card preview');
+
+          console.log('✅ Embed Studio preview parity audit passed.');
+          EOF
+      - name: Wire audit into package scripts
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          p.scripts = p.scripts || {};
+          p.scripts['audit:embed-studio-preview'] = 'node test/auditEmbedStudioPreview.js';
+          fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          NODE
+      - name: Validate embed hardening
+        run: |
+          npm run audit:embed-studio-preview
+          node test/auditEmbedGraphicHeaders.js
+          node test/auditEmbedSessionPersistence.js
+          node test/auditEmbedStatePersistenceBoundary.js
+          node test/auditRuntimeContracts.js
+      - name: Commit hardening and remove one-shot workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/embed-studio-hardening-pass.yml
+          git add src/modules/messageStudio/embed/embedPanel.js package.json
+          git add -f test/auditEmbedStudioPreview.js
+          git add -u .github/workflows/embed-studio-hardening-pass.yml
+          git commit -m 'test(embed): lock studio graphic-header preview parity'
+          git push origin dev
