@@ -1,0 +1,55 @@
+name: Fix Embed Media Persistence Limit
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - .github/workflows/fix-embed-media-persistence-limit.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Raise persistence ceiling and keep diagnostics accurate
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/modules/messageStudio/embed/embedMedia.js')
+          s = p.read_text()
+          old = "const MAX_ASSET_BYTES = 8 * 1024 * 1024;"
+          new = "const MAX_ASSET_BYTES = 25 * 1024 * 1024;"
+          if old not in s:
+              raise SystemExit('Expected 8 MB persistence constant was not found')
+          s = s.replace(old, new, 1)
+          s = s.replace("Media exceeds the 8 MB persistence limit.", "Media exceeds the 25 MB persistence limit.")
+          p.write_text(s)
+          PY
+          node --check src/modules/messageStudio/embed/embedMedia.js
+          grep -q "MAX_ASSET_BYTES = 25 \* 1024 \* 1024" src/modules/messageStudio/embed/embedMedia.js
+          ! grep -q "8 MB persistence limit" src/modules/messageStudio/embed/embedMedia.js
+
+      - name: Commit fix to dev
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/modules/messageStudio/embed/embedMedia.js
+          git commit -m "fix(embed): support larger durable animated media"
+          git push origin HEAD:dev
