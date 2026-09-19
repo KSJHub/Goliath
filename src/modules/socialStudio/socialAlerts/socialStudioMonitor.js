@@ -102,7 +102,11 @@ function retainedExtraFields(embed) { return (embed?.data?.fields || []).filter(
 async function applyOne(client, guildId, account, event, liveStatus) {
   if (!event || !liveStatus) return false; const message = await fetchMessage(client, guildId, account?.state); if (!message) return false; const existing = message.embeds?.[0]; if (!existing) return false;
   const embed = EmbedBuilder.from(existing); const settings = socialSettings(guildManager.reloadGuild(guildId)); const fields = [...parityFields(account, event, liveStatus, settings), ...retainedExtraFields(existing)]; if (fields.length) embed.setFields(fields.slice(0, 25)); else embed.setFields([]);
-  const creator = clean(event.creator || account.displayName || account.username || 'Creator', 256); const avatar = clean(event.avatarUrl || account.avatarUrl, 1000); if (creator) embed.setAuthor(avatar && /^https?:\/\//i.test(avatar) ? { name: creator, iconURL: avatar } : { name: creator });
+  const creator = clean(event.creator || account.displayName || account.username || 'Creator', 256);
+  const avatar = clean(event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || '', 1000);
+  const profileUrl = clean(account.profileUrl || account.url || event.profileUrl || event.url || '', 1000);
+  if (creator) { const author = { name: creator }; if (avatar && /^https?:\/\//i.test(avatar)) author.iconURL = avatar; if (profileUrl && /^https?:\/\//i.test(profileUrl)) author.url = profileUrl; embed.setAuthor(author); }
+  if (avatar && /^https?:\/\//i.test(avatar)) embed.setThumbnail(avatar);
   if (settings.includeThumbnails !== false) { const image = cacheBust(event.thumbnail || event.thumbnailUrl || event.previewImage || ''); if (image) embed.setImage(image); }
   if (liveStatus === 'OFFLINE') { const title = clean(event.title || account?.state?.lastLiveEvent?.title || 'Stream', 200); embed.setTitle(`⚫ ${title} • Stream Ended`); }
   await message.edit({ embeds: [embed], attachments: [] }); return true;
@@ -150,9 +154,7 @@ module.exports = {
   applyLiveMessageParity,
   buildLiveFields,
   livePlatformField,
+  LIVE_REFRESH_INTERVALS,
   liveRefreshEnabled,
   liveRefreshMs,
-  parityFields,
-  LIVE_REFRESH_INTERVALS,
-  DEFAULT_LIVE_REFRESH_MS,
 };
