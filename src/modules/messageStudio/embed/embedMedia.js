@@ -23,7 +23,7 @@ const MAX_GALLERY_ITEMS = 10;
 const MAX_FILES = 10;
 const MAX_COMPONENTS_PER_ROW = 5;
 const MAX_ACTION_ROWS = 5;
-const MAX_ASSET_BYTES = 8 * 1024 * 1024;
+const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 8000;
 
 function assetRoot(guildId) {
@@ -90,9 +90,9 @@ async function downloadAsset(url) {
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
     if (!supportedPersistentType(contentType)) throw new Error(`Unsupported media type: ${contentType || 'unknown'}`);
     const declared = Number(response.headers.get('content-length') || 0);
-    if (declared > MAX_ASSET_BYTES) throw new Error('Media exceeds the 8 MB persistence limit.');
+    if (declared > MAX_ASSET_BYTES) throw new Error('Media exceeds the 25 MB persistence limit.');
     const buffer = await response.buffer();
-    if (buffer.length > MAX_ASSET_BYTES) throw new Error('Media exceeds the 8 MB persistence limit.');
+    if (buffer.length > MAX_ASSET_BYTES) throw new Error('Media exceeds the 25 MB persistence limit.');
     return { buffer, contentType };
   } finally { clearTimeout(timer); }
 }

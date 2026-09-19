@@ -64,4 +64,68 @@ function resetTemplate(templates, type) {
   return normalized;
 }
 
-module.exports = { ALERT_TYPES, normalizeTemplates, resolveTemplate, resetTemplate };
+function creatorFor(config, accountId) {
+  return Object.values(isObject(config?.creators) ? config.creators : {}).find((creator) =>
+    Array.isArray(creator?.accountIds) && creator.accountIds.map(String).includes(String(accountId || ''))
+  ) || null;
+}
+
+function linkedUserId(creator, account) {
+  return String(creator?.ownerDiscordId || creator?.discordUserId || creator?.userId || account?.ownerDiscordId || account?.discordUserId || account?.userId || '');
+}
+
+function explicitAccountRoutes(account) {
+  if (!isObject(account)) return { channelId: null, channels: {} };
+  if (account.userRouteBaseCaptured) return { channelId: account.userRouteBaseChannelId || null, channels: isObject(account.userRouteBaseChannels) ? account.userRouteBaseChannels : {} };
+  if (account.creatorRouteInherited) return { channelId: account.creatorRoutePreviousChannelId || null, channels: isObject(account.creatorRoutePreviousChannels) ? account.creatorRoutePreviousChannels : {} };
+  return { channelId: account.alertChannelId || null, channels: isObject(account.alertChannels) ? account.alertChannels : {} };
+}
+
+function resolveSocialRoute(config, account, eventType, creatorInput = null) {
+  const creator = creatorInput || creatorFor(config, account?.accountId);
+  const platform = String(account?.platform || '').toLowerCase();
+  const userId = linkedUserId(creator, account);
+  const overrides = isObject(config?.userChannelOverrides) ? config.userChannelOverrides : {};
+  const userRoutes = isObject(overrides[userId]) ? overrides[userId] : {};
+  const accountRoutes = explicitAccountRoutes(account);
+  const creatorPlatformChannels = isObject(creator?.platformChannels) ? creator.platformChannels : {};
+  const serverPlatformChannels = isObject(config?.platformChannels) ? config.platformChannels : {};
+  const serverAlertChannels = isObject(config?.alertChannels) ? config.alertChannels : {};
+  const candidates = [
+    // Explicit per-user routing is the highest-priority Social Studio destination.
+    [userRoutes[eventType], 'User Content Override'],
+    [userRoutes.all, 'User All Content'],
+    // Creator/account overrides remain above server-wide routing, but must never mask a user route.
+    [creatorPlatformChannels[platform], 'Creator Platform Override'],
+    [creator?.alertChannelId, 'Creator Override'],
+    [accountRoutes.channels[eventType], 'Account Content Override'],
+    [accountRoutes.channelId, 'Account Override'],
+    [serverPlatformChannels[platform], 'Server Platform Override'],
+    [serverAlertChannels[eventType], 'Server Dedicated'],
+    [config?.alertsChannelId, 'Server Default'],
+  ];
+  for (const [channelId, source] of candidates) {
+    if (channelId) return { channelId: String(channelId), source, creator, userId, platform };
+  }
+  return { channelId: null, source: 'Not configured', creator, userId, platform };
+}
+
+function projectEffectiveAccounts(config) {
+  const projected = {};
+  const notificationMentionMode = ['role', 'everyone', 'here'].includes(config?.notificationMentionMode) ? config.notificationMentionMode : 'none';
+  const notificationRoleId = notificationMentionMode === 'role' ? String(config?.notificationRoleId || '') || null : null;
+  const accounts = isObject(config?.accounts) ? config.accounts : {};
+  for (const [accountId, accountValue] of Object.entries(accounts)) {
+    const account = { ...accountValue, accountId, alertChannels: { ...(isObject(accountValue?.alertChannels) ? accountValue.alertChannels : {}) }, mentionMode: notificationMentionMode, mentionRoleId: notificationRoleId };
+    const creator = creatorFor(config, accountId);
+    for (const eventType of ALERT_TYPES) {
+      const resolved = resolveSocialRoute(config, account, eventType, creator);
+      if (resolved.channelId) account.alertChannels[eventType] = resolved.channelId;
+      else delete account.alertChannels[eventType];
+    }
+    projected[accountId] = account;
+  }
+  return projected;
+}
+
+module.exports = { ALERT_TYPES, normalizeTemplates, resolveTemplate, resetTemplate, projectEffectiveAccounts };

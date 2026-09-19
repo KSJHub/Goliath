@@ -53,6 +53,10 @@ function expectedTypeOk(contentType, expected = 'media') {
   if (expected === 'media') return type.startsWith('image/') || type.startsWith('video/');
   return true;
 }
+function nativeImageShouldPassThrough(contentType) {
+  const type = contentTypeBase(contentType);
+  return NATIVE_IMAGE_TYPES.has(type) || (type.startsWith('image/') && !STATIC_RASTER_TYPES.has(type));
+}
 async function probeRemoteSource(url, expected = 'media') {
   if (!isHttpsUrl(url)) throw new Error(`Media source must resolve to a valid HTTPS URL: ${String(url || '').slice(0, 160)}`);
   const cached = getCachedAsset('global', url);
@@ -74,8 +78,10 @@ async function probeRemoteSource(url, expected = 'media') {
     const contentType = String(response.headers.get('content-type') || '');
     const declared = Number(response.headers.get('content-length') || 0);
     if (!expectedTypeOk(contentType, expected)) throw new Error(`Media source returned ${contentType || 'an unsupported type'}.`);
-    if (declared > MAX_SOURCE_BYTES) throw new Error(`Media source exceeds the ${Math.floor(MAX_SOURCE_BYTES / 1024 / 1024)} MB processing limit.`);
-    return { ok: true, contentType, bytes: declared || null, cached: false };
+    if (declared > MAX_SOURCE_BYTES && !nativeImageShouldPassThrough(contentType)) {
+      throw new Error(`Media source exceeds the ${Math.floor(MAX_SOURCE_BYTES / 1024 / 1024)} MB processing limit.`);
+    }
+    return { ok: true, contentType, bytes: declared || null, cached: false, nativePassThrough: nativeImageShouldPassThrough(contentType) };
   } finally { clearTimeout(timer); }
 }
 async function fetchImage(url) {
@@ -119,17 +125,8 @@ async function makeCenteredPortrait(buffer) {
   const visibleHeight = Number(visibleMeta.height || height);
   const left = Math.floor((SINGLE_IMAGE_CANVAS_WIDTH - visibleWidth) / 2);
 
-  return sharp({
-    create: {
-      width: SINGLE_IMAGE_CANVAS_WIDTH,
-      height: visibleHeight,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    },
-  })
-    .composite([{ input: visible, left, top: 0 }])
-    .png()
-    .toBuffer();
+  return sharp({ create: { width: SINGLE_IMAGE_CANVAS_WIDTH, height: visibleHeight, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: visible, left, top: 0 }]).png().toBuffer();
 }
 function cleanFooter(text) { return String(text || '').replace(/\u200B/g, '').trim(); }
 function panelText(data) {
@@ -198,10 +195,6 @@ async function addMediaFiles(container, media, interaction, payloadFiles, panelI
     } catch (error) { throw new Error(`Attached file \"${entry?.name || sourceFilename(source, 'file')}\" could not be prepared: ${error?.message || error}`); }
   }
 }
-function nativeImageShouldPassThrough(contentType) {
-  const type = contentTypeBase(contentType);
-  return NATIVE_IMAGE_TYPES.has(type) || (type.startsWith('image/') && !STATIC_RASTER_TYPES.has(type));
-}
 async function addLegacyImage(container, imageUrl, files, index) {
   if (!isHttpsUrl(imageUrl)) return;
   const probe = await probeRemoteSource(imageUrl, 'image');
@@ -233,55 +226,39 @@ function componentEmojiIds(actionRows = []) {
   }
   return [...ids];
 }
-
 function textEmojiIds(embeds = []) {
   const ids = new Set();
-  const scan = (value) => {
-    const text = String(value || '');
-    for (const match of text.matchAll(/<a?:[a-zA-Z0-9_]+:(\d{16,20})>/g)) ids.add(match[1]);
-  };
+  const scan = (value) => { for (const match of String(value || '').matchAll(/<a?:[a-zA-Z0-9_]+:(\d{16,20})>/g)) ids.add(match[1]); };
   for (const embed of embeds || []) {
     const data = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed;
     if (!data || typeof data !== 'object') continue;
-    scan(data.title);
-    scan(data.description);
-    scan(data.author?.name);
-    scan(data.footer?.text);
-    for (const field of Array.isArray(data.fields) ? data.fields : []) {
-      scan(field?.name);
-      scan(field?.value);
-    }
+    scan(data.title); scan(data.description); scan(data.author?.name); scan(data.footer?.text);
+    for (const field of Array.isArray(data.fields) ? data.fields : []) { scan(field?.name); scan(field?.value); }
   }
   return [...ids];
 }
-
 async function resolveApplicationEmojiShortcodes(embeds = [], interaction = null) {
   const client = interaction?.client || null;
   const guildId = String(interaction?.guildId || interaction?.guild?.id || '').trim();
   if (!client || !guildId) return embeds;
   return emojis.resolveEmbeds(client, guildId, embeds);
 }
-
 async function validateApplicationEmojiUsage(embeds = [], actionRows = [], interaction = null) {
   const usedIds = [...new Set([...componentEmojiIds(actionRows), ...textEmojiIds(embeds)])];
   if (!usedIds.length) return true;
-
   const manager = interaction?.client?.application?.emojis;
   const client = interaction?.client || null;
   const guildId = String(interaction?.guildId || interaction?.guild?.id || '').trim();
   if (!manager || !client || !guildId) return true;
-
   let bank = manager.cache;
   if (!bank?.size) bank = await manager.fetch();
   const applicationIds = new Set([...bank.values()].map((emoji) => String(emoji.id)));
   const usedApplicationIds = usedIds.filter((id) => applicationIds.has(id));
   if (!usedApplicationIds.length) return true;
-
   const allowedByName = await emojis.allowedGuildEmojis(client, guildId);
   const allowedIds = new Set([...allowedByName.values()].map((emoji) => String(emoji.id)));
   const blocked = usedApplicationIds.filter((id) => !allowedIds.has(id));
   if (!blocked.length) return true;
-
   const names = blocked.map((id) => bank.get(id)?.name ? `:${bank.get(id).name}:` : id);
   throw new Error(`Goliath application emoji not available for this guild: ${names.join(', ')}. Core emojis are automatic; optional Emoji Studio emojis must be selected for the guild.`);
 }
@@ -294,9 +271,7 @@ async function buildEmbedPayload(options = {}) {
   const resolvedEmbeds = await resolveApplicationEmojiShortcodes(embeds, interaction);
   const client = interaction?.client || null;
   const guildId = String(interaction?.guildId || interaction?.guild?.id || '').trim();
-  const resolvedActionRows = client && guildId
-    ? await emojiPayload.resolveComponents(client, guildId, actionRows, 'embed')
-    : actionRows;
+  const resolvedActionRows = client && guildId ? await emojiPayload.resolveComponents(client, guildId, actionRows, 'embed') : actionRows;
   await validateApplicationEmojiUsage(resolvedEmbeds, resolvedActionRows, interaction);
   if (allowUserPing && userId) components.push(new TextDisplayBuilder().setContent(`<@${userId}>`));
   for (let index = 0; index < resolvedEmbeds.length; index += 1) {
@@ -337,11 +312,7 @@ async function buildEmbedPayload(options = {}) {
   if (ephemeral) flags |= MessageFlags.Ephemeral;
   return { components, files, flags };
 }
-
-async function centerOnLegacyEmbedCanvas(buffer) {
-  return makeCenteredPortrait(buffer);
-}
-
+async function centerOnLegacyEmbedCanvas(buffer) { return makeCenteredPortrait(buffer); }
 async function prepareEmbedMedia(embeds = [], options = {}) {
   const files = [];
   const output = Array.isArray(embeds) ? embeds : [];

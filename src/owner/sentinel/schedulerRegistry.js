@@ -1,6 +1,7 @@
 'use strict';
 
 const registry = new Map();
+const timers = new Map();
 
 function positiveMs(value, fallback) {
   const number = Number(value);
@@ -110,7 +111,53 @@ function stop(idOrInput, reason = 'intentional shutdown', details = {}) {
 }
 
 function unregister(idOrInput) {
-  return registry.delete(schedulerId(idOrInput));
+  const id = schedulerId(idOrInput);
+  clear(id);
+  return registry.delete(id);
+}
+
+function registerInterval(idOrInput, callback, intervalMs, options = {}) {
+  const id = schedulerId(idOrInput);
+  if (!id) throw new Error('Sentinel scheduler interval requires an id.');
+  if (typeof callback !== 'function') throw new TypeError('Sentinel scheduler interval requires a callback.');
+  const ms = positiveMs(intervalMs, 60_000);
+  if (timers.has(id)) {
+    if (options?.replace !== true) return timers.get(id);
+    clearInterval(timers.get(id));
+    timers.delete(id);
+  }
+  register({ id, component: id, intervalMs: ms, staleAfterMs: Math.max(ms * 3, 180_000), details: { implementation: 'registered-interval' } });
+  const wrapped = async () => {
+    try {
+      await callback();
+      beat(id);
+    } catch (error) {
+      fail(id, error);
+      console.error(`[Sentinel Scheduler] ${id} failed:`, error);
+    }
+  };
+  const timer = setInterval(() => { void wrapped(); }, ms);
+  timers.set(id, timer);
+  timer.unref?.();
+  return timer;
+}
+
+function clear(idOrInput) {
+  if (arguments.length === 0 || idOrInput == null) {
+    for (const timer of timers.values()) clearInterval(timer);
+    timers.clear();
+    registry.clear();
+    return true;
+  }
+  const id = schedulerId(idOrInput);
+  if (!id) return false;
+  const timer = timers.get(id);
+  if (timer) {
+    clearInterval(timer);
+    timers.delete(id);
+  }
+  if (registry.has(id)) stop(id, 'scheduler cleared');
+  return Boolean(timer);
 }
 
 function entries() {
@@ -121,18 +168,15 @@ function snapshot() {
   return Object.fromEntries(entries().map((entry) => [entry.id, entry]));
 }
 
-function clear() {
-  registry.clear();
-}
-
 module.exports = {
   register,
+  registerInterval,
   beat,
   fail,
   stop,
   unregister,
+  clear,
   entries,
   snapshot,
-  clear,
   schedulerId,
 };

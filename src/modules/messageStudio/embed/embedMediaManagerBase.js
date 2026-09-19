@@ -26,21 +26,14 @@ function sourceLabel(value, fallback = 'Not set') {
 function installMediaManagerBase(panel, media) {
   if (!panel || !media || typeof panel.buildMediaManagerPanel === 'function') return panel;
 
-  // `mediaV2` is the live editor state. Mirror it into the compatibility `media`
-  // key before older storage wrappers run so newly edited media cannot be replaced
-  // by a stale copy during saveSession().
   if (!panel.__mediaSessionMirrorPatched && typeof panel.saveSession === 'function') {
     const originalSaveSession = panel.saveSession.bind(panel);
     panel.saveSession = (interaction, stateValue) => {
       if (!stateValue || typeof stateValue !== 'object') return originalSaveSession(interaction, stateValue);
       const authoritative = stateValue.mediaV2 || stateValue.media || null;
       if (!authoritative) return originalSaveSession(interaction, stateValue);
-      const mediaV2 = typeof media.clone === 'function'
-        ? media.clone(authoritative)
-        : JSON.parse(JSON.stringify(authoritative));
-      const legacyMedia = typeof media.clone === 'function'
-        ? media.clone(mediaV2)
-        : JSON.parse(JSON.stringify(mediaV2));
+      const mediaV2 = typeof media.clone === 'function' ? media.clone(authoritative) : JSON.parse(JSON.stringify(authoritative));
+      const legacyMedia = typeof media.clone === 'function' ? media.clone(mediaV2) : JSON.parse(JSON.stringify(mediaV2));
       return originalSaveSession(interaction, { ...stateValue, media: legacyMedia, mediaV2 });
     };
     panel.__mediaSessionMirrorPatched = true;
@@ -49,12 +42,8 @@ function installMediaManagerBase(panel, media) {
   panel.buildMediaManagerPanel = (interaction, who = 'Unknown User') => {
     const state = panel.getSession(interaction);
     const panelMedia = media.getPanelMedia(state);
-    const galleryIndex = Number.isInteger(state.selectedMediaIndex) && state.selectedMediaIndex < panelMedia.gallery.length
-      ? state.selectedMediaIndex
-      : null;
-    const fileIndex = Number.isInteger(state.selectedFileIndex) && state.selectedFileIndex < panelMedia.files.length
-      ? state.selectedFileIndex
-      : null;
+    const galleryIndex = Number.isInteger(state.selectedMediaIndex) && state.selectedMediaIndex < panelMedia.gallery.length ? state.selectedMediaIndex : null;
+    const fileIndex = Number.isInteger(state.selectedFileIndex) && state.selectedFileIndex < panelMedia.files.length ? state.selectedFileIndex : null;
     const rows = [];
 
     if (panelMedia.gallery.length) {
@@ -103,10 +92,13 @@ function installMediaManagerBase(panel, media) {
       mediaButton('embed:file-options', '⚙️ File Options', ButtonStyle.Secondary, fileIndex == null),
     ));
 
+    const selectedMedia = galleryIndex == null ? null : panelMedia.gallery[galleryIndex];
+    const isHeader = selectedMedia?.placement === 'above';
     rows.push(new ActionRowBuilder().addComponents(
       mediaButton('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary),
       mediaButton('embed:media-upload', '📤 Upload Media', ButtonStyle.Success),
       mediaButton('embed:media-options', '⚙️ Media Options', ButtonStyle.Secondary, galleryIndex == null),
+      mediaButton(isHeader ? 'embed:media-placement:below' : 'embed:media-placement:above', isHeader ? '🖼️ Header ON' : '🖼️ Use as Header', isHeader ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
     ));
 
     rows.push(new ActionRowBuilder().addComponents(
@@ -114,7 +106,6 @@ function installMediaManagerBase(panel, media) {
       mediaButton('embed:helpers', '📖 Variables'),
     ));
 
-    const selectedMedia = galleryIndex == null ? null : panelMedia.gallery[galleryIndex];
     const selectedFile = fileIndex == null ? null : panelMedia.files[fileIndex];
     const summary = [
       `Editing panel **${state.selectedPanelIndex + 1}/${state.panels.length}**`,
@@ -129,6 +120,7 @@ function installMediaManagerBase(panel, media) {
 
     if (selectedMedia) {
       summary.push('', `**Selected media:** ${sourceLabel(selectedMedia.alt || selectedMedia.source, `Item ${galleryIndex + 1}`)}`);
+      summary.push(`🪧 **Graphic header:** ${isHeader ? 'ON — displayed above content' : 'OFF — click Use as Header to move it above content'}`);
     } else if (selectedFile) {
       summary.push('', `**Selected file:** ${sourceLabel(selectedFile.name || selectedFile.source, `File ${fileIndex + 1}`)}`);
     } else if (!panelMedia.thumbnail?.source && !panelMedia.gallery.length && !panelMedia.files.length) {
@@ -136,12 +128,7 @@ function installMediaManagerBase(panel, media) {
     }
 
     return {
-      embeds: [panel.simplePanel(
-        '🖼️ Media Manager',
-        summary.join('\n'),
-        state,
-        who,
-      )],
+      embeds: [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)],
       components: rows.slice(0, 5),
     };
   };

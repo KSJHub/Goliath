@@ -105,9 +105,9 @@ async function ensureMaintenanceChannel(guild) {
   await channel.setPosition(0, { reason: 'Keep Goliath maintenance notice visible near the top' }).catch(() => null); return channel;
 }
 async function findStatusMessage(channel) {
-  const pinnedResult = await channel.messages.fetchPins().catch(() => null); const pinned = pinnedResult?.items || pinnedResult; const pinnedMessage = pinned?.find?.((message) => message.author?.id === channel.client.user?.id);
+  const pinnedResult = await channel.messages.fetchPins().catch(() => null); const pinned = pinnedResult?.items || pinnedResult; const pinnedMessage = pinned?.find?.((message) => message.author?.id === channel.client.user?.id && message.system !== true && message.editable !== false);
   if (pinnedMessage) return pinnedMessage;
-  const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null); return recent?.find?.((message) => message.author?.id === channel.client.user?.id) || null;
+  const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null); return recent?.find?.((message) => message.author?.id === channel.client.user?.id && message.system !== true && message.editable !== false) || null;
 }
 async function beginGuildMaintenance(guild, options = {}) {
   const kind = options.kind === 'restart' ? 'restart' : 'maintenance';

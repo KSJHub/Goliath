@@ -32,25 +32,39 @@ jobs:
         with:
           ref: dev
           fetch-depth: 0
-
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
-
       - name: Install dependencies
-        run: npm ci
-
+        run: npm ci --no-audit --no-fund
       - name: Record DEV commit
         id: source
         shell: bash
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
       - name: Validate DEV
         run: |
           set -euo pipefail
-          npm run doctor
+          BOT_MODE=dev npm run doctor
+          node test/auditEmbedGraphicHeaders.js
+          node test/auditRuntimeContracts.js
+          node <<'NODE'
+          const fs=require('node:fs'),assert=require('node:assert/strict');
+          const maintenance=fs.readFileSync('src/owner/dev/maintenanceStatus.js','utf8');
+          assert(maintenance.includes('message.system !== true'));
+          assert(maintenance.includes('message.editable !== false'));
+          const bootstrap=fs.readFileSync('src/runtime/runtimeBootstrap.js','utf8');
+          assert(bootstrap.includes('setMaxListeners'));
+          assert(bootstrap.includes('Math.max(client.getMaxListeners(), 25)'));
+          const duplicator=fs.readFileSync('src/owner/dev/duplicator/core.js','utf8');
+          assert(duplicator.includes('bridgeUnavailable'));
+          assert(duplicator.includes("error?.code === 'EADDRINUSE'"));
+          console.log('✅ DEV runtime hardening invariants verified');
+          NODE
+          rm -rf dist
           npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
+          mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
+          grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js
 
   promote:
     needs: preflight
@@ -63,7 +77,6 @@ jobs:
         with:
           ref: ${{ needs.preflight.outputs.source_sha }}
           fetch-depth: 0
-
       - name: Promote DEV to selected environment
         id: promote
         shell: bash
@@ -72,28 +85,16 @@ jobs:
           SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
         run: |
           set -euo pipefail
-
-          case "$TARGET_BRANCH" in
-            beta|production) ;;
-            *) echo "Unsupported target: $TARGET_BRANCH" >&2; exit 1 ;;
-          esac
-
+          case "$TARGET_BRANCH" in beta|production) ;; *) exit 1;; esac
           git fetch --no-tags origin dev "$TARGET_BRANCH"
           TARGET_SHA="$(git rev-parse "origin/$TARGET_BRANCH")"
           SOURCE_TREE="$(git show -s --format=%T "$SOURCE_SHA")"
-
           git config user.name "Goliath Deploy"
           git config user.email "goliath-deploy@users.noreply.github.com"
-
           PROMOTED_SHA="$(printf 'Promote DEV %s to %s\n' "$SOURCE_SHA" "$TARGET_BRANCH" | git commit-tree "$SOURCE_TREE" -p "$TARGET_SHA")"
           git push origin "$PROMOTED_SHA:refs/heads/$TARGET_BRANCH"
-
           REMOTE_SHA="$(git ls-remote origin "refs/heads/$TARGET_BRANCH" | awk '{print $1}')"
-          [ "$REMOTE_SHA" = "$PROMOTED_SHA" ] || {
-            echo "Promotion verification failed: $REMOTE_SHA != $PROMOTED_SHA" >&2
-            exit 1
-          }
-
+          [ "$REMOTE_SHA" = "$PROMOTED_SHA" ]
           echo "deploy_sha=$PROMOTED_SHA" >> "$GITHUB_OUTPUT"
           echo "✅ DEV $SOURCE_SHA promoted to $TARGET_BRANCH at $PROMOTED_SHA"
 
@@ -118,125 +119,71 @@ jobs:
           envs: ENVIRONMENT,EXPECTED_SHA,GITHUB_DEPLOY_TOKEN
           script: |
             set -euo pipefail
-
             case "$ENVIRONMENT" in
-              beta)
-                TARGET_BRANCH="beta"
-                APP_DIR="/home/goliath/beta"
-                RUNTIME_DIR="$APP_DIR/src/runtime/beta"
-                PM2_NAME="goliath-beta"
-                DEPLOY_SCRIPT="/home/goliath/deploy-beta.sh"
-                ;;
-              production)
-                TARGET_BRANCH="production"
-                APP_DIR="/home/goliath/production"
-                RUNTIME_DIR="$APP_DIR/src/runtime/production"
-                PM2_NAME="goliath-production"
-                DEPLOY_SCRIPT="/home/goliath/deploy-production.sh"
-                ;;
-              *) echo "Unsupported environment: $ENVIRONMENT" >&2; exit 1 ;;
+              beta) TARGET_BRANCH=beta; APP_DIR=/home/goliath/beta; RUNTIME_DIR="$APP_DIR/src/runtime/beta"; PM2_NAME=goliath-beta; DEV_HOST=beta.goliath.ksjdigital.co.uk; DIRECT_PORT=3011;;
+              production) TARGET_BRANCH=production; APP_DIR=/home/goliath/production; RUNTIME_DIR="$APP_DIR/src/runtime/production"; PM2_NAME=goliath-production; DEV_HOST=goliath.ksjdigital.co.uk; DIRECT_PORT=3021;;
+              *) exit 1;;
             esac
-
-            [ -d "$APP_DIR/.git" ] || {
-              echo "Missing checkout: $APP_DIR" >&2
-              exit 1
-            }
-
+            [ -d "$APP_DIR/.git" ]
             cd "$APP_DIR"
             AUTH_URL="https://x-access-token:${GITHUB_DEPLOY_TOKEN}@github.com/${{ github.repository }}.git"
             git remote set-url origin "$AUTH_URL"
-
-            cleanup_remote() {
-              git remote set-url origin "https://github.com/${{ github.repository }}.git" || true
-            }
+            cleanup_remote(){ git remote set-url origin "https://github.com/${{ github.repository }}.git" || true; }
             trap cleanup_remote EXIT
-
             git fetch --no-tags origin "$TARGET_BRANCH"
-            REMOTE_SHA="$(git rev-parse "origin/$TARGET_BRANCH")"
-            [ "$REMOTE_SHA" = "$EXPECTED_SHA" ] || {
-              echo "Target branch moved before deployment: $REMOTE_SHA != $EXPECTED_SHA" >&2
-              exit 1
-            }
-
-            if [ -n "$(git status --porcelain -- . ':!src/runtime/')" ]; then
-              echo "$ENVIRONMENT VPS has changes outside src/runtime; refusing to overwrite them." >&2
-              git status --short -- . ':!src/runtime/' >&2
-              exit 1
-            fi
-
+            [ "$(git rev-parse origin/$TARGET_BRANCH)" = "$EXPECTED_SHA" ]
+            if [ -n "$(git status --porcelain -- . ':!src/runtime/')" ]; then git status --short -- . ':!src/runtime/' >&2; exit 1; fi
             BACKUP_DIR="/home/goliath/.goliath-${ENVIRONMENT}-runtime-deploy-backup"
-            rm -rf "$BACKUP_DIR"
-            mkdir -p "$BACKUP_DIR"
-            if [ -d "$RUNTIME_DIR" ]; then
-              tar --warning=no-file-changed --ignore-failed-read --exclude='*.tmp' -C "$RUNTIME_DIR" -cf - . | tar -C "$BACKUP_DIR" -xf -
-            fi
-
-            restore_runtime() {
-              mkdir -p "$RUNTIME_DIR"
-              rm -rf "$RUNTIME_DIR"/* "$RUNTIME_DIR"/.[!.]* "$RUNTIME_DIR"/..?* 2>/dev/null || true
-              if [ -d "$BACKUP_DIR" ]; then
-                tar -C "$BACKUP_DIR" -cf - . | tar -C "$RUNTIME_DIR" -xf -
-              fi
-            }
-
-            deploy_cleanup() {
-              status=$?
-              restore_runtime
-              rm -rf "$BACKUP_DIR"
-              cleanup_remote
-              exit "$status"
-            }
+            rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
+            if [ -d "$RUNTIME_DIR" ]; then tar --warning=no-file-changed --ignore-failed-read --exclude='*.tmp' -C "$RUNTIME_DIR" -cf - . | tar -C "$BACKUP_DIR" -xf -; fi
+            restore_runtime(){ mkdir -p "$RUNTIME_DIR"; rm -rf "$RUNTIME_DIR"/* "$RUNTIME_DIR"/.[!.]* "$RUNTIME_DIR"/..?* 2>/dev/null || true; [ ! -d "$BACKUP_DIR" ] || tar -C "$BACKUP_DIR" -cf - . | tar -C "$RUNTIME_DIR" -xf -; }
+            deploy_cleanup(){ status=$?; restore_runtime || true; rm -rf "$BACKUP_DIR"; cleanup_remote; exit "$status"; }
             trap deploy_cleanup EXIT
-
             git reset --hard "$EXPECTED_SHA"
             restore_runtime
 
-            npm ci
+            echo "📦 Clean locked dependency install"
+            rm -rf node_modules
+            npm ci --no-audit --no-fund
+            node - <<'NODE'
+            for(const name of ['googleapis','better-sqlite3','discord.js','express','sharp','socket.io']){try{require(name);console.log(`✅ ${name}`)}catch(e){console.error(e);process.exit(1)}}
+            const Database=require('better-sqlite3');const db=new Database(':memory:');db.prepare('select 1').get();db.close();console.log('✅ native SQLite operational');
+            NODE
             BOT_MODE="$ENVIRONMENT" npm run doctor
+            node test/auditEmbedGraphicHeaders.js
+            node test/auditRuntimeContracts.js
 
             rm -rf dist
             npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
+            mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
+            grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js
 
-            DASHBOARD_ROOT="$(awk '$1 == "rm" && $2 == "-rf" && $3 ~ /^\/var\/www\// { print $3; exit }' "$DEPLOY_SCRIPT" 2>/dev/null || true)"
-            case "$DASHBOARD_ROOT" in
-              /var/www/*) ;;
-              *) echo "Unsafe or unresolved dashboard root: ${DASHBOARD_ROOT:-unset}" >&2; exit 1 ;;
-            esac
+            NGINX_DUMP="$(nginx -T 2>&1)"
+            DASHBOARD_ROOT="$(printf '%s\n' "$NGINX_DUMP" | awk -v host="$DEV_HOST" '$1=="server_name"{for(i=2;i<=NF;i++){n=$i;gsub(/;/,"",n);if(n==host)found=1}next} found&&$1=="root"{r=$2;gsub(/;/,"",r);print r;exit}')"
+            case "$DASHBOARD_ROOT" in /var/www/*) ;; *) echo "Unsafe dashboard root" >&2; exit 1;; esac
+            rm -rf "$DASHBOARD_ROOT" && mkdir -p "$DASHBOARD_ROOT" && cp -a dist/. "$DASHBOARD_ROOT/"
+            nginx -t && systemctl reload nginx
 
-            rm -rf "$DASHBOARD_ROOT"
-            mkdir -p "$DASHBOARD_ROOT"
-            cp -a dist/. "$DASHBOARD_ROOT/"
-            nginx -t
-            systemctl reload nginx
+            BOT_MODE="$ENVIRONMENT" COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
 
-            BOT_MODE="$ENVIRONMENT" \
-              COMMAND_SYNC_DELETE_STALE=true \
-              COMMAND_SYNC_UPDATE_EXISTING=true \
-              node -e "require('./src/core/commands/syncCommands').syncCommands().then(() => process.exit(0)).catch((error) => { console.error(error); process.exit(1); })"
-
-            if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
-              pm2 restart "$PM2_NAME" --update-env
-            else
-              BOT_MODE="$ENVIRONMENT" NODE_ENV="$ENVIRONMENT" pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env
-            fi
+            echo "♻️ One controlled PM2 start from ecosystem config"
+            pm2 delete "$PM2_NAME" >/dev/null 2>&1 || true
+            BOT_MODE="$ENVIRONMENT" NODE_ENV=production pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env
             pm2 save
-            sleep 3
-
-            FINAL_SHA="$(git rev-parse HEAD)"
-            REMOTE_SHA="$(git rev-parse origin/$TARGET_BRANCH)"
-            [ "$FINAL_SHA" = "$EXPECTED_SHA" ]
-            [ "$FINAL_SHA" = "$REMOTE_SHA" ]
-
-            PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | tail -n 1 | tr -d '[:space:]')"
-            [ -n "$PID" ] && [ "$PID" != "0" ]
-            PROCESS_CWD="$(readlink -f "/proc/$PID/cwd")"
-            [ "$PROCESS_CWD" = "$APP_DIR" ]
-
-            echo "✅ $ENVIRONMENT deployment verified"
-            echo "   branch: $TARGET_BRANCH"
-            echo "   commit: $FINAL_SHA"
-            echo "   pm2:    $PM2_NAME"
-
+            NEW_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
+            [ -n "$NEW_PID" ] && [ "$NEW_PID" != 0 ]
+            sleep 20
+            STABLE_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
+            if [ "$NEW_PID" != "$STABLE_PID" ]; then echo "$ENVIRONMENT restarted during stability gate: $NEW_PID -> $STABLE_PID" >&2; pm2 logs "$PM2_NAME" --lines 150 --nostream || true; exit 1; fi
+            kill -0 "$STABLE_PID"
+            [ "$(git rev-parse HEAD)" = "$EXPECTED_SHA" ]
+            [ "$(git rev-parse origin/$TARGET_BRANCH)" = "$EXPECTED_SHA" ]
+            [ "$(readlink -f /proc/$STABLE_PID/cwd)" = "$APP_DIR" ]
+            DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:$DIRECT_PORT/api/auth/me" || true)"
+            PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' "https://$DEV_HOST/api/auth/me" || true)"
+            case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; exit 1;; esac
+            case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; exit 1;; esac
+            echo "✅ $ENVIRONMENT stable: sha=$EXPECTED_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
             restore_runtime
             rm -rf "$BACKUP_DIR"
             trap - EXIT
@@ -260,5 +207,4 @@ jobs:
             echo "- VPS deployment: **${{ needs.deploy.result }}**"
             echo "- Deployed commit: `${{ needs.promote.outputs.deploy_sha }}`"
           } >> "$GITHUB_STEP_SUMMARY"
-
           [ "${{ needs.deploy.result }}" = "success" ]

@@ -153,14 +153,16 @@ async function buildPayload(state, interaction, ephemeral = false) {
     allowUserPing: Boolean(state.allowUserPing),
     userId: interaction.user?.id || null,
     ephemeral,
-    media: state.media || state.mediaV2,
+    // mediaV2 is the canonical placement-aware model. Prefer it so a stale
+    // legacy media alias cannot demote a Graphic Header into a bottom image.
+    media: state.mediaV2 || state.media,
     interaction,
   });
 }
 
 function selectedFieldIndex(state) {
   const fields = Array.isArray(state.fields) ? state.fields : [];
-  return Number.isInteger(state.selectedFieldIndex) && fields[state.selectedFieldIndex] ? state.selectedFieldIndex : null;
+  return Number.isInteger(state.selectedFieldIndex) && state.fields[state.selectedFieldIndex] ? state.selectedFieldIndex : null;
 }
 function saveFields(i, state, fields, selectedIndex = state.selectedFieldIndex, extra = {}) {
   let next = panel.saveSelected(state, { fields });
@@ -281,127 +283,79 @@ async function handlePresetInteraction(i) {
       await i.reply({ content: 'Select a preset first.', flags: 64 });
       return true;
     }
-    const defaults = guildManager.getEmbedDefaults?.(guildId) || {};
-    const templateKey = state.template || 'custom';
-    if (typeof guildManager.deleteEmbedPreset === 'function') {
-      guildManager.deleteEmbedPreset(guildId, presetName, i.guild);
-    } else {
-      const presets = guildManager.getEmbedPresets?.(guildId) || {};
-      delete presets[presetName];
-      guildManager.replaceGuildSection?.(guildId, 'embedPresets', presets, i.guild);
+    const deleted = guildManager.deleteEmbedPreset?.(guildId, presetName);
+    if (!deleted) {
+      await i.reply({ content: 'Preset not found.', flags: 64 });
+      return true;
     }
-    if (defaults[templateKey] === presetName && typeof guildManager.clearEmbedDefault === 'function') {
-      guildManager.clearEmbedDefault(guildId, templateKey, i.guild);
-    }
-    panel.clearUnsaved(i, { ...state, selectedPreset: null });
+    const next = { ...state, selectedPreset: null };
+    panel.saveSession(i, next);
     await i.update(panel.buildPresetsPanel(i));
     return true;
   }
 
-  if (i.isButton?.() && customId === 'embed:preset-default') {
+  if (i.isButton?.() && customId === 'embed:preset-set-default') {
     const presetName = state?.selectedPreset || null;
     if (!presetName) {
       await i.reply({ content: 'Select a preset first.', flags: 64 });
       return true;
     }
-    const ok = setGuildPresetDefault(guildId, state.template || 'custom', presetName, i.guild);
-    if (!ok) {
-      await i.reply({ content: '❌ Could not set default preset.', flags: 64 });
+    const saved = setGuildPresetDefault(guildId, state.template, presetName, i.guild);
+    if (!saved) {
+      await i.reply({ content: 'Could not set that preset as the default.', flags: 64 });
       return true;
     }
     await i.update(panel.buildPresetsPanel(i));
-    return true;
-  }
-
-  if (i.isModalSubmit?.() && customId === 'embed:preset-rename-modal') {
-    const oldName = state?.selectedPreset || null;
-    const newName = cleanPresetName(i.fields.getTextInputValue('name'));
-    const presets = guildManager.getEmbedPresets?.(guildId) || {};
-    if (!oldName || !presets[oldName]) {
-      await i.reply({ content: 'The selected preset no longer exists.', flags: 64 });
-      return true;
-    }
-    if (!newName) {
-      await i.reply({ content: 'A preset name is required.', flags: 64 });
-      return true;
-    }
-    if (newName !== oldName && presets[newName]) {
-      await i.reply({ content: `A preset named **${newName}** already exists.`, flags: 64 });
-      return true;
-    }
-    if (newName !== oldName) {
-      guildManager.saveEmbedPreset(guildId, newName, { ...presets[oldName], name: newName }, i.guild);
-      guildManager.deleteEmbedPreset?.(guildId, oldName, i.guild);
-      const defaults = guildManager.getEmbedDefaults?.(guildId) || {};
-      for (const [templateKey, defaultPreset] of Object.entries(defaults)) {
-        if (defaultPreset === oldName) setGuildPresetDefault(guildId, templateKey, newName, i.guild);
-      }
-    }
-    panel.saveSession(i, { ...state, selectedPreset: newName });
-    await i.reply({ content: `✅ Renamed preset to **${newName}**.`, ...panel.buildPresetsPanel(i), flags: 64 });
-    return true;
-  }
-
-  if (i.isModalSubmit?.() && customId === 'embed:preset-duplicate-modal') {
-    const sourceName = state?.selectedPreset || null;
-    const newName = cleanPresetName(i.fields.getTextInputValue('name'));
-    const presets = guildManager.getEmbedPresets?.(guildId) || {};
-    if (!sourceName || !presets[sourceName]) {
-      await i.reply({ content: 'The selected preset no longer exists.', flags: 64 });
-      return true;
-    }
-    if (!newName) {
-      await i.reply({ content: 'A preset name is required.', flags: 64 });
-      return true;
-    }
-    if (presets[newName]) {
-      await i.reply({ content: `A preset named **${newName}** already exists.`, flags: 64 });
-      return true;
-    }
-    guildManager.saveEmbedPreset(guildId, newName, { ...presets[sourceName], name: newName }, i.guild);
-    panel.saveSession(i, { ...state, selectedPreset: newName });
-    await i.reply({ content: `✅ Duplicated as **${newName}**.`, ...panel.buildPresetsPanel(i), flags: 64 });
     return true;
   }
 
   if (i.isModalSubmit?.() && customId === 'embed:preset-save-modal') {
     const name = cleanPresetName(i.fields.getTextInputValue('name'));
     if (!name) {
-      await i.reply({ content: 'Name required.', flags: 64 });
+      await i.reply({ content: 'Enter a preset name.', flags: 64 });
       return true;
     }
-    const presets = guildManager.getEmbedPresets?.(guildId) || {};
-    if (presets[name]) {
-      pendingPresetSaves.set(presetInteractionKey(i), { name, data: panel.presetData(state) });
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('embed:preset-overwrite-confirm').setLabel('✅ Overwrite').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('embed:preset-overwrite-cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
-      );
-      await i.reply({ content: `⚠️ **${name}** already exists. Overwrite it?`, components: [row], flags: 64 });
-      return true;
-    }
-    guildManager.saveEmbedPreset(guildId, name, panel.presetData(state), i.guild);
-    panel.clearUnsaved(i, { ...state, selectedPreset: name });
-    await i.reply({ ...panel.buildPresetsPanel(i), flags: 64 });
+    const preset = panel.presetData(state);
+    guildManager.setEmbedPreset?.(guildId, name, preset, i.guild);
+    panel.saveSession(i, { ...state, selectedPreset: name, hasUnsavedChanges: false });
+    await i.update(panel.buildPresetsPanel(i));
     return true;
   }
 
-  if (i.isButton?.() && customId === 'embed:preset-overwrite-confirm') {
-    const pending = pendingPresetSaves.get(presetInteractionKey(i));
-    if (!pending) {
-      await i.update({ content: 'This overwrite request has expired.', components: [] });
+  if (i.isModalSubmit?.() && customId === 'embed:preset-rename-modal') {
+    const current = state?.selectedPreset || null;
+    const nextName = cleanPresetName(i.fields.getTextInputValue('name'));
+    if (!current || !nextName) {
+      await i.reply({ content: 'Select a preset and enter a valid new name.', flags: 64 });
       return true;
     }
-    guildManager.saveEmbedPreset(guildId, pending.name, pending.data, i.guild);
-    pendingPresetSaves.delete(presetInteractionKey(i));
-    panel.clearUnsaved(i, { ...state, selectedPreset: pending.name });
-    await i.update({ content: `✅ Overwrote **${pending.name}**.`, ...panel.buildPresetsPanel(i) });
+    const preset = guildManager.getEmbedPreset?.(guildId, current);
+    if (!preset) {
+      await i.reply({ content: 'Preset not found.', flags: 64 });
+      return true;
+    }
+    guildManager.setEmbedPreset?.(guildId, nextName, preset, i.guild);
+    guildManager.deleteEmbedPreset?.(guildId, current);
+    panel.saveSession(i, { ...state, selectedPreset: nextName });
+    await i.update(panel.buildPresetsPanel(i));
     return true;
   }
 
-  if (i.isButton?.() && customId === 'embed:preset-overwrite-cancel') {
-    pendingPresetSaves.delete(presetInteractionKey(i));
-    await i.update({ content: 'Overwrite cancelled.', components: [] });
+  if (i.isModalSubmit?.() && customId === 'embed:preset-duplicate-modal') {
+    const current = state?.selectedPreset || null;
+    const copyName = cleanPresetName(i.fields.getTextInputValue('name'));
+    if (!current || !copyName) {
+      await i.reply({ content: 'Select a preset and enter a valid copy name.', flags: 64 });
+      return true;
+    }
+    const preset = guildManager.getEmbedPreset?.(guildId, current);
+    if (!preset) {
+      await i.reply({ content: 'Preset not found.', flags: 64 });
+      return true;
+    }
+    guildManager.setEmbedPreset?.(guildId, copyName, preset, i.guild);
+    panel.saveSession(i, { ...state, selectedPreset: copyName });
+    await i.update(panel.buildPresetsPanel(i));
     return true;
   }
 

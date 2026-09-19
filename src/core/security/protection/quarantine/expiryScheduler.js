@@ -1,15 +1,15 @@
 'use strict';
 
-const quarantine = require('../quarantine');
+const { restoreExpiredQuarantines } = require('./enforcementRecovery');
 const schedulerRegistry = require('../../../../owner/sentinel/schedulerRegistry');
 
-const QUARANTINE_SWEEP_INTERVAL_MS = Number(quarantine.QUARANTINE_SWEEP_INTERVAL_MS || 60_000);
+const QUARANTINE_SWEEP_INTERVAL_MS = 60_000;
 const QUARANTINE_SCHEDULER_ID = 'security:quarantine-expiry:global';
 let quarantineSweepTimer = null;
 
 async function runExpiryCycle(client, phase = 'scheduled') {
   try {
-    const result = await quarantine.restoreExpiredQuarantines(client);
+    const result = await restoreExpiredQuarantines(client);
     if (Number(result.failed || 0) > 0) {
       schedulerRegistry.fail(
         QUARANTINE_SCHEDULER_ID,
@@ -30,20 +30,9 @@ async function runExpiryCycle(client, phase = 'scheduled') {
 function startQuarantineExpiryScheduler(client) {
   if (!client) return null;
   if (quarantineSweepTimer) return quarantineSweepTimer;
-
-  schedulerRegistry.register({
-    id: QUARANTINE_SCHEDULER_ID,
-    module: 'security',
-    component: 'quarantine-expiry',
-    intervalMs: QUARANTINE_SWEEP_INTERVAL_MS,
-    staleAfterMs: QUARANTINE_SWEEP_INTERVAL_MS * 3,
-    details: { implementation: 'split-expiry-scheduler' },
-  });
-
+  schedulerRegistry.register({ id: QUARANTINE_SCHEDULER_ID, module: 'security', component: 'quarantine-expiry', intervalMs: QUARANTINE_SWEEP_INTERVAL_MS, staleAfterMs: QUARANTINE_SWEEP_INTERVAL_MS * 3, details: { implementation: 'split-expiry-scheduler' } });
   void runExpiryCycle(client, 'startup');
-  quarantineSweepTimer = setInterval(() => {
-    void runExpiryCycle(client, 'scheduled');
-  }, QUARANTINE_SWEEP_INTERVAL_MS);
+  quarantineSweepTimer = setInterval(() => { void runExpiryCycle(client, 'scheduled'); }, QUARANTINE_SWEEP_INTERVAL_MS);
   quarantineSweepTimer.unref?.();
   return quarantineSweepTimer;
 }
@@ -54,9 +43,4 @@ function stopQuarantineExpiryScheduler() {
   schedulerRegistry.stop(QUARANTINE_SCHEDULER_ID, 'quarantine expiry scheduler stopped');
 }
 
-module.exports = {
-  QUARANTINE_SWEEP_INTERVAL_MS,
-  runExpiryCycle,
-  startQuarantineExpiryScheduler,
-  stopQuarantineExpiryScheduler,
-};
+module.exports = { QUARANTINE_SWEEP_INTERVAL_MS, runExpiryCycle, startQuarantineExpiryScheduler, stopQuarantineExpiryScheduler };

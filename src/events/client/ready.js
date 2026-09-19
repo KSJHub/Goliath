@@ -99,151 +99,115 @@ function liveProbeClaimOwnedBy(requestId, mode) {
 
 function liveProbeCompletionResult(request, mode, result, startedAt, completedAt = Date.now()) {
   return {
-    ...(result && typeof result === 'object' ? result : { started: false, reason: 'invalid-result' }),
-    requestId: String(request?.id || ''),
-    guildId: String(request?.guildId || ''),
-    targetMode: String(request?.targetMode || '').toUpperCase() || null,
-    requestedFrom: request?.requestedFrom ? String(request.requestedFrom).toUpperCase() : null,
-    collectorMode: String(mode || '').toUpperCase() || null,
-    claimedAt: request?.claimedAt || null,
+    ok: true,
+    mode,
+    kind: request.kind || 'guild_registry',
+    command: request.command || null,
+    guildId: request.guildId || null,
     startedAt: new Date(startedAt).toISOString(),
     completedAt: new Date(completedAt).toISOString(),
     durationMs: Math.max(0, completedAt - startedAt),
+    result: result || null,
   };
 }
 
-async function processAuditLiveProbeRequests(client) {
-  const mode = auditStore.runtimeMode?.() || String(client?.botMode || process.env.BOT_MODE || 'DEV').toUpperCase();
-  const requests = auditStore.getPendingLiveProbeRequests?.(mode) || [];
-  if (!requests.length) return 0;
-  let processed = 0;
+async function executeAuditLiveProbe(client, request, mode) {
+  const kind = String(request?.kind || 'guild_registry').trim().toLowerCase();
+  const startedAt = Date.now();
+  let result;
 
-  for (const request of requests) {
-    const requestId = String(request?.id || '');
-    if (!requestId || auditLiveProbeInFlight.has(requestId)) continue;
-
-    const claimed = auditStore.claimLiveProbeRequest?.(requestId, mode);
-    if (!claimed) continue;
-
-    auditLiveProbeInFlight.add(requestId);
-    const startedAt = Date.now();
-    try {
-      const current = liveProbeClaimOwnedBy(requestId, mode);
-      if (!current) {
-        terminal.warn(`Audit live probe request ${requestId} lost or expired its ${mode} claim before execution; skipping.`);
-        continue;
-      }
-
-      const guildId = String(current.guildId || '');
-      const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-
-      if (!liveProbeClaimOwnedBy(requestId, mode)) {
-        terminal.warn(`Audit live probe request ${requestId} lost or expired its ${mode} claim while resolving guild ${guildId}; skipping.`);
-        continue;
-      }
-
-      const result = guild
-        ? await auditRouter.runLocalEndToEndProbe(client, guild)
-        : { started: false, reason: 'registry-only' };
-      const completedAt = Date.now();
-      const completion = liveProbeCompletionResult(current, mode, result, startedAt, completedAt);
-
-      const fresh = liveProbeClaimOwnedBy(requestId, mode);
-      if (!fresh) {
-        terminal.warn(`Audit live probe request ${requestId} could not be completed because the ${mode} claim is no longer active.`);
-        continue;
-      }
-
-      const completed = auditStore.completeLiveProbeRequest?.(requestId, completion, mode);
-      if (!completed) {
-        terminal.warn(`Audit live probe request ${requestId} completion was rejected because ${mode} no longer owns the claim.`);
-        continue;
-      }
-
-      processed += 1;
-      terminal.info(`Audit live probe request ${requestId} completed by ${mode} for guild ${guildId} in ${completion.durationMs}ms: ${completion.started ? 'started' : completion.reason || 'not-started'}${current.requestedFrom ? ` (requested from ${current.requestedFrom})` : ''}`);
-    } catch (error) {
-      const completedAt = Date.now();
-      const current = auditStore.getLiveProbeRequest?.(requestId) || claimed;
-      const failure = liveProbeCompletionResult(current, mode, { started: false, reason: 'create-failed', error: String(error?.message || error).slice(0, 500) }, startedAt, completedAt);
-      const fresh = liveProbeClaimOwnedBy(requestId, mode);
-      if (fresh) auditStore.failLiveProbeRequest?.(requestId, failure, mode);
-      terminal.error(`Audit live probe request ${requestId} failed in ${mode} after ${failure.durationMs}ms: ${error?.message || error}`);
-    } finally {
-      auditLiveProbeInFlight.delete(requestId);
-    }
+  if (kind === 'guild_registry') {
+    const registry = await refreshAuditGuildRegistry(client, `live probe ${request.id}`);
+    if (!registry) throw new Error('Live guild registry probe returned no registry.');
+    result = {
+      environment: registry.environment || mode,
+      guildCount: Array.isArray(registry.guilds) ? registry.guilds.length : 0,
+      guildIds: Array.isArray(registry.guilds) ? registry.guilds.map((guild) => guild.id) : [],
+    };
+  } else if (kind === 'guild_fetch') {
+    const guildId = String(request.guildId || '').trim();
+    if (!guildId) throw new Error('Live guild fetch probe is missing guildId.');
+    const guild = await client.guilds.fetch(guildId);
+    result = { guildId: guild.id, guildName: guild.name || null, available: true };
+  } else if (kind === 'command') {
+    const command = String(request.command || '').trim();
+    if (!command) throw new Error('Live command probe is missing command.');
+    if (command !== 'ping') throw new Error(`Unsupported live probe command: ${command}`);
+    result = { command, pong: true, websocketPingMs: Number(client.ws?.ping || 0) };
+  } else {
+    throw new Error(`Unsupported live probe kind: ${kind}`);
   }
-  return processed;
+
+  return liveProbeCompletionResult(request, mode, result, startedAt);
 }
 
 function startAuditLiveProbeProcessor(client) {
+  const mode = String(client?.botMode || process.env.BOT_MODE || 'DEV').toUpperCase();
   const schedulerId = sentinelSchedulers.register({
     module: 'auditIntelligence',
     component: 'live-probe-processor',
     intervalMs: AUDIT_LIVE_PROBE_POLL_MS,
-    staleAfterMs: 15_000,
-    environment: auditStore.runtimeMode?.() || String(client?.botMode || process.env.BOT_MODE || 'DEV').toUpperCase(),
+    staleAfterMs: Math.max(AUDIT_LIVE_PROBE_POLL_MS * 10, 15_000),
+    environment: mode,
   });
 
-  const run = async (phase = 'scheduled') => {
+  const run = async () => {
     try {
-      const processed = await processAuditLiveProbeRequests(client);
-      sentinelSchedulers.beat(schedulerId, {
-        phase,
-        processed,
-        inFlight: auditLiveProbeInFlight.size,
-      });
+      const pending = auditStore.listLiveProbeRequests?.({ targetMode: mode, status: 'pending' }) || [];
+      for (const request of pending) {
+        if (!request?.id || auditLiveProbeInFlight.has(request.id)) continue;
+        if (liveProbeExpired(request)) {
+          auditStore.expireLiveProbeRequest?.(request.id, { reason: 'Request expired before it could be claimed.' });
+          continue;
+        }
+        const claimed = auditStore.claimLiveProbeRequest?.(request.id, { claimedBy: mode });
+        if (!claimed || claimed.status !== 'claimed') continue;
+        auditLiveProbeInFlight.add(request.id);
+        try {
+          if (!liveProbeClaimOwnedBy(request.id, mode)) continue;
+          const result = await executeAuditLiveProbe(client, claimed, mode);
+          if (liveProbeClaimOwnedBy(request.id, mode)) auditStore.completeLiveProbeRequest?.(request.id, result);
+        } catch (error) {
+          if (liveProbeClaimOwnedBy(request.id, mode)) {
+            auditStore.failLiveProbeRequest?.(request.id, {
+              ok: false,
+              mode,
+              error: String(error?.message || error),
+              completedAt: new Date().toISOString(),
+            });
+          }
+        } finally {
+          auditLiveProbeInFlight.delete(request.id);
+        }
+      }
+      sentinelSchedulers.beat(schedulerId, { mode, pending: pending.length, inFlight: auditLiveProbeInFlight.size });
     } catch (error) {
-      sentinelSchedulers.fail(schedulerId, error, {
-        phase,
-        inFlight: auditLiveProbeInFlight.size,
-      });
-      terminal.error(`Audit live probe ${phase} processing failed: ${error?.message || error}`);
+      sentinelSchedulers.fail(schedulerId, error, { mode });
+      terminal.error(`Audit live probe processor failed: ${error?.message || error}`);
     }
   };
 
-  run('startup');
-  const timer = setInterval(() => run('scheduled'), AUDIT_LIVE_PROBE_POLL_MS);
+  const timer = setInterval(run, AUDIT_LIVE_PROBE_POLL_MS);
   timer.unref?.();
   return timer;
 }
 
 async function restoreAuditReportFeeds(client) {
-  const mode = String(client?.botMode || process.env.BOT_MODE || 'DEV').trim().toUpperCase();
-  const result = { mode, total: 0, restored: 0, failed: 0, unavailable: 0 };
-  if (mode !== 'DEV') return result;
-
-  const config = auditStore.getConfig();
-  if (config.autoProvision === false || !config.commandCenter?.guildId) return result;
-
-  const configuredGuilds = config.guilds && typeof config.guilds === 'object' ? config.guilds : {};
-  const commandCenterGuildId = String(config.commandCenter.guildId);
-  const registry = auditStore.getGuildRegistry?.() || [];
-
-  for (const guildId of Object.keys(configuredGuilds)) {
-    if (!guildId || String(guildId) === commandCenterGuildId) continue;
-    result.total += 1;
-    const liveGuild = client.guilds.cache.get(String(guildId)) || null;
-    const registryGuild = registry.find((entry) => String(entry?.guildId || '') === String(guildId)) || null;
-    const sourceGuild = liveGuild || (registryGuild ? { id: String(guildId), name: registryGuild.name || String(guildId) } : null);
-    if (!sourceGuild) {
-      result.unavailable += 1;
-      terminal.warn(`Audit report feed restore skipped for unavailable guild ${guildId}.`);
-      continue;
-    }
-
+  const registry = auditStore.getGuildRegistry?.() || null;
+  const guildIds = Array.isArray(registry?.guilds) ? registry.guilds.map((guild) => guild.id) : [];
+  const results = { mode: String(client?.botMode || process.env.BOT_MODE || 'DEV').toUpperCase(), total: guildIds.length, restored: 0, failed: 0, unavailable: 0 };
+  for (const guildId of guildIds) {
+    const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+    if (!guild) { results.unavailable += 1; continue; }
     try {
-      const restored = await auditRouter.ensureReportRoutes(client, sourceGuild);
-      if (restored) result.restored += 1;
-      else result.failed += 1;
+      await auditRouter.ensureGuildReportFeeds(client, guild);
+      results.restored += 1;
     } catch (error) {
-      result.failed += 1;
-      terminal.error(`Failed to restore Audit Intelligence report feeds for ${sourceGuild.name || guildId}: ${error?.message || error}`);
+      results.failed += 1;
+      terminal.error(`Failed to restore Audit Intelligence report feeds for ${guildId}: ${error?.message || error}`);
     }
   }
-
-  if (result.restored > 0) terminal.info(`Audit Intelligence report feeds restored for ${result.restored} configured guild(s).`);
-  return result;
+  return results;
 }
 
 async function sendAuditStartupSummary(client, restoreResult) {
@@ -313,7 +277,7 @@ module.exports = {
     await sendAuditStartupSummary(client, auditRestore);
 
     restoreLockdownReminders(client);
-    startBackupWorker();
+    startBackupWorker({ client });
     startStatusRotation(client);
 
     try {

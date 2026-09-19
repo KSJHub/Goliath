@@ -45,20 +45,28 @@ async function checkKick(account) {
   const resolvedUsername = clean(channel.slug || username);
   const channelUrl = `https://kick.com/${encodeURIComponent(resolvedUsername || username)}`;
   const streamFromChannel = channel.stream && typeof channel.stream === 'object' ? channel.stream : null;
-  let stream = streamFromChannel?.is_live ? streamFromChannel : null;
 
-  if (!stream && broadcasterId) {
+  // The channel endpoint only exposes a reduced stream object and does not
+  // reliably include the broadcaster profile picture or preview thumbnail.
+  // Always hydrate a LIVE channel from the livestream endpoint when possible.
+  let livestream = null;
+  if (broadcasterId) {
     const { json: liveJson } = await request(
       `https://api.kick.com/public/v1/livestreams?broadcaster_user_id=${encodeURIComponent(broadcasterId)}`,
       { headers },
-    );
-    stream = Array.isArray(liveJson?.data) ? liveJson.data[0] : liveJson?.data;
+    ).catch(() => ({ json: null }));
+    livestream = Array.isArray(liveJson?.data) ? liveJson.data[0] : liveJson?.data;
   }
 
+  const channelSaysLive = streamFromChannel?.is_live === true;
+  const stream = livestream || (channelSaysLive ? streamFromChannel : null);
   const avatar = first(
+    livestream?.profile_picture,
     stream?.profile_picture,
-    channel.profile_picture,
-    stream?.channel?.profile_picture,
+    account.avatar,
+    account.avatarUrl,
+    account.profileImage,
+    account.profileImageUrl,
   );
 
   if (!stream) {
@@ -91,12 +99,18 @@ async function checkKick(account) {
       ? channel.custom_tags
       : [];
   const category = first(stream.category?.name, channel.category?.name);
+  // Kick can intermittently omit the stream thumbnail on a later LIVE poll.
+  // Keep the last known image for the same monitored LIVE state so editing the
+  // Discord card never strips a previously valid preview image.
   const thumbnail = first(
+    livestream?.thumbnail,
+    livestream?.thumbnail_url,
     stream.thumbnail,
     stream.thumbnail_url,
     streamFromChannel?.thumbnail,
     streamFromChannel?.thumbnail_url,
-    stream.channel?.profile_picture,
+    account.state?.lastLiveEvent?.thumbnail,
+    avatar,
   );
 
   return result('kick', {
@@ -110,6 +124,8 @@ async function checkKick(account) {
       id: String(stream.id || `kick-live:${broadcasterId}`),
       title: stream.stream_title || stream.title || channel.stream_title || `${resolvedUsername || username} is live`,
       url: channelUrl,
+      profileUrl: channelUrl,
+      avatar,
       thumbnail,
       viewerCount,
       startedAt,

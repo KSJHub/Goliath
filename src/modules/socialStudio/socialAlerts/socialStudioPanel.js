@@ -128,7 +128,7 @@ function creatorSelect(creators, selected, id = `${P}account:creator`, placehold
 function accountSelect(accounts, selected) {
   return row(new StringSelectMenuBuilder().setCustomId(`${P}account:select`).setPlaceholder('2. Select an account to manage').setMinValues(1).setMaxValues(1).addOptions(accounts.slice(0, 25).map((a) => ({ label: `${LABEL[a.platform] || a.platform} · ${a.username || a.externalId || 'Resolving'}`.slice(0, 100), value: a.accountId, description: String(a.profileUrl || a.externalId || '').slice(0, 100), default: a.accountId === selected }))));
 }
-function platformSelect(selected = []) { return row(new StringSelectMenuBuilder().setCustomId(`${P}account:platforms`).setPlaceholder('Select platform(s) to add an account').setMinValues(1).setMaxValues(5).addOptions(PLATFORMS.map((p) => ({ label: LABEL[p], value: p, default: selected.includes(p) })))); }
+function platformSelect(selected = []) { return row(new StringSelectMenuBuilder().setCustomId(`${P}account:platforms`).setPlaceholder('Select platform(s) to add an account').setMinValues(1).setMaxValues(Math.min(PLATFORMS.length, 25)).addOptions(PLATFORMS.map((p) => ({ label: LABEL[p], value: p, default: selected.includes(p) })))); }
 function routeTypeSelect(id, selected, types = ALERT_TYPES) {
   const copy = {
     default: { label: '🏠 Default Channel', description: 'All social posts go here unless you choose a dedicated channel below.' },

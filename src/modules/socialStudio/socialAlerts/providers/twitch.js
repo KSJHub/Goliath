@@ -39,18 +39,33 @@ async function checkTwitch(account) {
   const video = stream ? previousVideo || null : videos[0] || null;
   const clip = clipRes.json?.data?.[0] || null;
   const channelUrl = `https://www.twitch.tv/${encodeURIComponent(user.login)}`;
-  const contentItems = [];
+  const candidates = [];
 
-  if (!stream && video?.id) contentItems.push({
+  if (!stream && video?.id) candidates.push({
     type: 'vod', id: String(video.id), title: video.title || `${user.display_name || user.login} VOD`, url: video.url || `${channelUrl}/videos`,
     thumbnail: clean(video.thumbnail_url).replace('%{width}', '1280').replace('%{height}', '720'), duration: video.duration || null,
     viewCount: video.view_count, publishedAt: video.published_at || video.created_at || null,
     category: account.state?.lastLiveEvent?.category || account.state?.lastLiveEvent?.game || null,
   });
-  if (clip?.id) contentItems.push({
+  if (clip?.id) candidates.push({
     type: 'clip', id: String(clip.id), title: clip.title || `${user.display_name || user.login} clip`, url: clip.url,
     thumbnail: clip.thumbnail_url || null, viewCount: clip.view_count, publishedAt: clip.created_at || null, duration: clip.duration || null,
   });
+
+  // The monitor currently persists one lastAlertKey per account. Returning both the
+  // latest VOD and latest clip causes that key to oscillate (vod -> clip -> vod),
+  // which re-delivers old Twitch content every monitor tick. Until the monitor's
+  // persistent multi-item delivery ledger is in place, expose only the newest
+  // content candidate. This guarantees stable dedupe and immediately prevents
+  // cross-guild replay spam without affecting LIVE detection/refresh behaviour.
+  const contentItems = candidates
+    .filter((item) => item?.id)
+    .sort((a, b) => {
+      const aTime = new Date(a.publishedAt || 0).getTime();
+      const bTime = new Date(b.publishedAt || 0).getTime();
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    })
+    .slice(0, 1);
 
   return result('twitch', {
     isLive: Boolean(stream), externalId: String(user.id), resolvedUsername: user.login, url: channelUrl, avatar: user.profile_image_url || null,

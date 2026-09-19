@@ -293,7 +293,7 @@ function rootAdminPanel(interaction) {
   const panel = adminPanel.buildAdminPanel(
     interaction.guild,
     memberDisplayName(interaction),
-    isGoliathOwner ? null : interaction,
+    interaction,
   );
   return addAdminControls(panel, interaction);
 }
@@ -580,7 +580,7 @@ const command = {
       const panel = adminPanel.buildAdminPanel(
         interaction.guild,
         displayName,
-        isGoliathOwner ? null : interaction,
+        interaction,
       );
 
       return safeEditReply(interaction, addAdminControls(panel, interaction));
