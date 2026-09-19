@@ -358,6 +358,30 @@ function buildPreviewEmbed(s, i) {
   return buildEmbedFromPanel(s.panels[s.selectedPanelIndex], i, s.showTimestamp, s.fieldLayout);
 }
 
+function buildStudioPreviewEmbeds(s, i) {
+  const index = Math.max(0, Number(s?.selectedPanelIndex) || 0);
+  const panel = s?.panels?.[index] || {};
+  const mediaPanel = Array.isArray(s?.mediaV2?.panels) ? (s.mediaV2.panels[index] || {}) : {};
+  const gallery = Array.isArray(mediaPanel?.gallery) ? mediaPanel.gallery : [];
+  const header = gallery.find((item) => String(item?.placement || '').toLowerCase() === 'above');
+  const source = header ? String(replaceVars(header.source || '', i) || '').trim() : '';
+
+  if (!source) return [buildPreviewEmbed(s, i)];
+
+  const headerPreview = new EmbedBuilder()
+    .setColor(panel.color || s.color || PANEL_COLOR)
+    .setImage(source);
+
+  // The live Components V2 renderer places an "above" gallery before the
+  // panel text. Keep the builder preview in that same visual order without
+  // changing the canonical deployment preview used by the renderer.
+  const contentPanel = { ...panel, image: '' };
+  const contentState = { ...s, panels: [contentPanel], selectedPanelIndex: 0 };
+  const contentPreview = buildPreviewEmbed(contentState, i);
+
+  return [headerPreview, contentPreview];
+}
+
 const EMBED_COMPONENT_LIMITS = Object.freeze({
   maxComponentsPerRow: 5,
   maxActionRows: 5,
@@ -469,7 +493,7 @@ function mainEmbed(s, who) {
 function buildEditorPanel(i, who = "Unknown User") {
   const s = getSession(i);
   return {
-    embeds: [mainEmbed(s, who), buildPreviewEmbed(s, i)],
+    embeds: [mainEmbed(s, who), ...buildStudioPreviewEmbeds(s, i)],
     components: [
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId("embed:template").setPlaceholder("🎨 Choose template").addOptions(Object.entries(TEMPLATES).map(([value, t]) => ({ label: t.label, value, emoji: t.emoji, default: s.template === value }))),
@@ -501,7 +525,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
   const s = getSession(i);
   const panels = Array.isArray(s.panels) && s.panels.length ? s.panels : [{}];
   return {
-    embeds: [simplePanel("🛠️ Embed Builder", `Editing panel **${s.selectedPanelIndex + 1}/${s.panels.length}**.`, s, who), buildPreviewEmbed(s, i)],
+    embeds: [simplePanel("🛠️ Embed Builder", `Editing panel **${s.selectedPanelIndex + 1}/${s.panels.length}**.`, s, who), ...buildStudioPreviewEmbeds(s, i)],
     components: [
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId("embed:builder-panel-select").setPlaceholder("🧩 Select content panel").setMinValues(1).setMaxValues(1).addOptions(panels.slice(0, 25).map((entry, index) => ({
@@ -538,7 +562,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
 function buildPanelsPanel(i, who) {
   const s = getSession(i);
   return {
-    embeds: [simplePanel("🧩 Content Panels", `Selected **${s.selectedPanelIndex + 1}/${s.panels.length}**.`, s, who), buildPreviewEmbed(s, i)],
+    embeds: [simplePanel("🧩 Content Panels", `Selected **${s.selectedPanelIndex + 1}/${s.panels.length}**.`, s, who), ...buildStudioPreviewEmbeds(s, i)],
     components: [
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId("embed:panel-select").setPlaceholder("🧩 Select panel").addOptions(s.panels.map((p, n) => ({
