@@ -1,0 +1,119 @@
+name: Social LIVE Presentation Fix
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: social-live-presentation-fix
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, '[live-presentation-fixed]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DEV
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Restore LIVE presentation parity
+        shell: python
+        run: |
+          from pathlib import Path
+
+          core_path = Path('src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js')
+          core = core_path.read_text(encoding='utf-8')
+
+          old = """  const creatorName = vars.creator || vars.username || 'Creator';
+  const authorIcon = clean(creator?.avatar || account.avatar || event.avatar || '', 1000);
+  const author = { name: creatorName };
+  if (/^https?:\\/\\//i.test(authorIcon)) author.iconURL = authorIcon;
+  if (/^https?:\\/\\//i.test(vars.url)) author.url = vars.url;
+  embed.setAuthor(author);
+"""
+          new = """  const creatorName = vars.creator || vars.username || 'Creator';
+  const authorIcon = clean(creator?.avatar || creator?.avatarUrl || creator?.profileImage || creator?.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || '', 1000);
+  const profileUrl = clean(account.profileUrl || account.url || event.profileUrl || vars.url || '', 1000);
+  const author = { name: creatorName };
+  if (/^https?:\\/\\//i.test(authorIcon)) author.iconURL = authorIcon;
+  if (/^https?:\\/\\//i.test(profileUrl)) author.url = profileUrl;
+  embed.setAuthor(author);
+  if (/^https?:\\/\\//i.test(authorIcon)) embed.setThumbnail(authorIcon);
+"""
+          if old not in core:
+              if 'embed.setThumbnail(authorIcon)' not in core:
+                  raise SystemExit('Core author/avatar anchor not found')
+          else:
+              core = core.replace(old, new, 1)
+
+          old = """    if (liveStatus === 'LIVE' && vars.url) actionLines.push(`▶️ **[Watch Live](${vars.url})** · 🔴 **LIVE**`);
+"""
+          new = """    if (liveStatus === 'LIVE' && vars.url) actionLines.push(`▶️ **[Watch Live](${vars.url})**${'\\u2003'.repeat(10)}🔴 **LIVE**`);
+"""
+          if old in core:
+              core = core.replace(old, new, 1)
+          elif "repeat(10)}🔴 **LIVE**" not in core:
+              raise SystemExit('Core LIVE action anchor not found')
+
+          core_path.write_text(core, encoding='utf-8')
+
+          monitor_path = Path('src/modules/socialStudio/socialAlerts/socialStudioMonitor.js')
+          monitor = monitor_path.read_text(encoding='utf-8')
+          old = """  const creator = clean(event.creator || account.displayName || account.username || 'Creator', 256); const avatar = clean(event.avatarUrl || account.avatarUrl, 1000); if (creator) embed.setAuthor(avatar && /^https?:\\/\\//i.test(avatar) ? { name: creator, iconURL: avatar } : { name: creator });
+"""
+          new = """  const creator = clean(event.creator || account.displayName || account.username || 'Creator', 256); const avatar = clean(event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || '', 1000); const profileUrl = clean(account.profileUrl || account.url || event.profileUrl || event.url || '', 1000); if (creator) { const author = { name: creator }; if (avatar && /^https?:\\/\\//i.test(avatar)) author.iconURL = avatar; if (profileUrl && /^https?:\\/\\//i.test(profileUrl)) author.url = profileUrl; embed.setAuthor(author); } if (avatar && /^https?:\\/\\//i.test(avatar)) embed.setThumbnail(avatar);
+"""
+          if old in monitor:
+              monitor = monitor.replace(old, new, 1)
+          elif 'embed.setThumbnail(avatar)' not in monitor:
+              raise SystemExit('Parity author/avatar anchor not found')
+          monitor_path.write_text(monitor, encoding='utf-8')
+
+          test_path = Path('test/auditSocialLivePresentation.js')
+          test_path.write_text("""'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const core = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js', 'utf8');
+const monitor = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitor.js', 'utf8');
+assert(core.includes('creator?.avatarUrl') && core.includes('account.avatarUrl') && core.includes('event.avatarUrl'), 'LIVE author avatar fallbacks missing');
+assert(core.includes('account.profileUrl || account.url || event.profileUrl || vars.url'), 'LIVE author profile URL fallback missing');
+assert(core.includes('author.url = profileUrl'), 'LIVE author must be clickable');
+assert(core.includes('embed.setThumbnail(authorIcon)'), 'LIVE creator thumbnail missing');
+assert(core.includes("'\\u2003'.repeat(10)") && core.includes('🔴 **LIVE**'), 'LIVE status right-spacing contract missing');
+assert(monitor.includes('embed.setThumbnail(avatar)'), 'refresh parity must retain creator thumbnail');
+assert(monitor.includes('author.url = profileUrl'), 'refresh parity must retain clickable creator author');
+assert(monitor.includes('event.profileImageUrl') && monitor.includes('account.profileImageUrl'), 'refresh avatar fallbacks missing');
+console.log('✅ Social Studio LIVE presentation parity audit passed.');
+""", encoding='utf-8')
+
+          package_path = Path('package.json')
+          package = package_path.read_text(encoding='utf-8')
+          if 'node test/auditSocialLivePresentation.js' not in package:
+              needle = 'npm run social-lifecycle-audit && node -e'
+              replacement = 'npm run social-lifecycle-audit && node test/auditSocialLivePresentation.js && node -e'
+              if needle not in package:
+                  raise SystemExit('Doctor command anchor not found')
+              package = package.replace(needle, replacement, 1)
+              package_path.write_text(package, encoding='utf-8')
+
+      - name: Validate presentation and repository
+        run: |
+          node test/auditSocialLivePresentation.js
+          npm ci
+          npm run doctor
+          npm run build
+
+      - name: Commit fix and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/social-live-presentation-fix.yml
+          git add src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js src/modules/socialStudio/socialAlerts/socialStudioMonitor.js test/auditSocialLivePresentation.js package.json
+          git commit -m "fix(social): restore LIVE presentation parity [live-presentation-fixed]"
+          git push origin HEAD:dev
