@@ -368,13 +368,15 @@ function buildStudioPreviewEmbeds(s, i) {
 
   if (!source) return [buildPreviewEmbed(s, i)];
 
+  // Discord's legacy embed preview cannot place its large image before its
+  // text. Render the graphic header as the first preview card so Studio
+  // mirrors the live Components V2 order: graphic header, then content.
   const headerPreview = new EmbedBuilder()
     .setColor(panel.color || s.color || PANEL_COLOR)
     .setImage(source);
 
-  // The live Components V2 renderer places an "above" gallery before the
-  // panel text. Keep the builder preview in that same visual order without
-  // changing the canonical deployment preview used by the renderer.
+  // Do not echo a legacy panel image underneath the content when the same
+  // media item is acting as the graphic header.
   const contentPanel = { ...panel, image: '' };
   const contentState = { ...s, panels: [contentPanel], selectedPanelIndex: 0 };
   const contentPreview = buildPreviewEmbed(contentState, i);
@@ -1250,6 +1252,7 @@ module.exports = {
   buildEmbedFromPanel,
   buildPreviewEmbeds,
   buildPreviewEmbed,
+  buildStudioPreviewEmbeds,
   buttonRows,
   buildButtonRows,
   layoutEmbedButtons,
