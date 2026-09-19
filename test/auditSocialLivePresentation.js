@@ -1,0 +1,14 @@
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const core = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js', 'utf8');
+const monitor = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitor.js', 'utf8');
+assert(core.includes('creator?.avatarUrl') && core.includes('account.avatarUrl') && core.includes('event.avatarUrl'), 'LIVE avatar fallbacks missing');
+assert(core.includes('account.profileUrl || account.url || event.profileUrl || vars.url'), 'LIVE profile URL fallback missing');
+assert(core.includes('author.url=profileUrl'), 'LIVE author must be clickable');
+assert(core.includes('embed.setThumbnail(authorIcon)'), 'LIVE creator thumbnail missing');
+assert(core.includes("'\\u2003'.repeat(10)") && core.includes('🔴 **LIVE**'), 'LIVE status spacing missing');
+assert(monitor.includes('embed.setThumbnail(avatar)'), 'refresh must retain creator thumbnail');
+assert(monitor.includes('author.url = profileUrl'), 'refresh must retain clickable author');
+assert(monitor.includes('event.profileImageUrl') && monitor.includes('account.profileImageUrl'), 'refresh avatar fallbacks missing');
+console.log('✅ Social Studio LIVE presentation parity audit passed.');
