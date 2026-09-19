@@ -1,0 +1,64 @@
+name: Fix Embed Graphic Header Media Source
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/fix-embed-graphic-header-media-source.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Prefer canonical mediaV2 at delivery boundary
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/modules/messageStudio/embed/embedInteractions.js')
+          s = p.read_text()
+          old = '    media: state.media || state.mediaV2,\n'
+          new = '    // mediaV2 is the canonical placement-aware model. Prefer it so a stale\\n    // legacy media alias cannot demote a Graphic Header into a bottom image.\\n    media: state.mediaV2 || state.media,\n'.replace('\\n', '\n')
+          if old not in s:
+              raise SystemExit('Expected buildPayload media selector not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          p = Path('test/auditEmbedGraphicHeaders.js')
+          s = p.read_text()
+          anchor = "  assert(embedRuntime.includes(\"placement: itemIndex === 0 ? 'above' : 'below'\"));\n"
+          addition = anchor + "\n  const interactions = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embedInteractions'), 'utf8');\n  assert(interactions.includes('media: state.mediaV2 || state.media,'), 'delivery must prefer canonical mediaV2 placement state');\n  assert(!interactions.includes('media: state.media || state.mediaV2,'), 'legacy media alias must not override canonical graphic-header placement');\n"
+          if anchor not in s:
+              raise SystemExit('Expected graphic-header audit anchor not found')
+          s = s.replace(anchor, addition, 1)
+          p.write_text(s)
+          PY
+
+      - name: Validate
+        run: |
+          npm run syntax
+          node test/auditEmbedGraphicHeaders.js
+
+      - name: Commit repair and remove one-shot workflow
+        run: |
+          rm -f .github/workflows/fix-embed-graphic-header-media-source.yml
+          git config user.name 'KSJHub'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/modules/messageStudio/embed/embedInteractions.js test/auditEmbedGraphicHeaders.js .github/workflows/fix-embed-graphic-header-media-source.yml
+          git commit -m 'fix(embed): keep graphic header above content at delivery boundary'
+          git push origin HEAD:dev
