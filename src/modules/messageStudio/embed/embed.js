@@ -12,6 +12,7 @@ const renderer = require('./embedRenderer');
 const { installMediaManagerBase } = require('./embedMediaManagerBase');
 const { installClassicSingleImagePayload } = require('./embedClassicSingleImage');
 const { installGraphicHeaders } = require('./embedGraphicHeaders');
+const { installImageAlignment, installInteraction: installImageAlignmentInteraction, applyAlignmentMap } = require('./embedImageAlignment');
 
 const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPanelMedia: media.setPanelMedia, mediaModel: media.mediaModel });
 function clone(value) { try { return JSON.parse(JSON.stringify(value)); } catch { return value; } }
@@ -47,6 +48,17 @@ function installCanonicalMediaSessions(targetPanel) {
   targetPanel.__canonicalMediaSessionsInstalled = true;
   return targetPanel;
 }
+function installAlignmentSessionView(targetPanel) {
+  if (!targetPanel || targetPanel.__alignmentSessionViewInstalled || typeof targetPanel.getSession !== 'function') return targetPanel;
+  const originalGetSession = targetPanel.getSession.bind(targetPanel);
+  targetPanel.getSession = (interaction) => {
+    const state = originalGetSession(interaction);
+    const map = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
+    return { ...state, media: applyAlignmentMap(state.media, map), mediaV2: applyAlignmentMap(state.mediaV2, map) };
+  };
+  targetPanel.__alignmentSessionViewInstalled = true;
+  return targetPanel;
+}
 function installMediaRuntime(targetPanel) {
   media.installStateCompatibility(targetPanel);
   media.installPersistentMediaCompatibility(targetPanel);
@@ -63,8 +75,11 @@ function installMediaRuntime(targetPanel) {
   return targetPanel;
 }
 installMediaRuntime(panel);
+installAlignmentSessionView(panel);
 installClassicSingleImagePayload(renderer);
+installImageAlignment(panel, renderer);
 const interactions = require('./embedInteractions');
+installImageAlignmentInteraction(panel, interactions);
 installGraphicHeaders(panel, media, interactions);
 const validation = require('./embedValidation');
 function getOverview(guildId) {
