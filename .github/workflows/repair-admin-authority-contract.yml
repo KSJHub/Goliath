@@ -1,0 +1,64 @@
+name: Repair admin authority contract
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/repair-admin-authority-contract.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Restore admin authority runtime contract
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/core/administration/admin/panel.js')
+          s = p.read_text()
+          old = "module.exports = { buildAdminPanel, handleAdminInteraction, getAuthorityConfig, hasGuildPermission, getAuthorityContext, GUILD_PERMISSION_CATALOG };"
+          new = "module.exports = { buildAdminPanel, handleAdminInteraction, getAuthorityConfig, hasGuildPermission, getAuthorityContext, canManageGuildAuthority: (interaction) => Boolean(getAuthorityContext(interaction).bypass), GUILD_PERMISSION_CATALOG };"
+          if old not in s:
+              raise SystemExit('Expected admin panel export anchor not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+
+      - name: Guard contract in runtime audit
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('test/auditRuntimeContracts.js')
+          s = p.read_text()
+          anchor = "  ['src/core/administration/mod/storage', ['searchCases', 'getCaseById', 'getCaseAudit', 'recordCaseAudit', 'updateCaseReason', 'updateCaseStatus', 'updateCaseNote', 'clearCaseNote']],"
+          addition = "  ['src/core/administration/admin/panel', ['buildAdminPanel', 'handleAdminInteraction', 'getAuthorityConfig', 'hasGuildPermission', 'getAuthorityContext', 'canManageGuildAuthority']],\n"
+          if addition not in s:
+              if anchor not in s:
+                  raise SystemExit('Runtime audit anchor not found')
+              s = s.replace(anchor, addition + anchor, 1)
+              p.write_text(s)
+          PY
+
+      - name: Verify repair
+        run: |
+          node -e "const p=require('./src/core/administration/admin/panel'); if(typeof p.canManageGuildAuthority!=='function') process.exit(1); console.log('admin authority contract OK')"
+          node test/auditRuntimeContracts.js
+
+      - name: Commit repair and remove one-shot workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/core/administration/admin/panel.js test/auditRuntimeContracts.js
+          git rm .github/workflows/repair-admin-authority-contract.yml
+          git commit -m 'fix(admin): restore authority runtime contract'
+          git push origin HEAD:dev

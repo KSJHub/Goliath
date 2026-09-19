@@ -6,6 +6,8 @@ const ROOT = path.resolve(__dirname, '..');
 const surfaces = [
   ['src/modules/socialStudio/socialAlerts/socialStudio', ['getAccess', 'findByOwnerDiscordId', 'getAccountsForCreator', 'completeCreatorProfile']],
   ['src/modules/socialStudio/socialAlerts/socialStudioMonitor', ['startupSocialStudio', 'checkGuildAccounts', 'forcePostCreatorLive', 'projectLiveRefreshState', 'projectGuildConfig', 'projectedOptions', 'projectedRefreshTimestamp', 'repairLiveRollovers', 'buildLiveFields', 'livePlatformField']],
+  ['src/core/administration/admin/panel', ['buildAdminPanel', 'handleAdminNavigation', 'getAuthorityConfig', 'hasGuildPermission', 'getAuthorityContext', 'canManageGuildAuthority']],
+  ['src/core/ui/panelNavigation', ['createState', 'normalize', 'encodeState', 'decodeState', 'push', 'back', 'current', 'buildCustomId', 'parseCustomId', 'applyNavigationUI']],
   ['src/core/administration/mod/storage', ['searchCases', 'getCaseById', 'getCaseAudit', 'recordCaseAudit', 'updateCaseReason', 'updateCaseStatus', 'updateCaseNote', 'clearCaseNote']],
   ['src/owner/auditIntelligence/auditRouter', ['deliver', 'ensureAuditChannel', 'ensureUserAuditChannel', 'ensureReportRoutes', 'refreshUserSummary', 'getOwnerAuditGuildId', 'ensureCommandCenter', 'routeKeyForEvent', 'monitorKeyForEvent', 'monitoringEnabled', 'configuredRouteChannel', 'runLocalEndToEndProbe', 'runLiveEndToEndProbe', 'channelDeliveryState', 'inspectReportFeeds', 'inspectStructure', 'repairStructure', 'inspectHealth', 'repairHealth']],
 ];
@@ -36,6 +38,41 @@ console.log(`${missingUser.length ? '❌' : '✅'} ./src/modules/socialStudio/so
 if (missingUser.length) {
   failed = true;
   console.error(` - missing ${missingUser.join(', ')}`);
+}
+
+
+// ---------------------------------------------------------
+// /admin owner interaction regression contract
+// ---------------------------------------------------------
+{
+  const fs = require('node:fs');
+
+  const adminCommandSource = fs.readFileSync(
+    path.resolve(
+      ROOT,
+      'src/core/administration/admin/command.js'
+    ),
+    'utf8',
+  );
+
+  const brokenPattern =
+    'isGoliathOwner ? null : interaction';
+
+  if (adminCommandSource.includes(brokenPattern)) {
+    failed = true;
+
+    console.error(
+      '❌ ./src/core/administration/admin/command owner interaction contract'
+    );
+
+    console.error(
+      ' - Goliath owner must retain the real Discord interaction'
+    );
+  } else {
+    console.log(
+      '✅ ./src/core/administration/admin/command owner interaction contract'
+    );
+  }
 }
 
 if (failed) process.exit(1);

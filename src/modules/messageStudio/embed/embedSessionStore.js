@@ -5,13 +5,36 @@ const path = require('node:path');
 
 const VERSION = 1;
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+// Durable state must not depend on the caller's working directory. PM2, tests
+// and maintenance commands can launch the same checkout from different cwd
+// values. This module is always four directories below the application root.
+const APP_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const VALID_MODES = new Set(['dev', 'beta', 'production']);
+
+function normalizeMode(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'development') return 'dev';
+  if (raw === 'prod') return 'production';
+  return VALID_MODES.has(raw) ? raw : '';
+}
+
+function checkoutMode() {
+  // The deployed checkouts are /home/goliath/dev, /beta and /production.
+  // Prefer that physical namespace over potentially stale PM2 environment
+  // variables so a DEV process can never write its sessions into another
+  // environment's runtime directory.
+  return normalizeMode(path.basename(APP_ROOT));
+}
 
 function mode() {
-  return String(process.env.BOT_MODE || process.env.NODE_ENV || 'dev').toLowerCase();
+  return checkoutMode()
+    || normalizeMode(process.env.BOT_MODE)
+    || normalizeMode(process.env.NODE_ENV)
+    || 'dev';
 }
 
 function rootDir() {
-  return path.join(process.cwd(), 'src', 'runtime', mode(), 'data', 'messageStudio', 'embedSessions');
+  return path.join(APP_ROOT, 'src', 'runtime', mode(), 'data', 'messageStudio', 'embedSessions');
 }
 
 function safeKey(key) {
@@ -76,4 +99,4 @@ function remove(key) {
   }
 }
 
-module.exports = { load, save, remove, fileFor };
+module.exports = { load, save, remove, fileFor, rootDir, mode };

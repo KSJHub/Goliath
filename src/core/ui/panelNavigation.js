@@ -52,6 +52,13 @@ function cleanHistory(history) {
   return ['admin:home', ...childRoutes.slice(-5)];
 }
 
+function normalize(state) {
+  const route = String(state?.route || '').trim();
+  let history = cleanHistory(state?.history);
+  if (route && route !== current({ history })) history = push({ history }, route).history;
+  return { history };
+}
+
 function encodeState(state) {
   const history = cleanHistory(state?.history);
   return history
@@ -138,6 +145,14 @@ function parseCustomId(customId) {
   } catch {
     return null;
   }
+}
+
+// Compatibility surface used by the Administration panel. The current Admin UI
+// owns its visible Back/Home controls, so this helper normalizes navigation state
+// without injecting duplicate component rows.
+function applyNavigationUI(payload, state) {
+  normalize(state);
+  return payload && typeof payload === 'object' ? payload : {};
 }
 
 function guildRolesByHierarchy(guild, { includeEveryone = false } = {}) {
@@ -254,6 +269,7 @@ function mergeRolePickerSelection(guild, existingIds = [], selectedValues = [], 
 
 module.exports = {
   createState,
+  normalize,
   encodeState,
   decodeState,
   push,
@@ -261,6 +277,7 @@ module.exports = {
   current,
   buildCustomId,
   parseCustomId,
+  applyNavigationUI,
   ROLE_PAGE_SIZE,
   guildRolesByHierarchy,
   rolePickerCustomId,

@@ -18,6 +18,10 @@ const contracts = [
   ['persistent event dedupe', 'deliveredEventKeys'],
   ['deleted-message recovery', 'recovered=Boolean(updated)'],
   ['recovery without ping', 'suppressMention:true'],
+  ['forced LIVE state persistence', 'state.lastLiveMessageId=delivered.messageId'],
+  ['forced LIVE channel persistence', 'state.lastLiveMessageChannelId=delivered.channelId'],
+  ['forced LIVE refresh clock', 'state.lastLiveMessageUpdatedAt=stamp'],
+  ['forced LIVE state save', 'saveMonitorState(guildId,config,monitorUpdates,{alerts:sent.length},historyEntries'],
 ];
 
 for (const [name, needle] of contracts) {
@@ -45,4 +49,4 @@ assert.equal(delivered.has('live:B'), false);
 delivered.add('live:B');
 assert.equal(delivered.size, 4);
 
-console.log('✅ Social Studio lifecycle validation passed: LIVE A -> OFFLINE -> VOD -> LIVE B');
+console.log('✅ Social Studio lifecycle validation passed: forced LIVE tracking -> refresh -> OFFLINE -> VOD -> LIVE B');
