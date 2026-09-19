@@ -40,5 +40,40 @@ if (missingUser.length) {
   console.error(` - missing ${missingUser.join(', ')}`);
 }
 
+
+// ---------------------------------------------------------
+// /admin owner interaction regression contract
+// ---------------------------------------------------------
+{
+  const fs = require('node:fs');
+
+  const adminCommandSource = fs.readFileSync(
+    path.resolve(
+      ROOT,
+      'src/core/administration/admin/command.js'
+    ),
+    'utf8',
+  );
+
+  const brokenPattern =
+    'isGoliathOwner ? null : interaction';
+
+  if (adminCommandSource.includes(brokenPattern)) {
+    failed = true;
+
+    console.error(
+      '❌ ./src/core/administration/admin/command owner interaction contract'
+    );
+
+    console.error(
+      ' - Goliath owner must retain the real Discord interaction'
+    );
+  } else {
+    console.log(
+      '✅ ./src/core/administration/admin/command owner interaction contract'
+    );
+  }
+}
+
 if (failed) process.exit(1);
 console.log(`✅ Runtime contract audit: ${surfaces.length + 1} surfaces`);
