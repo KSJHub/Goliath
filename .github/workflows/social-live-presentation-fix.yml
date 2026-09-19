@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   fix:
+    if: ${{ !contains(github.event.head_commit.message, '[live-presentation-fixed]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout DEV
@@ -25,32 +26,51 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+
           core_path = Path('src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js')
           core = core_path.read_text(encoding='utf-8')
-          old = "  const authorIcon = clean(creator?.avatar || account.avatar || event.avatar || '', 1000);\n  const author = { name: creatorName };\n  if (/^https?:\\/\\//i.test(authorIcon)) author.iconURL = authorIcon;\n  if (/^https?:\\/\\//i.test(vars.url)) author.url = vars.url;\n  embed.setAuthor(author);"
-          new = "  const authorIcon = clean(creator?.avatar || creator?.avatarUrl || creator?.profileImage || creator?.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || '', 1000);\n  const profileUrl = clean(account.profileUrl || account.url || event.profileUrl || vars.url || '', 1000);\n  const author = { name: creatorName };\n  if (/^https?:\\/\\//i.test(authorIcon)) author.iconURL = authorIcon;\n  if (/^https?:\\/\\//i.test(profileUrl)) author.url = profileUrl;\n  embed.setAuthor(author);\n  if (/^https?:\\/\\//i.test(authorIcon)) embed.setThumbnail(authorIcon);"
+          old = "authorIcon = clean(creator?.avatar || account.avatar || event.avatar || '',1000), author = { name:vars.creator || vars.username || 'Creator' }; if (/^https?:\\/\\//i.test(authorIcon)) author.iconURL=authorIcon; if (/^https?:\\/\\//i.test(vars.url)) author.url=vars.url; embed.setAuthor(author);"
+          new = "authorIcon = clean(creator?.avatar || creator?.avatarUrl || creator?.profileImage || creator?.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || '',1000), profileUrl = clean(account.profileUrl || account.url || event.profileUrl || vars.url || '',1000), author = { name:vars.creator || vars.username || 'Creator' }; if (/^https?:\\/\\//i.test(authorIcon)) author.iconURL=authorIcon; if (/^https?:\\/\\//i.test(profileUrl)) author.url=profileUrl; embed.setAuthor(author); if (/^https?:\\/\\//i.test(authorIcon)) embed.setThumbnail(authorIcon);"
           if old in core:
               core = core.replace(old, new, 1)
           elif 'embed.setThumbnail(authorIcon)' not in core:
-              raise SystemExit('Core author/avatar anchor not found')
-          old_action = "    if (liveStatus === 'LIVE' && vars.url) actionLines.push(`▶️ **[Watch Live](${vars.url})** · 🔴 **LIVE**`);"
-          new_action = "    if (liveStatus === 'LIVE' && vars.url) actionLines.push(`▶️ **[Watch Live](${vars.url})**${'\\u2003'.repeat(10)}🔴 **LIVE**`);"
+              raise SystemExit('Current core author/avatar anchor not found')
+
+          old_action = "actions.push(`▶️ **[Watch Live](${vars.url})** · 🔴 **LIVE**`)"
+          new_action = "actions.push(`▶️ **[Watch Live](${vars.url})**${'\\u2003'.repeat(10)}🔴 **LIVE**`)"
           if old_action in core:
               core = core.replace(old_action, new_action, 1)
           elif "repeat(10)}🔴 **LIVE**" not in core:
-              raise SystemExit('Core LIVE action anchor not found')
+              raise SystemExit('Current LIVE action anchor not found')
           core_path.write_text(core, encoding='utf-8')
+
           monitor_path = Path('src/modules/socialStudio/socialAlerts/socialStudioMonitor.js')
           monitor = monitor_path.read_text(encoding='utf-8')
-          old_parity = "  const creator = clean(event.creator || account.displayName || account.username || 'Creator', 256); const avatar = clean(event.avatarUrl || account.avatarUrl, 1000); if (creator) embed.setAuthor(avatar && /^https?:\\/\\//i.test(avatar) ? { name: creator, iconURL: avatar } : { name: creator });"
-          new_parity = "  const creator = clean(event.creator || account.displayName || account.username || 'Creator', 256); const avatar = clean(event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || '', 1000); const profileUrl = clean(account.profileUrl || account.url || event.profileUrl || event.url || '', 1000); if (creator) { const author = { name: creator }; if (avatar && /^https?:\\/\\//i.test(avatar)) author.iconURL = avatar; if (profileUrl && /^https?:\\/\\//i.test(profileUrl)) author.url = profileUrl; embed.setAuthor(author); } if (avatar && /^https?:\\/\\//i.test(avatar)) embed.setThumbnail(avatar);"
+          old_parity = "const creator = clean(event.creator || account.displayName || account.username || 'Creator', 256); const avatar = clean(event.avatarUrl || account.avatarUrl, 1000); if (creator) embed.setAuthor(avatar && /^https?:\\/\\//i.test(avatar) ? { name: creator, iconURL: avatar } : { name: creator });"
+          new_parity = "const creator = clean(event.creator || account.displayName || account.username || 'Creator', 256); const avatar = clean(event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || '', 1000); const profileUrl = clean(account.profileUrl || account.url || event.profileUrl || event.url || '', 1000); if (creator) { const author = { name: creator }; if (avatar && /^https?:\\/\\//i.test(avatar)) author.iconURL = avatar; if (profileUrl && /^https?:\\/\\//i.test(profileUrl)) author.url = profileUrl; embed.setAuthor(author); } if (avatar && /^https?:\\/\\//i.test(avatar)) embed.setThumbnail(avatar);"
           if old_parity in monitor:
               monitor = monitor.replace(old_parity, new_parity, 1)
           elif 'embed.setThumbnail(avatar)' not in monitor:
-              raise SystemExit('Parity author/avatar anchor not found')
+              raise SystemExit('Current parity author/avatar anchor not found')
           monitor_path.write_text(monitor, encoding='utf-8')
-          test_lines = ["'use strict';", "const assert = require('node:assert/strict');", "const fs = require('node:fs');", "const core = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js', 'utf8');", "const monitor = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitor.js', 'utf8');", "assert(core.includes('creator?.avatarUrl') && core.includes('account.avatarUrl') && core.includes('event.avatarUrl'));", "assert(core.includes('account.profileUrl || account.url || event.profileUrl || vars.url'));", "assert(core.includes('author.url = profileUrl'));", "assert(core.includes('embed.setThumbnail(authorIcon)'));", "assert(core.includes(\"'\\\\u2003'.repeat(10)\") && core.includes('🔴 **LIVE**'));", "assert(monitor.includes('embed.setThumbnail(avatar)'));", "assert(monitor.includes('author.url = profileUrl'));", "assert(monitor.includes('event.profileImageUrl') && monitor.includes('account.profileImageUrl'));", "console.log('✅ Social Studio LIVE presentation parity audit passed.');"]
-          Path('test/auditSocialLivePresentation.js').write_text('\n'.join(test_lines) + '\n', encoding='utf-8')
+
+          test = """'use strict';
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const core = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js', 'utf8');
+          const monitor = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitor.js', 'utf8');
+          assert(core.includes('creator?.avatarUrl') && core.includes('account.avatarUrl') && core.includes('event.avatarUrl'));
+          assert(core.includes('account.profileUrl || account.url || event.profileUrl || vars.url'));
+          assert(core.includes('author.url=profileUrl'));
+          assert(core.includes('embed.setThumbnail(authorIcon)'));
+          assert(core.includes("'\\\\u2003'.repeat(10)") && core.includes('🔴 **LIVE**'));
+          assert(monitor.includes('embed.setThumbnail(avatar)'));
+          assert(monitor.includes('author.url = profileUrl'));
+          assert(monitor.includes('event.profileImageUrl') && monitor.includes('account.profileImageUrl'));
+          console.log('✅ Social Studio LIVE presentation parity audit passed.');
+          """
+          Path('test/auditSocialLivePresentation.js').write_text(test, encoding='utf-8')
+
           package_path = Path('package.json')
           package = package_path.read_text(encoding='utf-8')
           if 'node test/auditSocialLivePresentation.js' not in package:
