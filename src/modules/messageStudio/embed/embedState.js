@@ -68,6 +68,9 @@ function getSession(interaction) {
       if (restored) {
         const synced = stateSync(restored);
         sessions.set(key, synced);
+        // Re-write restored state through the current schema/path. This also
+        // repairs a store that was removed while the process retained state.
+        sessionStore.save(key, synced);
         return synced;
       }
     }
@@ -76,7 +79,14 @@ function getSession(interaction) {
     sessions.set(key, fresh);
     sessionStore.save(key, fresh);
   }
-  return sessions.get(key);
+  const current = sessions.get(key);
+  // A live builder session must always have a durable counterpart. Some flows
+  // hydrate/replace the in-memory Map directly (for example deployment/editor
+  // recovery), and the JSON file can also disappear independently of memory.
+  // Make reads self-healing so any active Embed Studio interaction recreates
+  // the canonical session file before it can be lost on restart.
+  sessionStore.save(key, current);
+  return current;
 }
 
 function saveSession(interaction, state) {
