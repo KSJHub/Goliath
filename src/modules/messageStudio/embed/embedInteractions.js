@@ -156,6 +156,7 @@ async function buildPayload(state, interaction, ephemeral = false) {
     // mediaV2 is the canonical placement-aware model. Prefer it so a stale
     // legacy media alias cannot demote a Graphic Header into a bottom image.
     media: state.mediaV2 || state.media,
+    mediaAlignment: state.mediaAlignment || {},
     interaction,
   });
 }
@@ -219,149 +220,725 @@ function setGuildPresetDefault(guildId, templateKey, presetName, guild) {
 }
 async function handlePresetInteraction(i) {
   const customId = String(i?.customId || '');
-  if (!customId.startsWith('embed:preset-')) return false;
-  const guildId = i?.guildId || i?.guild?.id || null;
-  const state = panel.getSession(i);
 
-  if (i.isStringSelectMenu?.() && customId === 'embed:preset-select') {
-    const presetName = String(i.values?.[0] || '');
-    const presets = guildManager.getEmbedPresets?.(guildId) || {};
-    if (!presets[presetName]) {
-      await i.reply({ content: 'Preset not found.', flags: 64 });
+  if (!customId.startsWith('embed:preset-')) {
+    return false;
+  }
+
+  const guildId =
+    i?.guildId ||
+    i?.guild?.id ||
+    null;
+
+  if (!guildId) {
+    await i.reply({
+      content: 'This preset action requires a server.',
+      flags: 64,
+    });
+    return true;
+  }
+
+  let state = panel.getSession(i);
+
+  const getPreset = (name) =>
+    name
+      ? guildManager.getEmbedPreset?.(guildId, name) || null
+      : null;
+
+  const getSelected = () => {
+    const name =
+      panel.getSession(i)?.selectedPreset ||
+      null;
+
+    return {
+      name,
+      preset: getPreset(name),
+    };
+  };
+
+  /*
+   * SELECT
+   *
+   * Selection is management-only.
+   * It must never silently overwrite the editor.
+   */
+  if (
+    i.isStringSelectMenu?.() &&
+    customId === 'embed:preset-select'
+  ) {
+    const presetName =
+      String(i.values?.[0] || '').trim();
+
+    const preset = getPreset(presetName);
+
+    if (!preset || presetName.startsWith('auto-')) {
+      await i.reply({
+        content: 'That preset is no longer available.',
+        flags: 64,
+      });
       return true;
     }
-    panel.saveSession(i, { ...state, selectedPreset: presetName });
-    await i.update(panel.buildPresetsPanel(i));
+
+    panel.saveSession(i, {
+      ...state,
+      selectedPreset: presetName,
+    });
+
+    await i.update(
+      panel.buildPresetsPanel(i)
+    );
+
     return true;
   }
 
-  if (i.isButton?.() && customId === 'embed:preset-load') {
-    const presetName = state?.selectedPreset || null;
-    const preset = presetName ? guildManager.getEmbedPreset?.(guildId, presetName) : null;
-    if (!preset) {
-      await i.reply({ content: 'Select a valid preset first.', flags: 64 });
+  /*
+   * LOAD
+   */
+  if (
+    i.isButton?.() &&
+    customId === 'embed:preset-load'
+  ) {
+    const { name, preset } = getSelected();
+
+
+    if (!name || !preset) {
+      await i.reply({
+        content: 'Select a valid preset first.',
+        flags: 64,
+      });
       return true;
     }
-    panel.applyPreset(i, presetName, preset);
-    panel.clearUnsaved(i, panel.getSession(i));
-    await i.update(panel.buildEditorPanel(i, panel.memberName(i)));
+
+    /*
+     * applyPreset() establishes the selected saved preset as the
+     * editor's clean baseline. Media/alignment compatibility wrappers
+     * may normalize and re-save that state, but loading itself must
+     * never make the editor dirty.
+     */
+    panel.applyPreset(i, name, preset);
+
+    await i.update(
+      panel.buildEditorPanel(
+        i,
+        panel.memberName(i)
+      )
+    );
+
     return true;
   }
 
-  if (i.isButton?.() && customId === 'embed:preset-save') {
-    await i.showModal(panel.presetModal(state));
+  /*
+   * SAVE CURRENT
+   */
+  if (
+    i.isButton?.() &&
+    customId === 'embed:preset-save'
+  ) {
+    state = panel.getSession(i);
+
+    await i.showModal(
+      panel.presetModal(state)
+    );
+
     return true;
   }
 
-  if (i.isButton?.() && customId === 'embed:preset-new') {
+  /*
+   * NEW EMBED
+   *
+   * Clear working state and selected preset.
+   */
+  if (
+    i.isButton?.() &&
+    customId === 'embed:preset-new'
+  ) {
     panel.resetSession(i);
-    await i.update(panel.buildEditorPanel(i, panel.memberName(i)));
+
+    const fresh =
+      panel.getSession(i);
+
+    panel.saveSession(i, {
+      ...fresh,
+      selectedPreset: null,
+    });
+
+    await i.update(
+      panel.buildEditorPanel(
+        i,
+        panel.memberName(i)
+      )
+    );
+
     return true;
   }
 
-  if (i.isButton?.() && customId === 'embed:preset-rename') {
-    if (!state?.selectedPreset) {
-      await i.reply({ content: 'Select a preset first.', flags: 64 });
+  /*
+   * RENAME
+   */
+  if (
+    i.isButton?.() &&
+    customId === 'embed:preset-rename'
+  ) {
+    const { name, preset } = getSelected();
+
+    if (!name || !preset) {
+      await i.reply({
+        content: 'Select a valid preset first.',
+        flags: 64,
+      });
       return true;
     }
-    await i.showModal(presetNameModal('embed:preset-rename-modal', 'Rename Embed Preset', 'New preset name', state.selectedPreset));
+
+    await i.showModal(
+      presetNameModal(
+        'embed:preset-rename-modal',
+        'Rename Embed Preset',
+        'New preset name',
+        name
+      )
+    );
+
     return true;
   }
 
-  if (i.isButton?.() && customId === 'embed:preset-duplicate') {
-    if (!state?.selectedPreset) {
-      await i.reply({ content: 'Select a preset first.', flags: 64 });
+  /*
+   * DUPLICATE
+   */
+  if (
+    i.isButton?.() &&
+    customId === 'embed:preset-duplicate'
+  ) {
+    const { name, preset } = getSelected();
+
+    if (!name || !preset) {
+      await i.reply({
+        content: 'Select a valid preset first.',
+        flags: 64,
+      });
       return true;
     }
-    await i.showModal(presetNameModal('embed:preset-duplicate-modal', 'Duplicate Embed Preset', 'Copy name', `${state.selectedPreset} Copy`));
+
+    await i.showModal(
+      presetNameModal(
+        'embed:preset-duplicate-modal',
+        'Duplicate Embed Preset',
+        'Copy name',
+        `${name} Copy`
+      )
+    );
+
     return true;
   }
 
-  if (i.isButton?.() && customId === 'embed:preset-delete') {
-    const presetName = state?.selectedPreset || null;
-    if (!presetName) {
-      await i.reply({ content: 'Select a preset first.', flags: 64 });
+  /*
+   * DELETE
+   */
+  if (
+    i.isButton?.() &&
+    customId === 'embed:preset-delete'
+  ) {
+    const { name, preset } = getSelected();
+
+    if (!name || !preset) {
+      await i.reply({
+        content: 'Select a valid preset first.',
+        flags: 64,
+      });
       return true;
     }
-    const deleted = guildManager.deleteEmbedPreset?.(guildId, presetName);
+
+    if (name.startsWith('auto-')) {
+      await i.reply({
+        content: 'Internal deployment presets cannot be deleted here.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    const defaults =
+      guildManager.getEmbedDefaults?.(guildId) ||
+      {};
+
+    const presetTemplate =
+      preset.template ||
+      state.template ||
+      'custom';
+
+    /*
+     * Clear its default assignment first if necessary.
+     */
+    if (defaults[presetTemplate] === name) {
+      guildManager.clearEmbedDefault?.(
+        guildId,
+        presetTemplate,
+        i.guild
+      );
+    }
+
+
+    const deleted =
+      guildManager.deleteEmbedPreset?.(
+        guildId,
+        name,
+        i.guild
+      );
+
+
     if (!deleted) {
-      await i.reply({ content: 'Preset not found.', flags: 64 });
+      await i.reply({
+        content: `Could not delete preset "${name}".`,
+        flags: 64,
+      });
       return true;
     }
-    const next = { ...state, selectedPreset: null };
-    panel.saveSession(i, next);
-    await i.update(panel.buildPresetsPanel(i));
+
+    state = panel.getSession(i);
+
+    panel.saveSession(i, {
+      ...state,
+      selectedPreset: null,
+    });
+
+    console.log(
+      `[Embed Presets] Deleted "${name}" from guild ${guildId}`
+    );
+
+    await i.update(
+      panel.buildPresetsPanel(i)
+    );
+
     return true;
   }
 
-  if (i.isButton?.() && customId === 'embed:preset-set-default') {
-    const presetName = state?.selectedPreset || null;
-    if (!presetName) {
-      await i.reply({ content: 'Select a preset first.', flags: 64 });
+  /*
+   * SET DEFAULT
+   */
+  if (
+    i.isButton?.() &&
+    customId === 'embed:preset-default'
+  ) {
+    const { name, preset } = getSelected();
+
+    if (!name || !preset) {
+      await i.reply({
+        content: 'Select a valid preset first.',
+        flags: 64,
+      });
       return true;
     }
-    const saved = setGuildPresetDefault(guildId, state.template, presetName, i.guild);
+
+    const template =
+      preset.template ||
+      state.template ||
+      'custom';
+
+
+    const saved =
+      guildManager.setEmbedDefault?.(
+        guildId,
+        template,
+        name,
+        i.guild
+      );
+
+
     if (!saved) {
-      await i.reply({ content: 'Could not set that preset as the default.', flags: 64 });
+      await i.reply({
+        content: 'Could not set that preset as the default.',
+        flags: 64,
+      });
       return true;
     }
-    await i.update(panel.buildPresetsPanel(i));
+
+    await i.update(
+      panel.buildPresetsPanel(i)
+    );
+
     return true;
   }
 
-  if (i.isModalSubmit?.() && customId === 'embed:preset-save-modal') {
-    const name = cleanPresetName(i.fields.getTextInputValue('name'));
+  /*
+   * CLEAR DEFAULT
+   */
+  if (
+    i.isButton?.() &&
+    customId === 'embed:preset-clear-default'
+  ) {
+    const { name, preset } = getSelected();
+
+    if (!name || !preset) {
+      await i.reply({
+        content: 'Select a valid preset first.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    const template =
+      preset.template ||
+      state.template ||
+      'custom';
+
+    guildManager.clearEmbedDefault?.(
+      guildId,
+      template,
+      i.guild
+    );
+
+    await i.update(
+      panel.buildPresetsPanel(i)
+    );
+
+    return true;
+  }
+
+  /*
+   * SAVE MODAL
+   */
+  if (
+    i.isModalSubmit?.() &&
+    customId === 'embed:preset-save-modal'
+  ) {
+    const name =
+      cleanPresetName(
+        i.fields.getTextInputValue('name')
+      );
+
     if (!name) {
-      await i.reply({ content: 'Enter a preset name.', flags: 64 });
+      await i.reply({
+        content: 'Enter a preset name.',
+        flags: 64,
+      });
       return true;
     }
-    const preset = panel.presetData(state);
-    guildManager.setEmbedPreset?.(guildId, name, preset, i.guild);
-    panel.saveSession(i, { ...state, selectedPreset: name, hasUnsavedChanges: false });
-    await i.update(panel.buildPresetsPanel(i));
+
+    if (name.startsWith('auto-')) {
+      await i.reply({
+        content: 'Preset names beginning with "auto-" are reserved by Goliath.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    state = panel.getSession(i);
+
+    const preset =
+      panel.presetData(state);
+
+    const saved =
+      guildManager.saveEmbedPreset?.(
+        guildId,
+        name,
+        preset,
+        i.guild
+      );
+
+    if (!saved) {
+      await i.reply({
+        content: `Could not save preset "${name}".`,
+        flags: 64,
+      });
+      return true;
+    }
+
+    panel.saveSession(i, {
+      ...state,
+      selectedPreset: name,
+      hasUnsavedChanges: false,
+    });
+
+    await i.update(
+      panel.buildPresetsPanel(i)
+    );
+
     return true;
   }
 
-  if (i.isModalSubmit?.() && customId === 'embed:preset-rename-modal') {
-    const current = state?.selectedPreset || null;
-    const nextName = cleanPresetName(i.fields.getTextInputValue('name'));
+  /*
+   * RENAME MODAL
+   */
+  if (
+    i.isModalSubmit?.() &&
+    customId === 'embed:preset-rename-modal'
+  ) {
+    state = panel.getSession(i);
+
+    const current =
+      state?.selectedPreset ||
+      null;
+
+    const nextName =
+      cleanPresetName(
+        i.fields.getTextInputValue('name')
+      );
+
     if (!current || !nextName) {
-      await i.reply({ content: 'Select a preset and enter a valid new name.', flags: 64 });
+      await i.reply({
+        content: 'Select a preset and enter a valid new name.',
+        flags: 64,
+      });
       return true;
     }
-    const preset = guildManager.getEmbedPreset?.(guildId, current);
+
+    if (nextName.startsWith('auto-')) {
+      await i.reply({
+        content: 'Preset names beginning with "auto-" are reserved by Goliath.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    if (current === nextName) {
+      await i.update(
+        panel.buildPresetsPanel(i)
+      );
+      return true;
+    }
+
+    const preset =
+      getPreset(current);
+
     if (!preset) {
-      await i.reply({ content: 'Preset not found.', flags: 64 });
+      await i.reply({
+        content: 'The selected preset no longer exists.',
+        flags: 64,
+      });
       return true;
     }
-    guildManager.setEmbedPreset?.(guildId, nextName, preset, i.guild);
-    guildManager.deleteEmbedPreset?.(guildId, current);
-    panel.saveSession(i, { ...state, selectedPreset: nextName });
-    await i.update(panel.buildPresetsPanel(i));
+
+    const collision =
+      getPreset(nextName);
+
+    if (collision) {
+      await i.reply({
+        content: `A preset named "${nextName}" already exists.`,
+        flags: 64,
+      });
+      return true;
+    }
+
+    const defaults =
+      guildManager.getEmbedDefaults?.(guildId) ||
+      {};
+
+    const template =
+      preset.template ||
+      state.template ||
+      'custom';
+
+    const wasDefault =
+      defaults[template] === current;
+
+    const saved =
+      guildManager.saveEmbedPreset?.(
+        guildId,
+        nextName,
+        preset,
+        i.guild
+      );
+
+    if (!saved) {
+      await i.reply({
+        content: 'Could not save the renamed preset.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    /*
+     * If this preset is the template default, move the default
+     * BEFORE removing the old preset.
+     *
+     * This prevents the guild from ever being left with a default
+     * pointing at a preset that no longer exists.
+     */
+    if (wasDefault) {
+      try {
+        guildManager.setEmbedDefault(
+          guildId,
+          template,
+          nextName,
+          i.guild
+        );
+      } catch (error) {
+        /*
+         * Roll back the newly-created preset.
+         * The original preset and original default remain untouched.
+         */
+        guildManager.deleteEmbedPreset?.(
+          guildId,
+          nextName,
+          i.guild
+        );
+
+        console.warn(
+          '[Embed Presets] Rename default migration failed:',
+          error?.message || error
+        );
+
+        await i.reply({
+          content: 'Rename failed while moving the default assignment. No changes were kept.',
+          flags: 64,
+        });
+
+        return true;
+      }
+    }
+
+    const deleted =
+      guildManager.deleteEmbedPreset?.(
+        guildId,
+        current,
+        i.guild
+      );
+
+    if (!deleted) {
+      /*
+       * Roll back the new preset.
+       */
+      guildManager.deleteEmbedPreset?.(
+        guildId,
+        nextName,
+        i.guild
+      );
+
+      /*
+       * If the default was moved, restore it to the original preset.
+       */
+      if (wasDefault) {
+        try {
+          guildManager.setEmbedDefault(
+            guildId,
+            template,
+            current,
+            i.guild
+          );
+        } catch (error) {
+          console.error(
+            '[Embed Presets] Rename rollback could not restore default:',
+            error?.message || error
+          );
+        }
+      }
+
+      await i.reply({
+        content: 'Rename failed while removing the old preset. The rename was rolled back.',
+        flags: 64,
+      });
+
+      return true;
+    }
+
+    panel.saveSession(i, {
+      ...state,
+      selectedPreset: nextName,
+    });
+
+    await i.update(
+      panel.buildPresetsPanel(i)
+    );
+
     return true;
   }
 
-  if (i.isModalSubmit?.() && customId === 'embed:preset-duplicate-modal') {
-    const current = state?.selectedPreset || null;
-    const copyName = cleanPresetName(i.fields.getTextInputValue('name'));
+  /*
+   * DUPLICATE MODAL
+   */
+  if (
+    i.isModalSubmit?.() &&
+    customId === 'embed:preset-duplicate-modal'
+  ) {
+    state = panel.getSession(i);
+
+    const current =
+      state?.selectedPreset ||
+      null;
+
+    const copyName =
+      cleanPresetName(
+        i.fields.getTextInputValue('name')
+      );
+
     if (!current || !copyName) {
-      await i.reply({ content: 'Select a preset and enter a valid copy name.', flags: 64 });
+      await i.reply({
+        content: 'Select a preset and enter a valid copy name.',
+        flags: 64,
+      });
       return true;
     }
-    const preset = guildManager.getEmbedPreset?.(guildId, current);
+
+    if (copyName.startsWith('auto-')) {
+      await i.reply({
+        content: 'Preset names beginning with "auto-" are reserved by Goliath.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    if (getPreset(copyName)) {
+      await i.reply({
+        content: `A preset named "${copyName}" already exists.`,
+        flags: 64,
+      });
+      return true;
+    }
+
+    const preset =
+      getPreset(current);
+
     if (!preset) {
-      await i.reply({ content: 'Preset not found.', flags: 64 });
+      await i.reply({
+        content: 'The selected preset no longer exists.',
+        flags: 64,
+      });
       return true;
     }
-    guildManager.setEmbedPreset?.(guildId, copyName, preset, i.guild);
-    panel.saveSession(i, { ...state, selectedPreset: copyName });
-    await i.update(panel.buildPresetsPanel(i));
+
+    const saved =
+      guildManager.saveEmbedPreset?.(
+        guildId,
+        copyName,
+        preset,
+        i.guild
+      );
+
+    if (!saved) {
+      await i.reply({
+        content: 'Could not duplicate that preset.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    panel.saveSession(i, {
+      ...state,
+      selectedPreset: copyName,
+    });
+
+    await i.update(
+      panel.buildPresetsPanel(i)
+    );
+
     return true;
   }
 
-  return false;
-}
+  /*
+   * Any embed:preset-* interaction reaching here is an error.
+   * Do NOT fall through into the legacy preset implementation.
+   */
+  console.warn(
+    `[Embed Presets] Unhandled preset interaction: ${customId}`
+  );
 
+  if (!i.replied && !i.deferred) {
+    await i.reply({
+      content: 'That preset action is not currently available.',
+      flags: 64,
+    });
+  }
+
+  return true;
+}
 async function handleBuilderInteractions(i) {
   const customId = String(i.customId || '');
   const state = panel.getSession(i);
@@ -525,11 +1102,6 @@ async function handleLegacyInteraction(i) {
     if (customId === 'embed:field-layout') { panel.markUnsaved(i, { ...state, fieldLayout: i.values[0] }); await legacyReplyOrUpdate(i, panel.buildFieldsPanel(i, name)); return true; }
     if (customId === 'embed:field-select') { panel.saveSession(i, { ...state, selectedFieldIndex: Number(i.values[0]) }); await legacyReplyOrUpdate(i, panel.buildFieldsPanel(i, name)); return true; }
     if (customId === 'embed:button-select') { panel.saveSession(i, { ...state, selectedButtonIndex: Number(i.values[0]) }); await legacyReplyOrUpdate(i, panel.buildButtonsPanel(i, name)); return true; }
-    if (customId === 'embed:preset-select') {
-      const presetName = i.values[0]; const presets = typeof guildManager.getEmbedPresets === 'function' ? guildManager.getEmbedPresets(i.guild.id) || {} : {}; const preset = presets[presetName];
-      if (!preset) { await i.reply({ content: 'Preset not found.', flags: 64 }); return true; }
-      panel.applyPreset(i, presetName, preset); await legacyReplyOrUpdate(i, panel.buildEditorPanel(i, name)); return true;
-    }
   }
 
   if (i.isChannelSelectMenu?.() && customId === 'embed:channel') { panel.markUnsaved(i, { ...state, channelId: i.values[0] }); await legacyReplyOrUpdate(i, panel.buildEditorPanel(i, name)); return true; }
@@ -564,11 +1136,6 @@ async function handleLegacyInteraction(i) {
     if (customId === 'embed:button-edit') { if (!Number.isInteger(state.selectedButtonIndex)) { await i.reply({ content: 'Select a button first.', flags: 64 }); return true; } await i.showModal(panel.buttonModal(state, state.selectedButtonIndex)); return true; }
     if (customId === 'embed:button-remove-selected') { const buttons = [...(state.buttons || [])]; if (Number.isInteger(state.selectedButtonIndex)) buttons.splice(state.selectedButtonIndex, 1); panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: null }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
     if (customId === 'embed:button-move-up' || customId === 'embed:button-move-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedButtonIndex + delta; if (!Number.isInteger(state.selectedButtonIndex) || target < 0 || target >= (state.buttons || []).length) return true; const buttons = [...state.buttons]; [buttons[state.selectedButtonIndex], buttons[target]] = [buttons[target], buttons[state.selectedButtonIndex]]; panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: target }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
-    if (customId === 'embed:preset-save') { await i.showModal(panel.presetModal(state)); return true; }
-    if (customId === 'embed:preset-delete') {
-      const presetName = state.selectedPreset; if (!presetName) { await i.reply({ content: 'Select a preset first.', flags: 64 }); return true; }
-      const presets = typeof guildManager.getEmbedPresets === 'function' ? guildManager.getEmbedPresets(i.guild.id) || {} : {}; delete presets[presetName]; if (typeof guildManager.replaceGuildSection === 'function') guildManager.replaceGuildSection(i.guild.id, 'embedPresets', presets); panel.clearUnsaved(i, { ...state, selectedPreset: null }); await i.update(panel.buildPresetsPanel(i, name)); return true;
-    }
     if (customId === 'embed:update-existing') {
       const deployment = getEmbedDeployment(i.guild.id, getDeploymentKeyFromState(state));
       if (!deployment) { await i.reply({ content: '⚠️ No deployed embed found. Use the embed first.', flags: 64 }); return true; }
@@ -583,7 +1150,6 @@ async function handleLegacyInteraction(i) {
   }
 
   if (i.isModalSubmit?.()) {
-    if (customId === 'embed:preset-save-modal') { const presetName = i.fields.getTextInputValue('name').trim(); if (!presetName) { await i.reply({ content: 'Name required.', flags: 64 }); return true; } guildManager.saveEmbedPreset(i.guild.id, presetName, panel.presetData(state), i.guild); panel.clearUnsaved(i, { ...state, selectedPreset: presetName }); await i.reply({ ...panel.buildPresetsPanel(i, name), flags: 64 }); return true; }
     if (customId === 'embed:save-color') { const hex = i.fields.getTextInputValue('hex'); if (!panel.validHex(hex)) { await i.reply({ content: 'Invalid HEX.', flags: 64 }); return true; } panel.markUnsaved(i, panel.saveSelected(state, { color: panel.normHex(hex) })); await i.reply({ ...panel.buildEditorPanel(i, name), flags: 64 }); return true; }
     if (customId.startsWith('embed:save-content:')) { panel.markUnsaved(i, panel.saveSelected(state, { title: i.fields.getTextInputValue('title'), description: i.fields.getTextInputValue('description'), authorName: i.fields.getTextInputValue('authorName'), footer: i.fields.getTextInputValue('footer') })); await i.reply({ ...panel.buildBuilderPanel(i, name), flags: 64 }); return true; }
     if (customId.startsWith('embed:save-media:')) { panel.markUnsaved(i, panel.saveSelected(state, { authorIcon: i.fields.getTextInputValue('authorIcon'), thumbnail: i.fields.getTextInputValue('thumbnail'), image: i.fields.getTextInputValue('image'), authorUrl: i.fields.getTextInputValue('authorUrl'), footerIcon: i.fields.getTextInputValue('footerIcon') })); await i.reply({ ...panel.buildBuilderPanel(i, name), flags: 64 }); return true; }
@@ -616,6 +1182,10 @@ async function routeReadinessFix(interaction) {
 
 async function handleInteraction(interaction) {
   const customId = String(interaction.customId || '');
+
+  if (customId.startsWith('embed:preset-')) {
+  }
+
   if (await handlePresetInteraction(interaction)) return true;
   if (interaction.isStringSelectMenu?.() && customId === 'embed:builder-panel-select') { const state = panel.getSession(interaction); const index = Math.max(0, Math.min(Number(interaction.values?.[0]) || 0, Math.max(0, (state.panels?.length || 1) - 1))); panel.saveSession(interaction, { ...state, selectedPanelIndex: index, selectedFieldIndex: null }); await interaction.update(panel.buildBuilderPanel(interaction, panel.memberName(interaction))); return true; }
   if (interaction.isButton?.() && customId === 'embed:actions') { await interaction.update(panel.buildActionsPanel(interaction)); return true; }

@@ -114,7 +114,40 @@ function clearSession(interaction) { const key = sessionKey(interaction); hydrat
 function allowedMentions(state) { return state?.allowUserPing ? { parse: ['users', 'roles'] } : { parse: [] }; }
 function presetData(state) { return { template: state?.template || 'custom', panels: clone(state?.panels || []), allowUserPing: !!state?.allowUserPing, showTimestamp: state?.showTimestamp !== false, fieldLayout: state?.fieldLayout || 'auto' }; }
 function applyTemplate(interaction, name) { if (typeof basePanelFactory !== 'function') throw new Error('Embed state is not configured with a basePanel factory.'); const current = getSession(interaction); const nextPanel = basePanelFactory(name); return markUnsaved(interaction, stateSync({ ...current, template: name, selectedPanelIndex: 0, panels: [nextPanel], selectedPreset: null })); }
-function applyPreset(interaction, name, preset = {}) { if (typeof basePanelFactory !== 'function') throw new Error('Embed state is not configured with a basePanel factory.'); const current = getSession(interaction); const panels = Array.isArray(preset?.panels) && preset.panels.length ? clone(preset.panels) : [basePanelFactory('custom')]; return markUnsaved(interaction, stateSync({ ...current, template: preset?.template || 'custom', selectedPreset: name || null, panels, selectedPanelIndex: 0, allowUserPing: !!preset?.allowUserPing, showTimestamp: preset?.showTimestamp !== false, fieldLayout: preset?.fieldLayout || 'auto' })); }
+function applyPreset(interaction, name, preset = {}) {
+  if (typeof basePanelFactory !== 'function') {
+    throw new Error('Embed state is not configured with a basePanel factory.');
+  }
+
+  const current = getSession(interaction);
+
+  const panels =
+    Array.isArray(preset?.panels) && preset.panels.length
+      ? clone(preset.panels)
+      : [basePanelFactory('custom')];
+
+  /*
+   * Loading an existing saved preset establishes a clean editor
+   * baseline. The editor only becomes dirty after the user changes
+   * something after the load.
+   */
+  return saveSession(
+    interaction,
+    stateSync({
+      ...current,
+      template: preset?.template || 'custom',
+      selectedPreset: name || null,
+      panels,
+      selectedPanelIndex: 0,
+      selectedFieldIndex: null,
+      selectedButtonIndex: null,
+      allowUserPing: !!preset?.allowUserPing,
+      showTimestamp: preset?.showTimestamp !== false,
+      fieldLayout: preset?.fieldLayout || 'auto',
+      hasUnsavedChanges: false,
+    })
+  );
+}
 function setDefault(interaction, name) { const current = getSession(interaction); return saveSession(interaction, { ...current, selectedPreset: name || null }); }
 
 function bindPanel(panel, { defaultState, sync, basePanel } = {}) {

@@ -20,10 +20,11 @@ Locked aliases, in order:
 12. `steam`
 13. `tiktok`
 14. `twitch`
-15. `whatsapp`
-16. `x`
-17. `xbox`
-18. `youtube`
+15. `twitter`
+16. `whatsapp`
+17. `x`
+18. `xbox`
+19. `youtube`
 
 Preferred source filenames are `<alias>.png`, for example `youtube.png`. The startup matcher also accepts the existing descriptive platform filenames when the alias can be identified unambiguously.
 
