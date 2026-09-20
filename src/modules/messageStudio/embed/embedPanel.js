@@ -941,46 +941,431 @@ function buildButtonOptionsPanel(interaction) {
 function cleanPresetName(value) {
   return String(value || "").trim().slice(0, 50);
 }
+
+function getPresetManagerSummary(name, preset = {}, defaults = {}) {
+  const presetName = cleanPresetName(name || preset?.name || "");
+
+  /*
+   * panels[] is the canonical modern preset structure.
+   *
+   * The fallback exists only so the manager can still describe an older
+   * preset if one is encountered. It does not mutate or migrate storage.
+   */
+  const hasCanonicalPanels =
+    Array.isArray(preset?.panels) &&
+    preset.panels.length > 0;
+
+  const panels =
+    hasCanonicalPanels
+      ? preset.panels
+      : [preset || {}];
+
+  const template =
+    String(preset?.template || "custom");
+
+  let fieldCount = 0;
+  let buttonCount = 0;
+  let populatedPanels = 0;
+
+  for (const panelData of panels) {
+    const panelFields =
+      Array.isArray(panelData?.fields)
+        ? panelData.fields
+        : [];
+
+    const panelButtons =
+      Array.isArray(panelData?.buttons)
+        ? panelData.buttons
+        : [];
+
+    fieldCount += panelFields.length;
+    buttonCount += panelButtons.length;
+
+    const populated =
+      Boolean(
+        String(panelData?.title || "").trim() ||
+        String(panelData?.description || "").trim() ||
+        String(panelData?.authorName || "").trim() ||
+        String(panelData?.footer || "").trim() ||
+        String(panelData?.thumbnail || "").trim() ||
+        String(panelData?.image || "").trim() ||
+        panelFields.length ||
+        panelButtons.length
+      );
+
+    if (populated) populatedPanels += 1;
+  }
+
+  /*
+   * Media is stored separately from the embed panels.
+   * Count gallery items and attached files across all media panels.
+   */
+  const mediaState =
+    preset?.mediaV2 ||
+    preset?.media ||
+    {};
+
+  const mediaPanels =
+    Array.isArray(mediaState?.panels)
+      ? mediaState.panels
+      : [];
+
+  let galleryCount = 0;
+  let fileCount = 0;
+
+  for (const mediaPanel of mediaPanels) {
+    galleryCount +=
+      Array.isArray(mediaPanel?.gallery)
+        ? mediaPanel.gallery.length
+        : 0;
+
+    fileCount +=
+      Array.isArray(mediaPanel?.files)
+        ? mediaPanel.files.length
+        : 0;
+  }
+
+  const mediaCount =
+    galleryCount + fileCount;
+
+  const defaultForTemplate =
+    defaults?.[template] || null;
+
+  const isDefault =
+    Boolean(presetName) &&
+    defaultForTemplate === name;
+
+  const updatedAt =
+    preset?.updatedAt || null;
+
+  let updatedLabel = "Unknown";
+
+  if (updatedAt) {
+    const timestamp = Date.parse(updatedAt);
+
+    if (!Number.isNaN(timestamp)) {
+      updatedLabel =
+        `<t:${Math.floor(timestamp / 1000)}:R>`;
+    }
+  }
+
+  return {
+    name: presetName || String(name || ""),
+    template,
+    panelCount: panels.length,
+    populatedPanels,
+    fieldCount,
+    buttonCount,
+    galleryCount,
+    fileCount,
+    mediaCount,
+    hasCanonicalPanels,
+    format: hasCanonicalPanels ? "Modern" : "Legacy",
+    defaultForTemplate,
+    isDefault,
+    updatedAt,
+    updatedLabel,
+  };
+}
+
 function buildPresetsPanel(i, presets = null, defaultName = null) {
-  const s = getSession(i), rows = [];
+  const s = getSession(i);
   const guildId = i?.guildId || i?.guild?.id || null;
-  const resolvedPresets = presets && typeof presets === "object" && !Array.isArray(presets)
-    ? presets
-    : (guildId && typeof guildManager.getEmbedPresets === "function" ? guildManager.getEmbedPresets(guildId) || {} : {});
-  const resolvedDefault = defaultName != null
-    ? defaultName
-    : (guildId && typeof guildManager.getEmbedDefaults === "function"
-      ? (guildManager.getEmbedDefaults(guildId) || {})[s.template || "custom"] || null
-      : null);
-  const entries = Object.entries(resolvedPresets || {})
+
+  const allPresets =
+    presets && typeof presets === "object" && !Array.isArray(presets)
+      ? presets
+      : (
+          guildId && typeof guildManager.getEmbedPresets === "function"
+            ? guildManager.getEmbedPresets(guildId) || {}
+            : {}
+        );
+
+  /*
+   * auto-* presets are internal deployment snapshots.
+   * They must not appear as user-managed presets.
+   */
+  const visibleEntries = Object.entries(allPresets)
     .filter(([key]) => !String(key).startsWith("auto-"))
+    .sort(([a], [b]) =>
+      String(a).localeCompare(String(b), undefined, {
+        sensitivity: "base",
+      })
+    )
     .slice(0, 25);
-  if (entries.length) rows.push(new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("embed:preset-select")
-      .setPlaceholder("💾 Select preset")
-      .setMinValues(1)
-      .setMaxValues(1)
-      .addOptions(entries.map(([key, preset]) => ({
-        label: (cleanPresetName(preset?.name || key) || key).slice(0, 100),
-        value: key.slice(0, 100),
-        description: resolvedDefault === key ? "Default preset" : "Saved preset",
-        default: s.selectedPreset === key,
-      }))),
-  ));
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:preset-load").setLabel("📂 Load").setStyle(ButtonStyle.Primary).setDisabled(!s.selectedPreset),
-    new ButtonBuilder().setCustomId("embed:preset-save").setLabel("💾 Save Current").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("embed:preset-new").setLabel("➕ New").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("embed:preset-rename").setLabel("✏️ Rename").setStyle(ButtonStyle.Secondary).setDisabled(!s.selectedPreset),
-    new ButtonBuilder().setCustomId("embed:preset-duplicate").setLabel("📄 Duplicate").setStyle(ButtonStyle.Secondary).setDisabled(!s.selectedPreset),
-  ));
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:preset-delete").setLabel("🗑️ Delete").setStyle(ButtonStyle.Danger).setDisabled(!s.selectedPreset),
-    new ButtonBuilder().setCustomId("embed:preset-default").setLabel("⭐ Set Default").setStyle(ButtonStyle.Secondary).setDisabled(!s.selectedPreset),
-    new ButtonBuilder().setCustomId("embed:back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
-  ));
-  return { embeds: [simplePanel("💾 Embed Presets", `Saved presets: ${entries.length}.\nDefault: ${resolvedDefault || "None"}.`, s, memberName(i))], components: rows.slice(0, 5) };
+
+  const visiblePresets = Object.fromEntries(visibleEntries);
+
+  /*
+   * Recover cleanly if the selected preset was deleted elsewhere
+   * or no longer exists.
+   */
+  let selectedName =
+    s.selectedPreset && visiblePresets[s.selectedPreset]
+      ? s.selectedPreset
+      : null;
+
+  if (s.selectedPreset && !selectedName) {
+    saveSession(i, {
+      ...s,
+      selectedPreset: null,
+    });
+  }
+
+  const selectedPreset =
+    selectedName
+      ? visiblePresets[selectedName]
+      : null;
+
+  /*
+   * Defaults are template-specific.
+   */
+  const templateKey =
+    selectedPreset?.template ||
+    s.template ||
+    "custom";
+
+  const defaults =
+    guildId && typeof guildManager.getEmbedDefaults === "function"
+      ? guildManager.getEmbedDefaults(guildId) || {}
+      : {};
+
+  const resolvedDefault =
+    defaultName != null
+      ? defaultName
+      : defaults[templateKey] || null;
+
+  const isDefault =
+    Boolean(selectedName) &&
+    resolvedDefault === selectedName;
+
+  const rows = [];
+
+  /*
+   * Preset selector
+   */
+  if (visibleEntries.length) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("embed:preset-select")
+          .setPlaceholder(
+            selectedName
+              ? `Selected: ${cleanPresetName(selectedName)}`
+              : "💾 Select a saved preset"
+          )
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(
+            visibleEntries.map(([key, preset]) => {
+              const presetTemplate =
+                preset?.template ||
+                "custom";
+
+              const presetDefault =
+                (defaults[presetTemplate] || null) === key;
+
+              return {
+                label: `${presetDefault ? "⭐ " : ""}${cleanPresetName(
+                  preset?.name || key
+                ) || key}`.slice(0, 100),
+
+                value: key.slice(0, 100),
+
+                description: (
+                  presetDefault
+                    ? `Default • ${presetTemplate}`
+                    : `Saved preset • ${presetTemplate}`
+                ).slice(0, 100),
+
+                default: selectedName === key,
+              };
+            })
+          )
+      )
+    );
+  }
+
+  /*
+   * Primary actions
+   */
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("embed:preset-load")
+        .setLabel("📂 Load into Editor")
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(!selectedName),
+
+      new ButtonBuilder()
+        .setCustomId("embed:preset-save")
+        .setLabel(
+          selectedName
+            ? "💾 Update / Save"
+            : "💾 Save Current"
+        )
+        .setStyle(ButtonStyle.Success),
+
+      new ButtonBuilder()
+        .setCustomId("embed:preset-new")
+        .setLabel("➕ New Embed")
+        .setStyle(ButtonStyle.Secondary)
+    )
+  );
+
+  /*
+   * Management actions
+   */
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("embed:preset-rename")
+        .setLabel("✏️ Rename")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(!selectedName),
+
+      new ButtonBuilder()
+        .setCustomId("embed:preset-duplicate")
+        .setLabel("📄 Duplicate")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(!selectedName),
+
+      new ButtonBuilder()
+        .setCustomId("embed:preset-delete")
+        .setLabel("🗑️ Delete")
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(!selectedName),
+
+      new ButtonBuilder()
+        .setCustomId(
+          isDefault
+            ? "embed:preset-clear-default"
+            : "embed:preset-default"
+        )
+        .setLabel(
+          isDefault
+            ? "☆ Clear Default"
+            : "⭐ Set Default"
+        )
+        .setStyle(
+          isDefault
+            ? ButtonStyle.Success
+            : ButtonStyle.Secondary
+        )
+        .setDisabled(!selectedName)
+    )
+  );
+
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("embed:back")
+        .setLabel("⬅️ Back to Embed Studio")
+        .setStyle(ButtonStyle.Secondary)
+    )
+  );
+
+  /*
+   * Build real management information.
+   */
+  let description = "";
+
+  description +=
+    `### 💾 Preset Library\n` +
+    `**Saved presets:** ${visibleEntries.length}\n`;
+
+  if (!selectedPreset) {
+    description +=
+      `**Selected:** None\n\n` +
+      `Select a preset above to inspect and manage it.\n\n` +
+      `Selecting a preset **does not overwrite your editor**. ` +
+      `Use **Load into Editor** when you actually want to edit it.`;
+  } else {
+    const summary =
+      getPresetManagerSummary(
+        selectedName,
+        selectedPreset,
+        defaults
+      );
+
+    const updatedText =
+      summary.updatedAt
+        ? (() => {
+            const timestamp =
+              Date.parse(summary.updatedAt);
+
+            return Number.isNaN(timestamp)
+              ? "Unknown"
+              : `<t:${Math.floor(timestamp / 1000)}:F> • ${summary.updatedLabel}`;
+          })()
+        : "Unknown";
+
+    const status =
+      summary.isDefault
+        ? "⭐ Default preset"
+        : "Saved preset";
+
+    description +=
+      `**Selected:** ${summary.name}\n` +
+      `**Status:** ${status}\n` +
+      `**Template:** ${summary.template}\n` +
+      `**Format:** ${summary.format}\n` +
+      `**Updated:** ${updatedText}\n` +
+      `**Panels:** ${summary.panelCount}` +
+      (
+        summary.populatedPanels !== summary.panelCount
+          ? ` • ${summary.populatedPanels} populated`
+          : ""
+      ) +
+      `\n` +
+      `**Fields:** ${summary.fieldCount}\n` +
+      `**Buttons:** ${summary.buttonCount}\n` +
+      `**Media:** ${summary.mediaCount}` +
+      (
+        summary.mediaCount
+          ? ` • ${summary.galleryCount} gallery • ${summary.fileCount} files`
+          : ""
+      ) +
+      `\n\n`;
+
+    description +=
+      `### Management\n` +
+      `📂 **Load into Editor** — open this preset for editing.\n` +
+      `💾 **Update / Save** — save the current editor state.\n` +
+      `✏️ **Rename** — change this preset's name.\n` +
+      `📄 **Duplicate** — create an independent copy.\n` +
+      `🗑️ **Delete** — remove this saved preset.\n` +
+      `${isDefault ? "☆ **Clear Default**" : "⭐ **Set Default**"} — ` +
+      `${
+        isDefault
+          ? "stop using this as the template default."
+          : "make this the default for its template."
+      }`;
+  }
+
+  const managementEmbed = new EmbedBuilder()
+    .setColor(
+      isDefault
+        ? 0xF1C40F
+        : selectedPreset
+          ? 0x5865F2
+          : 0x2B2D31
+    )
+    .setTitle(
+      selectedPreset
+        ? `💾 Preset Manager • ${cleanPresetName(selectedName)}`
+        : "💾 Embed Preset Manager"
+    )
+    .setDescription(description.slice(0, 4096))
+    .setFooter({
+      text:
+        "Preset selection is safe: presets are only loaded when you press Load into Editor.",
+    });
+
+  return {
+    embeds: [managementEmbed],
+    components: rows.slice(0, 5),
+  };
 }
 function buildHelpersPanel(i) {
   const s = getSession(i);

@@ -706,7 +706,15 @@ module.exports = {
         return;
       }
       if (customId === 'admin:embed' || customId.startsWith('embed:')) {
-        if (!await callHandler(embedPanel, 'handleInteraction', interaction)) throw new Error(`Embed Studio did not handle ${customId}.`);
+
+        const handled = await callHandler(
+          embedPanel,
+          'handleInteraction',
+          interaction
+        );
+
+
+        if (!handled) throw new Error(`Embed Studio did not handle ${customId}.`);
         return;
       }
       if (customId === 'admin:social' || customId.startsWith('social:')) {

@@ -591,11 +591,22 @@ function saveEmbedPreset(guildId, presetName, presetData = {}, guildOrMeta = {})
 
 function deleteEmbedPreset(guildId, presetName, guildOrMeta = {}) {
   const name = sanitizeKey(presetName, 'Preset name');
-  const presets = getEmbedPresets(guildId);
-  if (!presets[name]) return false;
-  delete presets[name];
-  saveGuildSection(guildId, 'embedPresets', presets, guildOrMeta);
-  return true;
+
+  const updatedPresets = updateGuildSection(
+    guildId,
+    'embedPresets',
+    (presets) => {
+      if (!presets[name]) return presets;
+
+      const next = { ...presets };
+      delete next[name];
+      return next;
+    },
+    {},
+    guildOrMeta
+  );
+
+  return !Object.prototype.hasOwnProperty.call(updatedPresets, name);
 }
 
 function getEmbedDefaults(guildId) {
