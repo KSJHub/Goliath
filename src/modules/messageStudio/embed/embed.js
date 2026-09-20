@@ -14,6 +14,7 @@ const { installClassicSingleImagePayload } = require('./embedClassicSingleImage'
 const { installGraphicHeaders } = require('./embedGraphicHeaders');
 const { installImageAlignment, installInteraction: installImageAlignmentInteraction, applyAlignmentMap } = require('./embedImageAlignment');
 const { installAlignmentPreview } = require('./embedAlignmentPreview');
+const { installFinalImageAlignment } = require('./embedFinalImageAlignment');
 
 const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPanelMedia: media.setPanelMedia, mediaModel: media.mediaModel });
 function clone(value) { try { return JSON.parse(JSON.stringify(value)); } catch { return value; } }
@@ -97,6 +98,10 @@ installAlignmentSessionView(panel);
 installClassicSingleImagePayload(renderer);
 installImageAlignment(panel, renderer);
 installAlignmentDeliveryBridge(renderer, panel);
+// Last renderer wrapper: rebuild the outgoing attachment from Goliath's cached
+// source after all other media transforms. This makes the saved alignment the
+// final authority for Test, Use Embed and Update Existing.
+installFinalImageAlignment(renderer);
 const interactions = require('./embedInteractions');
 installImageAlignmentInteraction(panel, interactions);
 installAlignmentPreview(panel, interactions);
