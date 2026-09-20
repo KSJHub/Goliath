@@ -28,13 +28,11 @@ async function previewAttachment(source,alignment){
   return new AttachmentBuilder(output,{name:`embed-alignment-${alignment}-${Date.now()}.png`});
 }
 function embedTitle(embed){ return String(embed?.data?.title||embed?.title||''); }
-async function selectedContext(panel,interaction){ const state=panel.getSession(interaction); const panelIndex=Math.max(0,Number(state?.selectedPanelIndex)||0); const itemIndex=Number.isInteger(state?.selectedMediaIndex)?state.selectedMediaIndex:null; if(itemIndex==null)return {state,panelIndex,itemIndex,item:null,source:null,alignment:'left'}; const media=panel.getPanelMedia(state,panelIndex); const item=media?.gallery?.[itemIndex]||null; let source=String(item?.source||'').trim(); try{source=panel.replaceVars(source,interaction);}catch{} return {state,panelIndex,itemIndex,item,source,alignment:alignmentFor(state,panelIndex,itemIndex,item)}; }
+async function selectedContext(panel,interaction){ const state=panel.getSession(interaction); const panelIndex=Math.max(0,Number(state?.selectedPanelIndex)||0); const media=panel.getPanelMedia(state,panelIndex); let itemIndex=Number.isInteger(state?.selectedMediaIndex)?state.selectedMediaIndex:null; if(itemIndex==null && Array.isArray(media?.gallery) && media.gallery.length===1)itemIndex=0; if(itemIndex==null)return {state,panelIndex,itemIndex,item:null,source:null,alignment:'left'}; const item=media?.gallery?.[itemIndex]||null; let source=String(item?.source||'').trim(); try{source=panel.replaceVars(source,interaction);}catch{} return {state,panelIndex,itemIndex,item,source,alignment:alignmentFor(state,panelIndex,itemIndex,item)}; }
 async function attachPreview(panel,interaction,payload,ctx){
   if(!ctx.item?.source||ctx.item?.type==='video'||!safeUrl(ctx.source))return payload;
   try {
     const attachment=await previewAttachment(ctx.source,ctx.alignment); if(!attachment)return payload;
-    // Use the existing Media Options embed as the image host. This avoids creating
-    // a second description-only embed, which Discord renders as a tiny blank shell.
     const host=Array.isArray(payload?.embeds)?payload.embeds[0]:null;
     if(!host||typeof host.setImage!=='function')return payload;
     host.setImage(`attachment://${attachment.name}`);
@@ -44,10 +42,27 @@ async function attachPreview(panel,interaction,payload,ctx){
   } catch(error){ console.warn('[Embed Preview] Alignment preview failed:',error?.message||error); return payload; }
 }
 async function alignedManagerPayload(panel,interaction){ const payload=panel.buildMediaManagerPanel(interaction,panel.memberName(interaction)); const ctx=await selectedContext(panel,interaction); if(!ctx.item)return payload; const alignment=ctx.alignment; try { const attachment=await previewAttachment(ctx.source,alignment); if(!attachment)return payload; const preview=Array.isArray(payload?.embeds)?payload.embeds.find((embed)=>embedTitle(embed).includes('Selected Media Preview')):null; if(!preview||typeof preview.setImage!=='function')return payload; preview.setImage(`attachment://${attachment.name}`); preview.setTitle(`🖼️ Selected Media Preview • ${ctx.item.placement==='above'?'Above Content':'Below Content'} • ${alignment==='center'?'Centre':alignment[0].toUpperCase()+alignment.slice(1)}`); payload.files=[attachment]; payload.attachments=[]; return payload; } catch(error){ console.warn('[Embed Preview] Alignment preview failed:',error?.message||error); return payload; } }
+async function alignedBuilderPayload(panel,interaction){
+  const payload=panel.buildBuilderPanel(interaction,panel.memberName(interaction));
+  const ctx=await selectedContext(panel,interaction);
+  if(!ctx.item?.source||ctx.item?.type==='video'||String(ctx.item?.placement||'below').toLowerCase()==='above'||!safeUrl(ctx.source))return payload;
+  try{
+    const attachment=await previewAttachment(ctx.source,ctx.alignment); if(!attachment)return payload;
+    const previews=Array.isArray(payload?.embeds)?payload.embeds:[];
+    const host=previews.find((embed,index)=>index>0&&typeof embed?.setImage==='function'&&embed?.toJSON?.()?.image?.url) || previews.find((embed,index)=>index>0&&typeof embed?.setImage==='function');
+    if(!host)return payload;
+    host.setImage(`attachment://${attachment.name}`);
+    payload.files=[attachment];
+    payload.attachments=[];
+    return payload;
+  }catch(error){ console.warn('[Embed Preview] Builder alignment preview failed:',error?.message||error); return payload; }
+}
 function installAlignmentPreview(panel,interactions){ if(!panel||!interactions||interactions.__alignmentPreviewInstalled)return interactions; const original=interactions.handleInteraction.bind(interactions); interactions.handleInteraction=async(interaction)=>{ const customId=String(interaction?.customId||'');
     if(customId.startsWith('embed:media-align:')){ const alignment=customId.split(':').pop(); if(!VALID_ALIGNMENTS.has(alignment))return true; const ctx=await selectedContext(panel,interaction); if(ctx.itemIndex==null||!ctx.item)return original(interaction); const map={...(ctx.state?.mediaAlignment||{})}; map[key(ctx.panelIndex,ctx.itemIndex)]=alignment; panel.saveSession(interaction,{...ctx.state,mediaAlignment:map,hasUnsavedChanges:true}); const fresh=await selectedContext(panel,interaction); const payload=await attachPreview(panel,interaction,panel.buildMediaOptionsPanel(interaction),fresh); await interaction.update(payload); return true; }
     if(customId==='embed:media-options-back'||customId==='embed:edit-images'){ await interaction.update(await alignedManagerPayload(panel,interaction)); return true; }
     if(customId==='embed:media-gallery-select'&&interaction.isStringSelectMenu?.()){ const state=panel.getSession(interaction); panel.saveSession(interaction,{...state,selectedMediaIndex:Math.max(0,Number(interaction.values?.[0])||0)}); await interaction.update(await alignedManagerPayload(panel,interaction)); return true; }
+    if(customId==='embed:builder'){ await interaction.update(await alignedBuilderPayload(panel,interaction)); return true; }
+    if(customId==='embed:builder-panel-select'&&interaction.isStringSelectMenu?.()){ const state=panel.getSession(interaction); const index=Math.max(0,Math.min(Number(interaction.values?.[0])||0,Math.max(0,(state.panels?.length||1)-1))); panel.saveSession(interaction,{...state,selectedPanelIndex:index,selectedFieldIndex:null}); await interaction.update(await alignedBuilderPayload(panel,interaction)); return true; }
     return original(interaction); };
   interactions.__alignmentPreviewInstalled=true; return interactions; }
 module.exports={installAlignmentPreview};
