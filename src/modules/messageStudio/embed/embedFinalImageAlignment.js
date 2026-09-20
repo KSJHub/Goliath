@@ -16,11 +16,20 @@ function panelIndex(file, fallback) {
   const match = nameOf(file, fallback).match(/^embed-panel-(\d+)\.png$/i);
   return match ? Math.max(0, Number(match[1]) - 1) : fallback;
 }
-function alignmentOf(item) {
-  const value = String(item?.alignment || 'left').toLowerCase();
-  return VALID.has(value) ? value : 'left';
+function normalizeAlignment(value, fallback = 'left') {
+  const normalized = String(value || '').toLowerCase();
+  return VALID.has(normalized) ? normalized : fallback;
 }
-async function alignedAttachment(item, name) {
+function alignmentForPanel(item, alignmentState, index) {
+  // Media Options persists alignment separately from the gallery item. Final
+  // delivery must treat that saved map as authoritative, otherwise the old
+  // item/default value silently forces the posted attachment back to left.
+  const mapped = alignmentState && typeof alignmentState === 'object'
+    ? (alignmentState[index] ?? alignmentState[String(index)] ?? alignmentState[index + 1] ?? alignmentState[String(index + 1)])
+    : null;
+  return normalizeAlignment(mapped, normalizeAlignment(item?.alignment, 'left'));
+}
+async function alignedAttachment(item, name, alignment) {
   const cached = await mediaStore.ensureAssetCached('global', String(item.source || ''));
   if (!cached?.buffer) return null;
   const trimmed = await sharp(cached.buffer, { failOn: 'warning' })
@@ -33,10 +42,10 @@ async function alignedAttachment(item, name) {
   const meta = await sharp(visible).metadata();
   const width = Number(meta.width || VISIBLE_WIDTH);
   const height = Number(meta.height || VISIBLE_WIDTH);
-  const alignment = alignmentOf(item);
-  const left = alignment === 'right'
+  const resolvedAlignment = normalizeAlignment(alignment, 'left');
+  const left = resolvedAlignment === 'right'
     ? Math.max(0, CANVAS_WIDTH - width)
-    : alignment === 'center'
+    : resolvedAlignment === 'center'
       ? Math.max(0, Math.floor((CANVAS_WIDTH - width) / 2))
       : 0;
   const output = await sharp({ create: { width: CANVAS_WIDTH, height, channels: 4, background: PANEL_BG } })
@@ -50,13 +59,15 @@ function installFinalImageAlignment(renderer) {
   renderer.buildEmbedPayload = async (options = {}) => {
     const payload = await original(options);
     const media = options.media || options.mediaV2 || {};
+    const alignmentState = options.mediaAlignment || {};
     if (!Array.isArray(payload?.files) || !payload.files.length) return payload;
     payload.files = await Promise.all(payload.files.map(async (file, fallback) => {
       const index = panelIndex(file, fallback);
       const item = media?.panels?.[index]?.gallery?.[0];
       if (!item?.source || item?.type === 'video' || item?.spoiler === true || String(item?.placement || 'below').toLowerCase() === 'above') return file;
       try {
-        return await alignedAttachment(item, nameOf(file, fallback)) || file;
+        const alignment = alignmentForPanel(item, alignmentState, index);
+        return await alignedAttachment(item, nameOf(file, fallback), alignment) || file;
       } catch (error) {
         console.warn(`[Embed Renderer] Final alignment enforcement failed for panel ${index + 1}:`, error?.message || error);
         return file;
