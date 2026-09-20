@@ -20,12 +20,17 @@ function normalizeAlignment(value, fallback = 'left') {
   const normalized = String(value || '').toLowerCase();
   return VALID.has(normalized) ? normalized : fallback;
 }
-function alignmentForPanel(item, alignmentState, index) {
-  // Media Options persists alignment separately from the gallery item. Final
-  // delivery must treat that saved map as authoritative, otherwise the old
-  // item/default value silently forces the posted attachment back to left.
+function alignmentForItem(item, alignmentState, panelIndex, itemIndex = 0) {
+  // Alignment is persisted by embedImageAlignment as "panelIndex:itemIndex"
+  // (for example panel 1 / gallery item 1 is key "0:0"). Read that exact
+  // canonical key first. Older panel-only keys remain as compatibility fallbacks.
+  const key = `${Math.max(0, Number(panelIndex) || 0)}:${Math.max(0, Number(itemIndex) || 0)}`;
   const mapped = alignmentState && typeof alignmentState === 'object'
-    ? (alignmentState[index] ?? alignmentState[String(index)] ?? alignmentState[index + 1] ?? alignmentState[String(index + 1)])
+    ? (alignmentState[key]
+      ?? alignmentState[panelIndex]
+      ?? alignmentState[String(panelIndex)]
+      ?? alignmentState[panelIndex + 1]
+      ?? alignmentState[String(panelIndex + 1)])
     : null;
   return normalizeAlignment(mapped, normalizeAlignment(item?.alignment, 'left'));
 }
@@ -66,7 +71,7 @@ function installFinalImageAlignment(renderer) {
       const item = media?.panels?.[index]?.gallery?.[0];
       if (!item?.source || item?.type === 'video' || item?.spoiler === true || String(item?.placement || 'below').toLowerCase() === 'above') return file;
       try {
-        const alignment = alignmentForPanel(item, alignmentState, index);
+        const alignment = alignmentForItem(item, alignmentState, index, 0);
         return await alignedAttachment(item, nameOf(file, fallback), alignment) || file;
       } catch (error) {
         console.warn(`[Embed Renderer] Final alignment enforcement failed for panel ${index + 1}:`, error?.message || error);
