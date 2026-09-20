@@ -569,10 +569,10 @@ function mainEmbed(s, who, dashboard = {}) {
       ? report.warnings
       : [];
 
-  const preset =
+  const presetLine =
     s.selectedPreset
-      ? `💾 ${s.selectedPreset}`
-      : "None loaded";
+      ? `**Preset**　💾 ${s.selectedPreset}`
+      : null;
 
   const destination =
     s.channelId
@@ -591,7 +591,7 @@ function mainEmbed(s, who, dashboard = {}) {
       ? warnings.length
         ? `🟡 Ready • ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
         : "🟢 Ready"
-      : `🔴 Needs attention • ${errors.length || 1} issue${(errors.length || 1) === 1 ? "" : "s"}`;
+      : `🔴 ${errors.length || 1} issue${(errors.length || 1) === 1 ? "" : "s"} to resolve`;
 
   const deploymentState =
     deployment?.messageId && deployment?.channelId
@@ -648,12 +648,12 @@ function mainEmbed(s, who, dashboard = {}) {
       "",
       "### 🗂️ Workspace",
       `**Template**　${template.emoji} ${template.label}`,
-      `**Preset**　${preset}`,
+      ...(presetLine ? [presetLine] : []),
       `**Channel**　${destination}`,
       `**Status**　${saveState}`,
       "",
       "### 🧩 Content",
-      `**Panels**　${panels.length}/${MAX_PANELS}　•　**Selected**　${selectedIndex + 1}/${panels.length}`,
+      `**Panels**　${panels.length}/${MAX_PANELS}　•　**Active**　${selectedIndex + 1}/${panels.length}`,
       `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
       "",
       "### 🚦 Publish Status",
