@@ -287,11 +287,19 @@ async function buildEmbedPayload(options = {}) {
     const embed = resolvedEmbeds[index];
     const data = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed;
     if (!data || typeof data !== 'object') continue;
+    const hasPanelMediaState =
+      Array.isArray(mediaState?.panels) &&
+      index < mediaState.panels.length;
     const media = panelMedia(mediaState, index);
     const container = new ContainerBuilder();
     if (Number.isInteger(data.color)) container.setAccentColor(data.color);
     const text = panelText(data);
-    const thumbSource = resolveSource(media?.thumbnail?.source || data.thumbnail?.url, interaction);
+    const thumbSource = resolveSource(
+      hasPanelMediaState
+        ? media?.thumbnail?.source
+        : data.thumbnail?.url,
+      interaction
+    );
     if (thumbSource) await probeRemoteSource(thumbSource, 'thumbnail');
     const enhanced = isEnhancedMedia(media);
     const aboveItems = enhanced ? await galleryItems(media, interaction, 'above') : [];
@@ -305,7 +313,12 @@ async function buildEmbedPayload(options = {}) {
       const belowItems = await galleryItems(media, interaction, 'below');
       if (belowItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...belowItems));
     } else {
-      const imageUrl = resolveSource(media?.gallery?.[0]?.source || data.image?.url, interaction);
+      const imageUrl = resolveSource(
+        hasPanelMediaState
+          ? media?.gallery?.[0]?.source
+          : data.image?.url,
+        interaction
+      );
       if (isHttpsUrl(imageUrl)) {
         try { await addLegacyImage(container, imageUrl, files, index); }
         catch (error) { throw new Error(`Panel ${index + 1} image could not be prepared: ${error?.message || error}`); }
