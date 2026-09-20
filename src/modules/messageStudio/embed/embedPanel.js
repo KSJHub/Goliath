@@ -861,11 +861,9 @@ function buildBuilderPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("embed:fields").setLabel(`📋 Fields (${(s.fields || []).length})`).setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId("embed:buttons").setLabel(`🔘 Buttons (${(s.buttons || []).length})`).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:update-existing").setLabel("♻️ Update Existing").setStyle(ButtonStyle.Secondary),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:readiness").setLabel("✅ Review").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("embed:test-send").setLabel("🧪 Test").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:readiness").setLabel("✅ Review Readiness").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId("embed:toggle-timestamp").setLabel(s.showTimestamp ? "🕒 Timestamp ON" : "🕒 Timestamp OFF").setStyle(s.showTimestamp ? ButtonStyle.Success : ButtonStyle.Secondary),
       ),
       new ActionRowBuilder().addComponents(
@@ -1718,15 +1716,20 @@ function buildReadinessPanel(interaction) {
     : new ButtonBuilder().setCustomId("embed:readiness-fix").setLabel(fix.label).setStyle(ButtonStyle.Primary);
   const row1 = new ActionRowBuilder().addComponents(
     first,
-    new ButtonBuilder().setCustomId("embed:use").setLabel("✅ Use Embed").setStyle(ButtonStyle.Success).setDisabled(!report.ready),
+
+    new ButtonBuilder()
+      .setCustomId("embed:builder")
+      .setLabel("Back to Builder")
+      .setEmoji("🛠️")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("embed:back")
+      .setLabel("Embed Studio")
+      .setEmoji("⬅️")
+      .setStyle(ButtonStyle.Secondary)
   );
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:update-existing").setLabel("♻️ Update Existing").setStyle(ButtonStyle.Secondary).setDisabled(!report.ready),
-    new ButtonBuilder().setCustomId("embed:test-send").setLabel("🧪 Test").setStyle(ButtonStyle.Secondary).setDisabled(!report.ready),
-  );
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
-  );
+
   return {
     embeds: [
       new EmbedBuilder()
@@ -1736,7 +1739,7 @@ function buildReadinessPanel(interaction) {
         .setFooter({ text: `Requested by ${memberName(interaction)}` })
         .setTimestamp(),
     ],
-    components: [row1, row2, row3],
+    components: [row1],
   };
 }
 function modal(id, title, inputs) {
