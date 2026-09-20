@@ -572,12 +572,12 @@ function mainEmbed(s, who, dashboard = {}) {
   const preset =
     s.selectedPreset
       ? `💾 ${s.selectedPreset}`
-      : "— None loaded";
+      : "None loaded";
 
   const destination =
     s.channelId
       ? `<#${s.channelId}>`
-      : "⚠️ Not selected";
+      : "Not selected";
 
   const saveState =
     s.hasUnsavedChanges
@@ -589,13 +589,13 @@ function mainEmbed(s, who, dashboard = {}) {
   const readinessState =
     report.ready
       ? warnings.length
-        ? `🟡 Ready with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
-        : "🟢 Ready to deploy"
-      : `🔴 ${errors.length || 1} issue${(errors.length || 1) === 1 ? "" : "s"} to fix`;
+        ? `🟡 Ready • ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
+        : "🟢 Ready"
+      : `🔴 Needs attention • ${errors.length || 1} issue${(errors.length || 1) === 1 ? "" : "s"}`;
 
   const deploymentState =
     deployment?.messageId && deployment?.channelId
-      ? `🟢 Live in <#${deployment.channelId}>`
+      ? `🟢 Live • <#${deployment.channelId}>`
       : "⚪ Not deployed";
 
   const timestamp =
@@ -606,7 +606,7 @@ function mainEmbed(s, who, dashboard = {}) {
   const mentions =
     s.allowUserPing
       ? "Enabled"
-      : "Safe / disabled";
+      : "Safe";
 
   const panelName =
     trim(
@@ -620,16 +620,16 @@ function mainEmbed(s, who, dashboard = {}) {
 
   if (!s.channelId) {
     nextAction =
-      "Select a **destination channel** to continue.";
+      "Choose a destination channel.";
   } else if (!report.ready) {
     nextAction =
-      "Open **Review** to see what must be fixed before deployment.";
+      "Review readiness and resolve the remaining issues.";
   } else if (deployment) {
     nextAction =
-      "This workspace is already deployed. Use **Update Existing** to publish your latest changes.";
+      "Review the preview, then update the existing deployment.";
   } else {
     nextAction =
-      "Everything is ready. Use **Deploy New** when you are happy with the preview.";
+      "Review the preview, then deploy when ready.";
   }
 
   return new EmbedBuilder()
@@ -644,32 +644,31 @@ function mainEmbed(s, who, dashboard = {}) {
     )
     .setTitle("💎 Embed Studio")
     .setDescription([
-      "**Create, manage and deploy professional Discord embeds.**",
+      "Create, manage and deploy Discord embeds from one workspace.",
       "",
-      "### 📋 Current Workspace",
-      `> **Template**　${template.emoji} ${template.label}`,
-      `> **Preset**　${preset}`,
-      `> **Destination**　${destination}`,
-      `> **Save State**　${saveState}`,
+      "### 🗂️ Workspace",
+      `**Template**　${template.emoji} ${template.label}`,
+      `**Preset**　${preset}`,
+      `**Channel**　${destination}`,
+      `**Status**　${saveState}`,
       "",
-      "### 🧩 Embed Structure",
-      `> **Panels**　${panels.length}/${MAX_PANELS}`,
-      `> **Selected**　${selectedIndex + 1}/${panels.length} — ${panelName}`,
-      `> **Fields**　${fields.length}/${MAX_EMBED_FIELDS}`,
-      `> **Buttons**　${buttons.length}/${MAX_BUTTONS}`,
+      "### 🧩 Content",
+      `**Panels**　${panels.length}/${MAX_PANELS}　•　**Selected**　${selectedIndex + 1}/${panels.length}`,
+      `**Panel**　${panelName}`,
+      `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
       "",
-      "### 🚦 Readiness & Deployment",
-      `> **Readiness**　${readinessState}`,
-      `> **Deployment**　${deploymentState}`,
+      "### 🚦 Publish Status",
+      `**Readiness**　${readinessState}`,
+      `**Deployment**　${deploymentState}`,
       "",
       "### ⚙️ Delivery",
-      `> **Mentions**　${mentions}`,
-      `> **Timestamp**　${timestamp}`,
+      `**Mentions**　${mentions}　•　**Timestamp**　${timestamp}`,
       "",
-      `**Next step:** ${nextAction}`,
+      `### ➜ Next`,
+      nextAction,
     ].join("\n"))
     .setFooter({
-      text: `Embed Studio • Requested by ${who}`,
+      text: `Embed Studio • ${who}`,
     })
     .setTimestamp();
 }
@@ -723,7 +722,7 @@ function buildEditorPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("embed:template")
-          .setPlaceholder("🎨 Select embed template")
+          .setPlaceholder("🎨 Choose template")
           .setMinValues(1)
           .setMaxValues(1)
           .addOptions(
@@ -750,8 +749,8 @@ function buildEditorPanel(i, who = "Unknown User") {
           .setCustomId("embed:channel")
           .setPlaceholder(
             s.channelId
-              ? "📢 Change destination channel"
-              : "📢 Select destination channel"
+              ? "📢 Change destination"
+              : "📢 Choose destination"
           )
           .setMinValues(1)
           .setMaxValues(1)
@@ -767,13 +766,13 @@ function buildEditorPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("embed:builder")
-          .setLabel("Open Builder")
+          .setLabel("Builder")
           .setEmoji("🛠️")
           .setStyle(ButtonStyle.Primary),
 
         new ButtonBuilder()
           .setCustomId("embed:presets")
-          .setLabel("Preset Manager")
+          .setLabel("Presets")
           .setEmoji("💾")
           .setStyle(ButtonStyle.Primary),
 
@@ -808,7 +807,7 @@ function buildEditorPanel(i, who = "Unknown User") {
 
         new ButtonBuilder()
           .setCustomId("embed:test-send")
-          .setLabel("Test")
+          .setLabel("Test Send")
           .setEmoji("🧪")
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(!report.ready),
@@ -827,7 +826,7 @@ function buildEditorPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("admin:modules")
-          .setLabel("Back")
+          .setLabel("Modules")
           .setEmoji("⬅️")
           .setStyle(ButtonStyle.Secondary)
       ),
