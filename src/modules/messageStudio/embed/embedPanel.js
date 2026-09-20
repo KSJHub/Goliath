@@ -838,40 +838,232 @@ function simplePanel(title, desc, state, who) {
 }
 function buildBuilderPanel(i, who = "Unknown User") {
   const s = getSession(i);
-  const panels = Array.isArray(s.panels) && s.panels.length ? s.panels : [{}];
+
+  const panels =
+    Array.isArray(s.panels) && s.panels.length
+      ? s.panels
+      : [{}];
+
+  const selectedIndex = Math.max(
+    0,
+    Math.min(
+      Number(s.selectedPanelIndex || 0),
+      panels.length - 1
+    )
+  );
+
+  const selected = panels[selectedIndex] || {};
+
+  const fields =
+    Array.isArray(selected.fields)
+      ? selected.fields
+      : Array.isArray(s.fields)
+        ? s.fields
+        : [];
+
+  const buttons =
+    Array.isArray(selected.buttons)
+      ? selected.buttons
+      : Array.isArray(s.buttons)
+        ? s.buttons
+        : [];
+
+  const panelName = trim(
+    selected.title ||
+    selected.authorName ||
+    `Panel ${selectedIndex + 1}`,
+    80
+  );
+
+  const saveState =
+    s.hasUnsavedChanges
+      ? "🟠 Unsaved changes"
+      : "🟢 Saved";
+
+  const timestamp =
+    s.showTimestamp
+      ? "🟢 On"
+      : "⚪ Off";
+
+  const dashboard =
+    getFrontDashboardState(i, s);
+
+  const report =
+    dashboard.report;
+
+  const readiness =
+    report.ready
+      ? "🟢 Ready"
+      : "🟠 Review required";
+
+  const summary = [
+    "Build and refine the selected content panel.",
+    "",
+    "### 🧩 Current Panel",
+    `**Panel**　${selectedIndex + 1}/${panels.length}　•　${panelName}`,
+    `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
+    `**Status**　${saveState}`,
+    "",
+    "### ⚙️ Options",
+    `**Timestamp**　${timestamp}`,
+    `**Readiness**　${readiness}`,
+    "",
+    "### ➜ Next",
+    report.ready
+      ? "Review the finished embed, then return to Embed Studio when you're ready to publish."
+      : "Finish editing, then run the readiness review before publishing.",
+  ].join("\n");
+
   return {
-    embeds: [simplePanel("🛠️ Embed Builder", `Editing panel **${s.selectedPanelIndex + 1}/${s.panels.length}**.`, s, who), ...buildStudioPreviewEmbeds(s, i)],
+    embeds: [
+      simplePanel(
+        "🛠️ Embed Builder",
+        summary,
+        s,
+        who
+      ),
+      ...buildStudioPreviewEmbeds(s, i),
+    ],
+
     components: [
+      /*
+       * PANEL SELECTOR
+       */
       new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId("embed:builder-panel-select").setPlaceholder("🧩 Select content panel").setMinValues(1).setMaxValues(1).addOptions(panels.slice(0, 25).map((entry, index) => ({
-          label: `${index + 1}. ${trim(entry?.title || entry?.authorName || "Content Panel", 80)}`,
-          value: String(index),
-          description: trim(entry?.description || entry?.color || "Content panel", 100),
-          default: Number(s.selectedPanelIndex || 0) === index,
-        }))),
+        new StringSelectMenuBuilder()
+          .setCustomId("embed:builder-panel-select")
+          .setPlaceholder("🧩 Select content panel")
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(
+            panels.slice(0, 25).map((entry, index) => ({
+              label: `${index + 1}. ${trim(
+                entry?.title ||
+                entry?.authorName ||
+                "Content Panel",
+                80
+              )}`,
+              value: String(index),
+              description: trim(
+                entry?.description ||
+                entry?.color ||
+                "Content panel",
+                100
+              ),
+              default: selectedIndex === index,
+            }))
+          )
       ),
+
+      /*
+       * CONTENT
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:edit-content").setLabel("✏️ Content").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:panels").setLabel(`🧩 Panels (${s.panels?.length || 1})`).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:edit-media").setLabel("🎨 Appearance").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:edit-images").setLabel("🖼️ Media").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("embed:edit-content")
+          .setLabel("Content")
+          .setEmoji("✏️")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:panels")
+          .setLabel(`Panels (${panels.length})`)
+          .setEmoji("🧩")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:fields")
+          .setLabel(`Fields (${fields.length})`)
+          .setEmoji("📋")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:buttons")
+          .setLabel(`Buttons (${buttons.length})`)
+          .setEmoji("🔘")
+          .setStyle(ButtonStyle.Primary)
       ),
+
+      /*
+       * PRESENTATION
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:fields").setLabel(`📋 Fields (${(s.fields || []).length})`).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:buttons").setLabel(`🔘 Buttons (${(s.buttons || []).length})`).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("embed:edit-media")
+          .setLabel("Appearance")
+          .setEmoji("🎨")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:edit-images")
+          .setLabel("Media")
+          .setEmoji("🖼️")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("Variables")
+          .setEmoji("📖")
+          .setStyle(ButtonStyle.Secondary)
       ),
+
+      /*
+       * REVIEW
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:readiness").setLabel("✅ Review Readiness").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("embed:toggle-timestamp").setLabel(s.showTimestamp ? "🕒 Timestamp ON" : "🕒 Timestamp OFF").setStyle(s.showTimestamp ? ButtonStyle.Success : ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:readiness")
+          .setLabel(
+            report.ready
+              ? "Ready"
+              : "Review Readiness"
+          )
+          .setEmoji(
+            report.ready
+              ? "✅"
+              : "⚠️"
+          )
+          .setStyle(
+            report.ready
+              ? ButtonStyle.Success
+              : ButtonStyle.Secondary
+          ),
+
+        new ButtonBuilder()
+          .setCustomId("embed:toggle-timestamp")
+          .setLabel(
+            s.showTimestamp
+              ? "Timestamp ON"
+              : "Timestamp OFF"
+          )
+          .setEmoji("🕒")
+          .setStyle(
+            s.showTimestamp
+              ? ButtonStyle.Success
+              : ButtonStyle.Secondary
+          )
       ),
+
+      /*
+       * NAVIGATION
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:helpers").setLabel("📖 Variables").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:reset").setLabel("♻️ Reset").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId("embed:back")
+          .setLabel("Embed Studio")
+          .setEmoji("⬅️")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:reset")
+          .setLabel("Reset")
+          .setEmoji("♻️")
+          .setStyle(ButtonStyle.Danger)
       ),
     ],
   };
 }
+
 function buildPanelsPanel(i, who) {
   const s = getSession(i);
   return {
@@ -1706,40 +1898,111 @@ function getReadinessFixTargetCanonical(report) {
 }
 function buildReadinessPanel(interaction) {
   const state = getSession(interaction);
-  const { buildReadinessModel } = require("./embedValidation");
-  const model = buildReadinessModel(interaction, state, readinessOptions());
+
+  const { buildReadinessModel } =
+    require("./embedValidation");
+
+  const model =
+    buildReadinessModel(
+      interaction,
+      state,
+      readinessOptions()
+    );
+
   const { report, fix, lines } = model;
-  const first = report.ready
-    ? new ButtonBuilder().setCustomId("embed:readiness-refresh").setLabel("🔄 Recheck").setStyle(ButtonStyle.Secondary)
-    : new ButtonBuilder().setCustomId("embed:readiness-fix").setLabel(fix.label).setStyle(ButtonStyle.Primary);
-  const row1 = new ActionRowBuilder().addComponents(
-    first,
 
-    new ButtonBuilder()
-      .setCustomId("embed:builder")
-      .setLabel("Back to Builder")
-      .setEmoji("🛠️")
-      .setStyle(ButtonStyle.Secondary),
+  const panels =
+    Array.isArray(state.panels) && state.panels.length
+      ? state.panels
+      : [{}];
 
-    new ButtonBuilder()
-      .setCustomId("embed:back")
-      .setLabel("Embed Studio")
-      .setEmoji("⬅️")
-      .setStyle(ButtonStyle.Secondary)
-  );
+  const destination =
+    state.channelId
+      ? `<#${state.channelId}>`
+      : "⚪ Not selected";
+
+  const status =
+    report.ready
+      ? (
+          report.warnings.length
+            ? "🟡 Ready with warnings"
+            : "🟢 Ready to publish"
+        )
+      : "🔴 Action required";
+
+  const description = [
+    "Final validation before returning to Embed Studio for publishing.",
+    "",
+    "### 🚦 Publish Status",
+    `**Status**　${status}`,
+    `**Destination**　${destination}`,
+    `**Panels**　${panels.length}/${MAX_PANELS}`,
+    "",
+    "### 🔎 Validation",
+    ...lines,
+    "",
+    "### ➜ Next",
+    report.ready
+      ? "Everything required has passed. Return to Embed Studio to test or publish the embed."
+      : "Resolve the highlighted requirement, then recheck readiness.",
+  ].join("\n").slice(0, 4096);
+
+  const primary =
+    report.ready
+      ? new ButtonBuilder()
+          .setCustomId("embed:readiness-refresh")
+          .setLabel("Recheck")
+          .setEmoji("🔄")
+          .setStyle(ButtonStyle.Secondary)
+      : new ButtonBuilder()
+          .setCustomId("embed:readiness-fix")
+          .setLabel(fix.label)
+          .setStyle(ButtonStyle.Primary);
 
   return {
     embeds: [
       new EmbedBuilder()
-        .setColor(report.ready ? (report.warnings.length ? 0xFEE75C : 0x57F287) : 0xED4245)
+        .setColor(
+          report.ready
+            ? (
+                report.warnings.length
+                  ? 0xFEE75C
+                  : 0x57F287
+              )
+            : 0xED4245
+        )
         .setTitle("✅ Embed Readiness")
-        .setDescription(lines.join("\n").slice(0, 4096))
-        .setFooter({ text: `Requested by ${memberName(interaction)}` })
+        .setDescription(description)
+        .setFooter({
+          text: `Requested by ${memberName(interaction)}`
+        })
         .setTimestamp(),
     ],
-    components: [row1],
+
+    components: [
+      new ActionRowBuilder().addComponents(
+        primary,
+
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("Builder")
+          .setEmoji("🛠️")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:back")
+          .setLabel("Embed Studio")
+          .setEmoji("⬅️")
+          .setStyle(
+            report.ready
+              ? ButtonStyle.Success
+              : ButtonStyle.Secondary
+          )
+      ),
+    ],
   };
 }
+
 function modal(id, title, inputs) {
   return new ModalBuilder().setCustomId(id).setTitle(title).addComponents(...inputs.map((input) => new ActionRowBuilder().addComponents(input)));
 }
