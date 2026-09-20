@@ -309,15 +309,13 @@ async function handlePresetInteraction(i) {
       return true;
     }
 
+    /*
+     * applyPreset() establishes the selected saved preset as the
+     * editor's clean baseline. Media/alignment compatibility wrappers
+     * may normalize and re-save that state, but loading itself must
+     * never make the editor dirty.
+     */
     panel.applyPreset(i, name, preset);
-
-    const loadedState =
-      panel.getSession(i);
-
-    panel.clearUnsaved(i, {
-      ...loadedState,
-      selectedPreset: name,
-    });
 
     await i.update(
       panel.buildEditorPanel(
