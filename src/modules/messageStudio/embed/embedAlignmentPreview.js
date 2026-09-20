@@ -7,6 +7,7 @@ const sharp = require('sharp');
 
 const CANVAS_WIDTH = 600;
 const VISIBLE_WIDTH = 320;
+const PREVIEW_MAX_HEIGHT = 220;
 const PANEL_BG = { r: 19, g: 20, b: 22, alpha: 1 };
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
@@ -17,7 +18,15 @@ function isPrivateIpv6(hostname) { const h=hostname.toLowerCase(); return h===':
 function safeUrl(value) { try { const url=new URL(String(value||'')); const host=url.hostname.toLowerCase(); const version=net.isIP(host); if(url.protocol!=='https:'||!host||host==='localhost'||host.endsWith('.localhost')) return null; if((version===4&&isPrivateIpv4(host))||(version===6&&isPrivateIpv6(host))) return null; return url.toString(); } catch { return null; } }
 async function fetchImage(url) { const target=safeUrl(url); if(!target)return null; const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),FETCH_TIMEOUT_MS); timer.unref?.(); try { const response=await fetch(target,{signal:controller.signal,redirect:'error'}); if(!response.ok)return null; const type=String(response.headers.get('content-type')||'').toLowerCase(); if(type&&!type.startsWith('image/'))return null; const declared=Number(response.headers.get('content-length')||0); if(declared>MAX_SOURCE_BYTES)return null; const buffer=await response.buffer(); return buffer.length<=MAX_SOURCE_BYTES?buffer:null; } finally { clearTimeout(timer); } }
 function alignmentFor(state,panelIndex,itemIndex,item){ const value=String(state?.mediaAlignment?.[key(panelIndex,itemIndex)]||item?.alignment||'left').toLowerCase(); return VALID_ALIGNMENTS.has(value)?value:'left'; }
-async function previewAttachment(source,alignment){ const input=await fetchImage(source); if(!input)return null; const trimmed=await sharp(input,{failOn:'warning'}).ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer(); const visible=await sharp(trimmed,{failOn:'warning'}).resize({width:VISIBLE_WIDTH,height:VISIBLE_WIDTH,fit:'inside',withoutEnlargement:false}).ensureAlpha().png().toBuffer(); const meta=await sharp(visible).metadata(); const width=Number(meta.width||VISIBLE_WIDTH),height=Number(meta.height||VISIBLE_WIDTH); const left=alignment==='right'?Math.max(0,CANVAS_WIDTH-width):alignment==='center'?Math.max(0,Math.floor((CANVAS_WIDTH-width)/2)):0; const output=await sharp({create:{width:CANVAS_WIDTH,height,channels:4,background:PANEL_BG}}).composite([{input:visible,left,top:0}]).png().toBuffer(); return new AttachmentBuilder(output,{name:`embed-alignment-${alignment}-${Date.now()}.png`}); }
+async function previewAttachment(source,alignment){
+  const input=await fetchImage(source); if(!input)return null;
+  const trimmed=await sharp(input,{failOn:'warning'}).ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer();
+  const visible=await sharp(trimmed,{failOn:'warning'}).resize({width:VISIBLE_WIDTH,height:PREVIEW_MAX_HEIGHT,fit:'inside',withoutEnlargement:false}).ensureAlpha().png().toBuffer();
+  const meta=await sharp(visible).metadata(); const width=Number(meta.width||VISIBLE_WIDTH),height=Number(meta.height||PREVIEW_MAX_HEIGHT);
+  const left=alignment==='right'?Math.max(0,CANVAS_WIDTH-width):alignment==='center'?Math.max(0,Math.floor((CANVAS_WIDTH-width)/2)):0;
+  const output=await sharp({create:{width:CANVAS_WIDTH,height,channels:4,background:PANEL_BG}}).composite([{input:visible,left,top:0}]).png().toBuffer();
+  return new AttachmentBuilder(output,{name:`embed-alignment-${alignment}-${Date.now()}.png`});
+}
 function embedTitle(embed){ return String(embed?.data?.title||embed?.title||''); }
 async function selectedContext(panel,interaction){ const state=panel.getSession(interaction); const panelIndex=Math.max(0,Number(state?.selectedPanelIndex)||0); const itemIndex=Number.isInteger(state?.selectedMediaIndex)?state.selectedMediaIndex:null; if(itemIndex==null)return {state,panelIndex,itemIndex,item:null,source:null,alignment:'left'}; const media=panel.getPanelMedia(state,panelIndex); const item=media?.gallery?.[itemIndex]||null; let source=String(item?.source||'').trim(); try{source=panel.replaceVars(source,interaction);}catch{} return {state,panelIndex,itemIndex,item,source,alignment:alignmentFor(state,panelIndex,itemIndex,item)}; }
 async function attachPreview(panel,interaction,payload,ctx){ if(!ctx.item?.source||ctx.item?.type==='video'||!safeUrl(ctx.source))return payload; try { const attachment=await previewAttachment(ctx.source,ctx.alignment); if(!attachment)return payload; const preview=new EmbedBuilder().setDescription('\u200b').setImage(`attachment://${attachment.name}`); payload.embeds=[preview,...(Array.isArray(payload.embeds)?payload.embeds:[])]; payload.files=[attachment]; payload.attachments=[]; return payload; } catch(error){ console.warn('[Embed Preview] Alignment preview failed:',error?.message||error); return payload; } }
