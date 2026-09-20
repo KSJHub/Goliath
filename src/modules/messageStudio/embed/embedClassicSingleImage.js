@@ -12,14 +12,31 @@ const FETCH_TIMEOUT_MS = 8000;
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const VALID_ALIGNMENTS = new Set(['left', 'center', 'right']);
 
+function clone(value) { try { return JSON.parse(JSON.stringify(value)); } catch { return value; } }
 function hasAdvancedMedia(mediaState) {
   const panels = Array.isArray(mediaState?.panels) ? mediaState.panels : [];
   return panels.some((media) => {
     const gallery = Array.isArray(media?.gallery) ? media.gallery : [];
     const first = gallery[0] || {};
     const files = Array.isArray(media?.files) ? media.files : [];
-    return gallery.length > 1 || first.type === 'video' || first.spoiler === true || Boolean(first.alt) || Boolean(media?.thumbnail?.alt) || files.length > 0;
+    return gallery.length > 1 || first.type === 'video' || first.spoiler === true || Boolean(media?.thumbnail?.alt) || files.length > 0;
   });
+}
+function classicMediaState(mediaState) {
+  const next = clone(mediaState || {});
+  const panels = Array.isArray(next?.panels) ? next.panels : [];
+  for (const media of panels) {
+    const gallery = Array.isArray(media?.gallery) ? media.gallery : [];
+    const first = gallery[0] || null;
+    const files = Array.isArray(media?.files) ? media.files : [];
+    const simpleSingleImage = gallery.length === 1 && first && first.type !== 'video' && first.spoiler !== true && !media?.thumbnail?.alt && files.length === 0;
+    // Uploaded media uses the filename as alt text. The core renderer treats any
+    // alt text as "advanced media" and then bypasses the attachment canvas that
+    // implements Left/Centre/Right. For a simple single image, remove only that
+    // transport-only alt value from the renderer copy so alignment is honoured.
+    if (simpleSingleImage && Object.prototype.hasOwnProperty.call(first, 'alt')) delete first.alt;
+  }
+  return next;
 }
 function panelItem(mediaState, panelIndex) {
   const panels = Array.isArray(mediaState?.panels) ? mediaState.panels : [];
@@ -93,14 +110,15 @@ function installClassicSingleImagePayload(renderer) {
   if (typeof renderer.buildEmbedPayload !== 'function') return renderer;
   const originalBuildEmbedPayload = renderer.buildEmbedPayload.bind(renderer);
   renderer.buildEmbedPayload = async function alignedMediaManagerGallery(options = {}) {
-    const mediaState = options.media || options.mediaV2 || null;
-    const payload = await originalBuildEmbedPayload(options);
-    if (!hasAdvancedMedia(mediaState) && Array.isArray(payload?.files) && payload.files.length) {
+    const sourceMedia = options.media || options.mediaV2 || null;
+    const renderMedia = hasAdvancedMedia(sourceMedia) ? sourceMedia : classicMediaState(sourceMedia);
+    const payload = await originalBuildEmbedPayload({ ...options, media: renderMedia, mediaV2: renderMedia });
+    if (!hasAdvancedMedia(sourceMedia) && Array.isArray(payload?.files) && payload.files.length) {
       payload.files = await Promise.all(payload.files.map(async (file, fallbackIndex) => {
         const panelIndex = panelIndexFromAttachment(file, fallbackIndex);
-        const sourceUrl = panelSource(mediaState, panelIndex);
+        const sourceUrl = panelSource(sourceMedia, panelIndex);
         if (!sourceUrl) return file;
-        const alignment = panelAlignment(mediaState, panelIndex);
+        const alignment = panelAlignment(sourceMedia, panelIndex);
         try { return await buildAlignedGalleryAttachment(sourceUrl, attachmentName(file, fallbackIndex), alignment) || file; }
         catch (error) { console.warn(`[Embed Renderer] Media gallery alignment failed for panel ${panelIndex + 1}:`, error?.message || error); return file; }
       }));
