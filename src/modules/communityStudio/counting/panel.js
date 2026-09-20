@@ -10,7 +10,7 @@ const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guild
 const PREFIX = 'admin:module:counting';
 const PANEL_COLOR = 0x2f80ed;
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Primary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+const button = (customId, label, style = ButtonStyle.Primary, disabled = false) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style).setDisabled(disabled);
 const displayName = (interaction) => interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
 
 function formatTurnLimit(value) {
@@ -34,12 +34,13 @@ function channelSelector(section) {
 function buildPanel(guild, memberDisplayName = 'Unknown User') {
   const section = counting.getSection(guild.id);
   const enabled = isModuleEnabled(guild.id, counting.MODULE_KEY);
-  const channel = section.channelId ? `<#${section.channelId}>` : '**Not chosen yet**';
+  const hasChannel = Boolean(section.channelId);
+  const channel = hasChannel ? `<#${section.channelId}>` : '**Not chosen yet**';
   const lastCounter = section.lastCounterId ? `<@${section.lastCounterId}>` : 'Nobody yet';
   const embed = footer(new EmbedBuilder().setColor(PANEL_COLOR).setTitle('🔢 Counting').setDescription([
     'Set up and manage your server’s counting game from one place.', '',
     `**${enabled ? '🟢 Running' : '⚪ Disabled'}** • ${channel}`,
-    !section.channelId ? '\n⚠️ **Choose a counting channel before members can play or a player panel can be deployed.**' : '',
+    !hasChannel ? '\n⚠️ **Choose a counting channel first.** Goliath will unlock **Enable** and **Player Panel** once a channel is selected.' : '',
   ].filter(Boolean).join('\n')).addFields(
     { name: '📊 Current Game', value: [`**Current:** \`${section.currentCount}\`  •  **Next:** \`${counting.expectedNext(section)}\`  •  **Record:** \`${section.highestCount}\``, `**Last Counter:** ${lastCounter}`].join('\n') },
     { name: '🎮 Rules', value: [
@@ -62,8 +63,8 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
     row(channelSelector(section)),
     row(button(`${PREFIX}:rules:edit`, '⚙️ Game Rules', ButtonStyle.Primary), button(`${PREFIX}:setCurrent`, '🎯 Set Count', ButtonStyle.Secondary), button(`${PREFIX}:milestones`, '🎉 Milestones', ButtonStyle.Secondary)),
     row(button(`${PREFIX}:toggle:numbersOnly`, section.numbersOnly ? '🔢 Numbers Only: On' : '🔢 Numbers Only: Off', ButtonStyle.Secondary), button(`${PREFIX}:toggle:delete`, section.deleteIncorrect ? '🗑️ Wrong Counts: Delete' : '🗑️ Wrong Counts: Keep', ButtonStyle.Secondary)),
-    row(button(`${PREFIX}:toggle:funny`, section.funnyResponses ? '😂 Banter: On' : '😂 Banter: Off', ButtonStyle.Secondary), button(`${PREFIX}:responses:timing`, '⏱️ Reply Timing', ButtonStyle.Secondary), button(`${PREFIX}:playerPanel`, section.playerPanelMessageId ? '📢 Update Player Panel' : '📢 Player Panel', ButtonStyle.Secondary)),
-    row(button(`${PREFIX}:toggle:enabled`, enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Secondary : ButtonStyle.Success), button(`${PREFIX}:reset`, '♻️ Reset', ButtonStyle.Danger), button('admin:studio:communityStudio', '⬅️ Back', ButtonStyle.Secondary)),
+    row(button(`${PREFIX}:toggle:funny`, section.funnyResponses ? '😂 Banter: On' : '😂 Banter: Off', ButtonStyle.Secondary), button(`${PREFIX}:responses:timing`, '⏱️ Reply Timing', ButtonStyle.Secondary), button(`${PREFIX}:playerPanel`, section.playerPanelMessageId ? '📢 Update Player Panel' : '📢 Player Panel', ButtonStyle.Secondary, !hasChannel)),
+    row(button(`${PREFIX}:toggle:enabled`, enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Secondary : ButtonStyle.Success, !hasChannel && !enabled), button(`${PREFIX}:reset`, '♻️ Reset', ButtonStyle.Danger), button('admin:studio:communityStudio', '⬅️ Back', ButtonStyle.Secondary)),
   ] };
 }
 
@@ -143,7 +144,12 @@ async function handleInteraction(interaction) {
       counting.updateSection(interaction.guild.id, (section) => ({ ...section, channelId, playerPanelMessageId: channelId === section.channelId ? section.playerPanelMessageId : null }), { actorId, action: 'counting_channel_changed' });
       return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
-    if (id === `${PREFIX}:toggle:enabled`) { setModuleEnabled(interaction.guild.id, counting.MODULE_KEY, !isModuleEnabled(interaction.guild.id, counting.MODULE_KEY), { actorId, action: 'counting_toggle_enabled' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (id === `${PREFIX}:toggle:enabled`) {
+      const currentlyEnabled = isModuleEnabled(interaction.guild.id, counting.MODULE_KEY);
+      if (!currentlyEnabled && !counting.getSection(interaction.guild.id).channelId) throw new Error('Choose a counting channel before enabling the game.');
+      setModuleEnabled(interaction.guild.id, counting.MODULE_KEY, !currentlyEnabled, { actorId, action: 'counting_toggle_enabled' });
+      return safeUpdate(interaction, buildPanel(interaction.guild, name));
+    }
     if (id === `${PREFIX}:toggle:numbersOnly`) { counting.updateSection(interaction.guild.id, (section) => ({ ...section, numbersOnly: !section.numbersOnly }), { actorId, action: 'counting_toggle_numbers_only' }); await counting.refreshPlayerPanel(interaction.guild).catch(() => null); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
     if (id === `${PREFIX}:toggle:delete`) { counting.updateSection(interaction.guild.id, (section) => ({ ...section, deleteIncorrect: !section.deleteIncorrect }), { actorId, action: 'counting_toggle_delete' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
     if (id === `${PREFIX}:toggle:funny`) { counting.updateSection(interaction.guild.id, (section) => ({ ...section, funnyResponses: !section.funnyResponses }), { actorId, action: 'counting_toggle_funny' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
@@ -163,7 +169,11 @@ async function handleInteraction(interaction) {
     if (interaction.isModalSubmit?.() && id === `${PREFIX}:responses:timing:save`) { const responseCleanupSeconds = parseOptionalPositiveInteger(interaction, 'cleanupSeconds', 'Reply cleanup time'); counting.updateSection(interaction.guild.id, (section) => ({ ...section, responseCleanupSeconds }), { actorId, action: 'counting_response_timing_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
     if (interaction.isModalSubmit?.() && id === `${PREFIX}:setCurrent:save`) { const currentCount = parseRequiredInteger(interaction, 'currentCount', 'Current count', 0); counting.setCurrentCount(interaction.guild.id, currentCount, { actorId, action: 'counting_set_current' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
     if (interaction.isModalSubmit?.() && id === `${PREFIX}:milestones:save`) { const milestoneAnnouncements = parseOnOff(interaction, 'enabled', 'Milestones'); const milestoneInterval = parseRequiredInteger(interaction, 'interval', 'Milestone interval', 1); counting.updateSection(interaction.guild.id, (section) => ({ ...section, milestoneAnnouncements, milestoneInterval }), { actorId, action: 'counting_milestones_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (id === `${PREFIX}:playerPanel`) { await counting.deployPlayerPanel(interaction.guild, { actorId }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (id === `${PREFIX}:playerPanel`) {
+      if (!counting.getSection(interaction.guild.id).channelId) throw new Error('Choose a counting channel before deploying the player panel.');
+      await counting.deployPlayerPanel(interaction.guild, { actorId });
+      return safeUpdate(interaction, buildPanel(interaction.guild, name));
+    }
     if (id === `${PREFIX}:reset`) return safeUpdate(interaction, buildResetConfirmation(interaction.guild.id));
     if (id === `${PREFIX}:reset:confirm`) { await interaction.deferUpdate(); await counting.resetWithMarker(interaction.guild, { actorId, action: 'counting_reset_progress' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
     return safeUpdate(interaction, buildPanel(interaction.guild, name));

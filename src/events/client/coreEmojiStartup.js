@@ -4,6 +4,7 @@ const { Events } = require('discord.js');
 const terminal = require('../../core/logging/terminalLogger').createLogger('bot');
 const emojis = require('../../modules/utilityStudio/emojis/emojis');
 const emojiApi = require('../../modules/utilityStudio/emojis/emojisApi');
+const { repairCoreArtwork } = require('./coreEmojiArtworkRepair');
 const schedulerRegistry = require('../../owner/sentinel/schedulerRegistry');
 const audit = require('../../owner/auditIntelligence/auditIntelligence');
 
@@ -54,6 +55,13 @@ module.exports = { name: Events.ClientReady, once: true, async execute(client) {
     if (result.healthy) terminal.success(`Goliath Core emojis ready: ${result.installed}/${result.expected} application emojis available globally.`);
     else terminal.warn(`Goliath Core emojis incomplete: ${result.installed}/${result.expected} available; ${result.missingAssets.length} source asset(s) missing; ${result.failed.length} failed.`);
     if (!result.healthy) schedulerRegistry.fail(SCHEDULER_ID, new Error('Goliath Core emoji assets are incomplete.'), { phase: 'core-assets', installed: result.installed, expected: result.expected, missingAssets: result.missingAssets.length, failedAssets: result.failed.length });
+
+    const artwork = await repairCoreArtwork(client);
+    if (artwork.repaired.length > 0) terminal.success(`Goliath Core artwork updated ${artwork.repaired.length} application emoji(s): ${artwork.repaired.map((entry) => entry.alias).join(', ')}`);
+    if (artwork.unchanged.length > 0) terminal.info(`Goliath Core artwork already canonical for ${artwork.unchanged.length} emoji(s).`);
+    if (artwork.missing.length > 0) terminal.warn(`Goliath Core artwork check skipped missing asset(s): ${artwork.missing.join(', ')}`);
+    if (artwork.failed.length > 0) terminal.error(`Goliath Core artwork repair failed for ${artwork.failed.length} asset(s): ${artwork.failed.map((entry) => `${entry.alias}: ${entry.error}`).join(' | ')}`);
+
     await runStudioMaintenance(client, { logHealthy: true, phase: 'startup' });
     const timer = setInterval(() => runStudioMaintenance(client, { phase: 'scheduled' }).catch((error) => { schedulerRegistry.fail(SCHEDULER_ID, error, { phase: 'scheduled' }); terminal.warn(`Emoji Studio scheduled maintenance failed: ${error?.message || error}`); }), MAINTENANCE_INTERVAL_MS);
     timer.unref?.(); terminal.info('Emoji Studio maintenance scheduler started (hourly).');

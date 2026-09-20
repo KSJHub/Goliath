@@ -12,6 +12,9 @@ const renderer = require('./embedRenderer');
 const { installMediaManagerBase } = require('./embedMediaManagerBase');
 const { installClassicSingleImagePayload } = require('./embedClassicSingleImage');
 const { installGraphicHeaders } = require('./embedGraphicHeaders');
+const { installImageAlignment, installInteraction: installImageAlignmentInteraction, applyAlignmentMap } = require('./embedImageAlignment');
+const { installAlignmentPreview } = require('./embedAlignmentPreview');
+const { installFinalImageAlignment } = require('./embedFinalImageAlignment');
 
 const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPanelMedia: media.setPanelMedia, mediaModel: media.mediaModel });
 function clone(value) { try { return JSON.parse(JSON.stringify(value)); } catch { return value; } }
@@ -47,6 +50,34 @@ function installCanonicalMediaSessions(targetPanel) {
   targetPanel.__canonicalMediaSessionsInstalled = true;
   return targetPanel;
 }
+function installAlignmentSessionView(targetPanel) {
+  if (!targetPanel || targetPanel.__alignmentSessionViewInstalled || typeof targetPanel.getSession !== 'function') return targetPanel;
+  const originalGetSession = targetPanel.getSession.bind(targetPanel);
+  targetPanel.getSession = (interaction) => {
+    const state = originalGetSession(interaction);
+    const map = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
+    return { ...state, media: applyAlignmentMap(state.media, map), mediaV2: applyAlignmentMap(state.mediaV2, map) };
+  };
+  targetPanel.__alignmentSessionViewInstalled = true;
+  return targetPanel;
+}
+function installAlignmentDeliveryBridge(targetRenderer, targetPanel) {
+  if (!targetRenderer || targetRenderer.__alignmentDeliveryBridgeInstalled || typeof targetRenderer.buildEmbedPayload !== 'function') return targetRenderer;
+  const originalBuildEmbedPayload = targetRenderer.buildEmbedPayload.bind(targetRenderer);
+  targetRenderer.buildEmbedPayload = async (options = {}) => {
+    let map = options?.mediaAlignment && typeof options.mediaAlignment === 'object' ? options.mediaAlignment : null;
+    if (!map && options?.interaction && typeof targetPanel?.getSession === 'function') {
+      const state = targetPanel.getSession(options.interaction);
+      map = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
+    }
+    map = map || {};
+    const sourceMedia = options.media || options.mediaV2 || {};
+    const alignedMedia = applyAlignmentMap(sourceMedia, map);
+    return originalBuildEmbedPayload({ ...options, media: alignedMedia, mediaV2: alignedMedia, mediaAlignment: map });
+  };
+  targetRenderer.__alignmentDeliveryBridgeInstalled = true;
+  return targetRenderer;
+}
 function installMediaRuntime(targetPanel) {
   media.installStateCompatibility(targetPanel);
   media.installPersistentMediaCompatibility(targetPanel);
@@ -63,8 +94,17 @@ function installMediaRuntime(targetPanel) {
   return targetPanel;
 }
 installMediaRuntime(panel);
+installAlignmentSessionView(panel);
 installClassicSingleImagePayload(renderer);
+installImageAlignment(panel, renderer);
+installAlignmentDeliveryBridge(renderer, panel);
+// Last renderer wrapper: rebuild the outgoing attachment from Goliath's cached
+// source after all other media transforms. This makes the saved alignment the
+// final authority for Test, Use Embed and Update Existing.
+installFinalImageAlignment(renderer);
 const interactions = require('./embedInteractions');
+installImageAlignmentInteraction(panel, interactions);
+installAlignmentPreview(panel, interactions);
 installGraphicHeaders(panel, media, interactions);
 const validation = require('./embedValidation');
 function getOverview(guildId) {

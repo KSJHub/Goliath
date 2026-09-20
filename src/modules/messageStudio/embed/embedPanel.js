@@ -368,15 +368,10 @@ function buildStudioPreviewEmbeds(s, i) {
 
   if (!source) return [buildPreviewEmbed(s, i)];
 
-  // Discord's legacy embed preview cannot place its large image before its
-  // text. Render the graphic header as the first preview card so Studio
-  // mirrors the live Components V2 order: graphic header, then content.
   const headerPreview = new EmbedBuilder()
     .setColor(panel.color || s.color || PANEL_COLOR)
     .setImage(source);
 
-  // Do not echo a legacy panel image underneath the content when the same
-  // media item is acting as the graphic header.
   const contentPanel = { ...panel, image: '' };
   const contentState = { ...s, panels: [contentPanel], selectedPanelIndex: 0 };
   const contentPreview = buildPreviewEmbed(contentState, i);
@@ -470,97 +465,605 @@ function buildEmbedPanel(interactionOrGuild, memberDisplayName = "Unknown User")
   const fake = interactionOrGuild?.guild ? interactionOrGuild : { guild: interactionOrGuild, guildId: interactionOrGuild?.id, user: { id: "system" } };
   return buildEditorPanel(fake, memberDisplayName);
 }
-function mainEmbed(s, who) {
+function getFrontDashboardState(i, s) {
+  let report = {
+    ready: false,
+    errors: [],
+    warnings: [],
+  };
+
+  try {
+    report = getReadinessReportCanonical(i, s);
+  } catch (error) {
+    report = {
+      ready: false,
+      errors: [
+        {
+          message:
+            error?.message ||
+            "Embed readiness could not be checked.",
+        },
+      ],
+      warnings: [],
+    };
+  }
+
+  let deployment = null;
+  let deploymentKey = null;
+
+  try {
+    deploymentKey =
+      getDeploymentKeyFromState(s);
+
+    if (deploymentKey) {
+      deployment =
+        getEmbedDeployment(
+          i.guild.id,
+          deploymentKey
+        );
+    }
+  } catch {
+    deployment = null;
+  }
+
+  return {
+    report,
+    deployment,
+    deploymentKey,
+  };
+}
+
+function mainEmbed(s, who, dashboard = {}) {
+  const template =
+    TEMPLATES[s.template] ||
+    TEMPLATES.custom;
+
+  const panels =
+    Array.isArray(s.panels) && s.panels.length
+      ? s.panels
+      : [{}];
+
+  const selectedIndex =
+    Math.max(
+      0,
+      Math.min(
+        Number(s.selectedPanelIndex) || 0,
+        panels.length - 1
+      )
+    );
+
+  const selectedPanel =
+    panels[selectedIndex] || {};
+
+  const fields =
+    Array.isArray(selectedPanel.fields)
+      ? selectedPanel.fields
+      : Array.isArray(s.fields)
+        ? s.fields
+        : [];
+
+  const buttons =
+    Array.isArray(selectedPanel.buttons)
+      ? selectedPanel.buttons
+      : Array.isArray(s.buttons)
+        ? s.buttons
+        : [];
+
+  const report =
+    dashboard.report || {
+      ready: false,
+      errors: [],
+      warnings: [],
+    };
+
+  const deployment =
+    dashboard.deployment || null;
+
+  const errors =
+    Array.isArray(report.errors)
+      ? report.errors
+      : [];
+
+  const warnings =
+    Array.isArray(report.warnings)
+      ? report.warnings
+      : [];
+
+  const preset =
+    s.selectedPreset
+      ? `💾 ${s.selectedPreset}`
+      : "None loaded";
+
+  const destination =
+    s.channelId
+      ? `<#${s.channelId}>`
+      : "Not selected";
+
+  const saveState =
+    s.hasUnsavedChanges
+      ? "🟠 Unsaved changes"
+      : s.selectedPreset
+        ? "🟢 Saved"
+        : "⚪ New workspace";
+
+  const readinessState =
+    report.ready
+      ? warnings.length
+        ? `🟡 Ready • ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
+        : "🟢 Ready"
+      : `🔴 Needs attention • ${errors.length || 1} issue${(errors.length || 1) === 1 ? "" : "s"}`;
+
+  const deploymentState =
+    deployment?.messageId && deployment?.channelId
+      ? `🟢 Live • <#${deployment.channelId}>`
+      : "⚪ Not deployed";
+
+  const timestamp =
+    s.showTimestamp !== false
+      ? "On"
+      : "Off";
+
+  const mentions =
+    s.allowUserPing
+      ? "Enabled"
+      : "Safe";
+
+  const panelName =
+    trim(
+      selectedPanel.title ||
+      selectedPanel.authorName ||
+      `Panel ${selectedIndex + 1}`,
+      80
+    );
+
+  let nextAction;
+
+  if (!s.channelId) {
+    nextAction =
+      "Choose a destination channel.";
+  } else if (!report.ready) {
+    nextAction =
+      "Review readiness and resolve the remaining issues.";
+  } else if (deployment) {
+    nextAction =
+      "Review the preview, then update the existing deployment.";
+  } else {
+    nextAction =
+      "Review the preview, then deploy when ready.";
+  }
+
   return new EmbedBuilder()
-    .setColor(s.color || PANEL_COLOR)
-    .setTitle("✏️ Embed Studio")
+    .setColor(
+      report.ready
+        ? warnings.length
+          ? "#FEE75C"
+          : "#57F287"
+        : selectedPanel.color ||
+          s.color ||
+          PANEL_COLOR
+    )
+    .setTitle("💎 Embed Studio")
     .setDescription([
-      "**Build embeds with separate coloured panels in one Discord message.**",
+      "Create, manage and deploy Discord embeds from one workspace.",
       "",
-      `> **Template:** ${(TEMPLATES[s.template] || TEMPLATES.custom).emoji} ${(TEMPLATES[s.template] || TEMPLATES.custom).label}`,
-      `> **Preset:** ${s.selectedPreset ? `💾 ${s.selectedPreset}` : "None loaded"}`,
-      `> **Channel:** ${s.channelId ? `<#${s.channelId}>` : "Not selected"}`,
-      `> **Selected Panel:** ${s.selectedPanelIndex + 1}/${s.panels.length}`,
-      `> **Panel Colour:** \`${s.color || PANEL_COLOR}\``,
-      `> **Fields:** ${(s.fields || []).length}/25`,
-      `> **Buttons:** ${(s.buttons || []).length}/20`,
-      `> **Mentions:** ${s.allowUserPing ? "🔔 User ping enabled" : "🔕 Safe / no ping"}`,
-      `> **Unsaved Changes:** ${s.hasUnsavedChanges ? "⚠️ Yes" : "✅ No"}`,
+      "### 🗂️ Workspace",
+      `**Template**　${template.emoji} ${template.label}`,
+      `**Preset**　${preset}`,
+      `**Channel**　${destination}`,
+      `**Status**　${saveState}`,
       "",
-      "Server icon: use **Media → Small thumbnail URL** = `{guildIcon}`. Author/Footer icon fields also accept `{guildIcon}`.",
+      "### 🧩 Content",
+      `**Panels**　${panels.length}/${MAX_PANELS}　•　**Selected**　${selectedIndex + 1}/${panels.length}`,
+      `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
+      "",
+      "### 🚦 Publish Status",
+      `**Readiness**　${readinessState}`,
+      `**Deployment**　${deploymentState}`,
+      "",
+      "### ⚙️ Delivery",
+      `**Mentions**　${mentions}　•　**Timestamp**　${timestamp}`,
+      "",
+      `### ➜ Next`,
+      nextAction,
     ].join("\n"))
-    .setFooter({ text: `Requested by ${who}` })
+    .setFooter({
+      text: `Embed Studio • ${who}`,
+    })
     .setTimestamp();
 }
+
 function buildEditorPanel(i, who = "Unknown User") {
   const s = getSession(i);
+
+  const panels =
+    Array.isArray(s.panels) && s.panels.length
+      ? s.panels
+      : [{}];
+
+  const dashboard =
+    getFrontDashboardState(i, s);
+
+  const report =
+    dashboard.report;
+
+  const deployment =
+    dashboard.deployment;
+
+  const deployCustomId =
+    deployment
+      ? "embed:update-existing"
+      : "embed:use";
+
+  const deployLabel =
+    deployment
+      ? "Update Existing"
+      : "Deploy New";
+
+  const deployEmoji =
+    deployment
+      ? "♻️"
+      : "🚀";
+
+  const canDeploy =
+    !!s.channelId &&
+    !!report.ready;
+
   return {
-    embeds: [mainEmbed(s, who), ...buildStudioPreviewEmbeds(s, i)],
+    embeds: [
+      mainEmbed(s, who, dashboard),
+      ...buildStudioPreviewEmbeds(s, i),
+    ],
+
     components: [
+      /*
+       * WORKSPACE
+       */
       new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId("embed:template").setPlaceholder("🎨 Choose template").addOptions(Object.entries(TEMPLATES).map(([value, t]) => ({ label: t.label, value, emoji: t.emoji, default: s.template === value }))),
+        new StringSelectMenuBuilder()
+          .setCustomId("embed:template")
+          .setPlaceholder("🎨 Choose template")
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(
+            Object.entries(TEMPLATES).map(
+              ([value, t]) => ({
+                label: t.label,
+                value,
+                emoji: t.emoji,
+                description:
+                  value === "custom"
+                    ? "Start with a custom embed workspace"
+                    : `Use the ${t.label} template`,
+                default: s.template === value,
+              })
+            )
+          )
       ),
+
+      /*
+       * DESTINATION
+       */
       new ActionRowBuilder().addComponents(
-        new ChannelSelectMenuBuilder().setCustomId("embed:channel").setPlaceholder("📢 Choose channel").addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+        new ChannelSelectMenuBuilder()
+          .setCustomId("embed:channel")
+          .setPlaceholder(
+            s.channelId
+              ? "📢 Change destination"
+              : "📢 Choose destination"
+          )
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addChannelTypes(
+            ChannelType.GuildText,
+            ChannelType.GuildAnnouncement
+          )
       ),
+
+      /*
+       * PRIMARY WORKFLOW
+       */
       new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId("embed:color").setPlaceholder("🌈 Selected panel colour").addOptions([
-          ...COLORS.map((c) => ({ label: c.label, value: c.value, emoji: c.emoji, default: s.color === c.value })),
-          { label: "Custom HEX", value: CUSTOM_HEX_VALUE, emoji: "🎨", description: "Enter your own HEX colour" },
-        ]),
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("Builder")
+          .setEmoji("🛠️")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:presets")
+          .setLabel("Presets")
+          .setEmoji("💾")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:readiness")
+          .setLabel(
+            report.ready
+              ? "Ready"
+              : "Review"
+          )
+          .setEmoji(
+            report.ready
+              ? "✅"
+              : "⚠️"
+          )
+          .setStyle(
+            report.ready
+              ? ButtonStyle.Success
+              : ButtonStyle.Secondary
+          )
       ),
+
+      /*
+       * DEPLOYMENT WORKFLOW
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:builder").setLabel("🛠️ Builder").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:presets").setLabel("💾 Presets").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:use").setLabel("✅ Use Embed").setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId("embed:panels")
+          .setLabel(`Panels (${panels.length})`)
+          .setEmoji("🧩")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:test-send")
+          .setLabel("Test Send")
+          .setEmoji("🧪")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(!report.ready),
+
+        new ButtonBuilder()
+          .setCustomId(deployCustomId)
+          .setLabel(deployLabel)
+          .setEmoji(deployEmoji)
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(!canDeploy)
       ),
+
+      /*
+       * NAVIGATION
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("admin:modules").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("admin:modules")
+          .setLabel("Modules")
+          .setEmoji("⬅️")
+          .setStyle(ButtonStyle.Secondary)
       ),
     ],
   };
 }
+
 function simplePanel(title, desc, state, who) {
   return new EmbedBuilder().setColor(state.color || PANEL_COLOR).setTitle(title).setDescription(desc).setFooter({ text: `Requested by ${who}` }).setTimestamp();
 }
 function buildBuilderPanel(i, who = "Unknown User") {
   const s = getSession(i);
-  const panels = Array.isArray(s.panels) && s.panels.length ? s.panels : [{}];
+
+  const panels =
+    Array.isArray(s.panels) && s.panels.length
+      ? s.panels
+      : [{}];
+
+  const selectedIndex = Math.max(
+    0,
+    Math.min(
+      Number(s.selectedPanelIndex || 0),
+      panels.length - 1
+    )
+  );
+
+  const selected = panels[selectedIndex] || {};
+
+  const fields =
+    Array.isArray(selected.fields)
+      ? selected.fields
+      : Array.isArray(s.fields)
+        ? s.fields
+        : [];
+
+  const buttons =
+    Array.isArray(selected.buttons)
+      ? selected.buttons
+      : Array.isArray(s.buttons)
+        ? s.buttons
+        : [];
+
+  const panelName = trim(
+    selected.title ||
+    selected.authorName ||
+    `Panel ${selectedIndex + 1}`,
+    80
+  );
+
+  const saveState =
+    s.hasUnsavedChanges
+      ? "🟠 Unsaved changes"
+      : "🟢 Saved";
+
+  const timestamp =
+    s.showTimestamp
+      ? "🟢 On"
+      : "⚪ Off";
+
+  const dashboard =
+    getFrontDashboardState(i, s);
+
+  const report =
+    dashboard.report;
+
+  const readiness =
+    report.ready
+      ? "🟢 Ready"
+      : "🟠 Review required";
+
+  const summary = [
+    "Build and refine the selected content panel.",
+    "",
+    "### 🧩 Current Panel",
+    `**Panel**　${selectedIndex + 1}/${panels.length}　•　${panelName}`,
+    `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
+    `**Status**　${saveState}`,
+    "",
+    "### ⚙️ Options",
+    `**Timestamp**　${timestamp}`,
+    `**Readiness**　${readiness}`,
+    "",
+    "### ➜ Next",
+    report.ready
+      ? "Review the finished embed, then return to Embed Studio when you're ready to publish."
+      : "Finish editing, then run the readiness review before publishing.",
+  ].join("\n");
+
   return {
-    embeds: [simplePanel("🛠️ Embed Builder", `Editing panel **${s.selectedPanelIndex + 1}/${s.panels.length}**.`, s, who), ...buildStudioPreviewEmbeds(s, i)],
+    embeds: [
+      simplePanel(
+        "🛠️ Embed Builder",
+        summary,
+        s,
+        who
+      ),
+      ...buildStudioPreviewEmbeds(s, i),
+    ],
+
     components: [
+      /*
+       * PANEL SELECTOR
+       */
       new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId("embed:builder-panel-select").setPlaceholder("🧩 Select content panel").setMinValues(1).setMaxValues(1).addOptions(panels.slice(0, 25).map((entry, index) => ({
-          label: `${index + 1}. ${trim(entry?.title || entry?.authorName || "Content Panel", 80)}`,
-          value: String(index),
-          description: trim(entry?.description || entry?.color || "Content panel", 100),
-          default: Number(s.selectedPanelIndex || 0) === index,
-        }))),
+        new StringSelectMenuBuilder()
+          .setCustomId("embed:builder-panel-select")
+          .setPlaceholder("🧩 Select content panel")
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(
+            panels.slice(0, 25).map((entry, index) => ({
+              label: `${index + 1}. ${trim(
+                entry?.title ||
+                entry?.authorName ||
+                "Content Panel",
+                80
+              )}`,
+              value: String(index),
+              description: trim(
+                entry?.description ||
+                entry?.color ||
+                "Content panel",
+                100
+              ),
+              default: selectedIndex === index,
+            }))
+          )
       ),
+
+      /*
+       * CONTENT
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:edit-content").setLabel("✏️ Content").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:panels").setLabel(`🧩 Panels (${s.panels?.length || 1})`).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:edit-media").setLabel("🎨 Appearance").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:edit-images").setLabel("🖼️ Media").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("embed:edit-content")
+          .setLabel("Content")
+          .setEmoji("✏️")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:panels")
+          .setLabel(`Panels (${panels.length})`)
+          .setEmoji("🧩")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:fields")
+          .setLabel(`Fields (${fields.length})`)
+          .setEmoji("📋")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:buttons")
+          .setLabel(`Buttons (${buttons.length})`)
+          .setEmoji("🔘")
+          .setStyle(ButtonStyle.Primary)
       ),
+
+      /*
+       * PRESENTATION
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:fields").setLabel(`📋 Fields (${(s.fields || []).length})`).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:buttons").setLabel(`🔘 Buttons (${(s.buttons || []).length})`).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:update-existing").setLabel("♻️ Update Existing").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:edit-media")
+          .setLabel("Appearance")
+          .setEmoji("🎨")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:edit-images")
+          .setLabel("Media")
+          .setEmoji("🖼️")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("Variables")
+          .setEmoji("📖")
+          .setStyle(ButtonStyle.Secondary)
       ),
+
+      /*
+       * REVIEW
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:readiness").setLabel("✅ Review").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("embed:test-send").setLabel("🧪 Test").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:toggle-timestamp").setLabel(s.showTimestamp ? "🕒 Timestamp ON" : "🕒 Timestamp OFF").setStyle(s.showTimestamp ? ButtonStyle.Success : ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:readiness")
+          .setLabel(
+            report.ready
+              ? "Ready"
+              : "Review Readiness"
+          )
+          .setEmoji(
+            report.ready
+              ? "✅"
+              : "⚠️"
+          )
+          .setStyle(
+            report.ready
+              ? ButtonStyle.Success
+              : ButtonStyle.Secondary
+          ),
+
+        new ButtonBuilder()
+          .setCustomId("embed:toggle-timestamp")
+          .setLabel(
+            s.showTimestamp
+              ? "Timestamp ON"
+              : "Timestamp OFF"
+          )
+          .setEmoji("🕒")
+          .setStyle(
+            s.showTimestamp
+              ? ButtonStyle.Success
+              : ButtonStyle.Secondary
+          )
       ),
+
+      /*
+       * NAVIGATION
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:helpers").setLabel("📖 Variables").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:reset").setLabel("♻️ Reset").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId("embed:back")
+          .setLabel("Embed Studio")
+          .setEmoji("⬅️")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:reset")
+          .setLabel("Reset")
+          .setEmoji("♻️")
+          .setStyle(ButtonStyle.Danger)
       ),
     ],
   };
 }
+
 function buildPanelsPanel(i, who) {
   const s = getSession(i);
   return {
@@ -946,44 +1449,431 @@ function buildButtonOptionsPanel(interaction) {
 function cleanPresetName(value) {
   return String(value || "").trim().slice(0, 50);
 }
+
+function getPresetManagerSummary(name, preset = {}, defaults = {}) {
+  const presetName = cleanPresetName(name || preset?.name || "");
+
+  /*
+   * panels[] is the canonical modern preset structure.
+   *
+   * The fallback exists only so the manager can still describe an older
+   * preset if one is encountered. It does not mutate or migrate storage.
+   */
+  const hasCanonicalPanels =
+    Array.isArray(preset?.panels) &&
+    preset.panels.length > 0;
+
+  const panels =
+    hasCanonicalPanels
+      ? preset.panels
+      : [preset || {}];
+
+  const template =
+    String(preset?.template || "custom");
+
+  let fieldCount = 0;
+  let buttonCount = 0;
+  let populatedPanels = 0;
+
+  for (const panelData of panels) {
+    const panelFields =
+      Array.isArray(panelData?.fields)
+        ? panelData.fields
+        : [];
+
+    const panelButtons =
+      Array.isArray(panelData?.buttons)
+        ? panelData.buttons
+        : [];
+
+    fieldCount += panelFields.length;
+    buttonCount += panelButtons.length;
+
+    const populated =
+      Boolean(
+        String(panelData?.title || "").trim() ||
+        String(panelData?.description || "").trim() ||
+        String(panelData?.authorName || "").trim() ||
+        String(panelData?.footer || "").trim() ||
+        String(panelData?.thumbnail || "").trim() ||
+        String(panelData?.image || "").trim() ||
+        panelFields.length ||
+        panelButtons.length
+      );
+
+    if (populated) populatedPanels += 1;
+  }
+
+  /*
+   * Media is stored separately from the embed panels.
+   * Count gallery items and attached files across all media panels.
+   */
+  const mediaState =
+    preset?.mediaV2 ||
+    preset?.media ||
+    {};
+
+  const mediaPanels =
+    Array.isArray(mediaState?.panels)
+      ? mediaState.panels
+      : [];
+
+  let galleryCount = 0;
+  let fileCount = 0;
+
+  for (const mediaPanel of mediaPanels) {
+    galleryCount +=
+      Array.isArray(mediaPanel?.gallery)
+        ? mediaPanel.gallery.length
+        : 0;
+
+    fileCount +=
+      Array.isArray(mediaPanel?.files)
+        ? mediaPanel.files.length
+        : 0;
+  }
+
+  const mediaCount =
+    galleryCount + fileCount;
+
+  const defaultForTemplate =
+    defaults?.[template] || null;
+
+  const isDefault =
+    Boolean(presetName) &&
+    defaultForTemplate === name;
+
+  const updatedAt =
+    preset?.updatedAt || null;
+
+  let updatedLabel = "Unknown";
+
+  if (updatedAt) {
+    const timestamp = Date.parse(updatedAt);
+
+    if (!Number.isNaN(timestamp)) {
+      updatedLabel =
+        `<t:${Math.floor(timestamp / 1000)}:R>`;
+    }
+  }
+
+  return {
+    name: presetName || String(name || ""),
+    template,
+    panelCount: panels.length,
+    populatedPanels,
+    fieldCount,
+    buttonCount,
+    galleryCount,
+    fileCount,
+    mediaCount,
+    hasCanonicalPanels,
+    format: hasCanonicalPanels ? "Modern" : "Legacy",
+    defaultForTemplate,
+    isDefault,
+    updatedAt,
+    updatedLabel,
+  };
+}
+
 function buildPresetsPanel(i, presets = null, defaultName = null) {
-  const s = getSession(i), rows = [];
+  const s = getSession(i);
   const guildId = i?.guildId || i?.guild?.id || null;
-  const resolvedPresets = presets && typeof presets === "object" && !Array.isArray(presets)
-    ? presets
-    : (guildId && typeof guildManager.getEmbedPresets === "function" ? guildManager.getEmbedPresets(guildId) || {} : {});
-  const resolvedDefault = defaultName != null
-    ? defaultName
-    : (guildId && typeof guildManager.getEmbedDefaults === "function"
-      ? (guildManager.getEmbedDefaults(guildId) || {})[s.template || "custom"] || null
-      : null);
-  const entries = Object.entries(resolvedPresets || {}).slice(0, 25);
-  if (entries.length) rows.push(new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("embed:preset-select")
-      .setPlaceholder("💾 Select preset")
-      .setMinValues(1)
-      .setMaxValues(1)
-      .addOptions(entries.map(([key, preset]) => ({
-        label: (cleanPresetName(preset?.name || key) || key).slice(0, 100),
-        value: key.slice(0, 100),
-        description: resolvedDefault === key ? "Default preset" : "Saved preset",
-        default: s.selectedPreset === key,
-      }))),
-  ));
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:preset-load").setLabel("📂 Load").setStyle(ButtonStyle.Primary).setDisabled(!s.selectedPreset),
-    new ButtonBuilder().setCustomId("embed:preset-save").setLabel("💾 Save Current").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("embed:preset-new").setLabel("➕ New").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("embed:preset-rename").setLabel("✏️ Rename").setStyle(ButtonStyle.Secondary).setDisabled(!s.selectedPreset),
-    new ButtonBuilder().setCustomId("embed:preset-duplicate").setLabel("📄 Duplicate").setStyle(ButtonStyle.Secondary).setDisabled(!s.selectedPreset),
-  ));
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:preset-delete").setLabel("🗑️ Delete").setStyle(ButtonStyle.Danger).setDisabled(!s.selectedPreset),
-    new ButtonBuilder().setCustomId("embed:preset-default").setLabel("⭐ Set Default").setStyle(ButtonStyle.Secondary).setDisabled(!s.selectedPreset),
-    new ButtonBuilder().setCustomId("embed:back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
-  ));
-  return { embeds: [simplePanel("💾 Embed Presets", `Saved presets: ${entries.length}.\nDefault: ${resolvedDefault || "None"}.`, s, memberName(i))], components: rows.slice(0, 5) };
+
+  const allPresets =
+    presets && typeof presets === "object" && !Array.isArray(presets)
+      ? presets
+      : (
+          guildId && typeof guildManager.getEmbedPresets === "function"
+            ? guildManager.getEmbedPresets(guildId) || {}
+            : {}
+        );
+
+  /*
+   * auto-* presets are internal deployment snapshots.
+   * They must not appear as user-managed presets.
+   */
+  const visibleEntries = Object.entries(allPresets)
+    .filter(([key]) => !String(key).startsWith("auto-"))
+    .sort(([a], [b]) =>
+      String(a).localeCompare(String(b), undefined, {
+        sensitivity: "base",
+      })
+    )
+    .slice(0, 25);
+
+  const visiblePresets = Object.fromEntries(visibleEntries);
+
+  /*
+   * Recover cleanly if the selected preset was deleted elsewhere
+   * or no longer exists.
+   */
+  let selectedName =
+    s.selectedPreset && visiblePresets[s.selectedPreset]
+      ? s.selectedPreset
+      : null;
+
+  if (s.selectedPreset && !selectedName) {
+    saveSession(i, {
+      ...s,
+      selectedPreset: null,
+    });
+  }
+
+  const selectedPreset =
+    selectedName
+      ? visiblePresets[selectedName]
+      : null;
+
+  /*
+   * Defaults are template-specific.
+   */
+  const templateKey =
+    selectedPreset?.template ||
+    s.template ||
+    "custom";
+
+  const defaults =
+    guildId && typeof guildManager.getEmbedDefaults === "function"
+      ? guildManager.getEmbedDefaults(guildId) || {}
+      : {};
+
+  const resolvedDefault =
+    defaultName != null
+      ? defaultName
+      : defaults[templateKey] || null;
+
+  const isDefault =
+    Boolean(selectedName) &&
+    resolvedDefault === selectedName;
+
+  const rows = [];
+
+  /*
+   * Preset selector
+   */
+  if (visibleEntries.length) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("embed:preset-select")
+          .setPlaceholder(
+            selectedName
+              ? `Selected: ${cleanPresetName(selectedName)}`
+              : "💾 Select a saved preset"
+          )
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(
+            visibleEntries.map(([key, preset]) => {
+              const presetTemplate =
+                preset?.template ||
+                "custom";
+
+              const presetDefault =
+                (defaults[presetTemplate] || null) === key;
+
+              return {
+                label: `${presetDefault ? "⭐ " : ""}${cleanPresetName(
+                  preset?.name || key
+                ) || key}`.slice(0, 100),
+
+                value: key.slice(0, 100),
+
+                description: (
+                  presetDefault
+                    ? `Default • ${presetTemplate}`
+                    : `Saved preset • ${presetTemplate}`
+                ).slice(0, 100),
+
+                default: selectedName === key,
+              };
+            })
+          )
+      )
+    );
+  }
+
+  /*
+   * Primary actions
+   */
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("embed:preset-load")
+        .setLabel("📂 Load into Editor")
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(!selectedName),
+
+      new ButtonBuilder()
+        .setCustomId("embed:preset-save")
+        .setLabel(
+          selectedName
+            ? "💾 Update / Save"
+            : "💾 Save Current"
+        )
+        .setStyle(ButtonStyle.Success),
+
+      new ButtonBuilder()
+        .setCustomId("embed:preset-new")
+        .setLabel("➕ New Embed")
+        .setStyle(ButtonStyle.Secondary)
+    )
+  );
+
+  /*
+   * Management actions
+   */
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("embed:preset-rename")
+        .setLabel("✏️ Rename")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(!selectedName),
+
+      new ButtonBuilder()
+        .setCustomId("embed:preset-duplicate")
+        .setLabel("📄 Duplicate")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(!selectedName),
+
+      new ButtonBuilder()
+        .setCustomId("embed:preset-delete")
+        .setLabel("🗑️ Delete")
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(!selectedName),
+
+      new ButtonBuilder()
+        .setCustomId(
+          isDefault
+            ? "embed:preset-clear-default"
+            : "embed:preset-default"
+        )
+        .setLabel(
+          isDefault
+            ? "☆ Clear Default"
+            : "⭐ Set Default"
+        )
+        .setStyle(
+          isDefault
+            ? ButtonStyle.Success
+            : ButtonStyle.Secondary
+        )
+        .setDisabled(!selectedName)
+    )
+  );
+
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("embed:back")
+        .setLabel("⬅️ Back to Embed Studio")
+        .setStyle(ButtonStyle.Secondary)
+    )
+  );
+
+  /*
+   * Build real management information.
+   */
+  let description = "";
+
+  description +=
+    `### 💾 Preset Library\n` +
+    `**Saved presets:** ${visibleEntries.length}\n`;
+
+  if (!selectedPreset) {
+    description +=
+      `**Selected:** None\n\n` +
+      `Select a preset above to inspect and manage it.\n\n` +
+      `Selecting a preset **does not overwrite your editor**. ` +
+      `Use **Load into Editor** when you actually want to edit it.`;
+  } else {
+    const summary =
+      getPresetManagerSummary(
+        selectedName,
+        selectedPreset,
+        defaults
+      );
+
+    const updatedText =
+      summary.updatedAt
+        ? (() => {
+            const timestamp =
+              Date.parse(summary.updatedAt);
+
+            return Number.isNaN(timestamp)
+              ? "Unknown"
+              : `<t:${Math.floor(timestamp / 1000)}:F> • ${summary.updatedLabel}`;
+          })()
+        : "Unknown";
+
+    const status =
+      summary.isDefault
+        ? "⭐ Default preset"
+        : "Saved preset";
+
+    description +=
+      `**Selected:** ${summary.name}\n` +
+      `**Status:** ${status}\n` +
+      `**Template:** ${summary.template}\n` +
+      `**Format:** ${summary.format}\n` +
+      `**Updated:** ${updatedText}\n` +
+      `**Panels:** ${summary.panelCount}` +
+      (
+        summary.populatedPanels !== summary.panelCount
+          ? ` • ${summary.populatedPanels} populated`
+          : ""
+      ) +
+      `\n` +
+      `**Fields:** ${summary.fieldCount}\n` +
+      `**Buttons:** ${summary.buttonCount}\n` +
+      `**Media:** ${summary.mediaCount}` +
+      (
+        summary.mediaCount
+          ? ` • ${summary.galleryCount} gallery • ${summary.fileCount} files`
+          : ""
+      ) +
+      `\n\n`;
+
+    description +=
+      `### Management\n` +
+      `📂 **Load into Editor** — open this preset for editing.\n` +
+      `💾 **Update / Save** — save the current editor state.\n` +
+      `✏️ **Rename** — change this preset's name.\n` +
+      `📄 **Duplicate** — create an independent copy.\n` +
+      `🗑️ **Delete** — remove this saved preset.\n` +
+      `${isDefault ? "☆ **Clear Default**" : "⭐ **Set Default**"} — ` +
+      `${
+        isDefault
+          ? "stop using this as the template default."
+          : "make this the default for its template."
+      }`;
+  }
+
+  const managementEmbed = new EmbedBuilder()
+    .setColor(
+      isDefault
+        ? 0xF1C40F
+        : selectedPreset
+          ? 0x5865F2
+          : 0x2B2D31
+    )
+    .setTitle(
+      selectedPreset
+        ? `💾 Preset Manager • ${cleanPresetName(selectedName)}`
+        : "💾 Embed Preset Manager"
+    )
+    .setDescription(description.slice(0, 4096))
+    .setFooter({
+      text:
+        "Preset selection is safe: presets are only loaded when you press Load into Editor.",
+    });
+
+  return {
+    embeds: [managementEmbed],
+    components: rows.slice(0, 5),
+  };
 }
 function buildHelpersPanel(i) {
   const s = getSession(i);
@@ -1008,35 +1898,111 @@ function getReadinessFixTargetCanonical(report) {
 }
 function buildReadinessPanel(interaction) {
   const state = getSession(interaction);
-  const { buildReadinessModel } = require("./embedValidation");
-  const model = buildReadinessModel(interaction, state, readinessOptions());
+
+  const { buildReadinessModel } =
+    require("./embedValidation");
+
+  const model =
+    buildReadinessModel(
+      interaction,
+      state,
+      readinessOptions()
+    );
+
   const { report, fix, lines } = model;
-  const first = report.ready
-    ? new ButtonBuilder().setCustomId("embed:readiness-refresh").setLabel("🔄 Recheck").setStyle(ButtonStyle.Secondary)
-    : new ButtonBuilder().setCustomId("embed:readiness-fix").setLabel(fix.label).setStyle(ButtonStyle.Primary);
-  const row1 = new ActionRowBuilder().addComponents(
-    first,
-    new ButtonBuilder().setCustomId("embed:use").setLabel("✅ Use Embed").setStyle(ButtonStyle.Success).setDisabled(!report.ready),
-  );
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:update-existing").setLabel("♻️ Update Existing").setStyle(ButtonStyle.Secondary).setDisabled(!report.ready),
-    new ButtonBuilder().setCustomId("embed:test-send").setLabel("🧪 Test").setStyle(ButtonStyle.Secondary).setDisabled(!report.ready),
-  );
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
-  );
+
+  const panels =
+    Array.isArray(state.panels) && state.panels.length
+      ? state.panels
+      : [{}];
+
+  const destination =
+    state.channelId
+      ? `<#${state.channelId}>`
+      : "⚪ Not selected";
+
+  const status =
+    report.ready
+      ? (
+          report.warnings.length
+            ? "🟡 Ready with warnings"
+            : "🟢 Ready to publish"
+        )
+      : "🔴 Action required";
+
+  const description = [
+    "Final validation before returning to Embed Studio for publishing.",
+    "",
+    "### 🚦 Publish Status",
+    `**Status**　${status}`,
+    `**Destination**　${destination}`,
+    `**Panels**　${panels.length}/${MAX_PANELS}`,
+    "",
+    "### 🔎 Validation",
+    ...lines,
+    "",
+    "### ➜ Next",
+    report.ready
+      ? "Everything required has passed. Return to Embed Studio to test or publish the embed."
+      : "Resolve the highlighted requirement, then recheck readiness.",
+  ].join("\n").slice(0, 4096);
+
+  const primary =
+    report.ready
+      ? new ButtonBuilder()
+          .setCustomId("embed:readiness-refresh")
+          .setLabel("Recheck")
+          .setEmoji("🔄")
+          .setStyle(ButtonStyle.Secondary)
+      : new ButtonBuilder()
+          .setCustomId("embed:readiness-fix")
+          .setLabel(fix.label)
+          .setStyle(ButtonStyle.Primary);
+
   return {
     embeds: [
       new EmbedBuilder()
-        .setColor(report.ready ? (report.warnings.length ? 0xFEE75C : 0x57F287) : 0xED4245)
+        .setColor(
+          report.ready
+            ? (
+                report.warnings.length
+                  ? 0xFEE75C
+                  : 0x57F287
+              )
+            : 0xED4245
+        )
         .setTitle("✅ Embed Readiness")
-        .setDescription(lines.join("\n").slice(0, 4096))
-        .setFooter({ text: `Requested by ${memberName(interaction)}` })
+        .setDescription(description)
+        .setFooter({
+          text: `Requested by ${memberName(interaction)}`
+        })
         .setTimestamp(),
     ],
-    components: [row1, row2, row3],
+
+    components: [
+      new ActionRowBuilder().addComponents(
+        primary,
+
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("Builder")
+          .setEmoji("🛠️")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:back")
+          .setLabel("Embed Studio")
+          .setEmoji("⬅️")
+          .setStyle(
+            report.ready
+              ? ButtonStyle.Success
+              : ButtonStyle.Secondary
+          )
+      ),
+    ],
   };
 }
+
 function modal(id, title, inputs) {
   return new ModalBuilder().setCustomId(id).setTitle(title).addComponents(...inputs.map((input) => new ActionRowBuilder().addComponents(input)));
 }

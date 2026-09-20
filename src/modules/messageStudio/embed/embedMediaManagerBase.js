@@ -23,8 +23,53 @@ function sourceLabel(value, fallback = 'Not set') {
   }
 }
 
+function clone(value, fallback = null) {
+  try { return JSON.parse(JSON.stringify(value ?? fallback)); } catch { return fallback; }
+}
+
 function installMediaManagerBase(panel, media) {
   if (!panel || !media || typeof panel.buildMediaManagerPanel === 'function') return panel;
+
+  /*
+   * mediaV2 is authoritative once a panel has a media slot.  The legacy
+   * panel.image field exists only for backwards compatibility.  The original
+   * setPanelMedia() normalizer could use that legacy value as a fallback while
+   * clearing a gallery, immediately resurrecting the image that had just been
+   * removed.  Keep writes panel-local and normalize the requested media with
+   * no legacy fallback; saveMediaState() will mirror the resulting first item
+   * (or an empty string) back to the legacy panel afterwards.
+   */
+  if (!panel.__panelLocalMediaWritePatched && typeof panel.setPanelMedia === 'function') {
+    panel.setPanelMedia = (stateValue = {}, index, mediaValue = {}) => {
+      const panels = Array.isArray(stateValue?.panels) ? stateValue.panels : [];
+      const existing = stateValue?.mediaV2 || stateValue?.media || {};
+      const existingPanels = Array.isArray(existing?.panels) ? existing.panels : [];
+      const length = Math.max(panels.length, existingPanels.length, 1);
+      const selected = Math.max(0, Math.min(Number(index) || 0, length - 1));
+      const mediaPanels = [];
+
+      for (let n = 0; n < length; n += 1) {
+        if (n === selected) {
+          mediaPanels.push(media.mediaModel.normalizePanelMedia(mediaValue, {}));
+          continue;
+        }
+        if (existingPanels[n]) {
+          mediaPanels.push(media.mediaModel.normalizePanelMedia(existingPanels[n], {}));
+          continue;
+        }
+        mediaPanels.push(media.mediaModel.normalizePanelMedia({}, panels[n] || {}));
+      }
+
+      return {
+        ...stateValue,
+        mediaV2: {
+          version: media.mediaModel.MEDIA_SCHEMA_VERSION,
+          panels: mediaPanels,
+        },
+      };
+    };
+    panel.__panelLocalMediaWritePatched = true;
+  }
 
   if (!panel.__mediaSessionMirrorPatched && typeof panel.saveSession === 'function') {
     const originalSaveSession = panel.saveSession.bind(panel);
@@ -124,7 +169,7 @@ function installMediaManagerBase(panel, media) {
     } else if (selectedFile) {
       summary.push('', `**Selected file:** ${sourceLabel(selectedFile.name || selectedFile.source, `File ${fileIndex + 1}`)}`);
     } else if (!panelMedia.thumbnail?.source && !panelMedia.gallery.length && !panelMedia.files.length) {
-      summary.push('', 'No media configured yet. Use **Add Media**, **Upload Media**, or **Thumbnail** to begin.');
+      summary.push('', 'No media configured for this panel. Media on other panels is unaffected.');
     }
 
     return {
