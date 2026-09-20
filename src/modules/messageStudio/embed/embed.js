@@ -13,6 +13,7 @@ const { installMediaManagerBase } = require('./embedMediaManagerBase');
 const { installClassicSingleImagePayload } = require('./embedClassicSingleImage');
 const { installGraphicHeaders } = require('./embedGraphicHeaders');
 const { installImageAlignment, installInteraction: installImageAlignmentInteraction, applyAlignmentMap } = require('./embedImageAlignment');
+const { installAlignmentPreview } = require('./embedAlignmentPreview');
 
 const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPanelMedia: media.setPanelMedia, mediaModel: media.mediaModel });
 function clone(value) { try { return JSON.parse(JSON.stringify(value)); } catch { return value; } }
@@ -80,6 +81,7 @@ installClassicSingleImagePayload(renderer);
 installImageAlignment(panel, renderer);
 const interactions = require('./embedInteractions');
 installImageAlignmentInteraction(panel, interactions);
+installAlignmentPreview(panel, interactions);
 installGraphicHeaders(panel, media, interactions);
 const validation = require('./embedValidation');
 function getOverview(guildId) {
