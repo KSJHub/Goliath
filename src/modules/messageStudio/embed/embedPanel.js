@@ -368,15 +368,10 @@ function buildStudioPreviewEmbeds(s, i) {
 
   if (!source) return [buildPreviewEmbed(s, i)];
 
-  // Discord's legacy embed preview cannot place its large image before its
-  // text. Render the graphic header as the first preview card so Studio
-  // mirrors the live Components V2 order: graphic header, then content.
   const headerPreview = new EmbedBuilder()
     .setColor(panel.color || s.color || PANEL_COLOR)
     .setImage(source);
 
-  // Do not echo a legacy panel image underneath the content when the same
-  // media item is acting as the graphic header.
   const contentPanel = { ...panel, image: '' };
   const contentState = { ...s, panels: [contentPanel], selectedPanelIndex: 0 };
   const contentPreview = buildPreviewEmbed(contentState, i);
@@ -957,7 +952,9 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
     : (guildId && typeof guildManager.getEmbedDefaults === "function"
       ? (guildManager.getEmbedDefaults(guildId) || {})[s.template || "custom"] || null
       : null);
-  const entries = Object.entries(resolvedPresets || {}).slice(0, 25);
+  const entries = Object.entries(resolvedPresets || {})
+    .filter(([key]) => !String(key).startsWith("auto-"))
+    .slice(0, 25);
   if (entries.length) rows.push(new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("embed:preset-select")
