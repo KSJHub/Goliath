@@ -98,11 +98,36 @@ async function downloadAsset(url) {
 }
 async function ensureAssetCached(guildId, url) {
   if (!url || !/^https:\/\//i.test(String(url))) return null;
+
   const cached = getCachedAsset(guildId, url);
-  if (cached) return { ...cached, cached: true };
+  const cachedType = String(cached?.meta?.contentType || '')
+    .toLowerCase()
+    .split(';')[0]
+    .trim();
+
+  // Only reuse cache entries whose MIME metadata is meaningful.
+  // Older/stale entries may contain no type or a generic transport type,
+  // which can make the renderer reject otherwise valid Discord media.
+  if (
+    cached &&
+    cachedType &&
+    cachedType !== 'application/octet-stream' &&
+    supportedPersistentType(cachedType)
+  ) {
+    return { ...cached, cached: true };
+  }
+
   const downloaded = await downloadAsset(url);
-  saveCachedAsset(guildId, url, downloaded.buffer, { contentType: downloaded.contentType });
-  return { ...downloaded, id: assetId(url), cached: false };
+
+  saveCachedAsset(guildId, url, downloaded.buffer, {
+    contentType: downloaded.contentType,
+  });
+
+  return {
+    ...downloaded,
+    id: assetId(url),
+    cached: false,
+  };
 }
 function addHttpsSource(urls, value) {
   const source = String(value || '').trim();

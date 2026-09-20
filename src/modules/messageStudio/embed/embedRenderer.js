@@ -62,7 +62,12 @@ async function probeRemoteSource(url, expected = 'media') {
   const cached = getCachedAsset('global', url);
   if (cached?.buffer) {
     const cachedType = cached.meta?.contentType || '';
-    if (!expectedTypeOk(cachedType, expected)) throw new Error(`Media source returned ${cachedType || 'an unsupported type'}.`);
+    if (!expectedTypeOk(cachedType, expected)) {
+      throw new Error(
+        `Media source returned ${cachedType || 'an unsupported type'} ` +
+        `(expected=${expected}, branch=cache, source=${String(url).slice(0, 180)}).`
+      );
+    }
     return { ok: true, contentType: cachedType, bytes: cached.buffer.length, cached: true };
   }
 
@@ -77,7 +82,12 @@ async function probeRemoteSource(url, expected = 'media') {
     if (!response.ok && response.status !== 206) throw new Error(`Media source returned HTTP ${response.status}.`);
     const contentType = String(response.headers.get('content-type') || '');
     const declared = Number(response.headers.get('content-length') || 0);
-    if (!expectedTypeOk(contentType, expected)) throw new Error(`Media source returned ${contentType || 'an unsupported type'}.`);
+    if (!expectedTypeOk(contentType, expected)) {
+      throw new Error(
+        `Media source returned ${contentType || 'an unsupported type'} ` +
+        `(expected=${expected}, branch=network, source=${String(url).slice(0, 180)}).`
+      );
+    }
     if (declared > MAX_SOURCE_BYTES && !nativeImageShouldPassThrough(contentType)) {
       throw new Error(`Media source exceeds the ${Math.floor(MAX_SOURCE_BYTES / 1024 / 1024)} MB processing limit.`);
     }
@@ -161,8 +171,7 @@ async function galleryItems(media, interaction, placement = null) {
     if (placement && itemPlacement(item) !== placement) continue;
     const source = resolveSource(item?.source, interaction);
     if (!source) continue;
-    const expected = item?.type === 'image' ? 'image' : item?.type === 'video' ? 'video' : 'media';
-    await probeRemoteSource(source, expected);
+    await probeRemoteSource(source, 'media');
     const builder = new MediaGalleryItemBuilder().setURL(source).setSpoiler(item?.spoiler === true);
     if (item?.alt) builder.setDescription(String(item.alt).slice(0, 1024));
     output.push(builder);
