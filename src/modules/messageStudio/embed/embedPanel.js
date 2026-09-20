@@ -654,7 +654,6 @@ function mainEmbed(s, who, dashboard = {}) {
       "",
       "### 🧩 Content",
       `**Panels**　${panels.length}/${MAX_PANELS}　•　**Selected**　${selectedIndex + 1}/${panels.length}`,
-      `**Panel**　${panelName}`,
       `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
       "",
       "### 🚦 Publish Status",
