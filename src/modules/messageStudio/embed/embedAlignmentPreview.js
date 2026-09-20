@@ -6,8 +6,8 @@ const net = require('node:net');
 const sharp = require('sharp');
 
 const CANVAS_WIDTH = 600;
-const VISIBLE_WIDTH = 320;
-const PREVIEW_MAX_HEIGHT = 220;
+const VISIBLE_WIDTH = 360;
+const PREVIEW_MAX_HEIGHT = 320;
 const PANEL_BG = { r: 19, g: 20, b: 22, alpha: 1 };
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
