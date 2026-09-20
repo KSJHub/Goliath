@@ -175,7 +175,12 @@ function normalizeBackComponent(component, interaction) {
   const customId = data?.custom_id || data?.customId || null;
   const parentStudio = resolveParentStudio(interaction?.customId);
   if (!parentStudio || customId !== 'admin:modules') return data;
-  return { ...data, custom_id: `admin:studio:${parentStudio}`, label: '⬅️ Back' };
+  return {
+    ...data,
+    custom_id: `admin:studio:${parentStudio}`,
+    label: 'Back',
+    emoji: { name: '⬅️' },
+  };
 }
 function componentId(component) {
   return component?.custom_id || component?.customId || null;

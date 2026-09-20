@@ -626,10 +626,10 @@ function mainEmbed(s, who, dashboard = {}) {
       "Review readiness and resolve the remaining issues.";
   } else if (deployment) {
     nextAction =
-      "Review the preview, then update the existing deployment.";
+      "Ready to update the existing deployment.";
   } else {
     nextAction =
-      "Review the preview, then deploy when ready.";
+      "Ready to deploy.";
   }
 
   return new EmbedBuilder()
