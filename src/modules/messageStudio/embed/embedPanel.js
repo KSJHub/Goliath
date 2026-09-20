@@ -466,55 +466,245 @@ function buildEmbedPanel(interactionOrGuild, memberDisplayName = "Unknown User")
   return buildEditorPanel(fake, memberDisplayName);
 }
 function mainEmbed(s, who) {
+  const template =
+    TEMPLATES[s.template] ||
+    TEMPLATES.custom;
+
+  const panels =
+    Array.isArray(s.panels) && s.panels.length
+      ? s.panels
+      : [{}];
+
+  const selectedIndex =
+    Math.max(
+      0,
+      Math.min(
+        Number(s.selectedPanelIndex) || 0,
+        panels.length - 1
+      )
+    );
+
+  const selectedPanel =
+    panels[selectedIndex] || {};
+
+  const fields =
+    Array.isArray(selectedPanel.fields)
+      ? selectedPanel.fields
+      : Array.isArray(s.fields)
+        ? s.fields
+        : [];
+
+  const buttons =
+    Array.isArray(selectedPanel.buttons)
+      ? selectedPanel.buttons
+      : Array.isArray(s.buttons)
+        ? s.buttons
+        : [];
+
+  const preset =
+    s.selectedPreset
+      ? `💾 ${s.selectedPreset}`
+      : "— None loaded";
+
+  const destination =
+    s.channelId
+      ? `<#${s.channelId}>`
+      : "⚠️ Not selected";
+
+  const saveState =
+    s.hasUnsavedChanges
+      ? "🟠 Unsaved changes"
+      : s.selectedPreset
+        ? "🟢 Saved"
+        : "⚪ New workspace";
+
+  const timestamp =
+    s.showTimestamp !== false
+      ? "On"
+      : "Off";
+
+  const mentions =
+    s.allowUserPing
+      ? "Enabled"
+      : "Safe / disabled";
+
+  const panelName =
+    trim(
+      selectedPanel.title ||
+      selectedPanel.authorName ||
+      `Panel ${selectedIndex + 1}`,
+      80
+    );
+
   return new EmbedBuilder()
-    .setColor(s.color || PANEL_COLOR)
-    .setTitle("✏️ Embed Studio")
+    .setColor(
+      selectedPanel.color ||
+      s.color ||
+      PANEL_COLOR
+    )
+    .setTitle("💎 Embed Studio")
     .setDescription([
-      "**Build embeds with separate coloured panels in one Discord message.**",
+      "**Create, manage and deploy professional Discord embeds.**",
       "",
-      `> **Template:** ${(TEMPLATES[s.template] || TEMPLATES.custom).emoji} ${(TEMPLATES[s.template] || TEMPLATES.custom).label}`,
-      `> **Preset:** ${s.selectedPreset ? `💾 ${s.selectedPreset}` : "None loaded"}`,
-      `> **Channel:** ${s.channelId ? `<#${s.channelId}>` : "Not selected"}`,
-      `> **Selected Panel:** ${s.selectedPanelIndex + 1}/${s.panels.length}`,
-      `> **Panel Colour:** \`${s.color || PANEL_COLOR}\``,
-      `> **Fields:** ${(s.fields || []).length}/25`,
-      `> **Buttons:** ${(s.buttons || []).length}/20`,
-      `> **Mentions:** ${s.allowUserPing ? "🔔 User ping enabled" : "🔕 Safe / no ping"}`,
-      `> **Unsaved Changes:** ${s.hasUnsavedChanges ? "⚠️ Yes" : "✅ No"}`,
+      "### 📋 Current Workspace",
+      `> **Template**　${template.emoji} ${template.label}`,
+      `> **Preset**　${preset}`,
+      `> **Destination**　${destination}`,
+      `> **Status**　${saveState}`,
       "",
-      "Server icon: use **Media → Small thumbnail URL** = `{guildIcon}`. Author/Footer icon fields also accept `{guildIcon}`.",
+      "### 🧩 Embed Structure",
+      `> **Panels**　${panels.length}/${MAX_PANELS}`,
+      `> **Selected**　${selectedIndex + 1}/${panels.length} — ${panelName}`,
+      `> **Fields**　${fields.length}/${MAX_EMBED_FIELDS}`,
+      `> **Buttons**　${buttons.length}/${MAX_BUTTONS}`,
+      "",
+      "### ⚙️ Delivery",
+      `> **Mentions**　${mentions}`,
+      `> **Timestamp**　${timestamp}`,
+      "",
+      s.channelId
+        ? "Use **Open Builder** to edit the embed, or **Review & Deploy** when it is ready."
+        : "Select a **destination channel** before deploying this embed.",
     ].join("\n"))
-    .setFooter({ text: `Requested by ${who}` })
+    .setFooter({
+      text: `Embed Studio • Requested by ${who}`,
+    })
     .setTimestamp();
 }
+
 function buildEditorPanel(i, who = "Unknown User") {
   const s = getSession(i);
+
+  const template =
+    TEMPLATES[s.template] ||
+    TEMPLATES.custom;
+
+  const panels =
+    Array.isArray(s.panels) && s.panels.length
+      ? s.panels
+      : [{}];
+
+  const selectedIndex =
+    Math.max(
+      0,
+      Math.min(
+        Number(s.selectedPanelIndex) || 0,
+        panels.length - 1
+      )
+    );
+
   return {
-    embeds: [mainEmbed(s, who), ...buildStudioPreviewEmbeds(s, i)],
+    embeds: [
+      mainEmbed(s, who),
+      ...buildStudioPreviewEmbeds(s, i),
+    ],
+
     components: [
+      /*
+       * WORKSPACE
+       */
       new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId("embed:template").setPlaceholder("🎨 Choose template").addOptions(Object.entries(TEMPLATES).map(([value, t]) => ({ label: t.label, value, emoji: t.emoji, default: s.template === value }))),
+        new StringSelectMenuBuilder()
+          .setCustomId("embed:template")
+          .setPlaceholder("🎨 Select embed template")
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(
+            Object.entries(TEMPLATES).map(
+              ([value, t]) => ({
+                label: t.label,
+                value,
+                emoji: t.emoji,
+                description:
+                  value === "custom"
+                    ? "Start with a custom embed workspace"
+                    : `Use the ${t.label} template`,
+                default: s.template === value,
+              })
+            )
+          )
       ),
+
+      /*
+       * DESTINATION
+       */
       new ActionRowBuilder().addComponents(
-        new ChannelSelectMenuBuilder().setCustomId("embed:channel").setPlaceholder("📢 Choose channel").addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+        new ChannelSelectMenuBuilder()
+          .setCustomId("embed:channel")
+          .setPlaceholder(
+            s.channelId
+              ? "📢 Change destination channel"
+              : "📢 Select destination channel"
+          )
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addChannelTypes(
+            ChannelType.GuildText,
+            ChannelType.GuildAnnouncement
+          )
       ),
+
+      /*
+       * PRIMARY WORKFLOW
+       */
       new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId("embed:color").setPlaceholder("🌈 Selected panel colour").addOptions([
-          ...COLORS.map((c) => ({ label: c.label, value: c.value, emoji: c.emoji, default: s.color === c.value })),
-          { label: "Custom HEX", value: CUSTOM_HEX_VALUE, emoji: "🎨", description: "Enter your own HEX colour" },
-        ]),
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("Open Builder")
+          .setEmoji("🛠️")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:presets")
+          .setLabel("Preset Manager")
+          .setEmoji("💾")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:readiness")
+          .setLabel("Review")
+          .setEmoji("✅")
+          .setStyle(ButtonStyle.Secondary)
       ),
+
+      /*
+       * QUICK WORKSPACE ACTIONS
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:builder").setLabel("🛠️ Builder").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:presets").setLabel("💾 Presets").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:use").setLabel("✅ Use Embed").setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId("embed:panels")
+          .setLabel(`Panels (${panels.length})`)
+          .setEmoji("🧩")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:test-send")
+          .setLabel("Test")
+          .setEmoji("🧪")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:use")
+          .setLabel("Deploy")
+          .setEmoji("🚀")
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(!s.channelId)
       ),
+
+      /*
+       * NAVIGATION
+       */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("admin:modules").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("admin:modules")
+          .setLabel("Back")
+          .setEmoji("⬅️")
+          .setStyle(ButtonStyle.Secondary)
       ),
     ],
   };
 }
+
 function simplePanel(title, desc, state, who) {
   return new EmbedBuilder().setColor(state.color || PANEL_COLOR).setTitle(title).setDescription(desc).setFooter({ text: `Requested by ${who}` }).setTimestamp();
 }
