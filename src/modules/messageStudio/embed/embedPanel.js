@@ -711,7 +711,6 @@ function buildEditorPanel(i, who = "Unknown User") {
   return {
     embeds: [
       mainEmbed(s, who, dashboard),
-      ...buildStudioPreviewEmbeds(s, i),
     ],
 
     components: [
