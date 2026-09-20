@@ -82,9 +82,7 @@ function installUi(panel) {
       if (duplicate && backRow && (backRow.components?.length || 0) < 5) backRow.addComponents(duplicate);
     }
     const embed = payload?.embeds?.[0];
-    if (embed?.data?.description != null) {
-      embed.setDescription(`${embed.data.description}\n**Image alignment:** ${alignment === 'center' ? 'Centre' : alignment[0].toUpperCase() + alignment.slice(1)}`.slice(0, 4096));
-    }
+    if (embed?.data?.description != null) embed.setDescription(`${embed.data.description}\n**Image alignment:** ${alignment === 'center' ? 'Centre' : alignment[0].toUpperCase() + alignment.slice(1)}`.slice(0, 4096));
     return payload;
   };
   panel.__imageAlignmentUiInstalled = true;
@@ -102,10 +100,7 @@ function installInteraction(panel, interactions) {
     const panelIndex = Math.max(0, Number(state?.selectedPanelIndex) || 0);
     const itemIndex = Number.isInteger(state?.selectedMediaIndex) ? state.selectedMediaIndex : null;
     const panelMedia = panel.getPanelMedia(state, panelIndex);
-    if (itemIndex == null || !panelMedia?.gallery?.[itemIndex]) {
-      await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
-      return true;
-    }
+    if (itemIndex == null || !panelMedia?.gallery?.[itemIndex]) { await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction))); return true; }
     const map = alignmentMap(state);
     map[alignmentKey(panelIndex, itemIndex)] = alignment;
     panel.saveSession(interaction, { ...state, mediaAlignment: map, hasUnsavedChanges: true });
@@ -115,14 +110,9 @@ function installInteraction(panel, interactions) {
   interactions.__imageAlignmentInteractionInstalled = true;
 }
 
-function isPrivateIpv4(hostname) {
-  const p = hostname.split('.').map(Number); if (p.length !== 4 || p.some((n) => !Number.isInteger(n))) return false;
-  const [a, b] = p; return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
-}
+function isPrivateIpv4(hostname) { const p = hostname.split('.').map(Number); if (p.length !== 4 || p.some((n) => !Number.isInteger(n))) return false; const [a, b] = p; return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168); }
 function isPrivateIpv6(hostname) { const h = hostname.toLowerCase(); return h === '::1' || h === '::' || h.startsWith('fc') || h.startsWith('fd') || /^fe[89ab]/.test(h); }
-function safeUrl(value) {
-  try { const u = new URL(String(value || '')); const h = u.hostname.toLowerCase(); const v = net.isIP(h); if (u.protocol !== 'https:' || !h || h === 'localhost' || h.endsWith('.localhost') || (v === 4 && isPrivateIpv4(h)) || (v === 6 && isPrivateIpv6(h))) return null; return u.toString(); } catch { return null; }
-}
+function safeUrl(value) { try { const u = new URL(String(value || '')); const h = u.hostname.toLowerCase(); const v = net.isIP(h); if (u.protocol !== 'https:' || !h || h === 'localhost' || h.endsWith('.localhost') || (v === 4 && isPrivateIpv4(h)) || (v === 6 && isPrivateIpv6(h))) return null; return u.toString(); } catch { return null; } }
 async function fetchImage(url) {
   const target = safeUrl(url); if (!target) return null;
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS); timer.unref?.();
@@ -151,7 +141,7 @@ function installRenderer(renderer) {
     payload.files = await Promise.all(payload.files.map(async (file, fallbackIndex) => {
       const panelIndex = panelIndexFromAttachment(file, fallbackIndex);
       const item = media?.panels?.[panelIndex]?.gallery?.[0];
-      if (!item?.source || item?.placement === 'above' || item?.type === 'video' || item?.spoiler || item?.alt) return file;
+      if (!item?.source || item?.placement === 'above' || item?.type === 'video' || item?.spoiler) return file;
       const alignment = alignmentOf(item);
       if (alignment === 'center') return file;
       try { return await alignedAttachment(item.source, alignment, attachmentName(file, fallbackIndex)) || file; }
@@ -162,11 +152,6 @@ function installRenderer(renderer) {
   renderer.__imageAlignmentRendererInstalled = true;
 }
 
-function installImageAlignment(panel, renderer, interactions = null) {
-  installPersistence(panel);
-  installUi(panel);
-  installRenderer(renderer);
-  if (interactions) installInteraction(panel, interactions);
-}
+function installImageAlignment(panel, renderer, interactions = null) { installPersistence(panel); installUi(panel); installRenderer(renderer); if (interactions) installInteraction(panel, interactions); }
 
 module.exports = { installImageAlignment, installInteraction, applyAlignmentMap, alignmentOf };
