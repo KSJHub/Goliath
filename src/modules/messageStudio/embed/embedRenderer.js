@@ -161,8 +161,7 @@ async function galleryItems(media, interaction, placement = null) {
     if (placement && itemPlacement(item) !== placement) continue;
     const source = resolveSource(item?.source, interaction);
     if (!source) continue;
-    const expected = item?.type === 'image' ? 'image' : item?.type === 'video' ? 'video' : 'media';
-    await probeRemoteSource(source, expected);
+    await probeRemoteSource(source, 'media');
     const builder = new MediaGalleryItemBuilder().setURL(source).setSpoiler(item?.spoiler === true);
     if (item?.alt) builder.setDescription(String(item.alt).slice(0, 1024));
     output.push(builder);
