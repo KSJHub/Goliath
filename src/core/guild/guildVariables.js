@@ -3,9 +3,12 @@
 /**
  * Canonical Goliath Discord/guild template-variable registry and resolver.
  * Modules must consume this registry instead of maintaining local variable lists.
+ *
+ * Custom variables are data-driven. Pass persisted DEV-panel definitions through
+ * options.customVariables; no module should implement its own replacement engine.
  */
 
-const HELPERS = Object.freeze([
+const SYSTEM_VARIABLES = Object.freeze([
   '{userId}', '{userTag}', '{userName}', '{userGlobalName}', '{userMention}', '{userNoPing}',
   '{userAvatar}', '{userServerAvatar}', '{userNickname}', '{userDisplay}', '{userCreatedAt}',
   '{userCreatedTimestamp}', '{userJoinedAt}', '{userJoinedTimestamp}', '{createdAt}', '{joinedAt}',
@@ -20,8 +23,52 @@ const HELPERS = Object.freeze([
   '{guildDiscoverySplash}', '{userBot}', '{userTopRoleId}', '{userTopRoleMention}',
   '{verifiedRoles}', '{pendingRoles}', '{minimumAccountAgeDays}', '{minimumMembershipAgeMinutes}',
   '{cooldownSeconds}', '{attempts}', '{reason}',
+  '{guild}', '{serverName}', '{totalMemberCount}', '{user}', '{username}', '{memberAvatar}',
+  '{welcomeRoles}', '{welcomeRoleMentions}', '{welcomeRolesNoPing}',
 ]);
+const HELPERS = SYSTEM_VARIABLES;
 
+function variableKey(value) {
+  return String(value || '').trim().replace(/^\{+|\}+$/g, '');
+}
+function variableToken(value) {
+  const key = variableKey(value);
+  return key ? `{${key}}` : '';
+}
+function normalizeCustomVariable(input = {}) {
+  const key = variableKey(input.key || input.name || input.token);
+  if (!/^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$/.test(key)) throw new Error('Variable name must start with a letter and contain only letters, numbers, dot, dash or underscore.');
+  const token = `{${key}}`;
+  if (SYSTEM_VARIABLES.some((item) => item.toLowerCase() === token.toLowerCase())) throw new Error(`${token} is a protected system variable.`);
+  return {
+    key,
+    token,
+    value: String(input.value ?? ''),
+    category: String(input.category || 'Custom').trim().slice(0, 40) || 'Custom',
+    description: String(input.description || '').trim().slice(0, 240),
+    enabled: input.enabled !== false,
+  };
+}
+function normalizeCustomVariables(input) {
+  const source = Array.isArray(input) ? input : Object.entries(input || {}).map(([key, value]) => (typeof value === 'object' && value !== null ? { key, ...value } : { key, value }));
+  const seen = new Set();
+  const output = [];
+  for (const item of source) {
+    try {
+      const normalized = normalizeCustomVariable(item);
+      const id = normalized.key.toLowerCase();
+      if (seen.has(id)) continue;
+      seen.add(id);
+      output.push(normalized);
+    } catch { /* Ignore invalid persisted entries; DEV panel validation reports them before save. */ }
+  }
+  return output;
+}
+function buildCustomVariableMap(input) {
+  const output = {};
+  for (const item of normalizeCustomVariables(input)) if (item.enabled) output[item.token] = item.value;
+  return output;
+}
 function fmtDate(value) {
   if (!value) return 'Unknown';
   const date = value instanceof Date ? value : new Date(value);
@@ -54,8 +101,7 @@ function cleanServerName(value) {
   const cleaned = raw.replace(/^[\p{Extended_Pictographic}\p{Symbol}\p{Punctuation}\s]+/gu, '').replace(/[\p{Extended_Pictographic}\p{Symbol}\p{Punctuation}\s]+$/gu, '').trim();
   return cleaned || raw;
 }
-
-function buildVariableMap(interaction, allowUserPing = false, overrides = {}) {
+function buildVariableMap(interaction, allowUserPing = false, overrides = {}, options = {}) {
   const guild = interaction?.guild;
   const user = interaction?.user || interaction?.member?.user;
   const member = interaction?.member;
@@ -65,7 +111,7 @@ function buildVariableMap(interaction, allowUserPing = false, overrides = {}) {
   const ownerId = guild?.ownerId || '';
   const topRole = member?.roles?.highest || null;
   const guildCreatedTimestamp = guild?.createdTimestamp || 0;
-  return {
+  const map = {
     '{userId}': user?.id || '', '{userTag}': user?.tag || user?.username || '', '{userName}': user?.username || '',
     '{userGlobalName}': user?.globalName || '', '{userMention}': user?.id ? (allowUserPing ? `<@${user.id}>` : `@${displayName(member)}`) : '',
     '{userNoPing}': user?.id ? `@${displayName(member)}` : '', '{userAvatar}': avatar(member) || user?.displayAvatarURL?.({ size: 1024 }) || '',
@@ -88,125 +134,65 @@ function buildVariableMap(interaction, allowUserPing = false, overrides = {}) {
     '{userTopRoleId}': topRole?.id || '', '{userTopRoleMention}': topRole?.id ? `<@&${topRole.id}>` : '',
     '{verifiedRoles}': '', '{pendingRoles}': '', '{minimumAccountAgeDays}': '', '{minimumMembershipAgeMinutes}': '',
     '{cooldownSeconds}': '', '{attempts}': '', '{reason}': '',
-    ...overrides,
+    '{guild}': guild?.name || '', '{serverName}': guild?.name || '', '{totalMemberCount}': String(memberCount),
+    '{user}': user?.id ? `<@${user.id}>` : '', '{username}': user?.username || user?.tag || '', '{memberAvatar}': avatar(member) || '',
+    '{welcomeRoles}': '', '{welcomeRoleMentions}': '', '{welcomeRolesNoPing}': '',
   };
+  return { ...map, ...buildCustomVariableMap(options.customVariables), ...overrides };
 }
-
-function replaceVars(value, interaction, allowUserPing = false, overrides = {}) {
+function replaceVars(value, interaction, allowUserPing = false, overrides = {}, options = {}) {
   let output = String(value ?? '');
-  const vars = buildVariableMap(interaction, allowUserPing, overrides);
+  const vars = buildVariableMap(interaction, allowUserPing, overrides, options);
   for (const [key, replacement] of Object.entries(vars)) {
     output = output.split(key).join(String(replacement ?? ''));
     output = output.split(key.toLowerCase()).join(String(replacement ?? ''));
   }
   return output;
 }
-
-// Verification keeps its established presentation semantics while sourcing
-// values from the same global registry. This adapter can also serve other
-// member-event modules that require relative timestamps and preserve unknown
-// placeholders rather than replacing them with empty strings.
-function verificationFormatDate(value) {
-  if (!value) return '';
-  try { return new Date(value).toLocaleString(); } catch { return ''; }
+function buildWelcomeVariableMap(member, context = {}, options = {}) {
+  const guild = member?.guild;
+  const user = member?.user;
+  const joinNumber = Number(context.joinNumber ?? guild?.memberCount ?? 0);
+  const totalMemberCount = Number(context.totalMemberCount ?? guild?.memberCount ?? 0);
+  const roleMentions = String(context.welcomeRoleMentions ?? context.welcomeRoles ?? '');
+  const roleDisplay = String(context.welcomeRolesNoPing ?? '');
+  const interaction = { guild, guildId: guild?.id, user, member };
+  return buildVariableMap(interaction, false, {
+    '{guild}': guild?.name || '', '{guildName}': guild?.name || '', '{server}': guild?.name || '', '{serverName}': guild?.name || '',
+    '{memberCount}': String(joinNumber), '{guildMemberCount}': String(joinNumber), '{totalMemberCount}': String(totalMemberCount),
+    '{user}': user ? String(user) : '', '{userMention}': user?.id ? `<@${user.id}>` : '', '{userNoPing}': `@${user?.username || user?.id || ''}`,
+    '{username}': user?.username || user?.tag || user?.id || '', '{userDisplay}': member?.displayName || user?.globalName || user?.username || user?.id || '',
+    '{userAvatar}': member?.displayAvatarURL?.({ extension: 'png', size: 256 }) || user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || '',
+    '{memberAvatar}': member?.displayAvatarURL?.({ extension: 'png', size: 256 }) || user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || '',
+    '{welcomeRoles}': roleMentions, '{welcomeRoleMentions}': roleMentions, '{welcomeRolesNoPing}': roleDisplay,
+    '{createdAt}': fmtTs(user?.createdTimestamp, 'F'), '{joinedAt}': fmtTs(member?.joinedTimestamp, 'F'), '{timestamp}': fmtTs(Date.now(), 'F'),
+  }, options);
 }
-function verificationTimestamp(value) {
-  const milliseconds = value instanceof Date ? value.getTime() : Number(value);
-  const seconds = Math.floor(milliseconds / 1000);
-  return Number.isFinite(seconds) && seconds > 0 ? `<t:${seconds}:R>` : '';
+function renderWelcomeTemplate(template, member, context = {}, replacements = {}, options = {}) {
+  const values = { ...buildWelcomeVariableMap(member, context, options), ...replacements };
+  let output = String(template ?? '');
+  for (const [token, value] of Object.entries(values)) output = output.split(token).join(String(value ?? ''));
+  return output;
 }
+function verificationFormatDate(value) { if (!value) return ''; try { return new Date(value).toLocaleString(); } catch { return ''; } }
+function verificationTimestamp(value) { const milliseconds = value instanceof Date ? value.getTime() : Number(value); const seconds = Math.floor(milliseconds / 1000); return Number.isFinite(seconds) && seconds > 0 ? `<t:${seconds}:R>` : ''; }
 function verificationDuration(milliseconds) {
-  const total = Math.max(0, Number(milliseconds) || 0);
-  const days = Math.floor(total / 86400000);
-  const years = Math.floor(days / 365);
-  const months = Math.floor((days % 365) / 30);
-  const remainingDays = (days % 365) % 30;
-  const parts = [];
-  if (years) parts.push(`${years} year${years === 1 ? '' : 's'}`);
-  if (months) parts.push(`${months} month${months === 1 ? '' : 's'}`);
-  if (!years && remainingDays) parts.push(`${remainingDays} day${remainingDays === 1 ? '' : 's'}`);
-  return parts.length ? parts.join(', ') : 'less than a day';
+  const total = Math.max(0, Number(milliseconds) || 0); const days = Math.floor(total / 86400000); const years = Math.floor(days / 365); const months = Math.floor((days % 365) / 30); const remainingDays = (days % 365) % 30; const parts = [];
+  if (years) parts.push(`${years} year${years === 1 ? '' : 's'}`); if (months) parts.push(`${months} month${months === 1 ? '' : 's'}`); if (!years && remainingDays) parts.push(`${remainingDays} day${remainingDays === 1 ? '' : 's'}`); return parts.length ? parts.join(', ') : 'less than a day';
 }
-function buildVerificationVariableMap(member, guildInput, values = {}) {
-  const guild = guildInput || member?.guild || null;
-  const user = member?.user || values.user || null;
-  const userId = member?.id || user?.id || '';
-  const nowMs = Date.now();
-  const now = `<t:${Math.floor(nowMs / 1000)}:R>`;
-  const icon = guild?.iconURL?.({ extension: 'png', size: 256 }) || '';
-  const banner = guild?.bannerURL?.({ extension: 'png', size: 1024 }) || '';
-  const createdTimestamp = user?.createdTimestamp || 0;
-  const joinedTimestamp = member?.joinedTimestamp || 0;
-  const display = member?.displayName || user?.globalName || user?.displayName || user?.username || '';
-  const nickname = member?.nickname || display;
-  const userImage = user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || '';
-  const serverUserImage = member?.displayAvatarURL?.({ extension: 'png', size: 256 }) || userImage;
-  const unavailable = undefined;
-  return {
-    user: userId ? `<@${userId}>` : unavailable,
-    username: user?.username || unavailable,
-    serverId: guild?.id || unavailable,
-    userId: userId || unavailable,
-    userTag: user ? (user.tag || user.username || '') : unavailable,
-    userName: user?.username || unavailable,
-    userGlobalName: user ? (user.globalName || user.username || '') : unavailable,
-    userMention: userId ? `<@${userId}>` : unavailable,
-    userNoPing: userId ? `<@${userId}>` : unavailable,
-    userAvatar: userImage || unavailable,
-    userServerAvatar: serverUserImage || unavailable,
-    userNickname: nickname || unavailable,
-    userDisplay: display || unavailable,
-    userCreatedAt: user ? verificationFormatDate(user.createdAt) : unavailable,
-    userCreatedTimestamp: createdTimestamp ? verificationTimestamp(createdTimestamp) : unavailable,
-    userJoinedAt: member ? verificationFormatDate(member.joinedAt) : unavailable,
-    userJoinedTimestamp: joinedTimestamp ? verificationTimestamp(joinedTimestamp) : unavailable,
-    createdAt: createdTimestamp ? verificationTimestamp(createdTimestamp) : unavailable,
-    joinedAt: joinedTimestamp ? verificationTimestamp(joinedTimestamp) : unavailable,
-    leftAt: values.leftAt || now,
-    timestamp: values.timestamp || now,
-    accountAge: user && createdTimestamp ? verificationDuration(nowMs - createdTimestamp) : unavailable,
-    membershipDuration: member && joinedTimestamp ? verificationDuration(nowMs - joinedTimestamp) : unavailable,
-    departureIcon: values.departureIcon ?? '👋',
-    departureType: values.departureType ?? 'left',
-    departureLabel: values.departureLabel ?? 'Left Voluntarily',
-    departureReason: values.departureReason ?? 'No reason — the member left voluntarily.',
-    departureModerator: values.departureModerator ?? 'Not applicable',
-    departureModeratorId: values.departureModeratorId ?? 'Not applicable',
-    nowTimestamp: now,
-    successEmoji: '✅', warningEmoji: '⚠️', errorEmoji: '❌', proofVerifiedEmoji: '💎',
-    successColor: '#57F287', warningColor: '#FEE75C', errorColor: '#ED4245', proofVerifiedColor: '#00D4FF',
-    guildId: guild?.id || unavailable,
-    guildName: guild?.name || unavailable,
-    server: guild?.name || unavailable,
-    guildIcon: icon || unavailable,
-    serverIcon: icon || unavailable,
-    guildBanner: banner || unavailable,
-    guildMemberCount: guild ? String(guild.memberCount || 0) : unavailable,
-    memberCount: guild ? String(guild.memberCount || 0) : unavailable,
-    guildVanityCode: guild ? (guild.vanityURLCode || '') : unavailable,
-    verifiedRoles: values.verifiedRoles ?? '', pendingRoles: values.pendingRoles ?? '',
-    minimumAccountAgeDays: values.minimumAccountAgeDays ?? '',
-    minimumMembershipAgeMinutes: values.minimumMembershipAgeMinutes ?? '',
-    cooldownSeconds: values.cooldownSeconds ?? '', attempts: values.attempts ?? '', reason: values.reason ?? '',
-    ...values,
-  };
+function buildVerificationVariableMap(member, guildInput, values = {}, options = {}) {
+  const guild = guildInput || member?.guild || null; const user = member?.user || values.user || null; const userId = member?.id || user?.id || ''; const nowMs = Date.now(); const now = `<t:${Math.floor(nowMs / 1000)}:R>`; const icon = guild?.iconURL?.({ extension: 'png', size: 256 }) || ''; const banner = guild?.bannerURL?.({ extension: 'png', size: 1024 }) || ''; const createdTimestamp = user?.createdTimestamp || 0; const joinedTimestamp = member?.joinedTimestamp || 0; const display = member?.displayName || user?.globalName || user?.displayName || user?.username || ''; const nickname = member?.nickname || display; const userImage = user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || ''; const serverUserImage = member?.displayAvatarURL?.({ extension: 'png', size: 256 }) || userImage; const unavailable = undefined;
+  return { user: userId ? `<@${userId}>` : unavailable, username: user?.username || unavailable, serverId: guild?.id || unavailable, userId: userId || unavailable, userTag: user ? (user.tag || user.username || '') : unavailable, userName: user?.username || unavailable, userGlobalName: user ? (user.globalName || user.username || '') : unavailable, userMention: userId ? `<@${userId}>` : unavailable, userNoPing: userId ? `<@${userId}>` : unavailable, userAvatar: userImage || unavailable, userServerAvatar: serverUserImage || unavailable, userNickname: nickname || unavailable, userDisplay: display || unavailable, userCreatedAt: user ? verificationFormatDate(user.createdAt) : unavailable, userCreatedTimestamp: createdTimestamp ? verificationTimestamp(createdTimestamp) : unavailable, userJoinedAt: member ? verificationFormatDate(member.joinedAt) : unavailable, userJoinedTimestamp: joinedTimestamp ? verificationTimestamp(joinedTimestamp) : unavailable, createdAt: createdTimestamp ? verificationTimestamp(createdTimestamp) : unavailable, joinedAt: joinedTimestamp ? verificationTimestamp(joinedTimestamp) : unavailable, leftAt: values.leftAt || now, timestamp: values.timestamp || now, accountAge: user && createdTimestamp ? verificationDuration(nowMs - createdTimestamp) : unavailable, membershipDuration: member && joinedTimestamp ? verificationDuration(nowMs - joinedTimestamp) : unavailable, departureIcon: values.departureIcon ?? '👋', departureType: values.departureType ?? 'left', departureLabel: values.departureLabel ?? 'Left Voluntarily', departureReason: values.departureReason ?? 'No reason — the member left voluntarily.', departureModerator: values.departureModerator ?? 'Not applicable', departureModeratorId: values.departureModeratorId ?? 'Not applicable', nowTimestamp: now, successEmoji: '✅', warningEmoji: '⚠️', errorEmoji: '❌', proofVerifiedEmoji: '💎', successColor: '#57F287', warningColor: '#FEE75C', errorColor: '#ED4245', proofVerifiedColor: '#00D4FF', guildId: guild?.id || unavailable, guildName: guild?.name || unavailable, server: guild?.name || unavailable, guildIcon: icon || unavailable, serverIcon: icon || unavailable, guildBanner: banner || unavailable, guildMemberCount: guild ? String(guild.memberCount || 0) : unavailable, memberCount: guild ? String(guild.memberCount || 0) : unavailable, guildVanityCode: guild ? (guild.vanityURLCode || '') : unavailable, verifiedRoles: values.verifiedRoles ?? '', pendingRoles: values.pendingRoles ?? '', minimumAccountAgeDays: values.minimumAccountAgeDays ?? '', minimumMembershipAgeMinutes: values.minimumMembershipAgeMinutes ?? '', cooldownSeconds: values.cooldownSeconds ?? '', attempts: values.attempts ?? '', reason: values.reason ?? '', ...Object.fromEntries(Object.entries(buildCustomVariableMap(options.customVariables)).map(([k,v]) => [variableKey(k), v])), ...values };
 }
-function renderVerificationTemplate(template, member = null, guild = null, values = {}) {
-  const replacements = buildVerificationVariableMap(member, guild, values);
-  return String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (token, key) => {
-    if (!Object.prototype.hasOwnProperty.call(replacements, key)) return token;
-    const value = replacements[key];
-    return value === undefined || value === null ? token : String(value);
-  });
+function renderVerificationTemplate(template, member = null, guild = null, values = {}, options = {}) {
+  const replacements = buildVerificationVariableMap(member, guild, values, options);
+  return String(template || '').replace(/\{([a-zA-Z0-9_.-]+)\}/g, (token, key) => { if (!Object.prototype.hasOwnProperty.call(replacements, key)) return token; const value = replacements[key]; return value === undefined || value === null ? token : String(value); });
 }
-
-function getVariables() { return [...HELPERS]; }
-module.exports = {
-  HELPERS,
-  getVariables,
-  buildVariableMap,
-  replaceVars,
-  replaceVariables: replaceVars,
-  buildVerificationVariableMap,
-  renderVerificationTemplate,
-};
+function getVariables(customVariables = []) { return [...SYSTEM_VARIABLES, ...normalizeCustomVariables(customVariables).filter((item) => item.enabled).map((item) => item.token)]; }
+function getVariableDefinitions(customVariables = []) {
+  return [
+    ...SYSTEM_VARIABLES.map((token) => ({ key: variableKey(token), token, type: 'system', protected: true, enabled: true })),
+    ...normalizeCustomVariables(customVariables).map((item) => ({ ...item, type: 'custom', protected: false })),
+  ];
+}
+module.exports = { SYSTEM_VARIABLES, HELPERS, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables: replaceVars, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
