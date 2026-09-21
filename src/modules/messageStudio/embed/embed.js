@@ -89,7 +89,12 @@ function installMediaRuntime(targetPanel) {
   media.installMediaManagerUi(targetPanel);
   media.installThumbnailUi(targetPanel);
   targetPanel.getPanelMedia = mediaStateApi.getPanelMedia;
-  targetPanel.setPanelMedia = mediaStateApi.setPanelMedia;
+  // installMediaManagerBase() deliberately replaces setPanelMedia with a
+  // panel-local writer that treats an empty mediaV2 gallery as authoritative.
+  // Do not overwrite that patched writer with the legacy-fallback implementation.
+  if (typeof targetPanel.setPanelMedia !== 'function') {
+    targetPanel.setPanelMedia = mediaStateApi.setPanelMedia;
+  }
   targetPanel.mediaModel = mediaStateApi.mediaModel;
   return targetPanel;
 }
