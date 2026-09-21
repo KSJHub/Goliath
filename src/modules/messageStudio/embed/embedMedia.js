@@ -631,26 +631,19 @@ function installMediaManagerUi(panel) {
   const original = panel.buildMediaManagerPanel.bind(panel);
   panel.buildMediaManagerPanel = (interaction, requestedBy = null) => {
     const payload = original(interaction, requestedBy);
-    const originalRows = Array.isArray(payload?.components) ? payload.components : [];
+    /*
+     * Component layout is owned exclusively by embedMediaManagerBase.
+     *
+     * This UI installer enriches the manager with validation and previews,
+     * but must not reconstruct or reorder the controls. Keeping one layout
+     * authority prevents later installers from silently replacing placement,
+     * navigation, or secondary-media controls.
+     */
     const state = panel.getSession(interaction);
     const media = getPanelMedia(state);
-    const hasSelectedMedia = Number.isInteger(state.selectedMediaIndex) && Boolean(media.gallery[state.selectedMediaIndex]);
-    const hasSelectedFile = Number.isInteger(state.selectedFileIndex) && Boolean(media.files[state.selectedFileIndex]);
-    const rows = [];
-    const gallerySelect = componentById(originalRows, 'embed:media-gallery-select');
-    const fileSelect = componentById(originalRows, 'embed:media-file-select');
-    if (gallerySelect) rows.push(rowFromComponents(gallerySelect));
-    if (fileSelect) rows.push(rowFromComponents(fileSelect));
-    rows.push(rowFromComponents(
-      componentById(originalRows, 'embed:media-gallery-add'), componentById(originalRows, 'embed:media-gallery-edit')?.setLabel('✏️ Edit Media'), componentById(originalRows, 'embed:media-gallery-remove')?.setLabel('🗑️ Remove Media'), componentById(originalRows, 'embed:media-gallery-up')?.setLabel('⬆️ Up'), componentById(originalRows, 'embed:media-gallery-down')?.setLabel('⬇️ Down'),
-    ));
-    rows.push(rowFromComponents(
-      componentById(originalRows, 'embed:media-file-add'), componentById(originalRows, 'embed:media-file-edit'), componentById(originalRows, 'embed:media-file-remove')?.setLabel('🗑️ Remove File'), new ButtonBuilder().setCustomId('embed:file-options').setLabel('⚙️ File Options').setStyle(ButtonStyle.Secondary).setDisabled(!hasSelectedFile),
-    ));
-    rows.push(rowFromComponents(
-      componentById(originalRows, 'embed:media-thumbnail')?.setLabel('🖼️ Thumbnail'), new ButtonBuilder().setCustomId('embed:media-upload').setLabel('📤 Upload Media').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('embed:media-options').setLabel('⚙️ Media Options').setStyle(ButtonStyle.Secondary).setDisabled(!hasSelectedMedia),
-    ));
-    rows.push(rowFromComponents(componentById(originalRows, 'embed:builder'), componentById(originalRows, 'embed:helpers')));
+    const rows = Array.isArray(payload?.components)
+      ? payload.components
+      : [];
     const embed = payload?.embeds?.[0];
     if (embed?.data) embed.setDescription(`${String(embed.data.description || '')}\n\n${validationSummary(interaction)}`.slice(0, 4096));
     const embeds = Array.isArray(payload?.embeds) ? [...payload.embeds] : [];
