@@ -90,132 +90,8 @@ function parseVerifyCustomId(customId = '') {
   return prefix === CUSTOM_ID_PREFIX && action === 'button' && panelId ? { panelId } : null;
 }
 
-function formatDate(value) {
-  if (!value) return '';
-  try {
-    return new Date(value).toLocaleString();
-  } catch {
-    return '';
-  }
-}
-
-function formatTimestamp(value) {
-  const milliseconds = value instanceof Date ? value.getTime() : Number(value);
-  const seconds = Math.floor(milliseconds / 1000);
-  return Number.isFinite(seconds) && seconds > 0 ? `<t:${seconds}:R>` : '';
-}
-
-function formatDuration(milliseconds) {
-  const total = Math.max(0, Number(milliseconds) || 0);
-  const days = Math.floor(total / 86400000);
-  const years = Math.floor(days / 365);
-  const months = Math.floor((days % 365) / 30);
-  const remainingDays = (days % 365) % 30;
-  const parts = [];
-  if (years) parts.push(`${years} year${years === 1 ? '' : 's'}`);
-  if (months) parts.push(`${months} month${months === 1 ? '' : 's'}`);
-  if (!years && remainingDays) parts.push(`${remainingDays} day${remainingDays === 1 ? '' : 's'}`);
-  return parts.length ? parts.join(', ') : 'less than a day';
-}
-
-function userAvatar(user) {
-  return user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || '';
-}
-
-function serverAvatar(member, user) {
-  return member?.displayAvatarURL?.({ extension: 'png', size: 256 }) || userAvatar(user);
-}
-
-function guildIcon(guild) {
-  return guild?.iconURL?.({ extension: 'png', size: 256 }) || '';
-}
-
-function guildBanner(guild) {
-  return guild?.bannerURL?.({ extension: 'png', size: 1024 }) || '';
-}
-
-function templateReplacements(member, guildInput, values = {}) {
-  const guild = guildInput || member?.guild || null;
-  const user = member?.user || values.user || null;
-  const userId = member?.id || user?.id || '';
-  const nowMs = Date.now();
-  const now = `<t:${Math.floor(nowMs / 1000)}:R>`;
-  const icon = guildIcon(guild);
-  const banner = guildBanner(guild);
-  const createdTimestamp = user?.createdTimestamp || 0;
-  const joinedTimestamp = member?.joinedTimestamp || 0;
-  const display = member?.displayName || user?.globalName || user?.displayName || user?.username || '';
-  const nickname = member?.nickname || display;
-  const avatar = userAvatar(user);
-  const serverUserAvatar = serverAvatar(member, user);
-  const unavailable = undefined;
-
-  return {
-    user: userId ? `<@${userId}>` : unavailable,
-    username: user?.username || unavailable,
-    serverId: guild?.id || unavailable,
-    userId: userId || unavailable,
-    userTag: user ? (user.tag || user.username || '') : unavailable,
-    userName: user?.username || unavailable,
-    userGlobalName: user ? (user.globalName || user.username || '') : unavailable,
-    userMention: userId ? `<@${userId}>` : unavailable,
-    userNoPing: userId ? `<@${userId}>` : unavailable,
-    userAvatar: avatar || unavailable,
-    userServerAvatar: serverUserAvatar || unavailable,
-    userNickname: nickname || unavailable,
-    userDisplay: display || unavailable,
-    userCreatedAt: user ? formatDate(user.createdAt) : unavailable,
-    userCreatedTimestamp: createdTimestamp ? formatTimestamp(createdTimestamp) : unavailable,
-    userJoinedAt: member ? formatDate(member.joinedAt) : unavailable,
-    userJoinedTimestamp: joinedTimestamp ? formatTimestamp(joinedTimestamp) : unavailable,
-    createdAt: createdTimestamp ? formatTimestamp(createdTimestamp) : unavailable,
-    joinedAt: joinedTimestamp ? formatTimestamp(joinedTimestamp) : unavailable,
-    leftAt: values.leftAt || now,
-    timestamp: values.timestamp || now,
-    accountAge: user && createdTimestamp ? formatDuration(nowMs - createdTimestamp) : unavailable,
-    membershipDuration: member && joinedTimestamp ? formatDuration(nowMs - joinedTimestamp) : unavailable,
-    departureIcon: values.departureIcon ?? '👋',
-    departureType: values.departureType ?? 'left',
-    departureLabel: values.departureLabel ?? 'Left Voluntarily',
-    departureReason: values.departureReason ?? 'No reason — the member left voluntarily.',
-    departureModerator: values.departureModerator ?? 'Not applicable',
-    departureModeratorId: values.departureModeratorId ?? 'Not applicable',
-    nowTimestamp: now,
-    successEmoji: '✅',
-    warningEmoji: '⚠️',
-    errorEmoji: '❌',
-    proofVerifiedEmoji: '💎',
-    successColor: '#57F287',
-    warningColor: '#FEE75C',
-    errorColor: '#ED4245',
-    proofVerifiedColor: '#00D4FF',
-    guildId: guild?.id || unavailable,
-    guildName: guild?.name || unavailable,
-    server: guild?.name || unavailable,
-    guildIcon: icon || unavailable,
-    serverIcon: icon || unavailable,
-    guildBanner: banner || unavailable,
-    guildMemberCount: guild ? String(guild.memberCount || 0) : unavailable,
-    memberCount: guild ? String(guild.memberCount || 0) : unavailable,
-    guildVanityCode: guild ? (guild.vanityURLCode || '') : unavailable,
-    verifiedRoles: values.verifiedRoles ?? '',
-    pendingRoles: values.pendingRoles ?? '',
-    minimumAccountAgeDays: values.minimumAccountAgeDays ?? '',
-    minimumMembershipAgeMinutes: values.minimumMembershipAgeMinutes ?? '',
-    cooldownSeconds: values.cooldownSeconds ?? '',
-    attempts: values.attempts ?? '',
-    reason: values.reason ?? '',
-    ...values,
-  };
-}
-
 function renderTemplate(template, member = null, guild = null, values = {}) {
-  const replacements = templateReplacements(member, guild, values);
-  return String(template || '').replace(/\{([a-zA-Z0-9_]+)\}/g, (token, key) => {
-    if (!Object.prototype.hasOwnProperty.call(replacements, key)) return token;
-    const value = replacements[key];
-    return value === undefined || value === null ? token : String(value);
-  });
+  return guildVariables.renderVerificationTemplate(template, member, guild, values);
 }
 
 function buildVerificationEmbed(panel = {}, guild = null, member = null, values = {}) {
@@ -576,7 +452,7 @@ async function deployVerificationPanel(channel, input = {}, meta = {}) {
     if (message?.deletable) {
       await message.delete().catch((cleanupError) => {
         console.error('[Verification] Failed to remove uncommitted replacement panel message', {
-          guildId,
+          guildId: guild.id,
           panelId,
           messageId: message.id,
           error: cleanupError,
@@ -587,7 +463,7 @@ async function deployVerificationPanel(channel, input = {}, meta = {}) {
       verificationStore.deletePanel(guild.id, panelId, { action: 'verification_panel_stage_rollback', ...meta });
     } catch (cleanupError) {
       console.error('[Verification] Failed to remove staged panel record after deployment failure', {
-        guildId,
+        guildId: guild.id,
         panelId,
         error: cleanupError,
       });
