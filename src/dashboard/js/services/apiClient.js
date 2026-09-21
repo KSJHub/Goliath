@@ -48,6 +48,10 @@ export const api = {
   getOwnerMe: () => request('/api/owner/me'),
   getOwnerDiagnostics: () => request('/api/owner/diagnostics'),
   getOwnerGuilds: () => request('/api/owner/guilds/all'),
+  getOwnerVariables: () => request('/api/owner/variables'),
+  createOwnerVariable: (payload) => request('/api/owner/variables', { method: 'POST', body: JSON.stringify(payload) }),
+  updateOwnerVariable: (key, payload) => request(`/api/owner/variables/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteOwnerVariable: (key) => request(`/api/owner/variables/${encodeURIComponent(key)}`, { method: 'DELETE' }),
   getPlatformRuntime: () => request('/api/owner/runtime'),
   getOwnerBackups: (environment = 'all') => request(`/api/owner/backups?environment=${encodeURIComponent(environment)}`),
   createOwnerManualBackup: (payload) => request('/api/owner/backups/manual', { method: 'POST', body: JSON.stringify(payload) }),
@@ -130,11 +134,7 @@ export const api = {
   saveVerificationTemplate: (guildId, payload) => request(`/api/verification/${guildId}/template`, { method: 'POST', body: JSON.stringify(payload) }),
   deployVerificationPanel: (guildId, payload = {}) => request(`/api/verification/${guildId}/deploy`, {
     method: 'POST',
-    body: JSON.stringify({
-      channelId: payload.channelId,
-      panelId: payload.panelId,
-      template: payload.template || payload,
-    }),
+    body: JSON.stringify({ channelId: payload.channelId, panelId: payload.panelId, template: payload.template || payload }),
   }),
   refreshVerificationPanel: (guildId, panelId, payload = {}) => request(`/api/verification/${guildId}/panels/${encodeURIComponent(panelId)}/redeploy`, { method: 'POST', body: JSON.stringify(payload) }),
   deleteVerificationPanel: (guildId, panelId) => request(`/api/verification/${guildId}/panels/${encodeURIComponent(panelId)}`, { method: 'DELETE' }),
