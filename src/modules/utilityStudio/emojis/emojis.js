@@ -10,7 +10,7 @@ const MAX_STUDIO_EMOJIS = MAX_APPLICATION_EMOJIS - MAX_CORE_EMOJIS;
 const CORE_EMOJI_PREFIX = 'goliath_';
 const CORE_EMOJI_ALIASES = Object.freeze([
   'activision', 'blizzard', 'discord', 'epic', 'facebook', 'instagram', 'kick', 'nintendo', 'pc',
-  'playstation', 'snapchat', 'steam', 'tiktok', 'twitch', 'twitter', 'whatsapp', 'x', 'xbox', 'youtube',
+  'playstation', 'snapchat', 'steam', 'tiktok', 'twitch', 'twitter', 'whatsapp', 'xtwitter', 'xbox', 'youtube',
 ]);
 const CORE_EMOJI_ALIAS_SET = new Set(CORE_EMOJI_ALIASES);
 const GENERIC_POLICY_CONTEXTS = new Set(['unknown', 'text', 'embed', 'render', 'component', 'picker', 'editor']);
@@ -34,7 +34,8 @@ function isCoreEmojiName(name) { return String(name || '').toLowerCase().startsW
 function isCoreEmoji(emoji) { return Boolean(emoji?.name && isCoreEmojiName(emoji.name)); }
 function coreAlias(name) {
   const clean = String(name || '').toLowerCase();
-  return isCoreEmojiName(clean) ? clean.slice(CORE_EMOJI_PREFIX.length) : clean;
+  const alias = isCoreEmojiName(clean) ? clean.slice(CORE_EMOJI_PREFIX.length) : clean;
+  return alias === 'x' ? 'xtwitter' : alias;
 }
 function isApprovedCoreAlias(value) { return CORE_EMOJI_ALIAS_SET.has(cleanEmojiName(value)); }
 function coreArtifactName(kind, alias) { return `${CORE_EMOJI_PREFIX}${kind === 'backup' ? 'b' : 'r'}_${alias}`.slice(0, 32); }
