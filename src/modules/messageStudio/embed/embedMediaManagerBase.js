@@ -88,17 +88,25 @@ function installMediaManagerBase(panel, media) {
     const state = panel.getSession(interaction);
     const panelMedia = media.getPanelMedia(state);
 
-    const galleryIndex =
-      Number.isInteger(state.selectedMediaIndex) &&
-      state.selectedMediaIndex < panelMedia.gallery.length
-        ? state.selectedMediaIndex
-        : null;
+    /*
+     * Selection is a UI cursor, not media content. If media exists but the
+     * cursor is missing/stale (for example after reopening the manager), use
+     * the nearest valid item immediately so controls never appear disabled for
+     * visible media. Interaction handlers persist explicit user selections.
+     */
+    const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex)
+      ? state.selectedMediaIndex
+      : null;
+    const galleryIndex = panelMedia.gallery.length
+      ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1))
+      : null;
 
-    const fileIndex =
-      Number.isInteger(state.selectedFileIndex) &&
-      state.selectedFileIndex < panelMedia.files.length
-        ? state.selectedFileIndex
-        : null;
+    const requestedFileIndex = Number.isInteger(state.selectedFileIndex)
+      ? state.selectedFileIndex
+      : null;
+    const fileIndex = panelMedia.files.length
+      ? Math.max(0, Math.min(requestedFileIndex ?? 0, panelMedia.files.length - 1))
+      : null;
 
     const selectedMedia =
       galleryIndex == null
