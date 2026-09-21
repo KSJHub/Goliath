@@ -62,7 +62,12 @@ async function probeRemoteSource(url, expected = 'media') {
   const cached = getCachedAsset('global', url);
   if (cached?.buffer) {
     const cachedType = cached.meta?.contentType || '';
-    if (!expectedTypeOk(cachedType, expected)) throw new Error(`Media source returned ${cachedType || 'an unsupported type'}.`);
+    if (!expectedTypeOk(cachedType, expected)) {
+      throw new Error(
+        `Media source returned ${cachedType || 'an unsupported type'} ` +
+        `(expected=${expected}, branch=cache, source=${String(url).slice(0, 180)}).`
+      );
+    }
     return { ok: true, contentType: cachedType, bytes: cached.buffer.length, cached: true };
   }
 
@@ -77,7 +82,12 @@ async function probeRemoteSource(url, expected = 'media') {
     if (!response.ok && response.status !== 206) throw new Error(`Media source returned HTTP ${response.status}.`);
     const contentType = String(response.headers.get('content-type') || '');
     const declared = Number(response.headers.get('content-length') || 0);
-    if (!expectedTypeOk(contentType, expected)) throw new Error(`Media source returned ${contentType || 'an unsupported type'}.`);
+    if (!expectedTypeOk(contentType, expected)) {
+      throw new Error(
+        `Media source returned ${contentType || 'an unsupported type'} ` +
+        `(expected=${expected}, branch=network, source=${String(url).slice(0, 180)}).`
+      );
+    }
     if (declared > MAX_SOURCE_BYTES && !nativeImageShouldPassThrough(contentType)) {
       throw new Error(`Media source exceeds the ${Math.floor(MAX_SOURCE_BYTES / 1024 / 1024)} MB processing limit.`);
     }
@@ -149,20 +159,13 @@ function footerText(data) {
 }
 function panelMedia(mediaState, index) { return Array.isArray(mediaState?.panels) ? (mediaState.panels[index] || null) : null; }
 function itemPlacement(item) { return String(item?.placement || '').toLowerCase() === 'above' ? 'above' : 'below'; }
-function isEnhancedMedia(media) {
-  if (!media) return false;
-  const gallery = Array.isArray(media.gallery) ? media.gallery : [];
-  const first = gallery[0] || {};
-  return gallery.length > 1 || Boolean(first.alt) || first.spoiler === true || first.type === 'video' || itemPlacement(first) === 'above' || Boolean(media.thumbnail?.alt) || (Array.isArray(media.files) && media.files.length > 0);
-}
 async function galleryItems(media, interaction, placement = null) {
   const output = [];
   for (const item of (Array.isArray(media?.gallery) ? media.gallery : []).slice(0, 10)) {
     if (placement && itemPlacement(item) !== placement) continue;
     const source = resolveSource(item?.source, interaction);
     if (!source) continue;
-    const expected = item?.type === 'image' ? 'image' : item?.type === 'video' ? 'video' : 'media';
-    await probeRemoteSource(source, expected);
+    await probeRemoteSource(source, 'media');
     const builder = new MediaGalleryItemBuilder().setURL(source).setSpoiler(item?.spoiler === true);
     if (item?.alt) builder.setDescription(String(item.alt).slice(0, 1024));
     output.push(builder);
@@ -278,25 +281,44 @@ async function buildEmbedPayload(options = {}) {
     const embed = resolvedEmbeds[index];
     const data = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed;
     if (!data || typeof data !== 'object') continue;
+    const hasPanelMediaState =
+      Array.isArray(mediaState?.panels) &&
+      index < mediaState.panels.length;
     const media = panelMedia(mediaState, index);
     const container = new ContainerBuilder();
     if (Number.isInteger(data.color)) container.setAccentColor(data.color);
     const text = panelText(data);
-    const thumbSource = resolveSource(media?.thumbnail?.source || data.thumbnail?.url, interaction);
+    const thumbSource = resolveSource(
+      hasPanelMediaState
+        ? media?.thumbnail?.source
+        : data.thumbnail?.url,
+      interaction
+    );
     if (thumbSource) await probeRemoteSource(thumbSource, 'thumbnail');
-    const enhanced = isEnhancedMedia(media);
-    const aboveItems = enhanced ? await galleryItems(media, interaction, 'above') : [];
-    if (aboveItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...aboveItems));
-    if (text && isHttpsUrl(thumbSource)) {
-      const thumbnail = new ThumbnailBuilder().setURL(thumbSource);
-      if (media?.thumbnail?.alt) thumbnail.setDescription(String(media.thumbnail.alt).slice(0, 1024));
-      container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)).setThumbnailAccessory(thumbnail));
-    } else if (text) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
-    if (enhanced) {
+
+    // Placement-aware mediaV2 is authoritative. Always render its gallery
+    // natively so Above and Below use the same full-width Discord gallery
+    // geometry. The legacy image-normalization path is retained only for
+    // embeds that do not yet have a mediaV2 panel.
+    if (hasPanelMediaState) {
+      const aboveItems = await galleryItems(media, interaction, 'above');
+      if (aboveItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...aboveItems));
+
+      if (text && isHttpsUrl(thumbSource)) {
+        const thumbnail = new ThumbnailBuilder().setURL(thumbSource);
+        if (media?.thumbnail?.alt) thumbnail.setDescription(String(media.thumbnail.alt).slice(0, 1024));
+        container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)).setThumbnailAccessory(thumbnail));
+      } else if (text) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
+
       const belowItems = await galleryItems(media, interaction, 'below');
       if (belowItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...belowItems));
     } else {
-      const imageUrl = resolveSource(media?.gallery?.[0]?.source || data.image?.url, interaction);
+      if (text && isHttpsUrl(thumbSource)) {
+        const thumbnail = new ThumbnailBuilder().setURL(thumbSource);
+        container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)).setThumbnailAccessory(thumbnail));
+      } else if (text) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
+
+      const imageUrl = resolveSource(data.image?.url, interaction);
       if (isHttpsUrl(imageUrl)) {
         try { await addLegacyImage(container, imageUrl, files, index); }
         catch (error) { throw new Error(`Panel ${index + 1} image could not be prepared: ${error?.message || error}`); }

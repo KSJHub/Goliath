@@ -128,20 +128,52 @@ jobs:
             pm2 save
 
             NEW_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
-            [ -n "$NEW_PID" ] && [ "$NEW_PID" != 0 ]
+            if [ -z "$NEW_PID" ] || [ "$NEW_PID" = "0" ]; then
+              echo "DEV PM2 process did not start." >&2
+              pm2 logs "$PM2_NAME" --lines 120 --nostream || true
+              exit 1
+            fi
+
             sleep 18
+
             STABLE_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
+            if [ -z "$STABLE_PID" ] || [ "$STABLE_PID" = "0" ]; then
+              echo "DEV PM2 process is not running after stability gate." >&2
+              pm2 logs "$PM2_NAME" --lines 120 --nostream || true
+              exit 1
+            fi
             if [ "$NEW_PID" != "$STABLE_PID" ]; then
               echo "DEV crashed/restarted during 18s stability gate: $NEW_PID -> $STABLE_PID" >&2
               pm2 logs "$PM2_NAME" --lines 120 --nostream || true
               exit 1
             fi
-            kill -0 "$STABLE_PID"
+            if ! kill -0 "$STABLE_PID" 2>/dev/null; then
+              echo "DEV PID $STABLE_PID is not alive." >&2
+              pm2 logs "$PM2_NAME" --lines 120 --nostream || true
+              exit 1
+            fi
 
             FINAL_SHA="$(git rev-parse HEAD)"
-            [ "$FINAL_SHA" = "$EXPECTED_SHA" ]
-            [ "$FINAL_SHA" = "$(git rev-parse origin/dev)" ]
-            [ "$(readlink -f /proc/$STABLE_PID/cwd)" = "$APP_DIR" ]
+            REMOTE_SHA="$(git rev-parse origin/dev)"
+            if [ "$FINAL_SHA" != "$EXPECTED_SHA" ]; then
+              echo "DEV SHA mismatch: local=$FINAL_SHA expected=$EXPECTED_SHA" >&2
+              exit 1
+            fi
+            if [ "$FINAL_SHA" != "$REMOTE_SHA" ]; then
+              echo "DEV SHA mismatch: local=$FINAL_SHA remote=$REMOTE_SHA" >&2
+              exit 1
+            fi
+
+            PROCESS_CWD="$(readlink -f /proc/$STABLE_PID/cwd 2>/dev/null || true)"
+            echo "DEV process cwd: ${PROCESS_CWD:-unknown}"
+            if [ -z "$PROCESS_CWD" ]; then
+              echo "Unable to resolve DEV process cwd for PID $STABLE_PID." >&2
+              exit 1
+            fi
+            if [ "$PROCESS_CWD" != "$APP_DIR" ]; then
+              echo "DEV process cwd differs from app dir: $PROCESS_CWD != $APP_DIR" >&2
+              exit 1
+            fi
 
             DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/auth/me || true)"
             PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' https://$DEV_HOST/api/auth/me || true)"

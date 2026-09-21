@@ -98,11 +98,36 @@ async function downloadAsset(url) {
 }
 async function ensureAssetCached(guildId, url) {
   if (!url || !/^https:\/\//i.test(String(url))) return null;
+
   const cached = getCachedAsset(guildId, url);
-  if (cached) return { ...cached, cached: true };
+  const cachedType = String(cached?.meta?.contentType || '')
+    .toLowerCase()
+    .split(';')[0]
+    .trim();
+
+  // Only reuse cache entries whose MIME metadata is meaningful.
+  // Older/stale entries may contain no type or a generic transport type,
+  // which can make the renderer reject otherwise valid Discord media.
+  if (
+    cached &&
+    cachedType &&
+    cachedType !== 'application/octet-stream' &&
+    supportedPersistentType(cachedType)
+  ) {
+    return { ...cached, cached: true };
+  }
+
   const downloaded = await downloadAsset(url);
-  saveCachedAsset(guildId, url, downloaded.buffer, { contentType: downloaded.contentType });
-  return { ...downloaded, id: assetId(url), cached: false };
+
+  saveCachedAsset(guildId, url, downloaded.buffer, {
+    contentType: downloaded.contentType,
+  });
+
+  return {
+    ...downloaded,
+    id: assetId(url),
+    cached: false,
+  };
 }
 function addHttpsSource(urls, value) {
   const source = String(value || '').trim();
@@ -177,9 +202,22 @@ function normalizePanelMedia(value = {}, legacyPanel = {}) {
 function normalizeMediaV2(value = {}, panels = []) {
   const panelList = Array.isArray(panels) ? panels : [];
   const inputPanels = Array.isArray(value?.panels) ? value.panels : [];
+  const hasMediaState = Array.isArray(value?.panels);
   const length = panelList.length || inputPanels.length || 1;
   const normalizedPanels = [];
-  for (let index = 0; index < length; index += 1) normalizedPanels.push(normalizePanelMedia(inputPanels[index] || {}, panelList[index] || {}));
+
+  for (let index = 0; index < length; index += 1) {
+    // Legacy panel image/thumbnail fields are migration inputs only.
+    // Once a media model exists, that model is authoritative: an empty
+    // gallery or thumbnail means the user explicitly wants no media.
+    normalizedPanels.push(
+      normalizePanelMedia(
+        inputPanels[index] || {},
+        hasMediaState ? {} : (panelList[index] || {})
+      )
+    );
+  }
+
   return { version: MEDIA_SCHEMA_VERSION, panels: normalizedPanels };
 }
 function ensureStateMedia(state = {}) {
@@ -593,26 +631,19 @@ function installMediaManagerUi(panel) {
   const original = panel.buildMediaManagerPanel.bind(panel);
   panel.buildMediaManagerPanel = (interaction, requestedBy = null) => {
     const payload = original(interaction, requestedBy);
-    const originalRows = Array.isArray(payload?.components) ? payload.components : [];
+    /*
+     * Component layout is owned exclusively by embedMediaManagerBase.
+     *
+     * This UI installer enriches the manager with validation and previews,
+     * but must not reconstruct or reorder the controls. Keeping one layout
+     * authority prevents later installers from silently replacing placement,
+     * navigation, or secondary-media controls.
+     */
     const state = panel.getSession(interaction);
     const media = getPanelMedia(state);
-    const hasSelectedMedia = Number.isInteger(state.selectedMediaIndex) && Boolean(media.gallery[state.selectedMediaIndex]);
-    const hasSelectedFile = Number.isInteger(state.selectedFileIndex) && Boolean(media.files[state.selectedFileIndex]);
-    const rows = [];
-    const gallerySelect = componentById(originalRows, 'embed:media-gallery-select');
-    const fileSelect = componentById(originalRows, 'embed:media-file-select');
-    if (gallerySelect) rows.push(rowFromComponents(gallerySelect));
-    if (fileSelect) rows.push(rowFromComponents(fileSelect));
-    rows.push(rowFromComponents(
-      componentById(originalRows, 'embed:media-gallery-add'), componentById(originalRows, 'embed:media-gallery-edit')?.setLabel('✏️ Edit Media'), componentById(originalRows, 'embed:media-gallery-remove')?.setLabel('🗑️ Remove Media'), componentById(originalRows, 'embed:media-gallery-up')?.setLabel('⬆️ Up'), componentById(originalRows, 'embed:media-gallery-down')?.setLabel('⬇️ Down'),
-    ));
-    rows.push(rowFromComponents(
-      componentById(originalRows, 'embed:media-file-add'), componentById(originalRows, 'embed:media-file-edit'), componentById(originalRows, 'embed:media-file-remove')?.setLabel('🗑️ Remove File'), new ButtonBuilder().setCustomId('embed:file-options').setLabel('⚙️ File Options').setStyle(ButtonStyle.Secondary).setDisabled(!hasSelectedFile),
-    ));
-    rows.push(rowFromComponents(
-      componentById(originalRows, 'embed:media-thumbnail')?.setLabel('🖼️ Thumbnail'), new ButtonBuilder().setCustomId('embed:media-upload').setLabel('📤 Upload Media').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('embed:media-options').setLabel('⚙️ Media Options').setStyle(ButtonStyle.Secondary).setDisabled(!hasSelectedMedia),
-    ));
-    rows.push(rowFromComponents(componentById(originalRows, 'embed:builder'), componentById(originalRows, 'embed:helpers')));
+    const rows = Array.isArray(payload?.components)
+      ? payload.components
+      : [];
     const embed = payload?.embeds?.[0];
     if (embed?.data) embed.setDescription(`${String(embed.data.description || '')}\n\n${validationSummary(interaction)}`.slice(0, 4096));
     const embeds = Array.isArray(payload?.embeds) ? [...payload.embeds] : [];
