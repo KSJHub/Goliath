@@ -2213,8 +2213,6 @@ function contentModal(s) {
   return modal(`embed:save-content:${Date.now()}`, "Edit Panel Text", [
     input("title", "Panel title", TextInputStyle.Short, s.title, false, 256),
     input("description", "Panel message/content", TextInputStyle.Paragraph, s.description, false, 4000),
-    input("authorName", "Author name", TextInputStyle.Short, s.authorName, false, 256),
-    input("footer", "Footer text", TextInputStyle.Short, s.footer, false, 2048),
   ]);
 }
 function mediaModal(s) {
@@ -2286,7 +2284,7 @@ function resolveAppearanceSource(source, interaction) {
 function appearanceDetailsModal(state) {
   return new ModalBuilder()
     .setCustomId(`embed:appearance-details-save:${Date.now()}`)
-    .setTitle("Edit Appearance Details")
+    .setTitle("Author & Footer")
     .addComponents(
       new ActionRowBuilder().addComponents(input("authorName", "Author name", TextInputStyle.Short, state.authorName, false, 256)),
       new ActionRowBuilder().addComponents(input("authorUrl", "Author clickable URL", TextInputStyle.Short, state.authorUrl, false, 4000)),
@@ -2315,6 +2313,77 @@ function appearanceIconUploadModal(kind) {
         .setFileUploadComponent(new FileUploadBuilder().setCustomId("icon_file").setMinValues(1).setMaxValues(1).setRequired(true)),
     );
 }
+function buildContentManagerPanel(interaction) {
+  const state = getSession(interaction);
+
+  const lines = [
+    "**Main Text**",
+    `**Title:** ${state.title ? trim(state.title, 300) : "Not set"}`,
+    `**Message:** ${state.description ? "Configured" : "Not set"}`,
+    "",
+    "**Author**",
+    `**Name:** ${state.authorName ? trim(state.authorName, 300) : "Not set"}`,
+    `**Link:** ${state.authorUrl ? trim(state.authorUrl, 500) : "Not set"}`,
+    `**Icon:** ${state.authorIcon ? "Configured" : "Not set"}`,
+    "",
+    "**Footer**",
+    `**Text:** ${state.footer ? trim(state.footer, 700) : "Not set"}`,
+    `**Icon:** ${state.footerIcon ? "Configured" : "Not set"}`,
+    "",
+    "Author and footer are optional.",
+    "Supported content fields can use Embed Studio variables.",
+  ];
+
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle("📝 Content")
+        .setDescription(
+          lines.join("\n").slice(0, 4096)
+        ),
+    ],
+
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:content-edit-text")
+          .setLabel("✏️ Edit Text")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:content-details")
+          .setLabel("👤 Author & Footer")
+          .setStyle(ButtonStyle.Secondary),
+      ),
+
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:content-author-icon")
+          .setLabel("👤 Author Icon")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:content-footer-icon")
+          .setLabel("🏷️ Footer Icon")
+          .setStyle(ButtonStyle.Secondary),
+      ),
+
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("⬅️ Back")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("📖 Variables")
+          .setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
 function buildAppearancePanel(interaction) {
   const state = getSession(interaction);
   const authorIcon = resolveAppearanceSource(state.authorIcon, interaction);
@@ -2369,7 +2438,8 @@ function buildAppearanceIconPanel(interaction, kind) {
         new ButtonBuilder().setCustomId(`embed:appearance-icon-clear:${kind}`).setLabel("🗑️ Clear").setStyle(ButtonStyle.Danger).setDisabled(!raw),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:appearance-back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:content-back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:helpers").setLabel("📖 Variables").setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -2453,6 +2523,7 @@ module.exports = {
   appearanceDetailsModal,
   appearanceIconUrlModal,
   appearanceIconUploadModal,
+  buildContentManagerPanel,
   buildAppearancePanel,
   buildAppearanceIconPanel,
   PANEL_COLOR,
