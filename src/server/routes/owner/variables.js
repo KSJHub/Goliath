@@ -8,6 +8,7 @@ const {
   SYSTEM_VARIABLES,
   normalizeCustomVariable,
   normalizeCustomVariables,
+  invalidateCustomVariableCache,
 } = require('../../../core/guild/guildVariables');
 
 const router = express.Router();
@@ -67,6 +68,7 @@ function writeCustomVariables(variables) {
   const temporary = `${file}.tmp`;
   fs.writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
   fs.renameSync(temporary, file);
+  invalidateCustomVariableCache();
   return normalized;
 }
 
