@@ -27,8 +27,38 @@ const SYSTEM_VARIABLES = Object.freeze([
   '{cooldownSeconds}', '{attempts}', '{reason}',
   '{guild}', '{serverName}', '{totalMemberCount}', '{user}', '{username}', '{memberAvatar}',
   '{welcomeRoles}', '{welcomeRoleMentions}', '{welcomeRolesNoPing}',
+  '{ticketId}', '{ticketDisplayId}', '{ticketType}', '{ticketPriority}', '{ticketCreator}', '{ticketChannel}', '{ticketStatus}',
+  '{formId}', '{formName}', '{submissionId}', '{submitter}', '{submissionStatus}', '{reviewer}',
+  '{caseId}', '{moderator}', '{target}', '{duration}', '{action}',
+  '{suggestion}', '{suggestionAuthor}', '{suggestionStatus}', '{upVotes}', '{downVotes}',
+  '{teamResponse}', '{submittedAt}', '{decisionAt}', '{suggestionsEnabled}', '{anonymousMode}',
 ]);
 const HELPERS = SYSTEM_VARIABLES;
+
+const MEMBER_VARIABLES = Object.freeze([
+  '{user}', '{userMention}', '{username}', '{userId}', '{userAvatar}', '{memberAvatar}',
+  '{guild}', '{guildName}', '{server}', '{serverName}', '{memberCount}', '{createdAt}',
+]);
+const SUGGESTION_VARIABLES = Object.freeze([
+  '{suggestion}', '{suggestionAuthor}', '{suggestionStatus}', '{upVotes}', '{downVotes}',
+  '{teamResponse}', '{submittedAt}', '{decisionAt}', '{suggestionsEnabled}', '{anonymousMode}',
+]);
+const MODULE_VARIABLES = Object.freeze({
+  global: ['{guild}', '{guildName}', '{server}', '{serverName}', '{guildId}', '{guildIcon}', '{guildBanner}', '{memberCount}', '{createdAt}', '{timestamp}'],
+  welcome: [...MEMBER_VARIABLES, '{joinedAt}'],
+  goodbye: [...MEMBER_VARIABLES, '{joinedAt}', '{leftAt}', '{timestamp}'],
+  leave: [...MEMBER_VARIABLES, '{joinedAt}', '{leftAt}', '{timestamp}'],
+  dmWelcome: [...MEMBER_VARIABLES, '{joinedAt}'],
+  tickets: ['{ticketId}', '{ticketDisplayId}', '{ticketType}', '{ticketPriority}', '{ticketCreator}', '{ticketChannel}', '{ticketStatus}'],
+  forms: ['{formId}', '{formName}', '{submissionId}', '{submitter}', '{submissionStatus}', '{reviewer}'],
+  moderation: ['{caseId}', '{moderator}', '{target}', '{reason}', '{duration}', '{action}'],
+  suggestions: SUGGESTION_VARIABLES,
+  suggestion_panel: SUGGESTION_VARIABLES,
+  suggestion_pending: SUGGESTION_VARIABLES,
+  suggestion_accepted: SUGGESTION_VARIABLES,
+  suggestion_denied: SUGGESTION_VARIABLES,
+  suggestion_archived: SUGGESTION_VARIABLES,
+});
 
 let customCache = { file: '', mtimeMs: -1, variables: [] };
 
@@ -97,6 +127,11 @@ function buildCustomVariableMap(input) {
 }
 function buildGlobalCustomVariableMap(options = {}) {
   return buildCustomVariableMap(loadPersistedCustomVariables(options));
+}
+function variablesForModule(moduleName = 'global', customVariables) {
+  const key = String(moduleName || 'global').trim() || 'global';
+  const custom = customVariables === undefined ? loadPersistedCustomVariables() : normalizeCustomVariables(customVariables);
+  return [...new Set([...(MODULE_VARIABLES.global || []), ...(MODULE_VARIABLES[key] || []), ...custom.filter((item) => item.enabled).map((item) => item.token)])];
 }
 function fmtDate(value) {
   if (!value) return 'Unknown';
@@ -178,6 +213,14 @@ function replaceVars(value, interaction, allowUserPing = false, overrides = {}, 
   }
   return output;
 }
+function replaceVariables(value, variables = {}, interaction = null, allowUserPing = false, options = {}) {
+  const safeVariables = variables && typeof variables === 'object' && !Array.isArray(variables) ? variables : {};
+  const overrides = Object.fromEntries(Object.entries(safeVariables).map(([key, replacement]) => [variableToken(key), replacement]));
+  if (typeof value === 'string') return replaceVars(value, interaction, allowUserPing, overrides, options);
+  if (Array.isArray(value)) return value.map((item) => replaceVariables(item, safeVariables, interaction, allowUserPing, options));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceVariables(item, safeVariables, interaction, allowUserPing, options)]));
+  return value;
+}
 function buildWelcomeVariableMap(member, context = {}, options = {}) {
   const guild = member?.guild;
   const user = member?.user;
@@ -228,4 +271,4 @@ function getVariableDefinitions(customVariables) {
     ...custom.map((item) => ({ ...item, type: 'custom', protected: false })),
   ];
 }
-module.exports = { SYSTEM_VARIABLES, HELPERS, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, loadPersistedCustomVariables, invalidateCustomVariableCache, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables: replaceVars, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
+module.exports = { SYSTEM_VARIABLES, HELPERS, MODULE_VARIABLES, variablesForModule, getVariables, getVariableDefinitions, normalizeCustomVariable, normalizeCustomVariables, loadPersistedCustomVariables, invalidateCustomVariableCache, buildCustomVariableMap, buildVariableMap, replaceVars, replaceVariables, buildWelcomeVariableMap, renderWelcomeTemplate, buildVerificationVariableMap, renderVerificationTemplate };
