@@ -577,7 +577,7 @@ function mainEmbed(s, who, dashboard = {}) {
   const destination =
     s.channelId
       ? `<#${s.channelId}>`
-      : "Not selected";
+      : "⚪ Choose below";
 
   const saveState =
     s.hasUnsavedChanges
@@ -620,16 +620,16 @@ function mainEmbed(s, who, dashboard = {}) {
 
   if (!s.channelId) {
     nextAction =
-      "Choose a destination channel.";
+      "📍 Select the channel where this embed will be published.";
   } else if (!report.ready) {
     nextAction =
-      "Review readiness and resolve the remaining issues.";
+      `⚠️ Open Review and resolve ${errors.length || 1} remaining issue${(errors.length || 1) === 1 ? "" : "s"}.`;
   } else if (deployment) {
     nextAction =
-      "Ready to update the existing deployment.";
+      "♻️ Review your changes, test if needed, then update the existing message.";
   } else {
     nextAction =
-      "Ready to deploy.";
+      "🚀 Everything is ready. Test the embed or deploy it to the selected channel.";
   }
 
   return new EmbedBuilder()
@@ -644,26 +644,25 @@ function mainEmbed(s, who, dashboard = {}) {
     )
     .setTitle("💎 Embed Studio")
     .setDescription([
-      "Create, manage and deploy Discord embeds from one workspace.",
+      "Build, test and publish your Discord embed from one workspace.",
       "",
       "### 🗂️ Workspace",
       `**Template**　${template.emoji} ${template.label}`,
       ...(presetLine ? [presetLine] : []),
-      `**Channel**　${destination}`,
-      `**Status**　${saveState}`,
+      `**Destination**　${destination}`,
+      `**Workspace**　${saveState}`,
       "",
       "### 🧩 Content",
-      `**Panels**　${panels.length}/${MAX_PANELS}　•　**Active**　${selectedIndex + 1}/${panels.length}`,
+      `**Panels**　${panels.length}/${MAX_PANELS}　•　**Editing**　${panelName}`,
       `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
       "",
-      "### 🚦 Publish Status",
+      "### 🚦 Status",
       `**Readiness**　${readinessState}`,
       `**Deployment**　${deploymentState}`,
       "",
-      "### ⚙️ Delivery",
-      `**Mentions**　${mentions}　•　**Timestamp**　${timestamp}`,
+      `**Delivery**　Mentions ${mentions}　•　Timestamp ${timestamp}`,
       "",
-      `### ➜ Next`,
+      "### ➜ Next Step",
       nextAction,
     ].join("\n"))
     .setFooter({
