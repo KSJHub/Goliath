@@ -202,9 +202,22 @@ function normalizePanelMedia(value = {}, legacyPanel = {}) {
 function normalizeMediaV2(value = {}, panels = []) {
   const panelList = Array.isArray(panels) ? panels : [];
   const inputPanels = Array.isArray(value?.panels) ? value.panels : [];
+  const hasMediaState = Array.isArray(value?.panels);
   const length = panelList.length || inputPanels.length || 1;
   const normalizedPanels = [];
-  for (let index = 0; index < length; index += 1) normalizedPanels.push(normalizePanelMedia(inputPanels[index] || {}, panelList[index] || {}));
+
+  for (let index = 0; index < length; index += 1) {
+    // Legacy panel image/thumbnail fields are migration inputs only.
+    // Once a media model exists, that model is authoritative: an empty
+    // gallery or thumbnail means the user explicitly wants no media.
+    normalizedPanels.push(
+      normalizePanelMedia(
+        inputPanels[index] || {},
+        hasMediaState ? {} : (panelList[index] || {})
+      )
+    );
+  }
+
   return { version: MEDIA_SCHEMA_VERSION, panels: normalizedPanels };
 }
 function ensureStateMedia(state = {}) {
