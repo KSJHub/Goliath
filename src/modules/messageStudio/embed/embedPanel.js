@@ -834,6 +834,81 @@ function buildEditorPanel(i, who = "Unknown User") {
 function simplePanel(title, desc, state, who) {
   return new EmbedBuilder().setColor(state.color || PANEL_COLOR).setTitle(title).setDescription(desc).setFooter({ text: `Requested by ${who}` }).setTimestamp();
 }
+function buildResetConfirmationPanel(i, who = "Unknown User") {
+  const s = getSession(i);
+
+  const panels =
+    Array.isArray(s.panels) && s.panels.length
+      ? s.panels
+      : [{}];
+
+  const selectedIndex = Math.max(
+    0,
+    Math.min(
+      Number(s.selectedPanelIndex || 0),
+      panels.length - 1
+    )
+  );
+
+  const selected = panels[selectedIndex] || {};
+
+  const panelName = trim(
+    selected.title ||
+    selected.authorName ||
+    `Panel ${selectedIndex + 1}`,
+    80
+  );
+
+  const description = [
+    "### ⚠️ Reset Embed Studio?",
+    "This will clear the current working workspace and restore Embed Studio to its default state.",
+    "",
+    `**Current panel**　${panelName}`,
+    `**Panels**　${panels.length}/${MAX_PANELS}`,
+    `**Unsaved changes**　${s.hasUnsavedChanges ? "Yes" : "No"}`,
+    "",
+    "This action cannot be undone.",
+    "",
+    "Choose **Confirm Reset** only if you want to discard the current workspace.",
+  ].join("\n");
+
+  return {
+    embeds: [
+      simplePanel(
+        "♻️ Reset Workspace",
+        description,
+        s,
+        who
+      ),
+    ],
+
+    components: [
+      /*
+       * DESTRUCTIVE ACTION
+       */
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:reset-confirm")
+          .setLabel("Confirm Reset")
+          .setEmoji("🗑️")
+          .setStyle(ButtonStyle.Danger)
+      ),
+
+      /*
+       * NAVIGATION
+       * Persistent rule: Back is always alone on the final row.
+       */
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("Back")
+          .setEmoji("⬅️")
+          .setStyle(ButtonStyle.Secondary)
+      ),
+    ],
+  };
+}
+
 function buildBuilderPanel(i, who = "Unknown User") {
   const s = getSession(i);
 
@@ -902,14 +977,13 @@ function buildBuilderPanel(i, who = "Unknown User") {
     `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
     `**Status**　${saveState}`,
     "",
-    "### ⚙️ Options",
-    `**Timestamp**　${timestamp}`,
-    `**Readiness**　${readiness}`,
+    "### ⚙️ Panel Status",
+    `**Timestamp**　${timestamp}　•　**Readiness**　${readiness}`,
     "",
-    "### ➜ Next",
+    "### ➜ Next Step",
     report.ready
-      ? "Review the finished embed, then return to Embed Studio when you're ready to publish."
-      : "Finish editing, then run the readiness review before publishing.",
+      ? "✅ This panel is ready. Review the preview below or continue refining it."
+      : "⚠️ Continue editing this panel, then run Review Readiness before publishing.",
   ].join("\n");
 
   return {
@@ -983,12 +1057,12 @@ function buildBuilderPanel(i, who = "Unknown User") {
       ),
 
       /*
-       * PRESENTATION
+       * DESIGN / REVIEW
        */
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId("embed:edit-media")
-          .setLabel("Appearance")
+          .setCustomId("embed:panel-colour")
+          .setLabel("Panel Colour")
           .setEmoji("🎨")
           .setStyle(ButtonStyle.Secondary),
 
@@ -998,17 +1072,6 @@ function buildBuilderPanel(i, who = "Unknown User") {
           .setEmoji("🖼️")
           .setStyle(ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("Variables")
-          .setEmoji("📖")
-          .setStyle(ButtonStyle.Secondary)
-      ),
-
-      /*
-       * REVIEW
-       */
-      new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("embed:readiness")
           .setLabel(
@@ -1025,38 +1088,133 @@ function buildBuilderPanel(i, who = "Unknown User") {
             report.ready
               ? ButtonStyle.Success
               : ButtonStyle.Secondary
-          ),
+          )
+      ),
 
+      /*
+       * WORKSPACE OPTIONS
+       */
+      new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("embed:toggle-timestamp")
           .setLabel(
             s.showTimestamp
-              ? "Timestamp ON"
-              : "Timestamp OFF"
+              ? "Timestamp: On"
+              : "Timestamp: Off"
           )
           .setEmoji("🕒")
           .setStyle(
             s.showTimestamp
               ? ButtonStyle.Success
               : ButtonStyle.Secondary
-          )
-      ),
-
-      /*
-       * NAVIGATION
-       */
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:back")
-          .setLabel("Embed Studio")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary),
+          ),
 
         new ButtonBuilder()
           .setCustomId("embed:reset")
           .setLabel("Reset")
           .setEmoji("♻️")
           .setStyle(ButtonStyle.Danger)
+      ),
+
+      /*
+       * NAVIGATION / HELP
+       *
+       * Persistent layout:
+       * Back is always left-most on the final row.
+       * Variables is a helper and sits immediately to its right.
+       */
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:back")
+          .setLabel("Back")
+          .setEmoji("⬅️")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("Variables")
+          .setEmoji("📖")
+          .setStyle(ButtonStyle.Secondary)
+      ),
+    ],
+  };
+}
+
+function buildPanelColourPanel(i, who = "Unknown User") {
+  const s = getSession(i);
+
+  const panels =
+    Array.isArray(s.panels) && s.panels.length
+      ? s.panels
+      : [{}];
+
+  const selectedIndex = Math.max(
+    0,
+    Math.min(
+      Number(s.selectedPanelIndex || 0),
+      panels.length - 1
+    )
+  );
+
+  const selected = panels[selectedIndex] || {};
+  const currentColour =
+    selected.color ||
+    s.color ||
+    PANEL_COLOR;
+
+  const colourOptions = COLORS.map((entry) => ({
+    label: entry.label,
+    value: entry.value,
+    ...(entry.emoji ? { emoji: entry.emoji } : {}),
+    default:
+      String(entry.value).toLowerCase() ===
+      String(currentColour).toLowerCase(),
+  }));
+
+  colourOptions.push({
+    label: "Custom HEX",
+    value: CUSTOM_HEX_VALUE,
+    emoji: "🎨",
+  });
+
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(currentColour)
+        .setTitle("🎨 Panel Colour")
+        .setDescription([
+          "Choose the accent colour for the currently selected embed panel.",
+          "",
+          `**Panel**　${selectedIndex + 1}/${panels.length}`,
+          `**Current Colour**　\`${currentColour}\``,
+          "",
+          "Choose one of the preset colours below or select **Custom HEX**.",
+        ].join("\n"))
+        .setFooter({
+          text: `Embed Studio • ${who}`,
+        })
+        .setTimestamp(),
+    ],
+
+    components: [
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("embed:builder-color")
+          .setPlaceholder("🎨 Choose panel colour")
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addOptions(colourOptions.slice(0, 25))
+      ),
+
+      /*
+       * Persistent navigation row.
+       */
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("Back")
+          .setEmoji("⬅️")
+          .setStyle(ButtonStyle.Secondary)
       ),
     ],
   };
@@ -1112,7 +1270,14 @@ function buildFieldsPanel(i, who) {
     new ButtonBuilder().setCustomId("embed:field-add").setLabel("➕ Add").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId("embed:field-edit").setLabel("✏️ Edit").setStyle(ButtonStyle.Primary).setDisabled(!Number.isInteger(s.selectedFieldIndex)),
     new ButtonBuilder().setCustomId("embed:field-remove-selected").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(!Number.isInteger(s.selectedFieldIndex)),
-    new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Builder").setStyle(ButtonStyle.Secondary),
+  ));
+
+  // Navigation is always isolated on the final row.
+  rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("embed:builder")
+      .setLabel("⬅️ Back")
+      .setStyle(ButtonStyle.Secondary),
   ));
   return {
     embeds: [simplePanel("📋 Field Management", `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} fields: ${(s.fields || []).length}/25`, s, who)],
@@ -1241,7 +1406,14 @@ function buildFieldsManagerPanel(interaction) {
     ),
   );
 
-  return { embeds, components: rows.filter(Boolean).slice(0, 5) };
+  // Reserve Discord's final action row for navigation.
+  const navigationRow = rows.pop();
+  const controlRows = rows.filter(Boolean).slice(0, 4);
+
+  return {
+    embeds,
+    components: [...controlRows, navigationRow].filter(Boolean),
+  };
 }
 
 function buildButtonsPanel(i, who) {
@@ -1258,7 +1430,14 @@ function buildButtonsPanel(i, who) {
     new ButtonBuilder().setCustomId("embed:button-add").setLabel("➕ Add").setStyle(ButtonStyle.Success).setDisabled((s.buttons || []).length >= MAX_BUTTONS),
     new ButtonBuilder().setCustomId("embed:button-edit").setLabel("✏️ Edit").setStyle(ButtonStyle.Primary).setDisabled(!Number.isInteger(s.selectedButtonIndex)),
     new ButtonBuilder().setCustomId("embed:button-remove-selected").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(!Number.isInteger(s.selectedButtonIndex)),
-    new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Builder").setStyle(ButtonStyle.Secondary),
+  ));
+
+  // Navigation is always isolated on the final row.
+  rows.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("embed:builder")
+      .setLabel("⬅️ Back")
+      .setStyle(ButtonStyle.Secondary),
   ));
   return { embeds: [simplePanel("🔘 Button Management", `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} buttons: ${(s.buttons || []).length}/${MAX_BUTTONS}`, s, who)], components: rows };
 }
@@ -1364,7 +1543,16 @@ function buildButtonsManagerPanel(interaction) {
       new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
     ),
   );
-  return { embeds, components: rows.filter(Boolean).slice(0, EMBED_COMPONENT_LIMITS.maxActionRows) };
+  // Reserve Discord's final action row for navigation.
+  const navigationRow = rows.pop();
+  const controlRows = rows
+    .filter(Boolean)
+    .slice(0, EMBED_COMPONENT_LIMITS.maxActionRows - 1);
+
+  return {
+    embeds,
+    components: [...controlRows, navigationRow].filter(Boolean),
+  };
 }
 function buildButtonOptionsPanel(interaction) {
   const state = getSession(interaction);
@@ -1439,9 +1627,16 @@ function buildButtonOptionsPanel(interaction) {
     new ButtonBuilder().setCustomId("embed:button-options-back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
   ));
 
+  // Back navigation is structural and must never be removed by
+  // Discord's five-action-row limit.
+  const navigationRow = rows.pop();
+  const controlRows = rows
+    .filter(Boolean)
+    .slice(0, EMBED_COMPONENT_LIMITS.maxActionRows - 1);
+
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle("⚙️ Button Options").setDescription(details.join("\n").slice(0, 4096))],
-    components: rows.filter(Boolean).slice(0, EMBED_COMPONENT_LIMITS.maxActionRows),
+    components: [...controlRows, navigationRow].filter(Boolean),
   };
 }
 function cleanPresetName(value) {
@@ -1766,7 +1961,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("embed:back")
-        .setLabel("⬅️ Back to Embed Studio")
+        .setLabel("⬅️ Back")
         .setStyle(ButtonStyle.Secondary)
     )
   );
@@ -1868,14 +2063,20 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
         "Preset selection is safe: presets are only loaded when you press Load into Editor.",
     });
 
+  // Keep navigation permanently isolated as the final row.
+  const navigationRow = rows.pop();
+  const controlRows = rows
+    .filter(Boolean)
+    .slice(0, EMBED_COMPONENT_LIMITS.maxActionRows - 1);
+
   return {
     embeds: [managementEmbed],
-    components: rows.slice(0, 5),
+    components: [...controlRows, navigationRow].filter(Boolean),
   };
 }
 function buildHelpersPanel(i) {
   const s = getSession(i);
-  return { embeds: [simplePanel("📖 Embed Variables", HELPERS.map((h) => `\`${h}\``).join("\n"), s, memberName(i))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Builder").setStyle(ButtonStyle.Secondary))] };
+  return { embeds: [simplePanel("📖 Embed Variables", HELPERS.map((h) => `\`${h}\``).join("\n"), s, memberName(i))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary))] };
 }
 function readinessOptions() {
   const { mediaModel } = require("./embedMedia");
@@ -1985,17 +2186,16 @@ function buildReadinessPanel(interaction) {
           .setCustomId("embed:builder")
           .setLabel("Builder")
           .setEmoji("🛠️")
-          .setStyle(ButtonStyle.Secondary),
+          .setStyle(ButtonStyle.Secondary)
+      ),
 
+      // Navigation is always isolated on the final row.
+      new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("embed:back")
-          .setLabel("Embed Studio")
+          .setLabel("Back")
           .setEmoji("⬅️")
-          .setStyle(
-            report.ready
-              ? ButtonStyle.Success
-              : ButtonStyle.Secondary
-          )
+          .setStyle(ButtonStyle.Secondary)
       ),
     ],
   };
@@ -2226,6 +2426,8 @@ module.exports = {
   buildEditorPanel,
   simplePanel,
   buildBuilderPanel,
+  buildResetConfirmationPanel,
+  buildPanelColourPanel,
   buildPanelsPanel,
   buildFieldsPanel,
   buildFieldsManagerPanel,

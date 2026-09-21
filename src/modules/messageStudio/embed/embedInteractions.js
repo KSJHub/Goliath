@@ -1098,6 +1098,28 @@ async function handleLegacyInteraction(i) {
       if (value === panel.CUSTOM_HEX_VALUE) { await i.showModal(panel.colorModal(state)); return true; }
       panel.markUnsaved(i, panel.saveSelected(state, { color: value })); await legacyReplyOrUpdate(i, panel.buildEditorPanel(i, name)); return true;
     }
+    if (customId === 'embed:builder-color') {
+      const value = i.values[0];
+
+      if (value === panel.CUSTOM_HEX_VALUE) {
+        await i.showModal(panel.colorModal(state));
+        return true;
+      }
+
+      panel.markUnsaved(
+        i,
+        panel.saveSelected(state, {
+          color: value,
+        })
+      );
+
+      await legacyReplyOrUpdate(
+        i,
+        panel.buildPanelColourPanel(i, name)
+      );
+
+      return true;
+    }
     if (customId === 'embed:panel-select') { const current = panel.getSession(i); panel.saveSession(i, { ...current, selectedPanelIndex: Number(i.values[0]), selectedFieldIndex: null }); await legacyReplyOrUpdate(i, panel.buildEditorPanel(i, name)); return true; }
     if (customId === 'embed:field-layout') { panel.markUnsaved(i, { ...state, fieldLayout: i.values[0] }); await legacyReplyOrUpdate(i, panel.buildFieldsPanel(i, name)); return true; }
     if (customId === 'embed:field-select') { panel.saveSession(i, { ...state, selectedFieldIndex: Number(i.values[0]) }); await legacyReplyOrUpdate(i, panel.buildFieldsPanel(i, name)); return true; }
@@ -1109,13 +1131,23 @@ async function handleLegacyInteraction(i) {
   if (i.isButton?.()) {
     if (customId === 'embed:editor' || customId === 'embed:back') { await i.update(panel.buildEditorPanel(i, name)); return true; }
     if (customId === 'embed:builder') { await i.update(panel.buildBuilderPanel(i, name)); return true; }
+    if (customId === 'embed:panel-colour') { await i.update(panel.buildPanelColourPanel(i, name)); return true; }
     if (customId === 'embed:presets') { await i.update(panel.buildPresetsPanel(i, name)); return true; }
     if (customId === 'embed:panels') { await i.update(panel.buildPanelsPanel(i, name)); return true; }
     if (customId === 'embed:helpers') { await i.update(panel.buildHelpersPanel(name)); return true; }
     if (customId === 'embed:edit-content') { await i.showModal(panel.contentModal(state)); return true; }
     if (customId === 'embed:toggle-ping') { panel.markUnsaved(i, { ...state, allowUserPing: !state.allowUserPing }); await i.update(panel.buildBuilderPanel(i, name)); return true; }
     if (customId === 'embed:toggle-timestamp') { panel.markUnsaved(i, { ...state, showTimestamp: !state.showTimestamp }); await i.update(panel.buildBuilderPanel(i, name)); return true; }
-    if (customId === 'embed:reset') { panel.resetSession(i); await i.update(panel.buildEditorPanel(i, name)); return true; }
+    if (customId === 'embed:reset') {
+      await i.update(panel.buildResetConfirmationPanel(i, name));
+      return true;
+    }
+
+    if (customId === 'embed:reset-confirm') {
+      panel.resetSession(i);
+      await i.update(panel.buildEditorPanel(i, name));
+      return true;
+    }
     if (customId === 'embed:panel-add') {
       if (state.panels.length >= panel.MAX_PANELS) { await i.reply({ content: 'Maximum panel limit reached.', flags: 64 }); return true; }
       const panels = [...state.panels, panel.basePanel({ title: `Panel ${state.panels.length + 1}`, description: 'Add content here.', color: state.color })]; panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: panels.length - 1, selectedFieldIndex: null }); await i.update(panel.buildPanelsPanel(i, name)); return true;
