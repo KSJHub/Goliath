@@ -87,94 +87,225 @@ function installMediaManagerBase(panel, media) {
   panel.buildMediaManagerPanel = (interaction, who = 'Unknown User') => {
     const state = panel.getSession(interaction);
     const panelMedia = media.getPanelMedia(state);
-    const galleryIndex = Number.isInteger(state.selectedMediaIndex) && state.selectedMediaIndex < panelMedia.gallery.length ? state.selectedMediaIndex : null;
-    const fileIndex = Number.isInteger(state.selectedFileIndex) && state.selectedFileIndex < panelMedia.files.length ? state.selectedFileIndex : null;
+
+    const galleryIndex =
+      Number.isInteger(state.selectedMediaIndex) &&
+      state.selectedMediaIndex < panelMedia.gallery.length
+        ? state.selectedMediaIndex
+        : null;
+
+    const fileIndex =
+      Number.isInteger(state.selectedFileIndex) &&
+      state.selectedFileIndex < panelMedia.files.length
+        ? state.selectedFileIndex
+        : null;
+
+    const selectedMedia =
+      galleryIndex == null
+        ? null
+        : panelMedia.gallery[galleryIndex];
+
+    const aboveCount =
+      panelMedia.gallery.filter((item) => item?.placement === 'above').length;
+
+    const belowCount =
+      panelMedia.gallery.length - aboveCount;
+
+    const placementLabel = (item) =>
+      item?.placement === 'above'
+        ? '⬆️ Above Content'
+        : '⬇️ Below Content';
+
     const rows = [];
 
+    /*
+     * ROW 1 — MEDIA SELECTOR
+     */
     if (panelMedia.gallery.length) {
-      rows.push(new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId('embed:media-gallery-select')
-          .setPlaceholder('🖼️ Select gallery item')
-          .addOptions(panelMedia.gallery.slice(0, 25).map((item, index) => {
-            const placement = item.placement === 'above' ? 'above content' : 'below content';
-            return {
-              label: `${index + 1}. ${panel.trim(item.alt || sourceLabel(item.source, 'Media item'), 90)}`,
-              value: String(index),
-              description: panel.trim(`${item.type || 'auto'} • ${placement}${item.spoiler ? ' • spoiler' : ''} • ${item.source || ''}`, 100),
-              default: galleryIndex === index,
-            };
-          })),
-      ));
+      rows.push(
+        new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId('embed:media-gallery-select')
+            .setPlaceholder('🎞️ Select media item')
+            .addOptions(
+              panelMedia.gallery.slice(0, 25).map((item, index) => ({
+                label: `${index + 1}. ${panel.trim(
+                  item.alt || sourceLabel(item.source, 'Media item'),
+                  80
+                )}`,
+                value: String(index),
+                description: panel.trim(
+                  `${item.type || 'auto'} • ${
+                    item.placement === 'above'
+                      ? 'Above Content'
+                      : 'Below Content'
+                  }${item.spoiler ? ' • spoiler' : ''}`,
+                  100
+                ),
+                default: galleryIndex === index,
+              }))
+            )
+        )
+      );
     }
 
-    rows.push(new ActionRowBuilder().addComponents(
-      mediaButton('embed:media-gallery-add', `➕ Add Media (${panelMedia.gallery.length}/${media.mediaModel.MAX_GALLERY_ITEMS})`, ButtonStyle.Success, panelMedia.gallery.length >= media.mediaModel.MAX_GALLERY_ITEMS),
-      mediaButton('embed:media-gallery-edit', '✏️ Edit Media', ButtonStyle.Primary, galleryIndex == null),
-      mediaButton('embed:media-gallery-remove', '🗑️ Remove Media', ButtonStyle.Danger, galleryIndex == null),
-      mediaButton('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
-      mediaButton('embed:media-gallery-down', '⬇️ Down', ButtonStyle.Secondary, galleryIndex == null || galleryIndex >= panelMedia.gallery.length - 1),
-    ));
+    /*
+     * ROW 2 — MEDIA CRUD / ORDER
+     */
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        mediaButton(
+          'embed:media-gallery-add',
+          `➕ Add Media (${panelMedia.gallery.length}/${media.mediaModel.MAX_GALLERY_ITEMS})`,
+          ButtonStyle.Success,
+          panelMedia.gallery.length >= media.mediaModel.MAX_GALLERY_ITEMS
+        ),
+        mediaButton(
+          'embed:media-gallery-edit',
+          '✏️ Edit',
+          ButtonStyle.Primary,
+          galleryIndex == null
+        ),
+        mediaButton(
+          'embed:media-gallery-remove',
+          '🗑️ Remove',
+          ButtonStyle.Danger,
+          galleryIndex == null
+        ),
+        mediaButton(
+          'embed:media-gallery-up',
+          '⬆️ Up',
+          ButtonStyle.Secondary,
+          galleryIndex == null || galleryIndex <= 0
+        ),
+        mediaButton(
+          'embed:media-gallery-down',
+          '⬇️ Down',
+          ButtonStyle.Secondary,
+          galleryIndex == null ||
+            galleryIndex >= panelMedia.gallery.length - 1
+        )
+      )
+    );
 
-    if (panelMedia.files.length) {
-      rows.push(new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId('embed:media-file-select')
-          .setPlaceholder('📎 Select attached file')
-          .addOptions(panelMedia.files.slice(0, 25).map((item, index) => ({
-            label: `${index + 1}. ${panel.trim(item.name || sourceLabel(item.source, 'File'), 90)}`,
-            value: String(index),
-            description: panel.trim(item.description || item.source || 'Attached file', 100),
-            default: fileIndex === index,
-          }))),
-      ));
-    }
+    /*
+     * ROW 3 — PLACEMENT / OPTIONS
+     */
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        mediaButton(
+          'embed:media-placement:above',
+          '⬆️ Above Content',
+          selectedMedia?.placement === 'above'
+            ? ButtonStyle.Success
+            : ButtonStyle.Secondary,
+          galleryIndex == null
+        ),
+        mediaButton(
+          'embed:media-placement:below',
+          '⬇️ Below Content',
+          selectedMedia?.placement === 'below'
+            ? ButtonStyle.Success
+            : ButtonStyle.Secondary,
+          galleryIndex == null
+        ),
+        mediaButton(
+          'embed:media-options',
+          '⚙️ Options',
+          ButtonStyle.Secondary,
+          galleryIndex == null
+        ),
+        mediaButton(
+          'embed:media-upload',
+          '📤 Upload',
+          ButtonStyle.Success
+        )
+      )
+    );
 
-    rows.push(new ActionRowBuilder().addComponents(
-      mediaButton('embed:media-file-add', `📎 Add File (${panelMedia.files.length}/${media.mediaModel.MAX_FILES})`, ButtonStyle.Success, panelMedia.files.length >= media.mediaModel.MAX_FILES),
-      mediaButton('embed:media-file-edit', '✏️ Edit File', ButtonStyle.Secondary, fileIndex == null),
-      mediaButton('embed:media-file-remove', '🗑️ Remove File', ButtonStyle.Danger, fileIndex == null),
-      mediaButton('embed:file-options', '⚙️ File Options', ButtonStyle.Secondary, fileIndex == null),
-    ));
+    /*
+     * ROW 4 — SECONDARY MEDIA
+     *
+     * Keep files accessible without allowing them to consume an extra
+     * action row and push navigation beyond Discord's five-row limit.
+     */
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        mediaButton(
+          'embed:media-thumbnail',
+          panelMedia.thumbnail?.source
+            ? '🖼️ Thumbnail ✓'
+            : '🖼️ Thumbnail',
+          ButtonStyle.Primary
+        ),
+        mediaButton(
+          'embed:media-file-add',
+          `📎 Add File (${panelMedia.files.length}/${media.mediaModel.MAX_FILES})`,
+          ButtonStyle.Success,
+          panelMedia.files.length >= media.mediaModel.MAX_FILES
+        ),
+        mediaButton(
+          'embed:file-options',
+          '⚙️ File Options',
+          ButtonStyle.Secondary,
+          fileIndex == null
+        )
+      )
+    );
 
-    const selectedMedia = galleryIndex == null ? null : panelMedia.gallery[galleryIndex];
-    const isHeader = selectedMedia?.placement === 'above';
-    rows.push(new ActionRowBuilder().addComponents(
-      mediaButton('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary),
-      mediaButton('embed:media-upload', '📤 Upload Media', ButtonStyle.Success),
-      mediaButton('embed:media-options', '⚙️ Media Options', ButtonStyle.Secondary, galleryIndex == null),
-      mediaButton(isHeader ? 'embed:media-placement:below' : 'embed:media-placement:above', isHeader ? '🖼️ Header ON' : '🖼️ Use as Header', isHeader ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
-    ));
+    /*
+     * ROW 5 — NAVIGATION / HELP
+     */
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        mediaButton('embed:builder', '⬅️ Back'),
+        mediaButton('embed:helpers', '📖 Variables')
+      )
+    );
 
-    rows.push(new ActionRowBuilder().addComponents(
-      mediaButton('embed:builder', '⬅️ Builder'),
-      mediaButton('embed:helpers', '📖 Variables'),
-    ));
-
-    const selectedFile = fileIndex == null ? null : panelMedia.files[fileIndex];
     const summary = [
       `Editing panel **${state.selectedPanelIndex + 1}/${state.panels.length}**`,
       '',
+      `⬆️ **Above Content** — ${aboveCount}`,
+      `⬇️ **Below Content** — ${belowCount}`,
       `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'}`,
-      `🎞️ **Gallery** — ${panelMedia.gallery.length}/${media.mediaModel.MAX_GALLERY_ITEMS}`,
       `📎 **Files** — ${panelMedia.files.length}/${media.mediaModel.MAX_FILES}`,
       '',
-      '✨ **Images** — PNG · JPG · GIF · WEBP · AVIF (animated GIFs stay animated)',
-      '🔒 **Remote media** — HTTPS required · 8 MB processing limit',
+      'Images, animated GIFs and supported videos can be placed independently above or below the panel content.',
     ];
 
     if (selectedMedia) {
-      summary.push('', `**Selected media:** ${sourceLabel(selectedMedia.alt || selectedMedia.source, `Item ${galleryIndex + 1}`)}`);
-      summary.push(`🪧 **Graphic header:** ${isHeader ? 'ON — displayed above content' : 'OFF — click Use as Header to move it above content'}`);
-    } else if (selectedFile) {
-      summary.push('', `**Selected file:** ${sourceLabel(selectedFile.name || selectedFile.source, `File ${fileIndex + 1}`)}`);
-    } else if (!panelMedia.thumbnail?.source && !panelMedia.gallery.length && !panelMedia.files.length) {
-      summary.push('', 'No media configured for this panel. Media on other panels is unaffected.');
+      summary.push(
+        '',
+        `**Selected media:** ${sourceLabel(
+          selectedMedia.alt || selectedMedia.source,
+          `Item ${galleryIndex + 1}`
+        )}`,
+        `**Placement:** ${placementLabel(selectedMedia)}`,
+        `**Type:** ${selectedMedia.type || 'auto'}`,
+        `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`
+      );
+    } else if (
+      !panelMedia.thumbnail?.source &&
+      !panelMedia.gallery.length &&
+      !panelMedia.files.length
+    ) {
+      summary.push(
+        '',
+        'No media configured for this panel. Media on other panels is unaffected.'
+      );
     }
 
     return {
-      embeds: [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)],
-      components: rows.slice(0, 5),
+      embeds: [
+        panel.simplePanel(
+          '🖼️ Media Manager',
+          summary.join('\n'),
+          state,
+          who
+        ),
+      ],
+      components: rows,
     };
   };
 

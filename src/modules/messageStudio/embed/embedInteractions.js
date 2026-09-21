@@ -1019,7 +1019,30 @@ async function handleCoreInteraction(i) {
     if (customId === 'embed:media-options-back') return updateMediaPanel(i);
     if (customId.startsWith('embed:media-type:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const type = customId.split(':').pop(); if (!['auto', 'image', 'video'].includes(type)) return true; const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], type }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaOptions(i); }
     if (customId.startsWith('embed:media-spoiler:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], spoiler: customId.endsWith(':on') }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaOptions(i); }
-    if (customId.startsWith('embed:media-placement:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const placement = customId.split(':').pop(); if (!['above', 'below'].includes(placement)) return true; const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], placement }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaOptions(i); }
+    if (customId.startsWith('embed:media-placement:')) {
+      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) {
+        return updateMediaPanel(i);
+      }
+
+      const placement = customId.split(':').pop();
+      if (!['above', 'below'].includes(placement)) return true;
+
+      const gallery = [...panelMedia.gallery];
+
+      gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({
+        ...gallery[galleryIndex],
+        placement,
+      });
+
+      saveMediaState(
+        i,
+        state,
+        { ...panelMedia, gallery },
+        { selectedMediaIndex: galleryIndex }
+      );
+
+      return updateMediaPanel(i);
+    }
     if (customId === 'embed:media-duplicate') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); if (panelMedia.gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_GALLERY_ITEMS} gallery items reached.`, flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; const duplicate = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex] }); gallery.splice(galleryIndex + 1, 0, duplicate); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex + 1 }); return updateMediaOptions(i); }
     if (customId === 'embed:file-options') { if (fileIndex == null || !panelMedia.files[fileIndex]) { await i.reply({ content: 'Select an attached file first.', flags: 64 }); return true; } return updateFileOptions(i); }
     if (customId === 'embed:file-options-back') return updateMediaPanel(i);
