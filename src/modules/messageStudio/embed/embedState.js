@@ -122,7 +122,7 @@ function resetSession(interaction) {
 function clearSession(interaction) { const key = sessionKey(interaction); hydratedSessions.delete(key); sessionStore.remove(key); return sessions.delete(key); }
 function allowedMentions(state) { return state?.allowUserPing ? { parse: ['users', 'roles'] } : { parse: [] }; }
 function presetData(state) { return { template: state?.template || 'custom', panels: clone(state?.panels || []), allowUserPing: !!state?.allowUserPing, showTimestamp: state?.showTimestamp !== false, fieldLayout: state?.fieldLayout || 'auto' }; }
-function applyTemplate(interaction, name) { if (typeof basePanelFactory !== 'function') throw new Error('Embed state is not configured with a defaultState factory.'); const current = getSession(interaction); const nextPanel = basePanelFactory(name); return markUnsaved(interaction, stateSync({ ...current, template: name, selectedPanelIndex: 0, panels: [nextPanel], selectedPreset: null })); }
+function applyTemplate(interaction, name) { if (typeof basePanelFactory !== 'function') throw new Error('Embed state is not configured with a basePanel factory.'); const current = getSession(interaction); const nextPanel = basePanelFactory(name); return markUnsaved(interaction, stateSync({ ...current, template: name, selectedPanelIndex: 0, panels: [nextPanel], selectedPreset: null })); }
 function applyPreset(interaction, name, preset = {}) {
   if (typeof basePanelFactory !== 'function') {
     throw new Error('Embed state is not configured with a basePanel factory.');
