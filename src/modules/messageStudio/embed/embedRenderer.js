@@ -159,12 +159,6 @@ function footerText(data) {
 }
 function panelMedia(mediaState, index) { return Array.isArray(mediaState?.panels) ? (mediaState.panels[index] || null) : null; }
 function itemPlacement(item) { return String(item?.placement || '').toLowerCase() === 'above' ? 'above' : 'below'; }
-function isEnhancedMedia(media) {
-  if (!media) return false;
-  const gallery = Array.isArray(media.gallery) ? media.gallery : [];
-  const first = gallery[0] || {};
-  return gallery.length > 1 || Boolean(first.alt) || first.spoiler === true || first.type === 'video' || itemPlacement(first) === 'above' || Boolean(media.thumbnail?.alt) || (Array.isArray(media.files) && media.files.length > 0);
-}
 async function galleryItems(media, interaction, placement = null) {
   const output = [];
   for (const item of (Array.isArray(media?.gallery) ? media.gallery : []).slice(0, 10)) {
@@ -301,24 +295,30 @@ async function buildEmbedPayload(options = {}) {
       interaction
     );
     if (thumbSource) await probeRemoteSource(thumbSource, 'thumbnail');
-    const enhanced = isEnhancedMedia(media);
-    const aboveItems = enhanced ? await galleryItems(media, interaction, 'above') : [];
-    if (aboveItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...aboveItems));
-    if (text && isHttpsUrl(thumbSource)) {
-      const thumbnail = new ThumbnailBuilder().setURL(thumbSource);
-      if (media?.thumbnail?.alt) thumbnail.setDescription(String(media.thumbnail.alt).slice(0, 1024));
-      container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)).setThumbnailAccessory(thumbnail));
-    } else if (text) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
-    if (enhanced) {
+
+    // Placement-aware mediaV2 is authoritative. Always render its gallery
+    // natively so Above and Below use the same full-width Discord gallery
+    // geometry. The legacy image-normalization path is retained only for
+    // embeds that do not yet have a mediaV2 panel.
+    if (hasPanelMediaState) {
+      const aboveItems = await galleryItems(media, interaction, 'above');
+      if (aboveItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...aboveItems));
+
+      if (text && isHttpsUrl(thumbSource)) {
+        const thumbnail = new ThumbnailBuilder().setURL(thumbSource);
+        if (media?.thumbnail?.alt) thumbnail.setDescription(String(media.thumbnail.alt).slice(0, 1024));
+        container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)).setThumbnailAccessory(thumbnail));
+      } else if (text) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
+
       const belowItems = await galleryItems(media, interaction, 'below');
       if (belowItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...belowItems));
     } else {
-      const imageUrl = resolveSource(
-        hasPanelMediaState
-          ? media?.gallery?.[0]?.source
-          : data.image?.url,
-        interaction
-      );
+      if (text && isHttpsUrl(thumbSource)) {
+        const thumbnail = new ThumbnailBuilder().setURL(thumbSource);
+        container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)).setThumbnailAccessory(thumbnail));
+      } else if (text) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
+
+      const imageUrl = resolveSource(data.image?.url, interaction);
       if (isHttpsUrl(imageUrl)) {
         try { await addLegacyImage(container, imageUrl, files, index); }
         catch (error) { throw new Error(`Panel ${index + 1} image could not be prepared: ${error?.message || error}`); }
