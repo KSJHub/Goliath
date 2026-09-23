@@ -13,6 +13,7 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
+const { replaceVars } = require('../../../core/guild/guildVariables');
 const emojiPayload = require('../emojis/emojiPayload');
 const schedule = require('./schedule');
 
@@ -149,7 +150,15 @@ async function syncDiscordEvent(guild, event) {
 async function ensureEventThread(guild, event, message) {
   if (!event.thread?.enabled || event.thread.threadId) return event.thread?.threadId || null;
   if (!message?.startThread) return null;
-  const name = String(event.thread.title || '{event}').replaceAll('{event}', event.title).slice(0, 100);
+  const interaction = {
+    guild,
+    guildId: guild.id,
+    channel: message.channel,
+    channelId: message.channelId || message.channel?.id,
+  };
+  const name = replaceVars(event.thread.title || '{event}', interaction, false, {
+    '{event}': event.title,
+  }).slice(0, 100);
   const thread = await message.startThread({ name, autoArchiveDuration: event.thread.autoArchiveDuration || 1440, reason: 'Goliath Schedule event thread' }).catch(() => null);
   if (!thread) return null;
   schedule.saveEvent(guild.id, { ...schedule.getEvent(guild.id, event.eventId), thread: { ...event.thread, threadId: thread.id } }, { action: 'schedule_thread_created' });

@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
+const { replaceVars } = require('../../../core/guild/guildVariables');
 const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const emojiPayload = require('../emojis/emojiPayload');
 
@@ -479,9 +480,20 @@ function duePersonalReminders(event, timestamp = Date.now()) {
   for (const entry of Object.values(event.rsvps || {})) for (const minutes of entry.reminderMinutes || []) if (!(entry.sentReminderMinutes || []).includes(minutes) && timestamp >= startMs - minutes * 60000 && timestamp < startMs) due.push({ userId: entry.userId, minutes });
   return due;
 }
-function renderNotificationText(text, event) {
+function renderNotificationText(text, event, guild, channel = null) {
   const unix = Math.floor(new Date(event.startAt).getTime() / 1000);
-  return clean(text, 1800).replaceAll('{event}', event.title).replaceAll('{relative}', `<t:${unix}:R>`).replaceAll('{time}', `<t:${unix}:F>`).replaceAll('{host}', event.hostUserId ? `<@${event.hostUserId}>` : 'the host');
+  const interaction = {
+    guild,
+    guildId: guild?.id,
+    channel,
+    channelId: channel?.id,
+  };
+  return replaceVars(clean(text, 1800), interaction, false, {
+    '{event}': event.title,
+    '{relative}': `<t:${unix}:R>`,
+    '{time}': `<t:${unix}:F>`,
+    '{host}': event.hostUserId ? `<@${event.hostUserId}>` : 'the host',
+  });
 }
 async function sendReminder(guild, event, minutes) {
   const channel = event.channelId ? await guild.channels.fetch(event.channelId).catch(() => null) : null;
@@ -497,7 +509,7 @@ async function sendCustomNotification(guild, event, notification) {
   if (!channel?.send) throw new Error('Schedule notification channel is unavailable.');
   const roles = notification.mentionRoleIds || [];
   const mentions = roles.map((id) => `<@&${id}>`).join(' ');
-  const payload = await emojiPayload.resolveMessagePayload(guild.client, guild.id, { content: mentions || undefined, embeds: [{ color: event.color || 0x5865F2, title: renderNotificationText(notification.title, event), description: renderNotificationText(notification.description, event) }], allowedMentions: { roles } }, 'schedule');
+  const payload = await emojiPayload.resolveMessagePayload(guild.client, guild.id, { content: mentions || undefined, embeds: [{ color: event.color || 0x5865F2, title: renderNotificationText(notification.title, event, guild, channel), description: renderNotificationText(notification.description, event, guild, channel) }], allowedMentions: { roles } }, 'schedule');
   await channel.send(payload);
 }
 async function sendPersonalReminder(guild, event, userId, minutes) {
