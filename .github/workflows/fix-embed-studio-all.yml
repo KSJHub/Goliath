@@ -1,0 +1,206 @@
+name: Fix Embed Studio all reported issues
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/fix-embed-studio-all.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply all Embed Studio repairs
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'Expected block not found in {path}: {old[:80]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          # 1. Rebalance the front-page workflow into Build then Check/Publish.
+          panel = Path('src/modules/messageStudio/embed/embedPanel.js')
+          text = panel.read_text()
+          start_marker = '      /*\n       * PRIMARY WORKFLOW\n       */'
+          end_marker = '      /*\n       * NAVIGATION\n       */'
+          start = text.find(start_marker)
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit('Embed Studio workflow block not found')
+          workflow = '''      /*
+       * BUILD WORKFLOW
+       */
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("Builder")
+          .setEmoji("🛠️")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("embed:panels")
+          .setLabel(`Panels (${panels.length})`)
+          .setEmoji("🧩")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("embed:presets")
+          .setLabel("Presets")
+          .setEmoji("💾")
+          .setStyle(ButtonStyle.Primary)
+      ),
+
+      /*
+       * CHECK / PUBLISH WORKFLOW
+       * Natural left-to-right flow: readiness -> test -> deploy -> update.
+       */
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:readiness")
+          .setLabel(report.ready ? "Ready" : "Review")
+          .setEmoji(report.ready ? "✅" : "⚠️")
+          .setStyle(report.ready ? ButtonStyle.Success : ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:test-send")
+          .setLabel("Test Send")
+          .setEmoji("🧪")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(!report.ready),
+        new ButtonBuilder()
+          .setCustomId("embed:use")
+          .setLabel("Deploy New")
+          .setEmoji("🚀")
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(!canDeploy),
+        ...(deployment
+          ? [new ButtonBuilder()
+              .setCustomId("embed:update-existing")
+              .setLabel("Update Existing")
+              .setEmoji("♻️")
+              .setStyle(ButtonStyle.Success)
+              .setDisabled(!canDeploy)]
+          : [])
+      ),
+
+'''
+          panel.write_text(text[:start] + workflow + text[end:])
+
+          # 2. Options must open for visible media even if the saved UI cursor is stale.
+          media = 'src/modules/messageStudio/embed/embedMedia.js'
+          old_media_index = "const index = Number.isInteger(state.selectedMediaIndex) && media.gallery[state.selectedMediaIndex] ? state.selectedMediaIndex : null;"
+          replace_once(media, old_media_index, "const index = media.gallery.length ? Math.max(0, Math.min(Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : 0, media.gallery.length - 1)) : null;")
+          old_file_index = "const index = Number.isInteger(state.selectedFileIndex) && media.files[state.selectedFileIndex] ? state.selectedFileIndex : null;"
+          replace_once(media, old_file_index, "const index = media.files.length ? Math.max(0, Math.min(Number.isInteger(state.selectedFileIndex) ? state.selectedFileIndex : 0, media.files.length - 1)) : null;")
+          replace_once(media, old_file_index, "const index = media.files.length ? Math.max(0, Math.min(Number.isInteger(state.selectedFileIndex) ? state.selectedFileIndex : 0, media.files.length - 1)) : null;")
+
+          # 3. Make Media Options and Attachment Options unambiguous.
+          manager = 'src/modules/messageStudio/embed/embedMediaManagerBase.js'
+          replace_once(manager, "'⚙️ Options',", "'⚙️ Media Options',")
+          replace_once(manager, "'⚙️ File Options',", "'⚙️ Attachment Options',")
+
+          # 4. Components V2 gallery alignment: turn aligned static images into
+          # attachment-backed canvases before Discord builds the gallery.
+          renderer = 'src/modules/messageStudio/embed/embedRenderer.js'
+          old_gallery = '''async function galleryItems(media, interaction, placement = null) {
+  const output = [];
+  for (const item of (Array.isArray(media?.gallery) ? media.gallery : []).slice(0, 10)) {
+    if (placement && itemPlacement(item) !== placement) continue;
+    const source = resolveSource(item?.source, interaction);
+    if (!source) continue;
+    await probeRemoteSource(source, 'media');
+    const builder = new MediaGalleryItemBuilder().setURL(source).setSpoiler(item?.spoiler === true);
+    if (item?.alt) builder.setDescription(String(item.alt).slice(0, 1024));
+    output.push(builder);
+  }
+  return output;
+}'''
+          new_gallery = '''function galleryAlignment(item) {
+  const value = String(item?.alignment || 'left').toLowerCase();
+  return value === 'center' || value === 'right' ? value : 'left';
+}
+async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex) {
+  const cached = await ensureAssetCached('global', source);
+  if (!cached?.buffer) return null;
+  const type = contentTypeBase(cached.meta?.contentType || '');
+  if (type && !STATIC_RASTER_TYPES.has(type)) return null;
+  const trimmed = await sharp(cached.buffer, { failOn: 'warning' })
+    .ensureAlpha()
+    .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png().toBuffer();
+  const visible = await sharp(trimmed, { failOn: 'warning' })
+    .resize({ width: SINGLE_IMAGE_VISIBLE_WIDTH, height: SINGLE_IMAGE_VISIBLE_WIDTH, fit: 'inside', withoutEnlargement: false })
+    .ensureAlpha().png().toBuffer();
+  const meta = await sharp(visible).metadata();
+  const width = Number(meta.width || SINGLE_IMAGE_VISIBLE_WIDTH);
+  const height = Number(meta.height || SINGLE_IMAGE_VISIBLE_WIDTH);
+  const left = alignment === 'right'
+    ? Math.max(0, SINGLE_IMAGE_CANVAS_WIDTH - width)
+    : alignment === 'center'
+      ? Math.max(0, Math.floor((SINGLE_IMAGE_CANVAS_WIDTH - width) / 2))
+      : 0;
+  const output = await sharp({ create: { width: SINGLE_IMAGE_CANVAS_WIDTH, height, channels: 4, background: PANEL_BG } })
+    .composite([{ input: visible, left, top: 0 }]).png().toBuffer();
+  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
+  return { attachment: new AttachmentBuilder(output, { name }), url: `attachment://${name}` };
+}
+async function galleryItems(media, interaction, placement = null, payloadFiles = null, panelIndex = 0) {
+  const output = [];
+  const gallery = (Array.isArray(media?.gallery) ? media.gallery : []).slice(0, 10);
+  for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
+    const item = gallery[itemIndex];
+    if (placement && itemPlacement(item) !== placement) continue;
+    const source = resolveSource(item?.source, interaction);
+    if (!source) continue;
+    const probe = await probeRemoteSource(source, 'media');
+    let url = source;
+    const alignment = galleryAlignment(item);
+    const isStaticImage = String(item?.type || 'auto').toLowerCase() !== 'video' && !nativeImageShouldPassThrough(probe.contentType);
+    if (isStaticImage && alignment !== 'left' && Array.isArray(payloadFiles)) {
+      const prepared = await alignedGalleryAttachment(source, alignment, panelIndex, itemIndex);
+      if (prepared) {
+        payloadFiles.push(prepared.attachment);
+        url = prepared.url;
+      }
+    }
+    const builder = new MediaGalleryItemBuilder().setURL(url).setSpoiler(item?.spoiler === true);
+    if (item?.alt) builder.setDescription(String(item.alt).slice(0, 1024));
+    output.push(builder);
+  }
+  return output;
+}'''
+          replace_once(renderer, old_gallery, new_gallery)
+          replace_once(renderer,
+              "const aboveItems = await galleryItems(media, interaction, 'above');",
+              "const aboveItems = await galleryItems(media, interaction, 'above', files, index);")
+          replace_once(renderer,
+              "const belowItems = await galleryItems(media, interaction, 'below');",
+              "const belowItems = await galleryItems(media, interaction, 'below', files, index);")
+
+      - name: Validate backend syntax
+        run: npm run syntax
+      - name: Commit all repairs
+        run: |
+          git config user.name "KSJHub"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/modules/messageStudio/embed/embedPanel.js src/modules/messageStudio/embed/embedMedia.js src/modules/messageStudio/embed/embedMediaManagerBase.js src/modules/messageStudio/embed/embedRenderer.js
+          git commit -m "fix(embed): repair studio flow media options and image alignment"
+          git push origin dev
+      - name: Remove temporary workflow
+        if: success()
+        run: |
+          git pull --rebase origin dev
+          git rm .github/workflows/fix-embed-studio-all.yml
+          git commit -m "chore: remove temporary Embed Studio all-fixes workflow"
+          git push origin dev
