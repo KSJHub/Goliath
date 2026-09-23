@@ -7,6 +7,7 @@ const {
 } = require('discord.js');
 const invites = require('./invites');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
+const { replaceVars } = require('../../../core/guild/guildVariables');
 
 const sessions = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
@@ -149,7 +150,10 @@ function profilePayload(guild, user) {
 function personalInvitePayload(interaction, result) {
   const template = invites.getSection(interaction.guildId).settings.memberInviteTemplate;
   const url = result.invite.url || officialUrl(result.record.code);
-  const render = (value) => String(value || '').replaceAll('{server}', interaction.guild.name).replaceAll('{user}', interaction.user.username).replaceAll('{invite}', url);
+  const render = (value) => replaceVars(value, interaction, false, {
+    '{user}': interaction.user.username,
+    '{invite}': url,
+  });
   return { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(render(template.dmTitle)).setDescription(render(template.dmMessage)).setTimestamp()] };
 }
 
