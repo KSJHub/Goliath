@@ -1,14 +1,9 @@
 name: Sync Goliath
-
 on:
   push:
-    branches:
-      - dev
-  workflow_dispatch:
-
+    branches: [dev]
 permissions:
   contents: write
-
 jobs:
   migrate:
     runs-on: ubuntu-latest
@@ -17,95 +12,18 @@ jobs:
         with:
           ref: dev
           fetch-depth: 0
-      - name: Migrate variables
+      - name: Apply migration
+        env:
+          MIGRATION_B64: CmNvbnN0IGZzID0gcmVxdWlyZSgnbm9kZTpmcycpOwoKZnVuY3Rpb24gcmVwbGFjZUJsb2NrKGZpbGUsIHN0YXJ0TWFya2VyLCBlbmRNYXJrZXIsIHJlcGxhY2VtZW50LCBhbHJlYWR5TWFya2VyKSB7CiAgbGV0IHRleHQgPSBmcy5yZWFkRmlsZVN5bmMoZmlsZSwgJ3V0ZjgnKTsKICBpZiAoIXRleHQuaW5jbHVkZXMoYWxyZWFkeU1hcmtlcikpIHsKICAgIGNvbnN0IHN0YXJ0ID0gdGV4dC5pbmRleE9mKHN0YXJ0TWFya2VyKTsKICAgIGNvbnN0IGVuZCA9IHRleHQuaW5kZXhPZihlbmRNYXJrZXIsIHN0YXJ0KTsKICAgIGlmIChzdGFydCA8IDAgfHwgZW5kIDwgMCkgdGhyb3cgbmV3IEVycm9yKGBNaWdyYXRpb24gbWFya2VycyBub3QgZm91bmQgaW4gJHtmaWxlfWApOwogICAgdGV4dCA9IHRleHQuc2xpY2UoMCwgc3RhcnQpICsgcmVwbGFjZW1lbnQgKyB0ZXh0LnNsaWNlKGVuZCk7CiAgfQogIGZzLndyaXRlRmlsZVN5bmMoZmlsZSwgdGV4dCk7Cn0KCmNvbnN0IHN1Z2dlc3Rpb25zRmlsZSA9ICdzcmMvbW9kdWxlcy9mZWVkYmFja1N0dWRpby9zdWdnZXN0aW9ucy9zdWdnZXN0aW9uc1BhbmVsLmpzJzsKbGV0IHN1Z2dlc3Rpb25zID0gZnMucmVhZEZpbGVTeW5jKHN1Z2dlc3Rpb25zRmlsZSwgJ3V0ZjgnKTsKY29uc3Qgc3VnZ2VzdGlvbnNJbXBvcnQgPSAiY29uc3QgZ3VpbGRWYXJpYWJsZXMgPSByZXF1aXJlKCcuLi8uLi8uLi9jb3JlL2d1aWxkL2d1aWxkVmFyaWFibGVzJyk7IjsKY29uc3Qgc3VnZ2VzdGlvbnNBbmNob3IgPSAiY29uc3QgeyBpc01vZHVsZUVuYWJsZWQgfSA9IHJlcXVpcmUoJy4uLy4uLy4uL2NvcmUvZ3VpbGQvZ3VpbGRNYW5hZ2VyJyk7IjsKaWYgKCFzdWdnZXN0aW9ucy5pbmNsdWRlcyhzdWdnZXN0aW9uc0ltcG9ydCkpIHsKICBpZiAoIXN1Z2dlc3Rpb25zLmluY2x1ZGVzKHN1Z2dlc3Rpb25zQW5jaG9yKSkgdGhyb3cgbmV3IEVycm9yKCdTdWdnZXN0aW9ucyBpbXBvcnQgYW5jaG9yIG1pc3NpbmcnKTsKICBzdWdnZXN0aW9ucyA9IHN1Z2dlc3Rpb25zLnJlcGxhY2Uoc3VnZ2VzdGlvbnNBbmNob3IsIGAke3N1Z2dlc3Rpb25zQW5jaG9yfVxuJHtzdWdnZXN0aW9uc0ltcG9ydH1gKTsKICBmcy53cml0ZUZpbGVTeW5jKHN1Z2dlc3Rpb25zRmlsZSwgc3VnZ2VzdGlvbnMpOwp9CnJlcGxhY2VCbG9jaygKICBzdWdnZXN0aW9uc0ZpbGUsCiAgJ2Z1bmN0aW9uIHRlbXBsYXRlVmFyaWFibGVzKGd1aWxkLCBzdWdnZXN0aW9uID0gbnVsbCwgc2VjdGlvbiA9IHt9KSB7JywKICAnZnVuY3Rpb24gc3VnZ2VzdGlvblRlbXBsYXRlU2xvdCcsCmBmdW5jdGlvbiB0ZW1wbGF0ZVZhcmlhYmxlcyhndWlsZCwgc3VnZ2VzdGlvbiA9IG51bGwsIHNlY3Rpb24gPSB7fSkgewogIGNvbnN0IGVuYWJsZWQgPSBndWlsZD8uaWQgPyBpc01vZHVsZUVuYWJsZWQoZ3VpbGQuaWQsICdzdWdnZXN0aW9ucycpIDogdHJ1ZTsKICBjb25zdCBpbnRlcmFjdGlvbiA9IHsgZ3VpbGQsIGd1aWxkSWQ6IGd1aWxkPy5pZCB8fCAnJyB9OwogIHJldHVybiBndWlsZFZhcmlhYmxlcy5idWlsZFZhcmlhYmxlTWFwKGludGVyYWN0aW9uLCBmYWxzZSwgewogICAgJ3tzdWdnZXN0aW9uVGl0bGV9Jzogc3VnZ2VzdGlvbj8udGl0bGUgfHwgJycsCiAgICAne3N1Z2dlc3Rpb259Jzogc3VnZ2VzdGlvbj8uY29udGVudCB8fCAnJywKICAgICd7c3VnZ2VzdGlvbkF1dGhvcn0nOiBzdWdnZXN0aW9uID8gcHVibGljU3VnZ2VzdGlvbkF1dGhvcihzdWdnZXN0aW9uKSA6ICcnLAogICAgJ3tzdWdnZXN0aW9uU3RhdHVzfSc6IHN1Z2dlc3Rpb24gPyBzdGF0dXNMYWJlbChzdWdnZXN0aW9uLnN0YXR1cywgc2VjdGlvbikgOiAnJywKICAgICd7dXBWb3Rlc30nOiBTdHJpbmcoc3VnZ2VzdGlvbj8udXBWb3Rlcz8ubGVuZ3RoIHx8IDApLAogICAgJ3tkb3duVm90ZXN9JzogU3RyaW5nKHN1Z2dlc3Rpb24/LmRvd25Wb3Rlcz8ubGVuZ3RoIHx8IDApLAogICAgJ3t0ZWFtUmVzcG9uc2V9Jzogc3VnZ2VzdGlvbiA/IGRlZmF1bHRUZWFtUmVzcG9uc2Uoc3VnZ2VzdGlvbikgOiAnJywKICAgICd7c3VibWl0dGVkQXR9Jzogc3VnZ2VzdGlvbj8uY3JlYXRlZEF0ID8gZGlzY29yZFRpbWVzdGFtcChzdWdnZXN0aW9uLmNyZWF0ZWRBdCwgJ0YnKSA6ICcnLAogICAgJ3tkZWNpc2lvbkF0fSc6IHN1Z2dlc3Rpb24/LmltcGxlbWVudGVkQXQgfHwgc3VnZ2VzdGlvbj8ucmV2aWV3ZWRBdCB8fCBzdWdnZXN0aW9uPy51cGRhdGVkQXQKICAgICAgPyBkaXNjb3JkVGltZXN0YW1wKHN1Z2dlc3Rpb24uaW1wbGVtZW50ZWRBdCB8fCBzdWdnZXN0aW9uLnJldmlld2VkQXQgfHwgc3VnZ2VzdGlvbi51cGRhdGVkQXQsICdGJykgOiAnJywKICAgICd7c3VnZ2VzdGlvbnNFbmFibGVkfSc6IGVuYWJsZWQgPyAnT24nIDogJ09mZicsCiAgICAne2Fub255bW91c01vZGV9Jzogc2VjdGlvbi5hbm9ueW1vdXMgPT09IHRydWUgPyAnT24nIDogJ09mZicsCiAgfSk7Cn0KCmAsCiAgJ2d1aWxkVmFyaWFibGVzLmJ1aWxkVmFyaWFibGVNYXAoaW50ZXJhY3Rpb24sIGZhbHNlJywKKTsKCmNvbnN0IHNvY2lhbEZpbGUgPSAnc3JjL21vZHVsZXMvc29jaWFsU3R1ZGlvL3NvY2lhbEFsZXJ0cy9zb2NpYWxTdHVkaW9QYW5lbC5qcyc7CmxldCBzb2NpYWwgPSBmcy5yZWFkRmlsZVN5bmMoc29jaWFsRmlsZSwgJ3V0ZjgnKTsKY29uc3Qgc29jaWFsSW1wb3J0ID0gImNvbnN0IGd1aWxkVmFyaWFibGVzID0gcmVxdWlyZSgnLi4vLi4vLi4vY29yZS9ndWlsZC9ndWlsZFZhcmlhYmxlcycpOyI7CmNvbnN0IHNvY2lhbEFuY2hvciA9ICJjb25zdCBzZWN1cml0eSA9IHJlcXVpcmUoJy4uLy4uLy4uL2NvcmUvc2VjdXJpdHkvcHJvdGVjdGlvbi9jb3JlJyk7IjsKaWYgKCFzb2NpYWwuaW5jbHVkZXMoc29jaWFsSW1wb3J0KSkgewogIGlmICghc29jaWFsLmluY2x1ZGVzKHNvY2lhbEFuY2hvcikpIHRocm93IG5ldyBFcnJvcignU29jaWFsIGltcG9ydCBhbmNob3IgbWlzc2luZycpOwogIHNvY2lhbCA9IHNvY2lhbC5yZXBsYWNlKHNvY2lhbEFuY2hvciwgYCR7c29jaWFsQW5jaG9yfVxuJHtzb2NpYWxJbXBvcnR9YCk7CiAgZnMud3JpdGVGaWxlU3luYyhzb2NpYWxGaWxlLCBzb2NpYWwpOwp9CnJlcGxhY2VCbG9jaygKICBzb2NpYWxGaWxlLAogICdmdW5jdGlvbiB2YXJpYWJsZXNEZXNjcmlwdGlvbigpIHsnLAogICdmdW5jdGlvbiBidWlsZFRlbXBsYXRlUGFuZWwnLApgZnVuY3Rpb24gdmFyaWFibGVzRGVzY3JpcHRpb24oKSB7CiAgY29uc3QgdmFyaWFibGVzID0gZ3VpbGRWYXJpYWJsZXMudmFyaWFibGVzRm9yTW9kdWxlKCdzb2NpYWxTdHVkaW8nKTsKICBjb25zdCBsaW5lcyA9IFtdOwogIGZvciAobGV0IGluZGV4ID0gMDsgaW5kZXggPCB2YXJpYWJsZXMubGVuZ3RoOyBpbmRleCArPSA4KSB7CiAgICBsaW5lcy5wdXNoKHZhcmlhYmxlcy5zbGljZShpbmRleCwgaW5kZXggKyA4KS5tYXAoKHRva2VuKSA9PiAnXGAnICsgdG9rZW4gKyAnXGAnKS5qb2luKCcgJykpOwogIH0KICByZXR1cm4gWwogICAgJyoq8J+MkCBHb2xpYXRoIEdsb2JhbCBWYXJpYWJsZXMqKicsCiAgICAuLi5saW5lcywKICAgICcnLAogICAgJypHZW5lcmF0ZWQgZnJvbSB0aGUgY2VudHJhbCBndWlsZFZhcmlhYmxlcyByZWdpc3RyeS4gQ3VzdG9tIERFVi1wYW5lbCB2YXJpYWJsZXMgYXBwZWFyIGF1dG9tYXRpY2FsbHkuKicsCiAgXS5qb2luKCdcbicpOwp9CgpgLAogICJ2YXJpYWJsZXNGb3JNb2R1bGUoJ3NvY2lhbFN0dWRpbycpIiwKKTsKCmNvbnN0IGNlbnRyYWwgPSBmcy5yZWFkRmlsZVN5bmMoJ3NyYy9jb3JlL2d1aWxkL2d1aWxkVmFyaWFibGVzLmpzJywgJ3V0ZjgnKTsKZm9yIChjb25zdCByZXF1aXJlZCBvZiBbJ3tzdWdnZXN0aW9uVGl0bGV9JywgJ3tjcmVhdG9yRGlzcGxheU5hbWV9JywgJ3tzaG9ydFVybH0nLCAndmFyaWFibGVzRm9yTW9kdWxlJywgJ2J1aWxkVmFyaWFibGVNYXAnXSkgewogIGlmICghY2VudHJhbC5pbmNsdWRlcyhyZXF1aXJlZCkpIHRocm93IG5ldyBFcnJvcihgQ2VudHJhbCByZWdpc3RyeSBtaXNzaW5nICR7cmVxdWlyZWR9YCk7Cn0K
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace_block(text, start_marker, end_marker, replacement, already_marker):
-              if already_marker in text:
-                  return text
-              start = text.find(start_marker)
-              end = text.find(end_marker, start)
-              if start < 0 or end < 0:
-                  raise SystemExit('Migration markers not found: ' + start_marker)
-              return text[:start] + replacement + text[end:]
-
-          p = Path('src/modules/feedbackStudio/suggestions/suggestionsPanel.js')
-          text = p.read_text()
-          anchor = "const { isModuleEnabled } = require('../../../core/guild/guildManager');"
-          central_import = "const guildVariables = require('../../../core/guild/guildVariables');"
-          if central_import not in text:
-              if anchor not in text:
-                  raise SystemExit('Suggestions import anchor missing')
-              text = text.replace(anchor, anchor + '\n' + central_import, 1)
-          replacement = """function templateVariables(guild, suggestion = null, section = {}) {
-  const enabled = guild?.id ? isModuleEnabled(guild.id, 'suggestions') : true;
-  const interaction = { guild, guildId: guild?.id || '' };
-  return guildVariables.buildVariableMap(interaction, false, {
-    '{suggestionTitle}': suggestion?.title || '',
-    '{suggestion}': suggestion?.content || '',
-    '{suggestionAuthor}': suggestion ? publicSuggestionAuthor(suggestion) : '',
-    '{suggestionStatus}': suggestion ? statusLabel(suggestion.status, section) : '',
-    '{upVotes}': String(suggestion?.upVotes?.length || 0),
-    '{downVotes}': String(suggestion?.downVotes?.length || 0),
-    '{teamResponse}': suggestion ? defaultTeamResponse(suggestion) : '',
-    '{submittedAt}': suggestion?.createdAt ? discordTimestamp(suggestion.createdAt, 'F') : '',
-    '{decisionAt}': suggestion?.implementedAt || suggestion?.reviewedAt || suggestion?.updatedAt
-      ? discordTimestamp(suggestion.implementedAt || suggestion.reviewedAt || suggestion.updatedAt, 'F') : '',
-    '{suggestionsEnabled}': enabled ? 'On' : 'Off',
-    '{anonymousMode}': section.anonymous === true ? 'On' : 'Off',
-  });
-}
-
-"""
-          text = replace_block(text, 'function templateVariables(guild, suggestion = null, section = {}) {', 'function suggestionTemplateSlot', replacement, 'guildVariables.buildVariableMap(interaction, false')
-          p.write_text(text)
-
-          p = Path('src/modules/socialStudio/socialAlerts/socialStudioPanel.js')
-          text = p.read_text()
-          anchor = "const security = require('../../../core/security/protection/core');"
-          central_import = "const guildVariables = require('../../../core/guild/guildVariables');"
-          if central_import not in text:
-              if anchor not in text:
-                  raise SystemExit('Social Studio import anchor missing')
-              text = text.replace(anchor, anchor + '\n' + central_import, 1)
-          replacement = """function variablesDescription() {
-  const variables = guildVariables.variablesForModule('socialStudio');
-  const lines = [];
-  for (let index = 0; index < variables.length; index += 8) {
-    lines.push(variables.slice(index, index + 8).map((token) => '`' + token + '`').join(' '));
-  }
-  return [
-    '**🌐 Goliath Global Variables**',
-    ...lines,
-    '',
-    '*Generated from the central guildVariables registry. Custom DEV-panel variables appear automatically.*',
-  ].join(String.fromCharCode(10));
-}
-
-"""
-          text = replace_block(text, 'function variablesDescription() {', 'function buildTemplatePanel', replacement, "variablesForModule('socialStudio')")
-          p.write_text(text)
-
-          central = Path('src/core/guild/guildVariables.js').read_text()
-          for required in ['{suggestionTitle}', '{creatorDisplayName}', '{shortUrl}', 'variablesForModule', 'buildVariableMap']:
-              if required not in central:
-                  raise SystemExit('Central registry missing ' + required)
-          PY
-
+          git show 954ce159341677d1cb68fd2a7d5ec11dac2c856a:.github/workflows/sync-dev-now.yml > .github/workflows/sync-dev-now.yml
+          printf '%s' "$MIGRATION_B64" | base64 -d > /tmp/migrate.js
+          node /tmp/migrate.js
           node --check src/core/guild/guildVariables.js
           node --check src/modules/feedbackStudio/suggestions/suggestionsPanel.js
           node --check src/modules/socialStudio/socialAlerts/socialStudioPanel.js
-
-          if git diff --quiet; then
-            echo "Variable migration already complete."
-            exit 0
-          fi
-
           git config user.name "KSJ Goliath Automation"
           git config user.email "actions@users.noreply.github.com"
-          git add src/modules/feedbackStudio/suggestions/suggestionsPanel.js src/modules/socialStudio/socialAlerts/socialStudioPanel.js
-          git commit -m "refactor(variables): centralise remaining module variables"
+          git add .github/workflows/sync-dev-now.yml src/modules/feedbackStudio/suggestions/suggestionsPanel.js src/modules/socialStudio/socialAlerts/socialStudioPanel.js
+          git commit -m "refactor(variables): finish central variable migration"
           git push origin HEAD:dev
