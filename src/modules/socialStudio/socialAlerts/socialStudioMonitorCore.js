@@ -2,6 +2,7 @@
 
 const { EmbedBuilder } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
+const { replaceVariables } = require('../../../core/guild/guildVariables');
 const { deleteExpiredCreators } = require('./socialStudioStore');
 const { checkAccount, providerInfo } = require('./socialStudioProviders');
 const { normalizeTemplates, resolveTemplate } = require('./socialStudioTemplates');
@@ -56,7 +57,7 @@ function resolvedDuplicateIds(config, account, checked, creator) {
   const resolvedToken = identityToken(username), duplicateIds = []; for (const otherId of creator.accountIds || []) { if (otherId === account.accountId) continue; const other = config.accounts[otherId]; if (!other || String(other.platform || '').toLowerCase() !== platform) continue; const otherExternalId = clean(other.externalId), otherUsername = clean(other.normalizedUsername || other.username).replace(/^@+/, '').toLowerCase(); if (externalId && otherExternalId && externalId === otherExternalId) { duplicateIds.push(otherId); continue; } if (username && otherUsername && username === otherUsername) { duplicateIds.push(otherId); continue; } if (platform === 'tiktok' && externalId && !otherExternalId && !validTikTokHandle(otherUsername)) { const aliasToken = identityToken(otherUsername || other.sourceInput); if (aliasToken && resolvedToken.startsWith(aliasToken) && /^\d{2,6}$/.test(resolvedToken.slice(aliasToken.length))) duplicateIds.push(otherId); } } return [...new Set(duplicateIds)];
 }
 function templateFor(config, type) { return resolveTemplate(config.templates, type); }
-function render(value, vars) { return String(value || '').replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g, (_match, key) => vars[key] ?? ''); }
+function render(value, vars) { return replaceVariables(String(value || ''), vars); }
 function enabledAlert(account, type) { const rawSupported = providerInfo(account.platform).supportedAlertTypes || []; const supported = rawSupported.includes('live') ? [...new Set([...rawSupported, 'ended'])] : rawSupported; const configured = Array.isArray(account.alertTypes) ? account.alertTypes : supported; return supported.includes(type) && configured.includes(type); }
 function secondsBetween(start, end) { const a = new Date(start).getTime(), b = new Date(end).getTime(); return Number.isFinite(a) && Number.isFinite(b) && b >= a ? Math.floor((b - a) / 1000) : null; }
 function durationToSeconds(value) { if (Number.isFinite(Number(value))) return Number(value); const match = String(value || '').match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i); return match ? Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0) : null; }
