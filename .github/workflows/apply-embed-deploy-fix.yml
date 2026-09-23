@@ -1,0 +1,110 @@
+name: Apply Embed Studio deploy fix
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/apply-embed-deploy-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Patch Embed Studio deployment controls
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('src/modules/messageStudio/embed/embedPanel.js')
+          text = path.read_text()
+
+          old_vars = '''  const deployCustomId =
+    deployment
+      ? "embed:update-existing"
+      : "embed:use";
+
+  const deployLabel =
+    deployment
+      ? "Update Existing"
+      : "Deploy New";
+
+  const deployEmoji =
+    deployment
+      ? "♻️"
+      : "🚀";
+
+'''
+          if old_vars not in text:
+              raise SystemExit('Expected legacy deployment selector block was not found')
+          text = text.replace(old_vars, '', 1)
+
+          old_button = '''        new ButtonBuilder()
+          .setCustomId(deployCustomId)
+          .setLabel(deployLabel)
+          .setEmoji(deployEmoji)
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(!canDeploy)
+'''
+          new_buttons = '''        new ButtonBuilder()
+          .setCustomId("embed:use")
+          .setLabel("Deploy New")
+          .setEmoji("🚀")
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(!canDeploy),
+
+        ...(deployment
+          ? [
+              new ButtonBuilder()
+                .setCustomId("embed:update-existing")
+                .setLabel("Update Existing")
+                .setEmoji("♻️")
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(!canDeploy),
+            ]
+          : [])
+'''
+          if old_button not in text:
+              raise SystemExit('Expected legacy deployment button block was not found')
+          text = text.replace(old_button, new_buttons, 1)
+
+          old_next = '''  } else if (deployment) {
+    nextAction =
+      "♻️ Review your changes, test if needed, then update the existing message.";
+  } else {
+    nextAction =
+      "🚀 Everything is ready. Test the embed or deploy it to the selected channel.";
+  }
+'''
+          new_next = '''  } else if (deployment) {
+    nextAction =
+      "🚀 Ready to deploy a new message, or ♻️ update the existing live message.";
+  } else {
+    nextAction =
+      "🚀 Everything is ready. Test the embed or deploy it to the selected channel.";
+  }
+'''
+          if old_next not in text:
+              raise SystemExit('Expected deployment next-step block was not found')
+          text = text.replace(old_next, new_next, 1)
+
+          path.write_text(text)
+
+      - name: Validate syntax
+        run: node --check src/modules/messageStudio/embed/embedPanel.js
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          rm .github/workflows/apply-embed-deploy-fix.yml
+          git config user.name "KSJHub Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/modules/messageStudio/embed/embedPanel.js .github/workflows/apply-embed-deploy-fix.yml
+          git commit -m "fix(embed): expose deploy new alongside update existing"
+          git push origin HEAD:dev
