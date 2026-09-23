@@ -7,6 +7,7 @@ export const OWNER_NAV_ITEMS = [
   { key: 'ownerForms', label: 'Forms Hub', icon: 'modules', path: '/owner/forms' },
   { key: 'ownerTickets', label: 'Tickets Hub', icon: 'modules', path: '/owner/tickets' },
   { key: 'ownerTranslation', label: 'Translation Hub', icon: 'modules', path: '/owner/translation' },
+  { key: 'ownerVariables', label: 'Global Variables', icon: 'modules', path: '/owner/variables' },
   { key: 'ownerBackups', label: 'Backup Center', icon: 'admin', path: '/owner/backups' },
   { key: 'ownerDeployments', label: 'Deployment Center', icon: 'modules', path: '/owner/deployments' },
 ];
@@ -18,7 +19,7 @@ export const OWNER_NAV_GROUPS = [
   },
   {
     title: 'Operations',
-    items: ['ownerSecurity', 'ownerForms', 'ownerTickets', 'ownerTranslation'],
+    items: ['ownerSecurity', 'ownerForms', 'ownerTickets', 'ownerTranslation', 'ownerVariables'],
   },
   {
     title: 'Infrastructure',
