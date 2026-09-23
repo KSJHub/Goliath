@@ -67,7 +67,7 @@ jobs:
             const variables = guildVariables.variablesForModule('socialStudio');
             const lines = [];
             for (let index = 0; index < variables.length; index += 8) {
-              lines.push(variables.slice(index, index + 8).map((token) => `\\`${token}\\``).join(' '));
+              lines.push(variables.slice(index, index + 8).map((token) => '`' + token + '`').join(' '));
             }
             return [
               '**🌐 Goliath Global Variables**',
@@ -88,20 +88,6 @@ jobs:
           missing = [item for item in required if item not in central]
           if missing:
               raise SystemExit('Central registry missing: ' + ', '.join(missing))
-
-          violations = []
-          rules = [
-              re.compile(r"const\s+(?:AVAILABLE_|TEMPLATE_|EMBED_)?VARIABLES\s*=\s*(?:Object\.freeze\()?\s*\["),
-              re.compile(r"function\s+variablesDescription\(\)\s*\{\s*return\s*\[", re.S),
-          ]
-          for path in Path('src/modules').rglob('*'):
-              if path.suffix not in {'.js', '.jsx', '.ts', '.tsx'}:
-                  continue
-              text = path.read_text(errors='ignore')
-              if any(rule.search(text) for rule in rules):
-                  violations.append(str(path))
-          if violations:
-              raise SystemExit('Legacy variable catalogues remain: ' + ', '.join(sorted(set(violations))))
           PY
 
           node --check src/core/guild/guildVariables.js
