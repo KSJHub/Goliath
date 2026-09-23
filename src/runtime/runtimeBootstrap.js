@@ -5,33 +5,20 @@ const { resolveBotMode, getRuntimePaths } = require('../config/runtimePaths');
 /* ---------------- DIRECTORY HELPERS ---------------- */
 
 function ensureDir(dirPath) {
-  if (!dirPath) {
-    throw new Error('ensureDir received invalid path');
-  }
-
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-
+  if (!dirPath) throw new Error('ensureDir received invalid path');
+  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
   return dirPath;
 }
 
 function validatePath(pathToCheck, label) {
-  if (!fs.existsSync(pathToCheck)) {
-    throw new Error(`Missing required path: ${label}`);
-  }
-
+  if (!fs.existsSync(pathToCheck)) throw new Error(`Missing required path: ${label}`);
   console.log(`✅ Path OK: ${label}`);
   return true;
 }
 
 function validateEnv(name) {
   const value = process.env[name];
-
-  if (!value || !String(value).trim()) {
-    throw new Error(`Missing environment variable: ${name}`);
-  }
-
+  if (!value || !String(value).trim()) throw new Error(`Missing environment variable: ${name}`);
   console.log(`✅ ENV OK: ${name}`);
   return true;
 }
@@ -57,16 +44,10 @@ function installDiscordRuntimeCompat(logger = console) {
     const { GuildMessageManager } = require('discord.js');
     const proto = GuildMessageManager?.prototype;
     if (!proto || typeof proto.fetchPins !== 'function') return false;
-
-    // Goliath still has a few legacy call sites that use discord.js' deprecated
-    // fetchPinned() API. Route those calls through fetchPins() centrally so a
-    // restart cannot flood stderr with deprecation traces while the individual
-    // modules are migrated. Preserve the old Collection-shaped return value.
     proto.fetchPinned = async function goliathFetchPinnedCompat(...args) {
       const result = await this.fetchPins(...args);
       return result?.items || result;
     };
-
     logger.log('✅ Discord pinned-message compatibility active (fetchPins).');
     return true;
   } catch (error) {
@@ -78,10 +59,6 @@ function installDiscordRuntimeCompat(logger = console) {
 /* ---------------- EVENT REGISTRATION ---------------- */
 
 function registerEvents(client, options = {}) {
-  // Goliath uses the grouped event registry plus a small set of deliberately ordered
-  // Command Center/security guards that attach directly to the Discord client.
-  // Declare that listener budget explicitly so Node's default threshold does not
-  // misreport the intentional router topology as a memory leak.
   if (typeof client?.setMaxListeners === 'function' && typeof client?.getMaxListeners === 'function') {
     client.setMaxListeners(Math.max(client.getMaxListeners(), 25));
   }
@@ -95,9 +72,6 @@ function registerEvents(client, options = {}) {
 
   if (!fs.existsSync(eventsPath)) return { files: 0, groups: 0 };
 
-  // Embed interactions import embedPanel directly, so install the shared media
-  // runtime before event modules are required. This guarantees every consumer
-  // sees the same initialized panel API (including buildMediaManagerPanel).
   try {
     require('../modules/messageStudio/embed/embed');
   } catch (error) {
@@ -132,13 +106,42 @@ function registerEvents(client, options = {}) {
     }
   }
 
+  const readyGroupCount = [...grouped.values()].filter((group) => group.eventName === 'clientReady').length;
+  const readyCycle = {
+    pending: readyGroupCount,
+    startedAt: null,
+    completed: false,
+  };
+
+  function completeReadyGroup() {
+    if (readyCycle.completed) return;
+    readyCycle.pending = Math.max(0, readyCycle.pending - 1);
+    if (readyCycle.pending > 0) return;
+
+    readyCycle.completed = true;
+    const elapsed = Date.now() - (readyCycle.startedAt || Date.now());
+    const mode = String(process.env.BOT_MODE || 'UNKNOWN').trim().toUpperCase();
+    const guildCount = client?.guilds?.cache?.size ?? 0;
+
+    console.log('============================================================');
+    console.log('✅ GOLIATH STARTUP COMPLETE');
+    console.log(`🧠 Mode: ${mode}`);
+    console.log(`🤖 Discord: ${client?.isReady?.() ? 'READY' : 'NOT READY'}`);
+    console.log(`🏠 Guilds: ${guildCount}`);
+    console.log('🌐 Dashboard: RUNNING');
+    console.log('🛡️ Blocking startup handlers: COMPLETE');
+    console.log('🔄 Background startup jobs: may continue independently');
+    console.log(`⏱️ ClientReady cycle: ${(elapsed / 1000).toFixed(2)}s (${elapsed}ms)`);
+    console.log('============================================================');
+  }
+
   for (const { eventName, once, handlers } of grouped.values()) {
     const listener = async (...args) => {
-      const eventStartedAt = Date.now();
+      if (eventName === 'clientReady' && readyCycle.startedAt === null) readyCycle.startedAt = Date.now();
       if (eventName === 'interactionCreate') await prepareInteraction(args[0]);
+
       for (const handler of handlers) {
         const startedAt = Date.now();
-
         try {
           await handler.execute(...args, client);
         } catch (error) {
@@ -153,22 +156,7 @@ function registerEvents(client, options = {}) {
         }
       }
 
-      if (eventName === 'clientReady') {
-        const elapsed = Date.now() - eventStartedAt;
-        const mode = String(process.env.BOT_MODE || 'UNKNOWN').trim().toUpperCase();
-        const guildCount = client?.guilds?.cache?.size ?? 0;
-        const elapsedSeconds = (elapsed / 1000).toFixed(2);
-
-        console.log('============================================================');
-        console.log('✅ GOLIATH STARTUP COMPLETE');
-        console.log(`🧠 Mode: ${mode}`);
-        console.log(`🤖 Discord: ${client?.isReady?.() ? 'READY' : 'NOT READY'}`);
-        console.log(`🏠 Guilds: ${guildCount}`);
-        console.log('🌐 Dashboard: RUNNING');
-        console.log('🛡️ Startup handlers: COMPLETE');
-        console.log(`⏱️ ClientReady cycle: ${elapsedSeconds}s (${elapsed}ms)`);
-        console.log('============================================================');
-      }
+      if (eventName === 'clientReady') completeReadyGroup();
     };
     if (once) client.once(eventName, listener); else client.on(eventName, listener);
   }
@@ -183,9 +171,7 @@ function archiveStaleGuildFiles(client, botMode, logger = console) {
   const guildsDir = runtimePaths.guilds;
   if (!guildsDir || !fs.existsSync(guildsDir)) return { active: 0, archived: 0, skipped: 0 };
 
-  const activeIds = new Set(
-    [...(client?.guilds?.cache?.keys?.() || [])].map((id) => String(id)),
-  );
+  const activeIds = new Set([...(client?.guilds?.cache?.keys?.() || [])].map((id) => String(id)));
   const candidates = fs.readdirSync(guildsDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && /^\d{16,20}\.json$/.test(entry.name));
   const stale = candidates.filter((entry) => !activeIds.has(entry.name.replace(/\.json$/, '')));
@@ -217,14 +203,11 @@ function archiveStaleGuildFiles(client, botMode, logger = console) {
 }
 
 async function syncStartupGuilds(client, options = {}) {
-  const enforceGuildAccess = typeof options.enforceGuildAccess === 'function'
-    ? options.enforceGuildAccess
-    : async () => true;
+  const enforceGuildAccess = typeof options.enforceGuildAccess === 'function' ? options.enforceGuildAccess : async () => true;
   const guildManager = options.guildManager || {};
   const resourceManager = options.resourceManager || {};
   const botMode = options.botMode;
   const config = options.config;
-
   const results = [];
 
   for (const guild of client?.guilds?.cache?.values?.() || []) {
@@ -265,17 +248,13 @@ async function runStartupTask(label, fn, logger = console) {
 /* ---------------- MODE / RUNTIME ---------------- */
 
 function normalizeModeValue(mode) {
-  if (mode && typeof mode === 'object') {
-    return mode.botMode || mode.mode || mode.runtimeMode || 'DEV';
-  }
-
+  if (mode && typeof mode === 'object') return mode.botMode || mode.mode || mode.runtimeMode || 'DEV';
   return mode || 'DEV';
 }
 
 function bootstrapRuntime(mode = 'DEV') {
   const modeKey = resolveBotMode(mode);
   const runtimePaths = getRuntimePaths(modeKey);
-
   const paths = {
     root: runtimePaths.root,
     backups: runtimePaths.backups,
@@ -286,43 +265,18 @@ function bootstrapRuntime(mode = 'DEV') {
     security: runtimePaths.security,
   };
 
-  const requiredDirectories = [
-    paths.root,
-    paths.backups,
-    paths.data,
-    paths.database,
-    paths.guilds,
-    paths.logs,
-    paths.security,
-  ];
-
-  for (const dir of requiredDirectories) {
-    ensureDir(dir);
-  }
-
+  for (const dir of [paths.root, paths.backups, paths.data, paths.database, paths.guilds, paths.logs, paths.security]) ensureDir(dir);
   console.log(`✅ Runtime folders ready: ${paths.root}`);
-
-  return {
-    mode: modeKey,
-    ...paths,
-  };
+  return { mode: modeKey, ...paths };
 }
 
 /* ---------------- BOOT VALIDATION ---------------- */
 
 function runBootValidation(config = {}) {
   const { requiredPaths = [], requiredEnv = [] } = config;
-
   console.log('🩺 Running boot validation...');
-
-  for (const item of requiredPaths) {
-    validatePath(item.path, item.label);
-  }
-
-  for (const envName of requiredEnv) {
-    validateEnv(envName);
-  }
-
+  for (const item of requiredPaths) validatePath(item.path, item.label);
+  for (const envName of requiredEnv) validateEnv(envName);
   console.log('✅ Boot validation complete.');
   return true;
 }
@@ -331,7 +285,6 @@ function runBootValidation(config = {}) {
 
 function getStartupFingerprint(mode, runtimePaths = {}) {
   const modeValue = normalizeModeValue(mode);
-
   return {
     botMode: String(modeValue || 'UNKNOWN').toUpperCase(),
     runtimeMode: runtimePaths.mode || 'unknown',
@@ -345,7 +298,6 @@ function getStartupFingerprint(mode, runtimePaths = {}) {
 
 function printStartupFingerprint(mode, runtimePaths = {}) {
   const fingerprint = getStartupFingerprint(mode, runtimePaths);
-
   console.log('============================================================');
   console.log('🧠 Goliath Startup Fingerprint');
   console.log(`🧠 Bot Mode: ${fingerprint.botMode}`);
@@ -356,7 +308,6 @@ function printStartupFingerprint(mode, runtimePaths = {}) {
   console.log(`🧠 PID: ${fingerprint.pid}`);
   console.log(`🧠 Started At: ${fingerprint.startedAt}`);
   console.log('============================================================');
-
   return fingerprint;
 }
 
