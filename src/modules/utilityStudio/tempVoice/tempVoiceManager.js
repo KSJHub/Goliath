@@ -1,6 +1,7 @@
 'use strict';
 
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { replaceVars } = require('../../../core/guild/guildVariables');
 const tempVoiceStore = require('./tempVoiceStore');
 const { buildControlRows, buildPanelContent } = require('./tempVoicePanel');
 
@@ -23,7 +24,15 @@ function cleanLimit(value, fallback = 0) {
 
 function buildChannelName(template, member) {
   const username = member?.displayName || member?.user?.username || 'Member';
-  return safeChannelName(String(template || '{username}\'s Channel').replaceAll('{username}', username));
+  const interaction = {
+    guild: member?.guild,
+    guildId: member?.guild?.id,
+    user: member?.user,
+    member,
+  };
+  return safeChannelName(replaceVars(template || '{username}\'s Channel', interaction, false, {
+    '{username}': username,
+  }));
 }
 
 function hasManageChannels(guild) { return Boolean(guild?.members?.me?.permissions?.has(PermissionFlagsBits.ManageChannels)); }
