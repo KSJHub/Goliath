@@ -1013,18 +1013,10 @@ async function handleCoreInteraction(i) {
 
   if (i.isButton?.()) {
     const panelMedia = panel.getPanelMedia(state);
-    // Keep handler selection semantics identical to the Media Manager UI.
-    // The manager visually defaults to the first valid item when its cursor is
-    // missing/stale; handlers must do the same or an enabled Edit/Options button
-    // incorrectly replies "Select a gallery item first.".
     const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : null;
-    const galleryIndex = panelMedia.gallery.length
-      ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1))
-      : null;
+    const galleryIndex = panelMedia.gallery.length ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1)) : null;
     const requestedFileIndex = Number.isInteger(state.selectedFileIndex) ? state.selectedFileIndex : null;
-    const fileIndex = panelMedia.files.length
-      ? Math.max(0, Math.min(requestedFileIndex ?? 0, panelMedia.files.length - 1))
-      : null;
+    const fileIndex = panelMedia.files.length ? Math.max(0, Math.min(requestedFileIndex ?? 0, panelMedia.files.length - 1)) : null;
     if (customId === 'embed:media-upload') { await i.showModal(panel.mediaUploadModal()); return true; }
     if (customId === 'embed:media-options') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) { await i.reply({ content: 'Select a gallery item first.', flags: 64 }); return true; } return updateMediaOptions(i); }
     if (customId === 'embed:media-options-back') return updateMediaPanel(i);
