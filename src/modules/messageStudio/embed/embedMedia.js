@@ -510,7 +510,7 @@ function installMediaOptionsUi(panel) {
   panel.buildMediaOptionsPanel = (interaction) => {
     const state = panel.getSession(interaction);
     const media = getPanelMedia(state);
-    const index = Number.isInteger(state.selectedMediaIndex) && media.gallery[state.selectedMediaIndex] ? state.selectedMediaIndex : null;
+    const index = media.gallery.length ? Math.max(0, Math.min(Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : 0, media.gallery.length - 1)) : null;
     const item = index == null ? null : media.gallery[index];
     if (!item) return panel.buildMediaManagerPanel(interaction, panel.memberName(interaction));
     const type = ['auto', 'image', 'video'].includes(item.type) ? item.type : 'auto';
@@ -548,7 +548,7 @@ function installMediaOptionsUi(panel) {
   panel.buildFileOptionsPanel = (interaction) => {
     const state = panel.getSession(interaction);
     const media = getPanelMedia(state);
-    const index = Number.isInteger(state.selectedFileIndex) && media.files[state.selectedFileIndex] ? state.selectedFileIndex : null;
+    const index = media.files.length ? Math.max(0, Math.min(Number.isInteger(state.selectedFileIndex) ? state.selectedFileIndex : 0, media.files.length - 1)) : null;
     const item = index == null ? null : media.files[index];
     if (!item) return panel.buildMediaManagerPanel(interaction, panel.memberName(interaction));
     const source = resolveSource(panel, item.source, interaction);
@@ -618,7 +618,7 @@ function installMediaManagerUi(panel) {
   function filePreview(interaction) {
     const state = panel.getSession(interaction);
     const media = getPanelMedia(state);
-    const index = Number.isInteger(state.selectedFileIndex) && media.files[state.selectedFileIndex] ? state.selectedFileIndex : null;
+    const index = media.files.length ? Math.max(0, Math.min(Number.isInteger(state.selectedFileIndex) ? state.selectedFileIndex : 0, media.files.length - 1)) : null;
     if (index == null) return null;
     const file = media.files[index];
     const source = resolveSource(panel, file.source, interaction);

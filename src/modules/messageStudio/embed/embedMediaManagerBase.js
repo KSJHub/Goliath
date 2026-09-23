@@ -219,7 +219,7 @@ function installMediaManagerBase(panel, media) {
         ),
         mediaButton(
           'embed:media-options',
-          '⚙️ Options',
+          '⚙️ Media Options',
           ButtonStyle.Secondary,
           galleryIndex == null
         ),
@@ -254,7 +254,7 @@ function installMediaManagerBase(panel, media) {
         ),
         mediaButton(
           'embed:file-options',
-          '⚙️ File Options',
+          '⚙️ Attachment Options',
           ButtonStyle.Secondary,
           fileIndex == null
         )

@@ -743,74 +743,22 @@ function buildEditorPanel(i, who = "Unknown User") {
       ),
 
       /*
-       * PRIMARY WORKFLOW
+       * BUILD WORKFLOW
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("Builder")
-          .setEmoji("🛠️")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:presets")
-          .setLabel("Presets")
-          .setEmoji("💾")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:readiness")
-          .setLabel(
-            report.ready
-              ? "Ready"
-              : "Review"
-          )
-          .setEmoji(
-            report.ready
-              ? "✅"
-              : "⚠️"
-          )
-          .setStyle(
-            report.ready
-              ? ButtonStyle.Success
-              : ButtonStyle.Secondary
-          )
+        new ButtonBuilder().setCustomId("embed:builder").setLabel("Builder").setEmoji("🛠️").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("embed:panels").setLabel(`Panels (${panels.length})`).setEmoji("🧩").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("embed:presets").setLabel("Presets").setEmoji("💾").setStyle(ButtonStyle.Primary)
       ),
 
       /*
-       * DEPLOYMENT WORKFLOW
+       * CHECK / PUBLISH WORKFLOW
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:panels")
-          .setLabel(`Panels (${panels.length})`)
-          .setEmoji("🧩")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:test-send")
-          .setLabel("Test Send")
-          .setEmoji("🧪")
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(!report.ready),
-
-        new ButtonBuilder()
-          .setCustomId("embed:use")
-          .setLabel("Deploy New")
-          .setEmoji("🚀")
-          .setStyle(ButtonStyle.Success)
-          .setDisabled(!canDeploy),
-
-        ...(deployment
-          ? [
-              new ButtonBuilder()
-                .setCustomId("embed:update-existing")
-                .setLabel("Update Existing")
-                .setEmoji("♻️")
-                .setStyle(ButtonStyle.Success)
-                .setDisabled(!canDeploy),
-            ]
-          : [])
+        new ButtonBuilder().setCustomId("embed:readiness").setLabel(report.ready ? "Ready" : "Review").setEmoji(report.ready ? "✅" : "⚠️").setStyle(report.ready ? ButtonStyle.Success : ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:test-send").setLabel("Test Send").setEmoji("🧪").setStyle(ButtonStyle.Secondary).setDisabled(!report.ready),
+        new ButtonBuilder().setCustomId("embed:use").setLabel("Deploy New").setEmoji("🚀").setStyle(ButtonStyle.Success).setDisabled(!canDeploy),
+        ...(deployment ? [new ButtonBuilder().setCustomId("embed:update-existing").setLabel("Update Existing").setEmoji("♻️").setStyle(ButtonStyle.Success).setDisabled(!canDeploy)] : [])
       ),
 
       /*
