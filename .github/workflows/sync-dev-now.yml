@@ -2,152 +2,119 @@ name: Sync Goliath
 
 on:
   push:
-    branches: [dev]
+    branches:
+      - dev
   workflow_dispatch:
 
 permissions:
   contents: write
 
-concurrency:
-  group: sync-goliath-dev
-  cancel-in-progress: false
-
 jobs:
-  centralise-variables:
-    name: Centralise remaining template variables
+  migrate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: dev
           fetch-depth: 0
-      - name: Migrate remaining legacy variable implementations
-        shell: bash
+      - name: Migrate variables
         run: |
           set -euo pipefail
-          node <<'NODE'
-          const fs = require('node:fs');
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
 
-          function replaceOrFail(file, pattern, replacement, label) {
-            const before = fs.readFileSync(file, 'utf8');
-            if (!pattern.test(before)) {
-              console.log(`SKIP ${label}: already migrated or pattern absent`);
-              return false;
+          suggestions_path = Path('src/modules/feedbackStudio/suggestions/suggestionsPanel.js')
+          suggestions = suggestions_path.read_text()
+          import_line = "const guildVariables = require('../../../core/guild/guildVariables');"
+          anchor = "const { isModuleEnabled } = require('../../../core/guild/guildManager');"
+          if import_line not in suggestions:
+              suggestions = suggestions.replace(anchor, anchor + "\n" + import_line)
+
+          replacement = '''function templateVariables(guild, suggestion = null, section = {}) {
+            const enabled = guild?.id ? isModuleEnabled(guild.id, 'suggestions') : true;
+            const interaction = { guild, guildId: guild?.id || '' };
+            return guildVariables.buildVariableMap(interaction, false, {
+              '{suggestionTitle}': suggestion?.title || '',
+              '{suggestion}': suggestion?.content || '',
+              '{suggestionAuthor}': suggestion ? publicSuggestionAuthor(suggestion) : '',
+              '{suggestionStatus}': suggestion ? statusLabel(suggestion.status, section) : '',
+              '{upVotes}': String(suggestion?.upVotes?.length || 0),
+              '{downVotes}': String(suggestion?.downVotes?.length || 0),
+              '{teamResponse}': suggestion ? defaultTeamResponse(suggestion) : '',
+              '{submittedAt}': suggestion?.createdAt ? discordTimestamp(suggestion.createdAt, 'F') : '',
+              '{decisionAt}': suggestion?.implementedAt || suggestion?.reviewedAt || suggestion?.updatedAt
+                ? discordTimestamp(suggestion.implementedAt || suggestion.reviewedAt || suggestion.updatedAt, 'F') : '',
+              '{suggestionsEnabled}': enabled ? 'On' : 'Off',
+              '{anonymousMode}': section.anonymous === true ? 'On' : 'Off',
+            });
+          }
+
+          function suggestionTemplateSlot'''
+          suggestions, count = re.subn(r"function templateVariables\(guild, suggestion = null, section = \{\}\) \{.*?\n\}\n\nfunction suggestionTemplateSlot", replacement, suggestions, count=1, flags=re.S)
+          if count == 0 and 'guildVariables.buildVariableMap(interaction' not in suggestions:
+              raise SystemExit('Suggestions migration pattern not found')
+          suggestions_path.write_text(suggestions)
+
+          social_path = Path('src/modules/socialStudio/socialAlerts/socialStudioPanel.js')
+          social = social_path.read_text()
+          social_import = "const guildVariables = require('../../../core/guild/guildVariables');"
+          social_anchor = "const security = require('../../../core/security/protection/core');"
+          if social_import not in social:
+              social = social.replace(social_anchor, social_anchor + "\n" + social_import)
+
+          social_replacement = '''function variablesDescription() {
+            const variables = guildVariables.variablesForModule('socialStudio');
+            const lines = [];
+            for (let index = 0; index < variables.length; index += 8) {
+              lines.push(variables.slice(index, index + 8).map((token) => `\\`${token}\\``).join(' '));
             }
-            const after = before.replace(pattern, replacement);
-            if (after === before) throw new Error(`Failed to migrate ${label}`);
-            fs.writeFileSync(file, after);
-            console.log(`MIGRATED ${label}`);
-            return true;
+            return [
+              '**🌐 Goliath Global Variables**',
+              ...lines,
+              '',
+              '*Generated from the central guildVariables registry. Custom DEV-panel variables appear automatically.*',
+            ].join('\\n');
           }
 
-          const suggestionsFile = 'src/modules/feedbackStudio/suggestions/suggestionsPanel.js';
-          let suggestions = fs.readFileSync(suggestionsFile, 'utf8');
-          if (!suggestions.includes("require('../../../core/guild/guildVariables')")) {
-            suggestions = suggestions.replace(
-              "const { isModuleEnabled } = require('../../../core/guild/guildManager');",
-              "const { isModuleEnabled } = require('../../../core/guild/guildManager');\nconst guildVariables = require('../../../core/guild/guildVariables');",
-            );
-            fs.writeFileSync(suggestionsFile, suggestions);
-          }
-          replaceOrFail(
-            suggestionsFile,
-            /function templateVariables\(guild, suggestion = null, section = \{\}\) \{[\s\S]*?\n\}\n\nfunction suggestionTemplateSlot/,
-            `function templateVariables(guild, suggestion = null, section = {}) {
-  const enabled = guild?.id ? isModuleEnabled(guild.id, 'suggestions') : true;
-  const interaction = { guild, guildId: guild?.id || '' };
-  return guildVariables.buildVariableMap(interaction, false, {
-    '{suggestionTitle}': suggestion?.title || '',
-    '{suggestion}': suggestion?.content || '',
-    '{suggestionAuthor}': suggestion ? publicSuggestionAuthor(suggestion) : '',
-    '{suggestionStatus}': suggestion ? statusLabel(suggestion.status, section) : '',
-    '{upVotes}': String(suggestion?.upVotes?.length || 0),
-    '{downVotes}': String(suggestion?.downVotes?.length || 0),
-    '{teamResponse}': suggestion ? defaultTeamResponse(suggestion) : '',
-    '{submittedAt}': suggestion?.createdAt ? discordTimestamp(suggestion.createdAt, 'F') : '',
-    '{decisionAt}': suggestion?.implementedAt || suggestion?.reviewedAt || suggestion?.updatedAt
-      ? discordTimestamp(suggestion.implementedAt || suggestion.reviewedAt || suggestion.updatedAt, 'F') : '',
-    '{suggestionsEnabled}': enabled ? 'On' : 'Off',
-    '{anonymousMode}': section.anonymous === true ? 'On' : 'Off',
-  });
-}
+          function buildTemplatePanel'''
+          social, count = re.subn(r"function variablesDescription\(\) \{.*?\n\nfunction buildTemplatePanel", social_replacement, social, count=1, flags=re.S)
+          if count == 0 and "variablesForModule('socialStudio')" not in social:
+              raise SystemExit('Social Studio migration pattern not found')
+          social_path.write_text(social)
 
-function suggestionTemplateSlot`,
-            'Suggestions variable builder',
-          );
+          central = Path('src/core/guild/guildVariables.js').read_text()
+          required = ['{suggestionTitle}', '{creatorDisplayName}', '{shortUrl}', 'variablesForModule', 'buildVariableMap']
+          missing = [item for item in required if item not in central]
+          if missing:
+              raise SystemExit('Central registry missing: ' + ', '.join(missing))
 
-          const socialFile = 'src/modules/socialStudio/socialAlerts/socialStudioPanel.js';
-          let social = fs.readFileSync(socialFile, 'utf8');
-          if (!social.includes("require('../../../core/guild/guildVariables')")) {
-            social = social.replace(
-              "const security = require('../../../core/security/protection/core');",
-              "const security = require('../../../core/security/protection/core');\nconst guildVariables = require('../../../core/guild/guildVariables');",
-            );
-            fs.writeFileSync(socialFile, social);
-          }
-          replaceOrFail(
-            socialFile,
-            /function variablesDescription\(\) \{[\s\S]*?\n\nfunction buildTemplatePanel/,
-            `function variablesDescription() {
-  const variables = guildVariables.variablesForModule('socialStudio');
-  const lines = [];
-  for (let index = 0; index < variables.length; index += 8) {
-    lines.push(variables.slice(index, index + 8).map((token) => \`\\\`\${token}\\\`\`).join(' '));
-  }
-  return [
-    '**🌐 Goliath Global Variables**',
-    ...lines,
-    '',
-    '*This list is generated from the central guildVariables registry. Custom DEV-panel variables appear here automatically.*',
-  ].join('\\n');
-}
+          violations = []
+          rules = [
+              re.compile(r"const\s+(?:AVAILABLE_|TEMPLATE_|EMBED_)?VARIABLES\s*=\s*(?:Object\.freeze\()?\s*\["),
+              re.compile(r"function\s+variablesDescription\(\)\s*\{\s*return\s*\[", re.S),
+          ]
+          for path in Path('src/modules').rglob('*'):
+              if path.suffix not in {'.js', '.jsx', '.ts', '.tsx'}:
+                  continue
+              text = path.read_text(errors='ignore')
+              if any(rule.search(text) for rule in rules):
+                  violations.append(str(path))
+          if violations:
+              raise SystemExit('Legacy variable catalogues remain: ' + ', '.join(sorted(set(violations))))
+          PY
 
-function buildTemplatePanel`,
-            'Social Studio variable help',
-          );
-
-          const files = [];
-          function walk(dir) {
-            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-              const full = `${dir}/${entry.name}`;
-              if (entry.isDirectory()) walk(full);
-              else if (/\.(?:js|jsx|ts|tsx)$/.test(entry.name)) files.push(full);
-            }
-          }
-          walk('src/modules');
-
-          const forbidden = [
-            /const\s+(?:AVAILABLE_|TEMPLATE_|EMBED_)?VARIABLES\s*=\s*(?:Object\.freeze\()?\s*\[/,
-            /function\s+variablesDescription\(\)\s*\{\s*return\s*\[/,
-          ];
-          const violations = [];
-          for (const file of files) {
-            const text = fs.readFileSync(file, 'utf8');
-            for (const rule of forbidden) if (rule.test(text)) violations.push(file);
-          }
-          if (violations.length) {
-            console.error('Legacy variable catalogues remain:', [...new Set(violations)].join(', '));
-            process.exit(1);
-          }
-
-          const central = fs.readFileSync('src/core/guild/guildVariables.js', 'utf8');
-          for (const required of ['suggestionTitle', 'creatorDisplayName', 'shortUrl', 'variablesForModule', 'buildVariableMap']) {
-            if (!central.includes(required)) throw new Error(`Central registry missing ${required}`);
-          }
-          console.log('Central variable migration audit passed.');
-          NODE
-
+          node --check src/core/guild/guildVariables.js
           node --check src/modules/feedbackStudio/suggestions/suggestionsPanel.js
           node --check src/modules/socialStudio/socialAlerts/socialStudioPanel.js
-          node --check src/core/guild/guildVariables.js
 
           if git diff --quiet; then
-            echo 'No migration changes required.'
+            echo "Variable migration already complete."
             exit 0
           fi
 
-          git config user.name 'KSJ Goliath Automation'
-          git config user.email 'actions@users.noreply.github.com'
+          git config user.name "KSJ Goliath Automation"
+          git config user.email "actions@users.noreply.github.com"
           git add src/modules/feedbackStudio/suggestions/suggestionsPanel.js src/modules/socialStudio/socialAlerts/socialStudioPanel.js
-          git commit -m 'refactor(variables): centralise remaining module variables'
+          git commit -m "refactor(variables): centralise remaining module variables"
           git push origin HEAD:dev
