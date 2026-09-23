@@ -9,8 +9,6 @@ const RETIRED_GUILD_COMMANDS = new Set([
   'Convert Emoji Shortcodes',
 ]);
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function removeRetiredGuildCommands(client, rest, applicationId) {
   let removed = 0;
 
@@ -45,18 +43,28 @@ async function runGuard(client) {
   console.log(`[CommandGuard] Retired guild-command guard complete; removed ${removed}.`);
 }
 
+function scheduleGuard(client, delayMs, label) {
+  const timer = setTimeout(() => {
+    runGuard(client).catch((error) => {
+      console.error(`[CommandGuard] ${label} pass failed:`, error?.stack || error?.message || error);
+    });
+  }, delayMs);
+
+  // These delayed safety passes must not keep the Node process alive by themselves.
+  timer.unref?.();
+}
+
 module.exports = {
   name: Events.ClientReady,
   once: true,
 
   async execute(client) {
     // Audit Intelligence historically self-registered /commandcenter after the
-    // central command sync. Run after ready listeners settle, then once more to
-    // catch any delayed startup self-registration. This guard is authoritative:
-    // private owner tooling belongs behind /owner buttons, never guild slash commands.
-    await wait(8000);
-    await runGuard(client);
-    await wait(22000);
-    await runGuard(client);
+    // central command sync. Preserve both authoritative cleanup passes, but schedule
+    // them independently so the ClientReady pipeline is never blocked for 30 seconds.
+    // The first pass runs 8 seconds after ready; the second runs 30 seconds after ready.
+    scheduleGuard(client, 8000, '8-second');
+    scheduleGuard(client, 30000, '30-second');
+    console.log('[CommandGuard] Retired guild-command guard scheduled for +8s and +30s.');
   },
 };
