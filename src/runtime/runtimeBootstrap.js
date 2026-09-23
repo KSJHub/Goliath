@@ -134,6 +134,7 @@ function registerEvents(client, options = {}) {
 
   for (const { eventName, once, handlers } of grouped.values()) {
     const listener = async (...args) => {
+      const eventStartedAt = Date.now();
       if (eventName === 'interactionCreate') await prepareInteraction(args[0]);
       for (const handler of handlers) {
         const startedAt = Date.now();
@@ -150,6 +151,23 @@ function registerEvents(client, options = {}) {
             console.log(`[READY PERF] ${String(elapsed).padStart(6)}ms | ${relativeFile}`);
           }
         }
+      }
+
+      if (eventName === 'clientReady') {
+        const elapsed = Date.now() - eventStartedAt;
+        const mode = String(process.env.BOT_MODE || 'UNKNOWN').trim().toUpperCase();
+        const guildCount = client?.guilds?.cache?.size ?? 0;
+        const elapsedSeconds = (elapsed / 1000).toFixed(2);
+
+        console.log('============================================================');
+        console.log('✅ GOLIATH STARTUP COMPLETE');
+        console.log(`🧠 Mode: ${mode}`);
+        console.log(`🤖 Discord: ${client?.isReady?.() ? 'READY' : 'NOT READY'}`);
+        console.log(`🏠 Guilds: ${guildCount}`);
+        console.log('🌐 Dashboard: RUNNING');
+        console.log('🛡️ Startup handlers: COMPLETE');
+        console.log(`⏱️ ClientReady cycle: ${elapsedSeconds}s (${elapsed}ms)`);
+        console.log('============================================================');
       }
     };
     if (once) client.once(eventName, listener); else client.on(eventName, listener);
