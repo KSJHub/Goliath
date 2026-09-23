@@ -6,6 +6,7 @@ const path = require('path');
 const { getRuntimeRoot } = require('../../../config/runtimePaths');
 const {
   SYSTEM_VARIABLES,
+  MODULE_VARIABLES,
   normalizeCustomVariable,
   normalizeCustomVariables,
   invalidateCustomVariableCache,
@@ -82,13 +83,24 @@ function systemPayload() {
   }));
 }
 
+function modulePayload() {
+  return Object.fromEntries(
+    Object.entries(MODULE_VARIABLES).map(([moduleName, tokens]) => [moduleName, [...tokens]]),
+  );
+}
+
 function responsePayload(custom = readCustomVariables()) {
   return {
     success: true,
     environment: runtimeKey().toUpperCase(),
     system: systemPayload(),
+    modules: modulePayload(),
     custom,
-    counts: { system: SYSTEM_VARIABLES.length, custom: custom.length },
+    counts: {
+      system: SYSTEM_VARIABLES.length,
+      modules: Object.keys(MODULE_VARIABLES).length,
+      custom: custom.length,
+    },
   };
 }
 
