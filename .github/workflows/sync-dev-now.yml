@@ -1,29 +1,201 @@
 name: Sync Goliath
+
 on:
   push:
     branches: [dev]
+  workflow_dispatch:
+
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: sync-goliath-dev
+  cancel-in-progress: true
+
 jobs:
-  migrate:
+  sync-dev:
+    name: Validate, build and sync DEV
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: dev
-          fetch-depth: 0
-      - name: Apply migration
+      - name: Sync and verify DEV
+        uses: appleboy/ssh-action@v1
         env:
-          MIGRATION_B64: CmNvbnN0IGZzID0gcmVxdWlyZSgnbm9kZTpmcycpOwoKZnVuY3Rpb24gcmVwbGFjZUJsb2NrKGZpbGUsIHN0YXJ0TWFya2VyLCBlbmRNYXJrZXIsIHJlcGxhY2VtZW50LCBhbHJlYWR5TWFya2VyKSB7CiAgbGV0IHRleHQgPSBmcy5yZWFkRmlsZVN5bmMoZmlsZSwgJ3V0ZjgnKTsKICBpZiAoIXRleHQuaW5jbHVkZXMoYWxyZWFkeU1hcmtlcikpIHsKICAgIGNvbnN0IHN0YXJ0ID0gdGV4dC5pbmRleE9mKHN0YXJ0TWFya2VyKTsKICAgIGNvbnN0IGVuZCA9IHRleHQuaW5kZXhPZihlbmRNYXJrZXIsIHN0YXJ0KTsKICAgIGlmIChzdGFydCA8IDAgfHwgZW5kIDwgMCkgdGhyb3cgbmV3IEVycm9yKGBNaWdyYXRpb24gbWFya2VycyBub3QgZm91bmQgaW4gJHtmaWxlfWApOwogICAgdGV4dCA9IHRleHQuc2xpY2UoMCwgc3RhcnQpICsgcmVwbGFjZW1lbnQgKyB0ZXh0LnNsaWNlKGVuZCk7CiAgfQogIGZzLndyaXRlRmlsZVN5bmMoZmlsZSwgdGV4dCk7Cn0KCmNvbnN0IHN1Z2dlc3Rpb25zRmlsZSA9ICdzcmMvbW9kdWxlcy9mZWVkYmFja1N0dWRpby9zdWdnZXN0aW9ucy9zdWdnZXN0aW9uc1BhbmVsLmpzJzsKbGV0IHN1Z2dlc3Rpb25zID0gZnMucmVhZEZpbGVTeW5jKHN1Z2dlc3Rpb25zRmlsZSwgJ3V0ZjgnKTsKY29uc3Qgc3VnZ2VzdGlvbnNJbXBvcnQgPSAiY29uc3QgZ3VpbGRWYXJpYWJsZXMgPSByZXF1aXJlKCcuLi8uLi8uLi9jb3JlL2d1aWxkL2d1aWxkVmFyaWFibGVzJyk7IjsKY29uc3Qgc3VnZ2VzdGlvbnNBbmNob3IgPSAiY29uc3QgeyBpc01vZHVsZUVuYWJsZWQgfSA9IHJlcXVpcmUoJy4uLy4uLy4uL2NvcmUvZ3VpbGQvZ3VpbGRNYW5hZ2VyJyk7IjsKaWYgKCFzdWdnZXN0aW9ucy5pbmNsdWRlcyhzdWdnZXN0aW9uc0ltcG9ydCkpIHsKICBpZiAoIXN1Z2dlc3Rpb25zLmluY2x1ZGVzKHN1Z2dlc3Rpb25zQW5jaG9yKSkgdGhyb3cgbmV3IEVycm9yKCdTdWdnZXN0aW9ucyBpbXBvcnQgYW5jaG9yIG1pc3NpbmcnKTsKICBzdWdnZXN0aW9ucyA9IHN1Z2dlc3Rpb25zLnJlcGxhY2Uoc3VnZ2VzdGlvbnNBbmNob3IsIGAke3N1Z2dlc3Rpb25zQW5jaG9yfVxuJHtzdWdnZXN0aW9uc0ltcG9ydH1gKTsKICBmcy53cml0ZUZpbGVTeW5jKHN1Z2dlc3Rpb25zRmlsZSwgc3VnZ2VzdGlvbnMpOwp9CnJlcGxhY2VCbG9jaygKICBzdWdnZXN0aW9uc0ZpbGUsCiAgJ2Z1bmN0aW9uIHRlbXBsYXRlVmFyaWFibGVzKGd1aWxkLCBzdWdnZXN0aW9uID0gbnVsbCwgc2VjdGlvbiA9IHt9KSB7JywKICAnZnVuY3Rpb24gc3VnZ2VzdGlvblRlbXBsYXRlU2xvdCcsCmBmdW5jdGlvbiB0ZW1wbGF0ZVZhcmlhYmxlcyhndWlsZCwgc3VnZ2VzdGlvbiA9IG51bGwsIHNlY3Rpb24gPSB7fSkgewogIGNvbnN0IGVuYWJsZWQgPSBndWlsZD8uaWQgPyBpc01vZHVsZUVuYWJsZWQoZ3VpbGQuaWQsICdzdWdnZXN0aW9ucycpIDogdHJ1ZTsKICBjb25zdCBpbnRlcmFjdGlvbiA9IHsgZ3VpbGQsIGd1aWxkSWQ6IGd1aWxkPy5pZCB8fCAnJyB9OwogIHJldHVybiBndWlsZFZhcmlhYmxlcy5idWlsZFZhcmlhYmxlTWFwKGludGVyYWN0aW9uLCBmYWxzZSwgewogICAgJ3tzdWdnZXN0aW9uVGl0bGV9Jzogc3VnZ2VzdGlvbj8udGl0bGUgfHwgJycsCiAgICAne3N1Z2dlc3Rpb259Jzogc3VnZ2VzdGlvbj8uY29udGVudCB8fCAnJywKICAgICd7c3VnZ2VzdGlvbkF1dGhvcn0nOiBzdWdnZXN0aW9uID8gcHVibGljU3VnZ2VzdGlvbkF1dGhvcihzdWdnZXN0aW9uKSA6ICcnLAogICAgJ3tzdWdnZXN0aW9uU3RhdHVzfSc6IHN1Z2dlc3Rpb24gPyBzdGF0dXNMYWJlbChzdWdnZXN0aW9uLnN0YXR1cywgc2VjdGlvbikgOiAnJywKICAgICd7dXBWb3Rlc30nOiBTdHJpbmcoc3VnZ2VzdGlvbj8udXBWb3Rlcz8ubGVuZ3RoIHx8IDApLAogICAgJ3tkb3duVm90ZXN9JzogU3RyaW5nKHN1Z2dlc3Rpb24/LmRvd25Wb3Rlcz8ubGVuZ3RoIHx8IDApLAogICAgJ3t0ZWFtUmVzcG9uc2V9Jzogc3VnZ2VzdGlvbiA/IGRlZmF1bHRUZWFtUmVzcG9uc2Uoc3VnZ2VzdGlvbikgOiAnJywKICAgICd7c3VibWl0dGVkQXR9Jzogc3VnZ2VzdGlvbj8uY3JlYXRlZEF0ID8gZGlzY29yZFRpbWVzdGFtcChzdWdnZXN0aW9uLmNyZWF0ZWRBdCwgJ0YnKSA6ICcnLAogICAgJ3tkZWNpc2lvbkF0fSc6IHN1Z2dlc3Rpb24/LmltcGxlbWVudGVkQXQgfHwgc3VnZ2VzdGlvbj8ucmV2aWV3ZWRBdCB8fCBzdWdnZXN0aW9uPy51cGRhdGVkQXQKICAgICAgPyBkaXNjb3JkVGltZXN0YW1wKHN1Z2dlc3Rpb24uaW1wbGVtZW50ZWRBdCB8fCBzdWdnZXN0aW9uLnJldmlld2VkQXQgfHwgc3VnZ2VzdGlvbi51cGRhdGVkQXQsICdGJykgOiAnJywKICAgICd7c3VnZ2VzdGlvbnNFbmFibGVkfSc6IGVuYWJsZWQgPyAnT24nIDogJ09mZicsCiAgICAne2Fub255bW91c01vZGV9Jzogc2VjdGlvbi5hbm9ueW1vdXMgPT09IHRydWUgPyAnT24nIDogJ09mZicsCiAgfSk7Cn0KCmAsCiAgJ2d1aWxkVmFyaWFibGVzLmJ1aWxkVmFyaWFibGVNYXAoaW50ZXJhY3Rpb24sIGZhbHNlJywKKTsKCmNvbnN0IHNvY2lhbEZpbGUgPSAnc3JjL21vZHVsZXMvc29jaWFsU3R1ZGlvL3NvY2lhbEFsZXJ0cy9zb2NpYWxTdHVkaW9QYW5lbC5qcyc7CmxldCBzb2NpYWwgPSBmcy5yZWFkRmlsZVN5bmMoc29jaWFsRmlsZSwgJ3V0ZjgnKTsKY29uc3Qgc29jaWFsSW1wb3J0ID0gImNvbnN0IGd1aWxkVmFyaWFibGVzID0gcmVxdWlyZSgnLi4vLi4vLi4vY29yZS9ndWlsZC9ndWlsZFZhcmlhYmxlcycpOyI7CmNvbnN0IHNvY2lhbEFuY2hvciA9ICJjb25zdCBzZWN1cml0eSA9IHJlcXVpcmUoJy4uLy4uLy4uL2NvcmUvc2VjdXJpdHkvcHJvdGVjdGlvbi9jb3JlJyk7IjsKaWYgKCFzb2NpYWwuaW5jbHVkZXMoc29jaWFsSW1wb3J0KSkgewogIGlmICghc29jaWFsLmluY2x1ZGVzKHNvY2lhbEFuY2hvcikpIHRocm93IG5ldyBFcnJvcignU29jaWFsIGltcG9ydCBhbmNob3IgbWlzc2luZycpOwogIHNvY2lhbCA9IHNvY2lhbC5yZXBsYWNlKHNvY2lhbEFuY2hvciwgYCR7c29jaWFsQW5jaG9yfVxuJHtzb2NpYWxJbXBvcnR9YCk7CiAgZnMud3JpdGVGaWxlU3luYyhzb2NpYWxGaWxlLCBzb2NpYWwpOwp9CnJlcGxhY2VCbG9jaygKICBzb2NpYWxGaWxlLAogICdmdW5jdGlvbiB2YXJpYWJsZXNEZXNjcmlwdGlvbigpIHsnLAogICdmdW5jdGlvbiBidWlsZFRlbXBsYXRlUGFuZWwnLApgZnVuY3Rpb24gdmFyaWFibGVzRGVzY3JpcHRpb24oKSB7CiAgY29uc3QgdmFyaWFibGVzID0gZ3VpbGRWYXJpYWJsZXMudmFyaWFibGVzRm9yTW9kdWxlKCdzb2NpYWxTdHVkaW8nKTsKICBjb25zdCBsaW5lcyA9IFtdOwogIGZvciAobGV0IGluZGV4ID0gMDsgaW5kZXggPCB2YXJpYWJsZXMubGVuZ3RoOyBpbmRleCArPSA4KSB7CiAgICBsaW5lcy5wdXNoKHZhcmlhYmxlcy5zbGljZShpbmRleCwgaW5kZXggKyA4KS5tYXAoKHRva2VuKSA9PiAnXGAnICsgdG9rZW4gKyAnXGAnKS5qb2luKCcgJykpOwogIH0KICByZXR1cm4gWwogICAgJyoq8J+MkCBHb2xpYXRoIEdsb2JhbCBWYXJpYWJsZXMqKicsCiAgICAuLi5saW5lcywKICAgICcnLAogICAgJypHZW5lcmF0ZWQgZnJvbSB0aGUgY2VudHJhbCBndWlsZFZhcmlhYmxlcyByZWdpc3RyeS4gQ3VzdG9tIERFVi1wYW5lbCB2YXJpYWJsZXMgYXBwZWFyIGF1dG9tYXRpY2FsbHkuKicsCiAgXS5qb2luKCdcbicpOwp9CgpgLAogICJ2YXJpYWJsZXNGb3JNb2R1bGUoJ3NvY2lhbFN0dWRpbycpIiwKKTsKCmNvbnN0IGNlbnRyYWwgPSBmcy5yZWFkRmlsZVN5bmMoJ3NyYy9jb3JlL2d1aWxkL2d1aWxkVmFyaWFibGVzLmpzJywgJ3V0ZjgnKTsKZm9yIChjb25zdCByZXF1aXJlZCBvZiBbJ3tzdWdnZXN0aW9uVGl0bGV9JywgJ3tjcmVhdG9yRGlzcGxheU5hbWV9JywgJ3tzaG9ydFVybH0nLCAndmFyaWFibGVzRm9yTW9kdWxlJywgJ2J1aWxkVmFyaWFibGVNYXAnXSkgewogIGlmICghY2VudHJhbC5pbmNsdWRlcyhyZXF1aXJlZCkpIHRocm93IG5ldyBFcnJvcihgQ2VudHJhbCByZWdpc3RyeSBtaXNzaW5nICR7cmVxdWlyZWR9YCk7Cn0K
-        run: |
-          printf '%s' "$MIGRATION_B64" | base64 -d > /tmp/migrate.js
-          node /tmp/migrate.js
-          node --check src/core/guild/guildVariables.js
-          node --check src/modules/feedbackStudio/suggestions/suggestionsPanel.js
-          node --check src/modules/socialStudio/socialAlerts/socialStudioPanel.js
-          if git diff --quiet; then exit 0; fi
-          git config user.name "KSJ Goliath Automation"
-          git config user.email "actions@users.noreply.github.com"
-          git add src/modules/feedbackStudio/suggestions/suggestionsPanel.js src/modules/socialStudio/socialAlerts/socialStudioPanel.js
-          git commit -m "refactor(variables): finish central variable migration"
-          git push origin HEAD:dev
+          EXPECTED_SHA: ${{ github.sha }}
+          GITHUB_DEPLOY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          timeout: 60s
+          command_timeout: 15m
+          envs: EXPECTED_SHA,GITHUB_DEPLOY_TOKEN
+          script: |
+            set -euo pipefail
+            APP_DIR=/home/goliath/dev
+            RUNTIME_DIR="$APP_DIR/src/runtime/dev"
+            PM2_NAME=goliath-dev
+            DEV_HOST=dev.goliath.ksjdigital.co.uk
+            BACKUP_DIR=/home/goliath/.goliath-dev-runtime-sync-backup
+            DIRTY_BACKUP_ROOT=/home/goliath/.goliath-dev-dirty-backups
+            cd "$APP_DIR"
+
+            AUTH_URL="https://x-access-token:${GITHUB_DEPLOY_TOKEN}@github.com/${{ github.repository }}.git"
+            git remote set-url origin "$AUTH_URL"
+            cleanup_remote() { git remote set-url origin "https://github.com/${{ github.repository }}.git" || true; }
+            trap cleanup_remote EXIT
+
+            git fetch --no-tags origin dev
+            LATEST_SHA="$(git rev-parse origin/dev)"
+            [ "$EXPECTED_SHA" = "$LATEST_SHA" ] || { echo "Superseded before sync; exiting cleanly."; exit 0; }
+
+            DIRTY_STATUS="$(git status --porcelain -- . ':!src/runtime/')"
+            if [ -n "$DIRTY_STATUS" ]; then
+              DIRTY_BACKUP="$DIRTY_BACKUP_ROOT/$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short HEAD)"
+              mkdir -p "$DIRTY_BACKUP"
+              printf '%s\n' "$DIRTY_STATUS" > "$DIRTY_BACKUP/status.txt"
+              git diff --binary -- . ':!src/runtime/' > "$DIRTY_BACKUP/worktree.patch"
+              git diff --cached --binary -- . ':!src/runtime/' > "$DIRTY_BACKUP/index.patch"
+              git ls-files --others --exclude-standard -- . ':!src/runtime/' > "$DIRTY_BACKUP/untracked.txt"
+              while IFS= read -r path; do
+                [ -z "$path" ] && continue
+                mkdir -p "$DIRTY_BACKUP/untracked/$(dirname "$path")"
+                cp -a -- "$path" "$DIRTY_BACKUP/untracked/$path"
+              done < "$DIRTY_BACKUP/untracked.txt"
+              echo "⚠️ Preserved dirty DEV worktree at $DIRTY_BACKUP"
+              cat "$DIRTY_BACKUP/status.txt"
+              git reset --hard HEAD
+              git clean -fd -- . ':!src/runtime/'
+            fi
+
+            rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
+            if [ -d "$RUNTIME_DIR" ]; then
+              tar --warning=no-file-changed --ignore-failed-read --exclude='*.tmp' -C "$RUNTIME_DIR" -cf - . | tar -C "$BACKUP_DIR" -xf -
+            fi
+            restore_runtime() {
+              mkdir -p "$RUNTIME_DIR"
+              rm -rf "$RUNTIME_DIR"/* "$RUNTIME_DIR"/.[!.]* "$RUNTIME_DIR"/..?* 2>/dev/null || true
+              [ ! -d "$BACKUP_DIR" ] || tar -C "$BACKUP_DIR" -cf - . | tar -C "$RUNTIME_DIR" -xf -
+            }
+            finish() { status=$?; restore_runtime || true; rm -rf "$BACKUP_DIR"; cleanup_remote; exit "$status"; }
+            trap finish EXIT
+
+            git reset --hard "$EXPECTED_SHA"
+            restore_runtime
+
+            echo "📦 Clean locked dependency install"
+            rm -rf node_modules
+            npm ci --no-audit --no-fund
+
+            echo "🔧 Verify native/runtime dependencies"
+            node - <<'NODE'
+            for (const name of ['googleapis','better-sqlite3','discord.js','express','sharp','socket.io']) {
+              try { require(name); console.log(`✅ ${name}`); }
+              catch (error) { console.error(`❌ ${name}: ${error.stack || error.message}`); process.exit(1); }
+            }
+            const Database = require('better-sqlite3');
+            const db = new Database(':memory:');
+            db.prepare('select 1 as ok').get();
+            db.close();
+            console.log('✅ better-sqlite3 native binding operational');
+            NODE
+
+            echo "🔎 Validate DEV"
+            BOT_MODE=dev npm run doctor
+            node test/auditEmbedGraphicHeaders.js
+            node - <<'NODE'
+            const fs=require('node:fs'),assert=require('node:assert/strict');
+            const maintenance=fs.readFileSync('src/owner/dev/maintenanceStatus.js','utf8');
+            assert(maintenance.includes('message.system !== true'));
+            assert(maintenance.includes('message.editable !== false'));
+            const bootstrap=fs.readFileSync('src/runtime/runtimeBootstrap.js','utf8');
+            assert(bootstrap.includes('setMaxListeners'));
+            const duplicator=fs.readFileSync('src/owner/dev/duplicator/core.js','utf8');
+            assert(duplicator.includes('bridgeUnavailable'));
+            console.log('✅ DEV runtime invariants verified');
+            NODE
+
+            echo "🏗️ Build dashboard"
+            rm -rf dist
+            npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
+            mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
+            grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js
+
+            git fetch --no-tags origin dev
+            [ "$EXPECTED_SHA" = "$(git rev-parse origin/dev)" ] || { echo "Superseded during validation; exiting cleanly."; exit 0; }
+
+            NGINX_DUMP="$(nginx -T 2>&1)"
+            DASHBOARD_ROOT="$(printf '%s\n' "$NGINX_DUMP" | awk -v host="$DEV_HOST" '$1=="server_name"{for(i=2;i<=NF;i++){n=$i;gsub(/;/,"",n);if(n==host)found=1}next} found&&$1=="root"{r=$2;gsub(/;/,"",r);print r;exit}')"
+            case "$DASHBOARD_ROOT" in /var/www/*) ;; *) echo "Unsafe dashboard root" >&2; exit 1;; esac
+            rm -rf "$DASHBOARD_ROOT" && mkdir -p "$DASHBOARD_ROOT" && cp -a dist/. "$DASHBOARD_ROOT/"
+            nginx -t && systemctl reload nginx
+
+            BOT_MODE=dev COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
+
+            git fetch --no-tags origin dev
+            [ "$EXPECTED_SHA" = "$(git rev-parse origin/dev)" ] || { echo "Superseded before restart; exiting cleanly."; exit 0; }
+
+            echo "♻️ One controlled PM2 reload from ecosystem config"
+            pm2 delete "$PM2_NAME" >/dev/null 2>&1 || true
+            BOT_MODE=dev NODE_ENV=development pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env
+            pm2 save
+
+            NEW_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
+            if [ -z "$NEW_PID" ] || [ "$NEW_PID" = "0" ]; then
+              echo "DEV PM2 process did not start." >&2
+              pm2 logs "$PM2_NAME" --lines 120 --nostream || true
+              exit 1
+            fi
+
+            sleep 18
+
+            STABLE_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
+            if [ -z "$STABLE_PID" ] || [ "$STABLE_PID" = "0" ]; then
+              echo "DEV PM2 process is not running after stability gate." >&2
+              pm2 logs "$PM2_NAME" --lines 120 --nostream || true
+              exit 1
+            fi
+            if [ "$NEW_PID" != "$STABLE_PID" ]; then
+              echo "DEV crashed/restarted during 18s stability gate: $NEW_PID -> $STABLE_PID" >&2
+              pm2 logs "$PM2_NAME" --lines 120 --nostream || true
+              exit 1
+            fi
+            if ! kill -0 "$STABLE_PID" 2>/dev/null; then
+              echo "DEV PID $STABLE_PID is not alive." >&2
+              pm2 logs "$PM2_NAME" --lines 120 --nostream || true
+              exit 1
+            fi
+
+            FINAL_SHA="$(git rev-parse HEAD)"
+            REMOTE_SHA="$(git rev-parse origin/dev)"
+            if [ "$FINAL_SHA" != "$EXPECTED_SHA" ]; then
+              echo "DEV SHA mismatch: local=$FINAL_SHA expected=$EXPECTED_SHA" >&2
+              exit 1
+            fi
+            if [ "$FINAL_SHA" != "$REMOTE_SHA" ]; then
+              echo "DEV SHA mismatch: local=$FINAL_SHA remote=$REMOTE_SHA" >&2
+              exit 1
+            fi
+
+            PROCESS_CWD="$(readlink -f /proc/$STABLE_PID/cwd 2>/dev/null || true)"
+            echo "DEV process cwd: ${PROCESS_CWD:-unknown}"
+            if [ -z "$PROCESS_CWD" ]; then
+              echo "Unable to resolve DEV process cwd for PID $STABLE_PID." >&2
+              exit 1
+            fi
+            if [ "$PROCESS_CWD" != "$APP_DIR" ]; then
+              echo "DEV process cwd differs from app dir: $PROCESS_CWD != $APP_DIR" >&2
+              exit 1
+            fi
+
+            DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/auth/me || true)"
+            PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' https://$DEV_HOST/api/auth/me || true)"
+            case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
+            case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
+
+            echo "✅ DEV stable: sha=$FINAL_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
+            restore_runtime
+            rm -rf "$BACKUP_DIR"
+            trap - EXIT
+            cleanup_remote
