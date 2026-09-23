@@ -17,6 +17,7 @@ const suggestions = require('./suggestions');
 const tracking = require('./suggestionsTracking');
 const embedTemplates = require('../../messageStudio/embed/embedTemplates');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
+const { buildVariableMap } = require('../../../core/guild/guildVariables');
 const panelNavigation = require('../../../core/ui/panelNavigation');
 
 const SUGGESTIONS_COLOR = 0xfee75c;
@@ -82,24 +83,23 @@ function defaultTeamResponse(suggestion) {
 }
 
 function templateVariables(guild, suggestion = null, section = {}) {
-  const current = new Date();
-  const icon = guild?.iconURL?.({ extension: 'png', size: 512 }) || '';
-  const banner = guild?.bannerURL?.({ extension: 'png', size: 1024 }) || '';
   const enabled = guild?.id ? isModuleEnabled(guild.id, 'suggestions') : true;
-  return {
-    guild: guild?.name || 'Server', guildName: guild?.name || 'Server', server: guild?.name || 'Server', serverName: guild?.name || 'Server',
-    guildId: guild?.id || '', guildIcon: icon, guildBanner: banner, memberCount: Number(guild?.memberCount || 0),
-    createdAt: discordTimestamp(current, 'F'), timestamp: discordTimestamp(current, 'F'),
-    suggestionTitle: suggestion?.title || '', suggestion: suggestion?.content || '',
-    suggestionAuthor: suggestion ? publicSuggestionAuthor(suggestion) : '',
-    suggestionStatus: suggestion ? statusLabel(suggestion.status, section) : '',
-    upVotes: suggestion?.upVotes?.length || 0, downVotes: suggestion?.downVotes?.length || 0,
-    teamResponse: suggestion ? defaultTeamResponse(suggestion) : '',
-    submittedAt: suggestion?.createdAt ? discordTimestamp(suggestion.createdAt, 'F') : '',
-    decisionAt: suggestion?.implementedAt || suggestion?.reviewedAt || suggestion?.updatedAt
+  const interaction = { guild, guildId: guild?.id || '' };
+  const overrides = {
+    '{suggestionTitle}': suggestion?.title || '',
+    '{suggestion}': suggestion?.content || '',
+    '{suggestionAuthor}': suggestion ? publicSuggestionAuthor(suggestion) : '',
+    '{suggestionStatus}': suggestion ? statusLabel(suggestion.status, section) : '',
+    '{upVotes}': suggestion?.upVotes?.length || 0,
+    '{downVotes}': suggestion?.downVotes?.length || 0,
+    '{teamResponse}': suggestion ? defaultTeamResponse(suggestion) : '',
+    '{submittedAt}': suggestion?.createdAt ? discordTimestamp(suggestion.createdAt, 'F') : '',
+    '{decisionAt}': suggestion?.implementedAt || suggestion?.reviewedAt || suggestion?.updatedAt
       ? discordTimestamp(suggestion.implementedAt || suggestion.reviewedAt || suggestion.updatedAt, 'F') : '',
-    suggestionsEnabled: enabled ? 'On' : 'Off', anonymousMode: section.anonymous === true ? 'On' : 'Off',
+    '{suggestionsEnabled}': enabled ? 'On' : 'Off',
+    '{anonymousMode}': section.anonymous === true ? 'On' : 'Off',
   };
+  return Object.fromEntries(Object.entries(buildVariableMap(interaction, false, overrides)).map(([key, value]) => [key.replace(/^\{|\}$/g, ''), value]));
 }
 
 function suggestionTemplateSlot(suggestion) {
