@@ -2,6 +2,7 @@
 const { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const crypto = require('crypto');
 const security = require('../../../core/security/protection/core');
+const { variablesForModule } = require('../../../core/guild/guildVariables');
 const store = require('./socialStudioStore');
 const { normalizeAccountInput, migrateAccount } = require('./accountNormalizer');
 const { providerInfo } = require('./socialStudioProviders');
@@ -380,7 +381,31 @@ function buildAccountManagePanel(i, config, creator) {
   components.push(row(btn(`${P}creators`, '⬅️ Back'), btn(`${P}settings`, '⚙️ Settings')));
   return { embeds: [embed(config, '🛠️ Manage Account', d, who(i), active ? platformColor(active.platform) : creatorAccent(linked))], components };
 }
-function variablesDescription() { return ['**🌍 Global / Server**','`{timestamp}` `{nowTimestamp}` `{guildId}` `{guildName}` `{server}` `{guildIcon}` `{serverIcon}` `{guildBanner}` `{guildMemberCount}` `{memberCount}` `{guildVanityCode}`','`{successEmoji}` `{warningEmoji}` `{errorEmoji}` `{proofVerifiedEmoji}` `{successColor}` `{warningColor}` `{errorColor}` `{proofVerifiedColor}`','','**👤 Discord User Context**','`{userId}` `{userTag}` `{userName}` `{userGlobalName}` `{userMention}` `{userNoPing}` `{userAvatar}` `{userServerAvatar}` `{userNickname}` `{userDisplay}`','`{userCreatedAt}` `{userCreatedTimestamp}` `{userJoinedAt}` `{userJoinedTimestamp}` `{createdAt}` `{joinedAt}` `{leftAt}` `{accountAge}` `{membershipDuration}`','`{departureIcon}` `{departureType}` `{departureLabel}` `{departureReason}` `{departureModerator}` `{departureModeratorId}`','','**📣 Creator / Platform**','`{creator}` `{creatorName}` `{creatorDisplayName}` `{creatorAvatar}` `{creatorBanner}` `{creatorDescription}` `{platform}` `{platformIcon}` `{platformColor}` `{username}` `{displayName}` `{channelId}` `{profileUrl}`','','**🔴 LIVE / Stream**','`{title}` `{description}` `{game}` `{category}` `{viewers}` `{peakViewers}` `{started}` `{duration}` `{liveThumbnail}` `{thumbnail}` `{liveUrl}` `{url}`','','**🎥 Video / VOD / Upload / Clip / Short**','`{videoTitle}` `{videoDescription}` `{videoDuration}` `{videoViews}` `{videoThumbnail}` `{videoUrl}`','`{clipTitle}` `{clipCreator}` `{clipViews}` `{clipUrl}` `{uploadTitle}` `{uploadDescription}` `{uploadThumbnail}` `{uploadUrl}` `{shortTitle}` `{shortThumbnail}` `{shortUrl}`','','*Variables without context resolve to an empty value instead of breaking the message.*'].join('\n'); }
+function variablesDescription() {
+  const variables = variablesForModule('socialStudio');
+  const lines = ['**🧩 Available Variables**'];
+  let current = '';
+
+  for (const variable of variables) {
+    const token = `\`${variable}\``;
+    if (current && `${current} ${token}`.length > 90) {
+      lines.push(current);
+      current = token;
+    } else {
+      current = current ? `${current} ${token}` : token;
+    }
+  }
+
+  if (current) lines.push(current);
+
+  const note = '\n\n*Variables without context resolve to an empty value instead of breaking the message.*';
+  const description = lines.join('\n');
+  const maxLength = 4096 - note.length;
+
+  if (description.length <= maxLength) return description + note;
+
+  return `${description.slice(0, Math.max(0, maxLength - 80)).trimEnd()}\n… additional centrally managed variables are available.${note}`;
+}
 
 function buildTemplatePanel(i, config, type) {
   const current = resolveTemplate(config.templates, type);
