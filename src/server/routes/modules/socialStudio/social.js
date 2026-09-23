@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const guildManager = require('../../../../core/guild/guildManager');
+const { replaceVariables } = require('../../../../core/guild/guildVariables');
 const { ALERT_TYPES, normalizeTemplates, resolveTemplate } = require('../../../../modules/socialStudio/socialAlerts/socialStudioTemplates');
 
 const router = express.Router();
@@ -207,7 +208,7 @@ function health(config, discordGuild = null) {
   const score = Math.max(0, 100 - errors * 25 - (issues.length - errors) * 8);
   return { healthy: errors === 0, grade: score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : 'D', score, issues, checkedAt: now() };
 }
-function render(template, values) { return String(template || '').replace(/\{(creator|title|platform|url)\}/g, (_match, key) => values[key] || ''); }
+function render(template, values) { return replaceVariables(String(template || ''), values); }
 function preview(account, config, alertType) {
   const creator = Object.values(config.creators).find((item) => item.accountIds.includes(account.accountId));
   const template = resolveTemplate(config.templates, alertType);
