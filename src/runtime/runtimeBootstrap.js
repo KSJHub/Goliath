@@ -136,10 +136,19 @@ function registerEvents(client, options = {}) {
     const listener = async (...args) => {
       if (eventName === 'interactionCreate') await prepareInteraction(args[0]);
       for (const handler of handlers) {
-        try { await handler.execute(...args, client); }
-        catch (error) {
+        const startedAt = Date.now();
+
+        try {
+          await handler.execute(...args, client);
+        } catch (error) {
           console.error(`[Events] ${eventName} handler failed: ${handler.file}`);
           console.error(error?.stack || error?.message || error);
+        } finally {
+          if (eventName === 'clientReady') {
+            const elapsed = Date.now() - startedAt;
+            const relativeFile = path.relative(process.cwd(), handler.file);
+            console.log(`[READY PERF] ${String(elapsed).padStart(6)}ms | ${relativeFile}`);
+          }
         }
       }
     };
