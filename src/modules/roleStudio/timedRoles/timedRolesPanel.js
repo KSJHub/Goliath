@@ -16,6 +16,7 @@ const {
   UserSelectMenuBuilder,
 } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
+const { variablesForModule } = require('../../../core/guild/guildVariables');
 const {
   buildRolePicker,
   mergeRolePickerSelection,
@@ -169,7 +170,8 @@ function buildSettingsPanel(guildId) {
         `**Announcement channel:** ${section.settings.announcementChannelId ? `<#${section.settings.announcementChannelId}>` : 'Not selected'}`,
         '',
         '**Message placeholders**',
-        '`{member}` • `{role}` • `{duration}` • `{server}`',
+        '`{member}` • `{role}` • `{duration}`',
+        variablesForModule('timedRoles').map((entry) => `\`${entry.token}\``).join(' • ').slice(0, 900),
         '',
         `**Current message**\n${section.settings.announcementMessage}`,
       ].join('\n').slice(0, 4096))],
