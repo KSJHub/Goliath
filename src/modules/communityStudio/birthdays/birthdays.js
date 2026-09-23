@@ -2,6 +2,7 @@
 
 const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
+const { replaceVars } = require('../../../core/guild/guildVariables');
 const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js');
 const emojis = require('../../utilityStudio/emojis/emojis');
@@ -333,15 +334,28 @@ function renderTemplate(template, guild, member, year) {
   const discordMember = guild.members.cache.get(member.userId);
   const display = discordMember?.displayName || discordMember?.user?.username || 'member';
   const age = member.showAge ? ageFor(member, year) : null;
-  return clean(template, 1800).replaceAll('{mention}', `<@${member.userId}>`).replaceAll('{user}', display)
-    .replaceAll('{server}', guild.name || 'this server').replaceAll('{age}', age == null ? '' : String(age));
+  const interaction = {
+    guild,
+    guildId: guild.id,
+    user: discordMember?.user || null,
+    member: discordMember || null,
+  };
+  return replaceVars(clean(template, 1800), interaction, false, {
+    '{mention}': `<@${member.userId}>`,
+    '{user}': display,
+    '{age}': age == null ? '' : String(age),
+  });
 }
 function renderGroupTemplate(template, guild, members) {
   const mentions = members.map((member) => `<@${member.userId}>`).join(' ');
-  return clean(template, 1800)
-    .replaceAll('{mentions}', mentions)
-    .replaceAll('{count}', String(members.length))
-    .replaceAll('{server}', guild.name || 'this server');
+  const interaction = {
+    guild,
+    guildId: guild.id,
+  };
+  return replaceVars(clean(template, 1800), interaction, false, {
+    '{mentions}': mentions,
+    '{count}': String(members.length),
+  });
 }
 function seededTemplate(templates, seedKey) {
   const normalized = normalizeTemplates(templates, DEFAULT_INDIVIDUAL_TEMPLATES);
