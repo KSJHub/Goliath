@@ -626,7 +626,7 @@ function mainEmbed(s, who, dashboard = {}) {
       `⚠️ Open Review and resolve ${errors.length || 1} remaining issue${(errors.length || 1) === 1 ? "" : "s"}.`;
   } else if (deployment) {
     nextAction =
-      "♻️ Review your changes, test if needed, then update the existing message.";
+      "🚀 Ready to deploy a new message, or ♻️ update the existing live message.";
   } else {
     nextAction =
       "🚀 Everything is ready. Test the embed or deploy it to the selected channel.";
@@ -687,21 +687,6 @@ function buildEditorPanel(i, who = "Unknown User") {
 
   const deployment =
     dashboard.deployment;
-
-  const deployCustomId =
-    deployment
-      ? "embed:update-existing"
-      : "embed:use";
-
-  const deployLabel =
-    deployment
-      ? "Update Existing"
-      : "Deploy New";
-
-  const deployEmoji =
-    deployment
-      ? "♻️"
-      : "🚀";
 
   const canDeploy =
     !!s.channelId &&
@@ -810,11 +795,22 @@ function buildEditorPanel(i, who = "Unknown User") {
           .setDisabled(!report.ready),
 
         new ButtonBuilder()
-          .setCustomId(deployCustomId)
-          .setLabel(deployLabel)
-          .setEmoji(deployEmoji)
+          .setCustomId("embed:use")
+          .setLabel("Deploy New")
+          .setEmoji("🚀")
           .setStyle(ButtonStyle.Success)
-          .setDisabled(!canDeploy)
+          .setDisabled(!canDeploy),
+
+        ...(deployment
+          ? [
+              new ButtonBuilder()
+                .setCustomId("embed:update-existing")
+                .setLabel("Update Existing")
+                .setEmoji("♻️")
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(!canDeploy),
+            ]
+          : [])
       ),
 
       /*
