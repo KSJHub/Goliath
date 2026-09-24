@@ -27,6 +27,20 @@ function Stat({ theme, label, value, hint }) {
     {hint ? <div style={{ marginTop: 3, color: theme.mutedText, fontSize: 12 }}>{hint}</div> : null}
   </div>;
 }
+function PreviewMessage({ theme, title, payload }) {
+  if (!payload) return null;
+  return <div style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 16, padding: 14, background: 'rgba(15,23,42,0.32)', display: 'grid', gap: 10 }}>
+    <strong>{title}</strong>
+    {payload.content ? <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{payload.content}</div> : null}
+    {(payload.embeds || []).map((embed, index) => <div key={index} style={{ borderLeft: `4px solid ${embed.color ? `#${Number(embed.color).toString(16).padStart(6, '0')}` : '#5865f2'}`, background: 'rgba(2,6,23,0.48)', borderRadius: 8, padding: 14, display: 'grid', gap: 7 }}>
+      {embed.author?.name ? <div style={{ fontSize: 12, fontWeight: 850 }}>{embed.author.name}</div> : null}
+      {embed.title ? <strong style={{ fontSize: 16 }}>{embed.title}</strong> : null}
+      {embed.description ? <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{embed.description}</div> : null}
+      {(embed.fields || []).map((field, fieldIndex) => <div key={fieldIndex}><strong>{field.name}</strong><div style={{ whiteSpace: 'pre-wrap', color: theme.mutedText }}>{field.value}</div></div>)}
+      {embed.footer?.text ? <div style={{ color: theme.mutedText, fontSize: 11 }}>{embed.footer.text}</div> : null}
+    </div>)}
+  </div>;
+}
 
 export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
   const guildId = getGuildId(selectedGuild, selectedGuildData);
@@ -38,6 +52,7 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
   const [channels, setChannels] = useState([]);
   const [roles, setRoles] = useState([]);
   const [queue, setQueue] = useState([]);
+  const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -68,7 +83,7 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
     } catch (loadError) { setError(loadError.message || 'Failed to load Welcome.'); }
     finally { setBusy(''); }
   }
-  useEffect(() => { load(); }, [guildId]);
+  useEffect(() => { setPreview(null); load(); }, [guildId]);
 
   async function act(name, fn, successText) {
     setBusy(name); setError(''); setNotice('');
@@ -82,7 +97,7 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
     finally { setBusy(''); }
   }
   async function saveInstant(patch, message = 'Instant Welcome settings saved.') {
-    setConfig({ ...(config || {}), ...patch });
+    setPreview(null); setConfig({ ...(config || {}), ...patch });
     return act('instant', () => api.request(`/api/welcome/${guildId}/config`, { method: 'PUT', body: JSON.stringify(patch) }), message);
   }
   async function saveScheduled(patch, message = 'Scheduled Welcome settings saved.') {
@@ -90,10 +105,20 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
     return act('scheduled', () => api.request(`/api/welcome/${guildId}/scheduled`, { method: 'PUT', body: JSON.stringify(patch) }), message);
   }
   async function setMessageSource(source, templateId = '') {
+    setPreview(null);
     return act('messageSource', () => api.request(`/api/welcome/${guildId}/message-source`, { method: 'POST', body: JSON.stringify({ slot: 'welcome', source, templateId }) }), source === 'preset' ? 'Welcome preset selected.' : 'Welcome message source updated.');
   }
   async function setDmMessageSource(source, templateId = '') {
+    setPreview(null);
     return act('dmMessageSource', () => api.request(`/api/welcome/${guildId}/message-source`, { method: 'POST', body: JSON.stringify({ slot: 'dm_welcome', source, templateId }) }), source === 'inherit' ? 'DM now uses the Public Welcome message.' : source === 'preset' ? 'DM Welcome preset selected.' : 'DM Welcome message source updated.');
+  }
+  async function previewWelcome() {
+    setBusy('preview'); setError(''); setNotice('');
+    try {
+      const result = await api.request(`/api/welcome/${guildId}/preview`, { method: 'POST', body: JSON.stringify({ userId: selectedGuildData?.userId }) });
+      setPreview(result.preview || null); setNotice('Private Welcome preview generated. Nothing was posted to Discord.');
+    } catch (previewError) { setError(previewError.message || 'Failed to generate Welcome preview.'); }
+    finally { setBusy(''); }
   }
   async function previewQueue() {
     setBusy('queue'); setError('');
@@ -102,7 +127,7 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
   }
   async function resetModule() {
     if (!window.confirm('Reset Instant and Scheduled Welcome settings and analytics?')) return;
-    await act('reset', () => api.request(`/api/welcome/${guildId}/reset`, { method: 'POST' }), 'Welcome reset to defaults.'); setQueue([]);
+    await act('reset', () => api.request(`/api/welcome/${guildId}/reset`, { method: 'POST' }), 'Welcome reset to defaults.'); setQueue([]); setPreview(null);
   }
 
   if (!guildId) return <EmptyState theme={theme} icon="👋" title="Select a server" description="Select a server to manage Welcome." />;
@@ -197,9 +222,11 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
         </select>
       </label>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <button type="button" disabled={busy || (!config?.channelId && !config?.dmEnabled)} onClick={() => act('test', () => api.request(`/api/welcome/${guildId}/test`, { method: 'POST', body: JSON.stringify({ userId: selectedGuildData?.userId }) }), 'Instant Welcome test sent.')} style={buttonStyle(theme, 'success')}>Send Test</button>
+        <button type="button" disabled={busy} onClick={previewWelcome} style={buttonStyle(theme, 'primary')}>{busy === 'preview' ? 'Generating Preview...' : 'Preview'}</button>
+        <button type="button" disabled={busy || (!config?.channelId && !config?.dmEnabled)} onClick={() => act('test', () => api.request(`/api/welcome/${guildId}/test`, { method: 'POST', body: JSON.stringify({ userId: selectedGuildData?.userId }) }), 'Test Welcome delivered.')} style={buttonStyle(theme, 'success')}>Send Test</button>
         <button type="button" disabled={busy} onClick={() => act('repair', () => api.request(`/api/welcome/${guildId}/repair`, { method: 'POST' }), 'Welcome configuration repaired.')} style={buttonStyle(theme, 'primary')}>Repair All</button>
       </div>
+      {preview ? <div style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 18, padding: 16, display: 'grid', gap: 12 }}><div><strong>👁 Private Preview</strong><div style={{ color: theme.mutedText, fontSize: 12, marginTop: 4 }}>Rendered in the dashboard only. No Discord message or DM is sent, and analytics are untouched.</div></div><PreviewMessage theme={theme} title="Public Welcome" payload={preview.public} /><PreviewMessage theme={theme} title="DM Welcome" payload={preview.dm} /></div> : null}
     </section>
 
     <section style={{ ...card, display: 'grid', gap: 16 }}>
