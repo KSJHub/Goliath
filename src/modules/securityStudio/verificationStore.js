@@ -12,7 +12,7 @@ const MODULE = 'verification';
 const SCHEMA_VERSION = 2;
 const CONFIG_HISTORY_LIMIT = 5;
 const PENDING_ROLE_TIMINGS = new Set(['on_join', 'after_screening', 'manual']);
-const VERIFICATION_METHODS = new Set(['button', 'rules_acceptance', 'math_challenge', 'manual_approval']);
+const VERIFICATION_METHODS = new Set(['button']);
 
 function now() {
   return new Date().toISOString();
