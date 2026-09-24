@@ -294,7 +294,7 @@ function installHardeningPatch() {
 
 function retryStatsExtensionAfterPanelLoad() {
   // roleSelectorHealth is first loaded while roleSelectorPanel is still evaluating.
-  // Re-evaluate it once after the panel exists so the stats v2 router can wrap the
+  // Re-evaluate it once after the panel exists so the stats router can wrap the
   // completed exported interaction handler. Restore the original health cache entry
   // immediately so callers retain the same hardened health-service instance.
   setImmediate(() => {
