@@ -24,10 +24,7 @@ function mediaWeight(value) {
 }
 function canonicalMediaState(state = {}) {
   const panels = Array.isArray(state?.panels) ? state.panels : [];
-  const fromV2 = media.mediaModel.normalizeMediaV2(state?.mediaV2 || {}, panels);
-  const fromStored = media.mediaModel.normalizeMediaV2(state?.media || {}, panels);
-  let canonical = mediaWeight(fromV2) >= mediaWeight(fromStored) ? fromV2 : fromStored;
-  canonical = media.mediaModel.normalizeMediaV2(canonical, panels);
+  let canonical = media.mediaModel.normalizeMedia(state?.media || {}, panels);
   canonical.panels = canonical.panels.map((entry, index) => {
     const panelData = panels[index] || {};
     if (!panelData?.graphicHeaderTitle || String(panelData?.title || '').trim()) return entry;
@@ -41,11 +38,11 @@ function installCanonicalMediaSessions(targetPanel) {
   if (!targetPanel || targetPanel.__canonicalMediaSessionsInstalled) return targetPanel;
   if (typeof targetPanel.getSession === 'function') {
     const originalGetSession = targetPanel.getSession.bind(targetPanel);
-    targetPanel.getSession = (interaction) => { const state = originalGetSession(interaction); const canonical = canonicalMediaState(state); return { ...state, media: clone(canonical), mediaV2: clone(canonical) }; };
+    targetPanel.getSession = (interaction) => { const state = originalGetSession(interaction); const canonical = canonicalMediaState(state); return { ...state, media: clone(canonical) }; };
   }
   if (typeof targetPanel.saveSession === 'function') {
     const originalSaveSession = targetPanel.saveSession.bind(targetPanel);
-    targetPanel.saveSession = (interaction, state) => { const canonical = canonicalMediaState(state); return originalSaveSession(interaction, { ...state, media: clone(canonical), mediaV2: clone(canonical) }); };
+    targetPanel.saveSession = (interaction, state) => { const canonical = canonicalMediaState(state); return originalSaveSession(interaction, { ...state, media: clone(canonical) }); };
   }
   targetPanel.__canonicalMediaSessionsInstalled = true;
   return targetPanel;
@@ -56,7 +53,7 @@ function installAlignmentSessionView(targetPanel) {
   targetPanel.getSession = (interaction) => {
     const state = originalGetSession(interaction);
     const map = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
-    return { ...state, media: applyAlignmentMap(state.media, map), mediaV2: applyAlignmentMap(state.mediaV2, map) };
+    return { ...state, media: applyAlignmentMap(state.media, map) };
   };
   targetPanel.__alignmentSessionViewInstalled = true;
   return targetPanel;
@@ -71,9 +68,9 @@ function installAlignmentDeliveryBridge(targetRenderer, targetPanel) {
       map = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
     }
     map = map || {};
-    const sourceMedia = options.media || options.mediaV2 || {};
+    const sourceMedia = options.media || {};
     const alignedMedia = applyAlignmentMap(sourceMedia, map);
-    return originalBuildEmbedPayload({ ...options, media: alignedMedia, mediaV2: alignedMedia, mediaAlignment: map });
+    return originalBuildEmbedPayload({ ...options, media: alignedMedia, mediaAlignment: map });
   };
   targetRenderer.__alignmentDeliveryBridgeInstalled = true;
   return targetRenderer;
@@ -90,7 +87,7 @@ function installMediaRuntime(targetPanel) {
   media.installThumbnailUi(targetPanel);
   targetPanel.getPanelMedia = mediaStateApi.getPanelMedia;
   // installMediaManagerBase() deliberately replaces setPanelMedia with a
-  // panel-local writer that treats an empty mediaV2 gallery as authoritative.
+  // panel-local writer that treats an empty media gallery as authoritative.
   // Do not overwrite that patched writer with the legacy-fallback implementation.
   if (typeof targetPanel.setPanelMedia !== 'function') {
     targetPanel.setPanelMedia = mediaStateApi.setPanelMedia;

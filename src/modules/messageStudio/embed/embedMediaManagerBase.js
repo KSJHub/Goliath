@@ -31,7 +31,7 @@ function installMediaManagerBase(panel, media) {
   if (!panel || !media || typeof panel.buildMediaManagerPanel === 'function') return panel;
 
   /*
-   * mediaV2 is authoritative once a panel has a media slot.  The legacy
+   * media is authoritative once a panel has a media slot.  The legacy
    * panel.image field exists only for backwards compatibility.  The original
    * setPanelMedia() normalizer could use that legacy value as a fallback while
    * clearing a gallery, immediately resurrecting the image that had just been
@@ -42,7 +42,7 @@ function installMediaManagerBase(panel, media) {
   if (!panel.__panelLocalMediaWritePatched && typeof panel.setPanelMedia === 'function') {
     panel.setPanelMedia = (stateValue = {}, index, mediaValue = {}) => {
       const panels = Array.isArray(stateValue?.panels) ? stateValue.panels : [];
-      const existing = stateValue?.mediaV2 || stateValue?.media || {};
+      const existing = stateValue?.media || {};
       const existingPanels = Array.isArray(existing?.panels) ? existing.panels : [];
       const length = Math.max(panels.length, existingPanels.length, 1);
       const selected = Math.max(0, Math.min(Number(index) || 0, length - 1));
@@ -62,7 +62,7 @@ function installMediaManagerBase(panel, media) {
 
       return {
         ...stateValue,
-        mediaV2: {
+        media: {
           version: media.mediaModel.MEDIA_SCHEMA_VERSION,
           panels: mediaPanels,
         },
@@ -75,11 +75,11 @@ function installMediaManagerBase(panel, media) {
     const originalSaveSession = panel.saveSession.bind(panel);
     panel.saveSession = (interaction, stateValue) => {
       if (!stateValue || typeof stateValue !== 'object') return originalSaveSession(interaction, stateValue);
-      const authoritative = stateValue.mediaV2 || stateValue.media || null;
+      const authoritative = stateValue.media || null;
       if (!authoritative) return originalSaveSession(interaction, stateValue);
-      const mediaV2 = typeof media.clone === 'function' ? media.clone(authoritative) : JSON.parse(JSON.stringify(authoritative));
-      const legacyMedia = typeof media.clone === 'function' ? media.clone(mediaV2) : JSON.parse(JSON.stringify(mediaV2));
-      return originalSaveSession(interaction, { ...stateValue, media: legacyMedia, mediaV2 });
+      const canonicalMedia = typeof media.clone === 'function' ? media.clone(authoritative) : JSON.parse(JSON.stringify(authoritative));
+      const storedMedia = typeof media.clone === 'function' ? media.clone(canonicalMedia) : JSON.parse(JSON.stringify(canonicalMedia));
+      return originalSaveSession(interaction, { ...stateValue, media: storedMedia });
     };
     panel.__mediaSessionMirrorPatched = true;
   }

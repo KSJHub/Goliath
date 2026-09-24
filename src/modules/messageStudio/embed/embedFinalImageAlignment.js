@@ -63,7 +63,7 @@ function installFinalImageAlignment(renderer) {
   const original = renderer.buildEmbedPayload.bind(renderer);
   renderer.buildEmbedPayload = async (options = {}) => {
     const payload = await original(options);
-    const media = options.media || options.mediaV2 || {};
+    const media = options.media || {};
     const alignmentState = options.mediaAlignment || {};
     if (!Array.isArray(payload?.files) || !payload.files.length) return payload;
     payload.files = await Promise.all(payload.files.map(async (file, fallback) => {

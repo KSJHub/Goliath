@@ -110,9 +110,9 @@ function installClassicSingleImagePayload(renderer) {
   if (typeof renderer.buildEmbedPayload !== 'function') return renderer;
   const originalBuildEmbedPayload = renderer.buildEmbedPayload.bind(renderer);
   renderer.buildEmbedPayload = async function alignedMediaManagerGallery(options = {}) {
-    const sourceMedia = options.media || options.mediaV2 || null;
+    const sourceMedia = options.media || null;
     const renderMedia = hasAdvancedMedia(sourceMedia) ? sourceMedia : classicMediaState(sourceMedia);
-    const payload = await originalBuildEmbedPayload({ ...options, media: renderMedia, mediaV2: renderMedia });
+    const payload = await originalBuildEmbedPayload({ ...options, media: renderMedia });
     if (!hasAdvancedMedia(sourceMedia) && Array.isArray(payload?.files) && payload.files.length) {
       payload.files = await Promise.all(payload.files.map(async (file, fallbackIndex) => {
         const panelIndex = panelIndexFromAttachment(file, fallbackIndex);

@@ -146,7 +146,7 @@ async function persistPresetMedia(guildId, preset) {
   for (const panel of panels) {
     for (const key of ['image', 'thumbnail', 'authorIcon', 'footerIcon']) addHttpsSource(urls, panel?.[key]);
   }
-  collectMediaUrls(urls, preset?.media || preset?.mediaV2);
+  collectMediaUrls(urls, preset?.media);
   const results = [];
   for (const url of urls) {
     try {
@@ -199,7 +199,7 @@ function normalizePanelMedia(value = {}, legacyPanel = {}) {
     files,
   };
 }
-function normalizeMediaV2(value = {}, panels = []) {
+function normalizeMedia(value = {}, panels = []) {
   const panelList = Array.isArray(panels) ? panels : [];
   const inputPanels = Array.isArray(value?.panels) ? value.panels : [];
   const hasMediaState = Array.isArray(value?.panels);
@@ -222,12 +222,12 @@ function normalizeMediaV2(value = {}, panels = []) {
 }
 function ensureStateMedia(state = {}) {
   const panels = Array.isArray(state?.panels) ? state.panels : [];
-  return { ...state, mediaV2: normalizeMediaV2(state?.mediaV2 || {}, panels) };
+  return { ...state, media: normalizeMedia(state?.media || {}, panels) };
 }
 function syncLegacyPatch(state = {}, patch = {}) {
   const safe = ensureStateMedia(state);
-  const index = Math.max(0, Math.min(Number(safe.selectedPanelIndex) || 0, safe.mediaV2.panels.length - 1));
-  const panelMedia = clone(safe.mediaV2.panels[index], normalizePanelMedia());
+  const index = Math.max(0, Math.min(Number(safe.selectedPanelIndex) || 0, safe.media.panels.length - 1));
+  const panelMedia = clone(safe.media.panels[index], normalizePanelMedia());
   if (Object.prototype.hasOwnProperty.call(patch, 'thumbnail')) panelMedia.thumbnail = normalizeThumbnail({ source: patch.thumbnail });
   if (Object.prototype.hasOwnProperty.call(patch, 'image')) {
     const source = cleanSource(patch.image);
@@ -237,8 +237,8 @@ function syncLegacyPatch(state = {}, patch = {}) {
     } else if (panelMedia.gallery.length <= 1) panelMedia.gallery = [];
     else panelMedia.gallery = panelMedia.gallery.slice(1);
   }
-  const mediaPanels = safe.mediaV2.panels.map((entry, n) => n === index ? normalizePanelMedia(panelMedia) : entry);
-  return { ...safe, mediaV2: { version: MEDIA_SCHEMA_VERSION, panels: mediaPanels } };
+  const mediaPanels = safe.media.panels.map((entry, n) => n === index ? normalizePanelMedia(panelMedia) : entry);
+  return { ...safe, media: { version: MEDIA_SCHEMA_VERSION, panels: mediaPanels } };
 }
 function panelSignature(panel) {
   try { return JSON.stringify(panel || {}); } catch { return ''; }
@@ -248,12 +248,12 @@ function reconcileMediaByPanels(previous = {}, next = {}) {
   const nextPanels = Array.isArray(next?.panels) ? next.panels : [];
   if (!nextPanels.length) return ensureStateMedia(next);
   const oldPanels = Array.isArray(oldState.panels) ? oldState.panels : [];
-  const oldMedia = oldState.mediaV2.panels;
+  const oldMedia = oldState.media.panels;
   const oldSignatures = oldPanels.map(panelSignature);
   const nextSignatures = nextPanels.map(panelSignature);
   if (oldPanels.length === nextPanels.length) {
     const sameMultiset = [...oldSignatures].sort().join('\n') === [...nextSignatures].sort().join('\n');
-    if (!sameMultiset) return { ...next, mediaV2: normalizeMediaV2(oldState.mediaV2, nextPanels) };
+    if (!sameMultiset) return { ...next, media: normalizeMedia(oldState.media, nextPanels) };
   }
   const used = new Set();
   const mapped = nextPanels.map((panel, nextIndex) => {
@@ -267,38 +267,38 @@ function reconcileMediaByPanels(previous = {}, next = {}) {
     if (match >= 0) return clone(oldMedia[match], normalizePanelMedia({}, panel));
     return normalizePanelMedia({}, panel);
   });
-  return { ...next, mediaV2: { version: MEDIA_SCHEMA_VERSION, panels: mapped } };
+  return { ...next, media: { version: MEDIA_SCHEMA_VERSION, panels: mapped } };
 }
 function mediaForPanel(state = {}, index = null) {
   const safe = ensureStateMedia(state);
   const selected = index == null ? Number(safe.selectedPanelIndex) || 0 : Number(index) || 0;
-  return clone(safe.mediaV2.panels[Math.max(0, Math.min(selected, safe.mediaV2.panels.length - 1))], normalizePanelMedia());
+  return clone(safe.media.panels[Math.max(0, Math.min(selected, safe.media.panels.length - 1))], normalizePanelMedia());
 }
 function setPanelMedia(state = {}, index, media = {}) {
   const safe = ensureStateMedia(state);
-  const selected = Math.max(0, Math.min(Number(index) || 0, safe.mediaV2.panels.length - 1));
-  const nextPanels = safe.mediaV2.panels.map((entry, n) => n === selected ? normalizePanelMedia(media, safe.panels?.[n] || {}) : entry);
-  return { ...safe, mediaV2: { version: MEDIA_SCHEMA_VERSION, panels: nextPanels } };
+  const selected = Math.max(0, Math.min(Number(index) || 0, safe.media.panels.length - 1));
+  const nextPanels = safe.media.panels.map((entry, n) => n === selected ? normalizePanelMedia(media, safe.panels?.[n] || {}) : entry);
+  return { ...safe, media: { version: MEDIA_SCHEMA_VERSION, panels: nextPanels } };
 }
 function addPanelMedia(state = {}, afterIndex = null, sourceMedia = null) {
   const safe = ensureStateMedia(state);
-  const index = afterIndex == null ? safe.mediaV2.panels.length - 1 : Math.max(-1, Math.min(Number(afterIndex), safe.mediaV2.panels.length - 1));
-  const nextPanels = [...safe.mediaV2.panels];
+  const index = afterIndex == null ? safe.media.panels.length - 1 : Math.max(-1, Math.min(Number(afterIndex), safe.media.panels.length - 1));
+  const nextPanels = [...safe.media.panels];
   nextPanels.splice(index + 1, 0, normalizePanelMedia(sourceMedia || {}));
-  return { ...safe, mediaV2: { version: MEDIA_SCHEMA_VERSION, panels: nextPanels } };
+  return { ...safe, media: { version: MEDIA_SCHEMA_VERSION, panels: nextPanels } };
 }
 function removePanelMedia(state = {}, index) {
   const safe = ensureStateMedia(state);
-  const nextPanels = [...safe.mediaV2.panels];
+  const nextPanels = [...safe.media.panels];
   if (nextPanels.length > 1) nextPanels.splice(Math.max(0, Math.min(Number(index) || 0, nextPanels.length - 1)), 1);
-  return { ...safe, mediaV2: { version: MEDIA_SCHEMA_VERSION, panels: nextPanels } };
+  return { ...safe, media: { version: MEDIA_SCHEMA_VERSION, panels: nextPanels } };
 }
 function movePanelMedia(state = {}, from, to) {
   const safe = ensureStateMedia(state);
-  const nextPanels = [...safe.mediaV2.panels];
+  const nextPanels = [...safe.media.panels];
   const a = Number(from), b = Number(to);
   if (Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b >= 0 && a < nextPanels.length && b < nextPanels.length) [nextPanels[a], nextPanels[b]] = [nextPanels[b], nextPanels[a]];
-  return { ...safe, mediaV2: { version: MEDIA_SCHEMA_VERSION, panels: nextPanels } };
+  return { ...safe, media: { version: MEDIA_SCHEMA_VERSION, panels: nextPanels } };
 }
 
 const mediaModel = Object.freeze({
@@ -309,7 +309,7 @@ const mediaModel = Object.freeze({
   normalizeGalleryItem,
   normalizeFile,
   normalizePanelMedia,
-  normalizeMediaV2,
+  normalizeMedia,
   ensureStateMedia,
   syncLegacyPatch,
   reconcileMediaByPanels,
@@ -326,9 +326,9 @@ function getPanelMedia(stateValue, index = null) {
 
 function normalizeStoredMediaState(stateValue) {
   if (!stateValue || typeof stateValue !== 'object') return stateValue;
-  const source = stateValue.media || stateValue.mediaV2 || null;
+  const source = stateValue.media || null;
   if (!source) return stateValue;
-  return { ...stateValue, media: clone(source), mediaV2: clone(source) };
+  return { ...stateValue, media: clone(source) };
 }
 
 function installStorageNormalization(panel) {
@@ -346,9 +346,8 @@ function installStorageNormalization(panel) {
     panel.presetData = (stateValue) => {
       const normalized = normalizeStoredMediaState(stateValue);
       const preset = originalPresetData(normalized) || {};
-      const storedMedia = clone(preset.media || preset.mediaV2 || normalized?.media || normalized?.mediaV2, null);
+      const storedMedia = clone(preset.media || normalized?.media, null);
       const output = { ...preset };
-      delete output.mediaV2;
       if (storedMedia) output.media = storedMedia;
       return output;
     };
@@ -356,8 +355,8 @@ function installStorageNormalization(panel) {
   if (typeof panel.applyPreset === 'function') {
     const originalApplyPreset = panel.applyPreset.bind(panel);
     panel.applyPreset = (interaction, name, preset = {}) => {
-      const source = preset?.media || preset?.mediaV2 || null;
-      const compatiblePreset = source ? { ...preset, mediaV2: clone(source) } : preset;
+      const source = preset?.media || null;
+      const compatiblePreset = source ? { ...preset, media: clone(source) } : preset;
       const result = originalApplyPreset(interaction, name, compatiblePreset);
       return normalizeStoredMediaState(source ? { ...result, media: clone(source) } : result);
     };
@@ -367,7 +366,7 @@ function installStorageNormalization(panel) {
 }
 
 function installStateCompatibility(panel) {
-  if (!panel || panel.__mediaV2Patched) return panel;
+  if (!panel || panel.__mediaPatched) return panel;
   if (typeof panel.getSession === 'function') {
     const originalGetSession = panel.getSession.bind(panel);
     panel.getSession = (interaction) => mediaModel.ensureStateMedia(originalGetSession(interaction));
@@ -394,21 +393,21 @@ function installStateCompatibility(panel) {
     const originalApplyTemplate = panel.applyTemplate.bind(panel);
     panel.applyTemplate = (interaction, name) => {
       const result = originalApplyTemplate(interaction, name);
-      return panel.saveSession(interaction, mediaModel.ensureStateMedia({ ...result, mediaV2: undefined }));
+      return panel.saveSession(interaction, mediaModel.ensureStateMedia({ ...result, media: undefined }));
     };
   }
   if (typeof panel.applyPreset === 'function') {
     const originalApplyPreset = panel.applyPreset.bind(panel);
     panel.applyPreset = (interaction, name, preset) => {
       const result = originalApplyPreset(interaction, name, preset);
-      const restored = mediaModel.ensureStateMedia({ ...result, mediaV2: preset?.mediaV2 || result?.mediaV2 });
+      const restored = mediaModel.ensureStateMedia({ ...result, media: preset?.media || result?.media });
       return panel.saveSession(interaction, restored);
     };
   }
   panel.getPanelMedia = (stateValue, index = null) => mediaModel.mediaForPanel(stateValue, index);
   panel.setPanelMedia = (stateValue, index, media) => mediaModel.setPanelMedia(stateValue, index, media);
   panel.mediaModel = mediaModel;
-  panel.__mediaV2Patched = true;
+  panel.__mediaPatched = true;
   return panel;
 }
 
@@ -424,9 +423,9 @@ function installPersistentMediaCompatibility(panel) {
   const originalSaveSelected = panel.saveSelected.bind(panel);
   panel.saveSelected = (stateValue, patch = {}) => {
     let result = originalSaveSelected(stateValue, patch);
-    result = mediaModel.syncLegacyPatch({ ...result, mediaV2: stateValue?.mediaV2 }, patch);
+    result = mediaModel.syncLegacyPatch({ ...result, media: stateValue?.media }, patch);
     if (['image', 'thumbnail', 'authorIcon', 'footerIcon'].some((key) => patch && patch[key])) {
-      queuePersistentMediaImport({ panels: [patch], mediaV2: result.mediaV2 });
+      queuePersistentMediaImport({ panels: [patch], media: result.media });
     }
     return result;
   };
@@ -434,7 +433,7 @@ function installPersistentMediaCompatibility(panel) {
     const originalPresetData = panel.presetData.bind(panel);
     panel.presetData = (stateValue) => {
       const safeState = mediaModel.ensureStateMedia(stateValue);
-      const preset = { ...originalPresetData(safeState), mediaV2: safeState.mediaV2 };
+      const preset = { ...originalPresetData(safeState), media: safeState.media };
       queuePersistentMediaImport(preset);
       return preset;
     };

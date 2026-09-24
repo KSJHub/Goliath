@@ -41,7 +41,7 @@ try {
   run(`${common}
     const saved = state.markUnsaved(interaction, {
       panels: [{ title: '', graphicHeaderTitle: 'FAQ', image: 'https://example.test/faq.gif' }],
-      mediaV2: { panels: [{ gallery: [{ source: 'https://example.test/faq.gif', placement: 'above' }] }] },
+      media: { panels: [{ gallery: [{ source: 'https://example.test/faq.gif', placement: 'above' }] }] },
       selectedPanelIndex: 0,
     });
     if (!saved.hasUnsavedChanges) process.exit(2);
@@ -51,7 +51,7 @@ try {
     process.stdout.write(JSON.stringify(state.getSession(interaction)));
   `));
   assert.equal(restored.panels[0].graphicHeaderTitle, 'FAQ');
-  assert.equal(restored.mediaV2.panels[0].gallery[0].placement, 'above');
+  assert.equal(restored.media.panels[0].gallery[0].placement, 'above');
   assert.equal(restored.hasUnsavedChanges, true);
 
   run(`${common}

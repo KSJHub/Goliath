@@ -296,7 +296,7 @@ async function validateApplicationEmojiUsage(embeds = [], actionRows = [], inter
 
 async function buildEmbedPayload(options = {}) {
   const { embeds = [], actionRows = [], allowUserPing = false, userId = null, ephemeral = false, interaction = null } = options;
-  const mediaState = options.media || options.mediaV2 || null;
+  const mediaState = options.media || null;
   const components = [];
   const files = [];
   const resolvedEmbeds = await resolveApplicationEmojiShortcodes(embeds, interaction);
@@ -324,10 +324,10 @@ async function buildEmbedPayload(options = {}) {
     );
     if (thumbSource) await probeRemoteSource(thumbSource, 'thumbnail');
 
-    // Placement-aware mediaV2 is authoritative. Always render its gallery
+    // Placement-aware media is authoritative. Always render its gallery
     // natively so Above and Below use the same full-width Discord gallery
     // geometry. The legacy image-normalization path is retained only for
-    // embeds that do not yet have a mediaV2 panel.
+    // embeds that do not yet have a media panel.
     if (hasPanelMediaState) {
       const aboveItems = await galleryItems(media, interaction, 'above', files, index);
       if (aboveItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...aboveItems));

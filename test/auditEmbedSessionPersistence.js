@@ -17,7 +17,7 @@ try {
   const key = 'guild-1:user-1';
   const state = {
     panels: [{ title: '', graphicHeaderTitle: 'FAQ', image: 'https://example.test/faq.gif' }],
-    mediaV2: { panels: [{ gallery: [{ source: 'https://example.test/faq.gif', placement: 'above' }] }] },
+    media: { panels: [{ gallery: [{ source: 'https://example.test/faq.gif', placement: 'above' }] }] },
     selectedPanelIndex: 0,
     hasUnsavedChanges: true,
   };

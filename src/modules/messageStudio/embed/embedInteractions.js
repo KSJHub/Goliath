@@ -154,9 +154,9 @@ async function buildPayload(state, interaction, ephemeral = false) {
     allowUserPing: Boolean(state.allowUserPing),
     userId: interaction.user?.id || null,
     ephemeral,
-    // mediaV2 is the canonical placement-aware model. Prefer it so a stale
+    // media is the canonical placement-aware model. Prefer it so a stale
     // legacy media alias cannot demote a Graphic Header into a bottom image.
-    media: state.mediaV2 || state.media,
+    media: state.media,
     mediaAlignment: state.mediaAlignment || {},
     interaction,
   });

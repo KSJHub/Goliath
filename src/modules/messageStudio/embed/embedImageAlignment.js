@@ -135,8 +135,8 @@ function installRenderer(renderer) {
   const original = renderer.buildEmbedPayload.bind(renderer);
   renderer.buildEmbedPayload = async (options = {}) => {
     const map = options.mediaAlignment || {};
-    const media = applyAlignmentMap(options.media || options.mediaV2 || {}, map);
-    const payload = await original({ ...options, media, mediaV2: media });
+    const media = applyAlignmentMap(options.media || {}, map);
+    const payload = await original({ ...options, media });
     if (!Array.isArray(payload?.files) || !payload.files.length) return payload;
     payload.files = await Promise.all(payload.files.map(async (file, fallbackIndex) => {
       const panelIndex = panelIndexFromAttachment(file, fallbackIndex);

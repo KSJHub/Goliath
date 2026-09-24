@@ -361,7 +361,7 @@ function buildPreviewEmbed(s, i) {
 function buildStudioPreviewEmbeds(s, i) {
   const index = Math.max(0, Number(s?.selectedPanelIndex) || 0);
   const panel = s?.panels?.[index] || {};
-  const mediaPanel = Array.isArray(s?.mediaV2?.panels) ? (s.mediaV2.panels[index] || {}) : {};
+  const mediaPanel = Array.isArray(s?.media?.panels) ? (s.media.panels[index] || {}) : {};
   const gallery = Array.isArray(mediaPanel?.gallery) ? mediaPanel.gallery : [];
   const header = gallery.find((item) => String(item?.placement || '').toLowerCase() === 'above');
   const source = header ? String(replaceVars(header.source || '', i) || '').trim() : '';
@@ -1646,7 +1646,7 @@ function getPresetManagerSummary(name, preset = {}, defaults = {}) {
    * Count gallery items and attached files across all media panels.
    */
   const mediaState =
-    preset?.mediaV2 ||
+    preset?.media ||
     preset?.media ||
     {};
 
