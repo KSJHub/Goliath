@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import Social from './Social.jsx';
 import { api } from '../../services/apiClient.js';
@@ -53,11 +53,32 @@ function ProviderStatus({ theme, provider }) {
   </div>;
 }
 
-export function SocialRuntimeHealthCard({ theme, runtime, health, providers = [], loading, error, onRefresh }) {
+function AccountDiagnostic({ theme, account }) {
+  const diagnostic = account?.diagnostic || account?.state?.diagnostic || null;
+  const health = diagnostic?.health || {};
+  const level = health.level || (diagnostic?.failureCategory ? 'error' : diagnostic ? 'healthy' : 'empty');
+  const presentation = stateStyle(level === 'configuration' || level === 'delivery' ? 'attention' : level);
+  const liveState = diagnostic?.isLive === true ? 'LIVE' : diagnostic?.isLive === false ? 'Offline' : 'Unknown';
+  return <div style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 14, padding: 12, display: 'grid', gap: 5 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+      <strong>{account.displayName || account.username || account.accountId}</strong>
+      <span style={{ color: presentation.color, fontWeight: 900 }}>{diagnostic ? (health.label || presentation.label) : 'Not Checked'}</span>
+    </div>
+    <small style={{ color: theme.mutedText }}>{String(account.platform || '').toUpperCase()} · {liveState}{Number.isFinite(Number(diagnostic?.latencyMs)) ? ` · ${diagnostic.latencyMs}ms` : ''}</small>
+    {diagnostic?.failureCategory && <small style={{ color: '#fca5a5' }}>{diagnostic.failureCategory}: {diagnostic.reason || 'Provider check failed.'}</small>}
+    {diagnostic?.deliveryReady === false && <small style={{ color: '#fde68a' }}>{diagnostic.deliveryReason || 'Delivery setup required.'}</small>}
+  </div>;
+}
+
+export function SocialRuntimeHealthCard({ theme, runtime, health, providers = [], accounts = [], loading, checking, error, checkResult, onRefresh, onCheckAll }) {
   const issues = Array.isArray(health?.issues) && health.issues.length ? health.issues : (runtime?.issues || []);
   const providerSetupCount = providers.filter((provider) => provider?.status !== 'ready').length;
+  const diagnosticIssues = accounts.filter((account) => {
+    const diagnostic = account?.diagnostic || account?.state?.diagnostic;
+    return diagnostic && (diagnostic.failureCategory || diagnostic.deliveryReady === false || ['configuration_required', 'timeout', 'unavailable', 'unsupported'].includes(diagnostic.status));
+  }).length;
   const baseState = runtime?.state || (health ? (health.healthy ? (issues.length ? 'attention' : 'healthy') : 'error') : null);
-  const state = baseState === 'healthy' && providerSetupCount > 0 ? 'attention' : baseState;
+  const state = baseState === 'healthy' && (providerSetupCount > 0 || diagnosticIssues > 0) ? 'attention' : baseState;
   const presentation = stateStyle(state);
   const errorCount = issues.filter((issue) => String(issue?.severity || '').toLowerCase() === 'error').length;
   const warningCount = issues.length - errorCount;
@@ -66,24 +87,31 @@ export function SocialRuntimeHealthCard({ theme, runtime, health, providers = []
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
       <div>
         <h2 style={{ margin: 0 }}>Social Studio Health</h2>
-        <small style={{ color: theme.mutedText }}>Provider capability, delivery and runtime health in one operational view.</small>
+        <small style={{ color: theme.mutedText }}>Provider capability, account diagnostics, delivery and runtime health in one operational view.</small>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <strong style={{ color: state ? presentation.color : theme.mutedText }}>{loading ? 'Checking…' : state ? presentation.label : 'Unavailable'}</strong>
-        <button type="button" onClick={onRefresh} disabled={loading} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.35)', color: theme.cardText, borderRadius: 999, padding: '8px 12px', fontWeight: 900, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? .55 : 1 }}>Refresh</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <strong style={{ color: state ? presentation.color : theme.mutedText }}>{loading ? 'Refreshing…' : checking ? 'Checking accounts…' : state ? presentation.label : 'Unavailable'}</strong>
+        <button type="button" onClick={onCheckAll} disabled={loading || checking || !accounts.length} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(37,99,235,.22)', color: theme.cardText, borderRadius: 999, padding: '8px 12px', fontWeight: 900, cursor: loading || checking || !accounts.length ? 'not-allowed' : 'pointer', opacity: loading || checking || !accounts.length ? .55 : 1 }}>Run Provider Check</button>
+        <button type="button" onClick={onRefresh} disabled={loading || checking} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.35)', color: theme.cardText, borderRadius: 999, padding: '8px 12px', fontWeight: 900, cursor: loading || checking ? 'not-allowed' : 'pointer', opacity: loading || checking ? .55 : 1 }}>Refresh</button>
       </div>
     </div>
 
     {error && <div style={{ color: '#fca5a5', fontWeight: 800 }}>{error}</div>}
+    {checkResult && <div style={{ color: checkResult.summary?.overall === 'error' ? '#fca5a5' : checkResult.summary?.overall === 'attention' ? '#fde68a' : '#86efac', fontWeight: 800 }}>Provider check finished: {checkResult.checked || 0} account(s), {checkResult.summary?.providerErrors || 0} provider error(s), {checkResult.summary?.deliveryIssues || 0} delivery issue(s).</div>}
 
-    {(runtime || health || providers.length > 0) && <>
+    {(runtime || health || providers.length > 0 || accounts.length > 0) && <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
         <HealthMetric theme={theme} label="Warnings" value={warningCount} />
         <HealthMetric theme={theme} label="Errors" value={errorCount} />
         <HealthMetric theme={theme} label="Provider Setup" value={providerSetupCount} />
+        <HealthMetric theme={theme} label="Account Issues" value={diagnosticIssues} />
         <HealthMetric theme={theme} label="Health Score" value={Number.isFinite(Number(health?.score)) ? `${health.score}%` : '—'} />
         <HealthMetric theme={theme} label="Checked" value={health?.checkedAt ? new Date(health.checkedAt).toLocaleTimeString() : '—'} />
       </div>
+      {accounts.length > 0 && <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}><strong>Account Diagnostics</strong><small style={{ color: theme.mutedText }}>{accounts.filter((account) => account.enabled !== false).length} enabled</small></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>{accounts.map((account) => <AccountDiagnostic key={account.accountId} theme={theme} account={account} />)}</div>
+      </div>}
       {providers.length > 0 && <div style={{ display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <strong>Provider Capabilities</strong>
@@ -112,35 +140,60 @@ export default function SocialWithRuntime(props) {
   const [runtime, setRuntime] = useState(null);
   const [health, setHealth] = useState(null);
   const [providers, setProviders] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
+  const [checkResult, setCheckResult] = useState(null);
+
+  const enabledAccounts = useMemo(() => accounts.filter((account) => account.enabled !== false), [accounts]);
 
   const refreshRuntime = useCallback(async () => {
     if (!guildId) {
       setRuntime(null);
       setHealth(null);
       setProviders([]);
+      setAccounts([]);
       return;
     }
     setLoading(true);
     setError('');
     try {
-      const [diagnosticsResult, providersResult] = await Promise.all([
+      const [diagnosticsResult, providersResult, hubResult] = await Promise.all([
         api.request(`/api/social/${guildId}/creator-hub/diagnostics`),
         api.request(`/api/social/${guildId}/providers`),
+        api.request(`/api/social/${guildId}/creator-hub`),
       ]);
       setRuntime(diagnosticsResult.diagnostics?.runtime || null);
       setHealth(diagnosticsResult.diagnostics?.health || null);
       setProviders(Array.isArray(providersResult.providers) ? providersResult.providers : []);
+      setAccounts(Array.isArray(hubResult.accounts) ? hubResult.accounts : []);
     } catch (runtimeError) {
       setRuntime(null);
       setHealth(null);
       setProviders([]);
+      setAccounts([]);
       setError(runtimeError.message || 'Failed to load Social Studio health.');
     } finally {
       setLoading(false);
     }
   }, [guildId]);
+
+  const checkAll = useCallback(async () => {
+    if (!guildId || !enabledAccounts.length) return;
+    setChecking(true);
+    setError('');
+    setCheckResult(null);
+    try {
+      const result = await api.request(`/api/social/${guildId}/check`, { method: 'POST' });
+      setCheckResult(result);
+      await refreshRuntime();
+    } catch (checkError) {
+      setError(checkError.message || 'Provider check failed.');
+    } finally {
+      setChecking(false);
+    }
+  }, [guildId, enabledAccounts.length, refreshRuntime]);
 
   useEffect(() => {
     refreshRuntime();
@@ -150,7 +203,7 @@ export default function SocialWithRuntime(props) {
   }, [guildId, refreshRuntime]);
 
   return <div style={{ display: 'grid', gap: 16 }}>
-    {guildId && <SocialRuntimeHealthCard theme={theme} runtime={runtime} health={health} providers={providers} loading={loading} error={error} onRefresh={refreshRuntime} />}
+    {guildId && <SocialRuntimeHealthCard theme={theme} runtime={runtime} health={health} providers={providers} accounts={accounts} loading={loading} checking={checking} error={error} checkResult={checkResult} onRefresh={refreshRuntime} onCheckAll={checkAll} />}
     <Social {...props} />
   </div>;
 }
