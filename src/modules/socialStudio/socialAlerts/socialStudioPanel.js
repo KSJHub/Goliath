@@ -329,9 +329,66 @@ function creatorLivePostState(config, creator, options = {}) {
   return { canPost: true, reason: `${liveAccounts.length} LIVE account${liveAccounts.length === 1 ? '' : 's'} ready.` };
 }
 function buildMainPanel(guild, requestedBy = 'Unknown User') {
-  const c = getConfig(guild.id), creators = Object.keys(c.creators).length, accounts = Object.keys(c.accounts).length, ready = creators && accounts && c.alertsChannelId, stats = dashboardStats(c);
-  const d = [`${ready ? '✅' : '⚠️'} **${ready ? 'Social Studio is ready.' : 'Setup required'}**`, '', `**Creators:** ${creators}  •  **Accounts:** ${accounts}`, `🔴 **LIVE:** ${stats.live}  •  ⚫ **Offline:** ${stats.offline}  •  🟡 **Issues:** ${stats.unavailable}`, `📡 **Monitoring:** ${stats.monitored}/${accounts}`, `📨 **Alerts Sent:** ${Number(c.analytics?.alertsSent || 0).toLocaleString('en-GB')}`, `📂 **Default Channel:** ${c.alertsChannelId ? `<#${c.alertsChannelId}>` : 'Not configured'}`, `🔔 **Notifications:** ${c.enabled ? '🟢 Enabled' : '🔴 Disabled'}`].join('\n');
-  return { embeds: [embed(c, '📣 Social Studio', d, requestedBy)], components: [row(btn(`${P}creators`, '👥 Creator Profiles', ButtonStyle.Primary), btn(`${P}channels`, '📂 Channels'), btn(`${P}refresh`, '🔄 Refresh', ButtonStyle.Secondary), btn(`${P}templates`, '🎨 Templates', ButtonStyle.Secondary, true)), navigation('main')] };
+  const config = getConfig(guild.id);
+  const creators = Object.keys(config.creators || {}).length;
+  const accounts = Object.keys(config.accounts || {}).length;
+  const stats = dashboardStats(config);
+
+  const ready = Boolean(
+    creators &&
+    accounts &&
+    config.alertsChannelId
+  );
+
+  const status = config.enabled
+    ? '🟢 Monitoring Active'
+    : '🔴 Monitoring Disabled';
+
+  const description = [
+    `**${ready ? 'Social Studio is ready' : 'Setup required'}**`,
+    '',
+    'Manage creators, social alerts, notification routing and automation from one place.',
+    '',
+    '**Status**',
+    status,
+    `👥 Creators: **${creators}**`,
+    `🔗 Accounts: **${accounts}**`,
+    `🔴 LIVE: **${stats.live}**`,
+    `⚠️ Issues: **${stats.unavailable}**`,
+    '',
+    '**Delivery**',
+    `📡 Monitored Accounts: **${stats.monitored}/${accounts}**`,
+    `📨 Alerts Sent: **${Number(config.analytics?.alertsSent || 0).toLocaleString('en-GB')}**`,
+    `📍 Default Channel: ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : '**Not configured**'}`,
+  ].join('\n');
+
+  return {
+    embeds: [
+      embed(
+        config,
+        '📡 Social Studio',
+        description,
+        requestedBy,
+      ),
+    ],
+    components: [
+      row(
+        btn(`${P}creators`, '👥 Creators', ButtonStyle.Primary),
+        btn(`${P}channels`, '🧭 Routing', ButtonStyle.Primary),
+        btn(`${P}templates`, '🎨 Templates', ButtonStyle.Primary),
+      ),
+      row(
+        btn(`${P}monitoring`, '⚙️ Automation', ButtonStyle.Secondary),
+        btn(`${P}liveMessages`, '🔴 LIVE Messages', ButtonStyle.Secondary),
+        btn(`${P}diagnostics`, '🩺 Diagnostics', ButtonStyle.Secondary),
+      ),
+      row(
+        btn(`${P}settings`, '⚙️ Settings', ButtonStyle.Secondary),
+        btn(`${P}refresh`, '🔄 Refresh', ButtonStyle.Secondary),
+      ),
+      navigation('main'),
+    ],
+  };
 }
 function buildCreatorPanel(i, config, creators) {
   const view = getCreatorSession(i), pages = Math.max(1, Math.ceil(creators.length / PAGE_SIZE)); if (view.page >= pages) setCreatorSession(i, { page: pages - 1 });
