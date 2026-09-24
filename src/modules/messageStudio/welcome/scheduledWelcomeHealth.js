@@ -1,6 +1,7 @@
 'use strict';
 
 const { PermissionFlagsBits } = require('discord.js');
+const embedTemplateManager = require('../embed/embedTemplates');
 const scheduledWelcome = require('./scheduledWelcome');
 const queue = require('./scheduledWelcomeQueue');
 
@@ -12,6 +13,7 @@ async function buildHealth(guild) {
     ? guild.roles.cache.get(config.queueRoleId) || await guild.roles.fetch(config.queueRoleId).catch(() => null)
     : null;
   const channel = config.channelId ? await scheduledWelcome.resolveChannel(guild, config.channelId) : null;
+  const template = config.templateId ? embedTemplateManager.getTemplate(guild.id, config.templateId) : null;
   const me = guild.members?.me || null;
   const permissions = channel && me ? channel.permissionsFor(me) : null;
 
@@ -19,6 +21,7 @@ async function buildHealth(guild) {
   if (config.enabled && config.queueRoleId && !role) issues.push(`Queue role ${config.queueRoleId} no longer exists.`);
   if (config.enabled && !config.channelId) issues.push('Scheduled Welcome needs a destination channel.');
   if (config.enabled && config.channelId && !channel) issues.push(`Scheduled Welcome channel ${config.channelId} is unavailable.`);
+  if (config.templateId && !template) issues.push(`Scheduled Welcome Embed Studio template ${config.templateId} no longer exists.`);
   if (channel && !permissions?.has(PermissionFlagsBits.ViewChannel)) issues.push('Goliath cannot view the Scheduled Welcome channel.');
   if (channel && !permissions?.has(PermissionFlagsBits.SendMessages)) issues.push('Goliath cannot send messages in the Scheduled Welcome channel.');
   if (config.removeQueueRole && role) {
@@ -43,6 +46,8 @@ async function buildHealth(guild) {
     queueRoleName: role?.name || null,
     channelId: config.channelId,
     channelName: channel?.name || null,
+    templateId: config.templateId,
+    templateName: template?.name || null,
     waitingMembers: waitingMembers.length,
     stuckMemberIds,
     time: config.time,
@@ -59,6 +64,7 @@ async function repair(guild, meta = {}) {
 
   if (config.queueRoleId && !guild.roles.cache.has(config.queueRoleId)) patch.queueRoleId = null;
   if (config.channelId && !await scheduledWelcome.resolveChannel(guild, config.channelId)) patch.channelId = null;
+  if (config.templateId && !embedTemplateManager.getTemplate(guild.id, config.templateId)) patch.templateId = null;
 
   const remainingCompleted = [];
   for (const memberId of config.completedMemberIds) {
