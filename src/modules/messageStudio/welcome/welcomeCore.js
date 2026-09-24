@@ -90,9 +90,91 @@ async function sendWelcome(member, options = {}) {
   return { publicSent, dmSent, publicFailed, dmFailed, skipped: false, errors };
 }
 async function buildHealthReport(guild) {
-  if (!guild?.id) throw new Error('Guild is required.'); const config = getWelcomeSection(guild.id); const moduleEnabled = guildManager.isModuleEnabled(guild.id, MODULE); const channel = config.channelId ? await resolveWelcomeChannel(guild, config.channelId) : null; const botMember = guild.members?.me || guild.members?.cache?.get(guild.client?.user?.id) || null; const permissions = channel && botMember ? channel.permissionsFor(botMember) : null; const canView = Boolean(permissions?.has(PermissionFlagsBits.ViewChannel)); const canSend = Boolean(permissions?.has(PermissionFlagsBits.SendMessages)); const canEmbed = Boolean(permissions?.has(PermissionFlagsBits.EmbedLinks)); const canMentionEveryone = Boolean(permissions?.has(PermissionFlagsBits.MentionEveryone)); const publicTemplate = getAssignedTemplate(guild.id, 'welcome', config); const dmTemplate = config.dmEnabled ? getAssignedTemplate(guild.id, 'dmWelcome', config) : null; const mentionRoles = cleanDiscordIds(config.mentionRoleIds).map((roleId) => ({ roleId, role: guild.roles.cache.get(roleId) || null })); const missingMentionRoles = mentionRoles.filter(({ role }) => !role); const blockedMentionRoles = mentionRoles.filter(({ role }) => role && !role.mentionable && !canMentionEveryone);
-  const warnings = [!moduleEnabled ? 'Welcome is disabled.' : null, moduleEnabled && !config.channelId && !config.dmEnabled ? 'No welcome channel or welcome DM is configured.' : null, config.channelId && !channel ? `Configured welcome channel ${config.channelId} no longer exists or is not text-based.` : null, channel && !canView ? 'Goliath cannot view the welcome channel.' : null, channel && !canSend ? 'Goliath cannot send messages in the welcome channel.' : null, channel && !canEmbed ? 'Goliath cannot embed links in the welcome channel.' : null, config.channelId && !publicTemplate ? `Welcome template ${config.templateId} could not be found.` : null, config.dmEnabled && !dmTemplate ? 'Welcome DM is enabled, but no usable template is assigned.' : null, config.allowRolePings && !config.mentionRoleIds.length ? 'Role notifications are enabled but no roles are selected.' : null, ...missingMentionRoles.map(({ roleId }) => `Welcome notification role ${roleId} no longer exists.`), ...blockedMentionRoles.map(({ role }) => `${role.name}: role is not mentionable and Goliath lacks Mention Everyone in the welcome channel.`)].filter(Boolean);
-  return { enabled: moduleEnabled, channelId: config.channelId, channelExists: Boolean(channel), channelName: channel?.name || null, dmEnabled: config.dmEnabled === true, messageSource: config.messageSource, dmMessageSource: config.dmMessageSource, allowRolePings: config.allowRolePings === true, mentionRoleIds: config.mentionRoleIds, mentionRoles: mentionRoles.filter(({ role }) => role).map(({ role }) => ({ id: role.id, name: role.name, mentionable: role.mentionable })), canView, canSend, canEmbed, canMentionEveryone, templateId: publicTemplate?.templateId || config.templateId, templateName: publicTemplate?.name || null, templateBound: Boolean(getWelcomeBinding(guild.id, 'welcome')), dmTemplateId: dmTemplate?.templateId || config.dmTemplateId || config.templateId, dmTemplateName: dmTemplate?.name || null, dmUsesPublicTemplate: config.dmMessageSource === 'inherit', countMode: config.ignoreBots ? 'humans_only' : 'all_members', warnings, healthy: warnings.length === 0 };
+  if (!guild?.id) throw new Error('Guild is required.');
+  const config = getWelcomeSection(guild.id);
+  const moduleEnabled = guildManager.isModuleEnabled(guild.id, MODULE);
+  const channel = config.channelId ? await resolveWelcomeChannel(guild, config.channelId) : null;
+  const botMember = guild.members?.me || guild.members?.cache?.get(guild.client?.user?.id) || null;
+  const permissions = channel && botMember ? channel.permissionsFor(botMember) : null;
+  const canView = Boolean(permissions?.has(PermissionFlagsBits.ViewChannel));
+  const canSend = Boolean(permissions?.has(PermissionFlagsBits.SendMessages));
+  const canEmbed = Boolean(permissions?.has(PermissionFlagsBits.EmbedLinks));
+  const canMentionEveryone = Boolean(permissions?.has(PermissionFlagsBits.MentionEveryone));
+
+  const publicBinding = getWelcomeBinding(guild.id, 'welcome');
+  const publicBoundTemplate = publicBinding ? embedTemplateManager.getTemplate(guild.id, publicBinding.templateId) : null;
+  const configuredPublicTemplate = embedTemplateManager.getTemplate(guild.id, config.templateId);
+  const publicTemplate = publicBoundTemplate || configuredPublicTemplate;
+  const publicBindingMissingTemplate = Boolean(publicBinding && !publicBoundTemplate);
+  const publicBindingMismatch = Boolean(publicBinding && publicBoundTemplate && config.templateId && publicBinding.templateId !== config.templateId);
+  const publicSourceMismatch = Boolean(publicTemplate && normalizeMessageSource(config.messageSource, publicTemplate.templateId) !== config.messageSource);
+
+  const dmBinding = getWelcomeBinding(guild.id, 'dm_welcome');
+  const dmBoundTemplate = dmBinding ? embedTemplateManager.getTemplate(guild.id, dmBinding.templateId) : null;
+  const configuredDmTemplate = config.dmTemplateId ? embedTemplateManager.getTemplate(guild.id, config.dmTemplateId) : null;
+  const dmUsesPublicTemplate = config.dmMessageSource === 'inherit';
+  const dmTemplate = dmUsesPublicTemplate ? publicTemplate : (dmBoundTemplate || configuredDmTemplate);
+  const staleInheritedDmBinding = Boolean(dmUsesPublicTemplate && dmBinding);
+  const dmBindingMissingTemplate = Boolean(!dmUsesPublicTemplate && dmBinding && !dmBoundTemplate);
+  const dmBindingMismatch = Boolean(!dmUsesPublicTemplate && dmBinding && dmBoundTemplate && config.dmTemplateId && dmBinding.templateId !== config.dmTemplateId);
+  const dmMissingBinding = Boolean(!dmUsesPublicTemplate && configuredDmTemplate && (!dmBinding || dmBinding.templateId !== configuredDmTemplate.templateId));
+  const dmSourceMismatch = Boolean(!dmUsesPublicTemplate && dmTemplate && normalizeMessageSource(config.dmMessageSource, dmTemplate.templateId) !== config.dmMessageSource);
+
+  const mentionRoles = cleanDiscordIds(config.mentionRoleIds).map((roleId) => ({ roleId, role: guild.roles.cache.get(roleId) || null }));
+  const missingMentionRoles = mentionRoles.filter(({ role }) => !role);
+  const blockedMentionRoles = mentionRoles.filter(({ role }) => role && !role.mentionable && !canMentionEveryone);
+
+  const warnings = [
+    !moduleEnabled ? 'Welcome is disabled.' : null,
+    moduleEnabled && !config.channelId && !config.dmEnabled ? 'No welcome channel or welcome DM is configured.' : null,
+    config.channelId && !channel ? `Configured welcome channel ${config.channelId} no longer exists or is not text-based.` : null,
+    channel && !canView ? 'Goliath cannot view the welcome channel.' : null,
+    channel && !canSend ? 'Goliath cannot send messages in the welcome channel.' : null,
+    channel && !canEmbed ? 'Goliath cannot embed links in the welcome channel.' : null,
+    config.channelId && !publicTemplate ? `Welcome template ${config.templateId} could not be found.` : null,
+    publicBindingMissingTemplate ? `Public Welcome binding points to missing template ${publicBinding.templateId}.` : null,
+    publicBindingMismatch ? `Public Welcome binding (${publicBinding.templateId}) does not match configured template (${config.templateId}).` : null,
+    publicSourceMismatch ? `Public Welcome source ${config.messageSource} does not match template ${publicTemplate.templateId}.` : null,
+    config.dmEnabled && !dmTemplate ? 'Welcome DM is enabled, but no usable template is assigned.' : null,
+    staleInheritedDmBinding ? `DM Welcome is set to Same as Public but still has a stale binding to ${dmBinding.templateId}.` : null,
+    dmBindingMissingTemplate ? `DM Welcome binding points to missing template ${dmBinding.templateId}.` : null,
+    dmBindingMismatch ? `DM Welcome binding (${dmBinding.templateId}) does not match configured template (${config.dmTemplateId}).` : null,
+    dmMissingBinding ? `DM Welcome template ${configuredDmTemplate.templateId} is configured but not canonically bound.` : null,
+    dmSourceMismatch ? `DM Welcome source ${config.dmMessageSource} does not match template ${dmTemplate.templateId}.` : null,
+    config.allowRolePings && !config.mentionRoleIds.length ? 'Role notifications are enabled but no roles are selected.' : null,
+    ...missingMentionRoles.map(({ roleId }) => `Welcome notification role ${roleId} no longer exists.`),
+    ...blockedMentionRoles.map(({ role }) => `${role.name}: role is not mentionable and Goliath lacks Mention Everyone in the welcome channel.`),
+  ].filter(Boolean);
+
+  return {
+    enabled: moduleEnabled,
+    channelId: config.channelId,
+    channelExists: Boolean(channel),
+    channelName: channel?.name || null,
+    dmEnabled: config.dmEnabled === true,
+    messageSource: config.messageSource,
+    dmMessageSource: config.dmMessageSource,
+    allowRolePings: config.allowRolePings === true,
+    mentionRoleIds: config.mentionRoleIds,
+    mentionRoles: mentionRoles.filter(({ role }) => role).map(({ role }) => ({ id: role.id, name: role.name, mentionable: role.mentionable })),
+    canView,
+    canSend,
+    canEmbed,
+    canMentionEveryone,
+    templateId: publicTemplate?.templateId || config.templateId,
+    templateName: publicTemplate?.name || null,
+    templateBound: Boolean(publicBinding),
+    publicBindingId: publicBinding?.templateId || null,
+    publicBindingHealthy: !publicBindingMissingTemplate && !publicBindingMismatch && !publicSourceMismatch,
+    dmTemplateId: dmTemplate?.templateId || config.dmTemplateId || config.templateId,
+    dmTemplateName: dmTemplate?.name || null,
+    dmBindingId: dmBinding?.templateId || null,
+    dmUsesPublicTemplate,
+    dmBindingHealthy: !staleInheritedDmBinding && !dmBindingMissingTemplate && !dmBindingMismatch && !dmMissingBinding && !dmSourceMismatch,
+    countMode: config.ignoreBots ? 'humans_only' : 'all_members',
+    warnings,
+    healthy: warnings.length === 0,
+  };
 }
 async function repairConfiguration(guild, meta = {}) {
   const config = getWelcomeSection(guild.id);
