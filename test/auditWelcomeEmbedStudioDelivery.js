@@ -7,10 +7,12 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
-const welcome = read('src/modules/messageStudio/welcome/welcome.js');
+const welcomeEntry = read('src/modules/messageStudio/welcome/welcome.js');
+const welcome = read('src/modules/messageStudio/welcome/welcomeCore.js');
 const delivery = read('src/modules/messageStudio/embed/embedTemplateDelivery.js');
 const panel = read('src/modules/messageStudio/welcome/welcomePanel.js');
 
+assert(welcomeEntry.includes("require('./welcomeCore')"), 'Stable Welcome entry point must use the canonical Welcome implementation.');
 assert(welcome.includes("require('../embed/embedTemplateDelivery')"), 'Welcome must use the shared Embed Studio delivery service.');
 assert(welcome.includes('buildTemplateDeliveryPayload({'), 'Welcome payloads must delegate to the shared delivery service.');
 assert(!welcome.includes('buildPreviewEmbeds(state, renderInteraction)'), 'Welcome must not keep a private embed-only renderer.');
