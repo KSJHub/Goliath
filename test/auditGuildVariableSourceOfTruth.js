@@ -24,6 +24,20 @@ function relative(file) {
   return path.relative(ROOT, file).replace(/\\/g, '/');
 }
 
+function stripsTokenBraces(line) {
+  return /\.replace\(\s*\/\^\\\{\|\\\}\$\/g\s*,\s*['"]{0,1}['"]\s*\)/.test(line)
+    || /\.replace\(\s*\/\^\\\{\|\\\}\$\/g\s*,\s*['"]['"]\s*\)/.test(line)
+    || line.includes("replace(/^\\{|\\}$/g, '')")
+    || line.includes('replace(/^\\{|\\}$/g, "")');
+}
+
+function isDelegatorFunction(lines, index) {
+  const window = lines.slice(index, Math.min(lines.length, index + 5)).join('\n');
+  return /guildVariables\.(?:replaceVars|replaceVariables|renderVerificationTemplate)\s*\(/.test(window)
+    || /replaceVariables\s*\(/.test(window)
+    || /buildVariableMap\s*\(/.test(window);
+}
+
 const findings = [];
 const files = walk(SRC);
 
@@ -48,17 +62,24 @@ for (const file of files) {
   const lines = source.split(/\r?\n/);
   for (const check of checks) {
     for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
       check.regex.lastIndex = 0;
-      if (check.regex.test(lines[index])) {
-        findings.push(`${relative(file)}:${index + 1} [${check.name}] ${lines[index].trim()}`);
-      }
+      if (!check.regex.test(line)) continue;
+
+      // Converting canonical "{token}" map keys to bare "token" keys is not rendering.
+      if (check.name === 'manual placeholder replace renderer' && stripsTokenBraces(line)) continue;
+
+      // Thin module helpers are allowed when they delegate replacement to guildVariables.
+      if (check.name === 'local generic template renderer' && isDelegatorFunction(lines, index)) continue;
+
+      findings.push(`${relative(file)}:${index + 1} [${check.name}] ${line.trim()}`);
     }
   }
 }
 
 if (findings.length) {
   console.error('❌ Central Guild Variables source-of-truth audit failed.');
-  console.error('Template/placeholder rendering must go through src/core/guild/guildVariables.js.');
+  console.error('Template/placeholder replacement must go through src/core/guild/guildVariables.js.');
   for (const finding of findings) console.error(` - ${finding}`);
   process.exit(1);
 }
