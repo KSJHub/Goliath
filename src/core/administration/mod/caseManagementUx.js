@@ -237,7 +237,7 @@ else {
   const originalProceedingModal = caseProceeding.handleProceedingModal;
   caseProceeding.handleProceedingModal = async function caseManagementProceedingModal(interaction, ...args) {
     const id = String(interaction?.customId || '');
-    if (id.startsWith('mod_case_new_submit_v2:') && interaction.isModalSubmit?.()) {
+    if (id.startsWith('mod_case_new_submit:') && interaction.isModalSubmit?.()) {
       if (!canUseModAction(interaction.member, interaction.guild, 'proceeding_manage', interaction)) {
         await interaction.reply({ content: '❌ Case-management authority is required to open a case.', flags: MessageFlags.Ephemeral });
         return true;

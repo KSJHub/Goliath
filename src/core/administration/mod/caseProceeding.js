@@ -457,7 +457,7 @@ function closeCaseModal(caseId) {
 }
 
 function newCaseModal(targetId) {
-  return new ModalBuilder().setCustomId(`mod_case_new_submit_v2:${targetId}`).setTitle('Open New Case').addComponents(
+  return new ModalBuilder().setCustomId(`mod_case_new_submit:${targetId}`).setTitle('Open New Case').addComponents(
     modalInput('caseTitle', 'Case title / short summary', TextInputStyle.Short, true, 100, 'Example: Repeated harassment in #general'),
     modalInput('allegations', 'Allegations / details', TextInputStyle.Paragraph, true, 2000, 'Describe what happened, including context, dates, channels and users involved.'),
     modalInput('severity', 'Initial severity (Low–Critical)', TextInputStyle.Short, true, 8, 'Low, Medium, High, Severe, or Critical'),
@@ -701,9 +701,9 @@ async function handleProceedingInteraction(interaction) {
 
 async function handleProceedingModal(interaction) {
   const id = String(interaction.customId || '');
-  if (!(id.startsWith('mod_proceeding_') || id.startsWith('mod_case_new_submit_v2:')) || !interaction.isModalSubmit?.()) return false;
+  if (!(id.startsWith('mod_proceeding_') || id.startsWith('mod_case_new_submit:')) || !interaction.isModalSubmit?.()) return false;
   const [key, raw] = id.split(':');
-  if (key === 'mod_case_new_submit_v2') {
+  if (key === 'mod_case_new_submit') {
     if (!canManageProceeding(interaction)) { await interaction.reply({ content: '❌ Case-management authority is required to open a case.', flags: 64 }); return true; }
     const severity = parseSeverityInput(field(interaction, 'severity'));
     if (!severity) { await interaction.reply({ content: '❌ Severity must be Low, Medium, High, Severe, or Critical.', flags: 64 }); return true; }
