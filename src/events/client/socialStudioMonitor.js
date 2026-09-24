@@ -70,6 +70,37 @@ function selectedAccountIds(social, options = {}) {
   return Object.keys(social?.accounts || {});
 }
 
+function persistDiagnosticState(guildId, social, results = []) {
+  if (!results.length) return;
+  const checkedAt = new Date().toISOString();
+  social.diagnostics = social.diagnostics && typeof social.diagnostics === 'object' ? social.diagnostics : {};
+  social.diagnostics.lastProviderCheckAt = checkedAt;
+  social.diagnostics.lastProviderCheckCount = results.length;
+  social.diagnostics.lastProviderCheckIssues = results.filter((item) => item?.reason || item?.deliveryReady === false).length;
+
+  for (const result of results) {
+    const account = social.accounts?.[result.accountId];
+    if (!account) continue;
+    account.diagnostics = {
+      ...(account.diagnostics && typeof account.diagnostics === 'object' ? account.diagnostics : {}),
+      lastProviderCheckAt: result.checkedAt || checkedAt,
+      status: result.status || null,
+      isLive: result.isLive,
+      latencyMs: Number.isFinite(Number(result.latencyMs)) ? Number(result.latencyMs) : null,
+      reason: result.reason || null,
+      providerSource: result.providerSource || null,
+      deliveryReady: result.deliveryReady,
+      deliveryChannelId: result.deliveryChannelId || null,
+      deliveryReason: result.deliveryReason || null,
+    };
+  }
+
+  guildManager.saveGuildSection(guildId, 'social', social, {
+    guildId,
+    actorId: 'social-provider-diagnostic',
+  });
+}
+
 async function runProviderStatusCheck(guildId, options = {}) {
   const social = socialConfig(guildId);
   const accounts = social.accounts && typeof social.accounts === 'object' ? social.accounts : {};
@@ -85,6 +116,7 @@ async function runProviderStatusCheck(guildId, options = {}) {
     }));
   }
 
+  persistDiagnosticState(guildId, social, results);
   return { guildId, checked: results.length, results };
 }
 
