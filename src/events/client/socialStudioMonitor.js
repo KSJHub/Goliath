@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const guildManager = require('../../core/guild/guildManager');
 const { startupSocialStudio } = require('../../modules/socialStudio/socialAlerts/socialStudioMonitor');
-const { checkAccount } = require('../../modules/socialStudio/socialAlerts/socialStudioProviders');
+const { diagnoseAccount } = require('../../modules/socialStudio/socialAlerts/socialStudioProviders');
 const { buildSectionPanel } = require('../../modules/socialStudio/socialAlerts/socialStudioPanel');
 
 const PLATFORM_LABELS = {
@@ -78,30 +78,11 @@ async function runProviderStatusCheck(guildId, options = {}) {
   for (const accountId of selectedAccountIds(social, options)) {
     const account = accounts[accountId];
     if (!account || account.enabled === false) continue;
-
-    const startedAt = Date.now();
-    const checked = await checkAccount(account);
     const deliveryChannelId = alertChannelFor(social, account, 'live');
-
-    results.push({
-      accountId,
-      platform: account.platform,
-      status: checked.status,
-      isLive: checked.isLive,
-      live: checked.event || null,
-      checkedAt: checked.checkedAt || new Date().toISOString(),
-      latencyMs: Date.now() - startedAt,
-      username: checked.resolvedUsername || account.username || account.normalizedUsername || null,
-      resolvedUsername: checked.resolvedUsername || account.normalizedUsername || account.username || null,
-      externalId: checked.externalId || account.externalId || null,
-      displayName: account.displayName || null,
-      profileUrl: checked.url || account.profileUrl || account.url || null,
-      reason: checked.reason || null,
-      deliveryReady: Boolean(deliveryChannelId),
+    results.push(await diagnoseAccount({ ...account, accountId }, {
+      includeDelivery: true,
       deliveryChannelId,
-      deliveryReason: deliveryChannelId ? null : `No alert channel configured for ${account.platform}/live.`,
-      delivered: [],
-    });
+    }));
   }
 
   return { guildId, checked: results.length, results };
@@ -222,10 +203,6 @@ module.exports = [
       const options = checkOptions(customId);
       if (options && interaction.guildId) {
         if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-
-        // A manual Provider Check is diagnostic only. It must never send/edit/delete
-        // Discord alerts or turn a healthy provider result into ERROR just because a
-        // delivery channel has not been configured.
         const outcome = await runProviderStatusCheck(interaction.guildId, options);
 
         try {
