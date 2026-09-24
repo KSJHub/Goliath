@@ -26,10 +26,21 @@ if (!guildManager[PATCH_FLAG]) {
     let templateDeleted = false;
 
     if (templateId) {
-      // This is intentionally allowed to throw TEMPLATE_IN_USE (and the
-      // default-template protection error). The legacy preset must remain
-      // untouched when the canonical template cannot be safely deleted.
-      templateDeleted = embedTemplates.deleteTemplate(guildId, templateId);
+      try {
+        templateDeleted = embedTemplates.deleteTemplate(guildId, templateId);
+      } catch (error) {
+        // A legacy Discord caller expects a boolean result. Preserve that
+        // contract for protected templates instead of turning a safe refusal
+        // into an unhandled interaction error. The canonical dashboard path
+        // still receives TEMPLATE_IN_USE directly from deleteTemplate().
+        if (
+          error?.code === 'TEMPLATE_IN_USE' ||
+          error?.message === 'Default templates cannot be deleted.'
+        ) {
+          return false;
+        }
+        throw error;
+      }
     }
 
     const presetDeleted = deleteLegacyPreset(guildId, presetName, guildOrMeta);
