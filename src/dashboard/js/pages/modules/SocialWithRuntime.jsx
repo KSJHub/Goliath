@@ -41,9 +41,23 @@ function HealthMetric({ theme, label, value }) {
   </div>;
 }
 
-export function SocialRuntimeHealthCard({ theme, runtime, health, loading, error, onRefresh }) {
+function ProviderStatus({ theme, provider }) {
+  const ready = provider?.status === 'ready';
+  const alertTypes = Array.isArray(provider?.supportedAlertTypes) ? provider.supportedAlertTypes : [];
+  return <div style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 14, padding: 12, display: 'grid', gap: 5 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+      <strong>{provider?.label || provider?.id || 'Provider'}</strong>
+      <span style={{ color: ready ? '#86efac' : '#fde68a', fontWeight: 900 }}>{ready ? 'Ready' : 'Setup Required'}</span>
+    </div>
+    <small style={{ color: theme.mutedText }}>{alertTypes.length ? alertTypes.join(' • ') : 'No alert capabilities reported'}</small>
+  </div>;
+}
+
+export function SocialRuntimeHealthCard({ theme, runtime, health, providers = [], loading, error, onRefresh }) {
   const issues = Array.isArray(health?.issues) && health.issues.length ? health.issues : (runtime?.issues || []);
-  const state = runtime?.state || (health ? (health.healthy ? (issues.length ? 'attention' : 'healthy') : 'error') : null);
+  const providerSetupCount = providers.filter((provider) => provider?.status !== 'ready').length;
+  const baseState = runtime?.state || (health ? (health.healthy ? (issues.length ? 'attention' : 'healthy') : 'error') : null);
+  const state = baseState === 'healthy' && providerSetupCount > 0 ? 'attention' : baseState;
   const presentation = stateStyle(state);
   const errorCount = issues.filter((issue) => String(issue?.severity || '').toLowerCase() === 'error').length;
   const warningCount = issues.length - errorCount;
@@ -52,7 +66,7 @@ export function SocialRuntimeHealthCard({ theme, runtime, health, loading, error
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
       <div>
         <h2 style={{ margin: 0 }}>Social Studio Health</h2>
-        <small style={{ color: theme.mutedText }}>Provider, delivery and runtime health from one diagnostics response.</small>
+        <small style={{ color: theme.mutedText }}>Provider capability, delivery and runtime health in one operational view.</small>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <strong style={{ color: state ? presentation.color : theme.mutedText }}>{loading ? 'Checking…' : state ? presentation.label : 'Unavailable'}</strong>
@@ -62,13 +76,23 @@ export function SocialRuntimeHealthCard({ theme, runtime, health, loading, error
 
     {error && <div style={{ color: '#fca5a5', fontWeight: 800 }}>{error}</div>}
 
-    {(runtime || health) && <>
+    {(runtime || health || providers.length > 0) && <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
         <HealthMetric theme={theme} label="Warnings" value={warningCount} />
         <HealthMetric theme={theme} label="Errors" value={errorCount} />
+        <HealthMetric theme={theme} label="Provider Setup" value={providerSetupCount} />
         <HealthMetric theme={theme} label="Health Score" value={Number.isFinite(Number(health?.score)) ? `${health.score}%` : '—'} />
         <HealthMetric theme={theme} label="Checked" value={health?.checkedAt ? new Date(health.checkedAt).toLocaleTimeString() : '—'} />
       </div>
+      {providers.length > 0 && <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <strong>Provider Capabilities</strong>
+          <small style={{ color: theme.mutedText }}>{providers.filter((provider) => provider?.status === 'ready').length}/{providers.length} ready</small>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 10 }}>
+          {providers.map((provider) => <ProviderStatus key={provider.id || provider.label} theme={theme} provider={provider} />)}
+        </div>
+      </div>}
       {runtime && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 10 }}>
         <RuntimeService theme={theme} label="Scheduler" service={runtime.scheduler} intervalKey="tickIntervalMs" />
         <RuntimeService theme={theme} label="Delivery Queue" service={runtime.queue} />
@@ -77,7 +101,7 @@ export function SocialRuntimeHealthCard({ theme, runtime, health, loading, error
       {runtime?.startedAt && <div style={{ color: theme.mutedText }}>Runtime started: <strong style={{ color: theme.cardText }}>{new Date(runtime.startedAt).toLocaleString()}</strong></div>}
       {issues.length > 0
         ? <div>{issues.map((issue, index) => <div key={`${issue.code || 'issue'}:${index}`} style={{ borderTop: `1px solid ${theme.cardBorder}`, padding: '8px 0' }}><strong>{issue.severity || 'warning'}:</strong> {issue.message || issue.code}</div>)}</div>
-        : <div style={{ color: '#86efac', fontWeight: 800 }}>No provider, delivery or runtime issues detected.</div>}
+        : <div style={{ color: '#86efac', fontWeight: 800 }}>No delivery or runtime issues detected.</div>}
     </>}
   </section>;
 }
@@ -87,6 +111,7 @@ export default function SocialWithRuntime(props) {
   const guildId = getGuildId(selectedGuild, selectedGuildData);
   const [runtime, setRuntime] = useState(null);
   const [health, setHealth] = useState(null);
+  const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -94,17 +119,23 @@ export default function SocialWithRuntime(props) {
     if (!guildId) {
       setRuntime(null);
       setHealth(null);
+      setProviders([]);
       return;
     }
     setLoading(true);
     setError('');
     try {
-      const result = await api.request(`/api/social/${guildId}/creator-hub/diagnostics`);
-      setRuntime(result.diagnostics?.runtime || null);
-      setHealth(result.diagnostics?.health || null);
+      const [diagnosticsResult, providersResult] = await Promise.all([
+        api.request(`/api/social/${guildId}/creator-hub/diagnostics`),
+        api.request(`/api/social/${guildId}/providers`),
+      ]);
+      setRuntime(diagnosticsResult.diagnostics?.runtime || null);
+      setHealth(diagnosticsResult.diagnostics?.health || null);
+      setProviders(Array.isArray(providersResult.providers) ? providersResult.providers : []);
     } catch (runtimeError) {
       setRuntime(null);
       setHealth(null);
+      setProviders([]);
       setError(runtimeError.message || 'Failed to load Social Studio health.');
     } finally {
       setLoading(false);
@@ -119,7 +150,7 @@ export default function SocialWithRuntime(props) {
   }, [guildId, refreshRuntime]);
 
   return <div style={{ display: 'grid', gap: 16 }}>
-    {guildId && <SocialRuntimeHealthCard theme={theme} runtime={runtime} health={health} loading={loading} error={error} onRefresh={refreshRuntime} />}
+    {guildId && <SocialRuntimeHealthCard theme={theme} runtime={runtime} health={health} providers={providers} loading={loading} error={error} onRefresh={refreshRuntime} />}
     <Social {...props} />
   </div>;
 }
