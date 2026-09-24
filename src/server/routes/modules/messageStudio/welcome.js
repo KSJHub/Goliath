@@ -54,16 +54,21 @@ async function buildOverview(req, guildId) {
   const scheduledHealth = guild ? await scheduledWelcomeHealth.buildHealth(guild) : null;
   const templates = welcome.getWelcomeTemplates(guildId, 'welcome');
   const binding = welcome.getWelcomeBinding(guildId, 'welcome');
+  const dmBinding = welcome.getWelcomeBinding(guildId, 'dm_welcome');
+  const dmTemplate = welcome.getAssignedTemplate(guildId, 'dmWelcome', config);
   return {
     guildId,
     config,
     scheduled,
     templates,
     binding,
+    dmBinding,
     overview: {
       enabled: config.enabled,
       channelId: config.channelId,
       dmEnabled: config.dmEnabled === true,
+      messageSource: config.messageSource,
+      dmMessageSource: config.dmMessageSource,
       analytics: config.analytics,
       health,
       scheduledHealth,
@@ -72,6 +77,10 @@ async function buildOverview(req, guildId) {
       templateId: binding?.templateId || config.templateId,
       templateName: binding?.name || health?.templateName || null,
       templateBound: Boolean(binding),
+      dmTemplateId: dmTemplate?.templateId || config.dmTemplateId || config.templateId,
+      dmTemplateName: dmTemplate?.name || null,
+      dmTemplateBound: Boolean(dmBinding),
+      dmUsesPublicTemplate: config.dmMessageSource === 'inherit',
     },
   };
 }
@@ -108,6 +117,35 @@ router.post('/:guildId/template', async (req, res) => {
     if (!templateId) throw new Error('A template ID is required.');
     const result = welcome.bindWelcomeTemplate(guildId, templateId, 'welcome', { actorId: getActorId(req) });
     return success(res, { ...result, ...(await buildOverview(req, guildId)) });
+  } catch (error) { return failure(res, error, 400); }
+});
+
+router.post('/:guildId/message-source', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const source = String(req.body?.source || '').trim();
+    const slot = String(req.body?.slot || 'welcome').trim() === 'dm_welcome' ? 'dm_welcome' : 'welcome';
+    const templateId = String(req.body?.templateId || '').trim();
+    if (!['embedStudio', 'preset', 'custom', 'inherit'].includes(source)) throw new Error('Invalid Welcome message source.');
+    if (slot === 'welcome' && source === 'inherit') throw new Error('Public Welcome cannot inherit a message source.');
+    if (slot === 'dm_welcome' && source === 'inherit') {
+      welcome.clearDmTemplate(guildId, { actorId: getActorId(req) });
+      return success(res, await buildOverview(req, guildId));
+    }
+    if (source === 'preset') {
+      const presetId = slot === 'dm_welcome' ? 'dm_welcome_default' : 'welcome_default';
+      welcome.bindWelcomeTemplate(guildId, presetId, slot, { actorId: getActorId(req) });
+      return success(res, await buildOverview(req, guildId));
+    }
+    if (source === 'embedStudio') {
+      if (!templateId) throw new Error('Choose an Embed Studio message first.');
+      welcome.bindWelcomeTemplate(guildId, templateId, slot, { actorId: getActorId(req) });
+      return success(res, await buildOverview(req, guildId));
+    }
+    if (!templateId) throw new Error('Custom Welcome is not configured yet. Create or select its canonical message first.');
+    welcome.bindWelcomeTemplate(guildId, templateId, slot, { actorId: getActorId(req) });
+    welcome.updateConfig(guildId, slot === 'dm_welcome' ? { dmMessageSource: 'custom' } : { messageSource: 'custom' }, { actorId: getActorId(req) });
+    return success(res, await buildOverview(req, guildId));
   } catch (error) { return failure(res, error, 400); }
 });
 
