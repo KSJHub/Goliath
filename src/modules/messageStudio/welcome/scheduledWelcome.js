@@ -32,6 +32,7 @@ function defaultScheduledConfig() {
     time: '19:00',
     timezone: 'Europe/London',
     message: '👋 Welcome our newest members!\n\n{members}',
+    templateId: null,
     pingMembers: true,
     removeQueueRole: true,
     ignoreBots: true,
@@ -71,6 +72,7 @@ function normalizeScheduledConfig(value = {}) {
     time: cleanTime(source.time),
     timezone: cleanTimezone(source.timezone),
     message: String(source.message || base.message).slice(0, 1800),
+    templateId: String(source.templateId || '').trim().slice(0, 120) || null,
     pingMembers: source.pingMembers !== false,
     removeQueueRole: source.removeQueueRole !== false,
     ignoreBots: source.ignoreBots !== false,
@@ -167,7 +169,7 @@ async function runScheduledWelcome(guild, options = {}) {
 
   for (const batch of batches) {
     try {
-      const built = messages.buildBatchPayload(guild, batch, config);
+      const built = await messages.buildTemplateBatchPayload(guild, batch, config);
       const payload = await emojiPayload.resolveMessagePayload(guild.client, guild.id, built, 'welcome');
       await channel.send(payload);
       messagesSent += 1;
