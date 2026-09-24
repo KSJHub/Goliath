@@ -120,6 +120,7 @@ export const api = {
   getEmbedTemplates: (guildId) => request(`/api/modules/${guildId}/embed-studio/templates`),
   saveEmbedTemplate: (guildId, payload) => request(`/api/modules/${guildId}/embed-studio/templates`, { method: 'POST', body: JSON.stringify(payload) }),
   bindEmbedTemplate: (guildId, moduleKey, slot, templateId) => request(`/api/modules/${guildId}/embed-studio/bindings/${encodeURIComponent(moduleKey)}/${encodeURIComponent(slot)}`, { method: 'POST', body: JSON.stringify({ templateId }) }),
+  unbindEmbedTemplate: (guildId, moduleKey, slot) => request(`/api/modules/${guildId}/embed-studio/bindings/${encodeURIComponent(moduleKey)}/${encodeURIComponent(slot)}`, { method: 'DELETE' }),
   getAutomationRegistry: () => request('/api/automation/registry'),
   getAutomation: (guildId) => request(`/api/automation/${guildId}`),
   saveAutomationRule: (guildId, payload) => request(`/api/automation/${guildId}/rules`, { method: 'POST', body: JSON.stringify(payload) }),
