@@ -77,6 +77,7 @@ function defaultAnalytics() {
     failed: 0,
     alreadyVerified: 0,
     screeningBlocked: 0,
+    screeningCompleted: 0,
     requirementBlocked: 0,
     accountAgeBlocked: 0,
     membershipAgeBlocked: 0,
