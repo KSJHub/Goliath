@@ -95,6 +95,19 @@ function persistDiagnosticState(guildId, social, results = []) {
     };
   }
 
+  social.history = Array.isArray(social.history) ? social.history : [];
+  social.history.push({
+    id: `diagnostic_${Date.now()}`,
+    createdAt: checkedAt,
+    checkedAt,
+    status: 'checked',
+    providerStatus: results.some((item) => item?.reason) ? 'degraded' : 'ok',
+    source: 'provider_diagnostic',
+    checked: results.length,
+    issues: social.diagnostics.lastProviderCheckIssues,
+  });
+  social.history = social.history.slice(-1000);
+
   guildManager.saveGuildSection(guildId, 'social', social, {
     guildId,
     actorId: 'social-provider-diagnostic',
