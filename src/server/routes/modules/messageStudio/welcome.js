@@ -37,6 +37,23 @@ async function getGuild(req, guildId) {
   return client.guilds.cache.get(guildId) || client.guilds.fetch(guildId).catch(() => null);
 }
 
+async function getPreviewMember(req, guild) {
+  const userId = String(req.body?.userId || getActorId(req) || '').trim();
+  if (!/^\d{15,25}$/.test(userId)) throw new Error('A valid preview user ID is required.');
+  const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+  if (!member) throw new Error('Preview member could not be found in this server.');
+  return member;
+}
+
+function serializePreviewPayload(payload = {}) {
+  return {
+    content: payload.content || '',
+    embeds: (payload.embeds || []).map((embed) => typeof embed?.toJSON === 'function' ? embed.toJSON() : embed),
+    components: (payload.components || []).map((component) => typeof component?.toJSON === 'function' ? component.toJSON() : component),
+    allowedMentions: payload.allowedMentions || { parse: [] },
+  };
+}
+
 function canonicalConfig(guildId, config = welcome.getWelcomeSection(guildId)) {
   return { ...config, enabled: guildManager.isModuleEnabled(guildId, 'welcome') };
 }
@@ -160,17 +177,27 @@ router.post('/:guildId/repair', async (req, res) => {
   } catch (error) { return failure(res, error, 400); }
 });
 
+router.post('/:guildId/preview', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    const guild = await getGuild(req, guildId);
+    if (!guild) throw new Error('Guild is unavailable.');
+    const member = await getPreviewMember(req, guild);
+    const config = welcome.getWelcomeSection(guildId);
+    const publicPayload = await welcome.buildDiscordPayload(member, 'welcome', config, { suppressPing: true });
+    const dmPayload = config.dmEnabled ? await welcome.buildDiscordPayload(member, 'dmWelcome', config, { suppressPing: true, includeComponents: false }) : null;
+    return success(res, { preview: { public: serializePreviewPayload(publicPayload), dm: dmPayload ? serializePreviewPayload(dmPayload) : null } });
+  } catch (error) { return failure(res, error, 400); }
+});
+
 router.post('/:guildId/test', async (req, res) => {
   try {
     const guildId = getGuildId(req);
     const guild = await getGuild(req, guildId);
     if (!guild) throw new Error('Guild is unavailable.');
-    const userId = String(req.body?.userId || getActorId(req) || '').trim();
-    if (!/^\d{15,25}$/.test(userId)) throw new Error('A valid preview user ID is required.');
-    const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
-    if (!member) throw new Error('Preview member could not be found in this server.');
+    const member = await getPreviewMember(req, guild);
     const config = welcome.getWelcomeSection(guildId);
-    if (!config.channelId && !config.dmEnabled) throw new Error('Select a welcome channel or enable welcome DMs before previewing.');
+    if (!config.channelId && !config.dmEnabled) throw new Error('Select a welcome channel or enable welcome DMs before sending a test.');
     const result = await welcome.sendWelcome(member, { silent: false, force: true, previewOnly: true });
     return success(res, { result, ...(await buildOverview(req, guildId)) });
   } catch (error) { return failure(res, error, 400); }
