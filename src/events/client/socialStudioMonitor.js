@@ -3,7 +3,8 @@
 const crypto = require('node:crypto');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const guildManager = require('../../core/guild/guildManager');
-const { startupSocialStudio, checkGuildAccounts } = require('../../modules/socialStudio/socialAlerts/socialStudioMonitor');
+const { startupSocialStudio } = require('../../modules/socialStudio/socialAlerts/socialStudioMonitor');
+const { checkAccount } = require('../../modules/socialStudio/socialAlerts/socialStudioProviders');
 const { buildSectionPanel } = require('../../modules/socialStudio/socialAlerts/socialStudioPanel');
 
 const PLATFORM_LABELS = {
@@ -39,8 +40,75 @@ function sortProviderResults(results = []) {
   });
 }
 
+function socialConfig(guildId) {
+  return guildManager.getGuildSection(guildId, 'social', {}) || {};
+}
+
+function alertChannelFor(social, account, type = 'live') {
+  return account?.alertChannels?.[type]
+    || account?.alertChannelId
+    || social?.alertChannels?.[type]
+    || social?.platformChannels?.[account?.platform]
+    || social?.alertsChannelId
+    || null;
+}
+
+function selectedAccountIds(social, options = {}) {
+  if (Array.isArray(options.accountIds) && options.accountIds.length) {
+    return [...new Set(options.accountIds.map(String))];
+  }
+
+  if (Array.isArray(options.creatorIds) && options.creatorIds.length) {
+    const ids = [];
+    for (const creatorId of options.creatorIds) {
+      const creator = social?.creators?.[creatorId];
+      if (creator && Array.isArray(creator.accountIds)) ids.push(...creator.accountIds.map(String));
+    }
+    return [...new Set(ids)];
+  }
+
+  return Object.keys(social?.accounts || {});
+}
+
+async function runProviderStatusCheck(guildId, options = {}) {
+  const social = socialConfig(guildId);
+  const accounts = social.accounts && typeof social.accounts === 'object' ? social.accounts : {};
+  const results = [];
+
+  for (const accountId of selectedAccountIds(social, options)) {
+    const account = accounts[accountId];
+    if (!account || account.enabled === false) continue;
+
+    const startedAt = Date.now();
+    const checked = await checkAccount(account);
+    const deliveryChannelId = alertChannelFor(social, account, 'live');
+
+    results.push({
+      accountId,
+      platform: account.platform,
+      status: checked.status,
+      isLive: checked.isLive,
+      live: checked.event || null,
+      checkedAt: checked.checkedAt || new Date().toISOString(),
+      latencyMs: Date.now() - startedAt,
+      username: checked.resolvedUsername || account.username || account.normalizedUsername || null,
+      resolvedUsername: checked.resolvedUsername || account.normalizedUsername || account.username || null,
+      externalId: checked.externalId || account.externalId || null,
+      displayName: account.displayName || null,
+      profileUrl: checked.url || account.profileUrl || account.url || null,
+      reason: checked.reason || null,
+      deliveryReady: Boolean(deliveryChannelId),
+      deliveryChannelId,
+      deliveryReason: deliveryChannelId ? null : `No alert channel configured for ${account.platform}/live.`,
+      delivered: [],
+    });
+  }
+
+  return { guildId, checked: results.length, results };
+}
+
 function enrichProviderResults(guildId, results = []) {
-  const social = guildManager.getGuildSection(guildId, 'social', {}) || {};
+  const social = socialConfig(guildId);
   const accounts = social.accounts && typeof social.accounts === 'object' ? social.accounts : {};
 
   return results.map((item) => {
@@ -75,9 +143,11 @@ function formatProviderResult(item, { showIds = false } = {}) {
   const extra = [];
   if (showIds && item.accountId) extra.push(`Account: ${item.accountId}`);
   if (showIds && item.externalId) extra.push(`Provider ID: ${item.externalId}`);
+  if (Number.isFinite(Number(item.latencyMs))) extra.push(`Provider: ${Number(item.latencyMs)}ms`);
   if (item.events?.length) extra.push(`Detected: ${item.events.map((event) => event.type).join(', ')}`);
   if (item.delivered?.length) extra.push(`Posted: ${item.delivered.map((event) => event.type).join(', ')}`);
   if (item.reason) extra.push(item.reason);
+  if (item.deliveryReady === false && item.deliveryReason) extra.push(`⚠️ Alert delivery: ${item.deliveryReason}`);
 
   return `**${platform}** — **${state}** — ${identity}${extra.length ? `\n↳ ${extra.join(' • ')}` : ''}`;
 }
@@ -133,7 +203,7 @@ module.exports = [
   {
     name: 'interactionCreate',
     once: false,
-    async execute(interaction, client) {
+    async execute(interaction) {
       const customId = String(interaction?.customId || '');
 
       if (customId.startsWith('socialStatus:ids:')) {
@@ -152,12 +222,11 @@ module.exports = [
       const options = checkOptions(customId);
       if (options && interaction.guildId) {
         if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-        const outcome = await checkGuildAccounts(client || interaction.client, interaction.guildId, options);
 
-        if (outcome.skipped && outcome.reason === 'check_already_running') {
-          await interaction.followUp({ content: '🔎 **Social Studio Status Check**\n\n⏳ A Social Studio check is already running for this server.', flags: 64 }).catch(() => null);
-          return;
-        }
+        // A manual Provider Check is diagnostic only. It must never send/edit/delete
+        // Discord alerts or turn a healthy provider result into ERROR just because a
+        // delivery channel has not been configured.
+        const outcome = await runProviderStatusCheck(interaction.guildId, options);
 
         try {
           const section = currentPanelSection(interaction, customId);
