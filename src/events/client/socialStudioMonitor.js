@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const guildManager = require('../../core/guild/guildManager');
 const { startupSocialStudio, checkGuildAccounts } = require('../../modules/socialStudio/socialAlerts/socialStudioMonitor');
 const { buildSectionPanel } = require('../../modules/socialStudio/socialAlerts/socialStudioPanel');
 
@@ -32,9 +33,27 @@ function sortProviderResults(results = []) {
     const orderA = platformA === -1 ? PLATFORM_ORDER.length : platformA;
     const orderB = platformB === -1 ? PLATFORM_ORDER.length : platformB;
     if (orderA !== orderB) return orderA - orderB;
-    const identityA = String(a?.username || a?.externalId || '').toLowerCase();
-    const identityB = String(b?.username || b?.externalId || '').toLowerCase();
+    const identityA = String(a?.username || a?.resolvedUsername || a?.externalId || a?.accountId || '').toLowerCase();
+    const identityB = String(b?.username || b?.resolvedUsername || b?.externalId || b?.accountId || '').toLowerCase();
     return identityA.localeCompare(identityB, 'en-GB', { sensitivity: 'base', numeric: true });
+  });
+}
+
+function enrichProviderResults(guildId, results = []) {
+  const social = guildManager.getGuildSection(guildId, 'social', {}) || {};
+  const accounts = social.accounts && typeof social.accounts === 'object' ? social.accounts : {};
+
+  return results.map((item) => {
+    const account = accounts[item?.accountId] || {};
+    return {
+      ...item,
+      username: item?.username || item?.resolvedUsername || account.username || account.normalizedUsername || null,
+      resolvedUsername: item?.resolvedUsername || account.normalizedUsername || account.username || null,
+      externalId: item?.externalId || account.externalId || null,
+      displayName: item?.displayName || account.displayName || null,
+      profileUrl: item?.profileUrl || item?.url || account.profileUrl || account.url || null,
+      reason: item?.reason || item?.error || account.state?.lastError || null,
+    };
   });
 }
 
@@ -49,9 +68,13 @@ function formatProviderResult(item, { showIds = false } = {}) {
   else if (item.status === 'ok') state = '🟢 OK';
   else if (item.status) state = `🟡 ${String(item.status).replace(/_/g, ' ').toUpperCase()}`;
 
-  const identity = item.username || item.externalId || 'Unknown account';
+  const rawIdentity = item.username || item.resolvedUsername || item.displayName || item.externalId || item.accountId || 'Unknown account';
+  const identity = item.platform === 'twitch' && rawIdentity !== 'Unknown account' && !String(rawIdentity).startsWith('@')
+    ? `@${rawIdentity}`
+    : rawIdentity;
   const extra = [];
-  if (showIds && item.externalId) extra.push(`ID: ${item.externalId}`);
+  if (showIds && item.accountId) extra.push(`Account: ${item.accountId}`);
+  if (showIds && item.externalId) extra.push(`Provider ID: ${item.externalId}`);
   if (item.events?.length) extra.push(`Detected: ${item.events.map((event) => event.type).join(', ')}`);
   if (item.delivered?.length) extra.push(`Posted: ${item.delivered.map((event) => event.type).join(', ')}`);
   if (item.reason) extra.push(item.reason);
@@ -145,7 +168,7 @@ module.exports = [
 
         cleanupStatusSessions();
         const sessionId = crypto.randomBytes(6).toString('hex');
-        const results = sortProviderResults(outcome.results || []);
+        const results = sortProviderResults(enrichProviderResults(interaction.guildId, outcome.results || []));
         statusSessions.set(sessionId, { userId: interaction.user?.id || null, createdAt: Date.now(), results });
         await interaction.followUp(statusPayload(results, sessionId, false)).catch(() => null);
       }
