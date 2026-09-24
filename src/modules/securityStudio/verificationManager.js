@@ -98,7 +98,145 @@ async function verifyMember(interaction) {
   if (!canBotManageMember(member)) return failVerification(guildId, section, member, 'failed', { reason: 'Goliath cannot manage this member' }, { roleManageFailed: 1 }, { countFailure: false });
   for (const role of verifiedRoles) { const status = resolveRoleActionStatus(guild, member, role, 'add'); if (!status.ok) return failVerification(guildId, section, member, 'failed', { reason: status.message }, { roleManageFailed: 1 }, { countFailure: false }); }
   if (settings.usePendingRoles && settings.removePendingRoles) { for (const role of pendingRoles) { const status = resolveRoleActionStatus(guild, member, role, 'remove'); if (!status.ok) return failVerification(guildId, section, member, 'failed', { reason: status.message }, { roleManageFailed: 1 }, { countFailure: false }); } }
-  try { for (const role of verifiedRoles) if (!member.roles.cache.has(role.id)) await member.roles.add(role, 'Goliath verification completed'); if (settings.usePendingRoles && settings.removePendingRoles) for (const role of pendingRoles) if (member.roles.cache.has(role.id)) await member.roles.remove(role, 'Goliath verification completed'); const refreshedMember = await guild.members.fetch({ user: member.id, force: true }); const missingVerifiedRoles = verifiedRoles.filter((role) => !refreshedMember.roles.cache.has(role.id)); const remainingPendingRoles = settings.usePendingRoles && settings.removePendingRoles ? pendingRoles.filter((role) => refreshedMember.roles.cache.has(role.id)) : []; if (missingVerifiedRoles.length || remainingPendingRoles.length) { const problems = []; if (missingVerifiedRoles.length) problems.push(`verified role not added: ${missingVerifiedRoles.map((role) => role.name).join(', ')}`); if (remainingPendingRoles.length) problems.push(`pending role not removed: ${remainingPendingRoles.map((role) => role.name).join(', ')}`); throw new Error(problems.join('; ')); } verificationStore.clearAttempts(guildId, member.id); verificationStore.incrementAnalytics(guildId, { verified: 1 }); const values = { verifiedRoles: roleMentions(verifiedRoles), pendingRoles: roleMentions(pendingRoles) }; if (settings.logSuccess) await sendVerificationLog(guild, section, renderMessage(messages.successLog, refreshedMember, values)); if (settings.dmOnVerify) await refreshedMember.send(renderMessage(messages.dmSuccess, refreshedMember, values)).catch(() => null); return { ok: true, message: renderMessage(messages.success, refreshedMember, values) }; } catch (error) { const reason = error?.rawError?.message || error?.message || 'Discord rejected the role update'; console.error('[Verification] Role update failed', { guildId, userId: member.id, error }); return failVerification(guildId, section, member, 'failed', { reason }, { roleManageFailed: 1 }, { countFailure: false }); }
+  const addedVerifiedRoles = [];
+  const removedPendingRoles = [];
+
+  try {
+    for (const role of verifiedRoles) {
+      if (member.roles.cache.has(role.id)) continue;
+
+      await member.roles.add(role, 'Goliath verification completed');
+      addedVerifiedRoles.push(role);
+    }
+
+    if (settings.usePendingRoles && settings.removePendingRoles) {
+      for (const role of pendingRoles) {
+        if (!member.roles.cache.has(role.id)) continue;
+
+        await member.roles.remove(role, 'Goliath verification completed');
+        removedPendingRoles.push(role);
+      }
+    }
+
+    const refreshedMember = await guild.members.fetch({
+      user: member.id,
+      force: true,
+    });
+
+    const missingVerifiedRoles = verifiedRoles.filter(
+      (role) => !refreshedMember.roles.cache.has(role.id)
+    );
+
+    const remainingPendingRoles =
+      settings.usePendingRoles && settings.removePendingRoles
+        ? pendingRoles.filter((role) =>
+            refreshedMember.roles.cache.has(role.id)
+          )
+        : [];
+
+    if (missingVerifiedRoles.length || remainingPendingRoles.length) {
+      const problems = [];
+
+      if (missingVerifiedRoles.length) {
+        problems.push(
+          `verified role not added: ${missingVerifiedRoles
+            .map((role) => role.name)
+            .join(', ')}`
+        );
+      }
+
+      if (remainingPendingRoles.length) {
+        problems.push(
+          `pending role not removed: ${remainingPendingRoles
+            .map((role) => role.name)
+            .join(', ')}`
+        );
+      }
+
+      throw new Error(problems.join('; '));
+    }
+
+    verificationStore.clearAttempts(guildId, member.id);
+    verificationStore.incrementAnalytics(guildId, { verified: 1 });
+
+    const values = {
+      verifiedRoles: roleMentions(verifiedRoles),
+      pendingRoles: roleMentions(pendingRoles),
+    };
+
+    if (settings.logSuccess) {
+      await sendVerificationLog(
+        guild,
+        section,
+        renderMessage(messages.successLog, refreshedMember, values)
+      );
+    }
+
+    if (settings.dmOnVerify) {
+      await refreshedMember
+        .send(renderMessage(messages.dmSuccess, refreshedMember, values))
+        .catch(() => null);
+    }
+
+    return {
+      ok: true,
+      message: renderMessage(messages.success, refreshedMember, values),
+    };
+  } catch (error) {
+    const rollbackErrors = [];
+
+    for (const role of addedVerifiedRoles.reverse()) {
+      try {
+        await member.roles.remove(
+          role,
+          'Goliath verification rollback'
+        );
+      } catch (rollbackError) {
+        rollbackErrors.push(
+          `failed to remove ${role.name}: ${
+            rollbackError?.message || 'unknown error'
+          }`
+        );
+      }
+    }
+
+    for (const role of removedPendingRoles.reverse()) {
+      try {
+        await member.roles.add(
+          role,
+          'Goliath verification rollback'
+        );
+      } catch (rollbackError) {
+        rollbackErrors.push(
+          `failed to restore ${role.name}: ${
+            rollbackError?.message || 'unknown error'
+          }`
+        );
+      }
+    }
+
+    const reason =
+      error?.rawError?.message ||
+      error?.message ||
+      'Discord rejected the role update';
+
+    console.error('[Verification] Role update failed', {
+      guildId,
+      userId: member.id,
+      error,
+      rollbackErrors,
+    });
+
+    return failVerification(
+      guildId,
+      section,
+      member,
+      'failed',
+      { reason },
+      { roleManageFailed: 1 },
+      { countFailure: false }
+    );
+  }
 }
 
 function configureVerification(guildId, input = {}, meta = {}) { const settingsInput = input.settings && typeof input.settings === 'object' ? input.settings : {}; if (typeof input.enabled === 'boolean') guildManager.setModuleEnabled(guildId, MODULE, input.enabled, meta); verificationStore.updateVerificationSection(guildId, (section) => ({ ...section, settings: verificationStore.normalizeSettings({ ...(section.settings || {}), ...settingsInput }), messages: input.messages ? verificationStore.normalizeMessages({ ...(section.messages || {}), ...input.messages }) : section.messages, updatedAt: new Date().toISOString() }), meta); return getEffectiveVerificationSection(guildId); }
