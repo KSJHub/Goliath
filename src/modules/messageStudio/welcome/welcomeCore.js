@@ -94,7 +94,44 @@ async function buildHealthReport(guild) {
   const warnings = [!moduleEnabled ? 'Welcome is disabled.' : null, moduleEnabled && !config.channelId && !config.dmEnabled ? 'No welcome channel or welcome DM is configured.' : null, config.channelId && !channel ? `Configured welcome channel ${config.channelId} no longer exists or is not text-based.` : null, channel && !canView ? 'Goliath cannot view the welcome channel.' : null, channel && !canSend ? 'Goliath cannot send messages in the welcome channel.' : null, channel && !canEmbed ? 'Goliath cannot embed links in the welcome channel.' : null, config.channelId && !publicTemplate ? `Welcome template ${config.templateId} could not be found.` : null, config.dmEnabled && !dmTemplate ? 'Welcome DM is enabled, but no usable template is assigned.' : null, config.allowRolePings && !config.mentionRoleIds.length ? 'Role notifications are enabled but no roles are selected.' : null, ...missingMentionRoles.map(({ roleId }) => `Welcome notification role ${roleId} no longer exists.`), ...blockedMentionRoles.map(({ role }) => `${role.name}: role is not mentionable and Goliath lacks Mention Everyone in the welcome channel.`)].filter(Boolean);
   return { enabled: moduleEnabled, channelId: config.channelId, channelExists: Boolean(channel), channelName: channel?.name || null, dmEnabled: config.dmEnabled === true, messageSource: config.messageSource, dmMessageSource: config.dmMessageSource, allowRolePings: config.allowRolePings === true, mentionRoleIds: config.mentionRoleIds, mentionRoles: mentionRoles.filter(({ role }) => role).map(({ role }) => ({ id: role.id, name: role.name, mentionable: role.mentionable })), canView, canSend, canEmbed, canMentionEveryone, templateId: publicTemplate?.templateId || config.templateId, templateName: publicTemplate?.name || null, templateBound: Boolean(getWelcomeBinding(guild.id, 'welcome')), dmTemplateId: dmTemplate?.templateId || config.dmTemplateId || config.templateId, dmTemplateName: dmTemplate?.name || null, dmUsesPublicTemplate: config.dmMessageSource === 'inherit', countMode: config.ignoreBots ? 'humans_only' : 'all_members', warnings, healthy: warnings.length === 0 };
 }
-async function repairConfiguration(guild, meta = {}) { const config = getWelcomeSection(guild.id); const channel = config.channelId ? await resolveWelcomeChannel(guild, config.channelId) : null; const publicTemplate = getAssignedTemplate(guild.id, 'welcome', config); const dmTemplate = config.dmTemplateId ? embedTemplateManager.getTemplate(guild.id, config.dmTemplateId) : null; const mentionRoleIds = cleanDiscordIds(config.mentionRoleIds).filter((roleId) => roleId !== guild.id && guild.roles.cache.has(roleId)); return updateConfig(guild.id, { channelId: channel ? config.channelId : null, messageSource: normalizeMessageSource(config.messageSource, publicTemplate?.templateId || config.templateId), templateId: publicTemplate?.templateId || config.templateId, dmTemplateId: dmTemplate?.templateId || null, dmMessageSource: dmTemplate ? normalizeMessageSource(config.dmMessageSource, dmTemplate.templateId) : 'inherit', mentionRoleIds, allowRolePings: config.allowRolePings && mentionRoleIds.length > 0 }, { action: 'welcome_repair', ...meta }); }
+async function repairConfiguration(guild, meta = {}) {
+  const config = getWelcomeSection(guild.id);
+  const channel = config.channelId ? await resolveWelcomeChannel(guild, config.channelId) : null;
+  const publicBinding = getWelcomeBinding(guild.id, 'welcome');
+  const publicBoundTemplate = publicBinding ? embedTemplateManager.getTemplate(guild.id, publicBinding.templateId) : null;
+  if (publicBinding && !publicBoundTemplate) embedTemplateManager.unbindTemplate(guild.id, MODULE, 'welcome');
+  const publicTemplate = publicBoundTemplate || embedTemplateManager.getTemplate(guild.id, config.templateId);
+
+  let dmTemplate = null;
+  let dmTemplateId = null;
+  let dmMessageSource = 'inherit';
+  const dmBinding = getWelcomeBinding(guild.id, 'dm_welcome');
+
+  if (config.dmMessageSource === 'inherit') {
+    if (dmBinding) embedTemplateManager.unbindTemplate(guild.id, MODULE, 'dm_welcome');
+  } else {
+    const boundDmTemplate = dmBinding ? embedTemplateManager.getTemplate(guild.id, dmBinding.templateId) : null;
+    if (dmBinding && !boundDmTemplate) embedTemplateManager.unbindTemplate(guild.id, MODULE, 'dm_welcome');
+    dmTemplate = boundDmTemplate || (config.dmTemplateId ? embedTemplateManager.getTemplate(guild.id, config.dmTemplateId) : null);
+    if (dmTemplate) {
+      dmTemplateId = dmTemplate.templateId;
+      dmMessageSource = normalizeMessageSource(config.dmMessageSource, dmTemplateId);
+      const currentBinding = getWelcomeBinding(guild.id, 'dm_welcome');
+      if (!currentBinding || currentBinding.templateId !== dmTemplateId) embedTemplateManager.bindTemplate(guild.id, MODULE, 'dm_welcome', dmTemplateId);
+    }
+  }
+
+  const mentionRoleIds = cleanDiscordIds(config.mentionRoleIds).filter((roleId) => roleId !== guild.id && guild.roles.cache.has(roleId));
+  return updateConfig(guild.id, {
+    channelId: channel ? config.channelId : null,
+    messageSource: normalizeMessageSource(config.messageSource, publicTemplate?.templateId || config.templateId),
+    templateId: publicTemplate?.templateId || config.templateId,
+    dmTemplateId,
+    dmMessageSource,
+    mentionRoleIds,
+    allowRolePings: config.allowRolePings && mentionRoleIds.length > 0,
+  }, { action: 'welcome_repair', ...meta });
+}
 function exportConfiguration(guildId) { return { exportedAt: now(), guildId, module: MODULE, config: { ...getWelcomeSection(guildId), enabled: guildManager.isModuleEnabled(guildId, MODULE) }, publicBinding: getWelcomeBinding(guildId, 'welcome'), dmBinding: getWelcomeBinding(guildId, 'dm_welcome') }; }
 function resetWelcome(guildId, meta = {}) { return resetWelcomeSection(guildId, meta); }
 async function startupWelcome(client) {
