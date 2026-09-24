@@ -28,7 +28,8 @@
     "audit:embed-studio-preview": "node test/auditEmbedStudioPreview.js",
     "audit:embed-session-persistence": "node test/auditEmbedSessionPersistence.js",
     "audit:embed-state-persistence-boundary": "node test/auditEmbedStatePersistenceBoundary.js",
-    "doctor": "npm run syntax && npm run imports && npm run dashboard-imports && npm run contracts && npm run audit:guild-variables && npm run audit:embed-studio-preview && npm run audit:embed-session-persistence && npm run audit:embed-state-persistence-boundary && npm run social-live-audit && npm run social-lifecycle-audit && npm run social-live-presentation-audit && node -e \"require('./scripts/goliath.js'); process.exit(process.exitCode || 0)\" doctor",
+    "audit:embed-template-binding-lifecycle": "node test/auditEmbedTemplateBindingLifecycle.js",
+    "doctor": "npm run syntax && npm run imports && npm run dashboard-imports && npm run contracts && npm run audit:guild-variables && npm run audit:embed-studio-preview && npm run audit:embed-session-persistence && npm run audit:embed-state-persistence-boundary && npm run audit:embed-template-binding-lifecycle && npm run social-live-audit && npm run social-lifecycle-audit && npm run social-live-presentation-audit && node -e \"require('./scripts/goliath.js'); process.exit(process.exitCode || 0)\" doctor",
     "audit": "node scripts/goliath.js audit"
   },
   "dependencies": {
