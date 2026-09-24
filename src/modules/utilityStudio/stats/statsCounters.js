@@ -2,6 +2,7 @@
 
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const statsStore = require('./statsStore');
+const { replaceVariables } = require('../../../core/guild/guildVariables');
 
 const STATUS_VALUES = Object.freeze(['online', 'idle', 'dnd', 'offline']);
 const COUNTER_TYPES = Object.freeze([
@@ -287,9 +288,13 @@ function renderCounterName(guild, summary, input) {
   const dock = normalizeStoredDock(input);
   if (!dock) return 'Counter unavailable';
   const values = dock.segments.map((segment) => counterValue(guild, summary, segment));
-  let name = dock.template;
-  values.forEach((value, index) => { name = name.replaceAll(`{${index + 1}}`, value); });
-  if (values.length === 1) name = name.replaceAll('{value}', values[0]).replaceAll('{count}', values[0]).replaceAll('{date}', values[0]);
+  const variables = Object.fromEntries(values.map((value, index) => [String(index + 1), value]));
+  if (values.length === 1) {
+    variables.value = values[0];
+    variables.count = values[0];
+    variables.date = values[0];
+  }
+  const name = replaceVariables(dock.template, variables, { guild, guildId: guild?.id }, false);
   return safeString(name.replace(/\s+/g, ' '), 100) || 'Counter';
 }
 async function getBotMember(guild) { return guild.members.me || await guild.members.fetchMe().catch(() => null); }
