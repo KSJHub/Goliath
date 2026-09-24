@@ -64,7 +64,7 @@ jobs:
           rm -rf dist
           npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
           mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
-          grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js
+          grep -q 'GOLIATH_APPEALS_ENTRY' dist/assets/*.js
 
   promote:
     needs: preflight
@@ -156,7 +156,7 @@ jobs:
             rm -rf dist
             npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
             mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
-            grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js
+            grep -q 'GOLIATH_APPEALS_ENTRY' dist/assets/*.js
 
             NGINX_DUMP="$(nginx -T 2>&1)"
             DASHBOARD_ROOT="$(printf '%s\n' "$NGINX_DUMP" | awk -v host="$DEV_HOST" '$1=="server_name"{for(i=2;i<=NF;i++){n=$i;gsub(/;/,"",n);if(n==host)found=1}next} found&&$1=="root"{r=$2;gsub(/;/,"",r);print r;exit}')"
