@@ -14,6 +14,8 @@ async function buildHealth(guild) {
     : null;
   const channel = config.channelId ? await scheduledWelcome.resolveChannel(guild, config.channelId) : null;
   const template = config.templateId ? embedTemplateManager.getTemplate(guild.id, config.templateId) : null;
+  const templateBinding = scheduledWelcome.getTemplateBinding(guild.id);
+  const boundTemplate = templateBinding ? embedTemplateManager.getTemplate(guild.id, templateBinding.templateId) : null;
   const me = guild.members?.me || null;
   const permissions = channel && me ? channel.permissionsFor(me) : null;
 
@@ -22,8 +24,13 @@ async function buildHealth(guild) {
   if (config.enabled && !config.channelId) issues.push('Scheduled Welcome needs a destination channel.');
   if (config.enabled && config.channelId && !channel) issues.push(`Scheduled Welcome channel ${config.channelId} is unavailable.`);
   if (config.templateId && !template) issues.push(`Scheduled Welcome Embed Studio template ${config.templateId} no longer exists.`);
+  if (templateBinding && !boundTemplate) issues.push(`Scheduled Welcome binding points to missing template ${templateBinding.templateId}.`);
+  if (!config.templateId && templateBinding) issues.push(`Scheduled Welcome has stale template binding ${templateBinding.templateId} while no template is selected.`);
+  if (config.templateId && template && !templateBinding) issues.push(`Scheduled Welcome template ${config.templateId} is selected but is not canonically bound.`);
+  if (config.templateId && templateBinding && templateBinding.templateId !== config.templateId) issues.push(`Scheduled Welcome binding ${templateBinding.templateId} does not match configured template ${config.templateId}.`);
   if (channel && !permissions?.has(PermissionFlagsBits.ViewChannel)) issues.push('Goliath cannot view the Scheduled Welcome channel.');
   if (channel && !permissions?.has(PermissionFlagsBits.SendMessages)) issues.push('Goliath cannot send messages in the Scheduled Welcome channel.');
+  if (channel && template && !permissions?.has(PermissionFlagsBits.EmbedLinks)) issues.push('Goliath cannot embed links in the Scheduled Welcome channel.');
   if (config.removeQueueRole && role) {
     if (!me?.permissions?.has(PermissionFlagsBits.ManageRoles)) issues.push('Goliath needs Manage Roles to remove the queue role after welcoming members.');
     else if (role.managed || role.position >= me.roles.highest.position) issues.push(`Queue role ${role.name} cannot be managed by Goliath.`);
@@ -37,6 +44,9 @@ async function buildHealth(guild) {
   if (stuckMemberIds.length) warnings.push(`${stuckMemberIds.length} welcomed member(s) still have the queue role and need cleanup.`);
 
   const waitingMembers = config.queueRoleId ? await scheduledWelcome.getWaitingMembers(guild) : [];
+  const templateBindingHealthy = !config.templateId
+    ? !templateBinding
+    : Boolean(template && templateBinding && boundTemplate && templateBinding.templateId === config.templateId);
   return {
     healthy: issues.length === 0,
     enabled: config.enabled,
@@ -48,6 +58,8 @@ async function buildHealth(guild) {
     channelName: channel?.name || null,
     templateId: config.templateId,
     templateName: template?.name || null,
+    templateBindingId: templateBinding?.templateId || null,
+    templateBindingHealthy,
     waitingMembers: waitingMembers.length,
     stuckMemberIds,
     time: config.time,
@@ -75,6 +87,7 @@ async function repair(guild, meta = {}) {
   }
   patch.completedMemberIds = remainingCompleted;
   config = scheduledWelcome.updateScheduledConfig(guild.id, patch, { ...meta, action: 'scheduled_welcome_repair' });
+  scheduledWelcome.syncTemplateBinding(guild.id, config.templateId);
   return { before, config, health: await buildHealth(guild) };
 }
 
