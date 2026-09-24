@@ -83,7 +83,7 @@ function countEmbedPresetsForLimit(req) { const guildId = getGuildId(req); const
 
 function normalizeModuleMap(modules = {}) {
   const output = {};
-  if (modules && typeof modules === 'object' && !Array.isArray(value)) {
+  if (modules && typeof modules === 'object' && !Array.isArray(modules)) {
     for (const [key, value] of Object.entries(modules)) {
       if (key === 'verification') { output[key] = { enabled: typeof value === 'boolean' ? value !== false : value?.enabled !== false }; continue; }
       if (value && typeof value === 'object' && !Array.isArray(value)) output[key] = { ...value, enabled: value.enabled !== false };
