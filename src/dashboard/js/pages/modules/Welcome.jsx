@@ -50,6 +50,8 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
   const dmMessageSource = overview.dmMessageSource || config?.dmMessageSource || 'inherit';
   const activeTemplateId = binding?.templateId || overview.templateId || config?.templateId || 'welcome_default';
   const activeTemplate = templates.find((template) => String(template.templateId) === String(activeTemplateId)) || binding || null;
+  const dmTemplateId = overview.dmTemplateId || config?.dmTemplateId || (dmMessageSource === 'inherit' ? activeTemplateId : 'dm_welcome_default');
+  const dmTemplate = templates.find((template) => String(template.templateId) === String(dmTemplateId)) || null;
   const selectedRoleIds = Array.isArray(config?.mentionRoleIds) ? config.mentionRoleIds : [];
   const selectableRoles = roles.filter((role) => String(role.id) !== String(guildId) && role.managed !== true);
 
@@ -89,6 +91,9 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
   }
   async function setMessageSource(source, templateId = '') {
     return act('messageSource', () => api.request(`/api/welcome/${guildId}/message-source`, { method: 'POST', body: JSON.stringify({ slot: 'welcome', source, templateId }) }), source === 'preset' ? 'Welcome preset selected.' : 'Welcome message source updated.');
+  }
+  async function setDmMessageSource(source, templateId = '') {
+    return act('dmMessageSource', () => api.request(`/api/welcome/${guildId}/message-source`, { method: 'POST', body: JSON.stringify({ slot: 'dm_welcome', source, templateId }) }), source === 'inherit' ? 'DM now uses the Public Welcome message.' : source === 'preset' ? 'DM Welcome preset selected.' : 'DM Welcome message source updated.');
   }
   async function previewQueue() {
     setBusy('queue'); setError('');
@@ -151,11 +156,34 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
         {activeTemplate ? <div><span style={{ color: theme.mutedText, fontSize: 12 }}>ACTIVE MESSAGE</span><div style={{ marginTop: 4, fontWeight: 950 }}>{activeTemplate.name || activeTemplate.templateId}</div></div> : null}
       </div>
 
-      <div style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 18, padding: 16, display: 'grid', gap: 10 }}>
-        <div><strong>📨 Direct Message</strong><div style={{ color: theme.mutedText, fontSize: 12, marginTop: 4 }}>Current source: {dmMessageSource === 'inherit' ? 'Same as Public Welcome' : dmMessageSource}</div></div>
-        <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-          <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={config?.dmEnabled === true} onChange={(event) => saveInstant({ dmEnabled: event.target.checked })} /> Send DM</label>
-        </div>
+      <div style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.28)', borderRadius: 18, padding: 16, display: 'grid', gap: 14 }}>
+        <div><strong>📨 Direct Message</strong><div style={{ color: theme.mutedText, fontSize: 12, marginTop: 4 }}>Choose whether DM Welcome follows the Public Welcome or uses its own message.</div></div>
+        <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={config?.dmEnabled === true} onChange={(event) => saveInstant({ dmEnabled: event.target.checked })} /> Send DM Welcome</label>
+        <label style={{ display: 'grid', gap: 8 }}><span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900, textTransform: 'uppercase' }}>DM Message Source</span>
+          <select value={dmMessageSource} onChange={(event) => {
+            const source = event.target.value;
+            if (source === 'inherit') setDmMessageSource('inherit');
+            else if (source === 'preset') setDmMessageSource('preset');
+            else if (source === 'embedStudio') {
+              const first = templates.find((template) => !['welcome_default', 'dm_welcome_default'].includes(String(template.templateId)));
+              if (!first) { setError('Create or save an Embed Studio message first.'); return; }
+              const current = templates.find((template) => String(template.templateId) === String(dmTemplateId));
+              setDmMessageSource('embedStudio', current && !['welcome_default', 'dm_welcome_default'].includes(String(current.templateId)) ? current.templateId : first.templateId);
+            } else setError('Custom Welcome editor is the next implementation stage. Use Same as Public, Embed Studio or Preset for now.');
+          }} disabled={busy} style={fieldStyle(theme)}>
+            <option value="inherit">↩ Same as Public</option><option value="embedStudio">💎 Embed Studio</option><option value="preset">📦 Welcome Preset</option><option value="custom">🛠 Custom Welcome</option>
+          </select>
+        </label>
+        {dmMessageSource === 'embedStudio' ? <label style={{ display: 'grid', gap: 8 }}><span style={{ color: theme.mutedText, fontSize: 12, fontWeight: 900, textTransform: 'uppercase' }}>DM Saved Message</span>
+          <select value={dmTemplateId} onChange={(event) => setDmMessageSource('embedStudio', event.target.value)} disabled={busy || templates.length === 0} style={fieldStyle(theme)}>
+            {templates.length === 0 ? <option value="">No Embed Studio messages found</option> : null}
+            {templates.filter((template) => !['welcome_default', 'dm_welcome_default'].includes(String(template.templateId))).map((template) => <option key={template.templateId} value={template.templateId}>{template.name || template.templateId}</option>)}
+          </select>
+        </label> : null}
+        {dmMessageSource === 'inherit' ? <div style={{ color: theme.mutedText }}><strong style={{ color: theme.cardText }}>↩ Same as Public Welcome</strong><br />Future Public Welcome message changes automatically apply to DM Welcome too.</div> : null}
+        {dmMessageSource === 'preset' ? <div style={{ color: theme.mutedText }}><strong style={{ color: theme.cardText }}>📦 Goliath DM Welcome Preset</strong><br />Uses the built-in DM-specific preset through the shared renderer.</div> : null}
+        {dmMessageSource === 'custom' ? <div style={{ color: '#fbbf24', fontWeight: 850 }}>🛠 Custom DM Welcome is reserved for the simplified Welcome editor. Existing custom bindings remain safe.</div> : null}
+        <div><span style={{ color: theme.mutedText, fontSize: 12 }}>ACTIVE DM MESSAGE</span><div style={{ marginTop: 4, fontWeight: 950 }}>{dmMessageSource === 'inherit' ? `Same as Public · ${activeTemplate?.name || activeTemplateId}` : overview.dmTemplateName || dmTemplate?.name || dmTemplateId || 'Not set'}</div></div>
       </div>
 
       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
