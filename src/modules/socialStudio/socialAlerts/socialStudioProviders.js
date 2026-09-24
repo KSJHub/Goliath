@@ -81,7 +81,46 @@ async function checkAccount(account = {}) {
   }
 }
 
+function resolveAccountIdentity(account = {}, checked = {}) {
+  return {
+    username: checked.resolvedUsername || account.username || account.normalizedUsername || null,
+    resolvedUsername: checked.resolvedUsername || account.normalizedUsername || account.username || null,
+    externalId: checked.externalId || account.externalId || null,
+    displayName: checked.displayName || account.displayName || null,
+    profileUrl: checked.url || checked.profileUrl || account.profileUrl || account.url || null,
+  };
+}
+
+async function diagnoseAccount(account = {}, options = {}) {
+  const startedAt = Date.now();
+  const checked = await checkAccount(account);
+  const identity = resolveAccountIdentity(account, checked);
+  const deliveryChannelId = options.deliveryChannelId || null;
+
+  return {
+    accountId: account.accountId || account.id || null,
+    platform: String(account.platform || checked.platform || '').trim().toLowerCase(),
+    status: checked.status,
+    isLive: checked.isLive,
+    live: checked.event || null,
+    events: Array.isArray(checked.events) ? checked.events : [],
+    checkedAt: checked.checkedAt || new Date().toISOString(),
+    latencyMs: Date.now() - startedAt,
+    ...identity,
+    reason: checked.reason || null,
+    providerSource: checked.providerSource || null,
+    deliveryReady: options.includeDelivery === true ? Boolean(deliveryChannelId) : null,
+    deliveryChannelId: options.includeDelivery === true ? deliveryChannelId : null,
+    deliveryReason: options.includeDelivery === true && !deliveryChannelId
+      ? `No alert channel configured for ${account.platform}/live.`
+      : null,
+    delivered: [],
+  };
+}
+
 module.exports = {
   providerInfo,
   checkAccount,
+  diagnoseAccount,
+  resolveAccountIdentity,
 };
