@@ -6,7 +6,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const guildManager = require('../../../../core/guild/guildManager');
 const { replaceVariables } = require('../../../../core/guild/guildVariables');
 const { ALERT_TYPES, normalizeTemplates, resolveTemplate } = require('../../../../modules/socialStudio/socialAlerts/socialStudioTemplates');
-const { PLATFORMS, providerCatalog } = require('../../../../modules/socialStudio/socialAlerts/socialStudioProviders');
+const { PLATFORMS, providerCatalog, diagnoseAccount, diagnoseAccounts, applyDiagnosticState } = require('../../../../modules/socialStudio/socialAlerts/socialStudioProviders');
 
 const router = express.Router();
 const CREATOR_STATUSES = ['active', 'left_server', 'disabled', 'archived'];
@@ -85,6 +85,7 @@ function normalizeAccount(value = {}, existingId = null) {
     enabled: value.enabled !== false,
     metadata: isObject(value.metadata) ? value.metadata : {},
     state: isObject(value.state) ? value.state : {},
+    diagnostics: isObject(value.diagnostics) ? value.diagnostics : {},
     createdAt: value.createdAt || now(),
     updatedAt: now(),
   };
@@ -225,8 +226,61 @@ router.get('/:guildId/health', async (req, res) => { try { const id = guildId(re
 router.patch('/:guildId/config', (req, res) => { try { const id = guildId(req); const current = getConfig(id); const body = isObject(req.body) ? req.body : {}; if (typeof body.enabled === 'boolean') guildManager.setModuleEnabled(id, 'social', body.enabled, actor(req)); const { enabled: _enabled, ...bodyConfig } = body; const incomingTemplates = normalizeTemplates(bodyConfig.templates); const config = { ...current, ...bodyConfig, settings: { ...current.settings, ...(isObject(bodyConfig.settings) ? bodyConfig.settings : {}) }, templates: isObject(bodyConfig.templates) ? { ...current.templates, ...incomingTemplates, defaults: { ...current.templates.defaults, ...incomingTemplates.defaults }, custom: { ...current.templates.custom, ...incomingTemplates.custom } } : current.templates }; return success(res, { guildId: id, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/accounts', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const account = normalizeAccount(req.body || {}); config.accounts[account.accountId] = account; history(config, { status: 'created', accountId: account.accountId, platform: account.platform, alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, account, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.delete('/:guildId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const accountId = clean(req.params.accountId, 80); if (!config.accounts[accountId]) throw new Error('Social account was not found.'); delete config.accounts[accountId]; Object.values(config.creators).forEach((creator) => { creator.accountIds = creator.accountIds.filter((item) => item !== accountId); }); history(config, { status: 'deleted', accountId, alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/check', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const checked = Object.values(config.accounts).filter((item) => item.enabled).length; config.analytics.checks = Number(config.analytics.checks || 0) + checked; runtime.checks += checked; history(config, { status: 'checked', creator: 'All creators', alertType: null, checked }); return success(res, { guildId: id, checked, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/accounts/:accountId/check', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const account = config.accounts[clean(req.params.accountId, 80)]; if (!account) throw new Error('Social account was not found.'); account.state = { ...(account.state || {}), lastCheckedAt: now(), lastCheckStatus: 'ok' }; config.analytics.checks = Number(config.analytics.checks || 0) + 1; runtime.checks += 1; history(config, { status: 'checked', accountId: account.accountId, platform: account.platform, alertType: null }); return success(res, { guildId: id, account, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/check', async (req, res) => {
+  try {
+    const id = guildId(req);
+    const config = getConfig(id);
+    const result = await diagnoseAccounts(Object.values(config.accounts), {
+      includeDisabled: false,
+      includeDelivery: true,
+      concurrency: asNumber(req.body?.concurrency, 4, 1, 10),
+      resolveDeliveryChannelId: (account) => account.alertChannelId || config.alertsChannelId || null,
+    });
+    for (const diagnostic of result.diagnostics) {
+      const account = config.accounts[diagnostic.accountId];
+      if (account) config.accounts[diagnostic.accountId] = applyDiagnosticState(account, diagnostic);
+    }
+    const checked = result.diagnostics.length;
+    const failures = result.summary.providerErrors + result.summary.configuration;
+    config.analytics.checks = Number(config.analytics.checks || 0) + checked;
+    config.analytics.failures = Number(config.analytics.failures || 0) + failures;
+    runtime.checks += checked;
+    runtime.errors += failures;
+    history(config, { status: 'diagnostic_checked', creator: 'All creators', alertType: null, checked, summary: result.summary });
+    const saved = saveConfig(id, config, actor(req));
+    return success(res, { guildId: id, checked, diagnostics: result.diagnostics, summary: result.summary, config: saved });
+  } catch (error) {
+    runtime.errors += 1;
+    return failure(res, error, 400);
+  }
+});
+router.post('/:guildId/accounts/:accountId/check', async (req, res) => {
+  try {
+    const id = guildId(req);
+    const config = getConfig(id);
+    const accountId = clean(req.params.accountId, 80);
+    const account = config.accounts[accountId];
+    if (!account) throw new Error('Social account was not found.');
+    const diagnostic = await diagnoseAccount(account, {
+      includeDelivery: true,
+      deliveryChannelId: account.alertChannelId || config.alertsChannelId || null,
+    });
+    config.accounts[accountId] = applyDiagnosticState(account, diagnostic);
+    config.analytics.checks = Number(config.analytics.checks || 0) + 1;
+    const failed = diagnostic.health?.healthy === false && diagnostic.health?.level === 'error';
+    if (failed) {
+      config.analytics.failures = Number(config.analytics.failures || 0) + 1;
+      runtime.errors += 1;
+    }
+    runtime.checks += 1;
+    history(config, { status: 'diagnostic_checked', accountId, platform: account.platform, alertType: null, diagnostic: config.accounts[accountId].diagnostics?.provider || null });
+    const saved = saveConfig(id, config, actor(req));
+    return success(res, { guildId: id, account: saved.accounts[accountId], diagnostic, config: saved });
+  } catch (error) {
+    runtime.errors += 1;
+    return failure(res, error, 400);
+  }
+});
 router.post('/:guildId/creator-hub', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = normalizeCreator(req.body || {}, null, config.accounts); config.creators[creator.creatorId] = creator; history(config, { status: 'creator_created', creator: creator.displayName, alertType: null }); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.patch('/:guildId/creator-hub/:creatorId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creatorId = clean(req.params.creatorId, 80); const existing = config.creators[creatorId]; if (!existing) throw new Error('Creator profile was not found.'); const creator = normalizeCreator({ ...existing, ...(req.body || {}), creatorId, ownerDiscordId: existing.ownerDiscordId }, creatorId, config.accounts); config.creators[creatorId] = creator; return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/creator-hub/:creatorId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = config.creators[clean(req.params.creatorId, 80)]; const accountId = clean(req.params.accountId, 80); if (!creator || !config.accounts[accountId]) throw new Error('Creator or account was not found.'); creator.accountIds = [...new Set([...creator.accountIds, accountId])]; creator.updatedAt = now(); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
