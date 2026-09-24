@@ -6,19 +6,10 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const guildManager = require('../../../../core/guild/guildManager');
 const { replaceVariables } = require('../../../../core/guild/guildVariables');
 const { ALERT_TYPES, normalizeTemplates, resolveTemplate } = require('../../../../modules/socialStudio/socialAlerts/socialStudioTemplates');
+const { PLATFORMS, providerCatalog } = require('../../../../modules/socialStudio/socialAlerts/socialStudioProviders');
 
 const router = express.Router();
-const PLATFORMS = ['twitch', 'youtube', 'tiktok', 'kick', 'facebook', 'instagram', 'x'];
 const CREATOR_STATUSES = ['active', 'left_server', 'disabled', 'archived'];
-const PROVIDERS = {
-  twitch: ['Twitch', ['live'], ['TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET']],
-  youtube: ['YouTube', ['live', 'upload', 'short', 'post'], ['YOUTUBE_API_KEY']],
-  tiktok: ['TikTok', ['live', 'short', 'post'], ['TIKTOK_CLIENT_KEY']],
-  kick: ['Kick', ['live'], ['KICK_CLIENT_ID']],
-  facebook: ['Facebook', ['live', 'post'], ['FACEBOOK_APP_ID']],
-  instagram: ['Instagram', ['live', 'post', 'short'], ['INSTAGRAM_ACCESS_TOKEN']],
-  x: ['X', ['post'], ['X_BEARER_TOKEN']],
-};
 const runtime = { startedAt: new Date().toISOString(), checks: 0, deliveries: 0, errors: 0 };
 
 const now = () => new Date().toISOString();
@@ -187,11 +178,6 @@ function saveConfig(id, config, meta = {}) {
 function history(config, event) {
   config.history = [...(Array.isArray(config.history) ? config.history : []), { id: makeId('history'), createdAt: now(), ...event }].slice(-1000);
 }
-function provider(platform) {
-  const [label, alertTypes, envKeys] = PROVIDERS[platform];
-  const ready = envKeys.every((key) => Boolean(process.env[key]));
-  return { id: platform, label, supportedAlertTypes: alertTypes, status: ready ? 'ready' : 'configuration_required', productionSupported: true, authorizationRequired: !ready };
-}
 function overview(config) {
   const accounts = Object.values(config.accounts);
   return { enabled: config.enabled, accountCount: accounts.length, enabledAccountCount: accounts.filter((item) => item.enabled).length, creatorCount: Object.keys(config.creators).length, analytics: config.analytics, queue: { total: config.queue.length, pending: config.queue.filter((item) => ['pending', 'retry'].includes(item.status)).length }, history: { total: config.history.length }, updatedAt: config.updatedAt };
@@ -230,7 +216,7 @@ async function sendSimulation(req, id, account, data) {
 
 router.get('/:guildId', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, config: getConfig(id) }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/overview', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, overview: overview(getConfig(id)) }); } catch (error) { return failure(res, error, 400); } });
-router.get('/:guildId/providers', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, providers: PLATFORMS.map(provider) }); } catch (error) { return failure(res, error, 400); } });
+router.get('/:guildId/providers', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, providers: providerCatalog() }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/history', (req, res) => { try { const id = guildId(req); const limit = asNumber(req.query.limit, 100, 1, 500); return success(res, { guildId: id, history: getConfig(id).history.slice(-limit).reverse() }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/queue', (req, res) => { try { const id = guildId(req); const limit = asNumber(req.query.limit, 100, 1, 500); return success(res, { guildId: id, queue: getConfig(id).queue.slice(-limit).reverse() }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/creator-hub', (req, res) => { try { const id = guildId(req); const config = getConfig(id); return success(res, { guildId: id, creators: Object.values(config.creators), accounts: Object.values(config.accounts) }); } catch (error) { return failure(res, error, 400); } });
