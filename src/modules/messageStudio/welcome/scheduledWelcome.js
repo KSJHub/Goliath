@@ -3,10 +3,12 @@
 const guildManager = require('../../../core/guild/guildManager');
 const { getModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const emojiPayload = require('../../utilityStudio/emojis/emojiPayload');
+const embedTemplateManager = require('../embed/embedTemplates');
 const queue = require('./scheduledWelcomeQueue');
 const messages = require('./scheduledWelcomeMessage');
 
 const MODULE = 'welcome';
+const TEMPLATE_SLOT = 'scheduled_welcome';
 const now = () => new Date().toISOString();
 const clone = (value) => value == null ? value : JSON.parse(JSON.stringify(value));
 
@@ -89,6 +91,25 @@ function getScheduledConfig(guildId) {
   return normalizeScheduledConfig(welcome?.scheduled);
 }
 
+function getTemplateBinding(guildId) {
+  return embedTemplateManager.getBinding(guildId, MODULE, TEMPLATE_SLOT);
+}
+
+function syncTemplateBinding(guildId, templateId) {
+  const wantedId = String(templateId || '').trim() || null;
+  const current = getTemplateBinding(guildId);
+  const template = wantedId ? embedTemplateManager.getTemplate(guildId, wantedId) : null;
+
+  if (!wantedId || !template) {
+    if (current) embedTemplateManager.unbindTemplate(guildId, MODULE, TEMPLATE_SLOT);
+    return null;
+  }
+  if (!current || current.templateId !== wantedId) {
+    return embedTemplateManager.bindTemplate(guildId, MODULE, TEMPLATE_SLOT, wantedId);
+  }
+  return current;
+}
+
 function updateScheduledConfig(guildId, patch = {}, meta = {}) {
   if (patch?.enabled === true && !guildManager.isModuleEnabled(guildId, MODULE)) {
     guildManager.setModuleEnabled(guildId, MODULE, true, { ...meta, action: meta.action || 'scheduled_welcome_enable_parent' });
@@ -99,7 +120,9 @@ function updateScheduledConfig(guildId, patch = {}, meta = {}) {
     saved = normalizeScheduledConfig({ ...current, ...(patch || {}), updatedAt: now() });
     return { ...section, scheduled: saved, updatedAt: now() };
   }, {}, meta);
-  return saved || getScheduledConfig(guildId);
+  const result = saved || getScheduledConfig(guildId);
+  syncTemplateBinding(guildId, result.templateId);
+  return result;
 }
 
 function zonedDateKey(timezone, date = new Date()) {
@@ -211,9 +234,12 @@ async function runScheduledWelcome(guild, options = {}) {
 
 module.exports = {
   MODULE,
+  TEMPLATE_SLOT,
   defaultScheduledConfig,
   normalizeScheduledConfig,
   getScheduledConfig,
+  getTemplateBinding,
+  syncTemplateBinding,
   updateScheduledConfig,
   zonedDateKey,
   resolveChannel,
