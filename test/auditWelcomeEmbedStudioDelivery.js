@@ -19,11 +19,7 @@ assert(delivery.includes('buildEmbedPayload({'), 'Shared delivery must build the
 assert(delivery.includes('media: state.mediaV2 || state.media'), 'Shared delivery must preserve saved Embed Studio media.');
 assert(delivery.includes('actionRows'), 'Shared delivery must preserve saved Embed Studio buttons/actions.');
 assert(welcome.includes('guildVariables.buildVariableMap'), 'Welcome must continue to source runtime values from Guild Variables.');
-
-// This assertion intentionally protects the next integration step: Preview must await
-// the async Components V2 delivery path before this audit is promoted into `doctor`.
-if (!panel.includes("const payload = await welcome.buildDiscordPayload(member, 'welcome'")) {
-  console.warn('⚠️ Welcome Preview still needs to await the shared async delivery payload.');
-}
+assert(/const payload\s*=\s*await welcome\.buildDiscordPayload\(member\s*,\s*['"]welcome['"]/.test(panel), 'Welcome Preview must await the async shared Components V2 delivery payload.');
+assert(panel.includes('ephemeral:true') || panel.includes('ephemeral: true'), 'Welcome Preview must remain private/ephemeral.');
 
 console.log('✅ Welcome ↔ Embed Studio delivery contract audit passed.');
