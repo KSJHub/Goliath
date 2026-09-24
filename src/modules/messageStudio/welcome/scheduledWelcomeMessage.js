@@ -1,5 +1,7 @@
 'use strict';
 
+const { replaceVariables } = require('../../../core/guild/guildVariables');
+
 function displayName(member) {
   return member?.displayName || member?.user?.globalName || member?.user?.username || member?.id || 'Unknown';
 }
@@ -18,7 +20,7 @@ function renderMessage(template, guild, members, config = {}) {
     date: new Date().toLocaleDateString('en-GB'),
   };
   let output = String(template || '👋 Welcome our newest members!\n\n{members}');
-  for (const [key, value] of Object.entries(values)) output = output.replaceAll(`{${key}}`, String(value));
+  output = replaceVariables(output, values, { guild, guildId: guild?.id, user: members[0]?.user || null, member: members[0] || null }, false);
   return output.trim();
 }
 
