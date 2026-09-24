@@ -9,6 +9,7 @@ const instagram = require('./providers/instagram');
 const x = require('./providers/x');
 
 const PROVIDERS = Object.freeze({ twitch, youtube, tiktok, kick, facebook, instagram, x });
+const PLATFORMS = Object.freeze(Object.keys(PROVIDERS));
 const DEFAULT_PROVIDER_TIMEOUT_MS = 15000;
 
 const PROVIDER_CAPABILITIES = Object.freeze({
@@ -54,6 +55,10 @@ function providerInfo(platform) {
     authorizationRequired: capability.providerClass === 'official_api' && !configured,
     productionSupported: true,
   };
+}
+
+function providerCatalog() {
+  return PLATFORMS.map((platform) => providerInfo(platform));
 }
 
 function unavailable(platform, reason, status = 'unavailable', providerSource = null, failureCategory = null) {
@@ -276,7 +281,9 @@ async function diagnoseAccount(account = {}, options = {}) {
 }
 
 module.exports = {
+  PLATFORMS,
   providerInfo,
+  providerCatalog,
   checkAccount,
   diagnoseAccount,
   resolveAccountIdentity,
