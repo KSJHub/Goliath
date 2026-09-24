@@ -249,6 +249,42 @@ async function refreshVerificationPanel(guild, panelId, input = {}, meta = {}) {
 async function deleteVerificationPanel(guild, panelId, meta = {}) { if (!guild?.id) throw new Error('Guild is unavailable.'); const section = getEffectiveVerificationSection(guild.id); const panel = section.panels?.[String(panelId || '')] || verificationStore.getPanel(guild.id, panelId); if (!panel) throw new Error('Verification panel not found.'); if (section.enabled === true && section.activePanelId === panel.panelId) throw new Error('Cannot delete the active verification panel while Verification is enabled. Deploy a replacement first or disable Verification.'); const message = await fetchPanelMessage(guild, panel); if (message && !message.deletable) throw new Error('Verification panel message cannot be deleted. The saved panel record was preserved.'); if (message) await message.delete(); return verificationStore.deletePanel(guild.id, panel.panelId, meta); }
 async function getPanelHealth(guild, panel) { if (!panel) return { ok: false, status: 'Missing panel record' }; const channel = panel.channelId ? guild.channels.cache.get(panel.channelId) || await guild.channels.fetch(panel.channelId).catch(() => null) : null; if (!channel) return { ok: false, status: 'Missing channel' }; const message = await fetchPanelMessage(guild, panel); if (!message) return { ok: false, status: 'Missing message' }; return { ok: true, status: 'Healthy' }; }
 async function buildHealthReport(guild) { const section = getEffectiveVerificationSection(guild.id); const settings = section.settings; const panels = Object.values(section.panels || {}); const [verifiedRoles, pendingRoles, panelHealth] = await Promise.all([fetchRoles(guild, settings.verifiedRoleIds), fetchRoles(guild, settings.pendingRoleIds), Promise.all(panels.map(async (panel) => ({ panelId: panel.panelId, ...(await getPanelHealth(guild, panel)) })))]); const invalidVerified = verifiedRoles.filter((role) => !canBotManageRole(guild, role)); const invalidPending = pendingRoles.filter((role) => !canBotManageRole(guild, role)); const screeningEnabled = hasDiscordScreening(guild); const warnings = [section.enabled !== true ? 'Verification is disabled.' : null, !settings.verifiedRoleIds.length ? 'No verified roles are configured.' : null, settings.verifiedRoleIds.length !== verifiedRoles.length ? 'One or more verified roles are missing.' : null, invalidVerified.length ? 'Goliath cannot manage one or more verified roles.' : null, settings.usePendingRoles && !settings.pendingRoleIds.length ? 'Pending roles are enabled but no pending roles are selected.' : null, settings.requirePendingRole && !settings.usePendingRoles ? 'Require Pending Role is enabled while Pending Roles are disabled.' : null, settings.assignPendingRoles && !settings.usePendingRoles ? 'Assign Pending Roles is enabled while Pending Roles are disabled.' : null, settings.usePendingRoles && settings.pendingRoleIds.length !== pendingRoles.length ? 'One or more pending roles are missing.' : null, invalidPending.length ? 'Goliath cannot manage one or more pending roles.' : null, settings.waitForDiscordScreening && !screeningEnabled && !settings.skipScreeningIfUnavailable ? 'Discord Membership Screening is required but not configured.' : null, panels.length === 0 ? 'No verification panel deployed.' : null, ...panelHealth.filter((panel) => !panel.ok).map((panel) => `${panel.panelId}: ${panel.status}`)].filter(Boolean); return { enabled: section.enabled === true, screeningEnabled, waitForDiscordScreening: settings.waitForDiscordScreening, hasVerifiedRole: verifiedRoles.length > 0, verifiedRoleCount: verifiedRoles.length, hasPendingRole: pendingRoles.length > 0, pendingRoleCount: pendingRoles.length, hasLogChannel: Boolean(settings.logChannelId), panels: panelHealth, warnings }; }
-async function handleVerificationInteraction(interaction) { const parsed = parseVerifyCustomId(interaction?.customId); if (!parsed || !interaction?.guildId) return false; const result = await verifyMember(interaction); await interaction.reply({ content: result.ok ? `\u2705 ${result.message}` : `\u274C ${result.message}`, flags: 64 }).catch(() => null); return true; }
+async function handleVerificationInteraction(interaction) {
+  const parsed = parseVerifyCustomId(interaction?.customId);
+  if (!parsed || !interaction?.guildId) return false;
+
+  try {
+    await interaction.deferReply({ flags: 64 });
+  } catch (error) {
+    console.error('[Verification] Failed to acknowledge interaction', {
+      guildId: interaction.guildId,
+      userId: interaction.user?.id || interaction.member?.id,
+      error,
+    });
+    return true;
+  }
+
+  try {
+    const result = await verifyMember(interaction);
+
+    await interaction.editReply({
+      content: result.ok
+        ? `\u2705 ${result.message}`
+        : `\u274C ${result.message}`,
+    });
+  } catch (error) {
+    console.error('[Verification] Interaction processing failed', {
+      guildId: interaction.guildId,
+      userId: interaction.user?.id || interaction.member?.id,
+      error,
+    });
+
+    await interaction.editReply({
+      content: '\u274C Verification could not be completed. Please try again.',
+    }).catch(() => null);
+  }
+
+  return true;
+}
 
 module.exports = { CUSTOM_ID_PREFIX, SCREENING_FEATURE, DEFAULT_HELPERS, canManageVerification, canBotManageRole, canBotManageMember, hasDiscordScreening, buildVerifyCustomId, parseVerifyCustomId, buildVerificationEmbed, buildVerificationRows, configureVerification, setVerificationEnabled, toggleVerification, getVerificationStatus, updateVerificationSettings, updateVerificationMessages, updatePanelTemplate, assignPendingRoles, handleMemberJoin, handleMemberUpdate, deployVerificationPanel, refreshVerificationPanel, restoreMissingVerificationPanel, deleteVerificationPanel, getPanelHealth, buildHealthReport, verifyMember, handleVerificationInteraction, renderMessage, renderTemplate };
