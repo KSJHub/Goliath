@@ -108,6 +108,41 @@ function diagnosticHealth(diagnostic = {}) {
   return { level: 'healthy', healthy: true, actionable: false, label: 'Healthy' };
 }
 
+function diagnosticRecord(diagnostic = {}) {
+  const health = diagnostic.health || diagnosticHealth(diagnostic);
+  return {
+    checkedAt: diagnostic.checkedAt || new Date().toISOString(),
+    status: diagnostic.status || 'unknown',
+    isLive: typeof diagnostic.isLive === 'boolean' ? diagnostic.isLive : null,
+    latencyMs: Number.isFinite(Number(diagnostic.latencyMs)) ? Number(diagnostic.latencyMs) : null,
+    providerClass: diagnostic.providerClass || null,
+    providerSource: diagnostic.providerSource || null,
+    configured: diagnostic.configured !== false,
+    failureCategory: diagnostic.failureCategory || null,
+    reason: diagnostic.reason || null,
+    deliveryReady: typeof diagnostic.deliveryReady === 'boolean' ? diagnostic.deliveryReady : null,
+    deliveryChannelId: diagnostic.deliveryChannelId || null,
+    deliveryReason: diagnostic.deliveryReason || null,
+    health: {
+      level: health.level || 'unknown',
+      healthy: health.healthy === true,
+      actionable: health.actionable === true,
+      label: health.label || 'Unknown',
+    },
+  };
+}
+
+function applyDiagnosticState(account = {}, diagnostic = {}) {
+  const record = diagnosticRecord(diagnostic);
+  return {
+    ...account,
+    diagnostics: {
+      ...(account.diagnostics && typeof account.diagnostics === 'object' ? account.diagnostics : {}),
+      provider: record,
+    },
+  };
+}
+
 function summarizeDiagnostics(diagnostics = []) {
   const summary = {
     total: 0,
@@ -247,5 +282,7 @@ module.exports = {
   resolveAccountIdentity,
   classifyProviderFailure,
   diagnosticHealth,
+  diagnosticRecord,
+  applyDiagnosticState,
   summarizeDiagnostics,
 };
