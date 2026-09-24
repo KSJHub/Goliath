@@ -55,35 +55,20 @@ let presetStoreApi;
 // embedTemplateManager
 // ============================================================================
 {
-  const crypto = require('node:crypto');
   const { getGuildSection, updateGuildSection } = require('../../../core/guild/guildManager');
-  const {
-    MODULE_VARIABLES,
-    variablesForModule,
-    replaceVariables,
-  } = require('../../../core/guild/guildVariables');
+  const { MODULE_VARIABLES, variablesForModule, replaceVariables } = require('../../../core/guild/guildVariables');
 
   const MAX_EMBED_TOTAL = 6000;
   const MAX_HISTORY = 50;
   const DEFAULT_TEMPLATE_IDS = new Set([
-    'welcome_default',
-    'goodbye_default',
-    'leave_default',
-    'dm_welcome_default',
-    'ticket_panel_default',
-    'form_submission_default',
+    'welcome_default', 'goodbye_default', 'leave_default', 'dm_welcome_default',
+    'ticket_panel_default', 'form_submission_default',
   ]);
 
   const DEFAULT_EMBED = Object.freeze({
-    title: '',
-    description: '',
-    color: '#5865F2',
+    title: '', description: '', color: '#5865F2',
     author: { name: '', iconURL: '', url: '' },
-    thumbnailURL: '',
-    imageURL: '',
-    footer: { text: '', iconURL: '' },
-    fields: [],
-    buttons: [],
+    thumbnailURL: '', imageURL: '', footer: { text: '', iconURL: '' }, fields: [], buttons: [],
   });
 
   const DEFAULT_TEMPLATES = Object.freeze({
@@ -193,10 +178,7 @@ let presetStoreApi;
     if (value && typeof value === 'object') Object.values(value).forEach((item) => extractVariables(item, found));
     return found;
   }
-  function variablesForTemplateType(templateType = 'global') {
-    const key = cleanKey(templateType) || 'global';
-    return variablesForModule(key);
-  }
+  function variablesForTemplateType(templateType = 'global') { return variablesForModule(cleanKey(templateType) || 'global'); }
   function normalizeTemplate(input = {}) {
     const key = requiredKey(input.templateId || input.id || input.name, 'Template ID');
     const templateType = requiredKey(input.templateType || input.module || 'global', 'Template type');
@@ -245,29 +227,56 @@ let presetStoreApi;
       const storedTemplate = { ...template, version: Math.max(1, Number(previous?.version || 0) + 1), createdAt: previous?.createdAt || template.createdAt, updatedAt: now() };
       return { ...safeCurrent, templates: { ...existingTemplates, [template.templateId]: storedTemplate }, history: previous ? [...history.slice(-(MAX_HISTORY - 1)), { templateId: template.templateId, version: previous.version || 1, snapshot: clone(previous), archivedAt: now() }] : history.slice(-MAX_HISTORY), updatedAt: now() };
     }, {});
-    const saved = section?.templates?.[template.templateId]; if (!saved) throw new Error('Template save did not persist.'); return normalizeTemplate(saved);
+    const saved = section?.templates?.[template.templateId];
+    if (!saved) throw new Error('Template save did not persist.');
+    return normalizeTemplate(saved);
+  }
+  function getTemplateBindings(guildId, templateId) {
+    const id = assertGuildId(guildId);
+    const key = requiredKey(templateId, 'Template ID');
+    const bindings = asObject(getEmbedSection(id).bindings, {});
+    const usages = [];
+    for (const [moduleName, slots] of Object.entries(bindings)) {
+      for (const [slot, boundId] of Object.entries(asObject(slots, {}))) {
+        if (cleanKey(boundId) === key) usages.push({ module: moduleName, slot, templateId: key });
+      }
+    }
+    return usages;
   }
   function deleteTemplate(guildId, templateId) {
-    const id = assertGuildId(guildId); const key = requiredKey(templateId, 'Template ID'); if (DEFAULT_TEMPLATE_IDS.has(key)) throw new Error('Default templates cannot be deleted.');
+    const id = assertGuildId(guildId);
+    const key = requiredKey(templateId, 'Template ID');
+    if (DEFAULT_TEMPLATE_IDS.has(key)) throw new Error('Default templates cannot be deleted.');
+
+    const usages = getTemplateBindings(id, key);
+    if (usages.length) {
+      const error = new Error(`Template "${key}" is currently in use and cannot be deleted.`);
+      error.code = 'TEMPLATE_IN_USE';
+      error.templateId = key;
+      error.usages = usages;
+      throw error;
+    }
+
     let deleted = false;
     updateGuildSection(id, 'embedStudio', (current = {}) => {
-      const safeCurrent = asObject(current, {}); const templates = { ...asObject(safeCurrent.templates || safeCurrent.presets, {}) }; if (!templates[key]) return safeCurrent;
-      const bindings = {};
-      for (const [moduleName, slots] of Object.entries(asObject(safeCurrent.bindings, {}))) {
-        const filteredSlots = Object.fromEntries(Object.entries(asObject(slots, {})).filter(([, boundId]) => cleanKey(boundId) !== key));
-        if (Object.keys(filteredSlots).length) bindings[moduleName] = filteredSlots;
-      }
-      delete templates[key]; deleted = true; return { ...safeCurrent, templates, bindings, updatedAt: now() };
+      const safeCurrent = asObject(current, {});
+      const templates = { ...asObject(safeCurrent.templates || safeCurrent.presets, {}) };
+      if (!templates[key]) return safeCurrent;
+      delete templates[key];
+      deleted = true;
+      return { ...safeCurrent, templates, updatedAt: now() };
     }, {});
     return deleted;
   }
   function bindTemplate(guildId, moduleKey, slot, templateId) {
-    const id = assertGuildId(guildId); const moduleName = requiredKey(moduleKey, 'Module key'); const slotName = requiredKey(slot, 'Template slot'); const template = getTemplate(id, templateId); if (!template) throw new Error('Template not found.');
+    const id = assertGuildId(guildId); const moduleName = requiredKey(moduleKey, 'Module key'); const slotName = requiredKey(slot, 'Template slot'); const template = getTemplate(id, templateId);
+    if (!template) throw new Error('Template not found.');
     updateGuildSection(id, 'embedStudio', (current = {}) => { const safeCurrent = asObject(current, {}); return { ...safeCurrent, bindings: { ...asObject(safeCurrent.bindings, {}), [moduleName]: { ...asObject(safeCurrent.bindings?.[moduleName], {}), [slotName]: template.templateId } }, updatedAt: now() }; }, {});
     return { module: moduleName, slot: slotName, templateId: template.templateId, template };
   }
   function getBinding(guildId, moduleKey, slot) {
-    const id = assertGuildId(guildId); const moduleName = requiredKey(moduleKey, 'Module key'); const slotName = requiredKey(slot, 'Template slot'); const section = getEmbedSection(id); const templateId = section.bindings?.[moduleName]?.[slotName] || null; return templateId ? getTemplate(id, templateId) : null;
+    const id = assertGuildId(guildId); const moduleName = requiredKey(moduleKey, 'Module key'); const slotName = requiredKey(slot, 'Template slot'); const section = getEmbedSection(id); const templateId = section.bindings?.[moduleName]?.[slotName] || null;
+    return templateId ? getTemplate(id, templateId) : null;
   }
   function renderTemplate(template = {}, variables = {}) {
     const normalized = normalizeTemplate(template);
@@ -283,7 +292,7 @@ let presetStoreApi;
 
   templateManagerApi = {
     DEFAULT_EMBED, DEFAULT_TEMPLATES, MODULE_VARIABLES, cleanKey, normalizeEmbed, normalizeTemplate, extractVariables, variablesForTemplateType,
-    getEmbedSection, listTemplates, getTemplate, saveTemplate, deleteTemplate, bindTemplate, getBinding, replaceVariables, renderTemplate, renderBinding, legacyPresetToTemplate,
+    getEmbedSection, listTemplates, getTemplate, saveTemplate, getTemplateBindings, deleteTemplate, bindTemplate, getBinding, replaceVariables, renderTemplate, renderBinding, legacyPresetToTemplate,
   };
 }
 
@@ -297,14 +306,17 @@ let presetStoreApi;
   function clone(value) { return JSON.parse(JSON.stringify(value || {})); }
   function normalizeGuildId(guildId) { const id = String(guildId || '').trim(); if (!/^\d{16,20}$/.test(id)) throw new Error(`Invalid guild ID: ${guildId}`); return id; }
   function sanitizePresetName(name) {
-    const safeName = String(name || '').trim(); if (!safeName) throw new Error('Preset name is required.');
+    const safeName = String(name || '').trim();
+    if (!safeName) throw new Error('Preset name is required.');
     return safeName.replace(/[<>:"/\\|?*\x00-\x1F]/g, '').slice(0, 50);
   }
   function stripMeta(data = {}) { const cloned = clone(data); delete cloned.updatedAt; return cloned; }
   function loadPresets(guildId, options = {}) {
     const safeGuildId = normalizeGuildId(guildId);
     if (!options.forceReload && presetCache.has(safeGuildId)) return clone(presetCache.get(safeGuildId));
-    const presets = guildManager.getEmbedPresets(safeGuildId) || {}; presetCache.set(safeGuildId, clone(presets)); return clone(presets);
+    const presets = guildManager.getEmbedPresets(safeGuildId) || {};
+    presetCache.set(safeGuildId, clone(presets));
+    return clone(presets);
   }
   function savePresets(guildId, data = {}) {
     const safeGuildId = normalizeGuildId(guildId); const presets = data && typeof data === 'object' && !Array.isArray(data) ? data : {}; const nextData = { ...clone(presets), updatedAt: new Date().toISOString() };
