@@ -31,11 +31,16 @@ function stripsTokenBraces(line) {
     || line.includes('replace(/^\\{|\\}$/g, "")');
 }
 
-function isDelegatorFunction(lines, index) {
-  const window = lines.slice(index, Math.min(lines.length, index + 5)).join('\n');
-  return /guildVariables\.(?:replaceVars|replaceVariables|renderVerificationTemplate)\s*\(/.test(window)
-    || /replaceVariables\s*\(/.test(window)
-    || /buildVariableMap\s*\(/.test(window);
+function importsCentralReplacement(source) {
+  return /require\([^\n)]*core\/guild\/guildVariables[^\n)]*\)/.test(source)
+    && /\b(?:replaceVars|replaceVariables|buildVariableMap)\b/.test(source);
+}
+
+function isDelegatorFunction(source, lines, index) {
+  const window = lines.slice(index, Math.min(lines.length, index + 30)).join('\n');
+  if (/guildVariables\.(?:replaceVars|replaceVariables|renderVerificationTemplate)\s*\(/.test(window)) return true;
+  if (!importsCentralReplacement(source)) return false;
+  return /\b(?:replaceVars|replaceVariables|buildVariableMap)\s*\(/.test(window);
 }
 
 const findings = [];
@@ -69,8 +74,9 @@ for (const file of files) {
       // Converting canonical "{token}" map keys to bare "token" keys is not rendering.
       if (check.name === 'manual placeholder replace renderer' && stripsTokenBraces(line)) continue;
 
-      // Thin module helpers are allowed when they delegate replacement to guildVariables.
-      if (check.name === 'local generic template renderer' && isDelegatorFunction(lines, index)) continue;
+      // Thin module helpers are allowed when they delegate replacement to guildVariables,
+      // including destructured imports such as `const { replaceVars } = require(...)`.
+      if (check.name === 'local generic template renderer' && isDelegatorFunction(source, lines, index)) continue;
 
       findings.push(`${relative(file)}:${index + 1} [${check.name}] ${line.trim()}`);
     }
