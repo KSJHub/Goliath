@@ -9,6 +9,7 @@ const instagram = require('./providers/instagram');
 const x = require('./providers/x');
 
 const PROVIDERS = Object.freeze({ twitch, youtube, tiktok, kick, facebook, instagram, x });
+const DEFAULT_PROVIDER_TIMEOUT_MS = 15000;
 
 const PROVIDER_CAPABILITIES = Object.freeze({
   twitch: { providerClass: 'official_api', alertTypes: ['live', 'vod', 'clip'] },
@@ -67,6 +68,27 @@ function unavailable(platform, reason, status = 'unavailable', providerSource = 
   };
 }
 
+function providerTimeoutMs() {
+  const configured = Number(process.env.SOCIAL_PROVIDER_TIMEOUT_MS || DEFAULT_PROVIDER_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured >= 1000 ? configured : DEFAULT_PROVIDER_TIMEOUT_MS;
+}
+
+async function runProviderCheck(provider, account, platform) {
+  const timeoutMs = providerTimeoutMs();
+  let timer = null;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => provider.check({ ...account, platform })),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${provider.label || platform} provider check timed out after ${timeoutMs}ms.`)), timeoutMs);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function checkAccount(account = {}) {
   const platform = String(account.platform || '').trim().toLowerCase();
   const provider = PROVIDERS[platform];
@@ -83,14 +105,20 @@ async function checkAccount(account = {}) {
   }
 
   try {
-    const checked = await provider.check({ ...account, platform });
+    const checked = await runProviderCheck(provider, account, platform);
     return {
       ...checked,
       platform,
       providerSource: checked?.providerSource || info.providerClass,
     };
   } catch (error) {
-    return unavailable(platform, error?.message || 'Provider check failed.', 'unavailable', info.providerClass);
+    const timedOut = /timed out after \d+ms\.$/.test(String(error?.message || ''));
+    return unavailable(
+      platform,
+      error?.message || 'Provider check failed.',
+      timedOut ? 'timeout' : 'unavailable',
+      info.providerClass,
+    );
   }
 }
 
