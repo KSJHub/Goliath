@@ -89,6 +89,63 @@ function classifyProviderFailure(error) {
   return 'unknown';
 }
 
+function diagnosticHealth(diagnostic = {}) {
+  const status = String(diagnostic.status || '').toLowerCase();
+  const failureCategory = diagnostic.failureCategory || null;
+
+  if (status === 'unsupported' || failureCategory === 'unsupported') {
+    return { level: 'unsupported', healthy: false, actionable: false, label: 'Unsupported' };
+  }
+  if (status === 'configuration_required' || failureCategory === 'configuration') {
+    return { level: 'configuration', healthy: false, actionable: true, label: 'Configuration Required' };
+  }
+  if (failureCategory || ['timeout', 'unavailable', 'error', 'failed'].includes(status)) {
+    return { level: 'error', healthy: false, actionable: true, label: 'Provider Error' };
+  }
+  if (diagnostic.deliveryReady === false) {
+    return { level: 'delivery', healthy: false, actionable: true, label: 'Delivery Setup Required' };
+  }
+  return { level: 'healthy', healthy: true, actionable: false, label: 'Healthy' };
+}
+
+function summarizeDiagnostics(diagnostics = []) {
+  const summary = {
+    total: 0,
+    healthy: 0,
+    live: 0,
+    offline: 0,
+    configuration: 0,
+    providerErrors: 0,
+    deliveryIssues: 0,
+    unsupported: 0,
+    slow: 0,
+    maxLatencyMs: 0,
+    overall: 'healthy',
+  };
+
+  for (const diagnostic of Array.isArray(diagnostics) ? diagnostics : []) {
+    const health = diagnosticHealth(diagnostic);
+    const latencyMs = Math.max(0, Number(diagnostic?.latencyMs || 0));
+    summary.total += 1;
+    summary.maxLatencyMs = Math.max(summary.maxLatencyMs, latencyMs);
+    if (latencyMs >= 5000) summary.slow += 1;
+    if (diagnostic?.isLive === true) summary.live += 1;
+    else if (diagnostic?.isLive === false) summary.offline += 1;
+
+    if (health.level === 'healthy') summary.healthy += 1;
+    else if (health.level === 'configuration') summary.configuration += 1;
+    else if (health.level === 'delivery') summary.deliveryIssues += 1;
+    else if (health.level === 'unsupported') summary.unsupported += 1;
+    else summary.providerErrors += 1;
+  }
+
+  if (summary.providerErrors > 0) summary.overall = 'error';
+  else if (summary.configuration > 0 || summary.deliveryIssues > 0) summary.overall = 'attention';
+  else if (summary.total === 0) summary.overall = 'empty';
+
+  return summary;
+}
+
 async function runProviderCheck(provider, account, platform) {
   const timeoutMs = providerTimeoutMs();
   let timer = null;
@@ -157,8 +214,7 @@ async function diagnoseAccount(account = {}, options = {}) {
   const identity = resolveAccountIdentity(account, checked);
   const deliveryChannelId = options.deliveryChannelId || null;
   const info = providerInfo(account.platform || checked.platform);
-
-  return {
+  const diagnostic = {
     accountId: account.accountId || account.id || null,
     platform: String(account.platform || checked.platform || '').trim().toLowerCase(),
     status: checked.status,
@@ -181,6 +237,7 @@ async function diagnoseAccount(account = {}, options = {}) {
       : null,
     delivered: [],
   };
+  return { ...diagnostic, health: diagnosticHealth(diagnostic) };
 }
 
 module.exports = {
@@ -189,4 +246,6 @@ module.exports = {
   diagnoseAccount,
   resolveAccountIdentity,
   classifyProviderFailure,
+  diagnosticHealth,
+  summarizeDiagnostics,
 };
