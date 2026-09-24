@@ -50,23 +50,19 @@ jobs:
             LATEST_SHA="$(git rev-parse origin/dev)"
             [ "$EXPECTED_SHA" = "$LATEST_SHA" ] || { echo "Superseded before sync; exiting cleanly."; exit 0; }
 
+            # DEV SAFETY CONTRACT:
+            # Never reset, clean, stash, overwrite, or otherwise modify a dirty
+            # DEV worktree. A push may arrive while local development is active.
+            # In that case deployment must stop and leave every local change intact.
             DIRTY_STATUS="$(git status --porcelain -- . ':!src/runtime/')"
             if [ -n "$DIRTY_STATUS" ]; then
-              DIRTY_BACKUP="$DIRTY_BACKUP_ROOT/$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short HEAD)"
-              mkdir -p "$DIRTY_BACKUP"
-              printf '%s\n' "$DIRTY_STATUS" > "$DIRTY_BACKUP/status.txt"
-              git diff --binary -- . ':!src/runtime/' > "$DIRTY_BACKUP/worktree.patch"
-              git diff --cached --binary -- . ':!src/runtime/' > "$DIRTY_BACKUP/index.patch"
-              git ls-files --others --exclude-standard -- . ':!src/runtime/' > "$DIRTY_BACKUP/untracked.txt"
-              while IFS= read -r path; do
-                [ -z "$path" ] && continue
-                mkdir -p "$DIRTY_BACKUP/untracked/$(dirname "$path")"
-                cp -a -- "$path" "$DIRTY_BACKUP/untracked/$path"
-              done < "$DIRTY_BACKUP/untracked.txt"
-              echo "⚠️ Preserved dirty DEV worktree at $DIRTY_BACKUP"
-              cat "$DIRTY_BACKUP/status.txt"
-              git reset --hard HEAD
-              git clean -fd -- . ':!src/runtime/'
+              echo "❌ DEV sync refused: /home/goliath/dev contains local changes."
+              echo "The DEV worktree has been left completely untouched."
+              echo
+              printf '%s\n' "$DIRTY_STATUS"
+              echo
+              echo "Commit or otherwise resolve the local DEV changes, then sync again."
+              exit 1
             fi
 
             rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
