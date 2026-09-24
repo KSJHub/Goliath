@@ -77,7 +77,7 @@ function templateToState(template = {}) {
     showTimestamp: template.showTimestamp !== false,
     fieldLayout: template.fieldLayout || 'auto',
     allowUserPing: template.allowUserPing === true,
-    mediaV2: clone(template.mediaV2 || template.media || { panels: [] }),
+    media: clone(template.media || { panels: [] }),
   };
 }
 
@@ -97,7 +97,7 @@ function prependContent(payload, content) {
  * Canonical delivery path for a saved Embed Studio template.
  *
  * Calling modules own WHEN/WHERE/WHO. Guild Variables owns dynamic data.
- * Embed Studio owns WHAT and this function owns the final Components V2
+ * Embed Studio owns WHAT and this function owns the final component-based
  * rendering contract used to send that template to Discord.
  */
 async function buildTemplateDeliveryPayload(options = {}) {
@@ -125,7 +125,7 @@ async function buildTemplateDeliveryPayload(options = {}) {
     allowUserPing,
     userId,
     ephemeral,
-    media: state.mediaV2 || state.media,
+    media: state.media,
     mediaAlignment: state.mediaAlignment || {},
     interaction,
   });
