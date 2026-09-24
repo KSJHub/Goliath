@@ -94,20 +94,8 @@ function EmojiBankStrip({ theme, emojiBank, onCopied }) {
                 <span style={{ fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis' }}>:{emoji.name}:</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
-                <button
-                  type="button"
-                  onClick={() => copyEmoji(emoji, 'text')}
-                  style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(37,99,235,0.18)', color: theme.cardText, borderRadius: 10, padding: '8px 9px', cursor: 'pointer', fontWeight: 850 }}
-                >
-                  Text
-                </button>
-                <button
-                  type="button"
-                  onClick={() => copyEmoji(emoji, 'component')}
-                  style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(168,85,247,0.16)', color: theme.cardText, borderRadius: 10, padding: '8px 9px', cursor: 'pointer', fontWeight: 850 }}
-                >
-                  Button / Select
-                </button>
+                <button type="button" onClick={() => copyEmoji(emoji, 'text')} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(37,99,235,0.18)', color: theme.cardText, borderRadius: 10, padding: '8px 9px', cursor: 'pointer', fontWeight: 850 }}>Text</button>
+                <button type="button" onClick={() => copyEmoji(emoji, 'component')} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(168,85,247,0.16)', color: theme.cardText, borderRadius: 10, padding: '8px 9px', cursor: 'pointer', fontWeight: 850 }}>Button / Select</button>
               </div>
             </div>
           ))}
@@ -132,11 +120,9 @@ export default function EmbedStudioEnhanced(props) {
 
   const load = useCallback(async () => {
     if (!guildId) return null;
-
     const requestVersion = ++requestVersionRef.current;
     setBusy(true);
     setError('');
-
     try {
       const [result, emojisResult] = await Promise.all([
         api.getEmbedStudio(guildId),
@@ -148,9 +134,7 @@ export default function EmbedStudioEnhanced(props) {
       }
       return result;
     } catch (loadError) {
-      if (requestVersion === requestVersionRef.current) {
-        setError(loadError.message || 'Failed to load shared embed templates.');
-      }
+      if (requestVersion === requestVersionRef.current) setError(loadError.message || 'Failed to load shared embed templates.');
       return null;
     } finally {
       if (requestVersion === requestVersionRef.current) setBusy(false);
@@ -171,15 +155,12 @@ export default function EmbedStudioEnhanced(props) {
       setError('Choose a server first.');
       return null;
     }
-
     if (activeActionRef.current) return null;
-
     const requestVersion = ++requestVersionRef.current;
     activeActionRef.current = actionKey;
     setBusy(true);
     setError('');
     setNotice('');
-
     try {
       const result = await action();
       if (requestVersion === requestVersionRef.current) {
@@ -188,9 +169,7 @@ export default function EmbedStudioEnhanced(props) {
       }
       return result;
     } catch (actionError) {
-      if (requestVersion === requestVersionRef.current) {
-        setError(actionError.message || 'Embed template action failed.');
-      }
+      if (requestVersion === requestVersionRef.current) setError(actionError.message || 'Embed template action failed.');
       return null;
     } finally {
       if (activeActionRef.current === actionKey) activeActionRef.current = null;
@@ -201,11 +180,7 @@ export default function EmbedStudioEnhanced(props) {
   async function saveTemplate(template) {
     try {
       const normalized = normalizeTemplateInput(template);
-      return run(
-        `save:${normalized.templateId}`,
-        () => api.saveEmbedTemplate(guildId, normalized),
-        'Shared embed template saved.'
-      );
+      return run(`save:${normalized.templateId}`, () => api.saveEmbedTemplate(guildId, normalized), 'Shared embed template saved.');
     } catch (validationError) {
       setNotice('');
       setError(validationError.message || 'Template validation failed.');
@@ -218,15 +193,22 @@ export default function EmbedStudioEnhanced(props) {
       const cleanModule = cleanKey(moduleKey, 'Module key');
       const cleanSlot = cleanKey(slot, 'Template slot');
       const cleanTemplateId = cleanKey(templateId, 'Template ID');
-
-      return run(
-        `bind:${cleanModule}:${cleanSlot}`,
-        () => api.bindEmbedTemplate(guildId, cleanModule, cleanSlot, cleanTemplateId),
-        'Template binding saved.'
-      );
+      return run(`bind:${cleanModule}:${cleanSlot}`, () => api.bindEmbedTemplate(guildId, cleanModule, cleanSlot, cleanTemplateId), 'Template binding saved.');
     } catch (validationError) {
       setNotice('');
       setError(validationError.message || 'Template binding validation failed.');
+      return null;
+    }
+  }
+
+  async function unbindTemplate(moduleKey, slot) {
+    try {
+      const cleanModule = cleanKey(moduleKey, 'Module key');
+      const cleanSlot = cleanKey(slot, 'Template slot');
+      return run(`unbind:${cleanModule}:${cleanSlot}`, () => api.unbindEmbedTemplate(guildId, cleanModule, cleanSlot), 'Template binding removed.');
+    } catch (validationError) {
+      setNotice('');
+      setError(validationError.message || 'Template unbind validation failed.');
       return null;
     }
   }
@@ -243,6 +225,7 @@ export default function EmbedStudioEnhanced(props) {
         onReload={load}
         onSaveTemplate={saveTemplate}
         onBindTemplate={bindTemplate}
+        onUnbindTemplate={unbindTemplate}
       />
     </div>
   );
