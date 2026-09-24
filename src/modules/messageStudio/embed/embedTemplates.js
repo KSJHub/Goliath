@@ -274,6 +274,18 @@ let presetStoreApi;
     updateGuildSection(id, 'embedStudio', (current = {}) => { const safeCurrent = asObject(current, {}); return { ...safeCurrent, bindings: { ...asObject(safeCurrent.bindings, {}), [moduleName]: { ...asObject(safeCurrent.bindings?.[moduleName], {}), [slotName]: template.templateId } }, updatedAt: now() }; }, {});
     return { module: moduleName, slot: slotName, templateId: template.templateId, template };
   }
+  function unbindTemplate(guildId, moduleKey, slot) {
+    const id = assertGuildId(guildId); const moduleName = requiredKey(moduleKey, 'Module key'); const slotName = requiredKey(slot, 'Template slot');
+    let templateId = null; let unbound = false;
+    updateGuildSection(id, 'embedStudio', (current = {}) => {
+      const safeCurrent = asObject(current, {}); const bindings = { ...asObject(safeCurrent.bindings, {}) }; const moduleBindings = { ...asObject(bindings[moduleName], {}) };
+      if (!Object.prototype.hasOwnProperty.call(moduleBindings, slotName)) return safeCurrent;
+      templateId = moduleBindings[slotName] || null; delete moduleBindings[slotName]; unbound = true;
+      if (Object.keys(moduleBindings).length) bindings[moduleName] = moduleBindings; else delete bindings[moduleName];
+      return { ...safeCurrent, bindings, updatedAt: now() };
+    }, {});
+    return { module: moduleName, slot: slotName, templateId, unbound };
+  }
   function getBinding(guildId, moduleKey, slot) {
     const id = assertGuildId(guildId); const moduleName = requiredKey(moduleKey, 'Module key'); const slotName = requiredKey(slot, 'Template slot'); const section = getEmbedSection(id); const templateId = section.bindings?.[moduleName]?.[slotName] || null;
     return templateId ? getTemplate(id, templateId) : null;
@@ -292,7 +304,7 @@ let presetStoreApi;
 
   templateManagerApi = {
     DEFAULT_EMBED, DEFAULT_TEMPLATES, MODULE_VARIABLES, cleanKey, normalizeEmbed, normalizeTemplate, extractVariables, variablesForTemplateType,
-    getEmbedSection, listTemplates, getTemplate, saveTemplate, getTemplateBindings, deleteTemplate, bindTemplate, getBinding, replaceVariables, renderTemplate, renderBinding, legacyPresetToTemplate,
+    getEmbedSection, listTemplates, getTemplate, saveTemplate, getTemplateBindings, deleteTemplate, bindTemplate, unbindTemplate, getBinding, replaceVariables, renderTemplate, renderBinding, legacyPresetToTemplate,
   };
 }
 
