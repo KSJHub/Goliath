@@ -66,22 +66,9 @@ async function repairMissingPanelMessages(guild, report, meta = {}) {
 async function repair(guild, meta = {}) {
   const targetGuild = requireGuild(guild);
 
-  verificationStore.updateVerificationSection(
-    targetGuild.id,
-    (current) => ({
-      ...current,
-      settings: verificationStore.normalizeSettings(current.settings || {}),
-      messages: verificationStore.normalizeMessages(current.messages || {}),
-      panelTemplate: verificationStore.normalizePanelTemplate(current.panelTemplate || {}),
-      panels: { ...(current.panels || {}) },
-      updatedAt: new Date().toISOString(),
-    }),
-    {
-      action: 'verification_health_repair',
-      ...meta,
-    }
-  );
-
+  // Health repair is intentionally non-destructive. Runtime reads already
+  // normalize verification configuration; repair should only change state
+  // when it has identified a concrete recoverable fault.
   const before = await buildHealthReport(targetGuild);
   const recovery = await repairMissingPanelMessages(targetGuild, before, meta);
   const after = recovery.repaired ? await buildHealthReport(targetGuild) : before;
