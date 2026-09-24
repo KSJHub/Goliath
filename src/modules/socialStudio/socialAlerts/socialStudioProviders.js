@@ -56,7 +56,7 @@ function providerInfo(platform) {
   };
 }
 
-function unavailable(platform, reason, status = 'unavailable', providerSource = null) {
+function unavailable(platform, reason, status = 'unavailable', providerSource = null, failureCategory = null) {
   const info = providerInfo(platform);
   return {
     platform,
@@ -64,6 +64,7 @@ function unavailable(platform, reason, status = 'unavailable', providerSource = 
     isLive: null,
     checkedAt: new Date().toISOString(),
     reason,
+    failureCategory,
     providerSource: providerSource || info.providerClass || 'unknown',
   };
 }
@@ -71,6 +72,21 @@ function unavailable(platform, reason, status = 'unavailable', providerSource = 
 function providerTimeoutMs() {
   const configured = Number(process.env.SOCIAL_PROVIDER_TIMEOUT_MS || DEFAULT_PROVIDER_TIMEOUT_MS);
   return Number.isFinite(configured) && configured >= 1000 ? configured : DEFAULT_PROVIDER_TIMEOUT_MS;
+}
+
+function classifyProviderFailure(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  const statusCode = Number(error?.status || error?.statusCode || error?.response?.status || 0);
+
+  if (/timed out after \d+ms/.test(message) || message.includes('timeout')) return 'timeout';
+  if (statusCode === 401 || message.includes('unauthorized') || message.includes('invalid token')) return 'authentication';
+  if (statusCode === 403 || message.includes('forbidden') || message.includes('permission')) return 'permission';
+  if (statusCode === 404 || message.includes('not found')) return 'not_found';
+  if (statusCode === 429 || message.includes('rate limit') || message.includes('too many requests')) return 'rate_limited';
+  if (statusCode >= 500 || message.includes('service unavailable') || message.includes('bad gateway')) return 'provider_unavailable';
+  if (message.includes('json') || message.includes('parse') || message.includes('malformed') || message.includes('invalid response')) return 'invalid_response';
+  if (message.includes('network') || message.includes('fetch failed') || message.includes('econn') || message.includes('enotfound')) return 'network';
+  return 'unknown';
 }
 
 async function runProviderCheck(provider, account, platform) {
@@ -94,13 +110,14 @@ async function checkAccount(account = {}) {
   const provider = PROVIDERS[platform];
   const info = providerInfo(platform);
 
-  if (!provider) return unavailable(platform, 'Unsupported social platform.', 'unsupported', 'unsupported');
+  if (!provider) return unavailable(platform, 'Unsupported social platform.', 'unsupported', 'unsupported', 'unsupported');
   if (!info.configured) {
     return unavailable(
       platform,
       `${info.label} provider configuration is required before checks can run.`,
       'configuration_required',
       info.providerClass,
+      'configuration',
     );
   }
 
@@ -109,15 +126,17 @@ async function checkAccount(account = {}) {
     return {
       ...checked,
       platform,
+      failureCategory: checked?.failureCategory || null,
       providerSource: checked?.providerSource || info.providerClass,
     };
   } catch (error) {
-    const timedOut = /timed out after \d+ms\.$/.test(String(error?.message || ''));
+    const failureCategory = classifyProviderFailure(error);
     return unavailable(
       platform,
       error?.message || 'Provider check failed.',
-      timedOut ? 'timeout' : 'unavailable',
+      failureCategory === 'timeout' ? 'timeout' : 'unavailable',
       info.providerClass,
+      failureCategory,
     );
   }
 }
@@ -150,6 +169,7 @@ async function diagnoseAccount(account = {}, options = {}) {
     latencyMs: Date.now() - startedAt,
     ...identity,
     reason: checked.reason || null,
+    failureCategory: checked.failureCategory || null,
     providerSource: checked.providerSource || info.providerClass || null,
     providerClass: info.providerClass,
     configured: info.configured,
@@ -168,4 +188,5 @@ module.exports = {
   checkAccount,
   diagnoseAccount,
   resolveAccountIdentity,
+  classifyProviderFailure,
 };
