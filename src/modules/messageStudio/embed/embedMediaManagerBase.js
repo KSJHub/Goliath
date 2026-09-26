@@ -218,10 +218,10 @@ function installMediaManagerBase(panel, media) {
           galleryIndex == null
         ),
         mediaButton(
-          'embed:media-options',
+          galleryIndex != null ? 'embed:media-options' : 'embed:file-options',
           '⚙️ Media Options',
           ButtonStyle.Secondary,
-          galleryIndex == null
+          galleryIndex == null && fileIndex == null
         ),
         mediaButton(
           'embed:media-upload',
@@ -251,12 +251,6 @@ function installMediaManagerBase(panel, media) {
           `📎 Add File (${panelMedia.files.length}/${media.mediaModel.MAX_FILES})`,
           ButtonStyle.Success,
           panelMedia.files.length >= media.mediaModel.MAX_FILES
-        ),
-        mediaButton(
-          'embed:file-options',
-          '⚙️ Attachment Options',
-          ButtonStyle.Secondary,
-          fileIndex == null
         )
       )
     );
