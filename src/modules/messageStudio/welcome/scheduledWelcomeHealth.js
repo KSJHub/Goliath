@@ -1,6 +1,7 @@
 'use strict';
 
 const { PermissionFlagsBits } = require('discord.js');
+const guildManager = require('../../../core/guild/guildManager');
 const embedTemplateManager = require('../embed/embedTemplates');
 const scheduledWelcome = require('./scheduledWelcome');
 const queue = require('./scheduledWelcomeQueue');
@@ -12,6 +13,7 @@ async function resolveRole(guild, roleId) {
 
 async function buildHealth(guild) {
   const config = scheduledWelcome.getScheduledConfig(guild.id);
+  const parentEnabled = guildManager.isModuleEnabled(guild.id, 'welcome');
   const issues = [];
   const warnings = [];
   const role = await resolveRole(guild, config.queueRoleId);
@@ -22,6 +24,7 @@ async function buildHealth(guild) {
   const me = guild.members?.me || null;
   const permissions = channel && me ? channel.permissionsFor(me) : null;
 
+  if (config.enabled && !parentEnabled) issues.push('Scheduled Welcome is enabled but the parent Welcome module is disabled.');
   if (config.enabled && !config.queueRoleId) issues.push('Scheduled Welcome needs a queue role.');
   if (config.enabled && config.queueRoleId && !role) issues.push(`Queue role ${config.queueRoleId} no longer exists.`);
   if (config.enabled && !config.channelId) issues.push('Scheduled Welcome needs a destination channel.');
@@ -53,6 +56,7 @@ async function buildHealth(guild) {
   return {
     healthy: issues.length === 0,
     enabled: config.enabled,
+    parentEnabled,
     issues,
     warnings,
     queueRoleId: config.queueRoleId,
@@ -77,6 +81,9 @@ async function repair(guild, meta = {}) {
   let config = scheduledWelcome.getScheduledConfig(guild.id);
   const patch = {};
 
+  if (config.enabled && !guildManager.isModuleEnabled(guild.id, 'welcome')) {
+    guildManager.setModuleEnabled(guild.id, 'welcome', true, { ...meta, action: 'scheduled_welcome_repair_parent' });
+  }
   if (config.queueRoleId && !await resolveRole(guild, config.queueRoleId)) patch.queueRoleId = null;
   if (config.channelId && !await scheduledWelcome.resolveChannel(guild, config.channelId)) patch.channelId = null;
   if (config.templateId && !embedTemplateManager.getTemplate(guild.id, config.templateId)) patch.templateId = null;
