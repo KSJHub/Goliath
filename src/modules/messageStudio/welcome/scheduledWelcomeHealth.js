@@ -5,13 +5,16 @@ const embedTemplateManager = require('../embed/embedTemplates');
 const scheduledWelcome = require('./scheduledWelcome');
 const queue = require('./scheduledWelcomeQueue');
 
+async function resolveRole(guild, roleId) {
+  if (!roleId) return null;
+  return guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+}
+
 async function buildHealth(guild) {
   const config = scheduledWelcome.getScheduledConfig(guild.id);
   const issues = [];
   const warnings = [];
-  const role = config.queueRoleId
-    ? guild.roles.cache.get(config.queueRoleId) || await guild.roles.fetch(config.queueRoleId).catch(() => null)
-    : null;
+  const role = await resolveRole(guild, config.queueRoleId);
   const channel = config.channelId ? await scheduledWelcome.resolveChannel(guild, config.channelId) : null;
   const template = config.templateId ? embedTemplateManager.getTemplate(guild.id, config.templateId) : null;
   const templateBinding = scheduledWelcome.getTemplateBinding(guild.id);
@@ -74,7 +77,7 @@ async function repair(guild, meta = {}) {
   let config = scheduledWelcome.getScheduledConfig(guild.id);
   const patch = {};
 
-  if (config.queueRoleId && !guild.roles.cache.has(config.queueRoleId)) patch.queueRoleId = null;
+  if (config.queueRoleId && !await resolveRole(guild, config.queueRoleId)) patch.queueRoleId = null;
   if (config.channelId && !await scheduledWelcome.resolveChannel(guild, config.channelId)) patch.channelId = null;
   if (config.templateId && !embedTemplateManager.getTemplate(guild.id, config.templateId)) patch.templateId = null;
 
