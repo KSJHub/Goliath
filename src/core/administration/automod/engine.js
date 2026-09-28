@@ -193,7 +193,6 @@ async function applyPunishmentEngine(input = {}, options = {}) {
     if (punishment === 'dm') continue;
     if (shouldBlockDestructiveAction(context, punishment)) {
       console.log(`[TEST MODE] ${punishment} blocked for protected owner ${context.user?.tag || context.member?.id || 'unknown'} in guild ${context.guild?.id || 'unknown'}`);
-      result.applied.push(punishment);
       result.blockedActions.push(punishment);
       continue;
     }
