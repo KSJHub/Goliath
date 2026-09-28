@@ -9,6 +9,7 @@ const {
   EmbedBuilder,
   StringSelectMenuBuilder,
 } = require('discord.js');
+const { goliathNavigation } = require('../../../components/goliathNavigation');
 const store = require('./socialStudioStore');
 const { ALERT_TYPES } = require('./socialStudioTemplates');
 
@@ -69,7 +70,29 @@ function channelsHubPayload(interaction) {
     `**👤 Creator Overrides** • ${creatorCount} configured`, `**📱 Platform Overrides** • ${platformCount} configured`, '',
     '**Routing Priority**', '1. Creator + Platform override', '2. Creator/User override', '3. Platform override', '4. Dedicated content-type channel', '5. Default channel',
   ].join('\n');
-  const components = [row(button(`${P}channel:default:open`, '🏠 Default Channels', ButtonStyle.Primary), button(`${P}channel:creator:open`, '👤 Creator Overrides', ButtonStyle.Primary), button(`${P}channel:platform:open`, '📱 Platform Overrides', ButtonStyle.Primary)), row(button(`${P}main`, '⬅️ Back'), button(`${P}settings`, '⚙️ Settings'))];
+  const components = [
+    row(
+      button(
+        `${P}channel:default:open`,
+        '🏠 Default Channels',
+        ButtonStyle.Primary,
+      ),
+      button(
+        `${P}channel:creator:open`,
+        '👤 Creator Overrides',
+        ButtonStyle.Primary,
+      ),
+      button(
+        `${P}channel:platform:open`,
+        '📱 Platform Overrides',
+        ButtonStyle.Primary,
+      ),
+    ),
+    goliathNavigation(
+      `${P}settings`,
+      `${P}settings`,
+    ),
+  ];
   return { embeds: [embed(config, '📂 Channels', description, interaction)], components };
 }
 function defaultChannelsPayload(interaction) {
@@ -78,27 +101,181 @@ function defaultChannelsPayload(interaction) {
   const description = ['Configure the server Default Channel and the existing dedicated content-type channels.', '', `**🏠 Default Channel:** ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : 'Not set'}`, '', '**Dedicated Content Channels**', routeSummary, '', 'These routes remain active alongside Creator and Platform Overrides.'].join('\n');
   const components = [routeTypeSelect(routeType), channelSelect(`${P}channel:route`, selected, routeType === 'default' ? 'Choose the default channel' : `Choose where ${ALERT_LABEL[routeType]} posts go`)];
   if (routeType !== 'default' && selected) components.push(row(button(`${P}channel:default`, '🏠 Use Default Channel')));
-  components.push(row(button(`${P}channels`, '⬅️ Channels'), button(`${P}main`, '🏠 Social Studio')));
+  components.push(goliathNavigation(`${P}channels`, `${P}settings`));
   return { embeds: [embed(config, '🏠 Default Channels', description, interaction)], components };
 }
 function creatorChannelsPayload(interaction) {
-  const config = store.getConfig(interaction.guildId); const state = getSession(interaction); const creatorMenu = creatorSelect(config, state); setSession(interaction, { creatorPage: creatorMenu.page }); const selected = config.creators?.[state.creatorId] || null;
-  const overridden = sortedCreators(config).filter((creator) => creator.alertChannelId || Object.values(cloneObject(creator.platformChannels)).some(Boolean));
-  const summary = overridden.length ? overridden.slice(0, 12).map((creator) => { const platformRoutes = Object.values(cloneObject(creator.platformChannels)).filter(Boolean).length; const base = creator.alertChannelId ? `<#${creator.alertChannelId}>` : 'Server routing'; return `• **${creator.displayName || creator.creatorId}** → ${base}${platformRoutes ? ` • ${platformRoutes} platform override${platformRoutes === 1 ? '' : 's'}` : ''}`; }).join('\n') + (overridden.length > 12 ? `\n• …and ${overridden.length - 12} more` : '') : 'No creator-specific channels are configured.';
-  const description = ['Send every automatic Social Studio post for a selected creator to one Discord channel, with optional platform-specific routes.', '', '**How it works**', 'The main creator override applies to all social accounts linked to that Creator Profile.', 'Creator Platform Overrides can route selected platforms somewhere even more specific.', 'If neither applies, posts continue through server Platform Overrides, Dedicated Content Channels, then the Default Channel.', '', '**Current Overrides**', summary, '', selected ? `**Selected Creator:** ${selected.displayName || selected.creatorId}` : '**Selected Creator:** None', selected ? `**Automatic Post Channel:** ${selected.alertChannelId ? `<#${selected.alertChannelId}>` : 'Uses server routing'}` : 'Choose a creator below.'].join('\n');
+  const config = store.getConfig(interaction.guildId);
+  const state = getSession(interaction);
+  const creators = sortedCreators(config);
+
+  const selected =
+    creators.find(
+      (creator) => creator.creatorId === state.creatorId,
+    ) || null;
+
+  const overridden = creators.filter(
+    (creator) =>
+      creator.alertChannelId ||
+      Object.values(
+        cloneObject(creator.platformChannels),
+      ).some(Boolean),
+  );
+
+  const summary = overridden.length
+    ? overridden
+        .slice(0, 12)
+        .map((creator) => {
+          const platformRoutes = Object.values(
+            cloneObject(creator.platformChannels),
+          ).filter(Boolean).length;
+
+          const base = creator.alertChannelId
+            ? `<#${creator.alertChannelId}>`
+            : 'Server routing';
+
+          return (
+            `• **${creator.displayName || creator.creatorId}** → ` +
+            `${base}` +
+            (
+              platformRoutes
+                ? ` • ${platformRoutes} platform override${
+                    platformRoutes === 1 ? '' : 's'
+                  }`
+                : ''
+            )
+          );
+        })
+        .join('\n') +
+      (
+        overridden.length > 12
+          ? `\n• …and ${overridden.length - 12} more`
+          : ''
+      )
+    : 'No creator-specific channels are configured.';
+
+  const description = creators.length
+    ? [
+        'Send every automatic Social Studio post for a selected creator to one Discord channel, with optional platform-specific routes.',
+        '',
+        '**How it works**',
+        'The main creator override applies to all social accounts linked to that Creator Profile.',
+        'Creator Platform Overrides can route selected platforms somewhere even more specific.',
+        'If neither applies, posts continue through server Platform Overrides, Dedicated Content Channels, then the Default Channel.',
+        '',
+        '**Current Overrides**',
+        summary,
+        '',
+        selected
+          ? `**Selected Creator:** ${
+              selected.displayName || selected.creatorId
+            }`
+          : '**Selected Creator:** None',
+        selected
+          ? `**Automatic Post Channel:** ${
+              selected.alertChannelId
+                ? `<#${selected.alertChannelId}>`
+                : 'Uses server routing'
+            }`
+          : 'Choose a creator below.',
+      ].join('\n')
+    : [
+        '**No Creator Profiles exist yet.**',
+        '',
+        'Creator Overrides are configured against Creator Profiles.',
+        'Create a creator first, then return here to choose where that creator’s automatic Social Studio posts should be sent.',
+        '',
+        '**Current Overrides**',
+        'No creator-specific channels are configured.',
+      ].join('\n');
+
   const components = [];
-  if (creatorMenu.row) components.push(creatorMenu.row);
-  if (selected) {
-    components.push(channelSelect(`${P}channel:creator:route`, selected.alertChannelId || null, `Choose ${String(selected.displayName || 'creator').slice(0, 70)}'s automatic post channel`));
-    components.push(row(
-      button(`${P}channel:creator:clear`, '↩️ Use Server Routing', ButtonStyle.Secondary, !selected.alertChannelId),
-      button(`${P}channel:creator:platform:open`, '📱 Platform Overrides', ButtonStyle.Primary),
-    ));
+
+  if (creators.length) {
+    const creatorMenu = creatorSelect(config, state);
+
+    if (creatorMenu.row) {
+      components.push(creatorMenu.row);
+    }
+
+    if (selected) {
+      components.push(
+        channelSelect(
+          `${P}channel:creator:route`,
+          selected.alertChannelId || null,
+          `Choose ${String(
+            selected.displayName || 'creator',
+          ).slice(0, 70)}'s automatic post channel`,
+        ),
+      );
+
+      components.push(
+        row(
+          button(
+            `${P}channel:creator:clear`,
+            '↩️ Use Server Routing',
+            ButtonStyle.Secondary,
+            !selected.alertChannelId,
+          ),
+          button(
+            `${P}channel:creator:platform:open`,
+            '📱 Platform Overrides',
+            ButtonStyle.Primary,
+          ),
+        ),
+      );
+    }
+
+    if (creatorMenu.pages > 1) {
+      components.push(
+        row(
+          button(
+            `${P}channel:creator:prev`,
+            '⬅️ Previous',
+            ButtonStyle.Secondary,
+            creatorMenu.page <= 0,
+          ),
+          button(
+            `${P}channel:creator:next`,
+            'Next ➡️',
+            ButtonStyle.Secondary,
+            creatorMenu.page >= creatorMenu.pages - 1,
+          ),
+        ),
+      );
+    }
+  } else {
+    components.push(
+      row(
+        button(
+          `${P}creators`,
+          '👥 Creators',
+          ButtonStyle.Primary,
+        ),
+      ),
+    );
   }
-  if (creatorMenu.pages > 1) components.push(row(button(`${P}channel:creator:prev`, '⬅️ Previous', ButtonStyle.Secondary, creatorMenu.page <= 0), button(`${P}channel:creator:next`, 'Next ➡️', ButtonStyle.Secondary, creatorMenu.page >= creatorMenu.pages - 1)));
-  components.push(row(button(`${P}channels`, '⬅️ Channels'), button(`${P}main`, '🏠 Social Studio')));
-  return { embeds: [embed(config, '👤 Creator Channel Overrides', description, interaction)], components };
+
+  components.push(
+    goliathNavigation(
+      `${P}channels`,
+      `${P}settings`,
+    ),
+  );
+
+  return {
+    embeds: [
+      embed(
+        config,
+        '👤 Creator Channel Overrides',
+        description,
+        interaction,
+      ),
+    ],
+    components,
+  };
 }
+
 function creatorPlatformChannelsPayload(interaction) {
   const config = store.getConfig(interaction.guildId);
   const state = getSession(interaction);
@@ -120,7 +297,7 @@ function creatorPlatformChannelsPayload(interaction) {
     platformSelect(selectedPlatform, `${P}channel:creator:platform:select`, 'Route this creator’s'),
     channelSelect(`${P}channel:creator:platform:route`, selectedChannel, `Choose ${creator.displayName || 'creator'} ${PLATFORM_LABEL[selectedPlatform]} channel`),
     row(button(`${P}channel:creator:platform:clear`, '↩️ Use Creator / Server Routing', ButtonStyle.Secondary, !selectedChannel)),
-    row(button(`${P}channel:creator:back`, '⬅️ Creator Overrides'), button(`${P}main`, '🏠 Social Studio')),
+    row(button(`${P}channel:creator:back`, '⬅️ Back')),
   ];
   return { embeds: [embed(config, '👤📱 Creator Platform Overrides', description, interaction)], components };
 }
@@ -128,7 +305,7 @@ function platformChannelsPayload(interaction) {
   const config = store.getConfig(interaction.guildId); const state = getSession(interaction); const selectedPlatform = PLATFORMS.includes(state.platform) ? state.platform : 'youtube'; const selectedChannel = config.platformChannels?.[selectedPlatform] || null;
   const summary = PLATFORMS.map((platform) => `${PLATFORM_EMOJI[platform]} **${PLATFORM_LABEL[platform]}:** ${config.platformChannels?.[platform] ? `<#${config.platformChannels[platform]}>` : 'Server routing'}`).join('\n');
   const description = ['Route all automatic posts from a social platform to a dedicated Discord channel.', '', 'Platform Overrides work alongside Creator, Content-Type and Default routing. Creator/User overrides remain higher priority.', '', '**Current Platform Overrides**', summary, '', `**Selected Platform:** ${PLATFORM_LABEL[selectedPlatform]}`, `**Automatic Post Channel:** ${selectedChannel ? `<#${selectedChannel}>` : 'Uses server routing'}`].join('\n');
-  const components = [platformSelect(selectedPlatform), channelSelect(`${P}channel:platform:route`, selectedChannel, `Choose ${PLATFORM_LABEL[selectedPlatform]} destination channel`), row(button(`${P}channel:platform:clear`, '↩️ Use Server Routing', ButtonStyle.Secondary, !selectedChannel)), row(button(`${P}channels`, '⬅️ Channels'), button(`${P}main`, '🏠 Social Studio'))];
+  const components = [platformSelect(selectedPlatform), channelSelect(`${P}channel:platform:route`, selectedChannel, `Choose ${PLATFORM_LABEL[selectedPlatform]} destination channel`), row(button(`${P}channel:platform:clear`, '↩️ Use Server Routing', ButtonStyle.Secondary, !selectedChannel)), goliathNavigation(`${P}channels`, `${P}settings`)];
   return { embeds: [embed(config, '📱 Platform Channel Overrides', description, interaction)], components };
 }
 async function update(interaction, payload) { if (interaction.deferred || interaction.replied) await interaction.editReply(payload); else await interaction.update(payload); return true; }

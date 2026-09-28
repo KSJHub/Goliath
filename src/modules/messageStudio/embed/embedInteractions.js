@@ -2,6 +2,7 @@
 
 const {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
@@ -199,6 +200,84 @@ function manualRow(value) {
   const row = Number(value);
   return Number.isInteger(row) && row >= 0 && row < panel.MAX_DEPLOYED_BUTTON_ROWS ? row : null;
 }
+function safePresetExportFilename(name) {
+  const safe = String(name || 'embed-preset')
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+
+  return `${safe || 'embed-preset'}.json`;
+}
+
+async function fetchPresetImportJson(attachment) {
+  if (!attachment?.url) {
+    throw new Error('The uploaded preset file could not be read.');
+  }
+
+  const filename = String(attachment.name || '').toLowerCase();
+  const contentType = String(attachment.contentType || '').toLowerCase();
+
+  if (
+    filename &&
+    !filename.endsWith('.json') &&
+    contentType &&
+    !contentType.includes('json')
+  ) {
+    throw new Error('Upload a JSON preset file.');
+  }
+
+  const response = await fetch(attachment.url);
+
+  if (!response.ok) {
+    throw new Error(`Could not download the uploaded preset file (${response.status}).`);
+  }
+
+  const text = await response.text();
+
+  if (!text.trim()) {
+    throw new Error('The uploaded preset file is empty.');
+  }
+
+  if (Buffer.byteLength(text, 'utf8') > 1024 * 1024) {
+    throw new Error('Preset imports are limited to 1 MB.');
+  }
+
+  let parsed;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error('The uploaded file is not valid JSON.');
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('The uploaded JSON does not contain a valid preset object.');
+  }
+
+  return parsed;
+}
+
+function normalizePortablePresetDocument(document) {
+  const wrapped =
+    document?.format === 'goliath-embed-preset' &&
+    document?.preset &&
+    typeof document.preset === 'object' &&
+    !Array.isArray(document.preset);
+
+  const preset = wrapped ? document.preset : document;
+
+  const rawName =
+    wrapped
+      ? document.name || preset.name
+      : preset.name;
+
+  return {
+    name: cleanPresetName(rawName),
+    preset,
+  };
+}
+
 function presetInteractionKey(interaction) {
   return `${interaction?.guildId || interaction?.guild?.id || 'global'}:${interaction?.user?.id || 'system'}`;
 }
@@ -1007,6 +1086,161 @@ async function handleCoreInteraction(i) {
   const customId = String(i.customId || '');
   const state = panel.getSession(i);
 
+  if (customId === 'embed:settings' && i.isButton?.()) {
+    await i.update(panel.buildSettingsPanel(i));
+    return true;
+  }
+
+  if (customId === 'embed:settings-import' && i.isButton?.()) {
+    await i.showModal(panel.settingsImportModal());
+    return true;
+  }
+
+  if (customId === 'embed:settings-export' && i.isButton?.()) {
+    const guildId = i.guildId || i.guild?.id || null;
+
+    if (!guildId) {
+      await i.reply({
+        content: 'Preset export requires a server.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const current = panel.getSession(i);
+    const name = cleanPresetName(current?.selectedPreset);
+    const preset = name
+      ? guildManager.getEmbedPreset?.(guildId, name)
+      : null;
+
+    if (!name || !preset || name.startsWith('auto-')) {
+      await i.reply({
+        content: 'Select a saved preset in Preset Manager before exporting it.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const portable = {
+      format: 'goliath-embed-preset',
+      version: 1,
+      name,
+      exportedAt: new Date().toISOString(),
+      preset,
+    };
+
+    const attachment = new AttachmentBuilder(
+      Buffer.from(JSON.stringify(portable, null, 2), 'utf8'),
+      { name: safePresetExportFilename(name) }
+    );
+
+    await i.reply({
+      content: `📤 Exported preset **${name}**.`,
+      files: [attachment],
+      flags: MessageFlags.Ephemeral,
+    });
+
+    return true;
+  }
+
+  if (
+    i.isModalSubmit?.() &&
+    customId === 'embed:settings-import-save'
+  ) {
+    const guildId = i.guildId || i.guild?.id || null;
+
+    if (!guildId) {
+      await i.reply({
+        content: 'Preset import requires a server.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const uploaded = i.fields.getUploadedFiles('preset_file', true);
+    const attachment = [...(uploaded?.values?.() || [])][0];
+
+    if (!attachment) {
+      await i.reply({
+        content: 'Upload a preset JSON file.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    try {
+      const document = await fetchPresetImportJson(attachment);
+      const imported = normalizePortablePresetDocument(document);
+      const name = imported.name;
+
+      if (!name) {
+        await i.reply({
+          content: 'The imported preset does not contain a valid preset name.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+
+      if (name.startsWith('auto-')) {
+        await i.reply({
+          content: 'Preset names beginning with "auto-" are reserved by Goliath.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+
+      if (guildManager.getEmbedPreset?.(guildId, name)) {
+        await i.reply({
+          content: `A preset named "${name}" already exists. Rename or delete the existing preset before importing this file.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+
+      const saved = guildManager.saveEmbedPreset?.(
+        guildId,
+        name,
+        imported.preset,
+        i.guild
+      );
+
+      if (!saved) {
+        await i.reply({
+          content: `Could not import preset "${name}".`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+
+      const current = panel.getSession(i);
+
+      panel.saveSession(i, {
+        ...current,
+        selectedPreset: name,
+      });
+
+      await i.reply({
+        content: `✅ Imported preset **${name}** successfully.`,
+        ...panel.buildSettingsPanel(i),
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return true;
+    } catch (error) {
+      console.warn(
+        '[Embed Presets] Import failed:',
+        error?.message || error
+      );
+
+      await i.reply({
+        content: `❌ Preset import failed: ${error?.message || 'Unknown error.'}`,
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+  }
+
   if (customId === 'embed:edit-images' && i.isButton?.()) return updateMediaPanel(i);
   if (i.isStringSelectMenu?.() && customId === 'embed:media-gallery-select') { panel.saveSession(i, { ...state, selectedMediaIndex: Number(i.values[0]) }); return updateMediaPanel(i); }
   if (i.isStringSelectMenu?.() && customId === 'embed:media-file-select') { panel.saveSession(i, { ...state, selectedFileIndex: Number(i.values[0]) }); return updateMediaPanel(i); }
@@ -1017,7 +1251,21 @@ async function handleCoreInteraction(i) {
     const galleryIndex = panelMedia.gallery.length ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1)) : null;
     const requestedFileIndex = Number.isInteger(state.selectedFileIndex) ? state.selectedFileIndex : null;
     const fileIndex = panelMedia.files.length ? Math.max(0, Math.min(requestedFileIndex ?? 0, panelMedia.files.length - 1)) : null;
-    if (customId === 'embed:media-upload') { await i.showModal(panel.mediaUploadModal()); return true; }
+    if (customId === 'embed:media-add') {
+      if (
+        panelMedia.gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS &&
+        panelMedia.files.length >= panel.mediaModel.MAX_FILES
+      ) {
+        await i.reply({
+          content: 'Both the gallery media and attached file limits have been reached.',
+          flags: 64,
+        });
+        return true;
+      }
+
+      await i.showModal(panel.mediaAddModal());
+      return true;
+    }
     if (customId === 'embed:media-options') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) { await i.reply({ content: 'Select a gallery item first.', flags: 64 }); return true; } return updateMediaOptions(i); }
     if (customId === 'embed:media-options-back') return updateMediaPanel(i);
     if (customId.startsWith('embed:media-type:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const type = customId.split(':').pop(); if (!['auto', 'image', 'video'].includes(type)) return true; const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], type }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaOptions(i); }
@@ -1051,7 +1299,35 @@ async function handleCoreInteraction(i) {
     if (customId === 'embed:file-options-back') return updateMediaPanel(i);
     if (customId.startsWith('embed:file-spoiler:')) { if (fileIndex == null || !panelMedia.files[fileIndex]) return updateMediaPanel(i); const files = [...panelMedia.files]; files[fileIndex] = panel.mediaModel.normalizeFile({ ...files[fileIndex], spoiler: customId.endsWith(':on') }); saveMediaState(i, state, { ...panelMedia, files }, { selectedFileIndex: fileIndex }); return updateFileOptions(i); }
     if (customId === 'embed:media-gallery-add') { if (panelMedia.gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_GALLERY_ITEMS} gallery items reached.`, flags: 64 }); return true; } await i.showModal(panel.galleryItemModal(state)); return true; }
-    if (customId === 'embed:media-gallery-edit') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) { await i.reply({ content: 'Select a gallery item first.', flags: 64 }); return true; } await i.showModal(panel.galleryItemModal(state, galleryIndex)); return true; }
+    if (customId === 'embed:media-gallery-edit') {
+      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) {
+        await i.reply({
+          content: 'Select a gallery item first.',
+          flags: 64
+        });
+        return true;
+      }
+
+      await i.update(panel.buildEditMediaPanel(i));
+      return true;
+    }
+
+    if (customId === 'embed:media-edit-details') {
+      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) {
+        await i.reply({
+          content: 'Select a gallery item first.',
+          flags: 64
+        });
+        return true;
+      }
+
+      await i.showModal(panel.galleryItemModal(state, galleryIndex));
+      return true;
+    }
+
+    if (customId === 'embed:media-edit-back') {
+      return updateMediaPanel(i);
+    }
     if (customId === 'embed:media-gallery-remove') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; gallery.splice(galleryIndex, 1); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: null }); return updateMediaPanel(i); }
     if (customId === 'embed:media-gallery-up' || customId === 'embed:media-gallery-down') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const target = galleryIndex + (customId.endsWith('up') ? -1 : 1); if (target < 0 || target >= panelMedia.gallery.length) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; [gallery[galleryIndex], gallery[target]] = [gallery[target], gallery[galleryIndex]]; saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: target }); return updateMediaPanel(i); }
     if (customId === 'embed:media-file-add') { if (panelMedia.files.length >= panel.mediaModel.MAX_FILES) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_FILES} files reached.`, flags: 64 }); return true; } await i.showModal(panel.fileItemModal(state)); return true; }
@@ -1059,14 +1335,137 @@ async function handleCoreInteraction(i) {
     if (customId === 'embed:media-file-remove') { if (fileIndex == null || !panelMedia.files[fileIndex]) return updateMediaPanel(i); const files = [...panelMedia.files]; files.splice(fileIndex, 1); saveMediaState(i, state, { ...panelMedia, files }, { selectedFileIndex: null }); return updateMediaPanel(i); }
   }
 
-  if (i.isModalSubmit?.() && customId === 'embed:media-upload-save') {
-    const uploaded = i.fields.getUploadedFiles('media_files', true); const attachments = [...(uploaded?.values?.() || [])];
-    if (!attachments.length) { await i.reply({ content: 'No files were uploaded.', flags: 64 }); return true; }
-    const panelMedia = panel.getPanelMedia(state), gallery = [...panelMedia.gallery], files = [...panelMedia.files]; let addedGallery = 0, addedFiles = 0, skipped = 0;
-    for (const attachment of attachments) { await cacheUploadedAttachment(attachment); const kind = uploadType(attachment); if ((kind === 'image' || kind === 'video') && gallery.length < panel.mediaModel.MAX_GALLERY_ITEMS) { gallery.push(panel.mediaModel.normalizeGalleryItem({ source: attachment.url, alt: attachment.description || attachment.name || '', type: kind, spoiler: Boolean(attachment.spoiler), placement: 'below' })); addedGallery += 1; } else if (files.length < panel.mediaModel.MAX_FILES) { files.push(panel.mediaModel.normalizeFile({ source: attachment.url, name: attachment.name || '', description: attachment.description || '', spoiler: Boolean(attachment.spoiler) })); addedFiles += 1; } else skipped += 1; }
-    saveMediaState(i, state, { ...panelMedia, gallery, files }, { selectedMediaIndex: addedGallery ? gallery.length - 1 : state.selectedMediaIndex, selectedFileIndex: addedFiles ? files.length - 1 : state.selectedFileIndex });
-    await i.reply({ content: `✅ Added ${addedGallery} gallery media item(s) and ${addedFiles} attached file(s).${skipped ? ` ${skipped} item(s) were skipped because the panel limits were reached.` : ''}`, ...panel.buildMediaManagerPanel(i, who(i)), flags: 64 }); return true;
+  if (i.isModalSubmit?.() && customId === 'embed:media-add-save') {
+    const panelMedia = panel.getPanelMedia(state);
+    const gallery = [...panelMedia.gallery];
+    const files = [...panelMedia.files];
+
+    const source = String(i.fields.getTextInputValue('source') || '').trim();
+    const displayName = String(i.fields.getTextInputValue('display_name') || '').trim();
+    const description = String(i.fields.getTextInputValue('description') || '').trim();
+
+    const uploaded = i.fields.getUploadedFiles('media_files', false);
+    const attachments = [...(uploaded?.values?.() || [])];
+
+    if (!source && !attachments.length) {
+      await i.reply({
+        content: '⚠️ Add a Source URL / Variable or upload at least one file.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    let addedGallery = 0;
+    let addedFiles = 0;
+    let skipped = 0;
+
+    /*
+     * URL/variable sources may not be resolvable at edit time.
+     * Preserve Embed Studio's auto media handling for dynamic sources.
+     * Uploaded Discord attachments provide MIME information immediately
+     * and can therefore be classified here.
+     */
+    if (source) {
+      if (gallery.length < panel.mediaModel.MAX_GALLERY_ITEMS) {
+        gallery.push(
+          panel.mediaModel.normalizeGalleryItem({
+            source,
+            alt: displayName || description,
+            type: 'auto',
+            spoiler: false,
+            placement: 'below',
+          })
+        );
+        addedGallery += 1;
+      } else if (files.length < panel.mediaModel.MAX_FILES) {
+        files.push(
+          panel.mediaModel.normalizeFile({
+            source,
+            name: displayName,
+            description,
+            spoiler: false,
+          })
+        );
+        addedFiles += 1;
+      } else {
+        skipped += 1;
+      }
+    }
+
+    for (const attachment of attachments) {
+      await cacheUploadedAttachment(attachment);
+
+      const kind = uploadType(attachment);
+
+      if (
+        (kind === 'image' || kind === 'video') &&
+        gallery.length < panel.mediaModel.MAX_GALLERY_ITEMS
+      ) {
+        gallery.push(
+          panel.mediaModel.normalizeGalleryItem({
+            source: attachment.url,
+            alt: displayName || attachment.description || attachment.name || description,
+            type: kind,
+            spoiler: Boolean(attachment.spoiler),
+            placement: 'below',
+          })
+        );
+
+        addedGallery += 1;
+        continue;
+      }
+
+      if (files.length < panel.mediaModel.MAX_FILES) {
+        files.push(
+          panel.mediaModel.normalizeFile({
+            source: attachment.url,
+            name: displayName || attachment.name || '',
+            description,
+            spoiler: Boolean(attachment.spoiler),
+          })
+        );
+
+        addedFiles += 1;
+      } else {
+        skipped += 1;
+      }
+    }
+
+    if (!addedGallery && !addedFiles) {
+      await i.reply({
+        content: '⚠️ Nothing could be added because the applicable media/file limits have been reached.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    saveMediaState(
+      i,
+      state,
+      { ...panelMedia, gallery, files },
+      {
+        selectedMediaIndex: addedGallery
+          ? gallery.length - 1
+          : state.selectedMediaIndex,
+        selectedFileIndex: addedFiles
+          ? files.length - 1
+          : state.selectedFileIndex,
+      }
+    );
+
+    await i.reply({
+      content:
+        `✅ Added ${addedGallery} gallery media item(s) and ${addedFiles} attached file(s).` +
+        (skipped
+          ? ` ${skipped} item(s) were skipped because the panel limits were reached.`
+          : ''),
+      ...panel.buildMediaManagerPanel(i, who(i)),
+      flags: 64,
+    });
+
+    return true;
   }
+
   if (i.isModalSubmit?.() && customId.startsWith('embed:media-thumbnail-save:')) { const panelMedia = panel.getPanelMedia(state); panelMedia.thumbnail = panel.mediaModel.normalizeThumbnail({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt') }); saveMediaState(i, state, panelMedia); return replyMediaPanel(i); }
   if (i.isModalSubmit?.() && (customId === 'embed:media-gallery-save-new' || customId.startsWith('embed:media-gallery-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-gallery-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.gallery[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeGalleryItem({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt'), type: existing.type || 'auto', spoiler: existing.spoiler === true, placement: existing.placement || 'below' }); if (!entry.source) { await i.reply({ content: 'A media URL or variable is required.', flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; let selectedMediaIndex; if (editingIndex == null) { if (gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: 'Maximum gallery item limit reached.', flags: 64 }); return true; } gallery.push(entry); selectedMediaIndex = gallery.length - 1; } else { gallery[editingIndex] = entry; selectedMediaIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex }); return replyMediaPanel(i); }
   if (i.isModalSubmit?.() && (customId === 'embed:media-file-save-new' || customId.startsWith('embed:media-file-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-file-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.files[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeFile({ source: i.fields.getTextInputValue('source'), name: i.fields.getTextInputValue('name'), description: i.fields.getTextInputValue('description'), spoiler: existing.spoiler === true }); if (!entry.source) { await i.reply({ content: 'A file URL or variable is required.', flags: 64 }); return true; } const files = [...panelMedia.files]; let selectedFileIndex; if (editingIndex == null) { if (files.length >= panel.mediaModel.MAX_FILES) { await i.reply({ content: 'Maximum file limit reached.', flags: 64 }); return true; } files.push(entry); selectedFileIndex = files.length - 1; } else { files[editingIndex] = entry; selectedFileIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, files }, { selectedFileIndex }); return replyMediaPanel(i); }
@@ -1159,7 +1558,7 @@ async function handleLegacyInteraction(i) {
     if (customId === 'embed:panel-colour') { await i.update(panel.buildPanelColourPanel(i, name)); return true; }
     if (customId === 'embed:presets') { await i.update(panel.buildPresetsPanel(i, name)); return true; }
     if (customId === 'embed:panels') { await i.update(panel.buildPanelsPanel(i, name)); return true; }
-    if (customId === 'embed:helpers') { await i.update(panel.buildHelpersPanel(name)); return true; }
+    if (customId === 'embed:helpers') { await i.update(panel.buildHelpersPanel(i)); return true; }
     if (customId === 'embed:edit-content') return updateContent(i);
     if (customId === 'embed:content-back') return updateContent(i);
     if (customId === 'embed:content-edit-text') { await i.showModal(panel.contentModal(state)); return true; }

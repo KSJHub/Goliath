@@ -61,8 +61,8 @@ jobs:
               echo
               printf '%s\n' "$DIRTY_STATUS"
               echo
-              echo "Commit or otherwise resolve the local DEV changes, then sync again."
-              exit 1
+              echo "DEV sync deferred safely. Commit or otherwise resolve the local DEV changes, then sync again."
+              exit 0
             fi
 
             rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"

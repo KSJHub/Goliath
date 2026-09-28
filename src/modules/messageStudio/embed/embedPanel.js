@@ -767,8 +767,18 @@ function buildEditorPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("admin:modules")
-          .setLabel("Modules")
+          .setLabel("Back")
           .setEmoji("⬅️")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:settings")
+          .setLabel("Settings")
+          .setEmoji("⚙️")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("Variables")
+          .setEmoji("📖")
           .setStyle(ButtonStyle.Secondary)
       ),
     ],
@@ -1187,7 +1197,18 @@ function buildPanelsPanel(i, who) {
         new ButtonBuilder().setCustomId("embed:panel-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(s.selectedPanelIndex >= s.panels.length - 1),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("⬅️ Back")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:settings")
+          .setLabel("⚙️ Settings")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("📖 Variables")
+          .setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -1216,13 +1237,23 @@ function buildFieldsPanel(i, who) {
     new ButtonBuilder().setCustomId("embed:field-remove-selected").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(!Number.isInteger(s.selectedFieldIndex)),
   ));
 
-  // Navigation is always isolated on the final row.
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("embed:builder")
-      .setLabel("⬅️ Back")
-      .setStyle(ButtonStyle.Secondary),
-  ));
+  // Persistent navigation row.
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("embed:builder")
+        .setLabel("⬅️ Back")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:settings")
+        .setLabel("⚙️ Settings")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:helpers")
+        .setLabel("📖 Variables")
+        .setStyle(ButtonStyle.Secondary),
+    )
+  );
   return {
     embeds: [simplePanel("📋 Field Management", `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} fields: ${(s.fields || []).length}/25`, s, who)],
     components: rows,
@@ -1346,7 +1377,18 @@ function buildFieldsManagerPanel(interaction) {
       new ButtonBuilder().setCustomId("embed:field-manager-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(index == null || index >= fields.length - 1),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:builder")
+        .setLabel("⬅️ Back")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:settings")
+        .setLabel("⚙️ Settings")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:helpers")
+        .setLabel("📖 Variables")
+        .setStyle(ButtonStyle.Secondary),
     ),
   );
 
@@ -1376,13 +1418,23 @@ function buildButtonsPanel(i, who) {
     new ButtonBuilder().setCustomId("embed:button-remove-selected").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(!Number.isInteger(s.selectedButtonIndex)),
   ));
 
-  // Navigation is always isolated on the final row.
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("embed:builder")
-      .setLabel("⬅️ Back")
-      .setStyle(ButtonStyle.Secondary),
-  ));
+  // Persistent navigation row.
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("embed:builder")
+        .setLabel("⬅️ Back")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:settings")
+        .setLabel("⚙️ Settings")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:helpers")
+        .setLabel("📖 Variables")
+        .setStyle(ButtonStyle.Secondary),
+    )
+  );
   return { embeds: [simplePanel("🔘 Button Management", `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} buttons: ${(s.buttons || []).length}/${MAX_BUTTONS}`, s, who)], components: rows };
 }
 function selectedButtonManagerIndex(state) {
@@ -1484,7 +1536,18 @@ function buildButtonsManagerPanel(interaction) {
       new ButtonBuilder().setCustomId("embed:button-manager-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(index == null || index >= buttons.length - 1),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:builder")
+        .setLabel("⬅️ Back")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:settings")
+        .setLabel("⚙️ Settings")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:helpers")
+        .setLabel("📖 Variables")
+        .setStyle(ButtonStyle.Secondary),
     ),
   );
   // Reserve Discord's final action row for navigation.
@@ -2018,9 +2081,98 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
     components: [...controlRows, navigationRow].filter(Boolean),
   };
 }
+
+function settingsImportModal() {
+  return new ModalBuilder()
+    .setCustomId('embed:settings-import-save')
+    .setTitle('Import Embed Preset')
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Preset JSON file')
+        .setDescription('Upload one Goliath Embed Builder preset JSON file.')
+        .setFileUploadComponent(
+          new FileUploadBuilder()
+            .setCustomId('preset_file')
+            .setMinValues(1)
+            .setMaxValues(1)
+            .setRequired(true)
+        )
+    );
+}
+
+function buildSettingsPanel(i) {
+  const state = getSession(i);
+
+  return {
+    embeds: [
+      simplePanel(
+        '⚙️ Embed Settings',
+        [
+          'Manage Embed Builder settings and move saved presets between Goliath servers.',
+          '',
+          '**📥 Import**',
+          "Import an exported Embed Builder preset JSON file into this server's saved presets.",
+          '',
+          '**📤 Export**',
+          "Export one of this server's existing saved presets as a portable JSON file. It can then be imported into another Goliath server.",
+        ].join('\\n'),
+        state,
+        memberName(i)
+      )
+    ],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('embed:settings-import')
+          .setLabel('📥 Import')
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId('embed:settings-export')
+          .setLabel('📤 Export')
+          .setStyle(ButtonStyle.Primary)
+      ),
+
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('embed:builder')
+          .setLabel('⬅️ Back')
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId('embed:helpers')
+          .setLabel('📖 Variables')
+          .setStyle(ButtonStyle.Secondary)
+      )
+    ]
+  };
+}
+
 function buildHelpersPanel(i) {
   const s = getSession(i);
-  return { embeds: [simplePanel("📖 Embed Variables", HELPERS.map((h) => `\`${h}\``).join("\n"), s, memberName(i))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary))] };
+
+  return {
+    embeds: [
+      simplePanel(
+        "📖 Embed Variables",
+        HELPERS.map((h) => `\`${h}\``).join("\n"),
+        s,
+        memberName(i)
+      )
+    ],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("⬅️ Back")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:settings")
+          .setLabel("⚙️ Settings")
+          .setStyle(ButtonStyle.Secondary),
+      )
+    ],
+  };
 }
 function readinessOptions() {
   const { mediaModel } = require("./embedMedia");
@@ -2320,6 +2472,11 @@ function buildContentManagerPanel(interaction) {
           .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
+          .setCustomId("embed:settings")
+          .setLabel("⚙️ Settings")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
           .setCustomId("embed:helpers")
           .setLabel("📖 Variables")
           .setStyle(ButtonStyle.Secondary),
@@ -2354,7 +2511,18 @@ function buildAppearancePanel(interaction) {
         new ButtonBuilder().setCustomId("embed:appearance-footer-icon").setLabel("🏷️ Footer Icon").setStyle(ButtonStyle.Secondary),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("⬅️ Back")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:settings")
+          .setLabel("⚙️ Settings")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("📖 Variables")
+          .setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -2450,6 +2618,8 @@ module.exports = {
   buildButtonsManagerPanel,
   buildButtonOptionsPanel,
   buildPresetsPanel,
+  buildSettingsPanel,
+  settingsImportModal,
   buildHelpersPanel,
   buildReadinessPanel,
   getReadinessReport: getReadinessReportCanonical,

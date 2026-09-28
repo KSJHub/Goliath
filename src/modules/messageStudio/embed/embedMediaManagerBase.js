@@ -163,10 +163,11 @@ function installMediaManagerBase(panel, media) {
     rows.push(
       new ActionRowBuilder().addComponents(
         mediaButton(
-          'embed:media-gallery-add',
-          `➕ Add Media (${panelMedia.gallery.length}/${media.mediaModel.MAX_GALLERY_ITEMS})`,
+          'embed:media-add',
+          '➕ Add Media / File',
           ButtonStyle.Success,
-          panelMedia.gallery.length >= media.mediaModel.MAX_GALLERY_ITEMS
+          panelMedia.gallery.length >= media.mediaModel.MAX_GALLERY_ITEMS &&
+            panelMedia.files.length >= media.mediaModel.MAX_FILES
         ),
         mediaButton(
           'embed:media-gallery-edit',
@@ -197,7 +198,7 @@ function installMediaManagerBase(panel, media) {
     );
 
     /*
-     * ROW 3 — PLACEMENT / OPTIONS
+     * ROW 3 — PLACEMENT
      */
     rows.push(
       new ActionRowBuilder().addComponents(
@@ -216,26 +217,12 @@ function installMediaManagerBase(panel, media) {
             ? ButtonStyle.Success
             : ButtonStyle.Secondary,
           galleryIndex == null
-        ),
-        mediaButton(
-          galleryIndex != null ? 'embed:media-options' : 'embed:file-options',
-          '⚙️ Media Options',
-          ButtonStyle.Secondary,
-          galleryIndex == null && fileIndex == null
-        ),
-        mediaButton(
-          'embed:media-upload',
-          '📤 Upload',
-          ButtonStyle.Success
         )
       )
     );
 
     /*
      * ROW 4 — SECONDARY MEDIA
-     *
-     * Keep files accessible without allowing them to consume an extra
-     * action row and push navigation beyond Discord's five-row limit.
      */
     rows.push(
       new ActionRowBuilder().addComponents(
@@ -245,12 +232,6 @@ function installMediaManagerBase(panel, media) {
             ? '🖼️ Thumbnail ✓'
             : '🖼️ Thumbnail',
           ButtonStyle.Primary
-        ),
-        mediaButton(
-          'embed:media-file-add',
-          `📎 Add File (${panelMedia.files.length}/${media.mediaModel.MAX_FILES})`,
-          ButtonStyle.Success,
-          panelMedia.files.length >= media.mediaModel.MAX_FILES
         )
       )
     );
@@ -261,6 +242,7 @@ function installMediaManagerBase(panel, media) {
     rows.push(
       new ActionRowBuilder().addComponents(
         mediaButton('embed:builder', '⬅️ Back'),
+        mediaButton('embed:settings', '⚙️ Settings'),
         mediaButton('embed:helpers', '📖 Variables')
       )
     );

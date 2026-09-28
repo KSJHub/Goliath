@@ -461,6 +461,10 @@ function resolveSource(panel, source, interaction) {
 function textInput(id, label, style, value = '', maxLength = 4000) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(false).setMaxLength(maxLength).setValue(String(value || '').slice(0, maxLength));
 }
+
+function labelledTextInput(id, style, value = '', maxLength = 4000) {
+  return new TextInputBuilder().setCustomId(id).setStyle(style).setRequired(false).setMaxLength(maxLength).setValue(String(value || '').slice(0, maxLength));
+}
 function componentId(component) { return component?.data?.custom_id || component?.customId || null; }
 function componentById(rows, id) {
   for (const row of rows) {
@@ -476,11 +480,42 @@ function rowFromComponents(...components) {
 
 function installUploadModals(panel) {
   if (!panel || panel.__mediaUploadModalsBound) return panel;
-  panel.mediaUploadModal = () => new ModalBuilder().setCustomId('embed:media-upload-save').setTitle('Upload Media').addLabelComponents(
-    new LabelBuilder().setLabel('Upload media or files').setDescription('Add up to 10 files. Images and videos go to the gallery; other files are attached.').setFileUploadComponent(
-      new FileUploadBuilder().setCustomId('media_files').setMinValues(1).setMaxValues(10).setRequired(true),
-    ),
-  );
+  panel.mediaAddModal = () => new ModalBuilder()
+    .setCustomId('embed:media-add-save')
+    .setTitle('Add Media / File')
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Source URL / Variable')
+        .setDescription('Optional. URL or variable. Images/videos become gallery media; other URLs become attached files.')
+        .setTextInputComponent(
+          labelledTextInput('source', TextInputStyle.Short, '', 2000)
+            .setPlaceholder('https://... or {{variable}}')
+        ),
+      new LabelBuilder()
+        .setLabel('Upload Media / File')
+        .setDescription('Optional. Up to 10 files. Images/videos become gallery media; other files become attachments.')
+        .setFileUploadComponent(
+          new FileUploadBuilder()
+            .setCustomId('media_files')
+            .setMinValues(0)
+            .setMaxValues(10)
+            .setRequired(false)
+        ),
+      new LabelBuilder()
+        .setLabel('Display name / Alt text')
+        .setDescription('Optional. Alt text for gallery media or display filename for an attached file.')
+        .setTextInputComponent(
+          labelledTextInput('display_name', TextInputStyle.Short, '', 256)
+            .setPlaceholder('Optional')
+        ),
+      new LabelBuilder()
+        .setLabel('Description')
+        .setDescription('Optional. Adds descriptive information when supported.')
+        .setTextInputComponent(
+          labelledTextInput('description', TextInputStyle.Paragraph, '', 1024)
+            .setPlaceholder('Optional')
+        ),
+    );
   panel.galleryItemModal = (state, index = null) => {
     const media = getPanelMedia(state);
     const item = Number.isInteger(index) ? (media.gallery[index] || {}) : {};
@@ -500,6 +535,121 @@ function installUploadModals(panel) {
       new ActionRowBuilder().addComponents(textInput('description', 'File description', TextInputStyle.Paragraph, item.description || '', 1024)),
     );
   };
+
+  /*
+   * PASS 3F — EDIT MEDIA PANEL
+   *
+   * Keep the main Media Manager clean. Detailed controls for the selected
+   * gallery item live here instead.
+   */
+  panel.buildEditMediaPanel = (interaction) => {
+    const state = panel.getSession(interaction);
+    const media = getPanelMedia(state);
+
+    const requestedIndex = Number.isInteger(state.selectedMediaIndex)
+      ? state.selectedMediaIndex
+      : null;
+
+    const index = media.gallery.length
+      ? Math.max(0, Math.min(requestedIndex ?? 0, media.gallery.length - 1))
+      : null;
+
+    const item = index == null ? null : media.gallery[index];
+
+    if (!item) {
+      return panel.buildMediaManagerPanel(
+        interaction,
+        panel.memberName(interaction)
+      );
+    }
+
+    const type = ['auto', 'image', 'video'].includes(item.type)
+      ? item.type
+      : 'auto';
+
+    const placement = item.placement === 'above'
+      ? 'Above Content'
+      : 'Below Content';
+
+    let headerMode = 'Text';
+
+    if (typeof panel.graphicHeaderMode === 'function') {
+      const mode = panel.graphicHeaderMode(state);
+
+      if (mode === 'graphic') headerMode = 'Graphic';
+      else if (mode === 'both') headerMode = 'Both';
+    }
+
+    return {
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('✏️ Edit Media')
+          .setDescription([
+            `**Gallery item:** ${index + 1} / ${media.gallery.length}`,
+            `**Type:** ${
+              type === 'auto'
+                ? 'Auto Detect'
+                : type === 'image'
+                  ? 'Image'
+                  : 'Video'
+            }`,
+            `**Placement:** ${placement}`,
+            `**Graphic Header:** ${headerMode}`,
+            `**Spoiler:** ${item.spoiler ? 'On' : 'Off'}`,
+          ].join('\n')),
+      ],
+      components: enforceLimits([
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('embed:media-edit-details')
+            .setLabel('✏️ Edit Details')
+            .setStyle(ButtonStyle.Primary),
+
+          new ButtonBuilder()
+            .setCustomId('embed:graphic-header-cycle')
+            .setLabel(`🪧 Header: ${headerMode}`)
+            .setStyle(ButtonStyle.Secondary)
+        ),
+
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('embed:media-spoiler:off')
+            .setLabel('👁️ Normal')
+            .setStyle(
+              item.spoiler
+                ? ButtonStyle.Secondary
+                : ButtonStyle.Primary
+            ),
+
+          new ButtonBuilder()
+            .setCustomId('embed:media-spoiler:on')
+            .setLabel('🙈 Spoiler')
+            .setStyle(
+              item.spoiler
+                ? ButtonStyle.Primary
+                : ButtonStyle.Secondary
+            )
+        ),
+
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('embed:media-duplicate')
+            .setLabel('📑 Duplicate')
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(media.gallery.length >= MAX_GALLERY_ITEMS)
+        ),
+
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('embed:media-edit-back')
+            .setLabel('⬅️ Back')
+            .setStyle(ButtonStyle.Secondary)
+        ),
+      ]),
+    };
+  };
+
   panel.__mediaUploadModalsBound = true;
   return panel;
 }
@@ -607,8 +757,15 @@ function installMediaManagerUi(panel) {
       return embed;
     }
     if (selectedSource) {
-      const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`🖼️ Selected Media Preview • ${placement}`).setImage(selectedSource);
-      if (selected?.alt) embed.setDescription(String(selected.alt).slice(0, 800));
+      const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle(`🖼️ Selected Media Preview • ${placement}`)
+        .setDescription(
+          selected?.alt
+            ? String(selected.alt).slice(0, 800)
+            : 'Selected gallery media preview.'
+        )
+        .setImage(selectedSource);
       return embed;
     }
     if (thumbnailSource) return new EmbedBuilder().setColor(0x5865F2).setTitle('🖼️ Thumbnail Preview').setImage(thumbnailSource);

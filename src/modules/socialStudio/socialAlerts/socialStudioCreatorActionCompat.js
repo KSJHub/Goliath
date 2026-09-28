@@ -11,6 +11,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
+const { goliathNavigation } = require('../../../components/goliathNavigation');
 const store = require('./socialStudioStore');
 const { providerInfo } = require('./socialStudioProviders');
 
@@ -92,7 +93,10 @@ function profilePayload(interaction, creator) {
   const description = [`👤 **${creator.displayName || 'Unnamed creator'}**`, '', '**Profile**', `Status: ${creator.enabled === false ? '⏸️ Paused' : '🟢 Monitoring'}`, `Group / Team: ${creator.group || 'Not set'}`, `Tags: ${creator.tags?.length ? creator.tags.join(', ') : 'None'}`, `Profile Notes: ${creator.notes || 'None'}`, `🔒 Admin Notes: ${creator.adminNotes || 'None'}`].join('\n');
   return {
     embeds: [new EmbedBuilder().setColor(color).setTitle('📝 Manage Profile').setDescription(description).setFooter({ text: `Requested by ${who(interaction)}` }).setTimestamp()],
-    components: [row(button(`${P}creator:edit`, '📝 Edit Profile'), button(`${P}creator:clear`, '🔄 Clear'), button(`${P}creator:profile:toggle`, creator.enabled === false ? '▶️ Resume' : '⏸️ Pause', creator.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), button(`${P}creator:delete`, '🗑️ Delete', ButtonStyle.Danger)), row(button(`${P}creators`, '⬅️ Back'), button(`${P}settings`, '⚙️ Settings'))],
+    components: [row(button(`${P}creator:edit`, '📝 Edit Profile'), button(`${P}creator:clear`, '🔄 Clear'), button(`${P}creator:profile:toggle`, creator.enabled === false ? '▶️ Resume' : '⏸️ Pause', creator.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), button(`${P}creator:delete`, '🗑️ Delete', ButtonStyle.Danger)), goliathNavigation(
+      `${P}creators`,
+      `${P}settings`,
+    )],
   };
 }
 
@@ -102,7 +106,14 @@ function creatorsPayload(interaction, message) {
   return {
     content: message || null,
     embeds: [new EmbedBuilder().setColor(config.enabled ? 0x5865F2 : 0x747F8D).setTitle('👥 Creator Profiles').setDescription(creators.length ? `Profile action completed.\n\n**Profiles remaining:** ${creators.length}\n\nSelect a creator again to continue managing profiles.` : 'Profile action completed.\n\nThere are no creator profiles remaining.').setFooter({ text: `Requested by ${who(interaction)}` }).setTimestamp()],
-    components: [row(button(`${P}creators`, '🔄 Refresh Profiles', ButtonStyle.Primary), button(`${P}settings`, '⚙️ Settings'))],
+    components: [row(
+      button(
+        `${P}creators`,
+        '👥 Creators',
+        ButtonStyle.Primary,
+      ),
+      button(`${P}settings`, '⚙️ Settings'),
+    )],
   };
 }
 
@@ -115,40 +126,25 @@ function capture(interaction) {
 }
 
 function monitoringPayload(interaction) { return require('./socialStudioPanel').buildSectionPanel(interaction, 'monitoring'); }
-function diagnosticsPayload(interaction) { return require('./socialStudioPanel').buildSectionPanel(interaction, 'diagnostics'); }
+function diagnosticsPayload(interaction) {
+  return require('./socialStudioPanel')
+    .buildSectionPanel(interaction, 'diagnostics');
+}
 
-function liveMessagesPayload(interaction) {
-  const config = store.getConfig(interaction.guildId);
-  const settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
-  const refreshEnabled = settings.liveMessageRefreshEnabled !== false;
-  const refreshMs = LIVE_REFRESH_INTERVALS.has(String(settings.liveMessageRefreshMs)) ? Number(settings.liveMessageRefreshMs) : 600000;
-  const refreshMinutes = Math.round(refreshMs / 60000);
-  const description = [
-    '**Live Message Behaviour**',
-    `✏️ **Edit:** ${settings.editLiveNotifications !== false ? 'On' : 'Off'} - update the same LIVE post.`,
-    `🔄 **Refresh:** ${refreshEnabled ? `On · every ${refreshMinutes} minutes` : 'Off'} - refresh live data and thumbnail on the same post.`,
-    '⚫ **Offline detection:** Always On - provider checks still detect stream end even when refresh is disabled.',
-    `🗑️ **Cleanup:** ${settings.deleteEndedNotifications !== false ? 'On' : 'Off'} - remove ended LIVE posts.`,
-    `👥 **Viewers:** ${settings.includeViewerCount === false ? 'Off' : 'On'} - show viewer count.`,
-    `⏱️ **Duration:** ${settings.includeLiveDuration === false ? 'Off' : 'On'} - show time live.`,
-  ].join('\n');
-  const rate = new StringSelectMenuBuilder()
-    .setCustomId(`${P}automation:liverefreshrate`)
-    .setPlaceholder(`Refresh rate: ${refreshMinutes} minutes`)
-    .setMinValues(1)
-    .setMaxValues(1)
-    .addOptions([
-      ['10 minutes', '600000'], ['15 minutes', '900000'], ['20 minutes', '1200000'], ['30 minutes', '1800000'], ['45 minutes', '2700000'], ['60 minutes', '3600000'],
-    ].map(([label, value]) => ({ label, value, description: `Refresh the existing LIVE post every ${label}.`, default: value === String(refreshMs) })));
-  return {
-    embeds: [new EmbedBuilder().setColor(config.enabled ? 0x5865F2 : 0x747F8D).setTitle('🔴 Live Messages').setDescription(description).setFooter({ text: `Requested by ${who(interaction)}` }).setTimestamp()],
-    components: [
-      row(button(`${P}automation:editlive`, settings.editLiveNotifications !== false ? '✏️ Edit: On' : '✏️ Edit: Off'), button(`${P}automation:liverefresh`, refreshEnabled ? '🔄 Refresh: On' : '🔄 Refresh: Off', refreshEnabled ? ButtonStyle.Success : ButtonStyle.Secondary), button(`${P}automation:deleteended`, settings.deleteEndedNotifications !== false ? '🗑️ Cleanup: On' : '🗑️ Cleanup: Off')),
-      row(rate),
-      row(button(`${P}automation:viewers`, settings.includeViewerCount === false ? '👥 Viewers: Off' : '👥 Viewers: On'), button(`${P}automation:duration`, settings.includeLiveDuration === false ? '⏱️ Duration: Off' : '⏱️ Duration: On')),
-      row(button(`${P}settings`, '⬅️ Back'), button(`${P}main`, '🏠 Social Studio')),
-    ],
-  };
+function dataPayload(interaction) {
+  return require('./socialStudioPanel')
+    .buildSectionPanel(interaction, 'data');
+}
+
+function canonicalLiveMessagesPayload(interaction) {
+  const {
+    buildSectionPanel,
+  } = require('./socialStudioPanel');
+
+  return buildSectionPanel(
+    interaction,
+    'liveMessages',
+  );
 }
 
 async function updatePanel(interaction, payload) {
@@ -220,21 +216,21 @@ async function handleLiveMessageAction(interaction, id) {
     config.settings.liveMessageRefreshEnabled = config.settings.liveMessageRefreshEnabled === false;
     if (!LIVE_REFRESH_INTERVALS.has(String(config.settings.liveMessageRefreshMs))) config.settings.liveMessageRefreshMs = 600000;
     saveSettings(interaction, config);
-    return updatePanel(interaction, liveMessagesPayload(interaction));
+    return updatePanel(interaction, canonicalLiveMessagesPayload(interaction));
   }
   if (id === `${P}automation:liverefreshrate`) {
     const value = String(interaction.values?.[0] || '');
     if (!LIVE_REFRESH_INTERVALS.has(value)) throw new Error('Choose a valid LIVE message refresh rate.');
     config.settings.liveMessageRefreshMs = Number(value);
     saveSettings(interaction, config);
-    return updatePanel(interaction, liveMessagesPayload(interaction));
+    return updatePanel(interaction, canonicalLiveMessagesPayload(interaction));
   }
   const keyById = { [`${P}automation:editlive`]: 'editLiveNotifications', [`${P}automation:deleteended`]: 'deleteEndedNotifications', [`${P}automation:viewers`]: 'includeViewerCount', [`${P}automation:duration`]: 'includeLiveDuration' };
   const setting = keyById[id];
   if (!setting) return false;
   config.settings[setting] = config.settings[setting] === false;
   saveSettings(interaction, config);
-  return updatePanel(interaction, liveMessagesPayload(interaction));
+  return updatePanel(interaction, canonicalLiveMessagesPayload(interaction));
 }
 
 async function handleDiagnosticsAction(interaction, id) {
@@ -258,7 +254,19 @@ async function handleDiagnosticsAction(interaction, id) {
   }
   if (id === `${P}data:export:config`) { const safe = redactSecrets(config); const file = new AttachmentBuilder(Buffer.from(JSON.stringify(safe, null, 2), 'utf8'), { name: `social-studio-config-${interaction.guildId}.json` }); return followUp(interaction, { content: '📤 Social Studio configuration export.', files: [file] }); }
   if (id === `${P}data:export`) { const file = new AttachmentBuilder(Buffer.from(JSON.stringify(history, null, 2), 'utf8'), { name: `social-studio-history-${interaction.guildId}.json` }); return followUp(interaction, { content: '🗂️ Social Studio history export.', files: [file] }); }
-  if (id === `${P}data:clear`) { config.history = []; saveSettings(interaction, config); await updatePanel(interaction, diagnosticsPayload(interaction)); await interaction.followUp({ content: '🧹 Social Studio history cleared.', flags: 64 }).catch(() => null); return true; }
+  if (id === `${P}data:clear`) {
+    config.history = [];
+    saveSettings(interaction, config);
+    await updatePanel(
+      interaction,
+      dataPayload(interaction),
+    );
+    await interaction.followUp({
+      content: '🧹 Social Studio history cleared.',
+      flags: 64,
+    }).catch(() => null);
+    return true;
+  }
   return false;
 }
 
@@ -267,8 +275,7 @@ async function handle(interaction) {
   if (await compatibility.handle(interaction)) return true;
   const id = String(interaction?.customId || '');
   capture(interaction);
-  if (id === `${P}account:check` || id.startsWith(`${P}account:check:`) || id.startsWith(`${P}creator:check:`)) return true;
-  if (id === `${P}liveMessages`) return updatePanel(interaction, liveMessagesPayload(interaction));
+  if (id === `${P}liveMessages`) return updatePanel(interaction, canonicalLiveMessagesPayload(interaction));
   if ([`${P}test`, `${P}testing:last`, `${P}testing:diagnostics`, `${P}data:refresh`, `${P}data:export`, `${P}data:export:config`, `${P}data:clear`].includes(id)) return handleDiagnosticsAction(interaction, id);
   if ([`${P}automation:interval`, `${P}automation:dupes`, `${P}automation:retry`, `${P}automation:quiet`, `${P}toggle`].includes(id)) return handleMonitoringAction(interaction, id);
   if ([`${P}automation:editlive`, `${P}automation:deleteended`, `${P}automation:viewers`, `${P}automation:duration`, `${P}automation:liverefresh`, `${P}automation:liverefreshrate`].includes(id)) return handleLiveMessageAction(interaction, id);
