@@ -1028,7 +1028,7 @@ async function handleBuilderInteractions(i) {
   const buttonIndex = selectedButtonIndex(state);
 
   if (i.isButton?.()) {
-    if (customId === 'embed:edit-media') return updateAppearance(i);
+
     if (customId === 'embed:appearance-back') return updateAppearance(i);
     if (customId === 'embed:appearance-details') { await i.showModal(panel.appearanceDetailsModal(state)); return true; }
     if (customId === 'embed:appearance-author-icon') return updateIcon(i, 'author');
