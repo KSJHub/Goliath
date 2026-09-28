@@ -31,6 +31,12 @@ function memberName(interaction) { return interaction?.member?.displayName || in
 function displayName(member) { return member?.displayName || member?.user?.globalName || member?.user?.username || 'Unknown User'; }
 function refreshGuild(interaction) { return interaction?.guild || null; }
 function sessionKey(interaction) { return `${interaction?.guildId || interaction?.guild?.id || 'global'}:${interaction?.user?.id || 'system'}`; }
+function persistOrThrow(key, state, operation = 'save') {
+  if (sessionStore.save(key, state)) return state;
+  const error = new Error(`Embed Studio could not ${operation} the builder session. No success was recorded.`);
+  error.code = 'EMBED_SESSION_PERSIST_FAILED';
+  throw error;
+}
 
 // Persistence belongs at the canonical state boundary. Every consumer — including
 // functions destructured by embedPanel and lexical calls inside this module — now
@@ -43,17 +49,15 @@ function getSession(interaction) {
       const restored = sessionStore.load(key);
       if (restored) {
         const synced = stateSync(restored);
+        persistOrThrow(key, synced, 'refresh');
         sessions.set(key, synced);
-        // Re-write restored state through the current schema/path. This also
-        // repairs a store that was removed while the process retained state.
-        sessionStore.save(key, synced);
         return synced;
       }
     }
     if (typeof defaultStateFactory !== 'function') throw new Error('Embed state is not configured with a defaultState factory.');
     const fresh = stateSync(defaultStateFactory());
+    persistOrThrow(key, fresh, 'create');
     sessions.set(key, fresh);
-    sessionStore.save(key, fresh);
   }
   const current = sessions.get(key);
   // A live builder session must always have a durable counterpart. Some flows
@@ -61,16 +65,18 @@ function getSession(interaction) {
   // recovery), and the JSON file can also disappear independently of memory.
   // Make reads self-healing so any active Embed Studio interaction recreates
   // the canonical session file before it can be lost on restart.
-  sessionStore.save(key, current);
+  persistOrThrow(key, current, 'refresh');
   return current;
 }
 
 function saveSession(interaction, state) {
   const key = sessionKey(interaction);
   const synced = stateSync(state);
+  // Persist before publishing the new state in memory. A failed durable write
+  // must never leave the live process claiming a state that cannot survive restart.
+  persistOrThrow(key, synced);
   sessions.set(key, synced);
   hydratedSessions.add(key);
-  sessionStore.save(key, synced);
   return synced;
 }
 
@@ -84,9 +90,18 @@ function markUnsaved(interaction, state) { return saveSession(interaction, { ...
 function clearUnsaved(interaction, state) { return saveSession(interaction, { ...state, hasUnsavedChanges: false }); }
 function resetSession(interaction) {
   if (typeof defaultStateFactory !== 'function') throw new Error('Embed state is not configured with a defaultState factory.');
-  const key = sessionKey(interaction); const next = stateSync(defaultStateFactory()); sessions.set(key, next); hydratedSessions.add(key); sessionStore.save(key, next); return next;
+  const key = sessionKey(interaction); const next = stateSync(defaultStateFactory()); persistOrThrow(key, next, 'reset'); sessions.set(key, next); hydratedSessions.add(key); return next;
 }
-function clearSession(interaction) { const key = sessionKey(interaction); hydratedSessions.delete(key); sessionStore.remove(key); return sessions.delete(key); }
+function clearSession(interaction) {
+  const key = sessionKey(interaction);
+  if (!sessionStore.remove(key)) {
+    const error = new Error('Embed Studio could not clear the persisted builder session.');
+    error.code = 'EMBED_SESSION_REMOVE_FAILED';
+    throw error;
+  }
+  hydratedSessions.delete(key);
+  return sessions.delete(key);
+}
 function allowedMentions(state) { return state?.allowUserPing ? { parse: ['users', 'roles'] } : { parse: [] }; }
 function presetData(state) { return { template: state?.template || 'custom', panels: clone(state?.panels || []), allowUserPing: !!state?.allowUserPing, showTimestamp: state?.showTimestamp !== false, fieldLayout: state?.fieldLayout || 'auto' }; }
 function applyTemplate(interaction, name) { if (typeof basePanelFactory !== 'function') throw new Error('Embed state is not configured with a basePanel factory.'); const current = getSession(interaction); const nextPanel = basePanelFactory(name); return markUnsaved(interaction, stateSync({ ...current, template: name, selectedPanelIndex: 0, panels: [nextPanel], selectedPreset: null })); }
