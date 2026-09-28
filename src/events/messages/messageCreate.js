@@ -57,12 +57,10 @@ async function handleEmojiMessage(message, client) {
 module.exports = {
   name: Events.MessageCreate,
 
-  register(client) {
-    counting.registerProtectionEvents(client);
-  },
-
   async execute(message, client) {
     if (!message.guild || !message.member || message.author?.bot) return;
+
+    counting.registerProtectionEvents(client);
 
     const autoModHandled = await runHandler('AutoMod', handleAutoMod, message);
     if (autoModHandled) return;
