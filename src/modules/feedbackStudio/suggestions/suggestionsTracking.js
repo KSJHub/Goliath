@@ -5,6 +5,7 @@ const suggestions = require('./suggestions');
 const emojis = require('../../utilityStudio/emojis/emojis');
 const emojiPayload = require('../../utilityStudio/emojis/emojiPayload');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
+const { buildMemberNotice } = require('../../../core/ui/memberNotice');
 
 const locks = new Map();
 const lockKey = (guildId, suggestionId) => `${guildId}:${suggestionId}`;
@@ -233,35 +234,71 @@ function quotePreview(suggestion, maxLength = 500) {
   return `**${suggestion?.title || 'Your suggestion'}**\n${body}`;
 }
 
+function suggestionNoticeMeta(status) {
+  if (status === 'approved') return {
+    emoji: '✅', title: 'SUGGESTION APPROVED', statusLabel: '🟢 Approved', color: 0x57f287,
+    meaning: 'Management has reviewed your suggestion and approved it to move forward.',
+    nextSteps: 'You can follow its latest status through **My Suggestions**. If it is later implemented, Goliath will notify you again.',
+  };
+  if (status === 'implemented') return {
+    emoji: '🚀', title: 'SUGGESTION IMPLEMENTED', statusLabel: '🟢 Implemented', color: 0x57f287,
+    meaning: 'Management has marked your approved suggestion as implemented and completed.',
+    nextSteps: 'No action is required from you. You can still view the completed suggestion through **My Suggestions**.',
+  };
+  if (status === 'denied') return {
+    emoji: '❌', title: 'SUGGESTION DECLINED', statusLabel: '🔴 Declined', color: 0xed4245,
+    meaning: 'Management has reviewed your suggestion and decided not to move forward with it at this time.',
+    nextSteps: 'Review the Management response below for context. You can see the final status through **My Suggestions**.',
+  };
+  return {
+    emoji: '💡', title: 'SUGGESTION UPDATED', statusLabel: `${statusLabelForDm(status)} Updated`, color: 0x5865f2,
+    meaning: 'The status of your suggestion has been updated by the server team.',
+    nextSteps: 'You can see its latest status through **My Suggestions**.',
+  };
+}
+
 async function notifyAuthor(guild, suggestion) {
   if (!guild || !suggestion?.authorId) return false;
   const member = await guild.members.fetch(suggestion.authorId).catch(() => null);
   if (!member?.user) return false;
 
-  let headline = `💡 **The team has updated your suggestion in ${guild.name}.**`;
-  let decision = `${statusLabelForDm(suggestion.status)} Your suggestion status has changed.`;
-  if (suggestion.status === 'approved') {
-    headline = `💡 **Your suggestion in ${guild.name} was approved!**`;
-    decision = '✅ The management team has approved it to move forward.';
-  } else if (suggestion.status === 'implemented') {
-    headline = `🚀 **Your suggestion in ${guild.name} has been implemented!**`;
-    decision = '🚀 The management team has marked the suggestion as completed.';
-  } else if (suggestion.status === 'denied') {
-    headline = `💡 **The team has reviewed your suggestion in ${guild.name}.**`;
-    decision = '❌ The management team has decided not to move forward with it.';
-  }
-
   const response = suggestion.status === 'implemented'
     ? suggestion.implementationNote || suggestion.reviewReason
     : suggestion.reviewReason;
-  const note = response ? `\n\n**Team response**\n${response}` : '';
-  const privacy = suggestion.anonymous === true ? '\n\n🔒 You shared this suggestion anonymously on the public board.' : '';
-  const content = await emojis.resolveText(
-    guild.client,
-    guild.id,
-    `${headline}\n\n${quotePreview(suggestion)}\n\n${decision}${note}${privacy}\n\nYou can also see its latest status in **My Suggestions**.`,
-  );
-  return member.user.send(content).then(() => true).catch(() => false);
+  const meta = suggestionNoticeMeta(suggestion.status);
+  const reference = String(suggestion.reference || suggestion.suggestionId || 'Suggestion').slice(0, 100);
+  const preview = String(suggestion.content || '').trim().slice(0, 700) || 'No suggestion details are available.';
+  const contextFields = [
+    { name: '💡 Suggestion', value: String(suggestion.title || 'Your suggestion').slice(0, 1024), inline: false },
+    { name: '📊 Status', value: meta.statusLabel, inline: true },
+    { name: '🔐 Visibility', value: suggestion.anonymous === true ? 'Anonymous on the public board' : 'Public', inline: true },
+  ];
+  if (response) contextFields.push({
+    name: suggestion.status === 'implemented' ? '🛠️ Implementation Note' : '🛡️ Management Response',
+    value: String(response).slice(0, 1024),
+    inline: false,
+  });
+
+  const notice = buildMemberNotice({
+    guild,
+    moduleName: 'Suggestions',
+    moduleEmoji: meta.emoji,
+    title: meta.title,
+    subtitle: 'Suggestion Status Notice',
+    color: meta.color,
+    referenceLabel: 'Suggestion',
+    referenceValue: reference,
+    status: meta.statusLabel,
+    member: member.user,
+    contextFields,
+    detailsTitle: '📝 YOUR SUGGESTION',
+    details: `**${String(suggestion.title || 'Your suggestion').slice(0, 200)}**\n> ${preview.replace(/\n/g, '\n> ')}`,
+    meaning: meta.meaning,
+    nextSteps: meta.nextSteps,
+    footerLabel: `Suggestion ${reference}`,
+  });
+
+  return member.user.send(notice).then(() => true).catch(() => false);
 }
 
 function statusLabelForDm(status) {
