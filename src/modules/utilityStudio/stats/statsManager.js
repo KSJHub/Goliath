@@ -91,8 +91,27 @@ function exportConfig(guildId) { return { module: 'stats', guildId: String(guild
 function reset(guildId, meta = {}) { return statsStore.resetStats(guildId, meta); }
 
 async function handleMessageCreate(message) { try { if (!message?.guild || !message.member || !statsStore.isEnabled(message.guild.id)) return; statsStore.addMessage(message); queueCounterRefresh(message.guild, 'message'); } catch (error) { console.error('[Stats] Failed to track message:', error); } }
-async function handleVoiceStateUpdate(oldState, newState) { try { const guild = newState?.guild || oldState?.guild; const member = newState?.member || oldState?.member; if (!guild?.id || !member?.id) return; const key = sessionKey(guild.id, member.id); if (newState?.channelId && !oldState?.channelId) activeVoiceSessions.set(key, Date.now()); if (!newState?.channelId && oldState?.channelId) { const started = activeVoiceSessions.get(key); activeVoiceSessions.delete(key); if (started && statsStore.isEnabled(guild.id)) statsStore.addVoiceDuration(guild.id, member.id, Date.now() - started); } queueCounterRefresh(guild, 'voice'); } catch (error) { console.error('[Stats] Failed to track voice:', error); } }
-async function handleGuildMemberAdd(member) { try { if (!member?.guild || !statsStore.isEnabled(member.guild.id)) return; statsStore.recordMemberJoin(member); queueCounterRefresh(member.guild, 'member-add'); } catch (error) { console.error('[Stats] Failed to track member add:', error); } }
-async function handleGuildMemberRemove(member) { try { if (!member?.guild || !statsStore.isEnabled(member.guild.id)) return; statsStore.recordMemberLeave(member); queueCounterRefresh(member.guild, 'member-remove'); } catch (error) { console.error('[Stats] Failed to track member remove:', error); } }
+async function handleVoiceStateUpdate(oldState, newState) {
+  try {
+    const guild = newState?.guild || oldState?.guild;
+    const member = newState?.member || oldState?.member;
+    if (!guild?.id || !member?.id) return;
+    const key = sessionKey(guild.id, member.id);
+    const oldChannelId = oldState?.channelId || null;
+    const newChannelId = newState?.channelId || null;
+    if (oldChannelId === newChannelId) return;
+    const now = Date.now();
+    const session = activeVoiceSessions.get(key);
+    if (oldChannelId && session?.startedAt && session.channelId === oldChannelId) {
+      activeVoiceSessions.delete(key);
+      const minutes = Math.max(0, (now - session.startedAt) / 60000);
+      if (minutes > 0 && statsStore.isEnabled(guild.id)) statsStore.addVoiceMinutes(member, oldChannelId, minutes);
+    }
+    if (newChannelId) activeVoiceSessions.set(key, { startedAt: now, channelId: newChannelId });
+    queueCounterRefresh(guild, 'voice');
+  } catch (error) { console.error('[Stats] Failed to track voice:', error); }
+}
+async function handleGuildMemberAdd(member) { try { if (!member?.guild || !statsStore.isEnabled(member.guild.id)) return; statsStore.addMemberEvent(member, 'join'); queueCounterRefresh(member.guild, 'member-add'); } catch (error) { console.error('[Stats] Failed to track member add:', error); } }
+async function handleGuildMemberRemove(member) { try { if (!member?.guild || !statsStore.isEnabled(member.guild.id)) return; statsStore.addMemberEvent(member, 'leave'); queueCounterRefresh(member.guild, 'member-remove'); } catch (error) { console.error('[Stats] Failed to track member remove:', error); } }
 
 module.exports = { startup, shutdown, startCounterRefreshScheduler, stopCounterRefreshScheduler, refreshGuildCounters, refreshAllGuildCounters, queueCounterRefresh, buildHealth, repair, exportConfig, reset, handleMessageCreate, handleVoiceStateUpdate, handleGuildMemberAdd, handleGuildMemberRemove };
