@@ -17,6 +17,8 @@ const { installAlignmentPreview } = require('./embedAlignmentPreview');
 const { installFinalImageAlignment } = require('./embedFinalImageAlignment');
 
 const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPanelMedia: media.setPanelMedia, mediaModel: media.mediaModel });
+const deliveryLocks = new Map();
+const DELIVERY_ACTIONS = new Set(['embed:use', 'embed:update-existing']);
 function clone(value) { try { return JSON.parse(JSON.stringify(value)); } catch { return value; } }
 function mediaWeight(value) {
   const panels = Array.isArray(value?.panels) ? value.panels : [];
@@ -111,6 +113,26 @@ const interactions = require('./embedInteractions');
 installImageAlignmentInteraction(panel, interactions);
 installAlignmentPreview(panel, interactions);
 installGraphicHeaders(panel, media, interactions);
+const rawHandleInteraction = interactions.handleInteraction.bind(interactions);
+async function handleInteraction(interaction) {
+  const customId = String(interaction?.customId || '');
+  if (!DELIVERY_ACTIONS.has(customId)) return rawHandleInteraction(interaction);
+  const guildId = String(interaction?.guildId || interaction?.guild?.id || 'unknown');
+  const userId = String(interaction?.user?.id || interaction?.member?.id || 'unknown');
+  const state = typeof panel.getSession === 'function' ? panel.getSession(interaction) : {};
+  let deploymentKey = 'custom';
+  try { deploymentKey = deployments.getDeploymentKeyFromState(state); } catch {}
+  const lockKey = `${guildId}:${userId}:${deploymentKey}`;
+  const previous = deliveryLocks.get(lockKey) || Promise.resolve();
+  const run = previous.catch(() => null).then(() => rawHandleInteraction(interaction));
+  deliveryLocks.set(lockKey, run);
+  try {
+    return await run;
+  } finally {
+    if (deliveryLocks.get(lockKey) === run) deliveryLocks.delete(lockKey);
+  }
+}
+interactions.handleInteraction = handleInteraction;
 const validation = require('./embedValidation');
 const health = require('./embedHealth');
 function getOverview(guildId) {
@@ -118,4 +140,4 @@ function getOverview(guildId) {
   const allDeployments = Object.values(deployments.getAllEmbedDeployments(guildId) || {});
   return { enabled: true, templates: { total: Object.keys(allTemplates).length }, deployments: { total: allDeployments.length, active: allDeployments.filter((item) => !item.status || item.status === 'active').length, unavailable: allDeployments.filter((item) => item.status && item.status !== 'active').length } };
 }
-module.exports = { getOverview, buildHealthReport: health.buildHealthReport, repairAll: health.repairAll, handleInteraction: interactions.handleInteraction, installMediaRuntime, installMediaBoundary: installMediaRuntime, mediaStateApi, templates, deployments, panel, media, interactions, tracking: deployments, validation, health };
+module.exports = { getOverview, buildHealthReport: health.buildHealthReport, repairAll: health.repairAll, handleInteraction, installMediaRuntime, installMediaBoundary: installMediaRuntime, mediaStateApi, templates, deployments, panel, media, interactions, tracking: deployments, validation, health };
