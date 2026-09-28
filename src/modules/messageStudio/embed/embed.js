@@ -3,8 +3,6 @@
 const { PermissionFlagsBits } = require('discord.js');
 const templates = require('./embedTemplates');
 const deployments = require('./embedDeployments');
-// embedState owns durable session persistence natively. Keep persistence at the
-// canonical state boundary so lexical/destructured consumers cannot bypass it.
 require('./embedState');
 
 const panel = require('./embedPanel');
@@ -21,10 +19,6 @@ const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPan
 const deliveryLocks = new Map();
 const DELIVERY_ACTIONS = new Set(['embed:use', 'embed:update-existing']);
 function clone(value) { try { return JSON.parse(JSON.stringify(value)); } catch { return value; } }
-function mediaWeight(value) {
-  const panels = Array.isArray(value?.panels) ? value.panels : [];
-  return panels.reduce((total, entry) => total + (entry?.thumbnail?.source ? 1 : 0) + (Array.isArray(entry?.gallery) ? entry.gallery.filter((item) => item?.source).length : 0) + (Array.isArray(entry?.files) ? entry.files.filter((item) => item?.source).length : 0), 0);
-}
 function canonicalMediaState(state = {}) {
   const panels = Array.isArray(state?.panels) ? state.panels : [];
   let canonical = media.mediaModel.normalizeMedia(state?.media || {}, panels);
@@ -98,9 +92,7 @@ function installAlignmentDeliveryBridge(targetRenderer, targetPanel) {
       map = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
     }
     map = map || {};
-    const sourceMedia = options.media || {};
-    const alignedMedia = applyAlignmentMap(sourceMedia, map);
-    return originalBuildEmbedPayload({ ...options, media: alignedMedia, mediaAlignment: map });
+    return originalBuildEmbedPayload({ ...options, media: applyAlignmentMap(options.media || {}, map), mediaAlignment: map });
   };
   targetRenderer.__alignmentDeliveryBridgeInstalled = true;
   return targetRenderer;
@@ -116,26 +108,15 @@ function installMediaRuntime(targetPanel) {
   media.installMediaManagerUi(targetPanel);
   media.installThumbnailUi(targetPanel);
   targetPanel.getPanelMedia = mediaStateApi.getPanelMedia;
-  // installMediaManagerBase() deliberately replaces setPanelMedia with a
-  // panel-local writer that treats an empty media gallery as authoritative.
-  // Do not overwrite that patched writer with the legacy-fallback implementation.
-  if (typeof targetPanel.setPanelMedia !== 'function') {
-    targetPanel.setPanelMedia = mediaStateApi.setPanelMedia;
-  }
+  if (typeof targetPanel.setPanelMedia !== 'function') targetPanel.setPanelMedia = mediaStateApi.setPanelMedia;
   targetPanel.mediaModel = mediaStateApi.mediaModel;
   return targetPanel;
 }
 installMediaRuntime(panel);
 installAlignmentSessionView(panel);
 installClassicSingleImagePayload(renderer);
-// Install alignment state/preset/UI support without installing the older
-// attachment renderer. FinalImageAlignment below is the single delivery-time
-// authority for Left/Centre/Right attachment transformation.
 installImageAlignment(panel, null);
 installAlignmentDeliveryBridge(renderer, panel);
-// Last renderer wrapper: rebuild the outgoing attachment from Goliath's cached
-// source after all other media transforms. This makes the saved alignment the
-// final authority for Test, Use Embed and Update Existing.
 installFinalImageAlignment(renderer);
 const interactions = require('./embedInteractions');
 installImageAlignmentInteraction(panel, interactions);
@@ -147,9 +128,7 @@ async function deliveryReply(interaction, content) {
   try {
     if (interaction?.deferred || interaction?.replied) return await interaction.followUp(payload);
     return await interaction.reply(payload);
-  } catch {
-    return true;
-  }
+  } catch { return true; }
 }
 async function handleInteraction(interaction) {
   const customId = String(interaction?.customId || '');
@@ -163,18 +142,17 @@ async function handleInteraction(interaction) {
     await deliveryReply(interaction, '⏳ That Embed Studio deployment is already being processed. Please wait for it to finish.');
     return true;
   }
-  const permissionFailure = await attachmentPermissionFailure(interaction, state, customId);
-  if (permissionFailure) {
-    await deliveryReply(interaction, permissionFailure);
-    return true;
-  }
-  const run = Promise.resolve().then(() => rawHandleInteraction(interaction));
+  const run = (async () => {
+    const permissionFailure = await attachmentPermissionFailure(interaction, state, customId);
+    if (permissionFailure) {
+      await deliveryReply(interaction, permissionFailure);
+      return true;
+    }
+    return rawHandleInteraction(interaction);
+  })();
   deliveryLocks.set(lockKey, run);
-  try {
-    return await run;
-  } finally {
-    if (deliveryLocks.get(lockKey) === run) deliveryLocks.delete(lockKey);
-  }
+  try { return await run; }
+  finally { if (deliveryLocks.get(lockKey) === run) deliveryLocks.delete(lockKey); }
 }
 interactions.handleInteraction = handleInteraction;
 const validation = require('./embedValidation');
