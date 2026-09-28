@@ -18,6 +18,7 @@ const autoRoleManager = autoRoleStore;
 const verificationStore = require('../../modules/securityStudio/verificationStore');
 const verificationManager = require('../../modules/securityStudio/verificationManager');
 const embedTemplateManager = require('../../modules/messageStudio/embed/embedTemplates');
+const embedBindingRegistry = require('../../modules/messageStudio/embed/embedBindingRegistry');
 const {
   getAllEmbedDeployments,
   deleteEmbedDeployment,
@@ -69,6 +70,15 @@ function failure(res, error, status = 500) {
       error: error.message,
       templateId: error.templateId || null,
       usages: Array.isArray(error.usages) ? error.usages : [],
+    });
+  }
+  if (error?.code === 'EMBED_BINDING_UNSUPPORTED') {
+    return res.status(400).json({
+      success: false,
+      code: error.code,
+      error: error.message,
+      moduleKey: error.moduleKey || null,
+      slot: error.slot || null,
     });
   }
   return res.status(status).json({ success: false, error: error.message || 'Modules API request failed.' });
@@ -144,7 +154,7 @@ function getEmbedStudioPayload(guildId) {
   const templateSection = embedTemplateManager.getEmbedSection(guildId); const templates = embedTemplateManager.listTemplates(guildId);
   return {
     guildId, builder: { ...builder, deployments }, draft: builder.draft || {}, presets, deployments, templates,
-    bindings: templateSection.bindings || {}, variables: embedTemplateManager.MODULE_VARIABLES, defaults: embedTemplateManager.DEFAULT_TEMPLATES,
+    bindings: templateSection.bindings || {}, bindingRegistry: embedBindingRegistry.publicRegistry(), variables: embedTemplateManager.MODULE_VARIABLES, defaults: embedTemplateManager.DEFAULT_TEMPLATES,
     summary: {
       presetCount: Object.keys(presets || {}).filter((key) => key !== 'updatedAt').length,
       templateCount: Object.keys(templates || {}).length, deploymentCount: Object.keys(deployments || {}).length,
@@ -157,9 +167,6 @@ function getVerificationPayload(guildId) {
   return { guildId, config: section, overview: { enabled: status.enabled === true, panels: panels.length, deployedPanels: panels.filter((panel) => panel?.channelId && panel?.messageId).length, analytics: section.analytics || {}, hasTemplate: Boolean(section.panelTemplate) } };
 }
 
-// Every modules API route now shares the same authenticated guild-management
-// boundary. This prevents individual studios from accidentally exposing a
-// mutation route when a feature-specific guard is omitted.
 router.use('/:guildId', requireGuildManageAccess);
 
 router.get('/:guildId', (req, res) => { try { const guildId = getGuildId(req); const data = getGuildData(guildId) || {}; const modules = normalizeModuleMap(data.modules || {}); return success(res, { guildId, catalog: MODULE_CATALOG, modules, summary: { total: Object.keys(modules).length, enabled: Object.values(modules).filter((module) => module?.enabled !== false).length } }); } catch (error) { return failure(res, error, 400); } });
@@ -185,10 +192,10 @@ router.delete('/:guildId/embed-studio/presets/:name', (req, res) => {
     return success(res, { guildId, deleted: Boolean(templateDeleted || presetDeleted), templateDeleted, presetDeleted, ...getEmbedStudioPayload(guildId) });
   } catch (error) { return failure(res, error, error?.code === 'TEMPLATE_IN_USE' ? 409 : 400); }
 });
-router.get('/:guildId/embed-studio/templates', (req, res) => { try { const guildId = getGuildId(req); return success(res, { guildId, templates: embedTemplateManager.listTemplates(guildId), variables: embedTemplateManager.MODULE_VARIABLES }); } catch (error) { return failure(res, error, 400); } });
+router.get('/:guildId/embed-studio/templates', (req, res) => { try { const guildId = getGuildId(req); return success(res, { guildId, templates: embedTemplateManager.listTemplates(guildId), variables: embedTemplateManager.MODULE_VARIABLES, bindingRegistry: embedBindingRegistry.publicRegistry() }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/embed-studio/templates', (req, res) => { try { const guildId = getGuildId(req); const template = embedTemplateManager.saveTemplate(guildId, req.body || {}); return success(res, { guildId, template, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/embed-studio/bindings/:moduleKey/:slot', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const slot = cleanModuleKey(req.params.slot); const binding = embedTemplateManager.bindTemplate(guildId, moduleKey, slot, req.body?.templateId || req.body?.presetName || req.body?.name); return success(res, { guildId, binding, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
-router.delete('/:guildId/embed-studio/bindings/:moduleKey/:slot', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const slot = cleanModuleKey(req.params.slot); const binding = embedTemplateManager.unbindTemplate(guildId, moduleKey, slot); return success(res, { guildId, binding, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/embed-studio/bindings/:moduleKey/:slot', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const slot = cleanModuleKey(req.params.slot); embedBindingRegistry.assertSupportedBinding(moduleKey, slot); const binding = embedTemplateManager.bindTemplate(guildId, moduleKey, slot, req.body?.templateId || req.body?.presetName || req.body?.name); return success(res, { guildId, binding, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
+router.delete('/:guildId/embed-studio/bindings/:moduleKey/:slot', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const slot = cleanModuleKey(req.params.slot); embedBindingRegistry.assertSupportedBinding(moduleKey, slot); const binding = embedTemplateManager.unbindTemplate(guildId, moduleKey, slot); return success(res, { guildId, binding, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
 router.delete('/:guildId/embed-studio/deployments/:key', (req, res) => { try { const guildId = getGuildId(req); const key = cleanDeploymentKey(req.params.key); const deleted = deleteEmbedDeployment(guildId, key); return success(res, { guildId, deleted, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
 
 router.get('/:guildId/auto-roles', (req, res) => { try { const guildId = getGuildId(req); const config = autoRoleStore.getAutoRolesSection(guildId); return success(res, { guildId, config, overview: { enabled: isModuleEnabled(guildId, 'autoRoles'), joinRoleCount: (config.joinRoles || []).length, botRoleCount: (config.botRoles || []).length, applyToBots: config.settings?.applyToBots === true, analytics: config.analytics || {} } }); } catch (error) { return failure(res, error, 400); } });
