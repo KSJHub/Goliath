@@ -1,5 +1,6 @@
 'use strict';
 
+const { PermissionFlagsBits } = require('discord.js');
 const templates = require('./embedTemplates');
 const deployments = require('./embedDeployments');
 // embedState owns durable session persistence natively. Keep persistence at the
@@ -35,6 +36,33 @@ function canonicalMediaState(state = {}) {
     return { ...entry, gallery: entry.gallery.map((item, itemIndex) => ({ ...item, placement: itemIndex === 0 ? 'above' : 'below' })) };
   });
   return canonical;
+}
+function stateRequiresAttachments(state = {}) {
+  const canonical = canonicalMediaState(state);
+  const panels = Array.isArray(canonical?.panels) ? canonical.panels : [];
+  if (panels.some((entry) => Array.isArray(entry?.files) && entry.files.some((file) => file?.source))) return true;
+  const alignment = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
+  if (Object.values(alignment).some((value) => ['left', 'center', 'centre', 'right'].includes(String(value || '').toLowerCase()))) {
+    return panels.some((entry) => Array.isArray(entry?.gallery) && entry.gallery.some((item) => item?.source));
+  }
+  return false;
+}
+async function attachmentPermissionFailure(interaction, state, customId) {
+  if (!stateRequiresAttachments(state)) return null;
+  let channelId = state?.channelId || null;
+  if (customId === 'embed:update-existing') {
+    try {
+      const deployment = deployments.getEmbedDeployment(interaction.guild.id, deployments.getDeploymentKeyFromState(state));
+      channelId = deployment?.channelId || channelId;
+    } catch {}
+  }
+  if (!channelId || !interaction?.guild) return null;
+  const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null);
+  if (!channel) return null;
+  const me = interaction.guild.members.me || await interaction.guild.members.fetchMe().catch(() => null);
+  const permissions = me ? channel.permissionsFor(me) : null;
+  if (permissions?.has(PermissionFlagsBits.AttachFiles)) return null;
+  return `❌ Goliath needs **Attach Files** in <#${channelId}> because this embed contains attachment-backed media or files.`;
 }
 function installCanonicalMediaSessions(targetPanel) {
   if (!targetPanel || targetPanel.__canonicalMediaSessionsInstalled) return targetPanel;
@@ -114,8 +142,8 @@ installImageAlignmentInteraction(panel, interactions);
 installAlignmentPreview(panel, interactions);
 installGraphicHeaders(panel, media, interactions);
 const rawHandleInteraction = interactions.handleInteraction.bind(interactions);
-async function duplicateDeliveryReply(interaction) {
-  const payload = { content: '⏳ That Embed Studio deployment is already being processed. Please wait for it to finish.', flags: 64 };
+async function deliveryReply(interaction, content) {
+  const payload = { content, flags: 64 };
   try {
     if (interaction?.deferred || interaction?.replied) return await interaction.followUp(payload);
     return await interaction.reply(payload);
@@ -132,7 +160,12 @@ async function handleInteraction(interaction) {
   try { deploymentKey = deployments.getDeploymentKeyFromState(state); } catch {}
   const lockKey = `${guildId}:${deploymentKey}`;
   if (deliveryLocks.has(lockKey)) {
-    await duplicateDeliveryReply(interaction);
+    await deliveryReply(interaction, '⏳ That Embed Studio deployment is already being processed. Please wait for it to finish.');
+    return true;
+  }
+  const permissionFailure = await attachmentPermissionFailure(interaction, state, customId);
+  if (permissionFailure) {
+    await deliveryReply(interaction, permissionFailure);
     return true;
   }
   const run = Promise.resolve().then(() => rawHandleInteraction(interaction));
