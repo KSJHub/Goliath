@@ -74,7 +74,28 @@ function stopCounterRefreshScheduler() {
   sentinelScheduler.stop(SCHEDULER_ID, { reason: 'stats scheduler stopped intentionally' }); return true;
 }
 
-async function startup(client) { if (!client?.guilds?.cache) throw new Error('Discord client is unavailable.'); return startCounterRefreshScheduler(client); }
+function reconcileActiveVoiceSessions(client) {
+  if (!client?.guilds?.cache) return 0;
+  activeVoiceSessions.clear();
+  const now = Date.now();
+  let count = 0;
+  for (const guild of client.guilds.cache.values()) {
+    if (!statsStore.isEnabled(guild.id) || statsStore.getStats(guild.id).trackVoice === false) continue;
+    for (const state of guild.voiceStates?.cache?.values?.() || []) {
+      if (!state?.channelId || !state.member?.id) continue;
+      activeVoiceSessions.set(sessionKey(guild.id, state.member.id), { startedAt: now, channelId: state.channelId });
+      count += 1;
+    }
+  }
+  return count;
+}
+
+async function startup(client) {
+  if (!client?.guilds?.cache) throw new Error('Discord client is unavailable.');
+  const sessions = reconcileActiveVoiceSessions(client);
+  if (sessions) console.log(`[Stats] Reconciled ${sessions} active voice session(s) at startup.`);
+  return startCounterRefreshScheduler(client);
+}
 function shutdown() { return stopCounterRefreshScheduler(); }
 async function resolveChannel(guild, channelId) { if (!channelId) return null; return guild.channels.cache.get(channelId) || guild.channels.fetch(channelId).catch(() => null); }
 
@@ -107,7 +128,7 @@ async function handleVoiceStateUpdate(oldState, newState) {
       const minutes = Math.max(0, (now - session.startedAt) / 60000);
       if (minutes > 0 && statsStore.isEnabled(guild.id)) statsStore.addVoiceMinutes(member, oldChannelId, minutes);
     }
-    if (newChannelId) activeVoiceSessions.set(key, { startedAt: now, channelId: newChannelId });
+    if (newChannelId && statsStore.isEnabled(guild.id) && statsStore.getStats(guild.id).trackVoice !== false) activeVoiceSessions.set(key, { startedAt: now, channelId: newChannelId });
     queueCounterRefresh(guild, 'voice');
   } catch (error) { console.error('[Stats] Failed to track voice:', error); }
 }
