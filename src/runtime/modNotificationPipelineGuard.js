@@ -41,13 +41,24 @@ if (!globalThis[PATCH_KEY]) {
 
   function buildMemberNoticePayload(guild, modCase) {
     const appealWebUrl = `${appealsBaseUrl()}/appeals?guild=${encodeURIComponent(guild.id)}&case=${encodeURIComponent(modCase.caseId)}`;
+    const allAppealsUrl = `${appealsBaseUrl()}/appeals`;
+    const targetId = String(modCase.userId || modCase.user_id || 'Unknown');
+    const created = modCase.createdAt || modCase.created_at;
+    const action = actionMeta(modCase.action);
     return moderationNotice(guild, modCase, {
+      status: '🔴 Active • Appeal Eligible',
       issuedBy: issuerText(guild, modCase),
-      nextSteps: `If you believe this decision should be reconsidered, you can appeal **Case #${modCase.caseId}** below. Appeals remain available even if you are no longer in the server.`,
+      extraFields: [
+        { name: '🪪 Case Identity', value: `**Case:** #${modCase.caseId}\n**Action:** ${action.emoji} ${action.label}${created ? `\n**Issued:** <t:${Math.floor(new Date(created).getTime() / 1000)}:F>` : ''}`, inline: false },
+        { name: '👤 Member', value: `<@${targetId}>\n\`${targetId}\``, inline: true },
+        { name: '⚖️ Appeal Status', value: '**Eligible**', inline: true },
+      ],
+      nextSteps: `If you believe this decision was incorrect, unfair, or important context was missed, request a Management review using **Appeal This Case** below. Goliath already knows the server, member, action and **Case #${modCase.caseId}**, so you do not need to enter those details again. Appeals remain available even if you are no longer in the server.`,
       buttons: [
-        { customId: `mod_appeal_external:${guild.id}:${modCase.caseId}`, label: `Appeal Case #${modCase.caseId}`, emoji: '⚖️', style: ButtonStyle.Primary },
-        { url: appealWebUrl, label: 'Appeal Online', emoji: '🌐' },
-        { customId: 'mod_appeal_lookup', label: 'Appeal Another Case', style: ButtonStyle.Secondary },
+        // URL buttons are deliberately used in DMs. They remain functional after
+        // Kick/Ban and avoid Discord component-context failures outside a guild.
+        { url: appealWebUrl, label: `Appeal This Case`, emoji: '⚖️' },
+        { url: allAppealsUrl, label: 'Appeal Another Case', emoji: '🔎' },
       ],
     });
   }
