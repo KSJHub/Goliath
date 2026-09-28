@@ -181,7 +181,10 @@ async function applyPunishmentEngine(input = {}, options = {}) {
   };
 
   if (list.includes('dm')) {
-    if (dmEnabled === false) {
+    if (dmEnabled === false || source !== 'automod') {
+      // Manual moderation creates its canonical case first, then storage.sendModLog()
+      // sends the case-aware appeal notice. Never route a manual action through the
+      // AutoMod DM renderer or it is mislabeled and lacks the persisted Case ID.
       result.blockedActions.push('dm');
     } else {
       result.dmSent = await sendPunishmentDm(context, { rule, reason, messageContent, dmEnabled, dmMessage }, list);
