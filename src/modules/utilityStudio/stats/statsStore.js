@@ -53,6 +53,31 @@ function merge(defaults = {}, source = {}) {
   return output;
 }
 
+function retentionCutoff(retentionDays, now = Date.now()) {
+  return new Date(now - (Math.max(1, Number(retentionDays) || 30) - 1) * 86400000).toISOString().slice(0, 10);
+}
+
+function pruneDailyMap(map, cutoff) {
+  if (!isObject(map)) return {};
+  for (const key of Object.keys(map)) if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key < cutoff) delete map[key];
+  return map;
+}
+
+function applyRetention(stats) {
+  const cutoff = retentionCutoff(stats.settings?.retentionDays);
+  stats.data = isObject(stats.data) ? stats.data : copy(DEFAULT_STATS.data);
+  stats.data.messages = pruneDailyMap(stats.data.messages, cutoff);
+  stats.data.voice = pruneDailyMap(stats.data.voice, cutoff);
+  stats.data.members = isObject(stats.data.members) ? stats.data.members : copy(DEFAULT_STATS.data.members);
+  stats.data.members.snapshots = (Array.isArray(stats.data.members.snapshots) ? stats.data.members.snapshots : [])
+    .filter((snapshot) => {
+      const at = new Date(snapshot?.at || 0);
+      return Number.isFinite(at.getTime()) && at.toISOString().slice(0, 10) >= cutoff;
+    })
+    .slice(0, MAX_SNAPSHOTS);
+  return stats;
+}
+
 function normalizeStats(value = {}) {
   const normalized = merge(DEFAULT_STATS, value);
   delete normalized.enabled;
@@ -62,7 +87,7 @@ function normalizeStats(value = {}) {
   normalized.settings.timeZone = String(normalized.settings.timeZone || DEFAULT_STATS.settings.timeZone).trim().slice(0, 64) || DEFAULT_STATS.settings.timeZone;
   normalized.settings.defaultFrequencyMinutes = Math.max(10, Math.min(1440, Number(normalized.settings.defaultFrequencyMinutes || 10) || 10));
   normalized.counters = Array.isArray(normalized.counters) ? normalized.counters.slice(0, 100) : [];
-  return normalized;
+  return applyRetention(normalized);
 }
 
 function dayKey(date = new Date()) {
