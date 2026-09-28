@@ -23,9 +23,17 @@ function normalizeTemplateInput(template = {}) {
   const templateType = cleanKey(input.templateType || input.module || 'global', 'Template type');
   const content = String(input.content || '').slice(0, 2000);
   const embed = input.embed && typeof input.embed === 'object' && !Array.isArray(input.embed) ? input.embed : {};
+  const fields = Array.isArray(embed.fields) ? embed.fields : [];
+  const hasRenderableEmbed = Boolean(
+    String(embed.title || '').trim()
+    || String(embed.description || '').trim()
+    || String(embed.image?.url || embed.image || '').trim()
+    || String(embed.thumbnail?.url || embed.thumbnail || '').trim()
+    || fields.some((field) => String(field?.name || '').trim() || String(field?.value || '').trim())
+  );
 
-  if (!content.trim() && !String(embed.title || '').trim() && !String(embed.description || '').trim()) {
-    throw new Error('Template content, title or description is required.');
+  if (!content.trim() && !hasRenderableEmbed) {
+    throw new Error('Template must contain message content or renderable embed content.');
   }
 
   return {
