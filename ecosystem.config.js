@@ -4,7 +4,7 @@ module.exports = {
       name: 'goliath-dev',
       cwd: '/home/goliath/dev',
       script: 'server.js',
-      node_args: '-r ./src/runtime/embedPresetDeletionGuard.js -r ./src/runtime/modInteractionRefreshGuard.js',
+      node_args: '-r ./src/runtime/embedPresetDeletionGuard.js -r ./src/runtime/modInteractionRefreshGuard.js -r ./src/runtime/modConfirmationTicketGuard.js',
 
       env: {
         BOT_MODE: 'dev',
