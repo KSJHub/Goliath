@@ -118,11 +118,10 @@ async function handleInteraction(interaction) {
   const customId = String(interaction?.customId || '');
   if (!DELIVERY_ACTIONS.has(customId)) return rawHandleInteraction(interaction);
   const guildId = String(interaction?.guildId || interaction?.guild?.id || 'unknown');
-  const userId = String(interaction?.user?.id || interaction?.member?.id || 'unknown');
   const state = typeof panel.getSession === 'function' ? panel.getSession(interaction) : {};
   let deploymentKey = 'custom';
   try { deploymentKey = deployments.getDeploymentKeyFromState(state); } catch {}
-  const lockKey = `${guildId}:${userId}:${deploymentKey}`;
+  const lockKey = `${guildId}:${deploymentKey}`;
   const previous = deliveryLocks.get(lockKey) || Promise.resolve();
   const run = previous.catch(() => null).then(() => rawHandleInteraction(interaction));
   deliveryLocks.set(lockKey, run);
