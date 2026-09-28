@@ -14,9 +14,9 @@ if (!globalThis[PATCH_KEY]) {
   const originalSubmitPunishmentRequest = punishments.submitPunishmentRequest;
 
   const TIER_META = Object.freeze({
-    administrator: { rank: 300, badge: '👑' },
-    moderator: { rank: 200, badge: '🛡️' },
-    juniorModerator: { rank: 100, badge: '🔰' },
+    administrator: { rank: 300, badge: '👑', fallbackLabel: 'Admin' },
+    moderator: { rank: 200, badge: '🛡️', fallbackLabel: 'Moderator' },
+    juniorModerator: { rank: 100, badge: '🔰', fallbackLabel: 'Staff' },
   });
 
   const ACTION_META = Object.freeze({
@@ -33,11 +33,24 @@ if (!globalThis[PATCH_KEY]) {
     return [];
   }
 
-  function mappedAuthority(member, guild) {
-    if (!member || !guild || typeof adminPanel.getAuthorityConfig !== 'function') return null;
+  function mappedAuthority(interaction) {
+    const member = interaction?.member;
+    const guild = interaction?.guild;
+    if (!member || !guild || typeof adminPanel.getAuthorityConfig !== 'function' || typeof adminPanel.getAuthorityContext !== 'function') return null;
+
     let config;
-    try { config = adminPanel.getAuthorityConfig(guild.id); } catch { return null; }
-    if (!config?.configured) return null;
+    let context;
+    try {
+      config = adminPanel.getAuthorityConfig(guild.id);
+      context = adminPanel.getAuthorityContext(interaction);
+    } catch {
+      return null;
+    }
+
+    // Authority Control is the single source of truth when it is configured.
+    // Do not manufacture a title from native Discord permissions if Admin says
+    // this interaction is using configured authority.
+    if (!config?.configured || !context || context.source === 'legacy' || context.source === 'none') return null;
 
     const matches = memberRoleIds(member)
       .map((roleId) => ({ roleId, profile: config.roleProfiles?.[roleId] }))
@@ -47,6 +60,7 @@ if (!globalThis[PATCH_KEY]) {
         tier: profile.tier,
         rank: TIER_META[profile.tier].rank,
         badge: TIER_META[profile.tier].badge,
+        fallbackLabel: TIER_META[profile.tier].fallbackLabel,
         role: guild.roles?.cache?.get?.(roleId) || null,
       }))
       .sort((a, b) => (b.rank - a.rank) || ((b.role?.position || 0) - (a.role?.position || 0)));
@@ -54,9 +68,9 @@ if (!globalThis[PATCH_KEY]) {
     const best = matches[0];
     if (!best) return null;
     return {
-      source: 'authority-control',
+      source: context.source || 'authority-control',
       badge: best.badge,
-      label: best.role?.name || ({ administrator: 'Admin', moderator: 'Moderator', juniorModerator: 'Staff' }[best.tier] || 'Staff'),
+      label: best.role?.name || best.fallbackLabel,
       roleId: best.roleId,
       tier: best.tier,
     };
@@ -74,7 +88,7 @@ if (!globalThis[PATCH_KEY]) {
   }
 
   function resolveIssuingAuthority(interaction) {
-    return mappedAuthority(interaction?.member, interaction?.guild) || fallbackAuthority(interaction?.member);
+    return mappedAuthority(interaction) || fallbackAuthority(interaction?.member);
   }
 
   function actionMeta(type) {
@@ -109,7 +123,7 @@ if (!globalThis[PATCH_KEY]) {
     }
 
     embed.addFields(
-      { name: 'Safety Check', value: 'Authority, Discord hierarchy, target safety and current permissions will be rechecked when this action is confirmed.', inline: false },
+      { name: 'Safety Check', value: 'Goliath Admin Authority Control, Discord hierarchy and target safety will be rechecked when this action is confirmed.', inline: false },
       { name: '⚠️ Confirmation', value: meta.warning, inline: false },
     );
     return embed;
