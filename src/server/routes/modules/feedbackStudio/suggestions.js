@@ -25,7 +25,7 @@ async function guild(req, id) {
 }
 
 async function channelHealth(target, channelId, label, required, options = {}) {
-  if (!channelId) return required ? { level: 'warning', code: `${label}_missing` } : null;
+  if (!channelId) return required ? { level: 'issue', code: `${label}_missing` } : null;
   const channel = target?.channels?.cache?.get(channelId) || await target?.channels?.fetch?.(channelId).catch(() => null);
   if (!channel?.send) return { level: 'issue', code: `${label}_unavailable`, channelId };
   const me = target?.members?.me;
