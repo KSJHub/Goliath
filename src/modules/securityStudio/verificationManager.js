@@ -62,12 +62,128 @@ function accountAgeDays(member) { return (Date.now() - Number(member?.user?.crea
 function membershipAgeMinutes(member) { return (Date.now() - Number(member?.joinedTimestamp || Date.now())) / 60000; }
 
 async function assignPendingRoles(member, reason = 'Goliath pending verification role assigned') {
-  const section = getEffectiveVerificationSection(member.guild.id); const settings = section.settings;
-  if (section.enabled !== true || !settings.usePendingRoles || !settings.assignPendingRoles) return { assigned: [], failed: [], skipped: true };
-  const roles = await fetchRoles(member.guild, settings.pendingRoleIds); const assigned = []; const failed = [];
-  for (const role of roles) { const status = resolveRoleActionStatus(member.guild, member, role, 'add'); if (!status.ok) { failed.push({ roleId: role.id, reason: status.message }); continue; } if (status.skipped) continue; try { await member.roles.add(role, reason); if (member.roles.cache.has(role.id)) assigned.push(role); else failed.push({ roleId: role.id, reason: 'role was not present after assignment' }); } catch (error) { const failureReason = error?.message || 'Discord rejected the pending role assignment'; failed.push({ roleId: role.id, reason: failureReason }); console.warn('[Verification] Pending role assignment failed', { guildId: member.guild.id, userId: member.id, roleId: role.id, error: failureReason }); } }
-  if (assigned.length) { verificationStore.incrementAnalytics(member.guild.id, { pendingRolesAssigned: assigned.length }); if (settings.dmOnPendingRole) { const message = renderMessage(section.messages.pendingAssigned, member, { pendingRoles: roleMentions(assigned) }); await member.send(message).catch(() => null); } }
-  return { assigned, failed, skipped: false };
+  const section = getEffectiveVerificationSection(member.guild.id);
+  const settings = section.settings;
+
+  if (
+    section.enabled !== true ||
+    !settings.usePendingRoles ||
+    !settings.assignPendingRoles
+  ) {
+    return { assigned: [], failed: [], skipped: true };
+  }
+
+  const roles = await fetchRoles(member.guild, settings.pendingRoleIds);
+  const attempted = [];
+  const failed = [];
+
+  for (const role of roles) {
+    const status = resolveRoleActionStatus(
+      member.guild,
+      member,
+      role,
+      'add'
+    );
+
+    if (!status.ok) {
+      failed.push({
+        roleId: role.id,
+        reason: status.message,
+      });
+      continue;
+    }
+
+    if (status.skipped) continue;
+
+    try {
+      await member.roles.add(role, reason);
+      attempted.push(role);
+    } catch (error) {
+      const failureReason =
+        error?.message ||
+        'Discord rejected the pending role assignment';
+
+      failed.push({
+        roleId: role.id,
+        reason: failureReason,
+      });
+
+      console.warn('[Verification] Pending role assignment failed', {
+        guildId: member.guild.id,
+        userId: member.id,
+        roleId: role.id,
+        error: failureReason,
+      });
+    }
+  }
+
+  let refreshedMember = null;
+  let confirmationError = null;
+
+  if (attempted.length) {
+    try {
+      refreshedMember = await member.guild.members.fetch({
+        user: member.id,
+        force: true,
+      });
+    } catch (error) {
+      confirmationError =
+        error?.message ||
+        'Discord member state could not be refreshed';
+
+      console.warn(
+        '[Verification] Failed to confirm pending role assignments',
+        {
+          guildId: member.guild.id,
+          userId: member.id,
+          error: confirmationError,
+        }
+      );
+    }
+  }
+
+  const assigned = [];
+
+  for (const role of attempted) {
+    if (!refreshedMember) {
+      failed.push({
+        roleId: role.id,
+        reason: `role assignment could not be confirmed: ${confirmationError}`,
+      });
+      continue;
+    }
+
+    if (refreshedMember.roles.cache.has(role.id)) {
+      assigned.push(role);
+    } else {
+      failed.push({
+        roleId: role.id,
+        reason: 'role was not present after assignment',
+      });
+    }
+  }
+
+  if (assigned.length) {
+    verificationStore.incrementAnalytics(member.guild.id, {
+      pendingRolesAssigned: assigned.length,
+    });
+
+    if (settings.dmOnPendingRole) {
+      const message = renderMessage(
+        section.messages.pendingAssigned,
+        refreshedMember,
+        { pendingRoles: roleMentions(assigned) }
+      );
+
+      await refreshedMember.send(message).catch(() => null);
+    }
+  }
+
+  return {
+    assigned,
+    failed,
+    skipped: false,
+  };
 }
 
 async function handleMemberJoin(member) {
