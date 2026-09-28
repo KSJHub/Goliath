@@ -198,7 +198,121 @@ async function handleMemberUpdate(oldMember, newMember) { if (!newMember?.guild?
 async function failVerification(guildId, section, member, messageKey, values = {}, analytics = {}, options = {}) { const reason = renderMessage(section.messages[messageKey] || section.messages.failed, member, values); const countFailure = options.countFailure !== false; const logFailure = options.logFailure !== false; if (countFailure) { verificationStore.recordAttempt(guildId, member.id, { failed: true }); verificationStore.incrementAnalytics(guildId, { failed: 1, ...analytics }); } else if (Object.keys(analytics || {}).length) verificationStore.incrementAnalytics(guildId, analytics); if (section.settings.logFailure && logFailure) await sendVerificationLog(member.guild, section, renderMessage(section.messages.failureLog, member, { ...values, reason: values.reason || reason })); return { ok: false, message: reason }; }
 function getRequestedPanelId(interaction) { if (interaction?.panelId) return String(interaction.panelId); return parseVerifyCustomId(interaction?.customId)?.panelId || null; }
 function getActivePanel(guildId, panelId, context = {}) { if (!panelId) return null; const section = verificationStore.getVerificationSection(guildId); if (!section.activePanelId || section.activePanelId !== panelId) return null; const panel = section.panels?.[panelId] || null; if (!panel || panel.enabled === false || panel.deletedAt || panel.retiredAt) return null; const messageId = cleanDiscordId(context.messageId || context.message?.id); const channelId = cleanDiscordId(context.channelId || context.channel?.id); if (panel.messageId && messageId && panel.messageId !== messageId) return null; if (panel.channelId && channelId && panel.channelId !== channelId) return null; return panel; }
-async function reconcileAlreadyVerifiedMember(member, settings, verifiedRoles, pendingRoles) { const guild = member.guild; const issues = []; if (!canBotManageMember(member)) return { member, issues: ['member hierarchy prevents reconciliation'] }; for (const role of verifiedRoles) { if (member.roles.cache.has(role.id)) continue; const status = resolveRoleActionStatus(guild, member, role, 'add'); if (!status.ok) { issues.push(status.message); continue; } try { await member.roles.add(role, 'Goliath verification state reconciliation'); } catch (error) { issues.push(error?.message || `failed to add ${role.name}`); } } if (settings.usePendingRoles && settings.removePendingRoles) { for (const role of pendingRoles) { if (!member.roles.cache.has(role.id)) continue; const status = resolveRoleActionStatus(guild, member, role, 'remove'); if (!status.ok) { issues.push(status.message); continue; } try { await member.roles.remove(role, 'Goliath verification state reconciliation'); } catch (error) { issues.push(error?.message || `failed to remove ${role.name}`); } } } const refreshed = await guild.members.fetch({ user: member.id, force: true }).catch(() => member); return { member: refreshed, issues }; }
+async function reconcileAlreadyVerifiedMember(
+  member,
+  settings,
+  verifiedRoles,
+  pendingRoles
+) {
+  const guild = member.guild;
+  const issues = [];
+
+  if (!canBotManageMember(member)) {
+    return {
+      member,
+      issues: ['member hierarchy prevents reconciliation'],
+    };
+  }
+
+  for (const role of verifiedRoles) {
+    if (member.roles.cache.has(role.id)) continue;
+
+    const status = resolveRoleActionStatus(
+      guild,
+      member,
+      role,
+      'add'
+    );
+
+    if (!status.ok) {
+      issues.push(status.message);
+      continue;
+    }
+
+    try {
+      await member.roles.add(
+        role,
+        'Goliath verification state reconciliation'
+      );
+    } catch (error) {
+      issues.push(
+        error?.message || `failed to add ${role.name}`
+      );
+    }
+  }
+
+  if (settings.usePendingRoles && settings.removePendingRoles) {
+    for (const role of pendingRoles) {
+      if (!member.roles.cache.has(role.id)) continue;
+
+      const status = resolveRoleActionStatus(
+        guild,
+        member,
+        role,
+        'remove'
+      );
+
+      if (!status.ok) {
+        issues.push(status.message);
+        continue;
+      }
+
+      try {
+        await member.roles.remove(
+          role,
+          'Goliath verification state reconciliation'
+        );
+      } catch (error) {
+        issues.push(
+          error?.message || `failed to remove ${role.name}`
+        );
+      }
+    }
+  }
+
+  let refreshed;
+
+  try {
+    refreshed = await guild.members.fetch({
+      user: member.id,
+      force: true,
+    });
+  } catch (error) {
+    issues.push(
+      `unable to confirm reconciled member state: ${
+        error?.message || 'Discord member refresh failed'
+      }`
+    );
+
+    return {
+      member,
+      issues,
+    };
+  }
+
+  for (const role of verifiedRoles) {
+    if (!refreshed.roles.cache.has(role.id)) {
+      issues.push(
+        `verified role not present after reconciliation: ${role.name}`
+      );
+    }
+  }
+
+  if (settings.usePendingRoles && settings.removePendingRoles) {
+    for (const role of pendingRoles) {
+      if (refreshed.roles.cache.has(role.id)) {
+        issues.push(
+          `pending role still present after reconciliation: ${role.name}`
+        );
+      }
+    }
+  }
+
+  return {
+    member: refreshed,
+    issues,
+  };
+}
 
 async function verifyMember(interaction) {
   const guild = interaction?.guild; const guildId = interaction?.guildId || guild?.id; if (!guildId || !guild) return { ok: false, message: 'Server unavailable.' };
