@@ -98,7 +98,10 @@ function installMediaRuntime(targetPanel) {
 installMediaRuntime(panel);
 installAlignmentSessionView(panel);
 installClassicSingleImagePayload(renderer);
-installImageAlignment(panel, renderer);
+// Install alignment state/preset/UI support without installing the older
+// attachment renderer. FinalImageAlignment below is the single delivery-time
+// authority for Left/Centre/Right attachment transformation.
+installImageAlignment(panel, null);
 installAlignmentDeliveryBridge(renderer, panel);
 // Last renderer wrapper: rebuild the outgoing attachment from Goliath's cached
 // source after all other media transforms. This makes the saved alignment the
