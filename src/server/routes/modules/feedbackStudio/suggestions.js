@@ -16,13 +16,35 @@ function guildId(req) {
   return id;
 }
 
-const actorId = (req) => String(req.session?.user?.id || req.body?.actorId || '').trim() || null;
+const actorId = (req) => String(req.session?.user?.id || '').trim() || null;
 const client = (req) => req.client || req.app?.get?.('goliath.client') || null;
 
 async function guild(req, id) {
   const discord = client(req);
   return discord?.guilds?.cache?.get(id) || await discord?.guilds?.fetch?.(id).catch(() => null);
 }
+
+async function requireGuildAccess(req, res, next) {
+  try {
+    const userId = actorId(req);
+    if (!/^\d{15,25}$/.test(userId || '')) return res.status(401).json({ success: false, error: 'Authentication required.' });
+    const id = guildId(req);
+    const target = await guild(req, id);
+    if (!target) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
+    const member = target.members.cache.get(userId) || await target.members.fetch(userId).catch(() => null);
+    const allowed = Boolean(
+      member?.permissions?.has(PermissionFlagsBits.Administrator) ||
+      member?.permissions?.has(PermissionFlagsBits.ManageGuild)
+    );
+    if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
+    return next();
+  } catch (error) {
+    console.error('[Suggestions API access]', error);
+    return res.status(403).json({ success: false, error: 'Unable to verify server access.' });
+  }
+}
+
+router.use('/:guildId', requireGuildAccess);
 
 async function channelHealth(target, channelId, label, required, options = {}) {
   if (!channelId) return required ? { level: 'issue', code: `${label}_missing` } : null;
