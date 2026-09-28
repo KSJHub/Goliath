@@ -24,13 +24,15 @@ async function guild(req, id) {
   return discord?.guilds?.cache?.get(id) || await discord?.guilds?.fetch?.(id).catch(() => null);
 }
 
-async function channelHealth(target, channelId, label, required) {
+async function channelHealth(target, channelId, label, required, options = {}) {
   if (!channelId) return required ? { level: 'warning', code: `${label}_missing` } : null;
   const channel = target?.channels?.cache?.get(channelId) || await target?.channels?.fetch?.(channelId).catch(() => null);
   if (!channel?.send) return { level: 'issue', code: `${label}_unavailable`, channelId };
   const me = target?.members?.me;
   const permissions = me && channel.permissionsFor?.(me);
-  if (permissions && ![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks].every((permission) => permissions.has(permission))) {
+  const requiredPermissions = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks];
+  if (options.requireHistory === true) requiredPermissions.push(PermissionFlagsBits.ReadMessageHistory);
+  if (permissions && !requiredPermissions.every((permission) => permissions.has(permission))) {
     return { level: 'issue', code: `${label}_permissions_missing`, channelId };
   }
   return null;
@@ -39,10 +41,11 @@ async function channelHealth(target, channelId, label, required) {
 async function buildHealth(target, section) {
   if (!target) return null;
   const checks = await Promise.all([
-    channelHealth(target, section.submitChannelId, 'submit_channel', true),
-    channelHealth(target, section.reviewChannelId || section.submitChannelId, 'review_channel', section.requireReview !== false),
+    channelHealth(target, section.submitChannelId, 'submit_channel', true, { requireHistory: true }),
+    channelHealth(target, section.reviewChannelId, 'review_channel', section.requireReview !== false, { requireHistory: true }),
     channelHealth(target, section.approvedChannelId, 'approved_channel', false),
     channelHealth(target, section.deniedChannelId, 'denied_channel', false),
+    channelHealth(target, section.logChannelId, 'log_channel', false),
   ]);
   const issues = checks.filter((item) => item?.level === 'issue');
   const warnings = checks.filter((item) => item?.level === 'warning');
