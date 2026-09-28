@@ -190,7 +190,7 @@ async function galleryItems(media, interaction, placement = null, payloadFiles =
     let url = source;
     const alignment = galleryAlignment(item);
     const isStaticImage = String(item?.type || 'auto').toLowerCase() !== 'video' && !nativeImageShouldPassThrough(probe.contentType);
-    if (isStaticImage && alignment !== 'left' && Array.isArray(payloadFiles)) {
+    if (isStaticImage && Array.isArray(payloadFiles)) {
       const prepared = await alignedGalleryAttachment(source, alignment, panelIndex, itemIndex);
       if (prepared) { payloadFiles.push(prepared.attachment); url = prepared.url; }
     }

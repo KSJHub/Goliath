@@ -9,11 +9,9 @@ const panel = require('./embedPanel');
 const media = require('./embedMedia');
 const renderer = require('./embedRenderer');
 const { installMediaManagerBase } = require('./embedMediaManagerBase');
-const { installClassicSingleImagePayload } = require('./embedClassicSingleImage');
 const { installGraphicHeaders } = require('./embedGraphicHeaders');
 const { installImageAlignment, installInteraction: installImageAlignmentInteraction, applyAlignmentMap } = require('./embedImageAlignment');
 const { installAlignmentPreview } = require('./embedAlignmentPreview');
-const { installFinalImageAlignment } = require('./embedFinalImageAlignment');
 
 const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPanelMedia: media.setPanelMedia, mediaModel: media.mediaModel });
 const deliveryLocks = new Map();
@@ -114,10 +112,8 @@ function installMediaRuntime(targetPanel) {
 }
 installMediaRuntime(panel);
 installAlignmentSessionView(panel);
-installClassicSingleImagePayload(renderer);
 installImageAlignment(panel, null);
 installAlignmentDeliveryBridge(renderer, panel);
-installFinalImageAlignment(renderer);
 const interactions = require('./embedInteractions');
 installImageAlignmentInteraction(panel, interactions);
 installAlignmentPreview(panel, interactions);
