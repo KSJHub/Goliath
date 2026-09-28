@@ -112,9 +112,10 @@ installImageAlignmentInteraction(panel, interactions);
 installAlignmentPreview(panel, interactions);
 installGraphicHeaders(panel, media, interactions);
 const validation = require('./embedValidation');
+const health = require('./embedHealth');
 function getOverview(guildId) {
   const allTemplates = templates.listTemplates(guildId) || {};
   const allDeployments = Object.values(deployments.getAllEmbedDeployments(guildId) || {});
   return { enabled: true, templates: { total: Object.keys(allTemplates).length }, deployments: { total: allDeployments.length, active: allDeployments.filter((item) => !item.status || item.status === 'active').length, unavailable: allDeployments.filter((item) => item.status && item.status !== 'active').length } };
 }
-module.exports = { getOverview, buildHealthReport: validation.buildHealthReport, repairAll: validation.repairAll, handleInteraction: interactions.handleInteraction, installMediaRuntime, installMediaBoundary: installMediaRuntime, mediaStateApi, templates, deployments, panel, media, interactions, tracking: deployments, validation, health: validation };
+module.exports = { getOverview, buildHealthReport: health.buildHealthReport, repairAll: health.repairAll, handleInteraction: interactions.handleInteraction, installMediaRuntime, installMediaBoundary: installMediaRuntime, mediaStateApi, templates, deployments, panel, media, interactions, tracking: deployments, validation, health };
