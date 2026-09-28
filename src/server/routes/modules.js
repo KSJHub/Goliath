@@ -98,19 +98,30 @@ function normalizeModuleMap(modules = {}) {
 function getDiscordClient(req) { return req.client || req.app?.get?.('goliath.client') || req.app?.locals?.client || req.app?.locals?.discordClient || global.client || global.discordClient || null; }
 async function fetchGuild(req, guildId) { const client = getDiscordClient(req); if (!client?.guilds) return null; return client.guilds.cache.get(guildId) || client.guilds.fetch(guildId).catch(() => null); }
 
-async function requireVerificationGuildAccess(req, res, next) {
+async function requireGuildManageAccess(req, res, next) {
   try {
     const userId = cleanDiscordId(req.session?.user?.id);
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required.' });
-    const guildId = getGuildId(req); req.verificationActorId = userId;
+
+    const guildId = getGuildId(req);
+    req.moduleActorId = userId;
+
     if (security.isBotOwner(userId)) return next();
+
     const guild = await fetchGuild(req, guildId);
     if (!guild) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
+
     const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
-    const allowed = Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || member?.permissions?.has(PermissionFlagsBits.ManageGuild));
+    const allowed = Boolean(
+      member?.permissions?.has(PermissionFlagsBits.Administrator)
+      || member?.permissions?.has(PermissionFlagsBits.ManageGuild)
+    );
+
     if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
     return next();
-  } catch (error) { return failure(res, error, 403); }
+  } catch (error) {
+    return failure(res, error, 403);
+  }
 }
 
 async function guardManageableRoles(guild, roleIds = [], scope = 'roles') {
@@ -146,11 +157,15 @@ function getVerificationPayload(guildId) {
   return { guildId, config: section, overview: { enabled: status.enabled === true, panels: panels.length, deployedPanels: panels.filter((panel) => panel?.channelId && panel?.messageId).length, analytics: section.analytics || {}, hasTemplate: Boolean(section.panelTemplate) } };
 }
 
-router.use('/:guildId/verification', requireVerificationGuildAccess);
+// Every modules API route now shares the same authenticated guild-management
+// boundary. This prevents individual studios from accidentally exposing a
+// mutation route when a feature-specific guard is omitted.
+router.use('/:guildId', requireGuildManageAccess);
+
 router.get('/:guildId', (req, res) => { try { const guildId = getGuildId(req); const data = getGuildData(guildId) || {}; const modules = normalizeModuleMap(data.modules || {}); return success(res, { guildId, catalog: MODULE_CATALOG, modules, summary: { total: Object.keys(modules).length, enabled: Object.values(modules).filter((module) => module?.enabled !== false).length } }); } catch (error) { return failure(res, error, 400); } });
-router.patch('/:guildId/:moduleKey/enabled', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const enabled = req.body?.enabled === true; setModuleEnabled(guildId, moduleKey, enabled, moduleKey === 'verification' ? { actorId: req.verificationActorId } : {}); const modules = normalizeModuleMap(getGuildSection(guildId, 'modules', {})); return success(res, { guildId, moduleKey, enabled, modules }); } catch (error) { return failure(res, error, 400); } });
+router.patch('/:guildId/:moduleKey/enabled', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const enabled = req.body?.enabled === true; setModuleEnabled(guildId, moduleKey, enabled, { actorId: req.moduleActorId }); const modules = normalizeModuleMap(getGuildSection(guildId, 'modules', {})); return success(res, { guildId, moduleKey, enabled, modules }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/verification', (req, res) => { try { const guildId = getGuildId(req); return success(res, getVerificationPayload(guildId)); } catch (error) { return failure(res, error, 400); } });
-router.patch('/:guildId/verification/settings', async (req, res) => { try { const guildId = getGuildId(req); await guardVerificationRoles(req, guildId, req.body || {}); const settings = req.body?.settings || req.body || {}; const config = verificationManager.updateVerificationSettings(guildId, settings, { actorId: req.verificationActorId }); return success(res, { guildId, config, ...getVerificationPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
+router.patch('/:guildId/verification/settings', async (req, res) => { try { const guildId = getGuildId(req); await guardVerificationRoles(req, guildId, req.body || {}); const settings = req.body?.settings || req.body || {}; const config = verificationManager.updateVerificationSettings(guildId, settings, { actorId: req.moduleActorId }); return success(res, { guildId, config, ...getVerificationPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
 
 router.get('/:guildId/embed-studio', (req, res) => { try { const guildId = getGuildId(req); return success(res, getEmbedStudioPayload(guildId)); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/embed-studio/draft', (req, res) => { try { const guildId = getGuildId(req); const draft = saveEmbedBuilderDraft(guildId, req.body?.embed ? { ...req.body.embed, content: req.body.content || '' } : req.body || {}); return success(res, { guildId, draft, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
@@ -165,8 +180,6 @@ router.post('/:guildId/embed-studio/presets', requirePlanLimit('embedPresets', c
 router.delete('/:guildId/embed-studio/presets/:name', (req, res) => {
   try {
     const guildId = getGuildId(req); const name = cleanPresetName(req.params.name);
-    // Canonical template deletion is the guard. It must run first so a bound
-    // message can never lose its legacy preset record before deletion is refused.
     const templateDeleted = embedTemplateManager.deleteTemplate(guildId, name);
     const presetDeleted = deleteEmbedPreset(guildId, name);
     return success(res, { guildId, deleted: Boolean(templateDeleted || presetDeleted), templateDeleted, presetDeleted, ...getEmbedStudioPayload(guildId) });
@@ -179,9 +192,9 @@ router.delete('/:guildId/embed-studio/bindings/:moduleKey/:slot', (req, res) => 
 router.delete('/:guildId/embed-studio/deployments/:key', (req, res) => { try { const guildId = getGuildId(req); const key = cleanDeploymentKey(req.params.key); const deleted = deleteEmbedDeployment(guildId, key); return success(res, { guildId, deleted, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
 
 router.get('/:guildId/auto-roles', (req, res) => { try { const guildId = getGuildId(req); const config = autoRoleStore.getAutoRolesSection(guildId); return success(res, { guildId, config, overview: { enabled: isModuleEnabled(guildId, 'autoRoles'), joinRoleCount: (config.joinRoles || []).length, botRoleCount: (config.botRoles || []).length, applyToBots: config.settings?.applyToBots === true, analytics: config.analytics || {} } }); } catch (error) { return failure(res, error, 400); } });
-router.patch('/:guildId/auto-roles/enabled', (req, res) => { try { const guildId = getGuildId(req); const config = autoRoleManager.setAutoRolesEnabled(guildId, req.body?.enabled === true, { actorId: req.body?.actorId }); return success(res, { guildId, config }); } catch (error) { return failure(res, error, 400); } });
-router.patch('/:guildId/auto-roles/settings', (req, res) => { try { const guildId = getGuildId(req); const config = autoRoleStore.updateSettings(guildId, req.body?.settings || req.body || {}, { actorId: req.body?.actorId }); return success(res, { guildId, config }); } catch (error) { return failure(res, error, 400); } });
-router.put('/:guildId/auto-roles', async (req, res) => { try { const guildId = getGuildId(req); await guardAutoRoleConfig(req, guildId, req.body || {}); const config = autoRoleManager.configureAutoRoles(guildId, req.body || {}, { actorId: req.body?.actorId }); return success(res, { guildId, config }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/auto-roles/join', async (req, res) => { try { const guildId = getGuildId(req); const guild = await fetchGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); await guardManageableRoles(guild, [req.body?.roleId], 'auto_roles.join_role'); const config = autoRoleManager.addJoinRole(guildId, req.body?.roleId, { actorId: req.body?.actorId }); return success(res, { guildId, config }); } catch (error) { return failure(res, error, 400); } });
+router.patch('/:guildId/auto-roles/enabled', (req, res) => { try { const guildId = getGuildId(req); const config = autoRoleManager.setAutoRolesEnabled(guildId, req.body?.enabled === true, { actorId: req.moduleActorId }); return success(res, { guildId, config }); } catch (error) { return failure(res, error, 400); } });
+router.patch('/:guildId/auto-roles/settings', (req, res) => { try { const guildId = getGuildId(req); const config = autoRoleStore.updateSettings(guildId, req.body?.settings || req.body || {}, { actorId: req.moduleActorId }); return success(res, { guildId, config }); } catch (error) { return failure(res, error, 400); } });
+router.put('/:guildId/auto-roles', async (req, res) => { try { const guildId = getGuildId(req); await guardAutoRoleConfig(req, guildId, req.body || {}); const config = autoRoleManager.configureAutoRoles(guildId, req.body || {}, { actorId: req.moduleActorId }); return success(res, { guildId, config }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/auto-roles/join', async (req, res) => { try { const guildId = getGuildId(req); const guild = await fetchGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); await guardManageableRoles(guild, [req.body?.roleId], 'auto_roles.join_role'); const config = autoRoleManager.addJoinRole(guildId, req.body?.roleId, { actorId: req.moduleActorId }); return success(res, { guildId, config }); } catch (error) { return failure(res, error, 400); } });
 
 module.exports = router;
