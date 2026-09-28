@@ -39,12 +39,16 @@ function run() {
   assert(embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"));
 
   // Persistence now lives at the canonical embedState boundary itself rather
-  // than being installed as a wrapper from embed.js. Keep this audit focused
-  // on the invariant: every state load/save path must cross the durable store.
+  // than being installed as a wrapper from embed.js. Verify behaviour/ownership
+  // without coupling this audit to one exact implementation expression.
   const embedState = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embedState'), 'utf8');
   assert(embedState.includes("require('./embedSessionStore')"), 'embedState must own the durable session store');
   assert(embedState.includes('sessionStore.load(key)'), 'getSession must hydrate from durable storage');
-  assert(embedState.includes('sessionStore.save(key, synced)'), 'saveSession must persist canonical state');
+  assert(
+    embedState.includes('sessionStore.save(key, synced)') ||
+    (embedState.includes('persistOrThrow(key, synced') && embedState.includes('sessionStore.save(key, state)')),
+    'saveSession must persist canonical state'
+  );
   assert(embedState.includes('sessionStore.remove(key)'), 'clearSession must remove durable state');
 
   console.log('✅ Embed Graphic Header regression audit passed.');
