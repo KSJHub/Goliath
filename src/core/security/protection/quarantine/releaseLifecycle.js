@@ -7,6 +7,7 @@ const {
   emitCurrentQuarantineState,
   getQuarantineMode,
   normalizeArchivedRooms,
+  normalizePendingRoomCleanups,
 } = require('./state');
 const { ensureQuarantineRole } = require('./roleManager');
 const {
@@ -17,7 +18,7 @@ const {
 const { getRestorableRoleIds } = require('./memberLifecycle');
 
 async function archiveInvestigationRoom(guild, snapshot, options = {}) {
-  const channelId = snapshot?.interviewChannelId || snapshot?.previousInterviewChannelId || null;
+  const channelId = snapshot?.interviewChannelId || snapshot?.previousInterviewChannelId || snapshot?.channelId || null;
   if (!channelId) return { success: true, archived: false, reason: 'No investigation room.' };
   let channel = guild.channels.cache.get(String(channelId));
   if (!channel) channel = await guild.channels.fetch(String(channelId)).catch(() => null);
@@ -35,6 +36,45 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
     saveQuarantineState(guild, state);
     return { success: true, archived: true, channelId: channel.id };
   } catch (error) { return { success: false, archived: false, channelId: channel.id, error: error.message }; }
+}
+
+function queueInvestigationRoomCleanup(guild, snapshot, archive) {
+  const channelId = String(archive?.channelId || snapshot?.interviewChannelId || snapshot?.previousInterviewChannelId || '').trim();
+  if (!channelId) return false;
+  const latest = getQuarantineState(guild.id);
+  latest.pendingRoomCleanups = normalizePendingRoomCleanups([
+    ...(latest.pendingRoomCleanups || []),
+    {
+      channelId,
+      memberId: snapshot?.memberId || null,
+      caseId: snapshot?.caseId || null,
+      queuedAt: Date.now(),
+      lastError: archive?.error || 'Investigation room archival failed.',
+    },
+  ]);
+  saveQuarantineState(guild, latest);
+  return true;
+}
+
+async function retryPendingInvestigationRoomCleanups(guild, options = {}) {
+  if (!guild) return { checked: 0, archived: 0, failed: 0 };
+  const initial = getQuarantineState(guild.id);
+  const pending = normalizePendingRoomCleanups(initial.pendingRoomCleanups);
+  const result = { checked: pending.length, archived: 0, failed: 0 };
+  for (const cleanup of pending) {
+    const archive = await archiveInvestigationRoom(guild, cleanup, { ...options, system: true, reason: options.reason || 'Retrying investigation room cleanup' });
+    const latest = getQuarantineState(guild.id);
+    if (archive?.success === false) {
+      result.failed += 1;
+      latest.pendingRoomCleanups = normalizePendingRoomCleanups((latest.pendingRoomCleanups || []).map((entry) => String(entry.channelId) === String(cleanup.channelId) ? { ...entry, lastError: archive.error || entry.lastError } : entry));
+    } else {
+      result.archived += 1;
+      latest.pendingRoomCleanups = normalizePendingRoomCleanups((latest.pendingRoomCleanups || []).filter((entry) => String(entry.channelId) !== String(cleanup.channelId)));
+    }
+    saveQuarantineState(guild, latest);
+  }
+  if (result.checked) emitCurrentQuarantineState(guild, 'investigation_room_cleanup_retry', result);
+  return result;
 }
 
 async function restoreQuarantinedMember(guild, member, options = {}) {
@@ -65,11 +105,12 @@ async function restoreQuarantinedMember(guild, member, options = {}) {
     }
     const shouldArchive = Boolean(snapshot.interviewChannelId || snapshot.previousInterviewChannelId);
     const archive = shouldArchive ? await archiveInvestigationRoom(guild, snapshot, options) : { success: true, archived: false };
+    if (archive?.success === false) queueInvestigationRoomCleanup(guild, snapshot, archive);
     const latest = getQuarantineState(guild.id);
     delete latest.users[member.id];
     saveQuarantineState(guild, latest);
-    emitCurrentQuarantineState(guild, 'member_restored', { memberId: member.id, mode, restoredRoles: roles.restored.length, skippedRoles: roles.skipped, archive, restoredMemberChannelAllows: memberAccess.restored.length });
-    return { success: true, mode, restoredRoles: roles.restored.length, restoredRoleIds: roles.restored, skippedRoles: roles.skipped, memberAccess, archive };
+    emitCurrentQuarantineState(guild, 'member_restored', { memberId: member.id, mode, restoredRoles: roles.restored.length, skippedRoles: roles.skipped, archive, cleanupPending: archive?.success === false, restoredMemberChannelAllows: memberAccess.restored.length });
+    return { success: true, mode, restoredRoles: roles.restored.length, restoredRoleIds: roles.restored, skippedRoles: roles.skipped, memberAccess, archive, cleanupPending: archive?.success === false };
   } catch (error) { return { success: false, mode, error: error.message }; }
 }
 
@@ -88,4 +129,4 @@ async function clearExpiredAbsentMember(guild, userId, state) {
   return { success: true, cleared: true, memberAccess, archive };
 }
 
-module.exports = { archiveInvestigationRoom, restoreQuarantinedMember, clearExpiredAbsentMember };
+module.exports = { archiveInvestigationRoom, retryPendingInvestigationRoomCleanups, restoreQuarantinedMember, clearExpiredAbsentMember };
