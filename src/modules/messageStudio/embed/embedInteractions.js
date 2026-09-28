@@ -1472,25 +1472,257 @@ async function handleCoreInteraction(i) {
 
   if (customId === 'embed:test-send') { try { const payload = await buildPayload(state, i, true); payload.allowedMentions = panel.allowedMentions(state, i); await i.reply(payload); } catch (error) { console.error('[Embed] test payload failed:', error); await i.reply({ content: `❌ Embed test failed: ${error?.message || error}`, flags: 64 }); } return true; }
   if (customId === 'embed:update-existing') {
-    const deployment = getEmbedDeployment(i.guild.id, getDeploymentKeyFromState(state));
+    const deploymentKey = getDeploymentKeyFromState(state);
+    const deployment = getEmbedDeployment(i.guild.id, deploymentKey);
+
     if (!deployment) return handleLegacyInteraction(i);
-    const channel = i.guild.channels.cache.get(deployment.channelId) || await i.guild.channels.fetch(deployment.channelId).catch(() => null);
-    if (!isTextBasedChannel(channel)) { await i.reply({ content: '⚠️ The original embed channel no longer exists or is not text-based.', flags: 64 }); return true; }
-    const access = await validateChannelAccess(i.guild, channel.id, [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks], { scope: 'embed.update' });
-    if (!access.ok) { await i.reply({ content: panel.trim(access.message, 1800), flags: 64 }); return true; }
-    const message = await channel.messages.fetch(deployment.messageId).catch(() => null);
-    if (!message || !message.flags?.has?.(MessageFlags.IsComponentsV2)) return handleLegacyInteraction(i);
-    try { const payload = await buildPayload(state, i, false); payload.allowedMentions = panel.allowedMentions(state, i); await message.edit(payload); saveEmbedDeployment(i.guild.id, getDeploymentKeyFromState(state), { ...deployment, lastUpdatedBy: i.user.id }); await i.reply({ content: '✅ Existing embed updated.', flags: 64 }); }
-    catch (error) { await i.reply({ content: panel.embedOperationError(error, channel.id, 'update'), flags: 64 }); }
+
+    const channel =
+      i.guild.channels.cache.get(deployment.channelId) ||
+      await i.guild.channels.fetch(deployment.channelId).catch(() => null);
+
+    if (!isTextBasedChannel(channel)) {
+      await i.reply({
+        content: '⚠️ The original embed channel no longer exists or is not text-based.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    const access = await validateChannelAccess(
+      i.guild,
+      channel.id,
+      [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.EmbedLinks,
+      ],
+      { scope: 'embed.update' }
+    );
+
+    if (!access.ok) {
+      await i.reply({
+        content: panel.trim(access.message, 1800),
+        flags: 64,
+      });
+      return true;
+    }
+
+    const message = await channel.messages
+      .fetch(deployment.messageId)
+      .catch(() => null);
+
+    if (!message || !message.flags?.has?.(MessageFlags.IsComponentsV2)) {
+      return handleLegacyInteraction(i);
+    }
+
+    let discordUpdated = false;
+
+    try {
+      const payload = await buildPayload(state, i, false);
+      payload.allowedMentions = panel.allowedMentions(state, i);
+
+      await message.edit(payload);
+      discordUpdated = true;
+
+      saveEmbedDeployment(i.guild.id, deploymentKey, {
+        ...deployment,
+        channelId: channel.id,
+        messageId: message.id,
+        lastUpdatedBy: i.user.id,
+      });
+
+      const confirmed = getEmbedDeployment(i.guild.id, deploymentKey);
+
+      if (
+        !confirmed ||
+        confirmed.channelId !== channel.id ||
+        confirmed.messageId !== message.id
+      ) {
+        throw new Error(
+          'Deployment persistence could not be confirmed after the Discord message was updated.'
+        );
+      }
+
+      await i.reply({
+        content: '✅ Existing embed updated.',
+        flags: 64,
+      });
+    } catch (error) {
+      if (discordUpdated) {
+        const confirmedMessage = await channel.messages
+          .fetch(message.id)
+          .catch(() => null);
+
+        console.error(
+          '[Embed] Discord update succeeded but deployment persistence failed:',
+          {
+            guildId: i.guild.id,
+            channelId: channel.id,
+            messageId: message.id,
+            discordMessageConfirmed: Boolean(confirmedMessage),
+            error,
+          }
+        );
+
+        await i.reply({
+          content: confirmedMessage
+            ? '⚠️ The Discord embed was updated, but Goliath could not confirm its deployment record. The editor remains unsaved and this deployment requires reconciliation.'
+            : '⚠️ Goliath could not confirm the deployment after updating it. The editor remains unsaved and this deployment requires reconciliation.',
+          flags: 64,
+        });
+      } else {
+        await i.reply({
+          content: panel.embedOperationError(error, channel.id, 'update'),
+          flags: 64,
+        });
+      }
+    }
+
     return true;
   }
+
   if (customId === 'embed:use') {
-    const channel = i.guild.channels.cache.get(state.channelId) || await i.guild.channels.fetch(state.channelId).catch(() => null);
-    if (!isTextBasedChannel(channel)) { await i.reply({ content: 'Invalid channel.', flags: 64 }); return true; }
-    const access = await validateChannelAccess(i.guild, channel.id, [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks], { scope: 'embed.deploy' });
-    if (!access.ok) { await i.reply({ content: panel.trim(access.message, 1800), flags: 64 }); return true; }
-    try { const payload = await buildPayload(state, i, false); payload.allowedMentions = panel.allowedMentions(state, i); const sent = await channel.send(payload); const presetName = `auto-${state.template || 'custom'}`; guildManager.saveEmbedPreset(i.guild.id, presetName, panel.presetData(state), i.guild); saveEmbedDeployment(i.guild.id, getDeploymentKeyFromState({ ...state, selectedPreset: presetName }), { channelId: channel.id, messageId: sent.id, template: state.template, preset: presetName, createdBy: i.user.id, lastUpdatedBy: i.user.id }); const ok = setGuildPresetDefault(i.guild.id, state.template, presetName, i.guild); panel.clearUnsaved(i, { ...state, selectedPreset: presetName }); await i.reply({ content: ok ? `✅ Embed posted to <#${state.channelId}> and saved as active` : '⚠️ Preset saved, but default assignment failed.', flags: 64 }); }
-    catch (error) { await i.reply({ content: panel.embedOperationError(error, channel.id, 'send'), flags: 64 }); }
+    const channel =
+      i.guild.channels.cache.get(state.channelId) ||
+      await i.guild.channels.fetch(state.channelId).catch(() => null);
+
+    if (!isTextBasedChannel(channel)) {
+      await i.reply({
+        content: 'Invalid channel.',
+        flags: 64,
+      });
+      return true;
+    }
+
+    const access = await validateChannelAccess(
+      i.guild,
+      channel.id,
+      [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.EmbedLinks,
+      ],
+      { scope: 'embed.deploy' }
+    );
+
+    if (!access.ok) {
+      await i.reply({
+        content: panel.trim(access.message, 1800),
+        flags: 64,
+      });
+      return true;
+    }
+
+    let sent = null;
+
+    try {
+      const payload = await buildPayload(state, i, false);
+      payload.allowedMentions = panel.allowedMentions(state, i);
+
+      sent = await channel.send(payload);
+
+      const presetName = `auto-${state.template || 'custom'}`;
+      const deploymentKey = getDeploymentKeyFromState({
+        ...state,
+        selectedPreset: presetName,
+      });
+
+      guildManager.saveEmbedPreset(
+        i.guild.id,
+        presetName,
+        panel.presetData(state),
+        i.guild
+      );
+
+      const defaultSaved = setGuildPresetDefault(
+        i.guild.id,
+        state.template,
+        presetName,
+        i.guild
+      );
+
+      if (!defaultSaved) {
+        throw new Error(
+          'Preset default assignment failed after the Discord message was created.'
+        );
+      }
+
+      saveEmbedDeployment(i.guild.id, deploymentKey, {
+        channelId: channel.id,
+        messageId: sent.id,
+        template: state.template,
+        preset: presetName,
+        createdBy: i.user.id,
+        lastUpdatedBy: i.user.id,
+      });
+
+      const confirmed = getEmbedDeployment(i.guild.id, deploymentKey);
+
+      if (
+        !confirmed ||
+        confirmed.channelId !== channel.id ||
+        confirmed.messageId !== sent.id
+      ) {
+        throw new Error(
+          'Deployment persistence could not be confirmed after the Discord message was created.'
+        );
+      }
+
+      panel.clearUnsaved(i, {
+        ...state,
+        selectedPreset: presetName,
+      });
+
+      await i.reply({
+        content: `✅ Embed posted to <#${state.channelId}> and saved as active`,
+        flags: 64,
+      });
+    } catch (error) {
+      if (sent) {
+        let rollbackSucceeded = false;
+
+        try {
+          await sent.delete();
+          rollbackSucceeded = true;
+        } catch (rollbackError) {
+          console.error(
+            '[Embed] Failed to roll back Discord message after deployment persistence failure:',
+            {
+              guildId: i.guild.id,
+              channelId: channel.id,
+              messageId: sent.id,
+              rollbackError,
+            }
+          );
+        }
+
+        console.error(
+          '[Embed] Embed deployment failed after Discord message creation:',
+          {
+            guildId: i.guild.id,
+            channelId: channel.id,
+            messageId: sent.id,
+            rollbackSucceeded,
+            error,
+          }
+        );
+
+        await i.reply({
+          content: rollbackSucceeded
+            ? '❌ The embed could not be fully saved by Goliath. The Discord message was rolled back and the editor remains unsaved.'
+            : `🚨 The embed could not be fully saved by Goliath, and the Discord message could not be rolled back. Message ID: ${sent.id}. The editor remains unsaved and this deployment requires reconciliation.`,
+          flags: 64,
+        });
+      } else {
+        await i.reply({
+          content: panel.embedOperationError(error, channel.id, 'send'),
+          flags: 64,
+        });
+      }
+    }
+
     return true;
   }
 
