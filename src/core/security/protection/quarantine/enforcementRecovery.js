@@ -10,7 +10,7 @@ const {
 const { ensureQuarantineRole } = require('./roleManager');
 const { syncQuarantineIsolation, verifyMemberContainment } = require('./isolation');
 const { ensureInvestigationRoomForSnapshot } = require('./investigationRooms');
-const { restoreQuarantinedMember, clearExpiredAbsentMember } = require('./releaseLifecycle');
+const { restoreQuarantinedMember, clearExpiredAbsentMember, retryPendingInvestigationRoomCleanups } = require('./releaseLifecycle');
 
 async function recordAutomaticAction(guild, input = {}) {
   if (!guild?.client || !guild?.id) return;
@@ -67,10 +67,14 @@ async function enforceQuarantineOnMember(member, options = {}) {
 }
 
 async function restoreExpiredQuarantines(client) {
-  if (!client) return { checked: 0, restored: 0, clearedAbsent: 0, failed: 0 };
-  const result = { checked: 0, restored: 0, clearedAbsent: 0, failed: 0 };
+  if (!client) return { checked: 0, restored: 0, clearedAbsent: 0, cleanupChecked: 0, cleanupArchived: 0, cleanupFailed: 0, failed: 0 };
+  const result = { checked: 0, restored: 0, clearedAbsent: 0, cleanupChecked: 0, cleanupArchived: 0, cleanupFailed: 0, failed: 0 };
   for (const [, guild] of client.guilds.cache) {
     try {
+      const cleanup = await retryPendingInvestigationRoomCleanups(guild, { reason: 'Scheduled investigation room cleanup retry' });
+      result.cleanupChecked += cleanup.checked || 0;
+      result.cleanupArchived += cleanup.archived || 0;
+      result.cleanupFailed += cleanup.failed || 0;
       let state = getQuarantineState(guild.id);
       for (const userId of Object.keys(state.users || {})) {
         const snapshot = state.users[userId];
@@ -110,20 +114,21 @@ async function restoreExpiredQuarantines(client) {
 }
 
 async function recoverGuildQuarantine(guild) {
-  if (!guild) return { success: false, reason: 'Missing guild.', active: 0, reapplied: 0, restored: 0, failed: 0 };
+  if (!guild) return { success: false, reason: 'Missing guild.', active: 0, reapplied: 0, restored: 0, cleanupChecked: 0, cleanupArchived: 0, cleanupFailed: 0, failed: 0 };
+  const cleanup = await retryPendingInvestigationRoomCleanups(guild, { reason: 'Startup investigation room cleanup retry' });
   const state = getQuarantineState(guild.id);
   const entries = Object.entries(state.users || {});
-  if (!entries.length) return { success: true, active: 0, reapplied: 0, restored: 0, failed: 0 };
+  if (!entries.length) return { success: cleanup.failed === 0, active: 0, reapplied: 0, restored: 0, cleanupChecked: cleanup.checked, cleanupArchived: cleanup.archived, cleanupFailed: cleanup.failed, failed: cleanup.failed };
   const role = await ensureQuarantineRole(guild).catch((error) => {
     console.warn(`[QuarantineSystem] Failed to recover role in guild ${guild.id}:`, error.message);
     return null;
   });
   if (!role) {
     await recordAutomaticAction(guild, { type: 'goliath.background.quarantine_startup_recovery', success: false, summary: `Goliath could not recover the quarantine role in **${guild.name}**.`, reason: 'Quarantine role recovery failed.', metadata: { phase: 'startup', active: entries.length } });
-    return { success: false, reason: 'Quarantine role recovery failed.', active: entries.length, reapplied: 0, restored: 0, failed: entries.length };
+    return { success: false, reason: 'Quarantine role recovery failed.', active: entries.length, reapplied: 0, restored: 0, cleanupChecked: cleanup.checked, cleanupArchived: cleanup.archived, cleanupFailed: cleanup.failed, failed: entries.length + cleanup.failed };
   }
 
-  let reapplied = 0; let restored = 0; let failed = 0;
+  let reapplied = 0; let restored = 0; let failed = cleanup.failed || 0;
   for (const [userId, snapshot] of entries) {
     const member = await guild.members.fetch(userId).catch(() => null);
     if (snapshot?.expiresAt && Date.now() >= Number(snapshot.expiresAt)) {
@@ -149,24 +154,27 @@ async function recoverGuildQuarantine(guild) {
       metadata: { phase: 'startup', mode: getQuarantineMode(snapshot), interviewChannelId: operation.interviewChannelId || null },
     });
   }
-  return { success: failed === 0, active: entries.length, reapplied, restored, failed };
+  return { success: failed === 0, active: entries.length, reapplied, restored, cleanupChecked: cleanup.checked, cleanupArchived: cleanup.archived, cleanupFailed: cleanup.failed, failed };
 }
 
 async function recoverQuarantines(client) {
-  if (!client) return { guilds: 0, active: 0, reapplied: 0, restored: 0, failed: 0 };
-  const result = { guilds: 0, active: 0, reapplied: 0, restored: 0, failed: 0 };
+  if (!client) return { guilds: 0, active: 0, reapplied: 0, restored: 0, cleanupChecked: 0, cleanupArchived: 0, cleanupFailed: 0, failed: 0 };
+  const result = { guilds: 0, active: 0, reapplied: 0, restored: 0, cleanupChecked: 0, cleanupArchived: 0, cleanupFailed: 0, failed: 0 };
   for (const [, guild] of client.guilds.cache) {
     const state = getQuarantineState(guild.id);
-    if (!Object.keys(state.users || {}).length) continue;
+    if (!Object.keys(state.users || {}).length && !(state.pendingRoomCleanups || []).length) continue;
     result.guilds += 1;
     try {
       const recovered = await recoverGuildQuarantine(guild);
       result.active += recovered.active || 0;
       result.reapplied += recovered.reapplied || 0;
       result.restored += recovered.restored || 0;
+      result.cleanupChecked += recovered.cleanupChecked || 0;
+      result.cleanupArchived += recovered.cleanupArchived || 0;
+      result.cleanupFailed += recovered.cleanupFailed || 0;
       result.failed += recovered.failed || 0;
     } catch (error) {
-      result.failed += Object.keys(state.users || {}).length;
+      result.failed += Math.max(1, Object.keys(state.users || {}).length);
       console.warn(`[QuarantineSystem] Guild recovery failed for ${guild.id}:`, error.message);
       await recordAutomaticAction(guild, { type: 'goliath.background.quarantine_startup_recovery', success: false, summary: `Goliath startup quarantine recovery crashed in **${guild.name}**.`, reason: error.message, metadata: { phase: 'startup', active: Object.keys(state.users || {}).length } });
     }
