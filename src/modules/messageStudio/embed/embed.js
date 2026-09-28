@@ -114,6 +114,15 @@ installImageAlignmentInteraction(panel, interactions);
 installAlignmentPreview(panel, interactions);
 installGraphicHeaders(panel, media, interactions);
 const rawHandleInteraction = interactions.handleInteraction.bind(interactions);
+async function duplicateDeliveryReply(interaction) {
+  const payload = { content: '⏳ That Embed Studio deployment is already being processed. Please wait for it to finish.', flags: 64 };
+  try {
+    if (interaction?.deferred || interaction?.replied) return await interaction.followUp(payload);
+    return await interaction.reply(payload);
+  } catch {
+    return true;
+  }
+}
 async function handleInteraction(interaction) {
   const customId = String(interaction?.customId || '');
   if (!DELIVERY_ACTIONS.has(customId)) return rawHandleInteraction(interaction);
@@ -122,8 +131,11 @@ async function handleInteraction(interaction) {
   let deploymentKey = 'custom';
   try { deploymentKey = deployments.getDeploymentKeyFromState(state); } catch {}
   const lockKey = `${guildId}:${deploymentKey}`;
-  const previous = deliveryLocks.get(lockKey) || Promise.resolve();
-  const run = previous.catch(() => null).then(() => rawHandleInteraction(interaction));
+  if (deliveryLocks.has(lockKey)) {
+    await duplicateDeliveryReply(interaction);
+    return true;
+  }
+  const run = Promise.resolve().then(() => rawHandleInteraction(interaction));
   deliveryLocks.set(lockKey, run);
   try {
     return await run;
