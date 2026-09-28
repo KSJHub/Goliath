@@ -3,7 +3,7 @@
 const Module = require('module');
 
 const PATCH_KEY = Symbol.for('goliath.runtime.mod-interaction-refresh-guard-v1');
-const CANCEL_RESTORE_DELAY_MS = 3000;
+const ACKNOWLEDGEMENT_RESTORE_DELAY_MS = 3000;
 
 if (!globalThis[PATCH_KEY]) {
   globalThis[PATCH_KEY] = { installed: true };
@@ -34,12 +34,14 @@ if (!globalThis[PATCH_KEY]) {
           return originalRefreshDashboard.call(this, discord, interaction, ...args);
         }
 
-        // Cancellation deliberately shows a short acknowledgement before the
-        // workspace is restored. Restrict the delay to the shared moderation
-        // cancel custom-id so successful actions and ordinary refreshes remain
-        // immediate.
-        if (String(interaction?.customId || '').startsWith('mod_cancel_action')) {
-          await new Promise((resolve) => setTimeout(resolve, CANCEL_RESTORE_DELAY_MS));
+        // Confirmation and cancellation both replace the workspace with a short
+        // result acknowledgement before refreshDashboard restores the member
+        // workspace. Keep that acknowledgement readable for the same 3 seconds
+        // in either direction. This is intentionally limited to the shared
+        // pending-action buttons; ordinary navigation/refresh remains immediate.
+        const customId = String(interaction?.customId || '');
+        if (customId.startsWith('mod_cancel_action') || customId.startsWith('mod_confirm_action')) {
+          await new Promise((resolve) => setTimeout(resolve, ACKNOWLEDGEMENT_RESTORE_DELAY_MS));
         }
 
         const originalMessageEdit = message.edit;
