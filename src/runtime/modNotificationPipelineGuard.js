@@ -3,6 +3,8 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
 const PATCH_KEY = Symbol.for('goliath.mod.notification-pipeline-v1');
+const NOTICE_STORE_KEY = Symbol.for('goliath.mod.departure-notice-store-v1');
+if (!globalThis[NOTICE_STORE_KEY]) globalThis[NOTICE_STORE_KEY] = new Map();
 
 if (!globalThis[PATCH_KEY]) {
   globalThis[PATCH_KEY] = { installed: true };
@@ -27,9 +29,8 @@ if (!globalThis[PATCH_KEY]) {
     return String(process.env.CLIENT_URL || process.env.DASHBOARD_CLIENT_URL || process.env.VITE_CLIENT_URL || 'https://goliath.ksjdigital.co.uk').trim().replace(/\/+$/, '');
   }
 
-  function noticeAlreadyAttempted(modCase) {
-    return Boolean(modCase?.metadata?.appealNotice?.attemptedAt);
-  }
+  function noticeAlreadyAttempted(modCase) { return Boolean(modCase?.metadata?.appealNotice?.attemptedAt); }
+  function departureNoticeKey(guildId, userId) { return `${String(guildId)}:${String(userId)}`; }
 
   function persistNotice(guildId, modCase, notice) {
     const metadata = { ...(modCase.metadata || {}), appealNotice: notice };
@@ -42,8 +43,35 @@ if (!globalThis[PATCH_KEY]) {
     return updated;
   }
 
-  function durationValue(modCase) {
-    return modCase?.metadata?.duration || modCase?.metadata?.durationRaw || null;
+  function durationValue(modCase) { return modCase?.metadata?.duration || modCase?.metadata?.durationRaw || null; }
+
+  function buildMemberNoticePayload(guild, modCase) {
+    const meta = actionMeta(modCase.action);
+    const fields = [
+      { name: 'Action', value: `**${meta.label}**`, inline: true },
+      { name: 'Case', value: `**#${modCase.caseId}**`, inline: true },
+      { name: 'Server', value: String(guild.name || 'Discord Server').slice(0, 1024), inline: false },
+      { name: 'Reason', value: String(modCase.reason || 'No reason provided').slice(0, 1024), inline: false },
+    ];
+    const duration = durationValue(modCase);
+    if (duration && String(modCase.action).toLowerCase() === 'timeout') fields.push({ name: 'Duration', value: String(duration).slice(0, 1024), inline: true });
+    fields.push(
+      { name: 'What This Means', value: meta.consequence, inline: false },
+      { name: 'Appeal', value: `If you believe this decision should be reconsidered, you can appeal **Case #${modCase.caseId}** below. You can appeal even if you are no longer in the server.`, inline: false },
+    );
+    const embed = new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle(`${meta.emoji} ${meta.title} • ${String(guild.name || 'Server').slice(0, 100)}`.slice(0, 256))
+      .setDescription('This is an official Goliath moderation notice. The details below come from your recorded moderation case.')
+      .addFields(fields)
+      .setFooter({ text: `Goliath Moderation • ${String(guild.name || 'Server').slice(0, 80)} • Case #${modCase.caseId}` })
+      .setTimestamp();
+    const appealWebUrl = `${appealsBaseUrl()}/appeals?guild=${encodeURIComponent(guild.id)}&case=${encodeURIComponent(modCase.caseId)}`;
+    return { embeds: [embed], components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`mod_appeal_external:${guild.id}:${modCase.caseId}`).setLabel(`Appeal Case #${modCase.caseId}`.slice(0, 80)).setEmoji('⚖️').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setLabel('Appeal Online').setEmoji('🌐').setStyle(ButtonStyle.Link).setURL(appealWebUrl),
+      new ButtonBuilder().setCustomId('mod_appeal_lookup').setLabel('Appeal Another Case').setStyle(ButtonStyle.Secondary),
+    )] };
   }
 
   async function sendMemberCaseNotice({ guild, target = null, user = null, caseId = null }) {
@@ -55,39 +83,22 @@ if (!globalThis[PATCH_KEY]) {
 
     const recipient = target?.user || target || user?.user || user;
     const attemptedAt = new Date().toISOString();
+    const departureKey = departureNoticeKey(guild.id, modCase.userId);
+    const placeholder = globalThis[NOTICE_STORE_KEY].get(departureKey) || null;
+    globalThis[NOTICE_STORE_KEY].delete(departureKey);
     let sent = false;
     let error = null;
     try {
-      if (!recipient?.send) throw new Error('Could not resolve user DM target.');
-      const meta = actionMeta(modCase.action);
-      const fields = [
-        { name: 'Action', value: `**${meta.label}**`, inline: true },
-        { name: 'Case', value: `**#${modCase.caseId}**`, inline: true },
-        { name: 'Server', value: String(guild.name || 'Discord Server').slice(0, 1024), inline: false },
-        { name: 'Reason', value: String(modCase.reason || 'No reason provided').slice(0, 1024), inline: false },
-      ];
-      const duration = durationValue(modCase);
-      if (duration && String(modCase.action).toLowerCase() === 'timeout') fields.push({ name: 'Duration', value: String(duration).slice(0, 1024), inline: true });
-      fields.push(
-        { name: 'What This Means', value: meta.consequence, inline: false },
-        { name: 'Appeal', value: `If you believe this decision should be reconsidered, you can appeal **Case #${modCase.caseId}** below. You can appeal even if you are no longer in the server.`, inline: false },
-      );
-      const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle(`${meta.emoji} ${meta.title} • ${String(guild.name || 'Server').slice(0, 100)}`.slice(0, 256))
-        .setDescription('This is an official Goliath moderation notice. The details below come from your recorded moderation case.')
-        .addFields(fields)
-        .setFooter({ text: `Goliath Moderation • ${String(guild.name || 'Server').slice(0, 80)} • Case #${modCase.caseId}` })
-        .setTimestamp();
-      const appealWebUrl = `${appealsBaseUrl()}/appeals?guild=${encodeURIComponent(guild.id)}&case=${encodeURIComponent(modCase.caseId)}`;
-      await recipient.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`mod_appeal_external:${guild.id}:${modCase.caseId}`).setLabel(`Appeal Case #${modCase.caseId}`.slice(0, 80)).setEmoji('⚖️').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setLabel('Appeal Online').setEmoji('🌐').setStyle(ButtonStyle.Link).setURL(appealWebUrl),
-        new ButtonBuilder().setCustomId('mod_appeal_lookup').setLabel('Appeal Another Case').setStyle(ButtonStyle.Secondary),
-      )] });
+      const payload = buildMemberNoticePayload(guild, modCase);
+      if (placeholder?.edit) await placeholder.edit(payload);
+      else {
+        if (!recipient?.send) throw new Error('Could not resolve user DM target.');
+        await recipient.send(payload);
+      }
       sent = true;
     } catch (deliveryError) {
       error = String(deliveryError?.message || deliveryError || 'DM delivery failed.').slice(0, 300);
+      if (placeholder?.delete) await placeholder.delete().catch(() => null);
     }
 
     const notice = { attempted: true, attemptedAt, sent, sentAt: sent ? new Date().toISOString() : null, error };
@@ -158,9 +169,14 @@ if (!globalThis[PATCH_KEY]) {
   }
 
   async function sendHardenedModLog(payload = {}) {
-    // Canonical ordering: case already exists -> member notice -> persist/audit delivery -> management log.
-    // This makes the management log report the real case-notice outcome, not the old pre-case engine DM flag.
     const notice = await sendMemberCaseNotice({ guild: payload.guild, target: payload.target || payload.user || null, user: payload.user || null, caseId: payload.caseId });
+    // punishments.js still uses the shared engine report for its immediate
+    // acknowledgement. Update that live report object with the authoritative
+    // case-notice result so the moderator sees DM sent/failed truthfully.
+    if (payload.metadata?.punishmentReport && typeof payload.metadata.punishmentReport === 'object') {
+      payload.metadata.punishmentReport.dmSent = Boolean(notice.sent);
+      payload.metadata.punishmentReport.dmError = notice.error || null;
+    }
     const logged = await sendManagementLog(payload, notice);
     return Boolean(logged || notice.sent);
   }
