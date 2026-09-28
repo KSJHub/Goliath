@@ -3,6 +3,7 @@
 const Module = require('module');
 
 const PATCH_KEY = Symbol.for('goliath.runtime.mod-interaction-refresh-guard-v1');
+const CANCEL_RESTORE_DELAY_MS = 3000;
 
 if (!globalThis[PATCH_KEY]) {
   globalThis[PATCH_KEY] = { installed: true };
@@ -31,6 +32,14 @@ if (!globalThis[PATCH_KEY]) {
 
         if (!acknowledged || !message || typeof interaction?.editReply !== 'function' || typeof message.edit !== 'function') {
           return originalRefreshDashboard.call(this, discord, interaction, ...args);
+        }
+
+        // Cancellation deliberately shows a short acknowledgement before the
+        // workspace is restored. Restrict the delay to the shared moderation
+        // cancel custom-id so successful actions and ordinary refreshes remain
+        // immediate.
+        if (String(interaction?.customId || '').startsWith('mod_cancel_action')) {
+          await new Promise((resolve) => setTimeout(resolve, CANCEL_RESTORE_DELAY_MS));
         }
 
         const originalMessageEdit = message.edit;
