@@ -60,8 +60,6 @@ module.exports = {
   async execute(message, client) {
     if (!message.guild || !message.member || message.author?.bot) return;
 
-    counting.registerProtectionEvents(client);
-
     const autoModHandled = await runHandler('AutoMod', handleAutoMod, message);
     if (autoModHandled) return;
 
