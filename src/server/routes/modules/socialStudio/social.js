@@ -138,7 +138,7 @@ function normalize(raw = {}) {
     settings: {
       ...base.settings,
       ...settings,
-      checkIntervalMs: asNumber(settings.checkIntervalMs, 300000, 60000, 86400000),
+      checkIntervalMs: asNumber(settings.checkIntervalMs, 300000, 30000, 86400000),
       retryIntervalMs: asNumber(settings.retryIntervalMs, 60000, 30000, 86400000),
       retryDeliveries: settings.retryDeliveries !== false,
       maxDeliveryAttempts: asNumber(settings.maxDeliveryAttempts, 5, 1, 25),
