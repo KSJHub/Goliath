@@ -60,10 +60,14 @@ assert(
   'Facebook LIVE lookup failures must remain unavailable instead of becoming OFFLINE',
 );
 assert(
-  !compactFacebook.includes("live_videos?broadcast_status=LIVE") || !compactFacebook.includes("live_videos?broadcast_status=LIVE&fields=id,title,status,permalink_url,creation_time&limit=1&access_token=${encodeURIComponent(token)}`).catch(()=>({json:null}))"),
+  !compactFacebook.includes("live_videos?broadcast_status=LIVE&fields=id,title,status,permalink_url,creation_time&limit=1&access_token=${encodeURIComponent(token)}`).catch(()=>({json:null}))"),
   'Facebook LIVE lookup must not swallow failure into an empty response',
 );
-assert(compactTikTok.includes("returnunavailable('tiktok',`${context}"), 'TikTok ambiguous LIVE page must remain unavailable');
+assert(
+  compactTikTok.includes('TikTokreturnedthecreatorLIVEpagewithoutadefinitiveLIVE,PAUSEDorENDEDmarker')
+    && compactTikTok.includes("returnunavailable('tiktok',"),
+  'TikTok ambiguous LIVE page must remain unavailable',
+);
 assert(compactTikTok.includes("providerSource:ended?'public_page_ended':'public_page_redirect'"), 'TikTok proven OFFLINE paths missing');
 assert(compactTikTok.includes("liveStatus:isPaused?'PAUSED':'LIVE'"), 'TikTok PAUSED state contract missing');
 
