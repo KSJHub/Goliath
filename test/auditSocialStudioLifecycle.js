@@ -5,10 +5,12 @@ const fs = require('node:fs');
 
 const core = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js', 'utf8');
 const monitor = fs.readFileSync('src/modules/socialStudio/socialAlerts/socialStudioMonitor.js', 'utf8');
+const recovery = fs.readFileSync('src/events/client/socialStudioLivePostRecovery.js', 'utf8');
 
 // Source-shape checks intentionally ignore formatting so refactors/Prettier do not break CI.
 const compactCore = core.replace(/\s+/g, '');
 const compactMonitor = monitor.replace(/\s+/g, '');
+const compactRecovery = recovery.replace(/\s+/g, '');
 
 const contracts = [
   ['OFFLINE transition', 'checked.isLive===false&&previous.isLive===true'],
@@ -35,7 +37,8 @@ const contracts = [
 ];
 
 for (const [name, needle] of contracts) {
-  assert(compactCore.includes(needle), `${name} contract missing`);
+  const source = name.includes('recovery concurrency') ? compactRecovery : name.includes('rollover concurrency') ? compactMonitor : compactCore;
+  assert(source.includes(needle), `${name} contract missing`);
 }
 
 assert(
