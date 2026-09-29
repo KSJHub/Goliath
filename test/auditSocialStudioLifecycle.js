@@ -30,6 +30,8 @@ const contracts = [
   ['persisted pending delivery', 'state.pendingDelivery'],
   ['retry recovery delivery', 'recovered:true'],
   ['exhausted retry release', 'state.pendingDelivery=null'],
+  ['delivery failure preserves current state', 'let currentState={...previous}'],
+  ['retry failure persists current state', 'state:{...currentState,pendingDelivery'],
   ['stale LIVE retry protection', 'pendingLiveStale=Boolean(pendingEvent?.type===\'live\''],
   ['stale LIVE retry clears pending', 'state.pendingDelivery=null'],
   ['recovery concurrency deferral', "result?.skipped&&result.reason==='check_already_running'"],
