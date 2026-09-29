@@ -877,8 +877,8 @@ if (name === 'templates') {
         [
           'Configure how Social Studio operates.',
           '',
-          '**Access**',
-          '🔐 **Permissions** — control who can manage Social Studio.',
+          '**Roles & Management**',
+          '🎭 **Roles** — configure Social Studio manager roles, user access roles, the LIVE role and LIVE notification target.',
           '',
           '**Alerts & Delivery**',
           '⚙️ **Automation** — monitoring interval, duplicate protection, retries and quiet hours.',
@@ -896,7 +896,7 @@ if (name === 'templates') {
       row(
         btn(
           `${P}permissions`,
-          '🔐 Permissions',
+          '🎭 Roles',
           ButtonStyle.Primary,
         ),
         btn(
