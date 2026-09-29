@@ -124,8 +124,12 @@ function saveMediaState(i, state, mediaValue, extra = {}) {
   const index = state.selectedPanelIndex || 0;
   let next = panel.setPanelMedia(state, index, mediaValue);
   const current = panel.getPanelMedia(next, index);
-  next = panel.saveSelected(next, { image: current.gallery?.[0]?.source || '', thumbnail: current.thumbnail?.source || '' });
-  return panel.saveSession(i, { ...next, ...extra, hasUnsavedChanges: true });
+  next = panel.saveSelected(next, {
+    image: current.gallery?.[0]?.source || '',
+    thumbnail: current.thumbnail?.source || ''
+  });
+  next = { ...next, ...extra, hasUnsavedChanges: true };
+  return panel.saveSession(i, next);
 }
 async function updateContent(i) { await i.update(panel.buildContentManagerPanel(i)); return true; }
 async function updateAppearance(i) { await i.update(panel.buildAppearancePanel(i)); return true; }
@@ -1439,7 +1443,7 @@ async function handleCoreInteraction(i) {
       return true;
     }
 
-    saveMediaState(
+    const savedState = saveMediaState(
       i,
       state,
       { ...panelMedia, gallery, files },
@@ -1459,7 +1463,7 @@ async function handleCoreInteraction(i) {
         (skipped
           ? ` ${skipped} item(s) were skipped because the panel limits were reached.`
           : ''),
-      ...panel.buildMediaManagerPanel(i, who(i)),
+      ...panel.buildMediaManagerPanel(i, who(i), savedState),
       flags: 64,
     });
 
