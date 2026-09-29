@@ -30,15 +30,6 @@ function clone(value, fallback = null) {
 function installMediaManagerBase(panel, media) {
   if (!panel || !media || typeof panel.buildMediaManagerPanel === 'function') return panel;
 
-  /*
-   * media is authoritative once a panel has a media slot.  The legacy
-   * panel.image field exists only for backwards compatibility.  The original
-   * setPanelMedia() normalizer could use that legacy value as a fallback while
-   * clearing a gallery, immediately resurrecting the image that had just been
-   * removed.  Keep writes panel-local and normalize the requested media with
-   * no legacy fallback; saveMediaState() will mirror the resulting first item
-   * (or an empty string) back to the legacy panel afterwards.
-   */
   if (!panel.__panelLocalMediaWritePatched && typeof panel.setPanelMedia === 'function') {
     panel.setPanelMedia = (stateValue = {}, index, mediaValue = {}) => {
       const panels = Array.isArray(stateValue?.panels) ? stateValue.panels : [];
@@ -77,8 +68,20 @@ function installMediaManagerBase(panel, media) {
       if (!stateValue || typeof stateValue !== 'object') return originalSaveSession(interaction, stateValue);
       const authoritative = stateValue.media || null;
       if (!authoritative) return originalSaveSession(interaction, stateValue);
-      const canonicalMedia = typeof media.clone === 'function' ? media.clone(authoritative) : JSON.parse(JSON.stringify(authoritative));
-      const storedMedia = typeof media.clone === 'function' ? media.clone(canonicalMedia) : JSON.parse(JSON.stringify(canonicalMedia));
+      const canonicalMedia = typeof media.clone === 'function' ? media.clone(authoritative) : clone(authoritative, {});
+      const alignmentMap = stateValue.mediaAlignment && typeof stateValue.mediaAlignment === 'object'
+        ? stateValue.mediaAlignment
+        : {};
+      const mediaPanels = Array.isArray(canonicalMedia?.panels) ? canonicalMedia.panels : [];
+      for (let panelIndex = 0; panelIndex < mediaPanels.length; panelIndex += 1) {
+        const gallery = Array.isArray(mediaPanels[panelIndex]?.gallery) ? mediaPanels[panelIndex].gallery : [];
+        for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
+          const key = `${panelIndex}:${itemIndex}`;
+          const mapped = String(alignmentMap[key] || gallery[itemIndex]?.alignment || 'left').toLowerCase();
+          gallery[itemIndex].alignment = ['left', 'center', 'right'].includes(mapped) ? mapped : 'left';
+        }
+      }
+      const storedMedia = typeof media.clone === 'function' ? media.clone(canonicalMedia) : clone(canonicalMedia, {});
       return originalSaveSession(interaction, { ...stateValue, media: storedMedia });
     };
     panel.__mediaSessionMirrorPatched = true;
@@ -89,245 +92,82 @@ function installMediaManagerBase(panel, media) {
       ? stateOverride
       : panel.getSession(interaction);
     const panelMedia = media.getPanelMedia(state);
-
-    /*
-     * Selection is a UI cursor, not media content. If media exists but the
-     * cursor is missing/stale (for example after reopening the manager), use
-     * the nearest valid item immediately so controls never appear disabled for
-     * visible media. Interaction handlers persist explicit user selections.
-     */
-    const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex)
-      ? state.selectedMediaIndex
-      : null;
-    const galleryIndex = panelMedia.gallery.length
-      ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1))
-      : null;
-
-    const requestedFileIndex = Number.isInteger(state.selectedFileIndex)
-      ? state.selectedFileIndex
-      : null;
-    const fileIndex = panelMedia.files.length
-      ? Math.max(0, Math.min(requestedFileIndex ?? 0, panelMedia.files.length - 1))
-      : null;
-
-    const selectedMedia =
-      galleryIndex == null
-        ? null
-        : panelMedia.gallery[galleryIndex];
-
-    const aboveCount =
-      panelMedia.gallery.filter((item) => item?.placement === 'above').length;
-
-    const belowCount =
-      panelMedia.gallery.length - aboveCount;
-
-    const placementLabel = (item) =>
-      item?.placement === 'above'
-        ? '⬆️ Above Content'
-        : '⬇️ Below Content';
-
+    const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : null;
+    const galleryIndex = panelMedia.gallery.length ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1)) : null;
+    const selectedMedia = galleryIndex == null ? null : panelMedia.gallery[galleryIndex];
+    const aboveCount = panelMedia.gallery.filter((item) => item?.placement === 'above').length;
+    const belowCount = panelMedia.gallery.length - aboveCount;
+    const placementLabel = (item) => item?.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content';
     const rows = [];
 
-    /*
-     * ROW 1 — MEDIA SELECTOR
-     */
     if (panelMedia.gallery.length) {
-      rows.push(
-        new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('embed:media-gallery-select')
-            .setPlaceholder('🎞️ Select media item')
-            .addOptions(
-              panelMedia.gallery.slice(0, 25).map((item, index) => ({
-                label: `${index + 1}. ${panel.trim(
-                  item.alt || sourceLabel(item.source, 'Media item'),
-                  80
-                )}`,
-                value: String(index),
-                description: panel.trim(
-                  `${item.type || 'auto'} • ${
-                    item.placement === 'above'
-                      ? 'Above Content'
-                      : 'Below Content'
-                  }${item.spoiler ? ' • spoiler' : ''}`,
-                  100
-                ),
-                default: galleryIndex === index,
-              }))
-            )
+      rows.push(new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('embed:media-gallery-select').setPlaceholder('🎞️ Select media item').addOptions(
+          panelMedia.gallery.slice(0, 25).map((item, index) => ({
+            label: `${index + 1}. ${panel.trim(item.alt || sourceLabel(item.source, 'Media item'), 80)}`,
+            value: String(index),
+            description: panel.trim(`${item.type || 'auto'} • ${item.placement === 'above' ? 'Above Content' : 'Below Content'}${item.spoiler ? ' • spoiler' : ''}`, 100),
+            default: galleryIndex === index,
+          }))
         )
-      );
+      ));
     }
 
-    /*
-     * ROW 2 — MEDIA CRUD / ORDER
-     */
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        mediaButton(
-          'embed:media-add',
-          '➕ Add Media / File',
-          ButtonStyle.Success,
-          panelMedia.gallery.length >= media.mediaModel.MAX_GALLERY_ITEMS &&
-            panelMedia.files.length >= media.mediaModel.MAX_FILES
-        ),
-        mediaButton(
-          'embed:media-gallery-edit',
-          '✏️ Edit',
-          ButtonStyle.Primary,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-gallery-remove',
-          '🗑️ Remove',
-          ButtonStyle.Danger,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-gallery-up',
-          '⬆️ Up',
-          ButtonStyle.Secondary,
-          galleryIndex == null || galleryIndex <= 0
-        ),
-        mediaButton(
-          'embed:media-gallery-down',
-          '⬇️ Down',
-          ButtonStyle.Secondary,
-          galleryIndex == null ||
-            galleryIndex >= panelMedia.gallery.length - 1
-        )
-      )
-    );
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaButton('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= media.mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= media.mediaModel.MAX_FILES),
+      mediaButton('embed:media-gallery-edit', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
+      mediaButton('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
+      mediaButton('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
+      mediaButton('embed:media-gallery-down', '⬇️ Down', ButtonStyle.Secondary, galleryIndex == null || galleryIndex >= panelMedia.gallery.length - 1)
+    ));
 
-    /*
-     * ROW 2 — PLACEMENT + THUMBNAIL
-     */
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        mediaButton(
-          'embed:media-placement:above',
-          '⬆️ Above Content',
-          selectedMedia?.placement === 'above'
-            ? ButtonStyle.Success
-            : ButtonStyle.Secondary,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-placement:below',
-          '⬇️ Below Content',
-          selectedMedia?.placement === 'below'
-            ? ButtonStyle.Success
-            : ButtonStyle.Secondary,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-thumbnail',
-          panelMedia.thumbnail?.source
-            ? '🖼️ Thumbnail ✓'
-            : '🖼️ Thumbnail',
-          ButtonStyle.Primary
-        )
-      )
-    );
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaButton('embed:media-placement:above', '⬆️ Above Content', selectedMedia?.placement === 'above' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
+      mediaButton('embed:media-placement:below', '⬇️ Below Content', selectedMedia?.placement === 'below' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
+      mediaButton('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary)
+    ));
 
-    /*
-     * ROW 3 — IMAGE ALIGNMENT
-     */
-    const alignmentMap =
-      state?.mediaAlignment && typeof state.mediaAlignment === 'object'
-        ? state.mediaAlignment
-        : {};
-    const alignmentKey = galleryIndex == null
-      ? null
-      : `${Math.max(0, Number(state.selectedPanelIndex) || 0)}:${galleryIndex}`;
-    const selectedAlignment = ['left', 'center', 'right'].includes(
-      String(alignmentMap[alignmentKey] || '').toLowerCase()
-    )
-      ? String(alignmentMap[alignmentKey]).toLowerCase()
-      : 'left';
+    const alignmentMap = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
+    const alignmentKey = galleryIndex == null ? null : `${Math.max(0, Number(state.selectedPanelIndex) || 0)}:${galleryIndex}`;
+    const rawAlignment = String(alignmentMap[alignmentKey] || selectedMedia?.alignment || 'left').toLowerCase();
+    const selectedAlignment = ['left', 'center', 'right'].includes(rawAlignment) ? rawAlignment : 'left';
+    const alignmentLabel = selectedAlignment === 'center' ? '↔️ Centre' : selectedAlignment === 'right' ? '➡️ Right' : '⬅️ Left';
 
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        mediaButton(
-          'embed:media-align:left',
-          '⬅️ Left',
-          selectedAlignment === 'left'
-            ? ButtonStyle.Primary
-            : ButtonStyle.Secondary,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-align:center',
-          '↔️ Centre',
-          selectedAlignment === 'center'
-            ? ButtonStyle.Primary
-            : ButtonStyle.Secondary,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-align:right',
-          '➡️ Right',
-          selectedAlignment === 'right'
-            ? ButtonStyle.Primary
-            : ButtonStyle.Secondary,
-          galleryIndex == null
-        )
-      )
-    );
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaButton('embed:media-align:left', '⬅️ Left', selectedAlignment === 'left' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      mediaButton('embed:media-align:center', '↔️ Centre', selectedAlignment === 'center' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      mediaButton('embed:media-align:right', '➡️ Right', selectedAlignment === 'right' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null)
+    ));
 
-    /*
-     * ROW 4 — NAVIGATION / HELP
-     */
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        mediaButton('embed:builder', '⬅️ Back'),
-        mediaButton('embed:settings', '⚙️ Settings'),
-        mediaButton('embed:helpers', '📖 Variables')
-      )
-    );
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaButton('embed:builder', '⬅️ Back'),
+      mediaButton('embed:settings', '⚙️ Settings'),
+      mediaButton('embed:helpers', '📖 Variables')
+    ));
 
     const summary = [
-      `Editing panel **${state.selectedPanelIndex + 1}/${state.panels.length}**`,
-      '',
+      `Editing panel **${state.selectedPanelIndex + 1}/${state.panels.length}**`, '',
       `⬆️ **Above Content** — ${aboveCount}`,
       `⬇️ **Below Content** — ${belowCount}`,
       `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'}`,
-      `📎 **Files** — ${panelMedia.files.length}/${media.mediaModel.MAX_FILES}`,
-      '',
+      `📎 **Files** — ${panelMedia.files.length}/${media.mediaModel.MAX_FILES}`, '',
       'Images, animated GIFs and supported videos can be placed independently above or below the panel content.',
     ];
 
     if (selectedMedia) {
-      summary.push(
-        '',
-        `**Selected media:** ${sourceLabel(
-          selectedMedia.alt || selectedMedia.source,
-          `Item ${galleryIndex + 1}`
-        )}`,
+      summary.push('',
+        `**Selected media:** ${sourceLabel(selectedMedia.alt || selectedMedia.source, `Item ${galleryIndex + 1}`)}`,
         `**Placement:** ${placementLabel(selectedMedia)}`,
+        `**Alignment:** ${alignmentLabel}`,
         `**Type:** ${selectedMedia.type || 'auto'}`,
         `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`
       );
-    } else if (
-      !panelMedia.thumbnail?.source &&
-      !panelMedia.gallery.length &&
-      !panelMedia.files.length
-    ) {
-      summary.push(
-        '',
-        'No media configured for this panel. Media on other panels is unaffected.'
-      );
+    } else if (!panelMedia.thumbnail?.source && !panelMedia.gallery.length && !panelMedia.files.length) {
+      summary.push('', 'No media configured for this panel. Media on other panels is unaffected.');
     }
 
     return {
-      embeds: [
-        panel.simplePanel(
-          '🖼️ Media Manager',
-          summary.join('\n'),
-          state,
-          who
-        ),
-      ],
+      embeds: [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)],
       components: rows,
     };
   };
