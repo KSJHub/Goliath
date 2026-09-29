@@ -426,11 +426,6 @@ function buildMainPanel(guild, requestedBy = 'Unknown User') {
           '🎨 Templates',
           ButtonStyle.Primary,
         ),
-        btn(
-          `${P}settings`,
-          '⚙️ Settings',
-          ButtonStyle.Primary,
-        ),
       ),
       goliathNavigation(
         'admin:modules',
