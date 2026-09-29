@@ -26,6 +26,13 @@ function sourceLabel(value, fallback = 'Not set') {
 function clone(value, fallback = null) {
   try { return JSON.parse(JSON.stringify(value ?? fallback)); } catch { return fallback; }
 }
+function validAlignment(value) {
+  const alignment = String(value || '').toLowerCase();
+  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
+}
+function sourceKey(item) {
+  return String(item?.source || '').trim();
+}
 
 function installMediaManagerBase(panel, media) {
   if (!panel || !media || typeof panel.buildMediaManagerPanel === 'function') return panel;
@@ -68,21 +75,48 @@ function installMediaManagerBase(panel, media) {
       if (!stateValue || typeof stateValue !== 'object') return originalSaveSession(interaction, stateValue);
       const authoritative = stateValue.media || null;
       if (!authoritative) return originalSaveSession(interaction, stateValue);
-      const canonicalMedia = typeof media.clone === 'function' ? media.clone(authoritative) : clone(authoritative, {});
-      const alignmentMap = stateValue.mediaAlignment && typeof stateValue.mediaAlignment === 'object'
+
+      const previous = typeof panel.getSession === 'function' ? panel.getSession(interaction) : null;
+      const previousPanels = Array.isArray(previous?.media?.panels) ? previous.media.panels : [];
+      const incomingMap = stateValue.mediaAlignment && typeof stateValue.mediaAlignment === 'object'
         ? stateValue.mediaAlignment
         : {};
+      const canonicalMedia = typeof media.clone === 'function' ? media.clone(authoritative) : clone(authoritative, {});
       const mediaPanels = Array.isArray(canonicalMedia?.panels) ? canonicalMedia.panels : [];
+      const rebuiltMap = {};
+
       for (let panelIndex = 0; panelIndex < mediaPanels.length; panelIndex += 1) {
         const gallery = Array.isArray(mediaPanels[panelIndex]?.gallery) ? mediaPanels[panelIndex].gallery : [];
+        const previousGallery = Array.isArray(previousPanels[panelIndex]?.gallery) ? previousPanels[panelIndex].gallery : [];
+
         for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
           const key = `${panelIndex}:${itemIndex}`;
-          const mapped = String(alignmentMap[key] || gallery[itemIndex]?.alignment || 'left').toLowerCase();
-          gallery[itemIndex].alignment = ['left', 'center', 'right'].includes(mapped) ? mapped : 'left';
+          const item = gallery[itemIndex];
+          let alignment = validAlignment(item?.alignment) || 'left';
+          const mapped = validAlignment(incomingMap[key]);
+          const sameSlotPrevious = previousGallery[itemIndex];
+          const sameSourceInSlot = sourceKey(sameSlotPrevious) && sourceKey(sameSlotPrevious) === sourceKey(item);
+          const previousAlignment = sameSourceInSlot ? validAlignment(sameSlotPrevious?.alignment) : null;
+
+          // Editing the URL/alt modal historically rebuilt an item without its alignment.
+          // If the same media remains in the same slot and the compatibility map still
+          // carries its prior alignment, preserve that prior choice. Reordered items keep
+          // their own canonical alignment instead, preventing index-keyed map corruption.
+          if (sameSourceInSlot && previousAlignment && mapped === previousAlignment && alignment !== previousAlignment) {
+            alignment = previousAlignment;
+          }
+
+          item.alignment = alignment;
+          rebuiltMap[key] = alignment;
         }
       }
+
       const storedMedia = typeof media.clone === 'function' ? media.clone(canonicalMedia) : clone(canonicalMedia, {});
-      return originalSaveSession(interaction, { ...stateValue, media: storedMedia });
+      return originalSaveSession(interaction, {
+        ...stateValue,
+        media: storedMedia,
+        mediaAlignment: rebuiltMap,
+      });
     };
     panel.__mediaSessionMirrorPatched = true;
   }
@@ -106,7 +140,7 @@ function installMediaManagerBase(panel, media) {
           panelMedia.gallery.slice(0, 25).map((item, index) => ({
             label: `${index + 1}. ${panel.trim(item.alt || sourceLabel(item.source, 'Media item'), 80)}`,
             value: String(index),
-            description: panel.trim(`${item.type || 'auto'} • ${item.placement === 'above' ? 'Above Content' : 'Below Content'}${item.spoiler ? ' • spoiler' : ''}`, 100),
+            description: panel.trim(`${item.type || 'auto'} • ${item.placement === 'above' ? 'Above Content' : 'Below Content'} • ${validAlignment(item.alignment) === 'center' ? 'Centre' : (validAlignment(item.alignment) || 'left').replace(/^./, (c) => c.toUpperCase())}${item.spoiler ? ' • spoiler' : ''}`, 100),
             default: galleryIndex === index,
           }))
         )
@@ -127,10 +161,10 @@ function installMediaManagerBase(panel, media) {
       mediaButton('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary)
     ));
 
+    const canonicalAlignment = validAlignment(selectedMedia?.alignment);
     const alignmentMap = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
     const alignmentKey = galleryIndex == null ? null : `${Math.max(0, Number(state.selectedPanelIndex) || 0)}:${galleryIndex}`;
-    const rawAlignment = String(alignmentMap[alignmentKey] || selectedMedia?.alignment || 'left').toLowerCase();
-    const selectedAlignment = ['left', 'center', 'right'].includes(rawAlignment) ? rawAlignment : 'left';
+    const selectedAlignment = canonicalAlignment || validAlignment(alignmentMap[alignmentKey]) || 'left';
     const alignmentLabel = selectedAlignment === 'center' ? '↔️ Centre' : selectedAlignment === 'right' ? '➡️ Right' : '⬅️ Left';
 
     rows.push(new ActionRowBuilder().addComponents(
