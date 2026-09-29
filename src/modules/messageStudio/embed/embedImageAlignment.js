@@ -65,10 +65,6 @@ function selectedAlignment(panel, interaction) {
   const panelIndex = Math.max(0, Number(state?.selectedPanelIndex) || 0);
   const panelMedia = panel.getPanelMedia(state, panelIndex);
   const gallery = Array.isArray(panelMedia?.gallery) ? panelMedia.gallery : [];
-  // The Media Manager deliberately falls back to the first gallery item
-  // when the selection cursor has not yet been persisted (for example when
-  // the manager is opened/reopened). Alignment controls must use the same
-  // effective selection or they disappear even though media is visible.
   const itemIndex = Number.isInteger(state?.selectedMediaIndex)
     ? state.selectedMediaIndex
     : (gallery.length ? 0 : null);
@@ -92,10 +88,6 @@ function installUi(panel) {
 
       const rows = Array.isArray(payload?.components) ? payload.components : [];
       const buttons = alignmentButtons(alignment);
-
-      // The Media Manager already uses Discord's five action-row limit.
-      // Keep the alignment controls on this panel by sharing the existing
-      // Above Content / Below Content row instead of creating a sixth row.
       const placementRow = rows.find((row) => {
         const ids = Array.isArray(row?.components) ? row.components.map(componentId) : [];
         return ids.some((id) => id === 'embed:media-placement:above' || id === 'embed:media-above') &&
@@ -107,9 +99,6 @@ function installUi(panel) {
         return payload;
       }
 
-      // Compatibility fallback for older/newer Media Manager custom IDs:
-      // locate the row by the visible placement labels. Two placement buttons
-      // plus three alignment buttons exactly fills one Discord action row.
       const labelledPlacementRow = rows.find((row) => {
         const components = Array.isArray(row?.components) ? row.components : [];
         const labels = components.map((component) => String(component?.data?.label || component?.label || ''));
@@ -121,7 +110,6 @@ function installUi(panel) {
         return payload;
       }
 
-      // Only add a dedicated row when there is actually room for one.
       if (rows.length < 5) {
         const backIndex = rows.findIndex((row) => Array.isArray(row?.components) && row.components.some((c) => componentId(c) === 'embed:media-back'));
         const optionsBackIndex = rows.findIndex((row) => Array.isArray(row?.components) && row.components.some((c) => componentId(c) === 'embed:media-options-back'));
@@ -169,12 +157,11 @@ function installInteraction(panel, interactions) {
     }
     const map = alignmentMap(state);
     map[alignmentKey(panelIndex, itemIndex)] = alignment;
-    const media = panel.getPanelMedia(state, panelIndex);
-    const gallery = Array.isArray(media?.gallery) ? media.gallery.map((item, index) => (
+    const nextGallery = gallery.map((item, index) => (
       index === itemIndex ? { ...item, alignment } : item
-    )) : [];
-    const nextMedia = { ...media, gallery };
-    const nextState = panel.setPanelMedia(state, panelIndex, nextMedia);
+    ));
+    const nextPanelMedia = { ...panelMedia, gallery: nextGallery };
+    const nextState = panel.setPanelMedia(state, panelIndex, nextPanelMedia);
     panel.saveSession(interaction, { ...nextState, mediaAlignment: map, hasUnsavedChanges: true });
     await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
     return true;
