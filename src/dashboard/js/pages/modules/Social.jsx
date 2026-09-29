@@ -144,6 +144,7 @@ export default function Social({ theme, selectedGuild, selectedGuildData }) {
         <Stat theme={theme} label="Creator Profiles" value={profiles.length} hint="Managed creators" />
         <Stat theme={theme} label="Linked Accounts" value={overview.accountCount || accounts.length} hint="Platform accounts" />
         <Stat theme={theme} label="Enabled Accounts" value={overview.enabledAccountCount || 0} hint="Currently monitored" />
+        <Stat theme={theme} label="Pending Retries" value={overview.queue?.retries?.length || 0} hint="Failed deliveries waiting for retry" />
         <Stat theme={theme} label="Module" value={config.enabled ? 'On' : 'Off'} hint="Guild status" />
       </div>
       <Card theme={theme}><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
