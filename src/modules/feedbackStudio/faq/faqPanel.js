@@ -11,7 +11,14 @@ function buildHomePanel(guildId) {
   const categories = faq.listCategories(guildId).slice(0, 25);
   const embed = new EmbedBuilder().setColor(0x5865f2).setTitle('❓ FAQ & Support Centre').setDescription(['**Frequently Asked Questions**', '', 'The quickest place to find answers to common questions about the server, community and support.', '', 'Select an FAQ category below to get started. 👇'].join('\n'));
   const components = [];
-  if (categories.length) components.push(row(new StringSelectMenuBuilder().setCustomId('faq:category').setPlaceholder('Select an FAQ category').addOptions(categories.map(c => ({ label: c.name.slice(0, 100), description: (c.description || 'View questions').slice(0, 100), value: c.id, emoji: c.emoji || undefined })))));
+  if (categories.length) {
+    components.push(row(
+      new StringSelectMenuBuilder()
+        .setCustomId('faq:category')
+        .setPlaceholder('Select an FAQ category')
+        .addOptions(categories.map(c => ({ label: c.name.slice(0, 100), description: (c.description || 'View questions').slice(0, 100), value: c.id, emoji: c.emoji || undefined })))
+    ));
+  }
   return { embeds: [embed], components };
 }
 
@@ -21,7 +28,7 @@ function buildCategoryPanel(guildId, categoryId) {
   const entries = faq.listEntries(guildId, category.id).slice(0, 25);
   const embed = new EmbedBuilder().setColor(0x5865f2).setTitle(`${category.emoji || '❓'} ${category.name}`).setDescription(category.description || 'Select a question below.');
   const components = [];
-  if (entries.length) components.push(row(new StringSelectMenuBuilder().setCustomId(`faq:question:${category.id}`).setPlaceholder('Select a question').addOptions(entries.map(e => ({ label: e.question.slice(0, 100), value: e.id })))));
+  if (entries.length) components.push(row(new StringSelectMenuBuilder().setCustomId(`faq:question:${category.id}`).setPlaceholder('Select a question').addOptions(entries.map(e => ({ label: e.question.slice(0, 100), value: e.id }))));
   components.push(row(button('faq:home', '🏠 FAQ Home')));
   return { embeds: [embed], components };
 }
@@ -75,8 +82,8 @@ function buildManagePanel(guildId) {
   const entries = faq.listEntries(guildId);
   const embed = new EmbedBuilder().setColor(0x5865f2).setTitle('📚 FAQ Manager').setDescription(cats.length ? cats.map(c => `**${c.emoji || '❓'} ${c.name}** — ${entries.filter(e => e.categoryId === c.id).length} question(s)`).join('\n') : 'No FAQ categories created yet.');
   const components = [];
-  if (cats.length) components.push(row(new StringSelectMenuBuilder().setCustomId('admin:faq:manageCategory').setPlaceholder('Manage a category').addOptions(cats.slice(0, 25).map(c => ({ label: c.name.slice(0, 100), value: c.id, description: `${entries.filter(e => e.categoryId === c.id).length} question(s)`.slice(0, 100), emoji: c.emoji || undefined })))));
-  if (entries.length) components.push(row(new StringSelectMenuBuilder().setCustomId('admin:faq:manageEntry').setPlaceholder('Manage an FAQ').addOptions(entries.slice(0, 25).map(e => ({ label: e.question.slice(0, 100), value: e.id, description: (cats.find(c => c.id === e.categoryId)?.name || e.categoryId).slice(0, 100) })))));
+  if (cats.length) components.push(row(new StringSelectMenuBuilder().setCustomId('admin:faq:manageCategory').setPlaceholder('Manage a category').addOptions(cats.slice(0, 25).map(c => ({ label: c.name.slice(0, 100), value: c.id, description: `${entries.filter(e => e.categoryId === c.id).length} question(s)`.slice(0, 100), emoji: c.emoji || undefined }))));
+  if (entries.length) components.push(row(new StringSelectMenuBuilder().setCustomId('admin:faq:manageEntry').setPlaceholder('Manage an FAQ').addOptions(entries.slice(0, 25).map(e => ({ label: e.question.slice(0, 100), value: e.id, description: (cats.find(c => c.id === e.categoryId)?.name || e.categoryId).slice(0, 100) }))));
   components.push(row(button('admin:faq', '⬅️ FAQ Settings')));
   return { embeds: [embed], components };
 }
