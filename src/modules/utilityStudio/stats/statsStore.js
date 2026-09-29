@@ -10,6 +10,7 @@ const {
 const MODULE_KEY = 'stats';
 const MAX_ITEMS = 10;
 const MAX_SNAPSHOTS = 120;
+let runtimeConfigListener = null;
 
 const DEFAULT_STATS = {
   trackMessages: true,
@@ -103,32 +104,51 @@ function getStats(guildId) {
   return normalizeStats(getModuleSection(guildId, MODULE_KEY, DEFAULT_STATS));
 }
 
+function notifyRuntimeConfigChange(guildId, patch) {
+  if (typeof runtimeConfigListener !== 'function') return;
+  try { runtimeConfigListener(String(guildId), patch || {}); }
+  catch (error) { console.warn('[Stats] Runtime config reconciliation failed:', error?.message || error); }
+}
+
+function setRuntimeConfigListener(listener) {
+  runtimeConfigListener = typeof listener === 'function' ? listener : null;
+}
+
 function saveStats(guildId, stats, guildOrMeta = {}) {
-  return normalizeStats(saveModuleSection(
-    guildId,
-    MODULE_KEY,
-    normalizeStats(stats),
-    guildOrMeta
-  ));
+  const before = getStats(guildId);
+  const saved = normalizeStats(saveModuleSection(guildId, MODULE_KEY, normalizeStats(stats), guildOrMeta));
+  if ((before.trackVoice !== false) !== (saved.trackVoice !== false)) notifyRuntimeConfigChange(guildId, { trackVoice: saved.trackVoice !== false });
+  return saved;
 }
 
 function updateStats(guildId, updater, guildOrMeta = {}) {
-  return normalizeStats(updateModuleSection(
+  let voiceChanged = false;
+  let nextVoice = true;
+  const saved = normalizeStats(updateModuleSection(
     guildId,
     MODULE_KEY,
     (current) => {
       const normalized = normalizeStats(current);
+      const previousVoice = normalized.trackVoice !== false;
       const next = typeof updater === 'function' ? updater(copy(normalized)) : updater;
-      return normalizeStats(next);
+      const finalStats = normalizeStats(next);
+      nextVoice = finalStats.trackVoice !== false;
+      voiceChanged = previousVoice !== nextVoice;
+      return finalStats;
     },
     DEFAULT_STATS,
     guildOrMeta
   ));
+  if (voiceChanged) notifyRuntimeConfigChange(guildId, { trackVoice: nextVoice });
+  return saved;
 }
 
 function setEnabled(guildId, enabled, guildOrMeta = {}) {
+  const wasEnabled = guildManager.isModuleEnabled(guildId, MODULE_KEY);
   guildManager.setModuleEnabled(guildId, MODULE_KEY, enabled === true, guildOrMeta);
-  return { ...getStats(guildId), enabled: guildManager.isModuleEnabled(guildId, MODULE_KEY) };
+  const isNowEnabled = guildManager.isModuleEnabled(guildId, MODULE_KEY);
+  if (wasEnabled !== isNowEnabled) notifyRuntimeConfigChange(guildId, { enabled: isNowEnabled });
+  return { ...getStats(guildId), enabled: isNowEnabled };
 }
 
 function isEnabled(guildId) {
@@ -237,6 +257,7 @@ module.exports = {
   updateStats,
   setEnabled,
   isEnabled,
+  setRuntimeConfigListener,
   addMessage,
   addVoiceMinutes,
   addMemberEvent,
