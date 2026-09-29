@@ -1,6 +1,6 @@
 'use strict';
 
-const { PermissionFlagsBits } = require('discord.js');
+const { MessageFlags, PermissionFlagsBits } = require('discord.js');
 const templates = require('./embedTemplates');
 const deployments = require('./embedDeployments');
 require('./embedState');
@@ -126,6 +126,55 @@ async function deliveryReply(interaction, content) {
     return await interaction.reply(payload);
   } catch { return true; }
 }
+async function migrateLegacyUpdate(interaction, state) {
+  if (!interaction?.guild) return false;
+  let deploymentKey;
+  let deployment;
+  try {
+    deploymentKey = deployments.getDeploymentKeyFromState(state);
+    deployment = deployments.getEmbedDeployment(interaction.guild.id, deploymentKey);
+  } catch { return false; }
+  if (!deployment?.channelId || !deployment?.messageId) return false;
+  const channel = interaction.guild.channels.cache.get(deployment.channelId) || await interaction.guild.channels.fetch(deployment.channelId).catch(() => null);
+  if (!channel || typeof channel.messages?.fetch !== 'function') return false;
+  const message = await channel.messages.fetch(deployment.messageId).catch(() => null);
+  if (!message || message.flags?.has?.(MessageFlags.IsComponentsV2)) return false;
+
+  const report = typeof panel.getReadinessReport === 'function' ? panel.getReadinessReport(interaction) : { ready: true };
+  if (!report?.ready) return false;
+
+  try {
+    const payload = await renderer.buildEmbedPayload({
+      embeds: panel.buildPreviewEmbeds(state, interaction),
+      actionRows: panel.buttonRows(state, interaction),
+      allowUserPing: Boolean(state.allowUserPing),
+      userId: interaction.user?.id || null,
+      ephemeral: false,
+      media: state.media,
+      mediaAlignment: state.mediaAlignment || {},
+      interaction,
+    });
+    payload.allowedMentions = panel.allowedMentions(state, interaction);
+
+    // Legacy Discord messages may still contain embeds/content. Components V2
+    // cannot coexist with either, so explicitly clear both while migrating.
+    await message.edit({ ...payload, content: null, embeds: [] });
+
+    deployments.saveEmbedDeployment(interaction.guild.id, deploymentKey, {
+      ...deployment,
+      channelId: channel.id,
+      messageId: message.id,
+      lastUpdatedBy: interaction.user?.id || deployment.lastUpdatedBy,
+    });
+
+    await deliveryReply(interaction, '✅ Existing embed updated and migrated to Components V2.');
+    return true;
+  } catch (error) {
+    console.error('[Embed] Legacy Components V2 migration failed:', error);
+    await deliveryReply(interaction, `❌ Existing embed update failed: ${error?.message || error}`);
+    return true;
+  }
+}
 async function handleInteraction(interaction) {
   const customId = String(interaction?.customId || '');
   if (!DELIVERY_ACTIONS.has(customId)) return rawHandleInteraction(interaction);
@@ -144,6 +193,7 @@ async function handleInteraction(interaction) {
       await deliveryReply(interaction, permissionFailure);
       return true;
     }
+    if (customId === 'embed:update-existing' && await migrateLegacyUpdate(interaction, state)) return true;
     return rawHandleInteraction(interaction);
   })();
   deliveryLocks.set(lockKey, run);
