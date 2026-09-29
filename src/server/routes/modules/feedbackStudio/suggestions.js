@@ -65,8 +65,8 @@ async function buildHealth(target, section) {
   const checks = await Promise.all([
     channelHealth(target, section.submitChannelId, 'submit_channel', true, { requireHistory: true }),
     channelHealth(target, section.reviewChannelId, 'review_channel', section.requireReview !== false, { requireHistory: true }),
-    channelHealth(target, section.approvedChannelId, 'approved_channel', false),
-    channelHealth(target, section.deniedChannelId, 'denied_channel', false),
+    channelHealth(target, section.approvedChannelId, 'approved_channel', false, { requireHistory: true }),
+    channelHealth(target, section.deniedChannelId, 'denied_channel', false, { requireHistory: true }),
     channelHealth(target, section.logChannelId, 'log_channel', false),
   ]);
   const issues = checks.filter((item) => item?.level === 'issue');
