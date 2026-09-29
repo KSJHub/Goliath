@@ -10,15 +10,26 @@ const { projectEffectiveAccounts } = require('./socialStudioTemplates');
 const LIVE_REFRESH_INTERVALS = Object.freeze([600000, 900000, 1200000, 1800000, 2700000, 3600000]);
 const LIVE_REFRESH_INTERVAL_SET = new Set(LIVE_REFRESH_INTERVALS);
 const DEFAULT_LIVE_REFRESH_MS = LIVE_REFRESH_INTERVALS[0];
+const DEFAULT_CHECK_INTERVAL_MS = 60000;
+const MIN_CHECK_INTERVAL_MS = 30000;
 const PLATFORM_FIELDS = Object.freeze({ twitch: ['🟣', 'Twitch'], youtube: ['🔴', 'YouTube'], tiktok: ['⚫', 'TikTok'], kick: ['🟢', 'Kick'], facebook: ['🔵', 'Facebook'], instagram: ['🟠', 'Instagram'], x: ['⚪', 'X'] });
 let timer = null;
 let schedulerTickMs = 60000;
+const lastGuildChecks = new Map();
 const GLOBAL_SCHEDULER = 'social:monitor:global';
 
 function clean(value, max = 2000) { return String(value ?? '').trim().slice(0, max); }
 function intText(value) { return Number.isFinite(Number(value)) ? Number(value).toLocaleString('en-GB') : ''; }
 function liveRefreshEnabled(settings = {}) { return settings.liveMessageRefreshEnabled !== false; }
 function liveRefreshMs(settings = {}) { const requested = Number(settings.liveMessageRefreshMs); return LIVE_REFRESH_INTERVAL_SET.has(requested) ? requested : DEFAULT_LIVE_REFRESH_MS; }
+function configuredCheckIntervalMs(settings = {}) { const requested = Number(settings.checkIntervalMs); return Number.isFinite(requested) && requested >= MIN_CHECK_INTERVAL_MS ? requested : DEFAULT_CHECK_INTERVAL_MS; }
+function effectiveGuildIntervalMs(social = {}) {
+  const settings = social.settings || {};
+  const configured = configuredCheckIntervalMs(settings);
+  if (!liveRefreshEnabled(settings)) return configured;
+  const hasLive = Object.values(social.accounts || {}).some((account) => account?.enabled !== false && account?.state?.isLive === true);
+  return hasLive ? Math.min(configured, liveRefreshMs(settings)) : configured;
+}
 function projectedRefreshTimestamp(account, state, settings = {}, dateNow = Date.now()) {
   if (state?.isLive !== true || !liveRefreshEnabled(settings)) return null;
   const raw = state.lastLiveMessageUpdatedAt || state.lastLiveMessageUpdateAt || null;
@@ -123,18 +134,42 @@ async function checkGuild(client, guildId, options = {}) {
 async function checkGuildAccounts(client, guildId, options = {}) { return checkGuild(client, guildId, options); }
 async function forcePostCreatorLive(client, guildId, creatorId, options = {}) { return core.forcePostCreatorLive(client, guildId, creatorId, projectedOptions(guildId, options)); }
 async function tick(client) {
-  const results = []; for (const guild of client.guilds.cache.values()) { try { results.push({ guildId: guild.id, result: await checkGuild(client, guild.id) }); } catch (error) { console.error(`[Social Studio] Monitor failed for guild ${guild.id}:`, error); } } return results;
+  const results = [];
+  const now = Date.now();
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      const guildConfig = guildManager.reloadGuild(guild.id);
+      const social = guildConfig?.modules?.social || {};
+      if (social.enabled === false) {
+        lastGuildChecks.delete(guild.id);
+        results.push({ guildId: guild.id, result: { skipped: 'disabled' } });
+        continue;
+      }
+      const intervalMs = effectiveGuildIntervalMs(social);
+      const lastCheckedAt = lastGuildChecks.get(guild.id) || 0;
+      if (lastCheckedAt && now - lastCheckedAt < intervalMs) {
+        results.push({ guildId: guild.id, result: { skipped: 'not_due', intervalMs, nextCheckAt: new Date(lastCheckedAt + intervalMs).toISOString() } });
+        continue;
+      }
+      const result = await checkGuild(client, guild.id, { guildConfig });
+      lastGuildChecks.set(guild.id, Date.now());
+      results.push({ guildId: guild.id, result });
+    } catch (error) {
+      console.error(`[Social Studio] Monitor failed for guild ${guild.id}:`, error);
+    }
+  }
+  return results;
 }
 function start(client, intervalMs = 60000) {
   if (timer) return timer; schedulerTickMs = Math.max(15000, Number(intervalMs) || 60000); const run = () => tick(client).catch((error) => console.error('[Social Studio] Monitor tick failed:', error)); timer = sentinelScheduler.registerInterval(GLOBAL_SCHEDULER, run, schedulerTickMs, { replace: true }); if (typeof timer?.unref === 'function') timer.unref(); setTimeout(run, 5000).unref?.(); return timer;
 }
 function startupSocialStudio(client) { return start(client, Math.max(30000, Number(process.env.SOCIAL_STUDIO_TICK_MS || 60000))); }
-function stop() { if (!timer) return; sentinelScheduler.clear(GLOBAL_SCHEDULER); timer = null; }
+function stop() { if (!timer) return; sentinelScheduler.clear(GLOBAL_SCHEDULER); timer = null; lastGuildChecks.clear(); }
 function status(guildId = null) {
   const nextRunAt = timer && Number.isFinite(Number(timer._idleStart)) && Number.isFinite(Number(timer._idleTimeout)) ? new Date(Date.now() + Math.max(0, Number(timer._idleTimeout))).toISOString() : null;
   if (!guildId) return { running: Boolean(timer), intervalMs: schedulerTickMs, nextRunAt };
-  const config = guildManager.reloadGuild(guildId); const social = config?.modules?.social || {}; const settings = social.settings || {}; const accounts = Object.values(social.accounts || {}); const enabledAccounts = accounts.filter((account) => account?.enabled !== false); const liveAccounts = enabledAccounts.filter((account) => account?.state?.isLive === true); const refreshEnabled = liveRefreshEnabled(settings); const refreshMs = liveRefreshMs(settings); const projected = liveAccounts.map((account) => ({ accountId: account.accountId || null, platform: account.platform || null, username: account.username || null, messageId: account.state?.lastLiveMessageId || account.state?.lastAlertMessageId || null, channelId: account.state?.lastLiveMessageChannelId || account.state?.lastAlertChannelId || null, lastUpdatedAt: updateStamp(account), nextRefreshAt: projectedRefreshTimestamp(account, account.state, settings) })).filter((entry) => entry.messageId && entry.channelId); const nextRefreshAt = projected.map((entry) => entry.nextRefreshAt).filter(Boolean).sort((a, b) => a - b)[0] || null;
-  return { running: Boolean(timer), intervalMs: schedulerTickMs, nextRunAt, enabled: social.enabled !== false, accounts: accounts.length, enabledAccounts: enabledAccounts.length, liveAccounts: liveAccounts.length, liveMessageRefreshEnabled: refreshEnabled, liveMessageRefreshMs: refreshMs, trackedLiveMessages: projected.length, nextLiveRefreshAt: nextRefreshAt ? nextRefreshAt.toISOString() : null, liveMessages: projected.map((entry) => ({ ...entry, nextRefreshAt: entry.nextRefreshAt ? entry.nextRefreshAt.toISOString() : null })) };
+  const config = guildManager.reloadGuild(guildId); const social = config?.modules?.social || {}; const settings = social.settings || {}; const accounts = Object.values(social.accounts || {}); const enabledAccounts = accounts.filter((account) => account?.enabled !== false); const liveAccounts = enabledAccounts.filter((account) => account?.state?.isLive === true); const refreshEnabled = liveRefreshEnabled(settings); const refreshMs = liveRefreshMs(settings); const checkIntervalMs = configuredCheckIntervalMs(settings); const effectiveIntervalMs = effectiveGuildIntervalMs(social); const lastCheckAtMs = lastGuildChecks.get(guildId) || null; const nextGuildCheckAt = lastCheckAtMs ? new Date(lastCheckAtMs + effectiveIntervalMs).toISOString() : null; const projected = liveAccounts.map((account) => ({ accountId: account.accountId || null, platform: account.platform || null, username: account.username || null, messageId: account.state?.lastLiveMessageId || account.state?.lastAlertMessageId || null, channelId: account.state?.lastLiveMessageChannelId || account.state?.lastAlertChannelId || null, lastUpdatedAt: updateStamp(account), nextRefreshAt: projectedRefreshTimestamp(account, account.state, settings) })).filter((entry) => entry.messageId && entry.channelId); const nextRefreshAt = projected.map((entry) => entry.nextRefreshAt).filter(Boolean).sort((a, b) => a - b)[0] || null;
+  return { running: Boolean(timer), intervalMs: schedulerTickMs, nextRunAt, configuredCheckIntervalMs: checkIntervalMs, effectiveCheckIntervalMs: effectiveIntervalMs, lastGuildCheckAt: lastCheckAtMs ? new Date(lastCheckAtMs).toISOString() : null, nextGuildCheckAt, enabled: social.enabled !== false, accounts: accounts.length, enabledAccounts: enabledAccounts.length, liveAccounts: liveAccounts.length, liveMessageRefreshEnabled: refreshEnabled, liveMessageRefreshMs: refreshMs, trackedLiveMessages: projected.length, nextLiveRefreshAt: nextRefreshAt ? nextRefreshAt.toISOString() : null, liveMessages: projected.map((entry) => ({ ...entry, nextRefreshAt: entry.nextRefreshAt ? entry.nextRefreshAt.toISOString() : null })) };
 }
 
 module.exports = {
@@ -157,4 +192,6 @@ module.exports = {
   LIVE_REFRESH_INTERVALS,
   liveRefreshEnabled,
   liveRefreshMs,
+  configuredCheckIntervalMs,
+  effectiveGuildIntervalMs,
 };
