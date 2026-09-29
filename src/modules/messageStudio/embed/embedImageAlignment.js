@@ -82,11 +82,46 @@ function installUi(panel) {
       const payload = originalManager(interaction, ...args);
       const alignment = selectedAlignment(panel, interaction);
       if (!alignment) return payload;
+
       const rows = Array.isArray(payload?.components) ? payload.components : [];
-      const backIndex = rows.findIndex((row) => Array.isArray(row?.components) && row.components.some((c) => componentId(c) === 'embed:media-back'));
-      const optionsBackIndex = rows.findIndex((row) => Array.isArray(row?.components) && row.components.some((c) => componentId(c) === 'embed:media-options-back'));
-      const insertAt = backIndex >= 0 ? backIndex : optionsBackIndex >= 0 ? optionsBackIndex : rows.length;
-      rows.splice(insertAt, 0, new ActionRowBuilder().addComponents(...alignmentButtons(alignment)));
+      const buttons = alignmentButtons(alignment);
+
+      // The Media Manager already uses Discord's five action-row limit.
+      // Keep the alignment controls on this panel by sharing the existing
+      // Above Content / Below Content row instead of creating a sixth row.
+      const placementRow = rows.find((row) => {
+        const ids = Array.isArray(row?.components) ? row.components.map(componentId) : [];
+        return ids.some((id) => id === 'embed:media-placement:above' || id === 'embed:media-above') &&
+          ids.some((id) => id === 'embed:media-placement:below' || id === 'embed:media-below');
+      });
+
+      if (placementRow && Array.isArray(placementRow.components) && placementRow.components.length <= 2) {
+        placementRow.addComponents(...buttons);
+        return payload;
+      }
+
+      // Compatibility fallback for older/newer Media Manager custom IDs:
+      // locate the row by the visible placement labels. Two placement buttons
+      // plus three alignment buttons exactly fills one Discord action row.
+      const labelledPlacementRow = rows.find((row) => {
+        const components = Array.isArray(row?.components) ? row.components : [];
+        const labels = components.map((component) => String(component?.data?.label || component?.label || ''));
+        return labels.some((label) => label.includes('Above Content')) && labels.some((label) => label.includes('Below Content'));
+      });
+
+      if (labelledPlacementRow && Array.isArray(labelledPlacementRow.components) && labelledPlacementRow.components.length <= 2) {
+        labelledPlacementRow.addComponents(...buttons);
+        return payload;
+      }
+
+      // Only add a dedicated row when there is actually room for one.
+      if (rows.length < 5) {
+        const backIndex = rows.findIndex((row) => Array.isArray(row?.components) && row.components.some((c) => componentId(c) === 'embed:media-back'));
+        const optionsBackIndex = rows.findIndex((row) => Array.isArray(row?.components) && row.components.some((c) => componentId(c) === 'embed:media-options-back'));
+        const insertAt = backIndex >= 0 ? backIndex : optionsBackIndex >= 0 ? optionsBackIndex : rows.length;
+        rows.splice(insertAt, 0, new ActionRowBuilder().addComponents(...buttons));
+      }
+
       return payload;
     };
   }
