@@ -217,17 +217,24 @@ async function ensureOutcomeMessage(guild, suggestionId, targetId, label, sectio
   const target = await resolveSendableChannel(guild, targetId, label, { requireHistory: true });
   const payload = await resolveSuggestionPayload(guild, panel.buildSuggestionMessagePayload(guild, current, section, true, false));
   let message = null;
-  if (current.outcomeChannelId === target.id && current.outcomeMessageId) {
-    message = await fetchMessage(guild, current.outcomeChannelId, current.outcomeMessageId);
-    if (message?.editable) await message.edit(payload);
-    else message = null;
+  let previousMessage = null;
+  if (current.outcomeChannelId && current.outcomeMessageId) {
+    previousMessage = await fetchMessage(guild, current.outcomeChannelId, current.outcomeMessageId);
+    if (current.outcomeChannelId === target.id && previousMessage?.editable) {
+      await previousMessage.edit(payload);
+      message = previousMessage;
+    }
   }
   if (!message) message = await target.send(payload);
-  return suggestions.updateSuggestion(guild.id, suggestionId, {
+  const updated = suggestions.updateSuggestion(guild.id, suggestionId, {
     outcomeChannelId: message.channelId,
     outcomeMessageId: message.id,
     outcomeStatus: current.status,
   }, guild) || current;
+  if (previousMessage && previousMessage.id !== message.id && previousMessage.deletable) {
+    await previousMessage.delete().catch((error) => console.warn(`[Suggestions] Could not remove superseded outcome for ${current.reference || suggestionId}:`, error.message || error));
+  }
+  return updated;
 }
 
 async function refreshOutcomeMessage(guild, suggestionId, panel) {
@@ -241,7 +248,12 @@ async function refreshOutcomeMessage(guild, suggestionId, panel) {
 }
 
 async function ensureDiscussionThread(guild, suggestion) {
-  if (!suggestion?.reviewChannelId || !suggestion.reviewMessageId || suggestion.discussionThreadId) return suggestion?.discussionThreadId || null;
+  if (!suggestion?.reviewChannelId || !suggestion.reviewMessageId) return null;
+  if (suggestion.discussionThreadId) {
+    const existing = guild.channels.cache.get(suggestion.discussionThreadId) || await guild.channels.fetch(suggestion.discussionThreadId).catch(() => null);
+    if (existing?.isThread?.()) return existing.id;
+    suggestions.updateSuggestion(guild.id, suggestion.suggestionId, { discussionThreadId: null }, guild);
+  }
   const message = await fetchMessage(guild, suggestion.reviewChannelId, suggestion.reviewMessageId);
   if (!message?.startThread) return null;
   try {
@@ -324,6 +336,7 @@ module.exports = {
   refreshReviewMessage,
   refreshOutcomeMessage,
   refreshPendingSuggestions,
+  ensureDiscussionThread,
   vote,
   manage,
   review,
