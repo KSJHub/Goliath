@@ -60,8 +60,6 @@ async function reconcileCreator(guild, social, creator, role) {
 
 async function reconcileGuild(client, guildId) {
   const social = socialConfig(guildId);
-  if (!guildManager.isModuleEnabled(guildId, 'social')) return { guildId, skipped: 'disabled' };
-
   const roleId = String(social.liveRoleId || '').trim();
   if (!roleId) return { guildId, skipped: 'not_configured' };
 
@@ -72,16 +70,31 @@ async function reconcileGuild(client, guildId) {
   if (!role) return { guildId, skipped: 'role_unavailable' };
   if (role.managed) return { guildId, skipped: 'managed_role' };
 
+  // Disabling Social Studio must also reconcile away any temporary LIVE role
+  // that was assigned while the module was enabled.
+  const moduleEnabled = guildManager.isModuleEnabled(guildId, 'social');
+  const effectiveSocial = moduleEnabled
+    ? social
+    : {
+        ...social,
+        creators: Object.fromEntries(
+          Object.entries(social.creators || {}).map(([id, creator]) => [
+            id,
+            { ...creator, enabled: false },
+          ]),
+        ),
+      };
+
   const results = [];
-  for (const creator of Object.values(social.creators || {})) {
+  for (const creator of Object.values(effectiveSocial.creators || {})) {
     try {
-      results.push(await reconcileCreator(guild, social, creator, role));
+      results.push(await reconcileCreator(guild, effectiveSocial, creator, role));
     } catch (error) {
       console.error(`[Social Studio] LIVE role reconciliation failed for creator ${creator?.creatorId || 'unknown'} in guild ${guildId}:`, error);
       results.push({ creatorId: creator?.creatorId || null, error: error?.message || String(error) });
     }
   }
-  return { guildId, roleId, results };
+  return { guildId, roleId, moduleEnabled, results };
 }
 
 async function reconcileAll(client) {
