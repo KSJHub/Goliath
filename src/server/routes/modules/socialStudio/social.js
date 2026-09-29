@@ -187,9 +187,29 @@ function health(config, discordGuild = null) {
   const issues = [];
   if (!config.enabled) issues.push({ severity: 'warning', code: 'module_disabled', message: 'Social Studio is disabled.' });
   if (!config.alertsChannelId && !Object.values(config.accounts).some((item) => item.alertChannelId)) issues.push({ severity: 'warning', code: 'alert_channel_missing', message: 'No alert channel is configured.' });
+  if (discordGuild && config.liveRoleId) {
+    const role = discordGuild.roles.cache.get(config.liveRoleId);
+    if (!role) issues.push({ severity: 'error', code: 'live_role_missing', message: 'Configured LIVE role is unavailable.' });
+    else if (role.managed) issues.push({ severity: 'error', code: 'live_role_managed', message: 'Configured LIVE role is a managed Discord role and cannot be assigned by Goliath.' });
+    else if (!role.editable) issues.push({ severity: 'error', code: 'live_role_unmanageable', message: 'Goliath cannot manage the configured LIVE role because of Discord role hierarchy or permissions.' });
+  }
+  if (discordGuild) {
+    for (const roleId of [...new Set([...(config.managerRoleIds || []), ...(config.userRoleIds || []), ...(config.notificationRoleId ? [config.notificationRoleId] : [])].map(String))]) {
+      if (!discordGuild.roles.cache.has(roleId)) issues.push({ severity: 'warning', code: 'role_missing', roleId, message: 'Configured Social Studio role ' + roleId + ' is unavailable.' });
+    }
+  }
   for (const account of Object.values(config.accounts)) {
     if (!account.alertTypes.length) issues.push({ severity: 'warning', code: 'alert_types_missing', accountId: account.accountId, message: 'No alert types are enabled.' });
-    if (account.alertChannelId && discordGuild && !discordGuild.channels.cache.has(account.alertChannelId)) issues.push({ severity: 'error', code: 'channel_missing', accountId: account.accountId, message: 'Configured alert channel is unavailable.' });
+    if (account.alertChannelId && discordGuild) {
+      const channel = discordGuild.channels.cache.get(account.alertChannelId);
+      if (!channel) issues.push({ severity: 'error', code: 'channel_missing', accountId: account.accountId, message: 'Configured alert channel is unavailable.' });
+      else if (!channel.isTextBased?.()) issues.push({ severity: 'error', code: 'channel_not_text_based', accountId: account.accountId, message: 'Configured alert channel is not text based.' });
+    }
+  }
+  if (config.alertsChannelId && discordGuild) {
+    const channel = discordGuild.channels.cache.get(config.alertsChannelId);
+    if (!channel) issues.push({ severity: 'error', code: 'default_channel_missing', message: 'Configured default alert channel is unavailable.' });
+    else if (!channel.isTextBased?.()) issues.push({ severity: 'error', code: 'default_channel_not_text_based', message: 'Configured default alert channel is not text based.' });
   }
   const errors = issues.filter((item) => item.severity === 'error').length;
   const score = Math.max(0, 100 - errors * 25 - (issues.length - errors) * 8);
