@@ -60,6 +60,23 @@ async function channelHealth(target, channelId, label, required, options = {}) {
   return null;
 }
 
+async function deploymentHealth(target, deployment = {}) {
+  const channelId = deployment?.channelId || null;
+  const messageId = deployment?.messageId || null;
+  if (!channelId && !messageId) return null;
+  if (!channelId || !messageId) return { level: 'issue', code: 'deployment_link_incomplete', channelId, messageId };
+  const channel = target?.channels?.cache?.get(channelId) || await target?.channels?.fetch?.(channelId).catch(() => null);
+  if (!channel?.messages?.fetch) return { level: 'issue', code: 'deployment_channel_unavailable', channelId, messageId };
+  const me = target?.members?.me;
+  const permissions = me && channel.permissionsFor?.(me);
+  const requiredPermissions = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory];
+  if (permissions && !requiredPermissions.every((permission) => permissions.has(permission))) {
+    return { level: 'issue', code: 'deployment_channel_permissions_missing', channelId, messageId };
+  }
+  const message = await channel.messages.fetch(messageId).catch(() => null);
+  return message ? null : { level: 'issue', code: 'deployment_message_missing', channelId, messageId };
+}
+
 async function buildHealth(target, section) {
   if (!target) return null;
   const checks = await Promise.all([
@@ -68,9 +85,13 @@ async function buildHealth(target, section) {
     channelHealth(target, section.approvedChannelId, 'approved_channel', false, { requireHistory: true }),
     channelHealth(target, section.deniedChannelId, 'denied_channel', false, { requireHistory: true }),
     channelHealth(target, section.logChannelId, 'log_channel', false),
+    deploymentHealth(target, section.deployment),
   ]);
   const issues = checks.filter((item) => item?.level === 'issue');
   const warnings = checks.filter((item) => item?.level === 'warning');
+  if (section.requireReview !== false && section.submitChannelId && section.reviewChannelId && section.submitChannelId === section.reviewChannelId) {
+    issues.push({ level: 'issue', code: 'review_channel_matches_submit_channel', channelId: section.submitChannelId });
+  }
   for (const roleId of section.reviewerRoleIds || []) {
     const role = target.roles.cache.get(roleId) || await target.roles.fetch(roleId).catch(() => null);
     if (!role) warnings.push({ level: 'warning', code: 'reviewer_role_missing', roleId });
