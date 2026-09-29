@@ -24,8 +24,7 @@ function buildScheduleReminderNotice({ guild, member, event, minutes } = {}) {
   if (event?.voiceChannelId) fields.push({ name: '🔊 Voice Channel', value: `<#${event.voiceChannelId}>`, inline: true });
   if (event?.hostUserId) fields.push({ name: '👤 Host', value: `<@${event.hostUserId}>`, inline: true });
 
-  return buildMemberNotice({
-    guild,
+  return buildMemberNotice(guild, {
     moduleName: 'Schedule',
     moduleEmoji: '⏰',
     title: 'EVENT REMINDER',
@@ -79,8 +78,7 @@ function buildVerificationNotice({ guild, member, type, roles = [], reason = nul
   if (values.minimumMembershipAgeMinutes) fields.push({ name: '🕒 Minimum Membership Age', value: `${values.minimumMembershipAgeMinutes} minute(s)`, inline: true });
   if (values.cooldownSeconds) fields.push({ name: '⏳ Cooldown Remaining', value: `${values.cooldownSeconds} second(s)`, inline: true });
 
-  return buildMemberNotice({
-    guild,
+  return buildMemberNotice(guild, {
     moduleName: 'Verification',
     moduleEmoji: meta.emoji,
     title: meta.title,
@@ -108,8 +106,7 @@ function buildPrivateRoomDecisionNotice({ guild, member, request, room, approved
   if (participants.length) fields.push({ name: '👥 Participants', value: participants.map((id) => `<@${id?.id || id}>`).join(', ').slice(0, 1024), inline: false });
   if (approved && room?.channelId) fields.push({ name: '🏠 Private Room', value: `<#${room.channelId}>`, inline: true });
 
-  return buildMemberNotice({
-    guild,
+  return buildMemberNotice(guild, {
     moduleName: 'Private Rooms',
     moduleEmoji: approved ? '🔒' : '❌',
     title: approved ? 'PRIVATE ROOM APPROVED' : 'PRIVATE ROOM DECLINED',
@@ -139,8 +136,7 @@ function buildSecurityIncidentNotice({ guild, owner, incident } = {}) {
   ];
   if (incident?.targetName || incident?.targetId) fields.push({ name: '🎯 Target', value: clean(incident.targetName || incident.targetId, 1024), inline: false });
 
-  return buildMemberNotice({
-    guild,
+  return buildMemberNotice(guild, {
     moduleName: 'Security',
     moduleEmoji: '🚨',
     title: 'SECURITY INCIDENT DETECTED',
@@ -159,9 +155,99 @@ function buildSecurityIncidentNotice({ guild, owner, incident } = {}) {
   });
 }
 
+function buildScheduleWaitlistPromotionNotice({ guild, member, event } = {}) {
+  const start = discordTime(event?.startAt, 'F');
+  const relative = discordTime(event?.startAt, 'R');
+  const fields = [
+    { name: '📅 Event', value: clean(event?.title || 'Scheduled event'), inline: false },
+    { name: '🕒 Starts', value: `${start}\n${relative}`, inline: true },
+  ];
+
+  if (event?.location) {
+    fields.push({
+      name: '📍 Location',
+      value: clean(event.location),
+      inline: false,
+    });
+  }
+
+  if (event?.channelId) {
+    fields.push({
+      name: '💬 Event Channel',
+      value: `<#${event.channelId}>`,
+      inline: true,
+    });
+  }
+
+  if (event?.voiceChannelId) {
+    fields.push({
+      name: '🔊 Voice Channel',
+      value: `<#${event.voiceChannelId}>`,
+      inline: true,
+    });
+  }
+
+  return buildMemberNotice(guild, {
+    moduleName: 'Schedule',
+    moduleEmoji: '✅',
+    title: 'WAITLIST PROMOTION',
+    subtitle: 'Schedule RSVP Update',
+    color: Number(event?.color) || 0x57f287,
+    referenceLabel: 'Event',
+    referenceValue: clean(
+      event?.eventId || event?.id || event?.title || 'Scheduled Event',
+      100,
+    ),
+    status: '🟢 Place Confirmed',
+    member: member?.user || member,
+    contextFields: fields,
+    detailsTitle: '🎟️ YOUR PLACE IS AVAILABLE',
+    details: `A place opened up for **${clean(event?.title || 'this event', 200)}** and you have been promoted from the waitlist.`,
+    meaning: 'Your RSVP has automatically moved from the waitlist into an attending position because a place became available.',
+    nextSteps: 'No action is required unless your plans have changed. Review the event details above and update your RSVP if you can no longer attend.',
+    footerLabel: `Event ${clean(event?.eventId || event?.id || 'Waitlist', 80)}`,
+  });
+}
+
+function buildInviteUsedNotice({ guild, inviter, member, score = 0 } = {}) {
+  const joinedMember = member?.user || member;
+
+  return buildMemberNotice(guild, {
+    moduleName: 'Invites',
+    moduleEmoji: '🎉',
+    title: 'YOUR INVITE WAS USED',
+    subtitle: 'Invite Studio Notification',
+    color: 0x57f287,
+    referenceLabel: 'Member',
+    referenceValue: joinedMember?.id || member?.id || 'Unknown',
+    status: '🟢 Joined',
+    member: inviter?.user || inviter,
+    contextFields: [
+      {
+        name: '👤 New Member',
+        value: joinedMember?.id
+          ? `<@${joinedMember.id}>`
+          : clean(joinedMember?.tag || 'Unknown member', 100),
+        inline: true,
+      },
+      {
+        name: '🏆 Current Score',
+        value: String(Number(score) || 0),
+        inline: true,
+      },
+    ],
+    detailsTitle: '🎉 INVITE ACTIVITY',
+    details: `**${clean(joinedMember?.tag || joinedMember?.username || joinedMember?.id || 'A member', 200)}** joined **${clean(guild?.name || 'the server', 200)}** using your invite.`,
+    meaning: 'Goliath detected a successful join attributed to one of your tracked invites.',
+    nextSteps: 'No action is required. Your Invite Studio statistics have been updated automatically.',
+    footerLabel: 'Goliath Invite Studio',
+  });
+}
 module.exports = {
   buildScheduleReminderNotice,
   buildVerificationNotice,
   buildPrivateRoomDecisionNotice,
   buildSecurityIncidentNotice,
+  buildScheduleWaitlistPromotionNotice,
+  buildInviteUsedNotice
 };

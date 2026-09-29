@@ -15,6 +15,7 @@ const guildManager = require('../../core/guild/guildManager');
 const guildVariables = require('../../core/guild/guildVariables');
 const testDevOverride = require('../../owner/dev/DevOverrideManager');
 const emojiPayload = require('../utilityStudio/emojis/emojiPayload');
+const { buildVerificationNotice } = require('../../core/ui/systemNotices');
 
 const CUSTOM_ID_PREFIX = 'verify';
 const SCREENING_FEATURE = 'MEMBER_VERIFICATION_GATE_ENABLED';
@@ -169,13 +170,17 @@ async function assignPendingRoles(member, reason = 'Goliath pending verification
     });
 
     if (settings.dmOnPendingRole) {
-      const message = renderMessage(
-        section.messages.pendingAssigned,
-        refreshedMember,
-        { pendingRoles: roleMentions(assigned) }
-      );
-
-      await refreshedMember.send(message).catch(() => null);
+      await refreshedMember
+        .send(buildVerificationNotice({
+          guild: member.guild,
+          member: refreshedMember,
+          type: 'pending',
+          roles: assigned,
+          values: {
+            pendingRoles: roleMentions(assigned),
+          },
+        }))
+        .catch(() => null);
     }
   }
 
@@ -404,7 +409,13 @@ async function verifyMember(interaction) {
 
     if (settings.dmOnVerify) {
       await refreshedMember
-        .send(renderMessage(messages.dmSuccess, refreshedMember, values))
+        .send(buildVerificationNotice({
+          guild,
+          member: refreshedMember,
+          type: 'success',
+          roles: verifiedRoles,
+          values,
+        }))
         .catch(() => null);
     }
 

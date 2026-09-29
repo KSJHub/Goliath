@@ -6,6 +6,7 @@ const guildManager = require('../../../core/guild/guildManager');
 const { replaceVars } = require('../../../core/guild/guildVariables');
 const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const emojiPayload = require('../emojis/emojiPayload');
+const { buildScheduleReminderNotice } = require('../../../core/ui/systemNotices');
 
 const SECTION = 'schedule';
 const RSVP_STATES = Object.freeze(['going', 'maybe', 'declined', 'waitlist']);
@@ -515,8 +516,16 @@ async function sendCustomNotification(guild, event, notification) {
 async function sendPersonalReminder(guild, event, userId, minutes) {
   const member = await guild.members.fetch(userId).catch(() => null);
   if (!member?.user) return false;
-  const unix = Math.floor(new Date(event.startAt).getTime() / 1000);
-  await member.user.send(`⏰ **${event.title}** starts <t:${unix}:R> (<t:${unix}:F>).`).catch(() => null);
+
+  await member.user
+    .send(buildScheduleReminderNotice({
+      guild,
+      member,
+      event,
+      minutes,
+    }))
+    .catch(() => null);
+
   return true;
 }
 

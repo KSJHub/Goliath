@@ -2,6 +2,7 @@
 
 const { AuditLogEvent, PermissionFlagsBits } = require('discord.js');
 const securitySystem = require('./system');
+const { buildSecurityIncidentNotice } = require('../../ui/systemNotices');
 const guildManager = require('../../guild/guildManager');
 const { enableLockdown, getLockdownState, getLockdownModeFromSeverity } = require('./lockdown');
 const { validateBotHierarchy } = require('./system');
@@ -119,7 +120,13 @@ async function alertOwner(guild, incident) {
   try {
     const owner = await guild.fetchOwner().catch(() => null);
     if (!owner) return false;
-    await owner.send({ content: ['🚨 **Goliath Anti-Nuke Alert**', `Server: **${guild.name}**`, `Incident: \`${incident.type}\``, `Severity: \`${incident.severity}\``, `Actor: ${incident.actorTag || 'Unknown'} (${incident.actorId || 'unknown'})`, `Action: ${incident.actionTaken || 'Logged only'}`].join('\n'), allowedMentions: { parse: [] } });
+
+    await owner.send(buildSecurityIncidentNotice({
+      guild,
+      owner,
+      incident,
+    }));
+
     return true;
   } catch (error) {
     console.error('[AntiNuke] Owner alert failed:', error); return false;

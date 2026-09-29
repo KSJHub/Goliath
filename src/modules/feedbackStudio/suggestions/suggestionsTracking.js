@@ -279,8 +279,7 @@ async function notifyAuthor(guild, suggestion) {
     inline: false,
   });
 
-  const notice = buildMemberNotice({
-    guild,
+  const notice = buildMemberNotice(guild, {
     moduleName: 'Suggestions',
     moduleEmoji: meta.emoji,
     title: meta.title,

@@ -141,8 +141,7 @@ async function sendConfirmationDm(interaction, form, submission, bridgeResult) {
     if (ticketRef) contextFields.push({ name: '🎫 Ticket', value: `\`${ticketRef}\``, inline: true });
     if (channelId) contextFields.push({ name: '📍 Ticket Channel', value: `<#${channelId}>`, inline: true });
 
-    const notice = buildMemberNotice({
-      guild: interaction.guild,
+    const notice = buildMemberNotice(interaction.guild, {
       moduleName: 'Forms',
       moduleEmoji: '📝',
       title: 'FORM SUBMITTED',

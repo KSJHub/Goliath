@@ -15,6 +15,7 @@ const {
 const guildManager = require('../../../core/guild/guildManager');
 const { replaceVars } = require('../../../core/guild/guildVariables');
 const emojiPayload = require('../emojis/emojiPayload');
+const { buildScheduleWaitlistPromotionNotice } = require('../../../core/ui/systemNotices');
 const schedule = require('./schedule');
 
 const STATUS_COLOURS = Object.freeze({ scheduled: 0x5865F2, completed: 0x57F287, cancelled: 0xED4245 });
@@ -236,7 +237,13 @@ async function syncPromotedMember(guild, event, userId) {
   const status = event.rsvps?.[userId]?.status || null;
   await syncAttendeeRole(member, event, 'waitlist', status);
   if (schedule.isAttendeeStatus(event, status)) await addToThread(guild, event, member);
-  await member.user?.send?.(`✅ A place opened up for **${event.title}** and you have been promoted from the waitlist.`).catch(() => null);
+  await member.user
+    ?.send?.(buildScheduleWaitlistPromotionNotice({
+      guild,
+      member,
+      event,
+    }))
+    .catch(() => null);
   return member;
 }
 
