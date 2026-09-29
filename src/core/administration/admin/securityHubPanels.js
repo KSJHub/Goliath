@@ -38,10 +38,14 @@ function nav(refreshId) {
     new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
   );
 }
-function managementButton(customId, label, emoji) {
+function managementButton(customId, label, emoji, style = ButtonStyle.Primary) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(customId).setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(customId).setLabel(label).setEmoji(emoji).setStyle(style),
   );
+}
+function managementRow(buttons) {
+  return new ActionRowBuilder().addComponents(...buttons.map(({ customId, label, emoji, style = ButtonStyle.Primary, disabled = false }) =>
+    new ButtonBuilder().setCustomId(customId).setLabel(label).setEmoji(emoji).setStyle(style).setDisabled(disabled)));
 }
 function base(interaction, title, description, color = 0x5865F2) {
   return new EmbedBuilder().setColor(color).setTitle(title).setDescription(description)
@@ -53,6 +57,13 @@ function formatDuration(ms) {
   if (minutes % 1440 === 0) return `${minutes / 1440} day(s)`;
   if (minutes % 60 === 0) return `${minutes / 60} hour(s)`;
   return `${minutes} minute(s)`;
+}
+function incidentLine(item) {
+  const severity = String(item?.severity || 'low').toUpperCase();
+  const type = String(item?.type || 'unknown').replace(/[_-]+/g, ' ').slice(0, 55);
+  const actor = item?.executorId || item?.userId || item?.actorId || item?.metadata?.executorId || null;
+  const action = String(item?.actionTaken || item?.metadata?.actionTaken || '').slice(0, 70);
+  return `• **${severity}** — ${type}${actor ? ` • <@${actor}>` : ''}${action ? `\n  ↳ ${action}` : ''}`;
 }
 
 function buildThreatPanel(interaction) {
@@ -69,9 +80,13 @@ function buildThreatPanel(interaction) {
       { name: 'Incident Store', value: `**${incidents.length}** recorded\n**${packages.length}** evidence package(s)`, inline: true },
       { name: 'Severity Totals', value: `🔴 Critical **${severityCounts.critical}**\n🟠 High **${severityCounts.high}**\n🟡 Medium **${severityCounts.medium}**\n🔵 Low **${severityCounts.low}**`, inline: true },
       { name: 'Correlation Window', value: '**60 seconds**\nCross-event escalation enabled', inline: true },
-      { name: 'Recent Incidents', value: recent.length ? recent.map((item) => `• **${String(item.severity || 'low').toUpperCase()}** — ${String(item.type || 'unknown').slice(0, 60)}`).join('\n') : 'No security incidents recorded.', inline: false },
+      { name: 'Recent Incidents', value: recent.length ? recent.map(incidentLine).join('\n') : 'No security incidents recorded.', inline: false },
+      { name: 'Investigation Bridge', value: 'Use **Investigate Member** to open Goliath’s existing member intelligence workflow for a suspected actor. Guild-wide emergency response remains under **Restrictions**.', inline: false },
     );
-  return { embeds: [embed], components: [nav(REFRESH.threat)] };
+  return { embeds: [embed], components: [managementRow([
+    { customId: 'mod_scan_user', label: 'Investigate Member', emoji: '🔎' },
+    { customId: 'admin:server-security', label: 'Restrictions', emoji: '🔒', style: ButtonStyle.Secondary },
+  ]), nav(REFRESH.threat)] };
 }
 
 function buildAntiNukePanel(interaction) {
@@ -86,8 +101,12 @@ function buildAntiNukePanel(interaction) {
       { name: 'Automatic Response', value: [`Lockdown: ${bool(config.lockdown?.enabled !== false)}`, `Isolation: ${bool(config.quarantine?.enabled !== false)}`, `Invite freeze: ${bool(config.emergencyControls?.enabled !== false && config.emergencyControls?.disableInvites !== false)}`, `Role freeze: ${bool(config.emergencyControls?.enabled !== false && config.emergencyControls?.freezeRoles !== false)}`].join('\n'), inline: false },
       { name: 'Incident Safety', value: [`Owner alerts: ${bool(config.ownerAlerts?.enabled !== false)}`, `Pre-incident backup: ${bool(config.backups?.beforeIncident !== false)}`, `Post-incident backup: ${bool(config.backups?.afterIncident !== false)}`, `Response duration: **${formatDuration(config.emergencyControls?.durationMs)}**`].join('\n'), inline: false },
       { name: 'Trust Configuration', value: `Trusted users: **${(config.trustedUserIds || []).length}**\nTrusted roles: **${(config.trustedRoleIds || []).length}**\nIgnore bots: **${config.ignoreBots ? 'Yes' : 'No'}**`, inline: true },
+      { name: 'Response Controls', value: 'Use **Restrictions** for live lockdown/invite/role recovery and **Full Isolation** for owner-controlled member containment. Anti-Nuke continues to use its persisted protection policy automatically.', inline: false },
     );
-  return { embeds: [embed], components: [nav(REFRESH.antinuke)] };
+  return { embeds: [embed], components: [managementRow([
+    { customId: 'admin:server-security', label: 'Restrictions', emoji: '🔒' },
+    { customId: 'admin:security-isolation', label: 'Full Isolation', emoji: '🚨', style: ButtonStyle.Danger, disabled: interaction.guild?.ownerId !== interaction.user?.id },
+  ]), nav(REFRESH.antinuke)] };
 }
 
 function buildAutoModPanel(interaction) {
@@ -120,7 +139,10 @@ function buildMemberPanel(interaction) {
       { name: 'Contained Members', value: entries.length ? entries.map(([id, entry]) => `• <@${id}> — **${getQuarantineMode(entry) || 'unknown'}**${entry.caseId ? ` • Case #${entry.caseId}` : ''}`).join('\n') : 'No members are currently contained.', inline: false },
       { name: 'Management', value: 'Open Goliath’s existing Moderation controls to investigate members, review intelligence, manage investigation containment and work linked cases. Full Security Isolation remains owner-only in this Security Hub.', inline: false },
     );
-  return { embeds: [embed], components: [managementButton('mod_dashboard:none:actions', 'Manage Investigations', '🔎'), nav(REFRESH.member)] };
+  return { embeds: [embed], components: [managementRow([
+    { customId: 'mod_scan_user', label: 'Investigate Member', emoji: '🔎' },
+    { customId: 'admin:security-isolation', label: 'Full Isolation', emoji: '🚨', style: ButtonStyle.Danger, disabled: interaction.guild?.ownerId !== interaction.user?.id },
+  ]), nav(REFRESH.member)] };
 }
 
 function buildVerificationPanel(interaction) {
@@ -143,32 +165,46 @@ function buildHealthPanel(interaction) {
   const emergency = getEmergencyControlState(interaction.guild.id);
   const modes = countModes(interaction.guild.id);
   const antiNukeConfig = antiNuke.getAntiNukeConfig(interaction.guild.id);
+  const automod = automodPanel.getAutomodConfig(interaction.guild.id);
+  const verification = guildManager.getGuildSection(interaction.guild.id, 'verification', {}) || {};
   const incidents = securitySystem.readIncidents(interaction.guild.id) || [];
-  const degraded = !antiNukeConfig.enabled || lockdown.failedChannels?.length;
+  const failures = (lockdown.failedChannels || []).length;
+  const degraded = antiNukeConfig.enabled === false || automod.enabled === false || failures > 0;
   const embed = base(interaction, '🩺 Security Health', '**Live security runtime health and protection state.**', degraded ? 0xFEE75C : 0x57F287)
     .addFields(
       { name: 'Overall', value: degraded ? '🟠 Attention required' : '🟢 Operational', inline: true },
-      { name: 'Anti-Nuke', value: bool(antiNukeConfig.enabled !== false), inline: true },
       { name: 'Recorded Incidents', value: `**${incidents.length}**`, inline: true },
+      { name: 'Restore Failures', value: `**${failures}**`, inline: true },
+      { name: 'Protection Engines', value: `Anti-Nuke: ${bool(antiNukeConfig.enabled !== false)}\nAutoMod: ${bool(automod.enabled !== false)}\nVerification: ${bool(verification.enabled !== false)}`, inline: false },
       { name: 'Active Restrictions', value: `Lockdown: **${lockdown.active ? 'Active' : 'Standby'}**\nInvites: **${emergency.invites.active ? 'Frozen' : 'Normal'}**\nRoles: **${emergency.roles.active ? 'Frozen' : 'Normal'}**`, inline: true },
       { name: 'Containment', value: `Investigations: **${modes.investigations}**\nFull isolation: **${modes.isolation}**`, inline: true },
-      { name: 'Restore Health', value: `Lockdown restore failures: **${(lockdown.failedChannels || []).length}**`, inline: true },
     );
-  return { embeds: [embed], components: [nav(REFRESH.health)] };
+  return { embeds: [embed], components: [managementRow([
+    { customId: 'admin:server-security', label: 'Restrictions', emoji: '🔒' },
+    { customId: 'admin:automod', label: 'AutoMod', emoji: '🤖', style: ButtonStyle.Secondary },
+    { customId: 'admin:verification', label: 'Verification', emoji: '🛂', style: ButtonStyle.Secondary },
+  ]), nav(REFRESH.health)] };
 }
 
 function buildRecoveryPanel(interaction) {
   const lockdown = getLockdownState(interaction.guild.id);
   const emergency = getEmergencyControlState(interaction.guild.id);
+  const modes = countModes(interaction.guild.id);
   const active = [lockdown.active, emergency.invites.active, emergency.roles.active].filter(Boolean).length;
-  const embed = base(interaction, '🧰 Recovery Controls', '**Recovery readiness and saved emergency restriction state.**', active ? 0xFEE75C : 0x57F287)
+  const failures = (lockdown.failedChannels || []).length;
+  const embed = base(interaction, '🧰 Recovery Controls', '**Recovery readiness and saved emergency restriction state.**', active || failures ? 0xFEE75C : 0x57F287)
     .addFields(
       { name: 'Active Restrictions', value: `**${active}**`, inline: true },
+      { name: 'Restore Failures', value: `**${failures}**`, inline: true },
+      { name: 'Contained Members', value: `Investigations: **${modes.investigations}**\nFull isolation: **${modes.isolation}**`, inline: true },
       { name: 'Lockdown Snapshot', value: lockdown.active ? `**${(lockdown.channels || []).length}** channel(s) tracked` : 'No active lockdown', inline: true },
       { name: 'Emergency Snapshots', value: `Invites: **${(emergency.invites.channelSnapshots || []).length}**\nRoles: **${(emergency.roles.roleSnapshots || []).length}**`, inline: true },
-      { name: 'Recovery Actions', value: 'Use **Lockdown & Restrictions** from the Security Hub to end lockdown, restore invites, restore roles, or run the confirmed Restore All flow.', inline: false },
+      { name: 'Recovery Actions', value: 'Open **Restriction Recovery** to end lockdown, restore invites, restore roles, or run the confirmed Restore All flow. Use **Member Recovery** for owner-only isolation restoration.', inline: false },
     );
-  return { embeds: [embed], components: [nav(REFRESH.recovery)] };
+  return { embeds: [embed], components: [managementRow([
+    { customId: 'admin:server-security', label: 'Restriction Recovery', emoji: '🧰' },
+    { customId: 'admin:security-isolation', label: 'Member Recovery', emoji: '👤', style: ButtonStyle.Secondary, disabled: interaction.guild?.ownerId !== interaction.user?.id },
+  ]), nav(REFRESH.recovery)] };
 }
 
 module.exports = {
