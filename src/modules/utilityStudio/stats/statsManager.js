@@ -1,5 +1,6 @@
 'use strict';
 
+const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
 const statsStore = require('./statsStore');
 const statsCounters = require('./statsCounters');
@@ -101,10 +102,68 @@ async function resolveChannel(guild, channelId) { if (!channelId) return null; r
 
 async function buildHealth(guild) {
   if (!guild?.id) throw new Error('Guild is required.');
-  const config = statsStore.getStats(guild.id); const issues = []; const counters = statsCounters.listCounters(guild.id);
-  for (const counter of counters) { const channel = await resolveChannel(guild, counter.channelId); if (!channel) { issues.push({ code: 'counter_channel_missing', severity: 'error', counterId: counter.id, channelId: counter.channelId, type: counter.segments?.[0]?.type || null }); continue; } if (typeof channel.setName !== 'function') issues.push({ code: 'counter_channel_unmanageable', severity: 'error', counterId: counter.id, channelId: counter.channelId, type: counter.segments?.[0]?.type || null }); }
-  const retentionDays = Number(config.settings?.retentionDays || 0); if (!Number.isFinite(retentionDays) || retentionDays < 1) issues.push({ code: 'retention_invalid', severity: 'warning', value: config.settings?.retentionDays });
-  return { module: 'stats', guildId: guild.id, enabled: guildManager.isModuleEnabled(guild.id, 'stats'), healthy: issues.every((issue) => issue.severity !== 'error'), checkedAt: new Date().toISOString(), counters: { configured: counters.length, missing: issues.filter((issue) => issue.code === 'counter_channel_missing').length }, tracking: { messages: config.trackMessages !== false, voice: config.trackVoice !== false, members: config.trackMembers !== false }, issues };
+  const config = statsStore.getStats(guild.id);
+  const issues = [];
+  const counters = statsCounters.listCounters(guild.id);
+  const enabledCounters = counters.filter((counter) => counter.enabled !== false);
+  const me = guild.members?.me || null;
+
+  const scheduler = sentinelScheduler.snapshot()[SCHEDULER_ID] || null;
+  if (!intervalTimer || !scheduler || scheduler.state !== 'running') {
+    issues.push({ code: 'scheduler_not_running', severity: 'error', schedulerId: SCHEDULER_ID });
+  } else if (scheduler.lastBeatAt && Date.now() - Date.parse(scheduler.lastBeatAt) > Number(scheduler.staleAfterMs || 0)) {
+    issues.push({ code: 'scheduler_stale', severity: 'error', schedulerId: SCHEDULER_ID, lastBeatAt: scheduler.lastBeatAt });
+  }
+  if (scheduler?.consecutiveFailures > 0) {
+    issues.push({ code: 'scheduler_recent_failures', severity: 'warning', schedulerId: SCHEDULER_ID, consecutiveFailures: scheduler.consecutiveFailures });
+  }
+
+  for (const counter of enabledCounters) {
+    const channel = await resolveChannel(guild, counter.channelId);
+    if (!channel) {
+      issues.push({ code: 'counter_channel_missing', severity: 'error', counterId: counter.id, channelId: counter.channelId, type: counter.segments?.[0]?.type || null });
+      continue;
+    }
+    if (typeof channel.setName !== 'function') {
+      issues.push({ code: 'counter_channel_unmanageable', severity: 'error', counterId: counter.id, channelId: counter.channelId, type: counter.segments?.[0]?.type || null });
+    }
+    if (me && !channel.permissionsFor?.(me)?.has(PermissionFlagsBits.ManageChannels)) {
+      issues.push({ code: 'counter_manage_channels_missing', severity: 'error', counterId: counter.id, channelId: counter.channelId });
+    }
+    if (counter.categoryId) {
+      const category = await resolveChannel(guild, counter.categoryId);
+      if (!category) issues.push({ code: 'counter_category_missing', severity: 'warning', counterId: counter.id, categoryId: counter.categoryId });
+      else if (channel.parentId !== category.id) issues.push({ code: 'counter_category_mismatch', severity: 'warning', counterId: counter.id, channelId: counter.channelId, categoryId: category.id });
+    }
+    for (const segment of counter.segments || []) {
+      if (segment.type === 'role') {
+        for (const roleId of segment.options?.roleIds || []) {
+          if (!guild.roles.cache.has(roleId)) issues.push({ code: 'counter_role_missing', severity: 'warning', counterId: counter.id, roleId });
+        }
+      }
+      if (segment.type === 'voice' && ['whitelist', 'blacklist'].includes(segment.options?.mode)) {
+        for (const channelId of segment.options?.channelIds || []) {
+          if (!guild.channels.cache.has(channelId)) issues.push({ code: 'counter_voice_reference_missing', severity: 'warning', counterId: counter.id, channelId });
+        }
+      }
+      if (segment.type === 'datetime') {
+        try { new Intl.DateTimeFormat('en-GB', { timeZone: segment.options?.timeZone || 'Europe/London' }).format(); }
+        catch { issues.push({ code: 'counter_timezone_invalid', severity: 'warning', counterId: counter.id, timeZone: segment.options?.timeZone }); }
+      }
+    }
+  }
+
+  const retentionDays = Number(config.settings?.retentionDays || 0);
+  if (!Number.isFinite(retentionDays) || retentionDays < 1 || retentionDays > 365) issues.push({ code: 'retention_invalid', severity: 'warning', value: config.settings?.retentionDays });
+  const activeVoiceCount = [...activeVoiceSessions.keys()].filter((key) => key.startsWith(`${guild.id}:`)).length;
+  return {
+    module: 'stats', guildId: guild.id, enabled: guildManager.isModuleEnabled(guild.id, 'stats'),
+    healthy: issues.every((issue) => issue.severity !== 'error'), checkedAt: new Date().toISOString(),
+    counters: { configured: counters.length, enabled: enabledCounters.length, missing: issues.filter((issue) => issue.code === 'counter_channel_missing').length },
+    tracking: { messages: config.trackMessages !== false, voice: config.trackVoice !== false, members: config.trackMembers !== false, activeVoiceSessions: activeVoiceCount },
+    scheduler: scheduler ? { state: scheduler.state, lastBeatAt: scheduler.lastBeatAt, consecutiveFailures: scheduler.consecutiveFailures } : null,
+    issues,
+  };
 }
 
 async function repair(guild) {
