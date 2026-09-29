@@ -60,31 +60,49 @@ function alignmentButtons(alignment) {
   ];
 }
 
+function selectedAlignment(panel, interaction) {
+  const state = panel.getSession(interaction);
+  const panelIndex = Math.max(0, Number(state?.selectedPanelIndex) || 0);
+  const itemIndex = Number.isInteger(state?.selectedMediaIndex) ? state.selectedMediaIndex : null;
+  if (itemIndex == null) return null;
+  const panelMedia = panel.getPanelMedia(state, panelIndex);
+  const item = panelMedia?.gallery?.[itemIndex];
+  if (!item) return null;
+  const map = alignmentMap(state);
+  const stored = String(map[alignmentKey(panelIndex, itemIndex)] || item?.alignment || '').toLowerCase();
+  return VALID_ALIGNMENTS.has(stored) ? stored : 'left';
+}
+
 function installUi(panel) {
-  if (!panel || panel.__imageAlignmentUiInstalled || typeof panel.buildMediaOptionsPanel !== 'function') return;
-  const original = panel.buildMediaOptionsPanel.bind(panel);
-  panel.buildMediaOptionsPanel = (interaction) => {
-    const payload = original(interaction);
-    const state = panel.getSession(interaction);
-    const panelIndex = Math.max(0, Number(state?.selectedPanelIndex) || 0);
-    const itemIndex = Number.isInteger(state?.selectedMediaIndex) ? state.selectedMediaIndex : null;
-    if (itemIndex == null) return payload;
-    const map = alignmentMap(state);
-    const alignment = VALID_ALIGNMENTS.has(String(map[alignmentKey(panelIndex, itemIndex)] || '').toLowerCase())
-      ? String(map[alignmentKey(panelIndex, itemIndex)]).toLowerCase() : 'left';
-    const rows = Array.isArray(payload?.components) ? payload.components : [];
-    const duplicateRow = rows.find((row) => Array.isArray(row?.components) && row.components.some((c) => componentId(c) === 'embed:media-duplicate'));
-    const backRow = rows.find((row) => Array.isArray(row?.components) && row.components.some((c) => componentId(c) === 'embed:media-options-back'));
-    if (duplicateRow) {
-      const duplicate = duplicateRow.components.find((c) => componentId(c) === 'embed:media-duplicate');
-      duplicateRow.components = [];
-      duplicateRow.addComponents(...alignmentButtons(alignment));
-      if (duplicate && backRow && (backRow.components?.length || 0) < 5) backRow.addComponents(duplicate);
-    }
-    const embed = payload?.embeds?.[0];
-    if (embed?.data?.description != null) embed.setDescription(`${embed.data.description}\n**Image alignment:** ${alignment === 'center' ? 'Centre' : alignment[0].toUpperCase() + alignment.slice(1)}`.slice(0, 4096));
-    return payload;
-  };
+  if (!panel || panel.__imageAlignmentUiInstalled) return;
+
+  if (typeof panel.buildMediaManagerPanel === 'function') {
+    const originalManager = panel.buildMediaManagerPanel.bind(panel);
+    panel.buildMediaManagerPanel = (interaction, ...args) => {
+      const payload = originalManager(interaction, ...args);
+      const alignment = selectedAlignment(panel, interaction);
+      if (!alignment) return payload;
+      const rows = Array.isArray(payload?.components) ? payload.components : [];
+      const backIndex = rows.findIndex((row) => Array.isArray(row?.components) && row.components.some((c) => componentId(c) === 'embed:media-back'));
+      const optionsBackIndex = rows.findIndex((row) => Array.isArray(row?.components) && row.components.some((c) => componentId(c) === 'embed:media-options-back'));
+      const insertAt = backIndex >= 0 ? backIndex : optionsBackIndex >= 0 ? optionsBackIndex : rows.length;
+      rows.splice(insertAt, 0, new ActionRowBuilder().addComponents(...alignmentButtons(alignment)));
+      return payload;
+    };
+  }
+
+  if (typeof panel.buildMediaOptionsPanel === 'function') {
+    const originalOptions = panel.buildMediaOptionsPanel.bind(panel);
+    panel.buildMediaOptionsPanel = (interaction, ...args) => {
+      const payload = originalOptions(interaction, ...args);
+      const alignment = selectedAlignment(panel, interaction);
+      if (!alignment) return payload;
+      const embed = payload?.embeds?.[0];
+      if (embed?.data?.description != null) embed.setDescription(`${embed.data.description}\n**Image alignment:** ${alignment === 'center' ? 'Centre' : alignment[0].toUpperCase() + alignment.slice(1)}`.slice(0, 4096));
+      return payload;
+    };
+  }
+
   panel.__imageAlignmentUiInstalled = true;
 }
 
@@ -104,7 +122,7 @@ function installInteraction(panel, interactions) {
     const map = alignmentMap(state);
     map[alignmentKey(panelIndex, itemIndex)] = alignment;
     panel.saveSession(interaction, { ...state, mediaAlignment: map, hasUnsavedChanges: true });
-    await interaction.update(panel.buildMediaOptionsPanel(interaction));
+    await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
     return true;
   };
   interactions.__imageAlignmentInteractionInstalled = true;
