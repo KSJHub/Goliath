@@ -28,6 +28,8 @@ const contracts = [
   ['persisted pending delivery', 'state.pendingDelivery'],
   ['retry recovery delivery', 'recovered:true'],
   ['exhausted retry release', 'state.pendingDelivery=null'],
+  ['stale LIVE retry protection', 'pendingLiveStale=Boolean(pendingEvent?.type===\'live\''],
+  ['stale LIVE retry clears pending', 'state.pendingDelivery=null'],
 ];
 
 for (const [name, needle] of contracts) {
