@@ -30,7 +30,7 @@ const contracts = [
   ['persisted pending delivery', 'state.pendingDelivery'],
   ['retry recovery delivery', 'recovered:true'],
   ['exhausted retry release', 'state.pendingDelivery=null'],
-  ['delivery failure preserves current state', 'let currentState={...previous}'],
+  ['delivery failure preserves current state', 'letcurrentState={...previous}'],
   ['retry failure persists current state', 'state:{...currentState,pendingDelivery'],
   ['stale LIVE retry protection', 'pendingLiveStale=Boolean(pendingEvent?.type===\'live\''],
   ['stale LIVE retry clears pending', 'state.pendingDelivery=null'],
