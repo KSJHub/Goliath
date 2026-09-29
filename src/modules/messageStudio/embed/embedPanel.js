@@ -351,8 +351,49 @@ function buildEmbedFromPanel(panelData, i, showTimestamp = true, fieldLayout = "
   if (showTimestamp) e.setTimestamp();
   return e;
 }
+function hasRenderableEmbedContent(embed) {
+  if (!embed) return false;
+
+  let data;
+
+  try {
+    data = typeof embed.toJSON === 'function'
+      ? embed.toJSON()
+      : (embed.data || embed);
+  } catch {
+    data = embed.data || embed;
+  }
+
+  if (!data || typeof data !== 'object') return false;
+
+  if (String(data.title || '').trim()) return true;
+  if (String(data.description || '').trim()) return true;
+  if (String(data.url || '').trim()) return true;
+
+  if (data.author && String(data.author.name || '').trim()) return true;
+  if (data.footer && String(data.footer.text || '').trim()) return true;
+
+  if (data.image && String(data.image.url || '').trim()) return true;
+  if (data.thumbnail && String(data.thumbnail.url || '').trim()) return true;
+
+  if (
+    Array.isArray(data.fields) &&
+    data.fields.some((field) =>
+      String(field?.name || '').trim() ||
+      String(field?.value || '').trim()
+    )
+  ) {
+    return true;
+  }
+
+  // Colour and timestamp alone are not valid Discord embed content.
+  return false;
+}
+
 function buildPreviewEmbeds(s, i) {
-  return s.panels.map((p) => buildEmbedFromPanel(p, i, s.showTimestamp, s.fieldLayout));
+  return s.panels
+    .map((p) => buildEmbedFromPanel(p, i, s.showTimestamp, s.fieldLayout))
+    .filter(hasRenderableEmbedContent);
 }
 function buildPreviewEmbed(s, i) {
   return buildEmbedFromPanel(s.panels[s.selectedPanelIndex], i, s.showTimestamp, s.fieldLayout);
@@ -366,7 +407,10 @@ function buildStudioPreviewEmbeds(s, i) {
   const header = gallery.find((item) => String(item?.placement || '').toLowerCase() === 'above');
   const source = header ? String(replaceVars(header.source || '', i) || '').trim() : '';
 
-  if (!source) return [buildPreviewEmbed(s, i)];
+  if (!source) {
+    const preview = buildPreviewEmbed(s, i);
+    return hasRenderableEmbedContent(preview) ? [preview] : [];
+  }
 
   const headerPreview = new EmbedBuilder()
     .setColor(panel.color || s.color || PANEL_COLOR)
@@ -376,7 +420,11 @@ function buildStudioPreviewEmbeds(s, i) {
   const contentState = { ...s, panels: [contentPanel], selectedPanelIndex: 0 };
   const contentPreview = buildPreviewEmbed(contentState, i);
 
-  return [headerPreview, contentPreview];
+  // A graphic-only Above Content panel must not append an empty content
+  // embed. Discord rejects that second embed with BASE_TYPE_REQUIRED.
+  return hasRenderableEmbedContent(contentPreview)
+    ? [headerPreview, contentPreview]
+    : [headerPreview];
 }
 
 const EMBED_COMPONENT_LIMITS = Object.freeze({
