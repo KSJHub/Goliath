@@ -6,6 +6,7 @@ const {
 } = require('discord.js');
 
 const adminPanel = require('./panel');
+const securityHubPanels = require('./securityHubPanels');
 const socialStudioPanel = require('../../../modules/socialStudio/socialAlerts/socialStudioPanel');
 const { errorEmbed } = require('../../ui/embeds');
 const { safeEditReply } = require('../../ui/interactionResponse');
@@ -79,11 +80,22 @@ function addAdminControls(panel, interaction) {
     embeds[0] = EmbedBuilder.from(embeds[0]).addFields(fields);
   }
   const components = [...(panel.components || [])];
-  if (components.length < 5) {
-    const controls = [];
-    if (showSettings) controls.push(new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('⚙️').setStyle(ButtonStyle.Secondary));
-    if (showSecurity) controls.push(new ButtonBuilder().setCustomId(SECURITY_HUB_ID).setLabel('Security Hub').setEmoji('🛡️').setStyle(ButtonStyle.Primary));
-    if (controls.length) components.push(new ActionRowBuilder().addComponents(controls));
+  const controls = [];
+  if (showSettings) controls.push(new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('⚙️').setStyle(ButtonStyle.Secondary));
+  if (showSecurity) controls.push(new ButtonBuilder().setCustomId(SECURITY_HUB_ID).setLabel('Security Hub').setEmoji('🛡️').setStyle(ButtonStyle.Primary));
+  if (controls.length) {
+    if (components.length < 5) {
+      components.push(new ActionRowBuilder().addComponents(controls));
+    } else {
+      for (let index = components.length - 1; index >= 0 && controls.length; index -= 1) {
+        const existing = components[index];
+        const rowComponents = existing?.components || [];
+        const isButtonRow = rowComponents.length > 0 && rowComponents.every((component) => component?.data?.type === 2);
+        if (!isButtonRow || rowComponents.length >= 5) continue;
+        const available = 5 - rowComponents.length;
+        existing.addComponents(...controls.splice(0, available));
+      }
+    }
   }
   return { ...panel, embeds, components };
 }
@@ -255,16 +267,16 @@ async function handleSecurityHubInteraction(interaction) {
   if (id === SECURITY_HUB_BACK_ID) { await interaction.update(rootAdminPanel(interaction)); return true; }
   if (id === LOCKDOWN_HUB_ID) { await interaction.update(buildServerSecurityPanel(interaction)); return true; }
   if (id === ISOLATION_HUB_ID) { if (!isGuildOwner(interaction)) return denyOwnerSecurity(interaction); await interaction.update(buildSecurityIsolationPanel(interaction)); return true; }
-  const areas = {
-    [THREAT_HUB_ID]: ['⚡ Threat Protection','Correlated threat detection and coordinated response across Goliath security systems.',['Monitors security signals across the guild','Coordinates escalation into lockdown and emergency protection','Works with Anti-Nuke, containment and recovery systems']],
-    [ANTINUKE_HUB_ID]: ['💥 Anti-Nuke','Protection against rapid destructive administrative activity and compromised privileged accounts.',['Detects destructive action bursts','Can trigger emergency guild protections','Integrates with containment and recovery']],
-    [AUTOMOD_HUB_ID]: ['🤖 AutoMod','Routine automated moderation and message protection.',['Spam and flood protection','Configurable enforcement thresholds','Automatic moderation actions']],
-    [MEMBER_HUB_ID]: ['👤 Member Security','Member-focused protection and containment controls.',['Investigation containment state','Member security actions and case-linked protection','Separates member response from guild-wide lockdown']],
-    [VERIFICATION_HUB_ID]: ['🛂 Verification','Admission and pending-member security.',['Verification and pending-role protection','Join/member-update security processing','Verification health and repair support']],
-    [HEALTH_HUB_ID]: ['🩺 Security Health','Security configuration and runtime diagnostics.',['Checks protection state and configuration','Surfaces active emergency restrictions','Provides a central view before recovery or escalation']],
-    [RECOVERY_HUB_ID]: ['🧰 Recovery Controls','Restoration controls after a security incident.',['Restore lockdown state','Restore invite and role protections','Use saved security snapshots for safe recovery']],
-  };
-  if (areas[id]) { await interaction.update(buildSecurityArea(interaction, ...areas[id])); return true; }
+  if (id === THREAT_HUB_ID) { await interaction.update(securityHubPanels.buildThreatPanel(interaction)); return true; }
+  if (id === ANTINUKE_HUB_ID) { await interaction.update(securityHubPanels.buildAntiNukePanel(interaction)); return true; }
+  if (id === MEMBER_HUB_ID) { await interaction.update(securityHubPanels.buildMemberPanel(interaction)); return true; }
+  if (id === VERIFICATION_HUB_ID) { await interaction.update(securityHubPanels.buildVerificationPanel(interaction)); return true; }
+  if (id === HEALTH_HUB_ID) { await interaction.update(securityHubPanels.buildHealthPanel(interaction)); return true; }
+  if (id === RECOVERY_HUB_ID) { await interaction.update(securityHubPanels.buildRecoveryPanel(interaction)); return true; }
+  if (id === AUTOMOD_HUB_ID) {
+    await interaction.update(buildSecurityArea(interaction, '🤖 AutoMod', 'Routine automated moderation and message protection.', ['Spam and flood protection','Configurable enforcement thresholds','Automatic moderation actions']));
+    return true;
+  }
   return false;
 }
 
