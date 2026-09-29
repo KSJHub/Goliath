@@ -53,6 +53,7 @@ async function recoverAccount(client, guild, guildConfig, account) {
     const result = await core.checkGuildAccounts(client, guild.id, { force: true, accountIds: [account.accountId], guildConfig: patchedGuild });
     if (result?.skipped && result.reason === 'check_already_running') return { deferred: true };
     const item = (result?.results || []).find((entry) => String(entry.accountId) === String(account.accountId));
+    if (item?.status === 'skipped' && item?.reason === 'already_running') return { deferred: true };
     const delivery = (item?.delivered || []).find((entry) => entry.type === 'live' && String(entry.id || '') === String(currentEventId));
     if (!delivery) throw new Error('Missing LIVE post recovery completed without delivering a replacement LIVE event.');
     await sentinel.recover(client, incident, { accountId: account.accountId, currentEventId: String(currentEventId), deliveredMessageId: delivery.messageId || null, deliveredChannelId: delivery.channelId || null });
