@@ -118,8 +118,9 @@ function buildMemberPanel(interaction) {
       { name: 'Investigations', value: `**${modes.investigations}** active`, inline: true },
       { name: 'Full Security', value: `**${modes.isolation}** active`, inline: true },
       { name: 'Contained Members', value: entries.length ? entries.map(([id, entry]) => `• <@${id}> — **${getQuarantineMode(entry) || 'unknown'}**${entry.caseId ? ` • Case #${entry.caseId}` : ''}`).join('\n') : 'No members are currently contained.', inline: false },
+      { name: 'Management', value: 'Open Goliath’s existing Moderation controls to investigate members, review intelligence, manage investigation containment and work linked cases. Full Security Isolation remains owner-only in this Security Hub.', inline: false },
     );
-  return { embeds: [embed], components: [nav(REFRESH.member)] };
+  return { embeds: [embed], components: [managementButton('mod_dashboard:none:actions', 'Manage Investigations', '🔎'), nav(REFRESH.member)] };
 }
 
 function buildVerificationPanel(interaction) {
