@@ -40,11 +40,23 @@ function button(def = {}) {
 }
 
 function buildMemberNotice(guild, options = {}) {
-  const moduleName = clean(options.module, 'Goliath', 80);
-  const reference = options.reference ? clean(options.reference, '', 100) : '';
+  const moduleName = clean(options.moduleName || options.module, 'Goliath', 80);
+  const moduleEmoji = options.moduleEmoji || options.emoji || '💎';
+
+  const referenceValue = options.referenceValue || options.reference || '';
+  const referenceLabel = clean(options.referenceLabel, 'Reference', 80);
+  const reference = referenceValue ? clean(referenceValue, '', 100) : '';
+
   const status = options.status ? clean(options.status, '', 100) : '';
-  const title = `${options.emoji || '💎'} ${clean(options.title, 'Goliath Notice', 220)}`.slice(0, 256);
-  const description = clean(options.description, `This is an official ${moduleName} notice from ${guild?.name || 'this server'}.`, 4096);
+
+  const title = `${moduleEmoji} ${clean(options.title, 'Goliath Notice', 220)}`.slice(0, 256);
+
+  const description = clean(
+    options.description,
+    `This is an official ${moduleName} notice from ${guild?.name || 'this server'}.`,
+    4096
+  );
+
   const embed = new EmbedBuilder()
     .setColor(options.color ?? COLORS.info)
     .setTitle(title)
@@ -54,23 +66,69 @@ function buildMemberNotice(guild, options = {}) {
   const icon = guildIcon(guild);
   if (icon) embed.setThumbnail(icon);
 
+  const suppliedFields = [
+    ...(Array.isArray(options.fields) ? options.fields : []),
+    ...(Array.isArray(options.contextFields) ? options.contextFields : []),
+  ];
+
   const fields = [
     field('🏠 Server', guild?.name || 'Discord Server', true),
-    reference ? field('🆔 Reference', reference, true) : null,
+    reference ? field(`🆔 ${referenceLabel}`, reference, true) : null,
     status ? field('📌 Status', status, true) : null,
-    ...(Array.isArray(options.fields) ? options.fields.map((item) => item && field(item.name, item.value, item.inline === true)) : []),
-    options.reason ? field('📝 Reason / Details', options.reason) : null,
-    options.issuedBy ? field('👤 Issued / Updated By', options.issuedBy) : null,
-    options.meaning ? field('ℹ️ What This Means', options.meaning) : null,
-    options.nextSteps ? field('➡️ What Happens Next', options.nextSteps) : null,
+
+    ...suppliedFields.map(
+      (item) => item && field(item.name, item.value, item.inline === true)
+    ),
+
+    options.details
+      ? field(options.detailsTitle || '📋 Details', options.details)
+      : null,
+
+    options.reason
+      ? field('📝 Reason / Details', options.reason)
+      : null,
+
+    options.issuedBy
+      ? field('👤 Issued / Updated By', options.issuedBy)
+      : null,
+
+    options.meaning
+      ? field('ℹ️ What This Means', options.meaning)
+      : null,
+
+    options.nextSteps
+      ? field('➡️ What Happens Next', options.nextSteps)
+      : null,
   ].filter(Boolean).slice(0, 25);
+
   if (fields.length) embed.addFields(fields);
 
-  const footerBits = ['Goliath', moduleName, guild?.name || 'Server', reference].filter(Boolean);
-  embed.setFooter({ text: footerBits.join(' • ').slice(0, 2048), ...(icon ? { iconURL: icon } : {}) });
+  const footerReference = options.footerLabel || reference;
 
-  const buttons = (Array.isArray(options.buttons) ? options.buttons : []).map(button).filter(Boolean).slice(0, 5);
-  return { embeds: [embed], components: buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [], allowedMentions: { parse: [] } };
+  const footerBits = [
+    'Goliath',
+    moduleName,
+    guild?.name || 'Server',
+    footerReference,
+  ].filter(Boolean);
+
+  embed.setFooter({
+    text: footerBits.join(' • ').slice(0, 2048),
+    ...(icon ? { iconURL: icon } : {}),
+  });
+
+  const buttons = (Array.isArray(options.buttons) ? options.buttons : [])
+    .map(button)
+    .filter(Boolean)
+    .slice(0, 5);
+
+  return {
+    embeds: [embed],
+    components: buttons.length
+      ? [new ActionRowBuilder().addComponents(buttons)]
+      : [],
+    allowedMentions: { parse: [] },
+  };
 }
 
 function moderationNotice(guild, modCase, options = {}) {
