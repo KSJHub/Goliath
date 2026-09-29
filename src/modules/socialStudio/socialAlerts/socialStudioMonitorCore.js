@@ -115,11 +115,16 @@ async function checkGuildAccounts(client,guildId,options={}) {
       let activeDeliveryEvent=null;
       if(config.settings.retryDeliveries!==false&&previous.pendingDelivery&&typeof previous.pendingDelivery==='object'){
         const pending=previous.pendingDelivery, retryAt=Date.parse(String(pending.nextAttemptAt||0)), attempts=Number(pending.attempts||0);
-        if(attempts >= Number(config.settings.maxDeliveryAttempts||5)){
+        const pendingEvent=pending.event&&typeof pending.event==='object'?pending.event:null;
+        const pendingLiveStale=Boolean(pendingEvent?.type==='live' && (checked.isLive!==true || String(checked.event?.id||'')!==String(pendingEvent.id||'')));
+        if(pendingLiveStale){
+          state.pendingDelivery=null;
+          state.lastDeliveryError=null;
+        } else if(attempts >= Number(config.settings.maxDeliveryAttempts||5)){
           state.pendingDelivery=null;
         } else if(!Number.isFinite(retryAt)||retryAt<=Date.now()){
           try{
-            activeDeliveryEvent=pending.event&&typeof pending.event==='object'?pending.event:null;
+            activeDeliveryEvent=pendingEvent;
             if(activeDeliveryEvent){
               const retryDelivery=await sendAlert(client,guildId,config,account,activeDeliveryEvent,{...options,suppressMention:activeDeliveryEvent.type==='live'&&attempts>0});
               const retryKey=eventKey(activeDeliveryEvent); rememberDelivered(state,retryKey); state.pendingDelivery=null; state.lastAlertKey=retryKey; state.lastAlertAt=now(); state.lastAlertMessageId=retryDelivery.messageId; state.lastAlertChannelId=retryDelivery.channelId; state.lastDeliveryError=null;
