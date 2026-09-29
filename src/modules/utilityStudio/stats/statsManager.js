@@ -102,12 +102,26 @@ async function resolveChannel(guild, channelId) { if (!channelId) return null; r
 async function buildHealth(guild) {
   if (!guild?.id) throw new Error('Guild is required.');
   const config = statsStore.getStats(guild.id); const issues = []; const counters = statsCounters.listCounters(guild.id);
-  for (const counter of counters) { const channel = await resolveChannel(guild, counter.channelId); if (!channel) { issues.push({ code: 'counter_channel_missing', severity: 'error', channelId: counter.channelId, type: counter.type }); continue; } if (typeof channel.setName !== 'function') issues.push({ code: 'counter_channel_unmanageable', severity: 'error', channelId: counter.channelId, type: counter.type }); }
+  for (const counter of counters) { const channel = await resolveChannel(guild, counter.channelId); if (!channel) { issues.push({ code: 'counter_channel_missing', severity: 'error', counterId: counter.id, channelId: counter.channelId, type: counter.segments?.[0]?.type || null }); continue; } if (typeof channel.setName !== 'function') issues.push({ code: 'counter_channel_unmanageable', severity: 'error', counterId: counter.id, channelId: counter.channelId, type: counter.segments?.[0]?.type || null }); }
   const retentionDays = Number(config.settings?.retentionDays || 0); if (!Number.isFinite(retentionDays) || retentionDays < 1) issues.push({ code: 'retention_invalid', severity: 'warning', value: config.settings?.retentionDays });
   return { module: 'stats', guildId: guild.id, enabled: guildManager.isModuleEnabled(guild.id, 'stats'), healthy: issues.every((issue) => issue.severity !== 'error'), checkedAt: new Date().toISOString(), counters: { configured: counters.length, missing: issues.filter((issue) => issue.code === 'counter_channel_missing').length }, tracking: { messages: config.trackMessages !== false, voice: config.trackVoice !== false, members: config.trackMembers !== false }, issues };
 }
 
-async function repair(guild) { if (!guild?.id) throw new Error('Guild is required.'); const before = await buildHealth(guild); let suite = null; if (before.issues.some((issue) => issue.code === 'counter_channel_missing')) suite = await statsCounters.createCounterSuite(guild); const refreshed = await refreshGuildCounters(guild, 'repair'); return { suite, refreshed, health: await buildHealth(guild) }; }
+async function repair(guild) {
+  if (!guild?.id) throw new Error('Guild is required.');
+  const before = await buildHealth(guild);
+  const repaired = [];
+  for (const issue of before.issues.filter((item) => item.code === 'counter_channel_missing' && item.counterId)) {
+    const counter = statsCounters.listCounters(guild.id).find((item) => item.id === issue.counterId);
+    if (!counter?.enabled) continue;
+    const category = counter.categoryId ? await resolveChannel(guild, counter.categoryId) : null;
+    const replacement = await statsCounters.createDock(guild, { ...counter, channelId: null, categoryId: category?.id || null, categoryName: statsStore.getStats(guild.id).settings?.categoryName }, guild);
+    repaired.push({ counterId: replacement.id, channelId: replacement.channelId });
+  }
+  const refreshed = await refreshGuildCounters(guild, 'repair');
+  const health = await buildHealth(guild);
+  return { repaired, refreshed, health };
+}
 function exportConfig(guildId) { return { module: 'stats', guildId: String(guildId), exportedAt: new Date().toISOString(), config: { ...statsStore.getStats(guildId), enabled: guildManager.isModuleEnabled(guildId, 'stats') }, summary: statsStore.getSummary(guildId) }; }
 function reset(guildId, meta = {}) { return statsStore.resetStats(guildId, meta); }
 
