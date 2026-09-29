@@ -1,7 +1,9 @@
 'use strict';
 
 const express = require('express');
+const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../../core/guild/guildManager');
+const security = require('../../../../core/security/protection/core');
 const verificationManager = require('../../../../modules/securityStudio/verificationManager');
 const stats = require('../../../../modules/utilityStudio/stats/stats');
 
@@ -23,9 +25,33 @@ async function getGuild(req, guildId) {
   if (!client?.guilds) return null;
   return client.guilds.cache.get(guildId) || client.guilds.fetch(guildId).catch(() => null);
 }
-function actor(req, action) { return { action, actorId: req.session?.user?.id || req.body?.actorId || null }; }
+function actor(req, action) { return { action, actorId: req.session?.user?.id || null }; }
 function countObject(value) { return value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).length : 0; }
 function countArray(value) { return Array.isArray(value) ? value.length : 0; }
+
+async function requireStatsGuildAccess(req, res, next) {
+  try {
+    const userId = String(req.session?.user?.id || '').trim();
+    if (!/^\d{15,25}$/.test(userId)) return res.status(401).json({ success: false, error: 'Authentication required.' });
+    const guildId = getGuildId(req);
+    if (security.isBotOwner(userId)) return next();
+    const guild = await getGuild(req, guildId);
+    if (!guild) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
+    const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+    const allowed = Boolean(
+      member?.permissions?.has(PermissionFlagsBits.Administrator) ||
+      member?.permissions?.has(PermissionFlagsBits.ManageGuild)
+    );
+    if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
+    return next();
+  } catch (error) {
+    console.error('[Stats API access]', error);
+    return res.status(403).json({ success: false, error: 'Unable to verify server access.' });
+  }
+}
+
+router.use('/:guildId', requireStatsGuildAccess);
+
 function buildModuleStats(data, guildId) {
   const keys = Object.keys(data.modules || {});
   const enabledKeys = keys.filter((key) => guildManager.isModuleEnabled(guildId, key)).sort();
@@ -52,7 +78,7 @@ function buildStoredStats(data, guildId) {
   const forms = modules.forms || {};
   const polls = modules.polls || {};
   const logs = modules.logs || data.logs || {};
-  const security = modules.security || data.security || {};
+  const securityData = modules.security || data.security || {};
   return {
     activity: stats.getSummary(guildId),
     tickets: { total: countArray(tickets.tickets), panels: countArray(tickets.panels), open: countArray(tickets.tickets?.filter?.((ticket) => ticket.status === 'open') || []), analytics: tickets.analytics || {} },
@@ -60,7 +86,7 @@ function buildStoredStats(data, guildId) {
     polls: { total: countObject(polls.polls), active: Object.values(polls.polls || {}).filter((poll) => poll?.status === 'active').length, closed: Object.values(polls.polls || {}).filter((poll) => poll?.status === 'closed').length, analytics: polls.analytics || {} },
     verification: buildVerificationStats(guildId),
     logs: { enabled: guildManager.isModuleEnabled(guildId, 'logging'), channels: countObject(logs.channels), events: countObject(logs.events) },
-    security: { enabled: guildManager.isModuleEnabled(guildId, 'security'), threatLevel: security.threatLevel || 'low', totalIncidents: Number(security.totalIncidents || 0), criticalIncidents: Number(security.criticalIncidents || 0), incidents: countArray(security.incidents) },
+    security: { enabled: guildManager.isModuleEnabled(guildId, 'security'), threatLevel: securityData.threatLevel || 'low', totalIncidents: Number(securityData.totalIncidents || 0), criticalIncidents: Number(securityData.criticalIncidents || 0), incidents: countArray(securityData.incidents) },
   };
 }
 
