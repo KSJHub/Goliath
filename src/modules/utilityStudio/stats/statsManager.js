@@ -75,20 +75,55 @@ function stopCounterRefreshScheduler() {
   sentinelScheduler.stop(SCHEDULER_ID, { reason: 'stats scheduler stopped intentionally' }); return true;
 }
 
+function clearGuildVoiceSessions(guildId) {
+  let cleared = 0;
+  for (const key of [...activeVoiceSessions.keys()]) {
+    if (!key.startsWith(`${guildId}:`)) continue;
+    activeVoiceSessions.delete(key);
+    cleared += 1;
+  }
+  return cleared;
+}
+
+function reconcileGuildVoiceSessions(guild) {
+  if (!guild?.id) return 0;
+  clearGuildVoiceSessions(guild.id);
+  if (!statsStore.isEnabled(guild.id) || statsStore.getStats(guild.id).trackVoice === false) return 0;
+  const now = Date.now();
+  let count = 0;
+  for (const state of guild.voiceStates?.cache?.values?.() || []) {
+    if (!state?.channelId || !state.member?.id) continue;
+    activeVoiceSessions.set(sessionKey(guild.id, state.member.id), { startedAt: now, channelId: state.channelId });
+    count += 1;
+  }
+  return count;
+}
+
 function reconcileActiveVoiceSessions(client) {
   if (!client?.guilds?.cache) return 0;
   activeVoiceSessions.clear();
-  const now = Date.now();
   let count = 0;
-  for (const guild of client.guilds.cache.values()) {
-    if (!statsStore.isEnabled(guild.id) || statsStore.getStats(guild.id).trackVoice === false) continue;
-    for (const state of guild.voiceStates?.cache?.values?.() || []) {
-      if (!state?.channelId || !state.member?.id) continue;
-      activeVoiceSessions.set(sessionKey(guild.id, state.member.id), { startedAt: now, channelId: state.channelId });
-      count += 1;
-    }
-  }
+  for (const guild of client.guilds.cache.values()) count += reconcileGuildVoiceSessions(guild);
   return count;
+}
+
+function applyRuntimeConfig(guild, changes = {}, guildOrMeta = guild) {
+  if (!guild?.id) throw new Error('Guild is required.');
+  const hasEnabled = typeof changes.enabled === 'boolean';
+  const hasTrackVoice = typeof changes.trackVoice === 'boolean';
+  if (hasEnabled) statsStore.setEnabled(guild.id, changes.enabled, guildOrMeta);
+  const updates = { ...changes };
+  delete updates.enabled;
+  let stored = statsStore.getStats(guild.id);
+  if (Object.keys(updates).length) {
+    stored = statsStore.updateStats(guild.id, (current) => ({
+      ...current,
+      ...updates,
+      settings: updates.settings ? { ...(current.settings || {}), ...updates.settings } : current.settings,
+    }), guildOrMeta);
+  }
+  if (hasEnabled || hasTrackVoice) reconcileGuildVoiceSessions(guild);
+  return { ...stored, enabled: statsStore.isEnabled(guild.id) };
 }
 
 async function startup(client) {
@@ -208,4 +243,4 @@ async function handleVoiceStateUpdate(oldState, newState) {
 async function handleGuildMemberAdd(member) { try { if (!member?.guild || !statsStore.isEnabled(member.guild.id)) return; statsStore.addMemberEvent(member, 'join'); queueCounterRefresh(member.guild, 'member-add'); } catch (error) { console.error('[Stats] Failed to track member add:', error); } }
 async function handleGuildMemberRemove(member) { try { if (!member?.guild || !statsStore.isEnabled(member.guild.id)) return; statsStore.addMemberEvent(member, 'leave'); queueCounterRefresh(member.guild, 'member-remove'); } catch (error) { console.error('[Stats] Failed to track member remove:', error); } }
 
-module.exports = { startup, shutdown, startCounterRefreshScheduler, stopCounterRefreshScheduler, refreshGuildCounters, refreshAllGuildCounters, queueCounterRefresh, buildHealth, repair, exportConfig, reset, handleMessageCreate, handleVoiceStateUpdate, handleGuildMemberAdd, handleGuildMemberRemove };
+module.exports = { startup, shutdown, startCounterRefreshScheduler, stopCounterRefreshScheduler, reconcileGuildVoiceSessions, applyRuntimeConfig, refreshGuildCounters, refreshAllGuildCounters, queueCounterRefresh, buildHealth, repair, exportConfig, reset, handleMessageCreate, handleVoiceStateUpdate, handleGuildMemberAdd, handleGuildMemberRemove };
