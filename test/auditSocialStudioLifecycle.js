@@ -22,6 +22,12 @@ const contracts = [
   ['forced LIVE channel persistence', 'state.lastLiveMessageChannelId=delivered.channelId'],
   ['forced LIVE refresh clock', 'state.lastLiveMessageUpdatedAt=stamp'],
   ['forced LIVE state save', 'saveMonitorState(guildId,config,monitorUpdates,{alerts:sent.length},historyEntries'],
+  ['failed delivery retry toggle', 'config.settings.retryDeliveries!==false'],
+  ['retry attempt limit', 'config.settings.maxDeliveryAttempts||5'],
+  ['retry interval', 'config.settings.retryIntervalMs||60000'],
+  ['persisted pending delivery', 'state.pendingDelivery'],
+  ['retry recovery delivery', 'recovered:true'],
+  ['exhausted retry release', 'state.pendingDelivery=null'],
 ];
 
 for (const [name, needle] of contracts) {
