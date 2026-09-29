@@ -199,7 +199,7 @@ const DEFAULT_MODULES = Object.freeze({
   },
   suggestions: {
     enabled: true,
-    items: {},
+    suggestions: {},
   },
   timeline: {
     enabled: true,
