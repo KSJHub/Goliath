@@ -202,7 +202,6 @@ function installRenderer(renderer) {
       const item = media?.panels?.[panelIndex]?.gallery?.[0];
       if (!item?.source || item?.placement === 'above' || item?.type === 'video' || item?.spoiler) return file;
       const alignment = alignmentOf(item);
-      if (alignment === 'center') return file;
       try { return await alignedAttachment(item.source, alignment, attachmentName(file, fallbackIndex)) || file; }
       catch (error) { console.warn(`[Embed Renderer] Image alignment failed for panel ${panelIndex + 1}:`, error?.message || error); return file; }
     }));
