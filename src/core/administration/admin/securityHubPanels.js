@@ -4,6 +4,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const guildManager = require('../../guild/guildManager');
 const antiNuke = require('../../security/protection/antiNuke');
 const securitySystem = require('../../security/protection/system');
+const automodPanel = require('../automod/panel');
 const { getLockdownState } = require('../../security/protection/lockdown');
 const { getEmergencyControlState } = require('../../security/protection/emergencyControls');
 const { QUARANTINE_MODES, getQuarantineState, getQuarantineMode } = require('../../security/protection/quarantine');
@@ -12,6 +13,7 @@ const HUB_ID = 'admin:security-hub';
 const REFRESH = {
   threat: 'admin:security-hub:threat',
   antinuke: 'admin:security-hub:antinuke',
+  automod: 'admin:security-hub:automod',
   member: 'admin:security-hub:member',
   verification: 'admin:security-hub:verification',
   health: 'admin:security-hub:health',
@@ -83,6 +85,25 @@ function buildAntiNukePanel(interaction) {
   return { embeds: [embed], components: [nav(REFRESH.antinuke)] };
 }
 
+function buildAutoModPanel(interaction) {
+  const config = automodPanel.getAutomodConfig(interaction.guild.id);
+  const rules = automodPanel.AUTOMOD_RULES || {};
+  const keys = Object.keys(rules);
+  const enabled = keys.filter((key) => config[key]?.enabled).length;
+  const actions = [...new Set(keys.flatMap((key) => Array.isArray(config[key]?.actions) ? config[key].actions : []))];
+  const embed = base(interaction, '🤖 AutoMod', '**Live automated message and member protection status.**', config.enabled ? 0x57F287 : 0xED4245)
+    .addFields(
+      { name: 'System', value: bool(config.enabled), inline: true },
+      { name: 'Protection Rules', value: `**${enabled}/${keys.length}** enabled`, inline: true },
+      { name: 'Member DMs', value: bool(config.dmUser !== false), inline: true },
+      { name: 'Rules', value: keys.map((key) => `${config[key]?.enabled ? '🟢' : '⚫'} **${rules[key].title.replace(/^\S+\s*/, '')}**`).join('\n') || 'No AutoMod rules configured.', inline: false },
+      { name: 'Active Enforcement', value: actions.length ? actions.map((action) => `• ${action}`).join('\n') : 'No enforcement actions configured on enabled rules.', inline: true },
+      { name: 'Exceptions', value: `Ignored roles: **${(config.ignoredRoles || []).length}**\nIgnored channels: **${(config.ignoredChannels || []).length}**`, inline: true },
+      { name: 'Management', value: 'Full AutoMod rule editing remains available through Goliath’s existing AutoMod administration controls.', inline: false },
+    );
+  return { embeds: [embed], components: [nav(REFRESH.automod)] };
+}
+
 function buildMemberPanel(interaction) {
   const modes = countModes(interaction.guild.id);
   const state = getQuarantineState(interaction.guild.id);
@@ -147,6 +168,7 @@ function buildRecoveryPanel(interaction) {
 module.exports = {
   buildThreatPanel,
   buildAntiNukePanel,
+  buildAutoModPanel,
   buildMemberPanel,
   buildVerificationPanel,
   buildHealthPanel,
