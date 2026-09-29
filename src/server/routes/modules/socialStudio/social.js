@@ -139,7 +139,7 @@ function normalize(raw = {}) {
       ...base.settings,
       ...settings,
       checkIntervalMs: asNumber(settings.checkIntervalMs, 300000, 60000, 86400000),
-      retryIntervalMs: asNumber(settings.retryIntervalMs, 60000, 10000, 86400000),
+      retryIntervalMs: asNumber(settings.retryIntervalMs, 60000, 30000, 86400000),
       retryDeliveries: settings.retryDeliveries !== false,
       maxDeliveryAttempts: asNumber(settings.maxDeliveryAttempts, 5, 1, 25),
       cooldownMs: asNumber(settings.cooldownMs, 300000, 0, 86400000),
