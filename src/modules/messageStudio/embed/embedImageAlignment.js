@@ -63,10 +63,17 @@ function alignmentButtons(alignment) {
 function selectedAlignment(panel, interaction) {
   const state = panel.getSession(interaction);
   const panelIndex = Math.max(0, Number(state?.selectedPanelIndex) || 0);
-  const itemIndex = Number.isInteger(state?.selectedMediaIndex) ? state.selectedMediaIndex : null;
-  if (itemIndex == null) return null;
   const panelMedia = panel.getPanelMedia(state, panelIndex);
-  const item = panelMedia?.gallery?.[itemIndex];
+  const gallery = Array.isArray(panelMedia?.gallery) ? panelMedia.gallery : [];
+  // The Media Manager deliberately falls back to the first gallery item
+  // when the selection cursor has not yet been persisted (for example when
+  // the manager is opened/reopened). Alignment controls must use the same
+  // effective selection or they disappear even though media is visible.
+  const itemIndex = Number.isInteger(state?.selectedMediaIndex)
+    ? state.selectedMediaIndex
+    : (gallery.length ? 0 : null);
+  if (itemIndex == null) return null;
+  const item = gallery[itemIndex];
   if (!item) return null;
   const map = alignmentMap(state);
   const stored = String(map[alignmentKey(panelIndex, itemIndex)] || item?.alignment || '').toLowerCase();
