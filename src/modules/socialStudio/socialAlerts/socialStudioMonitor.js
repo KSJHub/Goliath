@@ -26,9 +26,14 @@ function configuredCheckIntervalMs(settings = {}) { const requested = Number(set
 function effectiveGuildIntervalMs(social = {}) {
   const settings = social.settings || {};
   const configured = configuredCheckIntervalMs(settings);
-  if (!liveRefreshEnabled(settings)) return configured;
-  const hasLive = Object.values(social.accounts || {}).some((account) => account?.enabled !== false && account?.state?.isLive === true);
-  return hasLive ? Math.min(configured, liveRefreshMs(settings)) : configured;
+  const accounts = Object.values(social.accounts || {});
+  const hasPendingRetry = settings.retryDeliveries !== false && accounts.some((account) => account?.enabled !== false && account?.state?.pendingDelivery && Number(account.state.pendingDelivery.attempts || 0) < Number(settings.maxDeliveryAttempts || 5));
+  const retryInterval = Number(settings.retryIntervalMs || 60000);
+  const hasLive = accounts.some((account) => account?.enabled !== false && account?.state?.isLive === true);
+  let effective = configured;
+  if (hasLive && liveRefreshEnabled(settings)) effective = Math.min(effective, liveRefreshMs(settings));
+  if (hasPendingRetry && Number.isFinite(retryInterval) && retryInterval >= MIN_CHECK_INTERVAL_MS) effective = Math.min(effective, retryInterval);
+  return effective;
 }
 function projectedRefreshTimestamp(account, state, settings = {}, dateNow = Date.now()) {
   if (state?.isLive !== true || !liveRefreshEnabled(settings)) return null;
@@ -169,7 +174,8 @@ function status(guildId = null) {
   const nextRunAt = timer && Number.isFinite(Number(timer._idleStart)) && Number.isFinite(Number(timer._idleTimeout)) ? new Date(Date.now() + Math.max(0, Number(timer._idleTimeout))).toISOString() : null;
   if (!guildId) return { running: Boolean(timer), intervalMs: schedulerTickMs, nextRunAt };
   const config = guildManager.reloadGuild(guildId); const social = config?.modules?.social || {}; const settings = social.settings || {}; const accounts = Object.values(social.accounts || {}); const enabledAccounts = accounts.filter((account) => account?.enabled !== false); const liveAccounts = enabledAccounts.filter((account) => account?.state?.isLive === true); const refreshEnabled = liveRefreshEnabled(settings); const refreshMs = liveRefreshMs(settings); const checkIntervalMs = configuredCheckIntervalMs(settings); const effectiveIntervalMs = effectiveGuildIntervalMs(social); const lastCheckAtMs = lastGuildChecks.get(guildId) || null; const nextGuildCheckAt = lastCheckAtMs ? new Date(lastCheckAtMs + effectiveIntervalMs).toISOString() : null; const projected = liveAccounts.map((account) => ({ accountId: account.accountId || null, platform: account.platform || null, username: account.username || null, messageId: account.state?.lastLiveMessageId || account.state?.lastAlertMessageId || null, channelId: account.state?.lastLiveMessageChannelId || account.state?.lastAlertChannelId || null, lastUpdatedAt: updateStamp(account), nextRefreshAt: projectedRefreshTimestamp(account, account.state, settings) })).filter((entry) => entry.messageId && entry.channelId); const nextRefreshAt = projected.map((entry) => entry.nextRefreshAt).filter(Boolean).sort((a, b) => a - b)[0] || null;
-  return { running: Boolean(timer), intervalMs: schedulerTickMs, nextRunAt, configuredCheckIntervalMs: checkIntervalMs, effectiveCheckIntervalMs: effectiveIntervalMs, lastGuildCheckAt: lastCheckAtMs ? new Date(lastCheckAtMs).toISOString() : null, nextGuildCheckAt, enabled: social.enabled !== false, accounts: accounts.length, enabledAccounts: enabledAccounts.length, liveAccounts: liveAccounts.length, liveMessageRefreshEnabled: refreshEnabled, liveMessageRefreshMs: refreshMs, trackedLiveMessages: projected.length, nextLiveRefreshAt: nextRefreshAt ? nextRefreshAt.toISOString() : null, liveMessages: projected.map((entry) => ({ ...entry, nextRefreshAt: entry.nextRefreshAt ? entry.nextRefreshAt.toISOString() : null })) };
+  const pendingRetries = enabledAccounts.filter((account) => account?.state?.pendingDelivery).map((account) => ({ accountId: account.accountId || null, attempts: Number(account.state.pendingDelivery.attempts || 0), nextAttemptAt: account.state.pendingDelivery.nextAttemptAt || null, error: account.state.lastDeliveryError || null }));
+  return { running: Boolean(timer), intervalMs: schedulerTickMs, nextRunAt, configuredCheckIntervalMs: checkIntervalMs, effectiveCheckIntervalMs: effectiveIntervalMs, pendingRetries, lastGuildCheckAt: lastCheckAtMs ? new Date(lastCheckAtMs).toISOString() : null, nextGuildCheckAt, enabled: social.enabled !== false, accounts: accounts.length, enabledAccounts: enabledAccounts.length, liveAccounts: liveAccounts.length, liveMessageRefreshEnabled: refreshEnabled, liveMessageRefreshMs: refreshMs, trackedLiveMessages: projected.length, nextLiveRefreshAt: nextRefreshAt ? nextRefreshAt.toISOString() : null, liveMessages: projected.map((entry) => ({ ...entry, nextRefreshAt: entry.nextRefreshAt ? entry.nextRefreshAt.toISOString() : null })) };
 }
 
 module.exports = {
