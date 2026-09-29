@@ -149,60 +149,135 @@ function buildSettingsPanel(interaction) {
 function buildServerSecurityPanel(interaction, notice = null) {
   const lockdown = getLockdownState(interaction.guild.id);
   const emergency = getEmergencyControlState(interaction.guild.id);
-  const anyActive = Boolean(lockdown.active || emergency.invites.active || emergency.roles.active);
+
+  const lockdownActive = Boolean(lockdown.active);
+  const invitesActive = Boolean(emergency.invites.active);
+  const rolesActive = Boolean(emergency.roles.active);
+  const anyActive = lockdownActive || invitesActive || rolesActive;
+
+  const serverState = anyActive
+    ? '🟠 **Emergency restrictions active**'
+    : '🟢 **Normal — no active emergency restrictions**';
+
   const embed = new EmbedBuilder()
     .setColor(anyActive ? 0xFEE75C : 0x57F287)
     .setTitle('🛡️ Server Security Controls')
     .setDescription([
-      'Guild-wide operational security and recovery controls.',
+      '**Live guild-wide protection, restrictions and recovery.**',
       '',
-      `🔒 **Guild Lockdown:** ${status(lockdown.active)}`,
-      `🐢 **Lockdown Slowmode:** ${lockdownSlowmode(lockdown)}`,
-      `📨 **Invite Freeze:** ${status(emergency.invites.active)}`,
-      `🎭 **Role Freeze:** ${status(emergency.roles.active)}`,
+      '### 🩺 Server Status',
+      serverState,
+      '',
+      `🔒 **Guild Lockdown** — ${lockdownActive ? '🔴 Active' : '🟢 Standby'}`,
+      `🐢 **Lockdown Slowmode** — ${lockdownSlowmode(lockdown)}`,
+      `📨 **Invite Freeze** — ${invitesActive ? '🔴 Active' : '🟢 Standby'}`,
+      `🎭 **Role Freeze** — ${rolesActive ? '🔴 Active' : '🟢 Standby'}`,
       notice ? `\n${notice}` : '',
     ].filter(Boolean).join('\n'))
     .addFields(
       {
-        name: '🔒 Lockdown State',
-        value: lockdown.active ? [
+        name: '🔒 Lockdown',
+        value: lockdownActive ? [
+          `**Status:** 🔴 Active`,
           `**Severity:** ${lockdown.severity || 'Unknown'}`,
           `**Mode:** ${lockdown.lockdownMode || 'Unknown'}`,
           `**Reason:** ${String(lockdown.reason || 'No reason recorded').slice(0, 500)}`,
           `**Started:** ${discordTime(lockdown.lockdownStartedAt || lockdown.enabledAt)}`,
           `**Expires:** ${discordTime(lockdown.lockdownExpiresAt)}`,
-          `**Affected channels:** ${(lockdown.channels || []).length}`,
-          `**Restore failures:** ${(lockdown.failedChannels || []).length}`,
-        ].join('\n') : 'No guild lockdown is currently active.',
+          `**Affected Channels:** ${(lockdown.channels || []).length}`,
+          `**Restore Failures:** ${(lockdown.failedChannels || []).length}`,
+        ].join('\n') : [
+          '**Status:** 🟢 Inactive',
+          'No guild lockdown is currently active.',
+        ].join('\n'),
         inline: false,
       },
       {
-        name: '📨 Invite Protection',
-        value: emergency.invites.active ? `Active • ${(emergency.invites.channelSnapshots || []).length} channel snapshots • expires ${discordTime(emergency.invites.expiresAt)}` : 'No emergency invite freeze is active.',
-        inline: true,
+        name: '🛡️ Emergency Protection',
+        value: [
+          `📨 **Invites:** ${invitesActive
+            ? `🔴 Frozen • ${(emergency.invites.channelSnapshots || []).length} snapshots • expires ${discordTime(emergency.invites.expiresAt)}`
+            : '🟢 Normal'}`,
+          `🎭 **Roles:** ${rolesActive
+            ? `🔴 Frozen • ${(emergency.roles.roleSnapshots || []).length} snapshots • expires ${discordTime(emergency.roles.expiresAt)}`
+            : '🟢 Normal'}`,
+        ].join('\n'),
+        inline: false,
       },
       {
-        name: '🎭 Role Protection',
-        value: emergency.roles.active ? `Active • ${(emergency.roles.roleSnapshots || []).length} role snapshots • expires ${discordTime(emergency.roles.expiresAt)}` : 'No emergency role freeze is active.',
-        inline: true,
+        name: '🔄 Recovery',
+        value: anyActive
+          ? 'Recovery controls are available below. Goliath uses its saved security state and restoration snapshots.'
+          : 'No active Goliath guild restrictions currently require recovery.',
+        inline: false,
       },
     )
-    .setFooter({ text: `Guild security controls • Requested by ${memberDisplayName(interaction)}` })
+    .setFooter({
+      text: `Guild security controls • Requested by ${memberDisplayName(interaction)}`,
+    })
     .setTimestamp();
 
   const recoveryRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(SERVER_SECURITY_RESTORE_LOCKDOWN_ID).setLabel('End Lockdown').setEmoji('🔓').setStyle(ButtonStyle.Primary).setDisabled(!lockdown.active),
-    new ButtonBuilder().setCustomId(SERVER_SECURITY_RESTORE_INVITES_ID).setLabel('Restore Invites').setEmoji('📨').setStyle(ButtonStyle.Primary).setDisabled(!emergency.invites.active),
-    new ButtonBuilder().setCustomId(SERVER_SECURITY_RESTORE_ROLES_ID).setLabel('Restore Roles').setEmoji('🎭').setStyle(ButtonStyle.Primary).setDisabled(!emergency.roles.active),
-  );
-  const controlRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(SERVER_SECURITY_RESTORE_ALL_ID).setLabel('Restore All Guild Restrictions').setEmoji('🚨').setStyle(ButtonStyle.Danger).setDisabled(!anyActive),
-    new ButtonBuilder().setCustomId(SERVER_SECURITY_REFRESH_ID).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(SERVER_SECURITY_BACK_ID).setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary),
-  );
-  return { embeds: [embed], components: [recoveryRow, controlRow] };
-}
+    new ButtonBuilder()
+      .setCustomId(SERVER_SECURITY_RESTORE_LOCKDOWN_ID)
+      .setLabel('End Lockdown')
+      .setEmoji('🔓')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(!lockdownActive),
 
+    new ButtonBuilder()
+      .setCustomId(SERVER_SECURITY_RESTORE_INVITES_ID)
+      .setLabel('Restore Invites')
+      .setEmoji('📨')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(!invitesActive),
+
+    new ButtonBuilder()
+      .setCustomId(SERVER_SECURITY_RESTORE_ROLES_ID)
+      .setLabel('Restore Roles')
+      .setEmoji('🎭')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(!rolesActive),
+  );
+
+  const controlRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(SERVER_SECURITY_RESTORE_ALL_ID)
+      .setLabel('Restore All Guild Restrictions')
+      .setEmoji('🚨')
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(!anyActive),
+  );
+
+  const navigationRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(SERVER_SECURITY_BACK_ID)
+      .setLabel('Back')
+      .setEmoji('⬅️')
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId(SETTINGS_ID)
+      .setLabel('Settings')
+      .setEmoji('⚙️')
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId(SERVER_SECURITY_REFRESH_ID)
+      .setLabel('Refresh')
+      .setEmoji('🔄')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  return {
+    embeds: [embed],
+    components: [
+      recoveryRow,
+      controlRow,
+      navigationRow,
+    ],
+  };
+}
 function buildRestoreAllConfirmation(interaction) {
   const lockdown = getLockdownState(interaction.guild.id);
   const emergency = getEmergencyControlState(interaction.guild.id);
