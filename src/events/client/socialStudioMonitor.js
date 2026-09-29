@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const guildManager = require('../../core/guild/guildManager');
 const { startupSocialStudio } = require('../../modules/socialStudio/socialAlerts/socialStudioMonitor');
+const liveRole = require('../../modules/socialStudio/socialAlerts/socialStudioLiveRole');
 const { diagnoseAccount } = require('../../modules/socialStudio/socialAlerts/socialStudioProviders');
 const { buildSectionPanel } = require('../../modules/socialStudio/socialAlerts/socialStudioPanel');
 
@@ -224,6 +225,7 @@ module.exports = [
     once: true,
     async execute(client) {
       startupSocialStudio(client);
+      liveRole.start(client);
     },
   },
   {
