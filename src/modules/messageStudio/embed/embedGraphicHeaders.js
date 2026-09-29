@@ -63,60 +63,6 @@ function normalizeHeaderPlacements(gallery, headerIndex = null) {
 function installGraphicHeaders(panel, media, interactions) {
   if (!panel || !media || !interactions || panel.__graphicHeadersInstalled) return;
 
-  const originalBuildMediaManagerPanel = panel.buildMediaManagerPanel?.bind(panel);
-  if (originalBuildMediaManagerPanel) {
-    panel.buildMediaManagerPanel = (interaction, who = 'Unknown User') => {
-      const payload = originalBuildMediaManagerPanel(interaction, who);
-      const state = panel.getSession(interaction);
-      const panelMedia = media.getPanelMedia(state, state.selectedPanelIndex || 0);
-      const selectedIndex = selectedMediaIndex(state, panelMedia);
-      const activeIndex = graphicHeaderIndex(panelMedia);
-      const mode = headerMode(state, media);
-      const rows = Array.isArray(payload?.components) ? payload.components : [];
-
-      // Replace the old placement shortcut with the three-state header control.
-      // This keeps the Media Manager within Discord's 5x5 component limits and
-      // avoids two controls fighting over the same placement state.
-      let mediaRow = rows.find((row) => Array.isArray(row?.components)
-        && row.components.some((component) => componentId(component) === 'embed:media-options'));
-      if (mediaRow?.components) {
-        mediaRow.components = mediaRow.components.filter((component) => !String(componentId(component) || '').startsWith('embed:media-placement:'));
-        if (mediaRow.components.length < 5) mediaRow.addComponents(headerButton(mode, selectedIndex == null));
-      } else if (rows.length < 5) {
-        rows.push(new ActionRowBuilder().addComponents(headerButton(mode, selectedIndex == null)));
-      }
-
-      const embed = payload?.embeds?.[0];
-      if (embed?.data?.description != null) {
-        const active = activeIndex == null ? null : panelMedia.gallery[activeIndex];
-        const activeName = active ? sourceLabel(active.alt || active.source, `Item ${activeIndex + 1}`) : null;
-        const selectedIsActive = selectedIndex != null && selectedIndex === activeIndex;
-        const lines = activeName
-          ? [`🪧 **Graphic Header** — ${activeName}`, `**Mode:** ${mode === 'graphic' ? 'Graphic only' : mode === 'both' ? 'Graphic + Text' : 'Text only'}${selectedIsActive ? ' • selected' : ''}`]
-          : ['🪧 **Graphic Header** — none selected.', selectedIndex == null ? 'Select a gallery image/GIF to enable the Header control.' : 'Press **Header: Text** to use the selected media as the graphic header.'];
-        embed.setDescription(`${embed.data.description}\n\n${lines.join('\n')}`.slice(0, 4096));
-      }
-      return { ...payload, components: rows.slice(0, 5) };
-    };
-    panel.buildMediaManager = panel.buildMediaManagerPanel;
-  }
-
-  const originalBuildMediaOptionsPanel = panel.buildMediaOptionsPanel?.bind(panel);
-  if (originalBuildMediaOptionsPanel) {
-    panel.buildMediaOptionsPanel = (interaction) => {
-      const payload = originalBuildMediaOptionsPanel(interaction);
-      const state = panel.getSession(interaction);
-      const panelMedia = media.getPanelMedia(state, state.selectedPanelIndex || 0);
-      const index = selectedMediaIndex(state, panelMedia);
-      const mode = headerMode(state, media);
-      const rows = Array.isArray(payload?.components) ? payload.components : [];
-      const backRow = rows.find((row) => Array.isArray(row?.components)
-        && row.components.some((component) => componentId(component) === 'embed:media-options-back'));
-      if (backRow?.addComponents && (backRow.components?.length || 0) < 5) backRow.addComponents(headerButton(mode, index == null));
-      return { ...payload, components: rows.slice(0, 5) };
-    };
-  }
-
   const originalHandleInteraction = interactions.handleInteraction.bind(interactions);
   interactions.handleInteraction = async (interaction) => {
     const customId = String(interaction?.customId || '');
