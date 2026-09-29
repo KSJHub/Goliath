@@ -16,7 +16,12 @@ async function facebookToken() {
 }
 
 async function checkFacebook(account) {
-  const token = await facebookToken();
+  let token;
+  try {
+    token = await facebookToken();
+  } catch (error) {
+    return unavailable('facebook', `Facebook authentication unavailable: ${error.message}`);
+  }
   if (!token) return unavailable('facebook', 'Set FACEBOOK_ACCESS_TOKEN or FACEBOOK_APP_ID + FACEBOOK_APP_SECRET.', 'configuration_required');
   const lookup = clean(account.externalId || account.metadata?.pageId || handle(account));
   if (!lookup) return unavailable('facebook', 'Facebook Page ID or username could not be resolved.');
