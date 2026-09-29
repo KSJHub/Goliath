@@ -169,7 +169,13 @@ function installInteraction(panel, interactions) {
     }
     const map = alignmentMap(state);
     map[alignmentKey(panelIndex, itemIndex)] = alignment;
-    panel.saveSession(interaction, { ...state, mediaAlignment: map, hasUnsavedChanges: true });
+    const media = panel.getPanelMedia(state, panelIndex);
+    const gallery = Array.isArray(media?.gallery) ? media.gallery.map((item, index) => (
+      index === itemIndex ? { ...item, alignment } : item
+    )) : [];
+    const nextMedia = { ...media, gallery };
+    const nextState = panel.setPanelMedia(state, panelIndex, nextMedia);
+    panel.saveSession(interaction, { ...nextState, mediaAlignment: map, hasUnsavedChanges: true });
     await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
     return true;
   };
