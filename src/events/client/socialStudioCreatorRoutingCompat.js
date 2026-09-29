@@ -72,18 +72,18 @@ function rolePayload(interaction) {
   const safePage = clampPage(state.rolePage, pageCount);
   const manager = roleSelect(interaction, `${P}roles:select`, 'Select Social Studio manager roles', config.managerRoleIds || [], safePage);
   const user = roleSelect(interaction, `${P}userroles:select`, 'Select Social Studio user access roles', config.userRoleIds || [], safePage);
-  const live = singleRoleSelect(interaction, `${P}liveRole:select`, 'Select temporary LIVE role', config.liveRoleId || null, safePage);
+  const live = singleRoleSelect(interaction, `${P}liveRole:select`, 'Select LIVE role', config.liveRoleId || null, safePage);
   setRoleSession(interaction, { rolePage: safePage });
   const description = [
     '👥 **Manager roles**', `Current: ${currentRoleNames(interaction, config.managerRoleIds || [])}`, '',
     '👤 **User access roles**', `Current: ${(config.userRoleIds || []).length ? currentRoleNames(interaction, config.userRoleIds) : 'Everyone'}`, '',
-    '🔴 **Temporary LIVE role**', `Current: ${config.liveRoleId ? `<@&${config.liveRoleId}>` : 'Disabled'}`, 'Automatically added while a linked creator has at least one monitored account LIVE, then removed when all of their monitored accounts are offline.', '',
+    '🔴 **LIVE role**', `Current: ${config.liveRoleId ? `<@&${config.liveRoleId}>` : 'Disabled'}`, 'Automatically added while a linked creator has at least one monitored account LIVE, then removed when all of their monitored accounts are offline.', '',
     '📢 **LIVE Notification Target**', `Current: ${config.notificationMentionMode === 'role' && config.notificationRoleId ? `<@&${config.notificationRoleId}>` : config.notificationMentionMode === 'here' ? '@here' : config.notificationMentionMode === 'everyone' ? '@everyone' : 'No ping'}`, '',
     'Role menus are ordered by Discord hierarchy, highest role first.',
   ].join('\n');
   const navigation = [button(`${P}settings`, '⬅️ Back'), button(`${P}main`, '🏠 Social Studio')];
   if (pageCount > 1) navigation.push(button(`${P}roles:page:prev`, '⬅️ Previous', safePage <= 0), button(`${P}roles:page:next`, 'Next ➡️', safePage >= pageCount - 1));
-  return { embeds: [new EmbedBuilder().setColor(config.enabled ? 0x5865F2 : 0x747F8D).setTitle('🔐 Permissions').setDescription(description).setFooter({ text: `Requested by ${who(interaction)}` }).setTimestamp()], components: [manager.row, user.row, live, notificationSelect(interaction, config), row(...navigation)] };
+  return { embeds: [new EmbedBuilder().setColor(config.enabled ? 0x5865F2 : 0x747F8D).setTitle('🎭 Roles').setDescription(description).setFooter({ text: `Requested by ${who(interaction)}` }).setTimestamp()], components: [manager.row, user.row, live, notificationSelect(interaction, config), row(...navigation)] };
 }
 function save(interaction, config) { return store.saveConfig(interaction.guildId, config, { actorId: interaction.user?.id || null, guild: interaction.guild }); }
 async function updateRoles(interaction) { const next = rolePayload(interaction); if (interaction.deferred || interaction.replied) await interaction.editReply(next); else await interaction.update(next); return true; }
