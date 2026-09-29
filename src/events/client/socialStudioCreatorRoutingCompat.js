@@ -9,6 +9,7 @@ const {
 } = require('discord.js');
 const store = require('../../modules/socialStudio/socialAlerts/socialStudioStore');
 const liveRole = require('../../modules/socialStudio/socialAlerts/socialStudioLiveRole');
+const { buildSectionPanel } = require('../../modules/socialStudio/socialAlerts/socialStudioPanel');
 const core = require('./socialStudioCreatorRoutingCompatCore');
 
 const P = 'social:';
@@ -87,6 +88,13 @@ function rolePayload(interaction) {
 }
 function save(interaction, config) { return store.saveConfig(interaction.guildId, config, { actorId: interaction.user?.id || null, guild: interaction.guild }); }
 async function updateRoles(interaction) { const next = rolePayload(interaction); if (interaction.deferred || interaction.replied) await interaction.editReply(next); else await interaction.update(next); return true; }
+async function updateSettings(interaction) {
+  const next = buildSectionPanel(interaction, 'settings');
+  const rolesButton = next?.components?.[0]?.components?.[0];
+  if (rolesButton?.setLabel) rolesButton.setLabel('🎭 Roles');
+  if (interaction.deferred || interaction.replied) await interaction.editReply(next); else await interaction.update(next);
+  return true;
+}
 function mergePageSelection(interaction, existingIds, selectedIds, page) {
   const roles = sortedRoles(interaction);
   const pageIds = new Set(roles.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((role) => role.id));
@@ -98,6 +106,7 @@ function mergePageSelection(interaction, existingIds, selectedIds, page) {
 async function handleRoleHierarchy(interaction) {
   const id = String(interaction?.customId || '');
   if (!interaction.guildId) return false;
+  if (id === `${P}settings`) return updateSettings(interaction);
   if (id === `${P}permissions`) { setRoleSession(interaction, { rolePage: 0 }); return updateRoles(interaction); }
   const state = getRoleSession(interaction);
   if (id === `${P}roles:page:prev` || id === `${P}roles:page:next`) {
