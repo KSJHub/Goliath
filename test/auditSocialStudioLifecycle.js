@@ -32,7 +32,7 @@ const contracts = [
   ['exhausted retry release', 'state.pendingDelivery=null'],
   ['stale LIVE retry protection', 'pendingLiveStale=Boolean(pendingEvent?.type===\'live\''],
   ['stale LIVE retry clears pending', 'state.pendingDelivery=null'],
-  ['recovery concurrency deferral', "item?.status==='skipped'&&item?.reason==='already_running'"],
+  ['recovery concurrency deferral', "repairedItem?.status==='skipped'&&repairedItem?.reason==='already_running'"],
   ['rollover concurrency deferral', "repairedItem?.status==='skipped'&&repairedItem?.reason==='already_running'"],
 ];
 
