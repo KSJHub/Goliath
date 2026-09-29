@@ -158,9 +158,15 @@ function installInteraction(panel, interactions) {
     if (!VALID_ALIGNMENTS.has(alignment)) return true;
     const state = panel.getSession(interaction);
     const panelIndex = Math.max(0, Number(state?.selectedPanelIndex) || 0);
-    const itemIndex = Number.isInteger(state?.selectedMediaIndex) ? state.selectedMediaIndex : null;
     const panelMedia = panel.getPanelMedia(state, panelIndex);
-    if (itemIndex == null || !panelMedia?.gallery?.[itemIndex]) { await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction))); return true; }
+    const gallery = Array.isArray(panelMedia?.gallery) ? panelMedia.gallery : [];
+    const itemIndex = Number.isInteger(state?.selectedMediaIndex)
+      ? state.selectedMediaIndex
+      : (gallery.length ? 0 : null);
+    if (itemIndex == null || !gallery[itemIndex]) {
+      await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
+      return true;
+    }
     const map = alignmentMap(state);
     map[alignmentKey(panelIndex, itemIndex)] = alignment;
     panel.saveSession(interaction, { ...state, mediaAlignment: map, hasUnsavedChanges: true });
