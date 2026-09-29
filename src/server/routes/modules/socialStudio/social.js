@@ -76,9 +76,14 @@ function normalizeAccount(value = {}, existingId = null) {
     platform,
     displayName: clean(value.displayName || username, 120),
     username,
+    normalizedUsername: clean(value.normalizedUsername, 500),
     externalId: clean(value.externalId, 200),
+    sourceInput: clean(value.sourceInput, 1000),
     url: clean(value.url || (/^https?:\/\//i.test(username) ? username : ''), 1000),
+    profileUrl: clean(value.profileUrl, 1000),
+    avatar: clean(value.avatar, 1000),
     alertChannelId: discordId(value.alertChannelId),
+    alertChannels: isObject(value.alertChannels) ? { ...value.alertChannels } : {},
     mentionRoleId: discordId(value.mentionRoleId),
     mentionMode: ['none', 'role', 'everyone', 'here'].includes(value.mentionMode) ? value.mentionMode : 'none',
     alertTypes: [...new Set((Array.isArray(value.alertTypes) ? value.alertTypes : ['live']).map((item) => clean(item, 20).toLowerCase()).filter((item) => ALERT_TYPES.includes(item)))],
@@ -193,7 +198,11 @@ function overview(config) {
 function health(config, discordGuild = null) {
   const issues = [];
   if (!config.enabled) issues.push({ severity: 'warning', code: 'module_disabled', message: 'Social Studio is disabled.' });
-  if (!config.alertsChannelId && !Object.values(config.accounts).some((item) => item.alertChannelId)) issues.push({ severity: 'warning', code: 'alert_channel_missing', message: 'No alert channel is configured.' });
+  const hasRoutedChannel = Boolean(config.alertsChannelId)
+    || Object.values(config.alertChannels || {}).some(Boolean)
+    || Object.values(config.platformChannels || {}).some(Boolean)
+    || Object.values(config.accounts).some((item) => item.alertChannelId || Object.values(item.alertChannels || {}).some(Boolean));
+  if (!hasRoutedChannel) issues.push({ severity: 'warning', code: 'alert_channel_missing', message: 'No alert channel is configured.' });
   if (discordGuild && config.liveRoleId) {
     const role = discordGuild.roles.cache.get(config.liveRoleId);
     if (!role) issues.push({ severity: 'error', code: 'live_role_missing', message: 'Configured LIVE role is unavailable.' });
@@ -310,7 +319,7 @@ router.post('/:guildId/accounts/:accountId/check', async (req, res) => {
 });
 router.post('/:guildId/creator-hub', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = normalizeCreator(req.body || {}, null, config.accounts); config.creators[creator.creatorId] = creator; history(config, { status: 'creator_created', creator: creator.displayName, alertType: null }); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.patch('/:guildId/creator-hub/:creatorId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creatorId = clean(req.params.creatorId, 80); const existing = config.creators[creatorId]; if (!existing) throw new Error('Creator profile was not found.'); const creator = normalizeCreator({ ...existing, ...(req.body || {}), creatorId, ownerDiscordId: existing.ownerDiscordId }, creatorId, config.accounts); config.creators[creatorId] = creator; return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/creator-hub/:creatorId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = config.creators[clean(req.params.creatorId, 80)]; const accountId = clean(req.params.accountId, 80); if (!creator || !config.accounts[accountId]) throw new Error('Creator or account was not found.'); creator.accountIds = [...new Set([...creator.accountIds, accountId])]; creator.updatedAt = now(); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/creator-hub/:creatorId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = config.creators[clean(req.params.creatorId, 80)]; const accountId = clean(req.params.accountId, 80); if (!creator || !config.accounts[accountId]) throw new Error('Creator or account was not found.'); Object.values(config.creators).forEach((item) => { item.accountIds = (item.accountIds || []).filter((id) => id !== accountId); }); creator.accountIds = [...new Set([...creator.accountIds, accountId])]; creator.updatedAt = now(); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.delete('/:guildId/creator-hub/:creatorId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = config.creators[clean(req.params.creatorId, 80)]; if (!creator) throw new Error('Creator profile was not found.'); creator.accountIds = creator.accountIds.filter((item) => item !== clean(req.params.accountId, 80)); creator.updatedAt = now(); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/creator-hub/rebuild', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const linked = new Set(Object.values(config.creators).flatMap((creator) => creator.accountIds)); let created = 0; for (const account of Object.values(config.accounts)) { if (linked.has(account.accountId)) continue; const creator = normalizeCreator({ displayName: account.displayName || account.username, accountIds: [account.accountId], tags: [account.platform] }, null, config.accounts); config.creators[creator.creatorId] = creator; created += 1; } const saved = saveConfig(id, config, actor(req)); return success(res, { guildId: id, created, creators: Object.values(saved.creators) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/creator-hub/accounts/:accountId/simulate', async (req, res) => { try { const id = guildId(req); const config = getConfig(id); const account = config.accounts[clean(req.params.accountId, 80)]; if (!account) throw new Error('Social account was not found.'); const alertType = ALERT_TYPES.includes(req.body?.alertType) ? req.body.alertType : 'live'; const data = preview(account, config, alertType); let messageId = null; if (req.body?.send === true) { const message = await sendSimulation(req, id, account, data); messageId = message.id; config.analytics.alertsSent = Number(config.analytics.alertsSent || 0) + 1; runtime.deliveries += 1; } config.analytics.simulations = Number(config.analytics.simulations || 0) + 1; history(config, { status: req.body?.send === true ? 'simulation_sent' : 'simulation_previewed', accountId: account.accountId, platform: account.platform, alertType }); saveConfig(id, config, actor(req)); return success(res, { guildId: id, preview: data, sent: req.body?.send === true, messageId }); } catch (error) { runtime.errors += 1; return failure(res, error, 400); } });
