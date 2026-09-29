@@ -38,6 +38,11 @@ function nav(refreshId) {
     new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
   );
 }
+function managementButton(customId, label, emoji) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(customId).setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Primary),
+  );
+}
 function base(interaction, title, description, color = 0x5865F2) {
   return new EmbedBuilder().setColor(color).setTitle(title).setDescription(description)
     .setFooter({ text: `Security Hub • Requested by ${displayName(interaction)}` }).setTimestamp();
@@ -99,9 +104,9 @@ function buildAutoModPanel(interaction) {
       { name: 'Rules', value: keys.map((key) => `${config[key]?.enabled ? '🟢' : '⚫'} **${rules[key].title.replace(/^\S+\s*/, '')}**`).join('\n') || 'No AutoMod rules configured.', inline: false },
       { name: 'Active Enforcement', value: actions.length ? actions.map((action) => `• ${action}`).join('\n') : 'No enforcement actions configured on enabled rules.', inline: true },
       { name: 'Exceptions', value: `Ignored roles: **${(config.ignoredRoles || []).length}**\nIgnored channels: **${(config.ignoredChannels || []).length}**`, inline: true },
-      { name: 'Management', value: 'Full AutoMod rule editing remains available through Goliath’s existing AutoMod administration controls.', inline: false },
+      { name: 'Management', value: 'Open the existing AutoMod administration panel to edit rules, actions, thresholds, domains, messages and logging.', inline: false },
     );
-  return { embeds: [embed], components: [nav(REFRESH.automod)] };
+  return { embeds: [embed], components: [managementButton('admin:automod', 'Manage AutoMod', '🤖'), nav(REFRESH.automod)] };
 }
 
 function buildMemberPanel(interaction) {
@@ -127,9 +132,9 @@ function buildVerificationPanel(interaction) {
       { name: 'Verification', value: bool(verification.enabled !== false), inline: true },
       { name: 'Verified Role', value: roleId ? `<@&${roleId}>` : 'Not configured', inline: true },
       { name: 'Pending Role', value: pendingRoleId ? `<@&${pendingRoleId}>` : 'Not configured', inline: true },
-      { name: 'Protection', value: 'Join and member-update security processing remains handled by the verification/security runtime.', inline: false },
+      { name: 'Management', value: 'Open the existing Verification Studio to manage workflow, assignment timing, roles and channels, requirements, messages, panels, settings and health.', inline: false },
     );
-  return { embeds: [embed], components: [nav(REFRESH.verification)] };
+  return { embeds: [embed], components: [managementButton('admin:verification', 'Manage Verification', '🛂'), nav(REFRESH.verification)] };
 }
 
 function buildHealthPanel(interaction) {
