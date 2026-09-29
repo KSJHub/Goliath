@@ -72,16 +72,13 @@ async function submitSuggestion(interaction, panel) {
   const guildId = interaction?.guildId;
   if (!interaction?.guild || !interaction.user?.id) throw new Error('The server or member could not be found.');
   const initial = assertEnabled(guildId);
-
   const title = String(interaction.fields.getTextInputValue('title') || '').trim();
   const content = String(interaction.fields.getTextInputValue('content') || '').trim();
   if (title.length < 3 || title.length > 100) throw new Error('Your suggestion name must be between 3 and 100 characters.');
   if (content.length < 5 || content.length > 1800) throw new Error('Your suggestion details must be between 5 and 1800 characters.');
   if (!initial.submitChannelId) throw new Error('The public suggestions channel has not been set up yet.');
   if (initial.requireReview !== false && !initial.reviewChannelId) throw new Error('The management discussion channel has not been set up yet.');
-  if (initial.requireReview !== false && initial.reviewChannelId === initial.submitChannelId) {
-    throw new Error('The management discussion channel must be different from the public suggestions channel.');
-  }
+  if (initial.requireReview !== false && initial.reviewChannelId === initial.submitChannelId) throw new Error('The management discussion channel must be different from the public suggestions channel.');
 
   let suggestionId = suggestions.createId('sg');
   while (suggestions.getSuggestion(guildId, suggestionId)) suggestionId = suggestions.createId('sg');
@@ -89,52 +86,19 @@ async function submitSuggestion(interaction, panel) {
   return withSuggestionLock(guildId, suggestionId, async () => {
     const fresh = assertEnabled(guildId);
     const publicChannel = await resolveSendableChannel(interaction.guild, fresh.submitChannelId, 'public suggestions channel', { requireHistory: true });
-    const reviewChannel = fresh.requireReview !== false
-      ? await resolveSendableChannel(interaction.guild, fresh.reviewChannelId, 'team discussion channel', { requireHistory: true })
-      : null;
-
-    const draft = suggestions.normalizeSuggestion({
-      suggestionId,
-      title,
-      content,
-      authorId: interaction.user.id,
-      anonymous: fresh.anonymous === true,
-      status: 'pending',
-      votePaused: false,
-    });
-
-    const publicPayload = await resolveSuggestionPayload(
-      interaction.guild,
-      panel.buildSuggestionMessagePayload(interaction.guild, draft, fresh, true, true),
-    );
+    const reviewChannel = fresh.requireReview !== false ? await resolveSendableChannel(interaction.guild, fresh.reviewChannelId, 'team discussion channel', { requireHistory: true }) : null;
+    const draft = suggestions.normalizeSuggestion({ suggestionId, title, content, authorId: interaction.user.id, anonymous: fresh.anonymous === true, status: 'pending', votePaused: false });
+    const publicPayload = await resolveSuggestionPayload(interaction.guild, panel.buildSuggestionMessagePayload(interaction.guild, draft, fresh, true, true));
     const publicMessage = await publicChannel.send(publicPayload);
     let reviewMessage = null;
-
     try {
-      const linkedDraft = suggestions.normalizeSuggestion({
-        ...draft,
-        channelId: publicMessage.channelId,
-        messageId: publicMessage.id,
-      });
+      const linkedDraft = suggestions.normalizeSuggestion({ ...draft, channelId: publicMessage.channelId, messageId: publicMessage.id });
       if (reviewChannel) {
-        const managementPayload = await resolveSuggestionPayload(
-          interaction.guild,
-          panel.buildManagementPayload(interaction.guild, linkedDraft, fresh),
-        );
+        const managementPayload = await resolveSuggestionPayload(interaction.guild, panel.buildManagementPayload(interaction.guild, linkedDraft, fresh));
         reviewMessage = await reviewChannel.send(managementPayload);
       }
-
-      const saved = suggestions.saveSuggestion(guildId, {
-        ...linkedDraft,
-        reviewChannelId: reviewMessage?.channelId || null,
-        reviewMessageId: reviewMessage?.id || null,
-      }, interaction.guild);
-      const submittedEvent = saved.history?.[saved.history.length - 1] || {
-        type: 'submitted',
-        actorId: interaction.user.id,
-        at: saved.createdAt,
-        toStatus: 'pending',
-      };
+      const saved = suggestions.saveSuggestion(guildId, { ...linkedDraft, reviewChannelId: reviewMessage?.channelId || null, reviewMessageId: reviewMessage?.id || null }, interaction.guild);
+      const submittedEvent = saved.history?.[saved.history.length - 1] || { type: 'submitted', actorId: interaction.user.id, at: saved.createdAt, toStatus: 'pending' };
       await writeAuditLog(interaction.guild, saved, submittedEvent, panel);
       return saved;
     } catch (error) {
@@ -153,10 +117,7 @@ async function refreshSuggestionMessage(guild, suggestionId, panel) {
   const message = await fetchMessage(guild, suggestion.channelId, suggestion.messageId);
   if (!message?.editable) return null;
   const enabled = isModuleEnabled(guild.id, 'suggestions');
-  const payload = await resolveSuggestionPayload(
-    guild,
-    panel.buildSuggestionMessagePayload(guild, suggestion, section, enabled, true),
-  );
+  const payload = await resolveSuggestionPayload(guild, panel.buildSuggestionMessagePayload(guild, suggestion, section, enabled, true));
   await message.edit(payload);
   return suggestion;
 }
@@ -185,9 +146,7 @@ async function bestEffortRefresh(guild, suggestionId, panel) {
 async function refreshPendingSuggestions(guild, panel) {
   if (!guild?.id) return 0;
   const section = suggestions.getSection(guild.id);
-  const activeIds = Object.values(section.suggestions || {})
-    .filter((item) => ['pending', 'discussing', 'approved'].includes(item?.status) && item.suggestionId)
-    .map((item) => item.suggestionId);
+  const activeIds = Object.values(section.suggestions || {}).filter((item) => ['pending', 'discussing', 'approved'].includes(item?.status) && item.suggestionId).map((item) => item.suggestionId);
   for (const suggestionId of activeIds) await bestEffortRefresh(guild, suggestionId, panel);
   return activeIds.length;
 }
@@ -198,7 +157,6 @@ async function vote(interaction, suggestionId, direction, panel) {
   const userId = interaction?.user?.id;
   const id = suggestions.cleanSuggestionId(suggestionId);
   if (!guildId || !userId || !id) throw new Error('That suggestion vote is no longer available.');
-
   return withSuggestionLock(guildId, id, async () => {
     const section = assertEnabled(guildId);
     if (section.voting === false) throw new Error('Community voting is currently turned off.');
@@ -206,65 +164,31 @@ async function vote(interaction, suggestionId, direction, panel) {
     if (!current) throw new Error('That suggestion could not be found.');
     if (current.status === 'discussing' || current.votePaused) throw new Error('Voting is paused while the management team discusses this suggestion.');
     if (current.status !== 'pending') throw new Error('Voting has closed for this suggestion.');
-
     const updated = suggestions.updateSuggestion(guildId, id, (item) => {
       const upVotes = new Set(item.upVotes || []);
       const downVotes = new Set(item.downVotes || []);
-      if (direction === 'up') {
-        downVotes.delete(userId);
-        if (upVotes.has(userId)) upVotes.delete(userId);
-        else upVotes.add(userId);
-      } else {
-        upVotes.delete(userId);
-        if (downVotes.has(userId)) downVotes.delete(userId);
-        else downVotes.add(userId);
-      }
+      if (direction === 'up') { downVotes.delete(userId); if (upVotes.has(userId)) upVotes.delete(userId); else upVotes.add(userId); }
+      else { upVotes.delete(userId); if (downVotes.has(userId)) downVotes.delete(userId); else downVotes.add(userId); }
       return { ...item, upVotes: [...upVotes], downVotes: [...downVotes] };
     }, interaction.guild);
-
     if (!updated) throw new Error('Your vote could not be saved.');
     await bestEffortRefresh(interaction.guild, id, panel);
     return updated;
   });
 }
 
-function quotePreview(suggestion, maxLength = 500) {
-  const text = String(suggestion?.content || '').trim().slice(0, maxLength);
-  const body = text ? `> ${text.replace(/\n/g, '\n> ')}` : '> Your suggestion';
-  return `**${suggestion?.title || 'Your suggestion'}**\n${body}`;
-}
-
 function suggestionNoticeMeta(status) {
-  if (status === 'approved') return {
-    emoji: '✅', title: 'SUGGESTION APPROVED', statusLabel: '🟢 Approved', color: 0x57f287,
-    meaning: 'Management has reviewed your suggestion and approved it to move forward.',
-    nextSteps: 'You can follow its latest status through **My Suggestions**. If it is later implemented, Goliath will notify you again.',
-  };
-  if (status === 'implemented') return {
-    emoji: '🚀', title: 'SUGGESTION IMPLEMENTED', statusLabel: '🟢 Implemented', color: 0x57f287,
-    meaning: 'Management has marked your approved suggestion as implemented and completed.',
-    nextSteps: 'No action is required from you. You can still view the completed suggestion through **My Suggestions**.',
-  };
-  if (status === 'denied') return {
-    emoji: '❌', title: 'SUGGESTION DECLINED', statusLabel: '🔴 Declined', color: 0xed4245,
-    meaning: 'Management has reviewed your suggestion and decided not to move forward with it at this time.',
-    nextSteps: 'Review the Management response below for context. You can see the final status through **My Suggestions**.',
-  };
-  return {
-    emoji: '💡', title: 'SUGGESTION UPDATED', statusLabel: `${statusLabelForDm(status)} Updated`, color: 0x5865f2,
-    meaning: 'The status of your suggestion has been updated by the server team.',
-    nextSteps: 'You can see its latest status through **My Suggestions**.',
-  };
+  if (status === 'approved') return { emoji: '✅', title: 'SUGGESTION APPROVED', statusLabel: '🟢 Approved', color: 0x57f287, meaning: 'Management has reviewed your suggestion and approved it to move forward.', nextSteps: 'You can follow its latest status through **My Suggestions**. If it is later implemented, Goliath will notify you again.' };
+  if (status === 'implemented') return { emoji: '🚀', title: 'SUGGESTION IMPLEMENTED', statusLabel: '🟢 Implemented', color: 0x57f287, meaning: 'Management has marked your approved suggestion as implemented and completed.', nextSteps: 'No action is required from you. You can still view the completed suggestion through **My Suggestions**.' };
+  if (status === 'denied') return { emoji: '❌', title: 'SUGGESTION DECLINED', statusLabel: '🔴 Declined', color: 0xed4245, meaning: 'Management has reviewed your suggestion and decided not to move forward with it at this time.', nextSteps: 'Review the Management response below for context. You can see the final status through **My Suggestions**.' };
+  return { emoji: '💡', title: 'SUGGESTION UPDATED', statusLabel: `${statusLabelForDm(status)} Updated`, color: 0x5865f2, meaning: 'The status of your suggestion has been updated by the server team.', nextSteps: 'You can see its latest status through **My Suggestions**.' };
 }
 
 async function notifyAuthor(guild, suggestion) {
   if (!guild || !suggestion?.authorId) return false;
   const member = await guild.members.fetch(suggestion.authorId).catch(() => null);
   if (!member?.user) return false;
-
-  const response = suggestion.status === 'implemented'
-    ? suggestion.implementationNote || suggestion.reviewReason
-    : suggestion.reviewReason;
+  const response = suggestion.status === 'implemented' ? suggestion.implementationNote || suggestion.reviewReason : suggestion.reviewReason;
   const meta = suggestionNoticeMeta(suggestion.status);
   const reference = String(suggestion.reference || suggestion.suggestionId || 'Suggestion').slice(0, 100);
   const preview = String(suggestion.content || '').trim().slice(0, 700) || 'No suggestion details are available.';
@@ -273,30 +197,8 @@ async function notifyAuthor(guild, suggestion) {
     { name: '📊 Status', value: meta.statusLabel, inline: true },
     { name: '🔐 Visibility', value: suggestion.anonymous === true ? 'Anonymous on the public board' : 'Public', inline: true },
   ];
-  if (response) contextFields.push({
-    name: suggestion.status === 'implemented' ? '🛠️ Implementation Note' : '🛡️ Management Response',
-    value: String(response).slice(0, 1024),
-    inline: false,
-  });
-
-  const notice = buildMemberNotice(guild, {
-    moduleName: 'Suggestions',
-    moduleEmoji: meta.emoji,
-    title: meta.title,
-    subtitle: 'Suggestion Status Notice',
-    color: meta.color,
-    referenceLabel: 'Suggestion',
-    referenceValue: reference,
-    status: meta.statusLabel,
-    member: member.user,
-    contextFields,
-    detailsTitle: '📝 YOUR SUGGESTION',
-    details: `**${String(suggestion.title || 'Your suggestion').slice(0, 200)}**\n> ${preview.replace(/\n/g, '\n> ')}`,
-    meaning: meta.meaning,
-    nextSteps: meta.nextSteps,
-    footerLabel: `Suggestion ${reference}`,
-  });
-
+  if (response) contextFields.push({ name: suggestion.status === 'implemented' ? '🛠️ Implementation Note' : '🛡️ Management Response', value: String(response).slice(0, 1024), inline: false });
+  const notice = buildMemberNotice(guild, { moduleName: 'Suggestions', moduleEmoji: meta.emoji, title: meta.title, subtitle: 'Suggestion Status Notice', color: meta.color, referenceLabel: 'Suggestion', referenceValue: reference, status: meta.statusLabel, member: member.user, contextFields, detailsTitle: '📝 YOUR SUGGESTION', details: `**${String(suggestion.title || 'Your suggestion').slice(0, 200)}**\n> ${preview.replace(/\n/g, '\n> ')}`, meaning: meta.meaning, nextSteps: meta.nextSteps, footerLabel: `Suggestion ${reference}` });
   return member.user.send(notice).then(() => true).catch(() => false);
 }
 
@@ -308,20 +210,34 @@ function statusLabelForDm(status) {
   return '💡';
 }
 
-async function publishReviewedSuggestion(guild, targetId, label, updated, section, panel) {
-  if (!targetId) return true;
-  try {
-    const target = await resolveSendableChannel(guild, targetId, label);
-    const payload = await resolveSuggestionPayload(
-      guild,
-      panel.buildSuggestionMessagePayload(guild, updated, section, true, false),
-    );
-    await target.send(payload);
-    return true;
-  } catch (error) {
-    console.warn(`[Suggestions] Failed to publish ${updated.reference || updated.suggestionId} to ${label}:`, error.message || error);
-    return false;
+async function ensureOutcomeMessage(guild, suggestionId, targetId, label, section, panel) {
+  if (!targetId) return suggestions.getSuggestion(guild.id, suggestionId);
+  const current = suggestions.getSuggestion(guild.id, suggestionId);
+  if (!current) throw new Error('That suggestion could not be found.');
+  const target = await resolveSendableChannel(guild, targetId, label, { requireHistory: true });
+  const payload = await resolveSuggestionPayload(guild, panel.buildSuggestionMessagePayload(guild, current, section, true, false));
+  let message = null;
+  if (current.outcomeChannelId === target.id && current.outcomeMessageId) {
+    message = await fetchMessage(guild, current.outcomeChannelId, current.outcomeMessageId);
+    if (message?.editable) await message.edit(payload);
+    else message = null;
   }
+  if (!message) message = await target.send(payload);
+  return suggestions.updateSuggestion(guild.id, suggestionId, {
+    outcomeChannelId: message.channelId,
+    outcomeMessageId: message.id,
+    outcomeStatus: current.status,
+  }, guild) || current;
+}
+
+async function refreshOutcomeMessage(guild, suggestionId, panel) {
+  const current = suggestions.getSuggestion(guild?.id, suggestionId);
+  if (!current || !['approved', 'implemented', 'denied'].includes(current.status)) return current;
+  const section = suggestions.getSection(guild.id);
+  const targetId = current.status === 'denied' ? section.deniedChannelId : section.approvedChannelId;
+  if (!targetId) return current;
+  const label = current.status === 'denied' ? 'declined suggestions channel' : 'approved suggestions channel';
+  return ensureOutcomeMessage(guild, suggestionId, targetId, label, section, panel);
 }
 
 async function ensureDiscussionThread(guild, suggestion) {
@@ -329,11 +245,7 @@ async function ensureDiscussionThread(guild, suggestion) {
   const message = await fetchMessage(guild, suggestion.reviewChannelId, suggestion.reviewMessageId);
   if (!message?.startThread) return null;
   try {
-    const thread = await message.startThread({
-      name: `${suggestion.reference} · ${String(suggestion.title || 'Suggestion').slice(0, 70)}`,
-      autoArchiveDuration: 1440,
-      reason: `Team discussion for ${suggestion.reference}`,
-    });
+    const thread = await message.startThread({ name: `${suggestion.reference} · ${String(suggestion.title || 'Suggestion').slice(0, 70)}`, autoArchiveDuration: 1440, reason: `Team discussion for ${suggestion.reference}` });
     return thread?.id || null;
   } catch (error) {
     console.warn(`[Suggestions] Could not create a discussion thread for ${suggestion.reference}:`, error.message || error);
@@ -348,107 +260,52 @@ async function manage(interaction, suggestionId, action, panel, reason = '') {
   const managerId = interaction?.user?.id;
   const id = suggestions.cleanSuggestionId(suggestionId);
   if (!guildId || !interaction?.guild || !managerId || !id) throw new Error('That suggestion action is no longer available.');
-
   return withSuggestionLock(guildId, id, async () => {
     const section = assertEnabled(guildId);
     if (!isReviewer(interaction.member, section)) throw new Error('You are not part of the suggestions management team.');
     const current = suggestions.getSuggestion(guildId, id);
     if (!current) throw new Error('That suggestion could not be found.');
-
     const note = String(reason || '').trim().slice(0, 500);
-    let fromStatus = current.status;
+    const fromStatus = current.status;
     let toStatus = current.status;
     let eventType = action;
     let patch = {};
-
     if (action === 'discuss') {
       if (current.status !== 'pending') throw new Error('Only an open suggestion can be moved into team discussion.');
-      toStatus = 'discussing';
-      eventType = 'discussion_started';
-      patch = {
-        status: 'discussing',
-        votePaused: true,
-        discussionStartedBy: managerId,
-        discussionStartedAt: new Date().toISOString(),
-      };
+      toStatus = 'discussing'; eventType = 'discussion_started'; patch = { status: 'discussing', votePaused: true, discussionStartedBy: managerId, discussionStartedAt: new Date().toISOString() };
     } else if (action === 'resume') {
       if (current.status !== 'discussing') throw new Error('Only a suggestion under discussion can be reopened for voting.');
-      toStatus = 'pending';
-      eventType = 'voting_resumed';
-      patch = { status: 'pending', votePaused: false };
+      toStatus = 'pending'; eventType = 'voting_resumed'; patch = { status: 'pending', votePaused: false };
     } else if (action === 'approve') {
       if (!['pending', 'discussing'].includes(current.status)) throw new Error('Only an open or discussed suggestion can be approved.');
-      toStatus = 'approved';
-      eventType = 'approved';
-      patch = {
-        status: 'approved',
-        votePaused: true,
-        reviewedBy: managerId,
-        reviewedAt: new Date().toISOString(),
-        reviewReason: note,
-      };
+      toStatus = 'approved'; eventType = 'approved'; patch = { status: 'approved', votePaused: true, reviewedBy: managerId, reviewedAt: new Date().toISOString(), reviewReason: note };
     } else if (action === 'deny') {
       if (!['pending', 'discussing'].includes(current.status)) throw new Error('Only an open or discussed suggestion can be declined.');
       if (note.length < 3) throw new Error('Please give the member a clear reason for declining the suggestion.');
-      toStatus = 'denied';
-      eventType = 'denied';
-      patch = {
-        status: 'denied',
-        votePaused: true,
-        reviewedBy: managerId,
-        reviewedAt: new Date().toISOString(),
-        reviewReason: note,
-      };
+      toStatus = 'denied'; eventType = 'denied'; patch = { status: 'denied', votePaused: true, reviewedBy: managerId, reviewedAt: new Date().toISOString(), reviewReason: note };
     } else if (action === 'implemented') {
       if (current.status !== 'approved') throw new Error('A suggestion must be approved before it can be marked as implemented.');
       if (note.length < 3) throw new Error('Please describe what was implemented.');
-      toStatus = 'implemented';
-      eventType = 'implemented';
-      patch = {
-        status: 'implemented',
-        votePaused: true,
-        implementedBy: managerId,
-        implementedAt: new Date().toISOString(),
-        implementationNote: note,
-      };
+      toStatus = 'implemented'; eventType = 'implemented'; patch = { status: 'implemented', votePaused: true, implementedBy: managerId, implementedAt: new Date().toISOString(), implementationNote: note };
     }
-
-    const event = {
-      type: eventType,
-      actorId: managerId,
-      at: new Date().toISOString(),
-      fromStatus,
-      toStatus,
-      note,
-    };
-    let updated = suggestions.updateSuggestion(guildId, id, (item) => ({
-      ...item,
-      ...patch,
-      history: suggestions.appendHistory(item.history, event),
-    }), interaction.guild);
+    const event = { type: eventType, actorId: managerId, at: new Date().toISOString(), fromStatus, toStatus, note };
+    let updated = suggestions.updateSuggestion(guildId, id, (item) => ({ ...item, ...patch, history: suggestions.appendHistory(item.history, event) }), interaction.guild);
     if (!updated) throw new Error('The suggestion could not be updated.');
-
     if (action === 'discuss') {
       const threadId = await ensureDiscussionThread(interaction.guild, updated);
-      if (threadId) {
-        updated = suggestions.updateSuggestion(guildId, id, { discussionThreadId: threadId }, interaction.guild) || updated;
-      }
+      if (threadId) updated = suggestions.updateSuggestion(guildId, id, { discussionThreadId: threadId }, interaction.guild) || updated;
     }
-
     await bestEffortRefresh(interaction.guild, id, panel);
     const freshSection = suggestions.getSection(guildId);
-
-    if (action === 'approve') {
-      await publishReviewedSuggestion(interaction.guild, freshSection.approvedChannelId, 'approved suggestions channel', updated, freshSection, panel);
-      await notifyAuthor(interaction.guild, updated);
-    } else if (action === 'deny') {
-      await publishReviewedSuggestion(interaction.guild, freshSection.deniedChannelId, 'declined suggestions channel', updated, freshSection, panel);
-      await notifyAuthor(interaction.guild, updated);
-    } else if (action === 'implemented') {
-      await publishReviewedSuggestion(interaction.guild, freshSection.approvedChannelId, 'approved suggestions channel', updated, freshSection, panel);
+    if (['approve', 'deny', 'implemented'].includes(action)) {
+      const targetId = action === 'deny' ? freshSection.deniedChannelId : freshSection.approvedChannelId;
+      const label = action === 'deny' ? 'declined suggestions channel' : 'approved suggestions channel';
+      if (targetId) {
+        try { updated = await ensureOutcomeMessage(interaction.guild, id, targetId, label, freshSection, panel); }
+        catch (error) { console.warn(`[Suggestions] Failed to reconcile outcome for ${updated.reference || id}:`, error.message || error); }
+      }
       await notifyAuthor(interaction.guild, updated);
     }
-
     await writeAuditLog(interaction.guild, updated, event, panel);
     return updated;
   });
@@ -465,6 +322,7 @@ module.exports = {
   submitSuggestion,
   refreshSuggestionMessage,
   refreshReviewMessage,
+  refreshOutcomeMessage,
   refreshPendingSuggestions,
   vote,
   manage,
