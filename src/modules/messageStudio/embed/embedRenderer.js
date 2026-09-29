@@ -163,6 +163,19 @@ function galleryAlignment(item) {
   const value = String(item?.alignment || 'left').toLowerCase();
   return value === 'center' || value === 'right' ? value : 'left';
 }
+function applyMediaAlignmentMap(mediaState, alignmentMap = {}) {
+  const media = mediaState && typeof mediaState === 'object' ? JSON.parse(JSON.stringify(mediaState)) : {};
+  const panels = Array.isArray(media.panels) ? media.panels : [];
+  for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) {
+    const gallery = Array.isArray(panels[panelIndex]?.gallery) ? panels[panelIndex].gallery : [];
+    for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
+      const key = String(Math.max(0, Number(panelIndex) || 0)) + ':' + String(Math.max(0, Number(itemIndex) || 0));
+      const mapped = String(alignmentMap?.[key] || '').toLowerCase();
+      if (mapped === 'left' || mapped === 'center' || mapped === 'right') gallery[itemIndex].alignment = mapped;
+    }
+  }
+  return media;
+}
 async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex) {
   const cached = await ensureAssetCached('global', source);
   if (!cached?.buffer) return null;
@@ -296,7 +309,11 @@ async function validateApplicationEmojiUsage(embeds = [], actionRows = [], inter
 
 async function buildEmbedPayload(options = {}) {
   const { embeds = [], actionRows = [], allowUserPing = false, userId = null, ephemeral = false, interaction = null } = options;
-  const mediaState = options.media || null;
+  // Alignment is part of the editor session state, not just a UI concern.
+  // Apply the persisted per-panel/per-media map here so every delivery path
+  // (new deployment, update-existing, preview and template delivery) renders
+  // the selected alignment identically.
+  const mediaState = applyMediaAlignmentMap(options.media || null, options.mediaAlignment || {});
   const components = [];
   const files = [];
   const resolvedEmbeds = await resolveApplicationEmojiShortcodes(embeds, interaction);
