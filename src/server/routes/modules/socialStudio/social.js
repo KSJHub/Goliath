@@ -181,7 +181,14 @@ function history(config, event) {
 }
 function overview(config) {
   const accounts = Object.values(config.accounts);
-  return { enabled: config.enabled, accountCount: accounts.length, enabledAccountCount: accounts.filter((item) => item.enabled).length, creatorCount: Object.keys(config.creators).length, analytics: config.analytics, queue: { total: config.queue.length, pending: config.queue.filter((item) => ['pending', 'retry'].includes(item.status)).length }, history: { total: config.history.length }, updatedAt: config.updatedAt };
+  const pendingRetries = accounts.filter((item) => item?.state?.pendingDelivery).map((item) => ({
+    accountId: item.accountId || null,
+    platform: item.platform || null,
+    attempts: Number(item.state.pendingDelivery.attempts || 0),
+    nextAttemptAt: item.state.pendingDelivery.nextAttemptAt || null,
+    error: item.state.lastDeliveryError || null,
+  }));
+  return { enabled: config.enabled, accountCount: accounts.length, enabledAccountCount: accounts.filter((item) => item.enabled).length, creatorCount: Object.keys(config.creators).length, analytics: config.analytics, queue: { total: config.queue.length + pendingRetries.length, legacy: config.queue.length, pending: config.queue.filter((item) => ['pending', 'retry'].includes(item.status)).length + pendingRetries.length, retries: pendingRetries }, history: { total: config.history.length }, updatedAt: config.updatedAt };
 }
 function health(config, discordGuild = null) {
   const issues = [];
