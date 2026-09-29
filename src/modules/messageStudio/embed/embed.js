@@ -10,7 +10,7 @@ const media = require('./embedMedia');
 const renderer = require('./embedRenderer');
 const { installMediaManagerBase } = require('./embedMediaManagerBase');
 const { installGraphicHeaders } = require('./embedGraphicHeaders');
-const { installImageAlignment, installInteraction: installImageAlignmentInteraction, applyAlignmentMap } = require('./embedImageAlignment');
+const { installImageAlignment, installInteraction: installImageAlignmentInteraction } = require('./embedImageAlignment');
 const { installAlignmentPreview } = require('./embedAlignmentPreview');
 
 const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPanelMedia: media.setPanelMedia, mediaModel: media.mediaModel });
@@ -69,32 +69,6 @@ function installCanonicalMediaSessions(targetPanel) {
   targetPanel.__canonicalMediaSessionsInstalled = true;
   return targetPanel;
 }
-function installAlignmentSessionView(targetPanel) {
-  if (!targetPanel || targetPanel.__alignmentSessionViewInstalled || typeof targetPanel.getSession !== 'function') return targetPanel;
-  const originalGetSession = targetPanel.getSession.bind(targetPanel);
-  targetPanel.getSession = (interaction) => {
-    const state = originalGetSession(interaction);
-    const map = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
-    return { ...state, media: applyAlignmentMap(state.media, map) };
-  };
-  targetPanel.__alignmentSessionViewInstalled = true;
-  return targetPanel;
-}
-function installAlignmentDeliveryBridge(targetRenderer, targetPanel) {
-  if (!targetRenderer || targetRenderer.__alignmentDeliveryBridgeInstalled || typeof targetRenderer.buildEmbedPayload !== 'function') return targetRenderer;
-  const originalBuildEmbedPayload = targetRenderer.buildEmbedPayload.bind(targetRenderer);
-  targetRenderer.buildEmbedPayload = async (options = {}) => {
-    let map = options?.mediaAlignment && typeof options.mediaAlignment === 'object' ? options.mediaAlignment : null;
-    if (!map && options?.interaction && typeof targetPanel?.getSession === 'function') {
-      const state = targetPanel.getSession(options.interaction);
-      map = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
-    }
-    map = map || {};
-    return originalBuildEmbedPayload({ ...options, media: applyAlignmentMap(options.media || {}, map), mediaAlignment: map });
-  };
-  targetRenderer.__alignmentDeliveryBridgeInstalled = true;
-  return targetRenderer;
-}
 function installMediaRuntime(targetPanel) {
   media.installStateCompatibility(targetPanel);
   media.installPersistentMediaCompatibility(targetPanel);
@@ -111,9 +85,7 @@ function installMediaRuntime(targetPanel) {
   return targetPanel;
 }
 installMediaRuntime(panel);
-installAlignmentSessionView(panel);
-installImageAlignment(panel, null);
-installAlignmentDeliveryBridge(renderer, panel);
+installImageAlignment(panel, renderer);
 const interactions = require('./embedInteractions');
 installImageAlignmentInteraction(panel, interactions);
 installAlignmentPreview(panel, interactions);
