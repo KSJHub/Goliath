@@ -84,8 +84,10 @@ function installMediaManagerBase(panel, media) {
     panel.__mediaSessionMirrorPatched = true;
   }
 
-  panel.buildMediaManagerPanel = (interaction, who = 'Unknown User') => {
-    const state = panel.getSession(interaction);
+  panel.buildMediaManagerPanel = (interaction, who = 'Unknown User', stateOverride = null) => {
+    const state = stateOverride && typeof stateOverride === 'object'
+      ? stateOverride
+      : panel.getSession(interaction);
     const panelMedia = media.getPanelMedia(state);
 
     /*
@@ -198,27 +200,8 @@ function installMediaManagerBase(panel, media) {
     );
 
     /*
-     * ROW 3 — PLACEMENT + IMAGE ALIGNMENT
-     *
-     * Discord allows five buttons per action row and this manager already
-     * consumes all five action rows. Keep the three alignment controls in
-     * this existing placement row so they are always rendered whenever a
-     * gallery item exists. The alignment interaction/persistence layer owns
-     * the actual mediaAlignment state.
+     * ROW 2 — PLACEMENT + THUMBNAIL
      */
-    const alignmentMap =
-      state?.mediaAlignment && typeof state.mediaAlignment === 'object'
-        ? state.mediaAlignment
-        : {};
-    const alignmentKey = galleryIndex == null
-      ? null
-      : `${Math.max(0, Number(state.selectedPanelIndex) || 0)}:${galleryIndex}`;
-    const selectedAlignment = ['left', 'center', 'right'].includes(
-      String(alignmentMap[alignmentKey] || '').toLowerCase()
-    )
-      ? String(alignmentMap[alignmentKey]).toLowerCase()
-      : 'left';
-
     rows.push(
       new ActionRowBuilder().addComponents(
         mediaButton(
@@ -237,6 +220,34 @@ function installMediaManagerBase(panel, media) {
             : ButtonStyle.Secondary,
           galleryIndex == null
         ),
+        mediaButton(
+          'embed:media-thumbnail',
+          panelMedia.thumbnail?.source
+            ? '🖼️ Thumbnail ✓'
+            : '🖼️ Thumbnail',
+          ButtonStyle.Primary
+        )
+      )
+    );
+
+    /*
+     * ROW 3 — IMAGE ALIGNMENT
+     */
+    const alignmentMap =
+      state?.mediaAlignment && typeof state.mediaAlignment === 'object'
+        ? state.mediaAlignment
+        : {};
+    const alignmentKey = galleryIndex == null
+      ? null
+      : `${Math.max(0, Number(state.selectedPanelIndex) || 0)}:${galleryIndex}`;
+    const selectedAlignment = ['left', 'center', 'right'].includes(
+      String(alignmentMap[alignmentKey] || '').toLowerCase()
+    )
+      ? String(alignmentMap[alignmentKey]).toLowerCase()
+      : 'left';
+
+    rows.push(
+      new ActionRowBuilder().addComponents(
         mediaButton(
           'embed:media-align:left',
           '⬅️ Left',
@@ -265,22 +276,7 @@ function installMediaManagerBase(panel, media) {
     );
 
     /*
-     * ROW 4 — SECONDARY MEDIA
-     */
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        mediaButton(
-          'embed:media-thumbnail',
-          panelMedia.thumbnail?.source
-            ? '🖼️ Thumbnail ✓'
-            : '🖼️ Thumbnail',
-          ButtonStyle.Primary
-        )
-      )
-    );
-
-    /*
-     * ROW 5 — NAVIGATION / HELP
+     * ROW 4 — NAVIGATION / HELP
      */
     rows.push(
       new ActionRowBuilder().addComponents(
