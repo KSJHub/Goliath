@@ -171,12 +171,16 @@ function normalizeThumbnail(value = {}, legacySource = '') {
 function normalizeGalleryItem(value = {}) {
   const source = typeof value === 'string' ? value : value?.source || value?.url || value?.attachment || '';
   const placement = String(value?.placement || '').toLowerCase() === 'above' ? 'above' : 'below';
+  const alignment = ['left', 'center', 'right'].includes(String(value?.alignment || '').toLowerCase())
+    ? String(value.alignment).toLowerCase()
+    : 'left';
   return {
     source: cleanSource(source),
     alt: cleanString(value?.alt || value?.description || '', 1024),
     spoiler: value?.spoiler === true,
     type: ['auto', 'image', 'video'].includes(String(value?.type || '').toLowerCase()) ? String(value.type).toLowerCase() : 'auto',
     placement,
+    alignment,
   };
 }
 function normalizeFile(value = {}) {
