@@ -221,6 +221,7 @@ async function startConfiguredModules(client) {
       return require('./src/modules/roleStudio/reactionRoles/reactionRoles').startup({ guilds: { cache: enabledGuilds } });
     }),
     runStartupTask('Verification', () => require('./src/modules/securityStudio/verification').startupVerification(client)),
+    runStartupTask('Stats', () => require('./src/modules/utilityStudio/stats/stats').startup(client)),
     runStartupTask('Birthdays', async () => {
       const birthdays = require('./src/modules/communityStudio/birthdays/birthdays');
       const runSweep = async () => {
