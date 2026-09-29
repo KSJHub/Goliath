@@ -20,7 +20,7 @@ const CONTROLS_PER_PAGE = 2;
 const ADMIN_FIELD_KEYS = new Set(['logChannel', 'managerRoles', 'reviewerRoles', 'levelRoles']);
 
 const CUSTOM_PANEL_KEYS = new Set([
-  'autoRoles', 'birthdays', 'embed', 'emojis', 'forms', 'giveaways', 'goodbye', 'invites', 'leveling',
+  'autoRoles', 'birthdays', 'embed', 'emojis', 'faq', 'forms', 'giveaways', 'goodbye', 'invites', 'leveling',
   'polls', 'privateRooms', 'reactionRoles', 'schedule', 'social', 'starboard', 'stats', 'sticky',
   'suggestions', 'tempVoice', 'temporaryRoles', 'tickets', 'timedRoles', 'verification', 'welcome',
 ]);
@@ -35,6 +35,7 @@ const MODULE_CATALOG = [
   { key: 'polls', studio: 'communityStudio', route: 'admin:polls', label: '📊 Polls', title: '📊 Polls', summary: 'Poll creation, voting and results.' },
 
   // Feedback Studio
+  { key: 'faq', studio: 'feedbackStudio', route: 'admin:faq', label: '❓ FAQ', title: '❓ FAQ', summary: 'Frequently asked questions, categories and self-service support.' },
   { key: 'forms', studio: 'feedbackStudio', route: 'admin:forms', label: '📝 Forms', title: '📝 Forms', summary: 'Forms, submissions, review and response storage.' },
   { key: 'suggestions', studio: 'feedbackStudio', route: 'admin:suggestions', label: '💡 Suggestions', title: '💡 Suggestions', summary: 'Suggestion intake, voting and review workflow.' },
   { key: 'tickets', studio: 'feedbackStudio', route: 'admin:tickets', label: '🎟️ Tickets', title: '🎟️ Tickets', summary: 'Support tickets and private help channels.' },
@@ -69,7 +70,7 @@ const MODULE_CATALOG = [
 
 const STUDIO_CATALOG = [
   { key: 'communityStudio', label: '🏘️ Community', title: '🏘️ Community Studio', summary: 'Community engagement, growth and participation modules.' },
-  { key: 'feedbackStudio', label: '💬 Feedback', title: '💬 Feedback Studio', summary: 'Forms, suggestions and support workflows.' },
+  { key: 'feedbackStudio', label: '💬 Feedback', title: '💬 Feedback Studio', summary: 'FAQs, forms, suggestions and support workflows.' },
   { key: 'messageStudio', label: '✉️ Messages', title: '✉️ Message Studio', summary: 'Server messages, embeds, highlights and member greetings.' },
   { key: 'roleStudio', label: '🎭 Roles', title: '🎭 Role Studio', summary: 'Automatic, reaction, temporary and timed role management.' },
   { key: 'securityStudio', label: '🛡️ Security', title: '🛡️ Security Studio', summary: 'Verification and member protection controls.' },
