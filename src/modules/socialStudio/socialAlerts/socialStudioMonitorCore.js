@@ -115,7 +115,9 @@ async function checkGuildAccounts(client,guildId,options={}) {
       let activeDeliveryEvent=null;
       if(config.settings.retryDeliveries!==false&&previous.pendingDelivery&&typeof previous.pendingDelivery==='object'){
         const pending=previous.pendingDelivery, retryAt=Date.parse(String(pending.nextAttemptAt||0)), attempts=Number(pending.attempts||0);
-        if(attempts < Number(config.settings.maxDeliveryAttempts||5) && (!Number.isFinite(retryAt)||retryAt<=Date.now())){
+        if(attempts >= Number(config.settings.maxDeliveryAttempts||5)){
+          state.pendingDelivery=null;
+        } else if(!Number.isFinite(retryAt)||retryAt<=Date.now()){
           try{
             activeDeliveryEvent=pending.event&&typeof pending.event==='object'?pending.event:null;
             if(activeDeliveryEvent){
@@ -128,6 +130,7 @@ async function checkGuildAccounts(client,guildId,options={}) {
             const nextAttempts=attempts+1, retryMs=Number(config.settings.retryIntervalMs||60000);
             state.pendingDelivery={...pending,attempts:nextAttempts,lastAttemptAt:now(),nextAttemptAt:new Date(Date.now()+retryMs).toISOString()};
             state.lastDeliveryError=String(error?.message||error).slice(0,500);
+            analyticsDelta.errors=Number(analyticsDelta.errors||0)+1;
           } finally { activeDeliveryEvent=null; }
         }
       }
