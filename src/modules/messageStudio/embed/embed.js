@@ -126,22 +126,40 @@ async function deliveryReply(interaction, content) {
     return await interaction.reply(payload);
   } catch { return true; }
 }
-async function migrateLegacyUpdate(interaction, state) {
+async function updateExistingCanonical(interaction, state) {
   if (!interaction?.guild) return false;
+
   let deploymentKey;
   let deployment;
   try {
     deploymentKey = deployments.getDeploymentKeyFromState(state);
     deployment = deployments.getEmbedDeployment(interaction.guild.id, deploymentKey);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
+
   if (!deployment?.channelId || !deployment?.messageId) return false;
+
   const channel = interaction.guild.channels.cache.get(deployment.channelId) || await interaction.guild.channels.fetch(deployment.channelId).catch(() => null);
-  if (!channel || typeof channel.messages?.fetch !== 'function') return false;
+  if (!channel || typeof channel.messages?.fetch !== 'function') {
+    await deliveryReply(interaction, '⚠️ The original embed channel no longer exists or is not text-based.');
+    return true;
+  }
+
   const message = await channel.messages.fetch(deployment.messageId).catch(() => null);
-  if (!message || message.flags?.has?.(MessageFlags.IsComponentsV2)) return false;
+  if (!message) {
+    await deliveryReply(interaction, '⚠️ The original deployed embed message could not be found. Deploy a new copy before using Update Existing again.');
+    return true;
+  }
 
   const report = typeof panel.getReadinessReport === 'function' ? panel.getReadinessReport(interaction) : { ready: true };
-  if (!report?.ready) return false;
+  if (!report?.ready) {
+    await deliveryReply(interaction, '⚠️ This embed is not ready to deploy. Resolve the readiness warnings before updating the existing message.');
+    return true;
+  }
+
+  const wasLegacy = !message.flags?.has?.(MessageFlags.IsComponentsV2);
+  let discordUpdated = false;
 
   try {
     const payload = await renderer.buildEmbedPayload({
@@ -156,9 +174,11 @@ async function migrateLegacyUpdate(interaction, state) {
     });
     payload.allowedMentions = panel.allowedMentions(state, interaction);
 
-    // Legacy Discord messages may still contain embeds/content. Components V2
-    // cannot coexist with either, so explicitly clear both while migrating.
-    await message.edit({ ...payload, content: null, embeds: [] });
+    // One canonical update path owns both message types. Legacy messages must
+    // explicitly clear content/embeds because Components V2 cannot coexist
+    // with either; existing V2 messages receive the canonical payload as-is.
+    await message.edit(wasLegacy ? { ...payload, content: null, embeds: [] } : payload);
+    discordUpdated = true;
 
     deployments.saveEmbedDeployment(interaction.guild.id, deploymentKey, {
       ...deployment,
@@ -167,10 +187,24 @@ async function migrateLegacyUpdate(interaction, state) {
       lastUpdatedBy: interaction.user?.id || deployment.lastUpdatedBy,
     });
 
-    await deliveryReply(interaction, '✅ Existing embed updated and migrated to Components V2.');
+    const confirmed = deployments.getEmbedDeployment(interaction.guild.id, deploymentKey);
+    if (!confirmed || confirmed.channelId !== channel.id || confirmed.messageId !== message.id) {
+      throw new Error('Deployment persistence could not be confirmed after the Discord message was updated.');
+    }
+
+    await deliveryReply(interaction, wasLegacy
+      ? '✅ Existing embed updated and migrated to Components V2.'
+      : '✅ Existing embed updated.');
     return true;
   } catch (error) {
-    console.error('[Embed] Legacy Components V2 migration failed:', error);
+    console.error('[Embed] Canonical Components V2 update failed:', error);
+    if (discordUpdated) {
+      const confirmedMessage = await channel.messages.fetch(message.id).catch(() => null);
+      await deliveryReply(interaction, confirmedMessage
+        ? '⚠️ The Discord embed was updated, but Goliath could not confirm its deployment record. The deployment requires reconciliation.'
+        : '⚠️ Goliath could not confirm the deployment after updating it. The deployment requires reconciliation.');
+      return true;
+    }
     await deliveryReply(interaction, `❌ Existing embed update failed: ${error?.message || error}`);
     return true;
   }
@@ -193,7 +227,7 @@ async function handleInteraction(interaction) {
       await deliveryReply(interaction, permissionFailure);
       return true;
     }
-    if (customId === 'embed:update-existing' && await migrateLegacyUpdate(interaction, state)) return true;
+    if (customId === 'embed:update-existing' && await updateExistingCanonical(interaction, state)) return true;
     return rawHandleInteraction(interaction);
   })();
   deliveryLocks.set(lockKey, run);
