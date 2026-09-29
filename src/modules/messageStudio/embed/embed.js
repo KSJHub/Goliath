@@ -130,7 +130,7 @@ async function updateExistingCanonical(interaction, state) {
     return true;
   }
 
-  const wasLegacy = !message.flags?.has?.(MessageFlags.IsComponentsV2);
+  const requiresMigration = !message.flags?.has?.(MessageFlags.IsComponentsV2);
   let discordUpdated = false;
 
   try {
@@ -146,10 +146,10 @@ async function updateExistingCanonical(interaction, state) {
     });
     payload.allowedMentions = panel.allowedMentions(state, interaction);
 
-    // One canonical update path owns both message types. Legacy messages must
-    // explicitly clear content/embeds because Components V2 cannot coexist
-    // with either; existing V2 messages receive the canonical payload as-is.
-    await message.edit(wasLegacy ? { ...payload, content: null, embeds: [] } : payload);
+    // One canonical update path owns every deployed message. Older messages
+    // may contain content/embeds that must be cleared before applying the
+    // canonical payload; current messages receive that payload as-is.
+    await message.edit(requiresMigration ? { ...payload, content: null, embeds: [] } : payload);
     discordUpdated = true;
 
     deployments.saveEmbedDeployment(interaction.guild.id, deploymentKey, {
@@ -164,12 +164,12 @@ async function updateExistingCanonical(interaction, state) {
       throw new Error('Deployment persistence could not be confirmed after the Discord message was updated.');
     }
 
-    await deliveryReply(interaction, wasLegacy
-      ? '✅ Existing embed updated and migrated to Components V2.'
+    await deliveryReply(interaction, requiresMigration
+      ? '✅ Existing embed updated to the current message format.'
       : '✅ Existing embed updated.');
     return true;
   } catch (error) {
-    console.error('[Embed] Canonical Components V2 update failed:', error);
+    console.error('[Embed] Canonical message update failed:', error);
     if (discordUpdated) {
       const confirmedMessage = await channel.messages.fetch(message.id).catch(() => null);
       await deliveryReply(interaction, confirmedMessage
