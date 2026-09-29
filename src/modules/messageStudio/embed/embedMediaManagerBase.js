@@ -198,8 +198,27 @@ function installMediaManagerBase(panel, media) {
     );
 
     /*
-     * ROW 3 — PLACEMENT
+     * ROW 3 — PLACEMENT + IMAGE ALIGNMENT
+     *
+     * Discord allows five buttons per action row and this manager already
+     * consumes all five action rows. Keep the three alignment controls in
+     * this existing placement row so they are always rendered whenever a
+     * gallery item exists. The alignment interaction/persistence layer owns
+     * the actual mediaAlignment state.
      */
+    const alignmentMap =
+      state?.mediaAlignment && typeof state.mediaAlignment === 'object'
+        ? state.mediaAlignment
+        : {};
+    const alignmentKey = galleryIndex == null
+      ? null
+      : `${Math.max(0, Number(state.selectedPanelIndex) || 0)}:${galleryIndex}`;
+    const selectedAlignment = ['left', 'center', 'right'].includes(
+      String(alignmentMap[alignmentKey] || '').toLowerCase()
+    )
+      ? String(alignmentMap[alignmentKey]).toLowerCase()
+      : 'left';
+
     rows.push(
       new ActionRowBuilder().addComponents(
         mediaButton(
@@ -215,6 +234,30 @@ function installMediaManagerBase(panel, media) {
           '⬇️ Below Content',
           selectedMedia?.placement === 'below'
             ? ButtonStyle.Success
+            : ButtonStyle.Secondary,
+          galleryIndex == null
+        ),
+        mediaButton(
+          'embed:media-align:left',
+          '⬅️ Left',
+          selectedAlignment === 'left'
+            ? ButtonStyle.Primary
+            : ButtonStyle.Secondary,
+          galleryIndex == null
+        ),
+        mediaButton(
+          'embed:media-align:center',
+          '↔️ Centre',
+          selectedAlignment === 'center'
+            ? ButtonStyle.Primary
+            : ButtonStyle.Secondary,
+          galleryIndex == null
+        ),
+        mediaButton(
+          'embed:media-align:right',
+          '➡️ Right',
+          selectedAlignment === 'right'
+            ? ButtonStyle.Primary
             : ButtonStyle.Secondary,
           galleryIndex == null
         )
