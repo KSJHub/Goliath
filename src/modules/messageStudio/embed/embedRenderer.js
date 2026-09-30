@@ -92,8 +92,20 @@ function panelMedia(mediaState, index) { return Array.isArray(mediaState?.panels
 function itemPlacement(item) { return String(item?.placement || '').toLowerCase() === 'above' ? 'above' : 'below'; }
 function galleryAlignment(item) { const value = String(item?.alignment || 'left').toLowerCase(); return value === 'center' || value === 'right' ? value : 'left'; }
 function applyMediaAlignmentMap(mediaState, alignmentMap = {}) {
-  const media = mediaState && typeof mediaState === 'object' ? JSON.parse(JSON.stringify(mediaState)) : {}; const panels = Array.isArray(media.panels) ? media.panels : [];
-  for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) { const gallery = Array.isArray(panels[panelIndex]?.gallery) ? panels[panelIndex].gallery : []; for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) { const current = String(gallery[itemIndex]?.alignment || '').toLowerCase(); if (VALID_ALIGNMENTS.has(current)) continue; const key = `${panelIndex}:${itemIndex}`; const mapped = String(alignmentMap?.[key] || '').toLowerCase(); gallery[itemIndex].alignment = VALID_ALIGNMENTS.has(mapped) ? mapped : 'left'; } }
+  const media = mediaState && typeof mediaState === 'object' ? JSON.parse(JSON.stringify(mediaState)) : {};
+  const panels = Array.isArray(media.panels) ? media.panels : [];
+  for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) {
+    const gallery = Array.isArray(panels[panelIndex]?.gallery) ? panels[panelIndex].gallery : [];
+    for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
+      const key = `${panelIndex}:${itemIndex}`;
+      const current = String(gallery[itemIndex]?.alignment || '').toLowerCase();
+      const mappedRaw = String(alignmentMap?.[key] || '').toLowerCase();
+      const mapped = mappedRaw === 'centre' ? 'center' : mappedRaw;
+      gallery[itemIndex].alignment = VALID_ALIGNMENTS.has(mapped)
+        ? mapped
+        : (VALID_ALIGNMENTS.has(current) ? current : 'left');
+    }
+  }
   return media;
 }
 async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex, guildId = 'global') {
