@@ -17,7 +17,7 @@ function isPrivateIpv4(hostname) { const p = hostname.split('.').map(Number); if
 function isPrivateIpv6(hostname) { const h=hostname.toLowerCase(); return h==='::1'||h==='::'||h.startsWith('fc')||h.startsWith('fd')||/^fe[89ab]/.test(h); }
 function safeUrl(value) { try { const url=new URL(String(value||'')); const host=url.hostname.toLowerCase(); const version=net.isIP(host); if(url.protocol!=='https:'||!host||host==='localhost'||host.endsWith('.localhost')) return null; if((version===4&&isPrivateIpv4(host))||(version===6&&isPrivateIpv6(host))) return null; return url.toString(); } catch { return null; } }
 async function fetchImage(url) { const target=safeUrl(url); if(!target)return null; const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),FETCH_TIMEOUT_MS); timer.unref?.(); try { const response=await fetch(target,{signal:controller.signal,redirect:'error'}); if(!response.ok)return null; const type=String(response.headers.get('content-type')||'').toLowerCase(); if(type&&!type.startsWith('image/'))return null; const declared=Number(response.headers.get('content-length')||0); if(declared>MAX_SOURCE_BYTES)return null; const buffer=await response.buffer(); return buffer.length<=MAX_SOURCE_BYTES?buffer:null; } finally { clearTimeout(timer); } }
-function alignmentFor(state,panelIndex,itemIndex,item){ const value=String(state?.mediaAlignment?.[key(panelIndex,itemIndex)]||item?.alignment||'left').toLowerCase(); return VALID_ALIGNMENTS.has(value)?value:'left'; }
+function alignmentFor(state,panelIndex,itemIndex,item){ const canonical=String(item?.alignment||'').toLowerCase(); if(VALID_ALIGNMENTS.has(canonical))return canonical; const mapped=String(state?.mediaAlignment?.[key(panelIndex,itemIndex)]||'').toLowerCase(); return VALID_ALIGNMENTS.has(mapped)?mapped:'left'; }
 async function previewAttachment(source,alignment){
   const input=await fetchImage(source); if(!input)return null;
   const trimmed=await sharp(input,{failOn:'warning'}).ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer();
@@ -46,10 +46,22 @@ async function alignContentPreview(panel,interaction,payload,label){
     const host=previews.find((embed,index)=>index>0&&typeof embed?.setImage==='function'&&embed?.toJSON?.()?.image?.url) || previews.find((embed,index)=>index>0&&typeof embed?.setImage==='function');
     if(!host)return payload;
     host.setImage(`attachment://${attachment.name}`); payload.files=[attachment]; payload.attachments=[]; return payload;
-  }catch(error){ console.warn(`[Embed Preview] ${label} alignment preview failed:`,error?.message||error); return payload; }
+  }catch(error){ console.warn(`[Embed Preview] ${label} alignment preview failed:`,error?.message||error); return payload;
+  }
 }
 function installAlignmentPreview(panel,interactions){ if(!panel||!interactions||interactions.__alignmentPreviewInstalled)return interactions; const original=interactions.handleInteraction.bind(interactions); interactions.handleInteraction=async(interaction)=>{ const customId=String(interaction?.customId||'');
-    if(customId.startsWith('embed:media-align:')){ const alignment=customId.split(':').pop(); if(!VALID_ALIGNMENTS.has(alignment))return true; const ctx=await selectedContext(panel,interaction); if(ctx.itemIndex==null||!ctx.item)return original(interaction); const map={...(ctx.state?.mediaAlignment||{})}; map[key(ctx.panelIndex,ctx.itemIndex)]=alignment; panel.saveSession(interaction,{...ctx.state,mediaAlignment:map,hasUnsavedChanges:true}); const fresh=await selectedContext(panel,interaction); await interaction.update(await attachPreview(panel,interaction,panel.buildMediaOptionsPanel(interaction),fresh)); return true; }
+    if(customId.startsWith('embed:media-align:')){
+      const alignment=customId.split(':').pop(); if(!VALID_ALIGNMENTS.has(alignment))return true;
+      const ctx=await selectedContext(panel,interaction); if(ctx.itemIndex==null||!ctx.item)return original(interaction);
+      const gallery=Array.isArray(panel.getPanelMedia(ctx.state,ctx.panelIndex)?.gallery)?panel.getPanelMedia(ctx.state,ctx.panelIndex).gallery:[];
+      const nextGallery=gallery.map((item,index)=>index===ctx.itemIndex?{...item,alignment}:item);
+      const nextPanelMedia={...panel.getPanelMedia(ctx.state,ctx.panelIndex),gallery:nextGallery};
+      const nextState=panel.setPanelMedia(ctx.state,ctx.panelIndex,nextPanelMedia);
+      const map={...(ctx.state?.mediaAlignment||{}),[key(ctx.panelIndex,ctx.itemIndex)]:alignment};
+      panel.saveSession(interaction,{...nextState,mediaAlignment:map,hasUnsavedChanges:true});
+      await interaction.update(await alignedManagerPayload(panel,interaction));
+      return true;
+    }
     if(customId==='embed:media-options-back'||customId==='embed:edit-images'){ await interaction.update(await alignedManagerPayload(panel,interaction)); return true; }
     if(customId==='embed:media-gallery-select'&&interaction.isStringSelectMenu?.()){ const state=panel.getSession(interaction); panel.saveSession(interaction,{...state,selectedMediaIndex:Math.max(0,Number(interaction.values?.[0])||0)}); await interaction.update(await alignedManagerPayload(panel,interaction)); return true; }
     if(customId==='embed:builder'){ await interaction.update(await alignedBuilderPayload(panel,interaction)); return true; }
@@ -58,4 +70,4 @@ function installAlignmentPreview(panel,interactions){ if(!panel||!interactions||
     if(customId==='embed:channel'&&interaction.isChannelSelectMenu?.()){ const state=panel.getSession(interaction); panel.markUnsaved(interaction,{...state,channelId:interaction.values[0]}); await interaction.update(await alignedEditorPayload(panel,interaction)); return true; }
     return original(interaction); };
   interactions.__alignmentPreviewInstalled=true; return interactions; }
-module.exports={installAlignmentPreview};
+module.exports={installAlignmentPreview,alignmentFor};
