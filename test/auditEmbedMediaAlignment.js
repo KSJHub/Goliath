@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const media = require('../src/modules/messageStudio/embed/embedMedia');
 const alignment = require('../src/modules/messageStudio/embed/embedImageAlignment');
+const preview = require('../src/modules/messageStudio/embed/embedAlignmentPreview');
 const renderer = require('../src/modules/messageStudio/embed/embedRenderer');
 
 const left = media.normalizeGalleryItem({ source: 'https://example.com/a.png', alignment: 'left' });
@@ -25,10 +26,14 @@ const canonical = {
   mediaAlignment: { '0:0': 'left', '0:1': 'left' },
 };
 
-// Canonical item alignment must win over stale index-keyed compatibility state.
+// Canonical item alignment must win over stale index-keyed compatibility state in both
+// the final renderer and the live preview path.
 const rendered = renderer.applyMediaAlignmentMap(canonical.media, canonical.mediaAlignment);
 assert.equal(rendered.panels[0].gallery[0].alignment, 'right');
 assert.equal(rendered.panels[0].gallery[1].alignment, 'center');
+assert.equal(preview.alignmentFor(canonical, 0, 0, canonical.media.panels[0].gallery[0]), 'right');
+assert.equal(preview.alignmentFor(canonical, 0, 1, canonical.media.panels[0].gallery[1]), 'center');
+assert.equal(preview.alignmentFor({ mediaAlignment: { '0:0': 'right' } }, 0, 0, {}), 'right');
 
 // Reordering media must carry alignment with the item rather than the old index.
 const reorderedMedia = JSON.parse(JSON.stringify(canonical.media));
@@ -59,4 +64,4 @@ const mapped = alignment.applyAlignmentMap(legacy.media, { '0:0': 'left' });
 assert.equal(mapped.panels[0].gallery[0].alignment, 'left');
 assert.equal(legacy.media.panels[0].gallery[0].alignment, undefined);
 
-console.log('✅ Embed media alignment canonical-state, migration and reorder audit passed.');
+console.log('✅ Embed media alignment canonical-state, preview precedence, migration and reorder audit passed.');
