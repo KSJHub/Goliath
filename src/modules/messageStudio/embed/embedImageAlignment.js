@@ -114,10 +114,20 @@ function installInteraction(panel, interactions) {
     const alignment = customId.split(':').pop(); if (!VALID_ALIGNMENTS.has(alignment)) return true;
     const selected = selectedItem(panel, interaction);
     if (!selected) { await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction))); return true; }
+
+    // The button the user selected is authoritative. Persist it on the media item used by
+    // the renderer and mirror it into the compatibility map in the same state write so
+    // preview, presets, test-send, deploy-new and update-existing cannot disagree.
     const nextGallery = selected.gallery.map((item, index) => index === selected.itemIndex ? { ...item, alignment } : item);
     const nextPanelMedia = { ...selected.panelMedia, gallery: nextGallery };
     const nextState = panel.setPanelMedia(selected.state, selected.panelIndex, nextPanelMedia);
-    const canonical = canonicalizeState({ ...nextState, hasUnsavedChanges: true }, false);
+    const key = alignmentKey(selected.panelIndex, selected.itemIndex);
+    const explicitState = {
+      ...nextState,
+      mediaAlignment: { ...alignmentMap(nextState), [key]: alignment },
+      hasUnsavedChanges: true,
+    };
+    const canonical = canonicalizeState(explicitState, false);
     panel.saveSession(interaction, canonical);
     await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
     return true;
