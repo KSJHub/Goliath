@@ -5,6 +5,7 @@ const security = require('../../core/security/protection/core');
 const studio = require('../../owner/dev/permissionsStudio');
 const editor = require('../../owner/dev/permissionsStudio/editor');
 const bulk = require('../../owner/dev/permissionsStudio/bulk');
+const presets = require('../../owner/dev/permissionsStudio/presets');
 
 const OWNER_SERVER_TOOLS = 'ownerpanel:server-tools';
 const OWNER_PREFIX = 'ownerpanel:';
@@ -21,7 +22,7 @@ function serverToolsPayload(guildId) {
     'Developer-only server tools. Access is restricted to configured Goliath owner IDs.','',
     '**Server Duplicator**','📋 **Copy Structure** — selectively copy server structure, roles and permissions.','🔎 **Analyse Servers** — compare a source and destination before copying.','',
     '**Templates**','📤 **Export Template** — save a server as a reusable Duplicator template.','🏗️ **Build Template** — build from a saved/default template.','',
-    '**Permissions Studio**','🛡️ **Permissions Studio** — audit, copy/paste, compare and undo.','🎚️ **Permission Editor** — Allow / Inherit / Deny editing for one role and channel.','🧰 **Bulk Editor** — apply permission changes across multiple channels/categories and roles.','',
+    '**Permissions Studio**','🛡️ **Permissions Studio** — audit, copy/paste, compare and undo.','🎚️ **Permission Editor** — Allow / Inherit / Deny editing for one role and channel.','🧰 **Bulk Editor** — apply permission changes across multiple channels/categories and roles.','🧩 **Blueprints** — save and reuse channel, category and role-overwrite permission setups.','',
     available?null:'⚠️ **Server context required.** Open `/owner` from a server channel to use these tools.',
   ].filter(Boolean).join('\n')).setFooter({text:'Owner only • Server tooling retains owner and safety checks'});
   const row1=new ActionRowBuilder().addComponents(
@@ -33,7 +34,9 @@ function serverToolsPayload(guildId) {
     new ButtonBuilder().setCustomId(`permstudio:home:guild:${guildId}`).setLabel('Permissions Studio').setEmoji('🛡️').setStyle(ButtonStyle.Primary).setDisabled(!available),
     new ButtonBuilder().setCustomId(`permedit:home:guild:${guildId}`).setLabel('Permission Editor').setEmoji('🎚️').setStyle(ButtonStyle.Primary).setDisabled(!available),
     new ButtonBuilder().setCustomId(`permbulk:home:guild:${guildId}`).setLabel('Bulk Editor').setEmoji('🧰').setStyle(ButtonStyle.Primary).setDisabled(!available));
-  const row3=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(ownerId('home',guildId)).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
+  const row3=new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`permpreset:home:guild:${guildId}`).setLabel('Blueprints').setEmoji('🧩').setStyle(ButtonStyle.Primary).setDisabled(!available),
+    new ButtonBuilder().setCustomId(ownerId('home',guildId)).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
   return {embeds:[embed],components:[row1,row2,row3]};
 }
 
@@ -44,6 +47,7 @@ module.exports={
     if(base(raw)===OWNER_SERVER_TOOLS){const gid=guildIdFrom(raw,interaction);setTimeout(()=>{if(interaction?.message?.edit)interaction.message.edit(serverToolsPayload(gid)).catch(()=>null);else if(interaction?.editReply)interaction.editReply(serverToolsPayload(gid)).catch(()=>null);},150);return;}
     if(raw.startsWith('permedit:')){await editor.handle(interaction);return;}
     if(raw.startsWith('permbulk:')){await bulk.handle(interaction);return;}
+    if(raw.startsWith('permpreset:')){await presets.handle(interaction);return;}
     if(!raw.startsWith('permstudio:'))return;
     const gid=guildIdFrom(raw,interaction);
     if(base(raw)==='permstudio:back-server-tools'){if(interaction.isMessageComponent?.())await interaction.update(serverToolsPayload(gid));return;}
