@@ -17,6 +17,7 @@ require('./embedState');
 const panel = require('./embedPanel');
 const media = require('./embedMedia');
 const renderer = require('./embedRenderer');
+const { installMediaManagerBase } = require('./embedMediaManagerBase');
 const { installGraphicHeaders } = require('./embedGraphicHeaders');
 const { installImageAlignment, installInteraction: installImageAlignmentInteraction, installAlignmentPreview } = require('./embedImageAlignment');
 
@@ -77,7 +78,7 @@ function installMediaRuntime(targetPanel) {
   media.installStorageNormalization(targetPanel);
   installCanonicalMediaSessions(targetPanel);
   media.installUploadModals(targetPanel);
-  media.installMediaManagerBase(targetPanel);
+  installMediaManagerBase(targetPanel, media);
   media.installMediaOptionsUi(targetPanel);
   media.installMediaManagerUi(targetPanel);
   media.installThumbnailUi(targetPanel);
