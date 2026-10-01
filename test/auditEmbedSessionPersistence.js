@@ -13,7 +13,7 @@ try {
   process.chdir(tmp);
   process.env.BOT_MODE = 'dev';
 
-  const store = require('../src/modules/messageStudio/embed/embedSessionStore');
+  const stateStore = require('../src/modules/messageStudio/embed/embedState');
   const key = 'guild-1:user-1';
   const state = {
     panels: [{ title: '', graphicHeaderTitle: 'FAQ', image: 'https://example.test/faq.gif' }],
@@ -22,11 +22,11 @@ try {
     hasUnsavedChanges: true,
   };
 
-  assert.equal(store.save(key, state), true);
-  assert.deepEqual(store.load(key), state);
-  assert.equal(fs.existsSync(store.fileFor(key)), true);
-  assert.equal(store.remove(key), true);
-  assert.equal(store.load(key), null);
+  assert.equal(stateStore.savePersistedSession(key, state), true);
+  assert.deepEqual(stateStore.loadPersistedSession(key), state);
+  assert.equal(fs.existsSync(stateStore.sessionFileFor(key)), true);
+  assert.equal(stateStore.removePersistedSession(key), true);
+  assert.equal(stateStore.loadPersistedSession(key), null);
 
   console.log('✅ Embed Studio session persistence audit passed');
 } finally {
