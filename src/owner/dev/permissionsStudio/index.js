@@ -6,7 +6,7 @@ const panel = require('./panel');
 const sessions = new Map();
 const pending = new Map();
 const CHANNEL_PERMISSION_NAMES = new Set([
-  'ViewChannel','ManageChannels','ManageRoles','CreateInstantInvite','SendMessages','SendTTSMessages','ManageMessages','EmbedLinks','AttachFiles','ReadMessageHistory','MentionEveryone','UseExternalEmojis','AddReactions','UseApplicationCommands','ManageWebhooks','ManageThreads','CreatePublicThreads','CreatePrivateThreads','SendMessagesInThreads','UseExternalStickers','SendVoiceMessages','SendPolls','Connect','Speak','Stream','UseVAD','PrioritySpeaker','MuteMembers','DeafenMembers','MoveMembers','UseEmbeddedActivities','RequestToSpeak','UseSoundboard','UseExternalSounds','SendMessagesInThreads'
+  'ViewChannel','ManageChannels','ManageRoles','CreateInstantInvite','SendMessages','SendTTSMessages','ManageMessages','EmbedLinks','AttachFiles','ReadMessageHistory','MentionEveryone','UseExternalEmojis','AddReactions','UseApplicationCommands','ManageWebhooks','ManageThreads','CreatePublicThreads','CreatePrivateThreads','SendMessagesInThreads','UseExternalStickers','SendVoiceMessages','SendPolls','Connect','Speak','Stream','UseVAD','PrioritySpeaker','MuteMembers','DeafenMembers','MoveMembers','UseEmbeddedActivities','RequestToSpeak','UseSoundboard','UseExternalSounds'
 ]);
 
 function key(interaction, guild) { return `${interaction.user.id}:${guild.id}`; }
@@ -31,7 +31,7 @@ function snapshotChannel(channel) {
 }
 function snapshotChannelRole(channel, role) {
   const o = channel.permissionOverwrites.cache.get(role.id);
-  return { kind: 'channel-role', id: `${channel.id}:${role.id}`, roleId: role.id, label: `${role.name} @ ${channel.name}`, copiedAt: Date.now(), allow: (o?.allow?.bitfield || 0n).toString(), deny: (o?.deny?.bitfield || 0n).toString() };
+  return { kind: 'channel-role', id: `${channel.id}:${role.id}`, roleId: role.id, roleName: role.name, label: `${role.name} @ ${channel.name}`, copiedAt: Date.now(), allow: (o?.allow?.bitfield || 0n).toString(), deny: (o?.deny?.bitfield || 0n).toString() };
 }
 function report(guild) {
   const roles = [...guild.roles.cache.values()]; const channels = [...guild.channels.cache.values()];
@@ -64,10 +64,8 @@ async function applyClipboard(guild, s, target) {
   if (target.kind === 'role') {
     const role = guild.roles.cache.get(target.id); if (!role || role.managed) throw new Error('Target role cannot be edited.');
     const before = role.permissions.bitfield.toString();
-    let next;
-    if (clip.kind === 'role') next = BigInt(clip.permissions);
-    else throw new Error('Only a copied role can be pasted to a server role.');
-    await role.setPermissions(next, 'Goliath Permissions Studio paste');
+    if (clip.kind !== 'role') throw new Error('Only a copied role can be pasted to a server role.');
+    await role.setPermissions(BigInt(clip.permissions), 'Goliath Permissions Studio paste');
     return { label: `@${role.name}: role permissions pasted`, undo: { kind: 'role', id: role.id, permissions: before } };
   }
   const channel = guild.channels.cache.get(target.id); if (!channel) throw new Error('Target channel unavailable.');
@@ -75,13 +73,18 @@ async function applyClipboard(guild, s, target) {
   if (clip.kind === 'channel' || clip.kind === 'category') {
     await channel.permissionOverwrites.set(clip.overwrites.map(o => ({ id: o.id, type: o.type, allow: BigInt(o.allow), deny: BigInt(o.deny) })), 'Goliath Permissions Studio paste');
   } else if (clip.kind === 'channel-role') {
-    await channel.permissionOverwrites.edit(clip.roleId, { allow: BigInt(clip.allow), deny: BigInt(clip.deny) }, { reason: 'Goliath Permissions Studio paste' });
+    const destinationRoleId = target.roleId || clip.roleId;
+    const destinationRole = guild.roles.cache.get(destinationRoleId);
+    if (!destinationRole || destinationRole.managed) throw new Error('Destination role cannot be edited.');
+    await channel.permissionOverwrites.edit(destinationRoleId, { allow: BigInt(clip.allow), deny: BigInt(clip.deny) }, { reason: `Goliath Permissions Studio override paste from ${clip.label}` });
   } else if (clip.kind === 'role') {
-    const role = guild.roles.cache.get(clip.id); if (!role) throw new Error('Copied role is unavailable in this server.');
-    const allow = Object.entries(PermissionFlagsBits).filter(([name, bit]) => CHANNEL_PERMISSION_NAMES.has(name) && role.permissions.has(bit)).reduce((v, [, bit]) => v | bit, 0n);
-    await channel.permissionOverwrites.edit(role.id, { allow, deny: 0n }, { reason: 'Goliath Permissions Studio role-to-channel paste' });
+    const sourceRole = guild.roles.cache.get(clip.id); if (!sourceRole) throw new Error('Copied role is unavailable in this server.');
+    const destinationRoleId = target.roleId || sourceRole.id;
+    const destinationRole = guild.roles.cache.get(destinationRoleId); if (!destinationRole || destinationRole.managed) throw new Error('Destination role cannot be edited.');
+    const allow = Object.entries(PermissionFlagsBits).filter(([name, bit]) => CHANNEL_PERMISSION_NAMES.has(name) && sourceRole.permissions.has(bit)).reduce((v, [, bit]) => v | bit, 0n);
+    await channel.permissionOverwrites.edit(destinationRoleId, { allow, deny: 0n }, { reason: `Goliath Permissions Studio role-to-channel paste from @${sourceRole.name}` });
   }
-  return { label: `${channel.name}: permissions pasted from ${clip.label}`, undo: { kind: 'channel', id: channel.id, overwrites: before.overwrites } };
+  return { label: `${channel.name}: permissions pasted from ${clip.label}${target.roleId ? ` → @${guild.roles.cache.get(target.roleId)?.name || target.roleId}` : ''}`, undo: { kind: 'channel', id: channel.id, overwrites: before.overwrites } };
 }
 async function undo(guild, s) {
   const item = s.history.pop(); if (!item?.undo) return false;
@@ -110,15 +113,15 @@ async function handle(interaction) {
   if (action.startsWith('copy-channel-role-')) { const [channelId, roleId] = action.slice(18).split('-'); const c = guild.channels.cache.get(channelId), r = guild.roles.cache.get(roleId); s.clipboard = snapshotChannelRole(c, r); await interaction.update(panel.channelRole(guild, c, r)); return true; }
   if (action.startsWith('copy-channel-')) { const c = guild.channels.cache.get(action.slice(13)); s.clipboard = snapshotChannel(c); await interaction.update(panel.channel(guild, c, s)); return true; }
   if (action.startsWith('paste-role-')) { const id = action.slice(11), r = guild.roles.cache.get(id), t = token(); pending.set(`${key(interaction,guild)}:${t}`, { kind:'role', id }); await interaction.update(panel.pastePreview(guild, s.clipboard, `@${r.name}`, t, 'Guild-level role permissions will be replaced by the copied role permissions.')); return true; }
-  if (action.startsWith('paste-channel-role-')) { const [channelId, roleId] = action.slice(19).split('-'); const c = guild.channels.cache.get(channelId); const t=token(); pending.set(`${key(interaction,guild)}:${t}`, { kind:'channel', id:channelId }); await interaction.update(panel.pastePreview(guild, s.clipboard, `${guild.roles.cache.get(roleId)?.name} @ ${c.name}`, t, 'The copied permissions will be applied to this channel.')); return true; }
-  if (action.startsWith('paste-channel-')) { const id=action.slice(14), c=guild.channels.cache.get(id), t=token(); pending.set(`${key(interaction,guild)}:${t}`, {kind:'channel',id}); await interaction.update(panel.pastePreview(guild,s.clipboard,c.name,t,'Channel/category overwrites will be applied. Role→channel paste creates an overwrite for that role.')); return true; }
+  if (action.startsWith('paste-channel-role-')) { const [channelId, roleId] = action.slice(19).split('-'); const c = guild.channels.cache.get(channelId), r = guild.roles.cache.get(roleId); const t=token(); pending.set(`${key(interaction,guild)}:${t}`, { kind:'channel', id:channelId, roleId }); const summary=s.clipboard?.kind==='channel-role'?`Only **@${r?.name || roleId}** on **${c?.name}** will receive the copied Allow / Deny / Inherit override. Other channel overwrites stay untouched.`:s.clipboard?.kind==='role'?`The copied guild permissions will be converted to channel permissions for **@${r?.name || roleId}** on **${c?.name}**. Other overwrites stay untouched.`:'This clipboard contains a full channel/category overwrite set. Use the channel-level Paste button to replace the full destination overwrite map.'; await interaction.update(panel.pastePreview(guild, s.clipboard, `${r?.name || roleId} @ ${c?.name || channelId}`, t, summary)); return true; }
+  if (action.startsWith('paste-channel-')) { const id=action.slice(14), c=guild.channels.cache.get(id), t=token(); pending.set(`${key(interaction,guild)}:${t}`, {kind:'channel',id}); const summary=s.clipboard?.kind==='channel-role'?`The copied **${s.clipboard.roleName || 'role'}** override will be applied to the same role on **${c.name}**. Open a role on the destination channel first if you want to remap it to a different role.`:s.clipboard?.kind==='role'?`A channel overwrite will be created for **${s.clipboard.label}** using its channel-relevant guild permissions.`:`The full ${s.clipboard?.kind || 'channel'} overwrite map will replace the overwrite map on **${c.name}**.`; await interaction.update(panel.pastePreview(guild,s.clipboard,c.name,t,summary)); return true; }
   if (action.startsWith('confirm-')) { const t=action.slice(8), pk=`${key(interaction,guild)}:${t}`, target=pending.get(pk); if(!target) throw new Error('Paste preview expired.'); pending.delete(pk); await interaction.deferUpdate(); const h=await applyClipboard(guild,s,target); rememberHistory(s,h); await interaction.editReply(panel.clipboard(guild,s)); return true; }
   if (action.startsWith('sync-channel-')) { const c=guild.channels.cache.get(action.slice(13)); if(c?.parent) { const before=snapshotChannel(c); await c.lockPermissions(); rememberHistory(s,{label:`${c.name}: synced with ${c.parent.name}`,undo:{kind:'channel',id:c.id,overwrites:before.overwrites}}); } await interaction.update(panel.channel(guild,c,s)); return true; }
   if (action.startsWith('compare-role-')) { await interaction.update(panel.comparePicker(guild,'role',action.slice(13))); return true; }
   if (action.startsWith('compare-channel-')) { await interaction.update(panel.comparePicker(guild,'channel',action.slice(16))); return true; }
   if (action.startsWith('compare-target-role-')) { const a=guild.roles.cache.get(action.slice(20)), b=guild.roles.cache.get(interaction.values[0]); await interaction.update(panel.diff(guild,`${a.name} ↔ ${b.name}`,roleDiff(a,b))); return true; }
   if (action.startsWith('compare-target-channel-')) { const a=guild.channels.cache.get(action.slice(23)), b=guild.channels.cache.get(interaction.values[0]); await interaction.update(panel.diff(guild,`${a.name} ↔ ${b.name}`,channelDiff(guild,a,b))); return true; }
-  if (action === 'search') { await interaction.update(panel.diff(guild,'Permission Search',['Use the Role and Channels workspaces to inspect effective permissions. Advanced cross-server search and saved blueprints are reserved for the next Permissions Studio expansion.'])); return true; }
+  if (action === 'search') { await interaction.update(panel.diff(guild,'Permission Search',['Use the Role and Channels workspaces to inspect effective permissions. Advanced cross-server search and saved blueprints are available from the Permissions Studio tools.'])); return true; }
   return false;
 }
 
