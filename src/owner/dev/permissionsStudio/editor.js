@@ -1,92 +1,12 @@
 'use strict';
 
-const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder,
-  ChannelType, EmbedBuilder, PermissionFlagsBits, RoleSelectMenuBuilder,
-  StringSelectMenuBuilder,
-} = require('discord.js');
-
-const PREFIX = 'permedit:';
-const sessions = new Map();
-const PERMISSIONS = [
-  ['ViewChannel','View Channel'],['SendMessages','Send Messages'],['ReadMessageHistory','Read Message History'],
-  ['AddReactions','Add Reactions'],['EmbedLinks','Embed Links'],['AttachFiles','Attach Files'],
-  ['MentionEveryone','Mention @everyone / @here'],['ManageMessages','Manage Messages'],['ManageChannels','Manage Channel'],
-  ['ManageRoles','Manage Permissions'],['CreateInstantInvite','Create Invite'],['ManageWebhooks','Manage Webhooks'],
-  ['ManageThreads','Manage Threads'],['CreatePublicThreads','Create Public Threads'],['CreatePrivateThreads','Create Private Threads'],
-  ['SendMessagesInThreads','Send Messages in Threads'],['Connect','Connect'],['Speak','Speak'],['Stream','Video / Stream'],
-  ['UseVAD','Use Voice Activity'],['PrioritySpeaker','Priority Speaker'],['MuteMembers','Mute Members'],
-  ['DeafenMembers','Deafen Members'],['MoveMembers','Move Members'],['UseEmbeddedActivities','Use Activities'],
-];
-
-const cid = (action, guildId) => `${PREFIX}${action}:guild:${guildId}`;
-function actionId(id) { return String(id || '').replace(/^permedit:/,'').replace(/:guild:\d{16,25}$/,''); }
-function guildId(id, interaction) { return String(id || '').match(/:guild:(\d{16,25})$/)?.[1] || interaction.guildId; }
-function sk(interaction, guild) { return `${interaction.user.id}:${guild.id}`; }
-function state(interaction, guild) {
-  const k=sk(interaction,guild); if(!sessions.has(k)) sessions.set(k,{ channelId:null, roleId:null, draft:new Map(), dirty:false }); return sessions.get(k);
-}
-function btn(id,label,emoji,style=ButtonStyle.Secondary,disabled=false){return new ButtonBuilder().setCustomId(id).setLabel(label).setEmoji(emoji).setStyle(style).setDisabled(disabled);}
-function selected(guild,s){return {channel:guild.channels.cache.get(s.channelId),role:guild.roles.cache.get(s.roleId)};}
-function overwriteState(channel,role,name){
-  const o=channel?.permissionOverwrites?.cache?.get(role?.id); const bit=PermissionFlagsBits[name];
-  if(!bit) return 'inherit'; if(o?.allow?.has(bit)) return 'allow'; if(o?.deny?.has(bit)) return 'deny'; return 'inherit';
-}
-function effective(channel,role,name){const bit=PermissionFlagsBits[name];return Boolean(bit&&channel?.permissionsFor(role)?.has(bit));}
-function currentState(channel,role,s,name){return s.draft.has(name)?s.draft.get(name):overwriteState(channel,role,name);}
-function home(guild,s){
-  const {channel,role}=selected(guild,s);
-  const embed=new EmbedBuilder().setColor(0x5865F2).setTitle('🎚️ Permission Editor').setDescription([
-    'Discord-style **Allow / Inherit / Deny** editing for one role on one category or channel.', '',
-    `**Target:** ${channel ? `${channel.type===ChannelType.GuildCategory?'📁':'#️⃣'} ${channel.name}` : 'Not selected'}`,
-    `**Role:** ${role ? `@${role.name}` : 'Not selected'}`,
-    s.dirty?'\n🟡 **Unsaved permission changes are staged.**':'\nNo staged changes.',
-  ].join('\n')).setFooter({text:'Changes are previewed before Discord is modified.'});
-  const channelPicker=new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId(cid('channel',guild.id)).setPlaceholder(channel?`Target: ${channel.name}`:'Select category/channel…').setMinValues(1).setMaxValues(1).addChannelTypes(ChannelType.GuildCategory,ChannelType.GuildText,ChannelType.GuildAnnouncement,ChannelType.GuildVoice,ChannelType.GuildStageVoice,ChannelType.GuildForum,ChannelType.GuildMedia));
-  const rolePicker=new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId(cid('role',guild.id)).setPlaceholder(role?`Role: ${role.name}`:'Select role…').setMinValues(1).setMaxValues(1));
-  const actions=new ActionRowBuilder().addComponents(btn(cid('open',guild.id),'Edit Permissions','🎚️',ButtonStyle.Primary,!channel||!role),btn(cid('discard',guild.id),'Discard Draft','🗑️',ButtonStyle.Secondary,!s.dirty),btn(`permstudio:home:guild:${guild.id}`,'Back to Studio','⬅️'));
-  return {embeds:[embed],components:[channelPicker,rolePicker,actions]};
-}
-function editor(guild,s,page=0){
-  const {channel,role}=selected(guild,s); const start=page*10; const items=PERMISSIONS.slice(start,start+10);
-  const embed=new EmbedBuilder().setColor(0x5865F2).setTitle(`🎚️ ${role.name} → ${channel.name}`).setDescription(items.map(([name,label])=>{
-    const st=currentState(channel,role,s,name); const icon=st==='allow'?'✅':st==='deny'?'❌':'➖'; const eff=effective(channel,role,name)?'✅ effective':'❌ effective'; return `${icon} **${label}** — ${st.toUpperCase()} • ${eff}`;
-  }).join('\n')).addFields({name:'How it works',value:'✅ **Allow** explicitly grants • ➖ **Inherit** removes the explicit overwrite • ❌ **Deny** explicitly blocks.'});
-  const menu=new StringSelectMenuBuilder().setCustomId(cid(`permission-${page}`,guild.id)).setPlaceholder('Choose a permission to change…').setMinValues(1).setMaxValues(1).addOptions(items.map(([value,label])=>({label,value,description:`Current: ${currentState(channel,role,s,value).toUpperCase()}`})));
-  const nav=new ActionRowBuilder().addComponents(btn(cid(`page-${Math.max(0,page-1)}`,guild.id),'Previous','⬅️',ButtonStyle.Secondary,page===0),btn(cid(`page-${Math.min(2,page+1)}`,guild.id),'Next','➡️',ButtonStyle.Secondary,start+10>=PERMISSIONS.length),btn(cid('preview',guild.id),'Preview Changes','🔎',ButtonStyle.Primary,!s.dirty),btn(cid('home',guild.id),'Targets','🎯'));
-  return {embeds:[embed],components:[new ActionRowBuilder().addComponents(menu),nav]};
-}
-function chooseState(guild,s,name,page){
-  const {channel,role}=selected(guild,s); const label=PERMISSIONS.find(([n])=>n===name)?.[1]||name; const now=currentState(channel,role,s,name);
-  const embed=new EmbedBuilder().setColor(0x5865F2).setTitle(`🎚️ ${label}`).setDescription(`**${role.name}** → **${channel.name}**\n\nCurrent explicit state: **${now.toUpperCase()}**\nEffective permission: **${effective(channel,role,name)?'ALLOWED':'DENIED'}**\n\nChoose the explicit overwrite state.`);
-  const row=new ActionRowBuilder().addComponents(btn(cid(`set-${name}-allow-${page}`,guild.id),'Allow','✅',ButtonStyle.Success),btn(cid(`set-${name}-inherit-${page}`,guild.id),'Inherit','➖',ButtonStyle.Secondary),btn(cid(`set-${name}-deny-${page}`,guild.id),'Deny','❌',ButtonStyle.Danger),btn(cid(`page-${page}`,guild.id),'Cancel','⬅️'));
-  return {embeds:[embed],components:[row]};
-}
-function preview(guild,s){
-  const {channel,role}=selected(guild,s); const changes=[...s.draft.entries()].filter(([name,value])=>value!==overwriteState(channel,role,name));
-  const embed=new EmbedBuilder().setColor(0xFEE75C).setTitle('🔎 Permission Change Preview').setDescription(changes.length?changes.map(([name,value])=>{const label=PERMISSIONS.find(([n])=>n===name)?.[1]||name;return `• **${label}:** ${overwriteState(channel,role,name).toUpperCase()} → **${value.toUpperCase()}**`;}).join('\n'):'No effective changes are staged.').addFields({name:'Target',value:`${role.name} → ${channel.name}`}).setFooter({text:'Discord has not been modified yet.'});
-  const row=new ActionRowBuilder().addComponents(btn(cid('apply',guild.id),'Apply Changes','✅',ButtonStyle.Success,!changes.length),btn(cid('open',guild.id),'Back to Editor','⬅️'),btn(cid('discard',guild.id),'Discard','🗑️',ButtonStyle.Danger));
-  return {embeds:[embed],components:[row]};
-}
-async function apply(guild,s){
-  const {channel,role}=selected(guild,s); if(!channel||!role) throw new Error('Permission target is no longer available.');
-  const o=channel.permissionOverwrites.cache.get(role.id); let allow=o?.allow?.bitfield||0n, deny=o?.deny?.bitfield||0n;
-  for(const [name,value] of s.draft.entries()) { const bit=PermissionFlagsBits[name]; if(!bit) continue; allow&=~bit; deny&=~bit; if(value==='allow')allow|=bit; if(value==='deny')deny|=bit; }
-  await channel.permissionOverwrites.edit(role.id,{allow,deny},{reason:'Goliath Permissions Studio tri-state editor'});
-  s.draft.clear(); s.dirty=false;
-}
-async function handle(interaction){
-  const raw=String(interaction.customId||''); if(!raw.startsWith(PREFIX))return false; const gid=guildId(raw,interaction); const guild=interaction.client.guilds.cache.get(gid)||await interaction.client.guilds.fetch(gid).catch(()=>null); if(!guild)return false; const s=state(interaction,guild); const action=actionId(raw);
-  if(action==='home'){await interaction.update(home(guild,s));return true;}
-  if(action==='channel'){s.channelId=interaction.values[0];s.draft.clear();s.dirty=false;await interaction.update(home(guild,s));return true;}
-  if(action==='role'){s.roleId=interaction.values[0];s.draft.clear();s.dirty=false;await interaction.update(home(guild,s));return true;}
-  if(action==='open'){await interaction.update(editor(guild,s,0));return true;}
-  if(action.startsWith('page-')){await interaction.update(editor(guild,s,Number(action.slice(5))||0));return true;}
-  if(action.startsWith('permission-')){const page=Number(action.slice(11))||0;await interaction.update(chooseState(guild,s,interaction.values[0],page));return true;}
-  if(action.startsWith('set-')){const m=action.match(/^set-(.+)-(allow|inherit|deny)-(\d+)$/);if(m){s.draft.set(m[1],m[2]);s.dirty=true;await interaction.update(editor(guild,s,Number(m[3])));return true;}}
-  if(action==='preview'){await interaction.update(preview(guild,s));return true;}
-  if(action==='discard'){s.draft.clear();s.dirty=false;await interaction.update(home(guild,s));return true;}
-  if(action==='apply'){await interaction.deferUpdate();await apply(guild,s);await interaction.editReply(home(guild,s));return true;}
-  return false;
-}
+const {ActionRowBuilder,ButtonBuilder,ButtonStyle,ChannelSelectMenuBuilder,ChannelType,EmbedBuilder,PermissionFlagsBits,RoleSelectMenuBuilder,StringSelectMenuBuilder}=require('discord.js');
+const PREFIX='permedit:';const sessions=new Map();const PERMISSIONS=[['ViewChannel','View Channel'],['SendMessages','Send Messages'],['ReadMessageHistory','Read Message History'],['AddReactions','Add Reactions'],['EmbedLinks','Embed Links'],['AttachFiles','Attach Files'],['MentionEveryone','Mention @everyone / @here'],['ManageMessages','Manage Messages'],['ManageChannels','Manage Channel'],['ManageRoles','Manage Permissions'],['CreateInstantInvite','Create Invite'],['ManageWebhooks','Manage Webhooks'],['ManageThreads','Manage Threads'],['CreatePublicThreads','Create Public Threads'],['CreatePrivateThreads','Create Private Threads'],['SendMessagesInThreads','Send Messages in Threads'],['Connect','Connect'],['Speak','Speak'],['Stream','Video / Stream'],['UseVAD','Use Voice Activity'],['PrioritySpeaker','Priority Speaker'],['MuteMembers','Mute Members'],['DeafenMembers','Deafen Members'],['MoveMembers','Move Members'],['UseEmbeddedActivities','Use Activities']];
+const cid=(a,g)=>`${PREFIX}${a}:guild:${g}`;function actionId(id){return String(id||'').replace(/^permedit:/,'').replace(/:guild:\d{16,25}$/,'');}function guildId(id,i){return String(id||'').match(/:guild:(\d{16,25})$/)?.[1]||i.guildId;}function sk(i,g){return`${i.user.id}:${g.id}`;}function state(i,g){const k=sk(i,g);if(!sessions.has(k))sessions.set(k,{channelId:null,roleId:null,draft:new Map(),dirty:false});return sessions.get(k);}function btn(id,l,e,st=ButtonStyle.Secondary,d=false){return new ButtonBuilder().setCustomId(id).setLabel(l).setEmoji(e).setStyle(st).setDisabled(d);}function selected(g,s){return{channel:g.channels.cache.get(s.channelId),role:g.roles.cache.get(s.roleId)};}function overwriteState(c,r,n){const o=c?.permissionOverwrites?.cache?.get(r?.id),bit=PermissionFlagsBits[n];if(!bit)return'inherit';if(o?.allow?.has(bit))return'allow';if(o?.deny?.has(bit))return'deny';return'inherit';}function effective(c,r,n){const bit=PermissionFlagsBits[n];return Boolean(bit&&c?.permissionsFor(r)?.has(bit));}function currentState(c,r,s,n){return s.draft.has(n)?s.draft.get(n):overwriteState(c,r,n);}
+function home(g,s){const{channel,role}=selected(g,s),embed=new EmbedBuilder().setColor(0x5865F2).setTitle('🎚️ Permission Editor').setDescription(['Discord-style **Allow / Inherit / Deny** editing for one role on one category or channel.','',`**Target:** ${channel?`${channel.type===ChannelType.GuildCategory?'📁':'#️⃣'} ${channel.name}`:'Not selected'}`,`**Role:** ${role?`@${role.name}`:'Not selected'}`,s.dirty?'\n🟡 **Unsaved permission changes are staged.**':'\nNo staged changes.'].join('\n')).setFooter({text:'Changes are previewed before Discord is modified.'}),cp=new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId(cid('channel',g.id)).setPlaceholder(channel?`Target: ${channel.name}`:'Select category/channel…').setMinValues(1).setMaxValues(1).addChannelTypes(ChannelType.GuildCategory,ChannelType.GuildText,ChannelType.GuildAnnouncement,ChannelType.GuildVoice,ChannelType.GuildStageVoice,ChannelType.GuildForum,ChannelType.GuildMedia)),rp=new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId(cid('role',g.id)).setPlaceholder(role?`Role: ${role.name}`:'Select role…').setMinValues(1).setMaxValues(1)),actions=new ActionRowBuilder().addComponents(btn(cid('open',g.id),'Edit Permissions','🎚️',ButtonStyle.Primary,!channel||!role),btn(cid('discard',g.id),'Discard Draft','🗑️',ButtonStyle.Secondary,!s.dirty),btn(`permstudio:home:guild:${g.id}`,'Back to Studio','⬅️'));return{embeds:[embed],components:[cp,rp,actions]};}
+function editor(g,s,page=0){const{channel,role}=selected(g,s),start=page*10,items=PERMISSIONS.slice(start,start+10),embed=new EmbedBuilder().setColor(0x5865F2).setTitle(`🎚️ ${role.name} → ${channel.name}`).setDescription(items.map(([n,l])=>{const st=currentState(channel,role,s,n);return`${st==='allow'?'✅':st==='deny'?'❌':'➖'} **${l}** — ${st.toUpperCase()} • ${effective(channel,role,n)?'✅ effective':'❌ effective'}`;}).join('\n')).addFields({name:'How it works',value:'✅ **Allow** explicitly grants • ➖ **Inherit** removes the explicit overwrite • ❌ **Deny** explicitly blocks.'}),menu=new StringSelectMenuBuilder().setCustomId(cid(`permission-${page}`,g.id)).setPlaceholder('Choose a permission to change…').setMinValues(1).setMaxValues(1).addOptions(items.map(([value,label])=>({label,value,description:`Current: ${currentState(channel,role,s,value).toUpperCase()}`}))),nav=new ActionRowBuilder().addComponents(btn(cid(`page-${Math.max(0,page-1)}`,g.id),'Previous','⬅️',ButtonStyle.Secondary,page===0),btn(cid(`page-${Math.min(2,page+1)}`,g.id),'Next','➡️',ButtonStyle.Secondary,start+10>=PERMISSIONS.length),btn(cid('preview',g.id),'Preview Changes','🔎',ButtonStyle.Primary,!s.dirty),btn(cid('home',g.id),'Targets','🎯'));return{embeds:[embed],components:[new ActionRowBuilder().addComponents(menu),nav]};}
+function chooseState(g,s,n,page){const{channel,role}=selected(g,s),label=PERMISSIONS.find(([x])=>x===n)?.[1]||n,now=currentState(channel,role,s,n),embed=new EmbedBuilder().setColor(0x5865F2).setTitle(`🎚️ ${label}`).setDescription(`**${role.name}** → **${channel.name}**\n\nCurrent explicit state: **${now.toUpperCase()}**\nEffective permission: **${effective(channel,role,n)?'ALLOWED':'DENIED'}**\n\nChoose the explicit overwrite state.`),row=new ActionRowBuilder().addComponents(btn(cid(`set-${n}-allow-${page}`,g.id),'Allow','✅',ButtonStyle.Success),btn(cid(`set-${n}-inherit-${page}`,g.id),'Inherit','➖'),btn(cid(`set-${n}-deny-${page}`,g.id),'Deny','❌',ButtonStyle.Danger),btn(cid(`page-${page}`,g.id),'Cancel','⬅️'));return{embeds:[embed],components:[row]};}
+function preview(g,s){const{channel,role}=selected(g,s),changes=[...s.draft.entries()].filter(([n,v])=>v!==overwriteState(channel,role,n)),embed=new EmbedBuilder().setColor(0xFEE75C).setTitle('🔎 Permission Change Preview').setDescription(changes.length?changes.map(([n,v])=>`• **${PERMISSIONS.find(([x])=>x===n)?.[1]||n}:** ${overwriteState(channel,role,n).toUpperCase()} → **${v.toUpperCase()}**`).join('\n'):'No effective changes are staged.').addFields({name:'Target',value:`${role.name} → ${channel.name}`}).setFooter({text:'Discord has not been modified yet.'});return{embeds:[embed],components:[new ActionRowBuilder().addComponents(btn(cid('apply',g.id),'Apply Changes','✅',ButtonStyle.Success,!changes.length),btn(cid('open',g.id),'Back to Editor','⬅️'),btn(cid('discard',g.id),'Discard','🗑️',ButtonStyle.Danger))]};}
+async function apply(g,s){const{channel,role}=selected(g,s);if(!channel||!role)throw new Error('Permission target is no longer available.');const o=channel.permissionOverwrites.cache.get(role.id);let allow=o?.allow?.bitfield||0n,deny=o?.deny?.bitfield||0n;for(const[n,v]of s.draft.entries()){const bit=PermissionFlagsBits[n];if(!bit)continue;allow&=~bit;deny&=~bit;if(v==='allow')allow|=bit;if(v==='deny')deny|=bit;}await channel.permissionOverwrites.edit(role.id,{allow,deny},{reason:'Goliath Permissions Studio tri-state editor'});s.draft.clear();s.dirty=false;}
+async function handle(i){const raw=String(i.customId||'');if(!raw.startsWith(PREFIX))return false;const gid=guildId(raw,i),g=i.client.guilds.cache.get(gid)||await i.client.guilds.fetch(gid).catch(()=>null);if(!g)return false,s=state(i,g);const s=state(i,g),a=actionId(raw);let m;if((m=a.match(/^target-channel-(\d{16,25})$/))){s.channelId=m[1];s.draft.clear();s.dirty=false;await i.update(home(g,s));return true;}if((m=a.match(/^target-role-(\d{16,25})$/))){s.roleId=m[1];s.draft.clear();s.dirty=false;await i.update(home(g,s));return true;}if((m=a.match(/^target-both-(\d{16,25})-(\d{16,25})$/))){s.channelId=m[1];s.roleId=m[2];s.draft.clear();s.dirty=false;await i.update(editor(g,s,0));return true;}if(a==='home'){await i.update(home(g,s));return true;}if(a==='channel'){s.channelId=i.values[0];s.draft.clear();s.dirty=false;await i.update(home(g,s));return true;}if(a==='role'){s.roleId=i.values[0];s.draft.clear();s.dirty=false;await i.update(home(g,s));return true;}if(a==='open'){await i.update(editor(g,s,0));return true;}if(a.startsWith('page-')){await i.update(editor(g,s,Number(a.slice(5))||0));return true;}if(a.startsWith('permission-')){await i.update(chooseState(g,s,i.values[0],Number(a.slice(11))||0));return true;}if(a.startsWith('set-')){m=a.match(/^set-(.+)-(allow|inherit|deny)-(\d+)$/);if(m){s.draft.set(m[1],m[2]);s.dirty=true;await i.update(editor(g,s,Number(m[3])));return true;}}if(a==='preview'){await i.update(preview(g,s));return true;}if(a==='discard'){s.draft.clear();s.dirty=false;await i.update(home(g,s));return true;}if(a==='apply'){await i.deferUpdate();await apply(g,s);await i.editReply(home(g,s));return true;}return false;}
 module.exports={PREFIX,handle,home};
