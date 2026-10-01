@@ -17,6 +17,7 @@ const {
 } = require('discord.js');
 
 const guildManager = require('../../core/guild/guildManager');
+const guildVariables = require('../../core/guild/guildVariables');
 const verificationManager = require('./verificationManager');
 const verificationStore = require('./verificationStore');
 const emojiPayload = require('../utilityStudio/emojis/emojiPayload');
@@ -487,9 +488,7 @@ function buildMessagesPage(guild, memberDisplayName) {
 }
 
 function variableGroups() {
-  const helpers = Array.isArray(verificationManager.DEFAULT_HELPERS)
-    ? verificationManager.DEFAULT_HELPERS
-    : [];
+  const helpers = guildVariables.getVariables();
   const groups = {
     Member: [],
     Server: [],

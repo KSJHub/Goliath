@@ -38,6 +38,7 @@ jobs:
             PM2_NAME=goliath-dev
             DEV_HOST=dev.goliath.ksjdigital.co.uk
             BACKUP_DIR=/home/goliath/.goliath-dev-runtime-sync-backup
+            DIRTY_BACKUP_ROOT=/home/goliath/.goliath-dev-dirty-backups
             cd "$APP_DIR"
 
             AUTH_URL="https://x-access-token:${GITHUB_DEPLOY_TOKEN}@github.com/${{ github.repository }}.git"
@@ -49,10 +50,19 @@ jobs:
             LATEST_SHA="$(git rev-parse origin/dev)"
             [ "$EXPECTED_SHA" = "$LATEST_SHA" ] || { echo "Superseded before sync; exiting cleanly."; exit 0; }
 
-            if [ -n "$(git status --porcelain -- . ':!src/runtime/')" ]; then
-              echo "DEV VPS has changes outside src/runtime; refusing overwrite." >&2
-              git status --short -- . ':!src/runtime/' >&2
-              exit 1
+            # DEV SAFETY CONTRACT:
+            # Never reset, clean, stash, overwrite, or otherwise modify a dirty
+            # DEV worktree. A push may arrive while local development is active.
+            # In that case deployment must stop and leave every local change intact.
+            DIRTY_STATUS="$(git status --porcelain -- . ':!src/runtime/')"
+            if [ -n "$DIRTY_STATUS" ]; then
+              echo "❌ DEV sync refused: /home/goliath/dev contains local changes."
+              echo "The DEV worktree has been left completely untouched."
+              echo
+              printf '%s\n' "$DIRTY_STATUS"
+              echo
+              echo "DEV sync deferred safely. Commit or otherwise resolve the local DEV changes, then sync again."
+              exit 0
             fi
 
             rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
@@ -106,7 +116,7 @@ jobs:
             rm -rf dist
             npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
             mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
-            grep -q 'GOLIATH_APPEALS_ENTRY_V2' dist/assets/*.js
+            grep -q 'GOLIATH_APPEALS_ENTRY' dist/assets/*.js
 
             git fetch --no-tags origin dev
             [ "$EXPECTED_SHA" = "$(git rev-parse origin/dev)" ] || { echo "Superseded during validation; exiting cleanly."; exit 0; }
@@ -180,9 +190,6 @@ jobs:
             case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
             case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
 
-            # Do not grep the persistent PM2 error log for historical failures here.
-            # npm dependency/native-binding checks above validate the freshly installed tree,
-            # while the same-PID stability gate and HTTP checks validate this exact process.
             echo "✅ DEV stable: sha=$FINAL_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
             restore_runtime
             rm -rf "$BACKUP_DIR"

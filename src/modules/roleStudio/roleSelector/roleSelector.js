@@ -2,6 +2,7 @@
 
 const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
+const { replaceVariables } = require('../../../core/guild/guildVariables');
 const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const { withManagedRoleLock, withMemberGroupLock } = require('./roleSelectorLocks');
 
@@ -180,13 +181,13 @@ function removeGroup(guildId, groupId, meta = {}) {
 
 function roleNameFor(section, label, group = null) {
   const style = section.style || defaultSection().style;
-  return String(style.format || '{role}')
-    .replaceAll('{icon}', style.icon || '')
-    .replaceAll('{separator}', style.separator || '|')
-    .replaceAll('{role}', String(label || 'Role'))
-    .replaceAll('{colour}', String(label || 'Role'))
-    .replaceAll('{group}', String(group?.name || ''))
-    .replace(/\s{2,}/g, ' ').trim().slice(0, 100);
+  return replaceVariables(String(style.format || '{role}'), {
+    icon: style.icon || '',
+    separator: style.separator || '|',
+    role: String(label || 'Role'),
+    colour: String(label || 'Role'),
+    group: String(group?.name || ''),
+  }).replace(/\s{2,}/g, ' ').trim().slice(0, 100);
 }
 function canManageRole(guild, role) { const me = guild?.members?.me; return Boolean(me && me.permissions.has(PermissionFlagsBits.ManageRoles) && role && !role.managed && role.position < me.roles.highest.position); }
 function assertSafeSelectorRole(guild, role) {

@@ -87,12 +87,22 @@ async function reconcileAllGuildCommands(client, reason = 'startup') {
   return results;
 }
 
+function startStartupReconciliation(client) {
+  // Discord's command-registration REST request can occasionally take tens of
+  // seconds. It remains authoritative, but it must not serialize the entire
+  // ClientReady startup pipeline while Discord responds.
+  reconcileAllGuildCommands(client, 'startup').catch((error) => {
+    terminal.error(`Background guild command startup reconciliation failed: ${error?.stack || error?.message || error}`);
+  });
+  terminal.info('Guild command startup reconciliation scheduled in background.');
+}
+
 module.exports = [
   {
     name: Events.ClientReady,
     once: true,
     async execute(client) {
-      await reconcileAllGuildCommands(client, 'startup');
+      startStartupReconciliation(client);
     },
   },
   {

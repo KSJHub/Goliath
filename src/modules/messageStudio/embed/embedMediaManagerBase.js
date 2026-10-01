@@ -26,23 +26,21 @@ function sourceLabel(value, fallback = 'Not set') {
 function clone(value, fallback = null) {
   try { return JSON.parse(JSON.stringify(value ?? fallback)); } catch { return fallback; }
 }
+function validAlignment(value) {
+  const alignment = String(value || '').toLowerCase();
+  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
+}
+function sourceKey(item) {
+  return String(item?.source || '').trim();
+}
 
 function installMediaManagerBase(panel, media) {
   if (!panel || !media || typeof panel.buildMediaManagerPanel === 'function') return panel;
 
-  /*
-   * mediaV2 is authoritative once a panel has a media slot.  The legacy
-   * panel.image field exists only for backwards compatibility.  The original
-   * setPanelMedia() normalizer could use that legacy value as a fallback while
-   * clearing a gallery, immediately resurrecting the image that had just been
-   * removed.  Keep writes panel-local and normalize the requested media with
-   * no legacy fallback; saveMediaState() will mirror the resulting first item
-   * (or an empty string) back to the legacy panel afterwards.
-   */
   if (!panel.__panelLocalMediaWritePatched && typeof panel.setPanelMedia === 'function') {
     panel.setPanelMedia = (stateValue = {}, index, mediaValue = {}) => {
       const panels = Array.isArray(stateValue?.panels) ? stateValue.panels : [];
-      const existing = stateValue?.mediaV2 || stateValue?.media || {};
+      const existing = stateValue?.media || {};
       const existingPanels = Array.isArray(existing?.panels) ? existing.panels : [];
       const length = Math.max(panels.length, existingPanels.length, 1);
       const selected = Math.max(0, Math.min(Number(index) || 0, length - 1));
@@ -62,7 +60,7 @@ function installMediaManagerBase(panel, media) {
 
       return {
         ...stateValue,
-        mediaV2: {
+        media: {
           version: media.mediaModel.MEDIA_SCHEMA_VERSION,
           panels: mediaPanels,
         },
@@ -75,244 +73,135 @@ function installMediaManagerBase(panel, media) {
     const originalSaveSession = panel.saveSession.bind(panel);
     panel.saveSession = (interaction, stateValue) => {
       if (!stateValue || typeof stateValue !== 'object') return originalSaveSession(interaction, stateValue);
-      const authoritative = stateValue.mediaV2 || stateValue.media || null;
+      const authoritative = stateValue.media || null;
       if (!authoritative) return originalSaveSession(interaction, stateValue);
-      const mediaV2 = typeof media.clone === 'function' ? media.clone(authoritative) : JSON.parse(JSON.stringify(authoritative));
-      const legacyMedia = typeof media.clone === 'function' ? media.clone(mediaV2) : JSON.parse(JSON.stringify(mediaV2));
-      return originalSaveSession(interaction, { ...stateValue, media: legacyMedia, mediaV2 });
+
+      const previous = typeof panel.getSession === 'function' ? panel.getSession(interaction) : null;
+      const previousPanels = Array.isArray(previous?.media?.panels) ? previous.media.panels : [];
+      const incomingMap = stateValue.mediaAlignment && typeof stateValue.mediaAlignment === 'object'
+        ? stateValue.mediaAlignment
+        : {};
+      const canonicalMedia = typeof media.clone === 'function' ? media.clone(authoritative) : clone(authoritative, {});
+      const mediaPanels = Array.isArray(canonicalMedia?.panels) ? canonicalMedia.panels : [];
+      const rebuiltMap = {};
+
+      for (let panelIndex = 0; panelIndex < mediaPanels.length; panelIndex += 1) {
+        const gallery = Array.isArray(mediaPanels[panelIndex]?.gallery) ? mediaPanels[panelIndex].gallery : [];
+        const previousGallery = Array.isArray(previousPanels[panelIndex]?.gallery) ? previousPanels[panelIndex].gallery : [];
+
+        for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
+          const key = `${panelIndex}:${itemIndex}`;
+          const item = gallery[itemIndex];
+          let alignment = validAlignment(item?.alignment) || 'left';
+          const mapped = validAlignment(incomingMap[key]);
+          const sameSlotPrevious = previousGallery[itemIndex];
+          const sameSourceInSlot = sourceKey(sameSlotPrevious) && sourceKey(sameSlotPrevious) === sourceKey(item);
+          const previousAlignment = sameSourceInSlot ? validAlignment(sameSlotPrevious?.alignment) : null;
+
+          // Editing the URL/alt modal historically rebuilt an item without its alignment.
+          // If the same media remains in the same slot and the compatibility map still
+          // carries its prior alignment, preserve that prior choice. Reordered items keep
+          // their own canonical alignment instead, preventing index-keyed map corruption.
+          if (sameSourceInSlot && previousAlignment && mapped === previousAlignment && alignment !== previousAlignment) {
+            alignment = previousAlignment;
+          }
+
+          item.alignment = alignment;
+          rebuiltMap[key] = alignment;
+        }
+      }
+
+      const storedMedia = typeof media.clone === 'function' ? media.clone(canonicalMedia) : clone(canonicalMedia, {});
+      return originalSaveSession(interaction, {
+        ...stateValue,
+        media: storedMedia,
+        mediaAlignment: rebuiltMap,
+      });
     };
     panel.__mediaSessionMirrorPatched = true;
   }
 
-  panel.buildMediaManagerPanel = (interaction, who = 'Unknown User') => {
-    const state = panel.getSession(interaction);
+  panel.buildMediaManagerPanel = (interaction, who = 'Unknown User', stateOverride = null) => {
+    const state = stateOverride && typeof stateOverride === 'object'
+      ? stateOverride
+      : panel.getSession(interaction);
     const panelMedia = media.getPanelMedia(state);
-
-    /*
-     * Selection is a UI cursor, not media content. If media exists but the
-     * cursor is missing/stale (for example after reopening the manager), use
-     * the nearest valid item immediately so controls never appear disabled for
-     * visible media. Interaction handlers persist explicit user selections.
-     */
-    const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex)
-      ? state.selectedMediaIndex
-      : null;
-    const galleryIndex = panelMedia.gallery.length
-      ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1))
-      : null;
-
-    const requestedFileIndex = Number.isInteger(state.selectedFileIndex)
-      ? state.selectedFileIndex
-      : null;
-    const fileIndex = panelMedia.files.length
-      ? Math.max(0, Math.min(requestedFileIndex ?? 0, panelMedia.files.length - 1))
-      : null;
-
-    const selectedMedia =
-      galleryIndex == null
-        ? null
-        : panelMedia.gallery[galleryIndex];
-
-    const aboveCount =
-      panelMedia.gallery.filter((item) => item?.placement === 'above').length;
-
-    const belowCount =
-      panelMedia.gallery.length - aboveCount;
-
-    const placementLabel = (item) =>
-      item?.placement === 'above'
-        ? '⬆️ Above Content'
-        : '⬇️ Below Content';
-
+    const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : null;
+    const galleryIndex = panelMedia.gallery.length ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1)) : null;
+    const selectedMedia = galleryIndex == null ? null : panelMedia.gallery[galleryIndex];
+    const aboveCount = panelMedia.gallery.filter((item) => item?.placement === 'above').length;
+    const belowCount = panelMedia.gallery.length - aboveCount;
+    const placementLabel = (item) => item?.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content';
     const rows = [];
 
-    /*
-     * ROW 1 — MEDIA SELECTOR
-     */
     if (panelMedia.gallery.length) {
-      rows.push(
-        new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('embed:media-gallery-select')
-            .setPlaceholder('🎞️ Select media item')
-            .addOptions(
-              panelMedia.gallery.slice(0, 25).map((item, index) => ({
-                label: `${index + 1}. ${panel.trim(
-                  item.alt || sourceLabel(item.source, 'Media item'),
-                  80
-                )}`,
-                value: String(index),
-                description: panel.trim(
-                  `${item.type || 'auto'} • ${
-                    item.placement === 'above'
-                      ? 'Above Content'
-                      : 'Below Content'
-                  }${item.spoiler ? ' • spoiler' : ''}`,
-                  100
-                ),
-                default: galleryIndex === index,
-              }))
-            )
+      rows.push(new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('embed:media-gallery-select').setPlaceholder('🎞️ Select media item').addOptions(
+          panelMedia.gallery.slice(0, 25).map((item, index) => ({
+            label: `${index + 1}. ${panel.trim(item.alt || sourceLabel(item.source, 'Media item'), 80)}`,
+            value: String(index),
+            description: panel.trim(`${item.type || 'auto'} • ${item.placement === 'above' ? 'Above Content' : 'Below Content'} • ${validAlignment(item.alignment) === 'center' ? 'Centre' : (validAlignment(item.alignment) || 'left').replace(/^./, (c) => c.toUpperCase())}${item.spoiler ? ' • spoiler' : ''}`, 100),
+            default: galleryIndex === index,
+          }))
         )
-      );
+      ));
     }
 
-    /*
-     * ROW 2 — MEDIA CRUD / ORDER
-     */
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        mediaButton(
-          'embed:media-gallery-add',
-          `➕ Add Media (${panelMedia.gallery.length}/${media.mediaModel.MAX_GALLERY_ITEMS})`,
-          ButtonStyle.Success,
-          panelMedia.gallery.length >= media.mediaModel.MAX_GALLERY_ITEMS
-        ),
-        mediaButton(
-          'embed:media-gallery-edit',
-          '✏️ Edit',
-          ButtonStyle.Primary,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-gallery-remove',
-          '🗑️ Remove',
-          ButtonStyle.Danger,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-gallery-up',
-          '⬆️ Up',
-          ButtonStyle.Secondary,
-          galleryIndex == null || galleryIndex <= 0
-        ),
-        mediaButton(
-          'embed:media-gallery-down',
-          '⬇️ Down',
-          ButtonStyle.Secondary,
-          galleryIndex == null ||
-            galleryIndex >= panelMedia.gallery.length - 1
-        )
-      )
-    );
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaButton('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= media.mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= media.mediaModel.MAX_FILES),
+      mediaButton('embed:media-gallery-edit', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
+      mediaButton('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
+      mediaButton('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
+      mediaButton('embed:media-gallery-down', '⬇️ Down', ButtonStyle.Secondary, galleryIndex == null || galleryIndex >= panelMedia.gallery.length - 1)
+    ));
 
-    /*
-     * ROW 3 — PLACEMENT / OPTIONS
-     */
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        mediaButton(
-          'embed:media-placement:above',
-          '⬆️ Above Content',
-          selectedMedia?.placement === 'above'
-            ? ButtonStyle.Success
-            : ButtonStyle.Secondary,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-placement:below',
-          '⬇️ Below Content',
-          selectedMedia?.placement === 'below'
-            ? ButtonStyle.Success
-            : ButtonStyle.Secondary,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-options',
-          '⚙️ Options',
-          ButtonStyle.Secondary,
-          galleryIndex == null
-        ),
-        mediaButton(
-          'embed:media-upload',
-          '📤 Upload',
-          ButtonStyle.Success
-        )
-      )
-    );
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaButton('embed:media-placement:above', '⬆️ Above Content', selectedMedia?.placement === 'above' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
+      mediaButton('embed:media-placement:below', '⬇️ Below Content', selectedMedia?.placement === 'below' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
+      mediaButton('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary)
+    ));
 
-    /*
-     * ROW 4 — SECONDARY MEDIA
-     *
-     * Keep files accessible without allowing them to consume an extra
-     * action row and push navigation beyond Discord's five-row limit.
-     */
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        mediaButton(
-          'embed:media-thumbnail',
-          panelMedia.thumbnail?.source
-            ? '🖼️ Thumbnail ✓'
-            : '🖼️ Thumbnail',
-          ButtonStyle.Primary
-        ),
-        mediaButton(
-          'embed:media-file-add',
-          `📎 Add File (${panelMedia.files.length}/${media.mediaModel.MAX_FILES})`,
-          ButtonStyle.Success,
-          panelMedia.files.length >= media.mediaModel.MAX_FILES
-        ),
-        mediaButton(
-          'embed:file-options',
-          '⚙️ File Options',
-          ButtonStyle.Secondary,
-          fileIndex == null
-        )
-      )
-    );
+    const canonicalAlignment = validAlignment(selectedMedia?.alignment);
+    const alignmentMap = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
+    const alignmentKey = galleryIndex == null ? null : `${Math.max(0, Number(state.selectedPanelIndex) || 0)}:${galleryIndex}`;
+    const selectedAlignment = canonicalAlignment || validAlignment(alignmentMap[alignmentKey]) || 'left';
+    const alignmentLabel = selectedAlignment === 'center' ? '↔️ Centre' : selectedAlignment === 'right' ? '➡️ Right' : '⬅️ Left';
 
-    /*
-     * ROW 5 — NAVIGATION / HELP
-     */
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        mediaButton('embed:builder', '⬅️ Back'),
-        mediaButton('embed:helpers', '📖 Variables')
-      )
-    );
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaButton('embed:media-align:left', '⬅️ Left', selectedAlignment === 'left' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      mediaButton('embed:media-align:center', '↔️ Centre', selectedAlignment === 'center' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      mediaButton('embed:media-align:right', '➡️ Right', selectedAlignment === 'right' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null)
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaButton('embed:builder', '⬅️ Back'),
+      mediaButton('embed:settings', '⚙️ Settings'),
+      mediaButton('embed:helpers', '📖 Variables')
+    ));
 
     const summary = [
-      `Editing panel **${state.selectedPanelIndex + 1}/${state.panels.length}**`,
-      '',
+      `Editing panel **${state.selectedPanelIndex + 1}/${state.panels.length}**`, '',
       `⬆️ **Above Content** — ${aboveCount}`,
       `⬇️ **Below Content** — ${belowCount}`,
       `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'}`,
-      `📎 **Files** — ${panelMedia.files.length}/${media.mediaModel.MAX_FILES}`,
-      '',
+      `📎 **Files** — ${panelMedia.files.length}/${media.mediaModel.MAX_FILES}`, '',
       'Images, animated GIFs and supported videos can be placed independently above or below the panel content.',
     ];
 
     if (selectedMedia) {
-      summary.push(
-        '',
-        `**Selected media:** ${sourceLabel(
-          selectedMedia.alt || selectedMedia.source,
-          `Item ${galleryIndex + 1}`
-        )}`,
+      summary.push('',
+        `**Selected media:** ${sourceLabel(selectedMedia.alt || selectedMedia.source, `Item ${galleryIndex + 1}`)}`,
         `**Placement:** ${placementLabel(selectedMedia)}`,
+        `**Alignment:** ${alignmentLabel}`,
         `**Type:** ${selectedMedia.type || 'auto'}`,
         `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`
       );
-    } else if (
-      !panelMedia.thumbnail?.source &&
-      !panelMedia.gallery.length &&
-      !panelMedia.files.length
-    ) {
-      summary.push(
-        '',
-        'No media configured for this panel. Media on other panels is unaffected.'
-      );
+    } else if (!panelMedia.thumbnail?.source && !panelMedia.gallery.length && !panelMedia.files.length) {
+      summary.push('', 'No media configured for this panel. Media on other panels is unaffected.');
     }
 
     return {
-      embeds: [
-        panel.simplePanel(
-          '🖼️ Media Manager',
-          summary.join('\n'),
-          state,
-          who
-        ),
-      ],
+      embeds: [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)],
       components: rows,
     };
   };

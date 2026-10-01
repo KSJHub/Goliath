@@ -2,6 +2,7 @@
 
 const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
+const { replaceVars } = require('../../../core/guild/guildVariables');
 const sentinelScheduler = require('../../../owner/sentinel/schedulerRegistry.js');
 const base = require('./timedRoles');
 const { withTimedRolesLock } = require('./timedRolesLocks');
@@ -76,11 +77,19 @@ async function announcePromotion(member, rule, role, settings) {
   if (!channel?.isTextBased?.() || typeof channel.send !== 'function') return false;
   const permissions = channel.permissionsFor?.(member.guild.members.me);
   if (permissions && (!permissions.has(PermissionFlagsBits.ViewChannel) || !permissions.has(PermissionFlagsBits.SendMessages))) return false;
-  const message = settings.announcementMessage
-    .replaceAll('{member}', `<@${member.id}>`)
-    .replaceAll('{role}', `<@&${role.id}>`)
-    .replaceAll('{duration}', base.formatDuration(rule))
-    .replaceAll('{server}', member.guild.name);
+  const interaction = {
+    guild: member.guild,
+    guildId: member.guild.id,
+    user: member.user,
+    member,
+    channel,
+    channelId: channel.id,
+  };
+  const message = replaceVars(settings.announcementMessage, interaction, true, {
+    '{member}': `<@${member.id}>`,
+    '{role}': `<@&${role.id}>`,
+    '{duration}': base.formatDuration(rule),
+  });
   await channel.send({ content: message, allowedMentions: { users: [member.id], roles: [role.id] } });
   return true;
 }

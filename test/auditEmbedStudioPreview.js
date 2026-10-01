@@ -23,7 +23,7 @@ function state(placement = 'above') {
       fields: [],
       buttons: [],
     }],
-    mediaV2: { version: 2, panels: [{ gallery: [{ source: 'https://example.com/faq.gif', placement }], files: [], thumbnail: { source: '' } }] },
+    media: { version: 2, panels: [{ gallery: [{ source: 'https://example.com/faq.gif', placement }], files: [], thumbnail: { source: '' } }] },
   };
 }
 
@@ -39,7 +39,7 @@ assert.equal(below.length, 1, 'below-content media must never be promoted to gra
 assert.equal(below[0].data.title, 'FAQ & Support Centre');
 
 const none = state('below');
-none.mediaV2.panels[0].gallery = [];
+none.media.panels[0].gallery = [];
 none.panels[0].image = '';
 assert.equal(panel.buildStudioPreviewEmbeds(none, interaction).length, 1, 'ordinary embeds keep the normal single-card preview');
 

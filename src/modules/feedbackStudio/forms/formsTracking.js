@@ -10,6 +10,7 @@ const { updateTicket } = require('../tickets/tickets');
 const emojis = require('../../utilityStudio/emojis/emojis');
 const emojiPayload = require('../../utilityStudio/emojis/emojiPayload');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
+const { buildMemberNotice } = require('../../../core/ui/memberNotice');
 const {
   TICKET_CHANNEL_PERMISSIONS,
   guardCategoryAccess,
@@ -127,15 +128,40 @@ async function sendConfirmationDm(interaction, form, submission, bridgeResult) {
       : await interaction.client.users.fetch(submission.userId).catch(() => null);
     if (!user?.send) return false;
 
-    const lines = [
-      `Your **${cleanText(form.name, 100)}** submission has been received.`,
-      `Reference: ${cleanText(submission.submissionId, 100)}`,
+    const ticketRef = bridgeResult?.ticket
+      ? cleanText(bridgeResult.ticket.displayId || bridgeResult.ticket.ticketId, 100)
+      : null;
+    const channelId = cleanDiscordId(bridgeResult?.channel?.id);
+    const submittedAt = submission.createdAt || submission.submittedAt || submission.created_at || now();
+    const contextFields = [
+      { name: '📝 Form', value: cleanText(form.name || 'Form Submission', 1024), inline: true },
+      { name: '🟡 Status', value: 'Received', inline: true },
+      { name: '🕒 Submitted', value: `<t:${Math.floor(new Date(submittedAt).getTime() / 1000)}:f>`, inline: false },
     ];
-    if (bridgeResult?.ticket) lines.push(`Ticket: ${cleanText(bridgeResult.ticket.displayId || bridgeResult.ticket.ticketId, 100)}`);
-    if (bridgeResult?.channel?.id) lines.push(`Channel: <#${bridgeResult.channel.id}>`);
+    if (ticketRef) contextFields.push({ name: '🎫 Ticket', value: `\`${ticketRef}\``, inline: true });
+    if (channelId) contextFields.push({ name: '📍 Ticket Channel', value: `<#${channelId}>`, inline: true });
 
-    const content = await emojis.resolveText(interaction.client, interaction.guildId, lines.join('\n').slice(0, 1900));
-    await user.send({ content });
+    const notice = buildMemberNotice(interaction.guild, {
+      moduleName: 'Forms',
+      moduleEmoji: '📝',
+      title: 'FORM SUBMITTED',
+      subtitle: 'Submission Receipt',
+      color: 0x5865f2,
+      referenceLabel: 'Submission',
+      referenceValue: cleanText(submission.submissionId, 100),
+      status: '🟡 Received',
+      member: user,
+      contextFields,
+      detailsTitle: '📋 SUBMISSION RECEIVED',
+      details: `Your **${cleanText(form.name || 'form', 100)}** submission has been successfully received by Goliath.`,
+      meaning: 'Your submission is now recorded in this server. This receipt confirms delivery; it does not by itself mean the submission has been approved or completed.',
+      nextSteps: ticketRef
+        ? `A ticket has been linked to this submission${channelId ? ` in <#${channelId}>` : ''}. Follow any instructions there and wait for the server team to review your submission.`
+        : 'The server team can now review your submission. Any further action or outcome will depend on this form\'s configured workflow.',
+      footerLabel: `Submission ${cleanText(submission.submissionId, 80)}`,
+    });
+
+    await user.send(notice);
     forms.incrementAnalytics(interaction.guildId, { dmSent: 1 }, interaction.guild);
     forms.updateSubmission(interaction.guildId, submission.submissionId, {
       workflow: { ...(submission.workflow || {}), confirmationDmSent: true, confirmationDmSentAt: now() },
@@ -238,113 +264,58 @@ async function createTicketForSubmission({ interaction, form, submission } = {})
         },
       });
 
-      if (!ticket?.ticketId) throw new Error('Ticket manager did not return a valid ticket.');
-      addTimeline(interaction.guildId, submission.submissionId, {
-        type: 'ticket_created',
-        label: 'Ticket created',
-        actorId: interaction.client?.user?.id || null,
-        metadata: { ticketId: ticket.ticketId, displayId: ticket.displayId },
-      }, interaction.guild);
-
       let channel = null;
-      let savedTicket = ticket;
-      try {
-        channel = await ticketChannelManager.createTicketChannel({ client: interaction.client, guild: interaction.guild, ticket, panel });
-      } catch (channelError) {
-        console.error('[Forms] Failed to create ticket channel for submission:', channelError);
-        addTimeline(interaction.guildId, submission.submissionId, {
-          type: 'ticket_channel_failed',
-          label: 'Ticket channel creation failed',
-          metadata: { error: cleanText(channelError.message, 500) },
-        }, interaction.guild);
-        if (isGoliathPermissionError(channelError)) throw channelError;
-      }
-
-      if (channel?.send) {
-        const controlMessage = await sendTicketControlMessage({ channel, ticket: savedTicket, panel, user: interaction.user }).catch((error) => {
-          console.error('[Forms] Failed to post ticket control message:', error);
-          return null;
-        });
-        if (controlMessage?.id) {
-          savedTicket = updateTicket(interaction.guildId, ticket.ticketId, {
-            discordMessageId: controlMessage.id,
-            messageId: controlMessage.id,
-          }) || savedTicket;
-        }
-
-        const roleIds = [...new Set((actions.pingRoleIds || []).map(cleanDiscordId).filter(Boolean))].slice(0, 20);
-        const payload = await resolveFormPayload(interaction.guild, {
-          content: buildStaffPingContent(form, freshSubmission),
-          embeds: [buildSubmissionTicketEmbed(form, freshSubmission, savedTicket)],
-          allowedMentions: { users: cleanDiscordId(freshSubmission.userId) ? [freshSubmission.userId] : [], roles: roleIds },
-        });
-        await channel.send(payload).catch((error) => console.error('[Forms] Failed to post submission embed in ticket channel:', error));
-
-        if (actions.notifyStaff !== false && roleIds.length) {
-          forms.incrementAnalytics(interaction.guildId, { staffNotified: 1 }, interaction.guild);
+      if (ticket?.ticketId) {
+        channel = await ticketChannelManager.createTicketChannel(interaction.guild, ticket, panel, interaction.user).catch(() => null);
+        if (channel?.id) {
+          await updateTicket(interaction.guildId, ticket.ticketId, { channelId: channel.id }).catch(() => null);
+          await channel.send({ embeds: [buildSubmissionTicketEmbed(form, freshSubmission, ticket)], content: buildStaffPingContent(form, freshSubmission), allowedMentions: { users: [freshSubmission.userId].filter(Boolean), roles: actions.pingRoleIds || [], parse: [] } }).catch(() => null);
+          await sendTicketControlMessage(channel, ticket, panel).catch(() => null);
         }
       }
 
-      const updatedSubmission = forms.updateSubmission(interaction.guildId, submission.submissionId, {
-        ticketId: savedTicket.ticketId,
+      const updated = forms.updateSubmission(interaction.guildId, submission.submissionId, {
+        ticketId: ticket?.ticketId || null,
         ticketChannelId: channel?.id || null,
-        status: 'pending',
         workflow: {
           ...(freshSubmission.workflow || {}),
-          ticketCreated: true,
-          ticketId: savedTicket.ticketId,
-          ticketDisplayId: savedTicket.displayId,
-          ticketChannelId: channel?.id || null,
-          ticketControlMessageId: savedTicket.discordMessageId || savedTicket.messageId || null,
+          ticketDisplayId: ticket?.displayId || null,
           ticketCreatedAt: now(),
         },
       }, interaction.guild);
 
-      if (!updatedSubmission?.ticketId) throw new Error('Ticket was created but the form submission could not be linked.');
-      forms.incrementAnalytics(interaction.guildId, { ticketsCreated: 1 }, interaction.guild);
+      addTimeline(interaction.guildId, submission.submissionId, {
+        type: 'ticket_created',
+        label: 'Ticket created from form submission',
+        metadata: { ticketId: ticket?.ticketId || null, channelId: channel?.id || null },
+      }, interaction.guild);
 
-      const result = { ok: true, ticket: savedTicket, channel, submission: updatedSubmission };
-      await sendConfirmationDm(interaction, form, updatedSubmission, result);
+      const result = { ok: true, ticket, channel, submission: updated };
+      await sendConfirmationDm(interaction, form, updated || freshSubmission, result);
       return result;
     } catch (error) {
-      console.error('[Forms] Ticket bridge failed:', error);
+      if (isGoliathPermissionError(error)) console.warn('[Forms] Ticket workflow permission failure:', error.message);
+      else console.error('[Forms] Ticket workflow failed:', error);
       addTimeline(interaction.guildId, submission.submissionId, {
-        type: 'workflow_failed',
-        label: 'Forms → Tickets workflow failed',
-        metadata: { error: cleanText(error.message || 'Ticket bridge failed.', 500) },
+        type: 'ticket_failed',
+        label: 'Ticket workflow failed',
+        metadata: { error: cleanText(error.message, 500) },
       }, interaction.guild);
-      return {
-        ok: false,
-        ticket: null,
-        channel: null,
-        error: cleanText(error.message || 'Ticket bridge failed.', 500),
-      };
+      return { ok: false, ticket: null, channel: null, error: cleanText(error.message, 500) };
     }
-  })().finally(() => {
-    if (workflowLocks.get(lockKey) === task) workflowLocks.delete(lockKey);
-  });
+  })();
 
   workflowLocks.set(lockKey, task);
-  return task;
-}
-
-async function processSubmissionWorkflow({ interaction, form, submission } = {}) {
-  if (!interaction || !form || !submission) {
-    return { ok: false, ticket: null, channel: null, error: 'Missing interaction, form, or submission.' };
+  try {
+    return await task;
+  } finally {
+    workflowLocks.delete(lockKey);
   }
-
-  if (!shouldCreateTicket(form)) {
-    const result = { ok: true, skipped: true, ticket: null, channel: null };
-    await sendConfirmationDm(interaction, form, submission, result);
-    return result;
-  }
-
-  return createTicketForSubmission({ interaction, form, submission });
 }
 
 module.exports = {
-  createTicketForSubmission,
-  processSubmissionWorkflow,
-  shouldCreateTicket,
   buildSubmissionTicketEmbed,
+  buildStaffPingContent,
+  createTicketForSubmission,
+  sendConfirmationDm,
 };

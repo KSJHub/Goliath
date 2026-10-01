@@ -4,6 +4,7 @@ module.exports = {
       name: 'goliath-dev',
       cwd: '/home/goliath/dev',
       script: 'server.js',
+      node_args: '-r ./src/runtime/embedPresetDeletionGuard.js -r ./src/runtime/unifiedMemberNoticeGuard.js -r ./src/runtime/modAppealOutcomeNoticeGuard.js -r ./src/runtime/modDepartureNoticeGuard.js -r ./src/runtime/modNotificationPipelineGuard.js -r ./src/runtime/modInteractionRefreshGuard.js -r ./src/runtime/modConfirmationTicketGuard.js',
 
       env: {
         BOT_MODE: 'dev',
@@ -25,6 +26,7 @@ module.exports = {
       name: 'goliath-beta',
       cwd: '/home/goliath/beta',
       script: 'server.js',
+      node_args: '-r ./src/runtime/embedPresetDeletionGuard.js',
 
       env: {
         BOT_MODE: 'beta',
@@ -46,6 +48,7 @@ module.exports = {
       name: 'goliath-production',
       cwd: '/home/goliath/production',
       script: 'server.js',
+      node_args: '-r ./src/runtime/embedPresetDeletionGuard.js',
 
       env: {
         BOT_MODE: 'production',

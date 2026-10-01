@@ -351,8 +351,49 @@ function buildEmbedFromPanel(panelData, i, showTimestamp = true, fieldLayout = "
   if (showTimestamp) e.setTimestamp();
   return e;
 }
+function hasRenderableEmbedContent(embed) {
+  if (!embed) return false;
+
+  let data;
+
+  try {
+    data = typeof embed.toJSON === 'function'
+      ? embed.toJSON()
+      : (embed.data || embed);
+  } catch {
+    data = embed.data || embed;
+  }
+
+  if (!data || typeof data !== 'object') return false;
+
+  if (String(data.title || '').trim()) return true;
+  if (String(data.description || '').trim()) return true;
+  if (String(data.url || '').trim()) return true;
+
+  if (data.author && String(data.author.name || '').trim()) return true;
+  if (data.footer && String(data.footer.text || '').trim()) return true;
+
+  if (data.image && String(data.image.url || '').trim()) return true;
+  if (data.thumbnail && String(data.thumbnail.url || '').trim()) return true;
+
+  if (
+    Array.isArray(data.fields) &&
+    data.fields.some((field) =>
+      String(field?.name || '').trim() ||
+      String(field?.value || '').trim()
+    )
+  ) {
+    return true;
+  }
+
+  // Colour and timestamp alone are not valid Discord embed content.
+  return false;
+}
+
 function buildPreviewEmbeds(s, i) {
-  return s.panels.map((p) => buildEmbedFromPanel(p, i, s.showTimestamp, s.fieldLayout));
+  return s.panels
+    .map((p) => buildEmbedFromPanel(p, i, s.showTimestamp, s.fieldLayout))
+    .filter(hasRenderableEmbedContent);
 }
 function buildPreviewEmbed(s, i) {
   return buildEmbedFromPanel(s.panels[s.selectedPanelIndex], i, s.showTimestamp, s.fieldLayout);
@@ -361,12 +402,15 @@ function buildPreviewEmbed(s, i) {
 function buildStudioPreviewEmbeds(s, i) {
   const index = Math.max(0, Number(s?.selectedPanelIndex) || 0);
   const panel = s?.panels?.[index] || {};
-  const mediaPanel = Array.isArray(s?.mediaV2?.panels) ? (s.mediaV2.panels[index] || {}) : {};
+  const mediaPanel = Array.isArray(s?.media?.panels) ? (s.media.panels[index] || {}) : {};
   const gallery = Array.isArray(mediaPanel?.gallery) ? mediaPanel.gallery : [];
   const header = gallery.find((item) => String(item?.placement || '').toLowerCase() === 'above');
   const source = header ? String(replaceVars(header.source || '', i) || '').trim() : '';
 
-  if (!source) return [buildPreviewEmbed(s, i)];
+  if (!source) {
+    const preview = buildPreviewEmbed(s, i);
+    return hasRenderableEmbedContent(preview) ? [preview] : [];
+  }
 
   const headerPreview = new EmbedBuilder()
     .setColor(panel.color || s.color || PANEL_COLOR)
@@ -376,7 +420,11 @@ function buildStudioPreviewEmbeds(s, i) {
   const contentState = { ...s, panels: [contentPanel], selectedPanelIndex: 0 };
   const contentPreview = buildPreviewEmbed(contentState, i);
 
-  return [headerPreview, contentPreview];
+  // A graphic-only Above Content panel must not append an empty content
+  // embed. Discord rejects that second embed with BASE_TYPE_REQUIRED.
+  return hasRenderableEmbedContent(contentPreview)
+    ? [headerPreview, contentPreview]
+    : [headerPreview];
 }
 
 const EMBED_COMPONENT_LIMITS = Object.freeze({
@@ -626,7 +674,7 @@ function mainEmbed(s, who, dashboard = {}) {
       `⚠️ Open Review and resolve ${errors.length || 1} remaining issue${(errors.length || 1) === 1 ? "" : "s"}.`;
   } else if (deployment) {
     nextAction =
-      "♻️ Review your changes, test if needed, then update the existing message.";
+      "🚀 Ready to deploy a new message, or ♻️ update the existing live message.";
   } else {
     nextAction =
       "🚀 Everything is ready. Test the embed or deploy it to the selected channel.";
@@ -688,21 +736,6 @@ function buildEditorPanel(i, who = "Unknown User") {
   const deployment =
     dashboard.deployment;
 
-  const deployCustomId =
-    deployment
-      ? "embed:update-existing"
-      : "embed:use";
-
-  const deployLabel =
-    deployment
-      ? "Update Existing"
-      : "Deploy New";
-
-  const deployEmoji =
-    deployment
-      ? "♻️"
-      : "🚀";
-
   const canDeploy =
     !!s.channelId &&
     !!report.ready;
@@ -758,63 +791,21 @@ function buildEditorPanel(i, who = "Unknown User") {
       ),
 
       /*
-       * PRIMARY WORKFLOW
+       * BUILD WORKFLOW
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("Builder")
-          .setEmoji("🛠️")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:presets")
-          .setLabel("Presets")
-          .setEmoji("💾")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:readiness")
-          .setLabel(
-            report.ready
-              ? "Ready"
-              : "Review"
-          )
-          .setEmoji(
-            report.ready
-              ? "✅"
-              : "⚠️"
-          )
-          .setStyle(
-            report.ready
-              ? ButtonStyle.Success
-              : ButtonStyle.Secondary
-          )
+        new ButtonBuilder().setCustomId("embed:builder").setLabel("Builder").setEmoji("🛠️").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("embed:panels").setLabel(`Panels (${panels.length})`).setEmoji("🧩").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("embed:presets").setLabel("Presets").setEmoji("💾").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("embed:use").setLabel("Deploy").setEmoji("🚀").setStyle(ButtonStyle.Success).setDisabled(!canDeploy)
       ),
 
       /*
-       * DEPLOYMENT WORKFLOW
+       * CHECK / PUBLISH WORKFLOW
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:panels")
-          .setLabel(`Panels (${panels.length})`)
-          .setEmoji("🧩")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:test-send")
-          .setLabel("Test Send")
-          .setEmoji("🧪")
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(!report.ready),
-
-        new ButtonBuilder()
-          .setCustomId(deployCustomId)
-          .setLabel(deployLabel)
-          .setEmoji(deployEmoji)
-          .setStyle(ButtonStyle.Success)
-          .setDisabled(!canDeploy)
+        new ButtonBuilder().setCustomId("embed:test-send").setLabel("Test Send").setEmoji("🧪").setStyle(ButtonStyle.Secondary).setDisabled(!report.ready),
+        ...(deployment ? [new ButtonBuilder().setCustomId("embed:update-existing").setLabel("Update Existing").setEmoji("♻️").setStyle(ButtonStyle.Success).setDisabled(!canDeploy)] : [])
       ),
 
       /*
@@ -823,8 +814,18 @@ function buildEditorPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("admin:modules")
-          .setLabel("Modules")
+          .setLabel("Back")
           .setEmoji("⬅️")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:settings")
+          .setLabel("Settings")
+          .setEmoji("⚙️")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("Variables")
+          .setEmoji("📖")
           .setStyle(ButtonStyle.Secondary)
       ),
     ],
@@ -1057,7 +1058,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
       ),
 
       /*
-       * DESIGN / REVIEW
+       * DESIGN / OPTIONS
        */
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -1073,55 +1074,18 @@ function buildBuilderPanel(i, who = "Unknown User") {
           .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
-          .setCustomId("embed:readiness")
-          .setLabel(
-            report.ready
-              ? "Ready"
-              : "Review Readiness"
-          )
-          .setEmoji(
-            report.ready
-              ? "✅"
-              : "⚠️"
-          )
-          .setStyle(
-            report.ready
-              ? ButtonStyle.Success
-              : ButtonStyle.Secondary
-          )
-      ),
-
-      /*
-       * WORKSPACE OPTIONS
-       */
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
           .setCustomId("embed:toggle-timestamp")
-          .setLabel(
-            s.showTimestamp
-              ? "Timestamp: On"
-              : "Timestamp: Off"
-          )
+          .setLabel("Timestamp")
           .setEmoji("🕒")
           .setStyle(
             s.showTimestamp
               ? ButtonStyle.Success
               : ButtonStyle.Secondary
-          ),
-
-        new ButtonBuilder()
-          .setCustomId("embed:reset")
-          .setLabel("Reset")
-          .setEmoji("♻️")
-          .setStyle(ButtonStyle.Danger)
+          )
       ),
 
       /*
        * NAVIGATION / HELP
-       *
-       * Persistent layout:
-       * Back is always left-most on the final row.
-       * Variables is a helper and sits immediately to its right.
        */
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -1134,7 +1098,13 @@ function buildBuilderPanel(i, who = "Unknown User") {
           .setCustomId("embed:helpers")
           .setLabel("Variables")
           .setEmoji("📖")
-          .setStyle(ButtonStyle.Secondary)
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:reset")
+          .setLabel("Reset")
+          .setEmoji("♻️")
+          .setStyle(ButtonStyle.Danger)
       ),
     ],
   };
@@ -1243,7 +1213,18 @@ function buildPanelsPanel(i, who) {
         new ButtonBuilder().setCustomId("embed:panel-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(s.selectedPanelIndex >= s.panels.length - 1),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("⬅️ Back")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:settings")
+          .setLabel("⚙️ Settings")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("📖 Variables")
+          .setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -1272,13 +1253,23 @@ function buildFieldsPanel(i, who) {
     new ButtonBuilder().setCustomId("embed:field-remove-selected").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(!Number.isInteger(s.selectedFieldIndex)),
   ));
 
-  // Navigation is always isolated on the final row.
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("embed:builder")
-      .setLabel("⬅️ Back")
-      .setStyle(ButtonStyle.Secondary),
-  ));
+  // Persistent navigation row.
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("embed:builder")
+        .setLabel("⬅️ Back")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:settings")
+        .setLabel("⚙️ Settings")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:helpers")
+        .setLabel("📖 Variables")
+        .setStyle(ButtonStyle.Secondary),
+    )
+  );
   return {
     embeds: [simplePanel("📋 Field Management", `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} fields: ${(s.fields || []).length}/25`, s, who)],
     components: rows,
@@ -1402,7 +1393,18 @@ function buildFieldsManagerPanel(interaction) {
       new ButtonBuilder().setCustomId("embed:field-manager-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(index == null || index >= fields.length - 1),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:builder")
+        .setLabel("⬅️ Back")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:settings")
+        .setLabel("⚙️ Settings")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:helpers")
+        .setLabel("📖 Variables")
+        .setStyle(ButtonStyle.Secondary),
     ),
   );
 
@@ -1432,13 +1434,23 @@ function buildButtonsPanel(i, who) {
     new ButtonBuilder().setCustomId("embed:button-remove-selected").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(!Number.isInteger(s.selectedButtonIndex)),
   ));
 
-  // Navigation is always isolated on the final row.
-  rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("embed:builder")
-      .setLabel("⬅️ Back")
-      .setStyle(ButtonStyle.Secondary),
-  ));
+  // Persistent navigation row.
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("embed:builder")
+        .setLabel("⬅️ Back")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:settings")
+        .setLabel("⚙️ Settings")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:helpers")
+        .setLabel("📖 Variables")
+        .setStyle(ButtonStyle.Secondary),
+    )
+  );
   return { embeds: [simplePanel("🔘 Button Management", `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} buttons: ${(s.buttons || []).length}/${MAX_BUTTONS}`, s, who)], components: rows };
 }
 function selectedButtonManagerIndex(state) {
@@ -1540,7 +1552,18 @@ function buildButtonsManagerPanel(interaction) {
       new ButtonBuilder().setCustomId("embed:button-manager-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(index == null || index >= buttons.length - 1),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:builder")
+        .setLabel("⬅️ Back")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:settings")
+        .setLabel("⚙️ Settings")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId("embed:helpers")
+        .setLabel("📖 Variables")
+        .setStyle(ButtonStyle.Secondary),
     ),
   );
   // Reserve Discord's final action row for navigation.
@@ -1702,7 +1725,7 @@ function getPresetManagerSummary(name, preset = {}, defaults = {}) {
    * Count gallery items and attached files across all media panels.
    */
   const mediaState =
-    preset?.mediaV2 ||
+    preset?.media ||
     preset?.media ||
     {};
 
@@ -2074,9 +2097,98 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
     components: [...controlRows, navigationRow].filter(Boolean),
   };
 }
+
+function settingsImportModal() {
+  return new ModalBuilder()
+    .setCustomId('embed:settings-import-save')
+    .setTitle('Import Embed Preset')
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Preset JSON file')
+        .setDescription('Upload one Goliath Embed Builder preset JSON file.')
+        .setFileUploadComponent(
+          new FileUploadBuilder()
+            .setCustomId('preset_file')
+            .setMinValues(1)
+            .setMaxValues(1)
+            .setRequired(true)
+        )
+    );
+}
+
+function buildSettingsPanel(i) {
+  const state = getSession(i);
+
+  return {
+    embeds: [
+      simplePanel(
+        '⚙️ Embed Settings',
+        [
+          'Manage Embed Builder settings and move saved presets between Goliath servers.',
+          '',
+          '**📥 Import**',
+          "Import an exported Embed Builder preset JSON file into this server's saved presets.",
+          '',
+          '**📤 Export**',
+          "Export one of this server's existing saved presets as a portable JSON file. It can then be imported into another Goliath server.",
+        ].join('\\n'),
+        state,
+        memberName(i)
+      )
+    ],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('embed:settings-import')
+          .setLabel('📥 Import')
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId('embed:settings-export')
+          .setLabel('📤 Export')
+          .setStyle(ButtonStyle.Primary)
+      ),
+
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('embed:builder')
+          .setLabel('⬅️ Back')
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId('embed:helpers')
+          .setLabel('📖 Variables')
+          .setStyle(ButtonStyle.Secondary)
+      )
+    ]
+  };
+}
+
 function buildHelpersPanel(i) {
   const s = getSession(i);
-  return { embeds: [simplePanel("📖 Embed Variables", HELPERS.map((h) => `\`${h}\``).join("\n"), s, memberName(i))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary))] };
+
+  return {
+    embeds: [
+      simplePanel(
+        "📖 Embed Variables",
+        HELPERS.map((h) => `\`${h}\``).join("\n"),
+        s,
+        memberName(i)
+      )
+    ],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("⬅️ Back")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:settings")
+          .setLabel("⚙️ Settings")
+          .setStyle(ButtonStyle.Secondary),
+      )
+    ],
+  };
 }
 function readinessOptions() {
   const { mediaModel } = require("./embedMedia");
@@ -2213,8 +2325,6 @@ function contentModal(s) {
   return modal(`embed:save-content:${Date.now()}`, "Edit Panel Text", [
     input("title", "Panel title", TextInputStyle.Short, s.title, false, 256),
     input("description", "Panel message/content", TextInputStyle.Paragraph, s.description, false, 4000),
-    input("authorName", "Author name", TextInputStyle.Short, s.authorName, false, 256),
-    input("footer", "Footer text", TextInputStyle.Short, s.footer, false, 2048),
   ]);
 }
 function mediaModal(s) {
@@ -2286,7 +2396,7 @@ function resolveAppearanceSource(source, interaction) {
 function appearanceDetailsModal(state) {
   return new ModalBuilder()
     .setCustomId(`embed:appearance-details-save:${Date.now()}`)
-    .setTitle("Edit Appearance Details")
+    .setTitle("Author & Footer")
     .addComponents(
       new ActionRowBuilder().addComponents(input("authorName", "Author name", TextInputStyle.Short, state.authorName, false, 256)),
       new ActionRowBuilder().addComponents(input("authorUrl", "Author clickable URL", TextInputStyle.Short, state.authorUrl, false, 4000)),
@@ -2315,6 +2425,82 @@ function appearanceIconUploadModal(kind) {
         .setFileUploadComponent(new FileUploadBuilder().setCustomId("icon_file").setMinValues(1).setMaxValues(1).setRequired(true)),
     );
 }
+function buildContentManagerPanel(interaction) {
+  const state = getSession(interaction);
+
+  const lines = [
+    "**Main Text**",
+    `**Title:** ${state.title ? trim(state.title, 300) : "Not set"}`,
+    `**Message:** ${state.description ? "Configured" : "Not set"}`,
+    "",
+    "**Author**",
+    `**Name:** ${state.authorName ? trim(state.authorName, 300) : "Not set"}`,
+    `**Link:** ${state.authorUrl ? trim(state.authorUrl, 500) : "Not set"}`,
+    `**Icon:** ${state.authorIcon ? "Configured" : "Not set"}`,
+    "",
+    "**Footer**",
+    `**Text:** ${state.footer ? trim(state.footer, 700) : "Not set"}`,
+    `**Icon:** ${state.footerIcon ? "Configured" : "Not set"}`,
+    "",
+    "Author and footer are optional.",
+    "Supported content fields can use Embed Studio variables.",
+  ];
+
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle("📝 Content")
+        .setDescription(
+          lines.join("\n").slice(0, 4096)
+        ),
+    ],
+
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:content-edit-text")
+          .setLabel("✏️ Edit Text")
+          .setStyle(ButtonStyle.Primary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:content-details")
+          .setLabel("👤 Author & Footer")
+          .setStyle(ButtonStyle.Secondary),
+      ),
+
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:content-author-icon")
+          .setLabel("👤 Author Icon")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:content-footer-icon")
+          .setLabel("🏷️ Footer Icon")
+          .setStyle(ButtonStyle.Secondary),
+      ),
+
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("⬅️ Back")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:settings")
+          .setLabel("⚙️ Settings")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("📖 Variables")
+          .setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
 function buildAppearancePanel(interaction) {
   const state = getSession(interaction);
   const authorIcon = resolveAppearanceSource(state.authorIcon, interaction);
@@ -2341,7 +2527,18 @@ function buildAppearancePanel(interaction) {
         new ButtonBuilder().setCustomId("embed:appearance-footer-icon").setLabel("🏷️ Footer Icon").setStyle(ButtonStyle.Secondary),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:builder").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:builder")
+          .setLabel("⬅️ Back")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:settings")
+          .setLabel("⚙️ Settings")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("embed:helpers")
+          .setLabel("📖 Variables")
+          .setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -2369,7 +2566,8 @@ function buildAppearanceIconPanel(interaction, kind) {
         new ButtonBuilder().setCustomId(`embed:appearance-icon-clear:${kind}`).setLabel("🗑️ Clear").setStyle(ButtonStyle.Danger).setDisabled(!raw),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:appearance-back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:content-back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:helpers").setLabel("📖 Variables").setStyle(ButtonStyle.Secondary),
       ),
     ],
   };
@@ -2436,6 +2634,8 @@ module.exports = {
   buildButtonsManagerPanel,
   buildButtonOptionsPanel,
   buildPresetsPanel,
+  buildSettingsPanel,
+  settingsImportModal,
   buildHelpersPanel,
   buildReadinessPanel,
   getReadinessReport: getReadinessReportCanonical,
@@ -2453,6 +2653,7 @@ module.exports = {
   appearanceDetailsModal,
   appearanceIconUrlModal,
   appearanceIconUploadModal,
+  buildContentManagerPanel,
   buildAppearancePanel,
   buildAppearanceIconPanel,
   PANEL_COLOR,

@@ -7,6 +7,7 @@ const scheduledWelcome = require('./scheduledWelcome');
 const CHECK_INTERVAL_MS = 60 * 1000;
 const installed = Symbol.for('goliath.messageStudio.scheduledWelcomeScheduler');
 const SCHEDULER_ID = 'welcome:scheduled-welcome:global';
+const runningGuilds = new Set();
 
 function zonedClock(timezone, date = new Date()) {
   const formatter = new Intl.DateTimeFormat('en-GB', {
@@ -29,6 +30,9 @@ async function checkGuild(guild, date = new Date()) {
   if (!guildManager.isModuleEnabled(guild.id, 'welcome')) return { skipped: true, reason: 'welcome_disabled' };
   const config = scheduledWelcome.getScheduledConfig(guild.id);
   if (!isDue(config, date)) return { skipped: true, reason: 'not_due' };
+  if (runningGuilds.has(guild.id)) return { skipped: true, reason: 'already_running' };
+
+  runningGuilds.add(guild.id);
   try {
     return await scheduledWelcome.runScheduledWelcome(guild);
   } catch (error) {
@@ -41,6 +45,8 @@ async function checkGuild(guild, date = new Date()) {
       },
     }, { action: 'scheduled_welcome_run_failed' });
     return { skipped: false, failed: true, error: error?.message || String(error) };
+  } finally {
+    runningGuilds.delete(guild.id);
   }
 }
 

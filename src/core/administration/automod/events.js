@@ -2,6 +2,7 @@
 
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../guild/guildManager');
+const { replaceVars } = require('../../guild/guildVariables');
 const { applyPunishmentEngine, normalizePunishments } = require('./engine');
 
 const AUTOMOD_MODULE = 'automod';
@@ -114,12 +115,19 @@ function isStaff(message) {
 }
 
 function renderDmMessage(template, message, reason) {
-  return String(template || '')
-    .replaceAll('{server}', message.guild.name)
-    .replaceAll('{reason}', reason)
-    .replaceAll('{user}', message.author.username)
-    .replaceAll('{userMention}', `<@${message.author.id}>`)
-    .replaceAll('{channel}', message.channel?.name || 'unknown-channel');
+  const interaction = {
+    guild: message.guild,
+    guildId: message.guild?.id,
+    user: message.author,
+    member: message.member,
+    channel: message.channel,
+    channelId: message.channelId,
+  };
+
+  return replaceVars(template, interaction, false, {
+    '{reason}': reason,
+    '{user}': message.author.username,
+  });
 }
 
 function extractDomains(content) {

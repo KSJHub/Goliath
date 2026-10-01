@@ -34,18 +34,24 @@ function run() {
 
   const embedRuntime = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embed'), 'utf8');
   assert(embedRuntime.includes('function canonicalMediaState'));
-  assert(embedRuntime.includes('mediaWeight(fromV2) >= mediaWeight(fromStored)'));
+  assert(embedRuntime.includes('media.mediaModel.normalizeMedia(state?.media || {}, panels)'));
   assert(embedRuntime.includes('installCanonicalMediaSessions(targetPanel)'));
   assert(embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"));
 
-  // Persistence now lives at the canonical embedState boundary itself rather
-  // than being installed as a wrapper from embed.js. Keep this audit focused
-  // on the invariant: every state load/save path must cross the durable store.
+  // Persistence is owned directly by the canonical embedState boundary.
+  // Validate the current consolidated implementation rather than the retired
+  // embedSessionStore module that previously supplied these operations.
   const embedState = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embedState'), 'utf8');
-  assert(embedState.includes("require('./embedSessionStore')"), 'embedState must own the durable session store');
-  assert(embedState.includes('sessionStore.load(key)'), 'getSession must hydrate from durable storage');
-  assert(embedState.includes('sessionStore.save(key, synced)'), 'saveSession must persist canonical state');
-  assert(embedState.includes('sessionStore.remove(key)'), 'clearSession must remove durable state');
+  assert(embedState.includes('function loadPersistedSession(key)'), 'embedState must own durable session loading');
+  assert(embedState.includes('function savePersistedSession(key, state)'), 'embedState must own durable session saving');
+  assert(embedState.includes('function removePersistedSession(key)'), 'embedState must own durable session removal');
+  assert(embedState.includes('loadPersistedSession(key)'), 'getSession must hydrate from durable storage');
+  assert(
+    embedState.includes('savePersistedSession(key, state)') &&
+    embedState.includes('persistOrThrow(key, synced'),
+    'saveSession must persist canonical state'
+  );
+  assert(embedState.includes('removePersistedSession(key)'), 'clearSession must remove durable state');
 
   console.log('✅ Embed Graphic Header regression audit passed.');
 }

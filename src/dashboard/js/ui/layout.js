@@ -52,6 +52,7 @@ const OwnerFormsHub = lazy(() => import('../pages/owner/FormsHub'));
 const OwnerTicketsHub = lazy(() => import('../pages/owner/TicketsHub'));
 const OwnerTranslationHub = lazy(() => import('../pages/owner/TranslationHub'));
 const OwnerPermissionHealth = lazy(() => import('../pages/owner/PermissionHealth'));
+const OwnerGlobalVariables = lazy(() => import('../pages/owner/GlobalVariables'));
 
 export const DASHBOARD_LAYOUT = { navbarExpandedWidth: '280px', navbarCollapsedWidth: '72px', topBarHeight: '72px', pageGap: '20px', cardRadius: '20px', cardPadding: '24px', sectionPadding: '18px' };
 export const NAV_ITEMS = [
@@ -88,6 +89,7 @@ export const ROUTES = [
   { key: 'ownerBilling', label: 'Billing Admin', icon: 'admin', path: '/owner/billing', component: OwnerBillingAdmin, ownerOnly: true },
   { key: 'ownerSecurity', label: 'Owner Security', icon: 'admin', path: '/owner/security', component: OwnerSecurityCenter, ownerOnly: true },
   { key: 'ownerPermissionHealth', label: 'Permission Health', icon: 'admin', path: '/owner/permission-health', component: OwnerPermissionHealth, ownerOnly: true },
+  { key: 'ownerVariables', label: 'Global Variables', icon: 'modules', path: '/owner/variables', component: OwnerGlobalVariables, ownerOnly: true },
   { key: 'ownerBackups', label: 'Backup Center', icon: 'admin', path: '/owner/backups', component: OwnerBackupCenter, ownerOnly: true },
   { key: 'ownerDeployments', label: 'Deployment Center', icon: 'modules', path: '/owner/deployments', component: OwnerDeploymentCenter, ownerOnly: true },
   { key: 'ownerForms', label: 'Forms Hub', icon: 'modules', path: '/owner/forms', component: OwnerFormsHub, ownerOnly: true },

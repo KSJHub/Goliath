@@ -16,7 +16,12 @@ async function facebookToken() {
 }
 
 async function checkFacebook(account) {
-  const token = await facebookToken();
+  let token;
+  try {
+    token = await facebookToken();
+  } catch (error) {
+    return unavailable('facebook', `Facebook authentication unavailable: ${error.message}`);
+  }
   if (!token) return unavailable('facebook', 'Set FACEBOOK_ACCESS_TOKEN or FACEBOOK_APP_ID + FACEBOOK_APP_SECRET.', 'configuration_required');
   const lookup = clean(account.externalId || account.metadata?.pageId || handle(account));
   if (!lookup) return unavailable('facebook', 'Facebook Page ID or username could not be resolved.');
@@ -24,10 +29,20 @@ async function checkFacebook(account) {
   try {
     const { json: pageJson } = await request(`https://graph.facebook.com/${version}/${encodeURIComponent(lookup)}?fields=id,name,username,picture.type(large)&access_token=${encodeURIComponent(token)}`);
     if (!pageJson?.id) return unavailable('facebook', 'Facebook Page could not be resolved. Page Public Content Access may be required.');
-    const [liveRes, feedRes] = await Promise.all([
-      request(`https://graph.facebook.com/${version}/${pageJson.id}/live_videos?broadcast_status=LIVE&fields=id,title,status,permalink_url,creation_time&limit=1&access_token=${encodeURIComponent(token)}`).catch(() => ({ json: null })),
-      request(`https://graph.facebook.com/${version}/${pageJson.id}/feed?fields=id,message,permalink_url,created_time,full_picture&limit=1&access_token=${encodeURIComponent(token)}`).catch(() => ({ json: null })),
-    ]);
+
+    // LIVE status is stateful: a failed LIVE lookup must never be interpreted as
+    // OFFLINE, otherwise a transient Graph API failure can generate a false
+    // stream-ended transition. Feed lookup is optional and may degrade alone.
+    let liveRes;
+    try {
+      liveRes = await request(`https://graph.facebook.com/${version}/${pageJson.id}/live_videos?broadcast_status=LIVE&fields=id,title,status,permalink_url,creation_time&limit=1&access_token=${encodeURIComponent(token)}`);
+    } catch (error) {
+      return unavailable('facebook', `Facebook LIVE status unavailable: ${error.message}`);
+    }
+
+    const feedRes = await request(`https://graph.facebook.com/${version}/${pageJson.id}/feed?fields=id,message,permalink_url,created_time,full_picture&limit=1&access_token=${encodeURIComponent(token)}`)
+      .catch(() => ({ json: null }));
+
     const live = liveRes.json?.data?.[0];
     const post = feedRes.json?.data?.[0];
     const pageUrl = pageJson.username ? `https://www.facebook.com/${encodeURIComponent(pageJson.username)}` : `https://www.facebook.com/${pageJson.id}`;

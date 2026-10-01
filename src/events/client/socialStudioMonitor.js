@@ -2,7 +2,10 @@
 
 const crypto = require('node:crypto');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { startupSocialStudio, checkGuildAccounts } = require('../../modules/socialStudio/socialAlerts/socialStudioMonitor');
+const guildManager = require('../../core/guild/guildManager');
+const { startupSocialStudio } = require('../../modules/socialStudio/socialAlerts/socialStudioMonitor');
+const liveRole = require('../../modules/socialStudio/socialAlerts/socialStudioLiveRole');
+const { diagnoseAccount } = require('../../modules/socialStudio/socialAlerts/socialStudioProviders');
 const { buildSectionPanel } = require('../../modules/socialStudio/socialAlerts/socialStudioPanel');
 
 const PLATFORM_LABELS = {
@@ -32,9 +35,120 @@ function sortProviderResults(results = []) {
     const orderA = platformA === -1 ? PLATFORM_ORDER.length : platformA;
     const orderB = platformB === -1 ? PLATFORM_ORDER.length : platformB;
     if (orderA !== orderB) return orderA - orderB;
-    const identityA = String(a?.username || a?.externalId || '').toLowerCase();
-    const identityB = String(b?.username || b?.externalId || '').toLowerCase();
+    const identityA = String(a?.username || a?.resolvedUsername || a?.externalId || a?.accountId || '').toLowerCase();
+    const identityB = String(b?.username || b?.resolvedUsername || b?.externalId || b?.accountId || '').toLowerCase();
     return identityA.localeCompare(identityB, 'en-GB', { sensitivity: 'base', numeric: true });
+  });
+}
+
+function socialConfig(guildId) {
+  return guildManager.getGuildSection(guildId, 'social', {}) || {};
+}
+
+function alertChannelFor(social, account, type = 'live') {
+  return account?.alertChannels?.[type]
+    || account?.alertChannelId
+    || social?.alertChannels?.[type]
+    || social?.platformChannels?.[account?.platform]
+    || social?.alertsChannelId
+    || null;
+}
+
+function selectedAccountIds(social, options = {}) {
+  if (Array.isArray(options.accountIds) && options.accountIds.length) {
+    return [...new Set(options.accountIds.map(String))];
+  }
+
+  if (Array.isArray(options.creatorIds) && options.creatorIds.length) {
+    const ids = [];
+    for (const creatorId of options.creatorIds) {
+      const creator = social?.creators?.[creatorId];
+      if (creator && Array.isArray(creator.accountIds)) ids.push(...creator.accountIds.map(String));
+    }
+    return [...new Set(ids)];
+  }
+
+  return Object.keys(social?.accounts || {});
+}
+
+function persistDiagnosticState(guildId, social, results = []) {
+  if (!results.length) return;
+  const checkedAt = new Date().toISOString();
+  social.diagnostics = social.diagnostics && typeof social.diagnostics === 'object' ? social.diagnostics : {};
+  social.diagnostics.lastProviderCheckAt = checkedAt;
+  social.diagnostics.lastProviderCheckCount = results.length;
+  social.diagnostics.lastProviderCheckIssues = results.filter((item) => item?.reason || item?.deliveryReady === false).length;
+
+  for (const result of results) {
+    const account = social.accounts?.[result.accountId];
+    if (!account) continue;
+    account.diagnostics = {
+      ...(account.diagnostics && typeof account.diagnostics === 'object' ? account.diagnostics : {}),
+      lastProviderCheckAt: result.checkedAt || checkedAt,
+      status: result.status || null,
+      isLive: result.isLive,
+      latencyMs: Number.isFinite(Number(result.latencyMs)) ? Number(result.latencyMs) : null,
+      reason: result.reason || null,
+      providerSource: result.providerSource || null,
+      deliveryReady: result.deliveryReady,
+      deliveryChannelId: result.deliveryChannelId || null,
+      deliveryReason: result.deliveryReason || null,
+    };
+  }
+
+  social.history = Array.isArray(social.history) ? social.history : [];
+  social.history.push({
+    id: `diagnostic_${Date.now()}`,
+    createdAt: checkedAt,
+    checkedAt,
+    status: 'checked',
+    providerStatus: results.some((item) => item?.reason) ? 'degraded' : 'ok',
+    source: 'provider_diagnostic',
+    checked: results.length,
+    issues: social.diagnostics.lastProviderCheckIssues,
+  });
+  social.history = social.history.slice(-1000);
+
+  guildManager.saveGuildSection(guildId, 'social', social, {
+    guildId,
+    actorId: 'social-provider-diagnostic',
+  });
+}
+
+async function runProviderStatusCheck(guildId, options = {}) {
+  const social = socialConfig(guildId);
+  const accounts = social.accounts && typeof social.accounts === 'object' ? social.accounts : {};
+  const results = [];
+
+  for (const accountId of selectedAccountIds(social, options)) {
+    const account = accounts[accountId];
+    if (!account || account.enabled === false) continue;
+    const deliveryChannelId = alertChannelFor(social, account, 'live');
+    results.push(await diagnoseAccount({ ...account, accountId }, {
+      includeDelivery: true,
+      deliveryChannelId,
+    }));
+  }
+
+  persistDiagnosticState(guildId, social, results);
+  return { guildId, checked: results.length, results };
+}
+
+function enrichProviderResults(guildId, results = []) {
+  const social = socialConfig(guildId);
+  const accounts = social.accounts && typeof social.accounts === 'object' ? social.accounts : {};
+
+  return results.map((item) => {
+    const account = accounts[item?.accountId] || {};
+    return {
+      ...item,
+      username: item?.username || item?.resolvedUsername || account.username || account.normalizedUsername || null,
+      resolvedUsername: item?.resolvedUsername || account.normalizedUsername || account.username || null,
+      externalId: item?.externalId || account.externalId || null,
+      displayName: item?.displayName || account.displayName || null,
+      profileUrl: item?.profileUrl || item?.url || account.profileUrl || account.url || null,
+      reason: item?.reason || item?.error || account.state?.lastError || null,
+    };
   });
 }
 
@@ -49,12 +163,18 @@ function formatProviderResult(item, { showIds = false } = {}) {
   else if (item.status === 'ok') state = '🟢 OK';
   else if (item.status) state = `🟡 ${String(item.status).replace(/_/g, ' ').toUpperCase()}`;
 
-  const identity = item.username || item.externalId || 'Unknown account';
+  const rawIdentity = item.username || item.resolvedUsername || item.displayName || item.externalId || item.accountId || 'Unknown account';
+  const identity = item.platform === 'twitch' && rawIdentity !== 'Unknown account' && !String(rawIdentity).startsWith('@')
+    ? `@${rawIdentity}`
+    : rawIdentity;
   const extra = [];
-  if (showIds && item.externalId) extra.push(`ID: ${item.externalId}`);
+  if (showIds && item.accountId) extra.push(`Account: ${item.accountId}`);
+  if (showIds && item.externalId) extra.push(`Provider ID: ${item.externalId}`);
+  if (Number.isFinite(Number(item.latencyMs))) extra.push(`Provider: ${Number(item.latencyMs)}ms`);
   if (item.events?.length) extra.push(`Detected: ${item.events.map((event) => event.type).join(', ')}`);
   if (item.delivered?.length) extra.push(`Posted: ${item.delivered.map((event) => event.type).join(', ')}`);
   if (item.reason) extra.push(item.reason);
+  if (item.deliveryReady === false && item.deliveryReason) extra.push(`⚠️ Alert delivery: ${item.deliveryReason}`);
 
   return `**${platform}** — **${state}** — ${identity}${extra.length ? `\n↳ ${extra.join(' • ')}` : ''}`;
 }
@@ -105,12 +225,13 @@ module.exports = [
     once: true,
     async execute(client) {
       startupSocialStudio(client);
+      liveRole.start(client);
     },
   },
   {
     name: 'interactionCreate',
     once: false,
-    async execute(interaction, client) {
+    async execute(interaction) {
       const customId = String(interaction?.customId || '');
 
       if (customId.startsWith('socialStatus:ids:')) {
@@ -129,12 +250,7 @@ module.exports = [
       const options = checkOptions(customId);
       if (options && interaction.guildId) {
         if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-        const outcome = await checkGuildAccounts(client || interaction.client, interaction.guildId, options);
-
-        if (outcome.skipped && outcome.reason === 'check_already_running') {
-          await interaction.followUp({ content: '🔎 **Social Studio Status Check**\n\n⏳ A Social Studio check is already running for this server.', flags: 64 }).catch(() => null);
-          return;
-        }
+        const outcome = await runProviderStatusCheck(interaction.guildId, options);
 
         try {
           const section = currentPanelSection(interaction, customId);
@@ -145,7 +261,7 @@ module.exports = [
 
         cleanupStatusSessions();
         const sessionId = crypto.randomBytes(6).toString('hex');
-        const results = sortProviderResults(outcome.results || []);
+        const results = sortProviderResults(enrichProviderResults(interaction.guildId, outcome.results || []));
         statusSessions.set(sessionId, { userId: interaction.user?.id || null, createdAt: Date.now(), results });
         await interaction.followUp(statusPayload(results, sessionId, false)).catch(() => null);
       }

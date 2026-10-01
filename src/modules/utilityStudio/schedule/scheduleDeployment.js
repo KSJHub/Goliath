@@ -13,7 +13,9 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
+const { replaceVars } = require('../../../core/guild/guildVariables');
 const emojiPayload = require('../emojis/emojiPayload');
+const { buildScheduleWaitlistPromotionNotice } = require('../../../core/ui/systemNotices');
 const schedule = require('./schedule');
 
 const STATUS_COLOURS = Object.freeze({ scheduled: 0x5865F2, completed: 0x57F287, cancelled: 0xED4245 });
@@ -149,7 +151,15 @@ async function syncDiscordEvent(guild, event) {
 async function ensureEventThread(guild, event, message) {
   if (!event.thread?.enabled || event.thread.threadId) return event.thread?.threadId || null;
   if (!message?.startThread) return null;
-  const name = String(event.thread.title || '{event}').replaceAll('{event}', event.title).slice(0, 100);
+  const interaction = {
+    guild,
+    guildId: guild.id,
+    channel: message.channel,
+    channelId: message.channelId || message.channel?.id,
+  };
+  const name = replaceVars(event.thread.title || '{event}', interaction, false, {
+    '{event}': event.title,
+  }).slice(0, 100);
   const thread = await message.startThread({ name, autoArchiveDuration: event.thread.autoArchiveDuration || 1440, reason: 'Goliath Schedule event thread' }).catch(() => null);
   if (!thread) return null;
   schedule.saveEvent(guild.id, { ...schedule.getEvent(guild.id, event.eventId), thread: { ...event.thread, threadId: thread.id } }, { action: 'schedule_thread_created' });
@@ -227,7 +237,13 @@ async function syncPromotedMember(guild, event, userId) {
   const status = event.rsvps?.[userId]?.status || null;
   await syncAttendeeRole(member, event, 'waitlist', status);
   if (schedule.isAttendeeStatus(event, status)) await addToThread(guild, event, member);
-  await member.user?.send?.(`✅ A place opened up for **${event.title}** and you have been promoted from the waitlist.`).catch(() => null);
+  await member.user
+    ?.send?.(buildScheduleWaitlistPromotionNotice({
+      guild,
+      member,
+      event,
+    }))
+    .catch(() => null);
   return member;
 }
 

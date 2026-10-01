@@ -71,7 +71,7 @@ export default function BackupCenter({ theme }) {
           </p>
 
           <h1 style={{ margin: '8px 0 0', fontSize: 34 }}>
-            Backup Center v2
+            Backup Center
           </h1>
 
           <p style={{ marginTop: 8, color: theme.mutedText, maxWidth: 840, lineHeight: 1.6 }}>

@@ -52,20 +52,15 @@ async function checkTwitch(account) {
     thumbnail: clip.thumbnail_url || null, viewCount: clip.view_count, publishedAt: clip.created_at || null, duration: clip.duration || null,
   });
 
-  // The monitor currently persists one lastAlertKey per account. Returning both the
-  // latest VOD and latest clip causes that key to oscillate (vod -> clip -> vod),
-  // which re-delivers old Twitch content every monitor tick. Until the monitor's
-  // persistent multi-item delivery ledger is in place, expose only the newest
-  // content candidate. This guarantees stable dedupe and immediately prevents
-  // cross-guild replay spam without affecting LIVE detection/refresh behaviour.
+  // The monitor persists a bounded deliveredEventKeys ledger, so distinct VOD and
+  // clip events can be returned together without the old lastAlertKey oscillation.
   const contentItems = candidates
     .filter((item) => item?.id)
     .sort((a, b) => {
       const aTime = new Date(a.publishedAt || 0).getTime();
       const bTime = new Date(b.publishedAt || 0).getTime();
       return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
-    })
-    .slice(0, 1);
+    });
 
   return result('twitch', {
     isLive: Boolean(stream), externalId: String(user.id), resolvedUsername: user.login, url: channelUrl, avatar: user.profile_image_url || null,

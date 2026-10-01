@@ -10,6 +10,7 @@ const {
 const MODULE_KEY = 'stats';
 const MAX_ITEMS = 10;
 const MAX_SNAPSHOTS = 120;
+let runtimeConfigListener = null;
 
 const DEFAULT_STATS = {
   trackMessages: true,
@@ -53,6 +54,31 @@ function merge(defaults = {}, source = {}) {
   return output;
 }
 
+function retentionCutoff(retentionDays, now = Date.now()) {
+  return new Date(now - (Math.max(1, Number(retentionDays) || 30) - 1) * 86400000).toISOString().slice(0, 10);
+}
+
+function pruneDailyMap(map, cutoff) {
+  if (!isObject(map)) return {};
+  for (const key of Object.keys(map)) if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key < cutoff) delete map[key];
+  return map;
+}
+
+function applyRetention(stats) {
+  const cutoff = retentionCutoff(stats.settings?.retentionDays);
+  stats.data = isObject(stats.data) ? stats.data : copy(DEFAULT_STATS.data);
+  stats.data.messages = pruneDailyMap(stats.data.messages, cutoff);
+  stats.data.voice = pruneDailyMap(stats.data.voice, cutoff);
+  stats.data.members = isObject(stats.data.members) ? stats.data.members : copy(DEFAULT_STATS.data.members);
+  stats.data.members.snapshots = (Array.isArray(stats.data.members.snapshots) ? stats.data.members.snapshots : [])
+    .filter((snapshot) => {
+      const at = new Date(snapshot?.at || 0);
+      return Number.isFinite(at.getTime()) && at.toISOString().slice(0, 10) >= cutoff;
+    })
+    .slice(0, MAX_SNAPSHOTS);
+  return stats;
+}
+
 function normalizeStats(value = {}) {
   const normalized = merge(DEFAULT_STATS, value);
   delete normalized.enabled;
@@ -62,7 +88,7 @@ function normalizeStats(value = {}) {
   normalized.settings.timeZone = String(normalized.settings.timeZone || DEFAULT_STATS.settings.timeZone).trim().slice(0, 64) || DEFAULT_STATS.settings.timeZone;
   normalized.settings.defaultFrequencyMinutes = Math.max(10, Math.min(1440, Number(normalized.settings.defaultFrequencyMinutes || 10) || 10));
   normalized.counters = Array.isArray(normalized.counters) ? normalized.counters.slice(0, 100) : [];
-  return normalized;
+  return applyRetention(normalized);
 }
 
 function dayKey(date = new Date()) {
@@ -78,32 +104,51 @@ function getStats(guildId) {
   return normalizeStats(getModuleSection(guildId, MODULE_KEY, DEFAULT_STATS));
 }
 
+function notifyRuntimeConfigChange(guildId, patch) {
+  if (typeof runtimeConfigListener !== 'function') return;
+  try { runtimeConfigListener(String(guildId), patch || {}); }
+  catch (error) { console.warn('[Stats] Runtime config reconciliation failed:', error?.message || error); }
+}
+
+function setRuntimeConfigListener(listener) {
+  runtimeConfigListener = typeof listener === 'function' ? listener : null;
+}
+
 function saveStats(guildId, stats, guildOrMeta = {}) {
-  return normalizeStats(saveModuleSection(
-    guildId,
-    MODULE_KEY,
-    normalizeStats(stats),
-    guildOrMeta
-  ));
+  const before = getStats(guildId);
+  const saved = normalizeStats(saveModuleSection(guildId, MODULE_KEY, normalizeStats(stats), guildOrMeta));
+  if ((before.trackVoice !== false) !== (saved.trackVoice !== false)) notifyRuntimeConfigChange(guildId, { trackVoice: saved.trackVoice !== false });
+  return saved;
 }
 
 function updateStats(guildId, updater, guildOrMeta = {}) {
-  return normalizeStats(updateModuleSection(
+  let voiceChanged = false;
+  let nextVoice = true;
+  const saved = normalizeStats(updateModuleSection(
     guildId,
     MODULE_KEY,
     (current) => {
       const normalized = normalizeStats(current);
+      const previousVoice = normalized.trackVoice !== false;
       const next = typeof updater === 'function' ? updater(copy(normalized)) : updater;
-      return normalizeStats(next);
+      const finalStats = normalizeStats(next);
+      nextVoice = finalStats.trackVoice !== false;
+      voiceChanged = previousVoice !== nextVoice;
+      return finalStats;
     },
     DEFAULT_STATS,
     guildOrMeta
   ));
+  if (voiceChanged) notifyRuntimeConfigChange(guildId, { trackVoice: nextVoice });
+  return saved;
 }
 
 function setEnabled(guildId, enabled, guildOrMeta = {}) {
+  const wasEnabled = guildManager.isModuleEnabled(guildId, MODULE_KEY);
   guildManager.setModuleEnabled(guildId, MODULE_KEY, enabled === true, guildOrMeta);
-  return { ...getStats(guildId), enabled: guildManager.isModuleEnabled(guildId, MODULE_KEY) };
+  const isNowEnabled = guildManager.isModuleEnabled(guildId, MODULE_KEY);
+  if (wasEnabled !== isNowEnabled) notifyRuntimeConfigChange(guildId, { enabled: isNowEnabled });
+  return { ...getStats(guildId), enabled: isNowEnabled };
 }
 
 function isEnabled(guildId) {
@@ -212,6 +257,7 @@ module.exports = {
   updateStats,
   setEnabled,
   isEnabled,
+  setRuntimeConfigListener,
   addMessage,
   addVoiceMinutes,
   addMemberEvent,

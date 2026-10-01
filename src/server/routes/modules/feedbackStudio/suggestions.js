@@ -16,7 +16,7 @@ function guildId(req) {
   return id;
 }
 
-const actorId = (req) => String(req.session?.user?.id || req.body?.actorId || '').trim() || null;
+const actorId = (req) => String(req.session?.user?.id || '').trim() || null;
 const client = (req) => req.client || req.app?.get?.('goliath.client') || null;
 
 async function guild(req, id) {
@@ -24,28 +24,74 @@ async function guild(req, id) {
   return discord?.guilds?.cache?.get(id) || await discord?.guilds?.fetch?.(id).catch(() => null);
 }
 
-async function channelHealth(target, channelId, label, required) {
-  if (!channelId) return required ? { level: 'warning', code: `${label}_missing` } : null;
+async function requireGuildAccess(req, res, next) {
+  try {
+    const userId = actorId(req);
+    if (!/^\d{15,25}$/.test(userId || '')) return res.status(401).json({ success: false, error: 'Authentication required.' });
+    const id = guildId(req);
+    const target = await guild(req, id);
+    if (!target) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
+    const member = target.members.cache.get(userId) || await target.members.fetch(userId).catch(() => null);
+    const allowed = Boolean(
+      member?.permissions?.has(PermissionFlagsBits.Administrator) ||
+      member?.permissions?.has(PermissionFlagsBits.ManageGuild)
+    );
+    if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
+    return next();
+  } catch (error) {
+    console.error('[Suggestions API access]', error);
+    return res.status(403).json({ success: false, error: 'Unable to verify server access.' });
+  }
+}
+
+router.use('/:guildId', requireGuildAccess);
+
+async function channelHealth(target, channelId, label, required, options = {}) {
+  if (!channelId) return required ? { level: 'issue', code: `${label}_missing` } : null;
   const channel = target?.channels?.cache?.get(channelId) || await target?.channels?.fetch?.(channelId).catch(() => null);
   if (!channel?.send) return { level: 'issue', code: `${label}_unavailable`, channelId };
   const me = target?.members?.me;
   const permissions = me && channel.permissionsFor?.(me);
-  if (permissions && ![PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks].every((permission) => permissions.has(permission))) {
+  const requiredPermissions = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks];
+  if (options.requireHistory === true) requiredPermissions.push(PermissionFlagsBits.ReadMessageHistory);
+  if (permissions && !requiredPermissions.every((permission) => permissions.has(permission))) {
     return { level: 'issue', code: `${label}_permissions_missing`, channelId };
   }
   return null;
 }
 
+async function deploymentHealth(target, deployment = {}) {
+  const channelId = deployment?.channelId || null;
+  const messageId = deployment?.messageId || null;
+  if (!channelId && !messageId) return null;
+  if (!channelId || !messageId) return { level: 'issue', code: 'deployment_link_incomplete', channelId, messageId };
+  const channel = target?.channels?.cache?.get(channelId) || await target?.channels?.fetch?.(channelId).catch(() => null);
+  if (!channel?.messages?.fetch) return { level: 'issue', code: 'deployment_channel_unavailable', channelId, messageId };
+  const me = target?.members?.me;
+  const permissions = me && channel.permissionsFor?.(me);
+  const requiredPermissions = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks, PermissionFlagsBits.ReadMessageHistory];
+  if (permissions && !requiredPermissions.every((permission) => permissions.has(permission))) {
+    return { level: 'issue', code: 'deployment_channel_permissions_missing', channelId, messageId };
+  }
+  const message = await channel.messages.fetch(messageId).catch(() => null);
+  return message ? null : { level: 'issue', code: 'deployment_message_missing', channelId, messageId };
+}
+
 async function buildHealth(target, section) {
   if (!target) return null;
   const checks = await Promise.all([
-    channelHealth(target, section.submitChannelId, 'submit_channel', true),
-    channelHealth(target, section.reviewChannelId || section.submitChannelId, 'review_channel', section.requireReview !== false),
-    channelHealth(target, section.approvedChannelId, 'approved_channel', false),
-    channelHealth(target, section.deniedChannelId, 'denied_channel', false),
+    channelHealth(target, section.submitChannelId, 'submit_channel', true, { requireHistory: true }),
+    channelHealth(target, section.reviewChannelId, 'review_channel', section.requireReview !== false, { requireHistory: true }),
+    channelHealth(target, section.approvedChannelId, 'approved_channel', false, { requireHistory: true }),
+    channelHealth(target, section.deniedChannelId, 'denied_channel', false, { requireHistory: true }),
+    channelHealth(target, section.logChannelId, 'log_channel', false),
+    deploymentHealth(target, section.deployment),
   ]);
   const issues = checks.filter((item) => item?.level === 'issue');
   const warnings = checks.filter((item) => item?.level === 'warning');
+  if (section.requireReview !== false && section.submitChannelId && section.reviewChannelId && section.submitChannelId === section.reviewChannelId) {
+    issues.push({ level: 'issue', code: 'review_channel_matches_submit_channel', channelId: section.submitChannelId });
+  }
   for (const roleId of section.reviewerRoleIds || []) {
     const role = target.roles.cache.get(roleId) || await target.roles.fetch(roleId).catch(() => null);
     if (!role) warnings.push({ level: 'warning', code: 'reviewer_role_missing', roleId });

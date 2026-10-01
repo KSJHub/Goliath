@@ -2,10 +2,15 @@
 const { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const crypto = require('crypto');
 const security = require('../../../core/security/protection/core');
+const { goliathNavigation } = require('../../../components/goliathNavigation');
+const { variablesForModule } = require('../../../core/guild/guildVariables');
 const store = require('./socialStudioStore');
 const { normalizeAccountInput, migrateAccount } = require('./accountNormalizer');
 const { providerInfo } = require('./socialStudioProviders');
-const { forcePostCreatorLive } = require('./socialStudioMonitor');
+const {
+  checkGuildAccounts,
+  forcePostCreatorLive,
+} = require('./socialStudioMonitor');
 const { ALERT_TYPES, normalizeTemplates, resolveTemplate, resetTemplate } = require('./socialStudioTemplates');
 
 const P = 'social:';
@@ -25,8 +30,32 @@ const ALERT_HELP = {
 const LABEL = { twitch: 'Twitch', youtube: 'YouTube', tiktok: 'TikTok', kick: 'Kick', facebook: 'Facebook', instagram: 'Instagram', x: 'X' };
 const ICON = { twitch: '🟣', youtube: '🔴', tiktok: '⚫', kick: '🟢', facebook: '🔵', instagram: '🟠', x: '⚪' };
 const PLATFORM_COLOR = { twitch: 0x9146FF, youtube: 0xFF0000, tiktok: 0x2F3136, kick: 0x53FC18, facebook: 0x1877F2, instagram: 0xE1306C, x: 0xFFFFFF };
-const NAV = new Set(['creators', 'accounts', 'notifications', 'templates', 'variables', 'channels', 'settings', 'permissions', 'roles', 'operations', 'monitoring', 'liveMessages', 'diagnostics', 'automation', 'testing', 'data']);
-const SETTINGS_CHILDREN = new Set(['permissions', 'roles', 'operations', 'monitoring', 'liveMessages', 'diagnostics', 'automation', 'testing', 'data']);
+const NAV = new Set([
+  'creators',
+  'accounts',
+  'templates',
+  'variables',
+  'alerts',
+  'channels',
+  'settings',
+  'permissions',
+  'roles',
+  'monitoring',
+  'liveMessages',
+  'diagnostics',
+  'automation',
+  'testing',
+  'data',
+]);
+const SETTINGS_CHILDREN = new Set([
+  'permissions',
+  'roles',
+  'monitoring',
+  'channels',
+  'liveMessages',
+  'diagnostics',
+  'data',
+]);
 const accountSessions = new Map();
 const creatorSessions = new Map();
 const feedSessions = new Map();
@@ -113,13 +142,28 @@ function platformColor(platform) { return PLATFORM_COLOR[platform] || 0x5865F2; 
 function creatorAccent(linked) { const platforms = [...new Set((linked || []).map((account) => account?.platform).filter(Boolean))]; return platforms.length === 1 ? platformColor(platforms[0]) : null; }
 function navigation(active = 'main') {
   let backId = 'admin:studio:socialStudio';
-  let secondaryId = `${P}settings`;
-  let secondaryLabel = '⚙️ Settings';
-  let secondaryDisabled = active === 'settings';
-  if (active === 'settings') backId = `${P}main`;
-  else if (SETTINGS_CHILDREN.has(active)) { backId = `${P}settings`; secondaryId = `${P}main`; secondaryLabel = '🏠 Social Studio'; secondaryDisabled = false; }
-  else if (active !== 'main') backId = `${P}main`;
-  return row(btn(backId, '⬅️ Back'), btn(secondaryId, secondaryLabel, ButtonStyle.Secondary, secondaryDisabled));
+
+  if (active === 'settings') {
+    backId = `${P}main`;
+  } else if (SETTINGS_CHILDREN.has(active)) {
+    backId = `${P}settings`;
+  } else if (active !== 'main') {
+    backId = `${P}main`;
+  }
+
+  return row(
+    btn(
+      backId,
+      '⬅️ Back',
+      ButtonStyle.Secondary,
+    ),
+    btn(
+      `${P}settings`,
+      '⚙️ Settings',
+      ButtonStyle.Secondary,
+      active === 'settings',
+    ),
+  );
 }
 
 function creatorSelect(creators, selected, id = `${P}account:creator`, placeholder = '1. Select the creator profile') {
@@ -328,22 +372,271 @@ function creatorLivePostState(config, creator, options = {}) {
   return { canPost: true, reason: `${liveAccounts.length} LIVE account${liveAccounts.length === 1 ? '' : 's'} ready.` };
 }
 function buildMainPanel(guild, requestedBy = 'Unknown User') {
-  const c = getConfig(guild.id), creators = Object.keys(c.creators).length, accounts = Object.keys(c.accounts).length, ready = creators && accounts && c.alertsChannelId, stats = dashboardStats(c);
-  const d = [`${ready ? '✅' : '⚠️'} **${ready ? 'Social Studio is ready.' : 'Setup required'}**`, '', `**Creators:** ${creators}  •  **Accounts:** ${accounts}`, `🔴 **LIVE:** ${stats.live}  •  ⚫ **Offline:** ${stats.offline}  •  🟡 **Issues:** ${stats.unavailable}`, `📡 **Monitoring:** ${stats.monitored}/${accounts}`, `📨 **Alerts Sent:** ${Number(c.analytics?.alertsSent || 0).toLocaleString('en-GB')}`, `📂 **Default Channel:** ${c.alertsChannelId ? `<#${c.alertsChannelId}>` : 'Not configured'}`, `🔔 **Notifications:** ${c.enabled ? '🟢 Enabled' : '🔴 Disabled'}`].join('\n');
-  return { embeds: [embed(c, '📣 Social Studio', d, requestedBy)], components: [row(btn(`${P}creators`, '👥 Creator Profiles', ButtonStyle.Primary), btn(`${P}channels`, '📂 Channels'), btn(`${P}refresh`, '🔄 Refresh', ButtonStyle.Secondary), btn(`${P}templates`, '🎨 Templates', ButtonStyle.Secondary, true)), navigation('main')] };
+  const config = getConfig(guild.id);
+  const creators = Object.keys(config.creators || {}).length;
+  const accounts = Object.keys(config.accounts || {}).length;
+  const stats = dashboardStats(config);
+
+  const ready = Boolean(
+    creators &&
+    accounts &&
+    config.alertsChannelId
+  );
+
+  const status = config.enabled
+    ? '🟢 Monitoring Active'
+    : '🔴 Monitoring Disabled';
+
+  const description = [
+    `**${ready ? 'Social Studio is ready' : 'Setup required'}**`,
+    '',
+    'Manage creators, alert templates and Social Studio configuration from one place.',
+    '',
+    '**Status**',
+    status,
+    `👥 Creators: **${creators}**`,
+    `🔗 Accounts: **${accounts}**`,
+    `🔴 LIVE: **${stats.live}**`,
+    `⚠️ Issues: **${stats.unavailable}**`,
+    '',
+    '**Delivery**',
+    `📡 Monitored Accounts: **${stats.monitored}/${accounts}**`,
+    `📨 Alerts Sent: **${Number(config.analytics?.alertsSent || 0).toLocaleString('en-GB')}**`,
+    `📍 Default Channel: ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : '**Not configured**'}`,
+  ].join('\n');
+
+  return {
+    embeds: [
+      embed(
+        config,
+        '📡 Social Studio',
+        description,
+        requestedBy,
+      ),
+    ],
+    components: [
+      row(
+        btn(
+          `${P}creators`,
+          '👥 Creators',
+          ButtonStyle.Primary,
+        ),
+        btn(
+          `${P}templates`,
+          '🎨 Templates',
+          ButtonStyle.Primary,
+        ),
+      ),
+      goliathNavigation(
+        'admin:modules',
+        `${P}settings`,
+      ),
+    ],
+  };
 }
 function buildCreatorPanel(i, config, creators) {
-  const view = getCreatorSession(i), pages = Math.max(1, Math.ceil(creators.length / PAGE_SIZE)); if (view.page >= pages) setCreatorSession(i, { page: pages - 1 });
-  let current = getCreatorSession(i), selected = config.creators[current.creatorId] || null; if (current.creatorId && !selected) { setCreatorSession(i, { creatorId: null }); selected = null; }
-  const linked = selected ? (selected.accountIds || []).map((id) => config.accounts[id]).filter(Boolean).sort(accountSort) : [];
-  const d = selected ? [`👤 **${selected.displayName}**`, '', ...(linked.length ? linked.map((a) => `${ICON[a.platform]} **${LABEL[a.platform]}** — ${a.profileUrl ? `[${a.username || a.externalId}](${a.profileUrl})` : a.username || a.externalId} — ${accountState(a)}`) : ['No linked social accounts.']), '', `**Status:** ${selected.enabled === false ? '⏸️ Paused' : '🟢 Monitoring'}`, `**Accounts:** ${linked.length}`, '', `**Group / Team:** ${selected.group || 'Not set'}`, `**Tags:** ${selected.tags?.length ? selected.tags.join(', ') : 'None'}`, `**Profile Notes:** ${selected.notes || 'None'}`].join('\n') : `Select a creator profile below.\n\n**Profiles:** ${creators.length}`;
-  const postState = creatorLivePostState(config, selected, { bypassCooldown: true });
-  const components = [], page = getCreatorSession(i).page, items = creators.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE); if (items.length) components.push(creatorSelect(items, getCreatorSession(i).creatorId, `${P}creator:select`, `Select a creator - Page ${page + 1}/${pages}`)); components.push(row(btn(`${P}creator:new`, '➕ New Profile', ButtonStyle.Success), btn(`${P}account:new`, '➕ New Account', ButtonStyle.Success, !selected), btn(`${P}creator:post`, '📣 Post LIVE', ButtonStyle.Primary, !postState.canPost))); components.push(row(btn(`${P}creator:profile`, '📝 Manage Profile', ButtonStyle.Primary, !selected), btn(`${P}creator:accounts`, '🛠️ Manage Account', ButtonStyle.Primary, !selected || !linked.length))); if (pages > 1) components.push(row(btn(`${P}creator:page:prev`, '⬅️ Previous', ButtonStyle.Secondary, page <= 0), btn(`${P}creator:page:next`, 'Next ➡️', ButtonStyle.Secondary, page >= pages - 1))); components.push(navigation('creators')); return { embeds: [embed(config, '👥 Creator Profiles', selected ? `${d}\n**Post LIVE:** ${postState.reason}` : d, who(i), selected ? creatorAccent(linked) : null)], components };
+  const view = getCreatorSession(i);
+  const pages = Math.max(1, Math.ceil(creators.length / PAGE_SIZE));
+
+  if (view.page >= pages) {
+    setCreatorSession(i, { page: pages - 1 });
+  }
+
+  let current = getCreatorSession(i);
+  let selected = config.creators[current.creatorId] || null;
+
+  if (current.creatorId && !selected) {
+    setCreatorSession(i, { creatorId: null });
+    selected = null;
+    current = getCreatorSession(i);
+  }
+
+  const linked = selected
+    ? (selected.accountIds || [])
+        .map((id) => config.accounts[id])
+        .filter(Boolean)
+        .sort(accountSort)
+    : [];
+
+  const allAccounts = Object.values(config.accounts || {});
+
+  const liveAccounts = allAccounts.filter(
+    (account) => account?.state?.isLive === true,
+  ).length;
+
+  const description = selected
+    ? [
+        `## 👤 ${selected.displayName}`,
+        '',
+        selected.enabled === false
+          ? '⏸️ **Monitoring Paused**'
+          : '🟢 **Monitoring Enabled**',
+        `🔗 **Connected Accounts:** ${linked.length}`,
+        `🔴 **Currently LIVE:** ${linked.filter(
+          (account) => account?.state?.isLive === true,
+        ).length}`,
+        '',
+        '**Connected Platforms**',
+        ...(linked.length
+          ? linked.map((account) => {
+              const name =
+                account.username ||
+                account.externalId ||
+                'Resolving…';
+
+              const profile = account.profileUrl
+                ? `[${name}](${account.profileUrl})`
+                : name;
+
+              return `${ICON[account.platform]} **${LABEL[account.platform]}** — ${profile} — ${accountState(account)}`;
+            })
+          : ['No social accounts connected yet.']),
+        '',
+        `**Group / Team:** ${selected.group || 'Not set'}`,
+        `**Tags:** ${
+          selected.tags?.length
+            ? selected.tags.join(', ')
+            : 'None'
+        }`,
+      ].join('\n')
+    : creators.length
+      ? [
+          'Select a creator to manage their profile and connected social accounts.',
+          '',
+          `👥 **Creators:** ${creators.length}`,
+          `🔗 **Connected Accounts:** ${allAccounts.length}`,
+          `🔴 **Currently LIVE:** ${liveAccounts}`,
+        ].join('\n')
+      : [
+          '**No creators have been added yet.**',
+          '',
+          'Creators are the people Social Studio monitors across their connected social platforms.',
+          '',
+          'Create a creator first. You can then open that creator and connect their social accounts.',
+          '',
+          '👥 **Creators:** 0',
+          '🔗 **Connected Accounts:** 0',
+        ].join('\n');
+
+  const components = [];
+  const page = getCreatorSession(i).page;
+
+  const items = creators.slice(
+    page * PAGE_SIZE,
+    (page + 1) * PAGE_SIZE,
+  );
+
+  if (items.length) {
+    components.push(
+      creatorSelect(
+        items,
+        getCreatorSession(i).creatorId,
+        `${P}creator:select`,
+        `Select a creator — Page ${page + 1}/${pages}`,
+      ),
+    );
+  }
+
+  if (!selected) {
+    components.push(
+      row(
+        btn(
+          `${P}creator:new`,
+          '➕ Add Creator',
+          ButtonStyle.Success,
+        ),
+      ),
+    );
+  } else {
+    const postState = creatorLivePostState(
+      config,
+      selected,
+      { bypassCooldown: true },
+    );
+
+    components.push(
+      row(
+        btn(
+          `${P}creator:profile`,
+          '👤 Creator Details',
+          ButtonStyle.Primary,
+        ),
+        btn(
+          `${P}creator:accounts`,
+          '🔗 Accounts',
+          ButtonStyle.Primary,
+        ),
+        btn(
+          `${P}creator:post`,
+          '🔴 Post LIVE',
+          ButtonStyle.Secondary,
+          !postState.canPost,
+        ),
+      ),
+    );
+
+    components.push(
+      row(
+        btn(
+          `${P}creator:new`,
+          '➕ Add Creator',
+          ButtonStyle.Success,
+        ),
+      ),
+    );
+  }
+
+  if (pages > 1) {
+    components.push(
+      row(
+        btn(
+          `${P}creator:page:prev`,
+          '◀ Previous',
+          ButtonStyle.Secondary,
+          page <= 0,
+        ),
+        btn(
+          `${P}creator:page:next`,
+          'Next ▶',
+          ButtonStyle.Secondary,
+          page >= pages - 1,
+        ),
+      ),
+    );
+  }
+
+  components.push(
+    row(
+      btn(
+        `${P}main`,
+        '⬅️ Back',
+        ButtonStyle.Secondary,
+      ),
+    ),
+  );
+
+  return {
+    embeds: [
+      embed(
+        config,
+        '👥 Creators',
+        description,
+        who(i),
+        selected ? creatorAccent(linked) : null,
+      ),
+    ],
+    components,
+  };
 }
+
 function buildAccountEditPanel(i, config, creator, account) {
   const supported = supportedAlerts(account.platform), alerts = Array.isArray(account.alertTypes) ? account.alertTypes : supported, s = account.state || {}, components = [];
   const actions = [btn(`${P}account:check:${account.accountId}`, '🔄 Check Now', ButtonStyle.Secondary), btn(`${P}account:change`, '📝 Edit'), btn(`${P}account:move`, '↪️ Move Account')]; if (account.profileUrl && /^https?:\/\//i.test(account.profileUrl)) actions.push(linkBtn(account.profileUrl, '🔗 Open Profile')); components.push(row(...actions.slice(0, 5))); components.push(row(btn(`${P}account:toggle`, account.enabled === false ? '▶️ Resume' : '⏸️ Pause', account.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}account:delete`, '🗑️ Delete', ButtonStyle.Danger)));
-  components.push(row(btn(`${P}accounts`, '⬅️ Accounts'), btn(`${P}settings`, '⚙️ Settings')));
+  components.push(row(
+    btn(`${P}accounts`, '⬅️ Accounts'),
+    btn(`${P}creators`, '👥 Creators'),
+    btn(`${P}settings`, '⚙️ Settings'),
+  ));
   const routes = Object.entries(account.alertChannels || {}).filter(([, channelId]) => channelId).map(([type, channelId]) => `${ALERT_LABEL[type] || type}: <#${channelId}>`).join(' • ');
   const deliveryError = s.lastDeliveryError && /notification channel is configured/i.test(String(s.lastDeliveryError)) ? 'LIVE posts need a channel route. Set this in Social Studio > Channels.' : String(s.lastDeliveryError || '').slice(0, 400);
   const d = [`${ICON[account.platform]} **${LABEL[account.platform]} Account**`, `${accountState(account)} **${account.username || account.externalId || 'Resolving…'}**`, '', `**Creator:** ${creator.displayName}`, '', '**Status**', `${account.enabled === false ? '⏸️ Monitoring paused' : '🟢 Monitoring enabled'}`, `Last checked: ${ts(s.lastCheckedAt)}`, '', '**Alerts**', alerts.length ? `${alerts.map((t) => ALERT_LABEL[t] || t).join(', ')} enabled` : 'No alert types enabled', '', '**Routing**', `Default channel: ${account.alertChannelId ? `<#${account.alertChannelId}>` : config.alertsChannelId ? `Server default <#${config.alertsChannelId}>` : 'Not configured'}`, `Dedicated channels: ${routes || 'None'}`, ...(deliveryError ? ['', `⚠️ **Last delivery**`, deliveryError] : []), ...(s.lastError ? ['', `⚠️ **Provider**`, String(s.lastError).slice(0, 400)] : [])].join('\n'); return { embeds: [embed(config, '🔗 Manage Social Account', d, who(i), platformColor(account.platform))], components: components.slice(0, 5) };
@@ -366,7 +659,10 @@ function buildProfileManagePanel(i, config, creator) {
     `\u{1F512} Admin Notes: ${creator.adminNotes || 'None'}`].join('\n');
   const components = [
     row(btn(`${P}creator:edit`, '📝 Edit Profile'), btn(`${P}creator:clear`, '🔄 Clear'), btn(`${P}creator:profile:toggle`, creator.enabled === false ? '▶️ Resume' : '⏸️ Pause', creator.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}creator:delete`, '🗑️ Delete', ButtonStyle.Danger)),
-    row(btn(`${P}creators`, '⬅️ Back'), btn(`${P}settings`, '⚙️ Settings')),
+    goliathNavigation(
+      `${P}creators`,
+      `${P}settings`,
+    ),
   ];
   return { embeds: [embed(config, '📝 Manage Profile', d, who(i), creatorAccent((creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean)))], components };
 }
@@ -377,10 +673,37 @@ function buildAccountManagePanel(i, config, creator) {
   const components = [];
   if (linked.length) components.push(accountSelect(linked, getAccountSession(i).accountId));
   components.push(row(btn(`${P}account:change`, '📝 Edit Account', ButtonStyle.Secondary, !active), btn(`${P}account:reset`, '🔄 Clear'), btn(`${P}account:delete`, '🗑️ Delete', ButtonStyle.Danger, !active)));
-  components.push(row(btn(`${P}creators`, '⬅️ Back'), btn(`${P}settings`, '⚙️ Settings')));
+  components.push(goliathNavigation(
+    `${P}creators`,
+    `${P}settings`,
+  ));
   return { embeds: [embed(config, '🛠️ Manage Account', d, who(i), active ? platformColor(active.platform) : creatorAccent(linked))], components };
 }
-function variablesDescription() { return ['**🌍 Global / Server**','`{timestamp}` `{nowTimestamp}` `{guildId}` `{guildName}` `{server}` `{guildIcon}` `{serverIcon}` `{guildBanner}` `{guildMemberCount}` `{memberCount}` `{guildVanityCode}`','`{successEmoji}` `{warningEmoji}` `{errorEmoji}` `{proofVerifiedEmoji}` `{successColor}` `{warningColor}` `{errorColor}` `{proofVerifiedColor}`','','**👤 Discord User Context**','`{userId}` `{userTag}` `{userName}` `{userGlobalName}` `{userMention}` `{userNoPing}` `{userAvatar}` `{userServerAvatar}` `{userNickname}` `{userDisplay}`','`{userCreatedAt}` `{userCreatedTimestamp}` `{userJoinedAt}` `{userJoinedTimestamp}` `{createdAt}` `{joinedAt}` `{leftAt}` `{accountAge}` `{membershipDuration}`','`{departureIcon}` `{departureType}` `{departureLabel}` `{departureReason}` `{departureModerator}` `{departureModeratorId}`','','**📣 Creator / Platform**','`{creator}` `{creatorName}` `{creatorDisplayName}` `{creatorAvatar}` `{creatorBanner}` `{creatorDescription}` `{platform}` `{platformIcon}` `{platformColor}` `{username}` `{displayName}` `{channelId}` `{profileUrl}`','','**🔴 LIVE / Stream**','`{title}` `{description}` `{game}` `{category}` `{viewers}` `{peakViewers}` `{started}` `{duration}` `{liveThumbnail}` `{thumbnail}` `{liveUrl}` `{url}`','','**🎥 Video / VOD / Upload / Clip / Short**','`{videoTitle}` `{videoDescription}` `{videoDuration}` `{videoViews}` `{videoThumbnail}` `{videoUrl}`','`{clipTitle}` `{clipCreator}` `{clipViews}` `{clipUrl}` `{uploadTitle}` `{uploadDescription}` `{uploadThumbnail}` `{uploadUrl}` `{shortTitle}` `{shortThumbnail}` `{shortUrl}`','','*Variables without context resolve to an empty value instead of breaking the message.*'].join('\n'); }
+function variablesDescription() {
+  const variables = variablesForModule('socialStudio');
+  const lines = ['**🧩 Available Variables**'];
+  let current = '';
+
+  for (const variable of variables) {
+    const token = `\`${variable}\``;
+    if (current && `${current} ${token}`.length > 90) {
+      lines.push(current);
+      current = token;
+    } else {
+      current = current ? `${current} ${token}` : token;
+    }
+  }
+
+  if (current) lines.push(current);
+
+  const note = '\n\n*Variables without context resolve to an empty value instead of breaking the message.*';
+  const description = lines.join('\n');
+  const maxLength = 4096 - note.length;
+
+  if (description.length <= maxLength) return description + note;
+
+  return `${description.slice(0, Math.max(0, maxLength - 80)).trimEnd()}\n… additional centrally managed variables are available.${note}`;
+}
 
 function buildTemplatePanel(i, config, type) {
   const current = resolveTemplate(config.templates, type);
@@ -411,7 +734,10 @@ function buildTemplatePanel(i, config, type) {
     embeds: [embed(config, `${ALERT_EMOJI[type] || '🔔'} ${ALERT_LABEL[type] || type} Template`, d, who(i))],
     components: [
       row(btn(`${P}template:edit:${type}`, '📝 Edit Template', ButtonStyle.Primary), btn(`${P}template:reset:${type}`, '🔄 Reset to Default', ButtonStyle.Secondary, !changed)),
-      row(btn(`${P}templates`, '⬅️ Templates'), btn(`${P}settings`, '⚙️ Settings')),
+      goliathNavigation(
+      `${P}templates`,
+      `${P}settings`,
+    ),
     ],
   };
 }
@@ -437,28 +763,174 @@ function buildSectionPanel(i, name) {
   const config = getConfig(i.guildId), accounts = Object.values(config.accounts), creators = Object.values(config.creators).sort((a, b) => String(a.displayName || '').localeCompare(String(b.displayName || ''), undefined, { sensitivity: 'base' })); if (name === 'creators') return buildCreatorPanel(i, config, creators);
   if (name === 'accounts') {
     const session = getAccountSession(i), creator = session.creatorId ? config.creators[session.creatorId] || null : null; if (session.creatorId && !creator) { accountSessions.delete(sessionKey(i)); return buildSectionPanel(i, 'accounts'); }
-    if (!creator) return { embeds: [embed(config, '🛠️ Manage Account', `Select a creator profile first.\n\n**Profiles:** ${creators.length}`, who(i))], components: [row(btn(`${P}creators`, '⬅️ Back'), btn(`${P}settings`, '⚙️ Settings'))] };
+    if (!creator) return { embeds: [embed(config, '🛠️ Manage Account', `Select a creator profile first.\n\n**Profiles:** ${creators.length}`, who(i))], components: [
+      goliathNavigation(
+        `${P}creators`,
+        `${P}settings`,
+      ),
+    ] };
     const linked = (creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean).sort(accountSort); if (session.accountId && !linked.some((a) => a.accountId === session.accountId)) setAccountSession(i, { accountId: null });
     return buildAccountManagePanel(i, config, creator);
   }
-  if (name === 'notifications') return buildSectionPanel(i, 'operations');
-  if (name === 'templates') {
+if (name === 'templates') {
     const templateButtons = ALERT_TYPES.map((t) => btn(`${P}template:${t}`, `${ALERT_EMOJI[t] || '🔔'} ${ALERT_LABEL[t]}`, ButtonStyle.Primary));
-    const c = [row(...templateButtons.slice(0, 5)), row(...templateButtons.slice(5)), row(btn(`${P}variables`, '🧩 Variables')), navigation('templates')];
+    const c = [row(...templateButtons.slice(0, 5)), row(...templateButtons.slice(5)), row(
+      btn(`${P}main`, '⬅️ Back', ButtonStyle.Secondary),
+      btn(`${P}settings`, '⚙️ Settings', ButtonStyle.Secondary),
+      btn(`${P}variables`, '🧩 Variables', ButtonStyle.Secondary),
+    )];
     return { embeds: [embed(config, '🎨 Alert Templates', 'Edit the headline and main message for each Social Studio post. The bot keeps the layout consistent with channel links, status, metadata, thumbnails, media previews, platform colours and footer details.\n\nUse **🧩 Variables** for the complete helper list.', who(i))], components: c };
   }
-  if (name === 'variables') return { embeds: [embed(config, '🧩 Template Variables', variablesDescription(), who(i))], components: [row(btn(`${P}templates`, '⬅️ Templates'), btn(`${P}main`, '🏠 Social Studio'))] };
+  if (name === 'variables') return { embeds: [embed(config, '🧩 Template Variables', variablesDescription(), who(i))], components: [
+      row(
+        btn(
+          `${P}templates`,
+          '⬅️ Back',
+          ButtonStyle.Secondary,
+        ),
+        btn(
+          `${P}settings`,
+          '⚙️ Settings',
+          ButtonStyle.Secondary,
+        ),
+      ),
+    ] };
   if (name === 'feeds') return buildSectionPanel(i, 'channels');
-  if (name === 'channels') {
-    const session = getFeedSession(i), routeType = ALERT_TYPES.includes(session.routeType) ? session.routeType : 'default', selected = routeType === 'default' ? config.alertsChannelId : config.alertChannels?.[routeType];
-    const routeSummary = ALERT_TYPES.map((type) => `${ALERT_EMOJI[type] || '🔔'} **${ALERT_LABEL[type]}:** ${config.alertChannels?.[type] ? `<#${config.alertChannels[type]}>` : 'Default channel'}`).join('\n');
-    const d = `Choose which Discord channels receive Social Studio posts.\n\n**🏠 Default Channel:** ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : 'Not set'}\nEverything posts here unless you choose a separate channel below.\n\n**Available by Platform**\n${platformAvailabilityLines().join('\n')}\n\n**Dedicated Channels**\n${routeSummary}\n\nPick what you want to configure, then choose the Discord channel.`;
-    const components = [routeTypeSelect(`${P}channel:type`, routeType), channelSelect(`${P}channel:route`, selected, routeType === 'default' ? 'Choose the default channel' : `Choose where ${ALERT_LABEL[routeType]} posts go`)];
-    if (routeType !== 'default' && selected) components.push(row(btn(`${P}channel:default`, '🏠 Use Default Channel')));
-    components.push(navigation('channels'));
-    return { embeds: [embed(config, '📂 Channels', d, who(i))], components };
+  if (name === 'alerts') {
+    const settings = config.settings || {};
+    const monitored = accounts.filter(
+      (account) => account.enabled !== false
+    ).length;
+
+    const failures =
+      accounts.filter(
+        (account) =>
+          account.state?.lastError ||
+          account.state?.lastDeliveryError
+      ).length +
+      Number(config.queue?.length || 0);
+
+    const description = [
+      'Manage Social Studio alert delivery from one workspace.',
+      '',
+      '**Status**',
+      `📡 Monitoring: **${config.enabled ? 'Enabled' : 'Disabled'}**`,
+      `🔗 Monitored Accounts: **${monitored}/${accounts.length}**`,
+      `⚠️ Current Issues: **${failures}**`,
+      '',
+      '**Alert Controls**',
+      '🧭 **Routing** — where alerts are delivered.',
+      '⚙️ **Automation** — monitoring schedule, duplicate protection, retries and quiet hours.',
+      '🔴 **LIVE Messages** — how active LIVE notifications update and finish.',
+      '🧪 **Test & Diagnose** — test delivery, inspect providers and view recent responses.',
+    ].join('\n');
+
+    return {
+      embeds: [
+        embed(
+          config,
+          '📡 Alerts',
+          description,
+          who(i),
+        ),
+      ],
+      components: [
+        row(
+          btn(
+            `${P}channels`,
+            '🧭 Routing',
+            ButtonStyle.Primary,
+          ),
+          btn(
+            `${P}monitoring`,
+            '⚙️ Automation',
+            ButtonStyle.Primary,
+          ),
+        ),
+        row(
+          btn(
+            `${P}liveMessages`,
+            '🔴 LIVE Messages',
+            ButtonStyle.Secondary,
+          ),
+          btn(
+            `${P}diagnostics`,
+            '🧪 Test & Diagnose',
+            ButtonStyle.Secondary,
+          ),
+        ),
+        row(
+          btn(
+            `${P}main`,
+            '⬅️ Back',
+          ),
+        ),
+      ],
+    };
   }
-  if (name === 'settings') return { embeds: [embed(config, '⚙️ Social Studio Settings', 'Manage access, monitoring, live message behaviour and diagnostics.', who(i))], components: [row(btn(`${P}permissions`, '🔐 Permissions', ButtonStyle.Primary), btn(`${P}monitoring`, '📡 Monitoring', ButtonStyle.Primary), btn(`${P}liveMessages`, '🔴 Live Messages', ButtonStyle.Primary), btn(`${P}diagnostics`, '🧪 Diagnostics', ButtonStyle.Primary)), navigation('settings')] };
+
+  if (name === 'settings') return {
+    embeds: [
+      embed(
+        config,
+        '⚙️ Settings',
+        [
+          'Configure how Social Studio operates.',
+          '',
+          '**Roles & Management**',
+          '🎭 **Roles** — configure Social Studio manager roles, user access roles, the LIVE role and LIVE notification target.',
+          '',
+          '**Alerts & Delivery**',
+          '⚙️ **Automation** — monitoring interval, duplicate protection, retries and quiet hours.',
+          '🎯 **Routing** — choose default, creator and platform notification destinations.',
+          '🔴 **LIVE Messages** — configure live-message editing, refresh and cleanup behaviour.',
+          '🧪 **Test & Diagnose** — provider checks, delivery tests and provider diagnostics.',
+          '',
+          '**Storage**',
+          '📦 **Data & Export** — export configuration or history and manage stored history.',
+        ].join('\n'),
+        who(i),
+      ),
+    ],
+    components: [
+      row(
+        btn(
+          `${P}permissions`,
+          '🎭 Roles',
+          ButtonStyle.Primary,
+        ),
+        btn(
+          `${P}monitoring`,
+          '⚙️ Automation',
+          ButtonStyle.Primary,
+        ),
+        btn(
+          `${P}channels`,
+          '🎯 Routing',
+          ButtonStyle.Primary,
+        ),
+      ),
+      row(
+        btn(
+          `${P}liveMessages`,
+          '🔴 LIVE Messages',
+          ButtonStyle.Primary,
+        ),
+        btn(
+          `${P}diagnostics`,
+          '🧪 Test & Diagnose',
+          ButtonStyle.Primary,
+        ),
+        btn(
+          `${P}data`,
+          '📦 Data & Export',
+          ButtonStyle.Primary,
+        ),
+      ),
+      navigation('settings'),
+    ],
+  };
+
   if (name === 'permissions') {
     const managerRoles = config.managerRoleIds.length ? config.managerRoleIds.map((id) => `<@&${id}>`).join(', ') : 'None';
     const userRoles = config.userRoleIds.length ? config.userRoleIds.map((id) => `<@&${id}>`).join(', ') : 'Everyone';
@@ -489,8 +961,59 @@ function buildSectionPanel(i, name) {
   }
   if (name === 'roles') return buildSectionPanel(i, 'permissions');
   if (name === 'automation') return buildSectionPanel(i, 'monitoring');
-  if (name === 'testing' || name === 'data') return buildSectionPanel(i, 'diagnostics');
-  if (name === 'operations') return { embeds: [embed(config, '⚙️ Operations', 'Choose the area you want to manage.', who(i))], components: [row(btn(`${P}monitoring`, '📡 Monitoring', ButtonStyle.Primary), btn(`${P}liveMessages`, '🔴 Live Messages', ButtonStyle.Primary), btn(`${P}diagnostics`, '🧪 Diagnostics', ButtonStyle.Primary)), navigation('operations')] };
+  if (name === 'testing') return buildSectionPanel(i, 'diagnostics');
+
+  if (name === 'data') {
+    const description = [
+      'Manage Social Studio configuration and stored activity data.',
+      '',
+      `📦 **History Entries:** ${config.history.length}`,
+      `📬 **Queue Items:** ${config.queue.length}`,
+      '',
+      '**Exports**',
+      '📤 **Config Export** — download Social Studio configuration with sensitive values redacted.',
+      '🗂️ **History Export** — download stored Social Studio activity history.',
+      '',
+      '**Maintenance**',
+      '🧹 **Clear History** — permanently clear saved Social Studio history for this server.',
+    ].join('\n');
+
+    return {
+      embeds: [
+        embed(
+          config,
+          '📦 Data & Export',
+          description,
+          who(i),
+        ),
+      ],
+      components: [
+        row(
+          btn(
+            `${P}data:export:config`,
+            '📤 Config Export',
+            ButtonStyle.Primary,
+          ),
+          btn(
+            `${P}data:export`,
+            '🗂️ History Export',
+            ButtonStyle.Secondary,
+          ),
+          btn(
+            `${P}data:clear`,
+            '🧹 Clear History',
+            ButtonStyle.Danger,
+            !config.history.length,
+          ),
+        ),
+        goliathNavigation(
+          `${P}settings`,
+          `${P}settings`,
+        ),
+      ],
+    };
+  }
+
   if (name === 'monitoring') {
     const settings = config.settings || {}, interval = Math.max(30000, Number(settings.checkIntervalMs || 300000)), mins = interval / 60000, quiet = settings.quietHours && typeof settings.quietHours === 'object' ? settings.quietHours : { enabled: false, start: '23:00', end: '08:00', timezone: 'Europe/London' };
     const monitored = accounts.filter((a) => a.enabled !== false).length;
@@ -529,24 +1052,221 @@ function buildSectionPanel(i, name) {
         monitoringIntervalSelect(settings),
         monitoringBooleanSelect(`${P}automation:dupes`, 'Duplicate protection', settings.suppressDuplicates !== false),
         monitoringBooleanSelect(`${P}automation:retry`, 'Failed delivery retry', settings.retryDeliveries !== false),
-        row(btn(`${P}automation:quiet`, 'Configure Quiet Hours'), btn(`${P}account:check`, 'Run Provider Check', ButtonStyle.Secondary, !accounts.length), btn(`${P}test`, 'Send Test LIVE Alert', ButtonStyle.Secondary, !config.alertsChannelId)),
-        row(btn(`${P}settings`, '⬅️ Back'), btn(`${P}toggle`, config.enabled ? 'Disable Monitoring' : 'Enable Monitoring', config.enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
+        row(
+          btn(`${P}automation:quiet`, 'Configure Quiet Hours'),
+        btn(
+          `${P}toggle`,
+          config.enabled
+            ? '⏸️ Disable Monitoring'
+            : '▶️ Enable Monitoring',
+          config.enabled
+            ? ButtonStyle.Danger
+            : ButtonStyle.Success,
+        ),
+        ),
+        goliathNavigation(
+          `${P}settings`,
+          `${P}settings`,
+        ),
       ],
     };
   }
   if (name === 'liveMessages') {
     const settings = config.settings || {};
     const d = ['**Live Message Behaviour**', `✏️ **Edit:** ${settings.editLiveNotifications !== false ? 'On' : 'Off'} - update the same LIVE post.`, `🗑️ **Cleanup:** ${settings.deleteEndedNotifications !== false ? 'On' : 'Off'} - remove ended LIVE posts.`, `👥 **Viewers:** ${settings.includeViewerCount === false ? 'Off' : 'On'} - show viewer count.`, `⏱️ **Duration:** ${settings.includeLiveDuration === false ? 'Off' : 'On'} - show time live.`].join('\n');
-    return { embeds: [embed(config, '🔴 Live Messages', d, who(i))], components: [row(btn(`${P}automation:editlive`, settings.editLiveNotifications !== false ? '✏️ Edit: On' : '✏️ Edit: Off'), btn(`${P}automation:deleteended`, settings.deleteEndedNotifications !== false ? '🗑️ Cleanup: On' : '🗑️ Cleanup: Off'), btn(`${P}automation:viewers`, settings.includeViewerCount === false ? '👥 Viewers: Off' : '👥 Viewers: On'), btn(`${P}automation:duration`, settings.includeLiveDuration === false ? '⏱️ Duration: Off' : '⏱️ Duration: On')), row(btn(`${P}settings`, '⬅️ Back'), btn(`${P}main`, '🏠 Social Studio'))] };
+    const refreshEnabled =
+      settings.liveRefreshEnabled !== false;
+
+    const refreshSeconds =
+      Number(settings.liveRefreshSeconds) || 300;
+
+    return {
+      embeds: [
+        embed(
+          config,
+          '🔴 Live Messages',
+          d,
+          who(i),
+        ),
+      ],
+      components: [
+        row(
+          btn(
+            `${P}automation:editlive`,
+            settings.editLiveNotifications !== false
+              ? '✏️ Edit: On'
+              : '✏️ Edit: Off',
+          ),
+          btn(
+            `${P}automation:liverefresh`,
+            refreshEnabled
+              ? '🔄 Refresh: On'
+              : '🔄 Refresh: Off',
+            refreshEnabled
+              ? ButtonStyle.Success
+              : ButtonStyle.Secondary,
+          ),
+          btn(
+            `${P}automation:deleteended`,
+            settings.deleteEndedNotifications !== false
+              ? '🗑️ Cleanup: On'
+              : '🗑️ Cleanup: Off',
+          ),
+        ),
+        row(
+          btn(
+            `${P}automation:viewers`,
+            settings.includeViewerCount === false
+              ? '👥 Viewers: Off'
+              : '👥 Viewers: On',
+          ),
+          btn(
+            `${P}automation:duration`,
+            settings.includeLiveDuration === false
+              ? '⏱️ Duration: Off'
+              : '⏱️ Duration: On',
+          ),
+          btn(
+            `${P}automation:liverefreshrate`,
+            `⏱️ Refresh: ${refreshSeconds}s`,
+            ButtonStyle.Secondary,
+            !refreshEnabled,
+          ),
+        ),
+        goliathNavigation(
+          `${P}settings`,
+          `${P}settings`,
+        ),
+      ],
+    };
   }
   if (name === 'diagnostics') {
-    const checks = Number(config.analytics?.checks || 0), alerts = Number(config.analytics?.alertsSent || 0), failures = Number(config.analytics?.failures || 0), monitored = accounts.filter((a) => a.enabled !== false).length;
-    const checkedEntries = config.history.filter((e) => e?.status === 'checked'), failedEntries = config.history.filter((e) => e?.status === 'delivery_failed' || e?.providerStatus === 'error' || e?.providerStatus === 'unavailable');
-    const lastSuccess = [...checkedEntries].reverse().find((e) => e?.isLive === true || e?.isLive === false || e?.providerStatus === 'ok' || e?.providerStatus === 'live' || e?.providerStatus === 'offline'), lastFailure = failedEntries.at(-1);
-    const recent = config.history.slice(-3).reverse().map((entry) => `- ${entry.status || 'event'}${entry.platform ? ` - ${LABEL[entry.platform] || entry.platform}` : ''}${entry.alertType ? ` - ${ALERT_LABEL[entry.alertType] || entry.alertType}` : ''}`).join('\n') || 'No history yet.';
-    const d = ['**Testing & Data**', `Default channel: ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : 'Not configured'}`, `Accounts: ${accounts.length} (${monitored} monitored)`, `Provider checks: ${checks.toLocaleString('en-GB')}`, `Alerts sent: ${alerts.toLocaleString('en-GB')}`, `Failures: ${failures.toLocaleString('en-GB')}`, `Queue size: ${config.queue.length}`, `History entries: ${config.history.length}`, `Last successful scan: ${ts(lastSuccess?.createdAt)}`, `Last failure: ${ts(lastFailure?.createdAt)}`, '', '**Tools**', '📨 **Send Test:** preview a test alert privately.', '📄 **Last Response:** view latest account check.', '🩺 **Provider Details:** show provider support.', '📤 **Config Export:** download readable Social Studio settings.', '🗂️ **History Export:** download saved activity history.', '🧹 **Clear History:** remove saved history.', '', '**Recent Activity**', recent].join('\n');
-    return { embeds: [embed(config, '🧪 Diagnostics', d, who(i))], components: [row(btn(`${P}test`, '📨 Send Test', ButtonStyle.Primary, !config.alertsChannelId), btn(`${P}testing:last`, '📄 Last Response'), btn(`${P}testing:diagnostics`, '🩺 Provider Details')), row(btn(`${P}data:export:config`, '📤 Config Export', ButtonStyle.Primary), btn(`${P}data:export`, '🗂️ History Export', ButtonStyle.Secondary), btn(`${P}data:clear`, '🧹 Clear History', ButtonStyle.Danger, !config.history.length)), row(btn(`${P}settings`, '⬅️ Back'), btn(`${P}main`, '🏠 Social Studio'), btn(`${P}data:refresh`, '🔄 Refresh'))] };
+    const checks = Number(
+      config.analytics?.checks || 0
+    );
+    const alerts = Number(
+      config.analytics?.alertsSent || 0
+    );
+    const failures = Number(
+      config.analytics?.failures || 0
+    );
+    const monitored = accounts.filter(
+      (account) => account.enabled !== false
+    ).length;
+
+    const checkedEntries = config.history.filter(
+      (entry) => entry?.status === 'checked'
+    );
+
+    const failedEntries = config.history.filter(
+      (entry) =>
+        entry?.status === 'delivery_failed' ||
+        entry?.providerStatus === 'error' ||
+        entry?.providerStatus === 'unavailable'
+    );
+
+    const lastSuccess = [...checkedEntries]
+      .reverse()
+      .find(
+        (entry) =>
+          entry?.isLive === true ||
+          entry?.isLive === false ||
+          entry?.providerStatus === 'ok' ||
+          entry?.providerStatus === 'live' ||
+          entry?.providerStatus === 'offline'
+      );
+
+    const lastFailure = failedEntries.at(-1);
+
+    const recent = config.history
+      .slice(-3)
+      .reverse()
+      .map(
+        (entry) =>
+          `- ${entry.status || 'event'}${
+            entry.platform
+              ? ` - ${LABEL[entry.platform] || entry.platform}`
+              : ''
+          }${
+            entry.alertType
+              ? ` - ${ALERT_LABEL[entry.alertType] || entry.alertType}`
+              : ''
+          }`
+      )
+      .join('\n') || 'No history yet.';
+
+    const d = [
+      '**Testing & Diagnostics**',
+      `Default channel: ${
+        config.alertsChannelId
+          ? `<#${config.alertsChannelId}>`
+          : 'Not configured'
+      }`,
+      `Accounts: ${accounts.length} (${monitored} monitored)`,
+      `Provider checks: ${checks.toLocaleString('en-GB')}`,
+      `Alerts sent: ${alerts.toLocaleString('en-GB')}`,
+      `Failures: ${failures.toLocaleString('en-GB')}`,
+      `Queue size: ${config.queue.length}`,
+      `Last successful scan: ${ts(lastSuccess?.createdAt)}`,
+      `Last failure: ${ts(lastFailure?.createdAt)}`,
+      '',
+      '**Tools**',
+      '🔎 **Run Provider Check:** immediately check linked provider accounts.',
+      '📨 **Send Test:** preview notification delivery privately.',
+      '📄 **Last Response:** inspect the latest recorded provider response.',
+      '🩺 **Provider Details:** inspect provider capabilities and supported alerts.',
+      '',
+      '**Recent Activity**',
+      recent,
+    ].join('\n');
+
+    return {
+      embeds: [
+        embed(
+          config,
+          '🧪 Test & Diagnose',
+          d,
+          who(i),
+        ),
+      ],
+      components: [
+        row(
+          btn(
+            `${P}account:check`,
+            '🔎 Run Provider Check',
+            ButtonStyle.Primary,
+            !accounts.length,
+          ),
+          btn(
+            `${P}test`,
+            '📨 Send Test',
+            ButtonStyle.Primary,
+            !config.alertsChannelId,
+          ),
+          btn(
+            `${P}testing:last`,
+            '📄 Last Response',
+            ButtonStyle.Secondary,
+          ),
+          btn(
+            `${P}testing:diagnostics`,
+            '🩺 Provider Details',
+            ButtonStyle.Secondary,
+          ),
+          btn(
+            `${P}data:refresh`,
+            '🔄 Refresh',
+            ButtonStyle.Secondary,
+          ),
+        ),
+        goliathNavigation(
+          `${P}settings`,
+          `${P}settings`,
+        ),
+      ],
+    };
   }
+
   return { embeds: [embed(config, name[0].toUpperCase() + name.slice(1), 'Social Studio settings.', who(i))], components: [navigation(name)] };
 }
 
@@ -776,7 +1496,489 @@ async function handleAccountInteraction(i, context) {
     actorId,
   } = context;
 
-  if (id === `${P}account:new`) { const cid = getCreatorSession(i).creatorId; const creator = config.creators[cid]; if (!creator) throw new Error('Select a creator profile first.'); setAccountSession(i, { creatorId: cid, accountId: null, platforms: [], routeType: 'default', mode: 'add' }); return respond(i, buildAccountAddPanel(i, config, creator)); }
+  if (
+    id === `${P}account:check` ||
+    id.startsWith(`${P}account:check:`)
+  ) {
+    const requestedAccountId = id.startsWith(`${P}account:check:`)
+      ? id.slice(`${P}account:check:`.length)
+      : null;
+
+    if (requestedAccountId) {
+      const account = context.config.accounts?.[requestedAccountId];
+
+      if (!account) {
+        throw new Error(
+          'The selected social account no longer exists.',
+        );
+      }
+
+      await checkGuildAccounts(
+        i.client,
+        i.guildId,
+        {
+          force: true,
+          manual: true,
+          accountIds: [requestedAccountId],
+          guild: i.guild,
+        },
+      );
+
+      const refreshed = getConfig(i.guildId);
+      const refreshedAccount =
+        refreshed.accounts?.[requestedAccountId];
+
+      if (!refreshedAccount) {
+        throw new Error(
+          'The social account disappeared after the provider check.',
+        );
+      }
+
+      const creator =
+        Object.values(refreshed.creators || {}).find(
+          (item) =>
+            Array.isArray(item.accountIds) &&
+            item.accountIds.includes(requestedAccountId),
+        );
+
+      if (!creator) {
+        throw new Error(
+          'The creator profile for this account could not be found.',
+        );
+      }
+
+      return respond(
+        i,
+        buildAccountEditPanel(
+          i,
+          refreshed,
+          creator,
+          refreshedAccount,
+        ),
+      );
+    }
+
+    await checkGuildAccounts(
+      i.client,
+      i.guildId,
+      {
+        force: true,
+        manual: true,
+        guild: i.guild,
+      },
+    );
+
+    return respond(
+      i,
+      buildSectionPanel(i, 'monitoring'),
+    );
+  }
+
+  if (id === `${P}account:new`) {
+    const cid = getCreatorSession(i).creatorId;
+    const creator = config.creators[cid];
+    if (!creator) throw new Error('Select a creator profile first.');
+
+    setAccountSession(i, {
+      creatorId: cid,
+      accountId: null,
+      platforms: [],
+      routeType: 'default',
+      mode: 'add',
+    });
+
+    return respond(i, buildAccountAddPanel(i, config, creator));
+  }
+
+  if (id === `${P}account:creator`) {
+    const creatorId = i.values?.[0] || null;
+
+    setAccountSession(i, {
+      creatorId,
+      accountId: null,
+      platforms: [],
+      routeType: 'default',
+    });
+
+    setCreatorSession(i, { creatorId });
+
+    return respond(i, buildSectionPanel(i, 'accounts'));
+  }
+
+  if (id === `${P}account:select`) {
+    setAccountSession(i, {
+      accountId: i.values?.[0] || null,
+      routeType: 'default',
+    });
+
+    return respond(i, buildSectionPanel(i, 'accounts'));
+  }
+
+  if (id === `${P}account:platforms`) {
+    const platforms = (i.values || [])
+      .filter((p) => PLATFORMS.includes(p))
+      .slice(0, 5);
+
+    const s = setAccountSession(i, { platforms });
+    const creator = config.creators[s.creatorId];
+
+    return s.mode === 'add' && creator
+      ? respond(i, buildAccountAddPanel(i, config, creator))
+      : respond(i, buildSectionPanel(i, 'accounts'));
+  }
+
+  if (id === `${P}account:reset`) {
+    setAccountSession(i, {
+      accountId: null,
+      platforms: [],
+      routeType: 'default',
+    });
+
+    return respond(i, buildSectionPanel(i, 'accounts'));
+  }
+
+  if (id === `${P}account:creator:toggle`) {
+    const s = getAccountSession(i);
+    const creator = config.creators[s.creatorId];
+
+    if (!creator) throw new Error('Select a creator profile first.');
+
+    creator.enabled = creator.enabled === false;
+    creator.updatedAt = now();
+
+    saveConfig(i.guildId, config, i.guild, actorId);
+    setCreatorSession(i, { creatorId: creator.creatorId });
+
+    return respond(i, buildSectionPanel(i, 'accounts'));
+  }
+
+  if (id === `${P}account:continue`) {
+    const s = getAccountSession(i);
+
+    if (!s.creatorId || !config.creators[s.creatorId]) {
+      throw new Error('Select a creator profile first.');
+    }
+
+    if (!s.platforms.length) {
+      throw new Error('Select at least one platform first.');
+    }
+
+    await i.showModal(accountModal(s.platforms));
+    return true;
+  }
+
+  if (id === `${P}account:edit`) {
+    const s = getAccountSession(i);
+    const c = config.creators[s.creatorId];
+    const a = config.accounts[s.accountId];
+
+    if (!c || !a) throw new Error('Select an account first.');
+
+    return respond(i, buildAccountEditPanel(i, config, c, a));
+  }
+
+  if (id === `${P}account:change`) {
+    const a = config.accounts[getAccountSession(i).accountId];
+
+    if (!a) throw new Error('The selected account no longer exists.');
+
+    await i.showModal(accountEditModal(a));
+    return true;
+  }
+
+  if (id === `${P}account:move`) {
+    const s = getAccountSession(i);
+    const c = config.creators[s.creatorId];
+    const a = config.accounts[s.accountId];
+
+    if (!c || !a) throw new Error('Select an account first.');
+
+    return respond(i, buildAccountMovePanel(i, config, c, a));
+  }
+
+  if (id === `${P}account:move:new`) {
+    const a = config.accounts[getAccountSession(i).accountId];
+
+    if (!a) throw new Error('Select an account first.');
+
+    await i.showModal(accountMoveNewProfileModal(a));
+    return true;
+  }
+
+  if (id === `${P}account:move:creator`) {
+    const s = getAccountSession(i);
+    const a = config.accounts[s.accountId];
+    const target = config.creators[i.values?.[0]];
+
+    if (!a || !target) {
+      throw new Error('Select a valid account and creator profile.');
+    }
+
+    moveAccountToCreator(config, a, target);
+    saveConfig(i.guildId, config, i.guild, actorId);
+
+    setAccountSession(i, {
+      creatorId: target.creatorId,
+      accountId: a.accountId,
+      routeType: 'default',
+    });
+
+    setCreatorSession(i, {
+      creatorId: target.creatorId,
+    });
+
+    const fresh = getConfig(i.guildId);
+
+    return respond(
+      i,
+      buildAccountEditPanel(
+        i,
+        fresh,
+        fresh.creators[target.creatorId],
+        fresh.accounts[a.accountId],
+      ),
+    );
+  }
+
+  if (id === `${P}account:toggle`) {
+    const s = getAccountSession(i);
+    const c = config.creators[s.creatorId];
+    const account = config.accounts[s.accountId];
+
+    if (!c || !account) {
+      throw new Error('The selected account no longer exists.');
+    }
+
+    account.enabled = account.enabled === false;
+    account.updatedAt = now();
+
+    saveConfig(i.guildId, config, i.guild, actorId);
+
+    const fresh = getConfig(i.guildId);
+
+    return respond(
+      i,
+      buildAccountEditPanel(
+        i,
+        fresh,
+        fresh.creators[s.creatorId],
+        fresh.accounts[account.accountId],
+      ),
+    );
+  }
+
+  if (id === `${P}account:delete`) {
+    const a = config.accounts[getAccountSession(i).accountId];
+
+    if (!a) throw new Error('The selected account no longer exists.');
+
+    return respond(i, {
+      embeds: [
+        embed(
+          config,
+          '⚠️ Delete Social Account',
+          `Delete **${LABEL[a.platform]} · ${a.username || a.externalId}**?`,
+          who(i),
+        ),
+      ],
+      components: [
+        row(
+          btn(`${P}account:delete:cancel`, '⬅️ Back'),
+          btn(
+            `${P}account:delete:confirm`,
+            '🗑️ Delete Account',
+            ButtonStyle.Danger,
+          ),
+        ),
+      ],
+    });
+  }
+
+  if (id === `${P}account:delete:cancel`) {
+    return respond(i, buildSectionPanel(i, 'accounts'));
+  }
+
+  if (id === `${P}account:delete:confirm`) {
+    const s = getAccountSession(i);
+    const a = config.accounts[s.accountId];
+
+    if (!a) throw new Error('The selected account no longer exists.');
+
+    removeAccountReferences(config, [a.accountId]);
+    delete config.accounts[a.accountId];
+
+    saveConfig(i.guildId, config, i.guild, actorId);
+
+    setAccountSession(i, {
+      accountId: null,
+    });
+
+    return respond(i, buildSectionPanel(i, 'accounts'));
+  }
+
+  if (id.startsWith(`${P}account:update:`)) {
+    const aid = id.slice(`${P}account:update:`.length);
+    const old = config.accounts[aid];
+    const s = getAccountSession(i);
+    const c = config.creators[s.creatorId];
+
+    if (!old || !c) {
+      throw new Error('The selected account no longer exists.');
+    }
+
+    const raw = i.fields.getTextInputValue('accountValue').trim();
+
+    removeAccountReferences(config, [old.accountId]);
+    delete config.accounts[old.accountId];
+
+    const r = upsertAccount(config, c, old.platform, raw);
+    const a = config.accounts[r.accountId];
+
+    a.enabled = old.enabled !== false;
+    a.alertTypes = Array.isArray(old.alertTypes)
+      ? old.alertTypes
+      : supportedAlerts(old.platform);
+
+    a.alertChannelId = old.alertChannelId || null;
+
+    a.alertChannels =
+      old.alertChannels && typeof old.alertChannels === 'object'
+        ? old.alertChannels
+        : {};
+
+    a.mentionMode =
+      old.mentionMode ||
+      config.notificationMentionMode ||
+      'none';
+
+    a.mentionRoleId =
+      old.mentionRoleId ||
+      (config.notificationMentionMode === 'role'
+        ? config.notificationRoleId || null
+        : null);
+
+    saveConfig(i.guildId, config, i.guild, actorId);
+
+    setAccountSession(i, {
+      accountId: r.accountId,
+      platforms: [],
+      routeType: 'default',
+    });
+
+    return afterModal(
+      i,
+      'accounts',
+      `✅ ${LABEL[old.platform]} account updated.`,
+    );
+  }
+
+  if (id === `${P}account:move:create`) {
+    const s = getAccountSession(i);
+    const account = config.accounts[s.accountId];
+
+    if (!account) {
+      throw new Error('The selected account no longer exists.');
+    }
+
+    const name = i.fields.getTextInputValue('displayName').trim();
+
+    if (!name) {
+      throw new Error('Creator display name is required.');
+    }
+
+    const cid = makeId('creator');
+
+    const creator = {
+      creatorId: cid,
+      displayName: name,
+      group: i.fields.getTextInputValue('group').trim(),
+      tags: i.fields
+        .getTextInputValue('tags')
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean),
+      notes: i.fields.getTextInputValue('notes').trim(),
+      enabled: true,
+      accountIds: [],
+      createdAt: now(),
+      updatedAt: now(),
+    };
+
+    config.creators[cid] = creator;
+
+    moveAccountToCreator(config, account, creator);
+    saveConfig(i.guildId, config, i.guild, actorId);
+
+    setCreatorSession(i, {
+      creatorId: cid,
+    });
+
+    setAccountSession(i, {
+      creatorId: cid,
+      accountId: account.accountId,
+      platforms: [],
+      routeType: 'default',
+    });
+
+    return afterModal(
+      i,
+      'accounts',
+      `✅ Account moved to ${name}.`,
+    );
+  }
+
+  if (id === `${P}account:create-multi`) {
+    const s = getAccountSession(i);
+    const c = config.creators[s.creatorId];
+
+    if (!c) {
+      throw new Error('The selected creator profile no longer exists.');
+    }
+
+    let created = 0;
+    let updated = 0;
+    let dupes = 0;
+    let selected = null;
+
+    for (const p of s.platforms.slice(0, 5)) {
+      const raw = i.fields
+        .getTextInputValue(`account_${p}`)
+        .trim();
+
+      if (!raw) continue;
+
+      const r = upsertAccount(config, c, p, raw);
+
+      selected = r.accountId;
+
+      if (r.created) created++;
+      else updated++;
+
+      dupes += r.removedDuplicates;
+    }
+
+    saveConfig(i.guildId, config, i.guild, actorId);
+
+    setCreatorSession(i, {
+      creatorId: c.creatorId,
+    });
+
+    setAccountSession(i, {
+      creatorId: c.creatorId,
+      platforms: [],
+      accountId: selected,
+      routeType: 'default',
+      mode: null,
+    });
+
+    return afterModal(
+      i,
+      'creators',
+      `✅ ${created} added, ${updated} updated${
+        dupes ? `, ${dupes} duplicates merged` : ''
+      }.`,
+    );
+  }
 
   return false;
 }
@@ -823,10 +2025,64 @@ async function handleChannelInteraction(i, context) {
     actorId,
   } = context;
 
-  if (id === `${P}feed:type` || id === `${P}channel:type`) { setFeedSession(i, { routeType: i.values?.[0] || 'default' }); return respond(i, buildSectionPanel(i, 'channels')); }
-  if (id === `${P}feed:route` || id === `${P}channel:route`) { const type = getFeedSession(i).routeType || 'default', channelId = i.values?.[0] || null; if (type === 'default') config.alertsChannelId = channelId; else { config.alertChannels = config.alertChannels && typeof config.alertChannels === 'object' ? config.alertChannels : {}; config.alertChannels[type] = channelId; } saveConfig(i.guildId, config, i.guild, actorId); return respond(i, buildSectionPanel(i, 'channels')); }
-  if (id === `${P}channel:default`) { const type = getFeedSession(i).routeType || 'default'; if (type !== 'default') { config.alertChannels = config.alertChannels && typeof config.alertChannels === 'object' ? config.alertChannels : {}; delete config.alertChannels[type]; saveConfig(i.guildId, config, i.guild, actorId); } return respond(i, buildSectionPanel(i, 'channels')); }
-  if (id === `${P}feed:channel` || id === `${P}channel:alerts`) { config.alertsChannelId = i.values?.[0] || null; saveConfig(i.guildId, config, i.guild, actorId); return respond(i, buildSectionPanel(i, 'channels')); }
+  // Legacy feed:* aliases remain here for compatibility.
+  // Modern channel:* routing is owned by
+  // socialStudioCreatorRoutingCompat.js.
+  if (id === `${P}feed:type`) {
+    setFeedSession(i, {
+      routeType: i.values?.[0] || 'default',
+    });
+
+    return respond(
+      i,
+      buildSectionPanel(i, 'channels'),
+    );
+  }
+
+  if (id === `${P}feed:route`) {
+    const type = getFeedSession(i).routeType || 'default';
+    const channelId = i.values?.[0] || null;
+
+    if (type === 'default') {
+      config.alertsChannelId = channelId;
+    } else {
+      config.alertChannels =
+        config.alertChannels &&
+        typeof config.alertChannels === 'object'
+          ? config.alertChannels
+          : {};
+
+      config.alertChannels[type] = channelId;
+    }
+
+    saveConfig(
+      i.guildId,
+      config,
+      i.guild,
+      actorId,
+    );
+
+    return respond(
+      i,
+      buildSectionPanel(i, 'channels'),
+    );
+  }
+
+  if (id === `${P}feed:channel`) {
+    config.alertsChannelId = i.values?.[0] || null;
+
+    saveConfig(
+      i.guildId,
+      config,
+      i.guild,
+      actorId,
+    );
+
+    return respond(
+      i,
+      buildSectionPanel(i, 'channels'),
+    );
+  }
 
   return false;
 }

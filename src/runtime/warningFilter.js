@@ -1,3 +1,5 @@
+require('./embedPresetDeletionGuard');
+
 const originalEmitWarning = process.emitWarning.bind(process);
 
 process.emitWarning = (warning, ...args) => {

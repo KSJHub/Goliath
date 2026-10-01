@@ -7,7 +7,7 @@ const implementation = require('./index.base');
 const core = require('./core');
 const hardening = require('./hardening');
 
-const CONTROL_PLANE_SNAPSHOT_KEY = Symbol.for('goliath.duplicator.snapshot-control-plane-v2');
+const CONTROL_PLANE_SNAPSHOT_KEY = Symbol.for('goliath.duplicator.snapshot-control-plane');
 
 function isControlPlaneRole(role) {
   return Boolean(role) && /^(?:goliath|operations)$/i.test(String(role.name || '').trim());
