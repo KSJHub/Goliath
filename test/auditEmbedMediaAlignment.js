@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const media = require('../src/modules/messageStudio/embed/embedMedia');
 const alignment = require('../src/modules/messageStudio/embed/embedImageAlignment');
-const preview = require('../src/modules/messageStudio/embed/embedAlignmentPreview');
+const preview = alignment;
 const renderer = require('../src/modules/messageStudio/embed/embedRenderer');
 
 const left = media.normalizeGalleryItem({ source: 'https://example.com/a.png', alignment: 'left' });
