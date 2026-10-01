@@ -12,10 +12,7 @@ const row = (...items) => new ActionRowBuilder().addComponents(...items);
 const button = (id, label, style = ButtonStyle.Secondary) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
 
 function selectRow(customId, placeholder, options) {
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(customId)
-    .setPlaceholder(placeholder)
-    .addOptions(options);
+  const menu = new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder(placeholder).addOptions(options);
   return row(menu);
 }
 
@@ -28,14 +25,7 @@ function buildHomePanel(guildId) {
     '❓ **Can’t find what you need?**', 'Ask the team and your question can become part of the FAQ knowledge base.',
   ].join('\n'));
   const components = [];
-  if (categories.length) {
-    components.push(selectRow('faq:category', 'Select an FAQ category', categories.map(c => ({
-      label: c.name.slice(0, 100),
-      description: (c.description || 'View questions').slice(0, 100),
-      value: c.id,
-      emoji: c.emoji || undefined,
-    }))));
-  }
+  if (categories.length) components.push(selectRow('faq:category', 'Select an FAQ category', categories.map(c => ({ label: c.name.slice(0, 100), description: (c.description || 'View questions').slice(0, 100), value: c.id, emoji: c.emoji || undefined }))));
   components.push(row(button('faq:ask', '❓ Ask a Question', ButtonStyle.Primary), button('faq:search', '🔎 Search FAQs')));
   return { embeds: [embed], components };
 }
@@ -46,9 +36,7 @@ function buildCategoryPanel(guildId, categoryId) {
   const entries = faq.listEntries(guildId, category.id).slice(0, 25);
   const embed = new EmbedBuilder().setColor(0x5865f2).setTitle(`${category.emoji || '❓'} ${category.name}`).setDescription(category.description || 'Select a question below.');
   const components = [];
-  if (entries.length) {
-    components.push(selectRow(`faq:question:${category.id}`, 'Select a question', entries.map(e => ({ label: e.question.slice(0, 100), value: e.id }))));
-  }
+  if (entries.length) components.push(selectRow(`faq:question:${category.id}`, 'Select a question', entries.map(e => ({ label: e.question.slice(0, 100), value: e.id }))));
   components.push(row(button('faq:ask', '❓ Ask a Question', ButtonStyle.Primary), button('faq:home', '🏠 FAQ Home')));
   return { embeds: [embed], components };
 }
@@ -83,18 +71,14 @@ function buildAskModal() {
 }
 
 function buildSearchModal() {
-  return new ModalBuilder().setCustomId('faq:modal:search').setTitle('Search FAQs').addComponents(
-    row(new TextInputBuilder().setCustomId('query').setLabel('What are you looking for?').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)),
-  );
+  return new ModalBuilder().setCustomId('faq:modal:search').setTitle('Search FAQs').addComponents(row(new TextInputBuilder().setCustomId('query').setLabel('What are you looking for?').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)));
 }
 
 function buildSearchResults(guildId, query) {
   const results = faq.search(guildId, query);
   const embed = new EmbedBuilder().setColor(0x5865f2).setTitle('🔎 FAQ Search').setDescription(results.length ? `Results for **${faq.cleanText(query, 100)}**` : `No FAQ matched **${faq.cleanText(query, 100)}**. You can send the question to the team.`);
   const components = [];
-  if (results.length) {
-    components.push(selectRow('faq:searchResult', 'Select an answer', results.slice(0, 25).map(e => ({ label: e.question.slice(0, 100), value: e.id }))));
-  }
+  if (results.length) components.push(selectRow('faq:searchResult', 'Select an answer', results.slice(0, 25).map(e => ({ label: e.question.slice(0, 100), value: e.id }))));
   components.push(row(button('faq:ask', '❓ Ask the Team', ButtonStyle.Primary), button('faq:home', '🏠 FAQ Home')));
   return { embeds: [embed], components };
 }
@@ -121,9 +105,7 @@ function buildTeamSubmission(guildId, submissionId) {
     components.push(row(button(`faq:team:claim:${s.id}`, s.claimedBy ? '👤 Take Over' : '👤 Claim'), button(`faq:team:answer:${s.id}`, '✍️ Answer', ButtonStyle.Primary), button(`faq:team:category:${s.id}`, '📁 Category')));
     components.push(row(button(`faq:team:resource:${s.id}`, '🔗 Guide / Resource'), button(`faq:team:support:${s.id}`, '💬 Support Channel'), button(`faq:team:preview:${s.id}`, '👁️ Preview')));
     components.push(row(button(`faq:team:publish:${s.id}`, '✅ Publish FAQ', ButtonStyle.Success), button(`faq:team:dismiss:${s.id}`, 'Dismiss', ButtonStyle.Danger)));
-  } else if (s.status === 'published' && s.entryId) {
-    components.push(row(button(`faq:team:viewPublished:${s.entryId}`, '👁️ View Published FAQ')));
-  }
+  } else if (s.status === 'published' && s.entryId) components.push(row(button(`faq:team:viewPublished:${s.entryId}`, '👁️ View Published FAQ')));
   return { embeds: [embed], components };
 }
 
@@ -141,10 +123,7 @@ function buildResourceModal(s) {
 
 function buildCategoryPicker(guildId, s) {
   const cats = faq.listCategories(guildId).slice(0, 25);
-  return {
-    embeds: [new EmbedBuilder().setColor(0x5865f2).setTitle('📁 Select FAQ Category').setDescription(`Choose where **${s.question}** will be published.`)],
-    components: cats.length ? [selectRow(`faq:team:categorySelect:${s.id}`, 'Select category', cats.map(c => ({ label: c.name, value: c.id, emoji: c.emoji || undefined })))] : [],
-  };
+  return { embeds: [new EmbedBuilder().setColor(0x5865f2).setTitle('📁 Select FAQ Category').setDescription(`Choose where **${s.question}** will be published.`)], components: cats.length ? [selectRow(`faq:team:categorySelect:${s.id}`, 'Select category', cats.map(c => ({ label: c.name, value: c.id, emoji: c.emoji || undefined })))] : [] };
 }
 
 function buildSupportPicker(s) {
@@ -165,7 +144,13 @@ function buildAdminPanel(guild, displayName = 'Unknown User') {
   const enabled = isModuleEnabled(guild.id, 'faq');
   const open = faq.listSubmissions(guild.id, ['submitted', 'claimed', 'draft', 'review']).length;
   const embed = new EmbedBuilder().setColor(enabled ? 0x57f287 : 0x5865f2).setTitle('❓ FAQ').setDescription(['Configure the server FAQ knowledge base and question workflow.', '', `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`, `**FAQ Channel:** ${s.settings.channelId ? `<#${s.settings.channelId}>` : '`Not set`'}`, `**Team Inbox:** ${s.settings.inboxChannelId ? `<#${s.settings.inboxChannelId}>` : '`Not set`'}`, `**Manager Roles:** ${s.settings.managerRoleIds.length ? s.settings.managerRoleIds.map(id => `<@&${id}>`).join(', ') : '`None`'}`, `**Categories:** \`${Object.keys(s.categories).length}\``, `**Published FAQs:** \`${Object.keys(s.entries).length}\``, `**Open Questions:** \`${open}\``, `**Panel:** ${s.panel.messageId ? 'Deployed ✅' : 'Not deployed'}`].join('\n')).setFooter({ text: `Requested by ${displayName}` }).setTimestamp();
-  return { embeds: [embed], components: [row(new ChannelSelectMenuBuilder().setCustomId('admin:faq:channel').setPlaceholder('Public FAQ channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)), row(new ChannelSelectMenuBuilder().setCustomId('admin:faq:inboxChannel').setPlaceholder('Private team FAQ inbox').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1)), row(new RoleSelectMenuBuilder().setCustomId('admin:faq:managerRoles').setPlaceholder('FAQ manager roles').setMinValues(0).setMaxValues(10)), row(button('admin:faq:addCategory', '➕ Category', ButtonStyle.Primary), button('admin:faq:addEntry', '➕ FAQ', ButtonStyle.Primary), button('admin:faq:manage', '📚 Manage')), row(button('admin:faq:deploy', '🚀 Deploy FAQ', ButtonStyle.Success), button(enabled ? 'admin:faq:disable' : 'admin:faq:enable', enabled ? '⏸️ Disable' : '▶️ Enable')), row(button('admin:modules', '⬅️ Modules'))] };
+  return { embeds: [embed], components: [
+    row(new ChannelSelectMenuBuilder().setCustomId('admin:faq:channel').setPlaceholder('Public FAQ channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
+    row(new ChannelSelectMenuBuilder().setCustomId('admin:faq:inboxChannel').setPlaceholder('Private team FAQ inbox').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1)),
+    row(new RoleSelectMenuBuilder().setCustomId('admin:faq:managerRoles').setPlaceholder('FAQ manager roles').setMinValues(0).setMaxValues(10)),
+    row(button('admin:faq:addCategory', '➕ Category', ButtonStyle.Primary), button('admin:faq:addEntry', '➕ FAQ', ButtonStyle.Primary), button('admin:faq:manage', '📚 Manage')),
+    row(button('admin:faq:deploy', '🚀 Deploy FAQ', ButtonStyle.Success), button(enabled ? 'admin:faq:disable' : 'admin:faq:enable', enabled ? '⏸️ Disable' : '▶️ Enable'), button('admin:modules', '⬅️ Modules')),
+  ] };
 }
 
 function buildCategoryModal(category = null) {
@@ -184,12 +169,8 @@ function buildManagePanel(guildId) {
   const entries = faq.listEntries(guildId);
   const embed = new EmbedBuilder().setColor(0x5865f2).setTitle('📚 FAQ Manager').setDescription(cats.length ? cats.map(c => `**${c.emoji || '❓'} ${c.name}** — ${entries.filter(e => e.categoryId === c.id).length} question(s)`).join('\n') : 'No FAQ categories created yet.');
   const components = [];
-  if (cats.length) {
-    components.push(selectRow('admin:faq:manageCategory', 'Manage a category', cats.slice(0, 25).map(c => ({ label: c.name, value: c.id, description: `${entries.filter(e => e.categoryId === c.id).length} question(s)`, emoji: c.emoji || undefined }))));
-  }
-  if (entries.length) {
-    components.push(selectRow('admin:faq:manageEntry', 'Manage an FAQ', entries.slice(0, 25).map(e => ({ label: e.question.slice(0, 100), value: e.id }))));
-  }
+  if (cats.length) components.push(selectRow('admin:faq:manageCategory', 'Manage a category', cats.slice(0, 25).map(c => ({ label: c.name, value: c.id, description: `${entries.filter(e => e.categoryId === c.id).length} question(s)`, emoji: c.emoji || undefined }))));
+  if (entries.length) components.push(selectRow('admin:faq:manageEntry', 'Manage an FAQ', entries.slice(0, 25).map(e => ({ label: e.question.slice(0, 100), value: e.id }))));
   components.push(row(button('admin:faq', '⬅️ FAQ Settings')));
   return { embeds: [embed], components };
 }
