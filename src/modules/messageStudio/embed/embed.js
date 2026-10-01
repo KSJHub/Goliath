@@ -10,8 +10,7 @@ const media = require('./embedMedia');
 const renderer = require('./embedRenderer');
 const { installMediaManagerBase } = require('./embedMediaManagerBase');
 const { installGraphicHeaders } = require('./embedGraphicHeaders');
-const { installImageAlignment, installInteraction: installImageAlignmentInteraction } = require('./embedImageAlignment');
-const { installAlignmentPreview } = require('./embedAlignmentPreview');
+const { installImageAlignment, installInteraction: installImageAlignmentInteraction, installAlignmentPreview } = require('./embedImageAlignment');
 const { installSettingsTransfer } = require('./embedSettingsTransfer');
 
 const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPanelMedia: media.setPanelMedia, mediaModel: media.mediaModel });
