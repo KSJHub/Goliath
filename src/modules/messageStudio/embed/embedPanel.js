@@ -796,16 +796,15 @@ function buildEditorPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("embed:builder").setLabel("Builder").setEmoji("🛠️").setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId("embed:panels").setLabel(`Panels (${panels.length})`).setEmoji("🧩").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:presets").setLabel("Presets").setEmoji("💾").setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId("embed:presets").setLabel("Presets").setEmoji("💾").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId("embed:use").setLabel("Deploy New").setEmoji("🚀").setStyle(ButtonStyle.Success).setDisabled(!canDeploy)
       ),
 
       /*
        * CHECK / PUBLISH WORKFLOW
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:readiness").setLabel(report.ready ? "Ready" : "Review").setEmoji(report.ready ? "✅" : "⚠️").setStyle(report.ready ? ButtonStyle.Success : ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("embed:test-send").setLabel("Test Send").setEmoji("🧪").setStyle(ButtonStyle.Secondary).setDisabled(!report.ready),
-        new ButtonBuilder().setCustomId("embed:use").setLabel("Deploy New").setEmoji("🚀").setStyle(ButtonStyle.Success).setDisabled(!canDeploy),
         ...(deployment ? [new ButtonBuilder().setCustomId("embed:update-existing").setLabel("Update Existing").setEmoji("♻️").setStyle(ButtonStyle.Success).setDisabled(!canDeploy)] : [])
       ),
 
@@ -1059,7 +1058,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
       ),
 
       /*
-       * DESIGN / REVIEW
+       * DESIGN / OPTIONS
        */
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -1075,55 +1074,18 @@ function buildBuilderPanel(i, who = "Unknown User") {
           .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
-          .setCustomId("embed:readiness")
-          .setLabel(
-            report.ready
-              ? "Ready"
-              : "Review Readiness"
-          )
-          .setEmoji(
-            report.ready
-              ? "✅"
-              : "⚠️"
-          )
-          .setStyle(
-            report.ready
-              ? ButtonStyle.Success
-              : ButtonStyle.Secondary
-          )
-      ),
-
-      /*
-       * WORKSPACE OPTIONS
-       */
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
           .setCustomId("embed:toggle-timestamp")
-          .setLabel(
-            s.showTimestamp
-              ? "Timestamp: On"
-              : "Timestamp: Off"
-          )
+          .setLabel("Timestamp")
           .setEmoji("🕒")
           .setStyle(
             s.showTimestamp
               ? ButtonStyle.Success
               : ButtonStyle.Secondary
-          ),
-
-        new ButtonBuilder()
-          .setCustomId("embed:reset")
-          .setLabel("Reset")
-          .setEmoji("♻️")
-          .setStyle(ButtonStyle.Danger)
+          )
       ),
 
       /*
        * NAVIGATION / HELP
-       *
-       * Persistent layout:
-       * Back is always left-most on the final row.
-       * Variables is a helper and sits immediately to its right.
        */
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -1136,7 +1098,13 @@ function buildBuilderPanel(i, who = "Unknown User") {
           .setCustomId("embed:helpers")
           .setLabel("Variables")
           .setEmoji("📖")
-          .setStyle(ButtonStyle.Secondary)
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:reset")
+          .setLabel("Reset")
+          .setEmoji("♻️")
+          .setStyle(ButtonStyle.Danger)
       ),
     ],
   };
