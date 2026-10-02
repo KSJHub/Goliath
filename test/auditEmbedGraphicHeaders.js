@@ -36,7 +36,10 @@ function run() {
   assert(embedRuntime.includes('function canonicalMediaState'));
   assert(embedRuntime.includes('media.mediaModel.normalizeMedia(state?.media || {}, panels)'));
   assert(embedRuntime.includes('installCanonicalMediaSessions(targetPanel)'));
-  assert(embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"));
+  assert(
+    !embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"),
+    'canonical session normalization must not overwrite an explicit Above/Below media placement'
+  );
 
   // Persistence is owned directly by the canonical embedState boundary.
   // Validate the current consolidated implementation rather than the retired
