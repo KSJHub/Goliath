@@ -8,8 +8,15 @@ function selectedPanel(state) {
 }
 
 function selectedMediaIndex(state, panelMedia) {
-  const index = Number(state?.selectedMediaIndex);
-  return Number.isInteger(index) && index >= 0 && index < (panelMedia?.gallery?.length || 0) ? index : null;
+  const galleryLength = panelMedia?.gallery?.length || 0;
+  if (!galleryLength) return null;
+  const raw = state?.selectedMediaIndex;
+  const index = Number(raw);
+  // The Media Manager visually defaults to item 0 when no explicit selection
+  // has been persisted yet. The interaction handler must use the same effective
+  // selection or placement buttons appear clickable but perform no change.
+  if (raw == null || raw === '' || !Number.isInteger(index)) return 0;
+  return index >= 0 && index < galleryLength ? index : 0;
 }
 
 function graphicHeaderIndex(panelMedia) {
@@ -67,11 +74,6 @@ function installGraphicHeaders(panel, media, interactions) {
   interactions.handleInteraction = async (interaction) => {
     const customId = String(interaction?.customId || '');
 
-    /*
-     * Placement is panel-scoped. Handle it at the outer Embed Studio wrapper so
-     * changing Panel 2/3/etc. cannot be overwritten by legacy image syncing or
-     * another interaction wrapper before the selected panel media is persisted.
-     */
     if (customId === 'embed:media-placement:above' || customId === 'embed:media-placement:below') {
       const state = panel.getSession(interaction);
       const panelIndex = Math.max(0, Number(state?.selectedPanelIndex) || 0);
@@ -92,15 +94,19 @@ function installGraphicHeaders(panel, media, interactions) {
       });
 
       let next = media.setPanelMedia(state, panelIndex, { ...panelMedia, gallery });
-
-      /*
-       * Keep the legacy panel image mirror in sync without routing the change
-       * back through saveSelected(), which can re-normalize the selected media.
-       * The canonical media model above remains the source of truth.
-       */
       const panels = Array.isArray(next?.panels) ? next.panels.map((entry) => ({ ...entry })) : [];
       if (panels[panelIndex]) {
+        const panelData = panels[panelIndex];
         panels[panelIndex].image = gallery[0]?.source || '';
+        // graphicHeaderTitle is legacy header-mode state. If the user explicitly
+        // moves the active/only media below content, clear that mode before the
+        // canonical session wrapper runs or it will promote the item above again.
+        if (placement === 'below' && !gallery.some((item) => item?.placement === 'above')) {
+          if (!String(panelData.title || '').trim() && String(panelData.graphicHeaderTitle || '').trim()) {
+            panels[panelIndex].title = String(panelData.graphicHeaderTitle);
+          }
+          panels[panelIndex].graphicHeaderTitle = '';
+        }
         next = { ...next, panels };
       }
 
@@ -133,18 +139,12 @@ function installGraphicHeaders(panel, media, interactions) {
     let patch = {};
 
     if (currentMode === 'text') {
-      // Selecting a new header atomically demotes any previous header. There can
-      // only be one graphic header per panel.
       gallery = normalizeHeaderPlacements(gallery, mediaIndex);
       patch = { graphicHeaderTitle: String(panelData.title || panelData.graphicHeaderTitle || ''), title: '' };
     } else if (currentMode === 'graphic') {
-      // If the user selected a different gallery item while Graphic mode is
-      // active, switch the header to that item without losing the saved title.
       if (activeIndex !== mediaIndex) gallery = normalizeHeaderPlacements(gallery, mediaIndex);
       patch = { title: String(panelData.graphicHeaderTitle || ''), graphicHeaderTitle: String(panelData.graphicHeaderTitle || '') };
     } else {
-      // Graphic + Text -> Text. Demote the actual active header, regardless of
-      // which gallery item is currently selected.
       gallery = normalizeHeaderPlacements(gallery, null);
       patch = { title: String(panelData.title || panelData.graphicHeaderTitle || ''), graphicHeaderTitle: String(panelData.graphicHeaderTitle || panelData.title || '') };
     }
