@@ -27,15 +27,10 @@ const DELIVERY_ACTIONS = new Set(['embed:use', 'embed:update-existing']);
 function clone(value) { try { return JSON.parse(JSON.stringify(value)); } catch { return value; } }
 function canonicalMediaState(state = {}) {
   const panels = Array.isArray(state?.panels) ? state.panels : [];
-  let canonical = media.mediaModel.normalizeMedia(state?.media || {}, panels);
-  canonical.panels = canonical.panels.map((entry, index) => {
-    const panelData = panels[index] || {};
-    if (!panelData?.graphicHeaderTitle || String(panelData?.title || '').trim()) return entry;
-    if (!Array.isArray(entry?.gallery) || !entry.gallery.length) return entry;
-    if (entry.gallery.some((item) => item?.placement === 'above')) return entry;
-    return { ...entry, gallery: entry.gallery.map((item, itemIndex) => ({ ...item, placement: itemIndex === 0 ? 'above' : 'below' })) };
-  });
-  return canonical;
+  // Placement is canonical media state. Do not infer or rewrite placement from
+  // legacy graphicHeaderTitle/title fields: explicit Above/Below choices made
+  // in Media Manager must survive session reads/writes on every panel.
+  return media.mediaModel.normalizeMedia(state?.media || {}, panels);
 }
 function stateRequiresAttachments(state = {}) {
   const canonical = canonicalMediaState(state);
