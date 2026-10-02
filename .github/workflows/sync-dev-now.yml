@@ -179,14 +179,18 @@ jobs:
               exit 1
             fi
 
-            FINAL_SHA="$(git rev-parse HEAD)"
+            # A newer DEV push may arrive while this run is inside the stability
+            # gate. That makes this run stale, not failed. Leave the newer workflow
+            # to deploy the newer commit instead of reporting a false SHA mismatch.
             REMOTE_SHA="$(remote_dev_sha)"
+            if [ "$EXPECTED_SHA" != "$REMOTE_SHA" ]; then
+              echo "Superseded during stability gate; exiting cleanly."
+              exit 0
+            fi
+
+            FINAL_SHA="$(git rev-parse HEAD)"
             if [ "$FINAL_SHA" != "$EXPECTED_SHA" ]; then
               echo "DEV SHA mismatch: local=$FINAL_SHA expected=$EXPECTED_SHA" >&2
-              exit 1
-            fi
-            if [ "$FINAL_SHA" != "$REMOTE_SHA" ]; then
-              echo "DEV SHA mismatch: local=$FINAL_SHA remote=$REMOTE_SHA" >&2
               exit 1
             fi
 
