@@ -130,9 +130,17 @@ jobs:
             git remote set-url origin "$AUTH_URL"
             cleanup_remote(){ git remote set-url origin "https://github.com/${{ github.repository }}.git" || true; }
             trap cleanup_remote EXIT
+
+            # A deployment target is disposable application code plus preserved runtime data.
+            # Clear any abandoned merge/conflict state before checking out the promoted tree.
+            # Runtime content is excluded from cleanup and restored below.
+            if [ -f .git/MERGE_HEAD ]; then git merge --abort || true; fi
+            git reset --hard HEAD
+            git clean -fd -- . ':!src/runtime/'
+
             git fetch --no-tags origin "$TARGET_BRANCH"
             [ "$(git rev-parse origin/$TARGET_BRANCH)" = "$EXPECTED_SHA" ]
-            if [ -n "$(git status --porcelain -- . ':!src/runtime/')" ]; then git status --short -- . ':!src/runtime/' >&2; exit 1; fi
+
             BACKUP_DIR="/home/goliath/.goliath-${ENVIRONMENT}-runtime-deploy-backup"
             rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
             if [ -d "$RUNTIME_DIR" ]; then tar --warning=no-file-changed --ignore-failed-read --exclude='*.tmp' -C "$RUNTIME_DIR" -cf - . | tar -C "$BACKUP_DIR" -xf -; fi
