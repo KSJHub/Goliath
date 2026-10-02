@@ -588,11 +588,6 @@ function installUploadModals(panel) {
       ? String(item.size).toLowerCase()
       : 'large';
 
-    rows.push(new ActionRowBuilder().addComponents(
-      mediaButton('embed:media-size:small', '🔹 Small', selectedSize === 'small' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      mediaButton('embed:media-size:medium', '🔷 Medium', selectedSize === 'medium' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      mediaButton('embed:media-size:large', '🔶 Large', selectedSize === 'large' ? ButtonStyle.Primary : ButtonStyle.Secondary)
-    ));
 
     return {
       embeds: [
@@ -644,6 +639,12 @@ function installUploadModals(panel) {
                 ? ButtonStyle.Primary
                 : ButtonStyle.Secondary
             )
+        ),
+
+        new ActionRowBuilder().addComponents(
+          mediaButton('embed:media-size:small', '🔹 Small', selectedSize === 'small' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+          mediaButton('embed:media-size:medium', '🔷 Medium', selectedSize === 'medium' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+          mediaButton('embed:media-size:large', '🔶 Large', selectedSize === 'large' ? ButtonStyle.Primary : ButtonStyle.Secondary)
         ),
 
         new ActionRowBuilder().addComponents(
