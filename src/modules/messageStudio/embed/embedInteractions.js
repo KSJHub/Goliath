@@ -1471,7 +1471,48 @@ async function handleCoreInteraction(i) {
   }
 
   if (i.isModalSubmit?.() && customId.startsWith('embed:media-thumbnail-save:')) { const panelMedia = panel.getPanelMedia(state); panelMedia.thumbnail = panel.mediaModel.normalizeThumbnail({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt') }); saveMediaState(i, state, panelMedia); return replyMediaPanel(i); }
-  if (i.isModalSubmit?.() && (customId === 'embed:media-gallery-save-new' || customId.startsWith('embed:media-gallery-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-gallery-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.gallery[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeGalleryItem({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt'), type: existing.type || 'auto', spoiler: existing.spoiler === true, placement: existing.placement || 'below' }); if (!entry.source) { await i.reply({ content: 'A media URL or variable is required.', flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; let selectedMediaIndex; if (editingIndex == null) { if (gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: 'Maximum gallery item limit reached.', flags: 64 }); return true; } gallery.push(entry); selectedMediaIndex = gallery.length - 1; } else { gallery[editingIndex] = entry; selectedMediaIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex }); return replyMediaPanel(i); }
+  if (customId.startsWith('embed:media-size:')) {
+    const requestedSize = customId.split(':').pop();
+    const validSizes = new Set(['small', 'medium', 'large']);
+
+    if (!validSizes.has(requestedSize)) {
+      await i.reply({ content: 'Invalid media size.', flags: 64 });
+      return true;
+    }
+
+    const currentState = panel.getSession(i);
+    const panelMedia = panel.getPanelMedia(currentState);
+    const selectedIndex = Number.isInteger(currentState.selectedMediaIndex)
+      ? currentState.selectedMediaIndex
+      : null;
+
+    if (
+      selectedIndex == null ||
+      selectedIndex < 0 ||
+      selectedIndex >= panelMedia.gallery.length
+    ) {
+      await i.reply({ content: 'Select a media item first.', flags: 64 });
+      return true;
+    }
+
+    const gallery = panelMedia.gallery.map((item, index) =>
+      index === selectedIndex
+        ? { ...item, size: requestedSize }
+        : item
+    );
+
+    saveMediaState(
+      i,
+      currentState,
+      { ...panelMedia, gallery },
+      { selectedMediaIndex: selectedIndex }
+    );
+
+    await i.update(panel.buildEditMediaPanel(i));
+    return true;
+  }
+
+  if (i.isModalSubmit?.() && (customId === 'embed:media-gallery-save-new' || customId.startsWith('embed:media-gallery-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-gallery-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.gallery[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeGalleryItem({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt'), type: existing.type || 'auto', spoiler: existing.spoiler === true, placement: existing.placement || 'below', alignment: existing.alignment || 'left', size: existing.size || 'large' }); if (!entry.source) { await i.reply({ content: 'A media URL or variable is required.', flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; let selectedMediaIndex; if (editingIndex == null) { if (gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: 'Maximum gallery item limit reached.', flags: 64 }); return true; } gallery.push(entry); selectedMediaIndex = gallery.length - 1; } else { gallery[editingIndex] = entry; selectedMediaIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex }); return replyMediaPanel(i); }
   if (i.isModalSubmit?.() && (customId === 'embed:media-file-save-new' || customId.startsWith('embed:media-file-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-file-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.files[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeFile({ source: i.fields.getTextInputValue('source'), name: i.fields.getTextInputValue('name'), description: i.fields.getTextInputValue('description'), spoiler: existing.spoiler === true }); if (!entry.source) { await i.reply({ content: 'A file URL or variable is required.', flags: 64 }); return true; } const files = [...panelMedia.files]; let selectedFileIndex; if (editingIndex == null) { if (files.length >= panel.mediaModel.MAX_FILES) { await i.reply({ content: 'Maximum file limit reached.', flags: 64 }); return true; } files.push(entry); selectedFileIndex = files.length - 1; } else { files[editingIndex] = entry; selectedFileIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, files }, { selectedFileIndex }); return replyMediaPanel(i); }
 
   if (customId === 'embed:test-send') { try { const payload = await buildPayload(state, i, true); payload.allowedMentions = panel.allowedMentions(state, i); await i.reply(payload); } catch (error) { console.error('[Embed] test payload failed:', error); await i.reply({ content: `❌ Embed test failed: ${error?.message || error}`, flags: 64 }); } return true; }

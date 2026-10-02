@@ -24,6 +24,16 @@ const PORTRAIT_WIDTH = 320;
 const PORTRAIT_SHIFT_RIGHT = 0;
 const SINGLE_IMAGE_CANVAS_WIDTH = 900;
 const SINGLE_IMAGE_VISIBLE_WIDTH = 520;
+const GALLERY_IMAGE_WIDTHS = Object.freeze({
+  small: 320,
+  medium: 420,
+  large: SINGLE_IMAGE_VISIBLE_WIDTH,
+});
+
+function galleryImageWidth(item) {
+  const size = String(item?.size || 'large').toLowerCase();
+  return GALLERY_IMAGE_WIDTHS[size] || SINGLE_IMAGE_VISIBLE_WIDTH;
+}
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 8000;
 const PANEL_BG = { r: 19, g: 20, b: 22, alpha: 1 };
@@ -96,14 +106,14 @@ function applyMediaAlignmentMap(mediaState, alignmentMap = {}) {
   for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) { const gallery = Array.isArray(panels[panelIndex]?.gallery) ? panels[panelIndex].gallery : []; for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) { const current = String(gallery[itemIndex]?.alignment || '').toLowerCase(); if (VALID_ALIGNMENTS.has(current)) continue; const key = `${panelIndex}:${itemIndex}`; const mapped = String(alignmentMap?.[key] || '').toLowerCase(); gallery[itemIndex].alignment = VALID_ALIGNMENTS.has(mapped) ? mapped : 'left'; } }
   return media;
 }
-async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex, guildId = 'global') {
+async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
   let cached = cachedAssetFor(guildId, source);
   if (!cached?.buffer) cached = await ensureAssetCached(guildId, source);
   if (!cached?.buffer) return null;
   const type = contentTypeBase(cached.meta?.contentType || cached.contentType || ''); if (type && !STATIC_RASTER_TYPES.has(type)) return null;
   const trimmed = await sharp(cached.buffer, { failOn: 'warning' }).ensureAlpha().trim({ background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
-  const visible = await sharp(trimmed, { failOn: 'warning' }).resize({ width: SINGLE_IMAGE_VISIBLE_WIDTH, height: SINGLE_IMAGE_VISIBLE_WIDTH, fit: 'inside', withoutEnlargement: false }).ensureAlpha().png().toBuffer();
-  const meta = await sharp(visible).metadata(); const width = Number(meta.width || SINGLE_IMAGE_VISIBLE_WIDTH); const height = Number(meta.height || SINGLE_IMAGE_VISIBLE_WIDTH); const left = alignment === 'right' ? Math.max(0, SINGLE_IMAGE_CANVAS_WIDTH - width) : alignment === 'center' ? Math.max(0, Math.floor((SINGLE_IMAGE_CANVAS_WIDTH - width) / 2)) : 0;
+  const visible = await sharp(trimmed, { failOn: 'warning' }).resize({ width: visibleWidth, height: visibleWidth, fit: 'inside', withoutEnlargement: false }).ensureAlpha().png().toBuffer();
+  const meta = await sharp(visible).metadata(); const width = Number(meta.width || visibleWidth); const height = Number(meta.height || visibleWidth); const left = alignment === 'right' ? Math.max(0, SINGLE_IMAGE_CANVAS_WIDTH - width) : alignment === 'center' ? Math.max(0, Math.floor((SINGLE_IMAGE_CANVAS_WIDTH - width) / 2)) : 0;
   const output = await sharp({ create: { width: SINGLE_IMAGE_CANVAS_WIDTH, height, channels: 4, background: PANEL_BG } }).composite([{ input: visible, left, top: 0 }]).png().toBuffer(); const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`; return { attachment: new AttachmentBuilder(output, { name }), url: `attachment://${name}` };
 }
 async function galleryItems(media, interaction, placement = null, payloadFiles = null, panelIndex = 0) {
@@ -111,7 +121,7 @@ async function galleryItems(media, interaction, placement = null, payloadFiles =
   for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
     const item = gallery[itemIndex]; if (placement && itemPlacement(item) !== placement) continue; const source = resolveSource(item?.source, interaction); if (!source) continue;
     const probe = await probeRemoteSource(source, 'media', guildId); let url = source; const alignment = galleryAlignment(item); const isStaticImage = String(item?.type || 'auto').toLowerCase() !== 'video' && !nativeImageShouldPassThrough(probe.contentType);
-    if (isStaticImage && Array.isArray(payloadFiles)) { const prepared = await alignedGalleryAttachment(source, alignment, panelIndex, itemIndex, guildId); if (prepared) { payloadFiles.push(prepared.attachment); url = prepared.url; } }
+    if (isStaticImage && Array.isArray(payloadFiles)) { const prepared = await alignedGalleryAttachment(source, alignment, panelIndex, itemIndex, guildId, galleryImageWidth(item)); if (prepared) { payloadFiles.push(prepared.attachment); url = prepared.url; } }
     const builder = new MediaGalleryItemBuilder().setURL(url).setSpoiler(item?.spoiler === true); if (item?.alt) builder.setDescription(String(item.alt).slice(0, 1024)); output.push(builder);
   }
   return output;
