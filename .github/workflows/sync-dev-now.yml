@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: sync-goliath-dev
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   sync-dev:
@@ -38,6 +38,15 @@ jobs:
             PM2_NAME=goliath-dev
             DEV_HOST=dev.goliath.ksjdigital.co.uk
             BACKUP_DIR=/home/goliath/.goliath-dev-runtime-sync-backup
+            LOCK_FILE=/home/goliath/.goliath-dev-sync.lock
+
+            # Serialize on the VPS as well as in GitHub Actions. This protects the
+            # shared DEV worktree/node_modules even if an SSH runner disconnects.
+            exec 9>"$LOCK_FILE"
+            echo "🔒 Waiting for DEV deployment lock"
+            flock -w 900 9 || { echo "Timed out waiting for DEV deployment lock." >&2; exit 1; }
+            echo "🔒 DEV deployment lock acquired"
+
             cd "$APP_DIR"
 
             AUTH_URL="https://x-access-token:${GITHUB_DEPLOY_TOKEN}@github.com/${{ github.repository }}.git"
