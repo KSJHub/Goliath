@@ -173,7 +173,13 @@ function importAudit() {
       cwd: root,
       encoding: 'utf8',
       timeout: 15000,
-      env: { ...process.env, GOLIATH_IMPORT_AUDIT: 'true' },
+      env: {
+        ...process.env,
+        GOLIATH_IMPORT_AUDIT: 'true',
+        // Import probes must never mutate the live dependency tree.
+        // Disable lifecycle/cleanup behaviour in modules that honour audit mode.
+        GOLIATH_DOCTOR: 'true',
+      },
     });
     console.log(`${result.status === 0 ? '✅' : '❌'} ${relative(filePath)}`);
     if (result.status !== 0) errors.push(`${relative(filePath)}: ${String(result.stderr || result.stdout).trim().split('\n').slice(0, 3).join(' | ')}`);
