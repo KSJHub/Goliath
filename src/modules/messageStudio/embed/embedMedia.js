@@ -642,9 +642,18 @@ function installUploadModals(panel) {
         ),
 
         new ActionRowBuilder().addComponents(
-          mediaButton('embed:media-size:small', '🔹 Small', selectedSize === 'small' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-          mediaButton('embed:media-size:medium', '🔷 Medium', selectedSize === 'medium' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-          mediaButton('embed:media-size:large', '🔶 Large', selectedSize === 'large' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+          new ButtonBuilder()
+            .setCustomId('embed:media-size:small')
+            .setLabel('🔹 Small')
+            .setStyle(selectedSize === 'small' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId('embed:media-size:medium')
+            .setLabel('🔷 Medium')
+            .setStyle(selectedSize === 'medium' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId('embed:media-size:large')
+            .setLabel('🔶 Large')
+            .setStyle(selectedSize === 'large' ? ButtonStyle.Primary : ButtonStyle.Secondary)
         ),
 
         new ActionRowBuilder().addComponents(
