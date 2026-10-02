@@ -66,6 +66,55 @@ function installGraphicHeaders(panel, media, interactions) {
   const originalHandleInteraction = interactions.handleInteraction.bind(interactions);
   interactions.handleInteraction = async (interaction) => {
     const customId = String(interaction?.customId || '');
+
+    /*
+     * Placement is panel-scoped. Handle it at the outer Embed Studio wrapper so
+     * changing Panel 2/3/etc. cannot be overwritten by legacy image syncing or
+     * another interaction wrapper before the selected panel media is persisted.
+     */
+    if (customId === 'embed:media-placement:above' || customId === 'embed:media-placement:below') {
+      const state = panel.getSession(interaction);
+      const panelIndex = Math.max(0, Number(state?.selectedPanelIndex) || 0);
+      const panelMedia = media.getPanelMedia(state, panelIndex);
+      const mediaIndex = selectedMediaIndex(state, panelMedia);
+
+      if (mediaIndex == null) {
+        await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
+        return true;
+      }
+
+      const placement = customId.endsWith(':above') ? 'above' : 'below';
+      const gallery = (Array.isArray(panelMedia.gallery) ? panelMedia.gallery : []).map((item, index) => {
+        if (index !== mediaIndex) return { ...item };
+        return media.mediaModel?.normalizeGalleryItem
+          ? media.mediaModel.normalizeGalleryItem({ ...item, placement })
+          : { ...item, placement };
+      });
+
+      let next = media.setPanelMedia(state, panelIndex, { ...panelMedia, gallery });
+
+      /*
+       * Keep the legacy panel image mirror in sync without routing the change
+       * back through saveSelected(), which can re-normalize the selected media.
+       * The canonical media model above remains the source of truth.
+       */
+      const panels = Array.isArray(next?.panels) ? next.panels.map((entry) => ({ ...entry })) : [];
+      if (panels[panelIndex]) {
+        panels[panelIndex].image = gallery[0]?.source || '';
+        next = { ...next, panels };
+      }
+
+      panel.saveSession(interaction, {
+        ...next,
+        selectedPanelIndex: panelIndex,
+        selectedMediaIndex: mediaIndex,
+        hasUnsavedChanges: true,
+      });
+
+      await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
+      return true;
+    }
+
     if (customId !== 'embed:graphic-header-cycle') return originalHandleInteraction(interaction);
 
     const state = panel.getSession(interaction);
