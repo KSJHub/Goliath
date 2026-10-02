@@ -12,9 +12,6 @@ function selectedMediaIndex(state, panelMedia) {
   if (!galleryLength) return null;
   const raw = state?.selectedMediaIndex;
   const index = Number(raw);
-  // The Media Manager visually defaults to item 0 when no explicit selection
-  // has been persisted yet. The interaction handler must use the same effective
-  // selection or placement buttons appear clickable but perform no change.
   if (raw == null || raw === '' || !Number.isInteger(index)) return 0;
   return index >= 0 && index < galleryLength ? index : 0;
 }
@@ -81,7 +78,7 @@ function installGraphicHeaders(panel, media, interactions) {
       const mediaIndex = selectedMediaIndex(state, panelMedia);
 
       if (mediaIndex == null) {
-        await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
+        await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction), state));
         return true;
       }
 
@@ -98,9 +95,6 @@ function installGraphicHeaders(panel, media, interactions) {
       if (panels[panelIndex]) {
         const panelData = panels[panelIndex];
         panels[panelIndex].image = gallery[0]?.source || '';
-        // graphicHeaderTitle is legacy header-mode state. If the user explicitly
-        // moves the active/only media below content, clear that mode before the
-        // canonical session wrapper runs or it will promote the item above again.
         if (placement === 'below' && !gallery.some((item) => item?.placement === 'above')) {
           if (!String(panelData.title || '').trim() && String(panelData.graphicHeaderTitle || '').trim()) {
             panels[panelIndex].title = String(panelData.graphicHeaderTitle);
@@ -110,14 +104,37 @@ function installGraphicHeaders(panel, media, interactions) {
         next = { ...next, panels };
       }
 
-      panel.saveSession(interaction, {
+      const saved = panel.saveSession(interaction, {
         ...next,
         selectedPanelIndex: panelIndex,
         selectedMediaIndex: mediaIndex,
         hasUnsavedChanges: true,
-      });
+      }) || next;
 
-      await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
+      // Render from the exact state returned by the save boundary. This avoids
+      // rebuilding the interaction from a stale pre-click session snapshot and
+      // makes the selected Above/Below button reflect the committed placement.
+      const committed = panel.getSession(interaction) || saved;
+      const committedMedia = media.getPanelMedia(committed, panelIndex);
+      const committedItem = committedMedia?.gallery?.[mediaIndex];
+      if (committedItem && committedItem.placement !== placement) {
+        // The media model is authoritative. If a compatibility layer changed the
+        // placement during save, write the explicit user choice back once without
+        // touching legacy panel image/title fields.
+        const repairedGallery = committedMedia.gallery.map((item, index) => index === mediaIndex
+          ? media.mediaModel.normalizeGalleryItem({ ...item, placement })
+          : { ...item });
+        const repaired = media.setPanelMedia(committed, panelIndex, { ...committedMedia, gallery: repairedGallery });
+        panel.saveSession(interaction, {
+          ...repaired,
+          selectedPanelIndex: panelIndex,
+          selectedMediaIndex: mediaIndex,
+          hasUnsavedChanges: true,
+        });
+      }
+
+      const finalState = panel.getSession(interaction);
+      await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction), finalState));
       return true;
     }
 
@@ -129,7 +146,7 @@ function installGraphicHeaders(panel, media, interactions) {
     const panelMedia = media.getPanelMedia(state, panelIndex);
     const mediaIndex = selectedMediaIndex(state, panelMedia);
     if (mediaIndex == null) {
-      await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
+      await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction), state));
       return true;
     }
 
@@ -152,7 +169,8 @@ function installGraphicHeaders(panel, media, interactions) {
     let next = panel.saveSelected(state, patch);
     next = media.setPanelMedia(next, panelIndex, { ...panelMedia, gallery });
     panel.saveSession(interaction, { ...next, hasUnsavedChanges: true });
-    await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction)));
+    const finalState = panel.getSession(interaction);
+    await interaction.update(panel.buildMediaManagerPanel(interaction, panel.memberName(interaction), finalState));
     return true;
   };
 
