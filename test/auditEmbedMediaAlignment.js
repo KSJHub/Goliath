@@ -6,6 +6,16 @@ const alignment = require('../src/modules/messageStudio/embed/embedImageAlignmen
 const preview = alignment;
 const renderer = require('../src/modules/messageStudio/embed/embedRenderer');
 
+const mediaManagerSource = require('node:fs').readFileSync(
+  require.resolve('../src/modules/messageStudio/embed/embedMedia'),
+  'utf8'
+);
+const mediaManagerStart = mediaManagerSource.indexOf('function installMediaManagerUi(panel) {');
+const mediaManagerEnd = mediaManagerSource.indexOf('\nfunction installThumbnailUi(panel)', mediaManagerStart);
+const mediaManagerBody = mediaManagerSource.slice(mediaManagerStart, mediaManagerEnd);
+assert(!mediaManagerBody.includes('media.mediaModel'), 'Media Manager must not reference an undefined media variable.');
+assert(!mediaManagerBody.includes('media.getPanelMedia'), 'Media Manager must use the canonical media model or panel API.');
+
 const left = media.normalizeGalleryItem({ source: 'https://example.com/a.png', alignment: 'left' });
 const centre = media.normalizeGalleryItem({ source: 'https://example.com/a.png', alignment: 'center' });
 const right = media.normalizeGalleryItem({ source: 'https://example.com/a.png', alignment: 'right' });
