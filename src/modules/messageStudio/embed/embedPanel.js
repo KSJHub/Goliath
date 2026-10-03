@@ -428,9 +428,14 @@ function buildStudioPreviewEmbeds(s, i) {
      * Remove the legacy panel image only for that panel so it cannot
      * duplicate the header beneath the content.
      */
-    const contentPanel = source
+    // Canonical media state owns graphic/image rendering. Once the media
+    // model exists for this panel, the legacy panel.image field must never
+    // leak back into the preview. Otherwise an old preset/session image can
+    // appear underneath newly-added gallery media.
+    const hasCanonicalMedia = Array.isArray(s?.media?.panels);
+    const contentPanel = hasCanonicalMedia
       ? { ...panel, image: '' }
-      : panel;
+      : (source ? { ...panel, image: '' } : panel);
 
     const contentPreview = buildEmbedFromPanel(
       contentPanel,
