@@ -3,7 +3,7 @@
 const { Events, REST, Routes } = require('discord.js');
 const { resolveTokenDetails } = require('../../config/tokenResolver');
 
-const FORBIDDEN = new Set(['owner', 'commandcenter', 'Convert Emoji Shortcodes']);
+const FORBIDDEN = new Set(['commandcenter', 'Convert Emoji Shortcodes']);
 
 async function cleanGuild(client, guildId) {
   if (!guildId) return;
