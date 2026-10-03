@@ -23,6 +23,7 @@ const formsInteractions = optionalRequire('forms', '../../modules/feedbackStudio
 const faqInteractions = optionalRequire('faq', '../../modules/feedbackStudio/faq/faqInteractions');
 const embedPanel = optionalRequire('embed interactions', '../../modules/messageStudio/embed/embedInteractions');
 const duplicator = optionalRequire('duplicator', '../../owner/dev/duplicator');
+const permissionsStudioInteractions = optionalRequire('permissions studio', './permissionsStudio');
 const adminPanel = optionalRequire('admin panel', '../../core/administration/admin/panel');
 const automodPanel = optionalRequire('automod panel', '../../core/administration/automod/panel');
 const modInteractions = optionalRequire('mod interactions', '../../core/administration/mod/interactions');
@@ -222,6 +223,8 @@ module.exports={
       if(await handleLegacyRolePage(interaction))return;
       prepareLegacyRoleInteraction(interaction);
       const customId=String(interaction.customId||'');
+      if (interaction.__goliathPermissionsStudioHandled) return;
+      if(customId.startsWith('permstudio:')||customId.startsWith('permedit:')||customId.startsWith('permbulk:')||customId.startsWith('permpreset:')||customId.startsWith('permsync:')||customId.startsWith('permaccess:')||customId.startsWith('permfinder:')||customId.startsWith('permaudit:')||customId.startsWith('permrestore:')){await permissionsStudioInteractions.execute(interaction,client);return;}
       if(customId.startsWith('mod_')||customId.startsWith('mod:')){if(!await callHandler(modInteractions,'handleModInteraction',interaction))throw new Error(`Mod did not handle ${customId}.`);return;}
       if(isVerificationMemberInteraction(interaction)){await handleVerificationMemberInteraction(interaction);return;}
       if(await enforceAdminModuleAuthority(interaction))return;
