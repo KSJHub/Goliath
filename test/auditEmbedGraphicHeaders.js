@@ -4,8 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {
   graphicHeaderIndex,
-  normalizeHeaderPlacements,
-} = require('../src/modules/messageStudio/embed/embedGraphicHeaders');
+  normalizeGraphicHeaderPlacements,
+} = require('../src/modules/messageStudio/embed/embedInteractions');
 
 function run() {
   assert.equal(graphicHeaderIndex({ gallery: [] }), null);
@@ -16,11 +16,11 @@ function run() {
     { source: 'https://example.com/b.png', placement: 'below' },
     { source: 'https://example.com/c.jpg', placement: 'above' },
   ];
-  const switched = normalizeHeaderPlacements(base, 1);
+  const switched = normalizeGraphicHeaderPlacements(base, 1);
   assert.deepEqual(switched.map((item) => item.placement), ['below', 'above', 'below']);
   assert.equal(switched[1].source, base[1].source);
 
-  const cleared = normalizeHeaderPlacements(base, null);
+  const cleared = normalizeGraphicHeaderPlacements(base, null);
   assert(cleared.every((item) => item.placement === 'below'));
 
   const renderer = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embedRenderer'), 'utf8');
