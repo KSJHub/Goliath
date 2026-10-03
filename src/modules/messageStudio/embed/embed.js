@@ -71,7 +71,6 @@ function installMediaRuntime(targetPanel) {
   media.installStorageNormalization(targetPanel);
   installCanonicalMediaSessions(targetPanel);
   media.installUploadModals(targetPanel);
-  media.installMediaOptionsUi(targetPanel);
   media.installMediaManagerUi(targetPanel);
   media.installThumbnailUi(targetPanel);
   targetPanel.getPanelMedia = mediaStateApi.getPanelMedia;
