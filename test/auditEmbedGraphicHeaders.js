@@ -88,7 +88,13 @@ function run() {
   assert(!mediaInteractionSource.includes('updateMediaOptions'), 'retired Media Options submenu updater must be removed');
   assert(!mediaSource.includes('buildMediaOptionsPanel'), 'retired Media Options submenu builder must be removed');
   assert(!mediaInteractionSource.includes("customId === 'embed:media-options'"), 'retired Media Options entry point must be removed');
-  assert(mediaInteractionSource.includes("customId.startsWith('embed:media-type:')") && mediaInteractionSource.includes("return updateMediaPanel(i)"), 'media type controls must return to the main Media Manager');
+  assert(
+    mediaInteractionSource.includes("customId === 'embed:media-type:cycle'") &&
+    mediaInteractionSource.includes("const cycle = ['auto', 'text', 'gif', 'image']") &&
+    mediaInteractionSource.includes('headerType') &&
+    mediaInteractionSource.includes('return updateMediaPanel(i)'),
+    'media header type cycle must persist headerType and return to the main Media Manager'
+  );
 
   /*
    * Renderer contract:
