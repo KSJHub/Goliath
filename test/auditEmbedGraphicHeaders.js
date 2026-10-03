@@ -61,13 +61,9 @@ function run() {
   assert(embedState.includes('removePersistedSession(key)'), 'clearSession must remove durable state');
 
   /*
-   * Header Type contract
-   *
-   * Canonical cycle:
-   * Auto -> Text -> GIF -> Image -> Auto
-   *
-   * Auto is also the migration/default value for presets created before
-   * headerType existed.
+   * Legacy media editor contract.
+   * The retired Edit Media/Header Type cycle must stay removed; the active
+   * media manager uses the canonical Media Options panel instead.
    */
   const mediaSource = fs.readFileSync(
     require.resolve('../src/modules/messageStudio/embed/embedMedia'),
@@ -79,39 +75,11 @@ function run() {
     'utf8'
   );
 
-  assert(
-    mediaSource.includes(
-      "['auto', 'text', 'gif', 'image'].includes(String(value?.headerType || '').toLowerCase())"
-    ),
-    'gallery media must normalize headerType through the canonical four-value set'
-  );
-
-  assert(
-    mediaSource.includes(": 'auto',"),
-    'legacy gallery media without headerType must default to Auto'
-  );
-
-  assert(
-    interactionSource.includes("auto: 'text'") &&
-    interactionSource.includes("text: 'gif'") &&
-    interactionSource.includes("gif: 'image'") &&
-    interactionSource.includes("image: 'auto'"),
-    'Header Type must cycle Auto -> Text -> GIF -> Image -> Auto'
-  );
-
-  assert(
-    interactionSource.includes(
-      "customId === 'embed:header-type-cycle'"
-    ),
-    'Header Type button must have a canonical interaction owner'
-  );
-
-  assert(
-    !interactionSource.includes(
-      "customId === 'embed:graphic-header-cycle'"
-    ),
-    'legacy Text/Graphic/Both interaction must not remain active'
-  );
+  assert(!mediaSource.includes('buildEditMediaPanel'), 'retired Edit Media panel must remain removed');
+  assert(!mediaSource.includes("embed:header-type-cycle"), 'retired Header Type cycle button must remain removed');
+  assert(!interactionSource.includes("customId === 'embed:header-type-cycle'"), 'retired Header Type cycle handler must remain removed');
+  assert(!interactionSource.includes('buildEditMediaPanel'), 'retired Edit Media handler must remain removed');
+  assert(mediaSource.includes("setCustomId('embed:media-options')"), 'Media Manager must open the canonical Media Options panel');
 
   /*
    * Renderer contract:
