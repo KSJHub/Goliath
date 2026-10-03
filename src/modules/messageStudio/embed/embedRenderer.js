@@ -133,6 +133,30 @@ async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex
     url: `attachment://${name}`
   };
 }
+async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
+  let cached = cachedAssetFor(guildId, source);
+  if (!cached?.buffer) cached = await ensureAssetCached(guildId, source);
+  if (!cached?.buffer) return null;
+
+  const type = contentTypeBase(cached.meta?.contentType || cached.contentType || '');
+  if (type && !STATIC_RASTER_TYPES.has(type)) return null;
+
+  const visible = await sharp(cached.buffer, { failOn: 'warning' })
+    .ensureAlpha()
+    .resize({
+      width: visibleWidth,
+      withoutEnlargement: true,
+      fit: 'inside'
+    })
+    .png()
+    .toBuffer();
+
+  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
+  return {
+    attachment: new AttachmentBuilder(visible, { name }),
+    url: `attachment://${name}`
+  };
+}
 async function galleryItems(media, interaction, placement = null, payloadFiles = null, panelIndex = 0) {
   const output = []; const gallery = (Array.isArray(media?.gallery) ? media.gallery : []).slice(0, 10); const guildId = interactionGuildId(interaction);
   for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
@@ -261,9 +285,8 @@ async function buildEmbedPayload(options = {}) {
           continue;
         }
 
-        const prepared = await alignedGalleryAttachment(
+        const prepared = await plainGalleryAttachment(
           source,
-          galleryAlignment(item),
           index,
           itemIndex,
           guildId,
@@ -303,9 +326,8 @@ async function buildEmbedPayload(options = {}) {
           if (nativeImageShouldPassThrough(source.contentType)) {
             targetEmbed.setImage(imageUrl);
           } else {
-            const prepared = await alignedGalleryAttachment(
+            const prepared = await plainGalleryAttachment(
               imageUrl,
-              'left',
               index,
               0,
               guildId,
