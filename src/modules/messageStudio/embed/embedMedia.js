@@ -666,10 +666,6 @@ function installMediaManagerUi(panel) {
       '**↔️ Alignments** — Set Above/Below Content, Left/Centre/Right and Small/Medium/Large.',
       '**🖼️ Thumbnail** — Add or manage the panel thumbnail.',
       '**🗑️ Remove** — Remove the selected media item.',
-      '',
-      '**⬅️ Back** — Return to the Embed Builder.',
-      '**⚙️ Settings** — Manage preset import/export.',
-      '**📖 Variables** — View available Embed Studio variables.',
     );
 
     const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\\n'), state, who)];
