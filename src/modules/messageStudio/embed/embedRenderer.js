@@ -2,8 +2,13 @@
 
 const {
   AttachmentBuilder,
-  EmbedBuilder,
+  ContainerBuilder,
+  MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
   MessageFlags,
+  SectionBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
 } = require('discord.js');
 const fetch = require('node-fetch');
 const path = require('node:path');
@@ -320,134 +325,306 @@ async function galleryItems(media, interaction, placement = null, payloadFiles =
 }
 
 async function buildEmbedPayload(options = {}) {
-  const { embeds = [], actionRows = [], allowUserPing = false, userId = null, ephemeral = false, interaction = null } = options;
-  const mediaState = applyMediaAlignmentMap(options.media || null, options.mediaAlignment || {});
+  const {
+    embeds = [],
+    actionRows = [],
+    allowUserPing = false,
+    userId = null,
+    ephemeral = false,
+    interaction = null,
+  } = options;
+
+  const mediaState = applyMediaAlignmentMap(
+    options.media || null,
+    options.mediaAlignment || {}
+  );
+
   const files = [];
-  const outputEmbeds = [];
-  const resolvedEmbeds = await resolveApplicationEmojiShortcodes(embeds, interaction);
+  const components = [];
+
+  const resolvedEmbeds = await resolveApplicationEmojiShortcodes(
+    embeds,
+    interaction
+  );
+
   const client = interaction?.client || null;
   const guildId = interactionGuildId(interaction);
-  const resolvedActionRows = client && guildId !== 'global' ? await emojiPayload.resolveComponents(client, guildId, actionRows, 'embed') : actionRows;
-  await validateApplicationEmojiUsage(resolvedEmbeds, resolvedActionRows, interaction);
+
+  const resolvedActionRows =
+    client && guildId !== 'global'
+      ? await emojiPayload.resolveComponents(
+          client,
+          guildId,
+          actionRows,
+          'embed'
+        )
+      : actionRows;
+
+  await validateApplicationEmojiUsage(
+    resolvedEmbeds,
+    resolvedActionRows,
+    interaction
+  );
 
   for (let index = 0; index < resolvedEmbeds.length; index += 1) {
     const sourceEmbed = resolvedEmbeds[index];
-    const data = typeof sourceEmbed?.toJSON === 'function' ? sourceEmbed.toJSON() : sourceEmbed;
+    const data =
+      typeof sourceEmbed?.toJSON === 'function'
+        ? sourceEmbed.toJSON()
+        : sourceEmbed;
+
     if (!data || typeof data !== 'object') continue;
-    const hasPanelMediaState = Array.isArray(mediaState?.panels) && index < mediaState.panels.length;
+
+    const hasPanelMediaState =
+      Array.isArray(mediaState?.panels) &&
+      index < mediaState.panels.length;
+
     const media = panelMedia(mediaState, index);
-    const targetData = { ...data };
-    if (hasPanelMediaState) {
-      // Canonical media state owns panel image/thumbnail presentation. Do not
-      // leave stale Discord CDN URLs from the legacy embed payload in place.
-      delete targetData.image;
-      delete targetData.thumbnail;
-    }
-    const targetEmbed = EmbedBuilder.from(targetData);
-    const thumbSource = resolveSource(hasPanelMediaState ? media?.thumbnail?.source : data.thumbnail?.url, interaction);
-    if (thumbSource) {
-      await probeRemoteSource(thumbSource, 'thumbnail', guildId);
-      if (isHttpsUrl(thumbSource)) {
-        const preparedThumb = await persistentImageAttachment(thumbSource, guildId, 'embed-panel-' + (index + 1) + '-thumbnail');
-        if (preparedThumb) { files.push(preparedThumb.attachment); targetEmbed.setThumbnail(preparedThumb.url); }
-        else targetEmbed.setThumbnail(thumbSource);
-      }
+
+    const container = new ContainerBuilder();
+
+    if (Number.isInteger(data.color)) {
+      container.setAccentColor(data.color);
     }
 
+    const aboveItems = [];
+    const belowItems = [];
+
     if (hasPanelMediaState) {
-      const gallery = Array.isArray(media?.gallery) ? media.gallery.slice(0, 10) : [];
-      const above = [];
-      const below = [];
-      for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
+      const gallery = Array.isArray(media?.gallery)
+        ? media.gallery.slice(0, 10)
+        : [];
+
+      for (
+        let itemIndex = 0;
+        itemIndex < gallery.length;
+        itemIndex += 1
+      ) {
         const item = gallery[itemIndex];
         const source = resolveSource(item?.source, interaction);
+
         if (!source) continue;
-        const probe = await probeRemoteSource(source, 'media', guildId);
-        const mediaType = String(item?.type || 'auto').toLowerCase();
 
-        if (mediaType === 'video') continue;
+        const probe = await probeRemoteSource(
+          source,
+          'media',
+          guildId
+        );
 
-        const placement = itemPlacement(item);
-        const headerType = placement === 'above'
-          ? resolvedGalleryHeaderType(item, probe.contentType)
-          : 'image';
+        const mediaType = String(
+          item?.type || 'auto'
+        ).toLowerCase();
 
         /*
-         * Type: Text deliberately suppresses the graphic header.
-         * The interaction handler normally moves it Below Content as well,
-         * but this renderer guard keeps persisted/manual state safe.
+         * Components V2 Media Gallery supports Discord media directly.
+         * Video URLs can therefore remain native instead of being silently
+         * discarded by the old EmbedBuilder renderer.
          */
-        if (placement === 'above' && headerType === 'text') {
+        const placement = itemPlacement(item);
+
+        const headerType =
+          placement === 'above'
+            ? resolvedGalleryHeaderType(
+                item,
+                probe.contentType
+              )
+            : 'image';
+
+        /*
+         * Type: Text suppresses an Above Content graphic.
+         */
+        if (
+          placement === 'above' &&
+          headerType === 'text'
+        ) {
           continue;
         }
 
-        const imageEmbed = new EmbedBuilder();
-
-        if (Number.isInteger(data.color)) {
-          imageEmbed.setColor(data.color);
-        }
-
-        if (placement === 'above' && headerType === 'gif') {
-          /*
-           * GIF/native mode bypasses Sharp entirely so Discord receives the
-           * original source and animation is preserved.
-           */
-          imageEmbed.setImage(source);
-          above.push(imageEmbed);
-          continue;
-        }
+        let mediaUrl = source;
 
         const forceStatic =
           placement === 'above' &&
           galleryHeaderType(item) === 'image';
 
         const nativePassThrough =
-          nativeImageShouldPassThrough(probe.contentType);
+          mediaType === 'video' ||
+          nativeImageShouldPassThrough(
+            probe.contentType
+          );
 
-        if (nativePassThrough && !forceStatic) {
-          /*
-           * Auto-detected native images (currently GIF) also pass through
-           * untouched.
-           */
-          imageEmbed.setImage(source);
-          (placement === 'above' ? above : below).push(imageEmbed);
-          continue;
+        /*
+         * Preserve GIF animation and other native Discord media.
+         * Static raster images keep Goliath's existing processing pipeline.
+         */
+        if (!nativePassThrough || forceStatic) {
+          const prepared = forceStatic
+            ? await forcedStaticGalleryAttachment(
+                source,
+                index,
+                itemIndex,
+                guildId,
+                galleryImageWidth(item)
+              )
+            : await plainGalleryAttachment(
+                source,
+                index,
+                itemIndex,
+                guildId,
+                galleryImageWidth(item)
+              );
+
+          if (!prepared) continue;
+
+          files.push(prepared.attachment);
+          mediaUrl = prepared.url;
         }
 
-        const prepared = forceStatic
-          ? await forcedStaticGalleryAttachment(
-              source,
-              index,
-              itemIndex,
+        const galleryItem =
+          new MediaGalleryItemBuilder()
+            .setURL(mediaUrl)
+            .setSpoiler(Boolean(item?.spoiler));
+
+        if (item?.alt) {
+          galleryItem.setDescription(
+            String(item.alt).slice(0, 1024)
+          );
+        }
+
+        (
+          placement === 'above'
+            ? aboveItems
+            : belowItems
+        ).push(galleryItem);
+      }
+    }
+
+    /*
+     * ABOVE CONTENT
+     */
+    if (aboveItems.length) {
+      container.addMediaGalleryComponents(
+        new MediaGalleryBuilder().addItems(
+          ...aboveItems
+        )
+      );
+    }
+
+    /*
+     * PANEL CONTENT
+     *
+     * Components V2 does not use EmbedBuilder for the visual body.
+     * Existing embed data is converted into Discord markdown.
+     */
+    const mainText = panelText(data);
+    const footText = footerText(data);
+
+    const thumbSource = resolveSource(
+      hasPanelMediaState
+        ? media?.thumbnail?.source
+        : data.thumbnail?.url,
+      interaction
+    );
+
+    if (mainText) {
+      if (thumbSource) {
+        await probeRemoteSource(
+          thumbSource,
+          'thumbnail',
+          guildId
+        );
+
+        let thumbUrl = thumbSource;
+
+        if (isHttpsUrl(thumbSource)) {
+          const preparedThumb =
+            await persistentImageAttachment(
+              thumbSource,
               guildId,
-              galleryImageWidth(item)
-            )
-          : await plainGalleryAttachment(
-              source,
-              index,
-              itemIndex,
-              guildId,
-              galleryImageWidth(item)
+              'embed-panel-' +
+                (index + 1) +
+                '-thumbnail'
             );
 
-        if (!prepared) continue;
+          if (preparedThumb) {
+            files.push(preparedThumb.attachment);
+            thumbUrl = preparedThumb.url;
+          }
+        }
 
-        files.push(prepared.attachment);
-        imageEmbed.setImage(prepared.url);
+        const section =
+          new SectionBuilder()
+            .addTextDisplayComponents(
+              new TextDisplayBuilder().setContent(
+                mainText.slice(0, 4000)
+              )
+            )
+            .setThumbnailAccessory(
+              new ThumbnailBuilder()
+                .setURL(thumbUrl)
+            );
 
-        (placement === 'above' ? above : below).push(imageEmbed);
+        container.addSectionComponents(section);
+      } else {
+        container.addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(
+            mainText.slice(0, 4000)
+          )
+        );
       }
-      for (const imageEmbed of above) outputEmbeds.push(imageEmbed);
-      outputEmbeds.push(targetEmbed);
-      for (const imageEmbed of below) outputEmbeds.push(imageEmbed);
-    } else {
-      outputEmbeds.push(targetEmbed);
     }
+
+    if (footText) {
+      container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          footText.slice(0, 4000)
+        )
+      );
+    }
+
+    /*
+     * BELOW CONTENT
+     */
+    if (belowItems.length) {
+      container.addMediaGalleryComponents(
+        new MediaGalleryBuilder().addItems(
+          ...belowItems
+        )
+      );
+    }
+
+    components.push(container);
   }
 
-  const payload = { embeds: outputEmbeds.slice(0, 10), components: [...(resolvedActionRows || [])], files };
-  if (allowUserPing && userId) payload.content = `<@${userId}>`;
-  if (ephemeral) payload.flags = MessageFlags.Ephemeral;
+  /*
+   * Message Studio buttons remain outside the individual panel containers
+   * but inside the same Components V2 message.
+   */
+  for (const row of resolvedActionRows || []) {
+    components.push(row);
+  }
+
+  const payload = {
+    components,
+    files,
+    flags: MessageFlags.IsComponentsV2,
+  };
+
+  if (allowUserPing && userId) {
+    /*
+     * Components V2 cannot use normal message content, so represent the
+     * requested ping as a Text Display at the start of the message.
+     */
+    payload.components.unshift(
+      new TextDisplayBuilder().setContent(
+        `<@${userId}>`
+      )
+    );
+  }
+
+  if (ephemeral) {
+    payload.flags |= MessageFlags.Ephemeral;
+  }
+
   return payload;
 }
 
