@@ -108,7 +108,7 @@ async function downloadAsset(url) {
 async function ensureAssetCached(guildId, url) {
   if (!url || !/^https:\/\//i.test(String(url))) return null;
 
-  const cached = getCachedAsset(guildId, url);
+  const cached = getCachedAsset(guildId, url) || (guildId !== 'global' ? getCachedAsset('global', url) : null);
   const cachedType = String(cached?.meta?.contentType || '')
     .toLowerCase()
     .split(';')[0]
