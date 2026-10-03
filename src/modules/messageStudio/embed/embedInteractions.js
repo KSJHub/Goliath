@@ -1331,17 +1331,6 @@ async function handleCoreInteraction(i) {
       await i.update(panel.buildMediaManagerPanel(i, panel.memberName(i), panel.getSession(i)));
       return true;
     }
-    if (customId.startsWith('embed:media-align:')) {
-      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i);
-      const alignment = validMediaAlignment(customId.split(':').pop());
-      if (!alignment) return true;
-      saveMediaState(i, state, { ...panelMedia, gallery: panelMedia.gallery.map((item, index) =>
-        index === galleryIndex ? panel.mediaModel.normalizeGalleryItem({ ...item, alignment }) : { ...item }
-      ) }, { selectedMediaIndex: galleryIndex });
-      await i.update(panel.buildMediaManagerPanel(i, panel.memberName(i), panel.getSession(i)));
-      return true;
-    }
-
     if (customId === 'embed:media-duplicate') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); if (panelMedia.gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_GALLERY_ITEMS} gallery items reached.`, flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; const duplicate = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex] }); gallery.splice(galleryIndex + 1, 0, duplicate); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex + 1 }); return updateMediaOptions(i); }
     if (customId === 'embed:file-options') { if (fileIndex == null || !panelMedia.files[fileIndex]) { await i.reply({ content: 'Select an attached file first.', flags: 64 }); return true; } return updateFileOptions(i); }
     if (customId === 'embed:file-options-back') return updateMediaPanel(i);
