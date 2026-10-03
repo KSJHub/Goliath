@@ -49,11 +49,21 @@ function payload(guild, report) {
 
 async function scan(interaction) {
   const guild = await getGuild(interaction);
-  if (!guild) { if (!interaction.replied) await interaction.reply({ content: '❌ Server context unavailable.', ephemeral: true }); return true; }
+  if (!guild) {
+    if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ Server context unavailable.', ephemeral: true });
+    return true;
+  }
+
+  // A full guild scan can require Discord API fetches before the detector runs.
+  // Acknowledge the button immediately so the interaction cannot expire while
+  // the read-only scan is collecting the current role/channel state.
+  if (!interaction.replied && !interaction.deferred) await interaction.deferUpdate();
+
   await guild.roles.fetch().catch(() => null);
   await guild.channels.fetch().catch(() => null);
+
   const report = detector.scanGuild(guild);
-  await interaction.update(payload(guild, report));
+  await interaction.editReply(payload(guild, report));
   return true;
 }
 
