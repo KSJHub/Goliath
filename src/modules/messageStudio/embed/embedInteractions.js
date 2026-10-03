@@ -1579,117 +1579,6 @@ async function handleCoreInteraction(i) {
   if (i.isModalSubmit?.() && (customId === 'embed:media-file-save-new' || customId.startsWith('embed:media-file-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-file-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.files[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeFile({ source: i.fields.getTextInputValue('source'), name: i.fields.getTextInputValue('name'), description: i.fields.getTextInputValue('description'), spoiler: existing.spoiler === true }); if (!entry.source) { await i.reply({ content: 'A file URL or variable is required.', flags: 64 }); return true; } const files = [...panelMedia.files]; let selectedFileIndex; if (editingIndex == null) { if (files.length >= panel.mediaModel.MAX_FILES) { await i.reply({ content: 'Maximum file limit reached.', flags: 64 }); return true; } files.push(entry); selectedFileIndex = files.length - 1; } else { files[editingIndex] = entry; selectedFileIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, files }, { selectedFileIndex }); return replyMediaPanel(i); }
 
   if (customId === 'embed:test-send') { try { const payload = await buildPayload(state, i, true); payload.allowedMentions = panel.allowedMentions(state, i); await i.reply(payload); } catch (error) { console.error('[Embed] test payload failed:', error); await i.reply({ content: `❌ Embed test failed: ${error?.message || error}`, flags: 64 }); } return true; }
-  if (customId === 'embed:update-existing') {
-    const deploymentKey = getDeploymentKeyFromState(state);
-    const deployment = getEmbedDeployment(i.guild.id, deploymentKey);
-
-    if (!deployment) return handleLegacyInteraction(i);
-
-    const channel =
-      i.guild.channels.cache.get(deployment.channelId) ||
-      await i.guild.channels.fetch(deployment.channelId).catch(() => null);
-
-    if (!isTextBasedChannel(channel)) {
-      await i.reply({
-        content: '⚠️ The original embed channel no longer exists or is not text-based.',
-        flags: 64,
-      });
-      return true;
-    }
-
-    const access = await validateChannelAccess(
-      i.guild,
-      channel.id,
-      [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.EmbedLinks,
-      ],
-      { scope: 'embed.update' }
-    );
-
-    if (!access.ok) {
-      await i.reply({
-        content: panel.trim(access.message, 1800),
-        flags: 64,
-      });
-      return true;
-    }
-
-    const message = await channel.messages
-      .fetch(deployment.messageId)
-      .catch(() => null);
-
-    if (!message || !message.flags?.has?.(MessageFlags.IsComponentsV2)) {
-      return handleLegacyInteraction(i);
-    }
-
-    let discordUpdated = false;
-
-    try {
-      const payload = await buildPayload(state, i, false);
-      payload.allowedMentions = panel.allowedMentions(state, i);
-
-      await message.edit(payload);
-      discordUpdated = true;
-
-      saveEmbedDeployment(i.guild.id, deploymentKey, {
-        ...deployment,
-        channelId: channel.id,
-        messageId: message.id,
-        lastUpdatedBy: i.user.id,
-      });
-
-      const confirmed = getEmbedDeployment(i.guild.id, deploymentKey);
-
-      if (
-        !confirmed ||
-        confirmed.channelId !== channel.id ||
-        confirmed.messageId !== message.id
-      ) {
-        throw new Error(
-          'Deployment persistence could not be confirmed after the Discord message was updated.'
-        );
-      }
-
-      await i.reply({
-        content: '✅ Existing embed updated.',
-        flags: 64,
-      });
-    } catch (error) {
-      if (discordUpdated) {
-        const confirmedMessage = await channel.messages
-          .fetch(message.id)
-          .catch(() => null);
-
-        console.error(
-          '[Embed] Discord update succeeded but deployment persistence failed:',
-          {
-            guildId: i.guild.id,
-            channelId: channel.id,
-            messageId: message.id,
-            discordMessageConfirmed: Boolean(confirmedMessage),
-            error,
-          }
-        );
-
-        await i.reply({
-          content: confirmedMessage
-            ? '⚠️ The Discord embed was updated, but Goliath could not confirm its deployment record. The editor remains unsaved and this deployment requires reconciliation.'
-            : '⚠️ Goliath could not confirm the deployment after updating it. The editor remains unsaved and this deployment requires reconciliation.',
-          flags: 64,
-        });
-      } else {
-        await i.reply({
-          content: panel.embedOperationError(error, channel.id, 'update'),
-          flags: 64,
-        });
-      }
-    }
-
-    return true;
-  }
 
   if (customId === 'embed:use') {
     const channel =
@@ -1937,15 +1826,7 @@ async function handleLegacyInteraction(i) {
     if (customId === 'embed:button-edit') { if (!Number.isInteger(state.selectedButtonIndex)) { await i.reply({ content: 'Select a button first.', flags: 64 }); return true; } await i.showModal(panel.buttonModal(state, state.selectedButtonIndex)); return true; }
     if (customId === 'embed:button-remove-selected') { const buttons = [...(state.buttons || [])]; if (Number.isInteger(state.selectedButtonIndex)) buttons.splice(state.selectedButtonIndex, 1); panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: null }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
     if (customId === 'embed:button-move-up' || customId === 'embed:button-move-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedButtonIndex + delta; if (!Number.isInteger(state.selectedButtonIndex) || target < 0 || target >= (state.buttons || []).length) return true; const buttons = [...state.buttons]; [buttons[state.selectedButtonIndex], buttons[target]] = [buttons[target], buttons[state.selectedButtonIndex]]; panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: target }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
-    if (customId === 'embed:update-existing') {
-      const deployment = getEmbedDeployment(i.guild.id, getDeploymentKeyFromState(state));
-      if (!deployment) { await i.reply({ content: '⚠️ No deployed embed found. Use the embed first.', flags: 64 }); return true; }
-      const channel = i.guild.channels.cache.get(deployment.channelId) || await i.guild.channels.fetch(deployment.channelId).catch(() => null);
-      if (!isTextBasedChannel(channel)) { await i.reply({ content: '⚠️ The original embed channel no longer exists or is not text-based.', flags: 64 }); return true; }
-      const access = await validateChannelAccess(i.guild, channel.id, [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks], { scope: 'embed.update' });
-      if (!access.ok) { await i.reply({ content: panel.trim(access.message, 1800), flags: 64 }); return true; }
-      return handleLegacyInteraction(i);
-    }
+
   }
 
   if (i.isModalSubmit?.()) {
