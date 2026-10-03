@@ -663,7 +663,7 @@ function installMediaManagerUi(panel) {
       '**🖼️ Thumbnail** — Add or manage the panel thumbnail.',
     );
 
-    const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\\n'), state, who)];
+    const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)];
 
     return { embeds, components: enforceLimits(rows) };
   };

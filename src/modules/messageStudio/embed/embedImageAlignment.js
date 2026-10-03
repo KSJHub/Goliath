@@ -86,7 +86,7 @@ function installUi(panel) {
       }
       payload.components=[
         row(selector),
-        row(add,button('embed:media-edit-details','✏️ Edit',ButtonStyle.Primary,!hasSelected),up,down),
+        row(add,button('embed:media-gallery-edit','✏️ Edit',ButtonStyle.Primary,!hasSelected),up,down),
         row(button('embed:media-type:cycle',`🏷️ Type: ${headerTypeLabel}`,ButtonStyle.Secondary,!hasSelected),button('embed:media-spoiler:off','👁️ Normal',selected?.item?.spoiler?ButtonStyle.Secondary:ButtonStyle.Primary,!hasSelected),button('embed:media-spoiler:on','🙈 Spoiler',selected?.item?.spoiler?ButtonStyle.Primary:ButtonStyle.Secondary,!hasSelected),button('embed:media-duplicate','📑 Duplicate',ButtonStyle.Success,!hasSelected||media.gallery.length>=10)),
         row(button('embed:media-alignments','↔️ Alignments',ButtonStyle.Primary,!hasSelected),thumbnail,remove),
         row(findComponent(payload,'embed:builder'),findComponent(payload,'embed:settings'),findComponent(payload,'embed:helpers')),
@@ -179,7 +179,6 @@ function installAlignmentPreview(panel,interactions){
     if(customId.startsWith('embed:media-align:')){ const alignment=customId.split(':').pop(); if(!VALID_ALIGNMENTS.has(alignment))return true; const ctx=await selectedContext(panel,interaction); if(ctx.itemIndex==null||!ctx.item)return original(interaction); saveSelectedPatch(panel,interaction,ctx,{alignment}); await interaction.update(await alignmentPanelPayload(panel,interaction)); return true; }
     if(customId.startsWith('embed:media-placement:')){ const placement=customId.split(':').pop(); if(!['above','below'].includes(placement))return original(interaction); const ctx=await selectedContext(panel,interaction); if(ctx.itemIndex==null||!ctx.item)return original(interaction); saveSelectedPatch(panel,interaction,ctx,{placement}); await interaction.update(await alignmentPanelPayload(panel,interaction)); return true; }
     if(customId.startsWith('embed:media-size:')){ const requestedSize=customId.split(':').pop(); if(!['small','medium','large'].includes(requestedSize))return original(interaction); const ctx=await selectedContext(panel,interaction); if(ctx.itemIndex==null||!ctx.item)return original(interaction); saveSelectedPatch(panel,interaction,ctx,{size:requestedSize}); await interaction.update(await alignmentPanelPayload(panel,interaction)); return true; }
-    if(customId==='embed:media-gallery-edit'){ await interaction.update(await alignedEditMediaPayload(panel,interaction)); return true; }
     if(customId==='embed:media-options-back'||customId==='embed:edit-images'){ await interaction.update(await alignedManagerPayload(panel,interaction)); return true; }
     if(customId==='embed:media-gallery-select'&&interaction.isStringSelectMenu?.()){ const state=panel.getSession(interaction); panel.saveSession(interaction,{...state,selectedMediaIndex:Math.max(0,Number(interaction.values?.[0])||0)}); await interaction.update(await alignedManagerPayload(panel,interaction)); return true; }
     return original(interaction);
