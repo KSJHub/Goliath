@@ -87,7 +87,7 @@ function installUi(panel) {
       payload.components=[
         row(selector),
         row(add,button('embed:media-edit-details','✏️ Edit',ButtonStyle.Primary,!hasSelected),up,down),
-        row(button('embed:header-type-cycle',`🏷️ Type: ${headerTypeLabel}`,ButtonStyle.Secondary,!hasSelected),button('embed:media-spoiler:off','👁️ Normal',selected?.item?.spoiler?ButtonStyle.Secondary:ButtonStyle.Primary,!hasSelected),button('embed:media-spoiler:on','🙈 Spoiler',selected?.item?.spoiler?ButtonStyle.Primary:ButtonStyle.Secondary,!hasSelected),button('embed:media-duplicate','📑 Duplicate',ButtonStyle.Success,!hasSelected||media.gallery.length>=10)),
+        row(button('embed:media-type:cycle',`🏷️ Type: ${headerTypeLabel}`,ButtonStyle.Secondary,!hasSelected),button('embed:media-spoiler:off','👁️ Normal',selected?.item?.spoiler?ButtonStyle.Secondary:ButtonStyle.Primary,!hasSelected),button('embed:media-spoiler:on','🙈 Spoiler',selected?.item?.spoiler?ButtonStyle.Primary:ButtonStyle.Secondary,!hasSelected),button('embed:media-duplicate','📑 Duplicate',ButtonStyle.Success,!hasSelected||media.gallery.length>=10)),
         row(button('embed:media-alignments','↔️ Alignments',ButtonStyle.Primary,!hasSelected),thumbnail,remove),
         row(findComponent(payload,'embed:builder'),findComponent(payload,'embed:settings'),findComponent(payload,'embed:helpers')),
       ].filter(Boolean);
