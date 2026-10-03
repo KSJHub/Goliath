@@ -238,6 +238,7 @@ async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = '
       withoutEnlargement: true,
       fit: 'inside'
     })
+    .flatten({ background: '#0A0A0C' })
     .png()
     .toBuffer();
 
