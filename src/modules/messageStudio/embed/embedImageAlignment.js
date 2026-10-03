@@ -21,6 +21,7 @@ function alignmentMap(state={}) { const source=state?.mediaAlignment&&typeof sta
 function row(...components) { const safe=components.filter(Boolean).slice(0,5); return safe.length?new ActionRowBuilder().addComponents(...safe):null; }
 function findComponent(payload,id) { for(const actionRow of Array.isArray(payload?.components)?payload.components:[]){ const found=(actionRow?.components||[]).find((component)=>componentId(component)===id); if(found)return found; } return null; }
 function button(id,label,style=ButtonStyle.Secondary,disabled=false){ return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled); }
+function sourceLabel(value,fallback='Not set'){ const text=String(value||'').trim(); if(!text)return fallback; try{ const url=new URL(text); const name=decodeURIComponent(url.pathname.split('/').filter(Boolean).pop()||'Media'); return name.length>60?`${name.slice(0,57)}...`:name; }catch{return text.length>60?`${text.slice(0,57)}...`:text;} }
 
 function applyAlignmentMap(mediaState,map={}, {legacyOverride=true}={}) {
   const media=clone(mediaState||{}); const panels=Array.isArray(media?.panels)?media.panels:[];
@@ -45,7 +46,6 @@ function selectedAlignment(panel,interaction){ const selected=selectedItem(panel
 function installUi(panel) {
   if(!panel||panel.__imageAlignmentUiInstalled)return;
 
-  // Main Embed Studio: Media shortcut on row one; Deploy leads row two.
   if(typeof panel.buildEditorPanel==='function'){
     const original=panel.buildEditorPanel.bind(panel);
     panel.buildEditorPanel=(interaction,...args)=>{
@@ -53,67 +53,37 @@ function installUi(panel) {
       const builder=findComponent(payload,'embed:builder'); const panels=findComponent(payload,'embed:panels'); const presets=findComponent(payload,'embed:presets');
       const deploy=findComponent(payload,'embed:use'); const test=findComponent(payload,'embed:test-send'); const update=findComponent(payload,'embed:update-existing');
       const back=findComponent(payload,'admin:modules'); const settings=findComponent(payload,'embed:settings'); const variables=findComponent(payload,'embed:helpers');
-      payload.components=[
-        ...payload.components.slice(0,2),
-        row(builder,panels,presets,button('embed:edit-images','🖼️ Media',ButtonStyle.Primary)),
-        row(deploy,test,update),
-        row(back,settings,variables),
-      ].filter(Boolean);
+      payload.components=[...payload.components.slice(0,2),row(builder,panels,presets,button('embed:edit-images','🖼️ Media',ButtonStyle.Primary)),row(deploy,test,update),row(back,settings,variables)].filter(Boolean);
       return payload;
     };
   }
 
-  // Content Panels: Add/Up/Down, Duplicate/Remove, Back/Settings.
   if(typeof panel.buildPanelsPanel==='function'){
     const original=panel.buildPanelsPanel.bind(panel);
-    panel.buildPanelsPanel=(interaction,...args)=>{
-      const payload=original(interaction,...args); const selector=payload.components?.[0];
-      payload.components=[selector,
-        row(findComponent(payload,'embed:panel-add'),findComponent(payload,'embed:panel-up'),findComponent(payload,'embed:panel-down')),
-        row(findComponent(payload,'embed:panel-duplicate'),findComponent(payload,'embed:panel-remove')),
-        row(findComponent(payload,'embed:builder'),findComponent(payload,'embed:settings')),
-      ].filter(Boolean); return payload;
-    };
+    panel.buildPanelsPanel=(interaction,...args)=>{ const payload=original(interaction,...args); const selector=payload.components?.[0]; payload.components=[selector,row(findComponent(payload,'embed:panel-add'),findComponent(payload,'embed:panel-up'),findComponent(payload,'embed:panel-down')),row(findComponent(payload,'embed:panel-duplicate'),findComponent(payload,'embed:panel-remove')),row(findComponent(payload,'embed:builder'),findComponent(payload,'embed:settings'))].filter(Boolean); return payload; };
   }
 
-  // Fields: Add/Edit/Up/Down, Inline/Remove, navigation unchanged.
   if(typeof panel.buildFieldsManagerPanel==='function'){
     const original=panel.buildFieldsManagerPanel.bind(panel);
-    panel.buildFieldsManagerPanel=(interaction,...args)=>{
-      const payload=original(interaction,...args); const structural=(payload.components||[]).filter((actionRow)=>{ const ids=(actionRow?.components||[]).map(componentId); return !ids.some((id)=>String(id||'').startsWith('embed:field-manager-')&&id!=='embed:field-manager-layout'&&id!=='embed:field-manager-select'); });
-      const layout=findComponent(payload,'embed:field-manager-layout'); const select=findComponent(payload,'embed:field-manager-select');
-      payload.components=[row(layout),row(select),
-        row(findComponent(payload,'embed:field-manager-add'),findComponent(payload,'embed:field-manager-edit'),findComponent(payload,'embed:field-manager-up'),findComponent(payload,'embed:field-manager-down')),
-        row(findComponent(payload,'embed:field-manager-inline'),findComponent(payload,'embed:field-manager-remove')),
-        row(findComponent(payload,'embed:builder'),findComponent(payload,'embed:settings'),findComponent(payload,'embed:helpers')),
-      ].filter(Boolean); void structural; return payload;
-    };
+    panel.buildFieldsManagerPanel=(interaction,...args)=>{ const payload=original(interaction,...args); const layout=findComponent(payload,'embed:field-manager-layout'); const select=findComponent(payload,'embed:field-manager-select'); payload.components=[row(layout),row(select),row(findComponent(payload,'embed:field-manager-add'),findComponent(payload,'embed:field-manager-edit'),findComponent(payload,'embed:field-manager-up'),findComponent(payload,'embed:field-manager-down')),row(findComponent(payload,'embed:field-manager-inline'),findComponent(payload,'embed:field-manager-remove')),row(findComponent(payload,'embed:builder'),findComponent(payload,'embed:settings'),findComponent(payload,'embed:helpers'))].filter(Boolean); return payload; };
   }
 
-  // Buttons: Add/Edit/Up/Down, Options/Remove, no Variables on this page.
   if(typeof panel.buildButtonsManagerPanel==='function'){
     const original=panel.buildButtonsManagerPanel.bind(panel);
-    panel.buildButtonsManagerPanel=(interaction,...args)=>{
-      const payload=original(interaction,...args); const select=findComponent(payload,'embed:button-manager-select');
-      payload.components=[row(select),
-        row(findComponent(payload,'embed:button-manager-add'),findComponent(payload,'embed:button-manager-edit'),findComponent(payload,'embed:button-manager-up'),findComponent(payload,'embed:button-manager-down')),
-        row(findComponent(payload,'embed:button-manager-options'),findComponent(payload,'embed:button-manager-remove')),
-        row(findComponent(payload,'embed:builder'),findComponent(payload,'embed:settings')),
-      ].filter(Boolean); return payload;
-    };
+    panel.buildButtonsManagerPanel=(interaction,...args)=>{ const payload=original(interaction,...args); const select=findComponent(payload,'embed:button-manager-select'); payload.components=[row(select),row(findComponent(payload,'embed:button-manager-add'),findComponent(payload,'embed:button-manager-edit'),findComponent(payload,'embed:button-manager-up'),findComponent(payload,'embed:button-manager-down')),row(findComponent(payload,'embed:button-manager-options'),findComponent(payload,'embed:button-manager-remove')),row(findComponent(payload,'embed:builder'),findComponent(payload,'embed:settings'))].filter(Boolean); return payload; };
   }
 
-  // Media Manager: management only. Placement/alignment/size live on Alignments.
   if(typeof panel.buildMediaManagerPanel==='function'){
     const originalManager=panel.buildMediaManagerPanel.bind(panel);
     panel.buildMediaManagerPanel=(interaction,...args)=>{
       const payload=originalManager(interaction,...args); const selected=selectedItem(panel,interaction); const state=panel.getSession(interaction); const media=panel.getPanelMedia(state); const hasSelected=Boolean(selected);
       const selector=findComponent(payload,'embed:media-gallery-select'); const add=findComponent(payload,'embed:media-add'); const up=findComponent(payload,'embed:media-gallery-up'); const down=findComponent(payload,'embed:media-gallery-down'); const remove=findComponent(payload,'embed:media-gallery-remove'); const thumbnail=findComponent(payload,'embed:media-thumbnail');
       let headerMode='Text'; if(typeof panel.graphicHeaderMode==='function'){ const mode=panel.graphicHeaderMode(state); if(mode==='graphic')headerMode='Graphic'; else if(mode==='both')headerMode='Both'; }
-      payload.components=[row(selector),
-        row(add,button('embed:media-edit-details','✏️ Edit Details',ButtonStyle.Primary,!hasSelected),up,down,button('embed:graphic-header-cycle',`🪧 Header: ${headerMode}`,ButtonStyle.Secondary,!hasSelected)),
-        row(button('embed:media-duplicate','📑 Duplicate',ButtonStyle.Success,!hasSelected||media.gallery.length>=10),button('embed:media-spoiler:off','👁️ Normal',selected?.item?.spoiler?ButtonStyle.Secondary:ButtonStyle.Primary,!hasSelected),button('embed:media-spoiler:on','🙈 Spoiler',selected?.item?.spoiler?ButtonStyle.Primary:ButtonStyle.Secondary,!hasSelected),thumbnail,remove),
-        row(button('embed:media-alignments','↔️ Alignments',ButtonStyle.Primary,!hasSelected)),
+      payload.components=[
+        row(selector),
+        row(add,button('embed:media-edit-details','✏️ Edit',ButtonStyle.Primary,!hasSelected),up,down),
+        row(button('embed:graphic-header-cycle',`🪧 Header: ${headerMode}`,ButtonStyle.Secondary,!hasSelected),button('embed:media-spoiler:off','👁️ Normal',selected?.item?.spoiler?ButtonStyle.Secondary:ButtonStyle.Primary,!hasSelected),button('embed:media-spoiler:on','🙈 Spoiler',selected?.item?.spoiler?ButtonStyle.Primary:ButtonStyle.Secondary,!hasSelected),button('embed:media-duplicate','📑 Duplicate',ButtonStyle.Success,!hasSelected||media.gallery.length>=10)),
+        row(button('embed:media-alignments','↔️ Alignments',ButtonStyle.Primary,!hasSelected),thumbnail,remove),
         row(findComponent(payload,'embed:builder'),findComponent(payload,'embed:settings'),findComponent(payload,'embed:helpers')),
       ].filter(Boolean);
       return payload;
@@ -142,14 +112,44 @@ async function fetchImage(url){ const target=safeUrl(url); if(!target)return nul
 function alignmentFor(state,panelIndex,itemIndex,item){ const canonical=String(item?.alignment||'').toLowerCase(); if(VALID_ALIGNMENTS.has(canonical))return canonical; const mapped=String(state?.mediaAlignment?.[alignmentKey(panelIndex,itemIndex)]||'').toLowerCase(); return VALID_ALIGNMENTS.has(mapped)?mapped:'left'; }
 async function previewAttachment(source,alignment,item=null){ const input=await fetchImage(source); if(!input)return null; const visibleWidth=previewImageWidth(item); const trimmed=await sharp(input,{failOn:'warning'}).ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer(); const visible=await sharp(trimmed,{failOn:'warning'}).resize({width:visibleWidth,height:PREVIEW_MAX_HEIGHT,fit:'inside',withoutEnlargement:false}).ensureAlpha().png().toBuffer(); const meta=await sharp(visible).metadata(); const width=Number(meta.width||visibleWidth),height=Number(meta.height||PREVIEW_MAX_HEIGHT); const left=alignment==='right'?Math.max(0,CANVAS_WIDTH-width):alignment==='center'?Math.max(0,Math.floor((CANVAS_WIDTH-width)/2)):0; const top=Math.max(0,Math.floor((PREVIEW_MAX_HEIGHT-height)/2)); const output=await sharp({create:{width:CANVAS_WIDTH,height:PREVIEW_MAX_HEIGHT,channels:4,background:{r:0,g:0,b:0,alpha:0}}}).composite([{input:visible,left,top}]).png().toBuffer(); return new AttachmentBuilder(output,{name:`embed-alignment-${alignment}-${String(item?.size||'large').toLowerCase()}-${Date.now()}.png`}); }
 function embedTitle(embed){ return String(embed?.data?.title||embed?.title||''); }
-async function selectedContext(panel,interaction){ const state=panel.getSession(interaction); const panelIndex=Math.max(0,Number(state?.selectedPanelIndex)||0); const media=panel.getPanelMedia(state,panelIndex); let itemIndex=Number.isInteger(state?.selectedMediaIndex)?state.selectedMediaIndex:null; if(itemIndex==null&&Array.isArray(media?.gallery)&&media.gallery.length===1)itemIndex=0; if(itemIndex==null)return{state,panelIndex,itemIndex,item:null,source:null,alignment:'left'}; const item=media?.gallery?.[itemIndex]||null; let source=String(item?.source||'').trim(); try{source=panel.replaceVars(source,interaction);}catch{} return{state,panelIndex,itemIndex,item,source,alignment:alignmentFor(state,panelIndex,itemIndex,item)}; }
+async function selectedContext(panel,interaction){ const state=panel.getSession(interaction); const panelIndex=Math.max(0,Number(state?.selectedPanelIndex)||0); const media=panel.getPanelMedia(state,panelIndex); let itemIndex=Number.isInteger(state?.selectedMediaIndex)?state.selectedMediaIndex:null; if(itemIndex==null&&Array.isArray(media?.gallery)&&media.gallery.length===1)itemIndex=0; if(itemIndex==null)return{state,panelIndex,itemIndex,item:null,source:null,alignment:'left',panelMedia:media}; const item=media?.gallery?.[itemIndex]||null; let source=String(item?.source||'').trim(); try{source=panel.replaceVars(source,interaction);}catch{} return{state,panelIndex,panelMedia:media,itemIndex,item,source,alignment:alignmentFor(state,panelIndex,itemIndex,item)}; }
 async function alignedManagerPayload(panel,interaction){ const payload=panel.buildMediaManagerPanel(interaction,panel.memberName(interaction)); const ctx=await selectedContext(panel,interaction); if(!ctx.item)return payload; try{ const attachment=await previewAttachment(ctx.source,ctx.alignment,ctx.item); if(!attachment)return payload; const preview=Array.isArray(payload?.embeds)?payload.embeds.find((embed)=>embedTitle(embed).includes('Selected Media Preview')):null; if(!preview||typeof preview.setImage!=='function')return payload; preview.setImage(`attachment://${attachment.name}`); preview.setTitle(`🖼️ Selected Media Preview • ${ctx.item.placement==='above'?'Above Content':'Below Content'} • ${ctx.alignment==='center'?'Centre':ctx.alignment[0].toUpperCase()+ctx.alignment.slice(1)}`); payload.files=[attachment]; payload.attachments=[]; return payload; }catch(error){ console.warn('[Embed Preview] Alignment preview failed:',error?.message||error); return payload; } }
 
 async function alignmentPanelPayload(panel,interaction){
   const ctx=await selectedContext(panel,interaction); if(!ctx.item)return alignedManagerPayload(panel,interaction);
   const size=['small','medium','large'].includes(String(ctx.item.size||'').toLowerCase())?String(ctx.item.size).toLowerCase():'large';
   const placement=ctx.item.placement==='above'?'above':'below';
-  const preview=new EmbedBuilder().setColor(0x5865F2).setTitle(`↔️ Media Alignments • Item ${ctx.itemIndex+1}`).setDescription(`**Placement:** ${placement==='above'?'Above Content':'Below Content'}\n**Alignment:** ${ctx.alignment==='center'?'Centre':ctx.alignment[0].toUpperCase()+ctx.alignment.slice(1)}\n**Size:** ${size.toUpperCase()}`);
+  const gallery=Array.isArray(ctx.panelMedia?.gallery)?ctx.panelMedia.gallery:[];
+  const aboveCount=gallery.filter((item)=>item?.placement==='above').length;
+  const belowCount=gallery.length-aboveCount;
+  const thumbnailConfigured=Boolean(ctx.panelMedia?.thumbnail?.source);
+  const files=Array.isArray(ctx.panelMedia?.files)?ctx.panelMedia.files:[];
+  const panelCount=Array.isArray(ctx.state?.panels)?ctx.state.panels.length:1;
+  const type=String(ctx.item?.type||'auto').toLowerCase();
+  const typeLabel=type==='image'?'Image':type==='video'?'Video':'Auto Detect';
+  const alignmentLabel=ctx.alignment==='center'?'Centre':ctx.alignment[0].toUpperCase()+ctx.alignment.slice(1);
+  const selectedName=sourceLabel(ctx.item?.alt||ctx.item?.source,`Item ${ctx.itemIndex+1}`);
+  let headerMode='Text'; if(typeof panel.graphicHeaderMode==='function'){ const mode=panel.graphicHeaderMode(ctx.state); if(mode==='graphic')headerMode='Graphic'; else if(mode==='both')headerMode='Both'; }
+  const description=[
+    `Editing panel **${ctx.panelIndex+1}/${panelCount}** • Media item **${ctx.itemIndex+1}/${gallery.length}**`,
+    '',
+    `**Selected media:** ${selectedName}`,
+    `**Type:** ${typeLabel}`,
+    `**Placement:** ${placement==='above'?'⬆️ Above Content':'⬇️ Below Content'}`,
+    `**Alignment:** ${alignmentLabel}`,
+    `**Size:** ${size.toUpperCase()}`,
+    `**Spoiler:** ${ctx.item?.spoiler?'On':'Off'}`,
+    `**Graphic Header:** ${headerMode}`,
+    '',
+    '**Panel media sync**',
+    `⬆️ **Above Content** — ${aboveCount}`,
+    `⬇️ **Below Content** — ${belowCount}`,
+    `🖼️ **Thumbnail** — ${thumbnailConfigured?'Configured':'Not set'}`,
+    `📎 **Files** — ${files.length}/10`,
+    '',
+    'Changes made here update the same selected media item shown in Media Manager. Placement, alignment and size are saved immediately.',
+  ].join('\n');
+  const preview=new EmbedBuilder().setColor(0x5865F2).setTitle(`↔️ Media Alignments • Item ${ctx.itemIndex+1}`).setDescription(description.slice(0,4096));
   const payload={embeds:[preview],components:[
     row(button('embed:media-placement:above','⬆️ Above Content',placement==='above'?ButtonStyle.Primary:ButtonStyle.Secondary),button('embed:media-placement:below','⬇️ Below Content',placement==='below'?ButtonStyle.Primary:ButtonStyle.Secondary)),
     row(button('embed:media-align:left','⬅️ Left',ctx.alignment==='left'?ButtonStyle.Primary:ButtonStyle.Secondary),button('embed:media-align:center','↔️ Centre',ctx.alignment==='center'?ButtonStyle.Primary:ButtonStyle.Secondary),button('embed:media-align:right','➡️ Right',ctx.alignment==='right'?ButtonStyle.Primary:ButtonStyle.Secondary)),
