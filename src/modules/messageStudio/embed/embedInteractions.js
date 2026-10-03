@@ -32,6 +32,19 @@ const {
 } = require('./embedDeployments');
 const { buildEmbedPayload } = require('./embedRenderer');
 
+// Embed interactions can be loaded directly by the runtime dispatcher as well as
+// through embed.js. Always install the canonical Media Manager onto the shared
+// panel before any media interaction handler can execute.
+media.installStateCompatibility(panel);
+media.installPersistentMediaCompatibility(panel);
+media.installStorageNormalization(panel);
+media.installUploadModals(panel);
+media.installMediaManagerUi(panel);
+media.installThumbnailUi(panel);
+if (typeof panel.getPanelMedia !== 'function') panel.getPanelMedia = media.getPanelMedia;
+if (typeof panel.setPanelMedia !== 'function') panel.setPanelMedia = media.setPanelMedia;
+panel.mediaModel = media.mediaModel;
+
 const DANGEROUS_ROLE_PERMISSIONS = [
   PermissionsBitField.Flags.Administrator,
   PermissionsBitField.Flags.ManageGuild,
