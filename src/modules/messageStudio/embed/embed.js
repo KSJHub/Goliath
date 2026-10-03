@@ -17,8 +17,6 @@ require('./embedState');
 const panel = require('./embedPanel');
 const media = require('./embedMedia');
 const renderer = require('./embedRenderer');
-const { installMediaManagerBase } = require('./embedMediaManagerBase');
-const { installGraphicHeaders } = require('./embedGraphicHeaders');
 const { installImageAlignment, installInteraction: installImageAlignmentInteraction, installAlignmentPreview } = require('./embedImageAlignment');
 
 const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPanelMedia: media.setPanelMedia, mediaModel: media.mediaModel });
@@ -73,7 +71,6 @@ function installMediaRuntime(targetPanel) {
   media.installStorageNormalization(targetPanel);
   installCanonicalMediaSessions(targetPanel);
   media.installUploadModals(targetPanel);
-  installMediaManagerBase(targetPanel, media);
   media.installMediaOptionsUi(targetPanel);
   media.installMediaManagerUi(targetPanel);
   media.installThumbnailUi(targetPanel);
@@ -167,7 +164,6 @@ installImageAlignment(panel, renderer);
 const interactions = require('./embedInteractions');
 installImageAlignmentInteraction(panel, interactions);
 installAlignmentPreview(panel, interactions);
-installGraphicHeaders(panel, media, interactions);
 installSettingsTransfer(panel, interactions);
 const rawHandleInteraction = interactions.handleInteraction.bind(interactions);
 async function deliveryReply(interaction, content) {
