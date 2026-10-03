@@ -15,11 +15,21 @@ const mediaManagerEnd = mediaManagerSource.indexOf('\nfunction installThumbnailU
 const mediaManagerBody = mediaManagerSource.slice(mediaManagerStart, mediaManagerEnd);
 assert(!mediaManagerBody.includes('media.mediaModel'), 'Media Manager must not reference an undefined media variable.');
 assert(!mediaManagerBody.includes('media.getPanelMedia'), 'Media Manager must use the canonical media model or panel API.');
+assert.match(mediaManagerSource, /DEFAULT_GALLERY_ITEM/);
+assert.match(mediaManagerSource, /const preset = \{ \.\.\.originalPresetData\(safeState\), media: safeState\.media \};/);
+assert.doesNotMatch(mediaManagerSource, /mediaDefaults/);
 
 const left = media.normalizeGalleryItem({ source: 'https://example.com/a.png', alignment: 'left' });
 const centre = media.normalizeGalleryItem({ source: 'https://example.com/a.png', alignment: 'center' });
 const right = media.normalizeGalleryItem({ source: 'https://example.com/a.png', alignment: 'right' });
 const invalid = media.normalizeGalleryItem({ source: 'https://example.com/a.png', alignment: 'bogus' });
+const defaults = media.normalizeGalleryItem({ source: 'https://example.com/defaults.png' });
+assert.equal(defaults.type, 'auto');
+assert.equal(defaults.headerType, 'auto');
+assert.equal(defaults.spoiler, false);
+assert.equal(defaults.placement, 'above');
+assert.equal(defaults.alignment, 'left');
+assert.equal(defaults.size, 'small');
 assert.equal(left.alignment, 'left');
 assert.equal(centre.alignment, 'center');
 assert.equal(right.alignment, 'right');
