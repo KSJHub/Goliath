@@ -133,6 +133,81 @@ async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex
     url: `attachment://${name}`
   };
 }
+async function removeConnectedCornerBackground(input, tolerance = 28) {
+  const { data, info } = await sharp(input, { failOn: 'warning' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const { width, height, channels } = info;
+  if (!width || !height || channels < 4) return input;
+
+  const pixelCount = width * height;
+  const visited = new Uint8Array(pixelCount);
+  const queue = new Int32Array(pixelCount);
+  let head = 0;
+  let tail = 0;
+
+  const seedIndexes = [
+    0,
+    width - 1,
+    (height - 1) * width,
+    height * width - 1
+  ];
+
+  const seed = seedIndexes.find((index) => data[index * channels + 3] > 0);
+  if (seed == null) return input;
+
+  const sr = data[seed * channels];
+  const sg = data[seed * channels + 1];
+  const sb = data[seed * channels + 2];
+  const threshold = tolerance * tolerance * 3;
+
+  for (const index of seedIndexes) {
+    if (index >= 0 && index < pixelCount && !visited[index]) {
+      visited[index] = 1;
+      queue[tail++] = index;
+    }
+  }
+
+  const matchesBackground = (index) => {
+    const offset = index * channels;
+    if (data[offset + 3] === 0) return true;
+    const dr = data[offset] - sr;
+    const dg = data[offset + 1] - sg;
+    const db = data[offset + 2] - sb;
+    return (dr * dr) + (dg * dg) + (db * db) <= threshold;
+  };
+
+  while (head < tail) {
+    const index = queue[head++];
+    if (!matchesBackground(index)) continue;
+
+    const offset = index * channels;
+    data[offset + 3] = 0;
+
+    const x = index % width;
+    const y = Math.floor(index / width);
+
+    const neighbours = [];
+    if (x > 0) neighbours.push(index - 1);
+    if (x < width - 1) neighbours.push(index + 1);
+    if (y > 0) neighbours.push(index - width);
+    if (y < height - 1) neighbours.push(index + width);
+
+    for (const next of neighbours) {
+      if (!visited[next]) {
+        visited[next] = 1;
+        if (matchesBackground(next)) queue[tail++] = next;
+      }
+    }
+  }
+
+  return sharp(data, {
+    raw: { width, height, channels }
+  }).png().toBuffer();
+}
+
 async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
   let cached = cachedAssetFor(guildId, source);
   if (!cached?.buffer) cached = await ensureAssetCached(guildId, source);
@@ -141,7 +216,8 @@ async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = '
   const type = contentTypeBase(cached.meta?.contentType || cached.contentType || '');
   if (type && !STATIC_RASTER_TYPES.has(type)) return null;
 
-  const visible = await sharp(cached.buffer, { failOn: 'warning' })
+  const transparent = await removeConnectedCornerBackground(cached.buffer);
+  const visible = await sharp(transparent, { failOn: 'warning' })
     .ensureAlpha()
     .resize({
       width: visibleWidth,
