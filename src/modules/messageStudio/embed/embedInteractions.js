@@ -1458,7 +1458,37 @@ async function handleCoreInteraction(i) {
     if (customId === 'embed:file-options-back') return updateMediaPanel(i);
     if (customId.startsWith('embed:file-spoiler:')) { if (fileIndex == null || !panelMedia.files[fileIndex]) return updateMediaPanel(i); const files = [...panelMedia.files]; files[fileIndex] = panel.mediaModel.normalizeFile({ ...files[fileIndex], spoiler: customId.endsWith(':on') }); saveMediaState(i, state, { ...panelMedia, files }, { selectedFileIndex: fileIndex }); return updateFileOptions(i); }
     if (customId === 'embed:media-gallery-add') { if (panelMedia.gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_GALLERY_ITEMS} gallery items reached.`, flags: 64 }); return true; } await i.showModal(panel.galleryItemModal(state)); return true; }
-    if (customId === 'embed:media-gallery-remove') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; gallery.splice(galleryIndex, 1); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: null }); return updateMediaPanel(i); }
+    if (customId === 'embed:media-gallery-remove') {
+      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i);
+
+      const gallery = [...panelMedia.gallery];
+      gallery.splice(galleryIndex, 1);
+
+      // When the final canonical media item is removed, clear the legacy
+      // panel.image alias first. Otherwise normalizePanelMedia can migrate the
+      // stale legacy image straight back into the now-empty gallery.
+      let mediaState = state;
+      if (!gallery.length) {
+        mediaState = panel.saveSelected(state, { image: '' });
+      }
+
+      const savedState = saveMediaState(
+        i,
+        mediaState,
+        { ...panelMedia, gallery },
+        { selectedMediaIndex: null }
+      );
+
+      await i.update(
+        panel.buildMediaManagerPanel(
+          i,
+          who(i),
+          savedState
+        )
+      );
+
+      return true;
+    }
     if (customId === 'embed:media-gallery-up' || customId === 'embed:media-gallery-down') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const target = galleryIndex + (customId.endsWith('up') ? -1 : 1); if (target < 0 || target >= panelMedia.gallery.length) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; [gallery[galleryIndex], gallery[target]] = [gallery[target], gallery[galleryIndex]]; saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: target }); return updateMediaPanel(i); }
     if (customId === 'embed:media-file-add') { if (panelMedia.files.length >= panel.mediaModel.MAX_FILES) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_FILES} files reached.`, flags: 64 }); return true; } await i.showModal(panel.fileItemModal(state)); return true; }
     if (customId === 'embed:media-file-edit') { if (fileIndex == null || !panelMedia.files[fileIndex]) { await i.reply({ content: 'Select a file first.', flags: 64 }); return true; } await i.showModal(panel.fileItemModal(state, fileIndex)); return true; }
