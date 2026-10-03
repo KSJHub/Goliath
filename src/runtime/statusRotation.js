@@ -6,6 +6,7 @@ const STATUS_INTERVAL_MS = 180_000;
 const STATUS_SCHEDULER_ID = 'runtime:status-rotation:global';
 
 const DEV_ACTIVITIES = [
+  { name: '/user', type: ActivityType.Listening },
   { name: '🔵 DEV | Building Goliath', type: ActivityType.Watching },
   { name: '🧪 Testing New Modules', type: ActivityType.Playing },
   { name: '🛠️ KSJ Development Server', type: ActivityType.Watching },
@@ -19,6 +20,7 @@ const DEV_ACTIVITIES = [
 ];
 
 const BETA_ACTIVITIES = [
+  { name: '/user', type: ActivityType.Listening },
   { name: '🟡 BETA | Staging Goliath', type: ActivityType.Watching },
   { name: '🚧 Testing Upcoming Features', type: ActivityType.Playing },
   { name: '🔍 Watching Beta Feedback', type: ActivityType.Watching },
@@ -38,6 +40,7 @@ function buildProductionActivities(client) {
     .toLocaleString();
 
   return [
+    { name: '/user', type: ActivityType.Listening },
     { name: '🟢 Goliath | Protecting Servers', type: ActivityType.Watching },
     { name: `🛡️ Protecting ${guildCount} Servers`, type: ActivityType.Watching },
     { name: `👥 Watching ${memberCount} Members`, type: ActivityType.Watching },

@@ -600,28 +600,26 @@ function installMediaManagerUi(panel) {
     rows.push(new ActionRowBuilder().addComponents(
       button('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= mediaModel.MAX_FILES),
       button('embed:media-gallery-edit', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
-      button('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
       button('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
       button('embed:media-gallery-down', '⬇️ Down', ButtonStyle.Secondary, galleryIndex == null || galleryIndex >= panelMedia.gallery.length - 1),
     ));
 
     rows.push(new ActionRowBuilder().addComponents(
-      button('embed:media-placement:above', '⬆️ Above Content', selectedMedia?.placement === 'above' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
-      button('embed:media-placement:below', '⬇️ Below Content', selectedMedia?.placement === 'below' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
-      button('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary),
-    ));
-
-    rows.push(new ActionRowBuilder().addComponents(
-      button('embed:media-align:left', '⬅️ Left', selectedAlignment === 'left' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
-      button('embed:media-align:center', '↔️ Centre', selectedAlignment === 'center' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
-      button('embed:media-align:right', '➡️ Right', selectedAlignment === 'right' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
-    ));
-
-    rows.push(new ActionRowBuilder().addComponents(
-      button('embed:media-type:cycle', `🏷️ Type: ${selectedMedia?.type || 'auto'}`, ButtonStyle.Secondary, galleryIndex == null),
+      button(
+        'embed:media-type:cycle',
+        `🏷️ Type: ${{ auto: 'Auto', text: 'Text', gif: 'GIF', image: 'Image' }[String(selectedMedia?.headerType || 'auto').toLowerCase()] || 'Auto'}`,
+        ButtonStyle.Secondary,
+        galleryIndex == null
+      ),
       button('embed:media-spoiler:off', '👁️ Normal', selectedMedia?.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary, galleryIndex == null),
       button('embed:media-spoiler:on', '🙈 Spoiler', selectedMedia?.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
       button('embed:media-duplicate', '📑 Duplicate', ButtonStyle.Success, galleryIndex == null || panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS),
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:media-alignments', '↔️ Alignments', ButtonStyle.Primary, galleryIndex == null),
+      button('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary),
+      button('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
     ));
 
     rows.push(new ActionRowBuilder().addComponents(
@@ -647,7 +645,7 @@ function installMediaManagerUi(panel) {
         `**Selected media:** ${String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 300)}`,
         `**Placement:** ${selectedMedia.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content'}`,
         `**Alignment:** ${alignmentLabel}`,
-        `**Type:** ${selectedMedia.type || 'auto'}`,
+        `**Type:** ${{ auto: 'Auto', text: 'Text', gif: 'GIF', image: 'Image' }[String(selectedMedia.headerType || 'auto').toLowerCase()] || 'Auto'}`,
         `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`,
       );
     } else {
