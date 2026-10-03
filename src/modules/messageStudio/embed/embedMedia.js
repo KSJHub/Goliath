@@ -655,12 +655,10 @@ function installMediaManagerUi(panel) {
 
     summary.push(
       '**Controls**',
-      '**➕ Add Media / File** — Add an image, GIF, video or file to this panel.',
       '**✏️ Edit** — Edit the selected media item.',
       '**🏷️ Type** — Choose Auto, Text, GIF or Image for the selected media.',
       '**👁️ Normal** — Show the selected media normally.',
       '**🙈 Spoiler** — Hide the selected media behind Discord’s spoiler treatment.',
-      '**📑 Duplicate** — Copy the selected media item with its current settings.',
       '**↔️ Alignments** — Set Above/Below Content, Left/Centre/Right and Small/Medium/Large.',
       '**🖼️ Thumbnail** — Add or manage the panel thumbnail.',
     );
