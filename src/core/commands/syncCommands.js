@@ -13,12 +13,11 @@ const auditStore = require('../../owner/auditIntelligence/auditStore');
 
 const ALLOWED_MODES = new Set(['dev', 'beta', 'production']);
 const OWNER_COMMAND_NAME = 'owner';
-const RETIRED_GUILD_COMMAND_NAMES = new Set(['owner', 'commandcenter']);
+const RETIRED_GUILD_COMMAND_NAMES = new Set(['commandcenter']);
 const PUBLIC_COMMAND_NAMES = new Set(
   [...CANONICAL_COMMAND_NAMES].filter((name) => !RETIRED_GUILD_COMMAND_NAMES.has(name)),
 );
-const ALLOWED_GLOBAL_COMMAND_NAMES = new Set([...PUBLIC_COMMAND_NAMES, OWNER_COMMAND_NAME]);
-const OWNER_USER_CONTEXTS = [0, 1, 2];
+const ALLOWED_GLOBAL_COMMAND_NAMES = new Set([...PUBLIC_COMMAND_NAMES]);
 const INACCESSIBLE_GUILD_ERROR_CODES = new Set([50001, 50013, 10004]);
 
 function resolveMode() {
@@ -120,30 +119,38 @@ function isInaccessibleGuildError(error) {
   return INACCESSIBLE_GUILD_ERROR_CODES.has(discordErrorCode(error));
 }
 
-function buildUserInstalledOwnerCommand(ownerCommand) {
+function assertOwnerCommandRestrictedGuild(ownerCommand) {
   if (!ownerCommand || ownerCommand.name !== OWNER_COMMAND_NAME) {
     throw new Error('Missing canonical /owner command.');
   }
 
-  const command = { ...ownerCommand };
-  command.integration_types = [1];
-  command.contexts = [...OWNER_USER_CONTEXTS];
-  delete command.default_member_permissions;
-  delete command.default_permission;
-  delete command.dm_permission;
-  return command;
-}
+  const integrationTypes = Array.isArray(ownerCommand.integration_types)
+    ? ownerCommand.integration_types
+    : [];
 
-function assertOwnerCommandUserInstall(ownerCommand) {
-  if (!ownerCommand) throw new Error('Missing /owner command payload.');
-  const integrationTypes = Array.isArray(ownerCommand.integration_types) ? ownerCommand.integration_types : [];
-  const contexts = Array.isArray(ownerCommand.contexts) ? [...ownerCommand.contexts].sort() : [];
-  if (integrationTypes.length !== 1 || integrationTypes[0] !== 1) {
-    throw new Error('Refusing to sync /owner unless it is USER_INSTALL only.');
+  const contexts = Array.isArray(ownerCommand.contexts)
+    ? ownerCommand.contexts
+    : [];
+
+  if (integrationTypes.length !== 1 || integrationTypes[0] !== 0) {
+    throw new Error(
+      'Refusing to sync /owner unless it is GUILD_INSTALL only.'
+    );
   }
-  if (contexts.length !== OWNER_USER_CONTEXTS.length || !OWNER_USER_CONTEXTS.every((value) => contexts.includes(value))) {
-    throw new Error('Refusing to sync /owner without the complete USER_INSTALL interaction-context set.');
+
+  if (contexts.length !== 1 || contexts[0] !== 0) {
+    throw new Error(
+      'Refusing to sync /owner unless it is Guild-context only.'
+    );
   }
+
+  if (String(ownerCommand.default_member_permissions) !== '8') {
+    throw new Error(
+      'Refusing to sync /owner unless default_member_permissions is Administrator (8).'
+    );
+  }
+
+  return true;
 }
 
 async function putGuildCommands(rest, clientId, guildId, publicCommands, dryRun) {
@@ -164,17 +171,33 @@ async function putGlobalCommands(rest, clientId, commands, dryRun) {
   console.log(`[CommandSync] Global: ${commands.map((command) => `/${command.name}`).join(', ')}`);
 }
 
-async function upsertGlobalOwnerCommand(rest, clientId, ownerCommand, dryRun = false) {
-  assertOwnerCommandUserInstall(ownerCommand);
-  const existing = await rest.get(Routes.applicationCommands(clientId));
-  const current = (existing || []).find((command) => command?.name === OWNER_COMMAND_NAME);
+async function removeLegacyGlobalOwnerCommand(
+  rest,
+  clientId,
+  dryRun = false
+) {
+  const existing = await rest.get(
+    Routes.applicationCommands(clientId)
+  );
+
+  const current = (existing || []).find(
+    (command) => command?.name === OWNER_COMMAND_NAME
+  );
+
+  if (!current) return false;
+
   if (dryRun) {
-    console.log(`[CommandSync] DRY RUN ${current ? 'update' : 'create'} USER_INSTALL /owner globally`);
+    console.log(
+      '[CommandSync] DRY RUN remove legacy global /owner'
+    );
     return true;
   }
-  if (current) await rest.patch(Routes.applicationCommand(clientId, current.id), { body: ownerCommand });
-  else await rest.post(Routes.applicationCommands(clientId), { body: ownerCommand });
-  console.log(`[CommandSync] USER_INSTALL /owner ${current ? 'updated' : 'created'} globally.`);
+
+  await rest.delete(
+    Routes.applicationCommand(clientId, current.id)
+  );
+
+  console.log('[CommandSync] Removed legacy global /owner.');
   return true;
 }
 
@@ -255,9 +278,10 @@ async function syncCommands() {
   const dryRun = ['1', 'true', 'yes', 'on'].includes(String(process.env.COMMAND_SYNC_DRY_RUN || '').toLowerCase());
   const commands = loadCanonicalCommands();
   const publicCommands = commands.filter((command) => PUBLIC_COMMAND_NAMES.has(command.name));
-  const canonicalOwner = commands.find((command) => command.name === OWNER_COMMAND_NAME) || null;
-  const ownerCommand = buildUserInstalledOwnerCommand(canonicalOwner);
-  assertOwnerCommandUserInstall(ownerCommand);
+  const ownerCommand = commands.find(
+    (command) => command.name === OWNER_COMMAND_NAME
+  ) || null;
+  assertOwnerCommandRestrictedGuild(ownerCommand);
 
   const guildIds = configuredGuildIds(mode);
   const privateGuildId = commandCenterGuildId();
@@ -268,11 +292,11 @@ async function syncCommands() {
 
   if (commandMode === 'global') {
     await putGlobalCommands(rest, clientId, publicCommands, dryRun);
-    await upsertGlobalOwnerCommand(rest, clientId, ownerCommand, dryRun);
+    await removeLegacyGlobalOwnerCommand(rest, clientId, dryRun);
   } else {
     if (!guildIds.length) throw new Error(`No guild IDs configured for ${mode}`);
     for (const guildId of guildIds) await putGuildCommands(rest, clientId, guildId, publicCommands, dryRun);
-    await upsertGlobalOwnerCommand(rest, clientId, ownerCommand, dryRun);
+    await removeLegacyGlobalOwnerCommand(rest, clientId, dryRun);
   }
 
   removedGuildCommands = await cleanupRetiredGuildCommands(rest, clientId, cleanupGuildIds, dryRun);
@@ -284,7 +308,7 @@ async function syncCommands() {
     dryRun,
     guildIds,
     commands: publicCommands.map((command) => command.name),
-    userInstalledCommands: [OWNER_COMMAND_NAME],
+    restrictedGuildCommands: [OWNER_COMMAND_NAME],
     removedGuildCommands,
     removedGlobalCommands,
   };
@@ -306,10 +330,9 @@ module.exports = {
   getCanonicalCommandFiles,
   loadCanonicalCommands,
   configuredGuildIds,
-  buildUserInstalledOwnerCommand,
-  assertOwnerCommandUserInstall,
+  assertOwnerCommandRestrictedGuild,
   cleanupStaleGlobalCommands,
   cleanupRetiredGuildCommands,
-  upsertGlobalOwnerCommand,
+  removeLegacyGlobalOwnerCommand,
   syncCommands,
 };
