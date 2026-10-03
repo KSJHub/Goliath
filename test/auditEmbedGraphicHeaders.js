@@ -77,8 +77,13 @@ function run() {
 
   assert(!mediaSource.includes('buildEditMediaPanel'), 'retired Edit Media panel must remain removed');
   assert(!mediaSource.includes("embed:header-type-cycle"), 'retired Header Type cycle button must remain removed');
-  assert(!interactionSource.includes("customId === 'embed:header-type-cycle'"), 'retired Header Type cycle handler must remain removed');
+  assert(interactionSource.includes("customId === 'embed:header-type-cycle'"), 'legacy Header Type cycle interactions must route into the current Media Manager');
   assert(!interactionSource.includes('buildEditMediaPanel'), 'retired Edit Media handler must remain removed');
+  assert(
+    interactionSource.includes("panel.buildMediaManagerPanel(i, who(i))") &&
+    interactionSource.includes("customId === 'embed:header-type-cycle'"),
+    'legacy Header Type interaction must bridge to the canonical Media Manager'
+  );
   assert(mediaSource.includes("setCustomId('embed:media-options')"), 'Media Manager must open the canonical Media Options panel');
 
   /*
