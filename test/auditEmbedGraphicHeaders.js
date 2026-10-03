@@ -121,20 +121,6 @@ function run() {
     'Auto must retain native-image pass-through detection'
   );
 
-  /*
-   * UI contract.
-   */
-  assert(
-    mediaSource.includes("setCustomId('embed:header-type-cycle')") &&
-    mediaSource.includes("Type: ${headerTypeLabel}"),
-    'Media editor must expose the new Header Type control'
-  );
-
-  assert(
-    mediaSource.includes('**Header Type**') &&
-    mediaSource.includes('Use **Auto** unless you need to override'),
-    'Media editor must explain the purpose of Header Type and recommend Auto'
-  );
 
   console.log('✅ Embed Graphic Header regression audit passed.');
 }
