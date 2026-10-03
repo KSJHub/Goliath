@@ -12,21 +12,21 @@ const ownerPanel = require('./command');
 /**
  * Private Goliath owner command.
  *
- * /owner is registered as a GUILD_INSTALL command and disabled by default
- * for ordinary guild members. Discord therefore does not expose it as a
- * normal member command.
+ * /owner is registered as a GUILD_INSTALL command and intentionally visible
+ * in the guild command picker. Discord cannot express a dynamic OWNER_IDS
+ * allow-list through default_member_permissions, so the authoritative owner
+ * check remains inside ownerPanel.execute().
  *
  * IMPORTANT:
- * This is only the Discord-side visibility restriction.
- * ownerPanel.execute() still enforces Goliath's OWNER_IDS authorization,
- * which remains the authoritative security gate.
+ * Visibility is not authorization. Non-owners can see the command entry, but
+ * ownerPanel.execute() and every owner-panel interaction enforce OWNER_IDS.
  */
 const data = new SlashCommandBuilder()
   .setName('owner')
   .setDescription('Open the private Goliath owner control panel.')
   .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
   .setContexts(InteractionContextType.Guild)
-  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+  .setDefaultMemberPermissions(0n);
 
 async function execute(interaction, client) {
   return ownerPanel.execute(interaction, client);
