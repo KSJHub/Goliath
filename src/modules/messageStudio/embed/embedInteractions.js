@@ -1325,6 +1325,14 @@ async function handleCoreInteraction(i) {
       await i.showModal(panel.mediaAddModal());
       return true;
     }
+    if (customId === 'embed:media-gallery-edit') {
+      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) {
+        await i.reply({ content: 'Select a media item first.', flags: 64 });
+        return true;
+      }
+      await i.showModal(panel.galleryItemModal(state, galleryIndex));
+      return true;
+    }
     if (customId === 'embed:media-type:cycle') {
       if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i);
 
