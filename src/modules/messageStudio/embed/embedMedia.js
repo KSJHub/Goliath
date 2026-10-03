@@ -171,13 +171,13 @@ function normalizeThumbnail(value = {}, legacySource = '') {
 }
 function normalizeGalleryItem(value = {}) {
   const source = typeof value === 'string' ? value : value?.source || value?.url || value?.attachment || '';
-  const placement = String(value?.placement || '').toLowerCase() === 'above' ? 'above' : 'below';
+  const placement = String(value?.placement || '').toLowerCase() === 'above' ? 'above' : 'above';
   const alignment = ['left', 'center', 'right'].includes(String(value?.alignment || '').toLowerCase())
     ? String(value.alignment).toLowerCase()
     : 'left';
   const size = ['small', 'medium', 'large'].includes(String(value?.size || '').toLowerCase())
     ? String(value.size).toLowerCase()
-    : 'large';
+    : 'small';
   return {
     source: cleanSource(source),
     alt: cleanString(value?.alt || value?.description || '', 1024),
