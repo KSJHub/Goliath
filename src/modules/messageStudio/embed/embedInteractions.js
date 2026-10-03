@@ -437,6 +437,17 @@ async function handlePresetInteraction(i) {
      * explicitly afterwards so preset media cannot be lost by any
      * legacy panel/state compatibility layer.
      */
+    // Refresh/verify durable media assets when a preset is loaded. If the
+    // Discord CDN URL has expired, the cached copy is what deployment uses.
+    try {
+      await media.persistPresetMedia(guildId, preset);
+    } catch (error) {
+      console.warn(
+        `[Embed Presets] Media cache refresh failed for "${name}":`,
+        error?.message || error
+      );
+    }
+
     panel.applyPreset(i, name, preset);
 
     const loadedState = panel.getSession(i);
