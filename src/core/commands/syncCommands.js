@@ -296,8 +296,7 @@ async function syncCommands() {
     await removeLegacyGlobalOwnerCommand(rest, clientId, dryRun);
   } else {
     if (!guildIds.length) throw new Error(`No guild IDs configured for ${mode}`);
-    const restrictedGuildCommands = [...publicCommands, ownerCommand.data ? ownerCommand : { toJSON: () => ownerCommand }]
-      .map((command) => typeof command.toJSON === 'function' ? command.toJSON() : command);
+    const restrictedGuildCommands = [...publicCommands, ownerCommand];
     for (const guildId of guildIds) await putGuildCommands(rest, clientId, guildId, restrictedGuildCommands, dryRun);
     await removeLegacyGlobalOwnerCommand(rest, clientId, dryRun);
   }
