@@ -20,6 +20,7 @@ const {
   attachQuarantineCase,
 } = require('../../security/protection/quarantine');
 const { refreshDashboard } = require('./panel');
+const investigationAccess = require('./investigationAccess');
 
 function isGuildOwner(interaction) {
   return Boolean(
@@ -266,6 +267,363 @@ function canUseInvestigationRoomControls(interaction, snapshot) {
     || String(snapshot.quarantinedBy || '') === String(interaction.user.id);
 }
 
+async function openInvestigationAccess(interaction, targetId) {
+  const snapshot = currentSnapshot(interaction, targetId);
+
+  if (!snapshot) {
+    return safeReply(interaction, {
+      content: '⚠️ This investigation is no longer active.',
+      flags: 64,
+    });
+  }
+
+  if (getQuarantineMode(snapshot) !== QUARANTINE_MODES.INVESTIGATION) {
+    return safeReply(interaction, {
+      content: '❌ Channel Access is only available for Investigation Isolation.',
+      flags: 64,
+    });
+  }
+
+  if (!canUseInvestigationRoomControls(interaction, snapshot)) {
+    return safeReply(interaction, {
+      content: '❌ Only the lead investigator or server owner can manage investigation channel access.',
+      flags: 64,
+    });
+  }
+
+  const target = interaction.guild.members.cache.get(String(targetId))
+    || await interaction.guild.members.fetch(String(targetId)).catch(() => null);
+
+  if (!target) {
+    return safeReply(interaction, {
+      content: '❌ The investigated member could not be found.',
+      flags: 64,
+    });
+  }
+
+  const allowedIds = [...new Set(
+    (snapshot.allowedChannelIds || []).map(String)
+  )];
+
+  const allowedText = allowedIds.length
+    ? allowedIds.map(id => `<#${id}>`).join('\n')
+    : '**Private investigation room only**';
+
+  const embed = new Discord.EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('🔐 Investigation Channel Access')
+    .setDescription([
+      `**Member:** ${target}`,
+      '',
+      '**Currently Allowed**',
+      allowedText,
+      '',
+      'Select a normal server channel below, then choose whether to allow or remove access.',
+      '',
+      'Use **Room Only** to remove all additional channel access.',
+    ].join('\n'))
+    .setFooter({
+      text: 'Goliath • Investigation Isolation',
+    })
+    .setTimestamp();
+
+  const channelSelect = new Discord.ChannelSelectMenuBuilder()
+    .setCustomId(`mod_invroom_access_channel:${targetId}`)
+    .setPlaceholder('Choose a server channel')
+    .setMinValues(1)
+    .setMaxValues(1)
+    .addChannelTypes(
+      Discord.ChannelType.GuildText,
+      Discord.ChannelType.GuildAnnouncement
+    );
+
+  const actions = new Discord.ActionRowBuilder().addComponents(
+    new Discord.ButtonBuilder()
+      .setCustomId(`mod_invroom_access_allow:${targetId}`)
+      .setLabel('Allow Access')
+      .setEmoji('➕')
+      .setStyle(Discord.ButtonStyle.Success)
+      .setDisabled(true),
+
+    new Discord.ButtonBuilder()
+      .setCustomId(`mod_invroom_access_remove:${targetId}`)
+      .setLabel('Remove Access')
+      .setEmoji('➖')
+      .setStyle(Discord.ButtonStyle.Danger)
+      .setDisabled(true),
+
+    new Discord.ButtonBuilder()
+      .setCustomId(`mod_invroom_access_clear:${targetId}`)
+      .setLabel('Room Only')
+      .setEmoji('🔒')
+      .setStyle(Discord.ButtonStyle.Secondary)
+      .setDisabled(allowedIds.length === 0)
+  );
+
+  return safeReply(interaction, {
+    embeds: [embed],
+    components: [
+      new Discord.ActionRowBuilder().addComponents(channelSelect),
+      actions,
+    ],
+    flags: 64,
+  });
+}
+
+function investigationAccessIds(customId) {
+  const parts = String(customId || '').split(':');
+  return {
+    targetId: parts[1] || null,
+    channelId: parts[2] || null,
+  };
+}
+
+function investigationAccessAuthorised(interaction, targetId) {
+  const snapshot = currentSnapshot(interaction, targetId);
+
+  if (!snapshot) {
+    return {
+      allowed: false,
+      snapshot: null,
+      message: '⚠️ This investigation is no longer active.',
+    };
+  }
+
+  if (getQuarantineMode(snapshot) !== QUARANTINE_MODES.INVESTIGATION) {
+    return {
+      allowed: false,
+      snapshot,
+      message: '❌ Channel Access is only available for Investigation Isolation.',
+    };
+  }
+
+  if (!canUseInvestigationRoomControls(interaction, snapshot)) {
+    return {
+      allowed: false,
+      snapshot,
+      message: '❌ Only the lead investigator or server owner can manage investigation channel access.',
+    };
+  }
+
+  return {
+    allowed: true,
+    snapshot,
+    message: null,
+  };
+}
+
+async function selectInvestigationAccessChannel(interaction) {
+  const { targetId } = investigationAccessIds(interaction.customId);
+  const auth = investigationAccessAuthorised(interaction, targetId);
+
+  if (!auth.allowed) {
+    return safeReply(interaction, {
+      content: auth.message,
+      flags: 64,
+    });
+  }
+
+  const channelId = String(interaction.values?.[0] || '');
+
+  if (!channelId) {
+    return safeReply(interaction, {
+      content: '❌ No channel was selected.',
+      flags: 64,
+    });
+  }
+
+  if (String(auth.snapshot.interviewChannelId || '') === channelId) {
+    return safeReply(interaction, {
+      content: 'ℹ️ The private investigation room is always available and does not need additional access.',
+      flags: 64,
+    });
+  }
+
+  const channel = interaction.guild.channels.cache.get(channelId)
+    || await interaction.guild.channels.fetch(channelId).catch(() => null);
+
+  if (!channel) {
+    return safeReply(interaction, {
+      content: '❌ That channel could not be found.',
+      flags: 64,
+    });
+  }
+
+  const allowedIds = new Set(
+    (auth.snapshot.allowedChannelIds || []).map(String)
+  );
+
+  const actions = new Discord.ActionRowBuilder().addComponents(
+    new Discord.ButtonBuilder()
+      .setCustomId(`mod_invroom_access_allow:${targetId}:${channelId}`)
+      .setLabel('Allow Access')
+      .setEmoji('➕')
+      .setStyle(Discord.ButtonStyle.Success)
+      .setDisabled(allowedIds.has(channelId)),
+
+    new Discord.ButtonBuilder()
+      .setCustomId(`mod_invroom_access_remove:${targetId}:${channelId}`)
+      .setLabel('Remove Access')
+      .setEmoji('➖')
+      .setStyle(Discord.ButtonStyle.Danger)
+      .setDisabled(!allowedIds.has(channelId)),
+
+    new Discord.ButtonBuilder()
+      .setCustomId(`mod_invroom_access_clear:${targetId}`)
+      .setLabel('Room Only')
+      .setEmoji('🔒')
+      .setStyle(Discord.ButtonStyle.Secondary)
+      .setDisabled(allowedIds.size === 0)
+  );
+
+  return interaction.update({
+    components: [
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ChannelSelectMenuBuilder()
+          .setCustomId(`mod_invroom_access_channel:${targetId}`)
+          .setPlaceholder(`Selected: #${channel.name}`.slice(0, 150))
+          .setMinValues(1)
+          .setMaxValues(1)
+          .addChannelTypes(
+            Discord.ChannelType.GuildText,
+            Discord.ChannelType.GuildAnnouncement
+          )
+      ),
+      actions,
+    ],
+  });
+}
+
+async function changeInvestigationAccess(interaction, action) {
+  const { targetId, channelId } = investigationAccessIds(interaction.customId);
+  const auth = investigationAccessAuthorised(interaction, targetId);
+
+  if (!auth.allowed) {
+    return safeReply(interaction, {
+      content: auth.message,
+      flags: 64,
+    });
+  }
+
+  const target = interaction.guild.members.cache.get(String(targetId))
+    || await interaction.guild.members.fetch(String(targetId)).catch(() => null);
+
+  if (!target) {
+    return safeReply(interaction, {
+      content: '❌ The investigated member could not be found.',
+      flags: 64,
+    });
+  }
+
+  let channel = null;
+
+  if (action !== 'clear') {
+    if (!channelId) {
+      return safeReply(interaction, {
+        content: '❌ Select a channel first.',
+        flags: 64,
+      });
+    }
+
+    channel = interaction.guild.channels.cache.get(String(channelId))
+      || await interaction.guild.channels.fetch(String(channelId)).catch(() => null);
+
+    if (!channel) {
+      return safeReply(interaction, {
+        content: '❌ The selected channel could not be found.',
+        flags: 64,
+      });
+    }
+  }
+
+  await interaction.deferUpdate();
+
+  try {
+    const result = await investigationAccess.updateAccess(
+      interaction,
+      target,
+      action,
+      channel
+    );
+
+    const allowedIds = result.allowedChannelIds || [];
+
+    const allowedText = allowedIds.length
+      ? allowedIds.map(id => `<#${id}>`).join('\n')
+      : '**Private investigation room only**';
+
+    const actionText = action === 'add'
+      ? `Access allowed for ${channel}.`
+      : action === 'remove'
+        ? `Access removed from ${channel}.`
+        : 'All additional channel access removed.';
+
+    const embed = new Discord.EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('🔐 Investigation Channel Access')
+      .setDescription([
+        `**Member:** ${target}`,
+        '',
+        `✅ ${actionText}`,
+        '',
+        '**Currently Allowed**',
+        allowedText,
+        '',
+        'Select another normal server channel below to continue managing access.',
+      ].join('\n'))
+      .setFooter({
+        text: 'Goliath • Investigation Isolation',
+      })
+      .setTimestamp();
+
+    const channelSelect = new Discord.ChannelSelectMenuBuilder()
+      .setCustomId(`mod_invroom_access_channel:${targetId}`)
+      .setPlaceholder('Choose a server channel')
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addChannelTypes(
+        Discord.ChannelType.GuildText,
+        Discord.ChannelType.GuildAnnouncement
+      );
+
+    const actions = new Discord.ActionRowBuilder().addComponents(
+      new Discord.ButtonBuilder()
+        .setCustomId(`mod_invroom_access_allow:${targetId}`)
+        .setLabel('Allow Access')
+        .setEmoji('➕')
+        .setStyle(Discord.ButtonStyle.Success)
+        .setDisabled(true),
+
+      new Discord.ButtonBuilder()
+        .setCustomId(`mod_invroom_access_remove:${targetId}`)
+        .setLabel('Remove Access')
+        .setEmoji('➖')
+        .setStyle(Discord.ButtonStyle.Danger)
+        .setDisabled(true),
+
+      new Discord.ButtonBuilder()
+        .setCustomId(`mod_invroom_access_clear:${targetId}`)
+        .setLabel('Room Only')
+        .setEmoji('🔒')
+        .setStyle(Discord.ButtonStyle.Secondary)
+        .setDisabled(allowedIds.length === 0)
+    );
+
+    return interaction.editReply({
+      embeds: [embed],
+      components: [
+        new Discord.ActionRowBuilder().addComponents(channelSelect),
+        actions,
+      ],
+    });
+  } catch (error) {
+    return interaction.editReply({
+      content: `❌ I couldn't change that investigation access: ${error.message}`,
+      components: [],
+    });
+  }
+}
+
 async function openInvestigationNoteModal(interaction, targetId) {
   const snapshot = currentSnapshot(interaction, targetId);
   if (!snapshot) return safeReply(interaction, { content: '⚠️ This investigation is no longer active.', flags: 64 });
@@ -388,7 +746,17 @@ async function handleQuarantineInteraction(interaction) {
     if (id.startsWith('mod_quarantine_security:')) return securityMovedToAdmin(interaction, targetIdFrom(id), false);
     if (id.startsWith('mod_remove_quarantine:')) return removeQuarantine(interaction, targetIdFrom(id));
     if (id.startsWith('mod_invroom_note:')) return openInvestigationNoteModal(interaction, targetIdFrom(id));
+    if (id.startsWith('mod_invroom_access:')) return openInvestigationAccess(interaction, targetIdFrom(id));
+    if (id.startsWith('mod_invroom_access_allow:')) return changeInvestigationAccess(interaction, 'add');
+    if (id.startsWith('mod_invroom_access_remove:')) return changeInvestigationAccess(interaction, 'remove');
+    if (id.startsWith('mod_invroom_access_clear:')) return changeInvestigationAccess(interaction, 'clear');
     return false;
+  }
+
+  if (interaction.isChannelSelectMenu?.()) {
+    if (id.startsWith('mod_invroom_access_channel:')) {
+      return selectInvestigationAccessChannel(interaction);
+    }
   }
 
   if (interaction.isModalSubmit?.()) {

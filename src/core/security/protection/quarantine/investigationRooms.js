@@ -128,6 +128,7 @@ async function createInvestigationRoom(guild, member, quarantineRole, options = 
     new ButtonBuilder().setCustomId(`mod_dashboard:${member.id}:cases`).setLabel('Case File').setEmoji('📁').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`mod_dashboard:${member.id}:intelligence`).setLabel('Intelligence').setEmoji('🧠').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_invroom_note:${member.id}`).setLabel('Add Staff Note').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_invroom_access:${member.id}`).setLabel('Channel Access').setEmoji('🔐').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_remove_quarantine:${member.id}`).setLabel('Clear Investigation').setEmoji('🔓').setStyle(ButtonStyle.Success),
   );
   await channel.send({ content: `${member}`, embeds: [intro], components: [controls], allowedMentions: { users: [member.id], roles: [], repliedUser: false } })
