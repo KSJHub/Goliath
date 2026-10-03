@@ -182,7 +182,11 @@ function normalizeGalleryItem(value = {}) {
     source: cleanSource(source),
     alt: cleanString(value?.alt || value?.description || '', 1024),
     spoiler: value?.spoiler === true,
-    type: ['auto', 'image', 'video'].includes(String(value?.type || '').toLowerCase()) ? String(value.type).toLowerCase() : 'auto',
+    // Media Type is always auto by default. Legacy "text" media values are
+    // retired; text is a header mode, not a gallery media type.
+    type: ['auto', 'image', 'video'].includes(String(value?.type || '').toLowerCase())
+      ? String(value.type).toLowerCase()
+      : 'auto',
     headerType: ['auto', 'text', 'gif', 'image'].includes(String(value?.headerType || '').toLowerCase())
       ? String(value.headerType).toLowerCase()
       : 'auto',
