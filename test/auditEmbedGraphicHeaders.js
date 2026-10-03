@@ -24,10 +24,14 @@ function run() {
   assert(cleared.every((item) => item.placement === 'below'));
 
   const renderer = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embedRenderer'), 'utf8');
-  const above = renderer.indexOf('if (aboveItems.length) container.addMediaGalleryComponents');
-  const text = renderer.indexOf('if (text && isHttpsUrl(thumbSource))', above);
-  assert(above >= 0 && text > above, 'graphic header must render before panel text');
-  assert(!renderer.slice(above, text).includes('Separator'), 'do not add artificial spacing below graphic headers');
+  const above = renderer.indexOf('for (const imageEmbed of above) outputEmbeds.push(imageEmbed)');
+  const content = renderer.indexOf('outputEmbeds.push(targetEmbed)', above);
+  const below = renderer.indexOf('for (const imageEmbed of below) outputEmbeds.push(imageEmbed)', content);
+
+  assert(
+    above >= 0 && content > above && below > content,
+    'renderer order must remain Above media -> panel content -> Below media'
+  );
 
   assert(renderer.includes("'image/gif'"));
   assert(renderer.includes('nativeImageShouldPassThrough'));

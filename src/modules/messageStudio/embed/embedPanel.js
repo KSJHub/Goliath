@@ -400,31 +400,55 @@ function buildPreviewEmbed(s, i) {
 }
 
 function buildStudioPreviewEmbeds(s, i) {
-  const index = Math.max(0, Number(s?.selectedPanelIndex) || 0);
-  const panel = s?.panels?.[index] || {};
-  const mediaPanel = Array.isArray(s?.media?.panels) ? (s.media.panels[index] || {}) : {};
-  const gallery = Array.isArray(mediaPanel?.gallery) ? mediaPanel.gallery : [];
-  const header = gallery.find((item) => String(item?.placement || '').toLowerCase() === 'above');
-  const source = header ? String(replaceVars(header.source || '', i) || '').trim() : '';
+  const panels = Array.isArray(s?.panels) ? s.panels : [];
+  const mediaPanels = Array.isArray(s?.media?.panels) ? s.media.panels : [];
+  const output = [];
 
-  if (!source) {
-    const preview = buildPreviewEmbed(s, i);
-    return hasRenderableEmbedContent(preview) ? [preview] : [];
+  for (let index = 0; index < panels.length; index += 1) {
+    const panel = panels[index] || {};
+    const mediaPanel = mediaPanels[index] || {};
+    const gallery = Array.isArray(mediaPanel?.gallery) ? mediaPanel.gallery : [];
+    const header = gallery.find(
+      (item) => String(item?.placement || '').toLowerCase() === 'above'
+    );
+    const source = header
+      ? String(replaceVars(header.source || '', i) || '').trim()
+      : '';
+
+    if (source) {
+      output.push(
+        new EmbedBuilder()
+          .setColor(panel.color || s.color || PANEL_COLOR)
+          .setImage(source)
+      );
+    }
+
+    /*
+     * Graphic Header media is rendered as its own preview card.
+     * Remove the legacy panel image only for that panel so it cannot
+     * duplicate the header beneath the content.
+     */
+    const contentPanel = source
+      ? { ...panel, image: '' }
+      : panel;
+
+    const contentPreview = buildEmbedFromPanel(
+      contentPanel,
+      i,
+      s.showTimestamp,
+      s.fieldLayout
+    );
+
+    /*
+     * Graphic-only panels intentionally contribute only their header.
+     * Discord rejects an otherwise-empty content embed.
+     */
+    if (hasRenderableEmbedContent(contentPreview)) {
+      output.push(contentPreview);
+    }
   }
 
-  const headerPreview = new EmbedBuilder()
-    .setColor(panel.color || s.color || PANEL_COLOR)
-    .setImage(source);
-
-  const contentPanel = { ...panel, image: '' };
-  const contentState = { ...s, panels: [contentPanel], selectedPanelIndex: 0 };
-  const contentPreview = buildPreviewEmbed(contentState, i);
-
-  // A graphic-only Above Content panel must not append an empty content
-  // embed. Discord rejects that second embed with BASE_TYPE_REQUIRED.
-  return hasRenderableEmbedContent(contentPreview)
-    ? [headerPreview, contentPreview]
-    : [headerPreview];
+  return output;
 }
 
 const EMBED_COMPONENT_LIMITS = Object.freeze({
