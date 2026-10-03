@@ -15,7 +15,9 @@ const ALLOWED_MODES = new Set(['dev', 'beta', 'production']);
 const OWNER_COMMAND_NAME = 'owner';
 const RETIRED_GUILD_COMMAND_NAMES = new Set(['commandcenter']);
 const PUBLIC_COMMAND_NAMES = new Set(
-  [...CANONICAL_COMMAND_NAMES].filter((name) => !RETIRED_GUILD_COMMAND_NAMES.has(name)),
+  [...CANONICAL_COMMAND_NAMES].filter(
+    (name) => name !== OWNER_COMMAND_NAME && !RETIRED_GUILD_COMMAND_NAMES.has(name),
+  ),
 );
 const ALLOWED_GLOBAL_COMMAND_NAMES = new Set([...PUBLIC_COMMAND_NAMES]);
 const INACCESSIBLE_GUILD_ERROR_CODES = new Set([50001, 50013, 10004]);
