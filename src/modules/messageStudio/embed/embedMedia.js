@@ -655,19 +655,7 @@ function installMediaManagerUi(panel) {
       summary.push('', 'No media selected. Add media or select an existing gallery item.');
     }
 
-    const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)];
-
-    if (selectedMedia) {
-      const source = resolveSource(panel, selectedMedia.source, interaction);
-      if (source && embeds.length < 10) {
-        const preview = new EmbedBuilder()
-          .setColor(0x5865F2)
-          .setTitle(`🖼️ Selected Media Preview • ${selectedMedia.placement === 'above' ? 'Above Content' : 'Below Content'} • ${selectedAlignment === 'center' ? 'Centre' : selectedAlignment[0].toUpperCase() + selectedAlignment.slice(1)}`)
-          .setDescription(String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 1000));
-        if (selectedMedia.type !== 'video') preview.setImage(source);
-        embeds.push(preview);
-      }
-    }
+    const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\\n'), state, who)];
 
     return { embeds, components: enforceLimits(rows) };
   };
