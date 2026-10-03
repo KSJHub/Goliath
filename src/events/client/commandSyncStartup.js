@@ -25,8 +25,7 @@ module.exports = {
         + `${(result?.commands || []).map((name) => `/${name}`).join(', ') || 'no public commands'}`,
       );
     } catch (error) {
-      // Keep the bot online if Discord rejects the user-install /owner command
-      // (for example until User Install is enabled in the Developer Portal),
+      // Keep the bot online if Discord rejects command registration,
       // but make the failure explicit in startup logs.
       console.error('[CommandSync] Startup sync failed:', error?.stack || error?.message || error);
     }
