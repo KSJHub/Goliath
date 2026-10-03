@@ -1051,6 +1051,16 @@ async function handlePresetInteraction(i) {
 async function handleBuilderInteractions(i) {
   const customId = String(i.customId || '');
   const state = panel.getSession(i);
+
+  // Compatibility bridge for Embed Studio panels created before the canonical
+  // Media Options editor replaced the retired Header Type cycle. Discord can
+  // keep those component IDs alive in an already-posted interaction panel.
+  // Never recreate the retired UI: acknowledge the stale control by routing
+  // the user directly into the current Media Manager.
+  if (i.isButton?.() && customId === 'embed:header-type-cycle') {
+    await i.update(panel.buildMediaManagerPanel(i, who(i)));
+    return true;
+  }
   const fields = Array.isArray(state.fields) ? [...state.fields] : [];
   const fieldIndex = selectedFieldIndex(state);
   const buttons = Array.isArray(state.buttons) ? [...state.buttons] : [];
