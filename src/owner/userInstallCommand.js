@@ -22,7 +22,7 @@ const ownerPanel = require('./command');
  */
 const data = new SlashCommandBuilder()
   .setName('owner')
-  .setDescription('Open the private Goliath owner control panel.')
+  .setDescription('💎 Open Goliath’s private owner control centre and system tools')
   .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
   .setContexts(InteractionContextType.Guild)
   .setDMPermission(false);

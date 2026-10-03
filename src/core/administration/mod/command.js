@@ -184,7 +184,7 @@ const command = {
   access: { level: 'mod', ownerOnly: false },
   data: new SlashCommandBuilder()
     .setName('mod')
-    .setDescription('🔐 Open Goliath’s moderation hub and management tools'),
+    .setDescription('🔑 Open Goliath’s moderation hub and management tools'),
   async execute(interaction) {
     const denied = await enforceCommandAccess(interaction, command);
     if (denied) {

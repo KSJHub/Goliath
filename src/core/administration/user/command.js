@@ -19,7 +19,7 @@ module.exports = {
 
   data: new SlashCommandBuilder()
     .setName('user')
-    .setDescription('Open your Goliath user panel')
+    .setDescription('🫂 Open your Goliath user panel, features and personal tools')
     .setDMPermission(false),
 
   async execute(interaction) {
