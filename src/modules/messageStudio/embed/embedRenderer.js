@@ -193,7 +193,6 @@ async function removeConnectedCornerBackground(input, tolerance = 42) {
     queue[tail++] = index;
   };
 
-  // Seed the complete outer boundary, not just the four corners.
   for (let x = 0; x < width; x += 1) {
     enqueue(x);
     enqueue((height - 1) * width + x);
@@ -238,7 +237,6 @@ async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = '
       withoutEnlargement: true,
       fit: 'inside'
     })
-    .flatten({ background: '#0A0A0C' })
     .png()
     .toBuffer();
 
@@ -249,220 +247,65 @@ async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = '
   };
 }
 async function galleryItems(media, interaction, placement = null, payloadFiles = null, panelIndex = 0) {
-  const output = []; const gallery = (Array.isArray(media?.gallery) ? media.gallery : []).slice(0, 10); const guildId = interactionGuildId(interaction);
-  for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
-    const item = gallery[itemIndex]; if (placement && itemPlacement(item) !== placement) continue; const source = resolveSource(item?.source, interaction); if (!source) continue;
-    const probe = await probeRemoteSource(source, 'media', guildId); let url = source; const alignment = galleryAlignment(item); const isStaticImage = String(item?.type || 'auto').toLowerCase() !== 'video' && !nativeImageShouldPassThrough(probe.contentType);
-    if (isStaticImage && Array.isArray(payloadFiles)) { const prepared = await alignedGalleryAttachment(source, alignment, panelIndex, itemIndex, guildId, galleryImageWidth(item)); if (prepared) { payloadFiles.push(prepared.attachment); url = prepared.url; } }
-    const builder = new MediaGalleryItemBuilder().setURL(url).setSpoiler(item?.spoiler === true); if (item?.alt) builder.setDescription(String(item.alt).slice(0, 1024)); output.push(builder);
-  }
-  return output;
+  return [];
 }
-function safeFilename(name, fallback) { const base = String(name || fallback || 'file').trim().replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, ''); return (base || fallback || 'file').slice(0, 120); }
-function sourceFilename(source, fallback) { try { const parsed = new URL(source); return decodeURIComponent(path.basename(parsed.pathname || '')) || fallback; } catch { return fallback; } }
-async function addMediaFiles(container, media, interaction, payloadFiles, panelIndex) {
-  const entries = (Array.isArray(media?.files) ? media.files : []).slice(0, 10); const guildId = interactionGuildId(interaction);
-  for (let fileIndex = 0; fileIndex < entries.length; fileIndex += 1) {
-    const entry = entries[fileIndex]; const source = resolveSource(entry?.source, interaction); if (!isHttpsUrl(source)) throw new Error(`Attached file source must resolve to a valid HTTPS URL: ${String(source || '').slice(0, 160)}`);
-    try { let cached = cachedAssetFor(guildId, source); if (!cached?.buffer) cached = await ensureAssetCached(guildId, source); if (!cached?.buffer) throw new Error('File could not be downloaded.'); const originalName = entry?.name || sourceFilename(source, `file-${fileIndex + 1}`); const name = safeFilename(`p${panelIndex + 1}-${fileIndex + 1}-${originalName}`, `p${panelIndex + 1}-file-${fileIndex + 1}`); const attachment = new AttachmentBuilder(cached.buffer, { name }); if (entry?.description) attachment.setDescription(String(entry.description).slice(0, 1024)); if (entry?.spoiler) attachment.setSpoiler(true); payloadFiles.push(attachment); container.addFileComponents(new FileBuilder().setURL(`attachment://${name}`).setSpoiler(entry?.spoiler === true)); }
-    catch (error) { throw new Error(`Attached file \"${entry?.name || sourceFilename(source, 'file')}\" could not be prepared: ${error?.message || error}`); }
-  }
-}
-async function addLegacyImage(container, imageUrl, files, index, guildId = 'global') {
-  if (!isHttpsUrl(imageUrl)) return; const probe = await probeRemoteSource(imageUrl, 'image', guildId);
-  if (nativeImageShouldPassThrough(probe.contentType)) { container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(imageUrl))); return; }
-  const source = await sourceImage(imageUrl, guildId); if (nativeImageShouldPassThrough(source.contentType)) { container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(imageUrl))); return; }
-  const centered = await makeCenteredPortrait(source.buffer); if (centered) { const name = `embed-panel-${index + 1}.png`; files.push(new AttachmentBuilder(centered, { name })); container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${name}`))); }
-}
-function componentEmojiIds(actionRows = []) { const ids = new Set(); for (const row of actionRows || []) { const data = typeof row?.toJSON === 'function' ? row.toJSON() : row; for (const component of Array.isArray(data?.components) ? data.components : []) { const id = String(component?.emoji?.id || '').trim(); if (/^\d{16,20}$/.test(id)) ids.add(id); } } return [...ids]; }
-function textEmojiIds(embeds = []) { const ids = new Set(); const scan = (value) => { for (const match of String(value || '').matchAll(/<a?:[a-zA-Z0-9_]+:(\d{16,20})>/g)) ids.add(match[1]); }; for (const embed of embeds || []) { const data = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed; if (!data || typeof data !== 'object') continue; scan(data.title); scan(data.description); scan(data.author?.name); scan(data.footer?.text); for (const field of Array.isArray(data.fields) ? data.fields : []) { scan(field?.name); scan(field?.value); } } return [...ids]; }
-async function resolveApplicationEmojiShortcodes(embeds = [], interaction = null) { const client = interaction?.client || null; const guildId = String(interaction?.guildId || interaction?.guild?.id || '').trim(); if (!client || !guildId) return embeds; return emojis.resolveEmbeds(client, guildId, embeds); }
-async function validateApplicationEmojiUsage(embeds = [], actionRows = [], interaction = null) {
-  const usedIds = [...new Set([...componentEmojiIds(actionRows), ...textEmojiIds(embeds)])]; if (!usedIds.length) return true; const manager = interaction?.client?.application?.emojis; const client = interaction?.client || null; const guildId = String(interaction?.guildId || interaction?.guild?.id || '').trim(); if (!manager || !client || !guildId) return true;
-  let bank = manager.cache; if (!bank?.size) bank = await manager.fetch(); const applicationIds = new Set([...bank.values()].map((emoji) => String(emoji.id))); const usedApplicationIds = usedIds.filter((id) => applicationIds.has(id)); if (!usedApplicationIds.length) return true;
-  const allowedByName = await emojis.allowedGuildEmojis(client, guildId); const allowedIds = new Set([...allowedByName.values()].map((emoji) => String(emoji.id))); const blocked = usedApplicationIds.filter((id) => !allowedIds.has(id)); if (!blocked.length) return true; const names = blocked.map((id) => bank.get(id)?.name ? `:${bank.get(id).name}:` : id); throw new Error(`Goliath application emoji not available for this guild: ${names.join(', ')}. Core emojis are automatic; optional Emoji Studio emojis must be selected for the guild.`);
-}
-async function buildEmbedPayload(options = {}) {
-  const {
-    embeds = [],
-    actionRows = [],
-    allowUserPing = false,
-    userId = null,
-    ephemeral = false,
-    interaction = null
-  } = options;
 
+async function buildEmbedPayload(options = {}) {
+  const { embeds = [], actionRows = [], allowUserPing = false, userId = null, ephemeral = false, interaction = null } = options;
   const mediaState = applyMediaAlignmentMap(options.media || null, options.mediaAlignment || {});
   const files = [];
   const outputEmbeds = [];
   const resolvedEmbeds = await resolveApplicationEmojiShortcodes(embeds, interaction);
   const client = interaction?.client || null;
   const guildId = interactionGuildId(interaction);
-  const resolvedActionRows =
-    client && guildId !== 'global'
-      ? await emojiPayload.resolveComponents(client, guildId, actionRows, 'embed')
-      : actionRows;
-
+  const resolvedActionRows = client && guildId !== 'global' ? await emojiPayload.resolveComponents(client, guildId, actionRows, 'embed') : actionRows;
   await validateApplicationEmojiUsage(resolvedEmbeds, resolvedActionRows, interaction);
 
   for (let index = 0; index < resolvedEmbeds.length; index += 1) {
     const sourceEmbed = resolvedEmbeds[index];
-    const data =
-      typeof sourceEmbed?.toJSON === 'function'
-        ? sourceEmbed.toJSON()
-        : sourceEmbed;
-
+    const data = typeof sourceEmbed?.toJSON === 'function' ? sourceEmbed.toJSON() : sourceEmbed;
     if (!data || typeof data !== 'object') continue;
-
-    const hasPanelMediaState =
-      Array.isArray(mediaState?.panels) && index < mediaState.panels.length;
+    const hasPanelMediaState = Array.isArray(mediaState?.panels) && index < mediaState.panels.length;
     const media = panelMedia(mediaState, index);
-    const targetEmbed =
-      sourceEmbed instanceof EmbedBuilder
-        ? EmbedBuilder.from(sourceEmbed)
-        : EmbedBuilder.from(data);
+    const targetEmbed = sourceEmbed instanceof EmbedBuilder ? EmbedBuilder.from(sourceEmbed) : EmbedBuilder.from(data);
+    const thumbSource = resolveSource(hasPanelMediaState ? media?.thumbnail?.source : data.thumbnail?.url, interaction);
+    if (thumbSource) { await probeRemoteSource(thumbSource, 'thumbnail', guildId); if (isHttpsUrl(thumbSource)) targetEmbed.setThumbnail(thumbSource); }
 
-    const thumbSource = resolveSource(
-      hasPanelMediaState ? media?.thumbnail?.source : data.thumbnail?.url,
-      interaction
-    );
-
-    if (thumbSource) {
-      await probeRemoteSource(thumbSource, 'thumbnail', guildId);
-      if (isHttpsUrl(thumbSource)) {
-        targetEmbed.setThumbnail(thumbSource);
-        if (hasPanelMediaState && media?.thumbnail?.alt) {
-          // Discord legacy embeds do not expose thumbnail alt text.
-        }
-      }
-    }
-
-    /*
-     * IMPORTANT:
-     * Do not use Discord Components V2 MediaGallery/ContainerBuilder for
-     * published embeds. MediaGallery renders a Discord-owned grey gallery
-     * surface around transparent/aligned artwork. Legacy embeds render the
-     * artwork directly, so transparent PNGs stay transparent.
-     */
     if (hasPanelMediaState) {
-      const gallery = Array.isArray(media?.gallery)
-        ? media.gallery.slice(0, 10)
-        : [];
-
+      const gallery = Array.isArray(media?.gallery) ? media.gallery.slice(0, 10) : [];
       const above = [];
       const below = [];
-
       for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
         const item = gallery[itemIndex];
         const source = resolveSource(item?.source, interaction);
         if (!source) continue;
-
         const probe = await probeRemoteSource(source, 'media', guildId);
         const type = String(item?.type || 'auto').toLowerCase();
-        const isImage =
-          type !== 'video' && !nativeImageShouldPassThrough(probe.contentType);
-
-        if (!isImage) {
-          /*
-           * Legacy embeds cannot host arbitrary video media without Discord
-           * generating its own rich preview. Keep the URL as an image-less
-           * embed so the source remains visible/clickable rather than
-           * reintroducing Components V2's grey MediaGallery surface.
-           */
-          const linkEmbed = new EmbedBuilder();
-          if (Number.isInteger(data.color)) linkEmbed.setColor(data.color);
-          linkEmbed.setDescription(String(source).slice(0, 4096));
-          (itemPlacement(item) === 'above' ? above : below).push(linkEmbed);
-          continue;
-        }
-
-        const prepared = await plainGalleryAttachment(
-          source,
-          index,
-          itemIndex,
-          guildId,
-          galleryImageWidth(item)
-        );
-
+        const isImage = type !== 'video' && !nativeImageShouldPassThrough(probe.contentType);
+        if (!isImage) continue;
+        const prepared = await plainGalleryAttachment(source, index, itemIndex, guildId, galleryImageWidth(item));
         if (!prepared) continue;
-
         files.push(prepared.attachment);
-
         const imageEmbed = new EmbedBuilder();
         if (Number.isInteger(data.color)) imageEmbed.setColor(data.color);
         imageEmbed.setImage(prepared.url);
-        if (item?.alt) {
-          imageEmbed.setDescription(String(item.alt).slice(0, 1024));
-        }
-
         (itemPlacement(item) === 'above' ? above : below).push(imageEmbed);
       }
-
       for (const imageEmbed of above) outputEmbeds.push(imageEmbed);
-
-      if (panelText(data) || thumbSource || data.footer || data.timestamp) {
-        const text = panelText(data);
-        if (text) targetEmbed.setDescription(text);
-        const footer = footerText(data);
-        if (footer) targetEmbed.setFooter({ text: footer.replace(/^-# /, '') });
-        outputEmbeds.push(targetEmbed);
-      }
-
+      outputEmbeds.push(targetEmbed);
       for (const imageEmbed of below) outputEmbeds.push(imageEmbed);
     } else {
-      const imageUrl = resolveSource(data.image?.url, interaction);
-      if (isHttpsUrl(imageUrl)) {
-        try {
-          const source = await sourceImage(imageUrl, guildId);
-          if (nativeImageShouldPassThrough(source.contentType)) {
-            targetEmbed.setImage(imageUrl);
-          } else {
-            const prepared = await plainGalleryAttachment(
-              imageUrl,
-              index,
-              0,
-              guildId,
-              SINGLE_IMAGE_VISIBLE_WIDTH
-            );
-            if (prepared) {
-              files.push(prepared.attachment);
-              targetEmbed.setImage(prepared.url);
-            }
-          }
-        } catch (error) {
-          throw new Error(
-            `Panel ${index + 1} image could not be prepared: ${error?.message || error}`
-          );
-        }
-      }
-
       outputEmbeds.push(targetEmbed);
     }
   }
 
-  /*
-   * Discord allows a maximum of 10 embeds per message. Preserve the
-   * configured order while preventing an invalid payload when several
-   * gallery items are present.
-   */
-  const finalEmbeds = outputEmbeds.slice(0, 10);
-  const components = [...(resolvedActionRows || [])];
-
-  const payload = {
-    embeds: finalEmbeds,
-    components,
-    files
-  };
-
+  const payload = { embeds: outputEmbeds.slice(0, 10), components: [...(resolvedActionRows || [])], files };
   if (allowUserPing && userId) payload.content = `<@${userId}>`;
   if (ephemeral) payload.flags = MessageFlags.Ephemeral;
-
   return payload;
 }
-async function centerOnLegacyEmbedCanvas(buffer) { return makeCenteredPortrait(buffer); }
-async function prepareEmbedMedia(embeds = [], options = {}) {
-  const files = []; const output = Array.isArray(embeds) ? embeds : []; const guildId = options.guildId || 'global';
-  for (let index = 0; index < output.length; index += 1) { const embed = output[index]; if (!embed || typeof embed.toJSON !== 'function' || typeof embed.setImage !== 'function') continue; const imageUrl = embed.toJSON()?.image?.url; if (!imageUrl || !isHttpsUrl(imageUrl)) continue; try { const source = await sourceImage(imageUrl, guildId); if (nativeImageShouldPassThrough(source.contentType)) continue; const processed = await centerOnLegacyEmbedCanvas(source.buffer); if (!processed) continue; const name = `embed-panel-${index + 1}-large.png`; files.push(new AttachmentBuilder(processed, { name })); embed.setImage(`attachment://${name}`); } catch (error) { console.warn(`[EmbedMedia] panel ${index + 1}: media normalization failed:`, error?.message || error); } }
-  return { embeds: output, files };
-}
-module.exports = { CANVAS_WIDTH, PORTRAIT_WIDTH, PORTRAIT_SHIFT_RIGHT, LEGACY_TARGET_WIDTH, LEGACY_PORTRAIT_VISIBLE_WIDTH, buildEmbedPayload, prepareEmbedMedia, probeRemoteSource, applyMediaAlignmentMap };
+
+async function resolveApplicationEmojiShortcodes(embeds, interaction) { return embeds || []; }
+async function validateApplicationEmojiUsage() { return true; }
+
+module.exports = { buildEmbedPayload, makeCenteredPortrait };
