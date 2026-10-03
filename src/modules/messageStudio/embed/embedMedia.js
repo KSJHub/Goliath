@@ -605,7 +605,12 @@ function installMediaManagerUi(panel) {
     ));
 
     rows.push(new ActionRowBuilder().addComponents(
-      button('embed:media-type:cycle', `🏷️ Type: ${selectedMedia?.type || 'auto'}`, ButtonStyle.Secondary, galleryIndex == null),
+      button(
+        'embed:media-type:cycle',
+        `🏷️ Type: ${{ auto: 'Auto', text: 'Text', gif: 'GIF', image: 'Image' }[String(selectedMedia?.headerType || 'auto').toLowerCase()] || 'Auto'}`,
+        ButtonStyle.Secondary,
+        galleryIndex == null
+      ),
       button('embed:media-spoiler:off', '👁️ Normal', selectedMedia?.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary, galleryIndex == null),
       button('embed:media-spoiler:on', '🙈 Spoiler', selectedMedia?.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
       button('embed:media-duplicate', '📑 Duplicate', ButtonStyle.Success, galleryIndex == null || panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS),
@@ -640,7 +645,7 @@ function installMediaManagerUi(panel) {
         `**Selected media:** ${String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 300)}`,
         `**Placement:** ${selectedMedia.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content'}`,
         `**Alignment:** ${alignmentLabel}`,
-        `**Type:** ${selectedMedia.type || 'auto'}`,
+        `**Type:** ${{ auto: 'Auto', text: 'Text', gif: 'GIF', image: 'Image' }[String(selectedMedia.headerType || 'auto').toLowerCase()] || 'Auto'}`,
         `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`,
       );
     } else {
