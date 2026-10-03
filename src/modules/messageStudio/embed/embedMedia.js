@@ -490,6 +490,164 @@ function rowFromComponents(...components) {
   return safe.length ? new ActionRowBuilder().addComponents(...safe) : null;
 }
 
+function installUploadModals(panel) {
+  if (!panel || panel.__mediaUploadModalsBound) return panel;
+  panel.mediaAddModal = () => new ModalBuilder()
+    .setCustomId('embed:media-add-save')
+    .setTitle('Add Media / File')
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Source URL / Variable')
+        .setDescription('Optional. URL or variable. Images/videos become gallery media; other URLs become attached files.')
+        .setTextInputComponent(
+          labelledTextInput('source', TextInputStyle.Short, '', 2000)
+            .setPlaceholder('https://... or {{variable}}')
+        ),
+      new LabelBuilder()
+        .setLabel('Upload Media / File')
+        .setDescription('Optional. Up to 10 files. Images/videos become gallery media; other files become attachments.')
+        .setFileUploadComponent(
+          new FileUploadBuilder()
+            .setCustomId('media_files')
+            .setMinValues(0)
+            .setMaxValues(10)
+            .setRequired(false)
+        ),
+      new LabelBuilder()
+        .setLabel('Display name / Alt text')
+        .setDescription('Optional. Alt text for gallery media or display filename for an attached file.')
+        .setTextInputComponent(
+          labelledTextInput('display_name', TextInputStyle.Short, '', 256)
+            .setPlaceholder('Optional')
+        ),
+      new LabelBuilder()
+        .setLabel('Description')
+        .setDescription('Optional. Adds descriptive information when supported.')
+        .setTextInputComponent(
+          labelledTextInput('description', TextInputStyle.Paragraph, '', 1024)
+            .setPlaceholder('Optional')
+        ),
+    );
+  panel.galleryItemModal = (state, index = null) => {
+    const media = getPanelMedia(state);
+    const item = Number.isInteger(index) ? (media.gallery[index] || {}) : {};
+    const customId = Number.isInteger(index) ? `embed:media-gallery-save:${index}` : 'embed:media-gallery-save-new';
+    return new ModalBuilder().setCustomId(customId).setTitle(Number.isInteger(index) ? 'Edit Gallery Media' : 'Add Gallery Media').addComponents(
+      new ActionRowBuilder().addComponents(textInput('source', 'Media URL / variable', TextInputStyle.Short, item.source || '')),
+      new ActionRowBuilder().addComponents(textInput('alt', 'Alt text / description', TextInputStyle.Paragraph, item.alt || '', 1024)),
+    );
+  };
+  panel.fileItemModal = (state, index = null) => {
+    const media = getPanelMedia(state);
+    const item = Number.isInteger(index) ? (media.files[index] || {}) : {};
+    const customId = Number.isInteger(index) ? `embed:media-file-save:${index}` : 'embed:media-file-save-new';
+    return new ModalBuilder().setCustomId(customId).setTitle(Number.isInteger(index) ? 'Edit Attached File' : 'Add Attached File').addComponents(
+      new ActionRowBuilder().addComponents(textInput('source', 'File URL / variable', TextInputStyle.Short, item.source || '')),
+      new ActionRowBuilder().addComponents(textInput('name', 'Display filename', TextInputStyle.Short, item.name || '', 256)),
+      new ActionRowBuilder().addComponents(textInput('description', 'File description', TextInputStyle.Paragraph, item.description || '', 1024)),
+    );
+  };
+
+  panel.__mediaUploadModalsBound = true;
+  return panel;
+}
+
+function installMediaOptionsUi(panel) {
+  if (!panel || panel.__mediaOptionsUiBound) return panel;
+  panel.buildMediaOptionsPanel = (interaction) => {
+    const state = panel.getSession(interaction);
+    const media = getPanelMedia(state);
+    const index = media.gallery.length ? Math.max(0, Math.min(Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : 0, media.gallery.length - 1)) : null;
+    const item = index == null ? null : media.gallery[index];
+    if (!item) return panel.buildMediaManagerPanel(interaction, panel.memberName(interaction));
+    const type = ['auto', 'image', 'video'].includes(item.type) ? item.type : 'auto';
+    const placement = item.placement === 'above' ? 'above' : 'below';
+    return {
+      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ Media Options').setDescription([
+        `**Gallery item:** ${index + 1} / ${media.gallery.length}`,
+        `**Type handling:** ${type === 'auto' ? 'Auto detect' : type === 'image' ? 'Image' : 'Video'}`,
+        `**Placement:** ${placement === 'above' ? 'Above Content' : 'Below Content'}`,
+        `**Spoiler:** ${item.spoiler ? 'On' : 'Off'}`,
+        '',
+        'Use placement to position media before or after the panel text. Duplicate Media copies the complete selected item, including its source and current settings.',
+      ].join('\n'))],
+      components: enforceLimits([
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('embed:media-type:auto').setLabel('✨ Auto Detect').setStyle(type === 'auto' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId('embed:media-type:image').setLabel('🖼️ Image').setStyle(type === 'image' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId('embed:media-type:video').setLabel('🎬 Video').setStyle(type === 'video' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        ),
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('embed:media-spoiler:off').setLabel('👁️ Normal').setStyle(item.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('embed:media-spoiler:on').setLabel('🙈 Spoiler').setStyle(item.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        ),
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('embed:media-placement:above').setLabel('⬆️ Above Content').setStyle(placement === 'above' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId('embed:media-placement:below').setLabel('⬇️ Below Content').setStyle(placement === 'below' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        ),
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('embed:media-duplicate').setLabel('📑 Duplicate Media').setStyle(ButtonStyle.Success).setDisabled(media.gallery.length >= MAX_GALLERY_ITEMS),
+        ),
+        new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:media-options-back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)),
+      ]),
+    };
+  };
+  panel.buildFileOptionsPanel = (interaction) => {
+    const state = panel.getSession(interaction);
+    const media = getPanelMedia(state);
+    const index = media.files.length ? Math.max(0, Math.min(Number.isInteger(state.selectedFileIndex) ? state.selectedFileIndex : 0, media.files.length - 1)) : null;
+    const item = index == null ? null : media.files[index];
+    if (!item) return panel.buildMediaManagerPanel(interaction, panel.memberName(interaction));
+    const source = resolveSource(panel, item.source, interaction);
+    return {
+      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ File Options').setDescription([
+        `**File:** ${index + 1} / ${media.files.length}`,
+        `**Name:** ${item.name || 'Automatic filename'}`,
+        `**Spoiler:** ${item.spoiler ? 'On' : 'Off'}`,
+        item.description ? `**Description:** ${String(item.description).slice(0, 900)}` : '**Description:** Not set',
+        '',
+        source ? `[Open selected file](${source})` : 'The source will be resolved when the message is sent.',
+        '',
+        'Use the buttons below to control whether Discord hides the attachment behind a spoiler warning.',
+      ].join('\n').slice(0, 4096))],
+      components: enforceLimits([
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('embed:file-spoiler:off').setLabel('👁️ Normal').setStyle(item.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('embed:file-spoiler:on').setLabel('🙈 Spoiler').setStyle(item.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        ),
+        new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:file-options-back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)),
+      ]),
+    };
+  };
+  panel.__mediaOptionsUiBound = true;
+  return panel;
+}
+
+function mediaManagerButton(id, label, style = ButtonStyle.Secondary, disabled = false) {
+  return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+}
+function mediaManagerSourceLabel(value, fallback = 'Not set') {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  try {
+    const url = new URL(text);
+    const name = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || 'Media');
+    return name.length > 42 ? `${name.slice(0, 39)}...` : name;
+  } catch {
+    return text.length > 42 ? `${text.slice(0, 39)}...` : text;
+  }
+}
+function mediaManagerClone(value, fallback = null) {
+  try { return JSON.parse(JSON.stringify(value ?? fallback)); } catch { return fallback; }
+}
+function validMediaAlignment(value) {
+  const alignment = String(value || '').toLowerCase();
+  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
+}
+function mediaSourceKey(item) {
+  return String(item?.source || '').trim();
+}
+
 function installMediaManagerUi(panel) {
   if (!panel || panel.__mediaManagerUiBound) return panel;
   if (!panel.__panelLocalMediaWritePatched && typeof panel.setPanelMedia === 'function') {
@@ -726,264 +884,6 @@ function installMediaManagerUi(panel) {
       components: enforceLimits(rows),
     };
   };
-
-
-  panel.buildMediaManager = panel.buildMediaManagerPanel;
-  panel.validatePanelMedia = validatePanelMedia;
-  panel.EMBED_COMPONENT_LIMITS = Object.freeze({ maxComponentsPerRow: MAX_COMPONENTS_PER_ROW, maxActionRows: MAX_ACTION_ROWS });
-  panel.__mediaManagerUiBound = true;
-  return panel;
-}
-
-function installMediaOptionsUi(panel) {
-  if (!panel || panel.__mediaOptionsUiBound) return panel;
-  panel.buildMediaOptionsPanel = (interaction) => {
-    const state = panel.getSession(interaction);
-    const media = getPanelMedia(state);
-    const index = media.gallery.length ? Math.max(0, Math.min(Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : 0, media.gallery.length - 1)) : null;
-    const item = index == null ? null : media.gallery[index];
-    if (!item) return panel.buildMediaManagerPanel(interaction, panel.memberName(interaction));
-    const type = ['auto', 'image', 'video'].includes(item.type) ? item.type : 'auto';
-    const placement = item.placement === 'above' ? 'above' : 'below';
-    return {
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ Media Options').setDescription([
-        `**Gallery item:** ${index + 1} / ${media.gallery.length}`,
-        `**Type handling:** ${type === 'auto' ? 'Auto detect' : type === 'image' ? 'Image' : 'Video'}`,
-        `**Placement:** ${placement === 'above' ? 'Above Content' : 'Below Content'}`,
-        `**Spoiler:** ${item.spoiler ? 'On' : 'Off'}`,
-        '',
-        'Use placement to position media before or after the panel text. Duplicate Media copies the complete selected item, including its source and current settings.',
-      ].join('\n'))],
-      components: enforceLimits([
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:media-type:auto').setLabel('✨ Auto Detect').setStyle(type === 'auto' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('embed:media-type:image').setLabel('🖼️ Image').setStyle(type === 'image' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('embed:media-type:video').setLabel('🎬 Video').setStyle(type === 'video' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        ),
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:media-spoiler:off').setLabel('👁️ Normal').setStyle(item.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('embed:media-spoiler:on').setLabel('🙈 Spoiler').setStyle(item.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        ),
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:media-placement:above').setLabel('⬆️ Above Content').setStyle(placement === 'above' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('embed:media-placement:below').setLabel('⬇️ Below Content').setStyle(placement === 'below' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        ),
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:media-duplicate').setLabel('📑 Duplicate Media').setStyle(ButtonStyle.Success).setDisabled(media.gallery.length >= MAX_GALLERY_ITEMS),
-        ),
-        new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:media-options-back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)),
-      ]),
-    };
-  };
-  panel.buildFileOptionsPanel = (interaction) => {
-    const state = panel.getSession(interaction);
-    const media = getPanelMedia(state);
-    const index = media.files.length ? Math.max(0, Math.min(Number.isInteger(state.selectedFileIndex) ? state.selectedFileIndex : 0, media.files.length - 1)) : null;
-    const item = index == null ? null : media.files[index];
-    if (!item) return panel.buildMediaManagerPanel(interaction, panel.memberName(interaction));
-    const source = resolveSource(panel, item.source, interaction);
-    return {
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ File Options').setDescription([
-        `**File:** ${index + 1} / ${media.files.length}`,
-        `**Name:** ${item.name || 'Automatic filename'}`,
-        `**Spoiler:** ${item.spoiler ? 'On' : 'Off'}`,
-        item.description ? `**Description:** ${String(item.description).slice(0, 900)}` : '**Description:** Not set',
-        '',
-        source ? `[Open selected file](${source})` : 'The source will be resolved when the message is sent.',
-        '',
-        'Use the buttons below to control whether Discord hides the attachment behind a spoiler warning.',
-      ].join('\n').slice(0, 4096))],
-      components: enforceLimits([
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:file-spoiler:off').setLabel('👁️ Normal').setStyle(item.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('embed:file-spoiler:on').setLabel('🙈 Spoiler').setStyle(item.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        ),
-        new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:file-options-back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)),
-      ]),
-    };
-  };
-  panel.__mediaOptionsUiBound = true;
-  return panel;
-}
-
-function installUploadModals(panel) {
-  if (!panel || panel.__mediaUploadModalsBound) return panel;
-  panel.mediaAddModal = () => new ModalBuilder()
-    .setCustomId('embed:media-add-save')
-    .setTitle('Add Media / File')
-    .addLabelComponents(
-      new LabelBuilder()
-        .setLabel('Source URL / Variable')
-        .setDescription('Optional. URL or variable. Images/videos become gallery media; other URLs become attached files.')
-        .setTextInputComponent(
-          labelledTextInput('source', TextInputStyle.Short, '', 2000)
-            .setPlaceholder('https://... or {{variable}}')
-        ),
-      new LabelBuilder()
-        .setLabel('Upload Media / File')
-        .setDescription('Optional. Up to 10 files. Images/videos become gallery media; other files become attachments.')
-        .setFileUploadComponent(
-          new FileUploadBuilder()
-            .setCustomId('media_files')
-            .setMinValues(0)
-            .setMaxValues(10)
-            .setRequired(false)
-        ),
-      new LabelBuilder()
-        .setLabel('Display name / Alt text')
-        .setDescription('Optional. Alt text for gallery media or display filename for an attached file.')
-        .setTextInputComponent(
-          labelledTextInput('display_name', TextInputStyle.Short, '', 256)
-            .setPlaceholder('Optional')
-        ),
-      new LabelBuilder()
-        .setLabel('Description')
-        .setDescription('Optional. Adds descriptive information when supported.')
-        .setTextInputComponent(
-          labelledTextInput('description', TextInputStyle.Paragraph, '', 1024)
-            .setPlaceholder('Optional')
-        ),
-    );
-  panel.galleryItemModal = (state, index = null) => {
-    const media = getPanelMedia(state);
-    const item = Number.isInteger(index) ? (media.gallery[index] || {}) : {};
-    const customId = Number.isInteger(index) ? `embed:media-gallery-save:${index}` : 'embed:media-gallery-save-new';
-    return new ModalBuilder().setCustomId(customId).setTitle(Number.isInteger(index) ? 'Edit Gallery Media' : 'Add Gallery Media').addComponents(
-      new ActionRowBuilder().addComponents(textInput('source', 'Media URL / variable', TextInputStyle.Short, item.source || '')),
-      new ActionRowBuilder().addComponents(textInput('alt', 'Alt text / description', TextInputStyle.Paragraph, item.alt || '', 1024)),
-    );
-  };
-  panel.fileItemModal = (state, index = null) => {
-    const media = getPanelMedia(state);
-    const item = Number.isInteger(index) ? (media.files[index] || {}) : {};
-    const customId = Number.isInteger(index) ? `embed:media-file-save:${index}` : 'embed:media-file-save-new';
-    return new ModalBuilder().setCustomId(customId).setTitle(Number.isInteger(index) ? 'Edit Attached File' : 'Add Attached File').addComponents(
-      new ActionRowBuilder().addComponents(textInput('source', 'File URL / variable', TextInputStyle.Short, item.source || '')),
-      new ActionRowBuilder().addComponents(textInput('name', 'Display filename', TextInputStyle.Short, item.name || '', 256)),
-      new ActionRowBuilder().addComponents(textInput('description', 'File description', TextInputStyle.Paragraph, item.description || '', 1024)),
-    );
-  };
-
-
-  panel.buildMediaManagerPanel = (interaction, who = 'Unknown User', stateOverride = null) => {
-    const state = stateOverride && typeof stateOverride === 'object'
-      ? stateOverride
-      : panel.getSession(interaction);
-    const panelMedia = mediaModel.mediaForPanel(state);
-    const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : null;
-    const galleryIndex = panelMedia.gallery.length ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1)) : null;
-    const selectedMedia = galleryIndex == null ? null : panelMedia.gallery[galleryIndex];
-    const aboveCount = panelMedia.gallery.filter((item) => item?.placement === 'above').length;
-    const belowCount = panelMedia.gallery.length - aboveCount;
-    const placementLabel = (item) => item?.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content';
-    const rows = [];
-
-    if (panelMedia.gallery.length) {
-      rows.push(new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('embed:media-gallery-select').setPlaceholder('🎞️ Select media item').addOptions(
-          panelMedia.gallery.slice(0, 25).map((item, index) => ({
-            label: `${index + 1}. ${panel.trim(item.alt || mediaManagerSourceLabel(item.source, 'Media item'), 80)}`,
-            value: String(index),
-            description: panel.trim(`${item.type || 'auto'} • ${item.placement === 'above' ? 'Above Content' : 'Below Content'} • ${validMediaAlignment(item.alignment) === 'center' ? 'Centre' : (validMediaAlignment(item.alignment) || 'left').replace(/^./, (c) => c.toUpperCase())}${item.spoiler ? ' • spoiler' : ''}`, 100),
-            default: galleryIndex === index,
-          }))
-        )
-      ));
-    }
-
-    rows.push(new ActionRowBuilder().addComponents(
-      mediaManagerButton('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= mediaModel.MAX_FILES),
-      mediaManagerButton('embed:media-options', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
-      mediaManagerButton('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
-      mediaManagerButton('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
-      mediaManagerButton('embed:media-gallery-down', '⬇️ Down', ButtonStyle.Secondary, galleryIndex == null || galleryIndex >= panelMedia.gallery.length - 1)
-    ));
-
-    rows.push(new ActionRowBuilder().addComponents(
-      mediaManagerButton('embed:media-placement:above', '⬆️ Above Content', selectedMedia?.placement === 'above' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
-      mediaManagerButton('embed:media-placement:below', '⬇️ Below Content', selectedMedia?.placement === 'below' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
-      mediaManagerButton('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary)
-    ));
-
-    const canonicalAlignment = validMediaAlignment(selectedMedia?.alignment);
-    const alignmentMap = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
-    const alignmentKey = galleryIndex == null ? null : `${Math.max(0, Number(state.selectedPanelIndex) || 0)}:${galleryIndex}`;
-    const selectedAlignment = canonicalAlignment || validMediaAlignment(alignmentMap[alignmentKey]) || 'left';
-    const alignmentLabel = selectedAlignment === 'center' ? '↔️ Centre' : selectedAlignment === 'right' ? '➡️ Right' : '⬅️ Left';
-
-    rows.push(new ActionRowBuilder().addComponents(
-      mediaManagerButton('embed:media-align:left', '⬅️ Left', selectedAlignment === 'left' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
-      mediaManagerButton('embed:media-align:center', '↔️ Centre', selectedAlignment === 'center' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
-      mediaManagerButton('embed:media-align:right', '➡️ Right', selectedAlignment === 'right' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null)
-    ));
-
-    rows.push(new ActionRowBuilder().addComponents(
-      mediaManagerButton('embed:builder', '⬅️ Back'),
-      mediaManagerButton('embed:settings', '⚙️ Settings'),
-      mediaManagerButton('embed:helpers', '📖 Variables')
-    ));
-
-    const summary = [
-      `Editing panel **${state.selectedPanelIndex + 1}/${state.panels.length}**`, '',
-      `⬆️ **Above Content** — ${aboveCount}`,
-      `⬇️ **Below Content** — ${belowCount}`,
-      `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'}`,
-      `📎 **Files** — ${panelMedia.files.length}/${mediaModel.MAX_FILES}`, '',
-      'Images, animated GIFs and supported videos can be placed independently above or below the panel content.',
-    ];
-
-    if (selectedMedia) {
-      summary.push('',
-        `**Selected media:** ${mediaManagerSourceLabel(selectedMedia.alt || selectedMedia.source, `Item ${galleryIndex + 1}`)}`,
-        `**Placement:** ${placementLabel(selectedMedia)}`,
-        `**Alignment:** ${alignmentLabel}`,
-        `**Type:** ${selectedMedia.type || 'auto'}`,
-        `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`
-      );
-    } else if (!panelMedia.thumbnail?.source && !panelMedia.gallery.length && !panelMedia.files.length) {
-      summary.push('', 'No media configured for this panel. Media on other panels is unaffected.');
-    }
-
-    const validation = validationSummary(interaction);
-    summary.push('', validation);
-    const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)];
-    const preview = visualPreview(interaction);
-    const selectedFile = filePreview(interaction);
-    if (preview && embeds.length < 10) embeds.push(preview);
-    if (selectedFile && embeds.length < 10) embeds.push(selectedFile);
-    return {
-      embeds,
-      components: enforceLimits(rows),
-    };
-  };
-
-
-
-
-function mediaManagerButton(id, label, style = ButtonStyle.Secondary, disabled = false) {
-  return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
-}
-function mediaManagerSourceLabel(value, fallback = 'Not set') {
-  const text = String(value || '').trim();
-  if (!text) return fallback;
-  try {
-    const url = new URL(text);
-    const name = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || 'Media');
-    return name.length > 42 ? `${name.slice(0, 39)}...` : name;
-  } catch {
-    return text.length > 42 ? `${text.slice(0, 39)}...` : text;
-  }
-}
-function mediaManagerClone(value, fallback = null) {
-  try { return JSON.parse(JSON.stringify(value ?? fallback)); } catch { return fallback; }
-}
-function validMediaAlignment(value) {
-  const alignment = String(value || '').toLowerCase();
-  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
-}
-function mediaSourceKey(item) {
-  return String(item?.source || '').trim();
-}
 
 
   panel.buildMediaManager = panel.buildMediaManagerPanel;
