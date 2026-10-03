@@ -144,9 +144,9 @@ function assertOwnerCommandRestrictedGuild(ownerCommand) {
     );
   }
 
-  if (String(ownerCommand.default_member_permissions) !== '8') {
+  if (String(ownerCommand.default_member_permissions || '0') !== '0') {
     throw new Error(
-      'Refusing to sync /owner unless default_member_permissions is Administrator (8).'
+      'Refusing to sync /owner unless default_member_permissions is 0; OWNER_IDS is the authoritative access gate.'
     );
   }
 
