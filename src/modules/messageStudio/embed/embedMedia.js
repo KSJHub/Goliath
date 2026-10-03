@@ -637,6 +637,24 @@ function installMediaManagerUi(panel) {
       `⬆️ **Above Content** — ${aboveCount} • ⬇️ **Below Content** — ${belowCount}`,
       `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'} • 📎 **Files** — ${panelMedia.files.length}/${mediaModel.MAX_FILES}`,
       '',
+    ];
+
+    if (selectedMedia) {
+      summary.push(
+        '**Selected Media**',
+        `🔗 **File:** ${String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 300)}`,
+        `📍 **Placement:** ${selectedMedia.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content'}`,
+        `↔️ **Alignment:** ${alignmentLabel}`,
+        `🏷️ **Type:** ${{ auto: 'Auto', text: 'Text', gif: 'GIF', image: 'Image' }[String(selectedMedia.headerType || 'auto').toLowerCase()] || 'Auto'}`,
+        `👁️ **Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`,
+        '',
+      );
+    } else {
+      summary.push('**Selected Media**', 'None selected — use ➕ Add Media / File or select an existing item.', '');
+    }
+
+    summary.push(
+      '**Controls**',
       '**➕ Add Media / File** — Add an image, GIF, video or file to this panel.',
       '**✏️ Edit** — Edit the selected media item.',
       '**⬆️ Up** — Move the selected media item up.',
@@ -652,9 +670,7 @@ function installMediaManagerUi(panel) {
       '**⬅️ Back** — Return to the Embed Builder.',
       '**⚙️ Settings** — Manage preset import/export.',
       '**📖 Variables** — View available Embed Studio variables.',
-      '',
-      `**Selected:** ${selectedMedia ? String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 300) : 'None — add or select media above.'}`,
-    ];
+    );
 
     const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\\n'), state, who)];
 
