@@ -20,6 +20,14 @@ const { getRuntimePaths } = require('../../../config/runtimePaths');
 const { validatePanelMedia, statusIcon } = require('./embedValidation');
 
 const MEDIA_SCHEMA_VERSION = 2;
+const DEFAULT_GALLERY_ITEM = Object.freeze({
+  type: 'auto',
+  headerType: 'auto',
+  spoiler: false,
+  placement: 'above',
+  alignment: 'left',
+  size: 'small',
+});
 const MAX_GALLERY_ITEMS = 10;
 const MAX_FILES = 10;
 const MAX_COMPONENTS_PER_ROW = 5;
@@ -171,28 +179,22 @@ function normalizeThumbnail(value = {}, legacySource = '') {
 }
 function normalizeGalleryItem(value = {}) {
   const source = typeof value === 'string' ? value : value?.source || value?.url || value?.attachment || '';
-  const placement = String(value?.placement || '').toLowerCase() === 'above' ? 'above' : 'above';
-  const alignment = ['left', 'center', 'right'].includes(String(value?.alignment || '').toLowerCase())
-    ? String(value.alignment).toLowerCase()
-    : 'left';
-  const size = ['small', 'medium', 'large'].includes(String(value?.size || '').toLowerCase())
-    ? String(value.size).toLowerCase()
-    : 'small';
+  const rawType = String(value?.type || '').toLowerCase();
+  const rawHeaderType = String(value?.headerType || '').toLowerCase();
+  const rawPlacement = String(value?.placement || '').toLowerCase();
+  const rawAlignment = String(value?.alignment || '').toLowerCase();
+  const rawSize = String(value?.size || '').toLowerCase();
   return {
     source: cleanSource(source),
     alt: cleanString(value?.alt || value?.description || '', 1024),
-    spoiler: value?.spoiler === true,
+    spoiler: value?.spoiler === true || DEFAULT_GALLERY_ITEM.spoiler,
     // Media Type is always auto by default. Legacy "text" media values are
     // retired; text is a header mode, not a gallery media type.
-    type: ['auto', 'image', 'video'].includes(String(value?.type || '').toLowerCase())
-      ? String(value.type).toLowerCase()
-      : 'auto',
-    headerType: ['auto', 'text', 'gif', 'image'].includes(String(value?.headerType || '').toLowerCase())
-      ? String(value.headerType).toLowerCase()
-      : 'auto',
-    placement,
-    alignment,
-    size,
+    type: ['auto', 'image', 'video'].includes(rawType) ? rawType : DEFAULT_GALLERY_ITEM.type,
+    headerType: ['auto', 'text', 'gif', 'image'].includes(rawHeaderType) ? rawHeaderType : DEFAULT_GALLERY_ITEM.headerType,
+    placement: rawPlacement === 'above' || rawPlacement === 'below' ? rawPlacement : DEFAULT_GALLERY_ITEM.placement,
+    alignment: ['left', 'center', 'right'].includes(rawAlignment) ? rawAlignment : DEFAULT_GALLERY_ITEM.alignment,
+    size: ['small', 'medium', 'large'].includes(rawSize) ? rawSize : DEFAULT_GALLERY_ITEM.size,
   };
 }
 function normalizeFile(value = {}) {
@@ -319,6 +321,7 @@ function movePanelMedia(state = {}, from, to) {
 
 const mediaModel = Object.freeze({
   MEDIA_SCHEMA_VERSION,
+  DEFAULT_GALLERY_ITEM,
   MAX_GALLERY_ITEMS,
   MAX_FILES,
   normalizeThumbnail,
