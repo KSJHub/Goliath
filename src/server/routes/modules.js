@@ -18,6 +18,7 @@ const autoRoleManager = autoRoleStore;
 const verificationStore = require('../../modules/securityStudio/verificationStore');
 const verificationManager = require('../../modules/securityStudio/verificationManager');
 const embedTemplateManager = require('../../modules/messageStudio/embed/embedTemplates');
+const embedRuntime = require('../../modules/messageStudio/embed/embed');
 const {
   getAllEmbedDeployments,
   deleteEmbedDeployment,
@@ -67,7 +68,7 @@ const MODULE_CATALOG = Object.freeze({
   embedStudio: {
     key: 'embedStudio', name: 'Embed Studio', icon: '\uD83D\uDDBC\uFE0F', category: 'Utilities',
     summary: 'Create, save and deploy reusable embed templates.',
-    apiBase: '/api/modules/:guildId/embed-studio', dashboardPath: '/modules/embed-studio', maturity: 'in_progress', configurable: true,
+    apiBase: '/api/modules/:guildId/embed-studio', dashboardPath: '/modules/embed-studio', maturity: 'complete', configurable: true,
   },
 });
 
@@ -173,6 +174,8 @@ router.get('/:guildId/verification', (req, res) => { try { const guildId = getGu
 router.patch('/:guildId/verification/settings', async (req, res) => { try { const guildId = getGuildId(req); await guardVerificationRoles(req, guildId, req.body || {}); const settings = req.body?.settings || req.body || {}; const config = verificationManager.updateVerificationSettings(guildId, settings, { actorId: req.moduleActorId }); return success(res, { guildId, config, ...getVerificationPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
 
 router.get('/:guildId/embed-studio', (req, res) => { try { const guildId = getGuildId(req); return success(res, getEmbedStudioPayload(guildId)); } catch (error) { return failure(res, error, 400); } });
+router.get('/:guildId/embed-studio/health', async (req, res) => { try { const guildId = getGuildId(req); const guild = await fetchGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); return success(res, { guildId, health: await embedRuntime.buildHealthReport(guild) }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/embed-studio/repair', async (req, res) => { try { const guildId = getGuildId(req); const guild = await fetchGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); return success(res, { guildId, health: await embedRuntime.repairAll(guild, req.moduleActorId || null), repaired: true }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/embed-studio/draft', (req, res) => { try { const guildId = getGuildId(req); const draft = saveEmbedBuilderDraft(guildId, req.body?.embed ? { ...req.body.embed, content: req.body.content || '' } : req.body || {}); return success(res, { guildId, draft, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/embed-studio/presets', requirePlanLimit('embedPresets', countEmbedPresetsForLimit), (req, res) => {
   try {
