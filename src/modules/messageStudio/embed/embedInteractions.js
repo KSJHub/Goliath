@@ -2003,4 +2003,4 @@ async function handleInteraction(interaction) {
   return handleBuilderInteractions(interaction);
 }
 
-module.exports = { handleInteraction, handleButtonAction };
+module.exports = { handleInteraction, handleButtonAction, graphicHeaderIndex, normalizeGraphicHeaderPlacements };
