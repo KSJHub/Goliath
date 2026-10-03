@@ -60,10 +60,25 @@ async function scan(interaction) {
   // A full guild scan can require Discord API fetches before the detector runs.
   // Acknowledge the button immediately so the interaction cannot expire while
   // the read-only scan is collecting the current role/channel state.
+  // Acknowledge immediately and give the user visible feedback before any
+  // Discord cache/API work begins.
   if (!interaction.replied && !interaction.deferred) await interaction.deferUpdate();
+  await interaction.editReply({
+    embeds: [new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle('🔎 Full Permission Audit')
+      .setDescription('⏳ Scanning the current server roles, channels and permission overwrites…')],
+    components: [],
+  });
 
-  await guild.roles.fetch().catch(() => null);
-  await guild.channels.fetch().catch(() => null);
+  // Refresh what Discord can provide, but never let a slow fetch block the
+  // interaction indefinitely. The detector can safely operate on the cache.
+  const refresh = (promise, timeoutMs = 5000) => Promise.race([
+    promise.catch(() => null),
+    new Promise(resolve => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
+  await refresh(guild.roles.fetch());
+  await refresh(guild.channels.fetch());
 
   const report = detector.scanGuild(guild);
   await interaction.editReply(payload(guild, report));
