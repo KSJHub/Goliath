@@ -552,6 +552,11 @@ function installUploadModals(panel) {
   return panel;
 }
 
+function validMediaAlignment(value) {
+  const alignment = String(value || '').toLowerCase();
+  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
+}
+
 function installMediaManagerUi(panel) {
   if (!panel || panel.__mediaManagerUiBound) return panel;
 
