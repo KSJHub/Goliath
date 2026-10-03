@@ -35,7 +35,10 @@ function payload(guild, report) {
     const options = report.findings.slice(0, 25).map((f, i) => ({
       label: `${i + 1}. ${f.title}`.slice(0, 100),
       description: `${f.severity.toUpperCase()} • ${f.code}`.slice(0, 100),
-      value: `${f.targetKind}:${f.targetId}`,
+      // Findings can share the same target (for example, one channel can have
+      // both a broken-inheritance and member-override finding). Discord select
+      // option values must still be unique, so include the finding index.
+      value: `${f.targetKind}:${f.targetId}:${i}`,
       emoji: severityEmoji(f.severity),
     }));
     components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(cid('open', guild.id)).setPlaceholder('Inspect a finding…').addOptions(options)));
