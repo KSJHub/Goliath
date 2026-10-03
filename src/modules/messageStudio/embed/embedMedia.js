@@ -552,7 +552,7 @@ function installUploadModals(panel) {
   return panel;
 }
 
-function installMediaOptionsUi(panel) {
+function installMediaManagerUi(panel) {
   if (!panel || panel.__mediaOptionsUiBound) return panel;
   panel.buildMediaManager = panel.buildMediaManagerPanel;
   panel.validatePanelMedia = validatePanelMedia;
@@ -607,7 +607,6 @@ module.exports = {
   installStateCompatibility,
   installPersistentMediaCompatibility,
   installUploadModals,
-  installMediaOptionsUi,
   installMediaManagerUi,
   installThumbnailUi,
   MAX_ASSET_BYTES,
