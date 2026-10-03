@@ -553,7 +553,7 @@ function installUploadModals(panel) {
 }
 
 function installMediaManagerUi(panel) {
-  if (!panel || panel.__mediaOptionsUiBound) return panel;
+  if (!panel || panel.__mediaManagerUiBound) return panel;
   panel.buildMediaManager = panel.buildMediaManagerPanel;
   panel.validatePanelMedia = validatePanelMedia;
   panel.EMBED_COMPONENT_LIMITS = Object.freeze({ maxComponentsPerRow: MAX_COMPONENTS_PER_ROW, maxActionRows: MAX_ACTION_ROWS });
