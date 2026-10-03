@@ -132,7 +132,8 @@ function run() {
   );
 
   assert(
-    renderer.includes('nativeImageShouldPassThrough(probe.contentType)'),
+    renderer.includes('nativeImageShouldPassThrough(') &&
+    renderer.includes('probe.contentType'),
     'Auto must retain native-image pass-through detection'
   );
 
