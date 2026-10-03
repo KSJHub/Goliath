@@ -634,32 +634,18 @@ function installMediaManagerUi(panel) {
     const summary = [
       `Editing panel **${(Number(state.selectedPanelIndex) || 0) + 1}/${Math.max(1, Array.isArray(state.panels) ? state.panels.length : 1)}**`,
       '',
-      `⬆️ **Above Content** — ${aboveCount}`,
-      `⬇️ **Below Content** — ${belowCount}`,
-      `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'}`,
-      `📎 **Files** — ${panelMedia.files.length}/${mediaModel.MAX_FILES}`,
+      `⬆️ **Above Content** — ${aboveCount} • ⬇️ **Below Content** — ${belowCount}`,
+      `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'} • 📎 **Files** — ${panelMedia.files.length}/${mediaModel.MAX_FILES}`,
       '',
-      'Images, animated GIFs and supported videos can be placed independently above or below the panel content.',
+      '**Media** — Add images, GIFs or supported videos and place them above or below the panel content.',
+      '**↔️ Alignments** — Set placement, left/centre/right alignment and Small/Medium/Large size.',
+      '**🏷️ Type** — Auto detects the header; Text, GIF or Image lets you choose it manually.',
+      '**👁️ Normal / 🙈 Spoiler** — Choose whether the selected media is shown normally or hidden behind Discord’s spoiler treatment.',
+      '**📑 Duplicate** — Copies the selected media item with its current settings.',
+      '**🖼️ Thumbnail** — Add or manage the panel thumbnail.',
+      '',
+      `**Selected:** ${selectedMedia ? String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 300) : 'None — add or select media above.'}`,
     ];
-
-    if (selectedMedia) {
-      summary.push(
-        '',
-        `**Selected media:** ${String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 300)}`,
-        `**Placement:** ${selectedMedia.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content'}`,
-        `**Alignment:** ${alignmentLabel}`,
-        `**Type:** ${{ auto: 'Auto', text: 'Text', gif: 'GIF', image: 'Image' }[String(selectedMedia.headerType || 'auto').toLowerCase()] || 'Auto'}`,
-        `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`,
-        '',
-        '**Header Type**',
-        '**Auto** — Automatically detects the appropriate header type.',
-        '**Text** — Uses the panel title as the header.',
-        '**GIF** — Forces an animated graphic header.',
-        '**Image** — Forces a static graphic header.',
-      );
-    } else {
-      summary.push('', 'No media selected. Add media or select an existing gallery item.');
-    }
 
     const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\\n'), state, who)];
 
