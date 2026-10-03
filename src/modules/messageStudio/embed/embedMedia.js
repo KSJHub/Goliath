@@ -187,7 +187,7 @@ function normalizeGalleryItem(value = {}) {
   return {
     source: cleanSource(source),
     alt: cleanString(value?.alt || value?.description || '', 1024),
-    spoiler: value?.spoiler === true || DEFAULT_GALLERY_ITEM.spoiler,
+    spoiler: value?.spoiler === true,
     // Media Type is always auto by default. Legacy "text" media values are
     // retired; text is a header mode, not a gallery media type.
     type: ['auto', 'image', 'video'].includes(rawType) ? rawType : DEFAULT_GALLERY_ITEM.type,
