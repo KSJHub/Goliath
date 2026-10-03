@@ -577,7 +577,7 @@ function installUploadModals(panel) {
 
     rows.push(new ActionRowBuilder().addComponents(
       mediaManagerButton('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= mediaModel.MAX_FILES),
-      mediaManagerButton('embed:media-gallery-edit', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
+      mediaManagerButton('embed:media-options', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
       mediaManagerButton('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
       mediaManagerButton('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
       mediaManagerButton('embed:media-gallery-down', '⬇️ Down', ButtonStyle.Secondary, galleryIndex == null || galleryIndex >= panelMedia.gallery.length - 1)
