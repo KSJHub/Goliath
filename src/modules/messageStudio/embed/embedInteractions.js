@@ -30,7 +30,7 @@ const {
   getEmbedDeployment,
   getDeploymentKeyFromState,
 } = require('./embedDeployments');
-const { buildEmbedPayload, prepareEmbedMedia } = require('./embedRenderer');
+const { buildEmbedPayload } = require('./embedRenderer');
 
 const DANGEROUS_ROLE_PERMISSIONS = [
   PermissionsBitField.Flags.Administrator,
@@ -152,6 +152,32 @@ async function cacheUploadedAttachment(attachment) {
   try { await media.ensureAssetCached('global', attachment.url); }
   catch (error) { console.warn('[Embed Media] upload persistence failed:', attachment?.name || attachment?.url, error?.message || error); }
 }
+function validMediaAlignment(value) {
+  const alignment = String(value || '').toLowerCase();
+  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
+}
+function selectedMediaContext(state, panelMedia) {
+  const gallery = Array.isArray(panelMedia?.gallery) ? panelMedia.gallery : [];
+  if (!gallery.length) return null;
+  const raw = state?.selectedMediaIndex;
+  const index = raw == null || raw === '' || !Number.isInteger(Number(raw)) ? 0 : Number(raw);
+  const selectedIndex = index >= 0 && index < gallery.length ? index : 0;
+  return { index: selectedIndex, item: gallery[selectedIndex] };
+}
+function graphicHeaderIndex(panelMedia) {
+  const gallery = Array.isArray(panelMedia?.gallery) ? panelMedia.gallery : [];
+  const index = gallery.findIndex((item) => String(item?.placement || '').toLowerCase() === 'above');
+  return index >= 0 ? index : null;
+}
+function graphicHeaderMode(state, panelMedia) {
+  if (graphicHeaderIndex(panelMedia) == null) return 'text';
+  const panelData = Array.isArray(state?.panels) ? state.panels[Math.max(0, Number(state?.selectedPanelIndex) || 0)] || {} : {};
+  return String(panelData.title || '').trim() ? 'both' : 'graphic';
+}
+function normalizeGraphicHeaderPlacements(gallery, headerIndex = null) {
+  return (Array.isArray(gallery) ? gallery : []).map((item, index) => ({ ...item, placement: headerIndex != null && index === headerIndex ? 'above' : 'below' }));
+}
+
 async function buildPayload(state, interaction, ephemeral = false) {
   return buildEmbedPayload({
     embeds: panel.buildPreviewEmbeds(state, interaction),
@@ -697,8 +723,7 @@ async function handlePresetInteraction(i) {
     }
 
     if (name.startsWith('auto-')) {
-      await i.reply({
-        content: 'Preset names beginning with "auto-" are reserved by Goliath.',
+      await i.reply({        content: 'Preset names beginning with "auto-" are reserved by Goliath.',
         flags: 64,
       });
       return true;
@@ -1275,29 +1300,48 @@ async function handleCoreInteraction(i) {
     if (customId.startsWith('embed:media-type:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const type = customId.split(':').pop(); if (!['auto', 'image', 'video'].includes(type)) return true; const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], type }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaOptions(i); }
     if (customId.startsWith('embed:media-spoiler:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], spoiler: customId.endsWith(':on') }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaOptions(i); }
     if (customId.startsWith('embed:media-placement:')) {
-      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) {
-        return updateMediaPanel(i);
-      }
-
+      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i);
       const placement = customId.split(':').pop();
       if (!['above', 'below'].includes(placement)) return true;
-
-      const gallery = [...panelMedia.gallery];
-
-      gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({
-        ...gallery[galleryIndex],
-        placement,
-      });
-
-      saveMediaState(
-        i,
-        state,
-        { ...panelMedia, gallery },
-        { selectedMediaIndex: galleryIndex }
-      );
-
-      return updateMediaPanel(i);
+      const panelIndex = Math.max(0, Number(state.selectedPanelIndex) || 0);
+      const panelData = Array.isArray(state.panels) ? state.panels[panelIndex] || {} : {};
+      const gallery = panelMedia.gallery.map((item, index) => index === galleryIndex
+        ? panel.mediaModel.normalizeGalleryItem({ ...item, placement })
+        : { ...item });
+      let next = panel.setPanelMedia(state, panelIndex, { ...panelMedia, gallery });
+      const panels = Array.isArray(next?.panels) ? next.panels.map((entry) => ({ ...entry })) : [];
+      if (panels[panelIndex]) {
+        const nextPanel = panels[panelIndex];
+        nextPanel.image = gallery[0]?.source || '';
+        if (placement === 'below' && !gallery.some((item) => item?.placement === 'above')) {
+          if (!String(nextPanel.title || '').trim() && String(nextPanel.graphicHeaderTitle || '').trim()) nextPanel.title = String(nextPanel.graphicHeaderTitle);
+          nextPanel.graphicHeaderTitle = '';
+        }
+      }
+      panel.saveSession(i, { ...next, panels, selectedPanelIndex: panelIndex, selectedMediaIndex: galleryIndex, hasUnsavedChanges: true });
+      const committed = panel.getSession(i);
+      const committedMedia = panel.getPanelMedia(committed, panelIndex);
+      const committedItem = committedMedia?.gallery?.[galleryIndex];
+      if (committedItem && committedItem.placement !== placement) {
+        const repairedGallery = committedMedia.gallery.map((item, index) => index === galleryIndex
+          ? panel.mediaModel.normalizeGalleryItem({ ...item, placement })
+          : { ...item });
+        panel.saveSession(i, { ...panel.setPanelMedia(committed, panelIndex, { ...committedMedia, gallery: repairedGallery }), selectedPanelIndex: panelIndex, selectedMediaIndex: galleryIndex, hasUnsavedChanges: true });
+      }
+      await i.update(panel.buildMediaManagerPanel(i, panel.memberName(i), panel.getSession(i)));
+      return true;
     }
+    if (customId.startsWith('embed:media-align:')) {
+      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i);
+      const alignment = validMediaAlignment(customId.split(':').pop());
+      if (!alignment) return true;
+      saveMediaState(i, state, { ...panelMedia, gallery: panelMedia.gallery.map((item, index) =>
+        index === galleryIndex ? panel.mediaModel.normalizeGalleryItem({ ...item, alignment }) : { ...item }
+      ) }, { selectedMediaIndex: galleryIndex });
+      await i.update(panel.buildMediaManagerPanel(i, panel.memberName(i), panel.getSession(i)));
+      return true;
+    }
+
     if (customId === 'embed:media-duplicate') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); if (panelMedia.gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_GALLERY_ITEMS} gallery items reached.`, flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; const duplicate = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex] }); gallery.splice(galleryIndex + 1, 0, duplicate); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex + 1 }); return updateMediaOptions(i); }
     if (customId === 'embed:file-options') { if (fileIndex == null || !panelMedia.files[fileIndex]) { await i.reply({ content: 'Select an attached file first.', flags: 64 }); return true; } return updateFileOptions(i); }
     if (customId === 'embed:file-options-back') return updateMediaPanel(i);
@@ -1398,7 +1442,6 @@ async function handleCoreInteraction(i) {
 
     for (const attachment of attachments) {
       await cacheUploadedAttachment(attachment);
-
       const kind = uploadType(attachment);
 
       if (
@@ -1471,6 +1514,37 @@ async function handleCoreInteraction(i) {
   }
 
   if (i.isModalSubmit?.() && customId.startsWith('embed:media-thumbnail-save:')) { const panelMedia = panel.getPanelMedia(state); panelMedia.thumbnail = panel.mediaModel.normalizeThumbnail({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt') }); saveMediaState(i, state, panelMedia); return replyMediaPanel(i); }
+  if (customId === 'embed:graphic-header-cycle') {
+    const currentState = panel.getSession(i);
+    const panelIndex = Math.max(0, Number(currentState?.selectedPanelIndex) || 0);
+    const panelData = Array.isArray(currentState?.panels) ? currentState.panels[panelIndex] || {} : {};
+    const panelMedia = panel.getPanelMedia(currentState, panelIndex);
+    const selected = selectedMediaContext(currentState, panelMedia);
+    if (!selected) {
+      await i.update(panel.buildMediaManagerPanel(i, panel.memberName(i), currentState));
+      return true;
+    }
+    const currentMode = graphicHeaderMode(currentState, panelMedia);
+    const activeIndex = graphicHeaderIndex(panelMedia);
+    let gallery = panelMedia.gallery.map((item) => ({ ...item }));
+    let patch = {};
+    if (currentMode === 'text') {
+      gallery = normalizeGraphicHeaderPlacements(gallery, selected.index);
+      patch = { graphicHeaderTitle: String(panelData.title || panelData.graphicHeaderTitle || ''), title: '' };
+    } else if (currentMode === 'graphic') {
+      if (activeIndex !== selected.index) gallery = normalizeGraphicHeaderPlacements(gallery, selected.index);
+      patch = { title: String(panelData.graphicHeaderTitle || ''), graphicHeaderTitle: String(panelData.graphicHeaderTitle || '') };
+    } else {
+      gallery = normalizeGraphicHeaderPlacements(gallery, null);
+      patch = { title: String(panelData.title || panelData.graphicHeaderTitle || ''), graphicHeaderTitle: String(panelData.graphicHeaderTitle || panelData.title || '') };
+    }
+    let next = panel.saveSelected(currentState, patch);
+    next = panel.setPanelMedia(next, panelIndex, { ...panelMedia, gallery });
+    panel.saveSession(i, { ...next, selectedPanelIndex: panelIndex, selectedMediaIndex: selected.index, hasUnsavedChanges: true });
+    await i.update(panel.buildEditMediaPanel(i));
+    return true;
+  }
+
   if (customId.startsWith('embed:media-size:')) {
     const requestedSize = customId.split(':').pop();
     const validSizes = new Set(['small', 'medium', 'large']);
@@ -1881,9 +1955,7 @@ async function handleLegacyInteraction(i) {
       if (!isTextBasedChannel(channel)) { await i.reply({ content: '⚠️ The original embed channel no longer exists or is not text-based.', flags: 64 }); return true; }
       const access = await validateChannelAccess(i.guild, channel.id, [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks], { scope: 'embed.update' });
       if (!access.ok) { await i.reply({ content: panel.trim(access.message, 1800), flags: 64 }); return true; }
-      try { const rendered = await prepareEmbedMedia(panel.buildPreviewEmbeds(state, i)); const message = await channel.messages.fetch(deployment.messageId); await message.edit({ content: state.allowUserPing ? `<@${i.user.id}>` : '', embeds: rendered.embeds, files: rendered.files, components: panel.buttonRows(state), allowedMentions: panel.allowedMentions(state, i) }); await i.reply({ content: '✅ Existing embed updated.', flags: 64 }); }
-      catch (error) { console.error('Failed to update legacy embed:', error); const detail = error?.code ? panel.embedOperationError(error, channel.id, 'update') : `❌ The embed could not be built: ${panel.discordErrorDetail(error)}`; await i.reply({ content: detail, flags: 64 }); }
-      return true;
+      return handleLegacyInteraction(i);
     }
   }
 
@@ -1920,9 +1992,6 @@ async function routeReadinessFix(interaction) {
 
 async function handleInteraction(interaction) {
   const customId = String(interaction.customId || '');
-
-  if (customId.startsWith('embed:preset-')) {
-  }
 
   if (await handlePresetInteraction(interaction)) return true;
   if (interaction.isStringSelectMenu?.() && customId === 'embed:builder-panel-select') { const state = panel.getSession(interaction); const index = Math.max(0, Math.min(Number(interaction.values?.[0]) || 0, Math.max(0, (state.panels?.length || 1) - 1))); panel.saveSession(interaction, { ...state, selectedPanelIndex: index, selectedFieldIndex: null }); await interaction.update(panel.buildBuilderPanel(interaction, panel.memberName(interaction))); return true; }
