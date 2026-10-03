@@ -136,7 +136,6 @@ async function updateAppearance(i) { await i.update(panel.buildAppearancePanel(i
 async function updateIcon(i, kind) { await i.update(panel.buildAppearanceIconPanel(i, kind)); return true; }
 async function updateThumbnailPanel(i) { await i.update(panel.buildThumbnailOptionsPanel(i)); return true; }
 async function updateMediaPanel(i) { await i.update(panel.buildMediaManagerPanel(i, who(i))); return true; }
-async function updateMediaOptions(i) { await i.update(panel.buildMediaOptionsPanel(i)); return true; }
 async function updateFileOptions(i) { await i.update(panel.buildFileOptionsPanel(i)); return true; }
 async function replyMediaPanel(i) { await i.reply({ ...panel.buildMediaManagerPanel(i, who(i)), flags: 64 }); return true; }
 function validKind(kind) { return kind === 'author' || kind === 'footer'; }
@@ -1305,9 +1304,8 @@ async function handleCoreInteraction(i) {
       await i.showModal(panel.mediaAddModal());
       return true;
     }
-    if (customId === 'embed:media-options') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) { await i.reply({ content: 'Select a gallery item first.', flags: 64 }); return true; } return updateMediaOptions(i); }
-    if (customId === 'embed:media-options-back') return updateMediaPanel(i);
-    if (customId.startsWith('embed:media-type:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const type = customId.split(':').pop(); if (!['auto', 'image', 'video'].includes(type)) return true; const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], type }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaOptions(i); }
+    if (customId === 'embed:media-options') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) { await i.reply({ content: 'Select a gallery item first.', flags: 64 }); return true; } return updateMediaPanel(i); }
+        if (customId.startsWith('embed:media-type:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const type = customId.split(':').pop(); if (!['auto', 'image', 'video'].includes(type)) return true; const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], type }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaPanel(i); }
     if (customId.startsWith('embed:media-spoiler:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], spoiler: customId.endsWith(':on') }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaOptions(i); }
     if (customId.startsWith('embed:media-placement:')) {
       if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i);
