@@ -433,11 +433,40 @@ async function handlePresetInteraction(i) {
 
     /*
      * applyPreset() establishes the selected saved preset as the
-     * editor's clean baseline. Media/alignment compatibility wrappers
-     * may normalize and re-save that state, but loading itself must
-     * never make the editor dirty.
+     * editor's clean baseline. Restore the canonical media model
+     * explicitly afterwards so preset media cannot be lost by any
+     * legacy panel/state compatibility layer.
      */
     panel.applyPreset(i, name, preset);
+
+    const loadedState = panel.getSession(i);
+    const restoredMedia = panel.mediaModel?.normalizeMedia
+      ? panel.mediaModel.normalizeMedia(preset?.media || {}, loadedState?.panels || [])
+      : preset?.media;
+
+    const restoredState = {
+      ...loadedState,
+      selectedPreset: name,
+      hasUnsavedChanges: false,
+      ...(restoredMedia ? { media: restoredMedia } : {}),
+    };
+
+    panel.saveSession(i, restoredState);
+
+    // Re-check the persisted session after the save. This makes the loaded
+    // preset's media state the source used by Builder, Media Manager and
+    // deployment immediately after a preset load.
+    const verifiedState = panel.getSession(i);
+    const galleryCount = Array.isArray(verifiedState?.media?.panels)
+      ? verifiedState.media.panels.reduce(
+          (count, entry) => count + (Array.isArray(entry?.gallery) ? entry.gallery.length : 0),
+          0
+        )
+      : 0;
+
+    console.log(
+      `[Embed Presets] Loaded "${name}" with ${galleryCount} gallery media item(s).`
+    );
 
     await i.update(
       panel.buildEditorPanel(
