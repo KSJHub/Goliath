@@ -554,9 +554,120 @@ function installUploadModals(panel) {
 
 function installMediaManagerUi(panel) {
   if (!panel || panel.__mediaManagerUiBound) return panel;
+
+  panel.buildMediaManagerPanel = (interaction, who = 'Unknown User', stateOverride = null) => {
+    const state = stateOverride && typeof stateOverride === 'object'
+      ? stateOverride
+      : panel.getSession(interaction);
+    const panelMedia = mediaModel.mediaForPanel(state);
+    const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : null;
+    const galleryIndex = panelMedia.gallery.length
+      ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1))
+      : null;
+    const selectedMedia = galleryIndex == null ? null : panelMedia.gallery[galleryIndex];
+    const aboveCount = panelMedia.gallery.filter((item) => item?.placement === 'above').length;
+    const belowCount = panelMedia.gallery.length - aboveCount;
+    const selectedAlignment = validMediaAlignment(selectedMedia?.alignment) || 'left';
+    const alignmentLabel = selectedAlignment === 'center' ? '↔️ Centre' : selectedAlignment === 'right' ? '➡️ Right' : '⬅️ Left';
+    const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => (
+      new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(Boolean(disabled))
+    );
+    const rows = [];
+
+    if (panelMedia.gallery.length) {
+      rows.push(new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('embed:media-gallery-select')
+          .setPlaceholder('🎞️ Select media item')
+          .addOptions(panelMedia.gallery.slice(0, 25).map((item, index) => ({
+            label: `${index + 1}. ${String(item.alt || item.source || 'Media item').slice(0, 80)}`,
+            value: String(index),
+            description: String(`${item.type || 'auto'} • ${item.placement === 'above' ? 'Above Content' : 'Below Content'} • ${item.spoiler ? 'spoiler' : 'normal'}`).slice(0, 100),
+            default: galleryIndex === index,
+          })))
+      ));
+    }
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= mediaModel.MAX_FILES),
+      button('embed:media-gallery-edit', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
+      button('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
+      button('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
+      button('embed:media-gallery-down', '⬇️ Down', ButtonStyle.Secondary, galleryIndex == null || galleryIndex >= panelMedia.gallery.length - 1),
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:media-placement:above', '⬆️ Above Content', selectedMedia?.placement === 'above' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-placement:below', '⬇️ Below Content', selectedMedia?.placement === 'below' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary),
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:media-align:left', '⬅️ Left', selectedAlignment === 'left' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-align:center', '↔️ Centre', selectedAlignment === 'center' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-align:right', '➡️ Right', selectedAlignment === 'right' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:media-type:auto', `🏷️ Type: ${selectedMedia?.type || 'auto'}`, ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-spoiler:off', '👁️ Normal', selectedMedia?.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary, galleryIndex == null),
+      button('embed:media-spoiler:on', '🙈 Spoiler', selectedMedia?.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-duplicate', '📑 Duplicate', ButtonStyle.Success, galleryIndex == null || panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS),
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:builder', '⬅️ Back'),
+      button('embed:settings', '⚙️ Settings'),
+      button('embed:helpers', '📖 Variables'),
+    ));
+
+    const summary = [
+      `Editing panel **${(Number(state.selectedPanelIndex) || 0) + 1}/${Math.max(1, Array.isArray(state.panels) ? state.panels.length : 1)}**`,
+      '',
+      `⬆️ **Above Content** — ${aboveCount}`,
+      `⬇️ **Below Content** — ${belowCount}`,
+      `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'}`,
+      `📎 **Files** — ${panelMedia.files.length}/${mediaModel.MAX_FILES}`,
+      '',
+      'Images, animated GIFs and supported videos can be placed independently above or below the panel content.',
+    ];
+
+    if (selectedMedia) {
+      summary.push(
+        '',
+        `**Selected media:** ${String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 300)}`,
+        `**Placement:** ${selectedMedia.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content'}`,
+        `**Alignment:** ${alignmentLabel}`,
+        `**Type:** ${selectedMedia.type || 'auto'}`,
+        `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`,
+      );
+    } else {
+      summary.push('', 'No media selected. Add media or select an existing gallery item.');
+    }
+
+    const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)];
+
+    if (selectedMedia) {
+      const source = resolveSource(panel, selectedMedia.source, interaction);
+      if (source && embeds.length < 10) {
+        const preview = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle(`🖼️ Selected Media Preview • ${selectedMedia.placement === 'above' ? 'Above Content' : 'Below Content'} • ${selectedAlignment === 'center' ? 'Centre' : selectedAlignment[0].toUpperCase() + selectedAlignment.slice(1)}`)
+          .setDescription(String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 1000));
+        if (selectedMedia.type !== 'video') preview.setImage(source);
+        embeds.push(preview);
+      }
+    }
+
+    return { embeds, components: enforceLimits(rows) };
+  };
+
   panel.buildMediaManager = panel.buildMediaManagerPanel;
   panel.validatePanelMedia = validatePanelMedia;
-  panel.EMBED_COMPONENT_LIMITS = Object.freeze({ maxComponentsPerRow: MAX_COMPONENTS_PER_ROW, maxActionRows: MAX_ACTION_ROWS });
+  panel.EMBED_COMPONENT_LIMITS = Object.freeze({
+    maxComponentsPerRow: MAX_COMPONENTS_PER_ROW,
+    maxActionRows: MAX_ACTION_ROWS,
+  });
   panel.__mediaManagerUiBound = true;
   return panel;
 }
