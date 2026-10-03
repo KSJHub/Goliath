@@ -1341,14 +1341,22 @@ async function handleCoreInteraction(i) {
           : panel.mediaModel.normalizeGalleryItem(item)
       );
 
-      saveMediaState(
+      const savedState = saveMediaState(
         i,
         state,
         { ...panelMedia, gallery },
         { selectedMediaIndex: galleryIndex }
       );
 
-      return updateMediaPanel(i);
+      await i.update(
+        panel.buildMediaManagerPanel(
+          i,
+          who(i),
+          savedState
+        )
+      );
+
+      return true;
     }
     if (customId.startsWith('embed:media-spoiler:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], spoiler: customId.endsWith(':on') }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaPanel(i); }
     if (customId.startsWith('embed:media-placement:')) {
