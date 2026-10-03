@@ -549,6 +549,100 @@ function installUploadModals(panel) {
   };
 
 
+  panel.buildMediaManagerPanel = (interaction, who = 'Unknown User', stateOverride = null) => {
+    const state = stateOverride && typeof stateOverride === 'object'
+      ? stateOverride
+      : panel.getSession(interaction);
+    const panelMedia = mediaModel.mediaForPanel(state);
+    const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : null;
+    const galleryIndex = panelMedia.gallery.length ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1)) : null;
+    const selectedMedia = galleryIndex == null ? null : panelMedia.gallery[galleryIndex];
+    const aboveCount = panelMedia.gallery.filter((item) => item?.placement === 'above').length;
+    const belowCount = panelMedia.gallery.length - aboveCount;
+    const placementLabel = (item) => item?.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content';
+    const rows = [];
+
+    if (panelMedia.gallery.length) {
+      rows.push(new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('embed:media-gallery-select').setPlaceholder('🎞️ Select media item').addOptions(
+          panelMedia.gallery.slice(0, 25).map((item, index) => ({
+            label: `${index + 1}. ${panel.trim(item.alt || mediaManagerSourceLabel(item.source, 'Media item'), 80)}`,
+            value: String(index),
+            description: panel.trim(`${item.type || 'auto'} • ${item.placement === 'above' ? 'Above Content' : 'Below Content'} • ${validMediaAlignment(item.alignment) === 'center' ? 'Centre' : (validMediaAlignment(item.alignment) || 'left').replace(/^./, (c) => c.toUpperCase())}${item.spoiler ? ' • spoiler' : ''}`, 100),
+            default: galleryIndex === index,
+          }))
+        )
+      ));
+    }
+
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaManagerButton('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= mediaModel.MAX_FILES),
+      mediaManagerButton('embed:media-gallery-edit', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
+      mediaManagerButton('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
+      mediaManagerButton('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
+      mediaManagerButton('embed:media-gallery-down', '⬇️ Down', ButtonStyle.Secondary, galleryIndex == null || galleryIndex >= panelMedia.gallery.length - 1)
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaManagerButton('embed:media-placement:above', '⬆️ Above Content', selectedMedia?.placement === 'above' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
+      mediaManagerButton('embed:media-placement:below', '⬇️ Below Content', selectedMedia?.placement === 'below' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
+      mediaManagerButton('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary)
+    ));
+
+    const canonicalAlignment = validMediaAlignment(selectedMedia?.alignment);
+    const alignmentMap = state?.mediaAlignment && typeof state.mediaAlignment === 'object' ? state.mediaAlignment : {};
+    const alignmentKey = galleryIndex == null ? null : `${Math.max(0, Number(state.selectedPanelIndex) || 0)}:${galleryIndex}`;
+    const selectedAlignment = canonicalAlignment || validMediaAlignment(alignmentMap[alignmentKey]) || 'left';
+    const alignmentLabel = selectedAlignment === 'center' ? '↔️ Centre' : selectedAlignment === 'right' ? '➡️ Right' : '⬅️ Left';
+
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaManagerButton('embed:media-align:left', '⬅️ Left', selectedAlignment === 'left' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      mediaManagerButton('embed:media-align:center', '↔️ Centre', selectedAlignment === 'center' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      mediaManagerButton('embed:media-align:right', '➡️ Right', selectedAlignment === 'right' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null)
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      mediaManagerButton('embed:builder', '⬅️ Back'),
+      mediaManagerButton('embed:settings', '⚙️ Settings'),
+      mediaManagerButton('embed:helpers', '📖 Variables')
+    ));
+
+    const summary = [
+      `Editing panel **${state.selectedPanelIndex + 1}/${state.panels.length}**`, '',
+      `⬆️ **Above Content** — ${aboveCount}`,
+      `⬇️ **Below Content** — ${belowCount}`,
+      `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'}`,
+      `📎 **Files** — ${panelMedia.files.length}/${mediaModel.MAX_FILES}`, '',
+      'Images, animated GIFs and supported videos can be placed independently above or below the panel content.',
+    ];
+
+    if (selectedMedia) {
+      summary.push('',
+        `**Selected media:** ${mediaManagerSourceLabel(selectedMedia.alt || selectedMedia.source, `Item ${galleryIndex + 1}`)}`,
+        `**Placement:** ${placementLabel(selectedMedia)}`,
+        `**Alignment:** ${alignmentLabel}`,
+        `**Type:** ${selectedMedia.type || 'auto'}`,
+        `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`
+      );
+    } else if (!panelMedia.thumbnail?.source && !panelMedia.gallery.length && !panelMedia.files.length) {
+      summary.push('', 'No media configured for this panel. Media on other panels is unaffected.');
+    }
+
+    const validation = validationSummary(interaction);
+    summary.push('', validation);
+    const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)];
+    const preview = visualPreview(interaction);
+    const selectedFile = filePreview(interaction);
+    if (preview && embeds.length < 10) embeds.push(preview);
+    if (selectedFile && embeds.length < 10) embeds.push(selectedFile);
+    return {
+      embeds,
+      components: enforceLimits(rows),
+    };
+  };
+
+
+
   panel.buildMediaManager = panel.buildMediaManagerPanel;
   panel.validatePanelMedia = validatePanelMedia;
   panel.EMBED_COMPONENT_LIMITS = Object.freeze({ maxComponentsPerRow: MAX_COMPONENTS_PER_ROW, maxActionRows: MAX_ACTION_ROWS });
