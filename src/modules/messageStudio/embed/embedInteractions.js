@@ -1146,7 +1146,13 @@ async function handleCoreInteraction(i) {
   const state = panel.getSession(i);
 
   if (customId === 'embed:settings' && i.isButton?.()) {
-    await i.update(panel.buildSettingsPanel(i));
+    // Settings is a control-only page. Explicitly clear attachments from the
+    // previous Builder/Media response so an old preview cannot remain on the
+    // edited Discord message.
+    await i.update({
+      ...panel.buildSettingsPanel(i),
+      attachments: [],
+    });
     return true;
   }
 
