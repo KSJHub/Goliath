@@ -291,11 +291,14 @@ async function syncCommands() {
   let removedGuildCommands = [];
 
   if (commandMode === 'global') {
+    // /owner is intentionally guild-scoped. Global sync must never publish it.
     await putGlobalCommands(rest, clientId, publicCommands, dryRun);
     await removeLegacyGlobalOwnerCommand(rest, clientId, dryRun);
   } else {
     if (!guildIds.length) throw new Error(`No guild IDs configured for ${mode}`);
-    for (const guildId of guildIds) await putGuildCommands(rest, clientId, guildId, publicCommands, dryRun);
+    const restrictedGuildCommands = [...publicCommands, ownerCommand.data ? ownerCommand : { toJSON: () => ownerCommand }]
+      .map((command) => typeof command.toJSON === 'function' ? command.toJSON() : command);
+    for (const guildId of guildIds) await putGuildCommands(rest, clientId, guildId, restrictedGuildCommands, dryRun);
     await removeLegacyGlobalOwnerCommand(rest, clientId, dryRun);
   }
 
