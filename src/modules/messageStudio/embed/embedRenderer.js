@@ -82,6 +82,16 @@ async function sourceImage(url, guildId = 'global') {
   const cached = cachedAssetFor(guildId, url); if (cached?.buffer) return { buffer: cached.buffer, contentType: cached.meta?.contentType || '' };
   const remote = await fetchImage(url); saveCachedAsset(guildId, url, remote.buffer, { contentType: remote.contentType }); return remote;
 }
+async function persistentImageAttachment(source, guildId = 'global', name = 'embed-persistent-image.png') {
+  if (!isHttpsUrl(source)) return null;
+  const cached = await ensureAssetCached(guildId, source);
+  if (!cached?.buffer) return null;
+  const contentType = contentTypeBase(cached.meta?.contentType || cached.contentType || '');
+  const extension = contentType === 'image/gif' ? 'gif' : 'png';
+  const safeName = String(name || 'embed-persistent-image').replace(/[^a-zA-Z0-9._-]/g, '-').replace(/\\.(png|gif)$/i, '');
+  const filename = safeName + '.' + extension;
+  return { attachment: new AttachmentBuilder(cached.buffer, { name: filename }), url: 'attachment://' + filename };
+}
 async function makeCenteredPortrait(buffer) {
   const source = sharp(buffer, { failOn: 'warning' }); const meta = await source.metadata(); const width = Number(meta.width || 0); const height = Number(meta.height || 0); if (!width || !height) return null;
   const targetVisibleWidth = Math.min(width, SINGLE_IMAGE_VISIBLE_WIDTH); const visible = await source.resize({ width: targetVisibleWidth, withoutEnlargement: true, fit: 'inside' }).ensureAlpha().png().toBuffer();
@@ -326,9 +336,23 @@ async function buildEmbedPayload(options = {}) {
     if (!data || typeof data !== 'object') continue;
     const hasPanelMediaState = Array.isArray(mediaState?.panels) && index < mediaState.panels.length;
     const media = panelMedia(mediaState, index);
-    const targetEmbed = sourceEmbed instanceof EmbedBuilder ? EmbedBuilder.from(sourceEmbed) : EmbedBuilder.from(data);
+    const targetData = { ...data };
+    if (hasPanelMediaState) {
+      // Canonical media state owns panel image/thumbnail presentation. Do not
+      // leave stale Discord CDN URLs from the legacy embed payload in place.
+      delete targetData.image;
+      delete targetData.thumbnail;
+    }
+    const targetEmbed = EmbedBuilder.from(targetData);
     const thumbSource = resolveSource(hasPanelMediaState ? media?.thumbnail?.source : data.thumbnail?.url, interaction);
-    if (thumbSource) { await probeRemoteSource(thumbSource, 'thumbnail', guildId); if (isHttpsUrl(thumbSource)) targetEmbed.setThumbnail(thumbSource); }
+    if (thumbSource) {
+      await probeRemoteSource(thumbSource, 'thumbnail', guildId);
+      if (isHttpsUrl(thumbSource)) {
+        const preparedThumb = await persistentImageAttachment(thumbSource, guildId, 'embed-panel-' + (index + 1) + '-thumbnail');
+        if (preparedThumb) { files.push(preparedThumb.attachment); targetEmbed.setThumbnail(preparedThumb.url); }
+        else targetEmbed.setThumbnail(thumbSource);
+      }
+    }
 
     if (hasPanelMediaState) {
       const gallery = Array.isArray(media?.gallery) ? media.gallery.slice(0, 10) : [];
@@ -434,4 +458,5 @@ module.exports = {
   buildEmbedPayload,
   makeCenteredPortrait,
   applyMediaAlignmentMap,
+  persistentImageAttachment,
 };
