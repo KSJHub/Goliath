@@ -746,6 +746,14 @@ async function handlePresetInteraction(i) {
     const preset =
       panel.presetData(state);
 
+    // Finish media persistence before the preset is committed. Discord upload
+    // URLs can expire; the cached asset is the durable source used after reload.
+    try {
+      await media.persistPresetMedia(guildId, preset);
+    } catch (error) {
+      console.warn('[Embed Presets] Media persistence failed before save:', error?.message || error);
+    }
+
     const saved =
       guildManager.saveEmbedPreset?.(
         guildId,
