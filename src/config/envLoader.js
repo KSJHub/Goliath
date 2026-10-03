@@ -50,6 +50,14 @@ function loadEnvironment(mode = process.env.BOT_MODE) {
     process.exit(1);
   }
 
+  // Owner identity is security-critical. PM2 can retain old environment values
+  // across reloads, so the active mode file must be authoritative for these keys.
+  for (const key of ['OWNER_ID', 'OWNER_IDS', 'BOT_OWNER_ID', 'BOT_OWNER_IDS']) {
+    if (Object.prototype.hasOwnProperty.call(result.parsed || {}, key)) {
+      process.env[key] = result.parsed[key];
+    }
+  }
+
   process.env.BOT_MODE = requestedMode;
   normalizeClientUrlEnvironment();
   applyModePublicClientOrigin(requestedMode);
