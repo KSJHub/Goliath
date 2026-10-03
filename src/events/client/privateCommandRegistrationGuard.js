@@ -3,7 +3,10 @@
 const { Events, REST, Routes } = require('discord.js');
 const { resolveTokenDetails } = require('../../config/tokenResolver');
 
-const RETIRED_GUILD_COMMANDS = new Set([\n  'commandcenter',\n  'Convert Emoji Shortcodes',\n]);
+const RETIRED_GUILD_COMMANDS = new Set([
+  'commandcenter',
+  'Convert Emoji Shortcodes',
+]);
 
 async function removeRetiredGuildCommands(client, rest, applicationId) {
   let removed = 0;
