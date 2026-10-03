@@ -609,7 +609,7 @@ function installMediaManagerUi(panel) {
     ));
 
     rows.push(new ActionRowBuilder().addComponents(
-      button('embed:media-type:auto', `🏷️ Type: ${selectedMedia?.type || 'auto'}`, ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-type:cycle', `🏷️ Type: ${selectedMedia?.type || 'auto'}`, ButtonStyle.Secondary, galleryIndex == null),
       button('embed:media-spoiler:off', '👁️ Normal', selectedMedia?.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary, galleryIndex == null),
       button('embed:media-spoiler:on', '🙈 Spoiler', selectedMedia?.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
       button('embed:media-duplicate', '📑 Duplicate', ButtonStyle.Success, galleryIndex == null || panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS),
