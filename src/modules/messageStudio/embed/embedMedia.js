@@ -657,15 +657,12 @@ function installMediaManagerUi(panel) {
       '**Controls**',
       '**➕ Add Media / File** — Add an image, GIF, video or file to this panel.',
       '**✏️ Edit** — Edit the selected media item.',
-      '**⬆️ Up** — Move the selected media item up.',
-      '**⬇️ Down** — Move the selected media item down.',
       '**🏷️ Type** — Choose Auto, Text, GIF or Image for the selected media.',
       '**👁️ Normal** — Show the selected media normally.',
       '**🙈 Spoiler** — Hide the selected media behind Discord’s spoiler treatment.',
       '**📑 Duplicate** — Copy the selected media item with its current settings.',
       '**↔️ Alignments** — Set Above/Below Content, Left/Centre/Right and Small/Medium/Large.',
       '**🖼️ Thumbnail** — Add or manage the panel thumbnail.',
-      '**🗑️ Remove** — Remove the selected media item.',
     );
 
     const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\\n'), state, who)];
