@@ -1,6 +1,10 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const {
+  ApplicationIntegrationType,
+  InteractionContextType,
+  SlashCommandBuilder,
+} = require('discord.js');
 
 const ownerPanel = require('./command');
 
@@ -19,6 +23,8 @@ const ownerPanel = require('./command');
 const data = new SlashCommandBuilder()
   .setName('owner')
   .setDescription('Open the private Goliath owner control panel.')
+  .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
+  .setContexts(InteractionContextType.Guild)
   .setDMPermission(false);
 
 async function execute(interaction, client) {
