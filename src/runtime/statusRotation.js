@@ -49,7 +49,6 @@ function buildProductionActivities(client) {
     { name: '🧰 Server Tools Online', type: ActivityType.Watching },
     { name: '💾 Backup Systems Ready', type: ActivityType.Watching },
     { name: '⚡ Powered by KSJ Digital', type: ActivityType.Watching },
-    { name: '/help', type: ActivityType.Listening },
   ];
 }
 
