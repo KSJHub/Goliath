@@ -7,10 +7,19 @@ const MAX_COOLDOWN_ENTRIES = 5000;
 
 const cooldowns = new Map();
 
-const OWNER_IDS = (process.env.OWNER_IDS || '')
-  .split(',')
-  .map((id) => String(id).trim())
-  .filter((id) => /^\d{15,25}$/.test(id));
+function splitOwnerIds(value) {
+  return String(value || '')
+    .split(',')
+    .map((id) => String(id).trim())
+    .filter((id) => /^\d{15,25}$/.test(id));
+}
+
+const OWNER_IDS = [...new Set([
+  ...splitOwnerIds(process.env.OWNER_ID),
+  ...splitOwnerIds(process.env.OWNER_IDS),
+  ...splitOwnerIds(process.env.BOT_OWNER_ID),
+  ...splitOwnerIds(process.env.BOT_OWNER_IDS),
+])];
 
 function getBotOwnerIds() { return [...new Set(OWNER_IDS)]; }
 function getBotOwnerId() { return OWNER_IDS[0] || null; }
