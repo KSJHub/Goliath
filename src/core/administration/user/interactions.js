@@ -688,7 +688,6 @@ async function handleUserPanelInteraction(interaction) {
   }
   if (customId === 'user:home') return showProfile(interaction);
   if (customId === 'user:account:record' && interaction.isButton?.()) return updatePanel(interaction, buildAccountRecordPanel(memberDisplayName));
-  if (customId === 'user:help' && interaction.isButton?.()) return updatePanel(interaction, buildHelpPanel(memberDisplayName));
   if (customId === 'user:preferences' && interaction.isButton?.()) return updatePanel(interaction, profileDevelopmentPage.buildPreferencesDevelopmentPanel(interaction));
   const inProgressMatch = customId.match(/^user:in-progress:(\d+)$/);
   if (inProgressMatch && interaction.isButton?.()) return updatePanel(interaction, buildInProgressPanel(memberDisplayName, Number(inProgressMatch[1])));
@@ -714,7 +713,6 @@ async function handleUserPanelInteraction(interaction) {
     if (moduleKey === 'cases') return updatePanel(interaction, caseProceeding.buildUserPublishedCasesPanel(interaction));
     if (moduleKey === 'appeals') return showUserAppeals(interaction);
     if (moduleKey === 'ping') return executeUtilityCommand(interaction, userUtilities.adapters.ping);
-    if (moduleKey === 'help') return executeUtilityCommand(interaction, userUtilities.adapters.help);
     if (moduleKey === 'serverinfo') return executeUtilityCommand(interaction, userUtilities.adapters.serverinfo);
     if (moduleKey === 'translate') return executeUtilityCommand(interaction, userUtilities.adapters.translate);
     return updatePanel(interaction, buildModulePanel(moduleKey, memberDisplayName));
