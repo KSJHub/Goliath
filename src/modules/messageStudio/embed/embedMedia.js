@@ -569,7 +569,7 @@ function installMediaManagerUi(panel) {
     const galleryIndex = panelMedia.gallery.length
       ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1))
       : null;
-    const selectedMedia = galleryIndex == null ? null : panelMedia.gallery[galleryIndex];
+    const selectedMedia = galleryIndex == null ? null : mediaModel.normalizeGalleryItem(panelMedia.gallery[galleryIndex] || {});
     const aboveCount = panelMedia.gallery.filter((item) => item?.placement === 'above').length;
     const belowCount = panelMedia.gallery.length - aboveCount;
     const selectedAlignment = validMediaAlignment(selectedMedia?.alignment) || 'left';
