@@ -17,6 +17,7 @@ const fetch = global.fetch;
 const security = require('../../../core/security/protection/core');
 const guildManager = require('../../../core/guild/guildManager');
 const { createServerBackup } = require('../../../core/security/restoreBackup/backup');
+const permissionEngine = require('../../../core/permissions/engine');
 
 const COPY_PREFIX = 'duplicator-copy';
 const BUILD_PREFIX = 'duplicator-build';
@@ -271,17 +272,10 @@ async function bufferFromUrl(url) { if (!url) return null; const response = awai
 function errorLabel(error) { return `${error?.code ? `Discord ${error.code}` : 'Error'}: ${error?.message || String(error)}`; }
 function pushError(log, stage, error) { const message = `[${stage}] ${errorLabel(error)}`; log.errors.push(message); console.error(`[Duplicator] ${message}`, error); }
 function hasBotPermission(guild, bit) { return Boolean(guild.members.me?.permissions?.has(bit)); }
-function permissionNamesFromBits(value) { try { return new PermissionsBitField(BigInt(value || 0)).toArray(); } catch { return []; } }
-function permissionGapNames(guild, value) { return permissionNamesFromBits(value).filter((name) => { const bit = PermissionFlagsBits[name]; return bit && !hasBotPermission(guild, bit); }); }
-function copyablePermissionBits(guild, value) {
-  let bits = 0n;
-  for (const name of permissionNamesFromBits(value)) {
-    const bit = PermissionFlagsBits[name];
-    if (bit && hasBotPermission(guild, bit)) bits |= bit;
-  }
-  return bits;
-}
-function namesForBits(bits) { try { return new PermissionsBitField(BigInt(bits || 0)).toArray(); } catch { return []; } }
+function permissionNamesFromBits(value) { return permissionEngine.namesFromBits(value); }
+function permissionGapNames(guild, value) { return permissionEngine.missingCapabilityNames(guild, value); }
+function copyablePermissionBits(guild, value) { return permissionEngine.copyableBits(guild, value); }
+function namesForBits(bits) { return permissionEngine.namesFromBits(bits); }
 function addDeferred(log, entry) {
   log.deferredPermissions ||= [];
   const key = `${entry.scope}:${entry.sourceId || ''}:${entry.targetId || ''}:${entry.kind || ''}`;
