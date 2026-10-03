@@ -12,7 +12,9 @@ const APP_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const VALID_MODES = new Set(['dev', 'beta', 'production']);
 function normalizeMode(value) { const raw = String(value || '').trim().toLowerCase(); if (raw === 'development') return 'dev'; if (raw === 'prod') return 'production'; return VALID_MODES.has(raw) ? raw : ''; }
 function checkoutMode() { return normalizeMode(path.basename(APP_ROOT)); }
-function sessionMode() { return checkoutMode() || normalizeMode(process.env.BOT_MODE) || normalizeMode(process.env.NODE_ENV) || 'dev'; }
+// BOT_MODE is authoritative because DEV/BETA/PRODUCTION may run from the same checkout.
+// Falling back to the checkout name is only for local/manual runs without BOT_MODE.
+function sessionMode() { return normalizeMode(process.env.BOT_MODE) || normalizeMode(process.env.NODE_ENV) || checkoutMode() || 'dev'; }
 function sessionRootDir() { return path.join(APP_ROOT, 'src', 'runtime', sessionMode(), 'data', 'messageStudio', 'embedSessions'); }
 function safeSessionKey(key) { return Buffer.from(String(key || 'global:system')).toString('base64url'); }
 function sessionFileFor(key) { return path.join(sessionRootDir(), `${safeSessionKey(key)}.json`); }
@@ -37,7 +39,7 @@ function configure({ defaultState, sync, basePanel } = {}) {
 function clone(value) { return JSON.parse(JSON.stringify(value || {})); }
 function trim(value, max = 4096) { const text = String(value || ''); return text.length > max ? `${text.slice(0, max - 3)}...` : text; }
 function fmtDate(value) { if (!value) return 'Unknown'; const date = value instanceof Date ? value : new Date(value); return Number.isNaN(date.getTime()) ? 'Unknown' : date.toISOString(); }
-function fmtTs(value, style = 'F') { if (!value) return 'Unknown'; const date = value instanceof Date ? value : new Date(value); if (Number.isNaN(date.getTime())) return 'Unknown'; return `<t:${Math.floor(date.getTime() / 1000)}:${style}>`; }
+function fmtTs(value, style = 'F') { if (!value) return 'Unknown'; const date = value instanceof Date ? value : new Date(value); if (Number.isNaN(date.getTime()) ? true : false) return 'Unknown'; return `<t:${Math.floor(date.getTime() / 1000)}:${style}>`; }
 function durationFrom(timestamp) { const started = Number(timestamp || 0); if (!started || started > Date.now()) return 'Unknown'; let months = Math.max(0, Math.floor((Date.now() - started) / (1000 * 60 * 60 * 24 * 30.4375))); const years = Math.floor(months / 12); months %= 12; const parts = []; if (years) parts.push(`${years} year${years === 1 ? '' : 's'}`); if (months || !parts.length) parts.push(`${months} month${months === 1 ? '' : 's'}`); return parts.join(', '); }
 function avatar(member) { return member?.displayAvatarURL?.({ size: 1024 }) || member?.user?.displayAvatarURL?.({ size: 1024 }) || undefined; }
 function guildIcon(guild) { return guild?.iconURL?.({ size: 1024 }) || undefined; }
