@@ -39,7 +39,6 @@ const MODULE_CATALOG = [
   { key: 'roles', category: 'roles', label: 'Roles', emoji: '🎭', summary: 'Planned self-assignable roles, history and requests.', status: 'planned' },
   { key: 'security', category: 'security', label: 'Security', emoji: '🛡️', summary: 'Planned verification status and security notifications.', status: 'planned' },
   { key: 'social', category: 'social', label: 'Social Studio', emoji: '📣', summary: 'Open or create your own Creator Profile.', status: 'live' },
-  { key: 'help', category: 'utility', label: 'Help', emoji: '📚', summary: 'User Panel help and navigation.', status: 'approved' },
   { key: 'ping', category: 'utility', label: 'Ping', emoji: '🏓', summary: 'Existing /ping command.', status: 'approved' },
   { key: 'serverinfo', category: 'utility', label: 'Server Info', emoji: '🏰', summary: 'Existing /serverinfo command.', status: 'approved' },
   { key: 'translate', category: 'utility', label: 'Translate', emoji: '🌐', summary: 'Existing /translate command.', status: 'approved' },
@@ -295,7 +294,6 @@ function buildProfilePanel(interaction, profile = {}, options = {}) {
   const actionButtons = [];
   if (options.rolesEnabled !== false) actionButtons.push(button('user:profile:roles', 'View Roles', ButtonStyle.Primary, false, '🎭'));
   actionButtons.push(button('user:account:record', 'Account Record', ButtonStyle.Secondary, false, '🗂️'));
-  actionButtons.push(button('user:help', 'Help', ButtonStyle.Secondary, false, '❓'));
 
   return {
     embeds: [embed],
