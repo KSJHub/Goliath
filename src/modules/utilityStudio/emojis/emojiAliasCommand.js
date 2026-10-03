@@ -16,7 +16,7 @@ module.exports = {
   },
   data: new SlashCommandBuilder()
     .setName('e')
-    .setDescription('Quickly use a Goliath emoji')
+    .setDescription('😀 Find and use Goliath’s built-in and server emojis')
     .addStringOption((option) => option
       .setName('find')
       .setDescription('Choose a built-in or server emoji')
