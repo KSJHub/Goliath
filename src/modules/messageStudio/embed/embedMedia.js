@@ -12,6 +12,7 @@ const {
   FileUploadBuilder,
   LabelBuilder,
   ModalBuilder,
+  StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
@@ -791,7 +792,7 @@ function mediaSourceKey(item) {
 }
 
 function installMediaManagerUi(panel) {
-  if (!panel || panel.__mediaManagerUiBound || typeof panel.buildMediaManagerPanel !== 'function') return panel;
+  if (!panel || panel.__mediaManagerUiBound) return panel;
   if (!panel.__panelLocalMediaWritePatched && typeof panel.setPanelMedia === 'function') {
     panel.setPanelMedia = (stateValue = {}, index, mediaValue = {}) => {
       const panels = Array.isArray(stateValue?.panels) ? stateValue.panels : [];
