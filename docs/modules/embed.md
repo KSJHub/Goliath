@@ -11,7 +11,7 @@ Core runtime responsibilities include:
 - `embedDeployments.js` — deployed-message persistence and resolution.
 - `embedValidation.js` — Discord payload, readiness and media validation.
 - `embedHealth.js` — diagnostics and repair.
-- `embedState.js` / `embedSessionStore.js` — session state and durable session persistence.
+- `embedState.js` — session state and durable session persistence.
 - `embedMedia.js` — canonical media model, Media Manager UI/runtime behaviour, alignment controls and media session compatibility.
 - `embedImageAlignment.js` — selected media alignment, preview behaviour and alignment interaction handling.
 - `embedRenderer.js` — canonical Discord delivery rendering, including aligned media.
