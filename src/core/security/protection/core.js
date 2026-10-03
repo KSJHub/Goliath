@@ -7,14 +7,25 @@ const MAX_COOLDOWN_ENTRIES = 5000;
 
 const cooldowns = new Map();
 
-const OWNER_IDS = (process.env.OWNER_IDS || '')
-  .split(',')
-  .map((id) => String(id).trim())
-  .filter((id) => /^\d{15,25}$/.test(id));
+function splitOwnerIds(value) {
+  return String(value || '')
+    .split(',')
+    .map((id) => String(id).trim())
+    .filter((id) => /^\d{15,25}$/.test(id));
+}
 
-function getBotOwnerIds() { return [...new Set(OWNER_IDS)]; }
-function getBotOwnerId() { return OWNER_IDS[0] || null; }
-function isBotOwner(userId) { return OWNER_IDS.includes(String(userId)); }
+function getConfiguredOwnerIds() {
+  return [...new Set([
+    ...splitOwnerIds(process.env.OWNER_ID),
+    ...splitOwnerIds(process.env.OWNER_IDS),
+    ...splitOwnerIds(process.env.BOT_OWNER_ID),
+    ...splitOwnerIds(process.env.BOT_OWNER_IDS),
+  ])];
+}
+
+function getBotOwnerIds() { return getConfiguredOwnerIds(); }
+function getBotOwnerId() { return getConfiguredOwnerIds()[0] || null; }
+function isBotOwner(userId) { return getConfiguredOwnerIds().includes(String(userId)); }
 function isGuildOwner(interaction) { return Boolean(interaction?.guild && interaction?.user && interaction.guild.ownerId === interaction.user.id); }
 function isDevOwnerHierarchyInteraction(interaction) { return isDevOwnerHierarchyOverride({ guild: interaction?.guild, member: interaction?.member, user: interaction?.user }); }
 function isDevOwnerHierarchyTarget(guild, targetMember) { return isDevOwnerHierarchyOverride({ guild, member: targetMember, user: targetMember?.user, userId: targetMember?.id }); }
