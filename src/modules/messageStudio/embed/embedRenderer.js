@@ -308,4 +308,8 @@ async function buildEmbedPayload(options = {}) {
 async function resolveApplicationEmojiShortcodes(embeds, interaction) { return embeds || []; }
 async function validateApplicationEmojiUsage() { return true; }
 
-module.exports = { buildEmbedPayload, makeCenteredPortrait };
+module.exports = {
+  buildEmbedPayload,
+  makeCenteredPortrait,
+  applyMediaAlignmentMap,
+};
