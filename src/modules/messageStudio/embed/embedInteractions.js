@@ -1503,33 +1503,122 @@ async function handleCoreInteraction(i) {
   }
 
   if (i.isModalSubmit?.() && customId.startsWith('embed:media-thumbnail-save:')) { const panelMedia = panel.getPanelMedia(state); panelMedia.thumbnail = panel.mediaModel.normalizeThumbnail({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt') }); saveMediaState(i, state, panelMedia); return replyMediaPanel(i); }
-  if (customId === 'embed:graphic-header-cycle') {
+  if (customId === 'embed:header-type-cycle') {
     const currentState = panel.getSession(i);
-    const panelIndex = Math.max(0, Number(currentState?.selectedPanelIndex) || 0);
-    const panelData = Array.isArray(currentState?.panels) ? currentState.panels[panelIndex] || {} : {};
+    const panelIndex = Math.max(
+      0,
+      Number(currentState?.selectedPanelIndex) || 0
+    );
+
+    const panelData = Array.isArray(currentState?.panels)
+      ? currentState.panels[panelIndex] || {}
+      : {};
+
     const panelMedia = panel.getPanelMedia(currentState, panelIndex);
     const selected = selectedMediaContext(currentState, panelMedia);
+
     if (!selected) {
-      await i.update(panel.buildMediaManagerPanel(i, panel.memberName(i), currentState));
+      await i.update(
+        panel.buildMediaManagerPanel(
+          i,
+          panel.memberName(i),
+          currentState
+        )
+      );
       return true;
     }
-    const currentMode = graphicHeaderMode(currentState, panelMedia);
-    const activeIndex = graphicHeaderIndex(panelMedia);
+
+    const currentType = ['auto', 'text', 'gif', 'image'].includes(
+      String(selected.item?.headerType || '').toLowerCase()
+    )
+      ? String(selected.item.headerType).toLowerCase()
+      : 'auto';
+
+    const cycle = {
+      auto: 'text',
+      text: 'gif',
+      gif: 'image',
+      image: 'auto',
+    };
+
+    const nextType = cycle[currentType] || 'auto';
+
     let gallery = panelMedia.gallery.map((item) => ({ ...item }));
     let patch = {};
-    if (currentMode === 'text') {
-      gallery = normalizeGraphicHeaderPlacements(gallery, selected.index);
-      patch = { graphicHeaderTitle: String(panelData.title || panelData.graphicHeaderTitle || ''), title: '' };
-    } else if (currentMode === 'graphic') {
-      if (activeIndex !== selected.index) gallery = normalizeGraphicHeaderPlacements(gallery, selected.index);
-      patch = { title: String(panelData.graphicHeaderTitle || ''), graphicHeaderTitle: String(panelData.graphicHeaderTitle || '') };
-    } else {
+
+    gallery[selected.index] = {
+      ...gallery[selected.index],
+      headerType: nextType,
+    };
+
+    if (nextType === 'text') {
+      /*
+       * Text mode uses the Discord panel title as the header.
+       * Preserve the selected media item, but return all gallery media
+       * to normal Below Content placement.
+       */
       gallery = normalizeGraphicHeaderPlacements(gallery, null);
-      patch = { title: String(panelData.title || panelData.graphicHeaderTitle || ''), graphicHeaderTitle: String(panelData.graphicHeaderTitle || panelData.title || '') };
+
+      patch = {
+        title: String(
+          panelData.title ||
+          panelData.graphicHeaderTitle ||
+          ''
+        ),
+        graphicHeaderTitle: String(
+          panelData.graphicHeaderTitle ||
+          panelData.title ||
+          ''
+        ),
+      };
+    } else {
+      /*
+       * Auto/GIF/Image are graphic-header modes. The selected item becomes
+       * the single Above Content header. Preserve the text title so changing
+       * back to Text never destroys user content.
+       */
+      gallery = normalizeGraphicHeaderPlacements(
+        gallery,
+        selected.index
+      );
+
+      patch = {
+        graphicHeaderTitle: String(
+          panelData.graphicHeaderTitle ||
+          panelData.title ||
+          ''
+        ),
+        title: '',
+      };
     }
+
+    /*
+     * normalizeGraphicHeaderPlacements clones gallery entries, so apply the
+     * new canonical headerType after placement normalization as well.
+     */
+    gallery[selected.index] = {
+      ...gallery[selected.index],
+      headerType: nextType,
+    };
+
     let next = panel.saveSelected(currentState, patch);
-    next = panel.setPanelMedia(next, panelIndex, { ...panelMedia, gallery });
-    panel.saveSession(i, { ...next, selectedPanelIndex: panelIndex, selectedMediaIndex: selected.index, hasUnsavedChanges: true });
+
+    next = panel.setPanelMedia(
+      next,
+      panelIndex,
+      {
+        ...panelMedia,
+        gallery,
+      }
+    );
+
+    panel.saveSession(i, {
+      ...next,
+      selectedPanelIndex: panelIndex,
+      selectedMediaIndex: selected.index,
+      hasUnsavedChanges: true,
+    });
+
     await i.update(panel.buildEditMediaPanel(i));
     return true;
   }

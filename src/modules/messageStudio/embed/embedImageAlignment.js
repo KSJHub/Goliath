@@ -78,11 +78,16 @@ function installUi(panel) {
     panel.buildMediaManagerPanel=(interaction,...args)=>{
       const payload=originalManager(interaction,...args); const selected=selectedItem(panel,interaction); const state=panel.getSession(interaction); const media=panel.getPanelMedia(state); const hasSelected=Boolean(selected);
       const selector=findComponent(payload,'embed:media-gallery-select'); const add=findComponent(payload,'embed:media-add'); const up=findComponent(payload,'embed:media-gallery-up'); const down=findComponent(payload,'embed:media-gallery-down'); const remove=findComponent(payload,'embed:media-gallery-remove'); const thumbnail=findComponent(payload,'embed:media-thumbnail');
-      let headerMode='Text'; if(typeof panel.graphicHeaderMode==='function'){ const mode=panel.graphicHeaderMode(state); if(mode==='graphic')headerMode='Graphic'; else if(mode==='both')headerMode='Both'; }
+      const headerType=['auto','text','gif','image'].includes(String(selected?.item?.headerType||'').toLowerCase())?String(selected.item.headerType).toLowerCase():'auto';
+      const headerTypeLabel={auto:'Auto',text:'Text',gif:'GIF',image:'Image'}[headerType];
+      const managerEmbed=Array.isArray(payload?.embeds)?payload.embeds[0]:null;
+      if(managerEmbed?.data?.description!=null){
+        managerEmbed.setDescription(`${managerEmbed.data.description}\n\n**Header Type**\nControls how the selected header is rendered. **Auto** detects the correct type automatically. **Text** uses the panel title only. **GIF** forces an animated graphic header. **Image** forces a static graphic header.\nUse **Auto** unless you need to override Goliath's detection.`.slice(0,4096));
+      }
       payload.components=[
         row(selector),
         row(add,button('embed:media-edit-details','✏️ Edit',ButtonStyle.Primary,!hasSelected),up,down),
-        row(button('embed:graphic-header-cycle',`🪧 Header: ${headerMode}`,ButtonStyle.Secondary,!hasSelected),button('embed:media-spoiler:off','👁️ Normal',selected?.item?.spoiler?ButtonStyle.Secondary:ButtonStyle.Primary,!hasSelected),button('embed:media-spoiler:on','🙈 Spoiler',selected?.item?.spoiler?ButtonStyle.Primary:ButtonStyle.Secondary,!hasSelected),button('embed:media-duplicate','📑 Duplicate',ButtonStyle.Success,!hasSelected||media.gallery.length>=10)),
+        row(button('embed:header-type-cycle',`🏷️ Type: ${headerTypeLabel}`,ButtonStyle.Secondary,!hasSelected),button('embed:media-spoiler:off','👁️ Normal',selected?.item?.spoiler?ButtonStyle.Secondary:ButtonStyle.Primary,!hasSelected),button('embed:media-spoiler:on','🙈 Spoiler',selected?.item?.spoiler?ButtonStyle.Primary:ButtonStyle.Secondary,!hasSelected),button('embed:media-duplicate','📑 Duplicate',ButtonStyle.Success,!hasSelected||media.gallery.length>=10)),
         row(button('embed:media-alignments','↔️ Alignments',ButtonStyle.Primary,!hasSelected),thumbnail,remove),
         row(findComponent(payload,'embed:builder'),findComponent(payload,'embed:settings'),findComponent(payload,'embed:helpers')),
       ].filter(Boolean);
@@ -129,7 +134,8 @@ async function alignmentPanelPayload(panel,interaction){
   const typeLabel=type==='image'?'Image':type==='video'?'Video':'Auto Detect';
   const alignmentLabel=ctx.alignment==='center'?'Centre':ctx.alignment[0].toUpperCase()+ctx.alignment.slice(1);
   const selectedName=sourceLabel(ctx.item?.alt||ctx.item?.source,`Item ${ctx.itemIndex+1}`);
-  let headerMode='Text'; if(typeof panel.graphicHeaderMode==='function'){ const mode=panel.graphicHeaderMode(ctx.state); if(mode==='graphic')headerMode='Graphic'; else if(mode==='both')headerMode='Both'; }
+  const headerType=['auto','text','gif','image'].includes(String(ctx.item?.headerType||'').toLowerCase())?String(ctx.item.headerType).toLowerCase():'auto';
+  const headerTypeLabel={auto:'Auto',text:'Text',gif:'GIF',image:'Image'}[headerType];
   const description=[
     `Editing panel **${ctx.panelIndex+1}/${panelCount}** • Media item **${ctx.itemIndex+1}/${gallery.length}**`,
     '',
@@ -139,7 +145,7 @@ async function alignmentPanelPayload(panel,interaction){
     `**Alignment:** ${alignmentLabel}`,
     `**Size:** ${size.toUpperCase()}`,
     `**Spoiler:** ${ctx.item?.spoiler?'On':'Off'}`,
-    `**Graphic Header:** ${headerMode}`,
+    `**Header Type:** ${headerTypeLabel}`,
     '',
     '**Panel media sync**',
     `⬆️ **Above Content** — ${aboveCount}`,

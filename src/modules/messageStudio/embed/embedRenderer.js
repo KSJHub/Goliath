@@ -93,6 +93,27 @@ function panelText(data) { const blocks = []; if (data.author?.name) blocks.push
 function footerText(data) { const bits = []; const footer = cleanFooter(data.footer?.text); if (footer) bits.push(footer); if (data.timestamp) { const unix = Math.floor(new Date(data.timestamp).getTime() / 1000); if (Number.isFinite(unix)) bits.push(`• Today at <t:${unix}:t>`); } return bits.length ? `-# ${bits.join(' · ')}` : ''; }
 function panelMedia(mediaState, index) { return Array.isArray(mediaState?.panels) ? (mediaState.panels[index] || null) : null; }
 function itemPlacement(item) { return String(item?.placement || '').toLowerCase() === 'above' ? 'above' : 'below'; }
+
+function galleryHeaderType(item) {
+  const value = String(item?.headerType || 'auto').toLowerCase();
+  return ['auto', 'text', 'gif', 'image'].includes(value)
+    ? value
+    : 'auto';
+}
+
+function resolvedGalleryHeaderType(item, contentType = '') {
+  const requested = galleryHeaderType(item);
+
+  if (requested !== 'auto') return requested;
+
+  const type = contentTypeBase(contentType);
+
+  if (type === 'image/gif') return 'gif';
+  if (type.startsWith('image/')) return 'image';
+
+  return 'image';
+}
+
 function galleryAlignment(item) { const value = String(item?.alignment || 'left').toLowerCase(); return value === 'center' || value === 'right' ? value : 'left'; }
 function applyMediaAlignmentMap(mediaState, alignmentMap = {}) {
   const media = mediaState && typeof mediaState === 'object' ? JSON.parse(JSON.stringify(mediaState)) : {}; const panels = Array.isArray(media.panels) ? media.panels : [];
@@ -221,6 +242,44 @@ async function removeConnectedCornerBackground(input, tolerance = 42) {
   }).png().toBuffer();
 }
 
+async function forcedStaticGalleryAttachment(source, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
+  let cached = cachedAssetFor(guildId, source);
+
+  if (!cached?.buffer) {
+    cached = await ensureAssetCached(guildId, source);
+  }
+
+  if (!cached?.buffer) return null;
+
+  const flattened = await sharp(cached.buffer, {
+    failOn: 'warning',
+    animated: false,
+    page: 0,
+  })
+    .ensureAlpha()
+    .png()
+    .toBuffer();
+
+  const transparent = await removeConnectedCornerBackground(flattened);
+
+  const visible = await sharp(transparent, { failOn: 'warning' })
+    .ensureAlpha()
+    .resize({
+      width: visibleWidth,
+      withoutEnlargement: true,
+      fit: 'inside',
+    })
+    .png()
+    .toBuffer();
+
+  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
+
+  return {
+    attachment: new AttachmentBuilder(visible, { name }),
+    url: `attachment://${name}`,
+  };
+}
+
 async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
   let cached = cachedAssetFor(guildId, source);
   if (!cached?.buffer) cached = await ensureAssetCached(guildId, source);
@@ -280,16 +339,79 @@ async function buildEmbedPayload(options = {}) {
         const source = resolveSource(item?.source, interaction);
         if (!source) continue;
         const probe = await probeRemoteSource(source, 'media', guildId);
-        const type = String(item?.type || 'auto').toLowerCase();
-        const isImage = type !== 'video' && !nativeImageShouldPassThrough(probe.contentType);
-        if (!isImage) continue;
-        const prepared = await plainGalleryAttachment(source, index, itemIndex, guildId, galleryImageWidth(item));
-        if (!prepared) continue;
-        files.push(prepared.attachment);
+        const mediaType = String(item?.type || 'auto').toLowerCase();
+
+        if (mediaType === 'video') continue;
+
+        const placement = itemPlacement(item);
+        const headerType = placement === 'above'
+          ? resolvedGalleryHeaderType(item, probe.contentType)
+          : 'image';
+
+        /*
+         * Type: Text deliberately suppresses the graphic header.
+         * The interaction handler normally moves it Below Content as well,
+         * but this renderer guard keeps persisted/manual state safe.
+         */
+        if (placement === 'above' && headerType === 'text') {
+          continue;
+        }
+
         const imageEmbed = new EmbedBuilder();
-        if (Number.isInteger(data.color)) imageEmbed.setColor(data.color);
+
+        if (Number.isInteger(data.color)) {
+          imageEmbed.setColor(data.color);
+        }
+
+        if (placement === 'above' && headerType === 'gif') {
+          /*
+           * GIF/native mode bypasses Sharp entirely so Discord receives the
+           * original source and animation is preserved.
+           */
+          imageEmbed.setImage(source);
+          above.push(imageEmbed);
+          continue;
+        }
+
+        const forceStatic =
+          placement === 'above' &&
+          galleryHeaderType(item) === 'image';
+
+        const nativePassThrough =
+          nativeImageShouldPassThrough(probe.contentType);
+
+        if (nativePassThrough && !forceStatic) {
+          /*
+           * Auto-detected native images (currently GIF) also pass through
+           * untouched.
+           */
+          imageEmbed.setImage(source);
+          (placement === 'above' ? above : below).push(imageEmbed);
+          continue;
+        }
+
+        const prepared = forceStatic
+          ? await forcedStaticGalleryAttachment(
+              source,
+              index,
+              itemIndex,
+              guildId,
+              galleryImageWidth(item)
+            )
+          : await plainGalleryAttachment(
+              source,
+              index,
+              itemIndex,
+              guildId,
+              galleryImageWidth(item)
+            );
+
+        if (!prepared) continue;
+
+        files.push(prepared.attachment);
         imageEmbed.setImage(prepared.url);
-        (itemPlacement(item) === 'above' ? above : below).push(imageEmbed);
+
+        (placement === 'above' ? above : below).push(imageEmbed);
       }
       for (const imageEmbed of above) outputEmbeds.push(imageEmbed);
       outputEmbeds.push(targetEmbed);

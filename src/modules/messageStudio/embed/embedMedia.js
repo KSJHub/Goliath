@@ -182,6 +182,9 @@ function normalizeGalleryItem(value = {}) {
     alt: cleanString(value?.alt || value?.description || '', 1024),
     spoiler: value?.spoiler === true,
     type: ['auto', 'image', 'video'].includes(String(value?.type || '').toLowerCase()) ? String(value.type).toLowerCase() : 'auto',
+    headerType: ['auto', 'text', 'gif', 'image'].includes(String(value?.headerType || '').toLowerCase())
+      ? String(value.headerType).toLowerCase()
+      : 'auto',
     placement,
     alignment,
     size,
@@ -579,14 +582,18 @@ function installUploadModals(panel) {
       ? 'Above Content'
       : 'Below Content';
 
-    let headerMode = 'Text';
+    const headerType = ['auto', 'text', 'gif', 'image'].includes(
+      String(item.headerType || '').toLowerCase()
+    )
+      ? String(item.headerType).toLowerCase()
+      : 'auto';
 
-    if (typeof panel.graphicHeaderMode === 'function') {
-      const mode = panel.graphicHeaderMode(state);
-
-      if (mode === 'graphic') headerMode = 'Graphic';
-      else if (mode === 'both') headerMode = 'Both';
-    }
+    const headerTypeLabel = {
+      auto: 'Auto',
+      text: 'Text',
+      gif: 'GIF',
+      image: 'Image',
+    }[headerType];
 
     const selectedSize = ['small', 'medium', 'large'].includes(String(item?.size || '').toLowerCase())
       ? String(item.size).toLowerCase()
@@ -608,7 +615,12 @@ function installUploadModals(panel) {
                   : 'Video'
             }`,
             `**Placement:** ${placement}`,
-            `**Graphic Header:** ${headerMode}`,
+            '',
+            '**Header Type**',
+            'Controls how this item behaves when used as the panel header.',
+            '**Auto** detects the correct header type automatically. **Text** uses the panel title only. **GIF** forces an animated graphic header. **Image** forces a static graphic header.',
+            'Use **Auto** unless you need to override Goliath’s detection.',
+            `**Current Header Type:** ${headerTypeLabel}`,
             `**Spoiler:** ${item.spoiler ? 'On' : 'Off'}`,
           ].join('\n')),
       ],
@@ -620,8 +632,8 @@ function installUploadModals(panel) {
             .setStyle(ButtonStyle.Primary),
 
           new ButtonBuilder()
-            .setCustomId('embed:graphic-header-cycle')
-            .setLabel(`🪧 Header: ${headerMode}`)
+            .setCustomId('embed:header-type-cycle')
+            .setLabel(`🏷️ Type: ${headerTypeLabel}`)
             .setStyle(ButtonStyle.Secondary)
         ),
 
