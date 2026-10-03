@@ -1440,8 +1440,6 @@ async function handleCoreInteraction(i) {
             source,
             alt: displayName || description,
             type: 'auto',
-            spoiler: false,
-            placement: 'below',
           })
         );
         addedGallery += 1;
@@ -1473,8 +1471,6 @@ async function handleCoreInteraction(i) {
             source: attachment.url,
             alt: displayName || attachment.description || attachment.name || description,
             type: kind,
-            spoiler: Boolean(attachment.spoiler),
-            placement: 'below',
           })
         );
 
