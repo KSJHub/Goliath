@@ -133,7 +133,7 @@ async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex
     url: `attachment://${name}`
   };
 }
-async function removeConnectedCornerBackground(input, tolerance = 28) {
+async function removeConnectedCornerBackground(input, tolerance = 42) {
   const { data, info } = await sharp(input, { failOn: 'warning' })
     .ensureAlpha()
     .raw()
@@ -148,59 +148,73 @@ async function removeConnectedCornerBackground(input, tolerance = 28) {
   let head = 0;
   let tail = 0;
 
-  const seedIndexes = [
+  const cornerIndexes = [
     0,
     width - 1,
     (height - 1) * width,
-    height * width - 1
+    pixelCount - 1
   ];
 
-  const seed = seedIndexes.find((index) => data[index * channels + 3] > 0);
-  if (seed == null) return input;
+  const colours = cornerIndexes
+    .map((index) => {
+      const offset = index * channels;
+      return {
+        r: data[offset],
+        g: data[offset + 1],
+        b: data[offset + 2],
+        a: data[offset + 3]
+      };
+    })
+    .filter((c) => c.a > 0);
 
-  const sr = data[seed * channels];
-  const sg = data[seed * channels + 1];
-  const sb = data[seed * channels + 2];
+  if (!colours.length) return input;
+
   const threshold = tolerance * tolerance * 3;
-
-  for (const index of seedIndexes) {
-    if (index >= 0 && index < pixelCount && !visited[index]) {
-      visited[index] = 1;
-      queue[tail++] = index;
-    }
-  }
-
   const matchesBackground = (index) => {
     const offset = index * channels;
     if (data[offset + 3] === 0) return true;
-    const dr = data[offset] - sr;
-    const dg = data[offset + 1] - sg;
-    const db = data[offset + 2] - sb;
-    return (dr * dr) + (dg * dg) + (db * db) <= threshold;
+
+    const r = data[offset];
+    const g = data[offset + 1];
+    const b = data[offset + 2];
+
+    return colours.some((c) => {
+      const dr = r - c.r;
+      const dg = g - c.g;
+      const db = b - c.b;
+      return (dr * dr) + (dg * dg) + (db * db) <= threshold;
+    });
   };
+
+  const enqueue = (index) => {
+    if (index < 0 || index >= pixelCount || visited[index]) return;
+    if (!matchesBackground(index)) return;
+    visited[index] = 1;
+    queue[tail++] = index;
+  };
+
+  // Seed the complete outer boundary, not just the four corners.
+  for (let x = 0; x < width; x += 1) {
+    enqueue(x);
+    enqueue((height - 1) * width + x);
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    enqueue(y * width);
+    enqueue(y * width + width - 1);
+  }
 
   while (head < tail) {
     const index = queue[head++];
-    if (!matchesBackground(index)) continue;
-
     const offset = index * channels;
     data[offset + 3] = 0;
 
     const x = index % width;
     const y = Math.floor(index / width);
 
-    const neighbours = [];
-    if (x > 0) neighbours.push(index - 1);
-    if (x < width - 1) neighbours.push(index + 1);
-    if (y > 0) neighbours.push(index - width);
-    if (y < height - 1) neighbours.push(index + width);
-
-    for (const next of neighbours) {
-      if (!visited[next]) {
-        visited[next] = 1;
-        if (matchesBackground(next)) queue[tail++] = next;
-      }
-    }
+    if (x > 0) enqueue(index - 1);
+    if (x < width - 1) enqueue(index + 1);
+    if (y > 0) enqueue(index - width);
+    if (y < height - 1) enqueue(index + width);
   }
 
   return sharp(data, {
