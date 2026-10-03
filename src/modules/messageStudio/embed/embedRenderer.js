@@ -22,10 +22,10 @@ const CANVAS_WIDTH = 520;
 const PORTRAIT_WIDTH = 320;
 const PORTRAIT_SHIFT_RIGHT = 0;
 const SINGLE_IMAGE_CANVAS_WIDTH = 900;
-const SINGLE_IMAGE_VISIBLE_WIDTH = 520;
+const SINGLE_IMAGE_VISIBLE_WIDTH = 820;
 const GALLERY_IMAGE_WIDTHS = Object.freeze({
   small: 320,
-  medium: 420,
+  medium: 520,
   large: SINGLE_IMAGE_VISIBLE_WIDTH,
 });
 
@@ -295,7 +295,7 @@ async function forcedStaticGalleryAttachment(source, panelIndex, itemIndex, guil
   };
 }
 
-async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
+async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH, alignment = 'left') {
   let cached = cachedAssetFor(guildId, source);
   if (!cached?.buffer) cached = await ensureAssetCached(guildId, source);
   if (!cached?.buffer) return null;
@@ -314,10 +314,50 @@ async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = '
     .png()
     .toBuffer();
 
+  const meta = await sharp(visible).metadata();
+  const width = Number(meta.width || visibleWidth);
+  const height = Number(meta.height || 1);
+
+  const normalizedAlignment = galleryAlignment({ alignment });
+
+  const left =
+    normalizedAlignment === 'right'
+      ? Math.max(0, SINGLE_IMAGE_CANVAS_WIDTH - width)
+      : normalizedAlignment === 'center'
+        ? Math.max(
+            0,
+            Math.floor((SINGLE_IMAGE_CANVAS_WIDTH - width) / 2)
+          )
+        : 0;
+
+  const output = await sharp({
+    create: {
+      width: SINGLE_IMAGE_CANVAS_WIDTH,
+      height,
+      channels: 4,
+      background: {
+        r: 0,
+        g: 0,
+        b: 0,
+        alpha: 0.01,
+      },
+    },
+  })
+    .composite([
+      {
+        input: visible,
+        left,
+        top: 0,
+      },
+    ])
+    .png()
+    .toBuffer();
+
   const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
+
   return {
-    attachment: new AttachmentBuilder(visible, { name }),
-    url: `attachment://${name}`
+    attachment: new AttachmentBuilder(output, { name }),
+    url: `attachment://${name}`,
   };
 }
 async function galleryItems(media, interaction, placement = null, payloadFiles = null, panelIndex = 0) {
@@ -470,7 +510,8 @@ async function buildEmbedPayload(options = {}) {
                 index,
                 itemIndex,
                 guildId,
-                galleryImageWidth(item)
+                galleryImageWidth(item),
+                galleryAlignment(item)
               );
 
           if (!prepared) continue;
