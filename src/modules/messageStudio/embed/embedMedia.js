@@ -803,20 +803,20 @@ function installMediaManagerUi(panel) {
 
       for (let n = 0; n < length; n += 1) {
         if (n === selected) {
-          mediaPanels.push(media.mediaModel.normalizePanelMedia(mediaValue, {}));
+          mediaPanels.push(mediaModel.normalizePanelMedia(mediaValue, {}));
           continue;
         }
         if (existingPanels[n]) {
-          mediaPanels.push(media.mediaModel.normalizePanelMedia(existingPanels[n], {}));
+          mediaPanels.push(mediaModel.normalizePanelMedia(existingPanels[n], {}));
           continue;
         }
-        mediaPanels.push(media.mediaModel.normalizePanelMedia({}, panels[n] || {}));
+        mediaPanels.push(mediaModel.normalizePanelMedia({}, panels[n] || {}));
       }
 
       return {
         ...stateValue,
         media: {
-          version: media.mediaModel.MEDIA_SCHEMA_VERSION,
+          version: mediaModel.MEDIA_SCHEMA_VERSION,
           panels: mediaPanels,
         },
       };
@@ -939,7 +939,7 @@ function installMediaManagerUi(panel) {
     const state = stateOverride && typeof stateOverride === 'object'
       ? stateOverride
       : panel.getSession(interaction);
-    const panelMedia = media.getPanelMedia(state);
+    const panelMedia = mediaModel.mediaForPanel(state);
     const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : null;
     const galleryIndex = panelMedia.gallery.length ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1)) : null;
     const selectedMedia = galleryIndex == null ? null : panelMedia.gallery[galleryIndex];
@@ -962,7 +962,7 @@ function installMediaManagerUi(panel) {
     }
 
     rows.push(new ActionRowBuilder().addComponents(
-      mediaManagerButton('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= media.mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= media.mediaModel.MAX_FILES),
+      mediaManagerButton('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= mediaModel.MAX_FILES),
       mediaManagerButton('embed:media-gallery-edit', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
       mediaManagerButton('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
       mediaManagerButton('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
@@ -998,7 +998,7 @@ function installMediaManagerUi(panel) {
       `⬆️ **Above Content** — ${aboveCount}`,
       `⬇️ **Below Content** — ${belowCount}`,
       `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'}`,
-      `📎 **Files** — ${panelMedia.files.length}/${media.mediaModel.MAX_FILES}`, '',
+      `📎 **Files** — ${panelMedia.files.length}/${mediaModel.MAX_FILES}`, '',
       'Images, animated GIFs and supported videos can be placed independently above or below the panel content.',
     ];
 
