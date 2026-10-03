@@ -4,7 +4,6 @@ const { Events, REST, Routes } = require('discord.js');
 const { resolveTokenDetails } = require('../../config/tokenResolver');
 
 const RETIRED_GUILD_COMMANDS = new Set([
-  'owner',
   'commandcenter',
   'Convert Emoji Shortcodes',
 ]);
