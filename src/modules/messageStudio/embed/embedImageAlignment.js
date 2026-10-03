@@ -162,28 +162,115 @@ async function previewAttachment(source,alignment,item=null){
   const trimmed=await sharp(input,{failOn:'warning'}).ensureAlpha().trim({background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer();
   const visible=await sharp(trimmed,{failOn:'warning'}).resize({width:visibleWidth,height:PREVIEW_MAX_HEIGHT,fit:'inside',withoutEnlargement:false}).ensureAlpha().png().toBuffer();
   const meta=await sharp(visible).metadata(); const width=Number(meta.width||visibleWidth),height=Number(meta.height||PREVIEW_MAX_HEIGHT);
-  const left=alignment==='right'?Math.max(0,CANVAS_WIDTH-width):alignment==='center'?Math.max(0,Math.floor((CANVAS_WIDTH-width)/2)):0;
-  const output=await sharp({create:{width:CANVAS_WIDTH,height,channels:4,background:PANEL_BG}}).composite([{input:visible,left,top:0}]).png().toBuffer();
+  const canvasWidth=CANVAS_WIDTH;
+  const canvasHeight=PREVIEW_MAX_HEIGHT;
+  const left=alignment==='right'
+    ? Math.max(0,canvasWidth-width)
+    : alignment==='center'
+      ? Math.max(0,Math.floor((canvasWidth-width)/2))
+      : 0;
+  const top=Math.max(0,Math.floor((canvasHeight-height)/2));
+  const output=await sharp({
+    create:{
+      width:canvasWidth,
+      height:canvasHeight,
+      channels:4,
+      background:PANEL_BG
+    }
+  }).composite([{input:visible,left,top}]).png().toBuffer();
   return new AttachmentBuilder(output,{name:`embed-alignment-${alignment}-${String(item?.size||'large').toLowerCase()}-${Date.now()}.png`});
 }
 function embedTitle(embed){ return String(embed?.data?.title||embed?.title||''); }
 async function selectedContext(panel,interaction){ const state=panel.getSession(interaction); const panelIndex=Math.max(0,Number(state?.selectedPanelIndex)||0); const media=panel.getPanelMedia(state,panelIndex); let itemIndex=Number.isInteger(state?.selectedMediaIndex)?state.selectedMediaIndex:null; if(itemIndex==null && Array.isArray(media?.gallery) && media.gallery.length===1)itemIndex=0; if(itemIndex==null)return {state,panelIndex,itemIndex,item:null,source:null,alignment:'left'}; const item=media?.gallery?.[itemIndex]||null; let source=String(item?.source||'').trim(); try{source=panel.replaceVars(source,interaction);}catch{} return {state,panelIndex,itemIndex,item,source,alignment:alignmentFor(state,panelIndex,itemIndex,item)}; }
 async function alignedManagerPayload(panel,interaction){ const payload=panel.buildMediaManagerPanel(interaction,panel.memberName(interaction)); const ctx=await selectedContext(panel,interaction); if(!ctx.item)return payload; try { const attachment=await previewAttachment(ctx.source,ctx.alignment,ctx.item); if(!attachment)return payload; const preview=Array.isArray(payload?.embeds)?payload.embeds.find((embed)=>embedTitle(embed).includes('Selected Media Preview')):null; if(!preview||typeof preview.setImage!=='function')return payload; preview.setImage(`attachment://${attachment.name}`); preview.setTitle(`🖼️ Selected Media Preview • ${ctx.item.placement==='above'?'Above Content':'Below Content'} • ${ctx.alignment==='center'?'Centre':ctx.alignment[0].toUpperCase()+ctx.alignment.slice(1)}`); payload.files=[attachment]; payload.attachments=[]; return payload; } catch(error){ console.warn('[Embed Preview] Alignment preview failed:',error?.message||error); return payload; } }
-async function alignContentPreview(panel,interaction,payload,label){ const ctx=await selectedContext(panel,interaction); if(!ctx.item?.source||ctx.item?.type==='video'||String(ctx.item?.placement||'below').toLowerCase()==='above'||!safeUrl(ctx.source))return payload; try{ const attachment=await previewAttachment(ctx.source,ctx.alignment,ctx.item); if(!attachment)return payload; const previews=Array.isArray(payload?.embeds)?payload.embeds:[]; const host=previews.find((embed,index)=>index>0&&typeof embed?.setImage==='function'&&embed?.toJSON?.()?.image?.url) || previews.find((embed,index)=>index>0&&typeof embed?.setImage==='function'); if(!host)return payload; host.setImage(`attachment://${attachment.name}`); payload.files=[attachment]; payload.attachments=[]; return payload; }catch(error){ console.warn(`[Embed Preview] ${label} alignment preview failed:`,error?.message||error); return payload; } }
-async function alignedBuilderPayload(panel,interaction){ return alignContentPreview(panel,interaction,panel.buildBuilderPanel(interaction,panel.memberName(interaction)),'Builder'); }
-async function alignedEditorPayload(panel,interaction){ return alignContentPreview(panel,interaction,panel.buildEditorPanel(interaction,panel.memberName(interaction)),'Studio'); }
+
+async function alignedEditMediaPayload(panel,interaction){
+  const payload=panel.buildEditMediaPanel(interaction);
+  const ctx=await selectedContext(panel,interaction);
+  if(!ctx.item||ctx.item?.type==='video'||!safeUrl(ctx.source))return payload;
+
+  try{
+    const attachment=await previewAttachment(ctx.source,ctx.alignment,ctx.item);
+    if(!attachment)return payload;
+
+    const embeds=Array.isArray(payload?.embeds)?[...payload.embeds]:[];
+    const preview=embeds.find((embed)=>embedTitle(embed).includes('Selected Media Preview'));
+
+    if(preview&&typeof preview.setImage==='function'){
+      preview.setImage(`attachment://${attachment.name}`);
+    }else{
+      const { EmbedBuilder }=require('discord.js');
+      embeds.unshift(
+        new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle(`🖼️ Selected Media Preview • ${String(ctx.item?.size||'large').toUpperCase()}`)
+          .setDescription(`**Size:** ${String(ctx.item?.size||'large').toUpperCase()} • **Alignment:** ${ctx.alignment==='center'?'Centre':ctx.alignment[0].toUpperCase()+ctx.alignment.slice(1)}`)
+          .setImage(`attachment://${attachment.name}`)
+      );
+    }
+
+    payload.embeds=embeds;
+    payload.files=[attachment];
+    payload.attachments=[];
+    return payload;
+  }catch(error){
+    console.warn('[Embed Preview] Edit Media preview failed:',error?.message||error);
+    return payload;
+  }
+}
+
 
 function installAlignmentPreview(panel,interactions){
   if(!panel||!interactions||interactions.__alignmentPreviewInstalled)return interactions;
   const original=interactions.handleInteraction.bind(interactions);
   interactions.handleInteraction=async(interaction)=>{ const customId=String(interaction?.customId||'');
     if(customId.startsWith('embed:media-align:')){ const alignment=customId.split(':').pop(); if(!VALID_ALIGNMENTS.has(alignment))return true; const ctx=await selectedContext(panel,interaction); if(ctx.itemIndex==null||!ctx.item)return original(interaction); const gallery=Array.isArray(panel.getPanelMedia(ctx.state,ctx.panelIndex)?.gallery)?panel.getPanelMedia(ctx.state,ctx.panelIndex).gallery:[]; const nextGallery=gallery.map((item,index)=>index===ctx.itemIndex?{...item,alignment}:item); const nextPanelMedia={...panel.getPanelMedia(ctx.state,ctx.panelIndex),gallery:nextGallery}; const nextState=panel.setPanelMedia(ctx.state,ctx.panelIndex,nextPanelMedia); const map={...(ctx.state?.mediaAlignment||{}),[alignmentKey(ctx.panelIndex,ctx.itemIndex)]:alignment}; panel.saveSession(interaction,{...nextState,mediaAlignment:map,hasUnsavedChanges:true}); await interaction.update(await alignedManagerPayload(panel,interaction)); return true; }
+
+    if(customId==='embed:media-gallery-edit'){
+      await interaction.update(await alignedEditMediaPayload(panel,interaction));
+      return true;
+    }
+
+    if(customId.startsWith('embed:media-size:')){
+      const requestedSize=customId.split(':').pop();
+      if(!['small','medium','large'].includes(requestedSize))return original(interaction);
+
+      const ctx=await selectedContext(panel,interaction);
+      if(ctx.itemIndex==null||!ctx.item)return original(interaction);
+
+      const gallery=Array.isArray(panel.getPanelMedia(ctx.state,ctx.panelIndex)?.gallery)
+        ? panel.getPanelMedia(ctx.state,ctx.panelIndex).gallery
+        : [];
+
+      const nextGallery=gallery.map((item,index)=>
+        index===ctx.itemIndex?{...item,size:requestedSize}:item
+      );
+
+      const nextPanelMedia={
+        ...panel.getPanelMedia(ctx.state,ctx.panelIndex),
+        gallery:nextGallery
+      };
+
+      const nextState=panel.setPanelMedia(
+        ctx.state,
+        ctx.panelIndex,
+        nextPanelMedia
+      );
+
+      panel.saveSession(interaction,{
+        ...nextState,
+        selectedMediaIndex:ctx.itemIndex,
+        hasUnsavedChanges:true
+      });
+
+      await interaction.update(
+        await alignedEditMediaPayload(panel,interaction)
+      );
+      return true;
+    }
+
     if(customId==='embed:media-options-back'||customId==='embed:edit-images'){ await interaction.update(await alignedManagerPayload(panel,interaction)); return true; }
     if(customId==='embed:media-gallery-select'&&interaction.isStringSelectMenu?.()){ const state=panel.getSession(interaction); panel.saveSession(interaction,{...state,selectedMediaIndex:Math.max(0,Number(interaction.values?.[0])||0)}); await interaction.update(await alignedManagerPayload(panel,interaction)); return true; }
-    if(customId==='embed:builder'){ await interaction.update(await alignedBuilderPayload(panel,interaction)); return true; }
-    if(customId==='embed:builder-panel-select'&&interaction.isStringSelectMenu?.()){ const state=panel.getSession(interaction); const index=Math.max(0,Math.min(Number(interaction.values?.[0])||0,Math.max(0,(state.panels?.length||1)-1))); panel.saveSession(interaction,{...state,selectedPanelIndex:index,selectedFieldIndex:null}); await interaction.update(await alignedBuilderPayload(panel,interaction)); return true; }
-    if(customId==='embed:editor'||customId==='embed:back'){ await interaction.update(await alignedEditorPayload(panel,interaction)); return true; }
-    if(customId==='embed:channel'&&interaction.isChannelSelectMenu?.()){ const state=panel.getSession(interaction); panel.markUnsaved(interaction,{...state,channelId:interaction.values[0]}); await interaction.update(await alignedEditorPayload(panel,interaction)); return true; }
     return original(interaction);
   };
   interactions.__alignmentPreviewInstalled=true;

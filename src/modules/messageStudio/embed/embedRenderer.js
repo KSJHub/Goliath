@@ -113,8 +113,32 @@ async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex
   const type = contentTypeBase(cached.meta?.contentType || cached.contentType || ''); if (type && !STATIC_RASTER_TYPES.has(type)) return null;
   const trimmed = await sharp(cached.buffer, { failOn: 'warning' }).ensureAlpha().trim({ background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
   const visible = await sharp(trimmed, { failOn: 'warning' }).resize({ width: visibleWidth, height: visibleWidth, fit: 'inside', withoutEnlargement: false }).ensureAlpha().png().toBuffer();
-  const meta = await sharp(visible).metadata(); const width = Number(meta.width || visibleWidth); const height = Number(meta.height || visibleWidth); const left = alignment === 'right' ? Math.max(0, SINGLE_IMAGE_CANVAS_WIDTH - width) : alignment === 'center' ? Math.max(0, Math.floor((SINGLE_IMAGE_CANVAS_WIDTH - width) / 2)) : 0;
-  const output = await sharp({ create: { width: SINGLE_IMAGE_CANVAS_WIDTH, height, channels: 4, background: PANEL_BG } }).composite([{ input: visible, left, top: 0 }]).png().toBuffer(); const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`; return { attachment: new AttachmentBuilder(output, { name }), url: `attachment://${name}` };
+  const meta = await sharp(visible).metadata();
+  const width = Number(meta.width || visibleWidth);
+  const height = Number(meta.height || visibleWidth);
+  const canvasWidth = SINGLE_IMAGE_CANVAS_WIDTH;
+  const canvasHeight = SINGLE_IMAGE_VISIBLE_WIDTH;
+  const left = alignment === 'right'
+    ? Math.max(0, canvasWidth - width)
+    : alignment === 'center'
+      ? Math.max(0, Math.floor((canvasWidth - width) / 2))
+      : 0;
+  const top = Math.max(0, Math.floor((canvasHeight - height) / 2));
+
+  const output = await sharp({
+    create: {
+      width: canvasWidth,
+      height: canvasHeight,
+      channels: 4,
+      background: PANEL_BG
+    }
+  }).composite([{ input: visible, left, top }]).png().toBuffer();
+
+  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
+  return {
+    attachment: new AttachmentBuilder(output, { name }),
+    url: `attachment://${name}`
+  };
 }
 async function galleryItems(media, interaction, placement = null, payloadFiles = null, panelIndex = 0) {
   const output = []; const gallery = (Array.isArray(media?.gallery) ? media.gallery : []).slice(0, 10); const guildId = interactionGuildId(interaction);
