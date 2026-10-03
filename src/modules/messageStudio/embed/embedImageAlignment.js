@@ -18,7 +18,6 @@ function previewImageWidth(item) {
   const size = String(item?.size || 'large').toLowerCase();
   return PREVIEW_IMAGE_WIDTHS[size] || PREVIEW_IMAGE_WIDTHS.large;
 }
-const PANEL_BG = { r: 19, g: 20, b: 22, alpha: 1 };
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 
@@ -175,7 +174,7 @@ async function previewAttachment(source,alignment,item=null){
       width:canvasWidth,
       height:canvasHeight,
       channels:4,
-      background:PANEL_BG
+      background:{r:0,g:0,b:0,alpha:0}
     }
   }).composite([{input:visible,left,top}]).png().toBuffer();
   return new AttachmentBuilder(output,{name:`embed-alignment-${alignment}-${String(item?.size||'large').toLowerCase()}-${Date.now()}.png`});

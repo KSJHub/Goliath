@@ -36,7 +36,6 @@ function galleryImageWidth(item) {
 }
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 8000;
-const PANEL_BG = { r: 19, g: 20, b: 22, alpha: 1 };
 const STATIC_RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/avif', 'image/svg+xml']);
 const NATIVE_IMAGE_TYPES = new Set(['image/gif']);
 const LEGACY_TARGET_WIDTH = 520;
@@ -130,7 +129,7 @@ async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex
       width: canvasWidth,
       height: canvasHeight,
       channels: 4,
-      background: PANEL_BG
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
     }
   }).composite([{ input: visible, left, top }]).png().toBuffer();
 
@@ -200,4 +199,4 @@ async function prepareEmbedMedia(embeds = [], options = {}) {
   for (let index = 0; index < output.length; index += 1) { const embed = output[index]; if (!embed || typeof embed.toJSON !== 'function' || typeof embed.setImage !== 'function') continue; const imageUrl = embed.toJSON()?.image?.url; if (!imageUrl || !isHttpsUrl(imageUrl)) continue; try { const source = await sourceImage(imageUrl, guildId); if (nativeImageShouldPassThrough(source.contentType)) continue; const processed = await centerOnLegacyEmbedCanvas(source.buffer); if (!processed) continue; const name = `embed-panel-${index + 1}-large.png`; files.push(new AttachmentBuilder(processed, { name })); embed.setImage(`attachment://${name}`); } catch (error) { console.warn(`[EmbedMedia] panel ${index + 1}: media normalization failed:`, error?.message || error); } }
   return { embeds: output, files };
 }
-module.exports = { CANVAS_WIDTH, PORTRAIT_WIDTH, PORTRAIT_SHIFT_RIGHT, PANEL_BG, LEGACY_TARGET_WIDTH, LEGACY_PORTRAIT_VISIBLE_WIDTH, buildEmbedPayload, prepareEmbedMedia, probeRemoteSource, applyMediaAlignmentMap };
+module.exports = { CANVAS_WIDTH, PORTRAIT_WIDTH, PORTRAIT_SHIFT_RIGHT, LEGACY_TARGET_WIDTH, LEGACY_PORTRAIT_VISIBLE_WIDTH, buildEmbedPayload, prepareEmbedMedia, probeRemoteSource, applyMediaAlignmentMap };
