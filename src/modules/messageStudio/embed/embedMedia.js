@@ -650,6 +650,12 @@ function installMediaManagerUi(panel) {
         `**Alignment:** ${alignmentLabel}`,
         `**Type:** ${{ auto: 'Auto', text: 'Text', gif: 'GIF', image: 'Image' }[String(selectedMedia.headerType || 'auto').toLowerCase()] || 'Auto'}`,
         `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`,
+        '',
+        '**Header Type**',
+        '**Auto** — Automatically detects the appropriate header type.',
+        '**Text** — Uses the panel title as the header.',
+        '**GIF** — Forces an animated graphic header.',
+        '**Image** — Forces a static graphic header.',
       );
     } else {
       summary.push('', 'No media selected. Add media or select an existing gallery item.');
