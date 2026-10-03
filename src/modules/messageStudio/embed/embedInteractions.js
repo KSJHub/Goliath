@@ -30,7 +30,20 @@ const {
   getEmbedDeployment,
   getDeploymentKeyFromState,
 } = require('./embedDeployments');
-const { buildEmbedPayload, prepareEmbedMedia } = require('./embedRenderer');
+const { buildEmbedPayload } = require('./embedRenderer');
+
+// Embed interactions can be loaded directly by the runtime dispatcher as well as
+// through embed.js. Always install the canonical Media Manager onto the shared
+// panel before any media interaction handler can execute.
+media.installStateCompatibility(panel);
+media.installPersistentMediaCompatibility(panel);
+media.installStorageNormalization(panel);
+media.installUploadModals(panel);
+media.installMediaManagerUi(panel);
+media.installThumbnailUi(panel);
+if (typeof panel.getPanelMedia !== 'function') panel.getPanelMedia = media.getPanelMedia;
+if (typeof panel.setPanelMedia !== 'function') panel.setPanelMedia = media.setPanelMedia;
+panel.mediaModel = media.mediaModel;
 
 const DANGEROUS_ROLE_PERMISSIONS = [
   PermissionsBitField.Flags.Administrator,
@@ -136,7 +149,6 @@ async function updateAppearance(i) { await i.update(panel.buildAppearancePanel(i
 async function updateIcon(i, kind) { await i.update(panel.buildAppearanceIconPanel(i, kind)); return true; }
 async function updateThumbnailPanel(i) { await i.update(panel.buildThumbnailOptionsPanel(i)); return true; }
 async function updateMediaPanel(i) { await i.update(panel.buildMediaManagerPanel(i, who(i))); return true; }
-async function updateMediaOptions(i) { await i.update(panel.buildMediaOptionsPanel(i)); return true; }
 async function updateFileOptions(i) { await i.update(panel.buildFileOptionsPanel(i)); return true; }
 async function replyMediaPanel(i) { await i.reply({ ...panel.buildMediaManagerPanel(i, who(i)), flags: 64 }); return true; }
 function validKind(kind) { return kind === 'author' || kind === 'footer'; }
@@ -152,6 +164,32 @@ async function cacheUploadedAttachment(attachment) {
   try { await media.ensureAssetCached('global', attachment.url); }
   catch (error) { console.warn('[Embed Media] upload persistence failed:', attachment?.name || attachment?.url, error?.message || error); }
 }
+function validMediaAlignment(value) {
+  const alignment = String(value || '').toLowerCase();
+  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
+}
+function selectedMediaContext(state, panelMedia) {
+  const gallery = Array.isArray(panelMedia?.gallery) ? panelMedia.gallery : [];
+  if (!gallery.length) return null;
+  const raw = state?.selectedMediaIndex;
+  const index = raw == null || raw === '' || !Number.isInteger(Number(raw)) ? 0 : Number(raw);
+  const selectedIndex = index >= 0 && index < gallery.length ? index : 0;
+  return { index: selectedIndex, item: gallery[selectedIndex] };
+}
+function graphicHeaderIndex(panelMedia) {
+  const gallery = Array.isArray(panelMedia?.gallery) ? panelMedia.gallery : [];
+  const index = gallery.findIndex((item) => String(item?.placement || '').toLowerCase() === 'above');
+  return index >= 0 ? index : null;
+}
+function graphicHeaderMode(state, panelMedia) {
+  if (graphicHeaderIndex(panelMedia) == null) return 'text';
+  const panelData = Array.isArray(state?.panels) ? state.panels[Math.max(0, Number(state?.selectedPanelIndex) || 0)] || {} : {};
+  return String(panelData.title || '').trim() ? 'both' : 'graphic';
+}
+function normalizeGraphicHeaderPlacements(gallery, headerIndex = null) {
+  return (Array.isArray(gallery) ? gallery : []).map((item, index) => ({ ...item, placement: headerIndex != null && index === headerIndex ? 'above' : 'below' }));
+}
+
 async function buildPayload(state, interaction, ephemeral = false) {
   return buildEmbedPayload({
     embeds: panel.buildPreviewEmbeds(state, interaction),
@@ -697,8 +735,7 @@ async function handlePresetInteraction(i) {
     }
 
     if (name.startsWith('auto-')) {
-      await i.reply({
-        content: 'Preset names beginning with "auto-" are reserved by Goliath.',
+      await i.reply({        content: 'Preset names beginning with "auto-" are reserved by Goliath.',
         flags: 64,
       });
       return true;
@@ -1026,6 +1063,16 @@ async function handlePresetInteraction(i) {
 async function handleBuilderInteractions(i) {
   const customId = String(i.customId || '');
   const state = panel.getSession(i);
+
+  // Compatibility bridge for Embed Studio panels created before the canonical
+  // Media Options editor replaced the retired Header Type cycle. Discord can
+  // keep those component IDs alive in an already-posted interaction panel.
+  // Never recreate the retired UI: acknowledge the stale control by routing
+  // the user directly into the current Media Manager.
+  if (i.isButton?.() && customId === 'embed:header-type-cycle') {
+    await i.update(panel.buildMediaManagerPanel(i, who(i)));
+    return true;
+  }
   const fields = Array.isArray(state.fields) ? [...state.fields] : [];
   const fieldIndex = selectedFieldIndex(state);
   const buttons = Array.isArray(state.buttons) ? [...state.buttons] : [];
@@ -1270,68 +1317,58 @@ async function handleCoreInteraction(i) {
       await i.showModal(panel.mediaAddModal());
       return true;
     }
-    if (customId === 'embed:media-options') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) { await i.reply({ content: 'Select a gallery item first.', flags: 64 }); return true; } return updateMediaOptions(i); }
-    if (customId === 'embed:media-options-back') return updateMediaPanel(i);
-    if (customId.startsWith('embed:media-type:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const type = customId.split(':').pop(); if (!['auto', 'image', 'video'].includes(type)) return true; const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], type }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaOptions(i); }
-    if (customId.startsWith('embed:media-spoiler:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], spoiler: customId.endsWith(':on') }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaOptions(i); }
-    if (customId.startsWith('embed:media-placement:')) {
-      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) {
-        return updateMediaPanel(i);
-      }
-
-      const placement = customId.split(':').pop();
-      if (!['above', 'below'].includes(placement)) return true;
-
-      const gallery = [...panelMedia.gallery];
-
-      gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({
-        ...gallery[galleryIndex],
-        placement,
-      });
-
-      saveMediaState(
-        i,
-        state,
-        { ...panelMedia, gallery },
-        { selectedMediaIndex: galleryIndex }
+    if (customId.startsWith('embed:media-type:')) {
+      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i);
+      const cycle = ['auto', 'image', 'video'];
+      const current = String(panelMedia.gallery[galleryIndex].type || 'auto').toLowerCase();
+      const currentIndex = cycle.indexOf(current);
+      const type = cycle[(currentIndex < 0 ? 0 : currentIndex) + 1 >= cycle.length ? 0 : currentIndex + 1];
+      const gallery = panelMedia.gallery.map((item, index) =>
+        index === galleryIndex
+          ? panel.mediaModel.normalizeGalleryItem({ ...item, type })
+          : panel.mediaModel.normalizeGalleryItem(item)
       );
-
+      saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex });
       return updateMediaPanel(i);
     }
-    if (customId === 'embed:media-duplicate') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); if (panelMedia.gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_GALLERY_ITEMS} gallery items reached.`, flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; const duplicate = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex] }); gallery.splice(galleryIndex + 1, 0, duplicate); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex + 1 }); return updateMediaOptions(i); }
+    if (customId.startsWith('embed:media-spoiler:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], spoiler: customId.endsWith(':on') }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaPanel(i); }
+    if (customId.startsWith('embed:media-placement:')) {
+      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i);
+      const placement = customId.split(':').pop();
+      if (!['above', 'below'].includes(placement)) return true;
+      const panelIndex = Math.max(0, Number(state.selectedPanelIndex) || 0);
+      const panelData = Array.isArray(state.panels) ? state.panels[panelIndex] || {} : {};
+      const gallery = panelMedia.gallery.map((item, index) => index === galleryIndex
+        ? panel.mediaModel.normalizeGalleryItem({ ...item, placement })
+        : { ...item });
+      let next = panel.setPanelMedia(state, panelIndex, { ...panelMedia, gallery });
+      const panels = Array.isArray(next?.panels) ? next.panels.map((entry) => ({ ...entry })) : [];
+      if (panels[panelIndex]) {
+        const nextPanel = panels[panelIndex];
+        nextPanel.image = gallery[0]?.source || '';
+        if (placement === 'below' && !gallery.some((item) => item?.placement === 'above')) {
+          if (!String(nextPanel.title || '').trim() && String(nextPanel.graphicHeaderTitle || '').trim()) nextPanel.title = String(nextPanel.graphicHeaderTitle);
+          nextPanel.graphicHeaderTitle = '';
+        }
+      }
+      panel.saveSession(i, { ...next, panels, selectedPanelIndex: panelIndex, selectedMediaIndex: galleryIndex, hasUnsavedChanges: true });
+      const committed = panel.getSession(i);
+      const committedMedia = panel.getPanelMedia(committed, panelIndex);
+      const committedItem = committedMedia?.gallery?.[galleryIndex];
+      if (committedItem && committedItem.placement !== placement) {
+        const repairedGallery = committedMedia.gallery.map((item, index) => index === galleryIndex
+          ? panel.mediaModel.normalizeGalleryItem({ ...item, placement })
+          : { ...item });
+        panel.saveSession(i, { ...panel.setPanelMedia(committed, panelIndex, { ...committedMedia, gallery: repairedGallery }), selectedPanelIndex: panelIndex, selectedMediaIndex: galleryIndex, hasUnsavedChanges: true });
+      }
+      await i.update(panel.buildMediaManagerPanel(i, panel.memberName(i), panel.getSession(i)));
+      return true;
+    }
+    if (customId === 'embed:media-duplicate') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); if (panelMedia.gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_GALLERY_ITEMS} gallery items reached.`, flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; const duplicate = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex] }); gallery.splice(galleryIndex + 1, 0, duplicate); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex + 1 }); return updateMediaPanel(i); }
     if (customId === 'embed:file-options') { if (fileIndex == null || !panelMedia.files[fileIndex]) { await i.reply({ content: 'Select an attached file first.', flags: 64 }); return true; } return updateFileOptions(i); }
     if (customId === 'embed:file-options-back') return updateMediaPanel(i);
     if (customId.startsWith('embed:file-spoiler:')) { if (fileIndex == null || !panelMedia.files[fileIndex]) return updateMediaPanel(i); const files = [...panelMedia.files]; files[fileIndex] = panel.mediaModel.normalizeFile({ ...files[fileIndex], spoiler: customId.endsWith(':on') }); saveMediaState(i, state, { ...panelMedia, files }, { selectedFileIndex: fileIndex }); return updateFileOptions(i); }
     if (customId === 'embed:media-gallery-add') { if (panelMedia.gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_GALLERY_ITEMS} gallery items reached.`, flags: 64 }); return true; } await i.showModal(panel.galleryItemModal(state)); return true; }
-    if (customId === 'embed:media-gallery-edit') {
-      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) {
-        await i.reply({
-          content: 'Select a gallery item first.',
-          flags: 64
-        });
-        return true;
-      }
-
-      await i.update(panel.buildEditMediaPanel(i));
-      return true;
-    }
-
-    if (customId === 'embed:media-edit-details') {
-      if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) {
-        await i.reply({
-          content: 'Select a gallery item first.',
-          flags: 64
-        });
-        return true;
-      }
-
-      await i.showModal(panel.galleryItemModal(state, galleryIndex));
-      return true;
-    }
-
-    if (customId === 'embed:media-edit-back') {
-      return updateMediaPanel(i);
-    }
     if (customId === 'embed:media-gallery-remove') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; gallery.splice(galleryIndex, 1); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: null }); return updateMediaPanel(i); }
     if (customId === 'embed:media-gallery-up' || customId === 'embed:media-gallery-down') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const target = galleryIndex + (customId.endsWith('up') ? -1 : 1); if (target < 0 || target >= panelMedia.gallery.length) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; [gallery[galleryIndex], gallery[target]] = [gallery[target], gallery[galleryIndex]]; saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: target }); return updateMediaPanel(i); }
     if (customId === 'embed:media-file-add') { if (panelMedia.files.length >= panel.mediaModel.MAX_FILES) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_FILES} files reached.`, flags: 64 }); return true; } await i.showModal(panel.fileItemModal(state)); return true; }
@@ -1398,7 +1435,6 @@ async function handleCoreInteraction(i) {
 
     for (const attachment of attachments) {
       await cacheUploadedAttachment(attachment);
-
       const kind = uploadType(attachment);
 
       if (
@@ -1471,121 +1507,12 @@ async function handleCoreInteraction(i) {
   }
 
   if (i.isModalSubmit?.() && customId.startsWith('embed:media-thumbnail-save:')) { const panelMedia = panel.getPanelMedia(state); panelMedia.thumbnail = panel.mediaModel.normalizeThumbnail({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt') }); saveMediaState(i, state, panelMedia); return replyMediaPanel(i); }
-  if (i.isModalSubmit?.() && (customId === 'embed:media-gallery-save-new' || customId.startsWith('embed:media-gallery-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-gallery-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.gallery[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeGalleryItem({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt'), type: existing.type || 'auto', spoiler: existing.spoiler === true, placement: existing.placement || 'below' }); if (!entry.source) { await i.reply({ content: 'A media URL or variable is required.', flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; let selectedMediaIndex; if (editingIndex == null) { if (gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: 'Maximum gallery item limit reached.', flags: 64 }); return true; } gallery.push(entry); selectedMediaIndex = gallery.length - 1; } else { gallery[editingIndex] = entry; selectedMediaIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex }); return replyMediaPanel(i); }
+
+
+  if (i.isModalSubmit?.() && (customId === 'embed:media-gallery-save-new' || customId.startsWith('embed:media-gallery-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-gallery-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.gallery[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeGalleryItem({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt'), type: existing.type || 'auto', spoiler: existing.spoiler === true, placement: existing.placement || 'below', alignment: existing.alignment || 'left', size: existing.size || 'large' }); if (!entry.source) { await i.reply({ content: 'A media URL or variable is required.', flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; let selectedMediaIndex; if (editingIndex == null) { if (gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: 'Maximum gallery item limit reached.', flags: 64 }); return true; } gallery.push(entry); selectedMediaIndex = gallery.length - 1; } else { gallery[editingIndex] = entry; selectedMediaIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex }); return replyMediaPanel(i); }
   if (i.isModalSubmit?.() && (customId === 'embed:media-file-save-new' || customId.startsWith('embed:media-file-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-file-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.files[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeFile({ source: i.fields.getTextInputValue('source'), name: i.fields.getTextInputValue('name'), description: i.fields.getTextInputValue('description'), spoiler: existing.spoiler === true }); if (!entry.source) { await i.reply({ content: 'A file URL or variable is required.', flags: 64 }); return true; } const files = [...panelMedia.files]; let selectedFileIndex; if (editingIndex == null) { if (files.length >= panel.mediaModel.MAX_FILES) { await i.reply({ content: 'Maximum file limit reached.', flags: 64 }); return true; } files.push(entry); selectedFileIndex = files.length - 1; } else { files[editingIndex] = entry; selectedFileIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, files }, { selectedFileIndex }); return replyMediaPanel(i); }
 
   if (customId === 'embed:test-send') { try { const payload = await buildPayload(state, i, true); payload.allowedMentions = panel.allowedMentions(state, i); await i.reply(payload); } catch (error) { console.error('[Embed] test payload failed:', error); await i.reply({ content: `❌ Embed test failed: ${error?.message || error}`, flags: 64 }); } return true; }
-  if (customId === 'embed:update-existing') {
-    const deploymentKey = getDeploymentKeyFromState(state);
-    const deployment = getEmbedDeployment(i.guild.id, deploymentKey);
-
-    if (!deployment) return handleLegacyInteraction(i);
-
-    const channel =
-      i.guild.channels.cache.get(deployment.channelId) ||
-      await i.guild.channels.fetch(deployment.channelId).catch(() => null);
-
-    if (!isTextBasedChannel(channel)) {
-      await i.reply({
-        content: '⚠️ The original embed channel no longer exists or is not text-based.',
-        flags: 64,
-      });
-      return true;
-    }
-
-    const access = await validateChannelAccess(
-      i.guild,
-      channel.id,
-      [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.EmbedLinks,
-      ],
-      { scope: 'embed.update' }
-    );
-
-    if (!access.ok) {
-      await i.reply({
-        content: panel.trim(access.message, 1800),
-        flags: 64,
-      });
-      return true;
-    }
-
-    const message = await channel.messages
-      .fetch(deployment.messageId)
-      .catch(() => null);
-
-    if (!message || !message.flags?.has?.(MessageFlags.IsComponentsV2)) {
-      return handleLegacyInteraction(i);
-    }
-
-    let discordUpdated = false;
-
-    try {
-      const payload = await buildPayload(state, i, false);
-      payload.allowedMentions = panel.allowedMentions(state, i);
-
-      await message.edit(payload);
-      discordUpdated = true;
-
-      saveEmbedDeployment(i.guild.id, deploymentKey, {
-        ...deployment,
-        channelId: channel.id,
-        messageId: message.id,
-        lastUpdatedBy: i.user.id,
-      });
-
-      const confirmed = getEmbedDeployment(i.guild.id, deploymentKey);
-
-      if (
-        !confirmed ||
-        confirmed.channelId !== channel.id ||
-        confirmed.messageId !== message.id
-      ) {
-        throw new Error(
-          'Deployment persistence could not be confirmed after the Discord message was updated.'
-        );
-      }
-
-      await i.reply({
-        content: '✅ Existing embed updated.',
-        flags: 64,
-      });
-    } catch (error) {
-      if (discordUpdated) {
-        const confirmedMessage = await channel.messages
-          .fetch(message.id)
-          .catch(() => null);
-
-        console.error(
-          '[Embed] Discord update succeeded but deployment persistence failed:',
-          {
-            guildId: i.guild.id,
-            channelId: channel.id,
-            messageId: message.id,
-            discordMessageConfirmed: Boolean(confirmedMessage),
-            error,
-          }
-        );
-
-        await i.reply({
-          content: confirmedMessage
-            ? '⚠️ The Discord embed was updated, but Goliath could not confirm its deployment record. The editor remains unsaved and this deployment requires reconciliation.'
-            : '⚠️ Goliath could not confirm the deployment after updating it. The editor remains unsaved and this deployment requires reconciliation.',
-          flags: 64,
-        });
-      } else {
-        await i.reply({
-          content: panel.embedOperationError(error, channel.id, 'update'),
-          flags: 64,
-        });
-      }
-    }
-
-    return true;
-  }
 
   if (customId === 'embed:use') {
     const channel =
@@ -1833,17 +1760,7 @@ async function handleLegacyInteraction(i) {
     if (customId === 'embed:button-edit') { if (!Number.isInteger(state.selectedButtonIndex)) { await i.reply({ content: 'Select a button first.', flags: 64 }); return true; } await i.showModal(panel.buttonModal(state, state.selectedButtonIndex)); return true; }
     if (customId === 'embed:button-remove-selected') { const buttons = [...(state.buttons || [])]; if (Number.isInteger(state.selectedButtonIndex)) buttons.splice(state.selectedButtonIndex, 1); panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: null }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
     if (customId === 'embed:button-move-up' || customId === 'embed:button-move-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedButtonIndex + delta; if (!Number.isInteger(state.selectedButtonIndex) || target < 0 || target >= (state.buttons || []).length) return true; const buttons = [...state.buttons]; [buttons[state.selectedButtonIndex], buttons[target]] = [buttons[target], buttons[state.selectedButtonIndex]]; panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: target }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
-    if (customId === 'embed:update-existing') {
-      const deployment = getEmbedDeployment(i.guild.id, getDeploymentKeyFromState(state));
-      if (!deployment) { await i.reply({ content: '⚠️ No deployed embed found. Use the embed first.', flags: 64 }); return true; }
-      const channel = i.guild.channels.cache.get(deployment.channelId) || await i.guild.channels.fetch(deployment.channelId).catch(() => null);
-      if (!isTextBasedChannel(channel)) { await i.reply({ content: '⚠️ The original embed channel no longer exists or is not text-based.', flags: 64 }); return true; }
-      const access = await validateChannelAccess(i.guild, channel.id, [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks], { scope: 'embed.update' });
-      if (!access.ok) { await i.reply({ content: panel.trim(access.message, 1800), flags: 64 }); return true; }
-      try { const rendered = await prepareEmbedMedia(panel.buildPreviewEmbeds(state, i)); const message = await channel.messages.fetch(deployment.messageId); await message.edit({ content: state.allowUserPing ? `<@${i.user.id}>` : '', embeds: rendered.embeds, files: rendered.files, components: panel.buttonRows(state), allowedMentions: panel.allowedMentions(state, i) }); await i.reply({ content: '✅ Existing embed updated.', flags: 64 }); }
-      catch (error) { console.error('Failed to update legacy embed:', error); const detail = error?.code ? panel.embedOperationError(error, channel.id, 'update') : `❌ The embed could not be built: ${panel.discordErrorDetail(error)}`; await i.reply({ content: detail, flags: 64 }); }
-      return true;
-    }
+
   }
 
   if (i.isModalSubmit?.()) {
@@ -1880,9 +1797,6 @@ async function routeReadinessFix(interaction) {
 async function handleInteraction(interaction) {
   const customId = String(interaction.customId || '');
 
-  if (customId.startsWith('embed:preset-')) {
-  }
-
   if (await handlePresetInteraction(interaction)) return true;
   if (interaction.isStringSelectMenu?.() && customId === 'embed:builder-panel-select') { const state = panel.getSession(interaction); const index = Math.max(0, Math.min(Number(interaction.values?.[0]) || 0, Math.max(0, (state.panels?.length || 1) - 1))); panel.saveSession(interaction, { ...state, selectedPanelIndex: index, selectedFieldIndex: null }); await interaction.update(panel.buildBuilderPanel(interaction, panel.memberName(interaction))); return true; }
   if (interaction.isButton?.() && customId === 'embed:actions') { await interaction.update(panel.buildActionsPanel(interaction)); return true; }
@@ -1893,4 +1807,4 @@ async function handleInteraction(interaction) {
   return handleBuilderInteractions(interaction);
 }
 
-module.exports = { handleInteraction, handleButtonAction };
+module.exports = { handleInteraction, handleButtonAction, graphicHeaderIndex, normalizeGraphicHeaderPlacements };

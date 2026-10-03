@@ -3,7 +3,7 @@
 const { Events } = require('discord.js');
 const terminal = require('../../core/logging/terminalLogger').createLogger('commands');
 
-const RETIRED_GUILD_COMMANDS = new Set(['owner', 'commandcenter', 'Convert Emoji Shortcodes']);
+const RETIRED_GUILD_COMMANDS = new Set(['commandcenter', 'Convert Emoji Shortcodes']);
 const inFlightGuilds = new Map();
 
 function resolvedBotMode(client) {

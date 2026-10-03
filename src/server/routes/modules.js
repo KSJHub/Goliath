@@ -18,7 +18,7 @@ const autoRoleManager = autoRoleStore;
 const verificationStore = require('../../modules/securityStudio/verificationStore');
 const verificationManager = require('../../modules/securityStudio/verificationManager');
 const embedTemplateManager = require('../../modules/messageStudio/embed/embedTemplates');
-const embedBindingRegistry = require('../../modules/messageStudio/embed/embedBindingRegistry');
+const embedRuntime = require('../../modules/messageStudio/embed/embed');
 const {
   getAllEmbedDeployments,
   deleteEmbedDeployment,
@@ -31,6 +31,28 @@ const security = require('../../core/security/protection/core');
 const { requirePlanLimit } = require('../middleware/requirePlanLimit');
 
 const router = express.Router();
+
+const EMBED_BINDING_REGISTRY = Object.freeze({
+  suggestions: Object.freeze({ key: 'suggestions', label: 'Suggestions', description: 'Suggestion submission panel and suggestion lifecycle messages.', slots: Object.freeze(['suggestion_panel', 'suggestion_pending', 'suggestion_accepted', 'suggestion_denied']) }),
+  welcome: Object.freeze({ key: 'welcome', label: 'Scheduled Welcome', description: 'Scheduled welcome message content.', slots: Object.freeze(['scheduled_welcome']) }),
+  goodbye: Object.freeze({ key: 'goodbye', label: 'Goodbye', description: 'Member goodbye message content.', slots: Object.freeze(['goodbye']) }),
+});
+function publicEmbedBindingRegistry() {
+  return Object.values(EMBED_BINDING_REGISTRY).map((entry) => ({ key: entry.key, label: entry.label, description: entry.description, slots: [...entry.slots] }));
+}
+function assertSupportedEmbedBinding(moduleKey, slot) {
+  const safeModule = String(moduleKey || '').trim();
+  const safeSlot = String(slot || '').trim();
+  const module = EMBED_BINDING_REGISTRY[safeModule];
+  if (!module || !module.slots.includes(safeSlot)) {
+    const error = new Error(`Unsupported Embed Studio binding: ${safeModule || '(missing)'}/${safeSlot || '(missing)'}.`);
+    error.code = 'EMBED_BINDING_UNSUPPORTED';
+    error.moduleKey = safeModule || null;
+    error.slot = safeSlot || null;
+    throw error;
+  }
+  return { moduleKey: safeModule, slot: safeSlot };
+}
 
 const MODULE_CATALOG = Object.freeze({
   verification: {
@@ -46,7 +68,7 @@ const MODULE_CATALOG = Object.freeze({
   embedStudio: {
     key: 'embedStudio', name: 'Embed Studio', icon: '\uD83D\uDDBC\uFE0F', category: 'Utilities',
     summary: 'Create, save and deploy reusable embed templates.',
-    apiBase: '/api/modules/:guildId/embed-studio', dashboardPath: '/modules/embed-studio', maturity: 'in_progress', configurable: true,
+    apiBase: '/api/modules/:guildId/embed-studio', dashboardPath: '/modules/embed-studio', maturity: 'complete', configurable: true,
   },
 });
 
@@ -64,22 +86,10 @@ function failure(res, error, status = 500) {
     });
   }
   if (error?.code === 'TEMPLATE_IN_USE') {
-    return res.status(409).json({
-      success: false,
-      code: error.code,
-      error: error.message,
-      templateId: error.templateId || null,
-      usages: Array.isArray(error.usages) ? error.usages : [],
-    });
+    return res.status(409).json({ success: false, code: error.code, error: error.message, templateId: error.templateId || null, usages: Array.isArray(error.usages) ? error.usages : [] });
   }
   if (error?.code === 'EMBED_BINDING_UNSUPPORTED') {
-    return res.status(400).json({
-      success: false,
-      code: error.code,
-      error: error.message,
-      moduleKey: error.moduleKey || null,
-      slot: error.slot || null,
-    });
+    return res.status(400).json({ success: false, code: error.code, error: error.message, moduleKey: error.moduleKey || null, slot: error.slot || null });
   }
   return res.status(status).json({ success: false, error: error.message || 'Modules API request failed.' });
 }
@@ -112,26 +122,16 @@ async function requireGuildManageAccess(req, res, next) {
   try {
     const userId = cleanDiscordId(req.session?.user?.id);
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required.' });
-
     const guildId = getGuildId(req);
     req.moduleActorId = userId;
-
     if (security.isBotOwner(userId)) return next();
-
     const guild = await fetchGuild(req, guildId);
     if (!guild) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
-
     const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
-    const allowed = Boolean(
-      member?.permissions?.has(PermissionFlagsBits.Administrator)
-      || member?.permissions?.has(PermissionFlagsBits.ManageGuild)
-    );
-
+    const allowed = Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || member?.permissions?.has(PermissionFlagsBits.ManageGuild));
     if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
     return next();
-  } catch (error) {
-    return failure(res, error, 403);
-  }
+  } catch (error) { return failure(res, error, 403); }
 }
 
 async function guardManageableRoles(guild, roleIds = [], scope = 'roles') {
@@ -154,7 +154,7 @@ function getEmbedStudioPayload(guildId) {
   const templateSection = embedTemplateManager.getEmbedSection(guildId); const templates = embedTemplateManager.listTemplates(guildId);
   return {
     guildId, builder: { ...builder, deployments }, draft: builder.draft || {}, presets, deployments, templates,
-    bindings: templateSection.bindings || {}, bindingRegistry: embedBindingRegistry.publicRegistry(), variables: embedTemplateManager.MODULE_VARIABLES, defaults: embedTemplateManager.DEFAULT_TEMPLATES,
+    bindings: templateSection.bindings || {}, bindingRegistry: publicEmbedBindingRegistry(), variables: embedTemplateManager.MODULE_VARIABLES, defaults: embedTemplateManager.DEFAULT_TEMPLATES,
     summary: {
       presetCount: Object.keys(presets || {}).filter((key) => key !== 'updatedAt').length,
       templateCount: Object.keys(templates || {}).length, deploymentCount: Object.keys(deployments || {}).length,
@@ -168,13 +168,14 @@ function getVerificationPayload(guildId) {
 }
 
 router.use('/:guildId', requireGuildManageAccess);
-
 router.get('/:guildId', (req, res) => { try { const guildId = getGuildId(req); const data = getGuildData(guildId) || {}; const modules = normalizeModuleMap(data.modules || {}); return success(res, { guildId, catalog: MODULE_CATALOG, modules, summary: { total: Object.keys(modules).length, enabled: Object.values(modules).filter((module) => module?.enabled !== false).length } }); } catch (error) { return failure(res, error, 400); } });
 router.patch('/:guildId/:moduleKey/enabled', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const enabled = req.body?.enabled === true; setModuleEnabled(guildId, moduleKey, enabled, { actorId: req.moduleActorId }); const modules = normalizeModuleMap(getGuildSection(guildId, 'modules', {})); return success(res, { guildId, moduleKey, enabled, modules }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/verification', (req, res) => { try { const guildId = getGuildId(req); return success(res, getVerificationPayload(guildId)); } catch (error) { return failure(res, error, 400); } });
 router.patch('/:guildId/verification/settings', async (req, res) => { try { const guildId = getGuildId(req); await guardVerificationRoles(req, guildId, req.body || {}); const settings = req.body?.settings || req.body || {}; const config = verificationManager.updateVerificationSettings(guildId, settings, { actorId: req.moduleActorId }); return success(res, { guildId, config, ...getVerificationPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
 
 router.get('/:guildId/embed-studio', (req, res) => { try { const guildId = getGuildId(req); return success(res, getEmbedStudioPayload(guildId)); } catch (error) { return failure(res, error, 400); } });
+router.get('/:guildId/embed-studio/health', async (req, res) => { try { const guildId = getGuildId(req); const guild = await fetchGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); return success(res, { guildId, health: await embedRuntime.buildHealthReport(guild) }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/embed-studio/repair', async (req, res) => { try { const guildId = getGuildId(req); const guild = await fetchGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); return success(res, { guildId, health: await embedRuntime.repairAll(guild, req.moduleActorId || null), repaired: true }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/embed-studio/draft', (req, res) => { try { const guildId = getGuildId(req); const draft = saveEmbedBuilderDraft(guildId, req.body?.embed ? { ...req.body.embed, content: req.body.content || '' } : req.body || {}); return success(res, { guildId, draft, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/embed-studio/presets', requirePlanLimit('embedPresets', countEmbedPresetsForLimit), (req, res) => {
   try {
@@ -192,10 +193,10 @@ router.delete('/:guildId/embed-studio/presets/:name', (req, res) => {
     return success(res, { guildId, deleted: Boolean(templateDeleted || presetDeleted), templateDeleted, presetDeleted, ...getEmbedStudioPayload(guildId) });
   } catch (error) { return failure(res, error, error?.code === 'TEMPLATE_IN_USE' ? 409 : 400); }
 });
-router.get('/:guildId/embed-studio/templates', (req, res) => { try { const guildId = getGuildId(req); return success(res, { guildId, templates: embedTemplateManager.listTemplates(guildId), variables: embedTemplateManager.MODULE_VARIABLES, bindingRegistry: embedBindingRegistry.publicRegistry() }); } catch (error) { return failure(res, error, 400); } });
+router.get('/:guildId/embed-studio/templates', (req, res) => { try { const guildId = getGuildId(req); return success(res, { guildId, templates: embedTemplateManager.listTemplates(guildId), variables: embedTemplateManager.MODULE_VARIABLES, bindingRegistry: publicEmbedBindingRegistry() }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/embed-studio/templates', (req, res) => { try { const guildId = getGuildId(req); const template = embedTemplateManager.saveTemplate(guildId, req.body || {}); return success(res, { guildId, template, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/embed-studio/bindings/:moduleKey/:slot', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const slot = cleanModuleKey(req.params.slot); embedBindingRegistry.assertSupportedBinding(moduleKey, slot); const binding = embedTemplateManager.bindTemplate(guildId, moduleKey, slot, req.body?.templateId || req.body?.presetName || req.body?.name); return success(res, { guildId, binding, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
-router.delete('/:guildId/embed-studio/bindings/:moduleKey/:slot', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const slot = cleanModuleKey(req.params.slot); embedBindingRegistry.assertSupportedBinding(moduleKey, slot); const binding = embedTemplateManager.unbindTemplate(guildId, moduleKey, slot); return success(res, { guildId, binding, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/embed-studio/bindings/:moduleKey/:slot', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const slot = cleanModuleKey(req.params.slot); assertSupportedEmbedBinding(moduleKey, slot); const binding = embedTemplateManager.bindTemplate(guildId, moduleKey, slot, req.body?.templateId || req.body?.presetName || req.body?.name); return success(res, { guildId, binding, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
+router.delete('/:guildId/embed-studio/bindings/:moduleKey/:slot', (req, res) => { try { const guildId = getGuildId(req); const moduleKey = cleanModuleKey(req.params.moduleKey); const slot = cleanModuleKey(req.params.slot); assertSupportedEmbedBinding(moduleKey, slot); const binding = embedTemplateManager.unbindTemplate(guildId, moduleKey, slot); return success(res, { guildId, binding, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
 router.delete('/:guildId/embed-studio/deployments/:key', (req, res) => { try { const guildId = getGuildId(req); const key = cleanDeploymentKey(req.params.key); const deleted = deleteEmbedDeployment(guildId, key); return success(res, { guildId, deleted, ...getEmbedStudioPayload(guildId) }); } catch (error) { return failure(res, error, 400); } });
 
 router.get('/:guildId/auto-roles', (req, res) => { try { const guildId = getGuildId(req); const config = autoRoleStore.getAutoRolesSection(guildId); return success(res, { guildId, config, overview: { enabled: isModuleEnabled(guildId, 'autoRoles'), joinRoleCount: (config.joinRoles || []).length, botRoleCount: (config.botRoles || []).length, applyToBots: config.settings?.applyToBots === true, analytics: config.analytics || {} } }); } catch (error) { return failure(res, error, 400); } });

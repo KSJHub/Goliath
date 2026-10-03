@@ -1,31 +1,18 @@
 'use strict';
 
-const faq = require('./faq');
-const panel = require('./faqPanel');
-const { isModuleEnabled } = require('../../../core/guild/guildManager');
-const { DEFAULT_BOT_CHANNEL_PERMISSIONS, guardChannelAccess } = require('../../../core/security/protection/permissions');
+const faq=require('./faq');
+const panel=require('./faqPanel');
+const { isModuleEnabled }=require('../../../core/guild/guildManager');
+const { DEFAULT_BOT_CHANNEL_PERMISSIONS, guardChannelAccess }=require('../../../core/security/protection/permissions');
 
-async function deploy(guild, actorId = null) {
-  if (!guild?.id) throw new Error('Guild is required.');
-  if (!isModuleEnabled(guild.id, 'faq')) throw new Error('FAQ module is disabled.');
-  const section = faq.getSection(guild.id);
-  const channelId = section.settings.channelId;
-  if (!channelId) throw new Error('Select an FAQ channel first.');
-  const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
-  if (!channel?.send) throw new Error('FAQ channel is unavailable or not sendable.');
-  await guardChannelAccess(guild, channel.id, DEFAULT_BOT_CHANNEL_PERMISSIONS, { scope:'faq.panel_deployment', autoFix:true, throwOnFail:true, reason:'Goliath FAQ panel deployment validation' });
-
-  let message = section.panel.messageId ? await channel.messages.fetch(section.panel.messageId).catch(() => null) : null;
-  const payload = panel.buildHomePanel(guild.id);
-  if (message) await message.edit(payload);
-  else message = await channel.send(payload);
-
-  faq.updateSection(guild.id, s => ({ ...s, panel:{ channelId:channel.id, messageId:message.id, deployedAt:new Date().toISOString(), deployedBy:actorId }, updatedAt:new Date().toISOString() }), guild);
-  return message;
-}
-
-function increment(guildId, key, guild) {
-  faq.updateSection(guildId, s => ({ ...s, analytics:{ ...s.analytics, [key]:Math.max(0,Number(s.analytics?.[key]||0))+1 }, updatedAt:new Date().toISOString() }), guild);
-}
-
-module.exports = { deploy, increment };
+async function getChannel(guild,id,label){if(!id)throw new Error(`Select a ${label} first.`);const channel=guild.channels.cache.get(id)||await guild.channels.fetch(id).catch(()=>null);if(!channel?.send)throw new Error(`${label} is unavailable or not sendable.`);return channel;}
+async function deploy(guild,actorId=null){if(!guild?.id)throw new Error('Guild is required.');if(!isModuleEnabled(guild.id,'faq'))throw new Error('FAQ module is disabled.');const section=faq.getSection(guild.id);const channel=await getChannel(guild,section.settings.channelId,'FAQ channel');await guardChannelAccess(guild,channel.id,DEFAULT_BOT_CHANNEL_PERMISSIONS,{scope:'faq.panel_deployment',autoFix:true,throwOnFail:true,reason:'Goliath FAQ panel deployment validation'});let message=null;if(section.panel.messageId&&section.panel.channelId===channel.id)message=await channel.messages.fetch(section.panel.messageId).catch(()=>null);const payload=panel.buildHomePanel(guild.id);if(message)await message.edit(payload);else message=await channel.send(payload);faq.updateSection(guild.id,s=>({...s,panel:{channelId:channel.id,messageId:message.id,deployedAt:new Date().toISOString(),deployedBy:actorId},updatedAt:new Date().toISOString()}),guild);return message;}
+async function refreshPublicPanel(guild){const s=faq.getSection(guild.id);if(!s.panel.channelId||!s.panel.messageId)return null;const channel=await getChannel(guild,s.panel.channelId,'FAQ channel');const message=await channel.messages.fetch(s.panel.messageId).catch(()=>null);if(!message){faq.updateSection(guild.id,x=>({...x,panel:{channelId:null,messageId:null,deployedAt:null,deployedBy:null}}),guild);return null;}await message.edit(panel.buildHomePanel(guild.id));return message;}
+async function deletePublicPanel(guild){const s=faq.getSection(guild.id);if(s.panel.channelId&&s.panel.messageId){const channel=guild.channels.cache.get(s.panel.channelId)||await guild.channels.fetch(s.panel.channelId).catch(()=>null);const message=await channel?.messages?.fetch(s.panel.messageId).catch(()=>null);if(message)await message.delete().catch(()=>null);}faq.updateSection(guild.id,x=>({...x,panel:{channelId:null,messageId:null,deployedAt:null,deployedBy:null},updatedAt:new Date().toISOString()}),guild);return true;}
+async function movePublicPanel(guild,newChannelId,actorId=null){const old=faq.getSection(guild.id).panel;const channel=await getChannel(guild,newChannelId,'FAQ channel');await guardChannelAccess(guild,channel.id,DEFAULT_BOT_CHANNEL_PERMISSIONS,{scope:'faq.panel_move',autoFix:true,throwOnFail:true,reason:'Goliath FAQ panel move validation'});const message=await channel.send(panel.buildHomePanel(guild.id));if(old.channelId&&old.messageId){const oldChannel=guild.channels.cache.get(old.channelId)||await guild.channels.fetch(old.channelId).catch(()=>null);const oldMessage=await oldChannel?.messages?.fetch(old.messageId).catch(()=>null);if(oldMessage)await oldMessage.delete().catch(()=>null);}faq.updateSection(guild.id,s=>({...s,settings:{...s.settings,channelId:channel.id},panel:{channelId:channel.id,messageId:message.id,deployedAt:new Date().toISOString(),deployedBy:actorId},updatedAt:new Date().toISOString()}),guild);return message;}
+async function submitQuestion(guild,user,question,details=''){if(!isModuleEnabled(guild.id,'faq'))throw new Error('FAQ is currently disabled.');const section=faq.getSection(guild.id);const inbox=await getChannel(guild,section.settings.inboxChannelId,'team FAQ inbox');await guardChannelAccess(guild,inbox.id,DEFAULT_BOT_CHANNEL_PERMISSIONS,{scope:'faq.team_inbox',autoFix:true,throwOnFail:true,reason:'Goliath FAQ team inbox validation'});const ref=faq.allocateReference(guild.id,guild.name,guild);let submission=faq.saveSubmission(guild.id,{id:faq.createId('submission'),reference:ref.reference,referenceNumber:ref.number,question,details,submittedBy:user.id,status:'submitted',teamChannelId:inbox.id},guild);const message=await inbox.send(panel.buildTeamSubmission(guild.id,submission.id));submission=faq.patchSubmission(guild.id,submission.id,{teamMessageId:message.id},guild);increment(guild.id,'submitted',guild);return submission;}
+async function refreshTeamMessage(guild,submissionId){const s=faq.getSubmission(guild.id,submissionId);if(!s?.teamChannelId||!s.teamMessageId)return null;const channel=guild.channels.cache.get(s.teamChannelId)||await guild.channels.fetch(s.teamChannelId).catch(()=>null);const message=await channel?.messages?.fetch(s.teamMessageId).catch(()=>null);if(message)await message.edit(panel.buildTeamSubmission(guild.id,s.id));return message;}
+async function createBrowseThread(interaction,category){const parent=interaction.channel;if(!parent?.threads?.create)throw new Error('The FAQ panel channel does not support threads.');const memberName=String(interaction.member?.displayName||interaction.user?.displayName||interaction.user?.username||'Member').replace(/[\r\n]+/g,' ').trim();const categoryName=String(category?.name||'FAQ').replace(/[\r\n]+/g,' ').trim();const thread=await parent.threads.create({name:`${category?.emoji||'❓'} ${categoryName} • ${memberName}`.slice(0,100),autoArchiveDuration:60,reason:`FAQ browsing session for ${interaction.user.id}`});await thread.members?.add?.(interaction.user.id).catch(()=>null);const message=await thread.send(panel.buildCategoryPanel(interaction.guildId,category.id));return{thread,message};}
+async function publishSubmission(guild,submissionId,userId){const s=faq.getSubmission(guild.id,submissionId);if(!s)throw new Error('Submission no longer exists.');if(!s.answer)throw new Error('Add an answer before publishing.');if(!s.categoryId||!faq.getSection(guild.id).categories[s.categoryId])throw new Error('Select a category before publishing.');const entry=faq.saveEntry(guild.id,{id:s.entryId||faq.createId('faq'),reference:s.reference,categoryId:s.categoryId,question:s.question,answer:s.answer,resources:s.resources,supportChannelId:s.supportChannelId,sourceSubmissionId:s.id,keywords:s.question.toLowerCase().split(/\W+/).filter(x=>x.length>3).slice(0,20)},guild);faq.patchSubmission(guild.id,s.id,{status:'published',entryId:entry.id,publishedBy:userId,publishedAt:new Date().toISOString()},guild);increment(guild.id,'published',guild);await refreshTeamMessage(guild,s.id);await refreshPublicPanel(guild).catch(()=>null);return entry;}
+function increment(guildId,key,guild){faq.updateSection(guildId,s=>({...s,analytics:{...s.analytics,[key]:Math.max(0,Number(s.analytics?.[key]||0))+1},updatedAt:new Date().toISOString()}),guild);}
+module.exports={deploy,refreshPublicPanel,deletePublicPanel,movePublicPanel,submitQuestion,refreshTeamMessage,createBrowseThread,publishSubmission,increment};

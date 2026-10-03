@@ -78,7 +78,6 @@ const SYSTEM_RULES = [
   ['Moderation', ['/purge', '/lockdown']],
   ['Media', ['/media', 'media:']],
   ['Server', ['/server', '/serverinfo']],
-  ['Help', ['/help']],
   ['Prefix', ['/prefix']],
 ];
 

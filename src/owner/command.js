@@ -314,7 +314,7 @@ function serverToolsPayload(interaction, explicitGuildId = null) {
       '🏗️ **Build Template** — build from a saved/default template.',
       '',
       '**Permissions Studio**',
-      '🛡️ Bulk category, channel and role permission management — coming next.',
+      '🛡️ Audit, edit, compare, copy and restore server permissions.',
       '',
       guildContextAvailable ? null : '⚠️ **Server context required.** Open `/owner` from a server channel to use these tools.',
     ].filter(Boolean).join('\n'))
@@ -328,7 +328,7 @@ function serverToolsPayload(interaction, explicitGuildId = null) {
 
   const secondaryTools = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(contextualOwnerId('server-build', guildId)).setLabel('Build Template').setEmoji('🏗️').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable),
-    new ButtonBuilder().setCustomId(contextualOwnerId('permissions-studio', guildId)).setLabel('Permissions Studio • Coming Next').setEmoji('🛡️').setStyle(ButtonStyle.Secondary).setDisabled(true)
+    new ButtonBuilder().setCustomId(`permstudio:home:guild:${guildId}`).setLabel('Permissions Studio').setEmoji('🛡️').setStyle(ButtonStyle.Primary).setDisabled(!guildContextAvailable)
   );
 
   const navigation = new ActionRowBuilder().addComponents(

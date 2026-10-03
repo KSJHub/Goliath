@@ -120,6 +120,7 @@ export default function EmbedStudioEnhanced(props) {
   const guildId = getGuildId(selectedGuild, selectedGuildData);
   const [payload, setPayload] = useState({});
   const [emojiBank, setEmojiBank] = useState(null);
+  const [health, setHealth] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -132,13 +133,15 @@ export default function EmbedStudioEnhanced(props) {
     setBusy(true);
     setError('');
     try {
-      const [result, emojisResult] = await Promise.all([
+      const [result, emojisResult, healthResult] = await Promise.all([
         api.getEmbedStudio(guildId),
         api.request(`/api/emojis/${guildId}/overview`).catch(() => null),
+        api.getEmbedStudioHealth(guildId).catch(() => null),
       ]);
       if (requestVersion === requestVersionRef.current) {
         setPayload(result || {});
         setEmojiBank(emojisResult || null);
+        setHealth(healthResult?.health || null);
       }
       return result;
     } catch (loadError) {
@@ -185,6 +188,26 @@ export default function EmbedStudioEnhanced(props) {
     }
   }
 
+  async function repairHealth() {
+    if (!guildId || activeActionRef.current) return null;
+    activeActionRef.current = 'embed-health-repair';
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await api.repairEmbedStudio(guildId);
+      setHealth(result?.health || null);
+      setNotice(result?.health?.healthy ? 'Embed Studio health check passed. No repairs were required.' : 'Embed Studio deployment records were reconciled.');
+      return result;
+    } catch (repairError) {
+      setError(repairError.message || 'Embed Studio repair failed.');
+      return null;
+    } finally {
+      activeActionRef.current = null;
+      setBusy(false);
+    }
+  }
+
   async function saveTemplate(template) {
     try {
       const normalized = normalizeTemplateInput(template);
@@ -225,6 +248,17 @@ export default function EmbedStudioEnhanced(props) {
     <div style={{ display: 'grid', gap: 18 }}>
       {error ? <section style={noticeStyle(theme, 'danger')}>{error}</section> : null}
       {notice ? <section style={noticeStyle(theme, 'success')}>{notice}</section> : null}
+      <section style={{ border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, color: theme.cardText, borderRadius: 22, padding: 18, boxShadow: theme.shadow, display: 'grid', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ color: theme.mutedText, fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Embed Studio Health</div>
+            <strong style={{ display: 'block', marginTop: 5 }}>{health ? (health.healthy ? '🟢 Healthy' : '🔴 Attention required') : '⚪ Health unavailable'}</strong>
+            <span style={{ display: 'block', marginTop: 4, color: theme.mutedText, fontSize: 12 }}>{health ? `${health.templates || 0} templates • ${health.deployments || 0} deployments • ${health.unavailable || 0} unavailable` : 'Run a health check to inspect tracked deployments.'}</span>
+          </div>
+          <button type="button" disabled={busy} onClick={repairHealth} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(37,99,235,0.18)', color: theme.cardText, borderRadius: 12, padding: '10px 12px', fontWeight: 950, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.55 : 1 }}>{busy ? 'Checking…' : 'Check & Repair'}</button>
+        </div>
+        {health?.issues?.length ? <div style={{ color: '#fca5a5', fontSize: 12, lineHeight: 1.5 }}>{health.issues.slice(0, 6).map((issue, index) => <div key={`${issue.code || 'issue'}-${index}`}>• {issue.code || 'Issue'}{issue.channelId ? ` — ${issue.channelId}` : ''}</div>)}</div> : null}
+      </section>
       <EmojiBankStrip theme={theme} emojiBank={emojiBank} onCopied={setNotice} />
       <SharedEmbedTemplatesPanel
         theme={theme}

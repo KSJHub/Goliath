@@ -2,14 +2,8 @@
 
 const {
   AttachmentBuilder,
-  ContainerBuilder,
-  FileBuilder,
-  MediaGalleryBuilder,
-  MediaGalleryItemBuilder,
+  EmbedBuilder,
   MessageFlags,
-  SectionBuilder,
-  TextDisplayBuilder,
-  ThumbnailBuilder,
 } = require('discord.js');
 const fetch = require('node-fetch');
 const path = require('node:path');
@@ -24,9 +18,18 @@ const PORTRAIT_WIDTH = 320;
 const PORTRAIT_SHIFT_RIGHT = 0;
 const SINGLE_IMAGE_CANVAS_WIDTH = 900;
 const SINGLE_IMAGE_VISIBLE_WIDTH = 520;
+const GALLERY_IMAGE_WIDTHS = Object.freeze({
+  small: 320,
+  medium: 420,
+  large: SINGLE_IMAGE_VISIBLE_WIDTH,
+});
+
+function galleryImageWidth(item) {
+  const size = String(item?.size || 'large').toLowerCase();
+  return GALLERY_IMAGE_WIDTHS[size] || SINGLE_IMAGE_VISIBLE_WIDTH;
+}
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 8000;
-const PANEL_BG = { r: 19, g: 20, b: 22, alpha: 1 };
 const STATIC_RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/avif', 'image/svg+xml']);
 const NATIVE_IMAGE_TYPES = new Set(['image/gif']);
 const LEGACY_TARGET_WIDTH = 520;
@@ -90,80 +93,345 @@ function panelText(data) { const blocks = []; if (data.author?.name) blocks.push
 function footerText(data) { const bits = []; const footer = cleanFooter(data.footer?.text); if (footer) bits.push(footer); if (data.timestamp) { const unix = Math.floor(new Date(data.timestamp).getTime() / 1000); if (Number.isFinite(unix)) bits.push(`• Today at <t:${unix}:t>`); } return bits.length ? `-# ${bits.join(' · ')}` : ''; }
 function panelMedia(mediaState, index) { return Array.isArray(mediaState?.panels) ? (mediaState.panels[index] || null) : null; }
 function itemPlacement(item) { return String(item?.placement || '').toLowerCase() === 'above' ? 'above' : 'below'; }
+
+function galleryHeaderType(item) {
+  const value = String(item?.headerType || 'auto').toLowerCase();
+  return ['auto', 'text', 'gif', 'image'].includes(value)
+    ? value
+    : 'auto';
+}
+
+function resolvedGalleryHeaderType(item, contentType = '') {
+  const requested = galleryHeaderType(item);
+
+  if (requested !== 'auto') return requested;
+
+  const type = contentTypeBase(contentType);
+
+  if (type === 'image/gif') return 'gif';
+  if (type.startsWith('image/')) return 'image';
+
+  return 'image';
+}
+
 function galleryAlignment(item) { const value = String(item?.alignment || 'left').toLowerCase(); return value === 'center' || value === 'right' ? value : 'left'; }
 function applyMediaAlignmentMap(mediaState, alignmentMap = {}) {
   const media = mediaState && typeof mediaState === 'object' ? JSON.parse(JSON.stringify(mediaState)) : {}; const panels = Array.isArray(media.panels) ? media.panels : [];
   for (let panelIndex = 0; panelIndex < panels.length; panelIndex += 1) { const gallery = Array.isArray(panels[panelIndex]?.gallery) ? panels[panelIndex].gallery : []; for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) { const current = String(gallery[itemIndex]?.alignment || '').toLowerCase(); if (VALID_ALIGNMENTS.has(current)) continue; const key = `${panelIndex}:${itemIndex}`; const mapped = String(alignmentMap?.[key] || '').toLowerCase(); gallery[itemIndex].alignment = VALID_ALIGNMENTS.has(mapped) ? mapped : 'left'; } }
   return media;
 }
-async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex, guildId = 'global') {
+async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
   let cached = cachedAssetFor(guildId, source);
   if (!cached?.buffer) cached = await ensureAssetCached(guildId, source);
   if (!cached?.buffer) return null;
   const type = contentTypeBase(cached.meta?.contentType || cached.contentType || ''); if (type && !STATIC_RASTER_TYPES.has(type)) return null;
   const trimmed = await sharp(cached.buffer, { failOn: 'warning' }).ensureAlpha().trim({ background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
-  const visible = await sharp(trimmed, { failOn: 'warning' }).resize({ width: SINGLE_IMAGE_VISIBLE_WIDTH, height: SINGLE_IMAGE_VISIBLE_WIDTH, fit: 'inside', withoutEnlargement: false }).ensureAlpha().png().toBuffer();
-  const meta = await sharp(visible).metadata(); const width = Number(meta.width || SINGLE_IMAGE_VISIBLE_WIDTH); const height = Number(meta.height || SINGLE_IMAGE_VISIBLE_WIDTH); const left = alignment === 'right' ? Math.max(0, SINGLE_IMAGE_CANVAS_WIDTH - width) : alignment === 'center' ? Math.max(0, Math.floor((SINGLE_IMAGE_CANVAS_WIDTH - width) / 2)) : 0;
-  const output = await sharp({ create: { width: SINGLE_IMAGE_CANVAS_WIDTH, height, channels: 4, background: PANEL_BG } }).composite([{ input: visible, left, top: 0 }]).png().toBuffer(); const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`; return { attachment: new AttachmentBuilder(output, { name }), url: `attachment://${name}` };
+  const visible = await sharp(trimmed, { failOn: 'warning' }).resize({ width: visibleWidth, height: visibleWidth, fit: 'inside', withoutEnlargement: false }).ensureAlpha().png().toBuffer();
+  const meta = await sharp(visible).metadata();
+  const width = Number(meta.width || visibleWidth);
+  const height = Number(meta.height || visibleWidth);
+  const canvasWidth = SINGLE_IMAGE_CANVAS_WIDTH;
+  const canvasHeight = SINGLE_IMAGE_VISIBLE_WIDTH;
+  const left = alignment === 'right'
+    ? Math.max(0, canvasWidth - width)
+    : alignment === 'center'
+      ? Math.max(0, Math.floor((canvasWidth - width) / 2))
+      : 0;
+  const top = Math.max(0, Math.floor((canvasHeight - height) / 2));
+
+  const output = await sharp({
+    create: {
+      width: canvasWidth,
+      height: canvasHeight,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    }
+  }).composite([{ input: visible, left, top }]).png().toBuffer();
+
+  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
+  return {
+    attachment: new AttachmentBuilder(output, { name }),
+    url: `attachment://${name}`
+  };
+}
+async function removeConnectedCornerBackground(input, tolerance = 42) {
+  const { data, info } = await sharp(input, { failOn: 'warning' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const { width, height, channels } = info;
+  if (!width || !height || channels < 4) return input;
+
+  const pixelCount = width * height;
+  const visited = new Uint8Array(pixelCount);
+  const queue = new Int32Array(pixelCount);
+  let head = 0;
+  let tail = 0;
+
+  const cornerIndexes = [
+    0,
+    width - 1,
+    (height - 1) * width,
+    pixelCount - 1
+  ];
+
+  const colours = cornerIndexes
+    .map((index) => {
+      const offset = index * channels;
+      return {
+        r: data[offset],
+        g: data[offset + 1],
+        b: data[offset + 2],
+        a: data[offset + 3]
+      };
+    })
+    .filter((c) => c.a > 0);
+
+  if (!colours.length) return input;
+
+  const threshold = tolerance * tolerance * 3;
+  const matchesBackground = (index) => {
+    const offset = index * channels;
+    if (data[offset + 3] === 0) return true;
+
+    const r = data[offset];
+    const g = data[offset + 1];
+    const b = data[offset + 2];
+
+    return colours.some((c) => {
+      const dr = r - c.r;
+      const dg = g - c.g;
+      const db = b - c.b;
+      return (dr * dr) + (dg * dg) + (db * db) <= threshold;
+    });
+  };
+
+  const enqueue = (index) => {
+    if (index < 0 || index >= pixelCount || visited[index]) return;
+    if (!matchesBackground(index)) return;
+    visited[index] = 1;
+    queue[tail++] = index;
+  };
+
+  for (let x = 0; x < width; x += 1) {
+    enqueue(x);
+    enqueue((height - 1) * width + x);
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    enqueue(y * width);
+    enqueue(y * width + width - 1);
+  }
+
+  while (head < tail) {
+    const index = queue[head++];
+    const offset = index * channels;
+    data[offset + 3] = 0;
+
+    const x = index % width;
+    const y = Math.floor(index / width);
+
+    if (x > 0) enqueue(index - 1);
+    if (x < width - 1) enqueue(index + 1);
+    if (y > 0) enqueue(index - width);
+    if (y < height - 1) enqueue(index + width);
+  }
+
+  return sharp(data, {
+    raw: { width, height, channels }
+  }).png().toBuffer();
+}
+
+async function forcedStaticGalleryAttachment(source, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
+  let cached = cachedAssetFor(guildId, source);
+
+  if (!cached?.buffer) {
+    cached = await ensureAssetCached(guildId, source);
+  }
+
+  if (!cached?.buffer) return null;
+
+  const flattened = await sharp(cached.buffer, {
+    failOn: 'warning',
+    animated: false,
+    page: 0,
+  })
+    .ensureAlpha()
+    .png()
+    .toBuffer();
+
+  const transparent = await removeConnectedCornerBackground(flattened);
+
+  const visible = await sharp(transparent, { failOn: 'warning' })
+    .ensureAlpha()
+    .resize({
+      width: visibleWidth,
+      withoutEnlargement: true,
+      fit: 'inside',
+    })
+    .png()
+    .toBuffer();
+
+  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
+
+  return {
+    attachment: new AttachmentBuilder(visible, { name }),
+    url: `attachment://${name}`,
+  };
+}
+
+async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
+  let cached = cachedAssetFor(guildId, source);
+  if (!cached?.buffer) cached = await ensureAssetCached(guildId, source);
+  if (!cached?.buffer) return null;
+
+  const type = contentTypeBase(cached.meta?.contentType || cached.contentType || '');
+  if (type && !STATIC_RASTER_TYPES.has(type)) return null;
+
+  const transparent = await removeConnectedCornerBackground(cached.buffer);
+  const visible = await sharp(transparent, { failOn: 'warning' })
+    .ensureAlpha()
+    .resize({
+      width: visibleWidth,
+      withoutEnlargement: true,
+      fit: 'inside'
+    })
+    .png()
+    .toBuffer();
+
+  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
+  return {
+    attachment: new AttachmentBuilder(visible, { name }),
+    url: `attachment://${name}`
+  };
 }
 async function galleryItems(media, interaction, placement = null, payloadFiles = null, panelIndex = 0) {
-  const output = []; const gallery = (Array.isArray(media?.gallery) ? media.gallery : []).slice(0, 10); const guildId = interactionGuildId(interaction);
-  for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
-    const item = gallery[itemIndex]; if (placement && itemPlacement(item) !== placement) continue; const source = resolveSource(item?.source, interaction); if (!source) continue;
-    const probe = await probeRemoteSource(source, 'media', guildId); let url = source; const alignment = galleryAlignment(item); const isStaticImage = String(item?.type || 'auto').toLowerCase() !== 'video' && !nativeImageShouldPassThrough(probe.contentType);
-    if (isStaticImage && Array.isArray(payloadFiles)) { const prepared = await alignedGalleryAttachment(source, alignment, panelIndex, itemIndex, guildId); if (prepared) { payloadFiles.push(prepared.attachment); url = prepared.url; } }
-    const builder = new MediaGalleryItemBuilder().setURL(url).setSpoiler(item?.spoiler === true); if (item?.alt) builder.setDescription(String(item.alt).slice(0, 1024)); output.push(builder);
-  }
-  return output;
+  return [];
 }
-function safeFilename(name, fallback) { const base = String(name || fallback || 'file').trim().replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, ''); return (base || fallback || 'file').slice(0, 120); }
-function sourceFilename(source, fallback) { try { const parsed = new URL(source); return decodeURIComponent(path.basename(parsed.pathname || '')) || fallback; } catch { return fallback; } }
-async function addMediaFiles(container, media, interaction, payloadFiles, panelIndex) {
-  const entries = (Array.isArray(media?.files) ? media.files : []).slice(0, 10); const guildId = interactionGuildId(interaction);
-  for (let fileIndex = 0; fileIndex < entries.length; fileIndex += 1) {
-    const entry = entries[fileIndex]; const source = resolveSource(entry?.source, interaction); if (!isHttpsUrl(source)) throw new Error(`Attached file source must resolve to a valid HTTPS URL: ${String(source || '').slice(0, 160)}`);
-    try { let cached = cachedAssetFor(guildId, source); if (!cached?.buffer) cached = await ensureAssetCached(guildId, source); if (!cached?.buffer) throw new Error('File could not be downloaded.'); const originalName = entry?.name || sourceFilename(source, `file-${fileIndex + 1}`); const name = safeFilename(`p${panelIndex + 1}-${fileIndex + 1}-${originalName}`, `p${panelIndex + 1}-file-${fileIndex + 1}`); const attachment = new AttachmentBuilder(cached.buffer, { name }); if (entry?.description) attachment.setDescription(String(entry.description).slice(0, 1024)); if (entry?.spoiler) attachment.setSpoiler(true); payloadFiles.push(attachment); container.addFileComponents(new FileBuilder().setURL(`attachment://${name}`).setSpoiler(entry?.spoiler === true)); }
-    catch (error) { throw new Error(`Attached file \"${entry?.name || sourceFilename(source, 'file')}\" could not be prepared: ${error?.message || error}`); }
-  }
-}
-async function addLegacyImage(container, imageUrl, files, index, guildId = 'global') {
-  if (!isHttpsUrl(imageUrl)) return; const probe = await probeRemoteSource(imageUrl, 'image', guildId);
-  if (nativeImageShouldPassThrough(probe.contentType)) { container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(imageUrl))); return; }
-  const source = await sourceImage(imageUrl, guildId); if (nativeImageShouldPassThrough(source.contentType)) { container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(imageUrl))); return; }
-  const centered = await makeCenteredPortrait(source.buffer); if (centered) { const name = `embed-panel-${index + 1}.png`; files.push(new AttachmentBuilder(centered, { name })); container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${name}`))); }
-}
-function componentEmojiIds(actionRows = []) { const ids = new Set(); for (const row of actionRows || []) { const data = typeof row?.toJSON === 'function' ? row.toJSON() : row; for (const component of Array.isArray(data?.components) ? data.components : []) { const id = String(component?.emoji?.id || '').trim(); if (/^\d{16,20}$/.test(id)) ids.add(id); } } return [...ids]; }
-function textEmojiIds(embeds = []) { const ids = new Set(); const scan = (value) => { for (const match of String(value || '').matchAll(/<a?:[a-zA-Z0-9_]+:(\d{16,20})>/g)) ids.add(match[1]); }; for (const embed of embeds || []) { const data = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed; if (!data || typeof data !== 'object') continue; scan(data.title); scan(data.description); scan(data.author?.name); scan(data.footer?.text); for (const field of Array.isArray(data.fields) ? data.fields : []) { scan(field?.name); scan(field?.value); } } return [...ids]; }
-async function resolveApplicationEmojiShortcodes(embeds = [], interaction = null) { const client = interaction?.client || null; const guildId = String(interaction?.guildId || interaction?.guild?.id || '').trim(); if (!client || !guildId) return embeds; return emojis.resolveEmbeds(client, guildId, embeds); }
-async function validateApplicationEmojiUsage(embeds = [], actionRows = [], interaction = null) {
-  const usedIds = [...new Set([...componentEmojiIds(actionRows), ...textEmojiIds(embeds)])]; if (!usedIds.length) return true; const manager = interaction?.client?.application?.emojis; const client = interaction?.client || null; const guildId = String(interaction?.guildId || interaction?.guild?.id || '').trim(); if (!manager || !client || !guildId) return true;
-  let bank = manager.cache; if (!bank?.size) bank = await manager.fetch(); const applicationIds = new Set([...bank.values()].map((emoji) => String(emoji.id))); const usedApplicationIds = usedIds.filter((id) => applicationIds.has(id)); if (!usedApplicationIds.length) return true;
-  const allowedByName = await emojis.allowedGuildEmojis(client, guildId); const allowedIds = new Set([...allowedByName.values()].map((emoji) => String(emoji.id))); const blocked = usedApplicationIds.filter((id) => !allowedIds.has(id)); if (!blocked.length) return true; const names = blocked.map((id) => bank.get(id)?.name ? `:${bank.get(id).name}:` : id); throw new Error(`Goliath application emoji not available for this guild: ${names.join(', ')}. Core emojis are automatic; optional Emoji Studio emojis must be selected for the guild.`);
-}
+
 async function buildEmbedPayload(options = {}) {
-  const { embeds = [], actionRows = [], allowUserPing = false, userId = null, ephemeral = false, interaction = null } = options; const mediaState = applyMediaAlignmentMap(options.media || null, options.mediaAlignment || {}); const components = []; const files = [];
-  const resolvedEmbeds = await resolveApplicationEmojiShortcodes(embeds, interaction); const client = interaction?.client || null; const guildId = interactionGuildId(interaction); const resolvedActionRows = client && guildId !== 'global' ? await emojiPayload.resolveComponents(client, guildId, actionRows, 'embed') : actionRows; await validateApplicationEmojiUsage(resolvedEmbeds, resolvedActionRows, interaction);
-  if (allowUserPing && userId) components.push(new TextDisplayBuilder().setContent(`<@${userId}>`));
+  const { embeds = [], actionRows = [], allowUserPing = false, userId = null, ephemeral = false, interaction = null } = options;
+  const mediaState = applyMediaAlignmentMap(options.media || null, options.mediaAlignment || {});
+  const files = [];
+  const outputEmbeds = [];
+  const resolvedEmbeds = await resolveApplicationEmojiShortcodes(embeds, interaction);
+  const client = interaction?.client || null;
+  const guildId = interactionGuildId(interaction);
+  const resolvedActionRows = client && guildId !== 'global' ? await emojiPayload.resolveComponents(client, guildId, actionRows, 'embed') : actionRows;
+  await validateApplicationEmojiUsage(resolvedEmbeds, resolvedActionRows, interaction);
+
   for (let index = 0; index < resolvedEmbeds.length; index += 1) {
-    const embed = resolvedEmbeds[index]; const data = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed; if (!data || typeof data !== 'object') continue;
-    const hasPanelMediaState = Array.isArray(mediaState?.panels) && index < mediaState.panels.length; const media = panelMedia(mediaState, index); const container = new ContainerBuilder(); if (Number.isInteger(data.color)) container.setAccentColor(data.color);
-    const text = panelText(data); const thumbSource = resolveSource(hasPanelMediaState ? media?.thumbnail?.source : data.thumbnail?.url, interaction); if (thumbSource) await probeRemoteSource(thumbSource, 'thumbnail', guildId);
+    const sourceEmbed = resolvedEmbeds[index];
+    const data = typeof sourceEmbed?.toJSON === 'function' ? sourceEmbed.toJSON() : sourceEmbed;
+    if (!data || typeof data !== 'object') continue;
+    const hasPanelMediaState = Array.isArray(mediaState?.panels) && index < mediaState.panels.length;
+    const media = panelMedia(mediaState, index);
+    const targetEmbed = sourceEmbed instanceof EmbedBuilder ? EmbedBuilder.from(sourceEmbed) : EmbedBuilder.from(data);
+    const thumbSource = resolveSource(hasPanelMediaState ? media?.thumbnail?.source : data.thumbnail?.url, interaction);
+    if (thumbSource) { await probeRemoteSource(thumbSource, 'thumbnail', guildId); if (isHttpsUrl(thumbSource)) targetEmbed.setThumbnail(thumbSource); }
+
     if (hasPanelMediaState) {
-      const aboveItems = await galleryItems(media, interaction, 'above', files, index); if (aboveItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...aboveItems));
-      if (text && isHttpsUrl(thumbSource)) { const thumbnail = new ThumbnailBuilder().setURL(thumbSource); if (media?.thumbnail?.alt) thumbnail.setDescription(String(media.thumbnail.alt).slice(0, 1024)); container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)).setThumbnailAccessory(thumbnail)); } else if (text) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
-      const belowItems = await galleryItems(media, interaction, 'below', files, index); if (belowItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...belowItems));
+      const gallery = Array.isArray(media?.gallery) ? media.gallery.slice(0, 10) : [];
+      const above = [];
+      const below = [];
+      for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
+        const item = gallery[itemIndex];
+        const source = resolveSource(item?.source, interaction);
+        if (!source) continue;
+        const probe = await probeRemoteSource(source, 'media', guildId);
+        const mediaType = String(item?.type || 'auto').toLowerCase();
+
+        if (mediaType === 'video') continue;
+
+        const placement = itemPlacement(item);
+        const headerType = placement === 'above'
+          ? resolvedGalleryHeaderType(item, probe.contentType)
+          : 'image';
+
+        /*
+         * Type: Text deliberately suppresses the graphic header.
+         * The interaction handler normally moves it Below Content as well,
+         * but this renderer guard keeps persisted/manual state safe.
+         */
+        if (placement === 'above' && headerType === 'text') {
+          continue;
+        }
+
+        const imageEmbed = new EmbedBuilder();
+
+        if (Number.isInteger(data.color)) {
+          imageEmbed.setColor(data.color);
+        }
+
+        if (placement === 'above' && headerType === 'gif') {
+          /*
+           * GIF/native mode bypasses Sharp entirely so Discord receives the
+           * original source and animation is preserved.
+           */
+          imageEmbed.setImage(source);
+          above.push(imageEmbed);
+          continue;
+        }
+
+        const forceStatic =
+          placement === 'above' &&
+          galleryHeaderType(item) === 'image';
+
+        const nativePassThrough =
+          nativeImageShouldPassThrough(probe.contentType);
+
+        if (nativePassThrough && !forceStatic) {
+          /*
+           * Auto-detected native images (currently GIF) also pass through
+           * untouched.
+           */
+          imageEmbed.setImage(source);
+          (placement === 'above' ? above : below).push(imageEmbed);
+          continue;
+        }
+
+        const prepared = forceStatic
+          ? await forcedStaticGalleryAttachment(
+              source,
+              index,
+              itemIndex,
+              guildId,
+              galleryImageWidth(item)
+            )
+          : await plainGalleryAttachment(
+              source,
+              index,
+              itemIndex,
+              guildId,
+              galleryImageWidth(item)
+            );
+
+        if (!prepared) continue;
+
+        files.push(prepared.attachment);
+        imageEmbed.setImage(prepared.url);
+
+        (placement === 'above' ? above : below).push(imageEmbed);
+      }
+      for (const imageEmbed of above) outputEmbeds.push(imageEmbed);
+      outputEmbeds.push(targetEmbed);
+      for (const imageEmbed of below) outputEmbeds.push(imageEmbed);
     } else {
-      if (text && isHttpsUrl(thumbSource)) { const thumbnail = new ThumbnailBuilder().setURL(thumbSource); container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)).setThumbnailAccessory(thumbnail)); } else if (text) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(text));
-      const imageUrl = resolveSource(data.image?.url, interaction); if (isHttpsUrl(imageUrl)) { try { await addLegacyImage(container, imageUrl, files, index, guildId); } catch (error) { throw new Error(`Panel ${index + 1} image could not be prepared: ${error?.message || error}`); } }
+      outputEmbeds.push(targetEmbed);
     }
-    if (media?.files?.length) await addMediaFiles(container, media, interaction, files, index); const footer = footerText(data); if (footer) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(footer)); components.push(container);
   }
-  for (const row of resolvedActionRows || []) components.push(row); let flags = MessageFlags.IsComponentsV2; if (ephemeral) flags |= MessageFlags.Ephemeral; return { components, files, flags };
+
+  const payload = { embeds: outputEmbeds.slice(0, 10), components: [...(resolvedActionRows || [])], files };
+  if (allowUserPing && userId) payload.content = `<@${userId}>`;
+  if (ephemeral) payload.flags = MessageFlags.Ephemeral;
+  return payload;
 }
-async function centerOnLegacyEmbedCanvas(buffer) { return makeCenteredPortrait(buffer); }
-async function prepareEmbedMedia(embeds = [], options = {}) {
-  const files = []; const output = Array.isArray(embeds) ? embeds : []; const guildId = options.guildId || 'global';
-  for (let index = 0; index < output.length; index += 1) { const embed = output[index]; if (!embed || typeof embed.toJSON !== 'function' || typeof embed.setImage !== 'function') continue; const imageUrl = embed.toJSON()?.image?.url; if (!imageUrl || !isHttpsUrl(imageUrl)) continue; try { const source = await sourceImage(imageUrl, guildId); if (nativeImageShouldPassThrough(source.contentType)) continue; const processed = await centerOnLegacyEmbedCanvas(source.buffer); if (!processed) continue; const name = `embed-panel-${index + 1}-large.png`; files.push(new AttachmentBuilder(processed, { name })); embed.setImage(`attachment://${name}`); } catch (error) { console.warn(`[EmbedMedia] panel ${index + 1}: media normalization failed:`, error?.message || error); } }
-  return { embeds: output, files };
-}
-module.exports = { CANVAS_WIDTH, PORTRAIT_WIDTH, PORTRAIT_SHIFT_RIGHT, PANEL_BG, LEGACY_TARGET_WIDTH, LEGACY_PORTRAIT_VISIBLE_WIDTH, buildEmbedPayload, prepareEmbedMedia, probeRemoteSource, applyMediaAlignmentMap };
+
+async function resolveApplicationEmojiShortcodes(embeds, interaction) { return embeds || []; }
+async function validateApplicationEmojiUsage() { return true; }
+
+module.exports = {
+  buildEmbedPayload,
+  makeCenteredPortrait,
+  applyMediaAlignmentMap,
+};

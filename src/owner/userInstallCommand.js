@@ -1,29 +1,24 @@
 'use strict';
 
-const {
-  SlashCommandBuilder,
-  ApplicationIntegrationType,
-  InteractionContextType,
-} = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
+
 const ownerPanel = require('./command');
 
 /**
  * Private Goliath owner command.
  *
- * /owner is a normal guild/global application command so the configured
- * Goliath owners can invoke it in any server where Goliath is installed.
- * Discord cannot express a dynamic OWNER_IDS allow-list in command metadata,
- * so ownerPanel.execute() is the authoritative access gate.
+ * /owner is registered as a GUILD_INSTALL command and intentionally visible
+ * in the guild command picker. Discord cannot express a dynamic OWNER_IDS
+ * allow-list through default_member_permissions, so the authoritative owner
+ * check remains inside ownerPanel.execute().
  *
  * IMPORTANT:
- * Visibility is not authorization. The command may appear in the picker,
- * but only configured OWNER_IDS receive the private owner panel.
+ * Visibility is not authorization. Non-owners can see the command entry, but
+ * ownerPanel.execute() and every owner-panel interaction enforce OWNER_IDS.
  */
 const data = new SlashCommandBuilder()
   .setName('owner')
   .setDescription('Open the private Goliath owner control panel.')
-  .setIntegrationTypes(ApplicationIntegrationType.GuildInstall)
-  .setContexts(InteractionContextType.Guild)
   .setDMPermission(false);
 
 async function execute(interaction, client) {
@@ -35,5 +30,8 @@ module.exports = {
   data,
   execute,
   category: 'Owner',
-  access: { ownerOnly: true },
+  access: {
+    ownerOnly: true,
+    restrictedGuildCommand: true,
+  },
 };

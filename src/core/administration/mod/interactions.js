@@ -858,6 +858,11 @@ async function handleModInteraction(i) {
       || quarantineId.startsWith('mod_submit_quarantine:')
       || quarantineId.startsWith('mod_invroom_note:')
       || quarantineId.startsWith('mod_invroom_note_submit:')
+      || quarantineId.startsWith('mod_invroom_access:')
+      || quarantineId.startsWith('mod_invroom_access_channel:')
+      || quarantineId.startsWith('mod_invroom_access_allow:')
+      || quarantineId.startsWith('mod_invroom_access_remove:')
+      || quarantineId.startsWith('mod_invroom_access_clear:')
     ) {
       const handledQuarantine = await quarantineInteractions.handleQuarantineInteraction(i);
       if (handledQuarantine) return true;

@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: sync-goliath-dev
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   sync-dev:
@@ -38,7 +38,15 @@ jobs:
             PM2_NAME=goliath-dev
             DEV_HOST=dev.goliath.ksjdigital.co.uk
             BACKUP_DIR=/home/goliath/.goliath-dev-runtime-sync-backup
-            DIRTY_BACKUP_ROOT=/home/goliath/.goliath-dev-dirty-backups
+            LOCK_FILE=/home/goliath/.goliath-dev-sync.lock
+
+            # Serialize on the VPS as well as in GitHub Actions. This protects the
+            # shared DEV worktree/node_modules even if an SSH runner disconnects.
+            exec 9>"$LOCK_FILE"
+            echo "🔒 Waiting for DEV deployment lock"
+            flock -w 900 9 || { echo "Timed out waiting for DEV deployment lock." >&2; exit 1; }
+            echo "🔒 DEV deployment lock acquired"
+
             cd "$APP_DIR"
 
             AUTH_URL="https://x-access-token:${GITHUB_DEPLOY_TOKEN}@github.com/${{ github.repository }}.git"
@@ -46,9 +54,17 @@ jobs:
             cleanup_remote() { git remote set-url origin "https://github.com/${{ github.repository }}.git" || true; }
             trap cleanup_remote EXIT
 
-            git fetch --no-tags origin dev
-            LATEST_SHA="$(git rev-parse origin/dev)"
+            remote_dev_sha() {
+              git ls-remote origin refs/heads/dev | awk 'NR==1 {print $1}'
+            }
+            ensure_expected_commit() {
+              git cat-file -e "$EXPECTED_SHA^{commit}" 2>/dev/null || git fetch --no-tags origin "$EXPECTED_SHA"
+            }
+
+            LATEST_SHA="$(remote_dev_sha)"
+            [ -n "$LATEST_SHA" ] || { echo "Unable to resolve remote DEV SHA." >&2; exit 1; }
             [ "$EXPECTED_SHA" = "$LATEST_SHA" ] || { echo "Superseded before sync; exiting cleanly."; exit 0; }
+            ensure_expected_commit
 
             # DEV SAFETY CONTRACT:
             # Never reset, clean, stash, overwrite, or otherwise modify a dirty
@@ -118,8 +134,8 @@ jobs:
             mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
             grep -q 'GOLIATH_APPEALS_ENTRY' dist/assets/*.js
 
-            git fetch --no-tags origin dev
-            [ "$EXPECTED_SHA" = "$(git rev-parse origin/dev)" ] || { echo "Superseded during validation; exiting cleanly."; exit 0; }
+            LATEST_SHA="$(remote_dev_sha)"
+            [ "$EXPECTED_SHA" = "$LATEST_SHA" ] || { echo "Superseded during validation; exiting cleanly."; exit 0; }
 
             NGINX_DUMP="$(nginx -T 2>&1)"
             DASHBOARD_ROOT="$(printf '%s\n' "$NGINX_DUMP" | awk -v host="$DEV_HOST" '$1=="server_name"{for(i=2;i<=NF;i++){n=$i;gsub(/;/,"",n);if(n==host)found=1}next} found&&$1=="root"{r=$2;gsub(/;/,"",r);print r;exit}')"
@@ -129,8 +145,8 @@ jobs:
 
             BOT_MODE=dev COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
 
-            git fetch --no-tags origin dev
-            [ "$EXPECTED_SHA" = "$(git rev-parse origin/dev)" ] || { echo "Superseded before restart; exiting cleanly."; exit 0; }
+            LATEST_SHA="$(remote_dev_sha)"
+            [ "$EXPECTED_SHA" = "$LATEST_SHA" ] || { echo "Superseded before restart; exiting cleanly."; exit 0; }
 
             echo "♻️ One controlled PM2 reload from ecosystem config"
             pm2 delete "$PM2_NAME" >/dev/null 2>&1 || true
@@ -163,14 +179,18 @@ jobs:
               exit 1
             fi
 
+            # A newer DEV push may arrive while this run is inside the stability
+            # gate. That makes this run stale, not failed. Leave the newer workflow
+            # to deploy the newer commit instead of reporting a false SHA mismatch.
+            REMOTE_SHA="$(remote_dev_sha)"
+            if [ "$EXPECTED_SHA" != "$REMOTE_SHA" ]; then
+              echo "Superseded during stability gate; exiting cleanly."
+              exit 0
+            fi
+
             FINAL_SHA="$(git rev-parse HEAD)"
-            REMOTE_SHA="$(git rev-parse origin/dev)"
             if [ "$FINAL_SHA" != "$EXPECTED_SHA" ]; then
               echo "DEV SHA mismatch: local=$FINAL_SHA expected=$EXPECTED_SHA" >&2
-              exit 1
-            fi
-            if [ "$FINAL_SHA" != "$REMOTE_SHA" ]; then
-              echo "DEV SHA mismatch: local=$FINAL_SHA remote=$REMOTE_SHA" >&2
               exit 1
             fi
 

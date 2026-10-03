@@ -113,6 +113,8 @@ export const api = {
   runTicketRecoveryScan: (guildId) => request(`/api/tickets/${guildId}/recovery`, { method: 'POST', body: JSON.stringify({ createMissingChannels: false }) }),
   recreateMissingTicketChannels: (guildId) => request(`/api/tickets/${guildId}/recovery`, { method: 'POST', body: JSON.stringify({ createMissingChannels: true }) }),
   getEmbedStudio: (guildId) => request(`/api/modules/${guildId}/embed-studio`),
+  getEmbedStudioHealth: (guildId) => request(`/api/modules/${guildId}/embed-studio/health`),
+  repairEmbedStudio: (guildId) => request(`/api/modules/${guildId}/embed-studio/repair`, { method: 'POST' }),
 
   saveEmbedPreset: (guildId, name, payload) => request(`/api/modules/${guildId}/embed-studio/presets`, { method: 'POST', body: JSON.stringify({ name, ...payload }) }),
   deleteEmbedPreset: (guildId, name) => request(`/api/modules/${guildId}/embed-studio/presets/${encodeURIComponent(name)}`, { method: 'DELETE' }),

@@ -12,6 +12,7 @@ const {
   FileUploadBuilder,
   LabelBuilder,
   ModalBuilder,
+  StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
@@ -174,13 +175,24 @@ function normalizeGalleryItem(value = {}) {
   const alignment = ['left', 'center', 'right'].includes(String(value?.alignment || '').toLowerCase())
     ? String(value.alignment).toLowerCase()
     : 'left';
+  const size = ['small', 'medium', 'large'].includes(String(value?.size || '').toLowerCase())
+    ? String(value.size).toLowerCase()
+    : 'large';
   return {
     source: cleanSource(source),
     alt: cleanString(value?.alt || value?.description || '', 1024),
     spoiler: value?.spoiler === true,
-    type: ['auto', 'image', 'video'].includes(String(value?.type || '').toLowerCase()) ? String(value.type).toLowerCase() : 'auto',
+    // Media Type is always auto by default. Legacy "text" media values are
+    // retired; text is a header mode, not a gallery media type.
+    type: ['auto', 'image', 'video'].includes(String(value?.type || '').toLowerCase())
+      ? String(value.type).toLowerCase()
+      : 'auto',
+    headerType: ['auto', 'text', 'gif', 'image'].includes(String(value?.headerType || '').toLowerCase())
+      ? String(value.headerType).toLowerCase()
+      : 'auto',
     placement,
     alignment,
+    size,
   };
 }
 function normalizeFile(value = {}) {
@@ -540,282 +552,131 @@ function installUploadModals(panel) {
     );
   };
 
-  /*
-   * PASS 3F — EDIT MEDIA PANEL
-   *
-   * Keep the main Media Manager clean. Detailed controls for the selected
-   * gallery item live here instead.
-   */
-  panel.buildEditMediaPanel = (interaction) => {
-    const state = panel.getSession(interaction);
-    const media = getPanelMedia(state);
-
-    const requestedIndex = Number.isInteger(state.selectedMediaIndex)
-      ? state.selectedMediaIndex
-      : null;
-
-    const index = media.gallery.length
-      ? Math.max(0, Math.min(requestedIndex ?? 0, media.gallery.length - 1))
-      : null;
-
-    const item = index == null ? null : media.gallery[index];
-
-    if (!item) {
-      return panel.buildMediaManagerPanel(
-        interaction,
-        panel.memberName(interaction)
-      );
-    }
-
-    const type = ['auto', 'image', 'video'].includes(item.type)
-      ? item.type
-      : 'auto';
-
-    const placement = item.placement === 'above'
-      ? 'Above Content'
-      : 'Below Content';
-
-    let headerMode = 'Text';
-
-    if (typeof panel.graphicHeaderMode === 'function') {
-      const mode = panel.graphicHeaderMode(state);
-
-      if (mode === 'graphic') headerMode = 'Graphic';
-      else if (mode === 'both') headerMode = 'Both';
-    }
-
-    return {
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0x5865F2)
-          .setTitle('✏️ Edit Media')
-          .setDescription([
-            `**Gallery item:** ${index + 1} / ${media.gallery.length}`,
-            `**Type:** ${
-              type === 'auto'
-                ? 'Auto Detect'
-                : type === 'image'
-                  ? 'Image'
-                  : 'Video'
-            }`,
-            `**Placement:** ${placement}`,
-            `**Graphic Header:** ${headerMode}`,
-            `**Spoiler:** ${item.spoiler ? 'On' : 'Off'}`,
-          ].join('\n')),
-      ],
-      components: enforceLimits([
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('embed:media-edit-details')
-            .setLabel('✏️ Edit Details')
-            .setStyle(ButtonStyle.Primary),
-
-          new ButtonBuilder()
-            .setCustomId('embed:graphic-header-cycle')
-            .setLabel(`🪧 Header: ${headerMode}`)
-            .setStyle(ButtonStyle.Secondary)
-        ),
-
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('embed:media-spoiler:off')
-            .setLabel('👁️ Normal')
-            .setStyle(
-              item.spoiler
-                ? ButtonStyle.Secondary
-                : ButtonStyle.Primary
-            ),
-
-          new ButtonBuilder()
-            .setCustomId('embed:media-spoiler:on')
-            .setLabel('🙈 Spoiler')
-            .setStyle(
-              item.spoiler
-                ? ButtonStyle.Primary
-                : ButtonStyle.Secondary
-            )
-        ),
-
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('embed:media-duplicate')
-            .setLabel('📑 Duplicate')
-            .setStyle(ButtonStyle.Success)
-            .setDisabled(media.gallery.length >= MAX_GALLERY_ITEMS)
-        ),
-
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('embed:media-edit-back')
-            .setLabel('⬅️ Back')
-            .setStyle(ButtonStyle.Secondary)
-        ),
-      ]),
-    };
-  };
-
   panel.__mediaUploadModalsBound = true;
   return panel;
 }
 
-function installMediaOptionsUi(panel) {
-  if (!panel || panel.__mediaOptionsUiBound) return panel;
-  panel.buildMediaOptionsPanel = (interaction) => {
-    const state = panel.getSession(interaction);
-    const media = getPanelMedia(state);
-    const index = media.gallery.length ? Math.max(0, Math.min(Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : 0, media.gallery.length - 1)) : null;
-    const item = index == null ? null : media.gallery[index];
-    if (!item) return panel.buildMediaManagerPanel(interaction, panel.memberName(interaction));
-    const type = ['auto', 'image', 'video'].includes(item.type) ? item.type : 'auto';
-    const placement = item.placement === 'above' ? 'above' : 'below';
-    return {
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ Media Options').setDescription([
-        `**Gallery item:** ${index + 1} / ${media.gallery.length}`,
-        `**Type handling:** ${type === 'auto' ? 'Auto detect' : type === 'image' ? 'Image' : 'Video'}`,
-        `**Placement:** ${placement === 'above' ? 'Above Content' : 'Below Content'}`,
-        `**Spoiler:** ${item.spoiler ? 'On' : 'Off'}`,
-        '',
-        'Use placement to position media before or after the panel text. Duplicate Media copies the complete selected item, including its source and current settings.',
-      ].join('\n'))],
-      components: enforceLimits([
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:media-type:auto').setLabel('✨ Auto Detect').setStyle(type === 'auto' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('embed:media-type:image').setLabel('🖼️ Image').setStyle(type === 'image' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('embed:media-type:video').setLabel('🎬 Video').setStyle(type === 'video' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        ),
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:media-spoiler:off').setLabel('👁️ Normal').setStyle(item.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('embed:media-spoiler:on').setLabel('🙈 Spoiler').setStyle(item.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        ),
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:media-placement:above').setLabel('⬆️ Above Content').setStyle(placement === 'above' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId('embed:media-placement:below').setLabel('⬇️ Below Content').setStyle(placement === 'below' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        ),
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:media-duplicate').setLabel('📑 Duplicate Media').setStyle(ButtonStyle.Success).setDisabled(media.gallery.length >= MAX_GALLERY_ITEMS),
-        ),
-        new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:media-options-back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)),
-      ]),
-    };
-  };
-  panel.buildFileOptionsPanel = (interaction) => {
-    const state = panel.getSession(interaction);
-    const media = getPanelMedia(state);
-    const index = media.files.length ? Math.max(0, Math.min(Number.isInteger(state.selectedFileIndex) ? state.selectedFileIndex : 0, media.files.length - 1)) : null;
-    const item = index == null ? null : media.files[index];
-    if (!item) return panel.buildMediaManagerPanel(interaction, panel.memberName(interaction));
-    const source = resolveSource(panel, item.source, interaction);
-    return {
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ File Options').setDescription([
-        `**File:** ${index + 1} / ${media.files.length}`,
-        `**Name:** ${item.name || 'Automatic filename'}`,
-        `**Spoiler:** ${item.spoiler ? 'On' : 'Off'}`,
-        item.description ? `**Description:** ${String(item.description).slice(0, 900)}` : '**Description:** Not set',
-        '',
-        source ? `[Open selected file](${source})` : 'The source will be resolved when the message is sent.',
-        '',
-        'Use the buttons below to control whether Discord hides the attachment behind a spoiler warning.',
-      ].join('\n').slice(0, 4096))],
-      components: enforceLimits([
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:file-spoiler:off').setLabel('👁️ Normal').setStyle(item.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('embed:file-spoiler:on').setLabel('🙈 Spoiler').setStyle(item.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        ),
-        new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:file-options-back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)),
-      ]),
-    };
-  };
-  panel.__mediaOptionsUiBound = true;
-  return panel;
+function validMediaAlignment(value) {
+  const alignment = String(value || '').toLowerCase();
+  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
 }
 
 function installMediaManagerUi(panel) {
-  if (!panel || panel.__mediaManagerUiBound || typeof panel.buildMediaManagerPanel !== 'function') return panel;
-  function validationSummary(interaction) {
-    const state = panel.getSession(interaction);
-    const media = getPanelMedia(state);
-    const report = validatePanelMedia(media);
-    const lines = ['**Media status**'];
-    if (media.thumbnail?.source) lines.push(`${statusIcon(report.thumbnail.status)} Thumbnail — ${report.thumbnail.message}`);
-    for (const entry of report.gallery) {
-      const placement = media.gallery?.[entry.index]?.placement === 'above' ? 'Above Content' : 'Below Content';
-      lines.push(`${statusIcon(entry.status)} Gallery ${entry.index + 1} — ${entry.kind === 'auto' ? 'media' : entry.kind} — ${placement} — ${entry.message}`);
+  if (!panel || panel.__mediaManagerUiBound) return panel;
+
+  panel.buildMediaManagerPanel = (interaction, who = 'Unknown User', stateOverride = null) => {
+    const state = stateOverride && typeof stateOverride === 'object'
+      ? stateOverride
+      : panel.getSession(interaction);
+    const panelMedia = mediaModel.mediaForPanel(state);
+    const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : null;
+    const galleryIndex = panelMedia.gallery.length
+      ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1))
+      : null;
+    const selectedMedia = galleryIndex == null ? null : mediaModel.normalizeGalleryItem(panelMedia.gallery[galleryIndex] || {});
+    const aboveCount = panelMedia.gallery.filter((item) => item?.placement === 'above').length;
+    const belowCount = panelMedia.gallery.length - aboveCount;
+    const selectedAlignment = validMediaAlignment(selectedMedia?.alignment) || 'left';
+    const alignmentLabel = selectedAlignment === 'center' ? '↔️ Centre' : selectedAlignment === 'right' ? '➡️ Right' : '⬅️ Left';
+    const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => (
+      new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(Boolean(disabled))
+    );
+    const rows = [];
+
+    if (panelMedia.gallery.length) {
+      rows.push(new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('embed:media-gallery-select')
+          .setPlaceholder('🎞️ Select media item')
+          .addOptions(panelMedia.gallery.slice(0, 25).map((item, index) => ({
+            label: `${index + 1}. ${String(item.alt || item.source || 'Media item').slice(0, 80)}`,
+            value: String(index),
+            description: String(`${item.type || 'auto'} • ${item.placement === 'above' ? 'Above Content' : 'Below Content'} • ${item.spoiler ? 'spoiler' : 'normal'}`).slice(0, 100),
+            default: galleryIndex === index,
+          })))
+      ));
     }
-    for (const entry of report.files) lines.push(`${statusIcon(entry.status)} File ${entry.index + 1} — ${entry.kind === 'auto' ? 'file' : entry.kind} — ${entry.message}`);
-    if (!media.thumbnail?.source && !report.gallery.length && !report.files.length) lines.push('➖ No media configured yet.');
-    lines.push(`Ready: **${report.ready}** • Warnings: **${report.warnings}** • Invalid: **${report.invalid}**`);
-    return lines.join('\n').slice(0, 1500);
-  }
-  function visualPreview(interaction) {
-    const state = panel.getSession(interaction);
-    const media = getPanelMedia(state);
-    const selected = Number.isInteger(state.selectedMediaIndex) ? media.gallery?.[state.selectedMediaIndex] : null;
-    const selectedSource = resolveSource(panel, selected?.source, interaction);
-    const thumbnailSource = resolveSource(panel, media.thumbnail?.source, interaction);
-    const selectedType = String(selected?.type || 'auto').toLowerCase();
-    const placement = selected?.placement === 'above' ? 'Above Content' : 'Below Content';
-    if (selected && selectedType === 'video') {
-      const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`🎬 Selected Video Preview • ${placement}`);
-      if (selectedSource) embed.setDescription(`[Open selected video](${selectedSource})${selected.alt ? `\n\n${String(selected.alt).slice(0, 800)}` : ''}`);
-      else embed.setDescription('The selected video uses a variable or source that cannot be previewed here yet. It will be resolved when the message is sent.');
-      return embed;
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= mediaModel.MAX_FILES),
+      button('embed:media-gallery-edit', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
+      button('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
+      button('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
+      button('embed:media-gallery-down', '⬇️ Down', ButtonStyle.Secondary, galleryIndex == null || galleryIndex >= panelMedia.gallery.length - 1),
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:media-placement:above', '⬆️ Above Content', selectedMedia?.placement === 'above' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-placement:below', '⬇️ Below Content', selectedMedia?.placement === 'below' ? ButtonStyle.Success : ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary),
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:media-align:left', '⬅️ Left', selectedAlignment === 'left' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-align:center', '↔️ Centre', selectedAlignment === 'center' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-align:right', '➡️ Right', selectedAlignment === 'right' ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:media-type:cycle', `🏷️ Type: ${selectedMedia?.type || 'auto'}`, ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-spoiler:off', '👁️ Normal', selectedMedia?.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary, galleryIndex == null),
+      button('embed:media-spoiler:on', '🙈 Spoiler', selectedMedia?.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
+      button('embed:media-duplicate', '📑 Duplicate', ButtonStyle.Success, galleryIndex == null || panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS),
+    ));
+
+    rows.push(new ActionRowBuilder().addComponents(
+      button('embed:builder', '⬅️ Back'),
+      button('embed:settings', '⚙️ Settings'),
+      button('embed:helpers', '📖 Variables'),
+    ));
+
+    const summary = [
+      `Editing panel **${(Number(state.selectedPanelIndex) || 0) + 1}/${Math.max(1, Array.isArray(state.panels) ? state.panels.length : 1)}**`,
+      '',
+      `⬆️ **Above Content** — ${aboveCount}`,
+      `⬇️ **Below Content** — ${belowCount}`,
+      `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'}`,
+      `📎 **Files** — ${panelMedia.files.length}/${mediaModel.MAX_FILES}`,
+      '',
+      'Images, animated GIFs and supported videos can be placed independently above or below the panel content.',
+    ];
+
+    if (selectedMedia) {
+      summary.push(
+        '',
+        `**Selected media:** ${String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 300)}`,
+        `**Placement:** ${selectedMedia.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content'}`,
+        `**Alignment:** ${alignmentLabel}`,
+        `**Type:** ${selectedMedia.type || 'auto'}`,
+        `**Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`,
+      );
+    } else {
+      summary.push('', 'No media selected. Add media or select an existing gallery item.');
     }
-    if (selectedSource) {
-      const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle(`🖼️ Selected Media Preview • ${placement}`)
-        .setDescription(
-          selected?.alt
-            ? String(selected.alt).slice(0, 800)
-            : 'Selected gallery media preview.'
-        )
-        .setImage(selectedSource);
-      return embed;
+
+    const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)];
+
+    if (selectedMedia) {
+      const source = resolveSource(panel, selectedMedia.source, interaction);
+      if (source && embeds.length < 10) {
+        const preview = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle(`🖼️ Selected Media Preview • ${selectedMedia.placement === 'above' ? 'Above Content' : 'Below Content'} • ${selectedAlignment === 'center' ? 'Centre' : selectedAlignment[0].toUpperCase() + selectedAlignment.slice(1)}`)
+          .setDescription(String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 1000));
+        if (selectedMedia.type !== 'video') preview.setImage(source);
+        embeds.push(preview);
+      }
     }
-    if (thumbnailSource) return new EmbedBuilder().setColor(0x5865F2).setTitle('🖼️ Thumbnail Preview').setImage(thumbnailSource);
-    return null;
-  }
-  function filePreview(interaction) {
-    const state = panel.getSession(interaction);
-    const media = getPanelMedia(state);
-    const index = media.files.length ? Math.max(0, Math.min(Number.isInteger(state.selectedFileIndex) ? state.selectedFileIndex : 0, media.files.length - 1)) : null;
-    if (index == null) return null;
-    const file = media.files[index];
-    const source = resolveSource(panel, file.source, interaction);
-    const lines = [`**File ${index + 1} of ${media.files.length}**`, `**Name:** ${file.name || 'Automatic filename'}`, `**Spoiler:** ${file.spoiler ? 'On' : 'Off'}`];
-    if (file.description) lines.push(`**Description:** ${String(file.description).slice(0, 800)}`);
-    if (source) lines.push(`[Open selected file](${source})`);
-    else lines.push('The file source uses a variable or cannot be previewed here yet. It will be resolved when the message is sent.');
-    return new EmbedBuilder().setColor(0x5865F2).setTitle('📎 Selected File').setDescription(lines.join('\n'));
-  }
-  const original = panel.buildMediaManagerPanel.bind(panel);
-  panel.buildMediaManagerPanel = (interaction, requestedBy = null) => {
-    const payload = original(interaction, requestedBy);
-    /*
-     * Component layout is owned exclusively by embedMediaManagerBase.
-     *
-     * This UI installer enriches the manager with validation and previews,
-     * but must not reconstruct or reorder the controls. Keeping one layout
-     * authority prevents later installers from silently replacing placement,
-     * navigation, or secondary-media controls.
-     */
-    const state = panel.getSession(interaction);
-    const media = getPanelMedia(state);
-    const rows = Array.isArray(payload?.components)
-      ? payload.components
-      : [];
-    const embed = payload?.embeds?.[0];
-    if (embed?.data) embed.setDescription(`${String(embed.data.description || '')}\n\n${validationSummary(interaction)}`.slice(0, 4096));
-    const embeds = Array.isArray(payload?.embeds) ? [...payload.embeds] : [];
-    const preview = visualPreview(interaction);
-    const selectedFile = filePreview(interaction);
-    if (preview && embeds.length < 10) embeds.push(preview);
-    if (selectedFile && embeds.length < 10) embeds.push(selectedFile);
-    return { ...payload, embeds, components: enforceLimits(rows) };
+
+    return { embeds, components: enforceLimits(rows) };
   };
+
   panel.buildMediaManager = panel.buildMediaManagerPanel;
   panel.validatePanelMedia = validatePanelMedia;
-  panel.EMBED_COMPONENT_LIMITS = Object.freeze({ maxComponentsPerRow: MAX_COMPONENTS_PER_ROW, maxActionRows: MAX_ACTION_ROWS });
+  panel.EMBED_COMPONENT_LIMITS = Object.freeze({
+    maxComponentsPerRow: MAX_COMPONENTS_PER_ROW,
+    maxActionRows: MAX_ACTION_ROWS,
+  });
   panel.__mediaManagerUiBound = true;
   return panel;
 }
@@ -866,7 +727,6 @@ module.exports = {
   installStateCompatibility,
   installPersistentMediaCompatibility,
   installUploadModals,
-  installMediaOptionsUi,
   installMediaManagerUi,
   installThumbnailUi,
   MAX_ASSET_BYTES,
