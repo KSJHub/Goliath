@@ -643,6 +643,40 @@ function installUploadModals(panel) {
 
 
 
+
+function mediaManagerButton(id, label, style = ButtonStyle.Secondary, disabled = false) {
+  return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+}
+function mediaManagerSourceLabel(value, fallback = 'Not set') {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  try {
+    const url = new URL(text);
+    const name = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || 'Media');
+    return name.length > 42 ? `${name.slice(0, 39)}...` : name;
+  } catch {
+    return text.length > 42 ? `${text.slice(0, 39)}...` : text;
+  }
+}
+function mediaManagerClone(value, fallback = null) {
+  try { return JSON.parse(JSON.stringify(value ?? fallback)); } catch { return fallback; }
+}
+function validMediaAlignment(value) {
+  const alignment = String(value || '').toLowerCase();
+  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
+}
+function mediaSourceKey(item) {
+  return String(item?.source || '').trim();
+}
+
+
+  panel.buildMediaManager = panel.buildMediaManagerPanel;
+  panel.validatePanelMedia = validatePanelMedia;
+  panel.EMBED_COMPONENT_LIMITS = Object.freeze({ maxComponentsPerRow: MAX_COMPONENTS_PER_ROW, maxActionRows: MAX_ACTION_ROWS });
+  panel.__mediaManagerUiBound = true;
+  return panel;
+}
+
 function installMediaOptionsUi(panel) {
   if (!panel || panel.__mediaOptionsUiBound) return panel;
   panel.buildMediaOptionsPanel = (interaction) => {
@@ -714,38 +748,6 @@ function installMediaOptionsUi(panel) {
   return panel;
 }
 
-function mediaManagerButton(id, label, style = ButtonStyle.Secondary, disabled = false) {
-  return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
-}
-function mediaManagerSourceLabel(value, fallback = 'Not set') {
-  const text = String(value || '').trim();
-  if (!text) return fallback;
-  try {
-    const url = new URL(text);
-    const name = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || 'Media');
-    return name.length > 42 ? `${name.slice(0, 39)}...` : name;
-  } catch {
-    return text.length > 42 ? `${text.slice(0, 39)}...` : text;
-  }
-}
-function mediaManagerClone(value, fallback = null) {
-  try { return JSON.parse(JSON.stringify(value ?? fallback)); } catch { return fallback; }
-}
-function validMediaAlignment(value) {
-  const alignment = String(value || '').toLowerCase();
-  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
-}
-function mediaSourceKey(item) {
-  return String(item?.source || '').trim();
-}
-
-
-  panel.buildMediaManager = panel.buildMediaManagerPanel;
-  panel.validatePanelMedia = validatePanelMedia;
-  panel.EMBED_COMPONENT_LIMITS = Object.freeze({ maxComponentsPerRow: MAX_COMPONENTS_PER_ROW, maxActionRows: MAX_ACTION_ROWS });
-  panel.__mediaManagerUiBound = true;
-  return panel;
-}
 
 function installThumbnailUi(panel) {
   if (!panel || panel.__thumbnailMediaUiBound) return panel;
