@@ -63,7 +63,7 @@ function run() {
   /*
    * Legacy media editor contract.
    * The retired Edit Media/Header Type cycle must stay removed; the active
-   * media manager uses the canonical Media Options panel instead.
+   * media manager owns the media controls directly; the retired Media Options submenu must stay removed.
    */
   const mediaSource = fs.readFileSync(
     require.resolve('../src/modules/messageStudio/embed/embedMedia'),
@@ -74,6 +74,7 @@ function run() {
     require.resolve('../src/modules/messageStudio/embed/embedInteractions'),
     'utf8'
   );
+  const mediaInteractionSource = interactionSource;
 
   assert(!mediaSource.includes('buildEditMediaPanel'), 'retired Edit Media panel must remain removed');
   assert(!mediaSource.includes("embed:header-type-cycle"), 'retired Header Type cycle button must remain removed');
