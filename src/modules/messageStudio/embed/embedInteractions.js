@@ -1317,10 +1317,10 @@ async function handleCoreInteraction(i) {
       await i.showModal(panel.mediaAddModal());
       return true;
     }
-        if (customId === 'embed:media-type:cycle') {
+    if (customId.startsWith('embed:media-type:')) {
       if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i);
-      const current = String(panelMedia.gallery[galleryIndex].type || 'auto').toLowerCase();
       const cycle = ['auto', 'image', 'video'];
+      const current = String(panelMedia.gallery[galleryIndex].type || 'auto').toLowerCase();
       const currentIndex = cycle.indexOf(current);
       const type = cycle[(currentIndex < 0 ? 0 : currentIndex) + 1 >= cycle.length ? 0 : currentIndex + 1];
       const gallery = panelMedia.gallery.map((item, index) =>
@@ -1328,14 +1328,8 @@ async function handleCoreInteraction(i) {
           ? panel.mediaModel.normalizeGalleryItem({ ...item, type })
           : panel.mediaModel.normalizeGalleryItem(item)
       );
-      const next = panel.setPanelMedia(state, Number(state.selectedPanelIndex) || 0, { ...panelMedia, gallery });
-      const saved = panel.saveSession(i, {
-        ...next,
-        selectedMediaIndex: galleryIndex,
-        hasUnsavedChanges: true,
-      });
-      await i.update(panel.buildMediaManagerPanel(i, who(i), saved));
-      return true;
+      saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex });
+      return updateMediaPanel(i);
     }
     if (customId.startsWith('embed:media-spoiler:')) { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); const gallery = [...panelMedia.gallery]; gallery[galleryIndex] = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex], spoiler: customId.endsWith(':on') }); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex }); return updateMediaPanel(i); }
     if (customId.startsWith('embed:media-placement:')) {
