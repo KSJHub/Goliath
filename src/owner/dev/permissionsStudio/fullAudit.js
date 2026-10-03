@@ -11,7 +11,13 @@ const severityEmoji = severity => ({ critical: '🔴', high: '🟠', medium: '�
 
 async function getGuild(interaction) {
   const id = gid(interaction);
-  return interaction.client.guilds.cache.get(id) || interaction.client.guilds.fetch(id).catch(() => null);
+  if (interaction?.guild?.id === id) return interaction.guild;
+  const cached = interaction?.client?.guilds?.cache?.get(id);
+  if (cached) return cached;
+  return Promise.race([
+    interaction.client.guilds.fetch(id).catch(() => null),
+    new Promise(resolve => setTimeout(() => resolve(null), 5000)),
+  ]);
 }
 
 function payload(guild, report) {
@@ -51,18 +57,10 @@ function payload(guild, report) {
 }
 
 async function scan(interaction) {
-  const guild = await getGuild(interaction);
-  if (!guild) {
-    if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ Server context unavailable.', ephemeral: true });
-    return true;
-  }
-
-  // A full guild scan can require Discord API fetches before the detector runs.
-  // Acknowledge the button immediately so the interaction cannot expire while
-  // the read-only scan is collecting the current role/channel state.
-  // Acknowledge immediately and give the user visible feedback before any
-  // Discord cache/API work begins.
+  // Acknowledge the button before resolving or fetching the guild. This keeps
+  // the interaction alive even if the guild manager/cache is slow.
   if (!interaction.replied && !interaction.deferred) await interaction.deferUpdate();
+
   await interaction.editReply({
     embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
@@ -70,6 +68,18 @@ async function scan(interaction) {
       .setDescription('⏳ Scanning the current server roles, channels and permission overwrites…')],
     components: [],
   });
+
+  const guild = await getGuild(interaction);
+  if (!guild) {
+    await interaction.editReply({
+      embeds: [new EmbedBuilder()
+        .setColor(0xED4245)
+        .setTitle('🔎 Full Permission Audit')
+        .setDescription('❌ Server context unavailable. The audit could not resolve the current guild.')],
+      components: [],
+    });
+    return true;
+  }
 
   // Refresh what Discord can provide, but never let a slow fetch block the
   // interaction indefinitely. The detector can safely operate on the cache.
