@@ -12,10 +12,10 @@ Core runtime responsibilities include:
 - `embedValidation.js` — Discord payload, readiness and media validation.
 - `embedHealth.js` — diagnostics and repair.
 - `embedState.js` / `embedSessionStore.js` — session state and durable session persistence.
-- `embedMedia.js` / `embedMediaManagerBase.js` — canonical media model and Media Manager UI/runtime behaviour.
-- `embedImageAlignment.js` / `embedAlignmentPreview.js` — selected media alignment, preview behaviour and alignment interaction handling.
+- `embedMedia.js` — canonical media model, Media Manager UI/runtime behaviour, alignment controls and media session compatibility.
+- `embedImageAlignment.js` — selected media alignment, preview behaviour and alignment interaction handling.
 - `embedRenderer.js` — canonical Discord delivery rendering, including aligned media.
-- `embedGraphicHeaders.js` — graphic-header placement and behaviour.
+- `embedInteractions.js` — graphic-header cycling, media placement/alignment and component interaction routing.
 - `embedTemplateDelivery.js` — shared template delivery used by other Message Studio features such as Welcome Studio.
 - `embedBindingRegistry.js` — template binding registry used by server-side module routes.
 
