@@ -128,8 +128,20 @@ function installSettingsTransfer(targetPanel, targetInteractions) {
   targetPanel.settingsPasteModal = () => targetPanel.modal('embed:settings-paste-save', 'Paste Embed Preset JSON', [targetPanel.input('preset_json', 'Preset JSON code', TextInputStyle.Paragraph, '', true, 4000)]);
   targetPanel.buildSettingsPanel = (interaction) => {
     const state = targetPanel.getSession(interaction);
-    const description = ['Manage Embed Builder settings and move saved presets between Goliath servers.', '', '### 📥 Import Preset', '**Upload JSON** — upload an exported `.json` preset file.', '**Paste JSON** — paste portable preset JSON code directly.', '', '### 📤 Export Preset', '**JSON File** — download the selected saved preset as a portable `.json` file.', '**JSON Code** — display the selected preset as copyable JSON code.', '', 'Select the preset you want to export in **Preset Manager** first.'].join('\n');
-    return { embeds: [targetPanel.simplePanel('⚙️ Embed Settings', description, state, targetPanel.memberName(interaction))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:settings-import').setLabel('Upload JSON').setEmoji('📁').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('embed:settings-paste').setLabel('Paste JSON').setEmoji('📋').setStyle(ButtonStyle.Primary)), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:settings-export').setLabel('JSON File').setEmoji('📁').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('embed:settings-export-code').setLabel('JSON Code').setEmoji('📋').setStyle(ButtonStyle.Secondary)), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:builder').setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('embed:helpers').setLabel('Variables').setEmoji('📖').setStyle(ButtonStyle.Secondary))] };
+    const description = ['Move saved Embed Builder presets between Goliath servers.', '', '**📥 Upload File** — upload a saved preset `.json` file.', '**📤 Export File** — download the selected preset as a `.json` file.', '**📋 Paste JSON** — paste portable preset JSON from another Goliath Embed Builder.', '**📋 Export JSON** — copy portable preset JSON to move it into another Embed Builder.', '', 'Select the preset you want to export in **Preset Manager** first.'].join('\\n');
+    const transferButtons = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('embed:settings-import').setLabel('Upload File').setEmoji('📥').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('embed:settings-export').setLabel('Export File').setEmoji('📤').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('embed:settings-paste').setLabel('Paste JSON').setEmoji('📋').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('embed:settings-export-code').setLabel('Export JSON').setEmoji('📋').setStyle(ButtonStyle.Secondary),
+    );
+    return { embeds: [targetPanel.simplePanel('⚙️ Embed Settings', description, state, targetPanel.memberName(interaction))], components: [
+      transferButtons,
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('embed:builder').setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('embed:helpers').setLabel('Variables').setEmoji('📖').setStyle(ButtonStyle.Secondary)
+      )
+    ] };
   };
   const originalHandle = targetInteractions.handleInteraction.bind(targetInteractions);
   targetInteractions.handleInteraction = async (interaction) => {
