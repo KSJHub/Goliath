@@ -129,7 +129,7 @@ async function checkGuildAccounts(client,guildId,options={}) {
   try { const deleted=deleteExpiredCreators(guildId,Date.now(),{actorId:'social-monitor'}); if(deleted.length){analyticsDelta.expiredCreatorsDeleted=deleted.length; for(const creatorId of deleted)historyEntries.push({id:`history_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,createdAt:now(),status:'creator_expired_deleted',creatorId});} } catch(error){analyticsDelta.errors=Number(analyticsDelta.errors||0)+1; console.error(`[Social Studio] expired creator cleanup failed for guild ${guildId}:`,error);}
   const accountIds=options.accountIds?.length?options.accountIds:Object.keys(config.accounts);
   const maxConcurrent=Math.max(1,Math.min(8,Number(config.settings.maxConcurrentAccounts||4)));
-  const processAccount=async(accountId)=>{const account=config.accounts[accountId]; if(!account||account.enabled===false)continue; const runKey=`${guildId}:${accountId}`; if(runningGuilds.has(runKey)){results.push({accountId,platform:account.platform,status:'skipped',reason:'already_running',delivered:[]});continue;} runningGuilds.add(runKey);
+  const processAccount=async(accountId)=>{const account=config.accounts[accountId]; if(!account||account.enabled===false)return; const runKey=`${guildId}:${accountId}`; if(runningGuilds.has(runKey)){results.push({accountId,platform:account.platform,status:'skipped',reason:'already_running',delivered:[]});return;} runningGuilds.add(runKey);
     let previous = account.state && typeof account.state === 'object' ? { ...account.state } : {};
     let checked = null;
     let currentState = { ...previous };
