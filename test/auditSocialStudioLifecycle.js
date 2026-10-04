@@ -47,11 +47,21 @@ for (const [name, needle] of contracts) {
   assert(source.includes(needle), `${name} contract missing`);
 }
 
-assert(
-  compactMonitor.includes('previousEventId===currentEventId'),
-  'rollover equality guard missing',
-);
+assert(compactMonitor.includes('previousEventId===currentEventId'), 'rollover equality guard missing');
 assert(compactMonitor.includes('stalePostRemoved'), 'stale rollover cleanup missing');
+
+// Completed LIVE sessions must retire volatile broadcast identity only after
+// ENDED delivery/retry work is finished. Durable dedupe/history can remain.
+assert(compactRecovery.includes('completedSessionNeedsRetirement'), 'completed-session retirement guard missing');
+assert(compactRecovery.includes("state.isLive!==false"), 'retirement must require confirmed OFFLINE state');
+assert(compactRecovery.includes("state.pendingEndedEvent&&typeofstate.pendingEndedEvent==='object'"), 'retirement must preserve pending ENDED state');
+assert(compactRecovery.includes("state.pendingDelivery?.event?.type==='ended'"), 'retirement must preserve pending ENDED delivery retries');
+assert(compactRecovery.includes('state.liveEventId=null'), 'completed-session liveEventId retirement missing');
+assert(compactRecovery.includes('state.liveStartedAt=null'), 'completed-session liveStartedAt retirement missing');
+assert(compactRecovery.includes('state.lastLiveEvent=null'), 'completed-session lastLiveEvent retirement missing');
+assert(compactRecovery.includes('state.peakViewers=0'), 'completed-session peak viewer retirement missing');
+assert(compactRecovery.includes("String(state.lastAlertKey||'').startsWith('live:')"), 'stale LIVE alert key retirement missing');
+assert(compactRecovery.includes('retireCompletedSessions(guild.id,guildConfig)'), 'completed-session retirement sweep missing');
 
 // Provider lifecycle safety: an uncertain provider response must not become a
 // false OFFLINE transition, because OFFLINE can emit an ended notification.
@@ -86,4 +96,4 @@ assert.equal(delivered.has('live:B'), false);
 delivered.add('live:B');
 assert.equal(delivered.size, 4);
 
-console.log('✅ Social Studio lifecycle validation passed: provider state -> forced LIVE tracking -> refresh -> OFFLINE -> VOD -> LIVE B');
+console.log('✅ Social Studio lifecycle validation passed: provider state -> forced LIVE tracking -> refresh -> OFFLINE -> retirement -> VOD -> LIVE B');
