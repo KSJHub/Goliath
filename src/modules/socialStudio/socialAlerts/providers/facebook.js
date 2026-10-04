@@ -52,18 +52,19 @@ async function checkFacebook(account) {
 
     const live = liveRes.json?.data?.[0];
     const post = feedRes.json?.data?.[0];
-    const pageUrl = pageJson.username ? `https://www.facebook.com/${encodeURIComponent(pageJson.username)}` : `https://www.facebook.com/${pageJson.id}`;
+    const canonicalUsername = clean(pageJson.username || '').replace(/^@/, '');
+    const pageUrl = canonicalUsername ? `https://www.facebook.com/${encodeURIComponent(canonicalUsername)}` : `https://www.facebook.com/${pageJson.id}`;
     const avatar = pageJson.picture?.data?.url || null;
-    const latestContent = post ? {
-      type: 'post', id: post.id, title: clean(post.message || 'New Facebook post').slice(0, 180),
-      url: post.permalink_url || pageUrl, thumbnail: post.full_picture || null, publishedAt: post.created_time,
+    const latestContent = post?.id ? {
+      type: 'post', id: String(post.id), title: clean(post.message || 'New Facebook post').slice(0, 180),
+      url: post.permalink_url || pageUrl, thumbnail: post.full_picture || null, publishedAt: post.created_time || null,
     } : null;
     return result('facebook', {
-      isLive: Boolean(live), externalId: pageJson.id, resolvedUsername: pageJson.username || pageJson.name || lookup,
+      isLive: Boolean(live?.id), externalId: String(pageJson.id), resolvedUsername: canonicalUsername || null,
       latestContent, contentItems: latestContent ? [latestContent] : [], url: pageUrl, avatar,
-      event: live ? {
-        type: 'live', id: live.id, title: live.title || `${pageJson.name || lookup} is live`,
-        url: live.permalink_url || pageUrl, startedAt: live.creation_time,
+      event: live?.id ? {
+        type: 'live', id: String(live.id), title: clean(live.title || `${pageJson.name || canonicalUsername || lookup} is live`).slice(0, 180),
+        url: live.permalink_url || pageUrl, startedAt: live.creation_time || null,
       } : null,
     });
   } catch (error) {
