@@ -45,7 +45,27 @@ function saveMonitorState(guildId, config, monitorUpdates, analyticsDelta, histo
     const latestCreators = latest.creators && typeof latest.creators === 'object' ? latest.creators : {};
     const creators = Object.fromEntries(Object.entries(latestCreators).map(([id, creator]) => [id, { ...creator, accountIds: Array.isArray(creator?.accountIds) ? [...creator.accountIds] : [] }]));
     for (const [accountId, update] of monitorUpdates.entries()) { const current = accounts[accountId]; if (!current || typeof current !== 'object') continue; accounts[accountId] = { ...current, state: update.state, ...(update.externalId ? { externalId: update.externalId } : {}), ...(update.resolvedUsername ? { username: update.resolvedUsername, normalizedUsername: update.resolvedUsername.toLowerCase() } : {}), ...(update.profileUrl ? { profileUrl: update.profileUrl } : {}), ...(update.avatar ? { avatar: update.avatar } : {}), updatedAt: update.updatedAt }; }
-    for (const [duplicateId, survivorId] of duplicateMerges.entries()) { if (duplicateId === survivorId) continue; const duplicate = accounts[duplicateId], survivor = accounts[survivorId]; if (!duplicate || !survivor) continue; const alertTypes = [...new Set([...(Array.isArray(survivor.alertTypes) ? survivor.alertTypes : []), ...(Array.isArray(duplicate.alertTypes) ? duplicate.alertTypes : [])])]; accounts[survivorId] = { ...survivor, ...(alertTypes.length ? { alertTypes } : {}), alertChannelId: survivor.alertChannelId || duplicate.alertChannelId || null, alertChannels: { ...(duplicate.alertChannels || {}), ...(survivor.alertChannels || {}) }, mentionMode: survivor.mentionMode && survivor.mentionMode !== 'none' ? survivor.mentionMode : duplicate.mentionMode || survivor.mentionMode || 'none', mentionRoleId: survivor.mentionRoleId || duplicate.mentionRoleId || null, createdAt: survivor.createdAt || duplicate.createdAt, updatedAt: now() }; delete accounts[duplicateId]; for (const creator of Object.values(creators)) creator.accountIds = [...new Set((creator.accountIds || []).map((id) => id === duplicateId ? survivorId : id))]; }
+    for (const [duplicateId, survivorId] of duplicateMerges.entries()) { if (duplicateId === survivorId) continue; const duplicate = accounts[duplicateId], survivor = accounts[survivorId]; if (!duplicate || !survivor) continue; const alertTypes = [...new Set([...(Array.isArray(survivor.alertTypes) ? survivor.alertTypes : []), ...(Array.isArray(duplicate.alertTypes) ? duplicate.alertTypes : [])])]; const mergedAliases = [...new Set([
+      ...(Array.isArray(survivor.identityAliases) ? survivor.identityAliases : []),
+      ...(Array.isArray(duplicate.identityAliases) ? duplicate.identityAliases : []),
+      duplicate.canonicalIdentity,
+      duplicate.externalId,
+      duplicate.normalizedUsername,
+      duplicate.username,
+    ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean))]
+      .filter((value) => value !== String(survivor.canonicalIdentity || '').trim().toLowerCase())
+      .slice(-25);
+    accounts[survivorId] = {
+      ...survivor,
+      ...(alertTypes.length ? { alertTypes } : {}),
+      identityAliases: mergedAliases,
+      alertChannelId: survivor.alertChannelId || duplicate.alertChannelId || null,
+      alertChannels: { ...(duplicate.alertChannels || {}), ...(survivor.alertChannels || {}) },
+      mentionMode: survivor.mentionMode && survivor.mentionMode !== 'none' ? survivor.mentionMode : duplicate.mentionMode || survivor.mentionMode || 'none',
+      mentionRoleId: survivor.mentionRoleId || duplicate.mentionRoleId || null,
+      createdAt: survivor.createdAt || duplicate.createdAt,
+      updatedAt: now()
+    }; delete accounts[duplicateId]; for (const creator of Object.values(creators)) creator.accountIds = [...new Set((creator.accountIds || []).map((id) => id === duplicateId ? survivorId : id))]; }
     const latestAnalytics = latest.analytics && typeof latest.analytics === 'object' ? latest.analytics : {}, analytics = { ...latestAnalytics }; for (const [key, amount] of Object.entries(analyticsDelta || {})) if (Number.isFinite(Number(amount)) && Number(amount) !== 0) analytics[key] = Number(analytics[key] || 0) + Number(amount);
     const history = [...(Array.isArray(latest.history) ? latest.history : []), ...(historyEntries || [])].slice(-1000); return { ...latest, accounts, creators, analytics, history, updatedAt: now() };
   }, {}, guild || { guildId }); return { ...updated, enabled: guildManager.isModuleEnabled(guildId, 'social') };
