@@ -34,15 +34,27 @@ function client(req) { return req.client || req.app?.get?.('goliath.client') || 
 async function requireManageAccess(req, res, next) {
   try {
     const userId = clean(req.session?.user?.id, 25);
-    if (!/^\\d{15,25}$/.test(userId)) return res.status(401).json({ success: false, error: 'Authentication required.' });
+    if (!/^\d{15,25}$/.test(userId)) return res.status(401).json({ success: false, error: 'Authentication required.' });
     const id = guildId(req);
     req.moduleActorId = userId;
     if (security.isBotOwner(userId)) return next();
+
     const discordGuild = await guild(req, id);
     if (!discordGuild) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
+
     const member = discordGuild.members.cache.get(userId) || await discordGuild.members.fetch(userId).catch(() => null);
-    const allowed = Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || member?.permissions?.has(PermissionFlagsBits.ManageGuild));
-    if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
+    const storedConfig = guildManager.getGuildSection(id, 'social', {});
+    const managerRoleIds = Array.isArray(storedConfig?.managerRoleIds)
+      ? storedConfig.managerRoleIds.map(discordId).filter(Boolean)
+      : [];
+
+    const allowed = Boolean(
+      discordGuild.ownerId === userId
+      || member?.permissions?.has(PermissionFlagsBits.Administrator)
+      || managerRoleIds.some((roleId) => member?.roles?.cache?.has?.(roleId)),
+    );
+
+    if (!allowed) return res.status(403).json({ success: false, error: 'Social Studio management permission is required.' });
     return next();
   } catch (error) {
     return failure(res, error, 403);
