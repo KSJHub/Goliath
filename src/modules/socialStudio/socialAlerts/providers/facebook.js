@@ -12,6 +12,12 @@ let cachedAppToken = null;
 let cachedAppTokenAt = 0;
 const APP_TOKEN_CACHE_MS = 50 * 60 * 1000;
 
+function validTimestamp(value) {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) && ms <= Date.now() + 5 * 60 * 1000 ? new Date(ms).toISOString() : null;
+}
+
 async function facebookToken() {
   if (process.env.FACEBOOK_ACCESS_TOKEN) return process.env.FACEBOOK_ACCESS_TOKEN;
   if (!process.env.FACEBOOK_APP_ID || !process.env.FACEBOOK_APP_SECRET) return null;
@@ -55,16 +61,20 @@ async function checkFacebook(account) {
     const canonicalUsername = clean(pageJson.username || '').replace(/^@/, '');
     const pageUrl = canonicalUsername ? `https://www.facebook.com/${encodeURIComponent(canonicalUsername)}` : `https://www.facebook.com/${pageJson.id}`;
     const avatar = pageJson.picture?.data?.url || null;
-    const latestContent = post?.id ? {
+    const postPublishedAt = validTimestamp(post?.created_time);
+    const latestContent = post?.id && postPublishedAt ? {
       type: 'post', id: String(post.id), title: clean(post.message || 'New Facebook post').slice(0, 180),
-      url: post.permalink_url || pageUrl, thumbnail: post.full_picture || null, publishedAt: post.created_time || null,
+      url: /^https:\/\/(?:www\.)?facebook\.com\//i.test(String(post.permalink_url || '')) ? post.permalink_url : pageUrl,
+      thumbnail: post.full_picture || null, publishedAt: postPublishedAt,
     } : null;
+    const liveStartedAt = validTimestamp(live?.creation_time);
     return result('facebook', {
       isLive: Boolean(live?.id), externalId: String(pageJson.id), resolvedUsername: canonicalUsername || null,
       latestContent, contentItems: latestContent ? [latestContent] : [], url: pageUrl, avatar,
       event: live?.id ? {
         type: 'live', id: String(live.id), title: clean(live.title || `${pageJson.name || canonicalUsername || lookup} is live`).slice(0, 180),
-        url: live.permalink_url || pageUrl, startedAt: live.creation_time || null,
+        url: /^https:\/\/(?:www\.)?facebook\.com\//i.test(String(live.permalink_url || '')) ? live.permalink_url : pageUrl,
+        startedAt: liveStartedAt,
       } : null,
     });
   } catch (error) {
