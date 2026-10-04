@@ -2159,9 +2159,18 @@ async function handleAdminSocialEntry(i, context) {
 }
 
 async function handleInteraction(i) {
-  const id = i.customId;
+  const id = String(i?.customId || '');
+  if (!id.startsWith(P)) return false;
+
   const config = getConfig(i.guildId);
   const actorId = i.user?.id;
+
+  // Every admin Social Studio component is privileged. Do not rely on
+  // the panel that originally rendered the component; custom IDs can be
+  // invoked directly or from stale messages.
+  if (!canManageSocialStudio(i, config)) {
+    return denySocialAccess(i);
+  }
 
   if (await handleAdminSocialEntry(i, {
     id,
