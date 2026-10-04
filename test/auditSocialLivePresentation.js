@@ -8,7 +8,9 @@ assert(core.includes('creator?.avatarUrl') && core.includes('account.avatarUrl')
 assert(core.includes('account.profileUrl || account.url || event.profileUrl || vars.url'), 'LIVE profile URL fallback missing');
 assert(core.includes('author.url=profileUrl'), 'LIVE author must be clickable');
 assert(core.includes('embed.setThumbnail(authorIcon)'), 'LIVE creator thumbnail missing');
-assert(core.includes("'\\u2003'.repeat(10)") && core.includes('🔴 **LIVE**'), 'LIVE status spacing missing');
+assert(core.includes("🔴 **LIVE NOW**"), 'LIVE NOW headline missing');
+assert(core.includes("▶️ **[Watch Live]"), 'Watch Live action missing');
+assert(core.includes("🔴 **LIVE**"), 'LIVE action status missing');
 assert(monitor.includes('embed.setThumbnail(avatar)'), 'refresh must retain creator thumbnail');
 assert(monitor.includes('author.url = profileUrl'), 'refresh must retain clickable author');
 assert(monitor.includes('event.profileImageUrl') && monitor.includes('account.profileImageUrl'), 'refresh avatar fallbacks missing');
