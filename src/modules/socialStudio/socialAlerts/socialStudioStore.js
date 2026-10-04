@@ -427,11 +427,43 @@ function upsertCreatorAccount(guildId, creatorId, account, duplicateAccountIds =
 
     const timestamp = new Date().toISOString();
     const current = section.accounts[accountId] || {};
+    const incoming = object(account);
+    const existingProvider = String(current.platform || current.provider || '').trim().toLowerCase();
+    const incomingProvider = String(incoming.platform || incoming.provider || '').trim().toLowerCase();
+    const existingIdentity = String(current.canonicalIdentity || current.externalId || current.normalizedUsername || current.username || '').trim().toLowerCase();
+    const incomingIdentity = String(incoming.canonicalIdentity || incoming.externalId || incoming.normalizedUsername || incoming.username || '').trim().toLowerCase();
+    const identityChanged = Boolean(current.accountId) && (
+      (existingProvider && incomingProvider && existingProvider !== incomingProvider)
+      || (existingIdentity && incomingIdentity && existingIdentity !== incomingIdentity)
+    );
+    const runtimeState = identityChanged
+      ? {
+        ...(current.state || {}),
+        isLive: false,
+        liveEventId: null,
+        liveStartedAt: null,
+        lastLiveEvent: null,
+        lastLiveEndedAt: null,
+        lastAlertKey: null,
+        lastAlertAt: null,
+        lastAlertMessageId: null,
+        lastAlertChannelId: null,
+        lastLiveMessageId: null,
+        lastLiveMessageChannelId: null,
+        lastLiveMessageUpdatedAt: null,
+        pendingDelivery: null,
+        pendingEndedEvent: null,
+        lastDeliveryError: null,
+        peakViewers: 0,
+        deliveredEventKeys: [],
+      }
+      : current.state;
     const nextAccount = {
       ...current,
-      ...object(account),
+      ...incoming,
       accountId,
-      createdAt: current.createdAt || account.createdAt || timestamp,
+      state: runtimeState,
+      createdAt: current.createdAt || incoming.createdAt || timestamp,
       updatedAt: timestamp,
     };
 
