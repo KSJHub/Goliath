@@ -16,7 +16,11 @@ const mediaManagerBody = mediaManagerSource.slice(mediaManagerStart, mediaManage
 assert(!mediaManagerBody.includes('media.mediaModel'), 'Media Manager must not reference an undefined media variable.');
 assert(!mediaManagerBody.includes('media.getPanelMedia'), 'Media Manager must use the canonical media model or panel API.');
 assert.match(mediaManagerSource, /DEFAULT_GALLERY_ITEM/);
-assert.match(mediaManagerSource, /const preset = \{ \.\.\.originalPresetData\(safeState\), media: safeState\.media \};/);
+assert.match(
+  mediaManagerSource,
+  /const preset = \{\s*\.\.\.\(base\.presetData\(normalized\) \|\| \{\}\),\s*media: clone\(normalized\.media\),\s*\};/,
+  'Preset persistence must save canonical normalized media.'
+);
 assert.doesNotMatch(mediaManagerSource, /mediaDefaults/);
 
 const left = media.normalizeGalleryItem({ source: 'https://example.com/a.png', alignment: 'left' });

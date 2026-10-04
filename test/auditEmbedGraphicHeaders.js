@@ -39,7 +39,10 @@ function run() {
   const embedRuntime = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embed'), 'utf8');
   assert(embedRuntime.includes('function canonicalMediaState'));
   assert(embedRuntime.includes('media.mediaModel.normalizeMedia(state?.media || {}, panels)'));
-  assert(embedRuntime.includes('installCanonicalMediaSessions(targetPanel)'));
+  assert(
+  embedRuntime.includes('installMediaRuntime(panel)'),
+  'Embed runtime must install the canonical Media Studio runtime.'
+);
   assert(
     !embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"),
     'canonical session normalization must not overwrite an explicit Above/Below media placement'
