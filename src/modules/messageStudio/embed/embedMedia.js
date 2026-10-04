@@ -4,18 +4,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const fetch = require('node-fetch');
-const {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-  FileUploadBuilder,
-  LabelBuilder,
-  ModalBuilder,
-  StringSelectMenuBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-} = require('discord.js');
 const { getRuntimePaths } = require('../../../config/runtimePaths');
 const { validatePanelMedia, statusIcon } = require('./embedValidation');
 
@@ -30,8 +18,6 @@ const DEFAULT_GALLERY_ITEM = Object.freeze({
 });
 const MAX_GALLERY_ITEMS = 10;
 const MAX_FILES = 10;
-const MAX_COMPONENTS_PER_ROW = 5;
-const MAX_ACTION_ROWS = 5;
 const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 8000;
 
@@ -350,84 +336,279 @@ function normalizeStoredMediaState(stateValue) {
   return { ...stateValue, media: clone(source) };
 }
 
-function installStorageNormalization(panel) {
-  if (!panel || panel.__mediaStorageNormalized) return panel;
-  if (typeof panel.getSession === 'function') {
-    const originalGetSession = panel.getSession.bind(panel);
-    panel.getSession = (interaction) => normalizeStoredMediaState(originalGetSession(interaction));
+function installMediaRuntimeCompatibility(panel) {
+  if (!panel || panel.__mediaRuntimeCompatibilityInstalled) {
+    return panel;
   }
-  if (typeof panel.saveSession === 'function') {
-    const originalSaveSession = panel.saveSession.bind(panel);
-    panel.saveSession = (interaction, stateValue) => originalSaveSession(interaction, normalizeStoredMediaState(stateValue));
+
+  /*
+   * Capture the original panel state API once.
+   *
+   * All media compatibility now passes through this single layer rather
+   * than repeatedly wrapping the same functions.
+   */
+  const base = {
+    getSession:
+      typeof panel.getSession === "function"
+        ? panel.getSession.bind(panel)
+        : null,
+
+    saveSession:
+      typeof panel.saveSession === "function"
+        ? panel.saveSession.bind(panel)
+        : null,
+
+    markUnsaved:
+      typeof panel.markUnsaved === "function"
+        ? panel.markUnsaved.bind(panel)
+        : null,
+
+    resetSession:
+      typeof panel.resetSession === "function"
+        ? panel.resetSession.bind(panel)
+        : null,
+
+    applyTemplate:
+      typeof panel.applyTemplate === "function"
+        ? panel.applyTemplate.bind(panel)
+        : null,
+
+    applyPreset:
+      typeof panel.applyPreset === "function"
+        ? panel.applyPreset.bind(panel)
+        : null,
+
+    presetData:
+      typeof panel.presetData === "function"
+        ? panel.presetData.bind(panel)
+        : null,
+
+    saveSelected:
+      typeof panel.saveSelected === "function"
+        ? panel.saveSelected.bind(panel)
+        : null,
+  };
+
+  const normalizeState = (stateValue = {}) =>
+    normalizeStoredMediaState(
+      mediaModel.ensureStateMedia(stateValue || {})
+    );
+
+  if (base.getSession) {
+    panel.getSession = (interaction) =>
+      normalizeState(
+        base.getSession(interaction)
+      );
   }
-  if (typeof panel.presetData === 'function') {
-    const originalPresetData = panel.presetData.bind(panel);
+
+  if (base.saveSession) {
+    panel.saveSession = (interaction, stateValue) =>
+      base.saveSession(
+        interaction,
+        normalizeState(stateValue)
+      );
+  }
+
+  if (base.markUnsaved) {
+    panel.markUnsaved = (interaction, stateValue) => {
+      const previous =
+        panel.getSession(interaction);
+
+      const reconciled =
+        mediaModel.reconcileMediaByPanels(
+          previous,
+          stateValue
+        );
+
+      return base.markUnsaved(
+        interaction,
+        normalizeState(reconciled)
+      );
+    };
+  }
+
+  if (base.resetSession) {
+    panel.resetSession = (interaction) => {
+      const result =
+        base.resetSession(interaction);
+
+      const normalized =
+        normalizeState(result);
+
+      return base.saveSession
+        ? panel.saveSession(interaction, normalized)
+        : normalized;
+    };
+  }
+
+  if (base.applyTemplate) {
+    panel.applyTemplate = (interaction, name) => {
+      const result =
+        base.applyTemplate(interaction, name);
+
+      /*
+       * Templates intentionally start with a fresh media model.
+       * Legacy panel image fields are then migrated by normalization.
+       */
+      const normalized =
+        normalizeState({
+          ...result,
+          media: undefined,
+        });
+
+      return base.saveSession
+        ? panel.saveSession(interaction, normalized)
+        : normalized;
+    };
+  }
+
+  if (base.applyPreset) {
+    panel.applyPreset = (
+      interaction,
+      name,
+      preset = {}
+    ) => {
+      const storedMedia =
+        preset?.media
+          ? clone(preset.media)
+          : null;
+
+      const compatiblePreset =
+        storedMedia
+          ? {
+              ...preset,
+              media: clone(storedMedia),
+            }
+          : preset;
+
+      const result =
+        base.applyPreset(
+          interaction,
+          name,
+          compatiblePreset
+        );
+
+      const normalized =
+        normalizeState(
+          storedMedia
+            ? {
+                ...result,
+                media: clone(storedMedia),
+              }
+            : result
+        );
+
+      return base.saveSession
+        ? panel.saveSession(interaction, normalized)
+        : normalized;
+    };
+  }
+
+  if (base.saveSelected) {
+    panel.saveSelected = (
+      stateValue,
+      patch = {}
+    ) => {
+      let result =
+        base.saveSelected(
+          normalizeState(stateValue),
+          patch
+        );
+
+      result =
+        mediaModel.syncLegacyPatch(
+          {
+            ...result,
+            media: stateValue?.media,
+          },
+          patch
+        );
+
+      if (
+        [
+          "image",
+          "thumbnail",
+          "authorIcon",
+          "footerIcon",
+        ].some(
+          (key) =>
+            patch &&
+            patch[key]
+        )
+      ) {
+        queuePersistentMediaImport({
+          panels: [patch],
+          media: result.media,
+        });
+      }
+
+      return normalizeState(result);
+    };
+  }
+
+  if (base.presetData) {
     panel.presetData = (stateValue) => {
-      const normalized = normalizeStoredMediaState(stateValue);
-      const preset = originalPresetData(normalized) || {};
-      const storedMedia = clone(preset.media || normalized?.media, null);
-      const output = { ...preset };
-      if (storedMedia) output.media = storedMedia;
-      return output;
+      const normalized =
+        normalizeState(stateValue);
+
+      const preset = {
+        ...(base.presetData(normalized) || {}),
+        media: clone(normalized.media),
+      };
+
+      queuePersistentMediaImport(preset);
+
+      return preset;
     };
   }
-  if (typeof panel.applyPreset === 'function') {
-    const originalApplyPreset = panel.applyPreset.bind(panel);
-    panel.applyPreset = (interaction, name, preset = {}) => {
-      const source = preset?.media || null;
-      const compatiblePreset = source ? { ...preset, media: clone(source) } : preset;
-      const result = originalApplyPreset(interaction, name, compatiblePreset);
-      return normalizeStoredMediaState(source ? { ...result, media: clone(source) } : result);
-    };
-  }
+
+  panel.getPanelMedia = (
+    stateValue,
+    index = null
+  ) =>
+    mediaModel.mediaForPanel(
+      normalizeState(stateValue),
+      index
+    );
+
+  panel.setPanelMedia = (
+    stateValue,
+    index,
+    panelMedia
+  ) =>
+    normalizeState(
+      mediaModel.setPanelMedia(
+        normalizeState(stateValue),
+        index,
+        panelMedia
+      )
+    );
+
+  panel.mediaModel = mediaModel;
+
+  /*
+   * Keep old guards true so nothing elsewhere can accidentally reinstall
+   * the retired compatibility layers.
+   */
   panel.__mediaStorageNormalized = true;
+  panel.__mediaPatched = true;
+  panel.__persistentMediaPatched = true;
+  panel.__canonicalMediaSessionsInstalled = true;
+  panel.__mediaRuntimeCompatibilityInstalled = true;
+
   return panel;
 }
 
+function installStorageNormalization(panel) {
+  return installMediaRuntimeCompatibility(panel);
+}
+
 function installStateCompatibility(panel) {
-  if (!panel || panel.__mediaPatched) return panel;
-  if (typeof panel.getSession === 'function') {
-    const originalGetSession = panel.getSession.bind(panel);
-    panel.getSession = (interaction) => mediaModel.ensureStateMedia(originalGetSession(interaction));
-  }
-  if (typeof panel.saveSession === 'function') {
-    const originalSaveSession = panel.saveSession.bind(panel);
-    panel.saveSession = (interaction, stateValue) => originalSaveSession(interaction, mediaModel.ensureStateMedia(stateValue));
-  }
-  if (typeof panel.markUnsaved === 'function') {
-    const originalMarkUnsaved = panel.markUnsaved.bind(panel);
-    panel.markUnsaved = (interaction, stateValue) => {
-      const previous = panel.getSession(interaction);
-      return originalMarkUnsaved(interaction, mediaModel.reconcileMediaByPanels(previous, stateValue));
-    };
-  }
-  if (typeof panel.resetSession === 'function') {
-    const originalResetSession = panel.resetSession.bind(panel);
-    panel.resetSession = (interaction) => {
-      const result = originalResetSession(interaction);
-      return panel.saveSession(interaction, mediaModel.ensureStateMedia(result));
-    };
-  }
-  if (typeof panel.applyTemplate === 'function') {
-    const originalApplyTemplate = panel.applyTemplate.bind(panel);
-    panel.applyTemplate = (interaction, name) => {
-      const result = originalApplyTemplate(interaction, name);
-      return panel.saveSession(interaction, mediaModel.ensureStateMedia({ ...result, media: undefined }));
-    };
-  }
-  if (typeof panel.applyPreset === 'function') {
-    const originalApplyPreset = panel.applyPreset.bind(panel);
-    panel.applyPreset = (interaction, name, preset) => {
-      const result = originalApplyPreset(interaction, name, preset);
-      const restored = mediaModel.ensureStateMedia({ ...result, media: preset?.media || result?.media });
-      return panel.saveSession(interaction, restored);
-    };
-  }
-  panel.getPanelMedia = (stateValue, index = null) => mediaModel.mediaForPanel(stateValue, index);
-  panel.setPanelMedia = (stateValue, index, media) => mediaModel.setPanelMedia(stateValue, index, media);
-  panel.mediaModel = mediaModel;
-  panel.__mediaPatched = true;
-  return panel;
+  return installMediaRuntimeCompatibility(panel);
+}
+
+function installPersistentMediaCompatibility(panel) {
+  return installMediaRuntimeCompatibility(panel);
 }
 
 function queuePersistentMediaImport(presetLike) {
@@ -437,284 +618,9 @@ function queuePersistentMediaImport(presetLike) {
   }).catch((error) => console.warn('[EmbedAssets] persistence import failed:', error?.message || error));
 }
 
-function installPersistentMediaCompatibility(panel) {
-  if (!panel || panel.__persistentMediaPatched || typeof panel.saveSelected !== 'function') return panel;
-  const originalSaveSelected = panel.saveSelected.bind(panel);
-  panel.saveSelected = (stateValue, patch = {}) => {
-    let result = originalSaveSelected(stateValue, patch);
-    result = mediaModel.syncLegacyPatch({ ...result, media: stateValue?.media }, patch);
-    if (['image', 'thumbnail', 'authorIcon', 'footerIcon'].some((key) => patch && patch[key])) {
-      queuePersistentMediaImport({ panels: [patch], media: result.media });
-    }
-    return result;
-  };
-  if (typeof panel.presetData === 'function') {
-    const originalPresetData = panel.presetData.bind(panel);
-    panel.presetData = (stateValue) => {
-      const safeState = mediaModel.ensureStateMedia(stateValue);
-      const preset = { ...originalPresetData(safeState), media: safeState.media };
-      queuePersistentMediaImport(preset);
-      return preset;
-    };
-  }
-  panel.__persistentMediaPatched = true;
-  return panel;
-}
-
-function enforceLimits(rows = []) {
-  return rows.filter(Boolean).slice(0, MAX_ACTION_ROWS).map((row) => {
-    if (!Array.isArray(row?.components) || row.components.length <= MAX_COMPONENTS_PER_ROW) return row;
-    row.components = row.components.slice(0, MAX_COMPONENTS_PER_ROW);
-    return row;
-  });
-}
-function resolveSource(panel, source, interaction) {
-  const raw = String(source || '').trim();
-  if (!raw) return '';
-  try {
-    const resolved = typeof panel.replaceVars === 'function' ? panel.replaceVars(raw, interaction) : raw;
-    const url = new URL(String(resolved || '').trim());
-    return url.protocol === 'https:' ? url.toString() : '';
-  } catch { return ''; }
-}
-function textInput(id, label, style, value = '', maxLength = 4000) {
-  return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(false).setMaxLength(maxLength).setValue(String(value || '').slice(0, maxLength));
-}
-
-function labelledTextInput(id, style, value = '', maxLength = 4000) {
-  return new TextInputBuilder().setCustomId(id).setStyle(style).setRequired(false).setMaxLength(maxLength).setValue(String(value || '').slice(0, maxLength));
-}
-function componentId(component) { return component?.data?.custom_id || component?.customId || null; }
-function componentById(rows, id) {
-  for (const row of rows) {
-    const component = Array.isArray(row?.components) ? row.components.find((entry) => componentId(entry) === id) : null;
-    if (component) return component;
-  }
-  return null;
-}
-function rowFromComponents(...components) {
-  const safe = components.filter(Boolean).slice(0, MAX_COMPONENTS_PER_ROW);
-  return safe.length ? new ActionRowBuilder().addComponents(...safe) : null;
-}
-
-function installUploadModals(panel) {
-  if (!panel || panel.__mediaUploadModalsBound) return panel;
-  panel.mediaAddModal = () => new ModalBuilder()
-    .setCustomId('embed:media-add-save')
-    .setTitle('Add Media / File')
-    .addLabelComponents(
-      new LabelBuilder()
-        .setLabel('Source URL / Variable')
-        .setDescription('Optional. URL or variable. Images/videos become gallery media; other URLs become attached files.')
-        .setTextInputComponent(
-          labelledTextInput('source', TextInputStyle.Short, '', 2000)
-            .setPlaceholder('https://... or {{variable}}')
-        ),
-      new LabelBuilder()
-        .setLabel('Upload Media / File')
-        .setDescription('Optional. Up to 10 files. Images/videos become gallery media; other files become attachments.')
-        .setFileUploadComponent(
-          new FileUploadBuilder()
-            .setCustomId('media_files')
-            .setMinValues(0)
-            .setMaxValues(10)
-            .setRequired(false)
-        ),
-      new LabelBuilder()
-        .setLabel('Display name / Alt text')
-        .setDescription('Optional. Alt text for gallery media or display filename for an attached file.')
-        .setTextInputComponent(
-          labelledTextInput('display_name', TextInputStyle.Short, '', 256)
-            .setPlaceholder('Optional')
-        ),
-      new LabelBuilder()
-        .setLabel('Description')
-        .setDescription('Optional. Adds descriptive information when supported.')
-        .setTextInputComponent(
-          labelledTextInput('description', TextInputStyle.Paragraph, '', 1024)
-            .setPlaceholder('Optional')
-        ),
-    );
-  panel.galleryItemModal = (state, index = null) => {
-    const media = getPanelMedia(state);
-    const item = Number.isInteger(index) ? (media.gallery[index] || {}) : {};
-    const customId = Number.isInteger(index) ? `embed:media-gallery-save:${index}` : 'embed:media-gallery-save-new';
-    return new ModalBuilder().setCustomId(customId).setTitle(Number.isInteger(index) ? 'Edit Gallery Media' : 'Add Gallery Media').addComponents(
-      new ActionRowBuilder().addComponents(textInput('source', 'Media URL / variable', TextInputStyle.Short, item.source || '')),
-      new ActionRowBuilder().addComponents(textInput('alt', 'Alt text / description', TextInputStyle.Paragraph, item.alt || '', 1024)),
-    );
-  };
-  panel.fileItemModal = (state, index = null) => {
-    const media = getPanelMedia(state);
-    const item = Number.isInteger(index) ? (media.files[index] || {}) : {};
-    const customId = Number.isInteger(index) ? `embed:media-file-save:${index}` : 'embed:media-file-save-new';
-    return new ModalBuilder().setCustomId(customId).setTitle(Number.isInteger(index) ? 'Edit Attached File' : 'Add Attached File').addComponents(
-      new ActionRowBuilder().addComponents(textInput('source', 'File URL / variable', TextInputStyle.Short, item.source || '')),
-      new ActionRowBuilder().addComponents(textInput('name', 'Display filename', TextInputStyle.Short, item.name || '', 256)),
-      new ActionRowBuilder().addComponents(textInput('description', 'File description', TextInputStyle.Paragraph, item.description || '', 1024)),
-    );
-  };
-
-  panel.__mediaUploadModalsBound = true;
-  return panel;
-}
-
-function validMediaAlignment(value) {
-  const alignment = String(value || '').toLowerCase();
-  return ['left', 'center', 'right'].includes(alignment) ? alignment : null;
-}
-
-function installMediaManagerUi(panel) {
-  if (!panel || panel.__mediaManagerUiBound) return panel;
-
-  panel.buildMediaManagerPanel = (interaction, who = 'Unknown User', stateOverride = null) => {
-    const state = stateOverride && typeof stateOverride === 'object'
-      ? stateOverride
-      : panel.getSession(interaction);
-    const panelMedia = mediaModel.mediaForPanel(state);
-    const requestedGalleryIndex = Number.isInteger(state.selectedMediaIndex) ? state.selectedMediaIndex : null;
-    const galleryIndex = panelMedia.gallery.length
-      ? Math.max(0, Math.min(requestedGalleryIndex ?? 0, panelMedia.gallery.length - 1))
-      : null;
-    const selectedMedia = galleryIndex == null ? null : mediaModel.normalizeGalleryItem(panelMedia.gallery[galleryIndex] || {});
-    const aboveCount = panelMedia.gallery.filter((item) => item?.placement === 'above').length;
-    const belowCount = panelMedia.gallery.length - aboveCount;
-    const selectedAlignment = validMediaAlignment(selectedMedia?.alignment) || 'left';
-    const alignmentLabel = selectedAlignment === 'center' ? '↔️ Centre' : selectedAlignment === 'right' ? '➡️ Right' : '⬅️ Left';
-    const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => (
-      new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(Boolean(disabled))
-    );
-    const rows = [];
-
-    if (panelMedia.gallery.length) {
-      rows.push(new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId('embed:media-gallery-select')
-          .setPlaceholder('🎞️ Select media item')
-          .addOptions(panelMedia.gallery.slice(0, 25).map((item, index) => ({
-            label: `${index + 1}. ${String(item.alt || item.source || 'Media item').slice(0, 80)}`,
-            value: String(index),
-            description: String(`${item.type || 'auto'} • ${item.placement === 'above' ? 'Above Content' : 'Below Content'} • ${item.spoiler ? 'spoiler' : 'normal'}`).slice(0, 100),
-            default: galleryIndex === index,
-          })))
-      ));
-    }
-
-    rows.push(new ActionRowBuilder().addComponents(
-      button('embed:media-add', '➕ Add Media / File', ButtonStyle.Success, panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS && panelMedia.files.length >= mediaModel.MAX_FILES),
-      button('embed:media-gallery-edit', '✏️ Edit', ButtonStyle.Primary, galleryIndex == null),
-      button('embed:media-gallery-up', '⬆️ Up', ButtonStyle.Secondary, galleryIndex == null || galleryIndex <= 0),
-      button('embed:media-gallery-down', '⬇️ Down', ButtonStyle.Secondary, galleryIndex == null || galleryIndex >= panelMedia.gallery.length - 1),
-    ));
-
-    rows.push(new ActionRowBuilder().addComponents(
-      button(
-        'embed:media-type:cycle',
-        `🏷️ Type: ${{ auto: 'Auto', text: 'Text', gif: 'GIF', image: 'Image' }[String(selectedMedia?.headerType || 'auto').toLowerCase()] || 'Auto'}`,
-        ButtonStyle.Secondary,
-        galleryIndex == null
-      ),
-      button('embed:media-spoiler:off', '👁️ Normal', selectedMedia?.spoiler ? ButtonStyle.Secondary : ButtonStyle.Primary, galleryIndex == null),
-      button('embed:media-spoiler:on', '🙈 Spoiler', selectedMedia?.spoiler ? ButtonStyle.Primary : ButtonStyle.Secondary, galleryIndex == null),
-      button('embed:media-duplicate', '📑 Duplicate', ButtonStyle.Success, galleryIndex == null || panelMedia.gallery.length >= mediaModel.MAX_GALLERY_ITEMS),
-    ));
-
-    rows.push(new ActionRowBuilder().addComponents(
-      button('embed:media-alignments', '↔️ Alignments', ButtonStyle.Primary, galleryIndex == null),
-      button('embed:media-thumbnail', panelMedia.thumbnail?.source ? '🖼️ Thumbnail ✓' : '🖼️ Thumbnail', ButtonStyle.Primary),
-      button('embed:media-gallery-remove', '🗑️ Remove', ButtonStyle.Danger, galleryIndex == null),
-    ));
-
-    rows.push(new ActionRowBuilder().addComponents(
-      button('embed:builder', '⬅️ Back'),
-      button('embed:settings', '⚙️ Settings'),
-      button('embed:helpers', '📖 Variables'),
-    ));
-
-    const summary = [
-      `Editing panel **${(Number(state.selectedPanelIndex) || 0) + 1}/${Math.max(1, Array.isArray(state.panels) ? state.panels.length : 1)}**`,
-      '',
-      `⬆️ **Above Content** — ${aboveCount} • ⬇️ **Below Content** — ${belowCount}`,
-      `🖼️ **Thumbnail** — ${panelMedia.thumbnail?.source ? 'Configured' : 'Not set'} • 📎 **Files** — ${panelMedia.files.length}/${mediaModel.MAX_FILES}`,
-      '',
-    ];
-
-    if (selectedMedia) {
-      summary.push(
-        '**Selected Media**',
-        `🔗 **File:** ${String(selectedMedia.alt || selectedMedia.source || `Item ${galleryIndex + 1}`).slice(0, 300)}`,
-        `📍 **Placement:** ${selectedMedia.placement === 'above' ? '⬆️ Above Content' : '⬇️ Below Content'}`,
-        `↔️ **Alignment:** ${alignmentLabel}`,
-        `🏷️ **Type:** ${{ auto: 'Auto', text: 'Text', gif: 'GIF', image: 'Image' }[String(selectedMedia.headerType || 'auto').toLowerCase()] || 'Auto'}`,
-        `👁️ **Spoiler:** ${selectedMedia.spoiler ? 'On' : 'Off'}`,
-        '',
-      );
-    } else {
-      summary.push('**Selected Media**', 'None selected — use ➕ Add Media / File or select an existing item.', '');
-    }
-
-    summary.push(
-      '**Controls**',
-      '**✏️ Edit** — Edit the selected media item.',
-      '**🏷️ Type** — Choose Auto, Text, GIF or Image for the selected media.',
-      '**👁️ Normal** — Show the selected media normally.',
-      '**🙈 Spoiler** — Hide the selected media behind Discord’s spoiler treatment.',
-      '**↔️ Alignments** — Set Above/Below Content, Left/Centre/Right and Small/Medium/Large.',
-      '**🖼️ Thumbnail** — Add or manage the panel thumbnail.',
-    );
-
-    const embeds = [panel.simplePanel('🖼️ Media Manager', summary.join('\n'), state, who)];
-
-    return { embeds, components: enforceLimits(rows) };
-  };
-
-  panel.buildMediaManager = panel.buildMediaManagerPanel;
-  panel.validatePanelMedia = validatePanelMedia;
-  panel.EMBED_COMPONENT_LIMITS = Object.freeze({
-    maxComponentsPerRow: MAX_COMPONENTS_PER_ROW,
-    maxActionRows: MAX_ACTION_ROWS,
-  });
-  panel.__mediaManagerUiBound = true;
-  return panel;
-}
-
-function installThumbnailUi(panel) {
-  if (!panel || panel.__thumbnailMediaUiBound) return panel;
-  panel.thumbnailUploadModal = () => new ModalBuilder().setCustomId('embed:thumbnail-upload-save').setTitle('Upload Thumbnail').addLabelComponents(
-    new LabelBuilder().setLabel('Thumbnail image').setDescription('Upload one image. GIF and other Discord-supported image formats are preserved.').setFileUploadComponent(
-      new FileUploadBuilder().setCustomId('thumbnail_file').setMinValues(1).setMaxValues(1).setRequired(true),
-    ),
-  );
-  panel.buildThumbnailOptionsPanel = (interaction) => {
-    const state = panel.getSession(interaction);
-    const media = getPanelMedia(state);
-    const thumbnail = media.thumbnail || { source: '', alt: '' };
-    const source = resolveSource(panel, thumbnail.source, interaction);
-    const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('🖼️ Thumbnail').setDescription([
-      '**Thumbnail settings**',
-      `**Source:** ${thumbnail.source ? String(thumbnail.source).slice(0, 500) : 'Not set'}`,
-      `**Alt text:** ${thumbnail.alt ? String(thumbnail.alt).slice(0, 700) : 'Not set'}`,
-      '',
-      'You can use a direct HTTPS image URL, an Embed Studio variable, or upload the thumbnail directly.',
-    ].join('\n'));
-    if (source) embed.setThumbnail(source);
-    return {
-      embeds: [embed],
-      components: enforceLimits([
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('embed:thumbnail-edit').setLabel('✏️ Edit URL / Alt').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId('embed:thumbnail-upload').setLabel('📤 Upload Thumbnail').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId('embed:thumbnail-clear').setLabel('🗑️ Clear').setStyle(ButtonStyle.Danger).setDisabled(!thumbnail.source),
-        ),
-        new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('embed:thumbnail-back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)),
-      ]),
-    };
-  };
-  panel.__thumbnailMediaUiBound = true;
-  return panel;
-}
 
 module.exports = {
+  installMediaRuntimeCompatibility,
   ...mediaModel,
   mediaModel,
   clone,
@@ -723,9 +629,6 @@ module.exports = {
   installStorageNormalization,
   installStateCompatibility,
   installPersistentMediaCompatibility,
-  installUploadModals,
-  installMediaManagerUi,
-  installThumbnailUi,
   MAX_ASSET_BYTES,
   supportedPersistentType,
   stableSourceKey,

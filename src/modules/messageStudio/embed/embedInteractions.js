@@ -3,12 +3,11 @@
 const {
   ActionRowBuilder,
   AttachmentBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
   MessageFlags,
+  ModalBuilder,
   PermissionFlagsBits,
   PermissionsBitField,
+  TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
 const panel = require('./embedPanel');
@@ -35,12 +34,6 @@ const { buildEmbedPayload } = require('./embedRenderer');
 // Embed interactions can be loaded directly by the runtime dispatcher as well as
 // through embed.js. Always install the canonical Media Manager onto the shared
 // panel before any media interaction handler can execute.
-media.installStateCompatibility(panel);
-media.installPersistentMediaCompatibility(panel);
-media.installStorageNormalization(panel);
-media.installUploadModals(panel);
-media.installMediaManagerUi(panel);
-media.installThumbnailUi(panel);
 if (typeof panel.getPanelMedia !== 'function') panel.getPanelMedia = media.getPanelMedia;
 if (typeof panel.setPanelMedia !== 'function') panel.setPanelMedia = media.setPanelMedia;
 panel.mediaModel = media.mediaModel;
@@ -104,8 +97,21 @@ async function handleButtonAction(interaction) {
   if (!action || action === 'custom' || action === 'none') { await ephemeral(interaction, 'ℹ️ This button does not have an action configured yet.'); return true; }
   if (action === 'reply' || action === 'message') { await ephemeral(interaction, resolved(value || 'Button pressed.', interaction).slice(0, 2000) || 'Button pressed.'); return true; }
   if (EMBED_ROLE_BUTTON_ACTIONS.has(action)) { await executeRoleAction(interaction, action, value); return true; }
-  if (action === 'user-info') { const member = interaction.member; const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('👤 Your Server Info').setDescription([`**User:** <@${interaction.user.id}>`, `**User ID:** \`${interaction.user.id}\``, `**Joined:** ${member?.joinedTimestamp ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>` : 'Unknown'}`, `**Roles:** ${member?.roles?.cache ? Math.max(0, member.roles.cache.size - 1) : 'Unknown'}`].join('\n')); await ephemeral(interaction, { embeds: [embed] }); return true; }
-  if (action === 'server-info') { const guild = interaction.guild; const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`🏠 ${guild?.name || 'Server'}`).setDescription([`**Members:** ${guild?.memberCount ?? 'Unknown'}`, `**Server ID:** \`${guild?.id || 'Unknown'}\``, `**Created:** ${guild?.createdTimestamp ? `<t:${Math.floor(guild.createdTimestamp / 1000)}:F>` : 'Unknown'}`].join('\n')); if (guild?.iconURL?.()) embed.setThumbnail(guild.iconURL({ size: 256 })); await ephemeral(interaction, { embeds: [embed] }); return true; }
+  if (action === 'user-info') {
+    await ephemeral(
+      interaction,
+      panel.buildUserInfoPayload(interaction)
+    );
+    return true;
+  }
+
+  if (action === 'server-info') {
+    await ephemeral(
+      interaction,
+      panel.buildServerInfoPayload(interaction)
+    );
+    return true;
+  }
   await ephemeral(interaction, `⚠️ The action \`${action}\` is not registered.`);
   return true;
 }
@@ -148,7 +154,13 @@ async function updateContent(i) { await i.update(panel.buildContentManagerPanel(
 async function updateAppearance(i) { await i.update(panel.buildAppearancePanel(i)); return true; }
 async function updateIcon(i, kind) { await i.update(panel.buildAppearanceIconPanel(i, kind)); return true; }
 async function updateThumbnailPanel(i) { await i.update(panel.buildThumbnailOptionsPanel(i)); return true; }
-async function updateMediaPanel(i) { await i.update(panel.buildMediaManagerPanel(i, who(i))); return true; }
+async function updateMediaPanel(i) {
+  await i.update({
+    ...panel.buildMediaManagerPanel(i, who(i)),
+    attachments: [],
+  });
+  return true;
+}
 async function updateFileOptions(i) { await i.update(panel.buildFileOptionsPanel(i)); return true; }
 async function replyMediaPanel(i) { await i.reply({ ...panel.buildMediaManagerPanel(i, who(i)), flags: 64 }); return true; }
 function validKind(kind) { return kind === 'author' || kind === 'footer'; }
@@ -1118,7 +1130,10 @@ async function handleBuilderInteractions(i) {
   // Never recreate the retired UI: acknowledge the stale control by routing
   // the user directly into the current Media Manager.
   if (i.isButton?.() && customId === 'embed:header-type-cycle') {
-    await i.update(panel.buildMediaManagerPanel(i, who(i)));
+    await i.update({
+      ...panel.buildMediaManagerPanel(i, who(i)),
+      attachments: [],
+    });
     return true;
   }
   const fields = Array.isArray(state.fields) ? [...state.fields] : [];
@@ -1136,10 +1151,56 @@ async function handleBuilderInteractions(i) {
     if (customId.startsWith('embed:appearance-icon-upload:')) { const kind = customId.split(':').pop(); if (!validKind(kind)) return true; await i.showModal(panel.appearanceIconUploadModal(kind)); return true; }
     if (customId.startsWith('embed:appearance-icon-clear:')) { const kind = customId.split(':').pop(); if (!validKind(kind)) return true; saveAppearance(i, state, { [iconField(kind)]: '' }); return updateIcon(i, kind); }
     if (customId === 'embed:media-thumbnail') return updateThumbnailPanel(i);
-    if (customId === 'embed:thumbnail-back') { await i.update(panel.buildMediaManagerPanel(i, who(i))); return true; }
+    if (customId === 'embed:thumbnail-back') {
+      await i.update({
+        ...panel.buildMediaManagerPanel(i, who(i)),
+        attachments: [],
+      });
+      return true;
+    }
     if (customId === 'embed:thumbnail-edit') { await i.showModal(panel.thumbnailModal(state)); return true; }
     if (customId === 'embed:thumbnail-upload') { await i.showModal(panel.thumbnailUploadModal()); return true; }
-    if (customId === 'embed:thumbnail-clear') { saveThumbnailState(i, state, { source: '', alt: '' }); return updateThumbnailPanel(i); }
+    if (customId === 'embed:thumbnail-clear') {
+      /*
+       * Remove the thumbnail from both canonical media state and
+       * legacy panel state so it cannot be restored during sync.
+       */
+      const panelIndex = Math.max(
+        0,
+        Math.min(
+          Number(state.selectedPanelIndex) || 0,
+          Math.max(0, (state.panels?.length || 1) - 1)
+        )
+      );
+
+      const panels = Array.isArray(state.panels)
+        ? state.panels.map((entry) => ({ ...entry }))
+        : [{}];
+
+      if (!panels[panelIndex]) {
+        panels[panelIndex] = {};
+      }
+
+      panels[panelIndex] = {
+        ...panels[panelIndex],
+        thumbnail: '',
+        thumbnailURL: '',
+      };
+
+      saveThumbnailState(
+        i,
+        {
+          ...state,
+          panels,
+        },
+        {
+          source: '',
+          alt: '',
+        }
+      );
+
+      return updateThumbnailPanel(i);
+    }
 
     if (customId === 'embed:fields') return updateFields(i);
     if (customId === 'embed:field-manager-add') { if (fields.length >= panel.MAX_EMBED_FIELDS) { await i.reply({ content: `Maximum of ${panel.MAX_EMBED_FIELDS} fields reached.`, flags: 64 }); return true; } await i.showModal(panel.fieldEditorModal(state)); return true; }
@@ -1346,6 +1407,35 @@ async function handleCoreInteraction(i) {
     }
   }
 
+  if (
+    i.isStringSelectMenu?.() &&
+    customId === 'embed:builder-media-select'
+  ) {
+    const requested = Number(i.values?.[0]);
+    const panelMedia = panel.getPanelMedia(state);
+
+    const selectedMediaIndex =
+      Number.isInteger(requested) &&
+      panelMedia.gallery?.[requested]
+        ? requested
+        : 0;
+
+    panel.saveSession(i, {
+      ...state,
+      selectedMediaIndex,
+    });
+
+    await i.update({
+      ...panel.buildBuilderPanel(
+        i,
+        who(i)
+      ),
+      attachments: [],
+    });
+
+    return true;
+  }
+
   if (customId === 'embed:edit-images' && i.isButton?.()) return updateMediaPanel(i);
   if (i.isStringSelectMenu?.() && customId === 'embed:media-gallery-select') { panel.saveSession(i, { ...state, selectedMediaIndex: Number(i.values[0]) }); return updateMediaPanel(i); }
   if (i.isStringSelectMenu?.() && customId === 'embed:media-file-select') { panel.saveSession(i, { ...state, selectedFileIndex: Number(i.values[0]) }); return updateMediaPanel(i); }
@@ -1410,13 +1500,14 @@ async function handleCoreInteraction(i) {
         { selectedMediaIndex: galleryIndex }
       );
 
-      await i.update(
-        panel.buildMediaManagerPanel(
+      await i.update({
+        ...panel.buildMediaManagerPanel(
           i,
           who(i),
           savedState
-        )
-      );
+        ),
+        attachments: [],
+      });
 
       return true;
     }
@@ -1450,7 +1541,14 @@ async function handleCoreInteraction(i) {
           : { ...item });
         panel.saveSession(i, { ...panel.setPanelMedia(committed, panelIndex, { ...committedMedia, gallery: repairedGallery }), selectedPanelIndex: panelIndex, selectedMediaIndex: galleryIndex, hasUnsavedChanges: true });
       }
-      await i.update(panel.buildMediaManagerPanel(i, panel.memberName(i), panel.getSession(i)));
+      await i.update({
+        ...panel.buildMediaManagerPanel(
+          i,
+          panel.memberName(i),
+          panel.getSession(i)
+        ),
+        attachments: [],
+      });
       return true;
     }
     if (customId === 'embed:media-duplicate') { if (galleryIndex == null || !panelMedia.gallery[galleryIndex]) return updateMediaPanel(i); if (panelMedia.gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: `Maximum of ${panel.mediaModel.MAX_GALLERY_ITEMS} gallery items reached.`, flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; const duplicate = panel.mediaModel.normalizeGalleryItem({ ...gallery[galleryIndex] }); gallery.splice(galleryIndex + 1, 0, duplicate); saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex: galleryIndex + 1 }); return updateMediaPanel(i); }
@@ -1608,14 +1706,14 @@ async function handleCoreInteraction(i) {
       }
     );
 
-    await i.reply({
-      content:
-        `✅ Added ${addedGallery} gallery media item(s) and ${addedFiles} attached file(s).` +
-        (skipped
-          ? ` ${skipped} item(s) were skipped because the panel limits were reached.`
-          : ''),
-      ...panel.buildMediaManagerPanel(i, who(i), savedState),
-      flags: 64,
+    await i.update({
+      ...panel.buildMediaManagerPanel(
+        i,
+        who(i),
+        savedState
+      ),
+      content: null,
+      attachments: [],
     });
 
     return true;
@@ -1791,15 +1889,16 @@ async function handleLegacyInteraction(i) {
   const name = panel.memberName(i);
   const state = panel.getSession(i);
 
-  if (customId === 'admin:embed') { await i.update(panel.buildEditorPanel(i, name)); return true; }
+  if (customId === 'admin:embed') {
+    await i.update({
+      ...panel.buildEditorPanel(i, name),
+      attachments: [],
+    });
+    return true;
+  }
 
   if (i.isStringSelectMenu?.()) {
     if (customId === 'embed:template') { panel.applyTemplate(i, i.values[0]); await legacyReplyOrUpdate(i, panel.buildEditorPanel(i, name)); return true; }
-    if (customId === 'embed:color') {
-      const value = i.values[0];
-      if (value === panel.CUSTOM_HEX_VALUE) { await i.showModal(panel.colorModal(state)); return true; }
-      panel.markUnsaved(i, panel.saveSelected(state, { color: value })); await legacyReplyOrUpdate(i, panel.buildEditorPanel(i, name)); return true;
-    }
     if (customId === 'embed:builder-color') {
       const value = i.values[0];
 
@@ -1828,14 +1927,163 @@ async function handleLegacyInteraction(i) {
     if (customId === 'embed:button-select') { panel.saveSession(i, { ...state, selectedButtonIndex: Number(i.values[0]) }); await legacyReplyOrUpdate(i, panel.buildButtonsPanel(i, name)); return true; }
   }
 
-  if (i.isChannelSelectMenu?.() && customId === 'embed:channel') { panel.markUnsaved(i, { ...state, channelId: i.values[0] }); await legacyReplyOrUpdate(i, panel.buildEditorPanel(i, name)); return true; }
+  if (
+    i.isStringSelectMenu?.() &&
+    customId === 'embed:channel'
+  ) {
+    const selected = String(i.values?.[0] || '');
+
+    if (selected === '__channel_id__') {
+      const modal = new ModalBuilder()
+        .setCustomId('embed:channel-id-save')
+        .setTitle('Set Destination Channel');
+
+      const input = new TextInputBuilder()
+        .setCustomId('channelId')
+        .setLabel('Channel ID')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Paste the Discord channel ID')
+        .setRequired(true)
+        .setMinLength(17)
+        .setMaxLength(20);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(input)
+      );
+
+      await i.showModal(modal);
+      return true;
+    }
+
+    panel.markUnsaved(i, {
+      ...state,
+      channelId: selected,
+    });
+
+    await legacyReplyOrUpdate(
+      i,
+      panel.buildEditorPanel(i, name)
+    );
+
+    return true;
+  }
+
+  if (
+    i.isModalSubmit?.() &&
+    customId === 'embed:channel-id-save'
+  ) {
+    const channelId = String(
+      i.fields.getTextInputValue('channelId') || ''
+    ).trim();
+
+    if (!/^\d{17,20}$/.test(channelId)) {
+      await i.reply({
+        content:
+          '❌ That is not a valid Discord channel ID.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    const channel =
+      i.guild?.channels?.cache?.get(channelId) ||
+      await i.guild?.channels
+        ?.fetch(channelId)
+        .catch(() => null);
+
+    if (
+      !channel ||
+      channel.guildId !== i.guildId ||
+      (
+        channel.type !== 0 &&
+        channel.type !== 5
+      )
+    ) {
+      await i.reply({
+        content:
+          '❌ That channel was not found in this server, or it is not a text/announcement channel.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    const access = await validateChannelAccess(
+      i.guild,
+      channel.id,
+      [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.EmbedLinks,
+      ],
+      {
+        scope: 'embed.destination',
+      }
+    );
+
+    if (!access.ok) {
+      await i.reply({
+        content: panel.trim(
+          access.message ||
+            'Goliath cannot deploy to that channel.',
+          1800
+        ),
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return true;
+    }
+
+    panel.markUnsaved(i, {
+      ...state,
+      channelId: channel.id,
+    });
+
+    await legacyReplyOrUpdate(
+      i,
+      panel.buildEditorPanel(i, name)
+    );
+
+    return true;
+  }
 
   if (i.isButton?.()) {
-    if (customId === 'embed:editor' || customId === 'embed:back') { await i.update(panel.buildEditorPanel(i, name)); return true; }
-    if (customId === 'embed:builder') { await i.update(panel.buildBuilderPanel(i, name)); return true; }
-    if (customId === 'embed:panel-colour') { await i.update(panel.buildPanelColourPanel(i, name)); return true; }
-    if (customId === 'embed:presets') { await i.update(panel.buildPresetsPanel(i, name)); return true; }
-    if (customId === 'embed:panels') { await i.update(panel.buildPanelsPanel(i, name)); return true; }
+    if (customId === 'embed:back') {
+      await i.update({
+        ...panel.buildEditorPanel(i, name),
+        attachments: [],
+      });
+      return true;
+    }
+    if (customId === 'embed:builder') {
+      await i.update({
+        ...panel.buildBuilderPanel(i, name),
+        attachments: [],
+      });
+      return true;
+    }
+    if (customId === 'embed:panel-colour') {
+      await i.update({
+        ...panel.buildPanelColourPanel(i, name),
+        attachments: [],
+      });
+      return true;
+    }
+    if (customId === 'embed:presets') {
+      await i.update({
+        ...panel.buildPresetsPanel(i, name),
+        attachments: [],
+      });
+      return true;
+    }
+    if (customId === 'embed:panels') {
+      await i.update({
+        ...panel.buildPanelsPanel(i, name),
+        attachments: [],
+      });
+      return true;
+    }
     if (customId === 'embed:helpers') { await i.update(panel.buildHelpersPanel(i)); return true; }
     if (customId === 'embed:edit-content') return updateContent(i);
     if (customId === 'embed:content-back') return updateContent(i);
@@ -1843,7 +2091,6 @@ async function handleLegacyInteraction(i) {
     if (customId === 'embed:content-details') { await i.showModal(panel.appearanceDetailsModal(state)); return true; }
     if (customId === 'embed:content-author-icon') return updateIcon(i, 'author');
     if (customId === 'embed:content-footer-icon') return updateIcon(i, 'footer');
-    if (customId === 'embed:toggle-ping') { panel.markUnsaved(i, { ...state, allowUserPing: !state.allowUserPing }); await i.update(panel.buildBuilderPanel(i, name)); return true; }
     if (customId === 'embed:toggle-timestamp') { panel.markUnsaved(i, { ...state, showTimestamp: !state.showTimestamp }); await i.update(panel.buildBuilderPanel(i, name)); return true; }
     if (customId === 'embed:reset') {
       await i.update(panel.buildResetConfirmationPanel(i, name));
@@ -1913,11 +2160,63 @@ async function handleInteraction(interaction) {
   const customId = String(interaction.customId || '');
 
   if (await handlePresetInteraction(interaction)) return true;
-  if (interaction.isStringSelectMenu?.() && customId === 'embed:builder-panel-select') { const state = panel.getSession(interaction); const index = Math.max(0, Math.min(Number(interaction.values?.[0]) || 0, Math.max(0, (state.panels?.length || 1) - 1))); panel.saveSession(interaction, { ...state, selectedPanelIndex: index, selectedFieldIndex: null }); await interaction.update(panel.buildBuilderPanel(interaction, panel.memberName(interaction))); return true; }
+  if (interaction.isStringSelectMenu?.() && customId === 'embed:builder-panel-select') {
+    const state = panel.getSession(interaction);
+    const index = Math.max(
+      0,
+      Math.min(
+        Number(interaction.values?.[0]) || 0,
+        Math.max(0, (state.panels?.length || 1) - 1)
+      )
+    );
+
+    panel.saveSession(interaction, {
+      ...state,
+      selectedPanelIndex: index,
+      selectedFieldIndex: null,
+    });
+
+    await interaction.update({
+      ...panel.buildBuilderPanel(
+        interaction,
+        panel.memberName(interaction)
+      ),
+      attachments: [],
+    });
+
+    return true;
+  }
   if (interaction.isButton?.() && customId === 'embed:actions') { await interaction.update(panel.buildActionsPanel(interaction)); return true; }
   if ((customId === 'embed:readiness' || customId === 'embed:readiness-refresh') && interaction.isButton?.()) return showReadiness(interaction);
   if (customId === 'embed:readiness-fix' && interaction.isButton?.()) return routeReadinessFix(interaction);
-  if (DELIVERY_ACTIONS.has(customId)) { const report = panel.getReadinessReport(interaction); if (!report.ready) { const payload = panel.buildReadinessPanel(interaction); const prefix = '❌ This embed is not ready to send. Fix the issues below first.'; payload.embeds[0].setDescription(`${prefix}\n\n${payload.embeds[0].data.description || ''}`.slice(0, 4096)); if (interaction.deferred || interaction.replied) await interaction.editReply(payload); else await interaction.reply({ ...payload, flags: 64 }); return true; } }
+  if (DELIVERY_ACTIONS.has(customId)) {
+    const report =
+      panel.getReadinessReport(interaction);
+
+    if (!report.ready) {
+      const payload =
+        panel.buildReadinessPanel(
+          interaction,
+          {
+            deliveryBlocked: true,
+          }
+        );
+
+      if (
+        interaction.deferred
+        || interaction.replied
+      ) {
+        await interaction.editReply(payload);
+      } else {
+        await interaction.reply({
+          ...payload,
+          flags: 64,
+        });
+      }
+
+      return true;
+    }
+  }
   if (await handleButtonAction(interaction)) return true;
   return handleBuilderInteractions(interaction);
 }

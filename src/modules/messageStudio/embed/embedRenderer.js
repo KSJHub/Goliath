@@ -304,10 +304,40 @@ async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = '
   if (type && !STATIC_RASTER_TYPES.has(type)) return null;
 
   const transparent = await removeConnectedCornerBackground(cached.buffer);
+
+  /*
+   * Wide landscape media needs its own LARGE treatment.
+   *
+   * Do not change the existing Small/Medium or square/portrait Large
+   * behaviour. Only LARGE media with an aspect ratio of at least 1.5
+   * enters this path.
+   */
+  const sourceMeta = await sharp(transparent).metadata();
+  const sourceWidth = Number(sourceMeta.width || 1);
+  const sourceHeight = Number(sourceMeta.height || 1);
+  const sourceAspectRatio = sourceWidth / Math.max(1, sourceHeight);
+
+  const isLargeMedia =
+    visibleWidth === SINGLE_IMAGE_VISIBLE_WIDTH;
+
+  const isWideLargeMedia =
+    isLargeMedia &&
+    sourceAspectRatio >= 1.5;
+
+  /*
+   * Discord scales the complete transparent alignment canvas.
+   * Wide LARGE media therefore needs a larger visible render target
+   * so the banner remains visually large after alignment padding.
+   */
+  const effectiveVisibleWidth =
+    isWideLargeMedia
+      ? SINGLE_IMAGE_VISIBLE_WIDTH * 2
+      : visibleWidth;
+
   const visible = await sharp(transparent, { failOn: 'warning' })
     .ensureAlpha()
     .resize({
-      width: visibleWidth,
+      width: effectiveVisibleWidth,
       withoutEnlargement: true,
       fit: 'inside'
     })
@@ -315,31 +345,46 @@ async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = '
     .toBuffer();
 
   const meta = await sharp(visible).metadata();
-  const width = Number(meta.width || visibleWidth);
+  const width = Number(meta.width || effectiveVisibleWidth);
   const height = Number(meta.height || 1);
 
   const normalizedAlignment = galleryAlignment({ alignment });
 
+  /*
+   * Existing Large Centre/Right behaviour remains unchanged for normal
+   * artwork. Wide LARGE media gets its own alignment canvas.
+   */
+  const alignmentCanvasWidth =
+    isWideLargeMedia
+      ? width
+      : isLargeMedia &&
+        (
+          normalizedAlignment === 'center' ||
+          normalizedAlignment === 'right'
+        )
+        ? SINGLE_IMAGE_VISIBLE_WIDTH * 2
+        : SINGLE_IMAGE_CANVAS_WIDTH;
+
   const left =
     normalizedAlignment === 'right'
-      ? Math.max(0, SINGLE_IMAGE_CANVAS_WIDTH - width)
+      ? Math.max(0, alignmentCanvasWidth - width)
       : normalizedAlignment === 'center'
         ? Math.max(
             0,
-            Math.floor((SINGLE_IMAGE_CANVAS_WIDTH - width) / 2)
+            Math.floor((alignmentCanvasWidth - width) / 2)
           )
         : 0;
 
   const output = await sharp({
     create: {
-      width: SINGLE_IMAGE_CANVAS_WIDTH,
+      width: alignmentCanvasWidth,
       height,
       channels: 4,
       background: {
         r: 0,
         g: 0,
         b: 0,
-        alpha: 0.01,
+        alpha: 0,
       },
     },
   })

@@ -277,7 +277,36 @@ const buildComingSoonPanel = (title, description, route) => ({ embeds: [createEm
 const buildPurgeModal = () => new ModalBuilder().setCustomId('admin:purgeModal').setTitle('Purge Messages').addComponents(row(new TextInputBuilder().setCustomId('amount').setLabel('Amount (1-100)').setStyle(TextInputStyle.Short).setPlaceholder('25').setRequired(true)));
 async function deny(interaction, message = '❌ You do not have permission to use this control.') { const payload = { content: message, flags: 64 }; if (interaction.deferred || interaction.replied) await interaction.editReply(payload); else await interaction.reply(payload); return true; }
 async function executePurge(interaction) { if (!hasGuildPermission(interaction, 'admin.purge')) return deny(interaction); const raw = interaction.fields?.getTextInputValue?.('amount')?.trim() || ''; const amount = /^\d+$/.test(raw) ? Number(raw) : NaN; if (!Number.isInteger(amount) || amount < 1 || amount > 100) { await interaction.reply({ content: '❌ Purge amount must be a whole number from 1 to 100.', flags: 64 }); return true; } if (!interaction.channel?.bulkDelete) { await interaction.reply({ content: '❌ This channel does not support bulk message deletion.', flags: 64 }); return true; } try { const deleted = await interaction.channel.bulkDelete(amount, true); await interaction.reply({ content: `🧹 Deleted **${deleted?.size ?? 0}** message${deleted?.size === 1 ? '' : 's'}. Messages older than 14 days are skipped by Discord.`, flags: 64 }); } catch (error) { console.error('❌ Admin purge failed:', error); await interaction.reply({ content: '❌ Failed to purge messages. Check the bot permissions and channel history.', flags: 64 }); } return true; }
-async function updatePanel(interaction, panel, route = 'admin:home') { const payload = applyNavigationUI(interaction, panel, canonicalState(route)); if (interaction.deferred || interaction.replied) await interaction.editReply(payload); else await interaction.update(payload); return true; }
+async function updatePanel(interaction, panel, route = 'admin:home') {
+  const payload = applyNavigationUI(
+    interaction,
+    panel,
+    canonicalState(route)
+  );
+
+  /*
+   * Discord retains existing message attachments when an interaction
+   * update omits the attachments field.
+   *
+   * Admin navigation never owns Embed Studio's generated preview
+   * attachments, so clear them unless the destination payload has
+   * explicitly supplied attachment handling of its own.
+   */
+  if (
+    !Object.prototype.hasOwnProperty.call(payload, 'attachments') &&
+    !Object.prototype.hasOwnProperty.call(payload, 'files')
+  ) {
+    payload.attachments = [];
+  }
+
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply(payload);
+  } else {
+    await interaction.update(payload);
+  }
+
+  return true;
+}
 function panelForRoute(route, interaction, name) { if (route === 'admin:home') return buildAdminPanel(interaction.guild, name, interaction); if (route === 'admin:automod') return automodPanel.buildAutomodPanel(interaction.guild, name); if (route === 'admin:automod:configure') return automodPanel.buildAutomodConfigurePanel(interaction.guild, name); if (route?.startsWith('admin:automod:rule:')) return automodPanel.buildAutomodRulePanel(interaction.guild, route.split(':').pop(), name); if (route === 'admin:adminpanel') return buildAdminToolsPanel(interaction.guild, name, interaction); if (route === 'admin:authority') return buildAuthorityPanel(interaction.guild, name); const authorityRoles = route.match(/^admin:authority:roles:(administrator|moderator|juniorModerator)$/); if (authorityRoles) return buildAuthorityRolesPanel(interaction.guild, authorityRoles[1], name); const authorityPermissions = route.match(/^admin:authority:permissions:(administrator|moderator|juniorModerator):(\d+)$/); if (authorityPermissions) return buildAuthorityPermissionsPanel(interaction.guild, authorityPermissions[1], Number(authorityPermissions[2]), name); const authorityProfile = route.match(/^admin:authority:profile:(\d{15,25}):(\d+)$/); if (authorityProfile) return buildAuthorityRoleProfilePanel(interaction.guild, authorityProfile[1], Number(authorityProfile[2]), name); if (route === 'admin:modules') return buildModulesPanel(interaction.guild, name, interaction); if (route === 'admin:logs') return buildLogsPanel(interaction.guild, name); if (route === 'admin:backups') return buildBackupsPanel(interaction.guild, name, interaction); if (route === 'admin:staffroles') return buildStaffRolesPanel(interaction.guild, name); if (route === 'admin:modroles') return buildModRolesPanel(interaction.guild, name); if (route === 'admin:autoRoles') return buildAutoRolesPanel(interaction.guild, name); return buildAdminPanel(interaction.guild, name, interaction); }
 const openRoute = (interaction, route, name) => updatePanel(interaction, panelForRoute(route, interaction, name), route);
 
@@ -293,7 +322,26 @@ async function handleAdminNavigation(interaction) {
   if (id.startsWith('admin:backup') && !hasGuildPermission(interaction, 'admin.backups.view')) return deny(interaction);
   if (await automodPanel.handleAutomodInteraction(interaction)) return true;
   const name = getMemberDisplayName(interaction);
-  if (id === 'admin:modules') return updatePanel(interaction, buildModulesPanel(interaction.guild, name, interaction), 'admin:modules');
+  if (id === 'admin:modules') {
+    const payload = buildModulesPanel(
+      interaction.guild,
+      name,
+      interaction
+    );
+
+    /*
+     * Studio modules can attach generated preview media to the interaction
+     * message. The Studios root must never retain module-specific previews.
+     */
+    payload.content = '';
+    payload.attachments = [];
+
+    return updatePanel(
+      interaction,
+      payload,
+      'admin:modules'
+    );
+  }
   if (studioMatch && interaction.isButton?.()) return updatePanel(interaction, buildFilteredStudioPanel(interaction, studioMatch[1], name), id);
   if (await moduleAdminPanels.handleModuleAdminInteraction(interaction)) return true;
   if (interaction.isModalSubmit?.() && id === 'admin:purgeModal') return executePurge(interaction);

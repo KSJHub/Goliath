@@ -1,13 +1,9 @@
 'use strict';
 
 const {
-  ActionRowBuilder,
   AttachmentBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   MessageFlags,
   PermissionFlagsBits,
-  TextInputStyle,
 } = require('discord.js');
 const guildManager = require('../../../core/guild/guildManager');
 const templates = require('./embedTemplates');
@@ -17,7 +13,10 @@ require('./embedState');
 const panel = require('./embedPanel');
 const media = require('./embedMedia');
 const renderer = require('./embedRenderer');
-const { installImageAlignment, installInteraction: installImageAlignmentInteraction, installAlignmentPreview } = require('./embedImageAlignment');
+const {
+  installImageAlignment,
+  installAlignmentPreview,
+} = require('./embedImageAlignment');
 
 const mediaStateApi = Object.freeze({ getPanelMedia: media.getPanelMedia, setPanelMedia: media.setPanelMedia, mediaModel: media.mediaModel });
 const deliveryLocks = new Map();
@@ -52,30 +51,22 @@ async function attachmentPermissionFailure(interaction, state, customId) {
   if (permissions?.has(PermissionFlagsBits.AttachFiles)) return null;
   return `❌ Goliath needs **Attach Files** in <#${channelId}> because this embed contains attachment-backed media or files.`;
 }
-function installCanonicalMediaSessions(targetPanel) {
-  if (!targetPanel || targetPanel.__canonicalMediaSessionsInstalled) return targetPanel;
-  if (typeof targetPanel.getSession === 'function') {
-    const originalGetSession = targetPanel.getSession.bind(targetPanel);
-    targetPanel.getSession = (interaction) => { const state = originalGetSession(interaction); const canonical = canonicalMediaState(state); return { ...state, media: clone(canonical) }; };
-  }
-  if (typeof targetPanel.saveSession === 'function') {
-    const originalSaveSession = targetPanel.saveSession.bind(targetPanel);
-    targetPanel.saveSession = (interaction, state) => { const canonical = canonicalMediaState(state); return originalSaveSession(interaction, { ...state, media: clone(canonical) }); };
-  }
-  targetPanel.__canonicalMediaSessionsInstalled = true;
-  return targetPanel;
-}
 function installMediaRuntime(targetPanel) {
-  media.installStateCompatibility(targetPanel);
-  media.installPersistentMediaCompatibility(targetPanel);
-  media.installStorageNormalization(targetPanel);
-  installCanonicalMediaSessions(targetPanel);
-  media.installUploadModals(targetPanel);
-  media.installMediaManagerUi(targetPanel);
-  media.installThumbnailUi(targetPanel);
-  targetPanel.getPanelMedia = mediaStateApi.getPanelMedia;
-  if (typeof targetPanel.setPanelMedia !== 'function') targetPanel.setPanelMedia = mediaStateApi.setPanelMedia;
-  targetPanel.mediaModel = mediaStateApi.mediaModel;
+  media.installMediaRuntimeCompatibility(targetPanel);
+
+  targetPanel.getPanelMedia =
+    mediaStateApi.getPanelMedia;
+
+  if (
+    typeof targetPanel.setPanelMedia !== "function"
+  ) {
+    targetPanel.setPanelMedia =
+      mediaStateApi.setPanelMedia;
+  }
+
+  targetPanel.mediaModel =
+    mediaStateApi.mediaModel;
+
   return targetPanel;
 }
 
@@ -123,26 +114,6 @@ function safeTransferFilename(name) {
 function transferCodeChunks(json, max = 1800) { const chunks = []; for (let offset = 0; offset < json.length; offset += max) chunks.push(json.slice(offset, offset + max)); return chunks; }
 function installSettingsTransfer(targetPanel, targetInteractions) {
   if (!targetPanel || !targetInteractions || targetInteractions.__settingsTransferInstalled) return;
-  const originalImportModal = targetPanel.settingsImportModal;
-  targetPanel.settingsImportModal = () => originalImportModal();
-  targetPanel.settingsPasteModal = () => targetPanel.modal('embed:settings-paste-save', 'Paste Embed Preset JSON', [targetPanel.input('preset_json', 'Preset JSON code', TextInputStyle.Paragraph, '', true, 4000)]);
-  targetPanel.buildSettingsPanel = (interaction) => {
-    const state = targetPanel.getSession(interaction);
-    const description = ['Move saved Embed Builder presets between Goliath servers.', '', '**📥 Upload File** — upload a saved preset `.json` file.', '**📤 Export File** — download the selected preset as a `.json` file.', '**📋 Paste JSON** — paste portable preset JSON from another Goliath Embed Builder.', '**📋 Export JSON** — copy portable preset JSON to move it into another Embed Builder.', '', 'Select the preset you want to export in **Preset Manager** first.'].join('\\n');
-    const transferButtons = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('embed:settings-import').setLabel('Upload File').setEmoji('📥').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('embed:settings-export').setLabel('Export File').setEmoji('📤').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('embed:settings-paste').setLabel('Paste JSON').setEmoji('📋').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('embed:settings-export-code').setLabel('Export JSON').setEmoji('📋').setStyle(ButtonStyle.Secondary),
-    );
-    return { embeds: [targetPanel.simplePanel('⚙️ Embed Settings', description, state, targetPanel.memberName(interaction))], components: [
-      transferButtons,
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('embed:builder').setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('embed:helpers').setLabel('Variables').setEmoji('📖').setStyle(ButtonStyle.Secondary)
-      )
-    ] };
-  };
   const originalHandle = targetInteractions.handleInteraction.bind(targetInteractions);
   targetInteractions.handleInteraction = async (interaction) => {
     const customId = String(interaction?.customId || '');
@@ -173,7 +144,6 @@ function installSettingsTransfer(targetPanel, targetInteractions) {
 installMediaRuntime(panel);
 installImageAlignment(panel, renderer);
 const interactions = require('./embedInteractions');
-installImageAlignmentInteraction(panel, interactions);
 installAlignmentPreview(panel, interactions);
 installSettingsTransfer(panel, interactions);
 const rawHandleInteraction = interactions.handleInteraction.bind(interactions);

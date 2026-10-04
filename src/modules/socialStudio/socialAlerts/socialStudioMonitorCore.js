@@ -109,11 +109,11 @@ async function checkGuildAccounts(client,guildId,options={}) {
     let previous = account.state && typeof account.state === 'object' ? { ...account.state } : {};
     let checked = null;
     let currentState = { ...previous };
+    let activeDeliveryEvent = null;
     try { checked=await checkAccount(account); const state={...previous,lastCheckedAt:checked.checkedAt||now(),lastStatus:checked.status,lastError:['unavailable','configuration_required'].includes(checked.status)?checked.reason:null}; currentState=state;
       if(checked.isLive===true){const incoming=checked.event?.id?String(checked.event.id):null, old=previous.liveEventId?String(previous.liveEventId):null, newBroadcast=Boolean(incoming&&old&&incoming!==old); state.isLive=true; state.liveEventId=incoming||state.liveEventId||null; state.liveStartedAt=checked.event?.startedAt||(newBroadcast?null:state.liveStartedAt)||null; state.lastLiveEvent=checked.event||state.lastLiveEvent||null; if(newBroadcast){state.peakViewers=0;state.lastLiveMessageId=null;state.lastLiveMessageChannelId=null;state.lastAlertMessageId=null;state.lastAlertChannelId=null;} const viewers=Number(checked.event?.viewerCount); if(Number.isFinite(viewers)&&viewers>=0)state.peakViewers=Math.max(Number(state.peakViewers||0),viewers);
       } else if(checked.isLive===false){state.isLive=false;if(previous.isLive===true)state.lastLiveEndedAt=checked.checkedAt||now();}
       const creator=creatorFor(config,accountId); for(const duplicateId of resolvedDuplicateIds(config,account,checked,creator))duplicateMerges.set(duplicateId,accountId); const delivered=[], events=eventCandidates(account,previous,checked);
-      let activeDeliveryEvent=null;
       if(config.settings.retryDeliveries!==false&&previous.pendingDelivery&&typeof previous.pendingDelivery==='object'){
         const pending=previous.pendingDelivery, retryAt=Date.parse(String(pending.nextAttemptAt||0)), attempts=Number(pending.attempts||0);
         const pendingEvent=pending.event&&typeof pending.event==='object'?pending.event:null;
