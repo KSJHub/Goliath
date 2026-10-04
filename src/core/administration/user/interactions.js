@@ -585,7 +585,8 @@ async function handleUserManageAccountCheck(interaction) {
     return true;
   }
   if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-  const result = await checkGuildAccounts(interaction.client, interaction.guildId);
+  const ownedAccountIds = Array.isArray(context.creator?.accountIds) ? context.creator.accountIds.filter((accountId) => context.accounts?.some?.((account) => account.accountId === accountId)) : [];
+  const result = await checkGuildAccounts(interaction.client, interaction.guildId, { accountIds: ownedAccountIds });
   await interaction.followUp({ content: `🔍 Provider check complete. ${Number(result?.checked || 0)} account(s) checked.`, flags: 64 }).catch(() => null);
   const refreshed = getOwnedCreatorAndAccounts(interaction);
   return updatePanel(interaction, buildUserManageAccountPanel(interaction, refreshed.creator, refreshed.accounts, context.account.accountId));
@@ -674,7 +675,7 @@ async function handleUserManualPostLive(interaction) {
     return true;
   }
   if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-  const result = await forcePostCreatorLive(interaction.client, interaction.guildId, creator.creatorId, { actorId: interaction.user.id, guild: interaction.guild, bypassCooldown: true });
+  const result = await forcePostCreatorLive(interaction.client, interaction.guildId, creator.creatorId, { actorId: interaction.user.id, guild: interaction.guild, bypassCooldown: false });
   const sent = Array.isArray(result?.sent) ? result.sent : [];
   const failed = Array.isArray(result?.failed) ? result.failed : [];
   const channels = [...new Set(sent.map((item) => item.channelId).filter(Boolean))];
