@@ -418,11 +418,23 @@ function upsertCreatorAccount(guildId, creatorId, account, duplicateAccountIds =
     const duplicateIds = new Set(array(duplicateAccountIds).map(String).filter(Boolean));
     duplicateIds.delete(accountId);
 
-    for (const duplicateId of duplicateIds) delete section.accounts[duplicateId];
+    for (const duplicateId of duplicateIds) {
+      if (duplicateId === accountId) continue;
+      delete section.accounts[duplicateId];
+    }
     for (const item of Object.values(section.creators)) {
       item.accountIds = array(item.accountIds)
         .map(String)
         .filter((value) => !duplicateIds.has(value));
+    }
+
+    // A relink must never leave the same account attached to multiple creators.
+    for (const item of Object.values(section.creators)) {
+      if (String(item.creatorId) === id) continue;
+      item.accountIds = array(item.accountIds)
+        .map(String)
+        .filter((value) => value !== accountId);
+      item.updatedAt = new Date().toISOString();
     }
 
     const timestamp = new Date().toISOString();
