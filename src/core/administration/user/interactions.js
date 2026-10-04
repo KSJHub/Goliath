@@ -557,7 +557,6 @@ async function handleUserManageAccountToggle(interaction) {
       lastError: null,
       peakViewers: 0,
       deliveredEventKeys: [],
-    };tError: null,
     };
   }
 
