@@ -36,7 +36,7 @@ async function cleanupAllGuilds(client) {
   let cleaned = 0;
   for (const guild of client.guilds.cache.values()) {
     const result = cleanupGuild(guild.id);
-    cleaned += Number(result?.deleted || result?.removed || 0);
+    cleaned += Array.isArray(result) ? result.length : Number(result?.deleted || result?.removed || 0);
   }
   return { guilds: client.guilds.cache.size, cleaned };
 }
