@@ -2,8 +2,9 @@
 
 const crypto = require('crypto');
 const express = require('express');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../../core/guild/guildManager');
+const security = require('../../../../core/security/protection/core');
 const { replaceVariables } = require('../../../../core/guild/guildVariables');
 const { ALERT_TYPES, normalizeTemplates, resolveTemplate } = require('../../../../modules/socialStudio/socialAlerts/socialStudioTemplates');
 const { PLATFORMS, providerCatalog, diagnoseAccount, diagnoseAccounts, applyDiagnosticState } = require('../../../../modules/socialStudio/socialAlerts/socialStudioProviders');
@@ -28,8 +29,26 @@ function guildId(req) {
   if (!/^\d{15,25}$/.test(id)) throw new Error('Invalid guild ID.');
   return id;
 }
-function actor(req) { return { actorId: req.session?.user?.id || req.body?.actorId || null }; }
+function actor(req) { return { actorId: req.moduleActorId || req.session?.user?.id || null }; }
 function client(req) { return req.client || req.app?.get?.('goliath.client') || req.app?.locals?.client || global.client || null; }
+async function requireManageAccess(req, res, next) {
+  try {
+    const userId = clean(req.session?.user?.id, 25);
+    if (!/^\\d{15,25}$/.test(userId)) return res.status(401).json({ success: false, error: 'Authentication required.' });
+    const id = guildId(req);
+    req.moduleActorId = userId;
+    if (security.isBotOwner(userId)) return next();
+    const discordGuild = await guild(req, id);
+    if (!discordGuild) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
+    const member = discordGuild.members.cache.get(userId) || await discordGuild.members.fetch(userId).catch(() => null);
+    const allowed = Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || member?.permissions?.has(PermissionFlagsBits.ManageGuild));
+    if (!allowed) return res.status(403).json({ success: false, error: 'Manage Server permission is required.' });
+    return next();
+  } catch (error) {
+    return failure(res, error, 403);
+  }
+}
+
 async function guild(req, id) {
   const bot = client(req);
   if (!bot?.guilds) return null;
@@ -250,6 +269,8 @@ async function sendSimulation(req, id, account, data) {
   const content = account.mentionMode === 'everyone' ? '@everyone' : account.mentionMode === 'here' ? '@here' : account.mentionMode === 'role' && account.mentionRoleId ? `<@&${account.mentionRoleId}>` : undefined;
   return channel.send({ content, embeds: [embed], components, allowedMentions: { parse: account.mentionMode === 'everyone' ? ['everyone'] : [], roles: account.mentionRoleId ? [account.mentionRoleId] : [] } });
 }
+
+router.use(requireManageAccess);
 
 router.get('/:guildId', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, config: getConfig(id) }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/overview', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, overview: overview(getConfig(id)) }); } catch (error) { return failure(res, error, 400); } });
