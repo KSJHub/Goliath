@@ -269,18 +269,58 @@ function markCreatorActive(guildId, ownerDiscordId, meta = {}) {
   }), meta);
 }
 
+function resetDepartedAccountState(account = {}) {
+  const state = account.state && typeof account.state === 'object' ? { ...account.state } : {};
+  return {
+    ...state,
+    isLive: false,
+    liveEventId: null,
+    liveStartedAt: null,
+    lastLiveEvent: null,
+    lastLiveEndedAt: null,
+    lastAlertKey: null,
+    lastAlertAt: null,
+    lastAlertMessageId: null,
+    lastAlertChannelId: null,
+    lastLiveMessageId: null,
+    lastLiveMessageChannelId: null,
+    lastLiveMessageUpdatedAt: null,
+    pendingDelivery: null,
+    pendingEndedEvent: null,
+    lastDeliveryError: null,
+    deliveredEventKeys: [],
+    peakViewers: 0,
+  };
+}
+
 function markCreatorDeparted(guildId, ownerDiscordId, departureType = 'left', meta = {}) {
   const creator = findCreatorByOwner(guildId, ownerDiscordId);
   if (!creator) return null;
 
   const leftAt = new Date();
-  return updateCreator(guildId, creator.creatorId, (current) => ({
-    ...current,
-    status: departureType === 'kicked' ? 'kicked' : 'left_server',
-    departureType: departureType === 'kicked' ? 'kicked' : 'left',
-    leftAt: leftAt.toISOString(),
-    scheduledDeletionAt: new Date(leftAt.getTime() + CREATOR_DELETE_GRACE_MS).toISOString(),
-  }), meta);
+  const scheduledDeletionAt = new Date(leftAt.getTime() + CREATOR_DELETE_GRACE_MS).toISOString();
+
+  updateSection(guildId, (section) => {
+    const current = section.creators[String(creator.creatorId)];
+    if (!current) return section;
+
+    current.status = departureType === 'kicked' ? 'kicked' : 'left_server';
+    current.departureType = departureType === 'kicked' ? 'kicked' : 'left';
+    current.leftAt = leftAt.toISOString();
+    current.scheduledDeletionAt = scheduledDeletionAt;
+    current.updatedAt = leftAt.toISOString();
+
+    for (const accountId of array(current.accountIds)) {
+      const account = section.accounts[String(accountId)];
+      if (!account) continue;
+      account.state = resetDepartedAccountState(account);
+      account.updatedAt = leftAt.toISOString();
+    }
+
+    return section;
+  }, meta);
+
+  return getCreator(guildId, creator.creatorId);
 }
 
 function getExpiredCreators(guildId, nowMs = Date.now()) {
