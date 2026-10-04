@@ -8,11 +8,18 @@ const {
   result,
 } = require('./shared');
 
+let cachedAppToken = null;
+let cachedAppTokenAt = 0;
+const APP_TOKEN_CACHE_MS = 50 * 60 * 1000;
+
 async function facebookToken() {
   if (process.env.FACEBOOK_ACCESS_TOKEN) return process.env.FACEBOOK_ACCESS_TOKEN;
   if (!process.env.FACEBOOK_APP_ID || !process.env.FACEBOOK_APP_SECRET) return null;
+  if (cachedAppToken && Date.now() - cachedAppTokenAt < APP_TOKEN_CACHE_MS) return cachedAppToken;
   const { json } = await request(`https://graph.facebook.com/oauth/access_token?client_id=${encodeURIComponent(process.env.FACEBOOK_APP_ID)}&client_secret=${encodeURIComponent(process.env.FACEBOOK_APP_SECRET)}&grant_type=client_credentials`);
-  return json?.access_token || null;
+  cachedAppToken = json?.access_token || null;
+  cachedAppTokenAt = cachedAppToken ? Date.now() : 0;
+  return cachedAppToken;
 }
 
 async function checkFacebook(account) {
