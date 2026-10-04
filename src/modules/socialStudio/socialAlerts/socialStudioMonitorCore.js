@@ -97,15 +97,68 @@ function eventCandidates(account, previous, checked) {
 }
 function accountChannelOverride(account, type) { return account.alertChannels?.[type] || account.alertChannelId || null; }
 function alertChannelId(config, account, type) { return accountChannelOverride(account, type) || config.alertChannels?.[type] || config.platformChannels?.[account.platform] || config.alertsChannelId || null; }
-function mentionFor(account, config = {}) { const mode = account.mentionMode || config.notificationMentionMode || 'none', roleId = account.mentionRoleId || config.notificationRoleId || null; if (mode === 'everyone') return '@everyone'; if (mode === 'here') return '@here'; if (mode === 'role' && roleId) return `<@&${roleId}>`; return ''; }
+function mentionConfig(account, config = {}) {
+  const mode = String(account.mentionMode || config.notificationMentionMode || 'none').toLowerCase();
+  const rawRoleId = String(account.mentionRoleId || config.notificationRoleId || '').trim();
+  const roleId = /^\d{17,20}$/.test(rawRoleId) ? rawRoleId : null;
+  return { mode: ['none', 'everyone', 'here', 'role'].includes(mode) ? mode : 'none', roleId };
+}
+async function resolveMention(guild, account, config = {}, suppress = false) {
+  if (suppress) return { content: '', allowedMentions: { parse: [] } };
+  const { mode, roleId } = mentionConfig(account, config);
+  if (mode === 'everyone') return { content: '@everyone', allowedMentions: { parse: ['everyone'] } };
+  if (mode === 'here') return { content: '@here', allowedMentions: { parse: ['everyone'] } };
+  if (mode === 'role' && roleId) {
+    const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+    if (role) return { content: `<@&${role.id}>`, allowedMentions: { parse: [], roles: [role.id] } };
+  }
+  return { content: '', allowedMentions: { parse: [] } };
+}
+function permanentDeliveryError(message, code = 'SOCIAL_DELIVERY_CONFIGURATION') {
+  const error = new Error(message);
+  error.code = code;
+  error.permanentDeliveryFailure = true;
+  return error;
+}
+function isPermanentDeliveryError(error) {
+  return error?.permanentDeliveryFailure === true;
+}
 function humanDuration(seconds) { const value = Number(seconds); if (!Number.isFinite(value) || value < 0) return ''; const hours = Math.floor(value / 3600), minutes = Math.floor((value % 3600) / 60), secs = Math.floor(value % 60); return [hours ? `${hours}h` : '', minutes ? `${minutes}m` : '', !hours && secs ? `${secs}s` : ''].filter(Boolean).join(' '); }
 function saneLiveDurationSeconds(event) { const supplied = Number(event?.durationSeconds), calculated = secondsBetween(event?.startedAt, event?.endedAt || new Date().toISOString()); if (Number.isFinite(supplied) && supplied >= 0 && supplied <= MAX_REASONABLE_LIVE_DURATION_SECONDS) return supplied; if (Number.isFinite(calculated) && calculated >= 0 && calculated <= MAX_REASONABLE_LIVE_DURATION_SECONDS) return calculated; return null; }
 function discordTimestamp(value, style = 'R') { const ms = new Date(value).getTime(); return Number.isFinite(ms) && ms >= Date.UTC(2020, 0, 1) && ms <= Date.now() + 86400000 ? `<t:${Math.floor(ms / 1000)}:${style}>` : ''; }
 function buildLiveFields({ account, event, vars, liveStatus, durationText, started, ended }) { const fields = [], platform = String(account?.platform || '').toLowerCase(), offline = liveStatus === 'OFFLINE'; if (platform !== 'tiktok' && vars.game) fields.push({ name: '🎮 Game', value: vars.game, inline: true }); const labels = { kick: ['🟢','Kick'], twitch:['🟣','Twitch'], youtube:['🔴','YouTube'], tiktok:['⚫','TikTok'], facebook:['🔵','Facebook'], instagram:['🟠','Instagram'], x:['⚪','X'] }, meta = labels[platform]; if (meta) fields.push({ name: `${meta[0]} ${meta[1]}`, value: vars.username ? `@${vars.username}` : platform === 'tiktok' && !offline ? 'TikTok LIVE' : (vars.creator || meta[1]), inline: true }); if (offline) { const peak = Number(account?.state?.peakViewers || vars.peakViewers || event?.viewerCount || 0); if (peak > 0) fields.push({ name:'📈 Peak Viewers', value:intText(peak), inline:true }); } else if (vars.viewers) fields.push({ name:'👥 Viewers', value:vars.viewers, inline:true }); if (started) fields.push({ name:'🕐 Started', value:started, inline:true }); if (durationText) fields.push({ name:offline?'⏱️ Streamed For':'⏱️ Live For', value:durationText, inline:true }); if (offline && ended) fields.push({ name:'⚫ Ended', value:ended, inline:true }); else if (!offline && event?.language) fields.push({ name:'🌐 Language', value:clean(String(event.language).toUpperCase(),100), inline:true }); if (!offline && event?.hasMatureContent === true) fields.push({ name:'🔞 Mature', value:'Yes', inline:true }); return fields; }
 function eventVars(account, event, creator, options = {}) { const username = clean(event.kickUsername || account.username || account.normalizedUsername || account.externalId, 100).replace(/^@/, ''), creatorName = creator?.displayName || account.displayName || username || 'Creator', title = clean(event.title || `${creatorName} has a new ${event.type}`, 256), url = clean(event.url || account.profileUrl || account.url, 1000), game = clean(event.category || event.game || '', 200), viewers = options.includeViewerCount === false || !Number.isFinite(Number(event.viewerCount)) || Number(event.viewerCount) <= 0 ? '' : intText(event.viewerCount), durationSeconds = event.type === 'live' ? saneLiveDurationSeconds(event) : (Number.isFinite(Number(event.durationSeconds)) ? Number(event.durationSeconds) : secondsBetween(event.startedAt, event.endedAt || new Date().toISOString())); return { creator:creatorName, username, platform:PLATFORM[account.platform]?.label || account.platform, platformIcon:PLATFORM[account.platform]?.icon || '🔔', type:event.type, title, url, game, category:game, viewers, peakViewers:intText(account.state?.peakViewers || event.peakViewers || event.viewerCount || 0), duration:options.includeLiveDuration === false ? '' : humanDuration(durationSeconds), started:discordTimestamp(event.startedAt), ended:discordTimestamp(event.endedAt), published:discordTimestamp(event.publishedAt), kickUsername:String(account.platform || '').toLowerCase() === 'kick' ? username : '' }; }
 function buildEmbed(account, event, template, creator, settings = {}) { const vars = eventVars(account,event,creator,settings), platformKey=String(account.platform||'').toLowerCase(), platform = PLATFORM[account.platform] || { color:0x5865F2,icon:'🔔',label:account.platform || 'Social' }, embed = new EmbedBuilder().setColor(event.type === 'ended' ? 0x747F8D : platform.color), liveStatus = event.type === 'ended' ? 'OFFLINE' : event.type === 'live' ? ((event.paused===true||String(event.liveStatus||'').toUpperCase()==='PAUSED')?'PAUSED':'LIVE') : '', authorIcon = clean(creator?.avatar || creator?.avatarUrl || creator?.profileImage || creator?.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || '',1000), profileUrl = clean(account.profileUrl || account.url || event.profileUrl || vars.url || '',1000), author = { name:vars.creator || vars.username || 'Creator' }; if (/^https?:\/\//i.test(authorIcon)) author.iconURL=authorIcon; if (/^https?:\/\//i.test(profileUrl)) author.url=profileUrl; embed.setAuthor(author); if (/^https?:\/\//i.test(authorIcon)) embed.setThumbnail(authorIcon); if (liveStatus) { const headline=liveStatus==='LIVE'?'🔴 **LIVE NOW**':liveStatus==='PAUSED'?'⏸️ **LIVE PAUSED**':'⚫ **STREAM ENDED**', actions=[]; if((liveStatus==='LIVE'||liveStatus==='PAUSED')&&vars.url) actions.push(`▶️ **[Watch Live](${vars.url})** · ${liveStatus==='PAUSED'?'⏸️ **PAUSED**':'🔴 **LIVE**'}`); if(liveStatus==='OFFLINE'&&event.vod?.url) actions.push(`▶️ **[Watch VOD](${event.vod.url})** · ⚫ **OFFLINE**`); embed.setDescription(`${headline}\n${stripTrailingDivider(vars.title)}${embedActionBlock(actions)}`); embed.addFields(buildLiveFields({account,event,vars,liveStatus,durationText:vars.duration,started:vars.started,ended:vars.ended})); if(event.vod?.url) embed.addFields({name:'📼 VOD',value:`[Watch the recording](${event.vod.url})`,inline:false}); } else { embed.setTitle((render(template.title,vars)||`${platform.icon} ${platform.label}`).slice(0,256)); const description=stripTrailingDivider(render(template.description,vars)||vars.title), actionLabel=clean(template.buttonLabel||'View Post',80), actions=vars.url?[`▶️ **[${actionLabel}](${vars.url})**`]:[]; embed.setDescription(`${description}${embedActionBlock(actions)}`.slice(0,4096)); } const liveImage=liveStatus==='LIVE'||liveStatus==='PAUSED', thumbnail=liveImage?(platformKey==='tiktok'?clean(event.thumbnail,1000):cacheBustedImageUrl(event.thumbnail)):clean(event.thumbnail,1000); if(thumbnail&&/^https?:\/\//i.test(thumbnail)) embed.setImage(thumbnail); if(!liveStatus&&vars.url&&/^https?:\/\//i.test(vars.url)) embed.setURL(vars.url); embed.setFooter({text:`Goliath Social Studio • ${platform.label} • ${liveStatus || event.type.toUpperCase()}`}); embed.setTimestamp(new Date(event.endedAt||event.publishedAt||event.startedAt||Date.now())); return embed; }
-function allowedMentionsFor(account, config = {}, content = '') { const mode = account.mentionMode || config.notificationMentionMode || 'none', roleId = account.mentionRoleId || config.notificationRoleId || null; if (!content) return { parse: [] }; if (mode === 'everyone' || mode === 'here') return { parse: ['everyone'] }; if (mode === 'role' && roleId) return { parse: ['roles'], roles: [String(roleId)] }; return { parse: [] }; }
-async function sendAlert(client,guildId,config,account,event,options={}) { const channelId=alertChannelId(config,account,event.type); if(!channelId) throw new Error(`No alert channel configured for ${account.platform}/${event.type}.`); const guild=client.guilds.cache.get(guildId)||await client.guilds.fetch(guildId), channel=guild.channels.cache.get(channelId)||await guild.channels.fetch(channelId); if(!channel?.isTextBased?.()) throw new Error('Configured alert channel is not text based.'); const embed=buildEmbed(account,event,templateFor(config,event.type),creatorFor(config,account.accountId),config.settings), content=options.suppressMention===true?'':mentionFor(account,config), allowedMentions=allowedMentionsFor(account,config,content); const message=await channel.send({content:content||null,embeds:[embed],allowedMentions}); if(!message?.id) throw new Error('Discord did not return a message id for the alert.'); return {channelId,messageId:message.id}; }
+async function sendAlert(client,guildId,config,account,event,options={}) {
+  const channelId = alertChannelId(config,account,event.type);
+  if (!channelId) throw permanentDeliveryError(`No alert channel configured for ${account.platform}/${event.type}.`);
+
+  const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+  if (!guild) throw permanentDeliveryError('Discord guild is unavailable.');
+
+  const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+  if (!channel) throw permanentDeliveryError('Configured alert channel does not exist.');
+  if (!channel.isTextBased?.()) throw permanentDeliveryError('Configured alert channel is not text based.');
+
+  const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
+  if (!me) throw new Error('Unable to resolve Goliath guild member for delivery permission check.');
+
+  const permissions = channel.permissionsFor(me);
+  if (!permissions?.has('ViewChannel')) throw permanentDeliveryError('Goliath cannot view the configured alert channel.');
+  if (!permissions?.has('SendMessages')) throw permanentDeliveryError('Goliath cannot send messages in the configured alert channel.');
+  if (!permissions?.has('EmbedLinks')) throw permanentDeliveryError('Goliath cannot embed links in the configured alert channel.');
+
+  const embed = buildEmbed(account,event,templateFor(config,event.type),creatorFor(config,account.accountId),config.settings);
+  const mention = await resolveMention(guild,account,config,options.suppressMention===true);
+  const message = await channel.send({
+    content: mention.content || null,
+    embeds: [embed],
+    allowedMentions: mention.allowedMentions
+  });
+
+  if (!message?.id) throw new Error('Discord did not return a message id for the alert.');
+  return {channelId,messageId:message.id};
+}
 async function trackedMessage(client,guildId,previous) { const channelId=previous.lastLiveMessageChannelId||previous.lastAlertChannelId, messageId=previous.lastLiveMessageId||previous.lastAlertMessageId; if(!channelId||!messageId)return null; const guild=client.guilds.cache.get(guildId)||await client.guilds.fetch(guildId).catch(()=>null); if(!guild)return null; const channel=guild.channels.cache.get(channelId)||await guild.channels.fetch(channelId).catch(()=>null); if(!channel?.isTextBased?.())return null; const message=await channel.messages.fetch(messageId).catch(()=>null); return message?{channelId,messageId,message}:null; }
 async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; await tracked.message.edit({embeds:[buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings)],attachments:[]}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
 async function updateEndedAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; await tracked.message.edit({content:null,embeds:[buildEmbed(account,event,templateFor(config,'ended'),creatorFor(config,account.accountId),config.settings)],attachments:[]}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
@@ -157,9 +210,15 @@ async function checkGuildAccounts(client,guildId,options={}) {
               delivered.push({type:activeDeliveryEvent.type,id:activeDeliveryEvent.id,...retryDelivery,recovered:true});
             } else state.pendingDelivery=null;
           }catch(error){
-            const nextAttempts=attempts+1, retryMs=Number(config.settings.retryIntervalMs||60000);
-            state.pendingDelivery={...pending,attempts:nextAttempts,lastAttemptAt:now(),nextAttemptAt:new Date(Date.now()+retryMs).toISOString()};
-            state.lastDeliveryError=String(error?.message||error).slice(0,500);
+            const message=String(error?.message||error).slice(0,500);
+            if(isPermanentDeliveryError(error)){
+              state.pendingDelivery=null;
+              state.lastDeliveryError=message;
+            }else{
+              const nextAttempts=attempts+1, retryMs=Number(config.settings.retryIntervalMs||60000);
+              state.pendingDelivery={...pending,attempts:nextAttempts,lastAttemptAt:now(),nextAttemptAt:new Date(Date.now()+retryMs).toISOString()};
+              state.lastDeliveryError=message;
+            }
             analyticsDelta.errors=Number(analyticsDelta.errors||0)+1;
           } finally { activeDeliveryEvent=null; }
         }
@@ -171,7 +230,63 @@ async function checkGuildAccounts(client,guildId,options={}) {
       }
       if(liveMessageUpdateDue(account,previous,checked,config.settings)){let updated=null,recovered=false,refreshError=null; if(config.settings.editLiveNotifications!==false){try{updated=await updateLiveAlert(client,guildId,config,account,checked.event,previous);}catch(error){refreshError=error?.message||String(error);}} if(!updated&&config.settings.editLiveNotifications!==false&&checked.isLive===true&&checked.event&&hasTrackedLiveMessage(previous)){try{updated=await sendAlert(client,guildId,config,account,checked.event,{...options,suppressMention:true});recovered=Boolean(updated);refreshError=null;}catch(error){refreshError=error?.message||String(error);}} if(updated){const key=eventKey(checked.event);rememberDelivered(state,key);state.lastAlertKey=key;state.lastAlertMessageId=updated.messageId;state.lastAlertChannelId=updated.channelId;state.lastLiveMessageId=updated.messageId;state.lastLiveMessageChannelId=updated.channelId;state.lastLiveMessageUpdatedAt=now();state.lastDeliveryError=null;delivered.push({type:'live',id:checked.event.id,refreshed:!recovered,recovered,...updated});}else if(refreshError){state.lastDeliveryError=String(refreshError).slice(0,500);}}
       monitorUpdates.set(accountId,{state,externalId:checked.externalId||null,resolvedUsername:checked.resolvedUsername||null,profileUrl:checked.url||null,avatar:checked.avatar||null,updatedAt:now()}); results.push({accountId,platform:account.platform,status:checked.status,isLive:checked.isLive,live:checked.event||null,delivered});analyticsDelta.checks=Number(analyticsDelta.checks||0)+1;if(delivered.length)analyticsDelta.alerts=Number(analyticsDelta.alerts||0)+delivered.length;for(const item of delivered)historyEntries.push({id:`history_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,createdAt:now(),accountId,platform:account.platform,status:item.recovered?'alert_recovered':item.refreshed?'alert_updated':'alert_sent',alertType:item.type,eventId:item.id,messageId:item.messageId,channelId:item.channelId});
-    } catch(error){analyticsDelta.errors=Number(analyticsDelta.errors||0)+1; const message=String(error?.message||error); if(activeDeliveryEvent&&config.settings.retryDeliveries!==false){const priorPending=previous.pendingDelivery&&typeof previous.pendingDelivery==='object'?previous.pendingDelivery:{}; const attempts=Number(priorPending.attempts||0)+1; if(attempts<=Number(config.settings.maxDeliveryAttempts||5)){const retryMs=Number(config.settings.retryIntervalMs||60000); monitorUpdates.set(accountId,{state:{...currentState,pendingDelivery:{event:activeDeliveryEvent,attempts,lastAttemptAt:now(),nextAttemptAt:new Date(Date.now()+retryMs).toISOString()},lastDeliveryError:message.slice(0,500)},updatedAt:now()});} else {monitorUpdates.set(accountId,{state:{...currentState,lastDeliveryError:message.slice(0,500),pendingDelivery:null},updatedAt:now()});}} else if(previous?.isLive===true || checked?.isLive===true){monitorUpdates.set(accountId,{state:{...currentState,lastDeliveryError:message.slice(0,500)},updatedAt:now()});} results.push({accountId,platform:account.platform,status:'error',error:error?.message||String(error),delivered:[]});} finally{runningGuilds.delete(runKey);}
+    } catch(error){
+      analyticsDelta.errors=Number(analyticsDelta.errors||0)+1;
+      const message=String(error?.message||error);
+
+      if(isPermanentDeliveryError(error)){
+        monitorUpdates.set(accountId,{
+          state:{
+            ...currentState,
+            lastDeliveryError:message.slice(0,500),
+            pendingDelivery:null
+          },
+          updatedAt:now()
+        });
+      } else if(activeDeliveryEvent&&config.settings.retryDeliveries!==false){
+        const priorPending=previous.pendingDelivery&&typeof previous.pendingDelivery==='object'?previous.pendingDelivery:{};
+        const attempts=Number(priorPending.attempts||0)+1;
+
+        if(attempts<=Number(config.settings.maxDeliveryAttempts||5)){
+          const retryMs=Number(config.settings.retryIntervalMs||60000);
+          monitorUpdates.set(accountId,{
+            state:{
+              ...currentState,
+              pendingDelivery:{
+                event:activeDeliveryEvent,
+                attempts,
+                lastAttemptAt:now(),
+                nextAttemptAt:new Date(Date.now()+retryMs).toISOString()
+              },
+              lastDeliveryError:message.slice(0,500)
+            },
+            updatedAt:now()
+          });
+        } else {
+          monitorUpdates.set(accountId,{
+            state:{
+              ...currentState,
+              lastDeliveryError:message.slice(0,500),
+              pendingDelivery:null
+            },
+            updatedAt:now()
+          });
+        }
+      } else if(previous?.isLive===true || checked?.isLive===true){
+        monitorUpdates.set(accountId,{
+          state:{...currentState,lastDeliveryError:message.slice(0,500)},
+          updatedAt:now()
+        });
+      }
+
+      results.push({
+        accountId,
+        platform:account.platform,
+        status:'error',
+        error:error?.message||String(error),
+        delivered:[]
+      });
+    } finally{runningGuilds.delete(runKey);}
   };
   for(let offset=0;offset<accountIds.length;offset+=maxConcurrent){
     await Promise.all(accountIds.slice(offset,offset+maxConcurrent).map((id)=>processAccount(id)));
