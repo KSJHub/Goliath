@@ -47,9 +47,10 @@ function classifyProviderFailure(error) {
   const statusCode = Number(error?.status || error?.statusCode || error?.response?.status || 0);
   if (/timed out after \d+ms/.test(message) || message.includes('timeout')) return 'timeout';
   if (statusCode === 401 || message.includes('unauthorized') || message.includes('invalid token')) return 'authentication';
+  if (statusCode === 429 || message.includes('rate limit') || message.includes('rate-limit') || message.includes('too many requests') || message.includes('quota exceeded') || message.includes('quotaexceeded') || message.includes('daily limit')) return 'rate_limited';
+  if (statusCode === 403 && (message.includes('quota') || message.includes('daily limit') || message.includes('rate limit'))) return 'rate_limited';
   if (statusCode === 403 || message.includes('forbidden') || message.includes('permission')) return 'permission';
   if (statusCode === 404 || message.includes('not found')) return 'not_found';
-  if (statusCode === 429 || message.includes('rate limit') || message.includes('too many requests')) return 'rate_limited';
   if (statusCode >= 500 || message.includes('service unavailable') || message.includes('bad gateway')) return 'provider_unavailable';
   if (message.includes('json') || message.includes('parse') || message.includes('malformed') || message.includes('invalid response')) return 'invalid_response';
   if (message.includes('network') || message.includes('fetch failed') || message.includes('econn') || message.includes('enotfound')) return 'network';
