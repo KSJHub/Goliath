@@ -84,6 +84,10 @@ function canonicalIdentity(account) {
   return String(account.canonicalIdentity || account.externalId || account.normalizedUsername || account.username || '').toLowerCase();
 }
 
+function identityTokens(account) {
+  return new Set([canonicalIdentity(account), String(account.externalId || '').toLowerCase(), String(account.normalizedUsername || account.username || '').toLowerCase(), ...(Array.isArray(account.identityAliases) ? account.identityAliases : [])].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean));
+}
+
 function canonicalKey(account) {
   return `${String(account.platform || '').toLowerCase()}:${canonicalIdentity(account)}`;
 }
@@ -93,7 +97,11 @@ function upsertUserAccount(guildId, creator, platform, rawValue, actorId) {
   const normalized = normalizeAccountInput(platform, rawValue);
   const key = `${platform}:${String(normalized.canonicalIdentity || normalized.externalId || normalized.normalizedUsername || normalized.username || '').toLowerCase()}`;
   const matches = Object.values(section.accounts || {}).filter((account) => {
-    try { return canonicalKey(migrateAccount(account)) === key; } catch { return false; }
+    try {
+      const migrated = migrateAccount(account);
+      if (canonicalKey(migrated) === key) return true;
+      return identityTokens(migrated).has(String(normalized.canonicalIdentity || normalized.externalId || normalized.normalizedUsername || normalized.username || '').toLowerCase());
+    } catch { return false; }
   });
   const primary = matches[0] || null;
   const accountId = primary?.accountId || `account_${crypto.randomBytes(8).toString('hex')}`;
@@ -107,6 +115,7 @@ function upsertUserAccount(guildId, creator, platform, rawValue, actorId) {
     externalId: primary?.externalId || normalized.externalId || null,
     inputType: normalized.inputType,
     canonicalIdentity: normalized.canonicalIdentity,
+    identityAliases: [...new Set([...(Array.isArray(primary?.identityAliases) ? primary.identityAliases : []), primary?.canonicalIdentity, primary?.externalId, primary?.normalizedUsername, primary?.username].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean))].filter((value) => value !== String(normalized.canonicalIdentity || '').toLowerCase()).slice(-25),
     profileUrl: normalized.profileUrl,
     sourceInput: normalized.sourceInput,
     displayName: creator.displayName,
