@@ -14,12 +14,80 @@ function requireGuild(guild) {
   return guild;
 }
 
-async function buildHealthReport(guild) {
-  const targetGuild = requireGuild(guild);
-  const report = await verificationManager.buildHealthReport(targetGuild);
+function appendUniqueWarning(warnings, warning) {
+  if (warning && !warnings.includes(warning)) warnings.push(warning);
+}
+
+function addStagedWorkflowHealth(guild, report) {
+  const section = verificationStore.getVerificationSection(guild.id);
+  const settings = section.settings || {};
+  const warnings = Array.isArray(report.warnings) ? [...report.warnings] : [];
+  const staged = settings.stagedRoleFlow === true;
+
+  if (!staged) {
+    return {
+      ...report,
+      warnings,
+      stagedRoleFlow: false,
+      arrivalRoleCount: 0,
+      screenedRoleCount: 0,
+    };
+  }
+
+  const arrivalRoleIds = Array.isArray(settings.arrivalRoleIds) ? settings.arrivalRoleIds : [];
+  const screenedRoleIds = Array.isArray(settings.pendingRoleIds) ? settings.pendingRoleIds : [];
+  const verifiedRoleIds = Array.isArray(settings.verifiedRoleIds) ? settings.verifiedRoleIds : [];
+
+  if (!arrivalRoleIds.length) {
+    appendUniqueWarning(warnings, 'Staged verification is enabled but no Arrival role is configured.');
+  }
+  if (!screenedRoleIds.length) {
+    appendUniqueWarning(warnings, 'Staged verification is enabled but no Screened/Member role is configured.');
+  }
+  if (!verifiedRoleIds.length) {
+    appendUniqueWarning(warnings, 'Staged verification is enabled but no Verified role is configured.');
+  }
+  if (!report.screeningEnabled) {
+    appendUniqueWarning(warnings, 'Staged verification requires Discord Membership Screening, but screening was not detected.');
+  }
+
+  const stages = [
+    ['Arrival', arrivalRoleIds],
+    ['Screened/Member', screenedRoleIds],
+    ['Verified', verifiedRoleIds],
+  ];
+
+  for (const [label, roleIds] of stages) {
+    for (const roleId of roleIds) {
+      const role = guild.roles.cache.get(roleId);
+      if (!role) {
+        appendUniqueWarning(warnings, `${label} role ${roleId} no longer exists.`);
+      }
+    }
+  }
+
+  const allStageIds = [...arrivalRoleIds, ...screenedRoleIds, ...verifiedRoleIds];
+  const duplicateIds = [...new Set(allStageIds.filter((id, index) => allStageIds.indexOf(id) !== index))];
+  if (duplicateIds.length) {
+    appendUniqueWarning(warnings, 'The same Discord role is configured in more than one verification stage. Each stage should use a distinct role.');
+  }
 
   return {
     ...report,
+    warnings,
+    stagedRoleFlow: true,
+    arrivalRoleCount: arrivalRoleIds.length,
+    screenedRoleCount: screenedRoleIds.length,
+  };
+}
+
+async function buildHealthReport(guild) {
+  const targetGuild = requireGuild(guild);
+  const report = await verificationManager.buildHealthReport(targetGuild);
+  const stagedReport = addStagedWorkflowHealth(targetGuild, report);
+
+  return {
+    ...stagedReport,
     enabled: guildManager.isModuleEnabled(targetGuild.id, MODULE),
   };
 }
