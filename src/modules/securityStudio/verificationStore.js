@@ -135,6 +135,8 @@ function defaultSettings() {
     waitForDiscordScreening: false,
     skipScreeningIfUnavailable: true,
     logScreeningCompletion: true,
+    stagedRoleFlow: false,
+    arrivalRoleIds: [],
     usePendingRoles: false,
     assignPendingRoles: false,
     pendingRoleTiming: 'after_screening',
@@ -226,6 +228,7 @@ function normalizeSettings(settings = {}) {
   const requirePendingRole = source.requirePendingRole === true;
   const verifiedRoleIds = cleanDiscordIds(source.verifiedRoleIds?.length ? source.verifiedRoleIds : legacyVerified);
   const pendingRoleIds = cleanDiscordIds(source.pendingRoleIds?.length ? source.pendingRoleIds : legacyPending);
+  const arrivalRoleIds = cleanDiscordIds(source.arrivalRoleIds);
   const removePendingRoles = source.removePendingRoles !== undefined
     ? source.removePendingRoles === true
     : source.removePendingRole !== undefined
@@ -240,6 +243,8 @@ function normalizeSettings(settings = {}) {
     waitForDiscordScreening: source.waitForDiscordScreening === true,
     skipScreeningIfUnavailable: source.skipScreeningIfUnavailable !== false,
     logScreeningCompletion: source.logScreeningCompletion !== false,
+    stagedRoleFlow: source.stagedRoleFlow === true,
+    arrivalRoleIds,
     usePendingRoles: source.usePendingRoles === true,
     assignPendingRoles: source.assignPendingRoles === true,
     pendingRoleTiming: PENDING_ROLE_TIMINGS.has(timing) ? timing : base.pendingRoleTiming,
