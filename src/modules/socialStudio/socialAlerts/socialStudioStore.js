@@ -450,12 +450,35 @@ function deleteAccount(guildId, accountId, meta = {}) {
   let deleted = false;
 
   updateSection(guildId, (section) => {
-    if (!section.accounts[id]) return section;
+    const account = section.accounts[id];
+    if (!account) return section;
 
     delete section.accounts[id];
     for (const creator of Object.values(section.creators)) {
       creator.accountIds = array(creator.accountIds).filter((value) => String(value) !== id);
       creator.updatedAt = new Date().toISOString();
+    }
+
+    // Account deletion is terminal for its runtime session. Do not leave
+    // orphaned LIVE/pending-delivery state in any persisted collections.
+    for (const key of ['history', 'queue']) {
+      if (!Array.isArray(section[key])) continue;
+      section[key] = section[key].filter((entry) => {
+        if (!entry || typeof entry !== 'object') return true;
+        return String(entry.accountId || '') !== id;
+      });
+    }
+    const creatorId = Object.values(section.creators).find((creator) =>
+      array(creator.accountIds).map(String).includes(id)
+    )?.creatorId || account.creatorId || null;
+    if (creatorId) {
+      for (const key of ['drafts', 'scheduledPosts', 'notifications']) {
+        const collection = object(section[key]);
+        for (const [entryId, value] of Object.entries(collection)) {
+          if (String(value?.accountId || '') === id) delete collection[entryId];
+        }
+        if (section[key]) section[key] = collection;
+      }
     }
 
     deleted = true;
