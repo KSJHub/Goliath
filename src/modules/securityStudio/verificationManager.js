@@ -27,8 +27,6 @@ const BUTTON_STYLES = {
   danger: ButtonStyle.Danger,
 };
 
-// Backwards-compatible export for callers that still consume DEFAULT_HELPERS.
-// The canonical catalogue lives in core/guild/guildVariables.js.
 const DEFAULT_HELPERS = guildVariables.HELPERS;
 
 function cleanDiscordId(value) { const id = String(value || '').replace(/[<@&#!>]/g, '').trim(); return /^\d{15,25}$/.test(id) ? id : null; }
@@ -55,6 +53,7 @@ function renderMessage(template, member, values = {}) { return renderTemplate(te
 async function fetchRole(guild, roleId) { if (!guild || !roleId) return null; return guild.roles.cache.get(roleId) || guild.roles.fetch(roleId).catch(() => null); }
 async function fetchRoles(guild, roleIds = []) { const ids = cleanDiscordIds(roleIds); const roles = await Promise.all(ids.map((roleId) => fetchRole(guild, roleId))); return roles.filter(Boolean); }
 function roleMentions(roles = []) { return roles.map((role) => `<@&${role.id}>`).join(', '); }
+function uniqueRoles(roles = []) { return [...new Map(roles.filter(Boolean).map((role) => [role.id, role])).values()]; }
 function resolveRoleActionStatus(guild, member, role, action) { if (!role || role.id === guild.id) return { ok: true, skipped: true }; if (action === 'add' && member.roles.cache.has(role.id)) return { ok: true, skipped: true }; if (action === 'remove' && !member.roles.cache.has(role.id)) return { ok: true, skipped: true }; if (!canBotManageRole(guild, role)) return { ok: false, message: `I cannot manage the ${role.name} role. Move my role above it and make sure I have Manage Roles.` }; return { ok: true, skipped: false }; }
 async function sendVerificationLog(guild, section, content) { const channelId = section.settings?.logChannelId; if (!channelId || !content) return false; const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null); if (!channel?.send) return false; await channel.send({ content, allowedMentions: { users: [], roles: [], parse: [] } }).catch(() => null); return true; }
 function isStaffBypass(member, settings) { return Boolean(settings.allowStaffBypass && canManageVerification(member)); }
@@ -62,421 +61,178 @@ function getAttemptBlock(section, member) { const settings = section.settings; c
 function accountAgeDays(member) { return (Date.now() - Number(member?.user?.createdTimestamp || Date.now())) / 86400000; }
 function membershipAgeMinutes(member) { return (Date.now() - Number(member?.joinedTimestamp || Date.now())) / 60000; }
 
+async function applyRoleTransition(member, addRoles = [], removeRoles = [], reason = 'Goliath verification role transition') {
+  const guild = member.guild;
+  const adds = uniqueRoles(addRoles);
+  const removes = uniqueRoles(removeRoles).filter((role) => !adds.some((add) => add.id === role.id));
+  const added = [];
+  const removed = [];
+
+  if (!canBotManageMember(member)) throw new Error('Goliath cannot manage this member.');
+  for (const role of adds) { const status = resolveRoleActionStatus(guild, member, role, 'add'); if (!status.ok) throw new Error(status.message); }
+  for (const role of removes) { const status = resolveRoleActionStatus(guild, member, role, 'remove'); if (!status.ok) throw new Error(status.message); }
+
+  try {
+    for (const role of adds) {
+      if (member.roles.cache.has(role.id)) continue;
+      await member.roles.add(role, reason);
+      added.push(role);
+    }
+    for (const role of removes) {
+      if (!member.roles.cache.has(role.id)) continue;
+      await member.roles.remove(role, reason);
+      removed.push(role);
+    }
+    const refreshed = await guild.members.fetch({ user: member.id, force: true });
+    const missing = adds.filter((role) => !refreshed.roles.cache.has(role.id));
+    const remaining = removes.filter((role) => refreshed.roles.cache.has(role.id));
+    if (missing.length || remaining.length) {
+      throw new Error([
+        missing.length ? `role not added: ${missing.map((role) => role.name).join(', ')}` : null,
+        remaining.length ? `role not removed: ${remaining.map((role) => role.name).join(', ')}` : null,
+      ].filter(Boolean).join('; '));
+    }
+    return { member: refreshed, added, removed };
+  } catch (error) {
+    for (const role of added.reverse()) await member.roles.remove(role, 'Goliath role transition rollback').catch(() => null);
+    for (const role of removed.reverse()) await member.roles.add(role, 'Goliath role transition rollback').catch(() => null);
+    throw error;
+  }
+}
+
 async function assignPendingRoles(member, reason = 'Goliath pending verification role assigned') {
   const section = getEffectiveVerificationSection(member.guild.id);
   const settings = section.settings;
-
-  if (
-    section.enabled !== true ||
-    !settings.usePendingRoles ||
-    !settings.assignPendingRoles
-  ) {
-    return { assigned: [], failed: [], skipped: true };
-  }
-
+  if (section.enabled !== true || !settings.usePendingRoles || !settings.assignPendingRoles) return { assigned: [], failed: [], skipped: true };
   const roles = await fetchRoles(member.guild, settings.pendingRoleIds);
-  const attempted = [];
-  const failed = [];
-
-  for (const role of roles) {
-    const status = resolveRoleActionStatus(
-      member.guild,
-      member,
-      role,
-      'add'
-    );
-
-    if (!status.ok) {
-      failed.push({
-        roleId: role.id,
-        reason: status.message,
-      });
-      continue;
+  try {
+    const result = await applyRoleTransition(member, roles, [], reason);
+    if (result.added.length) {
+      verificationStore.incrementAnalytics(member.guild.id, { pendingRolesAssigned: result.added.length });
+      if (settings.dmOnPendingRole) await result.member.send(buildVerificationNotice({ guild: member.guild, member: result.member, type: 'pending', roles: result.added, values: { pendingRoles: roleMentions(result.added) } })).catch(() => null);
     }
-
-    if (status.skipped) continue;
-
-    try {
-      await member.roles.add(role, reason);
-      attempted.push(role);
-    } catch (error) {
-      const failureReason =
-        error?.message ||
-        'Discord rejected the pending role assignment';
-
-      failed.push({
-        roleId: role.id,
-        reason: failureReason,
-      });
-
-      console.warn('[Verification] Pending role assignment failed', {
-        guildId: member.guild.id,
-        userId: member.id,
-        roleId: role.id,
-        error: failureReason,
-      });
-    }
+    return { assigned: result.added, failed: [], skipped: false };
+  } catch (error) {
+    console.warn('[Verification] Pending role assignment failed', { guildId: member.guild.id, userId: member.id, error: error?.message || error });
+    return { assigned: [], failed: [{ reason: error?.message || 'Pending role assignment failed' }], skipped: false };
   }
+}
 
-  let refreshedMember = null;
-  let confirmationError = null;
-
-  if (attempted.length) {
-    try {
-      refreshedMember = await member.guild.members.fetch({
-        user: member.id,
-        force: true,
-      });
-    } catch (error) {
-      confirmationError =
-        error?.message ||
-        'Discord member state could not be refreshed';
-
-      console.warn(
-        '[Verification] Failed to confirm pending role assignments',
-        {
-          guildId: member.guild.id,
-          userId: member.id,
-          error: confirmationError,
-        }
-      );
-    }
+async function assignArrivalRoles(member) {
+  const section = getEffectiveVerificationSection(member.guild.id);
+  const settings = section.settings;
+  if (section.enabled !== true || !settings.stagedRoleFlow) return { assigned: [], failed: [], skipped: true };
+  const roles = await fetchRoles(member.guild, settings.arrivalRoleIds);
+  if (!roles.length || roles.length !== settings.arrivalRoleIds.length) return { assigned: [], failed: [{ reason: 'One or more arrival roles are unavailable.' }], skipped: false };
+  try {
+    const result = await applyRoleTransition(member, roles, [], 'Goliath visitor role assigned on join');
+    return { assigned: result.added, failed: [], skipped: false };
+  } catch (error) {
+    console.warn('[Verification] Arrival role assignment failed', { guildId: member.guild.id, userId: member.id, error: error?.message || error });
+    return { assigned: [], failed: [{ reason: error?.message || 'Arrival role assignment failed' }], skipped: false };
   }
-
-  const assigned = [];
-
-  for (const role of attempted) {
-    if (!refreshedMember) {
-      failed.push({
-        roleId: role.id,
-        reason: `role assignment could not be confirmed: ${confirmationError}`,
-      });
-      continue;
-    }
-
-    if (refreshedMember.roles.cache.has(role.id)) {
-      assigned.push(role);
-    } else {
-      failed.push({
-        roleId: role.id,
-        reason: 'role was not present after assignment',
-      });
-    }
-  }
-
-  if (assigned.length) {
-    verificationStore.incrementAnalytics(member.guild.id, {
-      pendingRolesAssigned: assigned.length,
-    });
-
-    if (settings.dmOnPendingRole) {
-      await refreshedMember
-        .send(buildVerificationNotice({
-          guild: member.guild,
-          member: refreshedMember,
-          type: 'pending',
-          roles: assigned,
-          values: {
-            pendingRoles: roleMentions(assigned),
-          },
-        }))
-        .catch(() => null);
-    }
-  }
-
-  return {
-    assigned,
-    failed,
-    skipped: false,
-  };
 }
 
 async function handleMemberJoin(member) {
   const section = getEffectiveVerificationSection(member.guild.id);
   if (section.enabled !== true || member.user?.bot) return { handled: false };
+  if (section.settings.stagedRoleFlow) return assignArrivalRoles(member);
   if (!section.settings.assignPendingRoles || !section.settings.usePendingRoles) return { handled: false };
   if (section.settings.pendingRoleTiming !== 'on_join') return { handled: false };
   return assignPendingRoles(member, 'Goliath pending role assigned on join');
 }
 
-async function handleMemberUpdate(oldMember, newMember) { if (!newMember?.guild?.id || newMember.user?.bot) return { handled: false }; const screeningCompleted = oldMember?.pending === true && newMember.pending === false; if (!screeningCompleted) return { handled: false }; const section = getEffectiveVerificationSection(newMember.guild.id); if (section.enabled !== true) return { handled: false }; verificationStore.incrementAnalytics(newMember.guild.id, { screeningCompleted: 1 }); if (section.settings.logScreeningCompletion) await sendVerificationLog(newMember.guild, section, renderMessage(section.messages.screeningCompletedLog, newMember)); const result = section.settings.pendingRoleTiming === 'after_screening' ? await assignPendingRoles(newMember, 'Goliath pending role assigned after Discord screening') : { assigned: [], failed: [], skipped: true }; return { handled: true, screeningCompleted: true, ...result }; }
+async function handleMemberUpdate(oldMember, newMember) {
+  if (!newMember?.guild?.id || newMember.user?.bot) return { handled: false };
+  const screeningCompleted = oldMember?.pending === true && newMember.pending === false;
+  if (!screeningCompleted) return { handled: false };
+  const section = getEffectiveVerificationSection(newMember.guild.id);
+  if (section.enabled !== true) return { handled: false };
+  verificationStore.incrementAnalytics(newMember.guild.id, { screeningCompleted: 1 });
+  if (section.settings.logScreeningCompletion) await sendVerificationLog(newMember.guild, section, renderMessage(section.messages.screeningCompletedLog, newMember));
+
+  if (section.settings.stagedRoleFlow) {
+    const [arrivalRoles, screenedRoles] = await Promise.all([
+      fetchRoles(newMember.guild, section.settings.arrivalRoleIds),
+      fetchRoles(newMember.guild, section.settings.pendingRoleIds),
+    ]);
+    if (arrivalRoles.length !== section.settings.arrivalRoleIds.length || screenedRoles.length !== section.settings.pendingRoleIds.length || !screenedRoles.length) {
+      return { handled: true, screeningCompleted: true, failed: [{ reason: 'Staged verification roles are unavailable.' }] };
+    }
+    try {
+      const result = await applyRoleTransition(newMember, screenedRoles, arrivalRoles, 'Goliath Discord screening stage completed');
+      if (result.added.length) verificationStore.incrementAnalytics(newMember.guild.id, { pendingRolesAssigned: result.added.length });
+      return { handled: true, screeningCompleted: true, assigned: result.added, removed: result.removed, failed: [] };
+    } catch (error) {
+      console.warn('[Verification] Screening role transition failed', { guildId: newMember.guild.id, userId: newMember.id, error: error?.message || error });
+      return { handled: true, screeningCompleted: true, failed: [{ reason: error?.message || 'Screening role transition failed' }] };
+    }
+  }
+
+  const result = section.settings.pendingRoleTiming === 'after_screening'
+    ? await assignPendingRoles(newMember, 'Goliath pending role assigned after Discord screening')
+    : { assigned: [], failed: [], skipped: true };
+  return { handled: true, screeningCompleted: true, ...result };
+}
+
 async function failVerification(guildId, section, member, messageKey, values = {}, analytics = {}, options = {}) { const reason = renderMessage(section.messages[messageKey] || section.messages.failed, member, values); const countFailure = options.countFailure !== false; const logFailure = options.logFailure !== false; if (countFailure) { verificationStore.recordAttempt(guildId, member.id, { failed: true }); verificationStore.incrementAnalytics(guildId, { failed: 1, ...analytics }); } else if (Object.keys(analytics || {}).length) verificationStore.incrementAnalytics(guildId, analytics); if (section.settings.logFailure && logFailure) await sendVerificationLog(member.guild, section, renderMessage(section.messages.failureLog, member, { ...values, reason: values.reason || reason })); return { ok: false, message: reason }; }
 function getRequestedPanelId(interaction) { if (interaction?.panelId) return String(interaction.panelId); return parseVerifyCustomId(interaction?.customId)?.panelId || null; }
 function getActivePanel(guildId, panelId, context = {}) { if (!panelId) return null; const section = verificationStore.getVerificationSection(guildId); if (!section.activePanelId || section.activePanelId !== panelId) return null; const panel = section.panels?.[panelId] || null; if (!panel || panel.enabled === false || panel.deletedAt || panel.retiredAt) return null; const messageId = cleanDiscordId(context.messageId || context.message?.id); const channelId = cleanDiscordId(context.channelId || context.channel?.id); if (panel.messageId && messageId && panel.messageId !== messageId) return null; if (panel.channelId && channelId && panel.channelId !== channelId) return null; return panel; }
-async function reconcileAlreadyVerifiedMember(
-  member,
-  settings,
-  verifiedRoles,
-  pendingRoles
-) {
+
+async function reconcileAlreadyVerifiedMember(member, settings, verifiedRoles, cleanupRoles) {
   const guild = member.guild;
   const issues = [];
-
-  if (!canBotManageMember(member)) {
-    return {
-      member,
-      issues: ['member hierarchy prevents reconciliation'],
-    };
-  }
-
+  if (!canBotManageMember(member)) return { member, issues: ['member hierarchy prevents reconciliation'] };
   for (const role of verifiedRoles) {
     if (member.roles.cache.has(role.id)) continue;
-
-    const status = resolveRoleActionStatus(
-      guild,
-      member,
-      role,
-      'add'
-    );
-
-    if (!status.ok) {
-      issues.push(status.message);
-      continue;
-    }
-
-    try {
-      await member.roles.add(
-        role,
-        'Goliath verification state reconciliation'
-      );
-    } catch (error) {
-      issues.push(
-        error?.message || `failed to add ${role.name}`
-      );
-    }
+    const status = resolveRoleActionStatus(guild, member, role, 'add');
+    if (!status.ok) { issues.push(status.message); continue; }
+    try { await member.roles.add(role, 'Goliath verification state reconciliation'); } catch (error) { issues.push(error?.message || `failed to add ${role.name}`); }
   }
-
-  if (settings.usePendingRoles && settings.removePendingRoles) {
-    for (const role of pendingRoles) {
+  if (settings.removePendingRoles || settings.stagedRoleFlow) {
+    for (const role of cleanupRoles) {
       if (!member.roles.cache.has(role.id)) continue;
-
-      const status = resolveRoleActionStatus(
-        guild,
-        member,
-        role,
-        'remove'
-      );
-
-      if (!status.ok) {
-        issues.push(status.message);
-        continue;
-      }
-
-      try {
-        await member.roles.remove(
-          role,
-          'Goliath verification state reconciliation'
-        );
-      } catch (error) {
-        issues.push(
-          error?.message || `failed to remove ${role.name}`
-        );
-      }
+      const status = resolveRoleActionStatus(guild, member, role, 'remove');
+      if (!status.ok) { issues.push(status.message); continue; }
+      try { await member.roles.remove(role, 'Goliath verification state reconciliation'); } catch (error) { issues.push(error?.message || `failed to remove ${role.name}`); }
     }
   }
-
   let refreshed;
-
-  try {
-    refreshed = await guild.members.fetch({
-      user: member.id,
-      force: true,
-    });
-  } catch (error) {
-    issues.push(
-      `unable to confirm reconciled member state: ${
-        error?.message || 'Discord member refresh failed'
-      }`
-    );
-
-    return {
-      member,
-      issues,
-    };
-  }
-
-  for (const role of verifiedRoles) {
-    if (!refreshed.roles.cache.has(role.id)) {
-      issues.push(
-        `verified role not present after reconciliation: ${role.name}`
-      );
-    }
-  }
-
-  if (settings.usePendingRoles && settings.removePendingRoles) {
-    for (const role of pendingRoles) {
-      if (refreshed.roles.cache.has(role.id)) {
-        issues.push(
-          `pending role still present after reconciliation: ${role.name}`
-        );
-      }
-    }
-  }
-
-  return {
-    member: refreshed,
-    issues,
-  };
+  try { refreshed = await guild.members.fetch({ user: member.id, force: true }); } catch (error) { issues.push(`unable to confirm reconciled member state: ${error?.message || 'Discord member refresh failed'}`); return { member, issues }; }
+  for (const role of verifiedRoles) if (!refreshed.roles.cache.has(role.id)) issues.push(`verified role not present after reconciliation: ${role.name}`);
+  if (settings.removePendingRoles || settings.stagedRoleFlow) for (const role of cleanupRoles) if (refreshed.roles.cache.has(role.id)) issues.push(`pre-verification role still present after reconciliation: ${role.name}`);
+  return { member: refreshed, issues };
 }
 
 async function verifyMember(interaction) {
   const guild = interaction?.guild; const guildId = interaction?.guildId || guild?.id; if (!guildId || !guild) return { ok: false, message: 'Server unavailable.' };
   const panelId = getRequestedPanelId(interaction); const panel = getActivePanel(guildId, panelId, interaction); if (!panel) return { ok: false, message: 'This verification panel is no longer active. Please use the current verification panel.' };
   const section = getEffectiveVerificationSection(guildId); const userId = interaction?.user?.id || interaction?.member?.id; const member = userId ? await guild.members.fetch({ user: userId, force: true }).catch(() => interaction?.member || null) : null; if (!member) return { ok: false, message: 'Member not found.' };
-  const settings = section.settings; const messages = section.messages; const bypass = isStaffBypass(member, settings); const [verifiedRoles, pendingRoles] = await Promise.all([fetchRoles(guild, settings.verifiedRoleIds), fetchRoles(guild, settings.pendingRoleIds)]); const alreadyVerified = verifiedRoles.length > 0 && verifiedRoles.some((role) => member.roles.cache.has(role.id));
+  const settings = section.settings; const messages = section.messages; const bypass = isStaffBypass(member, settings);
+  const [verifiedRoles, pendingRoles, arrivalRoles] = await Promise.all([fetchRoles(guild, settings.verifiedRoleIds), fetchRoles(guild, settings.pendingRoleIds), fetchRoles(guild, settings.arrivalRoleIds)]);
+  const cleanupRoles = settings.stagedRoleFlow ? uniqueRoles([...arrivalRoles, ...pendingRoles]) : pendingRoles;
+  const alreadyVerified = verifiedRoles.length > 0 && verifiedRoles.some((role) => member.roles.cache.has(role.id));
   if (section.enabled !== true) return failVerification(guildId, section, member, 'unavailable', {}, { unavailable: 1 }, { countFailure: false, logFailure: false });
   if (settings.blockBots && member.user?.bot && !bypass) return failVerification(guildId, section, member, 'botBlocked', {}, { botBlocked: 1 });
-  if (alreadyVerified && !settings.allowReverification) { const reconciled = await reconcileAlreadyVerifiedMember(member, settings, verifiedRoles, pendingRoles); if (reconciled.issues.length) console.warn('[Verification] Already-verified reconciliation incomplete', { guildId, userId: member.id, issues: reconciled.issues }); verificationStore.clearAttempts(guildId, member.id); verificationStore.incrementAnalytics(guildId, { alreadyVerified: 1 }); return { ok: true, message: renderMessage(messages.alreadyVerified, reconciled.member) }; }
+  if (alreadyVerified && !settings.allowReverification) { const reconciled = await reconcileAlreadyVerifiedMember(member, settings, verifiedRoles, cleanupRoles); if (reconciled.issues.length) console.warn('[Verification] Already-verified reconciliation incomplete', { guildId, userId: member.id, issues: reconciled.issues }); verificationStore.clearAttempts(guildId, member.id); verificationStore.incrementAnalytics(guildId, { alreadyVerified: 1 }); return { ok: true, message: renderMessage(messages.alreadyVerified, reconciled.member) }; }
   if (!settings.verifiedRoleIds.length || settings.verifiedRoleIds.length !== verifiedRoles.length) return failVerification(guildId, section, member, 'unavailable', { reason: 'one or more configured verified roles are unavailable' }, { unavailable: 1 }, { countFailure: false, logFailure: false });
-  const pendingRolesRequiredByFlow = settings.usePendingRoles && (settings.requirePendingRole || settings.assignPendingRoles || settings.removePendingRoles); if (pendingRolesRequiredByFlow && settings.pendingRoleIds.length !== pendingRoles.length) return failVerification(guildId, section, member, 'unavailable', { reason: 'one or more configured pending roles are unavailable' }, { unavailable: 1 }, { countFailure: false, logFailure: false });
-  if (!bypass) { const attemptBlock = getAttemptBlock(section, member); if (attemptBlock?.key === 'cooldown') { verificationStore.incrementAnalytics(guildId, { cooldownBlocked: 1 }); return { ok: false, message: renderMessage(messages.cooldown, member, { cooldownSeconds: attemptBlock.remaining }) }; } if (attemptBlock?.key === 'failed') { verificationStore.incrementAnalytics(guildId, { requirementBlocked: 1 }); return { ok: false, message: renderMessage(messages.failed, member, { reason: attemptBlock.reason }) }; } const screeningAvailable = hasDiscordScreening(guild); if (settings.waitForDiscordScreening) { if (screeningAvailable && member.pending === true) return failVerification(guildId, section, member, 'screeningRequired', {}, { screeningBlocked: 1 }, { countFailure: false, logFailure: false }); if (!screeningAvailable && !settings.skipScreeningIfUnavailable) return failVerification(guildId, section, member, 'screeningRequired', { reason: 'Discord Membership Screening is not configured' }, { screeningBlocked: 1 }, { countFailure: false, logFailure: false }); } if (settings.usePendingRoles && settings.requirePendingRole && !(alreadyVerified && settings.allowReverification)) { const hasRequiredPendingRole = pendingRoles.some((role) => member.roles.cache.has(role.id)); if (!hasRequiredPendingRole) return failVerification(guildId, section, member, 'pendingRoleRequired', { pendingRoles: roleMentions(pendingRoles) }, { requirementBlocked: 1 }, { countFailure: false, logFailure: false }); } if (settings.minimumAccountAgeDays > 0 && accountAgeDays(member) < settings.minimumAccountAgeDays) return failVerification(guildId, section, member, 'accountTooNew', { minimumAccountAgeDays: settings.minimumAccountAgeDays }, { accountAgeBlocked: 1, requirementBlocked: 1 }, { countFailure: false, logFailure: false }); if (settings.minimumMembershipAgeMinutes > 0 && membershipAgeMinutes(member) < settings.minimumMembershipAgeMinutes) return failVerification(guildId, section, member, 'membershipTooNew', { minimumMembershipAgeMinutes: settings.minimumMembershipAgeMinutes }, { membershipAgeBlocked: 1, requirementBlocked: 1 }, { countFailure: false, logFailure: false }); }
+  if (settings.stagedRoleFlow && (!settings.arrivalRoleIds.length || arrivalRoles.length !== settings.arrivalRoleIds.length || !settings.pendingRoleIds.length || pendingRoles.length !== settings.pendingRoleIds.length)) return failVerification(guildId, section, member, 'unavailable', { reason: 'one or more staged verification roles are unavailable' }, { unavailable: 1 }, { countFailure: false, logFailure: false });
+  const pendingRolesRequiredByFlow = !settings.stagedRoleFlow && settings.usePendingRoles && (settings.requirePendingRole || settings.assignPendingRoles || settings.removePendingRoles); if (pendingRolesRequiredByFlow && settings.pendingRoleIds.length !== pendingRoles.length) return failVerification(guildId, section, member, 'unavailable', { reason: 'one or more configured pending roles are unavailable' }, { unavailable: 1 }, { countFailure: false, logFailure: false });
+  if (!bypass) { const attemptBlock = getAttemptBlock(section, member); if (attemptBlock?.key === 'cooldown') { verificationStore.incrementAnalytics(guildId, { cooldownBlocked: 1 }); return { ok: false, message: renderMessage(messages.cooldown, member, { cooldownSeconds: attemptBlock.remaining }) }; } if (attemptBlock?.key === 'failed') { verificationStore.incrementAnalytics(guildId, { requirementBlocked: 1 }); return { ok: false, message: renderMessage(messages.failed, member, { reason: attemptBlock.reason }) }; } const screeningAvailable = hasDiscordScreening(guild); if (settings.waitForDiscordScreening || settings.stagedRoleFlow) { if (screeningAvailable && member.pending === true) return failVerification(guildId, section, member, 'screeningRequired', {}, { screeningBlocked: 1 }, { countFailure: false, logFailure: false }); if (!screeningAvailable && (settings.stagedRoleFlow || !settings.skipScreeningIfUnavailable)) return failVerification(guildId, section, member, 'screeningRequired', { reason: 'Discord Membership Screening is not configured' }, { screeningBlocked: 1 }, { countFailure: false, logFailure: false }); } if (settings.stagedRoleFlow) { const hasScreenedRole = pendingRoles.some((role) => member.roles.cache.has(role.id)); if (!hasScreenedRole) return failVerification(guildId, section, member, 'pendingRoleRequired', { pendingRoles: roleMentions(pendingRoles) }, { requirementBlocked: 1 }, { countFailure: false, logFailure: false }); } else if (settings.usePendingRoles && settings.requirePendingRole && !(alreadyVerified && settings.allowReverification)) { const hasRequiredPendingRole = pendingRoles.some((role) => member.roles.cache.has(role.id)); if (!hasRequiredPendingRole) return failVerification(guildId, section, member, 'pendingRoleRequired', { pendingRoles: roleMentions(pendingRoles) }, { requirementBlocked: 1 }, { countFailure: false, logFailure: false }); } if (settings.minimumAccountAgeDays > 0 && accountAgeDays(member) < settings.minimumAccountAgeDays) return failVerification(guildId, section, member, 'accountTooNew', { minimumAccountAgeDays: settings.minimumAccountAgeDays }, { accountAgeBlocked: 1, requirementBlocked: 1 }, { countFailure: false, logFailure: false }); if (settings.minimumMembershipAgeMinutes > 0 && membershipAgeMinutes(member) < settings.minimumMembershipAgeMinutes) return failVerification(guildId, section, member, 'membershipTooNew', { minimumMembershipAgeMinutes: settings.minimumMembershipAgeMinutes }, { membershipAgeBlocked: 1, requirementBlocked: 1 }, { countFailure: false, logFailure: false }); }
   if (!canBotManageMember(member)) return failVerification(guildId, section, member, 'failed', { reason: 'Goliath cannot manage this member' }, { roleManageFailed: 1 }, { countFailure: false });
-  for (const role of verifiedRoles) { const status = resolveRoleActionStatus(guild, member, role, 'add'); if (!status.ok) return failVerification(guildId, section, member, 'failed', { reason: status.message }, { roleManageFailed: 1 }, { countFailure: false }); }
-  if (settings.usePendingRoles && settings.removePendingRoles) { for (const role of pendingRoles) { const status = resolveRoleActionStatus(guild, member, role, 'remove'); if (!status.ok) return failVerification(guildId, section, member, 'failed', { reason: status.message }, { roleManageFailed: 1 }, { countFailure: false }); } }
-  const addedVerifiedRoles = [];
-  const removedPendingRoles = [];
-
   try {
-    for (const role of verifiedRoles) {
-      if (member.roles.cache.has(role.id)) continue;
-
-      await member.roles.add(role, 'Goliath verification completed');
-      addedVerifiedRoles.push(role);
-    }
-
-    if (settings.usePendingRoles && settings.removePendingRoles) {
-      for (const role of pendingRoles) {
-        if (!member.roles.cache.has(role.id)) continue;
-
-        await member.roles.remove(role, 'Goliath verification completed');
-        removedPendingRoles.push(role);
-      }
-    }
-
-    const refreshedMember = await guild.members.fetch({
-      user: member.id,
-      force: true,
-    });
-
-    const missingVerifiedRoles = verifiedRoles.filter(
-      (role) => !refreshedMember.roles.cache.has(role.id)
-    );
-
-    const remainingPendingRoles =
-      settings.usePendingRoles && settings.removePendingRoles
-        ? pendingRoles.filter((role) =>
-            refreshedMember.roles.cache.has(role.id)
-          )
-        : [];
-
-    if (missingVerifiedRoles.length || remainingPendingRoles.length) {
-      const problems = [];
-
-      if (missingVerifiedRoles.length) {
-        problems.push(
-          `verified role not added: ${missingVerifiedRoles
-            .map((role) => role.name)
-            .join(', ')}`
-        );
-      }
-
-      if (remainingPendingRoles.length) {
-        problems.push(
-          `pending role not removed: ${remainingPendingRoles
-            .map((role) => role.name)
-            .join(', ')}`
-        );
-      }
-
-      throw new Error(problems.join('; '));
-    }
-
+    const rolesToRemove = settings.stagedRoleFlow ? cleanupRoles : (settings.usePendingRoles && settings.removePendingRoles ? pendingRoles : []);
+    const transition = await applyRoleTransition(member, verifiedRoles, rolesToRemove, 'Goliath verification completed');
     verificationStore.clearAttempts(guildId, member.id);
     verificationStore.incrementAnalytics(guildId, { verified: 1 });
-
-    const values = {
-      verifiedRoles: roleMentions(verifiedRoles),
-      pendingRoles: roleMentions(pendingRoles),
-    };
-
-    if (settings.logSuccess) {
-      await sendVerificationLog(
-        guild,
-        section,
-        renderMessage(messages.successLog, refreshedMember, values)
-      );
-    }
-
-    if (settings.dmOnVerify) {
-      await refreshedMember
-        .send(buildVerificationNotice({
-          guild,
-          member: refreshedMember,
-          type: 'success',
-          roles: verifiedRoles,
-          values,
-        }))
-        .catch(() => null);
-    }
-
-    return {
-      ok: true,
-      message: renderMessage(messages.success, refreshedMember, values),
-    };
+    const values = { verifiedRoles: roleMentions(verifiedRoles), pendingRoles: roleMentions(pendingRoles), arrivalRoles: roleMentions(arrivalRoles) };
+    if (settings.logSuccess) await sendVerificationLog(guild, section, renderMessage(messages.successLog, transition.member, values));
+    if (settings.dmOnVerify) await transition.member.send(buildVerificationNotice({ guild, member: transition.member, type: 'success', roles: verifiedRoles, values })).catch(() => null);
+    return { ok: true, message: renderMessage(messages.success, transition.member, values) };
   } catch (error) {
-    const rollbackErrors = [];
-
-    for (const role of addedVerifiedRoles.reverse()) {
-      try {
-        await member.roles.remove(
-          role,
-          'Goliath verification rollback'
-        );
-      } catch (rollbackError) {
-        rollbackErrors.push(
-          `failed to remove ${role.name}: ${
-            rollbackError?.message || 'unknown error'
-          }`
-        );
-      }
-    }
-
-    for (const role of removedPendingRoles.reverse()) {
-      try {
-        await member.roles.add(
-          role,
-          'Goliath verification rollback'
-        );
-      } catch (rollbackError) {
-        rollbackErrors.push(
-          `failed to restore ${role.name}: ${
-            rollbackError?.message || 'unknown error'
-          }`
-        );
-      }
-    }
-
-    const reason =
-      error?.rawError?.message ||
-      error?.message ||
-      'Discord rejected the role update';
-
-    console.error('[Verification] Role update failed', {
-      guildId,
-      userId: member.id,
-      error,
-      rollbackErrors,
-    });
-
-    return failVerification(
-      guildId,
-      section,
-      member,
-      'failed',
-      { reason },
-      { roleManageFailed: 1 },
-      { countFailure: false }
-    );
+    const reason = error?.rawError?.message || error?.message || 'Discord rejected the role update';
+    console.error('[Verification] Role update failed', { guildId, userId: member.id, error });
+    return failVerification(guildId, section, member, 'failed', { reason }, { roleManageFailed: 1 }, { countFailure: false });
   }
 }
 
@@ -489,5 +245,12 @@ async function deployVerificationPanel(channel, input = {}, meta = {}) { if (!ch
 async function refreshVerificationPanel(guild, panelId, input = {}, meta = {}) { if (!guild?.id) throw new Error('Guild is unavailable.'); const panel = verificationStore.getPanel(guild.id, panelId); if (!panel) throw new Error('Verification panel not found.'); const channelId = input.channelId || panel.channelId; const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null); if (!channel?.send) throw new Error('Panel channel is unavailable or not sendable.'); return deployVerificationPanel(channel, { ...panel, ...input, panelId: panel.panelId }, meta); }
 async function deleteVerificationPanel(guild, panelId, meta = {}) { if (!guild?.id) throw new Error('Guild is unavailable.'); const section = getEffectiveVerificationSection(guild.id); const panel = section.panels?.[String(panelId || '')] || verificationStore.getPanel(guild.id, panelId); if (!panel) throw new Error('Verification panel not found.'); if (section.enabled === true && section.activePanelId === panel.panelId) throw new Error('Cannot delete the active verification panel while Verification is enabled. Deploy a replacement first or disable Verification.'); const message = await fetchPanelMessage(guild, panel); if (message && !message.deletable) throw new Error('Verification panel message cannot be deleted. The saved panel record was preserved.'); if (message) await message.delete(); return verificationStore.deletePanel(guild.id, panel.panelId, meta); }
 async function getPanelHealth(guild, panel) { if (!panel) return { ok: false, status: 'Missing panel record' }; const channel = panel.channelId ? guild.channels.cache.get(panel.channelId) || await guild.channels.fetch(panel.channelId).catch(() => null) : null; if (!channel) return { ok: false, status: 'Missing channel' }; const message = await fetchPanelMessage(guild, panel); if (!message) return { ok: false, status: 'Missing message' }; return { ok: true, status: 'Healthy' }; }
-async function buildHealthReport(guild) { const section = getEffectiveVerificationSection(guild.id); const settings = section.settings; const panels = Object.values(section.panels || {}); const [verifiedRoles, pendingRoles, panelHealth] = await Promise.all([fetchRoles(guild, settings.verifiedRoleIds), fetchRoles(guild, settings.pendingRoleIds), Promise.all(panels.map(async (panel) => ({ panelId: panel.panelId, ...(await getPanelHealth(guild, panel)) })))]); const invalidVerified = verifiedRoles.filter((role) => !canBotManageRole(guild, role)); const invalidPending = pendingRoles.filter((role) => !canBotManageRole(guild, role)); const screeningEnabled = hasDiscordScreening(guild); const warnings = [section.enabled !== true ? 'Verification is disabled.' : null, !settings.verifiedRoleIds.length ? 'No verified roles are configured.' : null, settings.verifiedRoleIds.length !== verifiedRoles.length ? 'One or more verified roles are missing.' : null, invalidVerified.length ? 'Goliath cannot manage one or more verified roles.' : null, settings.usePendingRoles && !settings.pendingRoleIds.length ? 'Pending roles are enabled but no pending roles are selected.' : null, settings.requirePendingRole && !settings.usePendingRoles ? 'Require Pending Role is enabled while Pending Roles are disabled.' : null, settings.assignPendingRoles && !settings.usePendingRoles ? 'Assign Pending Roles is enabled while Pending Roles are disabled.' : null, settings.usePendingRoles && settings.pendingRoleIds.length !== pendingRoles.length ? 'One or more pending roles are missing.' : null, invalidPending.length ? 'Goliath cannot manage one or more pending roles.' : null, settings.waitForDiscordScreening && !screeningEnabled && !settings.skipScreeningIfUnavailable ? 'Discord Membership Screening is required but not configured.' : null, panels.length === 0 ? 'No verification panel deployed.' : null, ...panelHealth.filter((panel) => !panel.ok).map((panel) => `${panel.panelId}: ${panel.status}`)].filter(Boolean); return { enabled: section.enabled === true, screeningEnabled, waitForDiscordScreening: settings.waitForDiscordScreening, hasVerifiedRole: verifiedRoles.length > 0, verifiedRoleCount: verifiedRoles.length, hasPendingRole: pendingRoles.length > 0, pendingRoleCount: pendingRoles.length, hasLogChannel: Boolean(settings.logChannelId), panels: panelHealth, warnings }; }
-module.exports = { CUSTOM_ID_PREFIX, SCREENING_FEATURE, DEFAULT_HELPERS, canManageVerification, canBotManageRole, canBotManageMember, hasDiscordScreening, buildVerifyCustomId, parseVerifyCustomId, buildVerificationEmbed, buildVerificationRows, configureVerification, setVerificationEnabled, toggleVerification, getVerificationStatus, updateVerificationSettings, updateVerificationMessages, updatePanelTemplate, assignPendingRoles, handleMemberJoin, handleMemberUpdate, deployVerificationPanel, refreshVerificationPanel, restoreMissingVerificationPanel, deleteVerificationPanel, getPanelHealth, buildHealthReport, verifyMember, renderMessage, renderTemplate };
+async function buildHealthReport(guild) {
+  const section = getEffectiveVerificationSection(guild.id); const settings = section.settings; const panels = Object.values(section.panels || {});
+  const [verifiedRoles, pendingRoles, arrivalRoles, panelHealth] = await Promise.all([fetchRoles(guild, settings.verifiedRoleIds), fetchRoles(guild, settings.pendingRoleIds), fetchRoles(guild, settings.arrivalRoleIds), Promise.all(panels.map(async (panel) => ({ panelId: panel.panelId, ...(await getPanelHealth(guild, panel)) })))]);
+  const invalidVerified = verifiedRoles.filter((role) => !canBotManageRole(guild, role)); const invalidPending = pendingRoles.filter((role) => !canBotManageRole(guild, role)); const invalidArrival = arrivalRoles.filter((role) => !canBotManageRole(guild, role)); const screeningEnabled = hasDiscordScreening(guild);
+  const warnings = [section.enabled !== true ? 'Verification is disabled.' : null, !settings.verifiedRoleIds.length ? 'No verified roles are configured.' : null, settings.verifiedRoleIds.length !== verifiedRoles.length ? 'One or more verified roles are missing.' : null, invalidVerified.length ? 'Goliath cannot manage one or more verified roles.' : null, settings.stagedRoleFlow && !screeningEnabled ? 'Staged role flow requires Discord Membership Screening.' : null, settings.stagedRoleFlow && !settings.arrivalRoleIds.length ? 'Staged role flow is enabled but no arrival/visitor role is selected.' : null, settings.stagedRoleFlow && settings.arrivalRoleIds.length !== arrivalRoles.length ? 'One or more arrival/visitor roles are missing.' : null, invalidArrival.length ? 'Goliath cannot manage one or more arrival/visitor roles.' : null, settings.stagedRoleFlow && !settings.pendingRoleIds.length ? 'Staged role flow is enabled but no screened/member role is selected.' : null, settings.usePendingRoles && !settings.pendingRoleIds.length ? 'Pending roles are enabled but no pending roles are selected.' : null, settings.requirePendingRole && !settings.usePendingRoles && !settings.stagedRoleFlow ? 'Require Pending Role is enabled while Pending Roles are disabled.' : null, settings.assignPendingRoles && !settings.usePendingRoles && !settings.stagedRoleFlow ? 'Assign Pending Roles is enabled while Pending Roles are disabled.' : null, (settings.usePendingRoles || settings.stagedRoleFlow) && settings.pendingRoleIds.length !== pendingRoles.length ? 'One or more pending/screened roles are missing.' : null, invalidPending.length ? 'Goliath cannot manage one or more pending/screened roles.' : null, settings.waitForDiscordScreening && !screeningEnabled && !settings.skipScreeningIfUnavailable ? 'Discord Membership Screening is required but not configured.' : null, panels.length === 0 ? 'No verification panel deployed.' : null, ...panelHealth.filter((panel) => !panel.ok).map((panel) => `${panel.panelId}: ${panel.status}`)].filter(Boolean);
+  return { enabled: section.enabled === true, screeningEnabled, waitForDiscordScreening: settings.waitForDiscordScreening, stagedRoleFlow: settings.stagedRoleFlow, hasVerifiedRole: verifiedRoles.length > 0, verifiedRoleCount: verifiedRoles.length, hasArrivalRole: arrivalRoles.length > 0, arrivalRoleCount: arrivalRoles.length, hasPendingRole: pendingRoles.length > 0, pendingRoleCount: pendingRoles.length, hasLogChannel: Boolean(settings.logChannelId), panels: panelHealth, warnings };
+}
+
+module.exports = { CUSTOM_ID_PREFIX, SCREENING_FEATURE, DEFAULT_HELPERS, canManageVerification, canBotManageRole, canBotManageMember, hasDiscordScreening, buildVerifyCustomId, parseVerifyCustomId, buildVerificationEmbed, buildVerificationRows, configureVerification, setVerificationEnabled, toggleVerification, getVerificationStatus, updateVerificationSettings, updateVerificationMessages, updatePanelTemplate, assignPendingRoles, assignArrivalRoles, handleMemberJoin, handleMemberUpdate, deployVerificationPanel, refreshVerificationPanel, restoreMissingVerificationPanel, deleteVerificationPanel, getPanelHealth, buildHealthReport, verifyMember, renderMessage, renderTemplate };
