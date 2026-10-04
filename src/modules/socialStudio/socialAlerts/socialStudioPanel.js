@@ -2160,7 +2160,7 @@ async function handleAdminSocialEntry(i, context) {
 
 async function handleInteraction(i) {
   const id = String(i?.customId || '');
-  if (!id.startsWith(P)) return false;
+  if (id !== 'admin:social' && !id.startsWith(P)) return false;
 
   const config = getConfig(i.guildId);
   const actorId = i.user?.id;
