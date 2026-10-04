@@ -8,6 +8,12 @@ const {
   result,
 } = require('./shared');
 
+function validPublishedAt(value) {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) && ms <= Date.now() + 5 * 60 * 1000 ? new Date(ms).toISOString() : null;
+}
+
 async function checkInstagram(account) {
   const token = process.env.INSTAGRAM_ACCESS_TOKEN;
   const businessId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
@@ -23,8 +29,19 @@ async function checkInstagram(account) {
     const resolvedUsername = clean(discovery.username || username, 100).replace(/^@+/, '');
     const profileUrl = `https://www.instagram.com/${encodeURIComponent(resolvedUsername)}/`;
     const media = discovery.media?.data?.[0];
-    const latestContent = media ? { type: media.media_type === 'REELS' ? 'short' : 'post', id: media.id, title: clean(media.caption || `New Instagram ${media.media_type || 'post'}`).slice(0, 180), url: media.permalink || profileUrl, thumbnail: media.thumbnail_url || media.media_url, publishedAt: media.timestamp } : null;
-    return result('instagram', { isLive: false, status: 'ok', externalId: discovery.id, resolvedUsername, latestContent, contentItems: latestContent ? [latestContent] : [], url: profileUrl, avatar: discovery.profile_picture_url });
+    const mediaId = clean(media?.id, 200);
+    const mediaType = clean(media?.media_type, 30).toUpperCase();
+    const publishedAt = validPublishedAt(media?.timestamp);
+    const supportedMedia = new Set(['IMAGE', 'VIDEO', 'CAROUSEL_ALBUM', 'REELS']);
+    const latestContent = mediaId && publishedAt && supportedMedia.has(mediaType) ? {
+      type: mediaType === 'REELS' ? 'short' : 'post',
+      id: mediaId,
+      title: clean(media.caption || `New Instagram ${mediaType.toLowerCase()}`).slice(0, 180),
+      url: /^https:\/\/www\.instagram\.com\//i.test(String(media.permalink || '')) ? media.permalink : profileUrl,
+      thumbnail: media.thumbnail_url || media.media_url || null,
+      publishedAt,
+    } : null;
+    return result('instagram', { isLive: false, status: 'ok', externalId: String(discovery.id), resolvedUsername, latestContent, contentItems: latestContent ? [latestContent] : [], url: profileUrl, avatar: discovery.profile_picture_url || null });
   } catch (error) { return unavailable('instagram', `Instagram Graph API unavailable: ${error.message}`); }
 }
 
