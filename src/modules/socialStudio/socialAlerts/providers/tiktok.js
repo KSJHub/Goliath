@@ -137,7 +137,16 @@ function htmlPausedState(body) {
   return explicitBoolean || explicitStatus || humanMarker;
 }
 
-function tiktokApiResult(json, fallbackUsername, fallbackId, source) {
+function stableTikTokLiveEventId(roomId, priorLiveEventId = '') {
+  const room = clean(roomId);
+  const prior = clean(priorLiveEventId);
+  // If a public-page fallback had to create a synthetic id, keep it for the
+  // remainder of that LIVE so API recovery cannot look like a second broadcast.
+  if (prior.startsWith('tiktok-live:')) return prior;
+  return room || prior;
+}
+
+function tiktokApiResult(json, fallbackUsername, fallbackId, source, priorLiveEventId = '') {
   const user = json?.data?.user && typeof json.data.user === 'object' ? json.data.user : {};
   const liveRoom = json?.data?.liveRoom && typeof json.data.liveRoom === 'object' ? json.data.liveRoom : {};
   const rawStatus = liveRoom.status ?? user.status;
@@ -169,7 +178,7 @@ function tiktokApiResult(json, fallbackUsername, fallbackId, source) {
     avatar,
     event: {
       type: 'live',
-      id: roomId,
+      id: stableTikTokLiveEventId(roomId, priorLiveEventId),
       title: clean(liveRoom.title) || `${resolvedUsername || fallbackUsername || 'Creator'} is LIVE on TikTok`,
       url: resolvedLiveUrl || 'https://www.tiktok.com/live',
       thumbnail: cover || avatar || null,
@@ -196,11 +205,12 @@ async function checkTikTok(account) {
   if (!username && !userId) return unavailable('tiktok', 'TikTok username, channel ID or URL could not be resolved.');
 
   const errors = [];
+  const priorLiveEventId = account?.state?.isLive === true ? clean(account.state.liveEventId) : '';
 
   if (username) {
     try {
       const json = await tiktokApiLookup({ username });
-      const resolved = tiktokApiResult(json, username, userId, 'tiktok_api_live_username');
+      const resolved = tiktokApiResult(json, username, userId, 'tiktok_api_live_username', priorLiveEventId);
       if (resolved) return resolved;
     } catch (error) { errors.push(`username API: ${error.message}`); }
   }
@@ -208,7 +218,7 @@ async function checkTikTok(account) {
   if (userId) {
     try {
       const json = await tiktokApiLookup({ userId });
-      const resolved = tiktokApiResult(json, username, userId, 'tiktok_api_live_id');
+      const resolved = tiktokApiResult(json, username, userId, 'tiktok_api_live_id', priorLiveEventId);
       if (resolved) return resolved;
     } catch (error) { errors.push(`ID API: ${error.message}`); }
   }
@@ -251,7 +261,7 @@ async function checkTikTok(account) {
             resolvedUsername: sigiUsername,
             event: {
               type: 'live',
-              id: sigiRoomId,
+              id: stableTikTokLiveEventId(sigiRoomId, priorLiveEventId),
               title: clean(sigiRoom.title) || `${sigiUsername} is LIVE on TikTok`,
               url: liveUrl,
               thumbnail: cover,
@@ -291,7 +301,7 @@ async function checkTikTok(account) {
       resolvedUsername: username,
       event: {
         type: 'live',
-        id: pageRoomId || `tiktok-live:${username}`,
+        id: stableTikTokLiveEventId(pageRoomId, priorLiveEventId) || `tiktok-live:${username.toLowerCase()}`,
         title: pageTitle || `${username} is LIVE on TikTok`,
         url: liveUrl,
         thumbnail: ogImage || null,
