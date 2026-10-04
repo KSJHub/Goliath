@@ -538,15 +538,26 @@ async function handleUserManageAccountToggle(interaction) {
   if (!enabled) {
     account.state = {
       ...(account.state || {}),
-      isLive: null,
+      isLive: false,
       liveEventId: null,
+      liveStartedAt: null,
       lastLiveEvent: null,
+      lastLiveEndedAt: null,
+      lastAlertKey: null,
+      lastAlertAt: null,
+      lastAlertMessageId: null,
+      lastAlertChannelId: null,
       lastLiveMessageId: null,
       lastLiveMessageChannelId: null,
       lastLiveMessageUpdateAt: null,
       lastLiveMessageUpdatedAt: null,
+      pendingDelivery: null,
+      pendingEndedEvent: null,
       lastDeliveryError: null,
       lastError: null,
+      peakViewers: 0,
+      deliveredEventKeys: [],
+    };tError: null,
     };
   }
 
