@@ -451,15 +451,51 @@ async function handleUserManageAccountEditSubmit(interaction) {
   const section = guildManager.getGuildSection(interaction.guildId, 'social', {});
   const current = migrateAccount(section.accounts?.[context.account.accountId] || context.account);
   section.accounts = section.accounts && typeof section.accounts === 'object' ? section.accounts : {};
+  const oldIdentity = String(current.canonicalIdentity || current.externalId || current.normalizedUsername || current.username || '').trim().toLowerCase();
+  const newIdentity = String(normalized.canonicalIdentity || normalized.externalId || normalized.normalizedUsername || normalized.username || '').trim().toLowerCase();
+  const identityChanged = oldIdentity !== newIdentity;
+  const aliases = [...new Set([
+    ...(Array.isArray(current.identityAliases) ? current.identityAliases : []),
+    current.canonicalIdentity,
+    current.externalId,
+    current.normalizedUsername,
+    current.username,
+  ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean))]
+    .filter((value) => value !== newIdentity)
+    .slice(-25);
+  const resetState = identityChanged
+    ? {
+      ...(current.state || {}),
+      isLive: false,
+      liveEventId: null,
+      liveStartedAt: null,
+      lastLiveEvent: null,
+      lastLiveEndedAt: null,
+      lastAlertKey: null,
+      lastAlertAt: null,
+      lastAlertMessageId: null,
+      lastAlertChannelId: null,
+      lastLiveMessageId: null,
+      lastLiveMessageChannelId: null,
+      lastLiveMessageUpdatedAt: null,
+      pendingDelivery: null,
+      pendingEndedEvent: null,
+      lastDeliveryError: null,
+      peakViewers: 0,
+      deliveredEventKeys: [],
+    }
+    : current.state;
   section.accounts[context.account.accountId] = {
     ...current,
     username: normalized.username,
     normalizedUsername: normalized.normalizedUsername,
-    externalId: normalized.externalId || current.externalId || null,
+    externalId: normalized.externalId || null,
     inputType: normalized.inputType,
     canonicalIdentity: normalized.canonicalIdentity,
+    identityAliases: aliases,
     profileUrl: normalized.profileUrl,
     sourceInput: normalized.sourceInput,
+    state: resetState,
     updatedAt: new Date().toISOString(),
   };
   saveUserSocialSection(interaction, section);
