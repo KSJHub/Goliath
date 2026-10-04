@@ -222,6 +222,7 @@ function health(config, discordGuild = null) {
     || Object.values(config.platformChannels || {}).some(Boolean)
     || Object.values(config.accounts).some((item) => item.alertChannelId || Object.values(item.alertChannels || {}).some(Boolean));
   if (!hasRoutedChannel) issues.push({ severity: 'warning', code: 'alert_channel_missing', message: 'No alert channel is configured.' });
+  if (discordGuild) issues.push(...validateDiscordTargets(discordGuild, config));
   if (discordGuild && config.liveRoleId) {
     const role = discordGuild.roles.cache.get(config.liveRoleId);
     if (!role) issues.push({ severity: 'error', code: 'live_role_missing', message: 'Configured LIVE role is unavailable.' });
@@ -251,6 +252,30 @@ function health(config, discordGuild = null) {
   return { healthy: errors === 0, grade: score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : 'D', score, issues, checkedAt: now() };
 }
 function render(template, values) { return replaceVariables(String(template || ''), values); }
+function validateDiscordTargets(discordGuild, config) {
+  const issues = [];
+  const channelIds = new Set();
+  if (config.alertsChannelId) channelIds.add(config.alertsChannelId);
+  for (const account of Object.values(config.accounts || {})) {
+    if (account.alertChannelId) channelIds.add(account.alertChannelId);
+    for (const id of Object.values(account.alertChannels || {})) if (id) channelIds.add(id);
+  }
+  for (const channelId of channelIds) {
+    const channel = discordGuild?.channels?.cache?.get(channelId);
+    if (!channel) issues.push({ code: 'channel_missing', channelId });
+    else if (!channel.isTextBased?.()) issues.push({ code: 'channel_not_text_based', channelId });
+    else if (typeof channel.send !== 'function') issues.push({ code: 'channel_not_sendable', channelId });
+  }
+  const roleIds = new Set();
+  if (config.notificationRoleId) roleIds.add(config.notificationRoleId);
+  for (const account of Object.values(config.accounts || {})) if (account.mentionRoleId) roleIds.add(account.mentionRoleId);
+  for (const roleId of roleIds) {
+    const role = discordGuild?.roles?.cache?.get(roleId);
+    if (!role) issues.push({ code: 'role_missing', roleId });
+    else if (role.managed) issues.push({ code: 'role_managed', roleId });
+  }
+  return issues;
+}
 function preview(account, config, alertType) {
   const creator = Object.values(config.creators).find((item) => item.accountIds.includes(account.accountId));
   const template = resolveTemplate(config.templates, alertType);
@@ -260,6 +285,8 @@ function preview(account, config, alertType) {
 async function sendSimulation(req, id, account, data) {
   const discordGuild = await guild(req, id);
   if (!discordGuild) throw new Error('Discord guild is unavailable.');
+  const targetIssues = validateDiscordTargets(discordGuild, getConfig(id));
+  if (targetIssues.length) throw new Error('Configured Discord target is unavailable or invalid.');
   const channelId = account.alertChannelId || getConfig(id).alertsChannelId;
   if (!channelId) throw new Error('No alert channel is configured.');
   const channel = discordGuild.channels.cache.get(channelId) || await discordGuild.channels.fetch(channelId).catch(() => null);
