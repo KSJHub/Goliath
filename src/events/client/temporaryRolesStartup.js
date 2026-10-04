@@ -87,7 +87,16 @@ module.exports = {
       staleAfterMs: Math.max(SCAN_INTERVAL_MS * 3, 180_000),
       details: { scope: 'all-guilds' },
     });
-    await scanAllGuilds(client, { startup: true });
+    // Do not force an expiry scan during ClientReady.
+    // The recurring scheduler remains active and will perform the first
+    // normal scan after SCAN_INTERVAL_MS.
+    //
+    // This avoids startup-time guild/member hydration and the associated
+    // memory spike while preserving Temporary Roles expiry processing.
+    sentinelScheduler.beat(SCHEDULER_ID, {
+      phase: 'startup',
+      deferredFirstScan: true,
+    });
     const timer = setInterval(() => {
       scanAllGuilds(client).catch((error) => {
         sentinelScheduler.fail(SCHEDULER_ID, error, { phase: 'scheduler-cycle' });

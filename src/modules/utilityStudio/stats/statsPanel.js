@@ -162,7 +162,10 @@ async function handleStatsAdminInteraction(i) {
   }
   if (!i.isButton?.()) return false;
   if (id === 'admin:stats:setup') { await i.deferUpdate().catch(() => null); stats.setEnabled(guild.id, true, guild); await stats.counters.createCounterSuite(guild); return send(i, setupPanel(guild, who, 'Quick Setup completed.')); }
-  if (id === 'admin:stats:refresh') { await i.deferUpdate().catch(() => null); await stats.counters.refreshCounters(guild, { force: true }); return send(i, managerPanel(guild, who, { text: 'All counters refreshed.' })); }
+  if (id === 'admin:stats:refresh') { await i.deferUpdate().catch(() => null); await stats.counters.refreshCounters(guild, {
+    force: true,
+    fetchMembers: true,
+  }); return send(i, managerPanel(guild, who, { text: 'All counters refreshed.' })); }
   if (id === 'admin:stats:enable' || id === 'admin:stats:disable') { stats.setEnabled(guild.id, id.endsWith(':enable'), guild); return send(i, settingsPanel(guild, who, id.endsWith(':enable') ? 'Server Counters enabled.' : 'Server Counters disabled.')); }
   if (id === 'admin:stats:health') { await i.deferUpdate().catch(() => null); return send(i, healthPanel(await stats.buildHealth(guild), who)); }
   if (id === 'admin:stats:health:repair') { await i.deferUpdate().catch(() => null); const result = await stats.repair(guild); return send(i, healthPanel(result.health, who, 'Repair completed and counters refreshed.')); }

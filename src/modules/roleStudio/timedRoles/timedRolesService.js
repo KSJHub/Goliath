@@ -245,12 +245,9 @@ async function startup(client) {
     else sentinelScheduler.beat(SCHEDULER_ID, { scannedGuilds, guildFailures: 0, memberFailures: 0 });
     return { scannedGuilds, guildFailures, memberFailures };
   };
-  try {
-    await run(true);
-  } catch (error) {
-    client.__goliathTimedRolesStarted = false;
-    throw error;
-  }
+  // Do not force a full Timed Roles guild scan during startup.
+  // scanGuild() performs guild.members.fetch(), which hydrates the
+  // complete Discord member cache. Normal scheduled scans remain active.
   const timer = setInterval(() => run(false).catch((error) => console.warn(`[TimedRoles] Scheduler failed: ${error.message}`)), SCHEDULER_TICK_MS);
   timer.unref?.();
   return timer;

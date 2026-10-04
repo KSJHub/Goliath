@@ -18,6 +18,80 @@ function createIncidentId() {
   return `inc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+
+function sanitizeSecurityPersistence(value, seen = new WeakSet()) {
+  if (value === null || value === undefined) return value;
+
+  if (typeof value !== 'object') return value;
+
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+
+  seen.add(value);
+
+  // Full Goliath server backups contain guildConfig.
+  // They must never be embedded inside Security history because
+  // guildConfig itself contains Security history, creating recursive
+  // snapshots and exponential runtime-config growth.
+  if (
+    !Array.isArray(value) &&
+    value.guildConfig &&
+    typeof value.guildConfig === 'object' &&
+    (
+      value.backupId ||
+      value.backupType ||
+      value.type
+    )
+  ) {
+    const roles = Array.isArray(value.roles) ? value.roles : [];
+    const channels = Array.isArray(value.channels) ? value.channels : [];
+
+    return {
+      backupId: value.backupId || null,
+      type: value.type || value.backupType || 'runtime',
+      backupType:
+        value.backupType ||
+        value.metadata?.backupType ||
+        value.type ||
+        'runtime',
+      version: value.version || null,
+      createdAt: value.createdAt || null,
+      createdBy: value.createdBy || null,
+      requestedBy: value.requestedBy || null,
+      restoreRequestId: value.restoreRequestId || null,
+      reason: value.reason || null,
+      environment:
+        value.environment ||
+        value.metadata?.environment ||
+        null,
+      guildId: value.guild?.id || null,
+      guildName: value.guild?.name || null,
+      integrity: value.integrity || null,
+      counts: {
+        roles: roles.length,
+        channels: channels.length,
+      },
+    };
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) =>
+      sanitizeSecurityPersistence(entry, seen)
+    );
+  }
+
+  const sanitized = {};
+
+  for (const [key, entry] of Object.entries(value)) {
+    sanitized[key] =
+      sanitizeSecurityPersistence(entry, seen);
+  }
+
+  return sanitized;
+}
+
+
 function getSeverityColor(severity) {
   switch (severity) {
     case SEVERITY.CRITICAL: return 0xff0000;
@@ -135,7 +209,7 @@ async function logIncident(guild, options = {}) {
     targetType: options.targetType || null,
     reason: options.reason || null,
     actionTaken: options.actionTaken || null,
-    metadata: options.metadata || {},
+    metadata: sanitizeSecurityPersistence(options.metadata || {}),
     createdAt: options.createdAt || new Date().toISOString(),
   };
   const current = readIncidents(guildId);
