@@ -14,7 +14,7 @@ const EMBED_DEPLOYMENTS_SECTION = 'embedDeployments';
 const LEGACY_EMBED_BUILDER_SECTION = 'embedBuilder';
 const DEPLOYMENT_STATUS = Object.freeze({ ACTIVE: 'active', NOT_DEPLOYED: 'not_deployed', MISSING_MESSAGE: 'missing_message', MISSING_CHANNEL: 'missing_channel', PERMISSION_ERROR: 'permission_error', UNKNOWN: 'unknown' });
 const VALID_STATUSES = new Set(Object.values(DEPLOYMENT_STATUS));
-const EMBED_BUTTON_ACTIONS = Object.freeze(['reply', 'toggle-role', 'add-role', 'remove-role', 'user-info', 'server-info']);
+const EMBED_BUTTON_ACTIONS = Object.freeze(['reply', 'toggle-role', 'add-role', 'remove-role', 'user-info', 'server-info', 'verification']);
 const EMBED_ROLE_BUTTON_ACTIONS = new Set(['toggle-role', 'add-role', 'remove-role']);
 const now = () => new Date().toISOString();
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
