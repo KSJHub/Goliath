@@ -106,59 +106,83 @@ function registerEvents(client, options = {}) {
     }
   }
 
-  const readyGroupCount = [...grouped.values()].filter((group) => group.eventName === 'clientReady').length;
-  const readyCycle = {
-    pending: readyGroupCount,
-    startedAt: null,
-    completed: false,
-  };
+  /*
+   * CLIENTREADY STARTUP
+   *
+   * clientReady handlers are deliberately executed through one listener and
+   * one serial queue. This prevents the :once and :on groups from overlapping
+   * during startup and keeps startup work deterministic.
+   *
+   * Other Discord events retain their normal grouped registration.
+   */
+  const readyGroups = [...grouped.values()]
+    .filter((group) => group.eventName === 'clientReady');
 
-  function completeReadyGroup() {
-    if (readyCycle.completed) return;
-    readyCycle.pending = Math.max(0, readyCycle.pending - 1);
-    if (readyCycle.pending > 0) return;
+  const readyHandlers = readyGroups
+    .flatMap((group) => group.handlers);
 
-    readyCycle.completed = true;
-    const elapsed = Date.now() - (readyCycle.startedAt || Date.now());
-    const mode = String(process.env.BOT_MODE || 'UNKNOWN').trim().toUpperCase();
-    const guildCount = client?.guilds?.cache?.size ?? 0;
+  const nonReadyGroups = [...grouped.values()]
+    .filter((group) => group.eventName !== 'clientReady');
 
-    console.log('============================================================');
-    console.log('✅ GOLIATH STARTUP COMPLETE');
-    console.log(`🧠 Mode: ${mode}`);
-    console.log(`🤖 Discord: ${client?.isReady?.() ? 'READY' : 'NOT READY'}`);
-    console.log(`🏠 Guilds: ${guildCount}`);
-    console.log('🌐 Dashboard: RUNNING');
-    console.log('🛡️ Blocking startup handlers: COMPLETE');
-    console.log('🔄 Background startup jobs: may continue independently');
-    console.log(`⏱️ ClientReady cycle: ${(elapsed / 1000).toFixed(2)}s (${elapsed}ms)`);
-    console.log('============================================================');
+  async function executeHandler(eventName, handler, args) {
+    try {
+      await handler.execute(...args, client);
+    } catch (error) {
+      console.error(`[Events] ${eventName} handler failed: ${handler.file}`);
+      console.error(error?.stack || error?.message || error);
+    }
   }
 
-  for (const { eventName, once, handlers } of grouped.values()) {
+  /*
+   * Register every non-clientReady event exactly as before.
+   */
+  for (const { eventName, once, handlers } of nonReadyGroups) {
     const listener = async (...args) => {
-      if (eventName === 'clientReady' && readyCycle.startedAt === null) readyCycle.startedAt = Date.now();
-      if (eventName === 'interactionCreate') await prepareInteraction(args[0]);
-
-      for (const handler of handlers) {
-        const startedAt = Date.now();
-        try {
-          await handler.execute(...args, client);
-        } catch (error) {
-          console.error(`[Events] ${eventName} handler failed: ${handler.file}`);
-          console.error(error?.stack || error?.message || error);
-        } finally {
-          if (eventName === 'clientReady') {
-            const elapsed = Date.now() - startedAt;
-            const relativeFile = path.relative(process.cwd(), handler.file);
-            console.log(`[READY PERF] ${String(elapsed).padStart(6)}ms | ${relativeFile}`);
-          }
-        }
+      if (eventName === 'interactionCreate') {
+        await prepareInteraction(args[0]);
       }
 
-      if (eventName === 'clientReady') completeReadyGroup();
+      for (const handler of handlers) {
+        await executeHandler(eventName, handler, args);
+      }
     };
-    if (once) client.once(eventName, listener); else client.on(eventName, listener);
+
+    if (once) {
+      client.once(eventName, listener);
+    } else {
+      client.on(eventName, listener);
+    }
+  }
+
+  /*
+   * One clientReady listener.
+   * Every startup handler now completes before the next one begins.
+   */
+  if (readyHandlers.length > 0) {
+    client.once('clientReady', async (...args) => {
+      const readyStartedAt = Date.now();
+
+      for (const handler of readyHandlers) {
+        await executeHandler('clientReady', handler, args);
+      }
+
+      const elapsed = Date.now() - readyStartedAt;
+      const mode = String(process.env.BOT_MODE || 'UNKNOWN')
+        .trim()
+        .toUpperCase();
+
+      const guildCount = client?.guilds?.cache?.size ?? 0;
+
+      console.log('============================================================');
+      console.log('✅ GOLIATH STARTUP COMPLETE');
+      console.log(`🧠 Mode: ${mode}`);
+      console.log(`🤖 Discord: ${client?.isReady?.() ? 'READY' : 'NOT READY'}`);
+      console.log(`🏠 Guilds: ${guildCount}`);
+      console.log('🌐 Dashboard: RUNNING');
+      console.log('🛡️ Serialized startup handlers: COMPLETE');
+      console.log(`⏱️ ClientReady cycle: ${(elapsed / 1000).toFixed(2)}s (${elapsed}ms)`);
+      console.log('============================================================');
+    });
   }
 
   return { files: files.length, groups: grouped.size };

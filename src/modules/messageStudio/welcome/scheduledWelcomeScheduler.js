@@ -89,7 +89,16 @@ async function startup(client) {
     staleAfterMs: Math.max(CHECK_INTERVAL_MS * 3, 180_000),
     details: { scope: 'all-guilds' },
   });
-  await monitoredCheckAllGuilds(client);
+  // Do not run the scheduled-welcome guild scan during ClientReady.
+  // The interval below remains active and performs the first normal check
+  // after CHECK_INTERVAL_MS.
+  //
+  // Scheduled welcome queue processing can hydrate guild member caches,
+  // so deferring the first cycle prevents a large startup memory spike.
+  sentinelScheduler.beat(SCHEDULER_ID, {
+    phase: 'startup',
+    deferredFirstCheck: true,
+  });
   const timer = setInterval(() => {
     monitoredCheckAllGuilds(client).catch((error) => {
       console.error('[ScheduledWelcome] Scheduler cycle failed:', error?.stack || error?.message || error);

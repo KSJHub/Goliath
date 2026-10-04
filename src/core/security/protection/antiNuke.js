@@ -109,11 +109,59 @@ async function fetchAuditExecutor(guild, auditType) {
 }
 async function createEmergencyBackup(guild, reason, stage) {
   try {
-    const { createServerBackup } = require('../restoreBackup/backup');
-    if (typeof createServerBackup !== 'function') return null;
-    return await createServerBackup(guild, { createdBy: 'Goliath Anti-Nuke', reason, stage, emergency: true, type: 'security_emergency' });
+    const {
+      createServerBackup,
+      createBackupSummary,
+    } = require('../restoreBackup/backup');
+
+    if (typeof createServerBackup !== 'function') {
+      return null;
+    }
+
+    // The full backup must remain in the dedicated backup file only.
+    //
+    // Never return/persist the complete backup object in Security incident
+    // history. A full backup contains guildConfig, which itself contains
+    // Security incident history. Persisting that object inside an incident
+    // therefore creates recursive historical snapshots and exponential
+    // guild-config growth.
+    const backup = await createServerBackup(guild, {
+      createdBy: 'Goliath Anti-Nuke',
+      reason,
+      stage,
+      emergency: true,
+      type: 'security_emergency',
+    });
+
+    if (!backup) {
+      return null;
+    }
+
+    if (typeof createBackupSummary === 'function') {
+      return createBackupSummary(backup);
+    }
+
+    // Defensive fallback: retain only lightweight reference metadata.
+    return {
+      backupId: backup.backupId || null,
+      type: backup.type || backup.backupType || 'security_emergency',
+      backupType: backup.backupType || backup.type || 'security_emergency',
+      version: backup.version || null,
+      createdAt: backup.createdAt || null,
+      createdBy: backup.createdBy || null,
+      reason: backup.reason || reason || null,
+      environment: backup.environment || null,
+      guildId: backup.guild?.id || guild?.id || null,
+      guildName: backup.guild?.name || guild?.name || null,
+      integrity: backup.integrity || null,
+    };
   } catch (error) {
-    console.error('[AntiNuke] Emergency backup failed:', error); return null;
+    console.error(
+      '[AntiNuke] Emergency backup failed:',
+      error?.stack || error?.message || error
+    );
+
+    return null;
   }
 }
 async function alertOwner(guild, incident) {

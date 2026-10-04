@@ -155,38 +155,108 @@ async function handleRoleDelete(role) {
 }
 
 async function startupAutoRoles(client) {
-  if (!client?.guilds?.cache) return { ok: false, reason: 'Missing Discord client.', guildsChecked: 0, results: [] };
+  if (!client?.guilds?.cache) {
+    return {
+      ok: false,
+      reason: 'Missing Discord client.',
+      guildsChecked: 0,
+      results: [],
+    };
+  }
+
+  /*
+   * ClientReady must only initialise Auto Roles.
+   *
+   * Do NOT:
+   *   - fetch guild members
+   *   - reconcile existing members
+   *   - build full health reports
+   *   - perform role reapplication
+   *
+   * Those operations are administrator/manual operations and can
+   * hydrate large Discord caches during startup.
+   *
+   * Runtime role assignment continues through the normal member
+   * lifecycle handlers.
+   */
+
   const results = [];
+
   for (const guild of client.guilds.cache.values()) {
     try {
+      const enabled = guildManager.isModuleEnabled(
+        guild.id,
+        MODULE
+      );
+
+
       const section = base.getAutoRolesSection(guild.id);
-      const enabled = guildManager.isModuleEnabled(guild.id, MODULE);
-      const health = await base.buildHealthReport(guild);
-      const reapply = enabled && section.settings?.reapplyOnStartup === true
-        ? await reapplyToGuild(guild, { reason: 'Goliath Auto Roles startup recovery' })
-        : null;
-      results.push({ guildId: guild.id, guildName: guild.name, enabled, configured: health.configured, healthy: health.healthy, notices: health.notices, warnings: health.warnings, joinRoles: health.joinRoles, botRoles: health.botRoles, reapply });
+
+
+      const joinRoles = Array.isArray(section?.joinRoles)
+        ? section.joinRoles.length
+        : 0;
+
+      const botRoles = Array.isArray(section?.botRoles)
+        ? section.botRoles.length
+        : 0;
+
+      results.push({
+        guildId: guild.id,
+        guildName: guild.name,
+        enabled,
+        configured: joinRoles + botRoles > 0,
+        healthy: true,
+        notices: [],
+        warnings: [],
+        joinRoles,
+        botRoles,
+        reapply: null,
+      });
     } catch (error) {
-      results.push({ guildId: guild.id, guildName: guild.name, enabled: false, configured: false, healthy: false, notices: [], warnings: [error.message || 'Auto Roles startup check failed.'], joinRoles: 0, botRoles: 0, reapply: null });
+      results.push({
+        guildId: guild.id,
+        guildName: guild.name,
+        enabled: false,
+        configured: false,
+        healthy: false,
+        notices: [],
+        warnings: [
+          error?.message || 'Auto Roles startup initialisation failed.',
+        ],
+        joinRoles: 0,
+        botRoles: 0,
+        reapply: null,
+      });
     }
   }
+
+
   return {
-    ok: results.every((result) => result.healthy || result.enabled === false),
+    ok: results.every(
+      (result) =>
+        result.healthy ||
+        result.enabled === false
+    ),
     guildsChecked: results.length,
-    enabledGuilds: results.filter((result) => result.enabled).length,
-    configuredGuilds: results.filter((result) => result.enabled && result.configured).length,
-    configuredRoles: results.reduce((total, result) => total + result.joinRoles + result.botRoles, 0),
-    notices: results.reduce((total, result) => total + result.notices.length, 0),
-    warnings: results.reduce((total, result) => total + result.warnings.length, 0),
+    enabledGuilds: results.filter(
+      (result) => result.enabled
+    ).length,
+    configuredGuilds: results.filter(
+      (result) =>
+        result.enabled &&
+        result.configured
+    ).length,
+    configuredRoles: results.reduce(
+      (total, result) =>
+        total +
+        result.joinRoles +
+        result.botRoles,
+      0
+    ),
     results,
   };
 }
-
-// Safe compatibility bridge for legacy imports used by the central member event.
-// These wrappers do not call the corresponding base methods internally.
-base.applyAutoRoles = applyAutoRoles;
-base.reapplyToGuild = reapplyToGuild;
-base.startupAutoRoles = startupAutoRoles;
 
 module.exports = {
   ...base,
