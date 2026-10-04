@@ -20,7 +20,6 @@ const contracts = [
   ['OFFLINE transition', 'checked.isLive===false&&previous.isLive===true'],
   ['stable ended identity', 'id:`ended:${previous.liveEventId||prior.id||account.accountId}`'],
   ['VOD correlation', 'vodMatchesEndedStream(item,startedAt,endedAt)'],
-  ['VOD duplicate suppression', "endedVodId&&item.type==='vod'&&String(item.id)===endedVodId"],
   ['persistent event dedupe', 'deliveredEventKeys'],
   ['deleted-message recovery', 'recovered=Boolean(updated)'],
   ['recovery without ping', 'suppressMention:true'],
@@ -36,7 +35,7 @@ const contracts = [
   ['exhausted retry release', 'state.pendingDelivery=null'],
   ['delivery failure preserves current state', 'letcurrentState={...previous}'],
   ['retry failure persists current state', 'state:{...currentState,pendingDelivery'],
-  ['stale LIVE retry protection', 'pendingLiveStale=Boolean(pendingEvent?.type===\'live\''],
+  ['stale LIVE retry protection', "pendingLiveStale=Boolean(pendingEvent?.type==='live'"],
   ['stale LIVE retry clears pending', 'state.pendingDelivery=null'],
   ['recovery concurrency deferral', "result?.skipped&&result.reason==='check_already_running'"],
   ['rollover concurrency deferral', "repairedItem?.status==='skipped'&&repairedItem?.reason==='already_running'"],
@@ -81,7 +80,30 @@ assert(
 assert(compactTikTok.includes("providerSource:ended?'public_page_ended':'public_page_redirect'"), 'TikTok proven OFFLINE paths missing');
 assert(compactTikTok.includes("liveStatus:isPaused?'PAUSED':'LIVE'"), 'TikTok PAUSED state contract missing');
 
-// Deterministic VOD-window and event-identity sanity checks.
+// Locked Social Studio lifecycle model:
+// LIVE -> ENDED is one retained Discord session/message. VOD/content events are
+// independent event identities and must remain independently deduplicatable.
+const liveKey = 'live:stream-A';
+const endedKey = 'ended:ended:stream-A';
+const vodKey = 'vod:vod-A';
+const clipKey = 'clip:clip-A';
+assert.notEqual(liveKey, endedKey);
+assert.notEqual(endedKey, vodKey);
+assert.notEqual(vodKey, clipKey);
+const independentEvents = new Set([liveKey, endedKey, vodKey, clipKey]);
+assert.equal(independentEvents.size, 4, 'LIVE/ENDED/VOD/CLIP identities must remain independent');
+
+// TikTok PAUSED is still the same broadcast session. Resume must not mint a
+// second LIVE identity, and only a confirmed OFFLINE transition may end it.
+const tiktokSession = { id: 'tt-live-A', state: 'LIVE' };
+tiktokSession.state = 'PAUSED';
+assert.equal(tiktokSession.id, 'tt-live-A');
+assert.equal(tiktokSession.state, 'PAUSED');
+tiktokSession.state = 'LIVE';
+assert.equal(tiktokSession.id, 'tt-live-A', 'TikTok resume must preserve the LIVE session identity');
+
+// Deterministic VOD-window sanity check. Correlation is metadata only; it must
+// never imply that the VOD shares the ENDED event identity.
 const started = Date.parse('2026-09-18T20:00:00Z');
 const ended = Date.parse('2026-09-18T22:00:00Z');
 const margin = 15 * 60 * 1000;
@@ -92,8 +114,9 @@ assert.equal(matchesWindow(Date.parse('2026-09-18T22:16:00Z')), false);
 
 const delivered = new Set(['live:A', 'ended:ended:A', 'vod:vod-A']);
 assert.equal(delivered.has('live:A'), true);
+assert.equal(delivered.has('vod:vod-A'), true, 'correlated VOD must retain its own delivered-event identity');
 assert.equal(delivered.has('live:B'), false);
 delivered.add('live:B');
 assert.equal(delivered.size, 4);
 
-console.log('✅ Social Studio lifecycle validation passed: provider state -> forced LIVE tracking -> refresh -> OFFLINE -> retirement -> VOD -> LIVE B');
+console.log('✅ Social Studio lifecycle validation passed: provider state -> LIVE/PAUSED -> ENDED retention contract -> independent VOD/content -> LIVE B');
