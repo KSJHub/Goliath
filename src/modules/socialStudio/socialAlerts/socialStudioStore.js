@@ -46,7 +46,13 @@ function normalizeSection(input = {}) {
       : 'none',
     notificationRoleId: section.notificationRoleId || null,
     creators: Object.fromEntries(Object.entries(object(section.creators)).map(([id, creator]) => [id, normalizeCreator(creator)])),
-    accounts: object(section.accounts),
+    accounts: Object.fromEntries(Object.entries(object(section.accounts)).map(([id, account]) => {
+      const current = object(account);
+      const canonical = String(current.externalId || current.normalizedUsername || current.username || current.canonicalIdentity || '').trim().toLowerCase();
+      const previous = String(current.canonicalIdentity || '').trim().toLowerCase();
+      const aliases = [...new Set([...(Array.isArray(current.identityAliases) ? current.identityAliases : []), previous, current.externalId, current.normalizedUsername, current.username].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean))].filter((value) => value !== canonical).slice(-25);
+      return [id, { ...current, canonicalIdentity: canonical, identityAliases: aliases }];
+    })),
     settings: object(section.settings),
     templates: object(section.templates),
     history: array(section.history),
