@@ -46,7 +46,7 @@ const CONFIG_INPUT_KEYS = new Set([
 const pickKeys = (value, allowed) => Object.fromEntries(
   Object.entries(isObject(value) ? value : {}).filter(([key]) => allowed.has(key)),
 );
-const roleIds = (value) => [...new Set((Array.isArray(value) ? value : []).map(discordId).filter(Boolean))];
+const roleIds = (value, excludedId = null) => [...new Set((Array.isArray(value) ? value : []).map(discordId).filter((id) => id && id !== excludedId))];
 const alertChannels = (value) => Object.fromEntries(
   Object.entries(isObject(value) ? value : {})
     .map(([type, id]) => [clean(type, 20).toLowerCase(), discordId(id)])
@@ -92,19 +92,19 @@ function sanitizeCreatorInput(value = {}) {
   input.accountIds = [...new Set((Array.isArray(input.accountIds) ? input.accountIds : []).map((item) => clean(item, 80)).filter(Boolean))];
   return input;
 }
-function sanitizeConfigInput(value = {}) {
+function sanitizeConfigInput(value = {}, guildIdValue = null) {
   const input = pickKeys(value, CONFIG_INPUT_KEYS);
   if (Object.prototype.hasOwnProperty.call(input, 'alertsChannelId')) input.alertsChannelId = discordId(input.alertsChannelId);
   if (Object.prototype.hasOwnProperty.call(input, 'logChannelId')) input.logChannelId = discordId(input.logChannelId);
   if (Object.prototype.hasOwnProperty.call(input, 'alertChannels')) input.alertChannels = alertChannels(input.alertChannels);
   if (Object.prototype.hasOwnProperty.call(input, 'platformChannels')) input.platformChannels = platformChannels(input.platformChannels);
-  if (Object.prototype.hasOwnProperty.call(input, 'managerRoleIds')) input.managerRoleIds = roleIds(input.managerRoleIds);
-  if (Object.prototype.hasOwnProperty.call(input, 'userRoleIds')) input.userRoleIds = roleIds(input.userRoleIds);
+  if (Object.prototype.hasOwnProperty.call(input, 'managerRoleIds')) input.managerRoleIds = roleIds(input.managerRoleIds, guildIdValue);
+  if (Object.prototype.hasOwnProperty.call(input, 'userRoleIds')) input.userRoleIds = roleIds(input.userRoleIds, guildIdValue);
   if (Object.prototype.hasOwnProperty.call(input, 'notificationRoleId')) input.notificationRoleId = discordId(input.notificationRoleId);
   if (Object.prototype.hasOwnProperty.call(input, 'liveRoleId')) input.liveRoleId = discordId(input.liveRoleId);
   if (Object.prototype.hasOwnProperty.call(input, 'notificationMentionMode')) input.notificationMentionMode = ['none', 'role', 'everyone', 'here'].includes(input.notificationMentionMode) ? input.notificationMentionMode : 'none';
   if (Object.prototype.hasOwnProperty.call(input, 'settings') && isObject(input.settings)) {
-    const allowedSettings = new Set(['checkIntervalMs','retryIntervalMs','retryDeliveries','maxDeliveryAttempts','cooldownMs','suppressDuplicates','editLiveNotifications','deleteEndedNotifications','includeViewerCount','includeLiveDuration','thumbnailPreference','platformPriority','quietHours']);
+    const allowedSettings = new Set(['checkIntervalMs','retryIntervalMs','retryDeliveries','maxDeliveryAttempts','cooldownMs','suppressDuplicates','editLiveNotifications','deleteEndedNotifications','includeViewerCount','includeLiveDuration','thumbnailPreference','platformPriority','quietHours','liveRefreshEnabled','liveRefreshSeconds']);
     input.settings = pickKeys(input.settings, allowedSettings);
     if (isObject(input.settings.quietHours)) input.settings.quietHours = pickKeys(input.settings.quietHours, new Set(['enabled','start','end','timezone']));
     if (Array.isArray(input.settings.platformPriority)) input.settings.platformPriority = input.settings.platformPriority.map((item) => clean(item, 20).toLowerCase()).filter((item) => PLATFORMS.includes(item));
@@ -402,7 +402,7 @@ router.get('/:guildId/queue', (req, res) => { try { const id = guildId(req); con
 router.get('/:guildId/creator-hub', (req, res) => { try { const id = guildId(req); const config = getConfig(id); return success(res, { guildId: id, creators: Object.values(config.creators), accounts: Object.values(config.accounts) }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/creator-hub/diagnostics', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const result = health(config); return success(res, { guildId: id, diagnostics: { health: result, runtime: { state: result.healthy ? (result.issues.length ? 'warning' : 'healthy') : 'error', startedAt: runtime.startedAt, warningCount: result.issues.filter((item) => item.severity === 'warning').length, errorCount: result.issues.filter((item) => item.severity === 'error').length, issues: result.issues, scheduler: { started: config.enabled, tickIntervalMs: config.settings.checkIntervalMs }, queue: { started: config.enabled && config.settings.retryDeliveries, intervalMs: config.settings.retryIntervalMs }, incidentMonitor: { started: true, intervalMs: 60000 } } } }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/health', async (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, health: health(getConfig(id), await guild(req, id)) }); } catch (error) { return failure(res, error, 400); } });
-router.patch('/:guildId/config', (req, res) => { try { const id = guildId(req); const current = getConfig(id); const body = isObject(req.body) ? req.body : {}; if (typeof body.enabled === 'boolean') guildManager.setModuleEnabled(id, 'social', body.enabled, actor(req)); const bodyConfig = sanitizeConfigInput(body); const incomingTemplates = normalizeTemplates(bodyConfig.templates); const config = { ...current, ...bodyConfig, settings: { ...current.settings, ...(isObject(bodyConfig.settings) ? bodyConfig.settings : {}) }, templates: isObject(bodyConfig.templates) ? { ...current.templates, ...incomingTemplates, defaults: { ...current.templates.defaults, ...incomingTemplates.defaults }, custom: { ...current.templates.custom, ...incomingTemplates.custom } } : current.templates }; return success(res, { guildId: id, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
+router.patch('/:guildId/config', (req, res) => { try { const id = guildId(req); const current = getConfig(id); const body = isObject(req.body) ? req.body : {}; if (typeof body.enabled === 'boolean') guildManager.setModuleEnabled(id, 'social', body.enabled, actor(req)); const bodyConfig = sanitizeConfigInput(body, id); const incomingTemplates = normalizeTemplates(bodyConfig.templates); const config = { ...current, ...bodyConfig, settings: { ...current.settings, ...(isObject(bodyConfig.settings) ? bodyConfig.settings : {}) }, templates: isObject(bodyConfig.templates) ? { ...current.templates, ...incomingTemplates, defaults: { ...current.templates.defaults, ...incomingTemplates.defaults }, custom: { ...current.templates.custom, ...incomingTemplates.custom } } : current.templates }; return success(res, { guildId: id, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/accounts', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const account = normalizeAccount(sanitizeAccountInput(req.body || {})); config.accounts[account.accountId] = account; history(config, { status: 'created', accountId: account.accountId, platform: account.platform, alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, account, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.delete('/:guildId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const accountId = clean(req.params.accountId, 80); if (!config.accounts[accountId]) throw new Error('Social account was not found.'); delete config.accounts[accountId]; Object.values(config.creators).forEach((creator) => { creator.accountIds = creator.accountIds.filter((item) => item !== accountId); }); history(config, { status: 'deleted', accountId, alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/check', async (req, res) => {
