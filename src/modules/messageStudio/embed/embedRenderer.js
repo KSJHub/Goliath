@@ -714,7 +714,21 @@ async function buildEmbedPayload(options = {}) {
   return payload;
 }
 
-async function resolveApplicationEmojiShortcodes(embeds, interaction) { return embeds || []; }
+async function resolveApplicationEmojiShortcodes(embeds, interaction) {
+  const client = interaction?.client || null;
+  const guildId = interactionGuildId(interaction);
+
+  if (!client || guildId === 'global') {
+    return embeds || [];
+  }
+
+  return emojis.resolveEmbeds(
+    client,
+    guildId,
+    embeds || [],
+    'embed'
+  );
+}
 async function validateApplicationEmojiUsage() { return true; }
 
 module.exports = {
