@@ -26,6 +26,51 @@ function patchedGuildForRecovery(guildConfig, accountId, currentEventId) {
   return { ...guildConfig, modules: { ...(guildConfig.modules || {}), social: { ...social, accounts: { ...(social.accounts || {}), [accountId]: { ...account, state: { ...state, isLive: false, liveEventId: currentEventId, lastAlertKey: null, lastAlertMessageId: null, lastAlertChannelId: null, lastLiveMessageId: null, lastLiveMessageChannelId: null, lastLiveMessageUpdateAt: null, lastLiveMessageUpdatedAt: null, lastDeliveryError: null } } } } } };
 }
 
+function completedSessionNeedsRetirement(state = {}) {
+  if (state.isLive !== false) return false;
+  if (state.pendingEndedEvent && typeof state.pendingEndedEvent === 'object') return false;
+  if (state.pendingDelivery?.event?.type === 'ended') return false;
+  return Boolean(
+    state.liveEventId
+    || state.liveStartedAt
+    || state.lastLiveEvent
+    || state.peakViewers
+    || state.lastLiveMessageId
+    || state.lastLiveMessageChannelId
+    || state.lastLiveMessageUpdateAt
+    || state.lastLiveMessageUpdatedAt
+    || String(state.lastAlertKey || '').startsWith('live:')
+  );
+}
+
+function retireCompletedSessions(guildId, guildConfig) {
+  const social = guildConfig?.modules?.social || {};
+  const staleIds = Object.entries(social.accounts || {})
+    .filter(([, account]) => completedSessionNeedsRetirement(account?.state || {}))
+    .map(([accountId]) => accountId);
+  if (!staleIds.length) return guildConfig;
+  const staleSet = new Set(staleIds);
+  return guildManager.updateGuildSection(guildId, 'social', (latest = {}) => {
+    const accounts = { ...(latest.accounts || {}) };
+    for (const accountId of staleSet) {
+      const account = accounts[accountId];
+      if (!account || !completedSessionNeedsRetirement(account.state || {})) continue;
+      const state = { ...(account.state || {}) };
+      state.liveEventId = null;
+      state.liveStartedAt = null;
+      state.lastLiveEvent = null;
+      state.peakViewers = 0;
+      state.lastLiveMessageId = null;
+      state.lastLiveMessageChannelId = null;
+      state.lastLiveMessageUpdateAt = null;
+      state.lastLiveMessageUpdatedAt = null;
+      if (String(state.lastAlertKey || '').startsWith('live:')) state.lastAlertKey = null;
+      accounts[accountId] = { ...account, state, updatedAt: new Date().toISOString() };
+    }
+    return { ...latest, accounts, updatedAt: new Date().toISOString() };
+  }, {}, { guildId });
+}
+
 async function recordRecoveryAction(client, guild, account, currentEventId, input = {}) {
   await audit.captureGoliathAction(client, {
     guild, guildId: guild.id,
@@ -72,12 +117,14 @@ async function sweep(client) {
     if (runningGuilds.has(guild.id)) continue;
     runningGuilds.add(guild.id);
     try {
-      const guildConfig = guildManager.reloadGuild(guild.id) || {};
+      let guildConfig = guildManager.reloadGuild(guild.id) || {};
       const social = guildConfig?.modules?.social || {};
       for (const account of Object.values(social.accounts || {})) {
         if (!account || account.enabled === false) continue;
         await recoverAccount(client, guild, guildConfig, account);
       }
+      guildConfig = guildManager.reloadGuild(guild.id) || guildConfig;
+      retireCompletedSessions(guild.id, guildConfig);
     } catch (error) { console.error(`[Social Studio] LIVE post recovery sweep failed for guild ${guild.id}:`, error?.message || error); }
     finally { runningGuilds.delete(guild.id); }
   }
