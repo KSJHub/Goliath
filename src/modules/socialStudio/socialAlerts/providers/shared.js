@@ -10,21 +10,57 @@ function handle(account) { return clean(account.normalizedUsername || account.us
 function profileUrl(account) { return clean(account.profileUrl || account.url || account.username); }
 
 async function request(url, options = {}, timeoutMs = 10000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { redirect: 'follow', ...options, signal: controller.signal, headers: { 'User-Agent': UA, Accept: 'application/json,text/html;q=0.9,*/*;q=0.8', ...(options.headers || {}) } });
-    const text = await response.text();
-    let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch { }
-    if (!response.ok) {
-      const message = json?.message || json?.error?.message || json?.error_description || text.slice(0, 250) || `${response.status} ${response.statusText}`;
-      const error = new Error(message);
-      error.status = response.status;
-      throw error;
+  const maxAttempts = Math.max(1, Number(options.maxAttempts || 3));
+  const retryStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
+  const requestOptions = { ...options };
+  delete requestOptions.maxAttempts;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        redirect: 'follow',
+        ...requestOptions,
+        signal: controller.signal,
+        headers: {
+          'User-Agent': UA,
+          Accept: 'application/json,text/html;q=0.9,*/*;q=0.8',
+          ...(requestOptions.headers || {}),
+        },
+      });
+      const text = await response.text();
+      let json = null;
+      try { json = text ? JSON.parse(text) : null; } catch { }
+
+      if (!response.ok) {
+        const message = json?.message || json?.error?.message || json?.error_description || text.slice(0, 250) || `${response.status} ${response.statusText}`;
+        const error = new Error(message);
+        error.status = response.status;
+        error.retryAfterMs = Number(response.headers.get('retry-after')) > 0
+          ? Math.min(Number(response.headers.get('retry-after')) * 1000, 30000)
+          : null;
+
+        if (retryStatuses.has(response.status) && attempt < maxAttempts) {
+          const delay = error.retryAfterMs || Math.min(1000 * (2 ** (attempt - 1)), 8000);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+        throw error;
+      }
+
+      return { response, text, json };
+    } catch (error) {
+      if (attempt >= maxAttempts || (error?.status && !retryStatuses.has(error.status))) throw error;
+      const delay = error.retryAfterMs || Math.min(1000 * (2 ** (attempt - 1)), 8000);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    } finally {
+      clearTimeout(timer);
     }
-    return { response, text, json };
-  } finally { clearTimeout(timer); }
+  }
+
+  throw new Error('Provider request exhausted retry attempts.');
 }
 
 async function oauthClientToken(cacheKey, url, clientId, clientSecret) {
