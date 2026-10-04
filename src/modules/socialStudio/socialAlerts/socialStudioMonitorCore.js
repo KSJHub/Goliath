@@ -190,7 +190,26 @@ async function checkGuildAccounts(client,guildId,options={}) {
     try { checked=await checkAccount(account); const state={...previous,lastCheckedAt:checked.checkedAt||now(),lastStatus:checked.status,lastError:['unavailable','configuration_required'].includes(checked.status)?checked.reason:null}; currentState=state;
       if(checked.isLive===true){const incoming=checked.event?.id?String(checked.event.id):null, old=previous.liveEventId?String(previous.liveEventId):null, newBroadcast=Boolean(incoming&&old&&incoming!==old); state.isLive=true; state.liveEventId=incoming||state.liveEventId||null; state.liveStartedAt=checked.event?.startedAt||(newBroadcast?null:state.liveStartedAt)||null; state.lastLiveEvent=checked.event||state.lastLiveEvent||null; if(newBroadcast){state.peakViewers=0;state.lastLiveMessageId=null;state.lastLiveMessageChannelId=null;state.lastAlertMessageId=null;state.lastAlertChannelId=null;} const viewers=Number(checked.event?.viewerCount); if(Number.isFinite(viewers)&&viewers>=0)state.peakViewers=Math.max(Number(state.peakViewers||0),viewers);
       } else if(checked.isLive===false){state.isLive=false;if(previous.isLive===true)state.lastLiveEndedAt=checked.checkedAt||now();}
-      const creator=creatorFor(config,accountId); for(const duplicateId of resolvedDuplicateIds(config,account,checked,creator))duplicateMerges.set(duplicateId,accountId); const delivered=[], events=eventCandidates(account,previous,checked);
+      const creator=creatorFor(config,accountId);
+      for(const duplicateId of resolvedDuplicateIds(config,account,checked,creator))duplicateMerges.set(duplicateId,accountId);
+
+      const delivered=[];
+      const firstContentBaseline=!previous.contentBaselineEstablishedAt;
+      const checkedContentItems=Array.isArray(checked.contentItems)&&checked.contentItems.length
+        ? checked.contentItems
+        : checked.latestContent
+          ? [checked.latestContent]
+          : [];
+
+      if(firstContentBaseline){
+        for(const item of checkedContentItems){
+          if(!item?.type||!item?.id||item.type==='live'||item.type==='ended')continue;
+          rememberDelivered(state,eventKey(item));
+        }
+        state.contentBaselineEstablishedAt=checked.checkedAt||now();
+      }
+
+      const events=eventCandidates(account,firstContentBaseline?state:previous,checked);
       if(config.settings.retryDeliveries!==false&&previous.pendingDelivery&&typeof previous.pendingDelivery==='object'){
         const pending=previous.pendingDelivery, retryAt=Date.parse(String(pending.nextAttemptAt||0)), attempts=Number(pending.attempts||0);
         const pendingEvent=pending.event&&typeof pending.event==='object'?pending.event:null;
@@ -228,7 +247,66 @@ async function checkGuildAccounts(client,guildId,options={}) {
         if(event.type==='live'&&previous.isLive===true&&String(previous.liveEventId||'')===String(event.id||'')&&hasTrackedLiveMessage(previous)){const existing=await trackedMessage(client,guildId,previous).catch(()=>null); if(existing){state.lastAlertKey=key;rememberDelivered(state,key);continue;}}
         activeDeliveryEvent=event; const delivery=await sendAlert(client,guildId,config,account,event,options); activeDeliveryEvent=null; delivered.push({type:event.type,id:event.id,...delivery}); rememberDelivered(state,key);state.pendingDelivery=null;state.lastAlertKey=key;state.lastAlertAt=now();state.lastAlertMessageId=delivery.messageId;state.lastAlertChannelId=delivery.channelId;state.lastDeliveryError=null;if(event.type==='live'){state.lastLiveMessageId=delivery.messageId;state.lastLiveMessageChannelId=delivery.channelId;state.lastLiveMessageUpdatedAt=now();}
       }
-      if(liveMessageUpdateDue(account,previous,checked,config.settings)){let updated=null,recovered=false,refreshError=null; if(config.settings.editLiveNotifications!==false){try{updated=await updateLiveAlert(client,guildId,config,account,checked.event,previous);}catch(error){refreshError=error?.message||String(error);}} if(!updated&&config.settings.editLiveNotifications!==false&&checked.isLive===true&&checked.event&&hasTrackedLiveMessage(previous)){try{updated=await sendAlert(client,guildId,config,account,checked.event,{...options,suppressMention:true});recovered=Boolean(updated);refreshError=null;}catch(error){refreshError=error?.message||String(error);}} if(updated){const key=eventKey(checked.event);rememberDelivered(state,key);state.lastAlertKey=key;state.lastAlertMessageId=updated.messageId;state.lastAlertChannelId=updated.channelId;state.lastLiveMessageId=updated.messageId;state.lastLiveMessageChannelId=updated.channelId;state.lastLiveMessageUpdatedAt=now();state.lastDeliveryError=null;delivered.push({type:'live',id:checked.event.id,refreshed:!recovered,recovered,...updated});}else if(refreshError){state.lastDeliveryError=String(refreshError).slice(0,500);}}
+      const checkedLiveId=checked.isLive===true&&checked.event?.id?String(checked.event.id):null;
+      const previousLiveId=previous.isLive===true&&previous.liveEventId?String(previous.liveEventId):null;
+      const currentLiveId=state.isLive===true&&state.liveEventId?String(state.liveEventId):null;
+      const sameActiveBroadcast=Boolean(
+        checkedLiveId &&
+        previousLiveId &&
+        currentLiveId &&
+        checkedLiveId===previousLiveId &&
+        checkedLiveId===currentLiveId
+      );
+
+      if(sameActiveBroadcast&&liveMessageUpdateDue(account,previous,checked,config.settings)){
+        let updated=null,recovered=false,refreshError=null;
+
+        if(config.settings.editLiveNotifications!==false){
+          try{
+            updated=await updateLiveAlert(client,guildId,config,account,checked.event,previous);
+          }catch(error){
+            refreshError=error?.message||String(error);
+          }
+        }
+
+        if(!updated&&config.settings.editLiveNotifications!==false&&hasTrackedLiveMessage(previous)){
+          try{
+            updated=await sendAlert(
+              client,
+              guildId,
+              config,
+              account,
+              checked.event,
+              {...options,suppressMention:true}
+            );
+            recovered=Boolean(updated);
+            refreshError=null;
+          }catch(error){
+            refreshError=error?.message||String(error);
+          }
+        }
+
+        if(updated){
+          const key=eventKey(checked.event);
+          rememberDelivered(state,key);
+          state.lastAlertKey=key;
+          state.lastAlertMessageId=updated.messageId;
+          state.lastAlertChannelId=updated.channelId;
+          state.lastLiveMessageId=updated.messageId;
+          state.lastLiveMessageChannelId=updated.channelId;
+          state.lastLiveMessageUpdatedAt=now();
+          state.lastDeliveryError=null;
+          delivered.push({
+            type:'live',
+            id:checked.event.id,
+            refreshed:!recovered,
+            recovered,
+            ...updated
+          });
+        }else if(refreshError){
+          state.lastDeliveryError=String(refreshError).slice(0,500);
+        }
+      }
       monitorUpdates.set(accountId,{state,externalId:checked.externalId||null,resolvedUsername:checked.resolvedUsername||null,profileUrl:checked.url||null,avatar:checked.avatar||null,updatedAt:now()}); results.push({accountId,platform:account.platform,status:checked.status,isLive:checked.isLive,live:checked.event||null,delivered});analyticsDelta.checks=Number(analyticsDelta.checks||0)+1;if(delivered.length)analyticsDelta.alerts=Number(analyticsDelta.alerts||0)+delivered.length;for(const item of delivered)historyEntries.push({id:`history_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,createdAt:now(),accountId,platform:account.platform,status:item.recovered?'alert_recovered':item.refreshed?'alert_updated':'alert_sent',alertType:item.type,eventId:item.id,messageId:item.messageId,channelId:item.channelId});
     } catch(error){
       analyticsDelta.errors=Number(analyticsDelta.errors||0)+1;
