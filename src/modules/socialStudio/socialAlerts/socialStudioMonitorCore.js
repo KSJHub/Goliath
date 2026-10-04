@@ -194,6 +194,7 @@ async function checkGuildAccounts(client,guildId,options={}) {
       for(const duplicateId of resolvedDuplicateIds(config,account,checked,creator))duplicateMerges.set(duplicateId,accountId);
 
       const delivered=[];
+      const completedEventKeys=new Set();
       const firstContentBaseline=!previous.contentBaselineEstablishedAt;
       const checkedContentItems=Array.isArray(checked.contentItems)&&checked.contentItems.length
         ? checked.contentItems
@@ -224,7 +225,7 @@ async function checkGuildAccounts(client,guildId,options={}) {
             activeDeliveryEvent=pendingEvent;
             if(activeDeliveryEvent){
               const retryDelivery=await sendAlert(client,guildId,config,account,activeDeliveryEvent,{...options,suppressMention:activeDeliveryEvent.type==='live'&&attempts>0});
-              const retryKey=eventKey(activeDeliveryEvent); rememberDelivered(state,retryKey); state.pendingDelivery=null; state.lastAlertKey=retryKey; state.lastAlertAt=now(); state.lastAlertMessageId=retryDelivery.messageId; state.lastAlertChannelId=retryDelivery.channelId; state.lastDeliveryError=null;
+              const retryKey=eventKey(activeDeliveryEvent); rememberDelivered(state,retryKey); completedEventKeys.add(String(retryKey)); state.pendingDelivery=null; state.lastAlertKey=retryKey; state.lastAlertAt=now(); state.lastAlertMessageId=retryDelivery.messageId; state.lastAlertChannelId=retryDelivery.channelId; state.lastDeliveryError=null;
               if(activeDeliveryEvent.type==='live'){state.lastLiveMessageId=retryDelivery.messageId;state.lastLiveMessageChannelId=retryDelivery.channelId;state.lastLiveMessageUpdatedAt=now();}
               delivered.push({type:activeDeliveryEvent.type,id:activeDeliveryEvent.id,...retryDelivery,recovered:true});
             } else state.pendingDelivery=null;
@@ -242,10 +243,35 @@ async function checkGuildAccounts(client,guildId,options={}) {
           } finally { activeDeliveryEvent=null; }
         }
       }
-      for(const event of events){const key=eventKey(event); if(config.settings.retryDeliveries!==false&&previous.pendingDelivery&&String(eventKey(previous.pendingDelivery.event))===String(key))continue; if(config.settings.suppressDuplicates!==false&&hasDelivered(previous,key)&&event.type!=='live')continue; if(config.settings.suppressDuplicates!==false&&previous.lastAlertKey===key&&event.type!=='ended'&&event.type!=='live')continue; if(quiet&&!options.manual&&event.type!=='ended')continue;
+      for(const event of events){
+        const key=eventKey(event);
+        const keyString=String(key);
+
+        if(completedEventKeys.has(keyString))continue;
+
+        if(
+          config.settings.retryDeliveries!==false &&
+          state.pendingDelivery &&
+          String(eventKey(state.pendingDelivery.event))===keyString
+        )continue;
+
+        if(
+          config.settings.suppressDuplicates!==false &&
+          hasDelivered(state,key) &&
+          event.type!=='live'
+        )continue;
+
+        if(
+          config.settings.suppressDuplicates!==false &&
+          state.lastAlertKey===key &&
+          event.type!=='ended' &&
+          event.type!=='live'
+        )continue;
+
+        if(quiet&&!options.manual&&event.type!=='ended')continue;
         if(event.type==='ended'){let updated=null,removed=false; if(config.settings.deleteEndedNotifications!==false)removed=await deleteEndedAlert(client,guildId,previous).catch(()=>false); else if(config.settings.editLiveNotifications!==false)updated=await updateEndedAlert(client,guildId,config,account,event,previous).catch(()=>null); if(updated||removed){delivered.push({type:'ended',id:event.id,...(updated||{})}); rememberDelivered(state,key); state.lastAlertKey=key; state.lastAlertAt=now(); state.pendingEndedEvent=null; state.lastLiveMessageId=null; state.lastLiveMessageChannelId=null; if(removed||updated){state.lastAlertMessageId=null;state.lastAlertChannelId=null;}} else {state.pendingEndedEvent=event;} continue;}
         if(event.type==='live'&&previous.isLive===true&&String(previous.liveEventId||'')===String(event.id||'')&&hasTrackedLiveMessage(previous)){const existing=await trackedMessage(client,guildId,previous).catch(()=>null); if(existing){state.lastAlertKey=key;rememberDelivered(state,key);continue;}}
-        activeDeliveryEvent=event; const delivery=await sendAlert(client,guildId,config,account,event,options); activeDeliveryEvent=null; delivered.push({type:event.type,id:event.id,...delivery}); rememberDelivered(state,key);state.pendingDelivery=null;state.lastAlertKey=key;state.lastAlertAt=now();state.lastAlertMessageId=delivery.messageId;state.lastAlertChannelId=delivery.channelId;state.lastDeliveryError=null;if(event.type==='live'){state.lastLiveMessageId=delivery.messageId;state.lastLiveMessageChannelId=delivery.channelId;state.lastLiveMessageUpdatedAt=now();}
+        activeDeliveryEvent=event; const delivery=await sendAlert(client,guildId,config,account,event,options); activeDeliveryEvent=null; delivered.push({type:event.type,id:event.id,...delivery}); rememberDelivered(state,key);completedEventKeys.add(keyString);state.pendingDelivery=null;state.lastAlertKey=key;state.lastAlertAt=now();state.lastAlertMessageId=delivery.messageId;state.lastAlertChannelId=delivery.channelId;state.lastDeliveryError=null;if(event.type==='live'){state.lastLiveMessageId=delivery.messageId;state.lastLiveMessageChannelId=delivery.channelId;state.lastLiveMessageUpdatedAt=now();}
       }
       const checkedLiveId=checked.isLive===true&&checked.event?.id?String(checked.event.id):null;
       const previousLiveId=previous.isLive===true&&previous.liveEventId?String(previous.liveEventId):null;
