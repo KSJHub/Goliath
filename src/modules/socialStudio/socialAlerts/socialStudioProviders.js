@@ -91,6 +91,26 @@ async function runProviderCheck(provider, account, platform) {
   try { return await Promise.race([Promise.resolve().then(() => provider.check({ ...account, platform })), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${provider.label || platform} provider check timed out after ${timeoutMs}ms.`)), timeoutMs); timer.unref?.(); })]); }
   finally { if (timer) clearTimeout(timer); }
 }
+function stabilizeLiveCheck(account = {}, checked = {}) {
+  if (checked?.isLive !== true || !checked.event || typeof checked.event !== 'object') return checked;
+  const previous = account?.state?.isLive === true && account.state.lastLiveEvent && typeof account.state.lastLiveEvent === 'object'
+    ? account.state.lastLiveEvent
+    : null;
+  const sameBroadcast = previous && sameLiveEvent(previous, checked.event);
+  if (!sameBroadcast) return checked;
+  const event = { ...checked.event };
+  for (const key of ['title', 'thumbnail', 'startedAt', 'category', 'language', 'profileUrl', 'url']) {
+    if (!event[key] && previous[key]) event[key] = previous[key];
+  }
+  if ((event.viewerCount === null || event.viewerCount === undefined || event.viewerCount === '') && previous.viewerCount !== null && previous.viewerCount !== undefined) {
+    event.viewerCount = previous.viewerCount;
+  }
+  return {
+    ...checked,
+    avatar: checked.avatar || account.avatar || account.avatarUrl || null,
+    event,
+  };
+}
 function saneTikTokViewerCount(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0 || number > MAX_TIKTOK_VIEWERS) return null;
@@ -129,7 +149,9 @@ async function checkAccount(account = {}) {
   if (!info.configured) return unavailable(platform, `${info.label} provider configuration is required before checks can run.`, 'configuration_required', info.providerClass, 'configuration');
   try {
     const checked = await runProviderCheck(provider, account, platform);
-    const normalized = platform === 'tiktok' ? stabilizeTikTokCheck(account, checked) : checked;
+    const normalized = platform === 'tiktok'
+      ? stabilizeTikTokCheck(account, checked)
+      : stabilizeLiveCheck(account, checked);
     return { ...normalized, platform, failureCategory: normalized?.failureCategory || null, providerSource: normalized?.providerSource || info.providerClass };
   }
   catch (error) { const failureCategory = classifyProviderFailure(error); return unavailable(platform, error?.message || 'Provider check failed.', failureCategory === 'timeout' ? 'timeout' : 'unavailable', info.providerClass, failureCategory); }
