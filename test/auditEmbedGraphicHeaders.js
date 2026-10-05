@@ -125,7 +125,7 @@ function run() {
   assert(
     renderer.includes('new MediaGalleryItemBuilder()') &&
     renderer.includes('.setURL(mediaUrl)'),
-    'Components V2 media gallery must preserve the resolved native or processed media URL'
+    'component media gallery must preserve the resolved native or processed media URL'
   );
 
   assert(
@@ -144,7 +144,7 @@ function run() {
     renderer.includes('new ContainerBuilder()') &&
     renderer.includes('new MediaGalleryBuilder().addItems(') &&
     renderer.includes('flags: MessageFlags.IsComponentsV2'),
-    'renderer must keep panel media and content inside Components V2 containers'
+    'renderer must keep panel media and content inside Discord component containers'
   );
 
   console.log('✅ Embed Graphic Header regression audit passed.');
