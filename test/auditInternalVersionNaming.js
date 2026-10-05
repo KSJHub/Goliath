@@ -9,6 +9,7 @@ const extensions = new Set([
   '.json', '.md', '.txt', '.html', '.css', '.scss',
   '.yml', '.yaml', '.env', '.ini', '.toml', '.xml', '.svg',
 ]);
+const strictGenerationPattern = /[vV][23](?![0-9])/g;
 const versionPattern = new RegExp('(?:^|[^A-Za-z0-9])([vV][2-9][0-9]*)(?=$|[^A-Za-z0-9])|([A-Za-z_$][A-Za-z0-9_$]*[vV][2-9][0-9]*)', 'g');
 const revisionPattern = new RegExp('(?:^|[^A-Za-z0-9])(?:phase|revision|rev|version|generation)[ _.-]*[1-9][0-9]*(?=$|[^A-Za-z0-9])|(?:phase|revision|rev|version|generation)[1-9][0-9]*', 'gi');
 const filenameVersionPattern = /(?:^|[._-])[vV][2-9][0-9]*(?=$|[._-])|[A-Za-z0-9_$][vV][2-9][0-9]*(?=\.|$)/;
@@ -36,7 +37,8 @@ function stripOpaqueVectorData(target, line) {
 function inspectFilename(target) {
   const relative = path.relative(process.cwd(), target);
   for (const segment of relative.split(path.sep)) {
-    if (filenameVersionPattern.test(segment) || filenameRevisionPattern.test(segment)) {
+    strictGenerationPattern.lastIndex = 0;
+    if (strictGenerationPattern.test(segment) || filenameVersionPattern.test(segment) || filenameRevisionPattern.test(segment)) {
       failures.push(`${relative}: internal numbered version/revision file or directory name`);
       return;
     }
@@ -44,9 +46,10 @@ function inspectFilename(target) {
 }
 
 function hasForbiddenNaming(line) {
+  strictGenerationPattern.lastIndex = 0;
   versionPattern.lastIndex = 0;
   revisionPattern.lastIndex = 0;
-  return versionPattern.test(line) || revisionPattern.test(line);
+  return strictGenerationPattern.test(line) || versionPattern.test(line) || revisionPattern.test(line);
 }
 
 function auditableLine(target, line) {
