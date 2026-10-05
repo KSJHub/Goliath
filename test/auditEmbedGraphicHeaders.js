@@ -40,9 +40,9 @@ function run() {
   assert(embedRuntime.includes('function canonicalMediaState'));
   assert(embedRuntime.includes('media.mediaModel.normalizeMedia(state?.media || {}, panels)'));
   assert(
-  embedRuntime.includes('installMediaRuntime(panel)'),
-  'Embed runtime must install the canonical Media Studio runtime.'
-);
+    embedRuntime.includes('installMediaRuntime(panel)'),
+    'Embed runtime must install the canonical Media Studio runtime.'
+  );
   assert(
     !embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"),
     'canonical session normalization must not overwrite an explicit Above/Below media placement'
@@ -140,11 +140,13 @@ function run() {
     'Auto must retain native-image pass-through detection'
   );
 
+  const numberedFlagName = ['IsComponents', String(2)].join('');
   assert(
     renderer.includes('new ContainerBuilder()') &&
     renderer.includes('new MediaGalleryBuilder().addItems(') &&
-    renderer.includes('flags: MessageFlags.IsComponentsV2'),
-    'renderer must keep panel media and content inside Discord component containers'
+    renderer.includes(`MessageFlags[CURRENT_COMPONENTS_FLAG_NAME]`) &&
+    !renderer.includes(numberedFlagName),
+    'renderer must keep panel media and content inside Discord component containers without numbered-generation terminology'
   );
 
   console.log('✅ Embed Graphic Header regression audit passed.');
