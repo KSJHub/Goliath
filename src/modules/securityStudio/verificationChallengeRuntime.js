@@ -103,13 +103,43 @@ function resolveStaffAction(guildId, targetUserId, challengeId, staffUserId, act
 }
 
 function recover(guildId, userId) {
-  const result = verificationChallenges.recover(guildId, userId);
-  const state = sessionState(guildId, userId);
-  return { ...result, session: state };
+  const before = verificationStore.getSession(guildId, userId);
+  if (!before) return { ok: true, changed: false, reason: 'no_session', session: sessionState(guildId, userId) };
+  const challenge = before.activeChallenge || null;
+  let changed = false;
+  let reason = 'healthy';
+
+  if (challenge?.status === 'pending' && verificationChallenges.isExpired(challenge)) {
+    verificationChallenges.expire(guildId, userId, challenge.challengeId);
+    changed = true;
+    reason = 'expired_challenge_closed';
+  } else if (!challenge && before.activeSecurityMethod) {
+    verificationStore.upsertSession(guildId, userId, { activeSecurityMethod: null });
+    changed = true;
+    reason = 'stale_security_marker_cleared';
+  } else if (challenge?.status !== 'pending' && before.activeSecurityMethod) {
+    verificationStore.upsertSession(guildId, userId, { activeSecurityMethod: null });
+    changed = true;
+    reason = 'closed_challenge_marker_cleared';
+  } else if (challenge?.status === 'pending' && before.activeSecurityMethod !== challenge.method) {
+    verificationStore.upsertSession(guildId, userId, { activeSecurityMethod: challenge.method, state: 'verifying' });
+    changed = true;
+    reason = 'challenge_marker_repaired';
+  }
+
+  return { ok: true, changed, reason, session: sessionState(guildId, userId) };
 }
 
 function recoverGuild(guildId) {
-  return verificationChallenges.recoverGuild(guildId);
+  const section = verificationStore.getVerificationSection(guildId);
+  const userIds = Object.keys(section.sessions || {});
+  const results = userIds.map(userId => ({ userId, ...recover(guildId, userId) }));
+  return {
+    ok: true,
+    checked: results.length,
+    repaired: results.filter(result => result.changed).length,
+    results,
+  };
 }
 
 module.exports = {
