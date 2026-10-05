@@ -110,12 +110,12 @@ function getPendingAction(guildId, token) {
 function deletePendingAction(guildId, token) { return db.prepare('DELETE FROM pending_actions WHERE guild_id = ? AND token = ?').run(String(guildId), String(token)).changes > 0; }
 function normalizeDashboardContext(context = {}) { return { view: context.view || 'actions', actionFilter: context.actionFilter || 'all', statusFilter: context.statusFilter || 'all', page: Math.max(0, Math.trunc(Number(context.page) || 0)) }; }
 function buildConfirmCustomId(token, context = DEFAULT_DASHBOARD_CONTEXT) { const c = normalizeDashboardContext(context); return ['mod_confirm_action', token, c.view, c.actionFilter, c.statusFilter, c.page].join(':'); }
-function buildCancelCustomId(targetId, context = DEFAULT_DASHBOARD_CONTEXT) { const c = normalizeDashboardContext(context); return ['mod_cancel_action', targetId || 'none', c.view, c.actionFilter, c.statusFilter, c.page].join(':'); }
+function buildCancelCustomId(targetId, context = DEFAULT_DASHBOARD_CONTEXT, token = null) { const c = normalizeDashboardContext(context); return ['mod_cancel_action', targetId || 'none', c.view, c.actionFilter, c.statusFilter, c.page, token || 'legacy'].join(':'); }
 function buildConfirmRow(confirmId, cancelId) { return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(confirmId).setLabel('⚠️ Confirm').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(cancelId).setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary))]; }
 async function createConfirmation(interaction, targetId, type, payload, message, context = DEFAULT_DASHBOARD_CONTEXT) {
   const normalizedContext = normalizeDashboardContext(context);
   const token = createPendingAction(interaction.guild.id, { moderatorId: interaction.user.id, targetId, type, payload });
-  return safeReply(interaction, { content: message, components: buildConfirmRow(buildConfirmCustomId(token, normalizedContext), buildCancelCustomId(targetId, normalizedContext)), flags: 64 });
+  return safeReply(interaction, { content: message, components: buildConfirmRow(buildConfirmCustomId(token, normalizedContext), buildCancelCustomId(targetId, normalizedContext, token)), flags: 64 });
 }
 function createModerationCase(interaction, targetId, action, reason, metadata = {}, extras = {}) { return createCase({ guildId: interaction.guild.id, userId: targetId, moderatorId: interaction.user.id, action, reason, metadata, actorId: interaction.user.id, ...extras }); }
 async function logAction(interaction, target, action, reason, caseId, metadata = {}, user = null) {
@@ -229,7 +229,7 @@ async function submitBulkModal(interaction, buttonAction) {
   const batchId = `bulk_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`;
   const payload = { ...parsed.payload, bulkBatchId: batchId };
   const token = createPendingAction(interaction.guild.id, { moderatorId: interaction.user.id, type: 'bulk', payload });
-  return safeReply(interaction, { content: buildBulkPreview(payload, batchId), components: buildConfirmRow(buildConfirmCustomId(token, { view: 'tools' })), flags: 64 });
+  return safeReply(interaction, { content: buildBulkPreview(payload, batchId), components: buildConfirmRow(buildConfirmCustomId(token, { view: 'tools' }), buildCancelCustomId('none', { view: 'tools' }, token)), flags: 64 });
 }
 
 async function executeRemoveWarning(interaction, pending, fallbackTarget) {
