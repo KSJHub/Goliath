@@ -15,15 +15,11 @@ const filenameVersionPattern = /(?:^|[._-])[vV][2-9][0-9]*(?=$|[._-])|[A-Za-z0-9
 const filenameRevisionPattern = /(?:phase|revision|rev|version|generation)[ _.-]*[1-9][0-9]*/i;
 const failures = [];
 
-function externalProtocolLine(line) {
-  const value = String(line || '');
-  return value.includes('api.deepl.com/')
-    || value.includes('api-free.deepl.com/')
-    || value.includes('translation.googleapis.com/')
-    || value.includes('googleapis.com/youtube/')
-    || value.includes('graph.facebook.com/')
-    || /\bIP[vV][46]\b/.test(value)
-    || /\bIpv[46]\b/.test(value);
+function stripExternalProtocolTokens(line) {
+  return String(line || '')
+    .replace(/https?:\/\/(?:api(?:-free)?\.deepl\.com|translation\.googleapis\.com|[^\s'"`]*googleapis\.com\/youtube|graph\.facebook\.com)\/[^\s'"`]*/gi, '')
+    .replace(/\bIP[vV][46]\b/g, '')
+    .replace(/\bIpv[46]\b/g, '');
 }
 
 function generatedDependencyLine(target, line) {
@@ -32,10 +28,9 @@ function generatedDependencyLine(target, line) {
   return value.startsWith('"integrity":') || value.startsWith('"resolved":');
 }
 
-function opaqueVectorDataLine(target, line) {
-  if (path.extname(target).toLowerCase() !== '.svg') return false;
-  const value = String(line || '');
-  return /\bd=["'][^"']*[vV][23][^"']*["']/.test(value);
+function stripOpaqueVectorData(target, line) {
+  if (path.extname(target).toLowerCase() !== '.svg') return String(line || '');
+  return String(line || '').replace(/\bd=(["'])[^"']*\1/gi, 'd=""');
 }
 
 function inspectFilename(target) {
@@ -54,6 +49,11 @@ function hasForbiddenNaming(line) {
   return versionPattern.test(line) || revisionPattern.test(line);
 }
 
+function auditableLine(target, line) {
+  if (generatedDependencyLine(target, line)) return '';
+  return stripExternalProtocolTokens(stripOpaqueVectorData(target, line));
+}
+
 function walk(target) {
   if (!fs.existsSync(target)) return;
   const stat = fs.statSync(target);
@@ -69,8 +69,8 @@ function walk(target) {
   const lines = fs.readFileSync(target, 'utf8').split(/\r?\n/);
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    if (!hasForbiddenNaming(line)) continue;
-    if (externalProtocolLine(line) || generatedDependencyLine(target, line) || opaqueVectorDataLine(target, line)) continue;
+    const candidate = auditableLine(target, line);
+    if (!hasForbiddenNaming(candidate)) continue;
     failures.push(`${target}:${index + 1}: ${line.trim().slice(0, 220)}`);
   }
 }
