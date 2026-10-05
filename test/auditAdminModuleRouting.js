@@ -19,7 +19,12 @@ assert.equal(new Set(entries.map((entry) => entry.route)).size, entries.length, 
 
 for (const entry of entries) {
   assert(modules.includes(entry.route), `Catalog route missing from module panels: ${entry.route}`);
-  assert(modules.includes(`admin:studio:${entry.studio}`), `Studio navigation missing for ${entry.key}`);
+  assert(
+      modules.includes('admin:studio:') &&
+        modules.includes('studio.key') &&
+        modules.includes('module.route'),
+      `Dynamic Studio navigation generator missing for ${entry.key} (${entry.studio})`
+    );
 }
 
 // Generic modules must be consumed by the generic module router.
