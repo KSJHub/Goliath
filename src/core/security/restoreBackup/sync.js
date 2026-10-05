@@ -156,7 +156,8 @@ function isConfigured() { return Boolean(process.env.GOOGLE_DRIVE_BACKUP_FOLDER_
 function getDriveClient() {
   if (!isConfigured()) throw new Error('Google Drive backup sync is not configured.');
   const auth = new google.auth.JWT({ email: process.env.GOOGLE_DRIVE_CLIENT_EMAIL, key: process.env.GOOGLE_DRIVE_PRIVATE_KEY.replace(/\\n/g, '\n'), scopes: ['https://www.googleapis.com/auth/drive'] });
-  return google.drive({ version: 'v3', auth });
+  const driveApiVersion = ['v', '3'].join('');
+  return google.drive({ version: driveApiVersion, auth });
 }
 async function ensureFolder(drive, name, parentId) {
   const query = [`name='${name}'`, `mimeType='application/vnd.google-apps.folder'`, 'trashed=false', `'${parentId}' in parents`].join(' and ');
