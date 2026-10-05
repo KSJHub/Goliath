@@ -117,7 +117,7 @@ async function quarantineVerificationMember(guild, userId, reason = 'Verificatio
   if (!quarantine.length) return { ok: false, message: 'Quarantine is required but no usable Quarantine role is configured.' };
   const remove = await fetchRoles(guild, unique([...roleIds(currentSection.settings, 'pending'), ...roleIds(currentSection.settings, 'verifying'), ...roleIds(currentSection.settings, 'verified'), ...roleIds(currentSection.settings, 'auto')]));
   await transitionRoles(member, quarantine, remove, 'Goliath verification quarantine');
-  verificationStore.upsertSession(guild.id, userId, { state: 'quarantined', activeSecurityMethod: null, quarantinedAt: now() });
+  verificationStore.upsertSession(guild.id, userId, { state: 'quarantined', activeSecurityMethod: null, activeChallenge: null, quarantinedAt: now() });
   verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantined', reason });
   verificationStore.incrementAnalytics(guild.id, { quarantined: 1, lastQuarantineAt: now() });
   return { ok: false, quarantined: true, message: 'Member moved to Verification quarantine.' };
@@ -141,6 +141,7 @@ async function resumeVerification(context = {}) {
     if (challengeRuntime.INTERACTIVE_METHODS.has(step)) {
       const active = challengeRuntime.sessionState(guild.id, member.id).activeChallenge;
       const started = active ? { ok: true, pending: true, method: active.method, challenge: active } : challengeRuntime.startStep(guild.id, member.id, step, settings);
+      if (!started?.challenge) return { ok: false, message: started?.message || 'Verification could not start the required security challenge.' };
       return { ok: true, pendingSecurity: true, securityStep: step, challenge: started.challenge, message: step === 'staff_approval' ? 'Security checks passed so far. Waiting for staff approval.' : 'Continue with the next Verification security check.' };
     }
     if (step === 'simple' || step === 'rejoin_history') {
@@ -153,7 +154,19 @@ async function resumeVerification(context = {}) {
       completed.add(step); challengeRuntime.markCompleted(guild.id, member.id, step); continue;
     }
     if (step === 'discord_screening') {
-      if (!hasScreening(guild) || member.pending === true) return { ok: false, pendingSecurity: true, securityStep: step, message: 'Complete Discord Membership Screening before continuing Verification.' };
+      if (!hasScreening(guild)) {
+        if (settings.skipScreeningIfUnavailable === true) {
+          verificationStore.addSecurityHistory(guild.id, member.id, { type: 'discord_screening_skipped', reason: 'unavailable' });
+          completed.add(step);
+          challengeRuntime.markCompleted(guild.id, member.id, step);
+          continue;
+        }
+        return { ok: false, pendingSecurity: true, securityStep: step, message: 'Discord Membership Screening is required by this Verification flow but is not available in this server.' };
+      }
+      if (member.pending === true) {
+        verificationStore.incrementAnalytics(guild.id, { screeningBlocked: 1 });
+        return { ok: false, pendingSecurity: true, securityStep: step, message: 'Complete Discord Membership Screening before continuing Verification.' };
+      }
       completed.add(step); challengeRuntime.markCompleted(guild.id, member.id, step); continue;
     }
     if (step === 'bot_protection') {
