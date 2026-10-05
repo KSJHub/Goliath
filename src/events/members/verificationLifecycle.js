@@ -80,7 +80,7 @@ async function ensureQuarantineFromRoleChange(oldMember, newMember) {
   );
 }
 
-function resetJourneyOnLeave(member) {
+async function resetJourneyOnLeave(member) {
   if (!member?.guild || member.user?.bot) return;
 
   const guildId = member.guild.id;
@@ -95,6 +95,14 @@ function resetJourneyOnLeave(member) {
     previousState: session.state,
     completedSecurity: Array.isArray(session.completedSecurity) ? session.completedSecurity : [],
   });
+
+  if (session.quarantineChannelId) {
+    await verificationQuarantine.closeQuarantineCase(
+      member.guild,
+      member.id,
+      'Verification member left the server',
+    ).catch(error => console.error('[Verification] Quarantine case cleanup failed:', error?.message || error));
+  }
 
   verificationStore.upsertSession(guildId, member.id, {
     state: 'new',
@@ -127,9 +135,9 @@ module.exports = [
   },
   {
     name: 'guildMemberRemove',
-    execute(member) {
+    async execute(member) {
       try {
-        resetJourneyOnLeave(member);
+        await resetJourneyOnLeave(member);
       } catch (error) {
         console.error('[Verification] Leave reset failed:', error?.stack || error?.message || error);
       }
