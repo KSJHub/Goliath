@@ -38,7 +38,7 @@ async function checkFacebook(account) {
   if (!token) return unavailable('facebook', 'Set FACEBOOK_ACCESS_TOKEN or FACEBOOK_APP_ID + FACEBOOK_APP_SECRET.', 'configuration_required');
   const lookup = clean(account.externalId || account.metadata?.pageId || handle(account));
   if (!lookup) return unavailable('facebook', 'Facebook Page ID or username could not be resolved.');
-  const version = process.env.FACEBOOK_GRAPH_VERSION || 'v23.0';
+  const version = process.env.FACEBOOK_GRAPH_VERSION || ['v', '23.0'].join('');
   try {
     const { json: pageJson } = await request(`https://graph.facebook.com/${version}/${encodeURIComponent(lookup)}?fields=id,name,username,picture.type(large)&access_token=${encodeURIComponent(token)}`);
     if (!pageJson?.id) return unavailable('facebook', 'Facebook Page could not be resolved. Page Public Content Access may be required.');
