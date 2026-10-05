@@ -32,7 +32,7 @@ const modInteractions = optionalRequire('mod interactions', '../../core/administ
 const restoreRequestManager = optionalRequire('restore requests', '../../core/security/restoreBackup/requests');
 const statsAdminPanel = optionalRequire('stats admin', '../../modules/utilityStudio/stats/statsPanel');
 const reactionRolesAdminPanel = optionalRequire('reaction roles admin', '../../modules/roleStudio/reactionRoles/reactionRolesPanel');
-const temporaryRolesPanel = optionalRequire('temporary roles', '../../modules/roleStudio/temporaryRoles/temporaryRolesPanel');
+const temporaryRolesPanel = optionalRequire('temporary roles admin', '../../modules/roleStudio/temporaryRoles/temporaryRolesPanel');
 const giveawaysAdminPanel = optionalRequire('giveaways admin', '../../modules/communityStudio/giveaways/giveawaysAdminPanel');
 const starboardPanel = optionalRequire('starboard admin', '../../modules/messageStudio/starboard/starboardPanel');
 const stickyAdminPanel = optionalRequire('sticky admin', '../../modules/messageStudio/sticky/stickyAdminPanel');
@@ -154,37 +154,6 @@ function normalizeBackComponent(component, interaction) {
   return { ...data, custom_id: `admin:studio:${parentStudio}`, label: 'Back', emoji: { name: '⬅️' } };
 }
 function componentId(component) { return component?.custom_id || component?.customId || null; }
-function findComponent(rows, customId) {
-  for (const rowData of rows) { const found = rowData?.components?.find((component) => componentId(component) === customId); if (found) return found; }
-  return null;
-}
-function normalizeVerificationRows(payload, rows) {
-  const title = payload?.embeds?.[0]?.title;
-  if (title === '🔄 Verification · Workflow') {
-    if (rows.length !== 3 || rows[0]?.components?.length !== 3 || rows[1]?.components?.length !== 5) return rows;
-    const workflowButtons = [...rows[0].components, ...rows[1].components];
-    return [{ ...rows[0], components: workflowButtons.slice(0, 4) }, { ...rows[1], components: workflowButtons.slice(4) }, rows[2]];
-  }
-  if (title === '✅ Verification · Overview') {
-    const workflow = findComponent(rows, 'admin:verification:page:workflow');
-    const roles = findComponent(rows, 'admin:verification:page:roles');
-    const messages = findComponent(rows, 'admin:verification:page:messages');
-    const panels = findComponent(rows, 'admin:verification:page:panel');
-    const back = findComponent(rows, 'admin:studio:securityStudio') || findComponent(rows, 'admin:modules');
-    const settings = findComponent(rows, 'admin:verification:page:settings');
-    const requirements = findComponent(rows, 'admin:verification:page:requirements');
-    if (![workflow, roles, messages, panels, back, settings, requirements].every(Boolean)) return rows;
-    const next = { ...workflow, custom_id: 'admin:verification:overview:next', label: 'Next ➡️', style: 2 };
-    return [{ ...rows[0], components: [workflow, roles, messages, panels] }, { ...rows[0], components: [back, settings, requirements, next] }];
-  }
-  if (title === '🎨 Verification · Panel Builder') {
-    const editRow = rows[0]; const publishRow = rows[1]; const savedPanels = findComponent(rows, 'admin:verification:page:saved_panels');
-    const deletePanel = rows[3]?.components?.[0]; const resetDesign = rows[3]?.components?.[1]; const navRow = rows[4];
-    if (editRow?.components?.length !== 4 || publishRow?.components?.length !== 3 || !savedPanels || !deletePanel || !resetDesign || !navRow?.components?.length) return rows;
-    return [editRow, { ...publishRow, components: [...publishRow.components, savedPanels] }, { ...rows[3], components: [deletePanel, resetDesign] }, navRow];
-  }
-  return rows;
-}
 
 function pruneLegacyRoleSelections() { const cutoff = Date.now() - LEGACY_ROLE_TTL_MS; for (const [key, value] of legacyRoleSelections.entries()) if (Number(value?.touchedAt || 0) < cutoff) legacyRoleSelections.delete(key); }
 function legacyRoleKey(interaction, baseId) { return `${interaction?.guildId || interaction?.guild?.id || 'noguild'}:${interaction?.user?.id || 'nouser'}:${baseId}`; }
@@ -204,7 +173,7 @@ function compactModernRolePaginationRows(rows){if(!Array.isArray(rows))return ro
 function prepareLegacyRoleInteraction(interaction){const parsed=parseLegacyRoleId(interaction?.customId);if(!parsed||!interaction?.guild)return false;const rows=interaction.message?.components||[];let sourceComponent=null;for(const actionRow of rows){const rowData=typeof actionRow?.toJSON==='function'?actionRow.toJSON():actionRow;sourceComponent=(rowData?.components||[]).find((component)=>componentId(component)===interaction.customId);if(sourceComponent)break;}const state=legacyRoleState(interaction,parsed.baseId,null);const maxValues=Math.max(1,Number(state.maxValues??sourceComponent?.max_values??1)||1);const selectedNow=(interaction.values||[]).filter((id)=>id!=='__none__').map(String);if(maxValues<=1)state.ids=new Set(selectedNow.slice(0,1));else{const visible=new Set(roleIdsOnLegacyPage(interaction.guild,parsed.page));for(const id of visible)state.ids.delete(id);for(const id of selectedNow)state.ids.add(id);}state.touchedAt=Date.now();const ordered=guildRolesByHierarchy(interaction.guild).map((role)=>role.id).filter((id)=>state.ids.has(id));const limited=ordered.slice(0,maxValues);state.ids=new Set(limited);legacyRoleSelections.set(legacyRoleKey(interaction,parsed.baseId),state);interaction.values=limited;interaction.__goliathLegacyRolePage=parsed.page;interaction.__goliathLegacyRoleBase=parsed.baseId;try{Object.defineProperty(interaction,'isRoleSelectMenu',{value:()=>true,configurable:true});}catch{interaction.isRoleSelectMenu=()=>true;}return true;}
 async function handleLegacyRolePage(interaction){const match=String(interaction?.customId||'').match(/^grole:page:(\d+)$/);if(!match||!interaction?.message)return false;interaction.__goliathLegacyRolePage=Math.max(0,Number.parseInt(match[1],10)||0);const components=interaction.message.components.map((actionRow)=>typeof actionRow?.toJSON==='function'?actionRow.toJSON():actionRow);await interaction.update({components});return true;}
 
-function sanitizeComponentPayload(payload,interaction){if(!payload||typeof payload!=='object')return payload;const sanitizedPayload={...payload,...(Array.isArray(payload.embeds)?{embeds:payload.embeds.map(sanitizeEmbedData)}:{})};if(!Array.isArray(payload.components))return sanitizedPayload;const seen=new Set();const rows=[];for(const actionRow of payload.components){const rowData=typeof actionRow?.toJSON==='function'?actionRow.toJSON():actionRow;const components=Array.isArray(rowData?.components)?rowData.components.map((component)=>normalizeBackComponent(component,interaction)).filter((component)=>{const customId=componentId(component);if(!customId)return true;if(seen.has(customId))return false;seen.add(customId);return true;}):[];if(components.length)rows.push({...rowData,components});}const verifiedRows=normalizeVerificationRows(sanitizedPayload,rows);const roleRows=normalizeLegacyRoleRows(verifiedRows,interaction);return{...sanitizedPayload,components:compactModernRolePaginationRows(roleRows)};}
+function sanitizeComponentPayload(payload,interaction){if(!payload||typeof payload!=='object')return payload;const sanitizedPayload={...payload,...(Array.isArray(payload.embeds)?{embeds:payload.embeds.map(sanitizeEmbedData)}:{})};if(!Array.isArray(payload.components))return sanitizedPayload;const seen=new Set();const rows=[];for(const actionRow of payload.components){const rowData=typeof actionRow?.toJSON==='function'?actionRow.toJSON():actionRow;const components=Array.isArray(rowData?.components)?rowData.components.map((component)=>normalizeBackComponent(component,interaction)).filter((component)=>{const customId=componentId(component);if(!customId)return true;if(seen.has(customId))return false;seen.add(customId);return true;}):[];if(components.length)rows.push({...rowData,components});}const roleRows=normalizeLegacyRoleRows(rows,interaction);return{...sanitizedPayload,components:compactModernRolePaginationRows(roleRows)};}
 function wrapInteractionResponses(interaction){if(!interaction||interaction.__goliathResponsesWrapped)return;interaction.__goliathResponsesWrapped=true;const originals={};for(const methodName of ['reply','update','editReply','followUp'])if(typeof interaction[methodName]==='function')originals[methodName]=interaction[methodName].bind(interaction);for(const methodName of Object.keys(originals)){interaction[methodName]=(payload,...args)=>{const sanitized=sanitizeComponentPayload(payload,interaction);const isPanelPayload=Array.isArray(sanitized?.embeds)||Array.isArray(sanitized?.components);const canReuseModalSource=methodName==='reply'&&interaction.isModalSubmit?.()&&interaction.isFromMessage?.()&&!interaction.deferred&&!interaction.replied&&isPanelPayload&&typeof originals.update==='function';if(canReuseModalSource){const updatePayload={...sanitized};delete updatePayload.ephemeral;delete updatePayload.flags;return originals.update(updatePayload,...args);}return originals[methodName](sanitized,...args);};}}
 const startsWith=(interaction,prefix)=>String(interaction?.customId||'').startsWith(prefix);
 function isVerificationMemberInteraction(interaction){if(!interaction?.isButton?.())return false;return typeof verificationManager?.parseVerifyCustomId==='function'&&Boolean(verificationManager.parseVerifyCustomId(interaction.customId));}
@@ -261,7 +230,7 @@ module.exports={
       if(await callHandler(userPanelInteractions,'handleUserPanelInteraction',interaction))return;
       if(await callHandler(restoreRequestManager,'handleRestoreRequestInteraction',interaction))return;
       if(await callHandler(embedPanel,'handleEmbedInteraction',interaction))return;
-      if(await callHandler(verificationAdminPanel,'handleVerificationInteraction',interaction))return;
+      if(await callHandler(verificationAdminPanel,'handleVerificationAdminInteraction',interaction))return;
       if(await callHandler(automodPanel,'handleAutomodInteraction',interaction))return;
       if(startsWith(interaction,'admin:birthdays')||startsWith(interaction,'birthdays:user:')){await callHandler(birthdaysPanel,'handleBirthdayInteraction',interaction);return;}
       if(startsWith(interaction,'admin:invites')||startsWith(interaction,'invites:')){const invites=loadInvitesAdminPanel();if(!invites)throw invitesAdminPanelError||new Error('Invite Studio handler unavailable.');await invites.handleInviteStudioInteraction(interaction);return;}
