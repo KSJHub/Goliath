@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -18,6 +18,8 @@ const lifecycle = read('./src/events/members/verificationLifecycle.js');
 const risk = read('./src/core/administration/mod/verificationRiskBridge.js');
 const store = read('./src/modules/securityStudio/verificationStore.js');
 const manager = read('./src/modules/securityStudio/verificationManager.js');
+const panel = read('./src/modules/securityStudio/verificationPanel.js');
+const memberIntelligence = read('./src/events/members/memberIntelligence.js');
 
 for (const state of ['new', 'pending', 'verifying', 'verified', 'quarantined', 'review', 'rejected']) {
   contains(store, `'${state}'`, `persistent lifecycle state ${state}`);
@@ -45,7 +47,27 @@ contains(manager, 'discord_screening', 'screening health validation');
 contains(manager, 'risk_based', 'risk health validation');
 contains(manager, 'quarantine', 'quarantine health validation');
 
-const forbiddenGenerationPattern = new RegExp('\\b' + 'v' + '[23]' + '\\b', 'i');
-assert(!forbiddenGenerationPattern.test([flow, quarantine, lifecycle, risk, store, manager].join('\n')), 'Verification source contains forbidden numbered-generation naming.');
+// The canonical Verification admin surface must be the rehauled module.
+for (const section of ['roles', 'security', 'intelligence', 'flow', 'messages', 'logs', 'settings']) {
+  contains(panel, `'${section}'`, `admin section ${section}`);
+  contains(panel, `admin:verification:page:${section}`, `admin navigation ${section}`);
+}
+contains(panel, 'Verification · Front Door', 'new Verification home');
+contains(panel, 'Verification · Security', 'Security control page');
+contains(panel, 'NEW MEMBER → PENDING → VERIFYING → VERIFIED → SERVER', 'canonical member journey');
+contains(panel, 'admin:verification:security:', 'stackable security controls');
+contains(panel, 'admin:verification:intelligence:', 'integrated intelligence controls');
+contains(panel, 'admin:verification:flowSecurity', 'security flow selection');
+contains(panel, 'Verification · Logs', 'Verification logging page');
 
-console.log('\u2705 Verification lifecycle contract audit passed.');
+assert(!panel.includes('Verification · Overview'), 'Legacy Verification Overview must not be reachable from the canonical panel.');
+assert(!panel.includes('admin:verification:page:workflow'), 'Legacy Workflow page must not remain in the canonical panel.');
+assert(!panel.includes('admin:verification:page:requirements'), 'Legacy Requirements page must not remain in the canonical panel.');
+assert(!panel.includes('admin:verification:page:panel'), 'Legacy Panels page must not remain in the canonical panel.');
+assert(!memberIntelligence.includes('verificationIntelligenceExtension'), 'Member Intelligence must not monkey-patch the Verification admin UI.');
+assert(!fs.existsSync('./src/modules/securityStudio/verificationIntelligenceExtension.js'), 'Legacy Verification UI compatibility extension must be removed.');
+
+const forbiddenGenerationPattern = new RegExp('\\b' + 'v' + '[23]' + '\\b', 'i');
+assert(!forbiddenGenerationPattern.test([flow, quarantine, lifecycle, risk, store, manager, panel].join('\n')), 'Verification source contains forbidden numbered-generation naming.');
+
+console.log('Verification lifecycle and admin-surface contract audit passed.');
