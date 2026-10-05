@@ -3,8 +3,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const roots = ['src', 'scripts', 'test'];
-const extensions = new Set(['.js', '.jsx', '.cjs', '.mjs', '.json', '.md', '.txt']);
+const roots = ['.'];
+const extensions = new Set([
+  '.js', '.jsx', '.cjs', '.mjs', '.ts', '.tsx',
+  '.json', '.md', '.txt', '.html', '.css', '.scss',
+  '.yml', '.yaml', '.env', '.ini', '.toml', '.xml', '.svg',
+]);
 const versionPattern = new RegExp('(?:^|[^A-Za-z0-9])([vV][2-9][0-9]*)(?=$|[^A-Za-z0-9])|([A-Za-z_$][A-Za-z0-9_$]*[vV][2-9][0-9]*)', 'g');
 const revisionPattern = new RegExp('(?:^|[^A-Za-z0-9])(?:phase|revision|rev)[ _.-]*[1-9][0-9]*(?=$|[^A-Za-z0-9])|(?:phase|revision|rev)[1-9][0-9]*', 'gi');
 const filenameVersionPattern = /(?:^|[._-])[vV][2-9][0-9]*(?=$|[._-])|[A-Za-z0-9_$][vV][2-9][0-9]*(?=\.|$)/;
@@ -26,6 +30,12 @@ function generatedDependencyLine(target, line) {
   if (path.basename(target) !== 'package-lock.json') return false;
   const value = String(line || '').trim();
   return value.startsWith('"integrity":') || value.startsWith('"resolved":');
+}
+
+function opaqueVectorDataLine(target, line) {
+  if (path.extname(target).toLowerCase() !== '.svg') return false;
+  const value = String(line || '');
+  return /\bd=["'][^"']*[vV][23][^"']*["']/.test(value);
 }
 
 function inspectFilename(target) {
@@ -50,7 +60,7 @@ function walk(target) {
   inspectFilename(target);
   if (stat.isDirectory()) {
     for (const entry of fs.readdirSync(target)) {
-      if (['node_modules', 'dist', '.git'].includes(entry)) continue;
+      if (['node_modules', 'dist', '.git', 'coverage', '.cache'].includes(entry)) continue;
       walk(path.join(target, entry));
     }
     return;
@@ -60,7 +70,7 @@ function walk(target) {
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     if (!hasForbiddenNaming(line)) continue;
-    if (externalProtocolLine(line) || generatedDependencyLine(target, line)) continue;
+    if (externalProtocolLine(line) || generatedDependencyLine(target, line) || opaqueVectorDataLine(target, line)) continue;
     failures.push(`${target}:${index + 1}: ${line.trim().slice(0, 220)}`);
   }
 }
