@@ -711,6 +711,9 @@ function persistAppealNotice(guildId, caseId, notice) {
   const modCase = getCaseById(guildId, caseId);
   if (!modCase) return null;
   const metadata = { ...(modCase.metadata || {}), appealNotice: notice };
+  if (metadata.punishmentReport && typeof metadata.punishmentReport === 'object') {
+    metadata.punishmentReport = { ...metadata.punishmentReport, dmSent: Boolean(notice?.sent), dmError: notice?.error || null };
+  }
   const updatedAt = now();
   const result = db.prepare('UPDATE cases SET metadata = ?, updated_at = ? WHERE guild_id = ? AND case_id = ?').run(JSON.stringify(metadata), updatedAt, String(guildId), Number(caseId));
   if (!result.changes) return null;
