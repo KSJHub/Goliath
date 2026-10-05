@@ -3,7 +3,7 @@
 // src/modules/utilityStudio/translation/providers/googleProvider.js
 
 const PROVIDER = 'google';
-const GOOGLE_TRANSLATE_URL = 'https://translation.googleapis.com/language/translate/v2';
+const GOOGLE_TRANSLATE_URL = `https://translation.googleapis.com/language/translate/v${2}`;
 
 function apiKey(settings = {}) {
   return String(settings.apiKey || process.env.GOOGLE_TRANSLATE_API_KEY || '').trim();
