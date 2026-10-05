@@ -1,0 +1,177 @@
+'use strict';
+
+const { PermissionFlagsBits } = require('discord.js');
+const verificationStore = require('./verificationStore');
+const challengeRuntime = require('./verificationChallengeRuntime');
+
+const SECURITY_MAP = Object.freeze({
+  simple: 'simple',
+  captcha: 'captcha',
+  minigame: 'minigame',
+  account_age: 'accountAge',
+  discord_screening: 'discordScreening',
+  bot_protection: 'botProtection',
+  staff_approval: 'staffApproval',
+  one_time_challenge: 'oneTimeChallenge',
+  risk_based: 'riskBased',
+  rejoin_history: 'rejoinHistory',
+});
+
+const now = () => new Date().toISOString();
+const cleanIds = value => [...new Set((Array.isArray(value) ? value : value ? [value] : []).map(String).filter(Boolean))];
+const roleIds = (settings, key) => cleanIds(settings?.roles?.[key] || []);
+const unique = values => [...new Set(values.filter(Boolean))];
+
+function section(guildId) {
+  const current = verificationStore.getVerificationSection(guildId);
+  return { ...current, settings: verificationStore.normalizeSettings(current.settings || {}) };
+}
+
+function enabledSecurity(settings) {
+  const security = settings.security || {};
+  const ordered = Array.isArray(settings.flow?.orderedSecurity) ? settings.flow.orderedSecurity : [];
+  return unique(ordered.filter(key => SECURITY_MAP[key] && security[SECURITY_MAP[key]] === true));
+}
+
+async function fetchRoles(guild, ids) {
+  const roles = [];
+  for (const id of cleanIds(ids)) {
+    const role = guild.roles.cache.get(id) || await guild.roles.fetch(id).catch(() => null);
+    if (role) roles.push(role);
+  }
+  return roles;
+}
+
+function botCanManageRole(guild, role) {
+  const bot = guild.members.me || guild.members.cache.get(guild.client.user.id);
+  return Boolean(bot && role && !role.managed && role.id !== guild.id && bot.permissions.has(PermissionFlagsBits.ManageRoles) && bot.roles.highest.position > role.position);
+}
+
+async function transitionRoles(member, addRoles, removeRoles, reason) {
+  const add = [...new Map(addRoles.filter(Boolean).map(role => [role.id, role])).values()];
+  const remove = [...new Map(removeRoles.filter(Boolean).map(role => [role.id, role])).values()].filter(role => !add.some(candidate => candidate.id === role.id));
+  for (const role of [...add, ...remove]) {
+    const changeNeeded = add.includes(role) ? !member.roles.cache.has(role.id) : member.roles.cache.has(role.id);
+    if (changeNeeded && !botCanManageRole(member.guild, role)) throw new Error(`Goliath cannot manage the ${role.name} role.`);
+  }
+  const added = [];
+  const removed = [];
+  try {
+    for (const role of add) if (!member.roles.cache.has(role.id)) { await member.roles.add(role, reason); added.push(role); }
+    for (const role of remove) if (member.roles.cache.has(role.id)) { await member.roles.remove(role, reason); removed.push(role); }
+    return { added, removed };
+  } catch (error) {
+    for (const role of added.reverse()) await member.roles.remove(role, 'Goliath verification rollback').catch(() => null);
+    for (const role of removed.reverse()) await member.roles.add(role, 'Goliath verification rollback').catch(() => null);
+    throw error;
+  }
+}
+
+function accountAgeDays(member) {
+  return (Date.now() - Number(member?.user?.createdTimestamp || Date.now())) / 86400000;
+}
+
+function hasScreening(guild) {
+  return Boolean(guild?.features?.includes?.('MEMBER_VERIFICATION_GATE_ENABLED'));
+}
+
+async function complete(member, currentSection) {
+  const settings = currentSection.settings;
+  const verified = await fetchRoles(member.guild, roleIds(settings, 'verified'));
+  if (!verified.length) return { ok: false, message: 'Verification cannot complete because no usable Verified role is configured.' };
+  const auto = await fetchRoles(member.guild, roleIds(settings, 'auto'));
+  const remove = await fetchRoles(member.guild, unique([...roleIds(settings, 'pending'), ...roleIds(settings, 'verifying'), ...roleIds(settings, 'quarantine')]));
+  await transitionRoles(member, [...verified, ...auto], remove, 'Goliath verification completed');
+  verificationStore.clearAttempts(member.guild.id, member.id);
+  verificationStore.upsertSession(member.guild.id, member.id, {
+    state: 'verified',
+    activeSecurityMethod: null,
+    activeChallenge: null,
+    completedSecurity: enabledSecurity(settings),
+    verifiedAt: now(),
+  });
+  verificationStore.addSecurityHistory(member.guild.id, member.id, { type: 'verified', roles: verified.map(role => role.id), resumedFlow: true });
+  verificationStore.incrementAnalytics(member.guild.id, { verified: 1, lastVerificationAt: now() });
+  return { ok: true, complete: true, message: 'Verification complete. Welcome to the server.' };
+}
+
+async function recordVerificationFailure(guild, userId, step, reason) {
+  const currentSection = section(guild.id);
+  const member = await guild.members.fetch(userId).catch(() => null);
+  const attempt = verificationStore.recordAttempt(guild.id, userId, { failed: true, step, reason });
+  verificationStore.addSecurityHistory(guild.id, userId, { type: 'security_failed', step, reason, failed: Number(attempt?.failed || 0) });
+  verificationStore.incrementAnalytics(guild.id, { failed: 1, lastFailedAt: now() });
+  verificationStore.upsertSession(guild.id, userId, { state: 'verifying', failedAttempts: Number(attempt?.failed || 0), activeSecurityMethod: null });
+  const limit = Number(currentSection.settings.security?.maximumFailedAttempts || 5);
+  if (member && currentSection.settings.security?.quarantineOnLimit !== false && currentSection.settings.quarantine?.enabled !== false && limit > 0 && Number(attempt?.failed || 0) >= limit) {
+    return quarantineVerificationMember(guild, userId, reason);
+  }
+  return { ok: false, failed: Number(attempt?.failed || 0), attemptsRemaining: Math.max(0, limit - Number(attempt?.failed || 0)), message: reason };
+}
+
+async function quarantineVerificationMember(guild, userId, reason = 'Verification security policy') {
+  const currentSection = section(guild.id);
+  const member = await guild.members.fetch(userId).catch(() => null);
+  if (!member) return { ok: false, message: 'Verification member is no longer available.' };
+  const quarantine = await fetchRoles(guild, roleIds(currentSection.settings, 'quarantine'));
+  if (!quarantine.length) return { ok: false, message: 'Quarantine is required but no usable Quarantine role is configured.' };
+  const remove = await fetchRoles(guild, unique([...roleIds(currentSection.settings, 'pending'), ...roleIds(currentSection.settings, 'verifying'), ...roleIds(currentSection.settings, 'verified'), ...roleIds(currentSection.settings, 'auto')]));
+  await transitionRoles(member, quarantine, remove, 'Goliath verification quarantine');
+  verificationStore.upsertSession(guild.id, userId, { state: 'quarantined', activeSecurityMethod: null, quarantinedAt: now() });
+  verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantined', reason });
+  verificationStore.incrementAnalytics(guild.id, { quarantined: 1, lastQuarantineAt: now() });
+  return { ok: false, quarantined: true, message: 'Member moved to Verification quarantine.' };
+}
+
+async function resumeVerification(context = {}) {
+  const guild = context.guild;
+  const member = context.member || await guild?.members?.fetch?.(context.user?.id || context.userId).catch(() => null);
+  if (!guild || !member) return { ok: false, message: 'Verification member is unavailable.' };
+  const currentSection = section(guild.id);
+  const settings = currentSection.settings;
+  const session = verificationStore.getSession(guild.id, member.id) || {};
+  if (session.state === 'verified') return { ok: true, complete: true, message: 'You are already verified.' };
+  if (session.state === 'quarantined') return { ok: false, quarantined: true, message: 'Verification is awaiting staff review.' };
+
+  const completed = new Set([...(Array.isArray(session.completedSecurity) ? session.completedSecurity : []), ...(Array.isArray(context.completedSecurity) ? context.completedSecurity : [])]);
+  verificationStore.upsertSession(guild.id, member.id, { state: 'verifying', completedSecurity: [...completed] });
+
+  for (const step of enabledSecurity(settings)) {
+    if (completed.has(step)) continue;
+    if (challengeRuntime.INTERACTIVE_METHODS.has(step)) {
+      const active = challengeRuntime.sessionState(guild.id, member.id).activeChallenge;
+      const started = active ? { ok: true, pending: true, method: active.method, challenge: active } : challengeRuntime.startStep(guild.id, member.id, step, settings);
+      return { ok: true, pendingSecurity: true, securityStep: step, challenge: started.challenge, message: step === 'staff_approval' ? 'Security checks passed so far. Waiting for staff approval.' : 'Continue with the next Verification security check.' };
+    }
+    if (step === 'simple' || step === 'rejoin_history') {
+      completed.add(step);
+      challengeRuntime.markCompleted(guild.id, member.id, step);
+      continue;
+    }
+    if (step === 'account_age') {
+      if (accountAgeDays(member) < Number(settings.security?.minimumAccountAgeDays || 0)) return recordVerificationFailure(guild, member.id, step, 'Discord account does not meet the configured minimum age.');
+      completed.add(step); challengeRuntime.markCompleted(guild.id, member.id, step); continue;
+    }
+    if (step === 'discord_screening') {
+      if (!hasScreening(guild) || member.pending === true) return { ok: false, pendingSecurity: true, securityStep: step, message: 'Complete Discord Membership Screening before continuing Verification.' };
+      completed.add(step); challengeRuntime.markCompleted(guild.id, member.id, step); continue;
+    }
+    if (step === 'bot_protection') {
+      if (member.user?.bot) return recordVerificationFailure(guild, member.id, step, 'Bot account cannot use human Verification.');
+      completed.add(step); challengeRuntime.markCompleted(guild.id, member.id, step); continue;
+    }
+    if (step === 'risk_based') {
+      if (settings.intelligence?.enabled !== true && settings.flow?.failClosed !== false) return { ok: false, message: 'Verification Intelligence is required for Risk-Based Security but is unavailable.' };
+      completed.add(step); challengeRuntime.markCompleted(guild.id, member.id, step); continue;
+    }
+    return { ok: false, message: `Unsupported Verification security method: ${step}.` };
+  }
+  return complete(member, currentSection);
+}
+
+module.exports = {
+  enabledSecurity,
+  resumeVerification,
+  recordVerificationFailure,
+  quarantineVerificationMember,
+};
