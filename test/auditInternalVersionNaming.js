@@ -6,7 +6,9 @@ const path = require('node:path');
 const roots = ['src', 'scripts', 'test'];
 const extensions = new Set(['.js', '.jsx', '.cjs', '.mjs', '.json', '.md', '.txt']);
 const versionPattern = new RegExp('(?:^|[^A-Za-z0-9])([vV][2-9][0-9]*)(?=$|[^A-Za-z0-9])|([A-Za-z_$][A-Za-z0-9_$]*[vV][2-9][0-9]*)', 'g');
+const revisionPattern = new RegExp('(?:^|[^A-Za-z0-9])(?:phase|revision|rev)[ _.-]*[1-9][0-9]*(?=$|[^A-Za-z0-9])|(?:phase|revision|rev)[1-9][0-9]*', 'gi');
 const filenameVersionPattern = /(?:^|[._-])[vV][2-9][0-9]*(?=$|[._-])|[A-Za-z0-9_$][vV][2-9][0-9]*(?=\.|$)/;
+const filenameRevisionPattern = /(?:phase|revision|rev)[ _.-]*[1-9][0-9]*/i;
 const failures = [];
 
 function externalProtocolLine(line) {
@@ -29,11 +31,17 @@ function generatedDependencyLine(target, line) {
 function inspectFilename(target) {
   const relative = path.relative(process.cwd(), target);
   for (const segment of relative.split(path.sep)) {
-    if (filenameVersionPattern.test(segment)) {
-      failures.push(`${relative}: internal version-suffixed file or directory name`);
+    if (filenameVersionPattern.test(segment) || filenameRevisionPattern.test(segment)) {
+      failures.push(`${relative}: internal numbered version/revision file or directory name`);
       return;
     }
   }
+}
+
+function hasForbiddenNaming(line) {
+  versionPattern.lastIndex = 0;
+  revisionPattern.lastIndex = 0;
+  return versionPattern.test(line) || revisionPattern.test(line);
 }
 
 function walk(target) {
@@ -51,8 +59,7 @@ function walk(target) {
   const lines = fs.readFileSync(target, 'utf8').split(/\r?\n/);
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    versionPattern.lastIndex = 0;
-    if (!versionPattern.test(line)) continue;
+    if (!hasForbiddenNaming(line)) continue;
     if (externalProtocolLine(line) || generatedDependencyLine(target, line)) continue;
     failures.push(`${target}:${index + 1}: ${line.trim().slice(0, 220)}`);
   }
@@ -61,7 +68,7 @@ function walk(target) {
 for (const root of roots) walk(root);
 
 if (failures.length) {
-  console.error('❌ Internal version-suffixed Goliath naming detected:');
+  console.error('❌ Internal numbered version/revision Goliath naming detected:');
   for (const failure of failures) console.error(`  ${failure}`);
   process.exit(1);
 }
