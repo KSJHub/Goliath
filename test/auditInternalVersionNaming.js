@@ -17,7 +17,9 @@ function externalProtocolLine(line) {
     || value.includes('googleapis.com/youtube/')
     || value.includes('graph.facebook.com/')
     || value.includes("version: '" + 'v' + "3'")
-    || value.includes('MessageFlags.IsComponents');
+    || value.includes('MessageFlags.IsComponents')
+    || /\bIP[vV][46]\b/.test(value)
+    || /\bIpv[46]\b/.test(value);
 }
 
 function generatedDependencyLine(target, line) {
