@@ -3,6 +3,7 @@
 const verificationStore = require('../../modules/securityStudio/verificationStore');
 const verificationFlow = require('../../modules/securityStudio/verificationFlowContinuation');
 const challengeInteractions = require('../../modules/securityStudio/verificationChallengeInteractions');
+const verificationQuarantine = require('../../modules/securityStudio/verificationQuarantine');
 
 function settingsFor(guildId) {
   const section = verificationStore.getVerificationSection(guildId);
@@ -56,6 +57,29 @@ async function resumeAfterScreening(oldMember, newMember) {
   await notifyContinuation(newMember, result);
 }
 
+async function ensureQuarantineFromRoleChange(oldMember, newMember) {
+  if (!newMember?.guild || newMember.user?.bot) return;
+
+  const settings = settingsFor(newMember.guild.id);
+  if (settings.quarantine?.enabled === false) return;
+
+  const quarantineRoleIds = Array.isArray(settings.roles?.quarantine) ? settings.roles.quarantine.map(String) : [];
+  if (!quarantineRoleIds.length) return;
+
+  const newlyQuarantined = quarantineRoleIds.some(roleId =>
+    !oldMember?.roles?.cache?.has?.(roleId) && newMember.roles?.cache?.has?.(roleId));
+  if (!newlyQuarantined) return;
+
+  const session = verificationStore.getSession(newMember.guild.id, newMember.id);
+  if (!session || session.state !== 'quarantined') return;
+
+  await verificationQuarantine.ensureQuarantineCase(
+    newMember.guild,
+    newMember,
+    'Verification quarantine threshold or staff action',
+  );
+}
+
 function resetJourneyOnLeave(member) {
   if (!member?.guild || member.user?.bot) return;
 
@@ -82,6 +106,7 @@ function resetJourneyOnLeave(member) {
     startedAt: null,
     verifiedAt: null,
     quarantinedAt: null,
+    quarantineChannelId: null,
     leftAt: new Date().toISOString(),
   });
 
@@ -94,8 +119,9 @@ module.exports = [
     async execute(oldMember, newMember) {
       try {
         await resumeAfterScreening(oldMember, newMember);
+        await ensureQuarantineFromRoleChange(oldMember, newMember);
       } catch (error) {
-        console.error('[Verification] Screening continuation failed:', error?.stack || error?.message || error);
+        console.error('[Verification] Member lifecycle continuation failed:', error?.stack || error?.message || error);
       }
     },
   },
@@ -112,4 +138,5 @@ module.exports = [
 ];
 
 module.exports.resumeAfterScreening = resumeAfterScreening;
+module.exports.ensureQuarantineFromRoleChange = ensureQuarantineFromRoleChange;
 module.exports.resetJourneyOnLeave = resetJourneyOnLeave;
