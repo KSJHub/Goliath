@@ -42,12 +42,6 @@ function buildAnswerModal(userId, challenge) {
 }
 
 function parseAnswerModalId(customId = '') {
-  const parts = clean(customId).split(':');
-  if (parts.length !== 5 || parts[0] !== 'verify' || parts[1] !== 'answer') return null;
-  return { userId: parts[2], challengeId: `${parts[3]}:${parts[4]}` };
-}
-
-function parseAnswerModalIdSafe(customId = '') {
   const prefix = `${MODAL_PREFIX}:`;
   const value = clean(customId);
   if (!value.startsWith(prefix)) return null;
@@ -74,9 +68,7 @@ function challengeEmbed(challenge, member = null) {
 
 function memberChallengePayload(userId, challenge) {
   if (!challenge) return { content: '❌ No active Verification challenge exists.', components: [] };
-  if (challenge.method === 'staff_approval') {
-    return { embeds: [challengeEmbed(challenge)], content: '⏳ Verification is waiting for a member of staff.', components: [] };
-  }
+  if (challenge.method === 'staff_approval') return { embeds: [challengeEmbed(challenge)], content: '⏳ Verification is waiting for a member of staff.', components: [] };
   const button = new ButtonBuilder()
     .setCustomId(runtime.buildMemberActionId(userId, challenge.challengeId))
     .setLabel(challenge.method === 'minigame' ? 'Answer Mini-game' : 'Enter Answer')
@@ -101,15 +93,37 @@ function isStaff(member, settings = {}) {
   return configured.some(roleId => member.roles?.cache?.has?.(String(roleId)));
 }
 
-async function maybeResumeFlow(interaction, result, manager) {
+async function maybeResumeFlow(interaction, result, manager, targetUserId = null) {
   if (!result?.resumeFlow || typeof manager?.resumeVerification !== 'function') return null;
+  const userId = clean(targetUserId || interaction.user?.id);
+  const member = await interaction.guild.members.fetch(userId).catch(() => userId === clean(interaction.user?.id) ? interaction.member : null);
+  if (!member) return { ok: false, message: 'Verification member is no longer available.' };
   return manager.resumeVerification({
     guild: interaction.guild,
     guildId: interaction.guildId,
-    member: await interaction.guild.members.fetch(interaction.user.id).catch(() => interaction.member),
-    user: interaction.user,
+    member,
+    user: member.user,
     completedSecurity: result.completedSecurity,
   });
+}
+
+async function recordTerminalFailure(interaction, parsed, result, manager) {
+  if (!result?.recordFailure) return null;
+  if (typeof manager?.recordVerificationFailure === 'function') {
+    return manager.recordVerificationFailure(interaction.guild, parsed.userId, result.challenge?.method || 'challenge', 'Verification security challenge failed');
+  }
+  verificationStore.recordAttempt(interaction.guildId, parsed.userId, {
+    failed: true,
+    step: result.challenge?.method || 'challenge',
+    reason: 'Verification security challenge failed',
+  });
+  verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, {
+    type: 'security_failed',
+    step: result.challenge?.method || 'challenge',
+    reason: 'Verification security challenge failed',
+  });
+  verificationStore.incrementAnalytics(interaction.guildId, { failed: 1, lastFailedAt: new Date().toISOString() });
+  return null;
 }
 
 async function handleMemberAction(interaction, parsed) {
@@ -121,6 +135,10 @@ async function handleMemberAction(interaction, parsed) {
   const challenge = state.activeChallenge;
   if (!challenge || challenge.challengeId !== parsed.challengeId) {
     await interaction.reply({ content: '❌ This Verification challenge is no longer active.', flags: MessageFlags.Ephemeral });
+    return true;
+  }
+  if (runtime.recover(interaction.guildId, parsed.userId)?.repaired && !runtime.sessionState(interaction.guildId, parsed.userId).activeChallenge) {
+    await interaction.reply({ content: '❌ This Verification challenge has expired. Start Verification again.', flags: MessageFlags.Ephemeral });
     return true;
   }
   await interaction.showModal(buildAnswerModal(parsed.userId, challenge));
@@ -135,7 +153,8 @@ async function handleAnswerModal(interaction, parsed, manager) {
   const answer = interaction.fields.getTextInputValue(ANSWER_FIELD_ID);
   const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
   if (!result.ok) {
-    const message = result.reason === 'challenge_expired' ? '⏱️ This challenge expired. Start Verification again.' : result.complete ? '❌ That answer was incorrect and this challenge has ended.' : '❌ That answer was incorrect. Try again.';
+    await recordTerminalFailure(interaction, parsed, result, manager);
+    const message = result.reason === 'expired' ? '⏱️ This challenge expired. Start Verification again.' : result.complete ? '❌ That answer was incorrect and this challenge has ended.' : '❌ That answer was incorrect. Try again.';
     await interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
     return true;
   }
@@ -160,16 +179,21 @@ async function handleStaffAction(interaction, parsed, manager) {
     return true;
   }
   const result = runtime.resolveStaffAction(interaction.guildId, parsed.userId, parsed.challengeId, interaction.user.id, parsed.action);
-  if (!result.ok) {
+  if (!result.complete || !result.action) {
     await interaction.reply({ content: `❌ Staff action failed: ${result.reason || 'challenge unavailable'}.`, flags: MessageFlags.Ephemeral });
     return true;
   }
-  if (result.quarantine && typeof manager?.quarantineVerificationMember === 'function') {
-    await manager.quarantineVerificationMember(interaction.guild, parsed.userId, 'Quarantined by Verification staff approval');
-  } else if (result.recordFailure && typeof manager?.recordVerificationFailure === 'function') {
-    await manager.recordVerificationFailure(interaction.guild, parsed.userId, 'staff_approval', 'Rejected by Verification staff');
+  if (result.quarantine) {
+    if (typeof manager?.quarantineVerificationMember === 'function') await manager.quarantineVerificationMember(interaction.guild, parsed.userId, 'Quarantined by Verification staff approval');
+    else verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'quarantined', quarantinedAt: new Date().toISOString() });
+  } else if (result.recordFailure) {
+    if (typeof manager?.recordVerificationFailure === 'function') await manager.recordVerificationFailure(interaction.guild, parsed.userId, 'staff_approval', 'Rejected by Verification staff');
+    else {
+      verificationStore.recordAttempt(interaction.guildId, parsed.userId, { failed: true, step: 'staff_approval', reason: 'Rejected by Verification staff' });
+      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'security_failed', step: 'staff_approval', reason: 'Rejected by Verification staff', staffUserId: clean(interaction.user.id) });
+    }
   } else {
-    await maybeResumeFlow({ ...interaction, user: { id: parsed.userId } }, result, manager);
+    await maybeResumeFlow(interaction, result, manager, parsed.userId);
   }
   await interaction.reply({ content: `✅ Verification staff action recorded: **${parsed.action}**.`, flags: MessageFlags.Ephemeral });
   return true;
@@ -178,7 +202,7 @@ async function handleStaffAction(interaction, parsed, manager) {
 async function handleVerificationChallengeInteraction(interaction, manager = null) {
   const customId = clean(interaction?.customId);
   if (!customId.startsWith('verify:')) return false;
-  const modal = parseAnswerModalIdSafe(customId);
+  const modal = parseAnswerModalId(customId);
   if (modal && interaction.isModalSubmit?.()) return handleAnswerModal(interaction, modal, manager);
   const parsed = runtime.parseActionId(customId);
   if (!parsed) return false;
@@ -192,7 +216,7 @@ module.exports = {
   ANSWER_FIELD_ID,
   METHOD_LABELS,
   buildAnswerModal,
-  parseAnswerModalId: parseAnswerModalIdSafe,
+  parseAnswerModalId,
   challengeEmbed,
   memberChallengePayload,
   staffChallengePayload,
