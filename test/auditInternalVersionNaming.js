@@ -6,6 +6,7 @@ const path = require('node:path');
 const roots = ['src', 'scripts', 'test'];
 const extensions = new Set(['.js', '.jsx', '.cjs', '.mjs', '.json', '.md', '.txt']);
 const versionPattern = new RegExp('(?:^|[^A-Za-z0-9])([vV][2-9][0-9]*)(?=$|[^A-Za-z0-9])|([A-Za-z_$][A-Za-z0-9_$]*[vV][2-9][0-9]*)', 'g');
+const filenameVersionPattern = /(?:^|[._-])[vV][2-9][0-9]*(?=$|[._-])|[A-Za-z0-9_$][vV][2-9][0-9]*(?=\.|$)/;
 const failures = [];
 
 function externalProtocolLine(line) {
@@ -19,9 +20,26 @@ function externalProtocolLine(line) {
     || value.includes('MessageFlags.IsComponents');
 }
 
+function generatedDependencyLine(target, line) {
+  if (path.basename(target) !== 'package-lock.json') return false;
+  const value = String(line || '').trim();
+  return value.startsWith('"integrity":') || value.startsWith('"resolved":');
+}
+
+function inspectFilename(target) {
+  const relative = path.relative(process.cwd(), target);
+  for (const segment of relative.split(path.sep)) {
+    if (filenameVersionPattern.test(segment)) {
+      failures.push(`${relative}: internal version-suffixed file or directory name`);
+      return;
+    }
+  }
+}
+
 function walk(target) {
   if (!fs.existsSync(target)) return;
   const stat = fs.statSync(target);
+  inspectFilename(target);
   if (stat.isDirectory()) {
     for (const entry of fs.readdirSync(target)) {
       if (['node_modules', 'dist', '.git'].includes(entry)) continue;
@@ -35,7 +53,7 @@ function walk(target) {
     const line = lines[index];
     versionPattern.lastIndex = 0;
     if (!versionPattern.test(line)) continue;
-    if (externalProtocolLine(line)) continue;
+    if (externalProtocolLine(line) || generatedDependencyLine(target, line)) continue;
     failures.push(`${target}:${index + 1}: ${line.trim().slice(0, 220)}`);
   }
 }
