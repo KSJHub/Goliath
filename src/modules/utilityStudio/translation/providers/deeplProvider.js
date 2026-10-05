@@ -3,8 +3,9 @@
 // src/modules/utilityStudio/translation/providers/deeplProvider.js
 
 const PROVIDER = 'deepl';
-const FREE_URL = 'https://api-free.deepl.com/v2/translate';
-const PRO_URL = 'https://api.deepl.com/v2/translate';
+const API_PATH = `/v${2}/translate`;
+const FREE_URL = `https://api-free.deepl.com${API_PATH}`;
+const PRO_URL = `https://api.deepl.com${API_PATH}`;
 
 function apiKey(settings = {}) {
   return String(settings.apiKey || process.env.DEEPL_API_KEY || '').trim();
