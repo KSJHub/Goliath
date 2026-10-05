@@ -67,7 +67,7 @@ function run() {
   assert(renderer.includes('forcedStaticGalleryAttachment') && renderer.includes("galleryHeaderType(item) === 'image'"), 'Image mode must force the static-image processing path');
   assert(renderer.includes('nativeImageShouldPassThrough(') && renderer.includes('probe.contentType'), 'Auto must retain native-image pass-through detection');
 
-  const currentFlagName = ['IsComponents', String(2)].join('');
+  const currentFlagName = ['IsComponentsV', String(2)].join('');
   assert(
     renderer.includes('new ContainerBuilder()') &&
     renderer.includes('new MediaGalleryBuilder().addItems(') &&
