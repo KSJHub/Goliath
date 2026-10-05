@@ -232,18 +232,18 @@ module.exports={
       if(await callHandler(embedPanel,'handleEmbedInteraction',interaction))return;
       if(await callHandler(verificationAdminPanel,'handleVerificationAdminInteraction',interaction))return;
       if(await callHandler(automodPanel,'handleAutomodInteraction',interaction))return;
-      if(startsWith(interaction,'admin:birthdays')||startsWith(interaction,'birthdays:user:')){await callHandler(birthdaysPanel,'handleBirthdayInteraction',interaction);return;}
+      if((startsWith(interaction,'admin:birthdays')||startsWith(interaction,'birthdays:user:'))&&await callHandler(birthdaysPanel,'handleBirthdayInteraction',interaction))return;
       if(startsWith(interaction,'admin:invites')||startsWith(interaction,'invites:')){const invites=loadInvitesAdminPanel();if(!invites)throw invitesAdminPanelError||new Error('Invite Studio handler unavailable.');await invites.handleInviteStudioInteraction(interaction);return;}
-      if(startsWith(interaction,'admin:social')){await callHandler(socialAdminPanel,'handleSocialStudioInteraction',interaction);return;}
+      if(startsWith(interaction,'admin:social')&&await callHandler(socialAdminPanel,'handleInteraction',interaction))return;
       if(startsWith(interaction,'social:creator:')){await callHandler(socialCreatorActionCompat,'handleCreatorInteraction',interaction);return;}
-      if(startsWith(interaction,'admin:autoRoles')){await callHandler(autorolesPanel,'handleAutoRolesInteraction',interaction);return;}
-      if(startsWith(interaction,'admin:temporaryRoles')){await callHandler(temporaryRolesPanel,'handleTemporaryRolesInteraction',interaction);return;}
-      if(startsWith(interaction,'admin:timedRoles')){await callHandler(timedRolesPanel,'handleTimedRolesInteraction',interaction);return;}
-      if(startsWith(interaction,'admin:welcome')){await callHandler(welcomePanel,'handleWelcomeInteraction',interaction);return;}
-      if(startsWith(interaction,'admin:goodbye')){await callHandler(goodbyePanel,'handleGoodbyeInteraction',interaction);return;}
-      if(startsWith(interaction,'admin:reactionRoles')){await callHandler(reactionRolesAdminPanel,'handleReactionRolesAdminInteraction',interaction);return;}
-      if(startsWith(interaction,'admin:schedule')){await callHandler(schedulePanel,'handleScheduleAdminInteraction',interaction);return;}
-      if(startsWith(interaction,'schedule:rsvp:')){await callHandler(scheduleDeployment,'handleMemberInteraction',interaction);return;}
+      if(startsWith(interaction,'admin:autoRoles')&&await callHandler(autorolesPanel,'handleAutoRolesInteraction',interaction))return;
+      if(startsWith(interaction,'admin:temporaryRoles')&&await callHandler(temporaryRolesPanel,'handleTemporaryRolesInteraction',interaction))return;
+      if(startsWith(interaction,'admin:timedRoles')&&await callHandler(timedRolesPanel,'handleTimedRolesInteraction',interaction))return;
+      if(startsWith(interaction,'admin:welcome')&&await callHandler(welcomePanel,'handleWelcomeInteraction',interaction))return;
+      if(startsWith(interaction,'admin:goodbye')&&await callHandler(goodbyePanel,'handleGoodbyeInteraction',interaction))return;
+      if(startsWith(interaction,'admin:reactionRoles')&&await callHandler(reactionRolesAdminPanel,'handleReactionRolesAdminInteraction',interaction))return;
+      if(startsWith(interaction,'admin:schedule')&&await callHandler(schedulePanel,'handleScheduleAdminInteraction',interaction))return;
+      if(startsWith(interaction,'schedule:rsvp:')&&await callHandler(scheduleDeployment,'handleMemberInteraction',interaction))return;
       if(await callHandler(statsAdminPanel,'handleStatsAdminInteraction',interaction))return;
       if(await callHandler(suggestionsInteractions,'handleSuggestionsAdminInteraction',interaction))return;
       if(await callHandler(giveawaysAdminPanel,'handleGiveawaysAdminInteraction',interaction))return;
@@ -252,6 +252,7 @@ module.exports={
       if(await callHandler(starboardPanel,'handleStarboardAdminInteraction',interaction))return;
       if(await callHandler(stickyAdminPanel,'handleStickyAdminInteraction',interaction))return;
       if(await callHandler(levelingInteractions,'handleLevelingInteraction',interaction))return;
+      if(await callHandler(moduleAdminPanels,'handleModuleAdminInteraction',interaction))return;
       if(await callHandler(adminPanel,'handleAdminNavigation',interaction))return;
       if(await callHandler(duplicator,'handleInteraction',interaction))return;
       if(interaction.isButton?.()&&await callHandler(tempVoiceInteractionHandler,'handleTempVoiceInteraction',interaction,client))return;
