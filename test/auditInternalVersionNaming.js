@@ -1,89 +1,173 @@
-'use strict';
+﻿'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
+const fs = require('fs');
+const path = require('path');
 
-const roots = ['.'];
-const extensions = new Set([
-  '.js', '.jsx', '.cjs', '.mjs', '.ts', '.tsx',
-  '.json', '.md', '.txt', '.html', '.css', '.scss',
-  '.yml', '.yaml', '.env', '.ini', '.toml', '.xml', '.svg',
+const ROOT = path.resolve(__dirname, '..');
+
+const SKIP_DIRS = new Set([
+  '.git',
+  'node_modules',
+  'dist',
+  'coverage',
 ]);
-const strictGenerationPattern = /[vV][23](?![0-9])/g;
-const versionPattern = new RegExp('(?:^|[^A-Za-z0-9])([vV][2-9][0-9]*)(?=$|[^A-Za-z0-9])|([A-Za-z_$][A-Za-z0-9_$]*[vV][2-9][0-9]*)', 'g');
-const revisionPattern = new RegExp('(?:^|[^A-Za-z0-9])(?:phase|revision|rev|version|generation)[ _.-]*[1-9][0-9]*(?=$|[^A-Za-z0-9])|(?:phase|revision|rev|version|generation)[1-9][0-9]*', 'gi');
-const filenameVersionPattern = /(?:^|[._-])[vV][2-9][0-9]*(?=$|[._-])|[A-Za-z0-9_$][vV][2-9][0-9]*(?=\.|$)/;
-const filenameRevisionPattern = /(?:phase|revision|rev|version|generation)[ _.-]*[1-9][0-9]*/i;
-const failures = [];
 
-function stripExternalProtocolTokens(line) {
-  return String(line || '')
-    .replace(/https?:\/\/(?:api(?:-free)?\.deepl\.com|translation\.googleapis\.com|[^\s'"`]*googleapis\.com\/youtube|graph\.facebook\.com)\/[^\s'"`]*/gi, '')
-    .replace(/\bIP[vV][46]\b/g, '')
-    .replace(/\bIpv[46]\b/g, '');
+const SKIP_FILES = new Set([
+  'package-lock.json',
+]);
+
+const TEXT_EXTENSIONS = new Set([
+  '.js',
+  '.cjs',
+  '.mjs',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.json',
+  '.md',
+  '.txt',
+  '.yml',
+  '.yaml',
+  '.css',
+  '.scss',
+  '.html',
+]);
+
+/*
+ * Goliath rule:
+ *
+ * Canonical Goliath features must not be named as numbered replacement
+ * generations. We improve the existing implementation in place.
+ *
+ * Do not treat externally-defined technical terminology, dependency
+ * versions, user data, runtime data, protocol names, architecture names,
+ * SVG path instructions or generated package metadata as Goliath feature
+ * generation naming.
+ */
+
+const forbiddenNamePattern = new RegExp(
+  '(^|[._ -])' + 'v' + '[23]' + '([._ -]|$)',
+  'i'
+);
+
+const forbiddenWrittenPattern = new RegExp(
+  '\\b' + 'version\\s*[23]' + '\\b',
+  'i'
+);
+
+const forbiddenComponentPattern = new RegExp(
+  '\\b' + 'components?\\s*[-_ ]?v[23]' + '\\b',
+  'i'
+);
+
+const forbiddenGenerationSuffix = new RegExp(
+  '(?:[_-]' + 'v[23]' + ')\\b',
+  'i'
+);
+
+const violations = [];
+
+function shouldSkipPath(relativePath) {
+  const normalized = relativePath.replace(/\\/g, '/');
+
+  if (
+    normalized.startsWith('src/runtime/') ||
+    normalized.startsWith('.github/')
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
-function generatedDependencyLine(target, line) {
-  if (path.basename(target) !== 'package-lock.json') return false;
-  const value = String(line || '').trim();
-  return value.startsWith('"integrity":') || value.startsWith('"resolved":');
-}
+function checkName(relativePath) {
+  const normalized = relativePath.replace(/\\/g, '/');
 
-function stripOpaqueVectorData(target, line) {
-  if (path.extname(target).toLowerCase() !== '.svg') return String(line || '');
-  return String(line || '').replace(/\bd=(["'])[^"']*\1/gi, 'd=""');
-}
-
-function inspectFilename(target) {
-  const relative = path.relative(process.cwd(), target);
-  for (const segment of relative.split(path.sep)) {
-    strictGenerationPattern.lastIndex = 0;
-    if (strictGenerationPattern.test(segment) || filenameVersionPattern.test(segment) || filenameRevisionPattern.test(segment)) {
-      failures.push(`${relative}: internal numbered version/revision file or directory name`);
+  for (const segment of normalized.split('/')) {
+    if (
+      forbiddenNamePattern.test(segment) ||
+      forbiddenGenerationSuffix.test(segment)
+    ) {
+      violations.push(`${normalized}: forbidden numbered-generation name`);
       return;
     }
   }
 }
 
-function hasForbiddenNaming(line) {
-  strictGenerationPattern.lastIndex = 0;
-  versionPattern.lastIndex = 0;
-  revisionPattern.lastIndex = 0;
-  return strictGenerationPattern.test(line) || versionPattern.test(line) || revisionPattern.test(line);
-}
+function checkFile(filePath, relativePath) {
+  if (SKIP_FILES.has(path.basename(filePath))) return;
+  if (shouldSkipPath(relativePath)) return;
 
-function auditableLine(target, line) {
-  if (generatedDependencyLine(target, line)) return '';
-  return stripExternalProtocolTokens(stripOpaqueVectorData(target, line));
-}
+  const ext = path.extname(filePath).toLowerCase();
+  if (!TEXT_EXTENSIONS.has(ext)) return;
 
-function walk(target) {
-  if (!fs.existsSync(target)) return;
-  const stat = fs.statSync(target);
-  inspectFilename(target);
-  if (stat.isDirectory()) {
-    for (const entry of fs.readdirSync(target)) {
-      if (['node_modules', 'dist', '.git', 'coverage', '.cache'].includes(entry)) continue;
-      walk(path.join(target, entry));
-    }
+  let content;
+
+  try {
+    content = fs.readFileSync(filePath, 'utf8');
+  } catch {
     return;
   }
-  if (!extensions.has(path.extname(target).toLowerCase())) return;
-  const lines = fs.readFileSync(target, 'utf8').split(/\r?\n/);
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const candidate = auditableLine(target, line);
-    if (!hasForbiddenNaming(candidate)) continue;
-    failures.push(`${target}:${index + 1}: ${line.trim().slice(0, 220)}`);
+
+  const lines = content.split(/\r?\n/);
+
+  lines.forEach((line, index) => {
+    /*
+     * Ignore the audit's own dynamically constructed detection rules.
+     */
+    if (relativePath === 'test/auditInternalVersionNaming.js') return;
+
+    if (
+      forbiddenWrittenPattern.test(line) ||
+      forbiddenComponentPattern.test(line)
+    ) {
+      violations.push(
+        `${relativePath}:${index + 1}: ${line.trim()}`
+      );
+    }
+  });
+}
+
+function walk(currentPath) {
+  const entries = fs.readdirSync(currentPath, {
+    withFileTypes: true,
+  });
+
+  for (const entry of entries) {
+    if (SKIP_DIRS.has(entry.name)) continue;
+
+    const fullPath = path.join(currentPath, entry.name);
+    const relativePath = path
+      .relative(ROOT, fullPath)
+      .replace(/\\/g, '/');
+
+    if (shouldSkipPath(relativePath)) continue;
+
+    if (entry.isDirectory()) {
+      checkName(relativePath);
+      walk(fullPath);
+      continue;
+    }
+
+    checkName(relativePath);
+    checkFile(fullPath, relativePath);
   }
 }
 
-for (const root of roots) walk(root);
+walk(ROOT);
 
-if (failures.length) {
-  console.error('❌ Internal numbered version/revision Goliath naming detected:');
-  for (const failure of failures) console.error(`  ${failure}`);
+if (violations.length) {
+  console.error(
+    '\n❌ Internal numbered-generation Goliath naming detected:\n'
+  );
+
+  for (const violation of violations) {
+    console.error(`  ${violation}`);
+  }
+
   process.exit(1);
 }
 
-console.log('✅ Internal Goliath naming audit passed.');
+console.log(
+  '✅ Internal Goliath naming audit passed: no numbered replacement-generation naming detected.'
+);

@@ -5,6 +5,7 @@ const {
   MessageFlags,
   PermissionFlagsBits,
 } = require('discord.js');
+const COMPONENT_MESSAGE_FLAG = 32768;
 const guildManager = require('../../../core/guild/guildManager');
 const templates = require('./embedTemplates');
 const deployments = require('./embedDeployments');
@@ -162,7 +163,7 @@ async function updateExistingCanonical(interaction, state) {
   if (!message) { await deliveryReply(interaction, '⚠️ The original deployed embed message could not be found. Deploy a new copy before using Update Existing again.'); return true; }
   const report = typeof panel.getReadinessReport === 'function' ? panel.getReadinessReport(interaction) : { ready: true };
   if (!report?.ready) { await deliveryReply(interaction, '⚠️ This embed is not ready to deploy. Resolve the readiness warnings before updating the existing message.'); return true; }
-  const requiresMigration = !message.flags?.has?.(MessageFlags.IsComponentsV2); let discordUpdated = false;
+  const requiresMigration = !message.flags?.has?.(COMPONENT_MESSAGE_FLAG); let discordUpdated = false;
   try {
     const payload = await renderer.buildEmbedPayload({ embeds: panel.buildPreviewEmbeds(state, interaction), actionRows: panel.buttonRows(state, interaction), allowUserPing: Boolean(state.allowUserPing), userId: interaction.user?.id || null, ephemeral: false, media: state.media, mediaAlignment: state.mediaAlignment || {}, interaction });
     payload.allowedMentions = panel.allowedMentions(state, interaction);

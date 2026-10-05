@@ -1073,7 +1073,7 @@ if (name === 'templates') {
   }
   if (name === 'liveMessages') {
     const settings = config.settings || {};
-    const d = ['**Live Message Behaviour**', `✏️ **Edit:** ${settings.editLiveNotifications !== false ? 'On' : 'Off'} - update the same LIVE post.`, `🗑️ **Cleanup:** ${settings.deleteEndedNotifications !== false ? 'On' : 'Off'} - remove ended LIVE posts.`, `👥 **Viewers:** ${settings.includeViewerCount === false ? 'Off' : 'On'} - show viewer count.`, `⏱️ **Duration:** ${settings.includeLiveDuration === false ? 'Off' : 'On'} - show time live.`].join('\n');
+    const d = ['**Live Message Behaviour**', `✏️ **Edit:** ${settings.editLiveNotifications !== false ? 'On' : 'Off'} - update the same LIVE post.`, `👥 **Viewers:** ${settings.includeViewerCount === false ? 'Off' : 'On'} - show viewer count.`, `⏱️ **Duration:** ${settings.includeLiveDuration === false ? 'Off' : 'On'} - show time live.`].join('\n');
     const refreshEnabled =
       settings.liveRefreshEnabled !== false;
 
@@ -1105,12 +1105,6 @@ if (name === 'templates') {
             refreshEnabled
               ? ButtonStyle.Success
               : ButtonStyle.Secondary,
-          ),
-          btn(
-            `${P}automation:deleteended`,
-            settings.deleteEndedNotifications !== false
-              ? '🗑️ Cleanup: On'
-              : '🗑️ Cleanup: Off',
           ),
         ),
         row(

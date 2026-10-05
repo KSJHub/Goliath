@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -45,6 +45,7 @@ contains(manager, 'discord_screening', 'screening health validation');
 contains(manager, 'risk_based', 'risk health validation');
 contains(manager, 'quarantine', 'quarantine health validation');
 
-assert(!/\b(?:v2|v3)\b/i.test([flow, quarantine, lifecycle, risk, store, manager].join('\n')), 'Verification source contains forbidden numbered-generation naming.');
+const forbiddenGenerationPattern = new RegExp('\\b' + 'v' + '[23]' + '\\b', 'i');
+assert(!forbiddenGenerationPattern.test([flow, quarantine, lifecycle, risk, store, manager].join('\n')), 'Verification source contains forbidden numbered-generation naming.');
 
-console.log('✅ Verification lifecycle contract audit passed.');
+console.log('\u2705 Verification lifecycle contract audit passed.');

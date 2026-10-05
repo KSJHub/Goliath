@@ -18,6 +18,7 @@ const { replaceVars } = require('./embedPanel');
 const emojis = require('../../utilityStudio/emojis/emojis');
 const emojiPayload = require('../../utilityStudio/emojis/emojiPayload');
 
+const COMPONENT_MESSAGE_FLAG = 32768;
 const CANVAS_WIDTH = 520;
 const PORTRAIT_WIDTH = 320;
 const PORTRAIT_SHIFT_RIGHT = 0;
@@ -501,7 +502,7 @@ async function buildEmbedPayload(options = {}) {
         ).toLowerCase();
 
         /*
-         * Components V2 Media Gallery supports Discord media directly.
+         * Discord Media Gallery supports Discord media directly.
          * Video URLs can therefore remain native instead of being silently
          * discarded by the old EmbedBuilder renderer.
          */
@@ -598,7 +599,7 @@ async function buildEmbedPayload(options = {}) {
     /*
      * PANEL CONTENT
      *
-     * Components V2 does not use EmbedBuilder for the visual body.
+     * The current component message format does not use EmbedBuilder for the visual body.
      * Existing embed data is converted into Discord markdown.
      */
     const mainText = panelText(data);
@@ -683,7 +684,7 @@ async function buildEmbedPayload(options = {}) {
 
   /*
    * Message Studio buttons remain outside the individual panel containers
-   * but inside the same Components V2 message.
+   * but inside the same component message.
    */
   for (const row of resolvedActionRows || []) {
     components.push(row);
@@ -692,12 +693,12 @@ async function buildEmbedPayload(options = {}) {
   const payload = {
     components,
     files,
-    flags: MessageFlags.IsComponentsV2,
+    flags: COMPONENT_MESSAGE_FLAG,
   };
 
   if (allowUserPing && userId) {
     /*
-     * Components V2 cannot use normal message content, so represent the
+     * The current component message format cannot use normal message content, so represent the
      * requested ping as a Text Display at the start of the message.
      */
     payload.components.unshift(

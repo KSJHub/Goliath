@@ -225,7 +225,7 @@ async function handleLiveMessageAction(interaction, id) {
     saveSettings(interaction, config);
     return updatePanel(interaction, canonicalLiveMessagesPayload(interaction));
   }
-  const keyById = { [`${P}automation:editlive`]: 'editLiveNotifications', [`${P}automation:deleteended`]: 'deleteEndedNotifications', [`${P}automation:viewers`]: 'includeViewerCount', [`${P}automation:duration`]: 'includeLiveDuration' };
+  const keyById = { [`${P}automation:editlive`]: 'editLiveNotifications', [`${P}automation:viewers`]: 'includeViewerCount', [`${P}automation:duration`]: 'includeLiveDuration' };
   const setting = keyById[id];
   if (!setting) return false;
   config.settings[setting] = config.settings[setting] === false;
@@ -278,7 +278,7 @@ async function handle(interaction) {
   if (id === `${P}liveMessages`) return updatePanel(interaction, canonicalLiveMessagesPayload(interaction));
   if ([`${P}test`, `${P}testing:last`, `${P}testing:diagnostics`, `${P}data:refresh`, `${P}data:export`, `${P}data:export:config`, `${P}data:clear`].includes(id)) return handleDiagnosticsAction(interaction, id);
   if ([`${P}automation:interval`, `${P}automation:dupes`, `${P}automation:retry`, `${P}automation:quiet`, `${P}toggle`].includes(id)) return handleMonitoringAction(interaction, id);
-  if ([`${P}automation:editlive`, `${P}automation:deleteended`, `${P}automation:viewers`, `${P}automation:duration`, `${P}automation:liverefresh`, `${P}automation:liverefreshrate`].includes(id)) return handleLiveMessageAction(interaction, id);
+  if ([`${P}automation:editlive`, `${P}automation:viewers`, `${P}automation:duration`, `${P}automation:liverefresh`, `${P}automation:liverefreshrate`].includes(id)) return handleLiveMessageAction(interaction, id);
   if (![`${P}creator:edit`, `${P}creator:clear`, `${P}creator:delete`].includes(id)) return false;
   const creatorId = selectedCreatorId(interaction);
   if (!creatorId) throw new Error('Select a creator profile first.');

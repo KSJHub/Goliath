@@ -102,7 +102,7 @@ const IN_PROGRESS_PAGES = [
       '• Verification status',
       '• Member security notifications',
       '',
-      '**📣 Social Studio — Phase 1**',
+      '**📣 Social Studio**',
       '• Permission-controlled Creator Profile access',
       '• Open or create your own Creator Profile',
     ],
