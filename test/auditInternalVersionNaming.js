@@ -10,9 +10,9 @@ const extensions = new Set([
   '.yml', '.yaml', '.env', '.ini', '.toml', '.xml', '.svg',
 ]);
 const versionPattern = new RegExp('(?:^|[^A-Za-z0-9])([vV][2-9][0-9]*)(?=$|[^A-Za-z0-9])|([A-Za-z_$][A-Za-z0-9_$]*[vV][2-9][0-9]*)', 'g');
-const revisionPattern = new RegExp('(?:^|[^A-Za-z0-9])(?:phase|revision|rev)[ _.-]*[1-9][0-9]*(?=$|[^A-Za-z0-9])|(?:phase|revision|rev)[1-9][0-9]*', 'gi');
+const revisionPattern = new RegExp('(?:^|[^A-Za-z0-9])(?:phase|revision|rev|version|generation)[ _.-]*[1-9][0-9]*(?=$|[^A-Za-z0-9])|(?:phase|revision|rev|version|generation)[1-9][0-9]*', 'gi');
 const filenameVersionPattern = /(?:^|[._-])[vV][2-9][0-9]*(?=$|[._-])|[A-Za-z0-9_$][vV][2-9][0-9]*(?=\.|$)/;
-const filenameRevisionPattern = /(?:phase|revision|rev)[ _.-]*[1-9][0-9]*/i;
+const filenameRevisionPattern = /(?:phase|revision|rev|version|generation)[ _.-]*[1-9][0-9]*/i;
 const failures = [];
 
 function externalProtocolLine(line) {
