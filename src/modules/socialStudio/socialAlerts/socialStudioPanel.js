@@ -155,7 +155,7 @@ function navigation(active = 'main') {
     btn(
       backId,
       '⬅️ Back',
-      ButtonStyle.Secondary,
+      ButtonStyle.Primary,
     ),
     btn(
       `${P}settings`,
