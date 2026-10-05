@@ -14,6 +14,8 @@ function optionalRequire(label, modulePath, fallback = {}) {
 const guildManager = optionalRequire('guild manager', '../../core/guild/guildManager');
 const panelNavigation = optionalRequire('panel navigation', '../../core/ui/panelNavigation');
 const verificationManager = optionalRequire('verification manager', '../../modules/securityStudio/verificationManager');
+const verificationFlowContinuation = optionalRequire('verification flow continuation', '../../modules/securityStudio/verificationFlowContinuation');
+const verificationChallengeInteractions = optionalRequire('verification challenge interactions', '../../modules/securityStudio/verificationChallengeInteractions');
 const ticketInteractionHandler = optionalRequire('tickets', '../../modules/feedbackStudio/tickets/tickets');
 const pollsInteractions = optionalRequire('polls', '../../modules/communityStudio/polls/pollsInteractions');
 const tempVoiceInteractionHandler = optionalRequire('temp voice', '../../modules/utilityStudio/tempVoice/tempVoiceInteractionHandler');
@@ -208,7 +210,30 @@ const startsWith=(interaction,prefix)=>String(interaction?.customId||'').startsW
 function isVerificationMemberInteraction(interaction){if(!interaction?.isButton?.())return false;return typeof verificationManager?.parseVerifyCustomId==='function'&&Boolean(verificationManager.parseVerifyCustomId(interaction.customId));}
 async function safeInteractionError(interaction,error=null){const detail=error?.message?`\n\`${String(error.message).slice(0,300)}\``:'';const payload={content:`❌ Interaction failed.${detail}`,flags:MessageFlags.Ephemeral};try{if(interaction?.isAutocomplete?.()){await interaction.respond([]).catch(()=>null);return;}if(interaction?.deferred||interaction?.replied){await interaction.editReply(payload).catch(()=>interaction.followUp(payload).catch(()=>null));return;}await interaction?.reply?.(payload).catch(()=>null);}catch{}}
 async function fetchFreshMember(interaction){const guild=interaction?.guild;const userId=interaction?.user?.id;if(!guild||!userId)return null;return guild.members.fetch({user:userId,force:true}).catch(()=>guild.members.fetch(userId).catch(()=>null));}
-async function handleVerificationMemberInteraction(interaction){if(typeof verificationManager?.verifyMember!=='function')throw new Error('Verification handler is unavailable.');if(!interaction.deferred&&!interaction.replied)await interaction.deferReply({flags:MessageFlags.Ephemeral});const lockKey=`${interaction.guildId}:${interaction.user.id}`;const previous=verificationLocks.get(lockKey);if(previous)await previous.catch(()=>null);const operation=(async()=>{const member=await fetchFreshMember(interaction);if(!member)return{ok:false,message:'Member not found. Please try again.'};return verificationManager.verifyMember({guild:interaction.guild,guildId:interaction.guildId,member,user:interaction.user,customId:interaction.customId,channelId:interaction.channelId||interaction.channel?.id,messageId:interaction.message?.id||interaction.messageId});})();verificationLocks.set(lockKey,operation);try{const result=await operation;await interaction.editReply({content:result.ok?`✅ ${result.message}`:`❌ ${result.message}`});}finally{if(verificationLocks.get(lockKey)===operation)verificationLocks.delete(lockKey);}return true;}
+async function handleVerificationMemberInteraction(interaction){
+  if(typeof verificationManager?.verifyMember!=='function')throw new Error('Verification handler is unavailable.');
+  if(!interaction.deferred&&!interaction.replied)await interaction.deferReply({flags:MessageFlags.Ephemeral});
+  const lockKey=`${interaction.guildId}:${interaction.user.id}`;
+  const previous=verificationLocks.get(lockKey);
+  if(previous)await previous.catch(()=>null);
+  const operation=(async()=>{
+    const member=await fetchFreshMember(interaction);
+    if(!member)return{ok:false,message:'Member not found. Please try again.'};
+    const initial=await verificationManager.verifyMember({guild:interaction.guild,guildId:interaction.guildId,member,user:interaction.user,customId:interaction.customId,channelId:interaction.channelId||interaction.channel?.id,messageId:interaction.message?.id||interaction.messageId});
+    if(!initial?.pendingSecurity)return initial;
+    if(typeof verificationFlowContinuation?.resumeVerification!=='function')return initial;
+    return verificationFlowContinuation.resumeVerification({guild:interaction.guild,guildId:interaction.guildId,member,user:interaction.user});
+  })();
+  verificationLocks.set(lockKey,operation);
+  try{
+    const result=await operation;
+    if(result?.challenge&&typeof verificationChallengeInteractions?.memberChallengePayload==='function'){
+      const payload=verificationChallengeInteractions.memberChallengePayload(interaction.user.id,result.challenge);
+      await interaction.editReply({content:result.message||'Continue Verification.',...payload});
+    }else await interaction.editReply({content:result?.ok?`✅ ${result.message}`:`❌ ${result?.message||'Verification could not continue.'}`});
+  }finally{if(verificationLocks.get(lockKey)===operation)verificationLocks.delete(lockKey);}
+  return true;
+}
 
 module.exports={
   name:Events.InteractionCreate,
@@ -233,19 +258,15 @@ module.exports={
       if(customId.startsWith('admin:privateRooms')||customId.startsWith('user:privateRooms:')||customId.startsWith('privateRooms:')){if(customId.startsWith('admin:privateRooms')){await privateRoomsPanel.handleAdminInteraction(interaction);return;}if(customId.startsWith('user:privateRooms:')){await privateRoomsPanel.handleUserInteraction(interaction);return;}if(typeof privateRoomsPanel.handleInteraction==='function'){await privateRoomsPanel.handleInteraction(interaction);return;}}
       const isTicketRuntimeInteraction=customId.startsWith('ticket_')||customId.startsWith('goliath_ticket_');
       if(isTicketRuntimeInteraction&&interaction.guildId&&guildManager.isModuleEnabled?.(interaction.guildId,'tickets')===false){await interaction.reply({content:'❌ Tickets is currently disabled for this server.',flags:MessageFlags.Ephemeral});return;}
-      if(customId.startsWith('restore_request_')){if(!await callHandler(restoreRequestManager,'handleRestoreButton',interaction))throw new Error(`Restore request handler did not handle ${customId}.`);return;}
-      if(customId.startsWith('admin:automod')||customId==='admin:setautomodlog'||customId==='admin:selectautomodlog'||customId==='admin:channel:automodlog'){if(!await callHandler(automodPanel,'handleAutomodInteraction',interaction))throw new Error(`AutoMod did not handle ${customId}.`);return;}
-      if(customId.startsWith('admin:birthdays')){if(!await callHandler(birthdaysPanel,'handleAdmin',interaction))throw new Error(`Birthdays admin did not handle ${customId}.`);return;}
-      if(customId.startsWith('birthdays:user:')){if(!await callHandler(birthdaysPanel,'handleUser',interaction))throw new Error(`Birthdays user did not handle ${customId}.`);return;}
-      if(customId.startsWith('user:')){if(!await callHandler(userPanelInteractions,'handleUserPanelInteraction',interaction))throw new Error(`User panel did not handle ${customId}.`);return;}
-      if(customId==='admin:modules'||customId.startsWith('admin:modules:page:')||customId.startsWith('admin:module:')||customId.startsWith('admin:studio:')){if(!await callHandler(adminPanel,'handleAdminNavigation',interaction))throw new Error(`Admin authority router did not handle ${customId}.`);return;}
-      if(customId==='admin:invites'){const invitePanel=loadInvitesAdminPanel();if(typeof invitePanel?.buildInviteStudioPayload!=='function'){const reason=String(invitesAdminPanelError?.message||'Unknown module load error').slice(0,500);throw new Error(`Invite Studio failed to load: ${reason}`);}await interaction.deferUpdate();await interaction.editReply(invitePanel.buildInviteStudioPayload(interaction));return;}
-      if(startsWith(interaction,'invites:')){const invitePanel=loadInvitesAdminPanel();if(!invitePanel)throw new Error('Invite Studio failed to load.');if(!await callHandler(invitePanel,'handleInviteStudioInteraction',interaction))throw new Error(`Invite Studio did not handle ${customId}.`);return;}
-      if(customId==='admin:faq'||customId.startsWith('admin:faq:')||customId.startsWith('faq:')){if(!await callHandler(faqInteractions,'handleFaqInteraction',interaction))throw new Error(`FAQ did not handle ${customId}.`);return;}
-      if(customId==='admin:embed'||customId.startsWith('embed:')){const handled=await callHandler(embedPanel,'handleInteraction',interaction);if(!handled)throw new Error(`Embed Studio did not handle ${customId}.`);return;}
-      if(customId==='admin:social'||customId.startsWith('social:')){await callHandler(socialCreatorActionCompat,'capture',interaction);if(await callHandler(socialCreatorActionCompat,'handle',interaction))return;if(!await callHandler(socialAdminPanel,'handleSocialAdminInteraction',interaction))throw new Error(`Social Studio did not handle ${customId}.`);return;}
-      if(customId==='admin:verification:overview:next'){const displayName=interaction.member?.displayName||interaction.user?.displayName||interaction.user?.username||'Unknown User';const payload=await verificationAdminPanel.buildVerificationAdminPanel(interaction.guild,displayName,'workflow');if(interaction.deferred||interaction.replied)await interaction.editReply(payload);else await interaction.update(payload);return;}
-      if(startsWith(interaction,'admin:verification')){await callHandler(verificationAdminPanel,'handleVerificationAdminInteraction',interaction);return;}
+      if(await callHandler(userPanelInteractions,'handleUserPanelInteraction',interaction))return;
+      if(await callHandler(restoreRequestManager,'handleRestoreRequestInteraction',interaction))return;
+      if(await callHandler(embedPanel,'handleEmbedInteraction',interaction))return;
+      if(await callHandler(verificationAdminPanel,'handleVerificationInteraction',interaction))return;
+      if(await callHandler(automodPanel,'handleAutomodInteraction',interaction))return;
+      if(startsWith(interaction,'admin:birthdays')||startsWith(interaction,'birthdays:user:')){await callHandler(birthdaysPanel,'handleBirthdayInteraction',interaction);return;}
+      if(startsWith(interaction,'admin:invites')||startsWith(interaction,'invites:')){const invites=loadInvitesAdminPanel();if(!invites)throw invitesAdminPanelError||new Error('Invite Studio handler unavailable.');await invites.handleInviteStudioInteraction(interaction);return;}
+      if(startsWith(interaction,'admin:social')){await callHandler(socialAdminPanel,'handleSocialStudioInteraction',interaction);return;}
+      if(startsWith(interaction,'social:creator:')){await callHandler(socialCreatorActionCompat,'handleCreatorInteraction',interaction);return;}
       if(startsWith(interaction,'admin:autoRoles')){await callHandler(autorolesPanel,'handleAutoRolesInteraction',interaction);return;}
       if(startsWith(interaction,'admin:temporaryRoles')){await callHandler(temporaryRolesPanel,'handleTemporaryRolesInteraction',interaction);return;}
       if(startsWith(interaction,'admin:timedRoles')){await callHandler(timedRolesPanel,'handleTimedRolesInteraction',interaction);return;}
