@@ -20,14 +20,11 @@ assert.equal(new Set(entries.map((entry) => entry.route)).size, entries.length, 
 for (const entry of entries) {
   assert(modules.includes(entry.route), `Catalog route missing from module panels: ${entry.route}`);
   assert(
-      modules.includes('admin:studio:') &&
-        modules.includes('studio.key') &&
-        modules.includes('module.route'),
-      `Dynamic Studio navigation generator missing for ${entry.key} (${entry.studio})`
-    );
+    modules.includes('admin:studio:') && modules.includes('studio.key') && modules.includes('module.route'),
+    `Dynamic Studio navigation generator missing for ${entry.key} (${entry.studio})`
+  );
 }
 
-// Generic modules must be consumed by the generic module router.
 assert(router.includes("callHandler(moduleAdminPanels,'handleModuleAdminInteraction',interaction)"), 'Generic module router is not wired into InteractionCreate');
 assert(router.indexOf("callHandler(moduleAdminPanels,'handleModuleAdminInteraction',interaction)") < router.indexOf("callHandler(adminPanel,'handleAdminNavigation',interaction)"), 'Generic module router must run before general admin navigation');
 
@@ -35,62 +32,55 @@ for (const entry of entries.filter((entry) => entry.route.startsWith('admin:modu
   assert(modules.includes("id.match(/^admin:module:"), `Generic route parser missing for ${entry.key}`);
 }
 
-// Dedicated root routes. Each must have a real dispatch path before generic fallback.
 const dedicated = {
-  birthdays: 'handleBirthdayInteraction',
-  giveaways: 'handleGiveawaysAdminInteraction',
-  invites: 'handleInviteStudioInteraction',
-  leveling: 'handleLevelingInteraction',
-  polls: 'handlePollsInteraction',
-  faq: 'handleFaqInteraction',
-  forms: 'handleFormsAdminInteraction',
-  suggestions: 'handleSuggestionsAdminInteraction',
-  tickets: 'handleTicketInteraction',
-  goodbye: 'handleGoodbyeInteraction',
-  embed: 'handleEmbedInteraction',
-  starboard: 'handleStarboardAdminInteraction',
-  sticky: 'handleStickyAdminInteraction',
-  welcome: 'handleWelcomeInteraction',
-  autoRoles: 'handleAutoRolesInteraction',
-  reactionRoles: 'handleReactionRolesAdminInteraction',
-  temporaryRoles: 'handleTemporaryRolesInteraction',
-  timedRoles: 'handleTimedRolesInteraction',
-  verification: 'handleVerificationAdminInteraction',
-  social: 'handleInteraction',
-  privateRooms: 'handleAdminInteraction',
-  schedule: 'handleScheduleAdminInteraction',
-  stats: 'handleStatsAdminInteraction',
-  tempVoice: 'handleTempVoiceInteraction',
+  birthdays: 'handleBirthdayInteraction', giveaways: 'handleGiveawaysAdminInteraction', invites: 'handleInviteStudioInteraction', leveling: 'handleLevelingInteraction', polls: 'handlePollsInteraction',
+  faq: 'handleFaqInteraction', forms: 'handleFormsAdminInteraction', suggestions: 'handleSuggestionsAdminInteraction', tickets: 'handleTicketInteraction',
+  goodbye: 'handleGoodbyeInteraction', embed: 'handleEmbedInteraction', starboard: 'handleStarboardAdminInteraction', sticky: 'handleStickyAdminInteraction', welcome: 'handleWelcomeInteraction',
+  autoRoles: 'handleAutoRolesInteraction', reactionRoles: 'handleReactionRolesAdminInteraction', temporaryRoles: 'handleTemporaryRolesInteraction', timedRoles: 'handleTimedRolesInteraction',
+  verification: 'handleVerificationAdminInteraction', social: 'handleInteraction', privateRooms: 'handleAdminInteraction', schedule: 'handleScheduleAdminInteraction', stats: 'handleStatsAdminInteraction', tempVoice: 'handleTempVoiceInteraction',
 };
 
 for (const entry of entries.filter((entry) => !entry.route.startsWith('admin:module:'))) {
-  if (entry.key === 'translation') continue; // generic registry route is resolved by admin navigation/config surface.
+  if (entry.key === 'translation') continue;
   const method = dedicated[entry.key];
   assert(method, `No dedicated routing contract declared for ${entry.key} (${entry.route})`);
   assert(router.includes(method), `InteractionCreate does not wire ${entry.key} through ${method}`);
 }
 
-// Root Verification previously timed out because only admin:verification:* was accepted.
-assert(
-  verification.includes("id!=='admin:verification'&&!id.startsWith('admin:verification:')"),
-  'Verification handler does not accept the admin:verification root route'
-);
-assert(
-  verification.includes("if(id==='admin:verification'){await respond(i,buildVerificationAdminPanel(i.guild,user,'home',st));return true;}"),
-  'Verification root route does not open the Front Door panel'
-);
+assert(verification.includes("id!=='admin:verification'&&!id.startsWith('admin:verification:')"), 'Verification handler does not accept the admin:verification root route');
+assert(verification.includes("if(id==='admin:verification'){await respond(i,buildVerificationAdminPanel(i.guild,user,'home',st));return true;}"), 'Verification root route does not open the Front Door panel');
 
-// Prefix guards must only stop routing when the target handler actually handled the interaction.
 const unsafeGuard = /if\(startsWith\(interaction,'admin:[^']+'\)\)\{await callHandler\([^;]+;return;\}/g;
 assert.deepEqual(router.match(unsafeGuard) || [], [], 'Found an admin prefix guard that swallows an unhandled interaction');
 
-assert(router.includes("startsWith(interaction,'admin:social')&&await callHandler(socialAdminPanel,'handleInteraction',interaction)"), 'Social Studio root is not wired to its current handler');
-assert(router.includes("startsWith(interaction,'admin:autoRoles')&&await callHandler(autorolesPanel,'handleAutoRolesInteraction',interaction)"), 'Auto Roles root can be swallowed');
-assert(router.includes("startsWith(interaction,'admin:temporaryRoles')&&await callHandler(temporaryRolesPanel,'handleTemporaryRolesInteraction',interaction)"), 'Temporary Roles root can be swallowed');
-assert(router.includes("startsWith(interaction,'admin:timedRoles')&&await callHandler(timedRolesPanel,'handleTimedRolesInteraction',interaction)"), 'Timed Roles root can be swallowed');
-assert(router.includes("startsWith(interaction,'admin:welcome')&&await callHandler(welcomePanel,'handleWelcomeInteraction',interaction)"), 'Welcome root can be swallowed');
-assert(router.includes("startsWith(interaction,'admin:goodbye')&&await callHandler(goodbyePanel,'handleGoodbyeInteraction',interaction)"), 'Goodbye root can be swallowed');
-assert(router.includes("startsWith(interaction,'admin:reactionRoles')&&await callHandler(reactionRolesAdminPanel,'handleReactionRolesAdminInteraction',interaction)"), 'Reaction Roles root can be swallowed');
-assert(router.includes("startsWith(interaction,'admin:schedule')&&await callHandler(schedulePanel,'handleScheduleAdminInteraction',interaction)"), 'Schedule root can be swallowed');
+// Social Studio must route both its admin root and every social:* child interaction through the current panel before compatibility fallback.
+const socialDispatch = "if((startsWith(interaction,'admin:social')||startsWith(interaction,'social:'))&&await callHandler(socialAdminPanel,'handleInteraction',interaction))return;";
+const socialCompat = "if(startsWith(interaction,'social:creator:')){await callHandler(socialCreatorActionCompat,'handleCreatorInteraction',interaction);return;}";
+assert(router.includes(socialDispatch), 'Social Studio root + child namespace is not wired to its current handler');
+assert(router.includes(socialCompat), 'Social Studio creator compatibility fallback is missing');
+assert(router.indexOf(socialDispatch) < router.indexOf(socialCompat), 'Social Studio current handler must run before creator compatibility fallback');
 
-console.log(`✅ Admin module routing audit passed: ${entries.length} modules across ${new Set(entries.map((entry) => entry.studio)).size} studios.`);
+const requiredRouterContracts = [
+  ["startsWith(interaction,'admin:autoRoles')", 'Auto Roles root'],
+  ["startsWith(interaction,'admin:temporaryRoles')", 'Temporary Roles root'],
+  ["startsWith(interaction,'admin:timedRoles')", 'Timed Roles root'],
+  ["startsWith(interaction,'admin:welcome')", 'Welcome root'],
+  ["startsWith(interaction,'admin:goodbye')", 'Goodbye root'],
+  ["startsWith(interaction,'admin:reactionRoles')", 'Reaction Roles root'],
+  ["startsWith(interaction,'admin:schedule')", 'Schedule root'],
+  ["startsWith(interaction,'schedule:rsvp:')", 'Schedule RSVP child'],
+  ["startsWith(interaction,'admin:birthdays')", 'Birthdays root'],
+  ["startsWith(interaction,'birthdays:user:')", 'Birthdays user child'],
+  ["startsWith(interaction,'admin:invites')", 'Invites root'],
+  ["startsWith(interaction,'invites:')", 'Invites child'],
+];
+for (const [needle, label] of requiredRouterContracts) assert(router.includes(needle), `${label} routing contract is missing`);
+
+// Every studio/module namespace advertised by the central router must remain represented in its routing source.
+const prefixBlock = router.match(/const MODULE_STUDIO_PREFIXES = \[([\s\S]*?)\n\];/);
+assert(prefixBlock, 'MODULE_STUDIO_PREFIXES could not be parsed');
+const advertisedPrefixes = [...prefixBlock[1].matchAll(/'([^']+)'/g)].map((match) => match[1]).filter((value) => value.includes(':'));
+assert(advertisedPrefixes.length >= 40, `Expected deep module namespace coverage, found only ${advertisedPrefixes.length} prefixes`);
+for (const prefix of advertisedPrefixes) assert(router.includes(prefix), `Advertised module interaction namespace disappeared: ${prefix}`);
+
+console.log(`✅ Admin module routing audit passed: ${entries.length} modules across ${new Set(entries.map((entry) => entry.studio)).size} studios; root and child routing contracts guarded.`);
