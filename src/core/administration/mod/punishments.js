@@ -240,7 +240,8 @@ async function executeRemoveWarning(interaction, pending, fallbackTarget) {
   const userId = sourceCase?.userId || warning.userId || pending.targetId;
   const unwindCase = createModerationCase(interaction, userId, 'unwarn', `Removed warning from case #${caseId}`, {}, { relatedCaseId: caseId, status: 'reversed' });
   const logTarget = fallbackTarget || await fetchTarget(interaction.guild, userId);
-  await logAction(interaction, logTarget, 'Unwarn', unwindCase.reason, unwindCase.caseId);
+  const logUser = logTarget?.user || await interaction.client?.users?.fetch(String(userId)).catch(() => null) || null;
+  await logAction(interaction, logTarget, 'Unwarn', unwindCase.reason, unwindCase.caseId, {}, logUser);
   return { target: logTarget, content: `🗑️ Removed warning linked to **Case #${caseId}**.` };
 }
 async function executeRemoveTimeout(interaction, pending, target) {
@@ -281,7 +282,8 @@ async function runBulkRemoveWarning(interaction, caseIdRaw, options) {
   const reason = options.reason || `Bulk removed warning from case #${caseId}`;
   const unwindCase = createModerationCase(interaction, sourceCase.userId, 'unwarn', reason, { bulk: true, bulkBatchId: options.bulkBatchId, sourceWarningCaseId: caseId }, { relatedCaseId: caseId, status: 'reversed' });
   const target = await fetchTarget(interaction.guild, sourceCase.userId);
-  if (target) await logAction(interaction, target, 'Bulk Unwarn', reason, unwindCase.caseId, { bulk: true, bulkBatchId: options.bulkBatchId, sourceWarningCaseId: caseId });
+  const logUser = target?.user || await interaction.client?.users?.fetch(String(sourceCase.userId)).catch(() => null) || null;
+  if (target || logUser) await logAction(interaction, target, 'Bulk Unwarn', reason, unwindCase.caseId, { bulk: true, bulkBatchId: options.bulkBatchId, sourceWarningCaseId: caseId }, logUser);
   return unwindCase;
 }
 async function runBulkRemoveTimeout(interaction, member, options) {
