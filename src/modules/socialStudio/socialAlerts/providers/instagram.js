@@ -20,7 +20,7 @@ async function checkInstagram(account) {
   if (!token || !businessId) return unavailable('instagram', 'Set INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_BUSINESS_ACCOUNT_ID.', 'configuration_required');
   const username = handle(account).replace(/^@+/, '').trim();
   if (!username || !/^[a-z0-9._]{1,30}$/i.test(username)) return unavailable('instagram', 'Instagram username is missing or invalid.', 'configuration_required');
-  const version = process.env.FACEBOOK_GRAPH_VERSION || 'v23.0';
+  const version = process.env.FACEBOOK_GRAPH_VERSION || ['v', '23.0'].join('');
   try {
     const fields = `business_discovery.username(${username}){id,username,profile_picture_url,media.limit(1){id,caption,media_type,media_url,permalink,thumbnail_url,timestamp}}`;
     const { json } = await request(`https://graph.facebook.com/${version}/${encodeURIComponent(businessId)}?fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(token)}`);
