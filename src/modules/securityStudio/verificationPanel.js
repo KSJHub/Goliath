@@ -1,146 +1,62 @@
 'use strict';
 
 const {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ChannelSelectMenuBuilder,
-  ChannelType,
-  RoleSelectMenuBuilder,
-  StringSelectMenuBuilder,
+  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder, StringSelectMenuBuilder,
 } = require('discord.js');
-
 const guildManager = require('../../core/guild/guildManager');
 const verificationManager = require('./verificationManager');
 const verificationStore = require('./verificationStore');
 
-const SECTIONS = new Set(['home','roles','security','intelligence','flow','messages','logs','settings']);
-const ROLE_TYPES = ['pending','verifying','verified','auto','bot','bypass','quarantine','staff'];
-const SECURITY = [
-  ['simple','Simple Verify'],['captcha','CAPTCHA'],['minigame','Mini Games'],['accountAge','Account Age'],
-  ['discordScreening','Discord Screening'],['botProtection','Bot Protection'],['staffApproval','Staff Approval'],
-  ['oneTimeChallenge','One-Time Challenge'],['riskBased','Risk-Based Security'],['rejoinHistory','Rejoin History'],
-];
-const LOG_TYPES = ['join','intelligence','attempt','failure','success','roles','bot','raid','quarantine','staff','error'];
-const sessions = new Map();
-
-function row(...items){ return new ActionRowBuilder().addComponents(...items.filter(Boolean)); }
-function button(id,label,style=ButtonStyle.Secondary,disabled=false){ return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled); }
-function toggleButton(id,label,on){ return button(id,`${on?'🟢':'🔴'} ${label}`,on?ButtonStyle.Success:ButtonStyle.Danger); }
-function requestedBy(i){ return i.member?.displayName || i.user?.displayName || i.user?.username || 'Unknown User'; }
-function stateFor(i){ const key=`${i.guildId}:${i.user.id}`; const value=sessions.get(key)||{roleType:'pending',logType:'join'}; sessions.set(key,value); return value; }
-function status(guildId){ return verificationManager.getVerificationStatus(guildId); }
-function settings(guildId){ return status(guildId).settings || verificationStore.defaultSettings(); }
-function save(guildId, patch, actorId){ return verificationManager.updateVerificationSettings(guildId, patch, {actorId,action:'verification_admin_update'}); }
-function embed(title,lines,who,color=0x5865F2){ return new EmbedBuilder().setColor(color).setTitle(title).setDescription(lines.filter(Boolean).join('\n').slice(0,4096)).setFooter({text:`Requested by ${who}`}).setTimestamp(); }
-function roleText(guild,ids=[]){ return ids.length ? ids.map(id=>guild.roles.cache.has(id)?`<@&${id}>`:`Unknown (${id})`).join(', ') : '`Not set`'; }
-function channelText(id){ return id?`<#${id}>`:'`Not set`'; }
-function finalNav(back='home'){ return row(button(`admin:verification:page:${back}`,'◀ Back'),button('admin:verification:page:settings','⚙️ Settings')); }
-function pageButtons(){ return [
-  row(button('admin:verification:page:roles','🎭 Roles'),button('admin:verification:page:security','🛡️ Security'),button('admin:verification:page:intelligence','🧠 Intelligence'),button('admin:verification:page:flow','🚪 Flow')),
-  row(button('admin:verification:page:messages','💬 Messages'),button('admin:verification:page:logs','📋 Logs'),button('admin:verification:page:settings','⚙️ Settings')),
-]; }
-
-function homePage(guild,who){ const s=status(guild.id), c=s.settings; const enabled=guildManager.isModuleEnabled(guild.id,'verification'); const methods=(c.flow?.orderedSecurity||[]).join(' → ')||'Simple Verify'; return {embeds:[embed('🛡️ Verification · Front Door',[
-  '**Universal, modular server verification and entry security.**','',
-  `**Module:** ${enabled?'Enabled ✅':'Disabled ❌'}`,
-  `**Journey:** NEW MEMBER → PENDING → VERIFYING → VERIFIED → SERVER`,
-  `**Security Flow:** ${methods}`,
-  `**Intelligence:** ${c.intelligence?.enabled?'Enabled 🧠':'Disabled'}`,
-  `**Failed attempts before action:** ${c.security?.maximumFailedAttempts ?? 5}`,
-  `**Verified:** ${s.analytics?.verified||0} · **Failed:** ${s.analytics?.failed||0} · **Quarantined:** ${s.analytics?.quarantined||0}`,
-],who,enabled?0x57F287:0x5865F2)],components:pageButtons()}; }
-
-function rolesPage(guild,who,st){ const c=settings(guild.id), type=ROLE_TYPES.includes(st.roleType)?st.roleType:'pending'; const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:roleType').setPlaceholder('Choose role category').addOptions(ROLE_TYPES.map(x=>({label:x[0].toUpperCase()+x.slice(1),value:x,default:x===type}))); const selector=new RoleSelectMenuBuilder().setCustomId(`admin:verification:roles:${type}`).setPlaceholder(`Select ${type} role(s)`).setMinValues(0).setMaxValues(10); const lines=ROLE_TYPES.map(x=>`**${x[0].toUpperCase()+x.slice(1)}:** ${roleText(guild,c.roles?.[x]||[])}`); return {embeds:[embed('🎭 Verification · Roles',lines,who)],components:[row(menu),row(selector),finalNav()]}; }
-
-function securityPage(guild,who){ const c=settings(guild.id), sec=c.security||{}; const enabled=SECURITY.filter(([k])=>sec[k]===true).map(([,n])=>n); return {embeds:[embed('🛡️ Verification · Security',[
-  'Enable one security method or stack multiple methods. Flow controls their execution order.','',
-  `**Active:** ${enabled.join(' · ')||'None ⚠️'}`,
-  `**Maximum failed attempts:** ${sec.maximumFailedAttempts??5}`,
-  `**Cooldown:** ${sec.attemptCooldownSeconds??10}s`,
-  `**Quarantine at limit:** ${sec.quarantineOnLimit!==false?'Yes ✅':'No'}`,
-],who)],components:[
-  row(...SECURITY.slice(0,5).map(([k,n])=>toggleButton(`admin:verification:security:${k}`,n,sec[k]===true))),
-  row(...SECURITY.slice(5,10).map(([k,n])=>toggleButton(`admin:verification:security:${k}`,n,sec[k]===true))),
-  finalNav(),
-]}; }
-
-function intelligencePage(guild,who){ const c=settings(guild.id), intel=c.intelligence||{}; return {embeds:[embed('🧠 Verification · Intelligence',[
-  'Intelligence is the optional Auto Scan layer. It observes and flags; enforcement remains configurable.','',
-  `**Auto Scan:** ${intel.enabled?'ON ✅':'OFF'}`,
-  `**Initial scan:** ${intel.initialScan?'ON':'OFF'}`,
-  `**Continuous scan:** ${intel.continuousScan?'ON':'OFF'}`,
-  `**Rescan interval:** ${intel.rescanMinutes||1440} minutes`,
-  `**Flag logging:** ${intel.logFlags!==false?'ON':'OFF'}`,
-],who)],components:[
-  row(toggleButton('admin:verification:intelligence:enabled','Auto Scan',intel.enabled),toggleButton('admin:verification:intelligence:initialScan','Initial Scan',intel.initialScan),toggleButton('admin:verification:intelligence:continuousScan','Continuous Scan',intel.continuousScan)),
-  row(toggleButton('admin:verification:intelligence:logFlags','Flag Logs',intel.logFlags!==false),toggleButton('admin:verification:intelligence:logErrors','Error Logs',intel.logErrors!==false)),
-  finalNav(),
-]}; }
-
-function flowPage(guild,who){ const c=settings(guild.id), flow=c.flow||{}, order=flow.orderedSecurity||[]; const options=SECURITY.map(([key,name])=>({label:name,value:key,default:order.includes(key)})); const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:flowSecurity').setPlaceholder('Choose security layers used by this guild').setMinValues(1).setMaxValues(options.length).addOptions(options); return {embeds:[embed('🚪 Verification · Flow',[
-  '**Lifecycle:** NEW MEMBER → PENDING → VERIFYING → VERIFIED → SERVER','',
-  `**Required security:** ${order.length?order.map((x,i)=>`${i+1}. ${SECURITY.find(([k])=>k===x)?.[1]||x}`).join(' → '):'None ⚠️'}`,
-  `**Fail closed:** ${flow.failClosed!==false?'Yes ✅':'No ⚠️'}`,
-  `**Reset active journey on leave:** ${flow.resetActiveSessionOnLeave!==false?'Yes':'No'}`,
-  `**Retain security history:** ${flow.retainSecurityHistory!==false?'Yes':'No'}`,
-  '', 'Selected layers execute in the stored order. Security settings remain independent and modular.',
-],who)],components:[row(menu),row(toggleButton('admin:verification:flow:failClosed','Fail Closed',flow.failClosed!==false),toggleButton('admin:verification:flow:resetActiveSessionOnLeave','Reset Journey On Leave',flow.resetActiveSessionOnLeave!==false),toggleButton('admin:verification:flow:retainSecurityHistory','Retain History',flow.retainSecurityHistory!==false)),finalNav()]}; }
-
-function messagesPage(guild,who){ const m=status(guild.id).messages||{}; return {embeds:[embed('💬 Verification · Messages',[
-  'Verification owns its own member-facing messages. Embed Studio is not used by this module.','',
-  `**Start:** ${m.start||'Not set'}`,
-  `**Success:** ${m.success||'Not set'}`,
-  `**Failure:** ${m.failed||'Not set'}`,
-  `**Retry:** ${m.retry||'Not set'}`,
-  `**Quarantine:** ${m.quarantined||'Not set'}`,
-  '', 'Message editing controls will remain inside Verification.',
-],who)],components:[row(button('admin:verification:resetMessages','↺ Reset Verification Messages',ButtonStyle.Danger)),finalNav()]}; }
-
-function logsPage(guild,who,st){ const c=settings(guild.id), type=LOG_TYPES.includes(st.logType)?st.logType:'join'; const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:logType').setPlaceholder('Choose log category').addOptions(LOG_TYPES.map(x=>({label:x[0].toUpperCase()+x.slice(1),value:x,default:x===type}))); const channel=new ChannelSelectMenuBuilder().setCustomId(`admin:verification:logChannel:${type}`).setPlaceholder(`Choose ${type} log channel`).setMinValues(0).setMaxValues(1).setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement); return {embeds:[embed('📋 Verification · Logs',[
-  'Each Verification event can use its own channel or several categories can share one destination.','',
-  ...LOG_TYPES.map(x=>`**${x[0].toUpperCase()+x.slice(1)}:** ${channelText(c.logs?.[`${x}ChannelId`])}`),
-],who)],components:[row(menu),row(channel),finalNav()]}; }
-
-function settingsPage(guild,who){ const c=settings(guild.id), enabled=guildManager.isModuleEnabled(guild.id,'verification'); return {embeds:[embed('⚙️ Verification · Settings',[
-  `**Module:** ${enabled?'Enabled ✅':'Disabled ❌'}`,
-  `**Re-verification:** ${c.security?.allowReverification!==false?'Allowed':'Disabled'}`,
-  `**Maximum failed attempts:** ${c.security?.maximumFailedAttempts??5}`,
-  `**Attempt cooldown:** ${c.security?.attemptCooldownSeconds??10}s`,
-  `**Raid protection:** ${c.raid?.enabled!==false?'Enabled':'Disabled'}`,
-  `**Quarantine:** ${c.quarantine?.enabled!==false?'Enabled':'Disabled'}`,
-  `**Test mode:** ${c.health?.testMode?'Enabled':'Disabled'}`,
-],who)],components:[
-  row(enabled?button('admin:verification:disable','🔴 Disable Verification',ButtonStyle.Danger):button('admin:verification:enable','🟢 Enable Verification',ButtonStyle.Success),button('admin:verification:test','🩺 Health Check',ButtonStyle.Primary)),
-  row(toggleButton('admin:verification:settings:raid','Raid Protection',c.raid?.enabled!==false),toggleButton('admin:verification:settings:quarantine','Quarantine',c.quarantine?.enabled!==false),toggleButton('admin:verification:settings:testMode','Test Mode',c.health?.testMode===true)),
-  finalNav('home'),
-]}; }
-
-function buildVerificationAdminPanel(guild,who='Unknown User',section='home',state={}){ const page=SECTIONS.has(section)?section:'home'; if(page==='roles')return rolesPage(guild,who,state); if(page==='security')return securityPage(guild,who); if(page==='intelligence')return intelligencePage(guild,who); if(page==='flow')return flowPage(guild,who); if(page==='messages')return messagesPage(guild,who); if(page==='logs')return logsPage(guild,who,state); if(page==='settings')return settingsPage(guild,who); return homePage(guild,who); }
-async function respond(i,payload){ if(i.deferred||i.replied)return i.editReply(payload); return i.update(payload); }
-
-async function handleVerificationAdminInteraction(i){
-  const id=String(i.customId||''); if(!id.startsWith('admin:verification:'))return false;
-  const who=requestedBy(i), st=stateFor(i);
-  try{
-    if(id.startsWith('admin:verification:page:')){ const page=id.slice('admin:verification:page:'.length); return await respond(i,buildVerificationAdminPanel(i.guild,who,page,st)),true; }
-    if(id==='admin:verification:roleType'){ st.roleType=i.values?.[0]||'pending'; return await respond(i,rolesPage(i.guild,who,st)),true; }
-    if(id.startsWith('admin:verification:roles:')){ const type=id.slice('admin:verification:roles:'.length); if(!ROLE_TYPES.includes(type))throw new Error('Unknown Verification role category.'); const c=settings(i.guildId), roles={...(c.roles||{}),[type]:[...new Set(i.values||[])]}; save(i.guildId,{roles},i.user.id); st.roleType=type; return await respond(i,rolesPage(i.guild,who,st)),true; }
-    if(id.startsWith('admin:verification:security:')){ const key=id.slice('admin:verification:security:'.length); if(!SECURITY.some(([k])=>k===key))throw new Error('Unknown security method.'); const c=settings(i.guildId), security={...(c.security||{}),[key]:!(c.security?.[key]===true)}; save(i.guildId,{security},i.user.id); return await respond(i,securityPage(i.guild,who)),true; }
-    if(id.startsWith('admin:verification:intelligence:')){ const key=id.slice('admin:verification:intelligence:'.length); const c=settings(i.guildId), intelligence={...(c.intelligence||{}),[key]:!(c.intelligence?.[key]===true)}; save(i.guildId,{intelligence},i.user.id); return await respond(i,intelligencePage(i.guild,who)),true; }
-    if(id==='admin:verification:flowSecurity'){ const c=settings(i.guildId); const selected=[...new Set(i.values||[])]; const flow={...(c.flow||{}),orderedSecurity:selected}; const security={...(c.security||{})}; for(const [key] of SECURITY) security[key]=selected.includes(key); save(i.guildId,{flow,security},i.user.id); return await respond(i,flowPage(i.guild,who)),true; }
-    if(id.startsWith('admin:verification:flow:')){ const key=id.slice('admin:verification:flow:'.length), c=settings(i.guildId), flow={...(c.flow||{}),[key]:!(c.flow?.[key]===true)}; save(i.guildId,{flow},i.user.id); return await respond(i,flowPage(i.guild,who)),true; }
-    if(id==='admin:verification:logType'){ st.logType=i.values?.[0]||'join'; return await respond(i,logsPage(i.guild,who,st)),true; }
-    if(id.startsWith('admin:verification:logChannel:')){ const type=id.slice('admin:verification:logChannel:'.length); if(!LOG_TYPES.includes(type))throw new Error('Unknown log category.'); const c=settings(i.guildId), logs={...(c.logs||{}),[`${type}ChannelId`]:i.values?.[0]||null}; save(i.guildId,{logs},i.user.id); st.logType=type; return await respond(i,logsPage(i.guild,who,st)),true; }
-    if(id==='admin:verification:enable'||id==='admin:verification:disable'){ guildManager.setModuleEnabled(i.guildId,'verification',id.endsWith(':enable'),{actorId:i.user.id,action:'verification_admin_toggle'}); return await respond(i,settingsPage(i.guild,who)),true; }
-    if(id==='admin:verification:settings:raid'){ const c=settings(i.guildId); save(i.guildId,{raid:{...(c.raid||{}),enabled:c.raid?.enabled===false}},i.user.id); return await respond(i,settingsPage(i.guild,who)),true; }
-    if(id==='admin:verification:settings:quarantine'){ const c=settings(i.guildId); save(i.guildId,{quarantine:{...(c.quarantine||{}),enabled:c.quarantine?.enabled===false}},i.user.id); return await respond(i,settingsPage(i.guild,who)),true; }
-    if(id==='admin:verification:settings:testMode'){ const c=settings(i.guildId); save(i.guildId,{health:{...(c.health||{}),testMode:!(c.health?.testMode===true)}},i.user.id); return await respond(i,settingsPage(i.guild,who)),true; }
-    if(id==='admin:verification:test'){ const report=await verificationManager.buildHealthReport(i.guild); await i.reply({content:report.warnings?.length?`⚠️ Verification health:\n${report.warnings.map(x=>`• ${x}`).join('\n')}`:'✅ Verification setup looks healthy.',flags:64}); return true; }
-    if(id==='admin:verification:resetMessages'){ verificationManager.updateVerificationMessages(i.guildId,verificationStore.defaultMessages(),{actorId:i.user.id,action:'verification_messages_reset'}); return await respond(i,messagesPage(i.guild,who)),true; }
-    return false;
-  }catch(error){ const payload={content:`❌ Verification setup failed: ${error.message}`,flags:64}; if(i.deferred||i.replied)await i.followUp(payload).catch(()=>null); else await i.reply(payload).catch(()=>null); return true; }
-}
-
+const SECTIONS=new Set(['home','roles','security','intelligence','flow','messages','logs','settings']);
+const ROLE_TYPES=['pending','verifying','verified','auto','bot','bypass','quarantine','staff'];
+const SECURITY=[['simple','Simple Verify'],['captcha','CAPTCHA'],['minigame','Mini Games'],['accountAge','Account Age'],['discordScreening','Discord Screening'],['botProtection','Bot Protection'],['staffApproval','Staff Approval'],['oneTimeChallenge','One-Time Challenge'],['riskBased','Risk-Based Security'],['rejoinHistory','Rejoin History']];
+const FLOW_KEYS={simple:'simple',captcha:'captcha',minigame:'minigame',accountAge:'account_age',discordScreening:'discord_screening',botProtection:'bot_protection',staffApproval:'staff_approval',oneTimeChallenge:'one_time_challenge',riskBased:'risk_based',rejoinHistory:'rejoin_history'};
+const LOG_TYPES=['join','intelligence','attempt','failure','success','roles','bot','raid','quarantine','staff','error'];
+const MESSAGE_TYPES=['start','success','failed','retry','cooldown','screeningRequired','accountTooNew','botBlocked','quarantined','timedOut','unavailable','alreadyVerified'];
+const sessions=new Map();
+const row=(...x)=>new ActionRowBuilder().addComponents(...x.filter(Boolean));
+const button=(id,label,style=ButtonStyle.Secondary,disabled=false)=>new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+const toggle=(id,label,on)=>button(id,`${on?'🟢':'🔴'} ${label}`,on?ButtonStyle.Success:ButtonStyle.Danger);
+const title=s=>s[0].toUpperCase()+s.slice(1).replace(/([A-Z])/g,' $1');
+const who=i=>i.member?.displayName||i.user?.displayName||i.user?.username||'Unknown User';
+function state(i){const k=`${i.guildId}:${i.user.id}`,v=sessions.get(k)||{roleType:'pending',logType:'join',messageType:'start'};sessions.set(k,v);return v;}
+const status=id=>verificationManager.getVerificationStatus(id);
+const settings=id=>status(id).settings||verificationStore.defaultSettings();
+const save=(id,patch,actorId)=>verificationManager.updateVerificationSettings(id,patch,{actorId,action:'verification_admin_update'});
+const emb=(t,lines,user,color=0x5865F2)=>new EmbedBuilder().setColor(color).setTitle(t).setDescription(lines.filter(Boolean).join('\n').slice(0,4096)).setFooter({text:`Requested by ${user}`}).setTimestamp();
+const roleText=(g,ids=[])=>ids.length?ids.map(id=>g.roles.cache.has(id)?`<@&${id}>`:`Unknown (${id})`).join(', '):'`Not set`';
+const channelText=id=>id?`<#${id}>`:'`Not set`';
+const finalNav=(back='home')=>row(button(`admin:verification:page:${back}`,'◀ Back'),button('admin:verification:page:settings','⚙️ Settings'));
+const homeNav=()=>[row(button('admin:verification:page:roles','🎭 Roles'),button('admin:verification:page:security','🛡️ Security'),button('admin:verification:page:intelligence','🧠 Intelligence'),button('admin:verification:page:flow','🚪 Flow')),row(button('admin:verification:page:messages','💬 Messages'),button('admin:verification:page:logs','📋 Logs'),button('admin:verification:page:settings','⚙️ Settings'))];
+function homePage(g,user){const s=status(g.id),c=s.settings,en=guildManager.isModuleEnabled(g.id,'verification'),flow=c.flow?.orderedSecurity||[];return{embeds:[emb('🛡️ Verification · Front Door',['**Universal, modular server verification and entry security.**','',`**Module:** ${en?'Enabled ✅':'Disabled ❌'}`,'**Journey:** NEW MEMBER → PENDING → VERIFYING → VERIFIED → SERVER',`**Security Flow:** ${flow.length?flow.join(' → '):'None ⚠️'}`,`**Intelligence:** ${c.intelligence?.enabled?'Enabled 🧠':'Disabled'}`,`**Failed attempts before quarantine:** ${c.security?.maximumFailedAttempts??5}`,`**Verified:** ${s.analytics?.verified||0} · **Failed:** ${s.analytics?.failed||0} · **Quarantined:** ${s.analytics?.quarantined||0}`],user,en?0x57F287:0x5865F2)],components:homeNav()};}
+function rolesPage(g,user,st){const c=settings(g.id),type=ROLE_TYPES.includes(st.roleType)?st.roleType:'pending';const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:roleType').setPlaceholder('Choose role category').addOptions(ROLE_TYPES.map(x=>({label:title(x),value:x,default:x===type})));const selector=new RoleSelectMenuBuilder().setCustomId(`admin:verification:roles:${type}`).setPlaceholder(`Select ${type} role(s)`).setMinValues(0).setMaxValues(10);return{embeds:[emb('🎭 Verification · Roles',ROLE_TYPES.map(x=>`**${title(x)}:** ${roleText(g,c.roles?.[x]||[])}`),user)],components:[row(menu),row(selector),finalNav()]};}
+function securityPage(g,user){const c=settings(g.id),s=c.security||{},active=SECURITY.filter(([k])=>s[k]===true).map(([,n])=>n);return{embeds:[emb('🛡️ Verification · Security',['Enable one method or stack multiple methods. Flow decides execution order.','',`**Active:** ${active.join(' · ')||'None ⚠️'}`,`**Maximum failed attempts:** ${s.maximumFailedAttempts??5}`,`**Cooldown:** ${s.attemptCooldownSeconds??10}s`,`**Re-verification:** ${s.allowReverification!==false?'Allowed':'Disabled'}`,`**Quarantine at limit:** ${s.quarantineOnLimit!==false?'Yes ✅':'No'}`],user)],components:[row(...SECURITY.slice(0,5).map(([k,n])=>toggle(`admin:verification:security:${k}`,n,s[k]===true))),row(...SECURITY.slice(5).map(([k,n])=>toggle(`admin:verification:security:${k}`,n,s[k]===true))),row(toggle('admin:verification:securitySetting:allowReverification','Re-verification',s.allowReverification!==false),toggle('admin:verification:securitySetting:quarantineOnLimit','Quarantine At Limit',s.quarantineOnLimit!==false)),finalNav()]};}
+function intelligencePage(g,user){const x=settings(g.id).intelligence||{};return{embeds:[emb('🧠 Verification · Intelligence',['Auto Scan observes and flags. It does not punish by itself.','',`**Auto Scan:** ${x.enabled?'ON ✅':'OFF'}`,`**Initial scan:** ${x.initialScan?'ON':'OFF'}`,`**Continuous scan:** ${x.continuousScan?'ON':'OFF'}`,`**Rescan interval:** ${x.rescanMinutes||1440} minutes`,`**Successful scan logs:** ${x.logSuccessfulScans?'ON':'OFF'}`,`**Flag logs:** ${x.logFlags!==false?'ON':'OFF'}`,`**Error logs:** ${x.logErrors!==false?'ON':'OFF'}`],user)],components:[row(toggle('admin:verification:intelligence:enabled','Auto Scan',x.enabled),toggle('admin:verification:intelligence:initialScan','Initial Scan',x.initialScan),toggle('admin:verification:intelligence:continuousScan','Continuous Scan',x.continuousScan)),row(toggle('admin:verification:intelligence:logSuccessfulScans','Success Logs',x.logSuccessfulScans),toggle('admin:verification:intelligence:logFlags','Flag Logs',x.logFlags!==false),toggle('admin:verification:intelligence:logErrors','Error Logs',x.logErrors!==false)),finalNav()]};}
+function flowPage(g,user){const c=settings(g.id),f=c.flow||{},order=f.orderedSecurity||[];const opts=SECURITY.map(([key,name])=>({label:name,value:FLOW_KEYS[key],default:order.includes(FLOW_KEYS[key])}));const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:flowSecurity').setPlaceholder('Choose security layers used by this guild').setMinValues(1).setMaxValues(opts.length).addOptions(opts);return{embeds:[emb('🚪 Verification · Flow',['**Lifecycle:** NEW MEMBER → PENDING → VERIFYING → VERIFIED → SERVER','',`**Required security:** ${order.length?order.map((x,i)=>`${i+1}. ${title(x.replaceAll('_',' '))}`).join(' → '):'None ⚠️'}`,`**Fail closed:** ${f.failClosed!==false?'Yes ✅':'No ⚠️'}`,`**Reset active journey on leave:** ${f.resetActiveSessionOnLeave!==false?'Yes':'No'}`,`**Retain security history:** ${f.retainSecurityHistory!==false?'Yes':'No'}`,'','Only selected layers participate. Disabled security cannot silently grant Verified access.'],user)],components:[row(menu),row(toggle('admin:verification:flow:failClosed','Fail Closed',f.failClosed!==false),toggle('admin:verification:flow:resetActiveSessionOnLeave','Reset On Leave',f.resetActiveSessionOnLeave!==false),toggle('admin:verification:flow:retainSecurityHistory','Retain History',f.retainSecurityHistory!==false)),finalNav()]};}
+function messagesPage(g,user,st){const m=status(g.id).messages||{},type=MESSAGE_TYPES.includes(st.messageType)?st.messageType:'start';const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:messageType').setPlaceholder('Choose message').addOptions(MESSAGE_TYPES.map(x=>({label:title(x),value:x,default:x===type})));return{embeds:[emb('💬 Verification · Messages',['Verification owns all of its member-facing messages.','',`**Selected:** ${title(type)}`,`> ${(m[type]||'Not set').slice(0,1000)}`,'','Template variables are resolved by Verification at runtime.'],user)],components:[row(menu),row(button('admin:verification:resetMessages','↺ Reset All Verification Messages',ButtonStyle.Danger)),finalNav()]};}
+function logsPage(g,user,st){const c=settings(g.id),type=LOG_TYPES.includes(st.logType)?st.logType:'join';const menu=new StringSelectMenuBuilder().setCustomId('admin:verification:logType').setPlaceholder('Choose log category').addOptions(LOG_TYPES.map(x=>({label:title(x),value:x,default:x===type})));const channel=new ChannelSelectMenuBuilder().setCustomId(`admin:verification:logChannel:${type}`).setPlaceholder(`Choose ${type} log channel`).setMinValues(0).setMaxValues(1).setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement);return{embeds:[emb('📋 Verification · Logs',['Each event can use its own destination, or categories can share a channel.','',...LOG_TYPES.map(x=>`**${title(x)}:** ${channelText(c.logs?.[`${x}ChannelId`])}`)],user)],components:[row(menu),row(channel),finalNav()]};}
+function settingsPage(g,user){const c=settings(g.id),en=guildManager.isModuleEnabled(g.id,'verification');return{embeds:[emb('⚙️ Verification · Settings',[`**Module:** ${en?'Enabled ✅':'Disabled ❌'}`,`**Maximum failures:** ${c.security?.maximumFailedAttempts??5}`,`**Attempt cooldown:** ${c.security?.attemptCooldownSeconds??10}s`,`**Raid protection:** ${c.raid?.enabled!==false?'Enabled':'Disabled'}`,`**Quarantine:** ${c.quarantine?.enabled!==false?'Enabled':'Disabled'}`,`**Test mode:** ${c.health?.testMode?'Enabled':'Disabled'}`,`**Fail closed:** ${c.flow?.failClosed!==false?'Enabled':'Disabled'}`],user)],components:[row(en?button('admin:verification:disable','🔴 Disable Verification',ButtonStyle.Danger):button('admin:verification:enable','🟢 Enable Verification',ButtonStyle.Success),button('admin:verification:test','🩺 Health Check',ButtonStyle.Primary)),row(toggle('admin:verification:settings:raid','Raid Protection',c.raid?.enabled!==false),toggle('admin:verification:settings:quarantine','Quarantine',c.quarantine?.enabled!==false),toggle('admin:verification:settings:testMode','Test Mode',c.health?.testMode===true)),finalNav()]};}
+function buildVerificationAdminPanel(g,user='Unknown User',section='home',st={}){const p=SECTIONS.has(section)?section:'home';if(p==='roles')return rolesPage(g,user,st);if(p==='security')return securityPage(g,user);if(p==='intelligence')return intelligencePage(g,user);if(p==='flow')return flowPage(g,user);if(p==='messages')return messagesPage(g,user,st);if(p==='logs')return logsPage(g,user,st);if(p==='settings')return settingsPage(g,user);return homePage(g,user);}
+async function respond(i,p){if(i.deferred||i.replied)return i.editReply(p);return i.update(p);}
+async function handleVerificationAdminInteraction(i){const id=String(i.customId||'');if(!id.startsWith('admin:verification:'))return false;const user=who(i),st=state(i);try{
+ if(id.startsWith('admin:verification:page:')){await respond(i,buildVerificationAdminPanel(i.guild,user,id.slice(24),st));return true;}
+ if(id==='admin:verification:roleType'){st.roleType=i.values?.[0]||'pending';await respond(i,rolesPage(i.guild,user,st));return true;}
+ if(id.startsWith('admin:verification:roles:')){const type=id.slice(25);if(!ROLE_TYPES.includes(type))throw new Error('Unknown Verification role category.');const c=settings(i.guildId);save(i.guildId,{roles:{...(c.roles||{}),[type]:[...new Set(i.values||[])]}},i.user.id);st.roleType=type;await respond(i,rolesPage(i.guild,user,st));return true;}
+ if(id.startsWith('admin:verification:securitySetting:')){const key=id.slice(35),c=settings(i.guildId),s={...(c.security||{}),[key]:!(c.security?.[key]!==false)};save(i.guildId,{security:s},i.user.id);await respond(i,securityPage(i.guild,user));return true;}
+ if(id.startsWith('admin:verification:security:')){const key=id.slice(28);if(!SECURITY.some(([k])=>k===key))throw new Error('Unknown security method.');const c=settings(i.guildId),s={...(c.security||{}),[key]:!(c.security?.[key]===true)};save(i.guildId,{security:s},i.user.id);await respond(i,securityPage(i.guild,user));return true;}
+ if(id.startsWith('admin:verification:intelligence:')){const key=id.slice(32),c=settings(i.guildId),x={...(c.intelligence||{}),[key]:!(c.intelligence?.[key]===true)};save(i.guildId,{intelligence:x},i.user.id);await respond(i,intelligencePage(i.guild,user));return true;}
+ if(id==='admin:verification:flowSecurity'){const c=settings(i.guildId),selected=[...new Set(i.values||[])],s={...(c.security||{})};for(const [key] of SECURITY)s[key]=selected.includes(FLOW_KEYS[key]);save(i.guildId,{flow:{...(c.flow||{}),orderedSecurity:selected},security:s},i.user.id);await respond(i,flowPage(i.guild,user));return true;}
+ if(id.startsWith('admin:verification:flow:')){const key=id.slice(24),c=settings(i.guildId),f={...(c.flow||{}),[key]:!(c.flow?.[key]!==false)};save(i.guildId,{flow:f},i.user.id);await respond(i,flowPage(i.guild,user));return true;}
+ if(id==='admin:verification:messageType'){st.messageType=i.values?.[0]||'start';await respond(i,messagesPage(i.guild,user,st));return true;}
+ if(id==='admin:verification:logType'){st.logType=i.values?.[0]||'join';await respond(i,logsPage(i.guild,user,st));return true;}
+ if(id.startsWith('admin:verification:logChannel:')){const type=id.slice(30);if(!LOG_TYPES.includes(type))throw new Error('Unknown log category.');const c=settings(i.guildId);save(i.guildId,{logs:{...(c.logs||{}),[`${type}ChannelId`]:i.values?.[0]||null}},i.user.id);st.logType=type;await respond(i,logsPage(i.guild,user,st));return true;}
+ if(id==='admin:verification:enable'||id==='admin:verification:disable'){guildManager.setModuleEnabled(i.guildId,'verification',id.endsWith(':enable'),{actorId:i.user.id,action:'verification_admin_toggle'});await respond(i,settingsPage(i.guild,user));return true;}
+ if(id==='admin:verification:settings:raid'){const c=settings(i.guildId);save(i.guildId,{raid:{...(c.raid||{}),enabled:c.raid?.enabled===false}},i.user.id);await respond(i,settingsPage(i.guild,user));return true;}
+ if(id==='admin:verification:settings:quarantine'){const c=settings(i.guildId);save(i.guildId,{quarantine:{...(c.quarantine||{}),enabled:c.quarantine?.enabled===false}},i.user.id);await respond(i,settingsPage(i.guild,user));return true;}
+ if(id==='admin:verification:settings:testMode'){const c=settings(i.guildId);save(i.guildId,{health:{...(c.health||{}),testMode:!(c.health?.testMode===true)}},i.user.id);await respond(i,settingsPage(i.guild,user));return true;}
+ if(id==='admin:verification:test'){const r=await verificationManager.buildHealthReport(i.guild),text=[...(r.issues||[]),...(r.warnings||[])];await i.reply({content:text.length?`⚠️ Verification health:\n${text.map(x=>`• ${x}`).join('\n').slice(0,1900)}`:'✅ Verification setup looks healthy.',flags:64});return true;}
+ if(id==='admin:verification:resetMessages'){verificationManager.updateVerificationMessages(i.guildId,verificationStore.defaultMessages(),{actorId:i.user.id,action:'verification_messages_reset'});await respond(i,messagesPage(i.guild,user,st));return true;}
+ return false;
+}catch(error){const p={content:`❌ Verification setup failed: ${error.message}`,flags:64};if(i.deferred||i.replied)await i.followUp(p).catch(()=>null);else await i.reply(p).catch(()=>null);return true;}}
 module.exports={buildVerificationAdminPanel,handleVerificationAdminInteraction};
