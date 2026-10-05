@@ -104,7 +104,7 @@ function sanitizeConfigInput(value = {}, guildIdValue = null) {
   if (Object.prototype.hasOwnProperty.call(input, 'liveRoleId')) input.liveRoleId = discordId(input.liveRoleId);
   if (Object.prototype.hasOwnProperty.call(input, 'notificationMentionMode')) input.notificationMentionMode = ['none', 'role', 'everyone', 'here'].includes(input.notificationMentionMode) ? input.notificationMentionMode : 'none';
   if (Object.prototype.hasOwnProperty.call(input, 'settings') && isObject(input.settings)) {
-    const allowedSettings = new Set(['checkIntervalMs','retryIntervalMs','retryDeliveries','maxDeliveryAttempts','cooldownMs','suppressDuplicates','editLiveNotifications','deleteEndedNotifications','includeViewerCount','includeLiveDuration','thumbnailPreference','platformPriority','quietHours','liveRefreshEnabled','liveRefreshSeconds']);
+    const allowedSettings = new Set(['checkIntervalMs','retryIntervalMs','retryDeliveries','maxDeliveryAttempts','cooldownMs','suppressDuplicates','editLiveNotifications','includeViewerCount','includeLiveDuration','thumbnailPreference','platformPriority','quietHours','liveRefreshEnabled','liveRefreshSeconds']);
     input.settings = pickKeys(input.settings, allowedSettings);
     if (isObject(input.settings.quietHours)) input.settings.quietHours = pickKeys(input.settings.quietHours, new Set(['enabled','start','end','timezone']));
     if (Array.isArray(input.settings.platformPriority)) input.settings.platformPriority = input.settings.platformPriority.map((item) => clean(item, 20).toLowerCase()).filter((item) => PLATFORMS.includes(item));
@@ -166,7 +166,6 @@ function defaults() {
       cooldownMs: 300000,
       suppressDuplicates: true,
       editLiveNotifications: true,
-      deleteEndedNotifications: true,
       includeViewerCount: true,
       includeLiveDuration: true,
       thumbnailPreference: 'stream',
@@ -278,7 +277,6 @@ function normalize(raw = {}) {
       cooldownMs: asNumber(settings.cooldownMs, 300000, 0, 86400000),
       suppressDuplicates: settings.suppressDuplicates !== false,
       editLiveNotifications: settings.editLiveNotifications !== false,
-      deleteEndedNotifications: settings.deleteEndedNotifications !== false,
       includeViewerCount: settings.includeViewerCount !== false,
       includeLiveDuration: settings.includeLiveDuration !== false,
       thumbnailPreference: ['stream', 'creator', 'none'].includes(settings.thumbnailPreference) ? settings.thumbnailPreference : 'stream',
