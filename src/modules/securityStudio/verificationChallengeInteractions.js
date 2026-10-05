@@ -79,6 +79,21 @@ async function recordTerminalFailure(interaction, parsed, result, manager) {
   return null;
 }
 
+function resumedMemberPayload(userId, resumed) {
+  if (!resumed?.challenge) return { content: resumed?.ok ? `✅ ${resumed.message}` : resumed?.message || 'Security check passed. Continue Verification.' };
+  return { content: resumed.message || 'Continue with the next Verification security check.', ...memberChallengePayload(userId, resumed.challenge) };
+}
+
+async function publishResumedChallenge(interaction, userId, resumed) {
+  if (!resumed?.challenge) return false;
+  const payload = resumed.challenge.method === 'staff_approval'
+    ? staffChallengePayload(userId, resumed.challenge)
+    : memberChallengePayload(userId, resumed.challenge);
+  if (!payload || !interaction.channel?.send) return false;
+  await interaction.channel.send({ content: `<@${userId}> ${resumed.message || 'Verification requires another security check.'}`, ...payload, allowedMentions: { users: [userId], roles: [], parse: [] } });
+  return true;
+}
+
 async function handleMemberAction(interaction, parsed) {
   if (clean(interaction.user?.id) !== clean(parsed.userId)) { await interaction.reply({ content: '❌ This Verification challenge belongs to another member.', flags: MessageFlags.Ephemeral }); return true; }
   const state = runtime.sessionState(interaction.guildId, parsed.userId); const challenge = state.activeChallenge;
@@ -94,12 +109,12 @@ async function handleAnswerModal(interaction, parsed, manager) {
   const answer = interaction.fields.getTextInputValue(ANSWER_FIELD_ID);
   const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
   if (!result.ok) {
-    await recordTerminalFailure(interaction, parsed, result, manager);
-    const message = result.reason === 'expired' ? '⏱️ This challenge expired. Start Verification again.' : result.complete ? '❌ That answer was incorrect and this challenge has ended.' : '❌ That answer was incorrect. Try again.';
+    const failure = await recordTerminalFailure(interaction, parsed, result, manager);
+    const message = failure?.quarantined ? '⛔ Verification failed and your account has been moved to quarantine for staff review.' : result.reason === 'expired' ? '⏱️ This challenge expired. Start Verification again.' : result.complete ? '❌ That answer was incorrect and this challenge has ended.' : '❌ That answer was incorrect. Try again.';
     await interaction.reply({ content: message, flags: MessageFlags.Ephemeral }); return true;
   }
   const resumed = await maybeResumeFlow(interaction, result, manager);
-  if (resumed) { await interaction.reply({ content: resumed.ok ? `✅ ${resumed.message}` : resumed.message || 'Security check passed. Continue Verification.', flags: MessageFlags.Ephemeral }); return true; }
+  if (resumed) { await interaction.reply({ ...resumedMemberPayload(parsed.userId, resumed), flags: MessageFlags.Ephemeral }); return true; }
   const next = runtime.sessionState(interaction.guildId, parsed.userId).activeChallenge;
   await interaction.reply({ content: result.complete ? '✅ Security check passed.' : '✅ Round passed. Continue with the next round.', ...(next && !result.complete ? memberChallengePayload(parsed.userId, next) : {}), flags: MessageFlags.Ephemeral });
   return true;
@@ -110,6 +125,7 @@ async function handleStaffAction(interaction, parsed, manager) {
   if (!isStaff(interaction.member, section.settings || {})) { await interaction.reply({ content: '❌ You are not authorised to resolve Verification staff approvals.', flags: MessageFlags.Ephemeral }); return true; }
   const result = runtime.resolveStaffAction(interaction.guildId, parsed.userId, parsed.challengeId, interaction.user.id, parsed.action);
   if (!result.complete || !result.action) { await interaction.reply({ content: `❌ Staff action failed: ${result.reason || 'challenge unavailable'}.`, flags: MessageFlags.Ephemeral }); return true; }
+  let resumed = null;
   if (result.quarantine) {
     if (typeof manager?.quarantineVerificationMember === 'function') await manager.quarantineVerificationMember(interaction.guild, parsed.userId, 'Quarantined by Verification staff approval');
     else verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'quarantined', quarantinedAt: new Date().toISOString() });
@@ -119,8 +135,9 @@ async function handleStaffAction(interaction, parsed, manager) {
       verificationStore.recordAttempt(interaction.guildId, parsed.userId, { failed: true, step: 'staff_approval', reason: 'Rejected by Verification staff' });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'security_failed', step: 'staff_approval', reason: 'Rejected by Verification staff', staffUserId: clean(interaction.user.id) });
     }
-  } else await maybeResumeFlow(interaction, result, manager, parsed.userId);
-  await interaction.reply({ content: `✅ Verification staff action recorded: **${parsed.action}**.`, flags: MessageFlags.Ephemeral });
+  } else resumed = await maybeResumeFlow(interaction, result, manager, parsed.userId);
+  if (resumed?.challenge) await publishResumedChallenge(interaction, parsed.userId, resumed).catch(error => console.error('[Verification] Could not publish resumed challenge:', error));
+  await interaction.reply({ content: resumed?.complete ? `✅ Staff approval recorded. ${resumed.message}` : `✅ Verification staff action recorded: **${parsed.action}**.`, flags: MessageFlags.Ephemeral });
   return true;
 }
 
