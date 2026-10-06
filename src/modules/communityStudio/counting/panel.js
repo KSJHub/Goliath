@@ -135,13 +135,8 @@ async function handleInteraction(interaction) {
     if (id === `${PREFIX}:main:0`) return safeUpdate(interaction, buildPanel(interaction.guild, name));
     if (id === `${PREFIX}:channel:screen` || id === `${PREFIX}:rules:screen` || id === `${PREFIX}:responses:screen`) return safeUpdate(interaction, buildPanel(interaction.guild, name));
     if (interaction.isChannelSelectMenu?.() && id === `${PREFIX}:channel`) {
-      const old = counting.getSection(interaction.guild.id); const channelId = interaction.values?.[0] || null;
-      if (old.channelId && old.channelId !== channelId && old.playerPanelMessageId) {
-        const oldChannel = interaction.guild.channels.cache.get(old.channelId) || await interaction.guild.channels.fetch(old.channelId).catch(() => null);
-        const oldPanel = oldChannel?.messages ? await oldChannel.messages.fetch(old.playerPanelMessageId).catch(() => null) : null;
-        if (oldPanel) await oldPanel.delete().catch(() => null);
-      }
-      counting.updateSection(interaction.guild.id, (section) => ({ ...section, channelId, playerPanelMessageId: channelId === section.channelId ? section.playerPanelMessageId : null }), { actorId, action: 'counting_channel_changed' });
+      const channelId = interaction.values?.[0] || null;
+      await counting.changeChannel(interaction.guild, channelId, { actorId, action: 'counting_channel_changed' });
       return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
     if (id === `${PREFIX}:toggle:enabled`) {
@@ -150,9 +145,9 @@ async function handleInteraction(interaction) {
       setModuleEnabled(interaction.guild.id, counting.MODULE_KEY, !currentlyEnabled, { actorId, action: 'counting_toggle_enabled' });
       return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
-    if (id === `${PREFIX}:toggle:numbersOnly`) { counting.updateSection(interaction.guild.id, (section) => ({ ...section, numbersOnly: !section.numbersOnly }), { actorId, action: 'counting_toggle_numbers_only' }); await counting.refreshPlayerPanel(interaction.guild).catch(() => null); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (id === `${PREFIX}:toggle:delete`) { counting.updateSection(interaction.guild.id, (section) => ({ ...section, deleteIncorrect: !section.deleteIncorrect }), { actorId, action: 'counting_toggle_delete' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (id === `${PREFIX}:toggle:funny`) { counting.updateSection(interaction.guild.id, (section) => ({ ...section, funnyResponses: !section.funnyResponses }), { actorId, action: 'counting_toggle_funny' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (id === `${PREFIX}:toggle:numbersOnly`) { await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, numbersOnly: !section.numbersOnly }), { actorId, action: 'counting_toggle_numbers_only' }); await counting.refreshPlayerPanel(interaction.guild).catch(() => null); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (id === `${PREFIX}:toggle:delete`) { await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, deleteIncorrect: !section.deleteIncorrect }), { actorId, action: 'counting_toggle_delete' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (id === `${PREFIX}:toggle:funny`) { await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, funnyResponses: !section.funnyResponses }), { actorId, action: 'counting_toggle_funny' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
     if (id === `${PREFIX}:rules:edit`) { await interaction.showModal(buildRulesModal(interaction.guild.id)); return true; }
     if (id === `${PREFIX}:responses:timing`) { await interaction.showModal(buildTimingModal(interaction.guild.id)); return true; }
     if (id === `${PREFIX}:setCurrent`) { await interaction.showModal(buildSetCurrentModal(interaction.guild.id)); return true; }
@@ -163,12 +158,12 @@ async function handleInteraction(interaction) {
       const maxConsecutivePerMember = parseOptionalPositiveInteger(interaction, 'maxConsecutive', 'Turns per member');
       const answerAfterFailures = parseOptionalPositiveInteger(interaction, 'answerAfter', 'Hint threshold');
       const hasProgress = old.currentCount >= old.startingNumber || Object.values(old.memberStats || {}).some((stats) => Number(stats?.validCounts || 0) > 0);
-      counting.updateSection(interaction.guild.id, (section) => ({ ...section, startingNumber, maxConsecutivePerMember, answerAfterFailures, ...(!hasProgress ? { currentCount: startingNumber - 1, highestCount: startingNumber - 1, lastCounterId: null, consecutiveCount: 0, failureStreak: 0, acceptedMessages: {} } : {}) }), { actorId, action: 'counting_rules_saved' });
+      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, startingNumber, maxConsecutivePerMember, answerAfterFailures, ...(!hasProgress ? { currentCount: startingNumber - 1, highestCount: startingNumber - 1, lastCounterId: null, consecutiveCount: 0, failureStreak: 0, acceptedMessages: {} } : {}) }), { actorId, action: 'counting_rules_saved' });
       await counting.refreshPlayerPanel(interaction.guild).catch(() => null); return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
-    if (interaction.isModalSubmit?.() && id === `${PREFIX}:responses:timing:save`) { const responseCleanupSeconds = parseOptionalPositiveInteger(interaction, 'cleanupSeconds', 'Reply cleanup time'); counting.updateSection(interaction.guild.id, (section) => ({ ...section, responseCleanupSeconds }), { actorId, action: 'counting_response_timing_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (interaction.isModalSubmit?.() && id === `${PREFIX}:setCurrent:save`) { const currentCount = parseRequiredInteger(interaction, 'currentCount', 'Current count', 0); counting.setCurrentCount(interaction.guild.id, currentCount, { actorId, action: 'counting_set_current' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (interaction.isModalSubmit?.() && id === `${PREFIX}:milestones:save`) { const milestoneAnnouncements = parseOnOff(interaction, 'enabled', 'Milestones'); const milestoneInterval = parseRequiredInteger(interaction, 'interval', 'Milestone interval', 1); counting.updateSection(interaction.guild.id, (section) => ({ ...section, milestoneAnnouncements, milestoneInterval }), { actorId, action: 'counting_milestones_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (interaction.isModalSubmit?.() && id === `${PREFIX}:responses:timing:save`) { const responseCleanupSeconds = parseOptionalPositiveInteger(interaction, 'cleanupSeconds', 'Reply cleanup time'); await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, responseCleanupSeconds }), { actorId, action: 'counting_response_timing_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (interaction.isModalSubmit?.() && id === `${PREFIX}:setCurrent:save`) { const currentCount = parseRequiredInteger(interaction, 'currentCount', 'Current count', 0); await counting.setCurrentCountQueued(interaction.guild.id, currentCount, { actorId, action: 'counting_set_current' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (interaction.isModalSubmit?.() && id === `${PREFIX}:milestones:save`) { const milestoneAnnouncements = parseOnOff(interaction, 'enabled', 'Milestones'); const milestoneInterval = parseRequiredInteger(interaction, 'interval', 'Milestone interval', 1); await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, milestoneAnnouncements, milestoneInterval }), { actorId, action: 'counting_milestones_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
     if (id === `${PREFIX}:playerPanel`) {
       if (!counting.getSection(interaction.guild.id).channelId) throw new Error('Choose a counting channel before deploying the player panel.');
       await counting.deployPlayerPanel(interaction.guild, { actorId });
