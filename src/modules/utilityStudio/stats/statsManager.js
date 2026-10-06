@@ -85,6 +85,22 @@ function clearGuildVoiceSessions(guildId) {
   return cleared;
 }
 
+function flushGuildVoiceSessions(guild, now = Date.now()) {
+  if (!guild?.id) return 0;
+  let flushed = 0;
+  for (const [key, session] of [...activeVoiceSessions.entries()]) {
+    if (!key.startsWith(`${guild.id}:`)) continue;
+    activeVoiceSessions.delete(key);
+    const userId = key.slice(guild.id.length + 1);
+    const member = guild.members?.cache?.get?.(userId) || guild.voiceStates?.cache?.get?.(userId)?.member || null;
+    const minutes = Math.max(0, (now - Number(session?.startedAt || now)) / 60000);
+    if (!member || !session?.channelId || minutes <= 0) continue;
+    statsStore.addVoiceMinutes(member, session.channelId, minutes);
+    flushed += 1;
+  }
+  return flushed;
+}
+
 function reconcileGuildVoiceSessions(guild) {
   if (!guild?.id) return 0;
   clearGuildVoiceSessions(guild.id);
@@ -92,7 +108,7 @@ function reconcileGuildVoiceSessions(guild) {
   const now = Date.now();
   let count = 0;
   for (const state of guild.voiceStates?.cache?.values?.() || []) {
-    if (!state?.channelId || !state.member?.id) continue;
+    if (!state?.channelId || !state.member?.id || statsStore.isIgnoredActivity(state.member, state.channelId)) continue;
     activeVoiceSessions.set(sessionKey(guild.id, state.member.id), { startedAt: now, channelId: state.channelId });
     count += 1;
   }
@@ -110,7 +126,8 @@ function reconcileActiveVoiceSessions(client) {
 function applyRuntimeConfig(guild, changes = {}, guildOrMeta = guild) {
   if (!guild?.id) throw new Error('Guild is required.');
   const hasEnabled = typeof changes.enabled === 'boolean';
-  const hasTrackVoice = typeof changes.trackVoice === 'boolean';
+  const voiceEligibilityChanged = hasEnabled || ['trackVoice', 'ignoreBots', 'ignoredChannels', 'ignoredRoles'].some((key) => Object.prototype.hasOwnProperty.call(changes, key));
+  if (voiceEligibilityChanged) flushGuildVoiceSessions(guild);
   if (hasEnabled) statsStore.setEnabled(guild.id, changes.enabled, guildOrMeta);
   const updates = { ...changes };
   delete updates.enabled;
@@ -122,7 +139,7 @@ function applyRuntimeConfig(guild, changes = {}, guildOrMeta = guild) {
       settings: updates.settings ? { ...(current.settings || {}), ...updates.settings } : current.settings,
     }), guildOrMeta);
   }
-  if (hasEnabled || hasTrackVoice) reconcileGuildVoiceSessions(guild);
+  if (voiceEligibilityChanged) reconcileGuildVoiceSessions(guild);
   return { ...stored, enabled: statsStore.isEnabled(guild.id) };
 }
 
@@ -132,7 +149,13 @@ async function startup(client) {
   if (sessions) console.log(`[Stats] Reconciled ${sessions} active voice session(s) at startup.`);
   return startCounterRefreshScheduler(client);
 }
-function shutdown() { return stopCounterRefreshScheduler(); }
+function shutdown(client) {
+  if (client?.guilds?.cache) {
+    const now = Date.now();
+    for (const guild of client.guilds.cache.values()) flushGuildVoiceSessions(guild, now);
+  }
+  return stopCounterRefreshScheduler();
+}
 async function resolveChannel(guild, channelId) { if (!channelId) return null; return guild.channels.cache.get(channelId) || guild.channels.fetch(channelId).catch(() => null); }
 
 async function buildHealth(guild) {
@@ -243,4 +266,4 @@ async function handleVoiceStateUpdate(oldState, newState) {
 async function handleGuildMemberAdd(member) { try { if (!member?.guild || !statsStore.isEnabled(member.guild.id)) return; statsStore.addMemberEvent(member, 'join'); queueCounterRefresh(member.guild, 'member-add'); } catch (error) { console.error('[Stats] Failed to track member add:', error); } }
 async function handleGuildMemberRemove(member) { try { if (!member?.guild || !statsStore.isEnabled(member.guild.id)) return; statsStore.addMemberEvent(member, 'leave'); queueCounterRefresh(member.guild, 'member-remove'); } catch (error) { console.error('[Stats] Failed to track member remove:', error); } }
 
-module.exports = { startup, shutdown, startCounterRefreshScheduler, stopCounterRefreshScheduler, reconcileGuildVoiceSessions, applyRuntimeConfig, refreshGuildCounters, refreshAllGuildCounters, queueCounterRefresh, buildHealth, repair, exportConfig, reset, handleMessageCreate, handleVoiceStateUpdate, handleGuildMemberAdd, handleGuildMemberRemove };
+module.exports = { startup, shutdown, startCounterRefreshScheduler, stopCounterRefreshScheduler, flushGuildVoiceSessions, reconcileGuildVoiceSessions, applyRuntimeConfig, refreshGuildCounters, refreshAllGuildCounters, queueCounterRefresh, buildHealth, repair, exportConfig, reset, handleMessageCreate, handleVoiceStateUpdate, handleGuildMemberAdd, handleGuildMemberRemove };
