@@ -2064,8 +2064,10 @@ async function handleDiagnosticsInteraction(i, context) {
     if (!channel?.isTextBased?.() || typeof channel.send !== 'function') throw new Error('The configured Social Studio alert channel is unavailable or not text based.');
     const target = config.notificationMentionMode === 'role' && config.notificationRoleId ? `<@&${config.notificationRoleId}>` : config.notificationMentionMode === 'everyone' ? '@everyone' : config.notificationMentionMode === 'here' ? '@here' : 'No notification ping';
     const message = await channel.send({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Delivery Test').setDescription(`✅ Test delivery reached this channel successfully.\n\n**Configured LIVE notification target:** ${target}\n**Ping safety:** No members were pinged by this test.`).setFooter({ text: 'Goliath Social Studio • Safe Test' }).setTimestamp()], allowedMentions: { parse: [], roles: [] } });
-    await i.followUp({ content: `📨 Test delivered successfully in <#${channel.id}> without pinging members. Message ID: \`${message.id}\`.`, flags: 64 }).catch(() => null);
-    return respond(i, buildSectionPanel(i, 'monitoring'));
+    const notice = `📨 Test delivered successfully in <#${channel.id}> without pinging members. Message ID: ${message.id}.`;
+    if (i.deferred || i.replied) await i.followUp({ content: notice, flags: 64 }).catch(() => null);
+    else await i.reply({ content: notice, flags: 64 });
+    return true;
   }
 
   if (id === `${P}data:refresh`) return respond(i, buildSectionPanel(i, 'monitoring'));
