@@ -58,7 +58,11 @@ module.exports = {
   name: Events.MessageCreate,
 
   async execute(message, client) {
-    if (!message.guild || !message.member || message.author?.bot) return;
+    if (!message.guild || !message.member) return;
+    if (message.author?.bot) {
+      await runHandler('Stats', statsManager.handleMessageCreate, message);
+      return;
+    }
 
     const autoModHandled = await runHandler('AutoMod', handleAutoMod, message);
     if (autoModHandled) return;
