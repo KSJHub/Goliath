@@ -205,7 +205,7 @@ function addMemberEvent(member, type) {
   if (!member?.guild?.id) return null;
   if (!isEnabled(member.guild.id)) return getStats(member.guild.id);
   return updateStats(member.guild.id, (stats) => {
-    if (stats.trackMembers === false) return stats;
+    if (stats.trackMembers === false || ignored(stats, member, null)) return stats;
     if (type === 'join') stats.data.members.joins = Number(stats.data.members.joins || 0) + 1;
     if (type === 'leave') stats.data.members.leaves = Number(stats.data.members.leaves || 0) + 1;
     stats.data.members.snapshots = Array.isArray(stats.data.members.snapshots) ? stats.data.members.snapshots : [];
