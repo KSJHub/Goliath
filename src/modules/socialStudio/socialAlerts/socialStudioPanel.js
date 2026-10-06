@@ -1971,6 +1971,37 @@ async function handleAutomationInteraction(i, context) {
     );
   }
 
+  if (id === `${P}automation:viewers`) {
+    config.settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
+    config.settings.includeViewerCount = config.settings.includeViewerCount === false;
+    saveConfig(i.guildId, config, i.guild, actorId);
+    return respond(i, buildSectionPanel(i, 'liveMessages'));
+  }
+
+  if (id === `${P}automation:duration`) {
+    config.settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
+    config.settings.includeLiveDuration = config.settings.includeLiveDuration === false;
+    saveConfig(i.guildId, config, i.guild, actorId);
+    return respond(i, buildSectionPanel(i, 'liveMessages'));
+  }
+
+  if (id === `${P}automation:liverefreshrate`) {
+    config.settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
+    const values = [600000, 900000, 1200000, 1800000, 2700000, 3600000];
+    if (config.settings.liveRefreshEnabled === false) {
+      config.settings.liveRefreshEnabled = true;
+      config.settings.liveMessageRefreshMs = values[0];
+    } else {
+      const current = Number(config.settings.liveMessageRefreshMs || values[0]);
+      const index = values.indexOf(current);
+      if (index < 0) config.settings.liveMessageRefreshMs = values[0];
+      else if (index >= values.length - 1) config.settings.liveRefreshEnabled = false;
+      else config.settings.liveMessageRefreshMs = values[index + 1];
+    }
+    saveConfig(i.guildId, config, i.guild, actorId);
+    return respond(i, buildSectionPanel(i, 'liveMessages'));
+  }
+
   const section = id.slice(P.length);
   if (section === 'templates') {
     config.templates = normalizeTemplates(config.templates);
