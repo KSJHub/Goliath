@@ -148,7 +148,7 @@ function buildCleanupConfirmation(channelId, mode = 'move') {
 }
 function buildResetConfirmation(guildId) {
   const section = counting.getSection(guildId);
-  return { content: ['⚠️ **Start the counting game again?**', '', `This ends the current run and starts again from **${section.startingNumber}**.`, '', 'Goliath will replace the current player panel with one **COUNTING: RESET** panel in the counting channel. Everything above it belongs to the previous run.', '', 'Your counting channel and configured rules stay exactly as they are.', '', '**This cannot be undone.**'].join('\n'), embeds: [], components: [row(button(`${PREFIX}:reset:confirm`, '🔄 Yes, Start Again', ButtonStyle.Danger), button(`${PREFIX}:main:0`, 'Cancel', ButtonStyle.Secondary))] };
+  return { content: ['⚠️ **Start the counting game again?**', '', 'This ends the current run and starts again from **1**.', '', 'Goliath will replace the current player panel with one **COUNTING: RESET** panel in the counting channel. Everything above it belongs to the previous run.', '', 'Your counting channel and configured rules stay exactly as they are.', '', '**This cannot be undone.**'].join('\n'), embeds: [], components: [row(button(`${PREFIX}:reset:confirm`, '🔄 Yes, Start Again', ButtonStyle.Danger), button(`${PREFIX}:main:0`, 'Cancel', ButtonStyle.Secondary))] };
 }
 function parseRequiredInteger(interaction, fieldId, label, min = 0) {
   const raw = interaction.fields.getTextInputValue(fieldId).trim();
