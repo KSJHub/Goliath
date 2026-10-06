@@ -2115,12 +2115,15 @@ async function handleDiagnosticsInteraction(i, context) {
   } = context;
 
   if (id === `${P}test`) {
-    if (!config.alertsChannelId) throw new Error('Choose an alert channel first.');
-    const channel = i.guild?.channels?.cache?.get(config.alertsChannelId) || await i.guild?.channels?.fetch?.(config.alertsChannelId).catch(() => null);
-    if (!channel?.isTextBased?.() || typeof channel.send !== 'function') throw new Error('The configured Social Studio alert channel is unavailable or not text based.');
+    const accounts = Object.values(config.accounts || {}).filter((account) => account?.enabled !== false);
+    const liveAccount = accounts.find((account) => account.state?.isLive === true) || accounts[0] || null;
+    const resolved = liveAccount ? resolveSocialRoute(config, liveAccount, 'live') : { channelId: config.alertsChannelId || null, source: config.alertsChannelId ? 'Server Default' : 'Not configured' };
+    if (!resolved.channelId) throw new Error('Configure an alert destination in Routing first.');
+    const channel = i.guild?.channels?.cache?.get(resolved.channelId) || await i.guild?.channels?.fetch?.(resolved.channelId).catch(() => null);
+    if (!channel?.isTextBased?.() || typeof channel.send !== 'function') throw new Error('The resolved Social Studio alert destination is unavailable or not text based.');
     const target = config.notificationMentionMode === 'role' && config.notificationRoleId ? `<@&${config.notificationRoleId}>` : config.notificationMentionMode === 'everyone' ? '@everyone' : config.notificationMentionMode === 'here' ? '@here' : 'No notification ping';
-    const message = await channel.send({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Delivery Test').setDescription(`✅ Test delivery reached this channel successfully.\n\n**Configured LIVE notification target:** ${target}\n**Ping safety:** No members were pinged by this test.`).setFooter({ text: 'Goliath Social Studio • Safe Test' }).setTimestamp()], allowedMentions: { parse: [], roles: [] } });
-    const notice = `📨 Test delivered successfully in <#${channel.id}> without pinging members. Message ID: ${message.id}.`;
+    const message = await channel.send({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Delivery Test').setDescription(`✅ Test delivery reached this channel successfully.\n\n**Resolved LIVE route:** <#${channel.id}>\n**Route source:** ${resolved.source || 'Unknown'}\n**Configured LIVE notification target:** ${target}\n**Ping safety:** No members were pinged by this test.`).setFooter({ text: 'Goliath Social Studio • Safe Test' }).setTimestamp()], allowedMentions: { parse: [], roles: [] } });
+    const notice = `📨 Test delivered to <#${channel.id}> via **${resolved.source || 'resolved route'}** without pinging members. Message ID: ${message.id}.`;
     if (i.deferred || i.replied) await i.followUp({ content: notice, flags: 64 }).catch(() => null);
     else await i.reply({ content: notice, flags: 64 });
     return true;
