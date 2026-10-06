@@ -164,7 +164,17 @@ async function buildHealth(guild) {
   const issues = [];
   const counters = statsCounters.listCounters(guild.id);
   const enabledCounters = counters.filter((counter) => counter.enabled !== false);
+  const rawCounters = Array.isArray(config.counters) ? config.counters : [];
   const me = guild.members?.me || null;
+
+  if (rawCounters.length !== counters.length) {
+    issues.push({ code: 'counter_config_invalid', severity: 'error', configured: rawCounters.length, readable: counters.length });
+  }
+  const duplicateIds = [...new Set(counters.map((counter) => counter.id).filter((id, index, all) => id && all.indexOf(id) !== index))];
+  for (const counterId of duplicateIds) issues.push({ code: 'counter_id_duplicate', severity: 'error', counterId });
+  const channelIds = counters.map((counter) => counter.channelId).filter(Boolean);
+  const duplicateChannelIds = [...new Set(channelIds.filter((id, index, all) => all.indexOf(id) !== index))];
+  for (const channelId of duplicateChannelIds) issues.push({ code: 'counter_channel_duplicate', severity: 'error', channelId });
 
   const scheduler = sentinelScheduler.snapshot()[SCHEDULER_ID] || null;
   if (!intervalTimer || !scheduler || scheduler.state !== 'running') {
@@ -213,6 +223,8 @@ async function buildHealth(guild) {
 
   const retentionDays = Number(config.settings?.retentionDays || 0);
   if (!Number.isFinite(retentionDays) || retentionDays < 1 || retentionDays > 365) issues.push({ code: 'retention_invalid', severity: 'warning', value: config.settings?.retentionDays });
+  try { new Intl.DateTimeFormat('en-GB', { timeZone: config.settings?.timeZone || 'Europe/London' }).format(); }
+  catch { issues.push({ code: 'default_timezone_invalid', severity: 'warning', timeZone: config.settings?.timeZone }); }
   const activeVoiceCount = [...activeVoiceSessions.keys()].filter((key) => key.startsWith(`${guild.id}:`)).length;
   return {
     module: 'stats', guildId: guild.id, enabled: guildManager.isModuleEnabled(guild.id, 'stats'),
@@ -228,13 +240,43 @@ async function repair(guild) {
   if (!guild?.id) throw new Error('Guild is required.');
   const before = await buildHealth(guild);
   const repaired = [];
-  for (const issue of before.issues.filter((item) => item.code === 'counter_channel_missing' && item.counterId)) {
-    const counter = statsCounters.listCounters(guild.id).find((item) => item.id === issue.counterId);
-    if (!counter?.enabled) continue;
-    const category = counter.categoryId ? await resolveChannel(guild, counter.categoryId) : null;
-    const replacement = await statsCounters.createDock(guild, { ...counter, channelId: null, categoryId: category?.id || null, categoryName: statsStore.getStats(guild.id).settings?.categoryName }, guild);
-    repaired.push({ counterId: replacement.id, channelId: replacement.channelId });
+
+  if (before.issues.some((issue) => issue.code === 'scheduler_not_running')) {
+    startCounterRefreshScheduler(guild.client);
+    repaired.push({ type: 'scheduler', schedulerId: SCHEDULER_ID });
   }
+
+  for (const issue of before.issues) {
+    if (issue.code === 'counter_channel_missing' && issue.counterId) {
+      const counter = statsCounters.listCounters(guild.id).find((item) => item.id === issue.counterId);
+      if (!counter?.enabled) continue;
+      const category = counter.categoryId ? await resolveChannel(guild, counter.categoryId) : null;
+      const replacement = await statsCounters.createDock(guild, { ...counter, channelId: null, categoryId: category?.id || null, categoryName: statsStore.getStats(guild.id).settings?.categoryName }, guild);
+      repaired.push({ type: 'counter-channel', counterId: replacement.id, channelId: replacement.channelId });
+      continue;
+    }
+
+    if (issue.code === 'counter_manage_channels_missing' && issue.channelId) {
+      const channel = await resolveChannel(guild, issue.channelId);
+      if (channel) {
+        await statsCounters.ensureManageChannels(guild, channel, 'repair this Stats counter');
+        repaired.push({ type: 'permissions', counterId: issue.counterId, channelId: issue.channelId });
+      }
+      continue;
+    }
+
+    if (['counter_category_missing', 'counter_category_mismatch'].includes(issue.code) && issue.counterId) {
+      const counter = statsCounters.listCounters(guild.id).find((item) => item.id === issue.counterId);
+      const channel = counter?.channelId ? await resolveChannel(guild, counter.channelId) : null;
+      if (!counter || !channel?.setParent) continue;
+      const category = await statsCounters.findOrCreateCategory(guild, statsStore.getStats(guild.id).settings?.categoryName || '📊 SERVER STATS');
+      await channel.setParent(category.id, { lockPermissions: false, reason: 'Goliath Stats health repair' });
+      statsCounters.saveDock(guild.id, { ...counter, categoryId: category.id }, guild);
+      repaired.push({ type: 'category', counterId: counter.id, categoryId: category.id });
+    }
+  }
+
+  reconcileGuildVoiceSessions(guild);
   const refreshed = await refreshGuildCounters(guild, 'repair');
   const health = await buildHealth(guild);
   return { repaired, refreshed, health };
