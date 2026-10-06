@@ -632,31 +632,54 @@ async function handleUserManageAccountDeleteConfirm(interaction) {
 }
 
 function getUserManualLiveState(guildId, creator, accounts = []) {
-  if (!creator) return { canPost: false, reason: 'Your Creator Profile could not be found.' };
+  if (!creator) return { canPost: false, reason: 'Your Creator Profile could not be found.', eligibleAccounts: [] };
   const linked = Array.isArray(accounts) ? accounts : [];
   const liveAccounts = linked.filter((account) => account?.enabled !== false && account?.state?.isLive === true && account?.state?.lastLiveEvent && account?.state?.lastCheckedAt);
-  if (!liveAccounts.length) return { canPost: false, reason: 'No checked LIVE account is currently available.' };
+  if (!liveAccounts.length) return { canPost: false, reason: 'No checked LIVE account is currently available.', eligibleAccounts: [] };
+
   const social = guildManager.getGuildSection(guildId, 'social', {});
   const history = Array.isArray(social?.history) ? social.history : [];
-  const accountIds = new Set(linked.map((account) => String(account.accountId)));
   const cutoff = Date.now() - USER_MANUAL_LIVE_COOLDOWN_MS;
-  const recentAccountPost = linked.find((account) => {
-    if (!String(account?.state?.lastAlertKey || '').startsWith('live:')) return false;
-    const sentAt = new Date(account?.state?.lastAlertAt || '').getTime();
-    return Number.isFinite(sentAt) && sentAt >= cutoff;
-  });
-  const recentHistoryPost = [...history].reverse().find((entry) => {
-    if (entry?.status !== 'alert_sent' || entry?.alertType !== 'live') return false;
-    const sentAt = new Date(entry.createdAt || entry.sentAt || '').getTime();
-    if (!Number.isFinite(sentAt) || sentAt < cutoff) return false;
-    return String(entry.creatorId || '') === String(creator.creatorId) || accountIds.has(String(entry.accountId || ''));
-  });
-  const recentPost = recentAccountPost || recentHistoryPost;
-  if (!recentPost) return { canPost: true, reason: `${liveAccounts.length} LIVE account${liveAccounts.length === 1 ? '' : 's'} ready.` };
-  const timestamp = recentAccountPost?.state?.lastAlertAt || recentHistoryPost?.createdAt || recentHistoryPost?.sentAt;
-  const sentAt = new Date(timestamp || '').getTime();
-  const availableAt = Number.isFinite(sentAt) ? Math.floor((sentAt + USER_MANUAL_LIVE_COOLDOWN_MS) / 1000) : null;
-  return { canPost: false, reason: availableAt ? `A LIVE notification was posted within the last hour. Manual posting is available <t:${availableAt}:R>.` : 'A LIVE notification was posted within the last hour.' };
+  const blocked = [];
+  const eligibleAccounts = [];
+
+  for (const account of liveAccounts) {
+    const eventId = String(account?.state?.lastLiveEvent?.id || account?.state?.liveEventId || '');
+    const stateSentAt = String(account?.state?.lastAlertKey || '').startsWith('live:')
+      ? new Date(account?.state?.lastAlertAt || '').getTime()
+      : NaN;
+    const historyPost = [...history].reverse().find((entry) => {
+      if (String(entry?.accountId || '') !== String(account.accountId) || entry?.status !== 'alert_sent' || entry?.alertType !== 'live') return false;
+      const sentAt = new Date(entry.createdAt || entry.sentAt || '').getTime();
+      if (!Number.isFinite(sentAt) || sentAt < cutoff) return false;
+      return !eventId || !entry.eventId || String(entry.eventId) === eventId;
+    });
+    const historySentAt = new Date(historyPost?.createdAt || historyPost?.sentAt || '').getTime();
+    const sentAt = Math.max(Number.isFinite(stateSentAt) && stateSentAt >= cutoff ? stateSentAt : 0, Number.isFinite(historySentAt) ? historySentAt : 0);
+
+    if (sentAt > 0) blocked.push({ account, sentAt });
+    else eligibleAccounts.push(account);
+  }
+
+  if (eligibleAccounts.length) {
+    return {
+      canPost: true,
+      eligibleAccounts,
+      blockedAccounts: blocked.map((item) => item.account),
+      reason: `${eligibleAccounts.length} LIVE account${eligibleAccounts.length === 1 ? '' : 's'} ready.`,
+    };
+  }
+
+  const nextAvailable = blocked.length ? Math.min(...blocked.map((item) => item.sentAt + USER_MANUAL_LIVE_COOLDOWN_MS)) : null;
+  const availableAt = Number.isFinite(nextAvailable) ? Math.floor(nextAvailable / 1000) : null;
+  return {
+    canPost: false,
+    eligibleAccounts: [],
+    blockedAccounts: blocked.map((item) => item.account),
+    reason: availableAt
+      ? `Every currently LIVE account has already been posted. The next account becomes available <t:${availableAt}:R>.`
+      : 'Every currently LIVE account has already been posted within the last hour.',
+  };
 }
 
 async function reportUserLivePostFailure(interaction, creator, accounts, reason, details = {}) {
