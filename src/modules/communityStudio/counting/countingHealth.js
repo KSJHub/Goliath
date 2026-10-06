@@ -34,8 +34,7 @@ async function buildHealthReport(guild) {
     }
   }
 
-  const baseline = section.startingNumber - 1;
-  if (!Number.isSafeInteger(section.startingNumber) || section.startingNumber < 0) issues.push(issue('starting_number_invalid'));
+  const baseline = 0;
   if (!Number.isSafeInteger(section.currentCount) || section.currentCount < baseline) issues.push(issue('current_count_invalid', { currentCount: section.currentCount }));
   if (!Number.isSafeInteger(section.highestCount) || section.highestCount < section.currentCount) issues.push(issue('record_invalid', { highestCount: section.highestCount }));
   if (section.lastCounterId && section.consecutiveCount < 1) warnings.push(issue('turn_state_inconsistent'));
@@ -72,7 +71,7 @@ async function repair(guild, meta = {}) {
   }
 
   await counting.mutateSection(guild.id, (section) => {
-    const baseline = section.startingNumber - 1;
+    const baseline = 0;
     const currentCount = Number.isSafeInteger(section.currentCount) && section.currentCount >= baseline ? section.currentCount : baseline;
     const highestCount = Number.isSafeInteger(section.highestCount) && section.highestCount >= currentCount ? section.highestCount : currentCount;
     const hasCounter = Boolean(section.lastCounterId);
