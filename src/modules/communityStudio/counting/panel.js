@@ -32,7 +32,7 @@ function formatCleanup(value) {
   if (value === null || value === undefined || value === '') return 'Keep replies';
   return `Delete after ${value}s`;
 }
-function footer(embed, memberDisplayName) { return embed.setFooter({ text: `Requested by ${memberDisplayName}` }).setTimestamp(); }
+function footer(embed) { return embed.setFooter({ text: 'Goliath Counting' }).setTimestamp(); }
 function channelSelector(section) {
   return new ChannelSelectMenuBuilder().setCustomId(`${PREFIX}:channel`).setPlaceholder(section.channelId ? 'Change the counting channel' : 'Choose the counting channel').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1);
 }
@@ -64,7 +64,7 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
       '**Player Panel** posts or refreshes the member-friendly instructions in the counting channel.',
       '**Reset** ends the current run and starts again without changing your channel or rules.',
     ].join('\n') },
-  ), memberDisplayName);
+  ));
   return { content: null, embeds: [embed], components: [
     row(channelSelector(section)),
     row(button(`${PREFIX}:rules:edit`, '⚙️ Game Rules', ButtonStyle.Primary), button(`${PREFIX}:setCurrent`, '🎯 Set Count', ButtonStyle.Secondary), button(`${PREFIX}:milestones`, '🎉 Milestones', ButtonStyle.Secondary)),
