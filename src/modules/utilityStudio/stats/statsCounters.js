@@ -236,23 +236,25 @@ async function updateDock(guild, id, changes = {}, guildOrMeta = {}) {
   const existing = listCounters(guild.id).find((item) => item.id === id || item.channelId === id);
   if (!existing) throw new Error('Counter not found.');
   let next = cleanDock({ ...existing, ...changes, id: existing.id, channelId: existing.channelId, segments: changes.segments || existing.segments });
-  let replacement = null;
   if (existing.channelId && existing.channelType !== next.channelType) {
     const oldChannel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null);
     const parentId = oldChannel?.parentId || existing.categoryId || null;
-    replacement = await createCounterChannel(guild, { ...next, channelId: null }, parentId);
+    const replacementChannel = await createCounterChannel(guild, { ...next, channelId: null }, parentId);
+    next = { ...next, channelId: replacementChannel.id, categoryId: parentId || next.categoryId };
+    try { saveDock(guild.id, next, guildOrMeta || guild); }
+    catch (error) {
+      await replacementChannel.delete('Rollback failed Goliath Stats counter persistence').catch(() => null);
+      throw error;
+    }
     try {
       if (oldChannel) await deleteManagedChannel(guild, oldChannel, 'Goliath Stats counter channel type changed', 'replace this counter channel');
     } catch (error) {
-      await replacement.delete('Rollback failed Goliath Stats counter type change').catch(() => null);
+      saveDock(guild.id, existing, guildOrMeta || guild);
+      await replacementChannel.delete('Rollback failed Goliath Stats counter type change').catch(() => null);
       throw error;
     }
-    next = { ...next, channelId: replacement.id, categoryId: parentId || next.categoryId };
-  }
-  try { saveDock(guild.id, next, guildOrMeta || guild); }
-  catch (error) {
-    if (replacement) await replacement.delete('Rollback failed Goliath Stats counter persistence').catch(() => null);
-    throw error;
+  } else {
+    saveDock(guild.id, next, guildOrMeta || guild);
   }
   clearDockSchedule(guild.id, next.id);
   ensureDockSchedule(guild, next);
