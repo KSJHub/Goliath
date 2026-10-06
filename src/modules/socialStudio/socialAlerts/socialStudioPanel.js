@@ -619,7 +619,7 @@ function buildCreatorPanel(i, config, creators) {
           `${P}creator:post`,
           '🔴 Post LIVE',
           ButtonStyle.Secondary,
-          !postState.canPost,
+          false,
         ),
       ),
     );
@@ -1342,6 +1342,29 @@ async function handleCreatorInteraction(i, context) {
     if (!cid || !config.creators[cid]) {
       throw new Error('Select a creator profile first.');
     }
+
+    const creator = config.creators[cid];
+    const accountIds = (creator.accountIds || [])
+      .map((accountId) => config.accounts?.[accountId])
+      .filter((account) => account && account.enabled !== false)
+      .map((account) => account.accountId);
+
+    if (!accountIds.length) {
+      throw new Error('This creator has no enabled social accounts to check.');
+    }
+
+    // /admin is an explicit management override: refresh provider state at
+    // click-time so a newly replaced/linked identity can be posted immediately.
+    await checkGuildAccounts(
+      i.client,
+      i.guildId,
+      {
+        force: true,
+        diagnosticOnly: true,
+        accountIds,
+        guild: i.guild,
+      },
+    );
 
     const result = await forcePostCreatorLive(
       i.client,
