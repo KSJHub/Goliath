@@ -251,7 +251,21 @@ async function handleDiagnosticsAction(interaction, id) {
   if (id === `${P}data:refresh`) return updatePanel(interaction, diagnosticsPayload(interaction));
   if (id === `${P}test`) {
     if (!config.alertsChannelId) throw new Error('Choose an alert channel first.');
-    return followUp(interaction, { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Test').setDescription(`✅ Notification routing is working.\n\nThis private preview was opened from ${interaction.channelId ? `<#${interaction.channelId}>` : 'this setup channel'}.\n\nThumbnails, platform metadata and template variables will be applied to real provider events.`).setFooter({ text: 'Social Studio • Test' }).setTimestamp()] });
+    const channel = interaction.guild?.channels?.cache?.get(config.alertsChannelId)
+      || await interaction.guild?.channels?.fetch?.(config.alertsChannelId).catch(() => null);
+    if (!channel?.isTextBased?.() || typeof channel.send !== 'function') throw new Error('The configured Social Studio alert channel is unavailable or not text based.');
+    const target = config.notificationMentionMode === 'role' && config.notificationRoleId
+      ? `<@&${config.notificationRoleId}>`
+      : config.notificationMentionMode === 'everyone'
+        ? '@everyone'
+        : config.notificationMentionMode === 'here'
+          ? '@here'
+          : 'No notification ping';
+    const message = await channel.send({
+      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Delivery Test').setDescription(`✅ Test delivery reached this channel successfully.\n\n**Configured LIVE notification target:** ${target}\n**Ping safety:** No members were pinged by this test.\n\nReal provider events keep their normal templates, metadata and media.`).setFooter({ text: 'Goliath Social Studio • Safe Test' }).setTimestamp()],
+      allowedMentions: { parse: [], roles: [] },
+    });
+    return followUp(interaction, { content: `📨 Test delivered successfully in <#${channel.id}> without pinging members. Message ID: \`${message.id}\``.` });
   }
   if (id === `${P}testing:last`) {
     const latest = history.at(-1);
