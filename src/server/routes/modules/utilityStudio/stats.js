@@ -120,14 +120,16 @@ router.get('/:guildId/config', (req, res) => {
   try { const guildId = getGuildId(req); return success(res, { guildId, config: { ...stats.getConfig(guildId), enabled: guildManager.isModuleEnabled(guildId, 'stats'), counters: stats.counters.listCounters(guildId) }, summary: stats.getSummary(guildId) }); }
   catch (error) { return failure(res, error, 400); }
 });
-router.patch('/:guildId/config', (req, res) => {
+router.patch('/:guildId/config', async (req, res) => {
   try {
     const guildId = getGuildId(req);
+    const guild = await getGuild(req, guildId);
+    if (!guild) throw new Error('Guild is unavailable.');
     const allowed = ['trackMessages', 'trackVoice', 'trackMembers', 'ignoreBots', 'ignoredChannels', 'ignoredRoles', 'settings'];
-    if (typeof req.body?.enabled === 'boolean') guildManager.setModuleEnabled(guildId, 'stats', req.body.enabled, actor(req, 'stats_config_enabled'));
     const updates = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
-    const stored = stats.store.updateStats(guildId, (current) => ({ ...current, ...updates, settings: updates.settings ? { ...(current.settings || {}), ...updates.settings } : current.settings }), actor(req, 'stats_config_update'));
-    return success(res, { guildId, config: { ...stored, enabled: guildManager.isModuleEnabled(guildId, 'stats'), counters: stats.counters.listCounters(guildId) } });
+    if (typeof req.body?.enabled === 'boolean') updates.enabled = req.body.enabled;
+    const stored = stats.applyRuntimeConfig(guild, updates, actor(req, 'stats_config_update'));
+    return success(res, { guildId, config: { ...stored, counters: stats.counters.listCounters(guildId) } });
   } catch (error) { return failure(res, error, 400); }
 });
 router.get('/:guildId/health', async (req, res) => {
@@ -147,7 +149,7 @@ router.post('/:guildId/refresh', async (req, res) => {
   catch (error) { return failure(res, error, 400); }
 });
 router.post('/:guildId/counters/setup', async (req, res) => {
-  try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); guildManager.setModuleEnabled(guildId, 'stats', true, actor(req, 'stats_counter_setup')); return success(res, { guildId, result: await stats.counters.createCounterSuite(guild, req.body || {}) }); }
+  try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); stats.setEnabled(guildId, true, guild); return success(res, { guildId, result: await stats.counters.createCounterSuite(guild, req.body || {}) }); }
   catch (error) { return failure(res, error, 400); }
 });
 router.post('/:guildId/counters/preview', async (req, res) => {
@@ -155,7 +157,7 @@ router.post('/:guildId/counters/preview', async (req, res) => {
   catch (error) { return failure(res, error, 400); }
 });
 router.post('/:guildId/counters', async (req, res) => {
-  try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); guildManager.setModuleEnabled(guildId, 'stats', true, actor(req, 'stats_counter_create')); const counter = await stats.counters.createDock(guild, req.body || {}, actor(req, 'stats_counter_create')); return success(res, { guildId, counter, counters: stats.counters.listCounters(guildId) }); }
+  try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); stats.setEnabled(guildId, true, guild); const counter = await stats.counters.createDock(guild, req.body || {}, actor(req, 'stats_counter_create')); return success(res, { guildId, counter, counters: stats.counters.listCounters(guildId) }); }
   catch (error) { return failure(res, error, 400); }
 });
 router.patch('/:guildId/counters/:counterId', async (req, res) => {
