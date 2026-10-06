@@ -2074,6 +2074,16 @@ function userCreatorModal(
           .setRequired(false)
           .setValue(String(creator?.notes || '').slice(0, 1000)),
       ),
+      row(
+        new TextInputBuilder()
+          .setCustomId('showProfileInLive')
+          .setLabel('Show profile info in LIVE alerts?')
+          .setPlaceholder('yes or no')
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(3)
+          .setRequired(true)
+          .setValue(creator?.showProfileInLive === false ? 'no' : 'yes'),
+      ),
     );
 }
 
