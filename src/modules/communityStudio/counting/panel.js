@@ -24,8 +24,8 @@ function formatHintThreshold(value) {
   return `After ${value} mistake${Number(value) === 1 ? '' : 's'}`;
 }
 function formatFailureLimit(value) {
-  if (!Number(value)) return 'Off — mistakes do not reset the run';
-  if (Number(value) === 1) return '1 wrong answer — sudden death';
+  if (!Number(value)) return 'Off: mistakes do not reset the run';
+  if (Number(value) === 1) return '1 wrong answer: sudden death';
   return `${value} wrong answers before reset`;
 }
 function formatCleanup(value) {
@@ -113,10 +113,10 @@ function textInput(customId, label, value, { required = false, placeholder = nul
 function buildRulesModal(guildId) {
   const section = counting.getSection(guildId);
   return new ModalBuilder().setCustomId(`${PREFIX}:rules:save`).setTitle('Counting Game Rules').addComponents(
-    row(textInput('startingNumber', 'Start at — default 1', section.startingNumber, { required: true, placeholder: 'Number a new/reset game begins from' })),
-    row(textInput('maxConsecutive', 'Turns per member — blank = unlimited', section.maxConsecutivePerMember, { placeholder: '1 = one turn, 3 = up to three turns' })),
-    row(textInput('answerAfter', 'Hint after mistakes — blank = never', section.answerAfterFailures, { placeholder: '2 = reveal the answer after two mistakes' })),
-    row(textInput('failureLimit', 'Wrong answers before reset — 0 = off', section.failureLimit, { required: true, placeholder: '0 = off, 1 = sudden death, 3 = reset on third' })),
+    row(textInput('startingNumber', 'Start at (default 1)', section.startingNumber, { required: true, placeholder: 'Number a new/reset game begins from' })),
+    row(textInput('maxConsecutive', 'Turns per member (blank = unlimited)', section.maxConsecutivePerMember, { placeholder: '1 = one turn, 3 = up to three turns' })),
+    row(textInput('answerAfter', 'Hint after mistakes (blank = never)', section.answerAfterFailures, { placeholder: '2 = reveal the answer after two mistakes' })),
+    row(textInput('failureLimit', 'Wrong answers before reset (0 = off)', section.failureLimit, { required: true, placeholder: '0 = off, 1 = sudden death, 3 = reset on third' })),
   );
 }
 function buildTimingModal(guildId) {
@@ -130,7 +130,7 @@ function buildSetCurrentModal(guildId) {
 function buildMilestonesModal(guildId) {
   const section = counting.getSection(guildId);
   return new ModalBuilder().setCustomId(`${PREFIX}:milestones:save`).setTitle('Counting Milestones').addComponents(
-    row(textInput('enabled', 'Milestones — on or off', section.milestoneAnnouncements ? 'on' : 'off', { required: true, placeholder: 'on or off' })),
+    row(textInput('enabled', 'Milestones (on or off)', section.milestoneAnnouncements ? 'on' : 'off', { required: true, placeholder: 'on or off' })),
     row(textInput('interval', 'Celebrate every how many counts?', section.milestoneInterval, { required: true, placeholder: '100 = 100, 200, 300...' })),
   );
 }
