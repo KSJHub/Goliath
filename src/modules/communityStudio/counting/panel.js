@@ -113,7 +113,6 @@ function textInput(customId, label, value, { required = false, placeholder = nul
 function buildRulesModal(guildId) {
   const section = counting.getSection(guildId);
   return new ModalBuilder().setCustomId(`${PREFIX}:rules:save`).setTitle('Counting Game Rules').addComponents(
-    row(textInput('startingNumber', 'Start at (default 1)', section.startingNumber, { required: true, placeholder: 'Number a new/reset game begins from' })),
     row(textInput('maxConsecutive', 'Turns per member (blank = unlimited)', section.maxConsecutivePerMember, { placeholder: '1 = one turn, 3 = up to three turns' })),
     row(textInput('answerAfter', 'Hint after mistakes (blank = never)', section.answerAfterFailures, { placeholder: '2 = reveal the answer after two mistakes' })),
     row(textInput('failureLimit', 'Wrong answers before reset (0 = off)', section.failureLimit, { required: true, placeholder: '0 = off, 1 = sudden death, 3 = reset on third' })),
@@ -201,13 +200,10 @@ async function handleInteraction(interaction) {
     if (id === `${PREFIX}:setCurrent`) { await interaction.showModal(buildSetCurrentModal(interaction.guild.id)); return true; }
     if (id === `${PREFIX}:milestones` || id === `${PREFIX}:toggle:milestones`) { await interaction.showModal(buildMilestonesModal(interaction.guild.id)); return true; }
     if (interaction.isModalSubmit?.() && id === `${PREFIX}:rules:save`) {
-      const old = counting.getSection(interaction.guild.id);
-      const startingNumber = parseRequiredInteger(interaction, 'startingNumber', 'Starting number', 0);
       const maxConsecutivePerMember = parseOptionalPositiveInteger(interaction, 'maxConsecutive', 'Turns per member');
       const answerAfterFailures = parseOptionalPositiveInteger(interaction, 'answerAfter', 'Hint threshold');
       const failureLimit = parseRequiredInteger(interaction, 'failureLimit', 'Wrong answers before reset', 0);
-      const hasProgress = old.currentCount >= old.startingNumber || Object.values(old.memberStats || {}).some((stats) => Number(stats?.validCounts || 0) > 0);
-      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, startingNumber, maxConsecutivePerMember, answerAfterFailures, failureLimit, ...(!hasProgress ? { currentCount: startingNumber - 1, highestCount: startingNumber - 1, lastCounterId: null, consecutiveCount: 0, failureStreak: 0, acceptedMessages: {} } : {}) }), { actorId, action: 'counting_rules_saved' });
+      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, startingNumber: 1, maxConsecutivePerMember, answerAfterFailures, failureLimit }), { actorId, action: 'counting_rules_saved' });
       await counting.refreshPlayerPanel(interaction.guild).catch(() => null); return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
     if (interaction.isModalSubmit?.() && id === `${PREFIX}:responses:timing:save`) { const responseCleanupSeconds = parseOptionalPositiveInteger(interaction, 'cleanupSeconds', 'Reply cleanup time'); await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, responseCleanupSeconds }), { actorId, action: 'counting_response_timing_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
