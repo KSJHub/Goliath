@@ -55,16 +55,16 @@ async function rejectWrongCount(message, section, expected) {
   const gameOver = section.failureLimit > 0 && nextFailureStreak >= section.failureLimit;
   if (gameOver) {
     const reached = section.currentCount;
-    const baseline = section.startingNumber - 1;
+    const gameOverBaseline = 0;
     const updated = updateSection(message.guild.id, (current) => ({
-      ...current, currentCount: baseline, highestCount: Math.max(current.highestCount, reached), lastCounterId: null,
+      ...current, currentCount: gameOverBaseline, highestCount: Math.max(current.highestCount, reached), lastCounterId: null,
       consecutiveCount: 0, failureStreak: 0, acceptedMessages: {}, reactionIndex: 0, lastJokeIndex: section.funnyResponses ? joke.index : current.lastJokeIndex,
     }), { actorId: message.author.id, action: 'counting_game_over' });
     await deleteIncorrectMessage(message, updated);
     await message.channel.send({ embeds: [new EmbedBuilder().setColor(PANEL_COLOR).setTitle('💀 COUNTING — GAME OVER').setDescription([
       `<@${message.author.id}> broke the count at **${reached}**.`, `The correct number was **${expected}**.`, '',
-      `🏆 **Run reached:** ${reached}`, `💎 **Server record:** ${updated.highestCount}`, '', `Back to **${updated.startingNumber}**. Try not to break it this time. 👀`,
-      `**Next number: ${updated.startingNumber}**`,
+      `🏆 **Run reached:** ${reached}`, `💎 **Server record:** ${updated.highestCount}`, '', 'Back to **1**. Try not to break it this time. 👀',
+      '**Next number: 1**',
     ].join('\n')).setFooter({ text: 'Goliath Counting' })], allowedMentions: { users: [message.author.id], parse: [] } }).catch(() => null);
     return true;
   }
