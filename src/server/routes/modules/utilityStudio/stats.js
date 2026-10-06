@@ -127,6 +127,32 @@ router.patch('/:guildId/config', async (req, res) => {
     if (!guild) throw new Error('Guild is unavailable.');
     const allowed = ['trackMessages', 'trackVoice', 'trackMembers', 'ignoreBots', 'ignoredChannels', 'ignoredRoles', 'settings'];
     const updates = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
+    for (const key of ['trackMessages', 'trackVoice', 'trackMembers', 'ignoreBots']) {
+      if (Object.prototype.hasOwnProperty.call(updates, key) && typeof updates[key] !== 'boolean') throw new Error(`${key} must be true or false.`);
+    }
+    for (const key of ['ignoredChannels', 'ignoredRoles']) {
+      if (!Object.prototype.hasOwnProperty.call(updates, key)) continue;
+      if (!Array.isArray(updates[key])) throw new Error(`${key} must be an array.`);
+      updates[key] = [...new Set(updates[key].map(String).filter((id) => /^\d{15,25}$/.test(id)))].slice(0, 100);
+    }
+    if (updates.settings != null) {
+      if (!updates.settings || typeof updates.settings !== 'object' || Array.isArray(updates.settings)) throw new Error('settings must be an object.');
+      if (updates.settings.timeZone != null) {
+        const timeZone = String(updates.settings.timeZone).trim();
+        try { new Intl.DateTimeFormat('en-GB', { timeZone }).format(new Date()); } catch { throw new Error('Invalid Stats time zone.'); }
+        updates.settings.timeZone = timeZone;
+      }
+      if (updates.settings.retentionDays != null) {
+        const days = Number(updates.settings.retentionDays);
+        if (!Number.isFinite(days) || days < 1 || days > 365) throw new Error('Retention must be between 1 and 365 days.');
+        updates.settings.retentionDays = Math.floor(days);
+      }
+      if (updates.settings.defaultFrequencyMinutes != null) {
+        const minutes = Number(updates.settings.defaultFrequencyMinutes);
+        if (!Number.isFinite(minutes) || minutes < 10 || minutes > 1440) throw new Error('Default refresh must be between 10 and 1440 minutes.');
+        updates.settings.defaultFrequencyMinutes = Math.floor(minutes);
+      }
+    }
     if (typeof req.body?.enabled === 'boolean') updates.enabled = req.body.enabled;
     const stored = stats.applyRuntimeConfig(guild, updates, actor(req, 'stats_config_update'));
     return success(res, { guildId, config: { ...stored, counters: stats.counters.listCounters(guildId) } });
@@ -172,9 +198,17 @@ router.delete('/:guildId/counters/:counterId', async (req, res) => {
   try { const guildId = getGuildId(req); const guild = await getGuild(req, guildId); if (!guild) throw new Error('Guild is unavailable.'); await stats.counters.deleteDock(guild, String(req.params.counterId || ''), actor(req, 'stats_counter_delete')); return success(res, { guildId, counters: stats.counters.listCounters(guildId) }); }
   catch (error) { return failure(res, error, 400); }
 });
-router.post('/:guildId/reset', (req, res) => {
-  try { const guildId = getGuildId(req); if (req.body?.confirm !== true) return failure(res, new Error('Reset confirmation is required.'), 400); return success(res, { guildId, config: stats.reset(guildId, actor(req, 'stats_reset')) }); }
-  catch (error) { return failure(res, error, 400); }
+router.post('/:guildId/reset', async (req, res) => {
+  try {
+    const guildId = getGuildId(req);
+    if (req.body?.confirm !== true) return failure(res, new Error('Reset confirmation is required.'), 400);
+    const guild = await getGuild(req, guildId);
+    if (!guild) throw new Error('Guild is unavailable.');
+    stats.flushGuildVoiceSessions(guild);
+    const config = stats.reset(guildId, actor(req, 'stats_reset'));
+    stats.reconcileGuildVoiceSessions(guild);
+    return success(res, { guildId, config });
+  } catch (error) { return failure(res, error, 400); }
 });
 
 module.exports = router;
