@@ -1938,7 +1938,15 @@ async function handleDiagnosticsInteraction(i, context) {
     actorId,
   } = context;
 
-  if (id === `${P}test`) { if (!config.alertsChannelId) throw new Error('Choose an alert channel first.'); await i.followUp({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Test').setDescription(`✅ Notification routing is working.\n\nThis private preview was opened from ${i.channelId ? `<#${i.channelId}>` : 'this setup channel'}.\n\nThumbnails, platform metadata and template variables will be applied to real provider events.`).setFooter({ text: 'Social Studio • Test' }).setTimestamp()], flags: 64 }).catch(() => null); return respond(i, buildSectionPanel(i, 'diagnostics')); }
+  if (id === `${P}test`) {
+    if (!config.alertsChannelId) throw new Error('Choose an alert channel first.');
+    const channel = i.guild?.channels?.cache?.get(config.alertsChannelId) || await i.guild?.channels?.fetch?.(config.alertsChannelId).catch(() => null);
+    if (!channel?.isTextBased?.() || typeof channel.send !== 'function') throw new Error('The configured Social Studio alert channel is unavailable or not text based.');
+    const target = config.notificationMentionMode === 'role' && config.notificationRoleId ? `<@&${config.notificationRoleId}>` : config.notificationMentionMode === 'everyone' ? '@everyone' : config.notificationMentionMode === 'here' ? '@here' : 'No notification ping';
+    const message = await channel.send({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Delivery Test').setDescription(`✅ Test delivery reached this channel successfully.\n\n**Configured LIVE notification target:** ${target}\n**Ping safety:** No members were pinged by this test.`).setFooter({ text: 'Goliath Social Studio • Safe Test' }).setTimestamp()], allowedMentions: { parse: [], roles: [] } });
+    await i.followUp({ content: `📨 Test delivered successfully in <#${channel.id}> without pinging members. Message ID: \`${message.id}\`.`, flags: 64 }).catch(() => null);
+    return respond(i, buildSectionPanel(i, 'monitoring'));
+  }
 
   return false;
 }
