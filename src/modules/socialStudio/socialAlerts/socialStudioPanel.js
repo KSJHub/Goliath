@@ -902,8 +902,11 @@ if (name === 'templates') {
       '📦 **Data & Export** — export configuration/history and manage stored Social Studio data.',
     ].join('\n'), who(i))],
     components: [
-      row(btn(`${P}permissions`, '🎭 Roles & Access', ButtonStyle.Primary), btn(`${P}liveMessages`, '🔴 LIVE Messages', ButtonStyle.Primary)),
-      row(btn(`${P}monitoring`, '⚙️ Setup & Diagnostics', ButtonStyle.Primary)),
+      row(
+        btn(`${P}permissions`, '🎭 Roles & Access', ButtonStyle.Primary),
+        btn(`${P}liveMessages`, '🔴 LIVE Messages', ButtonStyle.Primary),
+        btn(`${P}monitoring`, '⚙️ Setup & Diagnostics', ButtonStyle.Primary),
+      ),
       row(btn(`${P}main`, '⬅️ Back', ButtonStyle.Secondary), btn(`${P}data`, '📦 Data & Export', ButtonStyle.Secondary)),
     ],
   };
