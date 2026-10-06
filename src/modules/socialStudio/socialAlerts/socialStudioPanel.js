@@ -76,6 +76,16 @@ const MONITORING_INTERVALS = [
   { label: 'Interval: 30 minutes', value: '1800000', description: 'Check providers every 30 minutes.' },
   { label: 'Interval: 1 hour', value: '3600000', description: 'Check providers every hour.' },
 ];
+function redactExportSecrets(value) {
+  if (Array.isArray(value)) return value.map(redactExportSecrets);
+  if (!value || typeof value !== 'object') return value;
+  const output = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (/(token|secret|password|authorization|cookie|api.?key|access.?key)/i.test(key)) output[key] = '[REDACTED]';
+    else output[key] = redactExportSecrets(entryValue);
+  }
+  return output;
+}
 function sortKeys(value) {
   if (Array.isArray(value)) return value.map(sortKeys);
   if (!value || typeof value !== 'object') return value;
@@ -2086,6 +2096,30 @@ async function handleDiagnosticsInteraction(i, context) {
     const lines = platforms.length ? platforms.map((platform) => { let info = {}; try { info = providerInfo(platform) || {}; } catch { info = {}; } const alerts = Array.isArray(info.supportedAlertTypes) && info.supportedAlertTypes.length ? info.supportedAlertTypes.join(', ') : 'No alert types reported'; return `**${LABEL[platform] || platform}** — ${alerts}`; }) : ['No linked accounts are available to inspect.'];
     const content = `🩺 **Social Studio Provider Details**\n\n${lines.join('\n').slice(0, 1800)}`;
     if (i.deferred || i.replied) await i.followUp({ content, flags: 64 }).catch(() => null); else await i.reply({ content, flags: 64 });
+    return true;
+  }
+  if (id === `${P}data:export:config`) {
+    const safe = redactExportSecrets(config);
+    const file = new AttachmentBuilder(Buffer.from(JSON.stringify(safe, null, 2), 'utf8'), { name: `social-studio-config-${i.guildId}.json` });
+    const payload = { content: '📤 Social Studio configuration export. Sensitive values have been redacted.', files: [file], flags: 64 };
+    if (i.deferred || i.replied) await i.followUp(payload); else await i.reply(payload);
+    return true;
+  }
+
+  if (id === `${P}data:export`) {
+    const history = Array.isArray(config.history) ? config.history : [];
+    const file = new AttachmentBuilder(Buffer.from(JSON.stringify(history, null, 2), 'utf8'), { name: `social-studio-history-${i.guildId}.json` });
+    const payload = { content: '🗂️ Social Studio history export.', files: [file], flags: 64 };
+    if (i.deferred || i.replied) await i.followUp(payload); else await i.reply(payload);
+    return true;
+  }
+
+  if (id === `${P}data:clear`) {
+    if (!Array.isArray(config.history) || !config.history.length) return respond(i, buildSectionPanel(i, 'data'));
+    config.history = [];
+    saveConfig(i.guildId, config, i.guild, actorId);
+    await respond(i, buildSectionPanel(i, 'data'));
+    await i.followUp({ content: '🧹 Social Studio history cleared.', flags: 64 }).catch(() => null);
     return true;
   }
   return false;
