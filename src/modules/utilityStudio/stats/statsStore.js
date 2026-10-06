@@ -162,6 +162,11 @@ function ignored(stats, member, channelId) {
   return Boolean(ignoredRoles.size && member?.roles?.cache?.some?.((role) => ignoredRoles.has(role.id)));
 }
 
+function isIgnoredActivity(member, channelId) {
+  if (!member?.guild?.id) return true;
+  return ignored(getStats(member.guild.id), member, channelId);
+}
+
 function addMessage(message) {
   if (!message?.guild?.id) return null;
   if (!isEnabled(message.guild.id)) return getStats(message.guild.id);
@@ -258,6 +263,7 @@ module.exports = {
   setEnabled,
   isEnabled,
   setRuntimeConfigListener,
+  isIgnoredActivity,
   addMessage,
   addVoiceMinutes,
   addMemberEvent,
