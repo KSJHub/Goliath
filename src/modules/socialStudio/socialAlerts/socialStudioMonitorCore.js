@@ -97,15 +97,16 @@ function eventCandidates(account, previous, checked) {
 }
 function accountChannelOverride(account, type) { return account.alertChannels?.[type] || account.alertChannelId || null; }
 function alertChannelId(config, account, type) { return accountChannelOverride(account, type) || config.alertChannels?.[type] || config.platformChannels?.[account.platform] || config.alertsChannelId || null; }
-function mentionConfig(account, config = {}) {
-  const mode = String(account.mentionMode || config.notificationMentionMode || 'none').toLowerCase();
-  const rawRoleId = String(account.mentionRoleId || config.notificationRoleId || '').trim();
+function mentionConfig(account, config = {}, eventType = '') {
+  const live = String(eventType || '').toLowerCase() === 'live';
+  const mode = String(live ? (config.notificationMentionMode || 'none') : (account.mentionMode || config.notificationMentionMode || 'none')).toLowerCase();
+  const rawRoleId = String(live ? (config.notificationRoleId || '') : (account.mentionRoleId || config.notificationRoleId || '')).trim();
   const roleId = /^\d{17,20}$/.test(rawRoleId) ? rawRoleId : null;
   return { mode: ['none', 'everyone', 'here', 'role'].includes(mode) ? mode : 'none', roleId };
 }
-async function resolveMention(guild, account, config = {}, suppress = false) {
+async function resolveMention(guild, account, config = {}, suppress = false, eventType = '') {
   if (suppress) return { content: '', allowedMentions: { parse: [] } };
-  const { mode, roleId } = mentionConfig(account, config);
+  const { mode, roleId } = mentionConfig(account, config, eventType);
   if (mode === 'everyone') return { content: '@everyone', allowedMentions: { parse: ['everyone'] } };
   if (mode === 'here') return { content: '@here', allowedMentions: { parse: ['everyone'] } };
   if (mode === 'role' && roleId) {
@@ -128,7 +129,16 @@ function saneLiveDurationSeconds(event) { const supplied = Number(event?.duratio
 function discordTimestamp(value, style = 'R') { const ms = new Date(value).getTime(); return Number.isFinite(ms) && ms >= Date.UTC(2020, 0, 1) && ms <= Date.now() + 86400000 ? `<t:${Math.floor(ms / 1000)}:${style}>` : ''; }
 function buildLiveFields({ account, event, vars, liveStatus, durationText, started, ended }) { const fields = [], platform = String(account?.platform || '').toLowerCase(), offline = liveStatus === 'OFFLINE'; if (platform !== 'tiktok' && vars.game) fields.push({ name: '🎮 Game', value: vars.game, inline: true }); const labels = { kick: ['🟢','Kick'], twitch:['🟣','Twitch'], youtube:['🔴','YouTube'], tiktok:['⚫','TikTok'], facebook:['🔵','Facebook'], instagram:['🟠','Instagram'], x:['⚪','X'] }, meta = labels[platform]; if (meta) fields.push({ name: `${meta[0]} ${meta[1]}`, value: vars.username ? `@${vars.username}` : platform === 'tiktok' && !offline ? 'TikTok LIVE' : (vars.creator || meta[1]), inline: true }); if (offline) { const peak = Number(account?.state?.peakViewers || vars.peakViewers || event?.viewerCount || 0); if (peak > 0) fields.push({ name:'📈 Peak Viewers', value:intText(peak), inline:true }); } else if (vars.viewers) fields.push({ name:'👥 Viewers', value:vars.viewers, inline:true }); if (started) fields.push({ name:'🕐 Started', value:started, inline:true }); if (durationText) fields.push({ name:offline?'⏱️ Streamed For':'⏱️ Live For', value:durationText, inline:true }); if (offline && ended) fields.push({ name:'⚫ Ended', value:ended, inline:true }); else if (!offline && event?.language) fields.push({ name:'🌐 Language', value:clean(String(event.language).toUpperCase(),100), inline:true }); if (!offline && event?.hasMatureContent === true) fields.push({ name:'🔞 Mature', value:'Yes', inline:true }); return fields; }
 function eventVars(account, event, creator, options = {}) { const username = clean(event.kickUsername || account.username || account.normalizedUsername || account.externalId, 100).replace(/^@/, ''), creatorName = creator?.displayName || account.displayName || username || 'Creator', title = clean(event.title || `${creatorName} has a new ${event.type}`, 256), url = clean(event.url || account.profileUrl || account.url, 1000), game = clean(event.category || event.game || '', 200), viewers = options.includeViewerCount === false || !Number.isFinite(Number(event.viewerCount)) || Number(event.viewerCount) <= 0 ? '' : intText(event.viewerCount), durationSeconds = event.type === 'live' ? saneLiveDurationSeconds(event) : (Number.isFinite(Number(event.durationSeconds)) ? Number(event.durationSeconds) : secondsBetween(event.startedAt, event.endedAt || new Date().toISOString())); return { creator:creatorName, username, platform:PLATFORM[account.platform]?.label || account.platform, platformIcon:PLATFORM[account.platform]?.icon || '🔔', type:event.type, title, url, game, category:game, viewers, peakViewers:intText(account.state?.peakViewers || event.peakViewers || event.viewerCount || 0), duration:options.includeLiveDuration === false ? '' : humanDuration(durationSeconds), started:discordTimestamp(event.startedAt), ended:discordTimestamp(event.endedAt), published:discordTimestamp(event.publishedAt), kickUsername:String(account.platform || '').toLowerCase() === 'kick' ? username : '' }; }
-function buildEmbed(account, event, template, creator, settings = {}) { const vars = eventVars(account,event,creator,settings), platformKey=String(account.platform||'').toLowerCase(), platform = PLATFORM[account.platform] || { color:0x5865F2,icon:'🔔',label:account.platform || 'Social' }, embed = new EmbedBuilder().setColor(event.type === 'ended' ? 0x747F8D : platform.color), liveStatus = event.type === 'ended' ? 'OFFLINE' : event.type === 'live' ? ((event.paused===true||String(event.liveStatus||'').toUpperCase()==='PAUSED')?'PAUSED':'LIVE') : '', authorIcon = clean(creator?.avatar || creator?.avatarUrl || creator?.profileImage || creator?.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || '',1000), profileUrl = clean(account.profileUrl || account.url || event.profileUrl || vars.url || '',1000), author = { name:vars.creator || vars.username || 'Creator' }; if (/^https?:\/\//i.test(authorIcon)) author.iconURL=authorIcon; if (/^https?:\/\//i.test(profileUrl)) author.url=profileUrl; embed.setAuthor(author); if (/^https?:\/\//i.test(authorIcon)) embed.setThumbnail(authorIcon); if (liveStatus) { const headline=liveStatus==='LIVE'?'🔴 **LIVE NOW**':liveStatus==='PAUSED'?'⏸️ **LIVE PAUSED**':'⚫ **STREAM ENDED**', actions=[]; if((liveStatus==='LIVE'||liveStatus==='PAUSED')&&vars.url) actions.push(`▶️ **[Watch Live](${vars.url})** · ${liveStatus==='PAUSED'?'⏸️ **PAUSED**':'🔴 **LIVE**'}`); if(liveStatus==='OFFLINE'&&event.vod?.url) actions.push(`▶️ **[Watch VOD](${event.vod.url})** · ⚫ **OFFLINE**`); embed.setDescription(`${headline}\n${stripTrailingDivider(vars.title)}${embedActionBlock(actions)}`); embed.addFields(buildLiveFields({account,event,vars,liveStatus,durationText:vars.duration,started:vars.started,ended:vars.ended})); if(event.vod?.url) embed.addFields({name:'📼 VOD',value:`[Watch the recording](${event.vod.url})`,inline:false}); } else { embed.setTitle((render(template.title,vars)||`${platform.icon} ${platform.label}`).slice(0,256)); const description=stripTrailingDivider(render(template.description,vars)||vars.title), actionLabel=clean(template.buttonLabel||'View Post',80), actions=vars.url?[`▶️ **[${actionLabel}](${vars.url})**`]:[]; embed.setDescription(`${description}${embedActionBlock(actions)}`.slice(0,4096)); } const liveImage=liveStatus==='LIVE'||liveStatus==='PAUSED', thumbnail=liveImage?(platformKey==='tiktok'?clean(event.thumbnail,1000):cacheBustedImageUrl(event.thumbnail)):clean(event.thumbnail,1000); if(thumbnail&&/^https?:\/\//i.test(thumbnail)) embed.setImage(thumbnail); if(!liveStatus&&vars.url&&/^https?:\/\//i.test(vars.url)) embed.setURL(vars.url); embed.setFooter({text:`Goliath Social Studio • ${platform.label} • ${liveStatus || event.type.toUpperCase()}`}); embed.setTimestamp(new Date(event.endedAt||event.publishedAt||event.startedAt||Date.now())); return embed; }
+function buildEmbed(account, event, template, creator, settings = {}) { const vars = eventVars(account,event,creator,settings), platformKey=String(account.platform||'').toLowerCase(), platform = PLATFORM[account.platform] || { color:0x5865F2,icon:'🔔',label:account.platform || 'Social' }, embed = new EmbedBuilder().setColor(event.type === 'ended' ? 0x747F8D : platform.color), liveStatus = event.type === 'ended' ? 'OFFLINE' : event.type === 'live' ? ((event.paused===true||String(event.liveStatus||'').toUpperCase()==='PAUSED')?'PAUSED':'LIVE') : '', authorIcon = clean(creator?.avatar || creator?.avatarUrl || creator?.profileImage || creator?.profileImageUrl || account.avatar || account.avatarUrl || account.profileImage || account.profileImageUrl || event.avatar || event.avatarUrl || event.profileImage || event.profileImageUrl || '',1000), profileUrl = clean(account.profileUrl || account.url || event.profileUrl || vars.url || '',1000), author = { name:vars.creator || vars.username || 'Creator' }; if (/^https?:\/\//i.test(authorIcon)) author.iconURL=authorIcon; if (/^https?:\/\//i.test(profileUrl)) author.url=profileUrl; embed.setAuthor(author); if (/^https?:\/\//i.test(authorIcon)) embed.setThumbnail(authorIcon); if (liveStatus) { const headline=liveStatus==='LIVE'?'🔴 **LIVE NOW**':liveStatus==='PAUSED'?'⏸️ **LIVE PAUSED**':'⚫ **STREAM ENDED**', actions=[]; if((liveStatus==='LIVE'||liveStatus==='PAUSED')&&vars.url) actions.push(`▶️ **[Watch Live](${vars.url})** · ${liveStatus==='PAUSED'?'⏸️ **PAUSED**':'🔴 **LIVE**'}`); if(liveStatus==='OFFLINE'&&event.vod?.url) actions.push(`▶️ **[Watch VOD](${event.vod.url})** · ⚫ **OFFLINE**`); embed.setDescription(`${headline}\n${stripTrailingDivider(vars.title)}${embedActionBlock(actions)}`); embed.addFields(buildLiveFields({account,event,vars,liveStatus,durationText:vars.duration,started:vars.started,ended:vars.ended}));
+    if (creator?.showProfileInLive !== false) {
+      const safeProfileText = (value, max) => clean(String(value || '').replace(/<@!?&?\d+>/g, '@mention').replace(/@(everyone|here)/gi, '@$1'), max);
+      const group = safeProfileText(creator?.group, 200);
+      const tags = Array.isArray(creator?.tags) ? safeProfileText(creator.tags.join(', '), 700) : '';
+      const notes = safeProfileText(creator?.notes, 900);
+      if (group) embed.addFields({ name: 'Group / Team', value: group, inline: false });
+      if (tags) embed.addFields({ name: 'Tags', value: tags, inline: false });
+      if (notes) embed.addFields({ name: 'Notes', value: notes, inline: false });
+    } if(event.vod?.url) embed.addFields({name:'📼 VOD',value:`[Watch the recording](${event.vod.url})`,inline:false}); } else { embed.setTitle((render(template.title,vars)||`${platform.icon} ${platform.label}`).slice(0,256)); const description=stripTrailingDivider(render(template.description,vars)||vars.title), actionLabel=clean(template.buttonLabel||'View Post',80), actions=vars.url?[`▶️ **[${actionLabel}](${vars.url})**`]:[]; embed.setDescription(`${description}${embedActionBlock(actions)}`.slice(0,4096)); } const liveImage=liveStatus==='LIVE'||liveStatus==='PAUSED', thumbnail=liveImage?(platformKey==='tiktok'?clean(event.thumbnail,1000):cacheBustedImageUrl(event.thumbnail)):clean(event.thumbnail,1000); if(thumbnail&&/^https?:\/\//i.test(thumbnail)) embed.setImage(thumbnail); if(!liveStatus&&vars.url&&/^https?:\/\//i.test(vars.url)) embed.setURL(vars.url); embed.setFooter({text:`Goliath Social Studio • ${platform.label} • ${liveStatus || event.type.toUpperCase()}`}); embed.setTimestamp(new Date(event.endedAt||event.publishedAt||event.startedAt||Date.now())); return embed; }
 async function sendAlert(client,guildId,config,account,event,options={}) {
   const channelId = alertChannelId(config,account,event.type);
   if (!channelId) throw permanentDeliveryError(`No alert channel configured for ${account.platform}/${event.type}.`);
@@ -149,7 +159,7 @@ async function sendAlert(client,guildId,config,account,event,options={}) {
   if (!permissions?.has('EmbedLinks')) throw permanentDeliveryError('Goliath cannot embed links in the configured alert channel.');
 
   const embed = buildEmbed(account,event,templateFor(config,event.type),creatorFor(config,account.accountId),config.settings);
-  const mention = await resolveMention(guild,account,config,options.suppressMention===true);
+  const mention = await resolveMention(guild,account,config,options.suppressMention===true,event.type);
   const message = await channel.send({
     content: mention.content || null,
     embeds: [embed],
@@ -209,7 +219,17 @@ async function checkGuildAccounts(client,guildId,options={}) {
         state.contentBaselineEstablishedAt=checked.checkedAt||now();
       }
 
-      const events=eventCandidates(account,firstContentBaseline?state:previous,checked);
+      let events=eventCandidates(account,firstContentBaseline?state:previous,checked);
+      const held = Array.isArray(previous.quietHoursPending) ? previous.quietHoursPending.filter((item) => item?.event?.type && item?.event?.id) : [];
+      if (!quiet && held.length) {
+        for (const item of held) {
+          const heldEvent = item.event;
+          if (heldEvent.type === 'live') {
+            if (checked.isLive === true && String(checked.event?.id || '') === String(heldEvent.id || '')) events.unshift(heldEvent);
+          } else events.unshift(heldEvent);
+        }
+        state.quietHoursPending = [];
+      }
       if(config.settings.retryDeliveries!==false&&previous.pendingDelivery&&typeof previous.pendingDelivery==='object'){
         const pending=previous.pendingDelivery, retryAt=Date.parse(String(pending.nextAttemptAt||0)), attempts=Number(pending.attempts||0);
         const pendingEvent=pending.event&&typeof pending.event==='object'?pending.event:null;
@@ -223,7 +243,7 @@ async function checkGuildAccounts(client,guildId,options={}) {
           try{
             activeDeliveryEvent=pendingEvent;
             if(activeDeliveryEvent){
-              const retryDelivery=await sendAlert(client,guildId,config,account,activeDeliveryEvent,{...options,suppressMention:activeDeliveryEvent.type==='live'&&attempts>0});
+              const retryDelivery=await sendAlert(client,guildId,config,account,activeDeliveryEvent,{...options,suppressMention:false});
               const retryKey=eventKey(activeDeliveryEvent); rememberDelivered(state,retryKey); completedEventKeys.add(String(retryKey)); state.pendingDelivery=null; state.lastAlertKey=retryKey; state.lastAlertAt=now(); state.lastAlertMessageId=retryDelivery.messageId; state.lastAlertChannelId=retryDelivery.channelId; state.lastDeliveryError=null;
               if(activeDeliveryEvent.type==='live'){state.lastLiveMessageId=retryDelivery.messageId;state.lastLiveMessageChannelId=retryDelivery.channelId;state.lastLiveMessageUpdatedAt=now();}
               delivered.push({type:activeDeliveryEvent.type,id:activeDeliveryEvent.id,...retryDelivery,recovered:true});
@@ -267,8 +287,14 @@ async function checkGuildAccounts(client,guildId,options={}) {
           event.type!=='live'
         )continue;
 
-        if(quiet&&!options.manual&&event.type!=='ended')continue;
-        if(event.type==='ended'){let updated=null; if(config.settings.editLiveNotifications!==false)updated=await updateEndedAlert(client,guildId,config,account,event,previous).catch(()=>null); if(updated){delivered.push({type:'ended',id:event.id,...updated}); rememberDelivered(state,key); state.lastAlertKey=key; state.lastAlertAt=now(); state.pendingEndedEvent=null; state.lastLiveMessageId=null; state.lastLiveMessageChannelId=null; state.lastAlertMessageId=null; state.lastAlertChannelId=null;} else {state.pendingEndedEvent=event;} continue;}
+        if(quiet&&!options.manual&&event.type!=='ended'){
+          const pending = Array.isArray(state.quietHoursPending) ? state.quietHoursPending : [];
+          const pendingKey = eventKey(event);
+          if (!pending.some((item) => item?.key === pendingKey)) pending.push({ key: pendingKey, event, heldAt: now() });
+          state.quietHoursPending = pending.slice(-100);
+          continue;
+        }
+        if(event.type==='ended'){let updated=null; updated=await updateEndedAlert(client,guildId,config,account,event,previous).catch(()=>null); if(updated){delivered.push({type:'ended',id:event.id,...updated}); rememberDelivered(state,key); state.lastAlertKey=key; state.lastAlertAt=now(); state.pendingEndedEvent=null; state.lastLiveMessageId=null; state.lastLiveMessageChannelId=null; state.lastAlertMessageId=null; state.lastAlertChannelId=null;} else {state.pendingEndedEvent=event;} continue;}
         if(event.type==='live'&&previous.isLive===true&&String(previous.liveEventId||'')===String(event.id||'')&&hasTrackedLiveMessage(previous)){const existing=await trackedMessage(client,guildId,previous).catch(()=>null); if(existing){state.lastAlertKey=key;rememberDelivered(state,key);continue;}}
         activeDeliveryEvent=event; const delivery=await sendAlert(client,guildId,config,account,event,options); activeDeliveryEvent=null; delivered.push({type:event.type,id:event.id,...delivery}); rememberDelivered(state,key);completedEventKeys.add(keyString);state.pendingDelivery=null;state.lastAlertKey=key;state.lastAlertAt=now();state.lastAlertMessageId=delivery.messageId;state.lastAlertChannelId=delivery.channelId;state.lastDeliveryError=null;if(event.type==='live'){state.lastLiveMessageId=delivery.messageId;state.lastLiveMessageChannelId=delivery.channelId;state.lastLiveMessageUpdatedAt=now();}
       }
@@ -286,15 +312,13 @@ async function checkGuildAccounts(client,guildId,options={}) {
       if(sameActiveBroadcast&&liveMessageUpdateDue(account,previous,checked,config.settings)){
         let updated=null,recovered=false,refreshError=null;
 
-        if(config.settings.editLiveNotifications!==false){
-          try{
+        try{
             updated=await updateLiveAlert(client,guildId,config,account,checked.event,previous);
           }catch(error){
             refreshError=error?.message||String(error);
           }
-        }
 
-        if(!updated&&config.settings.editLiveNotifications!==false&&hasTrackedLiveMessage(previous)){
+        if(!updated&&hasTrackedLiveMessage(previous)){
           try{
             updated=await sendAlert(
               client,
