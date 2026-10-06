@@ -167,7 +167,8 @@ function isUserSocialInteraction(customId) {
     || customId === 'user:social:account:platforms'
     || customId === 'user:social:account:continue'
     || customId === 'user:social:account:create-multi'
-    || /^user:social:(details|accounts|newAccount|manageAccount|alerts)$/.test(customId);
+    || /^user:social:(details|accounts|newAccount|manageAccount|alerts)$/.test(customId)
+    || /^user:social:profile:(edit|toggleLiveInfo)$/.test(customId);
 }
 
 async function handleUserCreateProfile(interaction, updatePanel) {
@@ -436,6 +437,19 @@ async function handleUserInteraction(interaction, updatePanel) {
 
   if (context.payload) {
     return updatePanel(interaction, context.payload);
+  }
+
+  if (customId === 'user:social:profile:edit' && interaction.isButton?.()) {
+    await interaction.showModal(userCreatorModal(context.creator, interaction));
+    return true;
+  }
+
+  if (customId === 'user:social:profile:toggleLiveInfo' && interaction.isButton?.()) {
+    const creator = store.updateCreator(interaction.guildId, context.creator.creatorId, (current) => ({
+      ...current,
+      showProfileInLive: current.showProfileInLive === false,
+    }), { actorId: interaction.user.id });
+    return updatePanel(interaction, buildUserSection(interaction, creator, 'details', context.accounts));
   }
 
   if (
