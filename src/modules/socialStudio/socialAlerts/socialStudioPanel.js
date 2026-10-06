@@ -922,10 +922,16 @@ if (name === 'templates') {
     const session = getFeedSession(i);
     const type = session.routeType || 'default';
     const selected = type === 'default' ? config.alertsChannelId : config.alertChannels?.[type] || null;
+    const enabledAccounts = accounts.filter((account) => account.enabled !== false);
+    const liveRoutes = enabledAccounts.map((account) => ({ account, route: resolveSocialRoute(config, account, 'live') })).filter((entry) => entry.route?.channelId);
+    const routeSummary = liveRoutes.length
+      ? [...new Map(liveRoutes.map((entry) => [`${entry.route.channelId}:${entry.route.source}`, entry.route])).values()].slice(0, 3).map((route) => `<#${route.channelId}> via ${route.source}`).join(' · ')
+      : (config.alertsChannelId ? `<#${config.alertsChannelId}> via Server Default` : 'Not configured');
     const summary = [
       'Choose the server destinations used by Social Studio alerts.',
       '',
       `**Default:** ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : 'Not configured'}`,
+      `**Effective LIVE Route:** ${routeSummary}`,
       ...ALERT_TYPES.map((alertType) => `${ALERT_EMOJI[alertType] || '🔔'} **${ALERT_LABEL[alertType] || alertType}:** ${config.alertChannels?.[alertType] ? `<#${config.alertChannels[alertType]}>` : 'Uses fallback routing'}`),
       '',
       '**Fallback order:** User → Creator/Account → Platform → Content Type → Default.',
