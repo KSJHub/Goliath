@@ -1077,16 +1077,16 @@ if (name === 'templates') {
       embeds: [embed(config, '⚙️ Setup & Diagnostics', d, who(i))],
       components: [
         row(
+          btn(`${P}channels`, '🎯 Routing', ButtonStyle.Secondary),
           btn(`${P}automation:interval`, `⏱️ Interval: ${intervalLabel}`, ButtonStyle.Secondary),
           btn(`${P}automation:quiet`, `🌙 Quiet Hours: ${quiet.enabled === true ? 'ON' : 'OFF'}`, quiet.enabled === true ? ButtonStyle.Success : ButtonStyle.Secondary),
           btn(`${P}automation:retry`, `🔄 Retry: ${settings.retryDeliveries === false ? 'OFF' : 'ON'}`, settings.retryDeliveries === false ? ButtonStyle.Secondary : ButtonStyle.Success),
-          btn(`${P}account:check`, '🔍 Run Check', ButtonStyle.Primary, !accounts.length),
         ),
         row(
+          btn(`${P}account:check`, '🔍 Run Check', ButtonStyle.Primary, !accounts.length),
           btn(`${P}test`, '📨 Send Test', ButtonStyle.Primary, !config.alertsChannelId),
-          btn(`${P}channels`, '🎯 Routing', ButtonStyle.Secondary),
-          btn(`${P}testing:last`, '📄 Last Response', ButtonStyle.Secondary),
           btn(`${P}testing:diagnostics`, '🩺 Provider Details', ButtonStyle.Secondary),
+          btn(`${P}testing:last`, '📄 Last Response', ButtonStyle.Secondary),
         ),
         row(btn(`${P}settings`, '⬅️ Back', ButtonStyle.Secondary), btn(`${P}data:refresh`, '🔄 Refresh', ButtonStyle.Secondary)),
       ],
