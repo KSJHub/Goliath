@@ -203,7 +203,7 @@ async function handleInteraction(interaction) {
       const maxConsecutivePerMember = parseOptionalPositiveInteger(interaction, 'maxConsecutive', 'Turns per member');
       const answerAfterFailures = parseOptionalPositiveInteger(interaction, 'answerAfter', 'Hint threshold');
       const failureLimit = parseRequiredInteger(interaction, 'failureLimit', 'Wrong answers before reset', 0);
-      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, startingNumber: 1, maxConsecutivePerMember, answerAfterFailures, failureLimit }), { actorId, action: 'counting_rules_saved' });
+      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, maxConsecutivePerMember, answerAfterFailures, failureLimit }), { actorId, action: 'counting_rules_saved' });
       await counting.refreshPlayerPanel(interaction.guild).catch(() => null); return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
     if (interaction.isModalSubmit?.() && id === `${PREFIX}:responses:timing:save`) { const responseCleanupSeconds = parseOptionalPositiveInteger(interaction, 'cleanupSeconds', 'Reply cleanup time'); await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, responseCleanupSeconds }), { actorId, action: 'counting_response_timing_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
