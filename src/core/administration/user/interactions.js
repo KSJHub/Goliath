@@ -16,6 +16,8 @@ const birthdaysPanel = require('../../../modules/communityStudio/birthdays/birth
 const socialStudio = require('../../../modules/socialStudio/socialAlerts/socialStudio');
 const { normalizeAccountInput, migrateAccount } = require('../../../modules/socialStudio/socialAlerts/accountNormalizer');
 const { checkGuildAccounts, forcePostCreatorLive } = require('../../../modules/socialStudio/socialAlerts/socialStudioMonitor');
+const auditStore = require('../../../owner/auditIntelligence/auditStore');
+const auditRouter = require('../../../owner/auditIntelligence/auditRouter');
 const notesUserPanel = require('../../../modules/utilityStudio/notes/notesUserPanel');
 const emojisUserPanel = require('../../../modules/utilityStudio/emojis/emojisUserPanel');
 const userUtilities = require('./utilities');
@@ -657,6 +659,39 @@ function getUserManualLiveState(guildId, creator, accounts = []) {
   return { canPost: false, reason: availableAt ? `A LIVE notification was posted within the last hour. Manual posting is available <t:${availableAt}:R>.` : 'A LIVE notification was posted within the last hour.' };
 }
 
+async function reportUserLivePostFailure(interaction, creator, accounts, reason, details = {}) {
+  const event = {
+    eventId: `SOCIAL-LIVE-${Date.now().toString(36).toUpperCase()}`,
+    timestamp: new Date().toISOString(),
+    guildId: interaction.guildId,
+    guildName: interaction.guild?.name || null,
+    type: 'goliath.socialStudio.userLivePostFailure',
+    category: 'goliath',
+    actor: {
+      id: interaction.user?.id || null,
+      username: interaction.user?.username || null,
+      globalName: interaction.user?.globalName || null,
+      bot: false,
+    },
+    metadata: {
+      module: 'Social Studio',
+      action: 'User Post LIVE verification',
+      creatorId: creator?.creatorId || null,
+      creatorName: creator?.displayName || null,
+      accountIds: (accounts || []).map((account) => account?.accountId).filter(Boolean),
+      platforms: [...new Set((accounts || []).map((account) => account?.platform).filter(Boolean))],
+      reason: String(reason || 'Unknown failure').slice(0, 1000),
+      ...details,
+    },
+  };
+  try {
+    auditStore.appendEvent(event);
+    await auditRouter.deliver(interaction.client, interaction.guild, event).catch(() => false);
+  } catch (error) {
+    console.warn('[Social Studio] Could not report user LIVE-post failure:', error?.message || error);
+  }
+}
+
 async function handleUserManualPostLive(interaction) {
   const access = socialStudio.getAccess(interaction);
   if (!access.allowed) {
@@ -668,6 +703,7 @@ async function handleUserManualPostLive(interaction) {
     await interaction.reply({ content: 'Your Creator Profile could not be verified.', flags: 64 });
     return true;
   }
+
   let accounts = socialStudio.getAccountsForCreator(interaction.guildId, creator);
   const accountIds = accounts
     .filter((account) => account?.enabled !== false)
@@ -679,32 +715,78 @@ async function handleUserManualPostLive(interaction) {
     return true;
   }
 
-  // /user remains ownership-scoped and protected, but verify the user's own
-  // linked accounts at click-time instead of requiring a previous monitor pass.
-  await checkGuildAccounts(interaction.client, interaction.guildId, {
-    force: true,
-    diagnosticOnly: true,
-    accountIds,
-    guild: interaction.guild,
+  await interaction.reply({
+    content: '🔍 **Checking your LIVE status...**\nVerifying your connected account before posting.',
+    flags: 64,
   });
+
+  let check;
+  try {
+    check = await checkGuildAccounts(interaction.client, interaction.guildId, {
+      force: true,
+      diagnosticOnly: true,
+      accountIds,
+      guild: interaction.guild,
+    });
+  } catch (error) {
+    await reportUserLivePostFailure(interaction, creator, accounts, error?.message || error, { phase: 'provider_check' });
+    await interaction.editReply({ content: '❌ We couldn’t verify your LIVE status right now. The issue has been reported to the Goliath development logs.' });
+    return true;
+  }
+
+  const providerFailures = (check?.results || []).filter((result) =>
+    result?.status === 'error'
+    || result?.status === 'unavailable'
+    || result?.status === 'configuration_required'
+  );
+
+  if (check?.skipped || providerFailures.length) {
+    const reason = check?.reason || providerFailures.map((result) => `${result.platform || 'provider'}: ${result.error || result.reason || result.status}`).join(' | ') || 'Provider verification failed.';
+    await reportUserLivePostFailure(interaction, creator, accounts, reason, {
+      phase: 'provider_check',
+      providerStatuses: (check?.results || []).map((result) => ({ accountId: result.accountId, platform: result.platform, status: result.status })),
+    });
+    await interaction.editReply({ content: '❌ We couldn’t verify your LIVE status right now. The issue has been reported to the Goliath development logs.' });
+    return true;
+  }
 
   accounts = socialStudio.getAccountsForCreator(interaction.guildId, creator);
   const state = getUserManualLiveState(interaction.guildId, creator, accounts);
   if (!state.canPost) {
-    await interaction.reply({ content: `📣 Manual Post LIVE is unavailable. ${state.reason}`, flags: 64 });
+    const anyChecked = accounts.some((account) => account?.state?.lastCheckedAt);
+    const anyLive = accounts.some((account) => account?.enabled !== false && account?.state?.isLive === true);
+    if (anyChecked && !anyLive) {
+      await interaction.editReply({ content: '⚫ **No LIVE stream detected.** Your LIVE post was not sent.' });
+    } else {
+      await interaction.editReply({ content: `📣 Manual Post LIVE is unavailable. ${state.reason}` });
+    }
     return true;
   }
-  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-  const result = await forcePostCreatorLive(interaction.client, interaction.guildId, creator.creatorId, { actorId: interaction.user.id, guild: interaction.guild, bypassCooldown: false });
-  const sent = Array.isArray(result?.sent) ? result.sent : [];
-  const failed = Array.isArray(result?.failed) ? result.failed : [];
-  const channels = [...new Set(sent.map((item) => item.channelId).filter(Boolean))];
-  const channelText = channels.length === 1 ? ` in <#${channels[0]}>` : channels.length > 1 ? ` across ${channels.length} channels` : '';
-  const failedText = failed.length ? ` ${failed.length} failed.` : '';
-  await interaction.followUp({ content: `📣 Sent ${sent.length} LIVE post${sent.length === 1 ? '' : 's'}${channelText}.${failedText}`, flags: 64 }).catch(() => null);
-  return updatePanel(interaction, socialStudio.user.buildProfile(interaction, creator, socialStudio.getAccountsForCreator(interaction.guildId, creator)));
-}
 
+  try {
+    const result = await forcePostCreatorLive(interaction.client, interaction.guildId, creator.creatorId, {
+      actorId: interaction.user.id,
+      guild: interaction.guild,
+      bypassCooldown: false,
+    });
+    const sent = Array.isArray(result?.sent) ? result.sent : [];
+    const failed = Array.isArray(result?.failed) ? result.failed : [];
+    if (!sent.length || failed.length) {
+      const reason = failed.map((item) => item?.error || item?.reason).filter(Boolean).join(' | ') || 'LIVE delivery returned no successful posts.';
+      await reportUserLivePostFailure(interaction, creator, accounts, reason, { phase: 'delivery', sent: sent.length, failed: failed.length });
+      await interaction.editReply({ content: '❌ Your LIVE status was confirmed, but Goliath couldn’t complete the LIVE post. The issue has been reported to the Goliath development logs.' });
+      return true;
+    }
+    const channels = [...new Set(sent.map((item) => item.channelId).filter(Boolean))];
+    const channelText = channels.length === 1 ? ` in <#${channels[0]}>` : channels.length > 1 ? ` across ${channels.length} channels` : '';
+    await interaction.editReply({ content: `✅ **LIVE confirmed — your LIVE post has been sent${channelText}.**` });
+    return updatePanel(interaction, socialStudio.user.buildProfile(interaction, creator, socialStudio.getAccountsForCreator(interaction.guildId, creator)));
+  } catch (error) {
+    await reportUserLivePostFailure(interaction, creator, accounts, error?.message || error, { phase: 'delivery' });
+    await interaction.editReply({ content: '❌ Your LIVE status was confirmed, but Goliath couldn’t complete the LIVE post. The issue has been reported to the Goliath development logs.' });
+    return true;
+  }
+}
 async function delegateModuleUserInteraction(interaction) {
   if (await emojisUserPanel.handleInteraction(interaction, updatePanel)) return true;
   if (await socialStudio.user.handleInteraction(interaction, updatePanel)) return true;
