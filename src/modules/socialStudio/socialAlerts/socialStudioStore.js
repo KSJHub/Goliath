@@ -27,6 +27,7 @@ function normalizeCreator(creator = {}) {
       : [],
     notes: creator.notes || '',
     adminNotes: creator.adminNotes || '',
+    showProfileInLive: creator.showProfileInLive !== false,
     enabled: creator.enabled !== false,
     status: creator.status || 'active',
   };
