@@ -154,6 +154,7 @@ function shutdown(client) {
     const now = Date.now();
     for (const guild of client.guilds.cache.values()) flushGuildVoiceSessions(guild, now);
   }
+  statsCounters.stopAllCounterSchedules();
   return stopCounterRefreshScheduler();
 }
 async function resolveChannel(guild, channelId) { if (!channelId) return null; return guild.channels.cache.get(channelId) || guild.channels.fetch(channelId).catch(() => null); }
