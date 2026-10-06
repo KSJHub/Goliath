@@ -93,9 +93,9 @@ function flushGuildVoiceSessions(guild, now = Date.now()) {
     activeVoiceSessions.delete(key);
     const userId = key.slice(guild.id.length + 1);
     const member = guild.members?.cache?.get?.(userId) || guild.voiceStates?.cache?.get?.(userId)?.member || null;
-    const minutes = Math.max(0, (now - Number(session?.startedAt || now)) / 60000);
-    if (!member || !session?.channelId || minutes <= 0) continue;
-    statsStore.addVoiceMinutes(member, session.channelId, minutes);
+    const startedAt = Number(session?.startedAt || now);
+    if (!member || !session?.channelId || now <= startedAt) continue;
+    statsStore.addVoiceInterval(member, session.channelId, startedAt, now);
     flushed += 1;
   }
   return flushed;
@@ -299,8 +299,7 @@ async function handleVoiceStateUpdate(oldState, newState) {
     const session = activeVoiceSessions.get(key);
     if (oldChannelId && session?.startedAt && session.channelId === oldChannelId) {
       activeVoiceSessions.delete(key);
-      const minutes = Math.max(0, (now - session.startedAt) / 60000);
-      if (minutes > 0 && statsStore.isEnabled(guild.id)) statsStore.addVoiceMinutes(member, oldChannelId, minutes);
+      if (now > session.startedAt && statsStore.isEnabled(guild.id)) statsStore.addVoiceInterval(member, oldChannelId, session.startedAt, now);
     }
     if (newChannelId && statsStore.isEnabled(guild.id) && statsStore.getStats(guild.id).trackVoice !== false && !statsStore.isIgnoredActivity(member, newChannelId)) activeVoiceSessions.set(key, { startedAt: now, channelId: newChannelId });
     queueCounterRefresh(guild, 'voice');
