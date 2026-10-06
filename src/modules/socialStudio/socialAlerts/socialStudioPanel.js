@@ -2056,7 +2056,8 @@ async function handleAutomationInteraction(i, context) {
     saveConfig(i.guildId, config, i.guild, actorId);
     return respond(i, buildSectionPanel(i, section));
   }
-  if (NAV.has(section)) return respond(i, buildSectionPanel(i, section)); throw new Error(`Unknown Social Studio interaction: ${id}`);
+  if (NAV.has(section)) return respond(i, buildSectionPanel(i, section));
+  return false;
 }
 
 
