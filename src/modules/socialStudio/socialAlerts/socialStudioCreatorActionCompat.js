@@ -265,7 +265,7 @@ async function handleDiagnosticsAction(interaction, id) {
       embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Delivery Test').setDescription(`✅ Test delivery reached this channel successfully.\n\n**Configured LIVE notification target:** ${target}\n**Ping safety:** No members were pinged by this test.\n\nReal provider events keep their normal templates, metadata and media.`).setFooter({ text: 'Goliath Social Studio • Safe Test' }).setTimestamp()],
       allowedMentions: { parse: [], roles: [] },
     });
-    return followUp(interaction, { content: `📨 Test delivered successfully in <#${channel.id}> without pinging members. Message ID: \`${message.id}\``.` });
+    return followUp(interaction, { content: `📨 Test delivered successfully in <#${channel.id}> without pinging members. Message ID: \`${message.id}\`.` });
   }
   if (id === `${P}testing:last`) {
     const latest = history.at(-1);
