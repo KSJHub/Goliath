@@ -668,7 +668,27 @@ async function handleUserManualPostLive(interaction) {
     await interaction.reply({ content: 'Your Creator Profile could not be verified.', flags: 64 });
     return true;
   }
-  const accounts = socialStudio.getAccountsForCreator(interaction.guildId, creator);
+  let accounts = socialStudio.getAccountsForCreator(interaction.guildId, creator);
+  const accountIds = accounts
+    .filter((account) => account?.enabled !== false)
+    .map((account) => account.accountId)
+    .filter(Boolean);
+
+  if (!accountIds.length) {
+    await interaction.reply({ content: '📣 Manual Post LIVE is unavailable. Your Creator Profile has no enabled social accounts.', flags: 64 });
+    return true;
+  }
+
+  // /user remains ownership-scoped and protected, but verify the user's own
+  // linked accounts at click-time instead of requiring a previous monitor pass.
+  await checkGuildAccounts(interaction.client, interaction.guildId, {
+    force: true,
+    diagnosticOnly: true,
+    accountIds,
+    guild: interaction.guild,
+  });
+
+  accounts = socialStudio.getAccountsForCreator(interaction.guildId, creator);
   const state = getUserManualLiveState(interaction.guildId, creator, accounts);
   if (!state.canPost) {
     await interaction.reply({ content: `📣 Manual Post LIVE is unavailable. ${state.reason}`, flags: 64 });
