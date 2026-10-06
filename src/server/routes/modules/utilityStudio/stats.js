@@ -199,16 +199,23 @@ router.delete('/:guildId/counters/:counterId', async (req, res) => {
   catch (error) { return failure(res, error, 400); }
 });
 router.post('/:guildId/reset', async (req, res) => {
+  let guild = null;
   try {
     const guildId = getGuildId(req);
     if (req.body?.confirm !== true) return failure(res, new Error('Reset confirmation is required.'), 400);
-    const guild = await getGuild(req, guildId);
+    guild = await getGuild(req, guildId);
     if (!guild) throw new Error('Guild is unavailable.');
     stats.flushGuildVoiceSessions(guild);
+    for (const counter of [...stats.counters.listCounters(guildId)]) {
+      await stats.counters.deleteDock(guild, counter.id, actor(req, 'stats_reset_counter_cleanup'));
+    }
     const config = stats.reset(guildId, actor(req, 'stats_reset'));
     stats.reconcileGuildVoiceSessions(guild);
     return success(res, { guildId, config });
-  } catch (error) { return failure(res, error, 400); }
+  } catch (error) {
+    if (guild) stats.reconcileGuildVoiceSessions(guild);
+    return failure(res, error, 400);
+  }
 });
 
 module.exports = router;
