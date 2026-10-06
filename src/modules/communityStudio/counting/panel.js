@@ -101,18 +101,54 @@ function buildSettingsScreen(guild) {
     .setTitle('⚙️ Counting Settings')
     .setDescription([
       '**Module Controls**',
-      'Manage Counting itself and check its configuration health.',
+      'Manage the Counting module without changing the current game from the main panel.',
       '',
-      '**Status:** ' + (enabled ? '🟢 Running' : '⚪ Disabled'),
-      '**Channel:** ' + (section.channelId ? '<#' + section.channelId + '>' : 'Not configured'),
+      '**⏸️ Disable Counting**',
+      'Pauses Counting in this server. Your channel, rules, current count and record are kept.',
+      '',
+      '**🔄 Defaults**',
+      'Restores Goliath\'s recommended game rules. The current count, record, channel and Player Panel are not reset.',
+      '',
+      '**🩺 Health**',
+      'Checks the Counting setup, channel access and configuration for problems.',
+      '',
+      '**Status:** ' + (enabled ? '🟢 Running' : '⚪ Disabled') + '   •   **Channel:** ' + (section.channelId ? '<#' + section.channelId + '>' : 'Not configured'),
     ].join('\n')));
   return { content: null, embeds: [embed], components: [
     row(
       button(PREFIX + ':toggle:enabled', enabled ? '⏸️ Disable Counting' : '▶️ Enable Counting', enabled ? ButtonStyle.Danger : ButtonStyle.Success, !section.channelId && !enabled),
+      button(PREFIX + ':defaults', '🔄 Defaults', ButtonStyle.Secondary),
       button(PREFIX + ':health', '🩺 Health', ButtonStyle.Secondary),
     ),
     row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
   ] };
+}
+function buildDefaultsConfirmation() {
+  return {
+    content: null,
+    embeds: [footer(new EmbedBuilder()
+      .setColor(PANEL_COLOR)
+      .setTitle('🔄 Restore Counting Defaults?')
+      .setDescription([
+        'This will restore Goliath\'s recommended Counting rules:',
+        '',
+        '👤 **Turns:** 1 number per member',
+        '💀 **Game Over:** 1 wrong answer',
+        '💡 **Hints:** Off',
+        '🔢 **Numbers Only:** On',
+        '🗑️ **Wrong Counts:** Delete',
+        '😂 **Banter:** On',
+        '⏱️ **Reply Timing:** Delete after 8s',
+        '',
+        '**Your current count, server record, Counting channel and Player Panel will be kept.**',
+      ].join('\n')))],
+    components: [
+      row(
+        button(PREFIX + ':defaults:confirm', '🔄 Restore Defaults', ButtonStyle.Danger),
+        button(PREFIX + ':settings', 'Cancel', ButtonStyle.Secondary),
+      ),
+    ],
+  };
 }
 function textInput(customId, label, value, { required = false, placeholder = null } = {}) {
   const input = new TextInputBuilder().setCustomId(customId).setLabel(label).setStyle(TextInputStyle.Short).setRequired(required);
@@ -199,6 +235,24 @@ async function handleInteraction(interaction) {
   try {
     if (id === `${PREFIX}:main:0`) return safeUpdate(interaction, buildPanel(interaction.guild, name));
     if (id === `${PREFIX}:settings`) return safeUpdate(interaction, buildSettingsScreen(interaction.guild));
+    if (id === `${PREFIX}:defaults`) return safeUpdate(interaction, buildDefaultsConfirmation());
+    if (id === `${PREFIX}:defaults:confirm`) {
+      await counting.mutateSection(interaction.guild.id, (section) => ({
+        ...section,
+        maxConsecutivePerMember: counting.DEFAULTS.maxConsecutivePerMember,
+        numbersOnly: counting.DEFAULTS.numbersOnly,
+        deleteIncorrect: counting.DEFAULTS.deleteIncorrect,
+        funnyResponses: counting.DEFAULTS.funnyResponses,
+        answerAfterFailures: counting.DEFAULTS.answerAfterFailures,
+        responseCleanupSeconds: counting.DEFAULTS.responseCleanupSeconds,
+        milestoneAnnouncements: counting.DEFAULTS.milestoneAnnouncements,
+        milestoneInterval: counting.DEFAULTS.milestoneInterval,
+        failureLimit: counting.DEFAULTS.failureLimit,
+        reactionIndex: counting.DEFAULTS.reactionIndex,
+      }), { actorId, action: 'counting_defaults_restored' });
+      await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
+      return safeUpdate(interaction, buildSettingsScreen(interaction.guild));
+    }
     if (id === `${PREFIX}:channel:screen` || id === `${PREFIX}:rules:screen` || id === `${PREFIX}:responses:screen`) return safeUpdate(interaction, buildPanel(interaction.guild, name));
     if (interaction.isChannelSelectMenu?.() && id === `${PREFIX}:channel`) {
       const channelId = interaction.values?.[0] || null;
@@ -306,4 +360,4 @@ async function handleInteraction(interaction) {
     return true;
   }
 }
-module.exports = { buildPanel, buildChannelScreen, buildRulesScreen, buildResponsesScreen, buildSettingsScreen, buildRulesModal, buildTimingModal, buildSetCurrentModal, buildMilestonesModal, buildResetConfirmation, buildCleanupConfirmation, handleInteraction };
+module.exports = { buildPanel, buildChannelScreen, buildRulesScreen, buildResponsesScreen, buildSettingsScreen, buildDefaultsConfirmation, buildRulesModal, buildTimingModal, buildSetCurrentModal, buildMilestonesModal, buildResetConfirmation, buildCleanupConfirmation, handleInteraction };
