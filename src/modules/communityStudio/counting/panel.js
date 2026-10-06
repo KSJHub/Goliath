@@ -23,6 +23,11 @@ function formatHintThreshold(value) {
   if (value === null || value === undefined || value === '') return 'Never reveal';
   return `After ${value} mistake${Number(value) === 1 ? '' : 's'}`;
 }
+function formatFailureLimit(value) {
+  if (!Number(value)) return 'Off — mistakes do not reset the run';
+  if (Number(value) === 1) return '1 wrong answer — sudden death';
+  return `${value} wrong answers before reset`;
+}
 function formatCleanup(value) {
   if (value === null || value === undefined || value === '') return 'Keep replies';
   return `Delete after ${value}s`;
@@ -46,7 +51,7 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
     { name: '📊 Current Game', value: [`**Current:** \`${section.currentCount}\`  •  **Next:** \`${counting.expectedNext(section)}\`  •  **Record:** \`${section.highestCount}\``, `**Last Counter:** ${lastCounter}`].join('\n') },
     { name: '🎮 Rules', value: [
       `**Start At:** \`${section.startingNumber}\``, `**Turns:** ${formatTurnLimit(section.maxConsecutivePerMember)}`,
-      `**Hint:** ${formatHintThreshold(section.answerAfterFailures)}`,
+      `**Hint:** ${formatHintThreshold(section.answerAfterFailures)}`, `**Game Over:** ${formatFailureLimit(section.failureLimit)}`,
       `**Numbers Only:** ${section.numbersOnly ? 'On ✅ — non-counting messages are removed' : 'Off — normal chat is allowed'}`,
       `**Wrong Counts:** ${section.deleteIncorrect ? 'Deleted ✅' : 'Kept'}`,
       `**Milestones:** ${section.milestoneAnnouncements ? `Every ${section.milestoneInterval} 🎉` : 'Off'}`,
@@ -84,6 +89,7 @@ function buildRulesModal(guildId) {
     row(textInput('startingNumber', 'Start at — default 1', section.startingNumber, { required: true, placeholder: 'Number a new/reset game begins from' })),
     row(textInput('maxConsecutive', 'Turns per member — blank = unlimited', section.maxConsecutivePerMember, { placeholder: '1 = one turn, 3 = up to three turns' })),
     row(textInput('answerAfter', 'Hint after mistakes — blank = never', section.answerAfterFailures, { placeholder: '2 = reveal the answer after two mistakes' })),
+    row(textInput('failureLimit', 'Wrong answers before reset — 0 = off', section.failureLimit, { required: true, placeholder: '0 = off, 1 = sudden death, 3 = reset on third' })),
   );
 }
 function buildTimingModal(guildId) {
@@ -100,6 +106,18 @@ function buildMilestonesModal(guildId) {
     row(textInput('enabled', 'Milestones — on or off', section.milestoneAnnouncements ? 'on' : 'off', { required: true, placeholder: 'on or off' })),
     row(textInput('interval', 'Celebrate every how many counts?', section.milestoneInterval, { required: true, placeholder: '100 = 100, 200, 300...' })),
   );
+}
+function buildCleanupConfirmation(channelId, mode = 'move') {
+  const mention = `<#${channelId}>`;
+  const reset = mode === 'reset';
+  return { content: [
+    '🧹 **Clean up the previous Counting messages?**', '',
+    reset ? `Would you like Goliath to remove the previous game messages from ${mention} before starting again?` : `Counting has moved. Would you like Goliath to remove the old Counting messages from ${mention}?`,
+    '', 'This cleanup is restricted to this Counting channel only.', '**Deleted messages cannot be recovered.**',
+  ].join('\n'), embeds: [], components: [row(
+    button(`${PREFIX}:cleanup:${reset ? 'reset' : 'move'}:yes:${channelId}`, reset ? '🗑️ Yes, Clear Previous Game' : '🗑️ Yes, Clean Up', ButtonStyle.Danger),
+    button(`${PREFIX}:cleanup:${reset ? 'reset' : 'move'}:no:${channelId}`, '➡️ No, Keep Messages', ButtonStyle.Secondary),
+  )] };
 }
 function buildResetConfirmation(guildId) {
   const section = counting.getSection(guildId);
@@ -137,7 +155,9 @@ async function handleInteraction(interaction) {
     if (id === `${PREFIX}:channel:screen` || id === `${PREFIX}:rules:screen` || id === `${PREFIX}:responses:screen`) return safeUpdate(interaction, buildPanel(interaction.guild, name));
     if (interaction.isChannelSelectMenu?.() && id === `${PREFIX}:channel`) {
       const channelId = interaction.values?.[0] || null;
+      const before = counting.getSection(interaction.guild.id);
       await counting.changeChannel(interaction.guild, channelId, { actorId, action: 'counting_channel_changed' });
+      if (before.channelId && before.channelId !== channelId) return safeUpdate(interaction, buildCleanupConfirmation(before.channelId, 'move'));
       return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
     if (id === `${PREFIX}:toggle:enabled`) {
@@ -158,13 +178,14 @@ async function handleInteraction(interaction) {
       const startingNumber = parseRequiredInteger(interaction, 'startingNumber', 'Starting number', 0);
       const maxConsecutivePerMember = parseOptionalPositiveInteger(interaction, 'maxConsecutive', 'Turns per member');
       const answerAfterFailures = parseOptionalPositiveInteger(interaction, 'answerAfter', 'Hint threshold');
+      const failureLimit = parseRequiredInteger(interaction, 'failureLimit', 'Wrong answers before reset', 0);
       const hasProgress = old.currentCount >= old.startingNumber || Object.values(old.memberStats || {}).some((stats) => Number(stats?.validCounts || 0) > 0);
-      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, startingNumber, maxConsecutivePerMember, answerAfterFailures, ...(!hasProgress ? { currentCount: startingNumber - 1, highestCount: startingNumber - 1, lastCounterId: null, consecutiveCount: 0, failureStreak: 0, acceptedMessages: {} } : {}) }), { actorId, action: 'counting_rules_saved' });
+      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, startingNumber, maxConsecutivePerMember, answerAfterFailures, failureLimit, ...(!hasProgress ? { currentCount: startingNumber - 1, highestCount: startingNumber - 1, lastCounterId: null, consecutiveCount: 0, failureStreak: 0, acceptedMessages: {} } : {}) }), { actorId, action: 'counting_rules_saved' });
       await counting.refreshPlayerPanel(interaction.guild).catch(() => null); return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
     if (interaction.isModalSubmit?.() && id === `${PREFIX}:responses:timing:save`) { const responseCleanupSeconds = parseOptionalPositiveInteger(interaction, 'cleanupSeconds', 'Reply cleanup time'); await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, responseCleanupSeconds }), { actorId, action: 'counting_response_timing_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
     if (interaction.isModalSubmit?.() && id === `${PREFIX}:setCurrent:save`) { const currentCount = parseRequiredInteger(interaction, 'currentCount', 'Current count', 0); await counting.setCurrentCountQueued(interaction.guild.id, currentCount, { actorId, action: 'counting_set_current' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (interaction.isModalSubmit?.() && id === `${PREFIX}:milestones:save`) { const milestoneAnnouncements = parseOnOff(interaction, 'enabled', 'Milestones'); const milestoneInterval = parseRequiredInteger(interaction, 'interval', 'Milestone interval', 1); await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, milestoneAnnouncements, milestoneInterval }), { actorId, action: 'counting_milestones_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (interaction.isModalSubmit?.() && id === `${PREFIX}:milestones:save`) { const milestoneAnnouncements = parseOnOff(interaction, 'enabled', 'Milestones'); const milestoneInterval = parseRequiredInteger(interaction, 'interval', 'Milestone interval', 1); await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, milestoneAnnouncements, milestoneInterval }), { actorId, action: 'counting_milestones_saved' }); await counting.refreshPlayerPanel(interaction.guild).catch(() => null); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
     if (id === `${PREFIX}:health`) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const health = await countingHealth.buildHealthReport(interaction.guild);
@@ -195,7 +216,24 @@ async function handleInteraction(interaction) {
       return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
     if (id === `${PREFIX}:reset`) return safeUpdate(interaction, buildResetConfirmation(interaction.guild.id));
-    if (id === `${PREFIX}:reset:confirm`) { await interaction.deferUpdate(); await counting.resetWithMarker(interaction.guild, { actorId, action: 'counting_reset_progress' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (id === `${PREFIX}:reset:confirm`) {
+      const section = counting.getSection(interaction.guild.id);
+      if (!section.channelId) { await counting.resetWithMarker(interaction.guild, { actorId, action: 'counting_reset_progress' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+      return safeUpdate(interaction, buildCleanupConfirmation(section.channelId, 'reset'));
+    }
+    if (id.startsWith(`${PREFIX}:cleanup:`)) {
+      const parts = id.split(':');
+      const mode = parts[3];
+      const choice = parts[4];
+      const channelId = parts[5];
+      const section = counting.getSection(interaction.guild.id);
+      if (mode === 'reset' && String(section.channelId) !== String(channelId)) throw new Error('The Counting channel changed before cleanup could run.');
+      if (mode === 'move' && String(section.channelId) === String(channelId)) throw new Error('Cleanup is only available for the previous Counting channel after a move.');
+      await interaction.deferUpdate();
+      if (choice === 'yes') await counting.purgeCountingChannel(interaction.guild, channelId, { actorId, action: `counting_${mode}_cleanup` });
+      if (mode === 'reset') await counting.resetWithMarker(interaction.guild, { actorId, action: 'counting_reset_progress' });
+      return safeUpdate(interaction, buildPanel(interaction.guild, name));
+    }
     return safeUpdate(interaction, buildPanel(interaction.guild, name));
   } catch (error) {
     const payload = { content: `❌ Counting setup failed: ${error.message}`, flags: MessageFlags.Ephemeral };
@@ -203,4 +241,4 @@ async function handleInteraction(interaction) {
     return true;
   }
 }
-module.exports = { buildPanel, buildChannelScreen, buildRulesScreen, buildResponsesScreen, buildRulesModal, buildTimingModal, buildSetCurrentModal, buildMilestonesModal, buildResetConfirmation, handleInteraction };
+module.exports = { buildPanel, buildChannelScreen, buildRulesScreen, buildResponsesScreen, buildRulesModal, buildTimingModal, buildSetCurrentModal, buildMilestonesModal, buildResetConfirmation, buildCleanupConfirmation, handleInteraction };
