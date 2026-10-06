@@ -259,7 +259,7 @@ async function handleVoiceStateUpdate(oldState, newState) {
       const minutes = Math.max(0, (now - session.startedAt) / 60000);
       if (minutes > 0 && statsStore.isEnabled(guild.id)) statsStore.addVoiceMinutes(member, oldChannelId, minutes);
     }
-    if (newChannelId && statsStore.isEnabled(guild.id) && statsStore.getStats(guild.id).trackVoice !== false) activeVoiceSessions.set(key, { startedAt: now, channelId: newChannelId });
+    if (newChannelId && statsStore.isEnabled(guild.id) && statsStore.getStats(guild.id).trackVoice !== false && !statsStore.isIgnoredActivity(member, newChannelId)) activeVoiceSessions.set(key, { startedAt: now, channelId: newChannelId });
     queueCounterRefresh(guild, 'voice');
   } catch (error) { console.error('[Stats] Failed to track voice:', error); }
 }
