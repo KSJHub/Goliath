@@ -2169,6 +2169,10 @@ async function handleInteraction(i) {
     actorId,
   })) return true;
 
+  if (id.startsWith(`${P}userroute:`)) {
+    const routingCore = require('../../../events/client/socialStudioCreatorRoutingCompatCore');
+    if (await routingCore.handle(i)) return true;
+  }
   const section = id.slice(P.length);
 
   if (section === 'templates') {
