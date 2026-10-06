@@ -41,39 +41,66 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
   const section = counting.getSection(guild.id);
   const enabled = isModuleEnabled(guild.id, counting.MODULE_KEY);
   const hasChannel = Boolean(section.channelId);
-  const channel = hasChannel ? `<#${section.channelId}>` : '**Not chosen yet**';
-  const lastCounter = section.lastCounterId ? `<@${section.lastCounterId}>` : 'Nobody yet';
-  const embed = footer(new EmbedBuilder().setColor(PANEL_COLOR).setTitle('🔢 Counting').setDescription([
-    'Set up and manage your server’s counting game from one place.', '',
-    `**${enabled ? '🟢 Running' : '⚪ Disabled'}** • ${channel}`,
-    !hasChannel ? '\n⚠️ **Choose a counting channel first.** Goliath will unlock **Enable** and **Player Panel** once a channel is selected.' : '',
-  ].filter(Boolean).join('\n')).addFields(
-    { name: '📊 Current Game', value: [`**Current:** \`${section.currentCount}\`  •  **Next:** \`${counting.expectedNext(section)}\`  •  **Record:** \`${section.highestCount}\``, `**Last Counter:** ${lastCounter}`].join('\n') },
-    { name: '🎮 Rules', value: [
-      `**Start At:** \`${section.startingNumber}\``, `**Turns:** ${formatTurnLimit(section.maxConsecutivePerMember)}`,
-      `**Hint:** ${formatHintThreshold(section.answerAfterFailures)}`, `**Game Over:** ${formatFailureLimit(section.failureLimit)}`,
-      `**Numbers Only:** ${section.numbersOnly ? 'On ✅ — non-counting messages are removed' : 'Off — normal chat is allowed'}`,
-      `**Wrong Counts:** ${section.deleteIncorrect ? 'Deleted ✅' : 'Kept'}`,
-      `**Milestones:** ${section.milestoneAnnouncements ? `Every ${section.milestoneInterval} 🎉` : 'Off'}`,
-    ].join('\n') },
-    { name: '💬 Goliath Responses', value: [`**Banter:** ${section.funnyResponses ? 'On 😂 — playful rotating reactions' : 'Off — simple responses'}`, `**Reply Timing:** ${formatCleanup(section.responseCleanupSeconds)}`].join('\n') },
-    { name: '🧭 What the controls do', value: [
-      '**Game Rules** changes where the game starts, turns per member and when hints appear.',
-      '**Set Count** moves the current game to a specific number without changing your setup.',
-      '**Milestones** controls celebrations and how often they happen.',
-      '**Player Panel** posts or refreshes the member-friendly instructions in the counting channel.',
-      '**Reset** ends the current run and starts again without changing your channel or rules.',
-    ].join('\n') },
-  ));
+  const channel = hasChannel ? '<#' + section.channelId + '>' : '**Not configured**';
+  const lastCounter = section.lastCounterId ? '<@' + section.lastCounterId + '>' : 'Nobody yet';
+  const status = enabled ? '🟢 Running' : '⚪ Disabled';
+
+  const embed = footer(new EmbedBuilder()
+    .setColor(PANEL_COLOR)
+    .setTitle('🔢 Counting Management')
+    .setDescription([
+      '**' + status + '**  •  ' + channel,
+      !hasChannel ? '\n⚠️ Choose a Counting channel to enable the game and deploy the Player Panel.' : '',
+    ].filter(Boolean).join('\n'))
+    .addFields(
+      {
+        name: '📊 Live Game',
+        value: [
+          '**Current**  \`' + section.currentCount + '\`   •   **Next**  \`' + counting.expectedNext(section) + '\`   •   **Record**  \`' + section.highestCount + '\`',
+          '**Last Counter:** ' + lastCounter,
+        ].join('\n'),
+      },
+      {
+        name: '🎮 Game Rules',
+        value: [
+          '**Start:** \`' + section.startingNumber + '\`   •   **Turns:** ' + formatTurnLimit(section.maxConsecutivePerMember),
+          '**Game Over:** ' + formatFailureLimit(section.failureLimit),
+          '**Hints:** ' + formatHintThreshold(section.answerAfterFailures) + '   •   **Milestones:** ' + (section.milestoneAnnouncements ? 'Every ' + section.milestoneInterval : 'Off'),
+        ].join('\n'),
+      },
+      {
+        name: '🛡️ Channel Behaviour',
+        value: [
+          '**Numbers Only:** ' + (section.numbersOnly ? 'On' : 'Off') + '   •   **Wrong Counts:** ' + (section.deleteIncorrect ? 'Delete' : 'Keep'),
+          '**Banter:** ' + (section.funnyResponses ? 'On' : 'Off') + '   •   **Reply Timing:** ' + formatCleanup(section.responseCleanupSeconds),
+        ].join('\n'),
+      },
+    ));
+
   return { content: null, embeds: [embed], components: [
     row(channelSelector(section)),
-    row(button(`${PREFIX}:rules:edit`, '⚙️ Game Rules', ButtonStyle.Primary), button(`${PREFIX}:setCurrent`, '🎯 Set Count', ButtonStyle.Secondary), button(`${PREFIX}:milestones`, '🎉 Milestones', ButtonStyle.Secondary)),
-    row(button(`${PREFIX}:toggle:numbersOnly`, section.numbersOnly ? '🔢 Numbers Only: On' : '🔢 Numbers Only: Off', ButtonStyle.Secondary), button(`${PREFIX}:toggle:delete`, section.deleteIncorrect ? '🗑️ Wrong Counts: Delete' : '🗑️ Wrong Counts: Keep', ButtonStyle.Secondary)),
-    row(button(`${PREFIX}:toggle:funny`, section.funnyResponses ? '😂 Banter: On' : '😂 Banter: Off', ButtonStyle.Secondary), button(`${PREFIX}:responses:timing`, '⏱️ Reply Timing', ButtonStyle.Secondary), button(`${PREFIX}:playerPanel`, section.playerPanelMessageId ? '📢 Update Player Panel' : '📢 Player Panel', ButtonStyle.Secondary, !hasChannel)),
-    row(button(`${PREFIX}:toggle:enabled`, enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Secondary : ButtonStyle.Success, !hasChannel && !enabled), button(`${PREFIX}:health`, '🩺 Health', ButtonStyle.Secondary), button(`${PREFIX}:reset`, '♻️ Reset', ButtonStyle.Danger), button('admin:studio:communityStudio', '⬅️ Back', ButtonStyle.Secondary)),
+    row(
+      button(PREFIX + ':rules:edit', '⚙️ Game Rules', ButtonStyle.Primary),
+      button(PREFIX + ':setCurrent', '🎯 Set Count', ButtonStyle.Secondary),
+      button(PREFIX + ':milestones', '🎉 Milestones', ButtonStyle.Secondary),
+    ),
+    row(
+      button(PREFIX + ':toggle:numbersOnly', section.numbersOnly ? '🔢 Numbers Only: On' : '🔢 Numbers Only: Off', ButtonStyle.Secondary),
+      button(PREFIX + ':toggle:delete', section.deleteIncorrect ? '🗑️ Wrong Counts: Delete' : '🗑️ Wrong Counts: Keep', ButtonStyle.Secondary),
+      button(PREFIX + ':toggle:funny', section.funnyResponses ? '😂 Banter: On' : '😂 Banter: Off', ButtonStyle.Secondary),
+    ),
+    row(
+      button(PREFIX + ':responses:timing', '⏱️ Reply Timing', ButtonStyle.Secondary),
+      button(PREFIX + ':playerPanel', section.playerPanelMessageId ? '📢 Update Player Panel' : '📢 Deploy Player Panel', ButtonStyle.Secondary, !hasChannel),
+      button(PREFIX + ':health', '🩺 Health', ButtonStyle.Secondary),
+    ),
+    row(
+      button(PREFIX + ':toggle:enabled', enabled ? '⏸️ Disable Counting' : '▶️ Enable Counting', enabled ? ButtonStyle.Secondary : ButtonStyle.Success, !hasChannel && !enabled),
+      button(PREFIX + ':reset', '♻️ Reset Game', ButtonStyle.Danger),
+      button('admin:studio:communityStudio', '⬅️ Back', ButtonStyle.Secondary),
+    ),
   ] };
 }
-
 function buildChannelScreen(guild, memberDisplayName) { return buildPanel(guild, memberDisplayName); }
 function buildRulesScreen(guild, memberDisplayName) { return buildPanel(guild, memberDisplayName); }
 function buildResponsesScreen(guild, memberDisplayName) { return buildPanel(guild, memberDisplayName); }
