@@ -11,7 +11,7 @@ const {
   checkGuildAccounts,
   forcePostCreatorLive,
 } = require('./socialStudioMonitor');
-const { ALERT_TYPES, normalizeTemplates, resolveTemplate, resetTemplate } = require('./socialStudioTemplates');
+const { ALERT_TYPES, normalizeTemplates, resolveTemplate, resetTemplate, resolveSocialRoute } = require('./socialStudioTemplates');
 
 const P = 'social:';
 const PAGE_SIZE = 22;
@@ -1051,22 +1051,38 @@ if (name === 'templates') {
     const settings = config.settings || {};
     const interval = Math.max(30000, Number(settings.checkIntervalMs || 300000));
     const quiet = settings.quietHours && typeof settings.quietHours === 'object' ? settings.quietHours : { enabled: false, start: '23:00', end: '08:00', timezone: 'Europe/London' };
-    const monitored = accounts.filter((account) => account.enabled !== false).length;
-    const issueAccounts = accounts.filter((account) => account.state?.lastError || account.state?.lastDeliveryError).length;
-    const pending = accounts.filter((account) => account.state?.pendingDelivery || account.state?.quietHoursPending?.length).length + Number(config.queue?.length || 0);
-    const lastCheckMs = newestTime(accounts.map((account) => account.state?.lastCheckedAt));
-    const health = !accounts.length ? '⚪ Not Configured' : issueAccounts || pending ? '🟡 Attention Needed' : '🟢 Operational';
+    const enabledAccounts = accounts.filter((account) => account.enabled !== false);
+    const monitored = enabledAccounts.length;
+    const issueAccounts = enabledAccounts.filter((account) => account.state?.lastError || account.state?.lastDeliveryError);
+    const pendingRetries = enabledAccounts.filter((account) => account.state?.pendingDelivery).length;
+    const heldItems = enabledAccounts.reduce((total, account) => total + (Array.isArray(account.state?.quietHoursPending) ? account.state.quietHoursPending.length : 0), 0);
+    const activeLive = enabledAccounts.filter((account) => account.state?.isLive === true).length;
+    const queued = Number(config.queue?.length || 0);
+    const pending = pendingRetries + heldItems + queued;
+    const lastCheckMs = newestTime(enabledAccounts.map((account) => account.state?.lastCheckedAt));
+    const missingRoute = !config.alertsChannelId && !Object.values(config.alertChannels || {}).some(Boolean) && !Object.values(config.platformChannels || {}).some(Boolean) && !Object.values(config.userChannelOverrides || {}).some((routes) => routes && Object.values(routes).some(Boolean));
+    let health = '🟢 Operational';
+    let healthReason = 'Monitoring and delivery configuration are ready.';
+    if (!monitored) { health = '⚪ Not Configured'; healthReason = 'Add a monitored account to begin provider checks.'; }
+    else if (issueAccounts.length) { health = '🔴 Issues Detected'; healthReason = `${issueAccounts.length} monitored account${issueAccounts.length === 1 ? '' : 's'} reported a provider or delivery failure.`; }
+    else if (missingRoute) { health = '🟡 Attention Needed'; healthReason = 'Configure at least one alert destination in Routing.'; }
+    else if (pendingRetries) { health = '🟡 Attention Needed'; healthReason = `${pendingRetries} delivery retr${pendingRetries === 1 ? 'y is' : 'ies are'} pending.`; }
+    else if (heldItems) { health = '🟢 Operational'; healthReason = `${heldItems} notification${heldItems === 1 ? ' is' : 's are'} intentionally held by Quiet Hours.`; }
     const intervalLabel = interval < 60000 ? '30s' : interval % 3600000 === 0 ? `${interval / 3600000}h` : `${interval / 60000}m`;
     const quietLabel = quiet.enabled === true ? `${quiet.start || '23:00'}–${quiet.end || '08:00'} (${quiet.timezone || 'Europe/London'})` : 'Off';
     const d = [
       'Configure Social Studio automation, test delivery and investigate provider health.',
       '',
       `**System Health:** ${health}`,
+      `↳ ${healthReason}`,
       `**Provider Checks:** Every ${intervalLabel}`,
       `**Accounts:** ${monitored} monitored`,
       `**Quiet Hours:** ${quietLabel}`,
       `**Failed Delivery Retry:** ${settings.retryDeliveries === false ? 'Off' : 'On'}`,
-      `**Pending Work:** ${pending}`,
+      ...(activeLive ? [`🔴 **Active LIVE Sessions:** ${activeLive}`] : []),
+      ...(heldItems ? [`🌙 **Held by Quiet Hours:** ${heldItems}`] : []),
+      ...(pendingRetries ? [`🔄 **Pending Retries:** ${pendingRetries}`] : []),
+      ...(queued ? [`📬 **Queued Work:** ${queued}`] : []),
       `**Last Provider Check:** ${ts(lastCheckMs ? new Date(lastCheckMs).toISOString() : null)}`,
       '',
       '**Core Protection**',
@@ -1083,8 +1099,8 @@ if (name === 'templates') {
           btn(`${P}automation:retry`, `🔄 Retry: ${settings.retryDeliveries === false ? 'OFF' : 'ON'}`, settings.retryDeliveries === false ? ButtonStyle.Secondary : ButtonStyle.Success),
         ),
         row(
-          btn(`${P}account:check`, '🔍 Run Check', ButtonStyle.Primary, !accounts.length),
-          btn(`${P}test`, '📨 Send Test', ButtonStyle.Primary, !config.alertsChannelId),
+          btn(`${P}account:check`, '🔍 Run Check', ButtonStyle.Primary, !monitored),
+          btn(`${P}test`, '📨 Send Test', ButtonStyle.Primary, missingRoute),
           btn(`${P}testing:diagnostics`, '🩺 Provider Details', ButtonStyle.Secondary),
           btn(`${P}testing:last`, '📄 Last Response', ButtonStyle.Secondary),
         ),
