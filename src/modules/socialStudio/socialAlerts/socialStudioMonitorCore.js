@@ -140,10 +140,10 @@ function buildLiveFields({ account, event, vars, liveStatus, durationText, start
     if (platformField) fields.push(platformField);
     if (started) fields.push({ name:'🕐 Started', value:started, inline:true });
 
-    if (event?.language) fields.push({ name:'🌐 Language', value:clean(String(event.language).toUpperCase(),100), inline:true });
+    fields.push({ name:'🌐 Language', value:event?.language ? clean(String(event.language).toUpperCase(),100) : '—', inline:true });
     const peak = Number(account?.state?.peakViewers || vars.peakViewers || event?.viewerCount || 0);
-    if (peak > 0) fields.push({ name:'📈 Peak Viewers', value:intText(peak), inline:true });
-    if (ended) fields.push({ name:'⚫ Ended', value:ended, inline:true });
+    fields.push({ name:'📈 Peak Viewers', value:peak > 0 ? intText(peak) : '—', inline:true });
+    fields.push({ name:'⚫ Ended', value:ended || '—', inline:true });
     return fields;
   }
 
