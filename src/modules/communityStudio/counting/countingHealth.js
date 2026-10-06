@@ -59,7 +59,7 @@ async function buildHealthReport(guild) {
     guildId: guild.id,
     enabled,
     configured: Boolean(section.channelId),
-    healthy: issues.length === 0,
+    healthy: issues.length === 0 && warnings.length === 0,
     issues,
     warnings,
     checkedAt: new Date().toISOString(),
