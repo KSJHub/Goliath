@@ -175,6 +175,17 @@ async function handleInteraction(interaction) {
         health.issues.length ? '**Issues**\n' + health.issues.map((item) => `• ${item.code}`).join('\n') : '**Issues**\n• None',
         health.warnings.length ? '**Warnings**\n' + health.warnings.map((item) => `• ${item.code}`).join('\n') : '**Warnings**\n• None',
       ];
+      await interaction.editReply({ content: lines.join('\n'), components: health.issues.length || health.warnings.length ? [row(button(`${PREFIX}:health:repair`, '🛠️ Safe Repair', ButtonStyle.Primary))] : [] });
+      return true;
+    }
+    if (id === `${PREFIX}:health:repair`) {
+      await interaction.deferUpdate();
+      const health = await countingHealth.repair(interaction.guild, { actorId });
+      const lines = [
+        `**Repair complete:** ${health.healthy ? 'Healthy ✅' : 'Still needs attention ⚠️'}`,
+        health.issues.length ? '**Remaining issues**\n' + health.issues.map((item) => `• ${item.code}`).join('\n') : '**Remaining issues**\n• None',
+        health.warnings.length ? '**Remaining warnings**\n' + health.warnings.map((item) => `• ${item.code}`).join('\n') : '**Remaining warnings**\n• None',
+      ];
       await interaction.editReply({ content: lines.join('\n'), components: [] });
       return true;
     }
