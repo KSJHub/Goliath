@@ -222,6 +222,7 @@ function completeCreatorProfile(member, values = {}, meta = {}) {
       .filter(Boolean),
     notes: clean(values.notes, 1000),
     adminNotes: clean(values.adminNotes, 1000),
+    showProfileInLive: values.showProfileInLive !== false,
     enabled: current.enabled !== false,
     status: 'active',
     departureType: null,
