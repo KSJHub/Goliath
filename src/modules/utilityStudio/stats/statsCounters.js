@@ -27,6 +27,7 @@ const DEFAULT_COUNTER_SUITE = Object.freeze([
 
 const dockSchedules = new Map();
 const dockRefreshInFlight = new Set();
+const suiteCreateInFlight = new Set();
 function safeString(value, max = 100) { return String(value ?? '').trim().slice(0, max); }
 function validId(value) { return /^\d{15,25}$/.test(String(value || '').trim()); }
 function cleanType(value) {
@@ -282,7 +283,41 @@ async function deleteDock(guild, id, guildOrMeta = {}) {
   return true;
 }
 function samePreset(dock, preset) { if (!dock || !preset) return false; const dockTypes = (dock.segments || []).map((segment) => `${segment.type}:${JSON.stringify(segment.options || {})}`), presetTypes = (preset.segments || []).map((segment) => `${segment.type}:${JSON.stringify(normalizeCounterOptions(segment.type, segment.options || {}))}`); return JSON.stringify(dockTypes) === JSON.stringify(presetTypes); }
-async function createCounterSuite(guild, options = {}) { if (!guild?.id) throw new Error('A guild is required to create counter channels.'); await guild.channels.fetch().catch(() => null); await guild.members.fetch({ withPresences: true }).catch(() => guild.members.fetch().catch(() => null)); await guild.roles.fetch().catch(() => null); const category = await findOrCreateCategory(guild, options.categoryName || statsStore.getStats(guild.id).settings?.categoryName || '📊 SERVER STATS'), created = [], reused = []; for (const preset of DEFAULT_COUNTER_SUITE) { const existing = listCounters(guild.id).find((dock) => dock.source === 'default-suite' && samePreset(dock, preset)); if (existing?.channelId) { const channel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null); if (channel) { reused.push(existing); ensureDockSchedule(guild, existing); continue; } } const dock = await createDock(guild, { name: preset.name || 'Counter', template: preset.template, segments: preset.segments, categoryId: category.id, channelType: options.channelType || 'voice', frequencyMinutes: Number(options.frequencyMinutes || statsStore.getStats(guild.id).settings?.defaultFrequencyMinutes || 10), source: 'default-suite' }, guild); created.push(dock); } await refreshCounters(guild, { force: true }); return { categoryId: category.id, created, reused }; }
+async function createCounterSuite(guild, options = {}) {
+  if (!guild?.id) throw new Error('A guild is required to create counter channels.');
+  if (suiteCreateInFlight.has(guild.id)) throw new Error('Stats Quick Setup is already running for this server.');
+  suiteCreateInFlight.add(guild.id);
+  try {
+    await guild.channels.fetch().catch(() => null);
+    await guild.members.fetch({ withPresences: true }).catch(() => guild.members.fetch().catch(() => null));
+    await guild.roles.fetch().catch(() => null);
+    const category = await findOrCreateCategory(guild, options.categoryName || statsStore.getStats(guild.id).settings?.categoryName || '📊 SERVER STATS');
+    const created = [], reused = [];
+    for (const preset of DEFAULT_COUNTER_SUITE) {
+      const existing = listCounters(guild.id).find((dock) => dock.source === 'default-suite' && samePreset(dock, preset));
+      if (existing?.channelId) {
+        const channel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null);
+        if (channel) { reused.push(existing); ensureDockSchedule(guild, existing); continue; }
+      }
+      const dock = await createDock(guild, {
+        id: existing?.id,
+        createdAt: existing?.createdAt,
+        name: preset.name || 'Counter',
+        template: preset.template,
+        segments: preset.segments,
+        categoryId: category.id,
+        channelType: options.channelType || 'voice',
+        frequencyMinutes: Number(options.frequencyMinutes || statsStore.getStats(guild.id).settings?.defaultFrequencyMinutes || 10),
+        source: 'default-suite',
+      }, guild);
+      created.push(dock);
+    }
+    await refreshCounters(guild, { force: true });
+    return { categoryId: category.id, created, reused };
+  } finally {
+    suiteCreateInFlight.delete(guild.id);
+  }
+}
 function previewDock(guild, input = {}) { return renderCounterName(guild, statsStore.getSummary(guild.id), cleanDock(input)); }
 
 module.exports = { COUNTER_TYPES, STATUS_VALUES, DEFAULT_COUNTER_SUITE, PRESENCE_TRIO_PRESET, cleanCounter, cleanDock, cleanSegment, listCounters, addCounter, saveDock, upsertCounterByType, removeCounter, refreshCounters, refreshDock, createCounterSuite, createDock, updateDock, setDockEnabled, deleteDock, previewDock, defaultTemplate, renderCounterName, ensureManageChannels, findOrCreateCategory, stopAllCounterSchedules };
