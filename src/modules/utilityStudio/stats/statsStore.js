@@ -175,6 +175,32 @@ function addVoiceMinutes(member, channelId, minutes) {
   }, member.guild);
 }
 
+function addVoiceInterval(member, channelId, startedAt, endedAt = Date.now()) {
+  if (!member?.guild?.id) return null;
+  const start = Number(startedAt || 0), end = Number(endedAt || 0);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return getStats(member.guild.id);
+  if (!isEnabled(member.guild.id)) return getStats(member.guild.id);
+  return updateStats(member.guild.id, (stats) => {
+    if (stats.trackVoice === false || ignored(stats, member, channelId)) return stats;
+    let cursor = start;
+    while (cursor < end) {
+      const date = new Date(cursor);
+      const nextMidnight = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
+      const sliceEnd = Math.min(end, nextMidnight);
+      const minutes = Math.max(0, (sliceEnd - cursor) / 60000);
+      const key = dayKey(cursor);
+      stats.data.voice[key] = stats.data.voice[key] || { totalMinutes: 0, users: {}, channels: {} };
+      const bucket = stats.data.voice[key];
+      bucket.totalMinutes = Number(bucket.totalMinutes || 0) + minutes;
+      addToMap(bucket.users, member.user?.id || member.id, minutes);
+      addToMap(bucket.channels, channelId, minutes);
+      cursor = sliceEnd;
+    }
+    stats.updatedAt = new Date().toISOString();
+    return stats;
+  }, member.guild);
+}
+
 function addMemberEvent(member, type) {
   if (!member?.guild?.id) return null;
   if (!isEnabled(member.guild.id)) return getStats(member.guild.id);
@@ -239,6 +265,7 @@ module.exports = {
   isIgnoredActivity,
   addMessage,
   addVoiceMinutes,
+  addVoiceInterval,
   addMemberEvent,
   resetStats,
   getSummary,
