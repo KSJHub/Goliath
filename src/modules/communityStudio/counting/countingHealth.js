@@ -27,10 +27,14 @@ async function buildHealthReport(guild) {
     else {
       const me = guild.members.me;
       const permissions = me ? channel.permissionsFor(me) : null;
-      if (!permissions?.has(PermissionFlagsBits.ViewChannel)) issues.push(issue('view_channel_missing', { channelId: section.channelId }));
-      if (!permissions?.has(PermissionFlagsBits.SendMessages)) issues.push(issue('send_messages_missing', { channelId: section.channelId }));
-      if (!permissions?.has(PermissionFlagsBits.ReadMessageHistory)) warnings.push(issue('read_history_missing', { channelId: section.channelId }));
-      if (section.deleteIncorrect && !permissions?.has(PermissionFlagsBits.ManageMessages)) warnings.push(issue('manage_messages_missing', { channelId: section.channelId }));
+      const botOverwrite = me ? channel.permissionOverwrites?.cache?.get(me.id) : null;
+      const explicitlyDenied = (permission) => Boolean(botOverwrite?.deny?.has(permission));
+      if (!permissions?.has(PermissionFlagsBits.ViewChannel) || explicitlyDenied(PermissionFlagsBits.ViewChannel)) issues.push(issue('view_channel_missing', { channelId: section.channelId }));
+      if (!permissions?.has(PermissionFlagsBits.SendMessages) || explicitlyDenied(PermissionFlagsBits.SendMessages)) issues.push(issue('send_messages_missing', { channelId: section.channelId }));
+      if (!permissions?.has(PermissionFlagsBits.EmbedLinks) || explicitlyDenied(PermissionFlagsBits.EmbedLinks)) warnings.push(issue('embed_links_missing', { channelId: section.channelId }));
+      if (!permissions?.has(PermissionFlagsBits.AddReactions) || explicitlyDenied(PermissionFlagsBits.AddReactions)) warnings.push(issue('add_reactions_missing', { channelId: section.channelId }));
+      if (!permissions?.has(PermissionFlagsBits.ReadMessageHistory) || explicitlyDenied(PermissionFlagsBits.ReadMessageHistory)) warnings.push(issue('read_history_missing', { channelId: section.channelId }));
+      if (section.deleteIncorrect && (!permissions?.has(PermissionFlagsBits.ManageMessages) || explicitlyDenied(PermissionFlagsBits.ManageMessages))) warnings.push(issue('manage_messages_missing', { channelId: section.channelId }));
     }
   }
 
@@ -40,7 +44,9 @@ async function buildHealthReport(guild) {
   if (section.lastCounterId && section.consecutiveCount < 1) warnings.push(issue('turn_state_inconsistent'));
   if (!section.lastCounterId && section.consecutiveCount !== 0) warnings.push(issue('turn_state_stale'));
 
-  if (section.playerPanelMessageId) {
+  if (section.channelId && enabled && !section.playerPanelMessageId) {
+    warnings.push(issue('player_panel_not_deployed'));
+  } else if (section.playerPanelMessageId) {
     if (!channel?.messages?.fetch) warnings.push(issue('player_panel_unreachable', { messageId: section.playerPanelMessageId }));
     else {
       const panel = await channel.messages.fetch(section.playerPanelMessageId).catch(() => null);
@@ -83,10 +89,17 @@ async function repair(guild, meta = {}) {
     };
   }, { ...meta, action: 'counting_health_repair_state' });
 
-  const section = counting.getSection(guild.id);
+  let section = counting.getSection(guild.id);
   if (section.playerPanelMessageId && channel?.messages?.fetch) {
     const panel = await channel.messages.fetch(section.playerPanelMessageId).catch(() => null);
-    if (!panel) await counting.mutateSection(guild.id, (current) => ({ ...current, playerPanelMessageId: null }), { ...meta, action: 'counting_health_clear_missing_panel' });
+    if (!panel) {
+      await counting.mutateSection(guild.id, (current) => ({ ...current, playerPanelMessageId: null }), { ...meta, action: 'counting_health_clear_missing_panel' });
+      section = counting.getSection(guild.id);
+    }
+  }
+
+  if (channel?.send && isModuleEnabled(guild.id, counting.MODULE_KEY) && !section.playerPanelMessageId) {
+    await counting.deployPlayerPanel(guild, { actorId: meta.actorId || null }).catch(() => null);
   }
 
   return buildHealthReport(guild);
