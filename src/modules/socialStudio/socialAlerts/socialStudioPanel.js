@@ -14,7 +14,7 @@ const {
 const { ALERT_TYPES, normalizeTemplates, resolveTemplate, resetTemplate } = require('./socialStudioTemplates');
 
 const P = 'social:';
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 22;
 const PLATFORMS = ['facebook', 'instagram', 'kick', 'tiktok', 'twitch', 'x', 'youtube'];
 const ALERT_LABEL = { live: 'LIVE', ended: 'Stream Ended', vod: 'VOD', clip: 'Clip', upload: 'Upload', short: 'Short', post: 'Social Post' };
 const ALERT_EMOJI = { live: '🔴', ended: '⚫', vod: '🎞️', clip: '🎬', upload: '📺', short: '📱', post: '📝' };
@@ -59,6 +59,7 @@ const SETTINGS_CHILDREN = new Set([
 const accountSessions = new Map();
 const creatorSessions = new Map();
 const feedSessions = new Map();
+const roleSessions = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const btn = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
 const linkBtn = (url, label) => new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(label);
@@ -136,6 +137,44 @@ function setAccountSession(i, patch) { const next = { ...getAccountSession(i), .
 function getCreatorSession(i) { return creatorSessions.get(sessionKey(i)) || { creatorId: null, page: 0 }; }
 function setCreatorSession(i, patch) { const next = { ...getCreatorSession(i), ...patch }; creatorSessions.set(sessionKey(i), next); return next; }
 function getFeedSession(i) { return feedSessions.get(sessionKey(i)) || { routeType: 'default' }; }
+function getRoleSession(i) { return roleSessions.get(sessionKey(i)) || { rolePage: 0 }; }
+function setRoleSession(i, patch) { const next = { ...getRoleSession(i), ...patch }; roleSessions.set(sessionKey(i), next); return next; }
+function sortedGuildRoles(i) { return [...(i.guild?.roles?.cache?.values?.() || [])].filter((role) => role && role.id !== i.guildId && !role.managed).sort((a, b) => b.position - a.position); }
+function rolePageCount(i) { return Math.max(1, Math.ceil(sortedGuildRoles(i).length / PAGE_SIZE)); }
+function clampRolePage(page, count) { return Math.max(0, Math.min(Number(page) || 0, Math.max(0, count - 1))); }
+function pagedRoleSelect(i, customId, placeholder, selectedIds = [], page = 0, single = false) {
+  const roles = sortedGuildRoles(i);
+  const count = Math.max(1, Math.ceil(roles.length / PAGE_SIZE));
+  const safe = clampRolePage(page, count);
+  const options = roles.slice(safe * PAGE_SIZE, (safe + 1) * PAGE_SIZE).map((role) => ({
+    label: String(role.name || 'Unnamed role').slice(0, 100),
+    value: role.id,
+    description: `Hierarchy position ${role.position}`.slice(0, 100),
+    default: selectedIds.includes(role.id),
+  }));
+  if (single) options.unshift({ label: 'No temporary LIVE role', value: '__none__', description: 'Do not assign a temporary role while creators are LIVE.', default: !selectedIds.length });
+  return row(new StringSelectMenuBuilder().setCustomId(customId).setPlaceholder(`${placeholder} • page ${safe + 1}/${count}`).setMinValues(single ? 1 : 0).setMaxValues(single ? 1 : Math.max(1, Math.min(options.length, 22))).addOptions(options));
+}
+function pagedNotificationSelect(i, config, page = 0) {
+  const selected = config.notificationMentionMode === 'role' && config.notificationRoleId ? `role:${config.notificationRoleId}` : (config.notificationMentionMode || 'none');
+  const roles = sortedGuildRoles(i);
+  const count = Math.max(1, Math.ceil(roles.length / PAGE_SIZE));
+  const safe = clampRolePage(page, count);
+  const options = roles.slice(safe * PAGE_SIZE, (safe + 1) * PAGE_SIZE).map((role) => ({ label: String(role.name || 'Unnamed role').slice(0, 100), value: `role:${role.id}`, description: 'Ping this role for the first alert of a new LIVE session.', default: selected === `role:${role.id}` }));
+  options.push(
+    { label: '@here', value: 'here', description: 'Ping currently online members.', default: selected === 'here' },
+    { label: '@everyone', value: 'everyone', description: 'Ping everyone when a creator goes LIVE.', default: selected === 'everyone' },
+    { label: 'No notification ping', value: 'none', description: 'Post LIVE alerts without pinging members.', default: selected === 'none' },
+  );
+  return row(new StringSelectMenuBuilder().setCustomId(`${P}notification:mode`).setPlaceholder(`LIVE Notification Target • page ${safe + 1}/${count}`).setMinValues(1).setMaxValues(1).addOptions(options));
+}
+function mergeRolePageSelection(i, existingIds, selectedIds, page) {
+  const roles = sortedGuildRoles(i);
+  const pageIds = new Set(roles.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((role) => role.id));
+  const next = new Set((existingIds || []).filter((id) => !pageIds.has(id)));
+  for (const id of selectedIds || []) if (id !== '__none__') next.add(id);
+  return [...next].slice(0, 100);
+}
 function setFeedSession(i, patch) { const next = { ...getFeedSession(i), ...patch }; feedSessions.set(sessionKey(i), next); return next; }
 function embed(config, title, description, requestedBy, color = null) { return new EmbedBuilder().setColor(color || (config.enabled ? 0x5865F2 : 0x747F8D)).setTitle(title).setDescription(description).setFooter({ text: `Requested by ${requestedBy}` }).setTimestamp(); }
 function platformColor(platform) { return PLATFORM_COLOR[platform] || 0x5865F2; }
@@ -912,32 +951,36 @@ if (name === 'templates') {
   };
 
   if (name === 'permissions') {
+    const state = getRoleSession(i);
+    const count = rolePageCount(i);
+    const page = clampRolePage(state.rolePage, count);
+    setRoleSession(i, { rolePage: page });
     const managerRoles = config.managerRoleIds.length ? config.managerRoleIds.map((id) => `<@&${id}>`).join(', ') : 'None';
     const userRoles = config.userRoleIds.length ? config.userRoleIds.map((id) => `<@&${id}>`).join(', ') : 'Everyone';
-    const pingTarget = config.notificationMentionMode === 'everyone'
-      ? '@everyone'
-      : config.notificationMentionMode === 'here'
-        ? '@here'
-        : config.notificationMentionMode === 'role' && config.notificationRoleId
-          ? `<@&${config.notificationRoleId}>`
-          : 'No ping';
+    const pingTarget = config.notificationMentionMode === 'everyone' ? '@everyone' : config.notificationMentionMode === 'here' ? '@here' : config.notificationMentionMode === 'role' && config.notificationRoleId ? `<@&${config.notificationRoleId}>` : 'No ping';
     const d = [
-      '👥 **Manager roles**',
-      `Current: ${managerRoles}`,
+      'Configure who can use Social Studio and how LIVE roles and notifications behave.',
       '',
-      '👤 **User access roles**',
-      `Current: ${userRoles}`,
-      '',
-      '📢 **LIVE Notification Target**',
-      `Current: ${pingTarget}`,
+      '👥 **Manager Roles**', `Current: ${managerRoles}`, '',
+      '👤 **User Access Roles**', `Current: ${userRoles}`, '',
+      '🔴 **Temporary LIVE Creator Role**', `Current: ${config.liveRoleId ? `<@&${config.liveRoleId}>` : 'Disabled'}`, 'Assigned while a linked creator is LIVE and removed when all monitored accounts are offline.', '',
+      '📣 **LIVE Notification Target**', `Current: ${pingTarget}`, 'Used only for the first notification of a genuinely new LIVE session.',
     ].join('\n');
-    const components = [
-      roleSelect(config.managerRoleIds, `${P}roles:select`, 'Select Social Studio manager roles'),
-      roleSelect(config.userRoleIds, `${P}userroles:select`, 'Select roles allowed to use /user Social Studio'),
-      notificationTargetSelect(i, config),
-      navigation('permissions'),
-    ];
-    return { embeds: [embed(config, '🔐 Permissions', d, who(i))], components };
+    return {
+      embeds: [embed(config, '🎭 Roles & Access', d, who(i))],
+      components: [
+        pagedRoleSelect(i, `${P}roles:select`, 'Manager Roles', config.managerRoleIds || [], page),
+        pagedRoleSelect(i, `${P}userroles:select`, 'User Access Roles', config.userRoleIds || [], page),
+        pagedRoleSelect(i, `${P}liveRole:select`, 'Temporary LIVE Creator Role', config.liveRoleId ? [config.liveRoleId] : [], page, true),
+        pagedNotificationSelect(i, config, page),
+        row(
+          btn(`${P}settings`, '⬅️ Back', ButtonStyle.Secondary),
+          btn(`${P}roles:page:prev`, '◀️', ButtonStyle.Secondary, page <= 0),
+          btn(`${P}roles:page:info`, `📄 Roles ${page + 1}/${count}`, ButtonStyle.Secondary, true),
+          btn(`${P}roles:page:next`, '▶️', ButtonStyle.Secondary, page >= count - 1),
+        ),
+      ],
+    };
   }
   if (name === 'roles') return buildSectionPanel(i, 'permissions');
   if (name === 'automation') return buildSectionPanel(i, 'monitoring');
