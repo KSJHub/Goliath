@@ -217,6 +217,11 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     const result = await request(`/api/stats/${guildId}/config`, { method: 'PATCH', body: JSON.stringify({ settings: next }) });
     setConfig(result.config || config);
   }
+  async function toggleModule() {
+    const result = await request(`/api/stats/${guildId}/config`, { method: 'PATCH', body: JSON.stringify({ enabled: config?.enabled === false }) });
+    setConfig(result.config || config);
+    await load();
+  }
   async function saveTrackingFilters() {
     const payload = {
       trackMessages: config?.trackMessages !== false,
@@ -299,6 +304,8 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Counter category name<input value={config?.settings?.categoryName || '📊 SERVER STATS'} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), categoryName: event.target.value } })} onBlur={(event) => saveSettings({ categoryName: event.target.value })} style={control(theme)} /></label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default timezone<input value={config?.settings?.timeZone || 'Europe/London'} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), timeZone: event.target.value } })} onBlur={(event) => saveSettings({ timeZone: event.target.value })} style={control(theme)} /></label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default update frequency<select value={config?.settings?.defaultFrequencyMinutes || 10} onChange={(event) => { const value = Number(event.target.value); setConfig({ ...config, settings: { ...(config?.settings || {}), defaultFrequencyMinutes: value } }); saveSettings({ defaultFrequencyMinutes: value }); }} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></label>
+          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Activity retention (days)<input type="number" min="1" max="365" value={config?.settings?.retentionDays || 30} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), retentionDays: Number(event.target.value) } })} onBlur={(event) => saveSettings({ retentionDays: Number(event.target.value) })} style={control(theme)} /></label>
+          <div><PrimaryButton onClick={toggleModule} disabled={busy}>{config?.enabled === false ? '▶️ Enable Server Counters' : '⏸️ Disable Server Counters'}</PrimaryButton></div>
         </div>
       </SectionCard>
 
