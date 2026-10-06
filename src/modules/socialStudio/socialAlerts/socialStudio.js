@@ -236,6 +236,7 @@ async function handleUserCreateProfileSubmit(
     group: interaction.fields.getTextInputValue('group'),
     tags: interaction.fields.getTextInputValue('tags'),
     notes: interaction.fields.getTextInputValue('notes'),
+    showProfileInLive: String(interaction.fields.getTextInputValue('showProfileInLive') || 'yes').trim().toLowerCase() !== 'no',
   });
 
   const accounts = getAccountsForCreator(
