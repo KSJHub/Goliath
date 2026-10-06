@@ -2002,6 +2002,44 @@ async function handleAutomationInteraction(i, context) {
     return respond(i, buildSectionPanel(i, 'liveMessages'));
   }
 
+  if (id === `${P}automation:interval`) {
+    config.settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
+    const values = MONITORING_INTERVALS.map((option) => Number(option.value));
+    const current = Number(config.settings.checkIntervalMs || 300000);
+    const index = values.indexOf(current);
+    config.settings.checkIntervalMs = values[(index < 0 ? 0 : index + 1) % values.length];
+    config.settings.suppressDuplicates = true;
+    saveConfig(i.guildId, config, i.guild, actorId);
+    return respond(i, buildSectionPanel(i, 'monitoring'));
+  }
+
+  if (id === `${P}automation:retry`) {
+    config.settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
+    config.settings.retryDeliveries = config.settings.retryDeliveries === false;
+    config.settings.suppressDuplicates = true;
+    saveConfig(i.guildId, config, i.guild, actorId);
+    return respond(i, buildSectionPanel(i, 'monitoring'));
+  }
+
+  if (id === `${P}automation:quiet`) {
+    config.settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
+    if (i.isButton?.()) { await i.showModal(quietHoursModal(config)); return true; }
+    if (i.isModalSubmit?.()) {
+      const enabledRaw = String(i.fields.getTextInputValue('enabled') || '').trim().toLowerCase();
+      const start = String(i.fields.getTextInputValue('start') || '').trim();
+      const end = String(i.fields.getTextInputValue('end') || '').trim();
+      const timezone = String(i.fields.getTextInputValue('timezone') || '').trim();
+      if (!['yes', 'no'].includes(enabledRaw)) throw new Error('Quiet Hours enabled must be yes or no.');
+      if (!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(start) || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(end)) throw new Error('Quiet Hours times must use 24-hour HH:MM format.');
+      if (start === end) throw new Error('Quiet Hours start and end times must be different.');
+      try { new Intl.DateTimeFormat('en-GB', { timeZone: timezone }).format(new Date()); } catch { throw new Error('Quiet Hours timezone must be a valid IANA timezone, for example Europe/London.'); }
+      config.settings.quietHours = { enabled: enabledRaw === 'yes', start, end, timezone };
+      config.settings.suppressDuplicates = true;
+      saveConfig(i.guildId, config, i.guild, actorId);
+      if (!i.deferred && !i.replied) await i.deferUpdate();
+      return respond(i, buildSectionPanel(i, 'monitoring'));
+    }
+  }
   const section = id.slice(P.length);
   if (section === 'templates') {
     config.templates = normalizeTemplates(config.templates);
@@ -2030,6 +2068,24 @@ async function handleDiagnosticsInteraction(i, context) {
     return respond(i, buildSectionPanel(i, 'monitoring'));
   }
 
+  if (id === `${P}data:refresh`) return respond(i, buildSectionPanel(i, 'monitoring'));
+
+  if (id === `${P}testing:last`) {
+    const history = Array.isArray(config.history) ? config.history : [];
+    const latest = history.at(-1);
+    const content = latest ? `📄 **Latest Social Studio Response**\n\n${JSON.stringify(latest, null, 2).slice(0, 1800)}` : '📄 **Latest Social Studio Response**\n\nNo provider response or Social Studio history has been recorded yet.';
+    if (i.deferred || i.replied) await i.followUp({ content, flags: 64 }).catch(() => null); else await i.reply({ content, flags: 64 });
+    return true;
+  }
+
+  if (id === `${P}testing:diagnostics`) {
+    const accounts = Object.values(config.accounts || {});
+    const platforms = [...new Set(accounts.map((account) => String(account.platform || '').toLowerCase()).filter(Boolean))];
+    const lines = platforms.length ? platforms.map((platform) => { let info = {}; try { info = providerInfo(platform) || {}; } catch { info = {}; } const alerts = Array.isArray(info.supportedAlertTypes) && info.supportedAlertTypes.length ? info.supportedAlertTypes.join(', ') : 'No alert types reported'; return `**${LABEL[platform] || platform}** — ${alerts}`; }) : ['No linked accounts are available to inspect.'];
+    const content = `🩺 **Social Studio Provider Details**\n\n${lines.join('\n').slice(0, 1800)}`;
+    if (i.deferred || i.replied) await i.followUp({ content, flags: 64 }).catch(() => null); else await i.reply({ content, flags: 64 });
+    return true;
+  }
   return false;
 }
 
