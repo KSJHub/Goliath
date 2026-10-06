@@ -128,4 +128,4 @@ function projectEffectiveAccounts(config) {
   return projected;
 }
 
-module.exports = { ALERT_TYPES, normalizeTemplates, resolveTemplate, resetTemplate, projectEffectiveAccounts };
+module.exports = { ALERT_TYPES, normalizeTemplates, resolveTemplate, resetTemplate, resolveSocialRoute, projectEffectiveAccounts };
