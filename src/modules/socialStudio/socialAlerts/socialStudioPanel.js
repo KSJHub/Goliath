@@ -869,6 +869,29 @@ if (name === 'templates') {
     };
   }
 
+  if (name === 'channels') {
+    const session = getFeedSession(i);
+    const type = session.routeType || 'default';
+    const selected = type === 'default' ? config.alertsChannelId : config.alertChannels?.[type] || null;
+    const summary = [
+      'Choose the server destinations used by Social Studio alerts.',
+      '',
+      `**Default:** ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : 'Not configured'}`,
+      ...ALERT_TYPES.map((alertType) => `${ALERT_EMOJI[alertType] || '🔔'} **${ALERT_LABEL[alertType] || alertType}:** ${config.alertChannels?.[alertType] ? `<#${config.alertChannels[alertType]}>` : 'Uses fallback routing'}`),
+      '',
+      '**Fallback order:** User → Creator/Account → Platform → Content Type → Default.',
+    ].join('\n');
+    return {
+      embeds: [embed(config, '🎯 Routing', summary, who(i))],
+      components: [
+        routeTypeSelect(`${P}feed:type`, type),
+        channelSelect(`${P}feed:route`, selected, `Choose destination for ${type === 'default' ? 'default alerts' : ALERT_LABEL[type] || type}`),
+        row(btn('social:userroute:open', '👥 User Routing', ButtonStyle.Secondary)),
+        row(btn(`${P}monitoring`, '⬅️ Back', ButtonStyle.Secondary)),
+      ],
+    };
+  }
+
   if (name === 'settings') return {
     embeds: [embed(config, '⚙️ Social Studio Settings', [
       'Configure the parts of Social Studio that server managers actually need.',
