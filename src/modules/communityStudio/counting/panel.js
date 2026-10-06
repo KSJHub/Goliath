@@ -63,7 +63,7 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
       {
         name: '🎮 Game Rules',
         value: [
-          '**Start:** \`' + section.startingNumber + '\`   •   **Turns:** ' + formatTurnLimit(section.maxConsecutivePerMember),
+          '**Turns:** ' + formatTurnLimit(section.maxConsecutivePerMember),
           '**Game Over:** ' + formatFailureLimit(section.failureLimit),
           '**Hints:** ' + formatHintThreshold(section.answerAfterFailures) + '   •   **Milestones:** ' + (section.milestoneAnnouncements ? 'Every ' + section.milestoneInterval : 'Off'),
         ].join('\n'),
