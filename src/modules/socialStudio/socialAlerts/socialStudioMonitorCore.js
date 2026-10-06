@@ -202,6 +202,13 @@ async function checkGuildAccounts(client,guildId,options={}) {
       const creator=creatorFor(config,accountId);
       for(const duplicateId of resolvedDuplicateIds(config,account,checked,creator))duplicateMerges.set(duplicateId,accountId);
 
+      if(options.diagnosticOnly===true){
+        monitorUpdates.set(accountId,{state,externalId:checked.externalId||null,resolvedUsername:checked.resolvedUsername||null,profileUrl:checked.url||null,avatar:checked.avatar||null,updatedAt:now()});
+        results.push({accountId,platform:account.platform,status:checked.status,isLive:checked.isLive,live:checked.event||null,delivered:[],diagnosticOnly:true});
+        analyticsDelta.checks=Number(analyticsDelta.checks||0)+1;
+        return;
+      }
+
       const delivered=[];
       const completedEventKeys=new Set();
       const firstContentBaseline=!previous.contentBaselineEstablishedAt;
