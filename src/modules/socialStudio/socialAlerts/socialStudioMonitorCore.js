@@ -232,8 +232,16 @@ async function checkGuildAccounts(client,guildId,options={}) {
         for (const item of held) {
           const heldEvent = item.event;
           if (heldEvent.type === 'live') {
-            if (checked.isLive === true && String(checked.event?.id || '') === String(heldEvent.id || '')) events.unshift(heldEvent);
-          } else events.unshift(heldEvent);
+            if (checked.isLive === true && String(checked.event?.id || '') === String(heldEvent.id || '')) {
+              events.unshift(heldEvent);
+              historyEntries.push({id:`history_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,createdAt:now(),accountId,platform:account.platform,status:'quiet_released',alertType:heldEvent.type,eventId:heldEvent.id});
+            } else {
+              historyEntries.push({id:`history_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,createdAt:now(),accountId,platform:account.platform,status:'quiet_stale_discarded',alertType:heldEvent.type,eventId:heldEvent.id});
+            }
+          } else {
+            events.unshift(heldEvent);
+            historyEntries.push({id:`history_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,createdAt:now(),accountId,platform:account.platform,status:'quiet_released',alertType:heldEvent.type,eventId:heldEvent.id});
+          }
         }
         state.quietHoursPending = [];
       }
@@ -295,7 +303,10 @@ async function checkGuildAccounts(client,guildId,options={}) {
         if(quiet&&!options.manual&&event.type!=='ended'){
           const pending = Array.isArray(state.quietHoursPending) ? state.quietHoursPending : [];
           const pendingKey = eventKey(event);
-          if (!pending.some((item) => item?.key === pendingKey)) pending.push({ key: pendingKey, event, heldAt: now() });
+          if (!pending.some((item) => item?.key === pendingKey)) {
+            pending.push({ key: pendingKey, event, heldAt: now() });
+            historyEntries.push({id:`history_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,createdAt:now(),accountId,platform:account.platform,status:'quiet_held',alertType:event.type,eventId:event.id});
+          }
           state.quietHoursPending = pending.slice(-100);
           continue;
         }
