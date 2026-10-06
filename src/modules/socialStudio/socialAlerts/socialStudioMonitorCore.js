@@ -135,10 +135,8 @@ function buildEmbed(account, event, template, creator, settings = {}) { const va
       const group = safeProfileText(creator?.group, 200);
       const tags = Array.isArray(creator?.tags) ? safeProfileText(creator.tags.join(', '), 700) : '';
       const notes = safeProfileText(creator?.notes, 900);
-      const profileParts = [];
-      if (group) profileParts.push(`**Group / Team:** ${group}`);
-      if (tags) profileParts.push(`**Tags:** ${tags}`);
-      if (profileParts.length) embed.addFields({ name: '\u200B', value: profileParts.join(' · '), inline: false });
+      if (group) embed.addFields({ name: '\u200B', value: `**🤼‍♂️** ${group}`, inline: false });
+      if (tags) embed.addFields({ name: '\u200B', value: `**🔖** ${tags}`, inline: false });
       if (notes) embed.addFields({ name: '\u200B', value: `💬 *${notes.replace(/([*_~\\])/g, '\\$1')}*`, inline: false });
     } if(event.vod?.url) embed.addFields({name:'📼 VOD',value:`[Watch the recording](${event.vod.url})`,inline:false}); } else { embed.setTitle((render(template.title,vars)||`${platform.icon} ${platform.label}`).slice(0,256)); const description=stripTrailingDivider(render(template.description,vars)||vars.title), actionLabel=clean(template.buttonLabel||'View Post',80), actions=vars.url?[`▶️ **[${actionLabel}](${vars.url})**`]:[]; embed.setDescription(`${description}${embedActionBlock(actions)}`.slice(0,4096)); } const liveImage=liveStatus==='LIVE'||liveStatus==='PAUSED', thumbnail=liveImage?(platformKey==='tiktok'?clean(event.thumbnail,1000):cacheBustedImageUrl(event.thumbnail)):clean(event.thumbnail,1000); if(thumbnail&&/^https?:\/\//i.test(thumbnail)) embed.setImage(thumbnail); if(!liveStatus&&vars.url&&/^https?:\/\//i.test(vars.url)) embed.setURL(vars.url); embed.setFooter({text:`Goliath Social Studio • ${platform.label} • ${liveStatus || event.type.toUpperCase()}`}); embed.setTimestamp(new Date(event.endedAt||event.publishedAt||event.startedAt||Date.now())); return embed; }
 async function sendAlert(client,guildId,config,account,event,options={}) {
