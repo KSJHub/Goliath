@@ -870,64 +870,18 @@ if (name === 'templates') {
   }
 
   if (name === 'settings') return {
-    embeds: [
-      embed(
-        config,
-        '⚙️ Settings',
-        [
-          'Configure how Social Studio operates.',
-          '',
-          '**Roles & Management**',
-          '🎭 **Roles** — configure Social Studio manager roles, user access roles, the LIVE role and LIVE notification target.',
-          '',
-          '**Alerts & Delivery**',
-          '⚙️ **Automation** — monitoring interval, duplicate protection, retries and quiet hours.',
-          '🎯 **Routing** — choose default, creator and platform notification destinations.',
-          '🔴 **LIVE Messages** — configure live-message editing, refresh and cleanup behaviour.',
-          '🧪 **Test & Diagnose** — provider checks, delivery tests and provider diagnostics.',
-          '',
-          '**Storage**',
-          '📦 **Data & Export** — export configuration or history and manage stored history.',
-        ].join('\n'),
-        who(i),
-      ),
-    ],
+    embeds: [embed(config, '⚙️ Social Studio Settings', [
+      'Configure the parts of Social Studio that server managers actually need.',
+      '',
+      '🎭 **Roles & Access** — management access, creator access, temporary LIVE role and the LIVE notification target.',
+      '🔴 **LIVE Messages** — viewer count, duration and silent refresh behaviour for the retained LIVE post.',
+      '⚙️ **Setup & Diagnostics** — provider timing, Quiet Hours, retries, routing, tests and provider health.',
+      '📦 **Data & Export** — export configuration/history and manage stored Social Studio data.',
+    ].join('\n'), who(i))],
     components: [
-      row(
-        btn(
-          `${P}permissions`,
-          '🎭 Roles',
-          ButtonStyle.Primary,
-        ),
-        btn(
-          `${P}monitoring`,
-          '⚙️ Automation',
-          ButtonStyle.Primary,
-        ),
-        btn(
-          `${P}channels`,
-          '🎯 Routing',
-          ButtonStyle.Primary,
-        ),
-      ),
-      row(
-        btn(
-          `${P}liveMessages`,
-          '🔴 LIVE Messages',
-          ButtonStyle.Primary,
-        ),
-        btn(
-          `${P}diagnostics`,
-          '🧪 Test & Diagnose',
-          ButtonStyle.Primary,
-        ),
-        btn(
-          `${P}data`,
-          '📦 Data & Export',
-          ButtonStyle.Primary,
-        ),
-      ),
-      navigation('settings'),
+      row(btn(`${P}permissions`, '🎭 Roles & Access', ButtonStyle.Primary), btn(`${P}liveMessages`, '🔴 LIVE Messages', ButtonStyle.Primary)),
+      row(btn(`${P}monitoring`, '⚙️ Setup & Diagnostics', ButtonStyle.Primary)),
+      row(btn(`${P}main`, '⬅️ Back', ButtonStyle.Secondary), btn(`${P}data`, '📦 Data & Export', ButtonStyle.Secondary)),
     ],
   };
 
@@ -1014,252 +968,82 @@ if (name === 'templates') {
     };
   }
 
-  if (name === 'monitoring') {
-    const settings = config.settings || {}, interval = Math.max(30000, Number(settings.checkIntervalMs || 300000)), mins = interval / 60000, quiet = settings.quietHours && typeof settings.quietHours === 'object' ? settings.quietHours : { enabled: false, start: '23:00', end: '08:00', timezone: 'Europe/London' };
-    const monitored = accounts.filter((a) => a.enabled !== false).length;
-    const lastHistoryCheck = [...config.history].reverse().find((entry) => entry?.status === 'checked' || entry?.providerStatus);
-    const lastAccountCheckMs = newestTime(accounts.map((account) => account.state?.lastCheckedAt));
-    const lastProviderCheck = lastAccountCheckMs ? new Date(lastAccountCheckMs).toISOString() : lastHistoryCheck?.createdAt || lastHistoryCheck?.checkedAt || lastHistoryCheck?.lastCheckedAt;
-    const failures = accounts.filter((a) => a.state?.lastError || a.state?.lastDeliveryError).length + Number(config.queue?.length || 0);
+  if (name === 'monitoring' || name === 'diagnostics' || name === 'automation' || name === 'testing') {
+    const settings = config.settings || {};
+    const interval = Math.max(30000, Number(settings.checkIntervalMs || 300000));
+    const quiet = settings.quietHours && typeof settings.quietHours === 'object' ? settings.quietHours : { enabled: false, start: '23:00', end: '08:00', timezone: 'Europe/London' };
+    const monitored = accounts.filter((account) => account.enabled !== false).length;
+    const issueAccounts = accounts.filter((account) => account.state?.lastError || account.state?.lastDeliveryError).length;
+    const pending = accounts.filter((account) => account.state?.pendingDelivery || account.state?.quietHoursPending?.length).length + Number(config.queue?.length || 0);
+    const lastCheckMs = newestTime(accounts.map((account) => account.state?.lastCheckedAt));
+    const health = !accounts.length ? '⚪ Not Configured' : issueAccounts || pending ? '🟡 Attention Needed' : '🟢 Operational';
+    const intervalLabel = interval < 60000 ? '30s' : interval % 3600000 === 0 ? `${interval / 3600000}h` : `${interval / 60000}m`;
+    const quietLabel = quiet.enabled === true ? `${quiet.start || '23:00'}–${quiet.end || '08:00'} (${quiet.timezone || 'Europe/London'})` : 'Off';
     const d = [
-      `${failures ? 'Warning' : 'Operational'} **System Health**`,
-      failures ? `${failures} account, delivery or queue item(s) need attention.` : 'No provider, delivery or queue issues detected.',
+      'Configure Social Studio automation, test delivery and investigate provider health.',
       '',
-      `**Module Status**\n${config.enabled ? 'Enabled' : 'Disabled'}`,
-      'Turns Social Studio monitoring on or off for this server.',
+      `**System Health:** ${health}`,
+      `**Provider Checks:** Every ${intervalLabel}`,
+      `**Accounts:** ${monitored} monitored`,
+      `**Quiet Hours:** ${quietLabel}`,
+      `**Failed Delivery Retry:** ${settings.retryDeliveries === false ? 'Off' : 'On'}`,
+      `**Pending Work:** ${pending}`,
+      `**Last Provider Check:** ${ts(lastCheckMs ? new Date(lastCheckMs).toISOString() : null)}`,
       '',
-      `**Check Interval**\n${interval < 60000 ? 'Every 30 seconds' : `Every ${mins} minute${mins === 1 ? '' : 's'}`}`,
-      'How often the bot checks linked accounts for new provider activity.',
-      '',
-      `**Duplicate Protection**\n${settings.suppressDuplicates === false ? 'Disabled' : 'Enabled'}`,
-      'Prevents the same LIVE/provider event from being posted twice.',
-      '',
-      `**Failed Delivery Retry**\n${settings.retryDeliveries === false ? 'Disabled' : 'Enabled'}`,
-      'Retries alert sends that failed because Discord or the target channel was unavailable.',
-      '',
-      `**Quiet Hours**\n${quiet.enabled === true ? `${quiet.start || '23:00'} - ${quiet.end || '08:00'} (${quiet.timezone || 'Europe/London'})` : 'Disabled'}`,
-      'Pauses outbound alerts during the selected quiet window.',
-      '',
-      `**Monitored Accounts**\n${monitored} / ${accounts.length}`,
-      'Accounts enabled for automatic provider checks.',
-      '',
-      `**Last Provider Check**\n${ts(lastProviderCheck)}`,
-      'Newest recorded check time across monitored account states.',
+      '**Core Protection**',
+      '📡 Monitoring stays active while Social Studio is enabled.',
+      '🛡️ Duplicate protection is always active.',
     ].join('\n');
     return {
-      embeds: [embed(config, 'Social Studio Monitoring', d, who(i))],
+      embeds: [embed(config, '⚙️ Setup & Diagnostics', d, who(i))],
       components: [
-        monitoringIntervalSelect(settings),
-        monitoringBooleanSelect(`${P}automation:dupes`, 'Duplicate protection', settings.suppressDuplicates !== false),
-        monitoringBooleanSelect(`${P}automation:retry`, 'Failed delivery retry', settings.retryDeliveries !== false),
         row(
-          btn(`${P}automation:quiet`, 'Configure Quiet Hours'),
-        btn(
-          `${P}toggle`,
-          config.enabled
-            ? '⏸️ Disable Monitoring'
-            : '▶️ Enable Monitoring',
-          config.enabled
-            ? ButtonStyle.Danger
-            : ButtonStyle.Success,
+          btn(`${P}automation:interval`, `⏱️ Interval: ${intervalLabel}`, ButtonStyle.Secondary),
+          btn(`${P}automation:quiet`, `🌙 Quiet Hours: ${quiet.enabled === true ? 'ON' : 'OFF'}`, quiet.enabled === true ? ButtonStyle.Success : ButtonStyle.Secondary),
+          btn(`${P}automation:retry`, `🔄 Retry: ${settings.retryDeliveries === false ? 'OFF' : 'ON'}`, settings.retryDeliveries === false ? ButtonStyle.Secondary : ButtonStyle.Success),
+          btn(`${P}account:check`, '🔍 Run Check', ButtonStyle.Primary, !accounts.length),
         ),
+        row(
+          btn(`${P}test`, '📨 Send Test', ButtonStyle.Primary, !config.alertsChannelId),
+          btn(`${P}channels`, '🎯 Routing', ButtonStyle.Secondary),
+          btn(`${P}testing:last`, '📄 Last Response', ButtonStyle.Secondary),
+          btn(`${P}testing:diagnostics`, '🩺 Provider Details', ButtonStyle.Secondary),
         ),
-        goliathNavigation(
-          `${P}settings`,
-          `${P}settings`,
-        ),
+        row(btn(`${P}settings`, '⬅️ Back', ButtonStyle.Secondary), btn(`${P}data:refresh`, '🔄 Refresh', ButtonStyle.Secondary)),
       ],
     };
   }
   if (name === 'liveMessages') {
     const settings = config.settings || {};
-    const d = ['**Live Message Behaviour**', `✏️ **Edit:** ${settings.editLiveNotifications !== false ? 'On' : 'Off'} - update the same LIVE post.`, `👥 **Viewers:** ${settings.includeViewerCount === false ? 'Off' : 'On'} - show viewer count.`, `⏱️ **Duration:** ${settings.includeLiveDuration === false ? 'Off' : 'On'} - show time live.`].join('\n');
-    const refreshEnabled =
-      settings.liveRefreshEnabled !== false;
-
-    const refreshSeconds =
-      Number(settings.liveRefreshSeconds) || 300;
-
-    return {
-      embeds: [
-        embed(
-          config,
-          '🔴 Live Messages',
-          d,
-          who(i),
-        ),
-      ],
-      components: [
-        row(
-          btn(
-            `${P}automation:editlive`,
-            settings.editLiveNotifications !== false
-              ? '✏️ Edit: On'
-              : '✏️ Edit: Off',
-          ),
-          btn(
-            `${P}automation:liverefresh`,
-            refreshEnabled
-              ? '🔄 Refresh: On'
-              : '🔄 Refresh: Off',
-            refreshEnabled
-              ? ButtonStyle.Success
-              : ButtonStyle.Secondary,
-          ),
-        ),
-        row(
-          btn(
-            `${P}automation:viewers`,
-            settings.includeViewerCount === false
-              ? '👥 Viewers: Off'
-              : '👥 Viewers: On',
-          ),
-          btn(
-            `${P}automation:duration`,
-            settings.includeLiveDuration === false
-              ? '⏱️ Duration: Off'
-              : '⏱️ Duration: On',
-          ),
-          btn(
-            `${P}automation:liverefreshrate`,
-            `⏱️ Refresh: ${refreshSeconds}s`,
-            ButtonStyle.Secondary,
-            !refreshEnabled,
-          ),
-        ),
-        goliathNavigation(
-          `${P}settings`,
-          `${P}settings`,
-        ),
-      ],
-    };
-  }
-  if (name === 'diagnostics') {
-    const checks = Number(
-      config.analytics?.checks || 0
-    );
-    const alerts = Number(
-      config.analytics?.alertsSent || 0
-    );
-    const failures = Number(
-      config.analytics?.failures || 0
-    );
-    const monitored = accounts.filter(
-      (account) => account.enabled !== false
-    ).length;
-
-    const checkedEntries = config.history.filter(
-      (entry) => entry?.status === 'checked'
-    );
-
-    const failedEntries = config.history.filter(
-      (entry) =>
-        entry?.status === 'delivery_failed' ||
-        entry?.providerStatus === 'error' ||
-        entry?.providerStatus === 'unavailable'
-    );
-
-    const lastSuccess = [...checkedEntries]
-      .reverse()
-      .find(
-        (entry) =>
-          entry?.isLive === true ||
-          entry?.isLive === false ||
-          entry?.providerStatus === 'ok' ||
-          entry?.providerStatus === 'live' ||
-          entry?.providerStatus === 'offline'
-      );
-
-    const lastFailure = failedEntries.at(-1);
-
-    const recent = config.history
-      .slice(-3)
-      .reverse()
-      .map(
-        (entry) =>
-          `- ${entry.status || 'event'}${
-            entry.platform
-              ? ` - ${LABEL[entry.platform] || entry.platform}`
-              : ''
-          }${
-            entry.alertType
-              ? ` - ${ALERT_LABEL[entry.alertType] || entry.alertType}`
-              : ''
-          }`
-      )
-      .join('\n') || 'No history yet.';
-
+    const refreshEnabled = settings.liveRefreshEnabled !== false;
+    const refreshSeconds = Number(settings.liveRefreshSeconds) || 300;
+    const refreshLabel = refreshEnabled ? (refreshSeconds % 60 === 0 ? `${refreshSeconds / 60}m` : `${refreshSeconds}s`) : 'OFF';
     const d = [
-      '**Testing & Diagnostics**',
-      `Default channel: ${
-        config.alertsChannelId
-          ? `<#${config.alertsChannelId}>`
-          : 'Not configured'
-      }`,
-      `Accounts: ${accounts.length} (${monitored} monitored)`,
-      `Provider checks: ${checks.toLocaleString('en-GB')}`,
-      `Alerts sent: ${alerts.toLocaleString('en-GB')}`,
-      `Failures: ${failures.toLocaleString('en-GB')}`,
-      `Queue size: ${config.queue.length}`,
-      `Last successful scan: ${ts(lastSuccess?.createdAt)}`,
-      `Last failure: ${ts(lastFailure?.createdAt)}`,
+      'Control the optional information shown while a creator is LIVE.',
       '',
-      '**Tools**',
-      '🔎 **Run Provider Check:** immediately check linked provider accounts.',
-      '📨 **Send Test:** preview notification delivery privately.',
-      '📄 **Last Response:** inspect the latest recorded provider response.',
-      '🩺 **Provider Details:** inspect provider capabilities and supported alerts.',
+      '**Permanent LIVE lifecycle**',
+      '✏️ The original LIVE post is retained and silently updated to ENDED/OFFLINE.',
+      '🔕 Refreshes, recovery and ENDED updates never create another LIVE ping.',
       '',
-      '**Recent Activity**',
-      recent,
+      `👥 **Viewer Count:** ${settings.includeViewerCount === false ? 'Off' : 'On'}`,
+      `⏱️ **Live Duration:** ${settings.includeLiveDuration === false ? 'Off' : 'On'}`,
+      `🔄 **Refresh:** ${refreshLabel}`,
+      '',
+      'Turning refresh off only stops periodic presentation refreshes. Monitoring and LIVE → ENDED still continue.',
     ].join('\n');
-
     return {
-      embeds: [
-        embed(
-          config,
-          '🧪 Test & Diagnose',
-          d,
-          who(i),
-        ),
-      ],
+      embeds: [embed(config, '🔴 LIVE Messages', d, who(i))],
       components: [
         row(
-          btn(
-            `${P}account:check`,
-            '🔎 Run Provider Check',
-            ButtonStyle.Primary,
-            !accounts.length,
-          ),
-          btn(
-            `${P}test`,
-            '📨 Send Test',
-            ButtonStyle.Primary,
-            !config.alertsChannelId,
-          ),
-          btn(
-            `${P}testing:last`,
-            '📄 Last Response',
-            ButtonStyle.Secondary,
-          ),
-          btn(
-            `${P}testing:diagnostics`,
-            '🩺 Provider Details',
-            ButtonStyle.Secondary,
-          ),
-          btn(
-            `${P}data:refresh`,
-            '🔄 Refresh',
-            ButtonStyle.Secondary,
-          ),
+          btn(`${P}automation:viewers`, settings.includeViewerCount === false ? '👥 Viewers: OFF' : '👥 Viewers: ON', settings.includeViewerCount === false ? ButtonStyle.Secondary : ButtonStyle.Success),
+          btn(`${P}automation:duration`, settings.includeLiveDuration === false ? '⏱️ Duration: OFF' : '⏱️ Duration: ON', settings.includeLiveDuration === false ? ButtonStyle.Secondary : ButtonStyle.Success),
+          btn(`${P}automation:liverefreshrate`, `🔄 Refresh: ${refreshLabel}`, refreshEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
         ),
-        goliathNavigation(
-          `${P}settings`,
-          `${P}settings`,
-        ),
+        row(btn(`${P}settings`, '⬅️ Back', ButtonStyle.Secondary)),
       ],
     };
   }
+  if (name === 'diagnostics') return buildSectionPanel(i, 'monitoring');
 
   return { embeds: [embed(config, name[0].toUpperCase() + name.slice(1), 'Social Studio settings.', who(i))], components: [navigation(name)] };
 }
