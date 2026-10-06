@@ -243,6 +243,19 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     setHealth(result.result?.health || null);
     await load();
   }
+  async function exportStats() {
+    const result = await request(`/api/stats/${guildId}/export`);
+    const blob = new Blob([JSON.stringify(result.export || {}, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = `goliath-stats-${guildId}.json`; link.click();
+    URL.revokeObjectURL(url);
+  }
+  async function resetStats() {
+    if (!window.confirm('Reset all stored Stats activity and counter configuration for this server? This cannot be undone.')) return;
+    await request(`/api/stats/${guildId}/reset`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+    setDraft(null); setPreview(''); setHealth(null); await load();
+  }
 
   if (!guildId) return <EmptyState theme={theme} title="Select a server" text="Select a server to manage its counters." />;
   if (loading && !overview) return <LoadingPanel theme={theme} text="Loading server counters..." />;
@@ -339,7 +352,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
             <Row theme={theme} label="Missing channels" value={health.counters?.missing ?? 0} />
             {health.issues?.length ? <div style={{ padding: 12, borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>{health.issues.map((issue, index) => <div key={`${issue.code}-${index}`}>• {issue.code.replaceAll('_', ' ')}</div>)}</div> : <div style={{ color: theme.mutedText }}>No issues found.</div>}
           </> : <div style={{ color: theme.mutedText }}>Run a health check to inspect the live counter setup.</div>}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><SecondaryButton onClick={runHealthCheck} disabled={busy}>🩺 Run Health Check</SecondaryButton><SecondaryButton onClick={repairStats} disabled={busy}>🔧 Repair Issues</SecondaryButton></div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><SecondaryButton onClick={runHealthCheck} disabled={busy}>🩺 Run Health Check</SecondaryButton><SecondaryButton onClick={repairStats} disabled={busy}>🔧 Repair Issues</SecondaryButton><SecondaryButton onClick={exportStats} disabled={busy}>📤 Export</SecondaryButton><SecondaryButton danger onClick={resetStats} disabled={busy}>🗑️ Reset Stats</SecondaryButton></div>
         </div>
       </SectionCard>
 
