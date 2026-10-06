@@ -223,9 +223,9 @@ async function handleInteraction(interaction) {
     }
     if (id.startsWith(`${PREFIX}:cleanup:`)) {
       const parts = id.split(':');
-      const mode = parts[3];
-      const choice = parts[4];
-      const channelId = parts[5];
+      const mode = parts[4];
+      const choice = parts[5];
+      const channelId = parts[6];
       const section = counting.getSection(interaction.guild.id);
       if (mode === 'reset' && String(section.channelId) !== String(channelId)) throw new Error('The Counting channel changed before cleanup could run.');
       if (mode === 'move' && String(section.channelId) === String(channelId)) throw new Error('Cleanup is only available for the previous Counting channel after a move.');
