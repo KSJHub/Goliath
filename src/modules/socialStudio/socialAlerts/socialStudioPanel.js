@@ -2447,7 +2447,17 @@ function buildUserSection(
         '**Status**',
         creator.status || 'active',
         '',
-        'Creator profile management will be connected here using the existing Social Studio profile functions.',
+        '**Group / Team**',
+        creator.group || 'Not set',
+        '',
+        '**Tags**',
+        Array.isArray(creator.tags) && creator.tags.length ? creator.tags.join(', ') : 'Not set',
+        '',
+        '**Notes**',
+        creator.notes || 'Not set',
+        '',
+        '**LIVE Profile Info**',
+        creator.showProfileInLive === false ? 'Hidden from LIVE alerts' : 'Shown in LIVE alerts when profile information is available.',
       ].join('\n'),
     },
     accounts: {
@@ -2480,7 +2490,19 @@ function buildUserSection(
         0xFEE75C,
       ),
     ],
-    components: [userSectionNavigation()],
+    components: section === 'details'
+      ? [
+          row(
+            btn('user:social:profile:edit', '✏️ Edit Profile', ButtonStyle.Primary),
+            btn(
+              'user:social:profile:toggleLiveInfo',
+              creator.showProfileInLive === false ? '📣 LIVE Profile Info: OFF' : '📣 LIVE Profile Info: ON',
+              creator.showProfileInLive === false ? ButtonStyle.Secondary : ButtonStyle.Success,
+            ),
+          ),
+          userSectionNavigation(),
+        ]
+      : [userSectionNavigation()],
   };
 }
 
