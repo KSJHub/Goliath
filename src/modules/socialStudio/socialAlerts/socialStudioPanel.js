@@ -1296,7 +1296,7 @@ async function handleAccountInteraction(i, context) {
         i.guildId,
         {
           force: true,
-          manual: true,
+          diagnosticOnly: true,
           accountIds: [requestedAccountId],
           guild: i.guild,
         },
@@ -1341,7 +1341,7 @@ async function handleAccountInteraction(i, context) {
       i.guildId,
       {
         force: true,
-        manual: true,
+        diagnosticOnly: true,
         guild: i.guild,
       },
     );
