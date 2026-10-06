@@ -39,6 +39,13 @@ const contracts = [
   ['stale LIVE retry clears pending', 'state.pendingDelivery=null'],
   ['recovery concurrency deferral', "result?.skipped&&result.reason==='check_already_running'"],
   ['rollover concurrency deferral', "repairedItem?.status==='skipped'&&repairedItem?.reason==='already_running'"],
+  ['quiet hours persistent hold', 'quietHoursPending'],
+  ['quiet hours held audit', "status:'quiet_held'"],
+  ['quiet hours release audit', "status:'quiet_released'"],
+  ['stale quiet LIVE discard audit', "status:'quiet_stale_discarded'"],
+  ['diagnostic provider isolation', 'options.diagnosticOnly===true'],
+  ['LIVE notification target is server authoritative', "constlive=String(eventType||'').toLowerCase()==='live'"],
+  ['creator LIVE profile visibility', 'creator?.showProfileInLive!==false'],
 ];
 
 for (const [name, needle] of contracts) {
