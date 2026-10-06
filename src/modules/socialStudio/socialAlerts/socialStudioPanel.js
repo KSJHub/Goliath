@@ -721,7 +721,12 @@ function buildAccountManagePanel(i, config, creator) {
   const d = [`👤 **${creator.displayName}**`, '', '**Accounts**', `Linked: ${linked.length}`, `Selected: ${active ? `${LABEL[active.platform]} — ${active.username || active.externalId}` : linked.length ? 'Choose an account below.' : 'None yet.'}`, ...(linked.length ? ['', linked.map((a) => `• ${ICON[a.platform]} **${LABEL[a.platform]}** — ${a.profileUrl ? `[${a.username || a.externalId}](${a.profileUrl})` : a.username || a.externalId} — ${accountState(a)}`).join('\n')] : ['', 'No linked social accounts.'])].join('\n');
   const components = [];
   if (linked.length) components.push(accountSelect(linked, getAccountSession(i).accountId));
-  components.push(row(btn(`${P}account:change`, '📝 Edit Account', ButtonStyle.Secondary, !active), btn(`${P}account:reset`, '🔄 Clear'), btn(`${P}account:delete`, '🗑️ Delete', ButtonStyle.Danger, !active)));
+  components.push(row(
+    btn(`${P}account:new`, '➕ Add Account', ButtonStyle.Success),
+    btn(`${P}account:change`, '📝 Edit Account', ButtonStyle.Secondary, !active),
+    btn(`${P}account:reset`, '🔄 Clear', ButtonStyle.Secondary, !active),
+    btn(`${P}account:delete`, '🗑️ Delete', ButtonStyle.Danger, !active),
+  ));
   components.push(goliathNavigation(
     `${P}creators`,
     `${P}settings`,
