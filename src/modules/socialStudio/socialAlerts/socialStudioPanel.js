@@ -1208,6 +1208,40 @@ async function handleCreatorInteraction(i, context) {
     return true;
   }
 
+  if (id === `${P}creator:create`) {
+    const displayName = i.fields.getTextInputValue('displayName').trim();
+    if (!displayName) throw new Error('Creator display name is required.');
+    const creatorId = makeId('creator');
+    const creator = {
+      creatorId, ownerDiscordId: null, displayName,
+      group: i.fields.getTextInputValue('group').trim(),
+      tags: i.fields.getTextInputValue('tags').split(',').map((value) => value.trim()).filter(Boolean),
+      notes: i.fields.getTextInputValue('notes').trim(),
+      adminNotes: i.fields.getTextInputValue('adminNotes').trim(),
+      showProfileInLive: true, enabled: true, status: 'active', accountIds: [], profileCompleted: true, createdAt: now(), updatedAt: now(),
+    };
+    config.creators[creatorId] = creator;
+    saveConfig(i.guildId, config, i.guild, actorId);
+    setCreatorSession(i, { creatorId });
+    return respond(i, buildProfileManagePanel(i, getConfig(i.guildId), getConfig(i.guildId).creators[creatorId]));
+  }
+
+  if (id === `${P}creator:clear`) {
+    const creatorId = getCreatorSession(i).creatorId;
+    if (!creatorId || !config.creators[creatorId]) throw new Error('Select a creator profile first.');
+    const updated = store.updateCreator(i.guildId, creatorId, (current) => ({ ...current, group: '', tags: [], notes: '', adminNotes: '' }), { actorId, guild: i.guild });
+    return respond(i, buildProfileManagePanel(i, getConfig(i.guildId), updated));
+  }
+
+  if (id === `${P}creator:delete`) {
+    const creatorId = getCreatorSession(i).creatorId;
+    const creator = config.creators[creatorId];
+    if (!creator) throw new Error('Select a creator profile first.');
+    if (!store.deleteCreator(i.guildId, creatorId, { actorId, guild: i.guild })) throw new Error('The selected creator profile no longer exists.');
+    setCreatorSession(i, { creatorId: null });
+    setAccountSession(i, { creatorId: null, accountId: null, platforms: [] });
+    return respond(i, buildSectionPanel(i, 'creators'));
+  }
   if (id.startsWith(`${P}creator:update:`)) {
     const creatorId = id.split(':')[2];
 
@@ -1219,14 +1253,7 @@ async function handleCreatorInteraction(i, context) {
       adminNotes: i.fields.getTextInputValue('adminNotes'),
     };
 
-    updateCreator(
-      i.guildId,
-      creatorId,
-      values,
-      {
-        actorId,
-      },
-    );
+    store.updateCreator(i.guildId, creatorId, values, { actorId, guild: i.guild });
 
     const updated =
       getConfig(i.guildId).creators[creatorId];
