@@ -1458,7 +1458,7 @@ async function handleAccountInteraction(i, context) {
       );
     }
 
-    await checkGuildAccounts(
+    const result = await checkGuildAccounts(
       i.client,
       i.guildId,
       {
@@ -1467,11 +1467,13 @@ async function handleAccountInteraction(i, context) {
         guild: i.guild,
       },
     );
-
-    return respond(
-      i,
-      buildSectionPanel(i, 'monitoring'),
-    );
+    const checkedResults = Array.isArray(result?.results) ? result.results.filter((item) => item?.status !== 'skipped') : [];
+    const failures = checkedResults.filter((item) => ['unavailable', 'configuration_required', 'error'].includes(String(item?.status || '').toLowerCase()));
+    const live = checkedResults.filter((item) => item?.isLive === true).length;
+    const summary = `🔍 **Provider check complete** — ${checkedResults.length} account${checkedResults.length === 1 ? '' : 's'} checked · ${checkedResults.length - failures.length} successful · ${failures.length} failed${live ? ` · ${live} LIVE` : ''}.`;
+    await respond(i, buildSectionPanel(i, 'monitoring'));
+    await i.followUp({ content: summary, flags: 64 }).catch(() => null);
+    return true;
   }
 
   if (id === `${P}account:new`) {
