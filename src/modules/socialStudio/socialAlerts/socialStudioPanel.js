@@ -1016,8 +1016,8 @@ if (name === 'templates') {
   if (name === 'liveMessages') {
     const settings = config.settings || {};
     const refreshEnabled = settings.liveRefreshEnabled !== false;
-    const refreshSeconds = Number(settings.liveRefreshSeconds) || 300;
-    const refreshLabel = refreshEnabled ? (refreshSeconds % 60 === 0 ? `${refreshSeconds / 60}m` : `${refreshSeconds}s`) : 'OFF';
+    const refreshMs = Number(settings.liveMessageRefreshMs) || 600000;
+    const refreshLabel = refreshEnabled ? (refreshMs % 3600000 === 0 ? `${refreshMs / 3600000}h` : `${refreshMs / 60000}m`) : 'OFF';
     const d = [
       'Control the optional information shown while a creator is LIVE.',
       '',
