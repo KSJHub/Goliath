@@ -2132,21 +2132,47 @@ async function handleDiagnosticsInteraction(i, context) {
   if (id === `${P}data:refresh`) return respond(i, buildSectionPanel(i, 'monitoring'));
 
   if (id === `${P}testing:last`) {
-    const history = Array.isArray(config.history) ? config.history : [];
-    const latest = history.at(-1);
-    const content = latest ? `📄 **Latest Social Studio Response**\n\n${JSON.stringify(latest, null, 2).slice(0, 1800)}` : '📄 **Latest Social Studio Response**\n\nNo provider response or Social Studio history has been recorded yet.';
+    const accounts = Object.values(config.accounts || {}).filter((account) => account?.enabled !== false);
+    const latest = accounts.map((account) => ({ account, checkedAt: Date.parse(String(account.state?.lastCheckedAt || 0)) || 0 })).sort((x, y) => y.checkedAt - x.checkedAt)[0]?.account || null;
+    let content = '📄 **Latest Provider Response**\n\nNo provider check has been recorded yet.';
+    if (latest?.state?.lastCheckedAt) {
+      const state = latest.state || {};
+      const creator = Object.values(config.creators || {}).find((item) => Array.isArray(item?.accountIds) && item.accountIds.map(String).includes(String(latest.accountId || '')));
+      const label = creator?.displayName || latest.displayName || latest.username || latest.accountId || 'Unknown account';
+      const result = state.lastStatus || (state.isLive === true ? 'live' : state.isLive === false ? 'offline' : 'unknown');
+      content = [
+        '📄 **Latest Provider Response**', '',
+        `**Provider:** ${LABEL[String(latest.platform || '').toLowerCase()] || latest.platform || 'Unknown'}`,
+        `**Account:** ${String(label).slice(0, 120)}`,
+        `**Checked:** ${ts(state.lastCheckedAt)}`,
+        `**Result:** ${String(result).toUpperCase()}`,
+        `**LIVE:** ${state.isLive === true ? 'Yes' : state.isLive === false ? 'No' : 'Unknown'}`,
+        ...(state.lastError ? [`**Provider Error:** ${String(state.lastError).slice(0, 400)}`] : []),
+        ...(state.lastDeliveryError ? [`**Delivery Error:** ${String(state.lastDeliveryError).slice(0, 400)}`] : []),
+      ].join('\n');
+    }
     if (i.deferred || i.replied) await i.followUp({ content, flags: 64 }).catch(() => null); else await i.reply({ content, flags: 64 });
     return true;
   }
 
   if (id === `${P}testing:diagnostics`) {
-    const accounts = Object.values(config.accounts || {});
-    const platforms = [...new Set(accounts.map((account) => String(account.platform || '').toLowerCase()).filter(Boolean))];
-    const lines = platforms.length ? platforms.map((platform) => { let info = {}; try { info = providerInfo(platform) || {}; } catch { info = {}; } const alerts = Array.isArray(info.supportedAlertTypes) && info.supportedAlertTypes.length ? info.supportedAlertTypes.join(', ') : 'No alert types reported'; return `**${LABEL[platform] || platform}** — ${alerts}`; }) : ['No linked accounts are available to inspect.'];
-    const content = `🩺 **Social Studio Provider Details**\n\n${lines.join('\n').slice(0, 1800)}`;
+    const accounts = Object.values(config.accounts || {}).filter((account) => account?.enabled !== false);
+    const lines = accounts.length ? accounts.map((account) => {
+      const platform = String(account.platform || '').toLowerCase();
+      let info = {};
+      try { info = providerInfo(platform) || {}; } catch { info = {}; }
+      const supported = Array.isArray(info.supportedAlertTypes) && info.supportedAlertTypes.length ? info.supportedAlertTypes.map((type) => ALERT_LABEL[type] || type).join('/') : 'No alert types reported';
+      const state = account.state || {};
+      const failed = Boolean(state.lastError || state.lastDeliveryError);
+      const status = failed ? '🔴 Issue' : state.lastCheckedAt ? '🟢 Checked' : '⚪ Not checked';
+      const name = account.displayName || account.username || account.accountId || 'Unknown account';
+      return `${status} **${LABEL[platform] || platform || 'Unknown'}** — ${String(name).slice(0, 80)} · ${supported} · Last: ${ts(state.lastCheckedAt)}${state.isLive === true ? ' · 🔴 LIVE' : ''}${state.lastError ? ` · ${String(state.lastError).slice(0, 120)}` : ''}`;
+    }) : ['⚪ No monitored accounts are available to inspect.'];
+    const content = `🩺 **Social Studio Provider Details**\n\n${lines.join('\n').slice(0, 1850)}`;
     if (i.deferred || i.replied) await i.followUp({ content, flags: 64 }).catch(() => null); else await i.reply({ content, flags: 64 });
     return true;
   }
+
   if (id === `${P}data:export:config`) {
     const safe = redactExportSecrets(config);
     const file = new AttachmentBuilder(Buffer.from(JSON.stringify(safe, null, 2), 'utf8'), { name: `social-studio-config-${i.guildId}.json` });
