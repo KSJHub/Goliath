@@ -13,7 +13,7 @@ const { buildSectionPanel } = require('../../modules/socialStudio/socialAlerts/s
 const core = require('./socialStudioCreatorRoutingCompatCore');
 
 const P = 'social:';
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 22;
 const MAX_SELECTED_ROLES = 10;
 const roleSessions = new Map();
 
@@ -51,16 +51,20 @@ function singleRoleSelect(interaction, customId, placeholder, selectedId, page) 
   else menu.addOptions({ label: 'No selectable roles', value: '__none__', description: 'No non-managed server roles are available.', default: false }).setMinValues(1).setMaxValues(1).setDisabled(true);
   return row(menu);
 }
-function notificationSelect(interaction, config) {
+function notificationSelect(interaction, config, page) {
   const selected = config.notificationMentionMode === 'role' && config.notificationRoleId ? `role:${config.notificationRoleId}` : (config.notificationMentionMode || 'none');
-  const roles = sortedRoles(interaction).slice(0, 22);
-  return row(new StringSelectMenuBuilder().setCustomId(`${P}notification:mode`).setPlaceholder('Select LIVE notification target').setMinValues(1).setMaxValues(1).addOptions([
-    ...roles.map((role) => ({ label: String(role.name || 'Unnamed role').slice(0, 100), value: `role:${role.id}`, description: `Hierarchy position ${role.position}`.slice(0, 100), default: selected === `role:${role.id}` })),
+  const roles = sortedRoles(interaction);
+  const pageCount = Math.max(1, Math.ceil(roles.length / PAGE_SIZE));
+  const safePage = clampPage(page, pageCount);
+  const pageRoles = roles.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+  return row(new StringSelectMenuBuilder().setCustomId(`${P}notification:mode`).setPlaceholder(`Select LIVE notification target • page ${safePage + 1}/${pageCount}`).setMinValues(1).setMaxValues(1).addOptions([
+    ...pageRoles.map((role) => ({ label: String(role.name || 'Unnamed role').slice(0, 100), value: `role:${role.id}`, description: `Hierarchy position ${role.position}`.slice(0, 100), default: selected === `role:${role.id}` })),
     { label: '@here', value: 'here', description: 'Ping currently online members.', default: selected === 'here' },
     { label: '@everyone', value: 'everyone', description: 'Ping everyone when a creator goes LIVE.', default: selected === 'everyone' },
-    { label: 'No notification ping', value: 'none', description: 'Post alerts without pinging members.', default: selected === 'none' },
+    { label: 'No notification ping', value: 'none', description: 'Post LIVE alerts without pinging members.', default: selected === 'none' },
   ]));
 }
+
 function currentRoleNames(interaction, ids = []) {
   const cache = interaction.guild?.roles?.cache;
   const roles = ids.map((id) => cache?.get?.(id)).filter(Boolean).sort((a, b) => b.position - a.position);
@@ -71,27 +75,32 @@ function rolePayload(interaction) {
   const state = getRoleSession(interaction);
   const pageCount = rolePageCount(interaction);
   const safePage = clampPage(state.rolePage, pageCount);
-  const manager = roleSelect(interaction, `${P}roles:select`, 'Select Social Studio manager roles', config.managerRoleIds || [], safePage);
-  const user = roleSelect(interaction, `${P}userroles:select`, 'Select Social Studio user access roles', config.userRoleIds || [], safePage);
-  const live = singleRoleSelect(interaction, `${P}liveRole:select`, 'Select LIVE role', config.liveRoleId || null, safePage);
+  const manager = roleSelect(interaction, `${P}roles:select`, 'Manager Roles', config.managerRoleIds || [], safePage);
+  const user = roleSelect(interaction, `${P}userroles:select`, 'User Access Roles', config.userRoleIds || [], safePage);
+  const live = singleRoleSelect(interaction, `${P}liveRole:select`, 'Temporary LIVE Creator Role', config.liveRoleId || null, safePage);
   setRoleSession(interaction, { rolePage: safePage });
   const description = [
-    '👥 **Manager roles**', `Current: ${currentRoleNames(interaction, config.managerRoleIds || [])}`, '',
-    '👤 **User access roles**', `Current: ${(config.userRoleIds || []).length ? currentRoleNames(interaction, config.userRoleIds) : 'Everyone'}`, '',
-    '🔴 **LIVE role**', `Current: ${config.liveRoleId ? `<@&${config.liveRoleId}>` : 'Disabled'}`, 'Automatically added while a linked creator has at least one monitored account LIVE, then removed when all of their monitored accounts are offline.', '',
-    '📢 **LIVE Notification Target**', `Current: ${config.notificationMentionMode === 'role' && config.notificationRoleId ? `<@&${config.notificationRoleId}>` : config.notificationMentionMode === 'here' ? '@here' : config.notificationMentionMode === 'everyone' ? '@everyone' : 'No ping'}`, '',
-    'Role menus are ordered by Discord hierarchy, highest role first.',
+    'Configure who can use Social Studio and how LIVE roles/mentions behave.',
+    '',
+    '👥 **Manager Roles**', `Current: ${currentRoleNames(interaction, config.managerRoleIds || [])}`, '',
+    '👤 **User Access Roles**', `Current: ${(config.userRoleIds || []).length ? currentRoleNames(interaction, config.userRoleIds) : 'Everyone'}`, '',
+    '🔴 **Temporary LIVE Creator Role**', `Current: ${config.liveRoleId ? `<@&${config.liveRoleId}>` : 'Disabled'}`, 'Added while a linked creator is LIVE and removed when all monitored accounts are offline.', '',
+    '📣 **LIVE Notification Target**', `Current: ${config.notificationMentionMode === 'role' && config.notificationRoleId ? `<@&${config.notificationRoleId}>` : config.notificationMentionMode === 'here' ? '@here' : config.notificationMentionMode === 'everyone' ? '@everyone' : 'No ping'}`,
+    'Used only for the first notification of a genuinely new LIVE session.',
   ].join('\n');
-  const navigation = [button(`${P}settings`, '⬅️ Back'), button(`${P}main`, '🏠 Social Studio')];
-  if (pageCount > 1) navigation.push(button(`${P}roles:page:prev`, '⬅️ Previous', safePage <= 0), button(`${P}roles:page:next`, 'Next ➡️', safePage >= pageCount - 1));
-  return { embeds: [new EmbedBuilder().setColor(config.enabled ? 0x5865F2 : 0x747F8D).setTitle('🎭 Roles').setDescription(description).setFooter({ text: `Requested by ${who(interaction)}` }).setTimestamp()], components: [manager.row, user.row, live, notificationSelect(interaction, config), row(...navigation)] };
+  const navigation = [
+    button(`${P}settings`, '⬅️ Back'),
+    button(`${P}roles:page:prev`, '◀️', safePage <= 0),
+    button(`${P}roles:page:info`, `📄 Roles ${safePage + 1}/${pageCount}`, true),
+    button(`${P}roles:page:next`, '▶️', safePage >= pageCount - 1),
+  ];
+  return { embeds: [new EmbedBuilder().setColor(config.enabled ? 0x5865F2 : 0x747F8D).setTitle('🎭 Roles & Access').setDescription(description).setFooter({ text: `Requested by ${who(interaction)}` }).setTimestamp()], components: [manager.row, user.row, live, notificationSelect(interaction, config, safePage), row(...navigation)] };
 }
+
 function save(interaction, config) { return store.saveConfig(interaction.guildId, config, { actorId: interaction.user?.id || null, guild: interaction.guild }); }
 async function updateRoles(interaction) { const next = rolePayload(interaction); if (interaction.deferred || interaction.replied) await interaction.editReply(next); else await interaction.update(next); return true; }
 async function updateSettings(interaction) {
   const next = buildSectionPanel(interaction, 'settings');
-  const rolesButton = next?.components?.[0]?.components?.[0];
-  if (rolesButton?.setLabel) rolesButton.setLabel('🎭 Roles');
   if (interaction.deferred || interaction.replied) await interaction.editReply(next); else await interaction.update(next);
   return true;
 }
