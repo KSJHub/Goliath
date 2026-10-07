@@ -35,6 +35,7 @@ const AUTOMOD_RULES = {
   flood: { label: '🌊 Flood', title: '🌊 Flood Protection', editLabel: '📏 Limits', defaults: { enabled: false, maxLines: 12, maxCharacters: 1800, maxRepeatedCharacters: 12, risk: 20, timeoutMinutes: 10, actions: ['delete'] } },
   emojiSpam: { label: '😀 Emoji', title: '😀 Emoji Protection', editLabel: '😀 Limit', defaults: { enabled: false, maxEmojis: 15, risk: 15, timeoutMinutes: 10, actions: ['delete'] } },
   attachments: { label: '📎 Attachments', title: '📎 Attachment Protection', editLabel: '📎 Limits', defaults: { enabled: false, maxAttachments: 5, blockedExtensions: [], risk: 20, timeoutMinutes: 10, actions: ['delete'] } },
+  scamPatterns: { label: '🚨 Suspicious', title: '🚨 Suspicious Content Protection', editLabel: '📝 Patterns', defaults: { enabled: false, phrases: [], risk: 45, timeoutMinutes: 30, actions: ['delete', 'timeout'] } },
 };
 const AUTOMOD_RULE_KEYS = Object.keys(AUTOMOD_RULES);
 const AUTOMOD_ACTIONS = ['dm', 'delete', 'warn', 'timeout', 'kick', 'ban'];
@@ -50,6 +51,7 @@ const DEFAULT_DM_MESSAGES = {
   flood: '⚠️ **{server} AutoMod**\nFlood Protection triggered: {reason}',
   emojiSpam: '⚠️ **{server} AutoMod**\nEmoji Protection triggered: {reason}',
   attachments: '⚠️ **{server} AutoMod**\nAttachment Protection triggered: {reason}',
+  scamPatterns: '⚠️ **{server} AutoMod**\nSuspicious Content Protection triggered: {reason}',
 };
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
@@ -109,6 +111,7 @@ function getAutomodConfig(guildId) {
   output.badWords.words = Array.isArray(output.badWords.words) ? output.badWords.words : [];
   output.invites.allowedCodes = Array.isArray(output.invites.allowedCodes) ? output.invites.allowedCodes : [];
   output.attachments.blockedExtensions = Array.isArray(output.attachments.blockedExtensions) ? output.attachments.blockedExtensions : [];
+  output.scamPatterns.phrases = Array.isArray(output.scamPatterns.phrases) ? output.scamPatterns.phrases : [];
   output.dmMessages = { ...DEFAULT_DM_MESSAGES, ...(current.dmMessages || {}) };
   output.ignoredRoles = Array.isArray(current.ignoredRoles) ? current.ignoredRoles : [];
   output.ignoredChannels = Array.isArray(current.ignoredChannels) ? current.ignoredChannels : [];
@@ -263,6 +266,7 @@ function ruleSummary(key, rule) {
   if(key==='flood') return '**Lines:** '+rule.maxLines+'\n**Characters:** '+rule.maxCharacters+'\n**Repeated characters:** '+rule.maxRepeatedCharacters+'\n'+enforcement;
   if(key==='emojiSpam') return '**Maximum emojis:** '+rule.maxEmojis+'\n'+enforcement;
   if(key==='attachments') return '**Maximum attachments:** '+rule.maxAttachments+'\n**Blocked extensions:** '+(rule.blockedExtensions?.join(', ')||'None')+'\n'+enforcement;
+  if(key==='scamPatterns') return '**Configured suspicious phrases:** '+(rule.phrases?.length||0)+'\n'+enforcement;
   return enforcement;
 }
 
@@ -317,6 +321,7 @@ function buildRuleModal(key, rule) {
   if(key==='flood') modal.addComponents(textInput('maxLines','Maximum lines',rule.maxLines),textInput('maxCharacters','Maximum characters',rule.maxCharacters),textInput('maxRepeatedCharacters','Repeated character limit',rule.maxRepeatedCharacters),textInput('risk','Risk points (0-100)',rule.risk??20),textInput('timeoutMinutes','Timeout minutes',rule.timeoutMinutes??10));
   if(key==='emojiSpam') modal.addComponents(textInput('maxEmojis','Maximum emojis',rule.maxEmojis),...enforcement);
   if(key==='attachments') modal.addComponents(textInput('maxAttachments','Maximum attachments',rule.maxAttachments),textInput('blockedExtensions','Blocked extensions, comma separated',(rule.blockedExtensions||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),...enforcement);
+  if(key==='scamPatterns') modal.addComponents(textInput('phrases','Suspicious phrases, comma separated',(rule.phrases||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),...enforcement);
   return modal;
 }
 
@@ -418,6 +423,7 @@ async function handleAutomodModal(interaction) {
   if (key === 'emojiSpam') rule.maxEmojis=parsePositive(interaction.fields.getTextInputValue('maxEmojis'),rule.maxEmojis,2,100);
   if (key === 'attachments') { rule.maxAttachments=parsePositive(interaction.fields.getTextInputValue('maxAttachments'),rule.maxAttachments,1,10); rule.blockedExtensions=parseList(interaction.fields.getTextInputValue('blockedExtensions')).map((entry)=>entry.replace(/^\./,'')); }
   if (key === 'badWords') rule.matchMode=(optionalField('matchMode')||'boundary').trim().toLowerCase()==='contains'?'contains':'boundary';
+  if (key === 'scamPatterns') rule.phrases=parseList(interaction.fields.getTextInputValue('phrases'));
   saveAutomodConfig(interaction.guild.id, { ...config, [key]: rule });
   await interaction.reply({ content: `✅ ${AUTOMOD_RULES[key].title} settings saved.`, flags: 64 });
   return true;
