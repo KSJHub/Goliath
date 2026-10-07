@@ -97,29 +97,30 @@ function buildRulesScreen(guild) {
     .setColor(PANEL_COLOR)
     .setTitle('🎮 Counting Game Rules')
     .setDescription([
-      'Configure the quick Counting rules below. Button changes apply immediately.',
+      'Set the game rules and choose how Goliath handles Counting messages.',
       '',
-      '**Current Rules**',
+      '**Game Setup**',
+      '👤 **Turns:** ' + formatTurnLimit(section.maxConsecutivePerMember) + '   •   💀 **Game Over:** ' + formatFailureLimit(section.failureLimit),
+      '💡 **Hints:** ' + formatHintThreshold(section.answerAfterFailures) + '   •   🎯 **Milestone:** Every ' + section.milestoneInterval,
+      '',
+      '**Quick Controls**',
       '🔢 **Numbers Only:** ' + (section.numbersOnly ? 'On' : 'Off') + '   •   🗑️ **Wrong Counts:** ' + (section.deleteIncorrect ? 'Delete' : 'Keep'),
-      '😂 **Banter:** ' + (section.funnyResponses ? 'On' : 'Off') + '   •   ⏱️ **Reply Timing:** ' + formatCleanup(section.responseCleanupSeconds),
-      '🎉 **Milestones:** ' + (section.milestoneAnnouncements ? 'On, every ' + section.milestoneInterval + ' counts' : 'Off'),
-      '',
-      '**Advanced Values**',
-      'Current Count, Turns, Game Over, Hints and Milestone Interval are managed through **✏️ Advanced Values**.',
+      '😂 **Banter:** ' + (section.funnyResponses ? 'On' : 'Off') + '   •   ⏱️ **Replies:** ' + formatCleanup(section.responseCleanupSeconds),
+      '🎉 **Milestones:** ' + (section.milestoneAnnouncements ? 'On' : 'Off'),
       '',
       '**Preset:** ' + (counting.rulesAreDefault(section) ? 'Goliath Defaults' : 'Custom'),
     ].join('\n')));
   return { content: null, embeds: [embed], components: [
+    row(button(PREFIX + ':rules:advanced', '🎮 Configure Game', ButtonStyle.Primary)),
     row(
-      button(PREFIX + ':rules:toggle:numbers', '🔢 Numbers Only: ' + (section.numbersOnly ? 'On' : 'Off'), section.numbersOnly ? ButtonStyle.Success : ButtonStyle.Secondary),
-      button(PREFIX + ':rules:toggle:delete', '🗑️ Wrong Counts: ' + (section.deleteIncorrect ? 'Delete' : 'Keep'), section.deleteIncorrect ? ButtonStyle.Success : ButtonStyle.Secondary),
-      button(PREFIX + ':rules:toggle:banter', '😂 Banter: ' + (section.funnyResponses ? 'On' : 'Off'), section.funnyResponses ? ButtonStyle.Success : ButtonStyle.Secondary),
+      button(PREFIX + ':rules:toggle:numbers', '🔢 Numbers Only: ' + (section.numbersOnly ? 'On' : 'Off'), ButtonStyle.Secondary),
+      button(PREFIX + ':rules:toggle:delete', '🗑️ Wrong Counts: ' + (section.deleteIncorrect ? 'Delete' : 'Keep'), ButtonStyle.Secondary),
+      button(PREFIX + ':rules:toggle:banter', '😂 Banter: ' + (section.funnyResponses ? 'On' : 'Off'), ButtonStyle.Secondary),
     ),
     row(
       button(PREFIX + ':rules:cycle:timing', '⏱️ Reply Timing: ' + (section.responseCleanupSeconds === null ? 'Keep' : section.responseCleanupSeconds + 's'), ButtonStyle.Secondary),
-      button(PREFIX + ':rules:toggle:milestones', '🎉 Milestones: ' + (section.milestoneAnnouncements ? 'On' : 'Off'), section.milestoneAnnouncements ? ButtonStyle.Success : ButtonStyle.Secondary),
+      button(PREFIX + ':rules:toggle:milestones', '🎉 Milestones: ' + (section.milestoneAnnouncements ? 'On' : 'Off'), ButtonStyle.Secondary),
     ),
-    row(button(PREFIX + ':rules:advanced', '✏️ Advanced Values', ButtonStyle.Primary)),
     row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
   ] };
 }
