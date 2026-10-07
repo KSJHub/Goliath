@@ -250,18 +250,151 @@ async function handleMentions(message, config) {
   return applyRule(message, config, 'mentions', 'Mention Protection', `${count} mentions detected (limit ${config.mentions.maxMentions})`, config.mentions.actions);
 }
 
+
+const duplicateWindows = new Map();
+const incidentWindows = new Map();
+
+function normalizeMessageText(content) {
+  return String(content || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+function inviteCodes(content) {
+  return [...String(content || '').matchAll(/(?:discord\.gg|discord(?:app)?\.com\/invite)\/([a-z0-9-]+)/gi)].map((match) => match[1].toLowerCase());
+}
+function countEmoji(content) {
+  const custom = (String(content || '').match(/<a?:\w+:\d+>/g) || []).length;
+  const unicode = (String(content || '').match(/\p{Extended_Pictographic}/gu) || []).length;
+  return custom + unicode;
+}
+function attachmentExtension(attachment) {
+  const name = String(attachment?.name || attachment?.url || '').split('?')[0];
+  const match = name.match(/\.([a-z0-9]{1,12})$/i);
+  return match ? match[1].toLowerCase() : '';
+}
+function severityFor(score, risk) {
+  if (score >= risk.critical) return 'critical';
+  if (score >= risk.high) return 'high';
+  if (score >= risk.medium) return 'medium';
+  if (score >= risk.low) return 'low';
+  return 'notice';
+}
+function recentIncidentCount(message, config) {
+  const key = message.guild.id + ':' + message.author.id;
+  const now = Date.now(), windowMs = config.risk.repeatWindowHours * 3600000;
+  const recent = (incidentWindows.get(key) || []).filter((time) => now - time <= windowMs);
+  return { key, recent, now };
+}
+function recordIncident(message, config) {
+  const state = recentIncidentCount(message, config);
+  state.recent.push(state.now);
+  incidentWindows.set(state.key, state.recent.slice(-50));
+}
+function collectAdvancedViolations(message, config) {
+  const out = [], content = String(message.content || '');
+  if (config.invites?.enabled) {
+    const codes = inviteCodes(content);
+    const blocked = codes.find((code) => !config.invites.allowedCodes.includes(code));
+    if (blocked) out.push({ key:'invites', name:'Invite Protection', reason:'Unapproved Discord invite detected', risk:config.invites.risk, rule:config.invites });
+  }
+  if (config.duplicates?.enabled) {
+    const normalized = normalizeMessageText(content);
+    if (normalized) {
+      const key = message.guild.id + ':' + message.author.id, now = Date.now(), ms = config.duplicates.intervalSeconds * 1000;
+      const recent = (duplicateWindows.get(key) || []).filter((entry) => now - entry.at <= ms);
+      recent.push({ at:now, text:normalized }); duplicateWindows.set(key,recent.slice(-50));
+      const same = recent.filter((entry) => entry.text === normalized).length;
+      if (same >= config.duplicates.maxDuplicates) out.push({ key:'duplicates', name:'Duplicate Message Protection', reason:same+' matching messages within '+config.duplicates.intervalSeconds+' seconds', risk:config.duplicates.risk, rule:config.duplicates });
+    }
+  }
+  if (config.flood?.enabled) {
+    const lines = content.split(/\r?\n/).length;
+    const repeat = new RegExp('(.)\\1{' + Math.max(2, config.flood.maxRepeatedCharacters - 1) + ',}').test(content);
+    if (lines > config.flood.maxLines || content.length > config.flood.maxCharacters || repeat) out.push({ key:'flood', name:'Flood Protection', reason:'Message flooding limits exceeded', risk:config.flood.risk, rule:config.flood });
+  }
+  if (config.emojiSpam?.enabled) {
+    const total = countEmoji(content);
+    if (total > config.emojiSpam.maxEmojis) out.push({ key:'emojiSpam', name:'Emoji Protection', reason:total+' emojis detected (limit '+config.emojiSpam.maxEmojis+')', risk:config.emojiSpam.risk, rule:config.emojiSpam });
+  }
+  if (config.attachments?.enabled) {
+    const files = [...(message.attachments?.values?.() || [])];
+    const blocked = files.find((file) => config.attachments.blockedExtensions.includes(attachmentExtension(file)));
+    if (files.length > config.attachments.maxAttachments || blocked) out.push({ key:'attachments', name:'Attachment Protection', reason:blocked?'Blocked attachment type: .'+attachmentExtension(blocked):files.length+' attachments detected (limit '+config.attachments.maxAttachments+')', risk:config.attachments.risk, rule:config.attachments });
+  }
+  return out;
+}
+function collectCoreViolations(message, config) {
+  const out = [], content = String(message.content || '');
+  if (config.antiLinks.enabled && !(config.antiLinks.allowStaff && isStaff(message))) {
+    const hit = evaluateLinkRule(extractDomains(content), config.antiLinks);
+    if (hit) out.push({key:'antiLinks',name:'Link Protection',reason:hit.reason,risk:config.antiLinks.risk,rule:config.antiLinks});
+  }
+  if (config.badWords.enabled && config.badWords.words.length) {
+    const hit = findBadWord(content, config.badWords.words, config.badWords.matchMode);
+    if (hit) out.push({key:'badWords',name:'Content Protection',reason:'Blocked word or phrase detected: '+hit,risk:config.badWords.risk,rule:config.badWords});
+  }
+  if (config.caps.enabled) {
+    const hit=evaluateCaps(content,config.caps); if(hit) out.push({key:'caps',name:'Caps Protection',reason:hit.reason,risk:config.caps.risk,rule:config.caps});
+  }
+  if (config.mentions.enabled) {
+    const users=message.mentions?.users?.size||0, roles=message.mentions?.roles?.size||0, total=countMentions(message);
+    if (total>config.mentions.maxMentions || users>config.mentions.maxUserMentions || roles>config.mentions.maxRoleMentions || (config.mentions.blockEveryone && message.mentions?.everyone)) out.push({key:'mentions',name:'Mention Protection',reason:total+' mentions detected',risk:config.mentions.risk,rule:config.mentions});
+  }
+  return out;
+}
+function strongestActions(violations) {
+  const order=['dm','delete','warn','timeout','kick','ban'], set=new Set();
+  for(const violation of violations) for(const action of violation.rule.actions||[]) set.add(action);
+  if(set.has('ban')) { set.delete('kick'); set.delete('timeout'); }
+  else if(set.has('kick')) set.delete('timeout');
+  return order.filter((action)=>set.has(action));
+}
+function shouldCreateCase(config, severity, actions) {
+  if(config.caseMode==='off') return false;
+  if(config.caseMode==='all') return true;
+  if(config.caseMode==='medium') return ['medium','high','critical'].includes(severity);
+  return actions.some((action)=>['warn','timeout','kick','ban'].includes(action));
+}
+async function enforceIncident(message, config, violations) {
+  const repeat = recentIncidentCount(message,config).recent.length;
+  const baseRisk = violations.reduce((sum,item)=>sum+Number(item.risk||0),0);
+  const score = Math.min(500,baseRisk+(config.risk.enabled?repeat*config.risk.repeatWeight:0));
+  const severity = severityFor(score,config.risk);
+  const actions = strongestActions(violations);
+  const reason = violations.map((item)=>item.name+': '+item.reason).join(' | ').slice(0,1800);
+  const timeoutMinutes = Math.max(...violations.map((item)=>Number(item.rule.timeoutMinutes||10)),10);
+  let result;
+  try {
+    result=await applyPunishmentEngine({message,member:message.member,user:message.author,guild:message.guild,channel:message.channel},{punishments:actions,rule:violations.map((item)=>item.name).join(' + '),reason,source:'automod',messageContent:message.content,dmEnabled:config.dmUser,dmMessage:renderDmMessage(config.dmMessages[violations[0].key]||'',message,reason),timeoutMinutes});
+  } catch(error) {
+    console.error('[AutoMod] Enforcement failed:',error?.stack||error); result={applied:[],failed:actions};
+  }
+  let caseId=null;
+  if(shouldCreateCase(config,severity,actions)) {
+    try {
+      const created=modStorage.createCase({guildId:message.guild.id,userId:message.author.id,moderatorId:message.client?.user?.id||'Goliath',action:'automod',reason,metadata:{source:'automod',severity,riskScore:score,rules:violations.map((item)=>item.key),channelId:message.channelId,messageId:message.id,evidence:config.evidenceRetentionDays>0?{content:String(message.content||'').slice(0,2000),attachments:[...(message.attachments?.values?.()||[])].map((a)=>({name:a.name,url:a.url})).slice(0,10),retentionDays:config.evidenceRetentionDays}:null,punishmentReport:result}});
+      caseId=created?.caseId||null;
+      if(caseId && actions.includes('warn')) modStorage.addWarning({guildId:message.guild.id,userId:message.author.id,moderatorId:message.client?.user?.id||'Goliath',reason,caseId});
+    } catch(error) { console.error('[AutoMod] Case creation failed:',error?.stack||error); }
+  }
+  recordIncident(message,config);
+  await sendAutoModLog(message,'Incident · '+severity.toUpperCase(),reason,actions,{...result,caseId,riskScore:score,rules:violations.map((v)=>v.name)});
+  return true;
+}
+
 async function handleAutoMod(message) {
   if (!message?.guild || !message?.member || message.author?.bot) return false;
   if (!guildManager.isModuleEnabled(message.guild.id, AUTOMOD_MODULE)) return false;
   const config = getAutoModConfig(message.guild.id);
   if (!config.enabled || isIgnored(message, config)) return false;
 
-  if (await handleSpam(message, config)) return true;
-  if (await handleLinks(message, config)) return true;
-  if (await handleBadWords(message, config)) return true;
-  if (await handleCaps(message, config)) return true;
-  if (await handleMentions(message, config)) return true;
-  return false;
+  const violations = [];
+  if (config.antiSpam.enabled) {
+    const now=Date.now(), windowMs=config.antiSpam.intervalSeconds*1000, key=message.guild.id+':'+message.author.id;
+    const timestamps=(spamWindows.get(key)||[]).filter((timestamp)=>now-timestamp<=windowMs); timestamps.push(now); spamWindows.set(key,timestamps);
+    if(timestamps.length>=config.antiSpam.maxMessages){spamWindows.delete(key);violations.push({key:'antiSpam',name:'Spam Protection',reason:timestamps.length+' messages within '+config.antiSpam.intervalSeconds+' seconds',risk:config.antiSpam.risk,rule:config.antiSpam});}
+  }
+  violations.push(...collectCoreViolations(message,config),...collectAdvancedViolations(message,config));
+  if(!violations.length) return false;
+  return enforceIncident(message,config,violations);
 }
 
 module.exports = {
@@ -274,4 +407,7 @@ module.exports = {
   findBadWord,
   evaluateCaps,
   countMentions,
+  collectCoreViolations,
+  collectAdvancedViolations,
+  severityFor,
 };
