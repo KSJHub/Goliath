@@ -91,7 +91,6 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
     ),
   ] };
 }
-function buildChannelScreen(guild, memberDisplayName) { return buildPanel(guild, memberDisplayName); }
 function buildRulesScreen(guild) {
   const section = counting.getSection(guild.id);
   const embed = footer(new EmbedBuilder()
@@ -135,7 +134,6 @@ function buildRulesScreen(guild) {
     row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
   ] };
 }
-function buildResponsesScreen(guild, memberDisplayName) { return buildPanel(guild, memberDisplayName); }
 function buildSettingsScreen(guild) {
   const section = counting.getSection(guild.id);
   const enabled = isModuleEnabled(guild.id, counting.MODULE_KEY);
@@ -287,7 +285,6 @@ async function handleInteraction(interaction) {
       await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
       return safeUpdate(interaction, buildSettingsScreen(interaction.guild));
     }
-    if (id === `${PREFIX}:channel:screen` || id === `${PREFIX}:rules:screen` || id === `${PREFIX}:responses:screen`) return safeUpdate(interaction, buildPanel(interaction.guild, name));
     if (interaction.isChannelSelectMenu?.() && id === `${PREFIX}:channel`) {
       const channelId = interaction.values?.[0] || null;
       const before = counting.getSection(interaction.guild.id);
@@ -426,4 +423,4 @@ async function handleInteraction(interaction) {
     return true;
   }
 }
-module.exports = { buildPanel, buildChannelScreen, buildRulesScreen, buildResponsesScreen, buildSettingsScreen, buildDefaultsConfirmation, buildAdvancedRulesModal, buildResetConfirmation, buildCleanupConfirmation, handleInteraction };
+module.exports = { buildPanel, buildRulesScreen, buildSettingsScreen, buildDefaultsConfirmation, buildAdvancedRulesModal, buildResetConfirmation, buildCleanupConfirmation, handleInteraction };
