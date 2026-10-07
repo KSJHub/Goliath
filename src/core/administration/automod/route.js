@@ -9,7 +9,7 @@ const router = express.Router();
 const MODULE = 'automod';
 
 const AUTOMOD_ACTIONS = new Set(['dm', 'delete', 'warn', 'timeout', 'kick', 'ban']);
-const ADVANCED_RULE_KEYS = ['invites', 'duplicates', 'flood', 'emojiSpam', 'attachments'];
+const ADVANCED_RULE_KEYS = ['invites', 'duplicates', 'flood', 'emojiSpam', 'attachments', 'scamPatterns'];
 const DEFAULT_DM_MESSAGES = {
   antiSpam: '⚠️ **{server} AutoMod**\nSpam Protection triggered: {reason}',
   antiLinks: '⚠️ **{server} AutoMod**\nLink Protection triggered: {reason}',
@@ -21,6 +21,7 @@ const DEFAULT_DM_MESSAGES = {
   flood: '⚠️ **{server} AutoMod**\nFlood Protection triggered: {reason}',
   emojiSpam: '⚠️ **{server} AutoMod**\nEmoji Protection triggered: {reason}',
   attachments: '⚠️ **{server} AutoMod**\nAttachment Protection triggered: {reason}',
+  scamPatterns: '⚠️ **{server} AutoMod**\nSuspicious Content Protection triggered: {reason}',
 };
 
 function getBody(req) {
@@ -215,6 +216,19 @@ function normalizeAutomodConfig(config = {}) {
       timeoutMinutes: normalizeNumber(safeConfig.emojiSpam?.timeoutMinutes, 10, 1, 40320),
       actions: normalizeActions(safeConfig.emojiSpam?.actions, ['delete']),
     },
+    scamPatterns: {
+      enabled: normalizeBoolean(safeConfig.scamPatterns?.enabled, false),
+      phrases: normalizeStringArray(safeConfig.scamPatterns?.phrases),
+      risk: normalizeNumber(safeConfig.scamPatterns?.risk, 45, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.scamPatterns?.timeoutMinutes, 30, 1, 40320),
+      actions: normalizeActions(safeConfig.scamPatterns?.actions, ['delete', 'timeout']),
+    },
+    accountRisk: {
+      enabled: normalizeBoolean(safeConfig.accountRisk?.enabled, false),
+      newAccountDays: normalizeNumber(safeConfig.accountRisk?.newAccountDays, 7, 0, 365),
+      newMemberHours: normalizeNumber(safeConfig.accountRisk?.newMemberHours, 24, 0, 720),
+      riskBoost: normalizeNumber(safeConfig.accountRisk?.riskBoost, 15, 0, 100),
+    },
     attachments: {
       enabled: normalizeBoolean(safeConfig.attachments?.enabled, false),
       maxAttachments: normalizeNumber(safeConfig.attachments?.maxAttachments, 5, 1, 10),
@@ -259,6 +273,7 @@ function mergeAutomodConfig(current, patch) {
       ...(patch.mentions || {}),
     },
     risk: { ...(current.risk || {}), ...(patch.risk || {}) },
+    accountRisk: { ...(current.accountRisk || {}), ...(patch.accountRisk || {}) },
     ...Object.fromEntries(ADVANCED_RULE_KEYS.map((key) => [key, { ...(current[key] || {}), ...(patch[key] || {}) }])),
   };
 }
