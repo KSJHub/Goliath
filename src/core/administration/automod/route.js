@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { PermissionFlagsBits } = require('discord.js');
 
 const guildManager = require('../../guild/guildManager');
 const { emitGuildUpdate } = require('../../../server/sockets/socketHub');
@@ -376,6 +377,25 @@ async function requestGuild(req, guildId) {
 function nativeRule(rule) {
   return {id:rule.id,name:rule.name,enabled:rule.enabled,eventType:rule.eventType,triggerType:rule.triggerType,triggerMetadata:rule.triggerMetadata,actions:rule.actions,exemptRoles:[...(rule.exemptRoles?.keys?.()||[])],exemptChannels:[...(rule.exemptChannels?.keys?.()||[])],creatorId:rule.creatorId||null};
 }
+router.get('/health/:guildId',async(req,res)=>{
+  try{
+    const guild=await requestGuild(req,req.params.guildId);if(!guild)return res.status(404).json({ok:false,error:'Guild unavailable.'});
+    const me=guild.members.me||await guild.members.fetchMe().catch(()=>null),permissions=me?.permissions;
+    const checks=[
+      ['Manage Messages',PermissionFlagsBits.ManageMessages],
+      ['Moderate Members',PermissionFlagsBits.ModerateMembers],
+      ['Kick Members',PermissionFlagsBits.KickMembers],
+      ['Ban Members',PermissionFlagsBits.BanMembers],
+      ['Manage Guild',PermissionFlagsBits.ManageGuild],
+    ].map(([name,flag])=>({name,ok:Boolean(permissions?.has(flag))}));
+    const config=read(guild.id),enabled=Object.keys(config).filter((key)=>config[key]?.enabled===true).length;
+    const logId=typeof guildManager.getLogChannelId==='function'?guildManager.getLogChannelId(guild.id,'automod'):null;
+    const logChannel=logId?(guild.channels.cache.get(logId)||await guild.channels.fetch(logId).catch(()=>null)):null;
+    const issues=[];if(!guildManager.isModuleEnabled(guild.id,MODULE))issues.push('AutoMod is disabled.');if(!enabled)issues.push('No protections are enabled.');if(!logChannel)issues.push('AutoMod log channel is not configured or unavailable.');for(const check of checks)if(!check.ok)issues.push('Missing '+check.name+' permission.');
+    return res.json({ok:true,status:issues.length?'degraded':'healthy',enabledProtections:enabled,logChannelId:logChannel?.id||null,permissions:checks,issues});
+  }catch(error){return fail(res,'health check',error);}
+});
+
 router.get('/native/:guildId',async(req,res)=>{
   try{const guild=await requestGuild(req,req.params.guildId);if(!guild)return res.status(404).json({ok:false,error:'Guild unavailable.'});const rules=await guild.autoModerationRules.fetch();return res.json({ok:true,rules:[...rules.values()].map(nativeRule)});}catch(error){return fail(res,'native AutoMod load',error);}
 });
