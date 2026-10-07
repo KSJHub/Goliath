@@ -109,6 +109,7 @@ function normalizeAutomodConfig(config = {}) {
 
   return {
     dmUser: normalizeBoolean(safeConfig.dmUser, true),
+    shadowMode: normalizeBoolean(safeConfig.shadowMode, false),
     dmMessages: normalizeDmMessages(safeConfig.dmMessages),
     preset: ['relaxed', 'balanced', 'strict', 'custom'].includes(safeConfig.preset) ? safeConfig.preset : 'custom',
     caseMode: ['off', 'punishments', 'medium', 'all'].includes(safeConfig.caseMode) ? safeConfig.caseMode : 'punishments',
