@@ -237,11 +237,18 @@ function buildRuleDmModal(key, config) {
 }
 
 function ruleSummary(key, rule) {
-  if (key === 'antiSpam') return `**Maximum messages:** ${rule.maxMessages}\n**Window:** ${rule.intervalSeconds} seconds\n**Actions:** ${formatActions(rule.actions)}`;
-  if (key === 'antiLinks') return `**Staff bypass:** ${rule.allowStaff ? 'Yes' : 'No'}\n**Allowed domains:** ${rule.allowedDomains?.length || 0}\n**Denied domains:** ${rule.deniedDomains?.length || 0}\n**Actions:** ${formatActions(rule.actions)}`;
-  if (key === 'badWords') return `**Blocked words:** ${rule.words?.length || 0}\n**Actions:** ${formatActions(rule.actions)}`;
-  if (key === 'caps') return `**Caps threshold:** ${rule.percent}%\n**Minimum length:** ${rule.minLength}\n**Actions:** ${formatActions(rule.actions)}`;
-  return `**Maximum mentions:** ${rule.maxMentions}\n**Actions:** ${formatActions(rule.actions)}`;
+  const enforcement='**Risk:** '+Number(rule.risk||0)+'\n**Timeout:** '+Number(rule.timeoutMinutes||10)+' minutes\n**Actions:** '+formatActions(rule.actions);
+  if(key==='antiSpam') return '**Maximum messages:** '+rule.maxMessages+'\n**Window:** '+rule.intervalSeconds+' seconds\n'+enforcement;
+  if(key==='antiLinks') return '**Staff bypass:** '+(rule.allowStaff?'Yes':'No')+'\n**Allowed domains:** '+(rule.allowedDomains?.length||0)+'\n**Denied domains:** '+(rule.deniedDomains?.length||0)+'\n'+enforcement;
+  if(key==='badWords') return '**Blocked words/phrases:** '+(rule.words?.length||0)+'\n**Matching:** '+(rule.matchMode||'boundary')+'\n'+enforcement;
+  if(key==='caps') return '**Caps threshold:** '+rule.percent+'%\n**Minimum length:** '+rule.minLength+'\n'+enforcement;
+  if(key==='mentions') return '**Total mentions:** '+rule.maxMentions+'\n**User/Role limits:** '+rule.maxUserMentions+'/'+rule.maxRoleMentions+'\n**@everyone/@here:** '+(rule.blockEveryone?'Blocked':'Allowed')+'\n'+enforcement;
+  if(key==='invites') return '**Allow own server:** '+(rule.allowOwnServer?'Yes':'No')+'\n**Allowed invite codes:** '+(rule.allowedCodes?.length||0)+'\n'+enforcement;
+  if(key==='duplicates') return '**Duplicates:** '+rule.maxDuplicates+' in '+rule.intervalSeconds+' seconds\n'+enforcement;
+  if(key==='flood') return '**Lines:** '+rule.maxLines+'\n**Characters:** '+rule.maxCharacters+'\n**Repeated characters:** '+rule.maxRepeatedCharacters+'\n'+enforcement;
+  if(key==='emojiSpam') return '**Maximum emojis:** '+rule.maxEmojis+'\n'+enforcement;
+  if(key==='attachments') return '**Maximum attachments:** '+rule.maxAttachments+'\n**Blocked extensions:** '+(rule.blockedExtensions?.join(', ')||'None')+'\n'+enforcement;
+  return enforcement;
 }
 
 function nextRuleId(key) {
@@ -283,16 +290,18 @@ function textInput(id, label, value, { placeholder = '', required = true, style 
 }
 
 function buildRuleModal(key, rule) {
-  const modal = new ModalBuilder().setCustomId(`admin:automod:rule:${key}:modal`).setTitle(`${AUTOMOD_RULES[key].title} Settings`);
-  if (key === 'antiSpam') modal.addComponents(textInput('maxMessages', 'Maximum messages', rule.maxMessages), textInput('intervalSeconds', 'Time window in seconds', rule.intervalSeconds));
-  if (key === 'antiLinks') modal.addComponents(
-    textInput('allowStaff', 'Allow staff? true or false', rule.allowStaff),
-    textInput('allowedDomains', 'Allowed domains, comma separated', (rule.allowedDomains || []).join(', '), { placeholder: 'trusted.example, discord.com', required: false, style: TextInputStyle.Paragraph }),
-    textInput('deniedDomains', 'Denied domains, comma separated', (rule.deniedDomains || []).join(', '), { placeholder: 'blocked.example, scam.example', required: false, style: TextInputStyle.Paragraph })
-  );
-  if (key === 'badWords') modal.addComponents(textInput('words', 'Blocked words, comma separated', (rule.words || []).join(', '), { placeholder: 'word1, word2', required: false, style: TextInputStyle.Paragraph }));
-  if (key === 'caps') modal.addComponents(textInput('percent', 'Capital letter percentage', rule.percent), textInput('minLength', 'Minimum message length', rule.minLength));
-  if (key === 'mentions') modal.addComponents(textInput('maxMentions', 'Maximum mentions', rule.maxMentions));
+  const modal=new ModalBuilder().setCustomId('admin:automod:rule:'+key+':modal').setTitle(AUTOMOD_RULES[key].title+' Settings');
+  const enforcement=[textInput('risk','Risk points (0-100)',rule.risk??20),textInput('timeoutMinutes','Timeout minutes',rule.timeoutMinutes??10)];
+  if(key==='antiSpam') modal.addComponents(textInput('maxMessages','Maximum messages',rule.maxMessages),textInput('intervalSeconds','Time window in seconds',rule.intervalSeconds),...enforcement);
+  if(key==='antiLinks') modal.addComponents(textInput('allowStaff','Allow staff? true or false',rule.allowStaff),textInput('allowedDomains','Allowed domains, comma separated',(rule.allowedDomains||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),textInput('deniedDomains','Denied domains, comma separated',(rule.deniedDomains||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),textInput('risk','Risk points (0-100)',rule.risk??30));
+  if(key==='badWords') modal.addComponents(textInput('words','Blocked words/phrases, comma separated',(rule.words||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),textInput('matchMode','Match mode: boundary or contains',rule.matchMode||'boundary'),...enforcement);
+  if(key==='caps') modal.addComponents(textInput('percent','Capital letter percentage',rule.percent),textInput('minLength','Minimum message length',rule.minLength),...enforcement);
+  if(key==='mentions') modal.addComponents(textInput('maxMentions','Maximum total mentions',rule.maxMentions),textInput('maxUserMentions','Maximum user mentions',rule.maxUserMentions),textInput('maxRoleMentions','Maximum role mentions',rule.maxRoleMentions),textInput('blockEveryone','Block @everyone/@here? true/false',rule.blockEveryone),textInput('risk','Risk points (0-100)',rule.risk??35));
+  if(key==='invites') modal.addComponents(textInput('allowOwnServer','Allow own server? true/false',rule.allowOwnServer),textInput('allowedCodes','Allowed invite codes',(rule.allowedCodes||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),...enforcement);
+  if(key==='duplicates') modal.addComponents(textInput('maxDuplicates','Maximum duplicate messages',rule.maxDuplicates),textInput('intervalSeconds','Window in seconds',rule.intervalSeconds),...enforcement);
+  if(key==='flood') modal.addComponents(textInput('maxLines','Maximum lines',rule.maxLines),textInput('maxCharacters','Maximum characters',rule.maxCharacters),textInput('maxRepeatedCharacters','Repeated character limit',rule.maxRepeatedCharacters),textInput('risk','Risk points (0-100)',rule.risk??20),textInput('timeoutMinutes','Timeout minutes',rule.timeoutMinutes??10));
+  if(key==='emojiSpam') modal.addComponents(textInput('maxEmojis','Maximum emojis',rule.maxEmojis),...enforcement);
+  if(key==='attachments') modal.addComponents(textInput('maxAttachments','Maximum attachments',rule.maxAttachments),textInput('blockedExtensions','Blocked extensions, comma separated',(rule.blockedExtensions||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),...enforcement);
   return modal;
 }
 
