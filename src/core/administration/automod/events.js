@@ -177,8 +177,7 @@ async function sendAutoModLog(message, ruleName, reason, actions, result) {
     )
     .setTimestamp();
 
-  await channel.send({ embeds: [embed] }).catch(() => null);
-  return true;
+  return Boolean(await channel.send({ embeds: [embed] }).catch(() => null));
 }
 
 async function applyRule(message, config, ruleKey, ruleName, reason, actions) {
@@ -390,13 +389,14 @@ async function enforceIncident(message, config, violations) {
     console.error('[AutoMod] Enforcement failed:',error?.stack||error); result={applied:[],failed:actions};
   }
   let caseId=null;
-  if(shouldCreateCase(config,severity,actions)) {
+  if(shouldCreateCase(config,severity,actions) && (result?.applied?.length || config.caseMode === 'all')) {
     try {
-      const caseAction=['ban','kick','timeout','warn'].find((action)=>actions.includes(action))||'automod';
+      const appliedActions=Array.isArray(result?.applied)?result.applied:[];
+      const caseAction=['ban','kick','timeout','warn'].find((action)=>appliedActions.includes(action))||'automod';
       const created=modStorage.createCase({guildId:message.guild.id,userId:message.author.id,moderatorId:message.client?.user?.id||'Goliath',action:caseAction,reason,metadata:{source:'automod',severity,riskScore:score,accountRiskBoost:accountBoost,rules:violations.map((item)=>item.key),channelId:message.channelId,messageId:message.id,evidence:config.evidenceRetentionDays>0?{content:String(message.content||'').slice(0,2000),attachments:[...(message.attachments?.values?.()||[])].map((a)=>({name:a.name,url:a.url})).slice(0,10),retentionDays:config.evidenceRetentionDays}:null,punishmentReport:result}});
       caseId=created?.caseId||null;
-      if(caseId && actions.includes('warn')) modStorage.addWarning({guildId:message.guild.id,userId:message.author.id,moderatorId:message.client?.user?.id||'Goliath',reason,caseId});
-      if(caseId) await modStorage.sendCaseAppealNotice({guild:message.guild,target:message.member,user:message.author,caseId}).catch(()=>null);
+      if(caseId && appliedActions.includes('warn')) modStorage.addWarning({guildId:message.guild.id,userId:message.author.id,moderatorId:message.client?.user?.id||'Goliath',reason,caseId});
+      if(caseId && ['warn','timeout','kick','ban'].includes(caseAction)) await modStorage.sendCaseAppealNotice({guild:message.guild,target:message.member,user:message.author,caseId}).catch(()=>null);
     } catch(error) { console.error('[AutoMod] Case creation failed:',error?.stack||error); }
   }
   recordIncident(message,config);
