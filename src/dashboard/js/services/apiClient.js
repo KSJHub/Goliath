@@ -154,6 +154,7 @@ export const api = {
   getAutoRolesAnalytics: (guildId) => request(`/api/modules/${guildId}/auto-roles/analytics`),
   getAutoModConfig: (guildId) => request(`/api/config/automod/${guildId}`),
   saveAutoModConfig: (guildId, payload) => request(`/api/config/automod/${guildId}`, { method: 'POST', body: JSON.stringify(payload) }),
+  getAutoModHealth: (guildId) => request(`/api/config/automod/health/${guildId}`),
   getNativeAutoModRules: (guildId) => request(`/api/config/automod/native/${guildId}`),
   updateNativeAutoModRule: (guildId, ruleId, payload) => request(`/api/config/automod/native/${guildId}/${encodeURIComponent(ruleId)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteNativeAutoModRule: (guildId, ruleId) => request(`/api/config/automod/native/${guildId}/${encodeURIComponent(ruleId)}`, { method: 'DELETE' }),
