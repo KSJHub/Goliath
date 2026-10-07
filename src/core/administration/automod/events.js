@@ -296,15 +296,14 @@ async function collectAdvancedViolations(message, config) {
   const out = [], content = String(message.content || '');
   if (config.invites?.enabled) {
     const codes = inviteCodes(content);
-    if(!codes.length) return out;
     let ownCodes=[];
-    if(config.invites.allowOwnServer){
+    if(codes.length && config.invites.allowOwnServer){
       if(message.guild.vanityURLCode) ownCodes.push(String(message.guild.vanityURLCode).toLowerCase());
       const invites=await message.guild.invites.fetch().catch(()=>null);
       if(invites) ownCodes.push(...[...invites.values()].map((invite)=>String(invite.code||'').toLowerCase()).filter(Boolean));
     }
     const allowed=new Set([...(config.invites.allowedCodes||[]),...ownCodes]);
-    const blocked = codes.find((code) => !allowed.has(code));
+    const blocked = codes.length ? codes.find((code) => !allowed.has(code)) : null;
     if (blocked) out.push({ key:'invites', name:'Invite Protection', reason:'Unapproved Discord invite detected', risk:config.invites.risk, rule:config.invites });
   }
   if (config.duplicates?.enabled) {
