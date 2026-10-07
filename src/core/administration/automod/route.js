@@ -124,6 +124,8 @@ function normalizeAutomodConfig(config = {}) {
       enabled: normalizeBoolean(safeConfig.antiSpam?.enabled, false),
       maxMessages: normalizeNumber(safeConfig.antiSpam?.maxMessages, 5, 2, 100),
       intervalSeconds: normalizeNumber(safeConfig.antiSpam?.intervalSeconds, 10, 1, 3600),
+      risk: normalizeNumber(safeConfig.antiSpam?.risk, 20, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.antiSpam?.timeoutMinutes, 10, 1, 40320),
       actions: normalizeActions(
         safeConfig.antiSpam?.actions || safeConfig.antiSpam?.action,
         ['delete']
@@ -135,6 +137,8 @@ function normalizeAutomodConfig(config = {}) {
       allowStaff: normalizeBoolean(safeConfig.antiLinks?.allowStaff, true),
       allowedDomains: normalizeDomainArray(safeConfig.antiLinks?.allowedDomains),
       deniedDomains: normalizeDomainArray(safeConfig.antiLinks?.deniedDomains),
+      risk: normalizeNumber(safeConfig.antiLinks?.risk, 30, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.antiLinks?.timeoutMinutes, 10, 1, 40320),
       actions: normalizeActions(
         safeConfig.antiLinks?.actions || safeConfig.antiLinks?.action,
         ['delete']
@@ -144,6 +148,9 @@ function normalizeAutomodConfig(config = {}) {
     badWords: {
       enabled: normalizeBoolean(safeConfig.badWords?.enabled, false),
       words: normalizeStringArray(safeConfig.badWords?.words),
+      matchMode: safeConfig.badWords?.matchMode === 'contains' ? 'contains' : 'boundary',
+      risk: normalizeNumber(safeConfig.badWords?.risk, 25, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.badWords?.timeoutMinutes, 10, 1, 40320),
       actions: normalizeActions(
         safeConfig.badWords?.actions || safeConfig.badWords?.action,
         ['delete']
@@ -154,6 +161,8 @@ function normalizeAutomodConfig(config = {}) {
       enabled: normalizeBoolean(safeConfig.caps?.enabled, false),
       percent: normalizeNumber(safeConfig.caps?.percent, 70, 1, 100),
       minLength: normalizeNumber(safeConfig.caps?.minLength, 12, 1, 500),
+      risk: normalizeNumber(safeConfig.caps?.risk, 10, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.caps?.timeoutMinutes, 10, 1, 40320),
       actions: normalizeActions(
         safeConfig.caps?.actions || safeConfig.caps?.action,
         ['warn']
@@ -163,6 +172,11 @@ function normalizeAutomodConfig(config = {}) {
     mentions: {
       enabled: normalizeBoolean(safeConfig.mentions?.enabled, false),
       maxMentions: normalizeNumber(safeConfig.mentions?.maxMentions, 5, 1, 100),
+      maxUserMentions: normalizeNumber(safeConfig.mentions?.maxUserMentions, 5, 1, 100),
+      maxRoleMentions: normalizeNumber(safeConfig.mentions?.maxRoleMentions, 3, 1, 100),
+      blockEveryone: normalizeBoolean(safeConfig.mentions?.blockEveryone, true),
+      risk: normalizeNumber(safeConfig.mentions?.risk, 35, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.mentions?.timeoutMinutes, 10, 1, 40320),
       actions: normalizeActions(
         safeConfig.mentions?.actions || safeConfig.mentions?.action,
         ['warn']
