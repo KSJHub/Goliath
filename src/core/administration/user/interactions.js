@@ -645,8 +645,14 @@ function getUserManualLiveState(guildId, creator, accounts = []) {
 
   for (const account of liveAccounts) {
     const eventId = String(account?.state?.lastLiveEvent?.id || account?.state?.liveEventId || '');
-    const stateSentAt = String(account?.state?.lastAlertKey || '').startsWith('live:')
-      ? new Date(account?.state?.lastAlertAt || '').getTime()
+    const currentKey = eventId ? `live:${eventId}` : '';
+    const alreadyDelivered = Boolean(
+      (currentKey && Array.isArray(account?.state?.deliveredEventKeys) && account.state.deliveredEventKeys.map(String).includes(currentKey))
+      || (currentKey && String(account?.state?.lastAlertKey || '') === currentKey)
+      || (account?.state?.lastLiveMessageId && (account?.state?.lastLiveMessageChannelId || account?.state?.lastAlertChannelId))
+    );
+    const stateSentAt = alreadyDelivered
+      ? (new Date(account?.state?.lastAlertAt || '').getTime() || Date.now())
       : NaN;
     const historyPost = [...history].reverse().find((entry) => {
       if (String(entry?.accountId || '') !== String(account.accountId) || entry?.status !== 'alert_sent' || entry?.alertType !== 'live') return false;
