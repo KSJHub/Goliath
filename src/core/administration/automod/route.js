@@ -10,7 +10,9 @@ const router = express.Router();
 const MODULE = 'automod';
 
 const AUTOMOD_ACTIONS = new Set(['dm', 'delete', 'warn', 'timeout', 'kick', 'ban']);
+const CORE_RULE_KEYS = ['antiSpam', 'antiLinks', 'badWords', 'caps', 'mentions'];
 const ADVANCED_RULE_KEYS = ['invites', 'duplicates', 'flood', 'emojiSpam', 'attachments', 'scamPatterns'];
+const ALL_RULE_KEYS = [...CORE_RULE_KEYS, ...ADVANCED_RULE_KEYS];
 const DEFAULT_DM_MESSAGES = {
   antiSpam: '⚠️ **{server} AutoMod**\nSpam Protection triggered: {reason}',
   antiLinks: '⚠️ **{server} AutoMod**\nLink Protection triggered: {reason}',
@@ -388,7 +390,7 @@ router.get('/health/:guildId',async(req,res)=>{
       ['Ban Members',PermissionFlagsBits.BanMembers],
       ['Manage Guild',PermissionFlagsBits.ManageGuild],
     ].map(([name,flag])=>({name,ok:Boolean(permissions?.has(flag))}));
-    const config=read(guild.id),enabled=Object.keys(config).filter((key)=>config[key]?.enabled===true).length;
+    const config=read(guild.id),enabled=ALL_RULE_KEYS.filter((key)=>config[key]?.enabled===true).length;
     const logId=typeof guildManager.getLogChannelId==='function'?guildManager.getLogChannelId(guild.id,'automod'):null;
     const logChannel=logId?(guild.channels.cache.get(logId)||await guild.channels.fetch(logId).catch(()=>null)):null;
     const issues=[];if(!guildManager.isModuleEnabled(guild.id,MODULE))issues.push('AutoMod is disabled.');if(!enabled)issues.push('No protections are enabled.');if(!logChannel)issues.push('AutoMod log channel is not configured or unavailable.');for(const check of checks)if(!check.ok)issues.push('Missing '+check.name+' permission.');
@@ -407,3 +409,6 @@ router.delete('/native/:guildId/:ruleId',async(req,res)=>{
 });
 
 module.exports = router;
+module.exports.normalizeAutomodConfig = normalizeAutomodConfig;
+module.exports.DEFAULT_DM_MESSAGES = DEFAULT_DM_MESSAGES;
+module.exports.RULE_KEYS = ALL_RULE_KEYS;
