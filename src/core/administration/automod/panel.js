@@ -193,6 +193,7 @@ function buildAutomodConfigurePanel(guild, name = 'Unknown User') {
     embeds: [createEmbed('⚙️ AutoMod Settings', [
       `**AutoMod:** ${status(config.enabled)}`,
       `**DM users:** ${status(config.dmUser !== false)}`,
+      `**Simulation:** ${config.shadowMode ? 'ON — log only' : 'OFF — enforcement active'}`,
       `**AutoMod log:** ${getLogChannelId(guild.id) ? `<#${getLogChannelId(guild.id)}>` : 'Not set'}`,
       '',
       'Configure AutoMod status, logging and the DM sent for each infraction.',
@@ -203,6 +204,7 @@ function buildAutomodConfigurePanel(guild, name = 'Unknown User') {
         button('admin:automod:dm', config.dmUser !== false ? 'Disable DMs' : 'Enable DMs', config.dmUser !== false ? ButtonStyle.Danger : ButtonStyle.Success),
         button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Primary)
       ),
+      row(button('admin:automod:shadow', config.shadowMode ? 'Disable Simulation' : 'Enable Simulation', ButtonStyle.Secondary)),
       row(button('admin:setautomodlog', '🤖 AutoMod Log', ButtonStyle.Secondary), button('admin:automod:exemptions', '🧩 Exemptions', ButtonStyle.Secondary), button('admin:automod:reset', '♻️ Reset', ButtonStyle.Danger)),
       navRow('admin:automod:configure', 'admin:automod:rule:antiSpam'),
     ],
@@ -471,6 +473,11 @@ async function handleAutomodInteraction(interaction) {
   if (!interaction.isButton?.()) return false;
 
   if (id === 'admin:automod') return updatePanel(interaction, buildAutomodPanel(interaction.guild, name));
+  if (id === 'admin:automod:shadow') {
+    const config=getAutomodConfig(interaction.guild.id);
+    saveAutomodConfig(interaction.guild.id,{...config,shadowMode:!config.shadowMode});
+    return updatePanel(interaction,buildAutomodConfigurePanel(interaction.guild,name));
+  }
   if (id === 'admin:automod:configure') return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
   if (id === 'admin:automod:risk') return updatePanel(interaction, buildRiskPanel(interaction.guild, name));
   if (id === 'admin:automod:exemptions') return updatePanel(interaction, buildExemptionsPanel(interaction.guild, name));
