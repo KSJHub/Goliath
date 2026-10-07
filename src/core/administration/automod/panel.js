@@ -372,6 +372,11 @@ async function handleAutomodModal(interaction) {
   const key = match[1];
   const config = getAutomodConfig(interaction.guild.id);
   const rule = { ...config[key] };
+  const optionalField = (fieldId) => { try { return interaction.fields.getTextInputValue(fieldId); } catch { return null; } };
+  const riskValue=optionalField('risk');
+  const timeoutValue=optionalField('timeoutMinutes');
+  if(riskValue!==null) rule.risk=parsePositive(riskValue,rule.risk??20,0,100);
+  if(timeoutValue!==null) rule.timeoutMinutes=parsePositive(timeoutValue,rule.timeoutMinutes??10,1,40320);
   if (key === 'antiSpam') {
     rule.maxMessages = parsePositive(interaction.fields.getTextInputValue('maxMessages'), rule.maxMessages, 2, 100);
     rule.intervalSeconds = parsePositive(interaction.fields.getTextInputValue('intervalSeconds'), rule.intervalSeconds, 1, 3600);
@@ -386,7 +391,12 @@ async function handleAutomodModal(interaction) {
     rule.percent = parsePositive(interaction.fields.getTextInputValue('percent'), rule.percent, 1, 100);
     rule.minLength = parsePositive(interaction.fields.getTextInputValue('minLength'), rule.minLength, 1, 500);
   }
-  if (key === 'mentions') rule.maxMentions = parsePositive(interaction.fields.getTextInputValue('maxMentions'), rule.maxMentions, 1, 100);
+  if (key === 'mentions') {
+    rule.maxMentions=parsePositive(interaction.fields.getTextInputValue('maxMentions'),rule.maxMentions,1,100);
+    rule.maxUserMentions=parsePositive(interaction.fields.getTextInputValue('maxUserMentions'),rule.maxUserMentions,1,100);
+    rule.maxRoleMentions=parsePositive(interaction.fields.getTextInputValue('maxRoleMentions'),rule.maxRoleMentions,1,100);
+    rule.blockEveryone=interaction.fields.getTextInputValue('blockEveryone').trim().toLowerCase()!=='false';
+  }
   saveAutomodConfig(interaction.guild.id, { ...config, [key]: rule });
   await interaction.reply({ content: `✅ ${AUTOMOD_RULES[key].title} settings saved.`, flags: 64 });
   return true;
