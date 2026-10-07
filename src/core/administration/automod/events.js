@@ -288,11 +288,18 @@ function recordIncident(message, config) {
   state.recent.push(state.now);
   incidentWindows.set(state.key, state.recent.slice(-50));
 }
-function collectAdvancedViolations(message, config) {
+async function collectAdvancedViolations(message, config) {
   const out = [], content = String(message.content || '');
   if (config.invites?.enabled) {
     const codes = inviteCodes(content);
-    const blocked = codes.find((code) => !config.invites.allowedCodes.includes(code));
+    let ownCodes=[];
+    if(config.invites.allowOwnServer){
+      if(message.guild.vanityURLCode) ownCodes.push(String(message.guild.vanityURLCode).toLowerCase());
+      const invites=await message.guild.invites.fetch().catch(()=>null);
+      if(invites) ownCodes.push(...[...invites.values()].map((invite)=>String(invite.code||'').toLowerCase()).filter(Boolean));
+    }
+    const allowed=new Set([...(config.invites.allowedCodes||[]),...ownCodes]);
+    const blocked = codes.find((code) => !allowed.has(code));
     if (blocked) out.push({ key:'invites', name:'Invite Protection', reason:'Unapproved Discord invite detected', risk:config.invites.risk, rule:config.invites });
   }
   if (config.duplicates?.enabled) {
@@ -392,7 +399,7 @@ async function handleAutoMod(message) {
     const timestamps=(spamWindows.get(key)||[]).filter((timestamp)=>now-timestamp<=windowMs); timestamps.push(now); spamWindows.set(key,timestamps);
     if(timestamps.length>=config.antiSpam.maxMessages){spamWindows.delete(key);violations.push({key:'antiSpam',name:'Spam Protection',reason:timestamps.length+' messages within '+config.antiSpam.intervalSeconds+' seconds',risk:config.antiSpam.risk,rule:config.antiSpam});}
   }
-  violations.push(...collectCoreViolations(message,config),...collectAdvancedViolations(message,config));
+  violations.push(...collectCoreViolations(message,config),...(await collectAdvancedViolations(message,config)));
   if(!violations.length) return false;
   return enforceIncident(message,config,violations);
 }
