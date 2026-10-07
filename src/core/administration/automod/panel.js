@@ -6,6 +6,8 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
+  RoleSelectMenuBuilder,
+  UserSelectMenuBuilder,
   ChannelType,
   StringSelectMenuBuilder,
   ModalBuilder,
@@ -72,7 +74,7 @@ function normalizeActions(value, fallback = ['delete']) {
   const actions = [...new Set((Array.isArray(value) ? value : value ? [value] : fallback)
     .map((entry) => String(entry).toLowerCase())
     .filter((entry) => AUTOMOD_ACTIONS.includes(entry)))];
-  const compatible = actions.includes('ban') ? actions.filter((entry) => entry !== 'kick') : actions;
+  const compatible = actions.includes('ban') ? actions.filter((entry) => entry !== 'kick' && entry !== 'timeout') : actions.includes('kick') ? actions.filter((entry) => entry !== 'timeout') : actions;
   return compatible.length ? compatible : [...fallback];
 }
 
@@ -196,7 +198,7 @@ function buildAutomodConfigurePanel(guild, name = 'Unknown User') {
         button('admin:automod:dm', config.dmUser !== false ? 'Disable DMs' : 'Enable DMs', config.dmUser !== false ? ButtonStyle.Danger : ButtonStyle.Success),
         button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Primary)
       ),
-      row(button('admin:setautomodlog', '🤖 AutoMod Log', ButtonStyle.Secondary), button('admin:automod:reset', '♻️ Reset', ButtonStyle.Danger)),
+      row(button('admin:setautomodlog', '🤖 AutoMod Log', ButtonStyle.Secondary), button('admin:automod:exemptions', '🧩 Exemptions', ButtonStyle.Secondary), button('admin:automod:reset', '♻️ Reset', ButtonStyle.Danger)),
       navRow('admin:automod:configure', 'admin:automod:rule:antiSpam'),
     ],
   };
@@ -234,6 +236,19 @@ function buildRuleDmModal(key, config) {
   return new ModalBuilder().setCustomId('admin:automod:rule:'+key+':dm:modal').setTitle('Member Notice').addComponents(
     textInput('message','DM message for this protection',config.dmMessages?.[key]||DEFAULT_DM_MESSAGES[key],{required:false,style:TextInputStyle.Paragraph,maxLength:1000})
   );
+}
+
+function buildExemptionsPanel(guild, name='Unknown User') {
+  const config=getAutomodConfig(guild.id);
+  const roles=new RoleSelectMenuBuilder().setCustomId('admin:automod:exemptions:roles').setPlaceholder('Ignored roles').setMinValues(0).setMaxValues(25);
+  const channels=new ChannelSelectMenuBuilder().setCustomId('admin:automod:exemptions:channels').setPlaceholder('Ignored channels').setMinValues(0).setMaxValues(25).addChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement,ChannelType.GuildForum);
+  const categories=new ChannelSelectMenuBuilder().setCustomId('admin:automod:exemptions:categories').setPlaceholder('Ignored categories').setMinValues(0).setMaxValues(25).addChannelTypes(ChannelType.GuildCategory);
+  const users=new UserSelectMenuBuilder().setCustomId('admin:automod:exemptions:users').setPlaceholder('Ignored members').setMinValues(0).setMaxValues(25);
+  if(config.ignoredRoles?.length) roles.setDefaultRoles(config.ignoredRoles.slice(0,25));
+  if(config.ignoredChannels?.length) channels.setDefaultChannels(config.ignoredChannels.slice(0,25));
+  if(config.ignoredCategories?.length) categories.setDefaultChannels(config.ignoredCategories.slice(0,25));
+  if(config.ignoredUsers?.length) users.setDefaultUsers(config.ignoredUsers.slice(0,25));
+  return {embeds:[createEmbed('🧩 AutoMod Exemptions',['**Roles:** '+(config.ignoredRoles?.length||0),'**Channels:** '+(config.ignoredChannels?.length||0),'**Categories:** '+(config.ignoredCategories?.length||0),'**Members:** '+(config.ignoredUsers?.length||0),'','Selected resources bypass all Goliath AutoMod message protections. Rule-specific allow lists remain configured inside each protection.'].join('\n'),name)],components:[row(roles),row(channels),row(categories),row(users),row(backButton('admin:automod:configure'))]};
 }
 
 function ruleSummary(key, rule) {
@@ -418,6 +433,12 @@ async function handleAutomodInteraction(interaction) {
 
   const name = getMemberDisplayName(interaction);
   if (interaction.isModalSubmit?.()) return handleAutomodModal(interaction);
+  if ((interaction.isRoleSelectMenu?.() || interaction.isUserSelectMenu?.() || interaction.isChannelSelectMenu?.()) && id.startsWith('admin:automod:exemptions:')) {
+    const config=getAutomodConfig(interaction.guild.id);
+    const type=id.split(':').pop();
+    const field={roles:'ignoredRoles',channels:'ignoredChannels',categories:'ignoredCategories',users:'ignoredUsers'}[type];
+    if(field){saveAutomodConfig(interaction.guild.id,{...config,[field]:interaction.values||[]});return updatePanel(interaction,buildExemptionsPanel(interaction.guild,name));}
+  }
   if (interaction.isChannelSelectMenu?.() && id === 'admin:selectautomodlog') {
     setLogChannelId(interaction.guild.id, interaction.values?.[0] || null);
     return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
@@ -441,6 +462,7 @@ async function handleAutomodInteraction(interaction) {
   if (id === 'admin:automod') return updatePanel(interaction, buildAutomodPanel(interaction.guild, name));
   if (id === 'admin:automod:configure') return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
   if (id === 'admin:automod:risk') return updatePanel(interaction, buildRiskPanel(interaction.guild, name));
+  if (id === 'admin:automod:exemptions') return updatePanel(interaction, buildExemptionsPanel(interaction.guild, name));
   if (id === 'admin:automod:risk:edit') { await interaction.showModal(buildRiskModal(getAutomodConfig(interaction.guild.id))); return true; }
   if (id === 'admin:setautomodlog' || id === 'admin:channel:automodlog') return updatePanel(interaction, buildLogChannelPanel());
   if (id === 'admin:automod:dmmessage') {
@@ -495,6 +517,7 @@ module.exports = {
   buildAutomodConfigurePanel,
   buildAutomodRulePanel,
   buildRiskPanel,
+  buildExemptionsPanel,
   buildLogChannelPanel,
   handleAutomodInteraction,
 };
