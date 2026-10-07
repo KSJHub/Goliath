@@ -56,9 +56,9 @@ async function sendTemporaryMessage(channel, content, section, userId = null) { 
 function playerRuleLines(section) {
   const lines = [];
   if (section.maxConsecutivePerMember === null) lines.push('👤 **Turns:** Unlimited');
-  else if (section.maxConsecutivePerMember === 1) lines.push('👤 **Turns:** 1 number per member : another member must go next');
+  else if (section.maxConsecutivePerMember === 1) lines.push('👤 **Turns:** 1 number per member. Another member must go next.');
   else lines.push(`👤 **Turns:** Up to **${section.maxConsecutivePerMember} numbers in a row** per member`);
-  lines.push(section.failureLimit > 0 ? `💀 **Game Over:** ${section.failureLimit} wrong answer${section.failureLimit === 1 ? '' : 's'} will reset the count` : '💀 **Game Over:** Off : wrong answers do not reset the count');
+  lines.push(section.failureLimit > 0 ? `💀 **Game Over:** ${section.failureLimit} wrong answer${section.failureLimit === 1 ? '' : 's'} will reset the count` : '💀 **Game Over:** Off. Wrong answers do not reset the count.');
   lines.push(section.answerAfterFailures !== null ? `💡 **Hints:** Correct number revealed after ${section.answerAfterFailures} failed attempt${section.answerAfterFailures === 1 ? '' : 's'}` : '💡 **Hints:** Off');
   lines.push(`🔢 **Numbers Only:** ${section.numbersOnly ? 'On' : 'Off'}`);
   lines.push(section.milestoneAnnouncements ? `🎉 **Milestones:** Celebrated every ${section.milestoneInterval} counts` : '🎉 **Milestones:** Off');
