@@ -152,20 +152,30 @@ const navRow = (route, nextId, settingsId = null) => row(backButton(route), ...(
 function buildAutomodPanel(guild, name = 'Unknown User') {
   const config = getAutomodConfig(guild.id);
   const enabledRules = AUTOMOD_RULE_KEYS.filter((key) => config[key].enabled).length;
-  const buttons = AUTOMOD_RULE_KEYS.map((key) => [key, AUTOMOD_RULES[key].label, config[key].enabled ? ButtonStyle.Success : ButtonStyle.Secondary]);
+  const selector = new StringSelectMenuBuilder()
+    .setCustomId('admin:automod:protection')
+    .setPlaceholder('Choose a protection to manage')
+    .addOptions(AUTOMOD_RULE_KEYS.map((key) => ({
+      label: AUTOMOD_RULES[key].title.replace(/^\S+\s/, '').slice(0, 100),
+      value: key,
+      description: (config[key].enabled ? 'Enabled' : 'Disabled') + ' • Risk ' + Number(config[key].risk || 0),
+    })));
   return {
     embeds: [createEmbed('🤖 AutoMod Protection', [
-      `**System:** ${status(config.enabled)}`,
-      `**Protection rules:** ${enabledRules}/${AUTOMOD_RULE_KEYS.length} enabled`,
+      '**System:** ' + status(config.enabled),
+      '**Protections:** ' + enabledRules + '/' + AUTOMOD_RULE_KEYS.length + ' enabled',
+      '**Case policy:** ' + String(config.caseMode || 'punishments'),
+      '**Evidence retention:** ' + Number(config.evidenceRetentionDays || 0) + ' days',
+      '**Exceptions:** ' + ((config.ignoredRoles?.length || 0) + (config.ignoredChannels?.length || 0) + (config.ignoredCategories?.length || 0) + (config.ignoredUsers?.length || 0)),
       '',
-      ...AUTOMOD_RULE_KEYS.map((key) => `**${AUTOMOD_RULES[key].label}:** ${status(config[key].enabled)}`),
+      'AutoMod evaluates every enabled protection together, correlates violations into one incident and applies one compatible enforcement decision.',
       '',
-      'Select a protection rule, or open system settings.',
+      ...AUTOMOD_RULE_KEYS.map((key) => AUTOMOD_RULES[key].label + ': **' + (config[key].enabled ? 'ON' : 'OFF') + '**'),
     ].join('\n'), name, config.enabled ? ENABLED_COLOR : DISABLED_COLOR)],
     components: [
-      row(...buttons.slice(0, 3).map(([key, label, style]) => button(`admin:automod:rule:${key}`, label, style))),
-      row(...buttons.slice(3).map(([key, label, style]) => button(`admin:automod:rule:${key}`, label, style))),
-      navRow('admin:automod', 'admin:adminpanel', 'admin:automod:configure'),
+      row(selector),
+      row(button('admin:automod:configure', '⚙️ System Settings'), button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Secondary)),
+      navRow('admin:automod', 'admin:adminpanel'),
     ],
   };
 }
@@ -334,6 +344,11 @@ async function handleAutomodInteraction(interaction) {
     return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
   }
   if (interaction.isStringSelectMenu?.()) {
+    if (id === 'admin:automod:protection') {
+      const key = interaction.values?.[0];
+      if (!AUTOMOD_RULES[key]) return false;
+      return updatePanel(interaction, buildAutomodRulePanel(interaction.guild, key, name));
+    }
     const match = id.match(/^admin:automod:rule:([^:]+):actions$/);
     if (!match || !AUTOMOD_RULES[match[1]]) return false;
     const key = match[1];
