@@ -397,6 +397,12 @@ async function handleAutomodModal(interaction) {
     rule.maxRoleMentions=parsePositive(interaction.fields.getTextInputValue('maxRoleMentions'),rule.maxRoleMentions,1,100);
     rule.blockEveryone=interaction.fields.getTextInputValue('blockEveryone').trim().toLowerCase()!=='false';
   }
+  if (key === 'invites') { rule.allowOwnServer=interaction.fields.getTextInputValue('allowOwnServer').trim().toLowerCase()!=='false'; rule.allowedCodes=parseList(interaction.fields.getTextInputValue('allowedCodes')); }
+  if (key === 'duplicates') { rule.maxDuplicates=parsePositive(interaction.fields.getTextInputValue('maxDuplicates'),rule.maxDuplicates,2,50); rule.intervalSeconds=parsePositive(interaction.fields.getTextInputValue('intervalSeconds'),rule.intervalSeconds,1,3600); }
+  if (key === 'flood') { rule.maxLines=parsePositive(interaction.fields.getTextInputValue('maxLines'),rule.maxLines,2,100); rule.maxCharacters=parsePositive(interaction.fields.getTextInputValue('maxCharacters'),rule.maxCharacters,50,4000); rule.maxRepeatedCharacters=parsePositive(interaction.fields.getTextInputValue('maxRepeatedCharacters'),rule.maxRepeatedCharacters,3,100); }
+  if (key === 'emojiSpam') rule.maxEmojis=parsePositive(interaction.fields.getTextInputValue('maxEmojis'),rule.maxEmojis,2,100);
+  if (key === 'attachments') { rule.maxAttachments=parsePositive(interaction.fields.getTextInputValue('maxAttachments'),rule.maxAttachments,1,10); rule.blockedExtensions=parseList(interaction.fields.getTextInputValue('blockedExtensions')).map((entry)=>entry.replace(/^\./,'')); }
+  if (key === 'badWords') rule.matchMode=(optionalField('matchMode')||'boundary').trim().toLowerCase()==='contains'?'contains':'boundary';
   saveAutomodConfig(interaction.guild.id, { ...config, [key]: rule });
   await interaction.reply({ content: `✅ ${AUTOMOD_RULES[key].title} settings saved.`, flags: 64 });
   return true;
