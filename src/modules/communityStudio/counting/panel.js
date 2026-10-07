@@ -101,9 +101,9 @@ function buildRulesScreen(guild) {
       '',
       '**🎮 Configure Game**',
       '👤 **Turns:** ' + formatTurnLimit(section.maxConsecutivePerMember) + '   •   💀 **Game Over:** ' + formatFailureLimit(section.failureLimit),
-      '💡 **Hints:** ' + formatHintThreshold(section.answerAfterFailures) + '   •   🎯 **Milestone Interval:** Every ' + section.milestoneInterval,
+      '💡 **Hints:** ' + formatHintThreshold(section.answerAfterFailures) + '   •   🎯 **Milestones:** ' + (section.milestoneAnnouncements ? 'Every ' + section.milestoneInterval : 'Off'),
       '',
-      '**⏱️ Reply Timing:** ' + formatCleanup(section.responseCleanupSeconds) + '   •   **🎉 Milestones:** ' + (section.milestoneAnnouncements ? 'On' : 'Off'),
+      '**⏱️ Reply Timing:** ' + formatCleanup(section.responseCleanupSeconds),
       '',
       '**🔢 Numbers Only:** ' + (section.numbersOnly ? 'On' : 'Off') + '   •   **🗑️ Wrong Counts:** ' + (section.deleteIncorrect ? 'Delete' : 'Keep'),
       '**😂 Banter:** ' + (section.funnyResponses ? 'On' : 'Off'),
@@ -114,7 +114,6 @@ function buildRulesScreen(guild) {
     row(
       button(PREFIX + ':rules:advanced', '🎮 Configure Game', ButtonStyle.Primary),
       button(PREFIX + ':rules:cycle:timing', '⏱️ Reply Timing: ' + (section.responseCleanupSeconds === null ? 'Keep' : section.responseCleanupSeconds + 's'), ButtonStyle.Secondary),
-      button(PREFIX + ':rules:toggle:milestones', '🎉 Milestones: ' + (section.milestoneAnnouncements ? 'On' : 'Off'), ButtonStyle.Secondary),
     ),
     row(
       button(PREFIX + ':rules:toggle:numbers', '🔢 Numbers Only: ' + (section.numbersOnly ? 'On' : 'Off'), ButtonStyle.Secondary),
@@ -195,7 +194,7 @@ function buildAdvancedRulesModal(guildId) {
     row(textInput('maxConsecutive', 'Custom turns (blank = unlimited)', section.maxConsecutivePerMember, { placeholder: 'Example: 5' })),
     row(textInput('failureLimit', 'Custom Game Over limit (0 = off)', section.failureLimit, { required: true, placeholder: 'Example: 5' })),
     row(textInput('answerAfter', 'Custom hint threshold (blank = off)', section.answerAfterFailures, { placeholder: 'Example: 4' })),
-    row(textInput('milestoneInterval', 'Custom milestone interval', section.milestoneInterval, { required: true, placeholder: 'Example: 25' })),
+    row(textInput('milestoneInterval', 'Milestone interval (0 = off)', section.milestoneAnnouncements ? section.milestoneInterval : 0, { required: true, placeholder: '0 = off, 25 = every 25 counts' })),
   );
 }
 function buildCleanupConfirmation(channelId, mode = 'move') {
@@ -214,6 +213,7 @@ function buildResetConfirmation(guildId) {
   const section = counting.getSection(guildId);
   return { content: ['⚠️ **Start the counting game again?**', '', 'This ends the current run and starts again from **1**.', '', 'Goliath will replace the current player panel with one **COUNTING: RESET** panel in the counting channel. Everything above it belongs to the previous run.', '', 'Your counting channel and configured rules stay exactly as they are.', '', '**This cannot be undone.**'].join('\n'), embeds: [], components: [row(button(`${PREFIX}:reset:confirm`, '🔄 Yes, Start Again', ButtonStyle.Danger), button(`${PREFIX}:main:0`, 'Cancel', ButtonStyle.Secondary))] };
 }
+function sectionMilestoneFallback(section) { return Number.isSafeInteger(Number(section?.milestoneInterval)) && Number(section.milestoneInterval) > 0 ? Number(section.milestoneInterval) : counting.DEFAULTS.milestoneInterval; }
 function parseRequiredInteger(interaction, fieldId, label, min = 0) {
   const raw = interaction.fields.getTextInputValue(fieldId).trim();
   if (!/^\d+$/.test(raw)) throw new Error(`${label} must be a whole number.`);
@@ -345,10 +345,12 @@ async function handleInteraction(interaction) {
       const maxConsecutivePerMember = parseOptionalPositiveInteger(interaction, 'maxConsecutive', 'Turns per member');
       const failureLimit = parseRequiredInteger(interaction, 'failureLimit', 'Wrong answers before reset', 0);
       const answerAfterFailures = parseOptionalPositiveInteger(interaction, 'answerAfter', 'Hint threshold');
-      const milestoneInterval = parseRequiredInteger(interaction, 'milestoneInterval', 'Milestone interval', 1);
+      const milestoneValue = parseRequiredInteger(interaction, 'milestoneInterval', 'Milestone interval', 0);
+      const milestoneAnnouncements = milestoneValue > 0;
+      const milestoneInterval = milestoneAnnouncements ? milestoneValue : sectionMilestoneFallback(before);
       if (currentCount !== before.currentCount) await counting.setCurrentCountQueued(interaction.guild.id, currentCount, { actorId, action: 'counting_set_current_from_rules' });
       await counting.mutateSection(interaction.guild.id, (section) => ({
-        ...section, maxConsecutivePerMember, failureLimit, answerAfterFailures, milestoneInterval,
+        ...section, maxConsecutivePerMember, failureLimit, answerAfterFailures, milestoneAnnouncements, milestoneInterval,
       }), { actorId, action: 'counting_advanced_rules_saved' });
       await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
       return safeUpdate(interaction, buildRulesScreen(interaction.guild));
