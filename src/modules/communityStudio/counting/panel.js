@@ -97,29 +97,19 @@ function buildRulesScreen(guild) {
     .setColor(PANEL_COLOR)
     .setTitle('🎮 Counting Game Rules')
     .setDescription([
-      'Configure how the Counting game plays. Button changes apply immediately.',
+      'Configure the quick Counting rules below. Button changes apply immediately.',
       '',
-      '**🎮 Core Gameplay**',
-      '👤 **Turns:** ' + formatTurnLimit(section.maxConsecutivePerMember),
-      '💀 **Game Over:** ' + formatFailureLimit(section.failureLimit),
-      '💡 **Hints:** ' + formatHintThreshold(section.answerAfterFailures),
-      '',
-      '**💬 Message Behaviour**',
+      '**Current Rules**',
       '🔢 **Numbers Only:** ' + (section.numbersOnly ? 'On' : 'Off') + '   •   🗑️ **Wrong Counts:** ' + (section.deleteIncorrect ? 'Delete' : 'Keep'),
       '😂 **Banter:** ' + (section.funnyResponses ? 'On' : 'Off') + '   •   ⏱️ **Reply Timing:** ' + formatCleanup(section.responseCleanupSeconds),
+      '🎉 **Milestones:** ' + (section.milestoneAnnouncements ? 'On, every ' + section.milestoneInterval + ' counts' : 'Off'),
       '',
-      '**🎉 Progress**',
-      '🎉 **Milestones:** ' + (section.milestoneAnnouncements ? 'Every ' + section.milestoneInterval + ' counts' : 'Off'),
+      '**Advanced Values**',
+      'Current Count, Turns, Game Over, Hints and Milestone Interval are managed through **✏️ Advanced Values**.',
       '',
       '**Preset:** ' + (counting.rulesAreDefault(section) ? 'Goliath Defaults' : 'Custom'),
-      'Use **✏️ Advanced Values** when you need a value outside the button presets.',
     ].join('\n')));
   return { content: null, embeds: [embed], components: [
-    row(
-      button(PREFIX + ':rules:cycle:turns', '👤 Turns: ' + (section.maxConsecutivePerMember === null ? 'Unlimited' : section.maxConsecutivePerMember), ButtonStyle.Secondary),
-      button(PREFIX + ':rules:cycle:failure', '💀 Game Over: ' + (section.failureLimit === 0 ? 'Off' : section.failureLimit), ButtonStyle.Secondary),
-      button(PREFIX + ':rules:cycle:hints', '💡 Hints: ' + (section.answerAfterFailures === null ? 'Off' : section.answerAfterFailures), ButtonStyle.Secondary),
-    ),
     row(
       button(PREFIX + ':rules:toggle:numbers', '🔢 Numbers Only: ' + (section.numbersOnly ? 'On' : 'Off'), section.numbersOnly ? ButtonStyle.Success : ButtonStyle.Secondary),
       button(PREFIX + ':rules:toggle:delete', '🗑️ Wrong Counts: ' + (section.deleteIncorrect ? 'Delete' : 'Keep'), section.deleteIncorrect ? ButtonStyle.Success : ButtonStyle.Secondary),
@@ -128,7 +118,6 @@ function buildRulesScreen(guild) {
     row(
       button(PREFIX + ':rules:cycle:timing', '⏱️ Reply Timing: ' + (section.responseCleanupSeconds === null ? 'Keep' : section.responseCleanupSeconds + 's'), ButtonStyle.Secondary),
       button(PREFIX + ':rules:toggle:milestones', '🎉 Milestones: ' + (section.milestoneAnnouncements ? 'On' : 'Off'), section.milestoneAnnouncements ? ButtonStyle.Success : ButtonStyle.Secondary),
-      button(PREFIX + ':rules:cycle:milestoneInterval', '🎯 Interval: ' + section.milestoneInterval, ButtonStyle.Secondary, !section.milestoneAnnouncements),
     ),
     row(button(PREFIX + ':rules:advanced', '✏️ Advanced Values', ButtonStyle.Primary)),
     row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
