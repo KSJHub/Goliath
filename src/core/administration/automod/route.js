@@ -107,6 +107,18 @@ function normalizeAutomodConfig(config = {}) {
   return {
     dmUser: normalizeBoolean(safeConfig.dmUser, true),
     dmMessages: normalizeDmMessages(safeConfig.dmMessages),
+    preset: ['relaxed', 'balanced', 'strict', 'custom'].includes(safeConfig.preset) ? safeConfig.preset : 'custom',
+    caseMode: ['off', 'punishments', 'medium', 'all'].includes(safeConfig.caseMode) ? safeConfig.caseMode : 'punishments',
+    evidenceRetentionDays: normalizeNumber(safeConfig.evidenceRetentionDays, 30, 0, 365),
+    risk: {
+      enabled: normalizeBoolean(safeConfig.risk?.enabled, true),
+      low: normalizeNumber(safeConfig.risk?.low, 25, 1, 500),
+      medium: normalizeNumber(safeConfig.risk?.medium, 50, 1, 500),
+      high: normalizeNumber(safeConfig.risk?.high, 75, 1, 500),
+      critical: normalizeNumber(safeConfig.risk?.critical, 100, 1, 500),
+      repeatWindowHours: normalizeNumber(safeConfig.risk?.repeatWindowHours, 24, 1, 720),
+      repeatWeight: normalizeNumber(safeConfig.risk?.repeatWeight, 10, 0, 100),
+    },
 
     antiSpam: {
       enabled: normalizeBoolean(safeConfig.antiSpam?.enabled, false),
@@ -157,8 +169,50 @@ function normalizeAutomodConfig(config = {}) {
       ),
     },
 
+    invites: {
+      enabled: normalizeBoolean(safeConfig.invites?.enabled, false),
+      allowOwnServer: normalizeBoolean(safeConfig.invites?.allowOwnServer, true),
+      allowedCodes: normalizeStringArray(safeConfig.invites?.allowedCodes),
+      risk: normalizeNumber(safeConfig.invites?.risk, 35, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.invites?.timeoutMinutes, 10, 1, 40320),
+      actions: normalizeActions(safeConfig.invites?.actions || safeConfig.invites?.action, ['delete']),
+    },
+    duplicates: {
+      enabled: normalizeBoolean(safeConfig.duplicates?.enabled, false),
+      maxDuplicates: normalizeNumber(safeConfig.duplicates?.maxDuplicates, 3, 2, 50),
+      intervalSeconds: normalizeNumber(safeConfig.duplicates?.intervalSeconds, 30, 1, 3600),
+      risk: normalizeNumber(safeConfig.duplicates?.risk, 25, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.duplicates?.timeoutMinutes, 10, 1, 40320),
+      actions: normalizeActions(safeConfig.duplicates?.actions, ['delete']),
+    },
+    flood: {
+      enabled: normalizeBoolean(safeConfig.flood?.enabled, false),
+      maxLines: normalizeNumber(safeConfig.flood?.maxLines, 12, 2, 100),
+      maxCharacters: normalizeNumber(safeConfig.flood?.maxCharacters, 1800, 50, 4000),
+      maxRepeatedCharacters: normalizeNumber(safeConfig.flood?.maxRepeatedCharacters, 12, 3, 100),
+      risk: normalizeNumber(safeConfig.flood?.risk, 20, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.flood?.timeoutMinutes, 10, 1, 40320),
+      actions: normalizeActions(safeConfig.flood?.actions, ['delete']),
+    },
+    emojiSpam: {
+      enabled: normalizeBoolean(safeConfig.emojiSpam?.enabled, false),
+      maxEmojis: normalizeNumber(safeConfig.emojiSpam?.maxEmojis, 15, 2, 100),
+      risk: normalizeNumber(safeConfig.emojiSpam?.risk, 15, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.emojiSpam?.timeoutMinutes, 10, 1, 40320),
+      actions: normalizeActions(safeConfig.emojiSpam?.actions, ['delete']),
+    },
+    attachments: {
+      enabled: normalizeBoolean(safeConfig.attachments?.enabled, false),
+      maxAttachments: normalizeNumber(safeConfig.attachments?.maxAttachments, 5, 1, 10),
+      blockedExtensions: normalizeStringArray(safeConfig.attachments?.blockedExtensions).map((item) => item.replace(/^\./, '')),
+      risk: normalizeNumber(safeConfig.attachments?.risk, 20, 0, 100),
+      timeoutMinutes: normalizeNumber(safeConfig.attachments?.timeoutMinutes, 10, 1, 40320),
+      actions: normalizeActions(safeConfig.attachments?.actions, ['delete']),
+    },
     ignoredRoles: normalizeStringArray(safeConfig.ignoredRoles),
     ignoredChannels: normalizeStringArray(safeConfig.ignoredChannels),
+    ignoredCategories: normalizeStringArray(safeConfig.ignoredCategories),
+    ignoredUsers: normalizeStringArray(safeConfig.ignoredUsers),
   };
 }
 
@@ -190,6 +244,8 @@ function mergeAutomodConfig(current, patch) {
       ...(current.mentions || {}),
       ...(patch.mentions || {}),
     },
+    risk: { ...(current.risk || {}), ...(patch.risk || {}) },
+    ...Object.fromEntries(ADVANCED_RULE_KEYS.map((key) => [key, { ...(current[key] || {}), ...(patch[key] || {}) }])),
   };
 }
 
