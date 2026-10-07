@@ -372,7 +372,7 @@ router.post('/:guildId/reset', (req, res) => {
 });
 
 async function requestGuild(req, guildId) {
-  const client=req.client||req.app?.get?.('goliath.client')||req.app?.locals?.client||null;
+  const client=req.client||req.app?.get?.('goliath.client')||req.app?.locals?.client||req.app?.locals?.discordClient||null;
   if(!client?.guilds) return null;
   return client.guilds.cache.get(guildId)||await client.guilds.fetch(guildId).catch(()=>null);
 }
@@ -390,22 +390,22 @@ router.get('/health/:guildId',async(req,res)=>{
       ['Ban Members',PermissionFlagsBits.BanMembers],
       ['Manage Guild',PermissionFlagsBits.ManageGuild],
     ].map(([name,flag])=>({name,ok:Boolean(permissions?.has(flag))}));
-    const config=read(guild.id),enabled=ALL_RULE_KEYS.filter((key)=>config[key]?.enabled===true).length;
+    const config=readConfig(guild.id),enabled=ALL_RULE_KEYS.filter((key)=>config[key]?.enabled===true).length;
     const logId=typeof guildManager.getLogChannelId==='function'?guildManager.getLogChannelId(guild.id,'automod'):null;
     const logChannel=logId?(guild.channels.cache.get(logId)||await guild.channels.fetch(logId).catch(()=>null)):null;
     const issues=[];if(!guildManager.isModuleEnabled(guild.id,MODULE))issues.push('AutoMod is disabled.');if(!enabled)issues.push('No protections are enabled.');if(!logChannel)issues.push('AutoMod log channel is not configured or unavailable.');for(const check of checks)if(!check.ok)issues.push('Missing '+check.name+' permission.');
     return res.json({ok:true,status:issues.length?'degraded':'healthy',enabledProtections:enabled,logChannelId:logChannel?.id||null,permissions:checks,issues});
-  }catch(error){return fail(res,'health check',error);}
+  }catch(error){return sendFailure(res,'health check',error);}
 });
 
 router.get('/native/:guildId',async(req,res)=>{
-  try{const guild=await requestGuild(req,req.params.guildId);if(!guild)return res.status(404).json({ok:false,error:'Guild unavailable.'});const rules=await guild.autoModerationRules.fetch();return res.json({ok:true,rules:[...rules.values()].map(nativeRule)});}catch(error){return fail(res,'native AutoMod load',error);}
+  try{const guild=await requestGuild(req,req.params.guildId);if(!guild)return res.status(404).json({ok:false,error:'Guild unavailable.'});const rules=await guild.autoModerationRules.fetch();return res.json({ok:true,rules:[...rules.values()].map(nativeRule)});}catch(error){return sendFailure(res,'native AutoMod load',error);}
 });
 router.patch('/native/:guildId/:ruleId',async(req,res)=>{
-  try{const guild=await requestGuild(req,req.params.guildId);if(!guild)return res.status(404).json({ok:false,error:'Guild unavailable.'});const rule=await guild.autoModerationRules.fetch(req.params.ruleId);if(!rule)return res.status(404).json({ok:false,error:'Discord AutoMod rule not found.'});const body=obj(req.body),patch={};if(typeof body.enabled==='boolean')patch.enabled=body.enabled;if(text(body.name))patch.name=text(body.name).slice(0,100);const updated=await rule.edit(patch,'Goliath AutoMod dashboard');return res.json({ok:true,rule:nativeRule(updated)});}catch(error){return fail(res,'native AutoMod update',error);}
+  try{const guild=await requestGuild(req,req.params.guildId);if(!guild)return res.status(404).json({ok:false,error:'Guild unavailable.'});const rule=await guild.autoModerationRules.fetch(req.params.ruleId);if(!rule)return res.status(404).json({ok:false,error:'Discord AutoMod rule not found.'});const body=getBody(req),patch={};if(typeof body.enabled==='boolean')patch.enabled=body.enabled;if(typeof body.name==='string'&&body.name.trim())patch.name=body.name.trim().slice(0,100);const updated=await rule.edit(patch,'Goliath AutoMod dashboard');return res.json({ok:true,rule:nativeRule(updated)});}catch(error){return sendFailure(res,'native AutoMod update',error);}
 });
 router.delete('/native/:guildId/:ruleId',async(req,res)=>{
-  try{const guild=await requestGuild(req,req.params.guildId);if(!guild)return res.status(404).json({ok:false,error:'Guild unavailable.'});const rule=await guild.autoModerationRules.fetch(req.params.ruleId);if(!rule)return res.status(404).json({ok:false,error:'Discord AutoMod rule not found.'});await rule.delete('Goliath AutoMod dashboard');return res.json({ok:true,deleted:req.params.ruleId});}catch(error){return fail(res,'native AutoMod delete',error);}
+  try{const guild=await requestGuild(req,req.params.guildId);if(!guild)return res.status(404).json({ok:false,error:'Guild unavailable.'});const rule=await guild.autoModerationRules.fetch(req.params.ruleId);if(!rule)return res.status(404).json({ok:false,error:'Discord AutoMod rule not found.'});await rule.delete('Goliath AutoMod dashboard');return res.json({ok:true,deleted:req.params.ruleId});}catch(error){return sendFailure(res,'native AutoMod delete',error);}
 });
 
 module.exports = router;
