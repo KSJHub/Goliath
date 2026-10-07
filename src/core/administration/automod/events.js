@@ -126,10 +126,7 @@ function findBadWord(content, words, mode = 'boundary') {
   const lower = String(content || '').normalize('NFKC').toLowerCase();
   if (mode === 'contains') return words.find((word) => lower.includes(word)) || null;
   return words.find((word) => {
-    const escaped = String(word).replace(/[.*+?^$()|[\\]\\\\]/g, '\\function findBadWord(content, words) {
-  const lower = String(content || '').toLowerCase();
-  return words.find((word) => lower.includes(word)) || null;
-}');
+    const escaped = String(word).replace(/[.*+?^$()|[\]\\]/g, '\\$&');
     return new RegExp('(^|[^a-z0-9])' + escaped + '([^a-z0-9]|$)', 'i').test(lower);
   }) || null;
 }
