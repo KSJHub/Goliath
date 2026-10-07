@@ -9,12 +9,18 @@ const router = express.Router();
 const MODULE = 'automod';
 
 const AUTOMOD_ACTIONS = new Set(['dm', 'delete', 'warn', 'timeout', 'kick', 'ban']);
+const ADVANCED_RULE_KEYS = ['invites', 'duplicates', 'flood', 'emojiSpam', 'attachments'];
 const DEFAULT_DM_MESSAGES = {
   antiSpam: '⚠️ **{server} AutoMod**\nSpam Protection triggered: {reason}',
   antiLinks: '⚠️ **{server} AutoMod**\nLink Protection triggered: {reason}',
   badWords: '⚠️ **{server} AutoMod**\nBad Word Filter triggered: {reason}',
   caps: '⚠️ **{server} AutoMod**\nCaps Protection triggered: {reason}',
   mentions: '⚠️ **{server} AutoMod**\nMention Protection triggered: {reason}',
+  invites: '⚠️ **{server} AutoMod**\nInvite Protection triggered: {reason}',
+  duplicates: '⚠️ **{server} AutoMod**\nDuplicate Message Protection triggered: {reason}',
+  flood: '⚠️ **{server} AutoMod**\nFlood Protection triggered: {reason}',
+  emojiSpam: '⚠️ **{server} AutoMod**\nEmoji Protection triggered: {reason}',
+  attachments: '⚠️ **{server} AutoMod**\nAttachment Protection triggered: {reason}',
 };
 
 function getBody(req) {
