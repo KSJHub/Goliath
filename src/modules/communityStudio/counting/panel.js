@@ -288,35 +288,8 @@ async function handleInteraction(interaction) {
       setModuleEnabled(interaction.guild.id, counting.MODULE_KEY, !currentlyEnabled, { actorId, action: 'counting_toggle_enabled' });
       return safeUpdate(interaction, buildSettingsScreen(interaction.guild));
     }
-    if (id === `${PREFIX}:rules:cycle:turns`) {
-      const current = counting.getSection(interaction.guild.id).maxConsecutivePerMember;
-      const values = [1, 2, 3, null];
-      const index = values.findIndex((value) => value === current);
-      const next = values[(index < 0 ? 0 : index + 1) % values.length];
-      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, maxConsecutivePerMember: next }), { actorId, action: 'counting_cycle_turns' });
-      await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
-      return safeUpdate(interaction, buildRulesScreen(interaction.guild));
-    }
-    if (id === `${PREFIX}:rules:cycle:failure`) {
-      const current = counting.getSection(interaction.guild.id).failureLimit;
-      const values = [1, 2, 3, 0];
-      const index = values.indexOf(current);
-      const next = values[(index < 0 ? 0 : index + 1) % values.length];
-      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, failureLimit: next }), { actorId, action: 'counting_cycle_failure_limit' });
-      await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
-      return safeUpdate(interaction, buildRulesScreen(interaction.guild));
-    }
-    if (id === `${PREFIX}:rules:cycle:hints`) {
-      const current = counting.getSection(interaction.guild.id).answerAfterFailures;
-      const values = [null, 1, 2, 3];
-      const index = values.findIndex((value) => value === current);
-      const next = values[(index < 0 ? 0 : index + 1) % values.length];
-      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, answerAfterFailures: next }), { actorId, action: 'counting_cycle_hints' });
-      await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
-      return safeUpdate(interaction, buildRulesScreen(interaction.guild));
-    }
-    if (id === `${PREFIX}:rules:toggle:numbers` || id === `${PREFIX}:rules:toggle:delete` || id === `${PREFIX}:rules:toggle:banter` || id === `${PREFIX}:rules:toggle:milestones`) {
-      const key = id.endsWith(':numbers') ? 'numbersOnly' : id.endsWith(':delete') ? 'deleteIncorrect' : id.endsWith(':banter') ? 'funnyResponses' : 'milestoneAnnouncements';
+    if (id === `${PREFIX}:rules:toggle:numbers` || id === `${PREFIX}:rules:toggle:delete` || id === `${PREFIX}:rules:toggle:banter`) {
+      const key = id.endsWith(':numbers') ? 'numbersOnly' : id.endsWith(':delete') ? 'deleteIncorrect' : 'funnyResponses';
       await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, [key]: !section[key] }), { actorId, action: 'counting_toggle_' + key });
       await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
       return safeUpdate(interaction, buildRulesScreen(interaction.guild));
@@ -327,15 +300,6 @@ async function handleInteraction(interaction) {
       const index = values.findIndex((value) => value === current);
       const next = values[(index < 0 ? 0 : index + 1) % values.length];
       await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, responseCleanupSeconds: next }), { actorId, action: 'counting_cycle_reply_timing' });
-      return safeUpdate(interaction, buildRulesScreen(interaction.guild));
-    }
-    if (id === `${PREFIX}:rules:cycle:milestoneInterval`) {
-      const current = counting.getSection(interaction.guild.id).milestoneInterval;
-      const values = [5, 10, 25, 50, 100];
-      const index = values.indexOf(current);
-      const next = values[(index < 0 ? 0 : index + 1) % values.length];
-      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, milestoneInterval: next }), { actorId, action: 'counting_cycle_milestone_interval' });
-      await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
       return safeUpdate(interaction, buildRulesScreen(interaction.guild));
     }
     if (id === `${PREFIX}:rules:advanced`) { await interaction.showModal(buildAdvancedRulesModal(interaction.guild.id)); return true; }
