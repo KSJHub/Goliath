@@ -325,6 +325,11 @@ async function collectAdvancedViolations(message, config) {
     const total = countEmoji(content);
     if (total > config.emojiSpam.maxEmojis) out.push({ key:'emojiSpam', name:'Emoji Protection', reason:total+' emojis detected (limit '+config.emojiSpam.maxEmojis+')', risk:config.emojiSpam.risk, rule:config.emojiSpam });
   }
+  if (config.scamPatterns?.enabled && config.scamPatterns.phrases?.length) {
+    const normalized=normalizeMessageText(content);
+    const hit=config.scamPatterns.phrases.find((phrase)=>normalized.includes(String(phrase).toLowerCase()));
+    if(hit) out.push({key:'scamPatterns',name:'Suspicious Content Protection',reason:'Configured suspicious phrase detected',risk:config.scamPatterns.risk,rule:config.scamPatterns});
+  }
   if (config.attachments?.enabled) {
     const files = [...(message.attachments?.values?.() || [])];
     const blocked = files.find((file) => config.attachments.blockedExtensions.includes(attachmentExtension(file)));
@@ -367,7 +372,13 @@ function shouldCreateCase(config, severity, actions) {
 async function enforceIncident(message, config, violations) {
   const repeat = recentIncidentCount(message,config).recent.length;
   const baseRisk = violations.reduce((sum,item)=>sum+Number(item.risk||0),0);
-  const score = Math.min(500,baseRisk+(config.risk.enabled?repeat*config.risk.repeatWeight:0));
+  let accountBoost=0;
+  if(config.accountRisk?.enabled){
+    const accountAgeDays=(Date.now()-Number(message.author?.createdTimestamp||Date.now()))/86400000;
+    const memberAgeHours=(Date.now()-Number(message.member?.joinedTimestamp||Date.now()))/3600000;
+    if(accountAgeDays<=config.accountRisk.newAccountDays || memberAgeHours<=config.accountRisk.newMemberHours) accountBoost=config.accountRisk.riskBoost;
+  }
+  const score = Math.min(500,baseRisk+accountBoost+(config.risk.enabled?repeat*config.risk.repeatWeight:0));
   const severity = severityFor(score,config.risk);
   const actions = strongestActions(violations);
   const reason = violations.map((item)=>item.name+': '+item.reason).join(' | ').slice(0,1800);
@@ -382,7 +393,7 @@ async function enforceIncident(message, config, violations) {
   if(shouldCreateCase(config,severity,actions)) {
     try {
       const caseAction=['ban','kick','timeout','warn'].find((action)=>actions.includes(action))||'automod';
-      const created=modStorage.createCase({guildId:message.guild.id,userId:message.author.id,moderatorId:message.client?.user?.id||'Goliath',action:caseAction,reason,metadata:{source:'automod',severity,riskScore:score,rules:violations.map((item)=>item.key),channelId:message.channelId,messageId:message.id,evidence:config.evidenceRetentionDays>0?{content:String(message.content||'').slice(0,2000),attachments:[...(message.attachments?.values?.()||[])].map((a)=>({name:a.name,url:a.url})).slice(0,10),retentionDays:config.evidenceRetentionDays}:null,punishmentReport:result}});
+      const created=modStorage.createCase({guildId:message.guild.id,userId:message.author.id,moderatorId:message.client?.user?.id||'Goliath',action:caseAction,reason,metadata:{source:'automod',severity,riskScore:score,accountRiskBoost:accountBoost,rules:violations.map((item)=>item.key),channelId:message.channelId,messageId:message.id,evidence:config.evidenceRetentionDays>0?{content:String(message.content||'').slice(0,2000),attachments:[...(message.attachments?.values?.()||[])].map((a)=>({name:a.name,url:a.url})).slice(0,10),retentionDays:config.evidenceRetentionDays}:null,punishmentReport:result}});
       caseId=created?.caseId||null;
       if(caseId && actions.includes('warn')) modStorage.addWarning({guildId:message.guild.id,userId:message.author.id,moderatorId:message.client?.user?.id||'Goliath',reason,caseId});
       if(caseId) await modStorage.sendCaseAppealNotice({guild:message.guild,target:message.member,user:message.author,caseId}).catch(()=>null);
