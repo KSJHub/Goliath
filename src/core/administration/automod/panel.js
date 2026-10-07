@@ -27,7 +27,12 @@ const AUTOMOD_RULES = {
   antiLinks: { label: '🔗 Links', title: '🔗 Link Protection', editLabel: '🌐 Domains', defaults: { enabled: false, allowStaff: true, allowedDomains: [], deniedDomains: [], actions: ['delete'] } },
   badWords: { label: '🤬 Bad Words', title: '🤬 Bad Word Filter', editLabel: '📝 Word List', defaults: { enabled: false, words: [], actions: ['delete'] } },
   caps: { label: '🔠 Caps', title: '🔠 Caps Protection', editLabel: '📏 Thresholds', defaults: { enabled: false, percent: 70, minLength: 12, actions: ['warn'] } },
-  mentions: { label: '📣 Mentions', title: '📣 Mention Protection', editLabel: '📣 Limit', defaults: { enabled: false, maxMentions: 5, actions: ['warn'] } },
+  mentions: { label: '📣 Mentions', title: '📣 Mention Protection', editLabel: '📣 Limits', defaults: { enabled: false, maxMentions: 5, maxUserMentions: 5, maxRoleMentions: 3, blockEveryone: true, risk: 35, timeoutMinutes: 10, actions: ['warn'] } },
+  invites: { label: '✉️ Invites', title: '✉️ Invite Protection', editLabel: '🔗 Invites', defaults: { enabled: false, allowOwnServer: true, allowedCodes: [], risk: 35, timeoutMinutes: 10, actions: ['delete'] } },
+  duplicates: { label: '♻️ Duplicates', title: '♻️ Duplicate Protection', editLabel: '⏱️ Limits', defaults: { enabled: false, maxDuplicates: 3, intervalSeconds: 30, risk: 25, timeoutMinutes: 10, actions: ['delete'] } },
+  flood: { label: '🌊 Flood', title: '🌊 Flood Protection', editLabel: '📏 Limits', defaults: { enabled: false, maxLines: 12, maxCharacters: 1800, maxRepeatedCharacters: 12, risk: 20, timeoutMinutes: 10, actions: ['delete'] } },
+  emojiSpam: { label: '😀 Emoji', title: '😀 Emoji Protection', editLabel: '😀 Limit', defaults: { enabled: false, maxEmojis: 15, risk: 15, timeoutMinutes: 10, actions: ['delete'] } },
+  attachments: { label: '📎 Attachments', title: '📎 Attachment Protection', editLabel: '📎 Limits', defaults: { enabled: false, maxAttachments: 5, blockedExtensions: [], risk: 20, timeoutMinutes: 10, actions: ['delete'] } },
 };
 const AUTOMOD_RULE_KEYS = Object.keys(AUTOMOD_RULES);
 const AUTOMOD_ACTIONS = ['dm', 'delete', 'warn', 'timeout', 'kick', 'ban'];
@@ -38,6 +43,11 @@ const DEFAULT_DM_MESSAGES = {
   badWords: '⚠️ **{server} AutoMod**\nBad Word Filter triggered: {reason}',
   caps: '⚠️ **{server} AutoMod**\nCaps Protection triggered: {reason}',
   mentions: '⚠️ **{server} AutoMod**\nMention Protection triggered: {reason}',
+  invites: '⚠️ **{server} AutoMod**\nInvite Protection triggered: {reason}',
+  duplicates: '⚠️ **{server} AutoMod**\nDuplicate Message Protection triggered: {reason}',
+  flood: '⚠️ **{server} AutoMod**\nFlood Protection triggered: {reason}',
+  emojiSpam: '⚠️ **{server} AutoMod**\nEmoji Protection triggered: {reason}',
+  attachments: '⚠️ **{server} AutoMod**\nAttachment Protection triggered: {reason}',
 };
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
@@ -75,6 +85,11 @@ function defaults() {
     ...Object.fromEntries(AUTOMOD_RULE_KEYS.map((key) => [key, { ...AUTOMOD_RULES[key].defaults }])),
     ignoredRoles: [],
     ignoredChannels: [],
+    ignoredCategories: [],
+    ignoredUsers: [],
+    caseMode: 'punishments',
+    evidenceRetentionDays: 30,
+    risk: { enabled: true, low: 25, medium: 50, high: 75, critical: 100, repeatWindowHours: 24, repeatWeight: 10 },
   };
 }
 
@@ -90,9 +105,13 @@ function getAutomodConfig(guildId) {
   output.antiLinks.allowedDomains = Array.isArray(output.antiLinks.allowedDomains) ? output.antiLinks.allowedDomains : [];
   output.antiLinks.deniedDomains = Array.isArray(output.antiLinks.deniedDomains) ? output.antiLinks.deniedDomains : [];
   output.badWords.words = Array.isArray(output.badWords.words) ? output.badWords.words : [];
+  output.invites.allowedCodes = Array.isArray(output.invites.allowedCodes) ? output.invites.allowedCodes : [];
+  output.attachments.blockedExtensions = Array.isArray(output.attachments.blockedExtensions) ? output.attachments.blockedExtensions : [];
   output.dmMessages = { ...DEFAULT_DM_MESSAGES, ...(current.dmMessages || {}) };
   output.ignoredRoles = Array.isArray(current.ignoredRoles) ? current.ignoredRoles : [];
   output.ignoredChannels = Array.isArray(current.ignoredChannels) ? current.ignoredChannels : [];
+  output.ignoredCategories = Array.isArray(current.ignoredCategories) ? current.ignoredCategories : [];
+  output.ignoredUsers = Array.isArray(current.ignoredUsers) ? current.ignoredUsers : [];
   return output;
 }
 
