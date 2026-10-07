@@ -116,7 +116,6 @@ function buildRulesScreen(guild) {
       'Use **✏️ Advanced Values** when you need a value outside the button presets.',
     ].join('\n')));
   return { content: null, embeds: [embed], components: [
-    row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
     row(
       button(PREFIX + ':rules:cycle:turns', '👤 Turns: ' + (section.maxConsecutivePerMember === null ? 'Unlimited' : section.maxConsecutivePerMember), ButtonStyle.Secondary),
       button(PREFIX + ':rules:cycle:failure', '💀 Game Over: ' + (section.failureLimit === 0 ? 'Off' : section.failureLimit), ButtonStyle.Secondary),
@@ -133,6 +132,7 @@ function buildRulesScreen(guild) {
       button(PREFIX + ':rules:cycle:milestoneInterval', '🎯 Interval: ' + section.milestoneInterval, ButtonStyle.Secondary, !section.milestoneAnnouncements),
     ),
     row(button(PREFIX + ':rules:advanced', '✏️ Advanced Values', ButtonStyle.Primary)),
+    row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
   ] };
 }
 function buildResponsesScreen(guild, memberDisplayName) { return buildPanel(guild, memberDisplayName); }
