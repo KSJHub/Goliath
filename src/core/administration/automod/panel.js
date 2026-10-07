@@ -194,12 +194,46 @@ function buildAutomodConfigurePanel(guild, name = 'Unknown User') {
       row(
         button('admin:automod:toggle', config.enabled ? 'Disable AutoMod' : 'Enable AutoMod', config.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
         button('admin:automod:dm', config.dmUser !== false ? 'Disable DMs' : 'Enable DMs', config.dmUser !== false ? ButtonStyle.Danger : ButtonStyle.Success),
-        button('admin:automod:dmmessage', '✉️ DM Message', ButtonStyle.Primary)
+        button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Primary)
       ),
       row(button('admin:setautomodlog', '🤖 AutoMod Log', ButtonStyle.Secondary), button('admin:automod:reset', '♻️ Reset', ButtonStyle.Danger)),
       navRow('admin:automod:configure', 'admin:automod:rule:antiSpam'),
     ],
   };
+}
+
+function buildRiskPanel(guild, name = 'Unknown User') {
+  const config = getAutomodConfig(guild.id);
+  const risk = config.risk || {};
+  return {
+    embeds: [createEmbed('🎯 AutoMod Risk, Cases & Evidence', [
+      '**Risk engine:** ' + status(risk.enabled !== false),
+      '**Thresholds:** Low ' + (risk.low || 25) + ' • Medium ' + (risk.medium || 50) + ' • High ' + (risk.high || 75) + ' • Critical ' + (risk.critical || 100),
+      '**Repeat window:** ' + (risk.repeatWindowHours || 24) + 'h • +' + (risk.repeatWeight || 10) + ' risk per recent incident',
+      '**Case policy:** ' + (config.caseMode || 'punishments'),
+      '**Evidence retention:** ' + Number(config.evidenceRetentionDays || 0) + ' days',
+      '',
+      'Risk combines every protection triggered by the same message. Repeat incidents increase risk without silently changing the configured punishment actions.',
+    ].join('\n'), name, PANEL_COLOR)],
+    components: [
+      row(button('admin:automod:risk:edit', '⚙️ Configure Risk & Cases'), button('admin:automod', '🛡️ Protections', ButtonStyle.Secondary)),
+      row(backButton('admin:automod:configure')),
+    ],
+  };
+}
+function buildRiskModal(config) {
+  const risk=config.risk||{};
+  return new ModalBuilder().setCustomId('admin:automod:risk:modal').setTitle('Risk, Cases & Evidence').addComponents(
+    textInput('thresholds','Risk thresholds: low,medium,high,critical',[risk.low||25,risk.medium||50,risk.high||75,risk.critical||100].join(',')),
+    textInput('repeat','Repeat window hours, risk weight',[risk.repeatWindowHours||24,risk.repeatWeight||10].join(',')),
+    textInput('caseMode','Case mode: off/punishments/medium/all',config.caseMode||'punishments'),
+    textInput('retention','Evidence retention days (0-365)',config.evidenceRetentionDays??30)
+  );
+}
+function buildRuleDmModal(key, config) {
+  return new ModalBuilder().setCustomId('admin:automod:rule:'+key+':dm:modal').setTitle('Member Notice').addComponents(
+    textInput('message','DM message for this protection',config.dmMessages?.[key]||DEFAULT_DM_MESSAGES[key],{required:false,style:TextInputStyle.Paragraph,maxLength:1000})
+  );
 }
 
 function ruleSummary(key, rule) {
@@ -232,7 +266,7 @@ function buildAutomodRulePanel(guild, key, name = 'Unknown User') {
   return {
     embeds: [createEmbed(meta.title, [`**Status:** ${status(rule.enabled)}`, '', ruleSummary(key, rule), '', 'Choose the exact settings and select every action that should run when this rule triggers.'].join('\n'), name, rule.enabled ? ENABLED_COLOR : DISABLED_COLOR)],
     components: [
-      row(button(`${route}:toggle`, rule.enabled ? 'Disable' : 'Enable', rule.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button(`${route}:edit`, meta.editLabel)),
+      row(button(`${route}:toggle`, rule.enabled ? 'Disable' : 'Enable', rule.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button(`${route}:edit`, meta.editLabel), button(`${route}:dm`, '✉️ DM Notice', ButtonStyle.Secondary)),
       row(buildActionSelect(key, rule)),
       navRow(route, nextRuleId(key), `${route}:edit`),
     ],
@@ -292,6 +326,26 @@ async function updatePanel(interaction, panel) {
 }
 
 async function handleAutomodModal(interaction) {
+  if (interaction.customId === 'admin:automod:risk:modal') {
+    const config=getAutomodConfig(interaction.guild.id);
+    const thresholds=interaction.fields.getTextInputValue('thresholds').split(',').map((v)=>parsePositive(v,0,1,500));
+    const repeat=interaction.fields.getTextInputValue('repeat').split(',').map((v)=>parsePositive(v,0,0,1000));
+    const requested=interaction.fields.getTextInputValue('caseMode').trim().toLowerCase();
+    config.risk={...(config.risk||{}),low:thresholds[0]||25,medium:thresholds[1]||50,high:thresholds[2]||75,critical:thresholds[3]||100,repeatWindowHours:repeat[0]||24,repeatWeight:Number.isFinite(repeat[1])?repeat[1]:10};
+    config.caseMode=['off','punishments','medium','all'].includes(requested)?requested:'punishments';
+    config.evidenceRetentionDays=parsePositive(interaction.fields.getTextInputValue('retention'),30,0,365);
+    saveAutomodConfig(interaction.guild.id,config);
+    await interaction.reply({content:'✅ AutoMod risk, case and evidence policy saved.',flags:64});
+    return true;
+  }
+  const dmMatch=interaction.customId.match(/^admin:automod:rule:([^:]+):dm:modal$/);
+  if(dmMatch && AUTOMOD_RULES[dmMatch[1]]) {
+    const key=dmMatch[1],config=getAutomodConfig(interaction.guild.id),dmMessages={...config.dmMessages};
+    dmMessages[key]=interaction.fields.getTextInputValue('message').trim()||DEFAULT_DM_MESSAGES[key];
+    saveAutomodConfig(interaction.guild.id,{...config,dmMessages});
+    await interaction.reply({content:'✅ Member notice saved.',flags:64});
+    return true;
+  }
   if (interaction.customId === 'admin:automod:dmmessage:modal') {
     const config = getAutomodConfig(interaction.guild.id);
     const dmMessages = { ...config.dmMessages };
@@ -361,6 +415,8 @@ async function handleAutomodInteraction(interaction) {
 
   if (id === 'admin:automod') return updatePanel(interaction, buildAutomodPanel(interaction.guild, name));
   if (id === 'admin:automod:configure') return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
+  if (id === 'admin:automod:risk') return updatePanel(interaction, buildRiskPanel(interaction.guild, name));
+  if (id === 'admin:automod:risk:edit') { await interaction.showModal(buildRiskModal(getAutomodConfig(interaction.guild.id))); return true; }
   if (id === 'admin:setautomodlog' || id === 'admin:channel:automodlog') return updatePanel(interaction, buildLogChannelPanel());
   if (id === 'admin:automod:dmmessage') {
     await interaction.showModal(buildDmMessagesModal(getAutomodConfig(interaction.guild.id)));
@@ -382,13 +438,17 @@ async function handleAutomodInteraction(interaction) {
     return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
   }
 
-  const ruleMatch = id.match(/^admin:automod:rule:([^:]+)(?::(toggle|edit))?$/);
+  const ruleMatch = id.match(/^admin:automod:rule:([^:]+)(?::(toggle|edit|dm))?$/);
   if (ruleMatch && AUTOMOD_RULES[ruleMatch[1]]) {
     const key = ruleMatch[1];
     const action = ruleMatch[2];
     if (!action) return updatePanel(interaction, buildAutomodRulePanel(interaction.guild, key, name));
     const config = getAutomodConfig(interaction.guild.id);
     const rule = { ...config[key] };
+    if (action === 'dm') {
+      await interaction.showModal(buildRuleDmModal(key, config));
+      return true;
+    }
     if (action === 'edit') {
       await interaction.showModal(buildRuleModal(key, rule));
       return true;
@@ -409,6 +469,7 @@ module.exports = {
   buildAutomodPanel,
   buildAutomodConfigurePanel,
   buildAutomodRulePanel,
+  buildRiskPanel,
   buildLogChannelPanel,
   handleAutomodInteraction,
 };
