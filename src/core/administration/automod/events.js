@@ -380,6 +380,14 @@ async function enforceIncident(message, config, violations) {
   const score = Math.min(500,baseRisk+accountBoost+(config.risk.enabled?repeat*config.risk.repeatWeight:0));
   const severity = severityFor(score,config.risk);
   const actions = strongestActions(violations);
+  if (config.shadowMode) {
+    const reason = violations.map((item) => item.name + ': ' + item.reason).join(' | ').slice(0, 1800);
+    recordIncident(message, config);
+    await sendAutoModLog(message, 'SHADOW MODE · ' + severity.toUpperCase(), reason, ['No enforcement (simulation)'], {
+      applied: [], failed: [], riskScore: score, rules: violations.map((item) => item.name),
+    });
+    return false;
+  }
   const reason = violations.map((item)=>item.name+': '+item.reason).join(' | ').slice(0,1800);
   const timeoutMinutes = Math.max(...violations.map((item)=>Number(item.rule.timeoutMinutes||10)),10);
   let result;
