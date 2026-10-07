@@ -205,7 +205,7 @@ function buildAdvancedRulesModal(guildId) {
     row(textInput('maxConsecutive', 'Custom turns (blank = unlimited)', section.maxConsecutivePerMember, { placeholder: 'Example: 5' })),
     row(textInput('failureLimit', 'Custom Game Over limit (0 = off)', section.failureLimit, { required: true, placeholder: 'Example: 5' })),
     row(textInput('answerAfter', 'Custom hint threshold (blank = off)', section.answerAfterFailures, { placeholder: 'Example: 4' })),
-    row(textInput('timingAndMilestone', 'Reply seconds, milestone interval', `${section.responseCleanupSeconds === null ? 'keep' : section.responseCleanupSeconds},${section.milestoneInterval}`, { required: true, placeholder: '8,5 or keep,5' })),
+    row(textInput('milestoneInterval', 'Custom milestone interval', section.milestoneInterval, { required: true, placeholder: 'Example: 25' })),
   );
 }
 function buildCleanupConfirmation(channelId, mode = 'move') {
@@ -355,15 +355,10 @@ async function handleInteraction(interaction) {
       const maxConsecutivePerMember = parseOptionalPositiveInteger(interaction, 'maxConsecutive', 'Turns per member');
       const failureLimit = parseRequiredInteger(interaction, 'failureLimit', 'Wrong answers before reset', 0);
       const answerAfterFailures = parseOptionalPositiveInteger(interaction, 'answerAfter', 'Hint threshold');
-      const combined = interaction.fields.getTextInputValue('timingAndMilestone').split(',').map((value) => value.trim().toLowerCase());
-      if (combined.length !== 2) throw new Error('Use reply timing and milestone interval, for example: 8,5 or keep,5.');
-      const responseCleanupSeconds = ['keep', 'off'].includes(combined[0]) ? null : Number(combined[0]);
-      if (responseCleanupSeconds !== null && (!Number.isSafeInteger(responseCleanupSeconds) || responseCleanupSeconds < 1)) throw new Error('Reply timing must be a whole number of seconds or Keep.');
-      const milestoneInterval = Number(combined[1]);
-      if (!Number.isSafeInteger(milestoneInterval) || milestoneInterval < 1) throw new Error('Milestone interval must be 1 or higher.');
+      const milestoneInterval = parseRequiredInteger(interaction, 'milestoneInterval', 'Milestone interval', 1);
       if (currentCount !== before.currentCount) await counting.setCurrentCountQueued(interaction.guild.id, currentCount, { actorId, action: 'counting_set_current_from_rules' });
       await counting.mutateSection(interaction.guild.id, (section) => ({
-        ...section, maxConsecutivePerMember, failureLimit, answerAfterFailures, responseCleanupSeconds, milestoneInterval,
+        ...section, maxConsecutivePerMember, failureLimit, answerAfterFailures, milestoneInterval,
       }), { actorId, action: 'counting_advanced_rules_saved' });
       await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
       return safeUpdate(interaction, buildRulesScreen(interaction.guild));
