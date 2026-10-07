@@ -94,6 +94,7 @@ function defaults() {
     caseMode: 'punishments',
     evidenceRetentionDays: 30,
     risk: { enabled: true, low: 25, medium: 50, high: 75, critical: 100, repeatWindowHours: 24, repeatWeight: 10 },
+    accountRisk: { enabled: false, newAccountDays: 7, newMemberHours: 24, riskBoost: 15 },
   };
 }
 
@@ -171,6 +172,7 @@ function buildAutomodPanel(guild, name = 'Unknown User') {
       '**Protections:** ' + enabledRules + '/' + AUTOMOD_RULE_KEYS.length + ' enabled',
       '**Case policy:** ' + String(config.caseMode || 'punishments'),
       '**Evidence retention:** ' + Number(config.evidenceRetentionDays || 0) + ' days',
+      '**Account context:** ' + (config.accountRisk?.enabled ? 'Enabled • '+config.accountRisk.riskBoost+' risk boost' : 'Disabled'),
       '**Exceptions:** ' + ((config.ignoredRoles?.length || 0) + (config.ignoredChannels?.length || 0) + (config.ignoredCategories?.length || 0) + (config.ignoredUsers?.length || 0)),
       '',
       'AutoMod evaluates every enabled protection together, correlates violations into one incident and applies one compatible enforcement decision.',
@@ -232,7 +234,8 @@ function buildRiskModal(config) {
     textInput('thresholds','Risk thresholds: low,medium,high,critical',[risk.low||25,risk.medium||50,risk.high||75,risk.critical||100].join(',')),
     textInput('repeat','Repeat window hours, risk weight',[risk.repeatWindowHours||24,risk.repeatWeight||10].join(',')),
     textInput('caseMode','Case mode: off/punishments/medium/all',config.caseMode||'punishments'),
-    textInput('retention','Evidence retention days (0-365)',config.evidenceRetentionDays??30)
+    textInput('retention','Evidence retention days (0-365)',config.evidenceRetentionDays??30),
+    textInput('accountRisk','Account risk: on/off,days,hours,boost',[(config.accountRisk?.enabled?'on':'off'),config.accountRisk?.newAccountDays??7,config.accountRisk?.newMemberHours??24,config.accountRisk?.riskBoost??15].join(','))
   );
 }
 function buildRuleDmModal(key, config) {
@@ -363,6 +366,8 @@ async function handleAutomodModal(interaction) {
     config.risk={...(config.risk||{}),low:thresholds[0]||25,medium:thresholds[1]||50,high:thresholds[2]||75,critical:thresholds[3]||100,repeatWindowHours:repeat[0]||24,repeatWeight:Number.isFinite(repeat[1])?repeat[1]:10};
     config.caseMode=['off','punishments','medium','all'].includes(requested)?requested:'punishments';
     config.evidenceRetentionDays=parsePositive(interaction.fields.getTextInputValue('retention'),30,0,365);
+    const account=interaction.fields.getTextInputValue('accountRisk').split(',').map((v)=>v.trim());
+    config.accountRisk={enabled:['on','true','enabled','yes'].includes(String(account[0]).toLowerCase()),newAccountDays:parsePositive(account[1],7,0,365),newMemberHours:parsePositive(account[2],24,0,720),riskBoost:parsePositive(account[3],15,0,100)};
     saveAutomodConfig(interaction.guild.id,config);
     await interaction.reply({content:'✅ AutoMod risk, case and evidence policy saved.',flags:64});
     return true;
