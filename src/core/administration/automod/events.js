@@ -88,14 +88,18 @@ function renderDmMessage(template, message, reason) {
 }
 
 function extractDomains(content) {
-  const matches = String(content || '').match(/(?:https?:\/\/|www\.)[^\s<>()]+/gi) || [];
-  const domains = [];
-  for (const raw of matches) {
-    try {
-      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
-      const host = normalizeDomain(url.hostname);
-      if (host) domains.push(host);
-    } catch {}
+  const text=String(content||'');
+  const matches=[
+    ...(text.match(/(?:https?:\/\/|www\.)[^\s<>()]+/gi)||[]),
+    ...(text.match(/\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}(?:\/[^\s<>()]*)?/gi)||[]),
+  ];
+  const domains=[];
+  for(const raw of matches){
+    try{
+      const value=/^https?:\/\//i.test(raw)?raw:'https://'+raw;
+      const url=new URL(value),host=normalizeDomain(url.hostname);
+      if(host)domains.push(host);
+    }catch{}
   }
   return [...new Set(domains)];
 }
