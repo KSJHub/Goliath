@@ -4,6 +4,8 @@ const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../guild/guildManager');
 const { replaceVars } = require('../../guild/guildVariables');
 const { applyPunishmentEngine, normalizePunishments } = require('./engine');
+const { normalizeAutomodConfig } = require('./route');
+const modStorage = require('../mod/storage');
 
 const AUTOMOD_MODULE = 'automod';
 const spamWindows = new Map();
@@ -49,59 +51,14 @@ function normalizeIdList(value) {
 }
 
 function getAutoModConfig(guildId) {
-  const config = readAutomodSection(guildId);
-  const antiSpam = config.antiSpam || {};
-  const antiLinks = config.antiLinks || {};
-  const badWords = config.badWords || {};
-  const caps = config.caps || {};
-  const mentions = config.mentions || {};
-
-  return {
-    enabled: guildManager.isModuleEnabled(guildId, AUTOMOD_MODULE),
-    dmUser: config.dmUser !== false,
-    dmMessages: {
-      antiSpam: String(config.dmMessages?.antiSpam || DEFAULT_DM_MESSAGES.antiSpam),
-      antiLinks: String(config.dmMessages?.antiLinks || DEFAULT_DM_MESSAGES.antiLinks),
-      badWords: String(config.dmMessages?.badWords || DEFAULT_DM_MESSAGES.badWords),
-      caps: String(config.dmMessages?.caps || DEFAULT_DM_MESSAGES.caps),
-      mentions: String(config.dmMessages?.mentions || DEFAULT_DM_MESSAGES.mentions),
-    },
-    ignoredRoles: normalizeIdList(config.ignoredRoles),
-    ignoredChannels: normalizeIdList(config.ignoredChannels),
-    antiSpam: {
-      enabled: antiSpam.enabled === true,
-      maxMessages: Math.min(100, Math.max(2, Number.parseInt(antiSpam.maxMessages, 10) || 5)),
-      intervalSeconds: Math.min(3600, Math.max(1, Number.parseInt(antiSpam.intervalSeconds, 10) || 10)),
-      actions: normalizePunishments(antiSpam.actions || antiSpam.action || ['delete']),
-    },
-    antiLinks: {
-      enabled: antiLinks.enabled === true,
-      allowStaff: antiLinks.allowStaff !== false,
-      allowedDomains: normalizeDomainList(antiLinks.allowedDomains),
-      deniedDomains: normalizeDomainList(antiLinks.deniedDomains),
-      actions: normalizePunishments(antiLinks.actions || antiLinks.action || ['delete']),
-    },
-    badWords: {
-      enabled: badWords.enabled === true,
-      words: normalizeStringList(badWords.words),
-      actions: normalizePunishments(badWords.actions || badWords.action || ['delete']),
-    },
-    caps: {
-      enabled: caps.enabled === true,
-      percent: Math.min(100, Math.max(1, Number.parseInt(caps.percent, 10) || 70)),
-      minLength: Math.min(500, Math.max(1, Number.parseInt(caps.minLength, 10) || 12)),
-      actions: normalizePunishments(caps.actions || caps.action || ['warn']),
-    },
-    mentions: {
-      enabled: mentions.enabled === true,
-      maxMentions: Math.min(100, Math.max(1, Number.parseInt(mentions.maxMentions, 10) || 5)),
-      actions: normalizePunishments(mentions.actions || mentions.action || ['warn']),
-    },
-  };
+  const config = normalizeAutomodConfig(readAutomodSection(guildId));
+  return { ...config, enabled: guildManager.isModuleEnabled(guildId, AUTOMOD_MODULE) };
 }
 
 function isIgnored(message, config) {
+  if (config.ignoredUsers?.includes(String(message.author?.id))) return true;
   if (config.ignoredChannels.includes(String(message.channelId))) return true;
+  if (config.ignoredCategories?.includes(String(message.channel?.parentId || ''))) return true;
   const roleIds = message.member?.roles?.cache ? [...message.member.roles.cache.keys()].map(String) : [];
   return roleIds.some((roleId) => config.ignoredRoles.includes(roleId));
 }
@@ -165,9 +122,16 @@ function evaluateLinkRule(domains, rule) {
   return null;
 }
 
-function findBadWord(content, words) {
+function findBadWord(content, words, mode = 'boundary') {
+  const lower = String(content || '').normalize('NFKC').toLowerCase();
+  if (mode === 'contains') return words.find((word) => lower.includes(word)) || null;
+  return words.find((word) => {
+    const escaped = String(word).replace(/[.*+?^$()|[\\]\\\\]/g, '\\function findBadWord(content, words) {
   const lower = String(content || '').toLowerCase();
   return words.find((word) => lower.includes(word)) || null;
+}');
+    return new RegExp('(^|[^a-z0-9])' + escaped + '([^a-z0-9]|$)', 'i').test(lower);
+  }) || null;
 }
 
 function evaluateCaps(content, rule) {
@@ -267,7 +231,7 @@ async function handleLinks(message, config) {
 
 async function handleBadWords(message, config) {
   if (!config.badWords.enabled || !config.badWords.words.length) return false;
-  const blocked = findBadWord(message.content, config.badWords.words);
+  const blocked = findBadWord(message.content, config.badWords.words, config.badWords.matchMode);
   if (!blocked) return false;
   return applyRule(message, config, 'badWords', 'Bad Word Filter', `Blocked word or phrase detected: ${blocked}`, config.badWords.actions);
 }
