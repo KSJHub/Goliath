@@ -296,6 +296,7 @@ async function collectAdvancedViolations(message, config) {
   const out = [], content = String(message.content || '');
   if (config.invites?.enabled) {
     const codes = inviteCodes(content);
+    if(!codes.length) return out;
     let ownCodes=[];
     if(config.invites.allowOwnServer){
       if(message.guild.vanityURLCode) ownCodes.push(String(message.guild.vanityURLCode).toLowerCase());
