@@ -111,15 +111,15 @@ function buildRulesScreen(guild) {
       '**Preset:** ' + (counting.rulesAreDefault(section) ? 'Goliath Defaults' : 'Custom'),
     ].join('\n')));
   return { content: null, embeds: [embed], components: [
-    row(button(PREFIX + ':rules:advanced', '🎮 Configure Game', ButtonStyle.Primary)),
+    row(
+      button(PREFIX + ':rules:advanced', '🎮 Configure Game', ButtonStyle.Primary),
+      button(PREFIX + ':rules:cycle:timing', '⏱️ Reply Timing: ' + (section.responseCleanupSeconds === null ? 'Keep' : section.responseCleanupSeconds + 's'), ButtonStyle.Secondary),
+      button(PREFIX + ':rules:toggle:milestones', '🎉 Milestones: ' + (section.milestoneAnnouncements ? 'On' : 'Off'), ButtonStyle.Secondary),
+    ),
     row(
       button(PREFIX + ':rules:toggle:numbers', '🔢 Numbers Only: ' + (section.numbersOnly ? 'On' : 'Off'), ButtonStyle.Secondary),
       button(PREFIX + ':rules:toggle:delete', '🗑️ Wrong Counts: ' + (section.deleteIncorrect ? 'Delete' : 'Keep'), ButtonStyle.Secondary),
       button(PREFIX + ':rules:toggle:banter', '😂 Banter: ' + (section.funnyResponses ? 'On' : 'Off'), ButtonStyle.Secondary),
-    ),
-    row(
-      button(PREFIX + ':rules:cycle:timing', '⏱️ Reply Timing: ' + (section.responseCleanupSeconds === null ? 'Keep' : section.responseCleanupSeconds + 's'), ButtonStyle.Secondary),
-      button(PREFIX + ':rules:toggle:milestones', '🎉 Milestones: ' + (section.milestoneAnnouncements ? 'On' : 'Off'), ButtonStyle.Secondary),
     ),
     row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
   ] };
