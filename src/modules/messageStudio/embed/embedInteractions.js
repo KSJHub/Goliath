@@ -1613,6 +1613,8 @@ async function handleCoreInteraction(i) {
       return true;
     }
 
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+
     let addedGallery = 0;
     let addedFiles = 0;
     let skipped = 0;
@@ -1685,7 +1687,7 @@ async function handleCoreInteraction(i) {
     }
 
     if (!addedGallery && !addedFiles) {
-      await i.reply({
+      await i.editReply({
         content: '⚠️ Nothing could be added because the applicable media/file limits have been reached.',
         flags: 64,
       });
@@ -1706,7 +1708,7 @@ async function handleCoreInteraction(i) {
       }
     );
 
-    await i.update({
+    await i.editReply({
       ...panel.buildMediaManagerPanel(
         i,
         who(i),
