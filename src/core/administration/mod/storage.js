@@ -226,10 +226,10 @@ function getCaseAudit(guildId, caseId, { page = 0, pageSize = 25 } = {}) {
   const normalizedGuildId = String(guildId || '').trim();
   const normalizedCaseId = Number(caseId);
   if (!normalizedGuildId || !Number.isInteger(normalizedCaseId) || normalizedCaseId <= 0) return { results: [], total: 0, page: 0, pageSize: 25, totalPages: 0 };
-  const safePageSize = Math.min(100, Math.max(1, Number(pageSize) || 25));
+  const safePageSize = Number.isFinite(Number(pageSize)) ? Math.min(100, Math.max(1, Math.trunc(Number(pageSize)))) : 25;
   const total = db.prepare('SELECT COUNT(*) AS count FROM case_audit WHERE guild_id = ? AND case_id = ?').get(normalizedGuildId, normalizedCaseId).count;
   const totalPages = Math.ceil(total / safePageSize);
-  const safePage = Math.max(0, Math.min(Math.trunc(Number(page) || 0), Math.max(0, totalPages - 1)));
+  const safePage = Number.isFinite(Number(page)) ? Math.max(0, Math.min(Math.trunc(Number(page)), Math.max(0, totalPages - 1))) : 0;
   const rows = db.prepare('SELECT a.*, c.created_at AS case_created_at FROM case_audit a LEFT JOIN cases c ON c.case_id = a.case_id AND c.guild_id = a.guild_id WHERE a.guild_id = ? AND a.case_id = ? ORDER BY a.audit_id DESC LIMIT ? OFFSET ?').all(normalizedGuildId, normalizedCaseId, safePageSize, safePage * safePageSize);
   return { results: rows.map(mapAudit), total, page: safePage, pageSize: safePageSize, totalPages };
 }
