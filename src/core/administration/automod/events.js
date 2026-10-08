@@ -289,7 +289,7 @@ function countEmoji(content) {
   return custom + unicode;
 }
 function attachmentExtension(attachment) {
-  const name = String(attachment?.name || attachment?.url || '').split('?')[0];
+  const name = String(attachment?.name || attachment?.url || '').split(/[?#]/)[0];
   const match = name.match(/\.([a-z0-9]{1,12})$/i);
   return match ? match[1].toLowerCase() : '';
 }
