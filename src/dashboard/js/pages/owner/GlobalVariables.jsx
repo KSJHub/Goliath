@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/apiClient.js';
 
@@ -55,7 +56,7 @@ export default function GlobalVariables({ theme }) {
 
   const edit = (item) => { setEditingKey(item.key); setForm({ key: item.key, value: item.value || '', category: item.category || 'Custom', description: item.description || '', enabled: item.enabled !== false }); };
   const toggle = async (item) => { try { await api.request(`${endpoint}/${encodeURIComponent(item.key)}`, { method: 'PATCH', body: JSON.stringify({ ...item, enabled: item.enabled === false }) }); await load(); } catch (err) { setError(err.message || 'Could not update variable.'); } };
-  const remove = async (item) => { if (!window.confirm(`Delete ${item.token || `{${item.key}}`}?`)) return; try { await api.request(`${endpoint}/${encodeURIComponent(item.key)}`, { method: 'DELETE' }); if (editingKey === item.key) { setEditingKey(''); setForm(EMPTY_FORM); } await load(); } catch (err) { setError(err.message || 'Could not delete variable.'); } };
+  const remove = async (item) => { if (!await goliathDialog.confirm(`Delete ${item.token || `{${item.key}}`}?`, { title: 'Delete Global Variable?', danger: true, confirmLabel: 'Delete Variable' })) return; try { await api.request(`${endpoint}/${encodeURIComponent(item.key)}`, { method: 'DELETE' }); if (editingKey === item.key) { setEditingKey(''); setForm(EMPTY_FORM); } await load(); } catch (err) { setError(err.message || 'Could not delete variable.'); } };
 
   const card = { border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, color: theme.cardText, borderRadius: 20, padding: 20, boxShadow: theme.shadow };
   const input = { width: '100%', boxSizing: 'border-box', border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,.45)', color: theme.cardText, borderRadius: 10, padding: '10px 12px' };
