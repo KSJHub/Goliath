@@ -262,9 +262,12 @@ function purgeExpiredAutoModEvidence() {
         removed++;
       }
     }
-    if (value.metadata && typeof value.metadata === 'object') changed = scrub(value.metadata, value.createdAt || createdAt) || changed;
-    if (value.before && typeof value.before === 'object') changed = scrub(value.before, value.createdAt || createdAt) || changed;
-    if (value.after && typeof value.after === 'object') changed = scrub(value.after, value.createdAt || createdAt) || changed;
+    for (const child of Object.values(value)) {
+      if (!child || typeof child !== 'object') continue;
+      if (Array.isArray(child)) {
+        for (const item of child) if (item && typeof item === 'object') changed = scrub(item, value.createdAt || createdAt) || changed;
+      } else changed = scrub(child, value.createdAt || createdAt) || changed;
+    }
     return changed;
   };
   const transaction = db.transaction(() => {
