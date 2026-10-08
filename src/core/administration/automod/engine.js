@@ -124,8 +124,13 @@ async function safeBan(context, reason, deleteDays = 0) {
 async function safeWarnChannel(message, reason) {
   try {
     if (!message?.channel || !message?.author) return false;
-    const sent = await message.channel.send({ content: `⚠️ ${message.author}, your message was blocked: ${reason}` });
-    setTimeout(() => { sent.delete().catch(() => {}); }, 5000);
+    const safeReason = String(reason || 'AutoMod rule triggered').slice(0, 1500);
+    const sent = await message.channel.send({
+      content: `⚠️ ${message.author}, your message was blocked: ${safeReason}`,
+      allowedMentions: { parse: [] },
+    });
+    const cleanup = setTimeout(() => { sent.delete().catch(() => {}); }, 5000);
+    cleanup.unref?.();
     return true;
   } catch (error) {
     console.error('❌ Punishment engine channel warn failed:', error);
@@ -148,7 +153,7 @@ async function sendPunishmentDm(context, options, punishments) {
 
 async function executePunishment(punishment, context, options) {
   if (punishment === 'delete') return safeDelete(context.message);
-  if (punishment === 'warn') return context.message ? safeWarnChannel(context.message, options.reason) : true;
+  if (punishment === 'warn') return context.message ? safeWarnChannel(context.message, options.reason) : false;
   if (punishment === 'timeout') return safeTimeout(context.member, options.timeoutDurationMs, options.actionReason);
   if (punishment === 'kick') return safeKick(context.member, options.actionReason);
   if (punishment === 'ban') return safeBan(context, options.actionReason, options.deleteDays);
@@ -209,7 +214,7 @@ async function applyPunishmentEngine(input = {}, options = {}) {
   const blockedActions = [...new Set(result.blockedActions)];
   const blocked = blockedActions.length > 0;
   return {
-    ok: failed.length === 0,
+    ok: failed.length === 0 && blockedActions.length === 0 && applied.length > 0,
     punishments: list,
     applied,
     failed,

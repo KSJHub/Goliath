@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import EmptyState from '../../shared/EmptyState.jsx';
 import { api } from '../../services/apiClient.js';
@@ -125,11 +126,11 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
   }
   async function saveSettings(patch, notice = 'Schedule defaults updated.') { return action('settings', () => api.request(`/api/schedule/${guildId}/settings`, { method: 'PATCH', body: JSON.stringify(patch) }), notice); }
   async function saveTemplate(event) {
-    const name = window.prompt('Template name', event.title); if (!name) return;
+    const name = await goliathDialog.prompt('Template name', { title: 'Save Event Template', defaultValue: event.title }); if (!name) return;
     await action('template-save', () => api.request(`/api/schedule/${guildId}/templates`, { method: 'POST', body: JSON.stringify({ name, event }) }), 'Template saved.');
   }
   async function createFromTemplate(template) {
-    const startAt = window.prompt('New event start (ISO or YYYY-MM-DDTHH:mm)', new Date(Date.now() + 3600000).toISOString()); if (!startAt) return;
+    const startAt = await goliathDialog.prompt('New event start (ISO or YYYY-MM-DDTHH:mm)', { title: 'Schedule Event', defaultValue: new Date(Date.now() + 3600000).toISOString() }); if (!startAt) return;
     const start = new Date(startAt); if (!Number.isFinite(start.getTime())) { setError('Invalid event start.'); return; }
     const sourceDuration = template.event?.endAt && template.event?.startAt ? new Date(template.event.endAt) - new Date(template.event.startAt) : 3600000;
     await action('template-create', () => api.request(`/api/schedule/${guildId}/templates/${template.templateId}/create-event`, { method: 'POST', body: JSON.stringify({ startAt: start.toISOString(), endAt: new Date(start.getTime() + sourceDuration).toISOString() }) }), 'Event created from template.');
@@ -224,7 +225,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
       <div style={{ display: 'flex', gap: 10 }}><button style={buttonStyle(theme, 'success')} disabled={busy || !draft.title || !draft.startAt} onClick={saveEvent}>{busy === 'save' ? 'Saving...' : editingId ? 'Save Changes' : 'Create Event'}</button>{editingId && <button style={buttonStyle(theme)} onClick={() => { setEditingId(''); setDraft({ ...emptyDraft, timezone: settings.defaultTimezone || 'Europe/London' }); }}>Cancel</button>}</div>
     </section>
 
-    <section style={{ ...card, padding: 22, display: 'grid', gap: 12 }}><h2 style={{ margin: 0 }}>Event Templates</h2>{templates.length ? templates.map((template) => <div key={template.templateId} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 14, padding: 13, display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><strong>{template.name}</strong><div style={{ display: 'flex', gap: 8 }}><button style={buttonStyle(theme, 'primary')} onClick={() => createFromTemplate(template)}>Create Event</button><button style={buttonStyle(theme, 'danger')} onClick={() => window.confirm('Delete this template?') && action('template-delete', () => api.request(`/api/schedule/${guildId}/templates/${template.templateId}`, { method: 'DELETE' }), 'Template deleted.')}>Delete</button></div></div>) : <div style={{ color: theme.mutedText }}>No templates saved yet. Save any event below as a reusable template.</div>}</section>
+    <section style={{ ...card, padding: 22, display: 'grid', gap: 12 }}><h2 style={{ margin: 0 }}>Event Templates</h2>{templates.length ? templates.map((template) => <div key={template.templateId} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 14, padding: 13, display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><strong>{template.name}</strong><div style={{ display: 'flex', gap: 8 }}><button style={buttonStyle(theme, 'primary')} onClick={() => createFromTemplate(template)}>Create Event</button><button style={buttonStyle(theme, 'danger')} onClick={async () => { if (await goliathDialog.confirm('Delete this template?', { title: 'Delete Event Template?', danger: true, confirmLabel: 'Delete Template' })) action('template-delete', () => api.request(`/api/schedule/${guildId}/templates/${template.templateId}`, { method: 'DELETE' }), 'Template deleted.'); }}>Delete</button></div></div>) : <div style={{ color: theme.mutedText }}>No templates saved yet. Save any event below as a reusable template.</div>}</section>
 
     <section style={{ ...card, padding: 22, display: 'grid', gap: 12 }}><h2 style={{ margin: 0 }}>Events</h2>{events.length === 0 ? <EmptyState theme={theme} icon="📅" title="No events" description="Create your first scheduled event." /> : events.map((event) => {
       const attending = Object.values(event.rsvps || {}).filter((entry) => (event.rsvpOptions || []).some((option) => option.key === entry.status && option.isAttendee)).length;
@@ -236,7 +237,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
           <button style={buttonStyle(theme)} disabled={busy} onClick={() => action(`duplicate-${event.eventId}`, () => api.request(`/api/schedule/${guildId}/events/${event.eventId}/duplicate`, { method: 'POST' }), 'Event duplicated.')}>Duplicate</button>
           <button style={buttonStyle(theme)} disabled={busy} onClick={() => saveTemplate(event)}>Save Template</button>
           {event.mirrorDiscordEvent && <button style={buttonStyle(theme, 'primary')} disabled={busy} onClick={() => action(`native-${event.eventId}`, () => api.request(`/api/schedule/${guildId}/events/${event.eventId}/native/sync`, { method: 'POST' }), 'Native Discord event synced.')}>Sync Native</button>}
-          {event.status === 'scheduled' && <button style={buttonStyle(theme, 'danger')} disabled={busy} onClick={() => window.confirm('Cancel this event?') && action(`cancel-${event.eventId}`, () => api.request(`/api/schedule/${guildId}/events/${event.eventId}/cancel`, { method: 'POST' }), 'Event cancelled.')}>Cancel</button>}
+          {event.status === 'scheduled' && <button style={buttonStyle(theme, 'danger')} disabled={busy} onClick={async () => { if (await goliathDialog.confirm('Cancel this event?', { title: 'Cancel Scheduled Event?', danger: true, confirmLabel: 'Cancel Event' })) action(`cancel-${event.eventId}`, () => api.request(`/api/schedule/${guildId}/events/${event.eventId}/cancel`, { method: 'POST' }), 'Event cancelled.'); }}>Cancel</button>}
         </div>
       </article>;
     })}</section>

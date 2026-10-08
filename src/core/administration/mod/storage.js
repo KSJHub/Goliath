@@ -219,17 +219,17 @@ function recordCaseAudit({ guildId, caseId, actorId = null, event, before = null
   const result = db.prepare('INSERT INTO case_audit (guild_id, case_id, actor_id, event, before_value, after_value, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
     String(guildId), Number(caseId), actorId ? String(actorId) : null, String(event), serializeAuditValue(before), serializeAuditValue(after), JSON.stringify(metadata || {}), now()
   );
-  return mapAudit(db.prepare('SELECT * FROM case_audit WHERE audit_id = ?').get(result.lastInsertRowid));
+  return mapAudit(db.prepare('SELECT a.*, c.created_at AS case_created_at FROM case_audit a LEFT JOIN cases c ON c.case_id = a.case_id AND c.guild_id = a.guild_id WHERE a.audit_id = ?').get(result.lastInsertRowid));
 }
 function getCaseAudit(guildId, caseId, { page = 0, pageSize = 25 } = {}) {
   purgeExpiredAutoModEvidence();
   const normalizedGuildId = String(guildId || '').trim();
   const normalizedCaseId = Number(caseId);
   if (!normalizedGuildId || !Number.isInteger(normalizedCaseId) || normalizedCaseId <= 0) return { results: [], total: 0, page: 0, pageSize: 25, totalPages: 0 };
-  const safePageSize = Math.min(100, Math.max(1, Number(pageSize) || 25));
+  const safePageSize = Number.isFinite(Number(pageSize)) ? Math.min(100, Math.max(1, Math.trunc(Number(pageSize)))) : 25;
   const total = db.prepare('SELECT COUNT(*) AS count FROM case_audit WHERE guild_id = ? AND case_id = ?').get(normalizedGuildId, normalizedCaseId).count;
   const totalPages = Math.ceil(total / safePageSize);
-  const safePage = Math.max(0, Math.min(Math.trunc(Number(page) || 0), Math.max(0, totalPages - 1)));
+  const safePage = Number.isFinite(Number(page)) ? Math.max(0, Math.min(Math.trunc(Number(page)), Math.max(0, totalPages - 1))) : 0;
   const rows = db.prepare('SELECT a.*, c.created_at AS case_created_at FROM case_audit a LEFT JOIN cases c ON c.case_id = a.case_id AND c.guild_id = a.guild_id WHERE a.guild_id = ? AND a.case_id = ? ORDER BY a.audit_id DESC LIMIT ? OFFSET ?').all(normalizedGuildId, normalizedCaseId, safePageSize, safePage * safePageSize);
   return { results: rows.map(mapAudit), total, page: safePage, pageSize: safePageSize, totalPages };
 }
@@ -243,7 +243,7 @@ function purgeExpiredAutoModEvidence() {
   const cases = db.prepare("SELECT case_id, created_at, metadata FROM cases WHERE metadata LIKE '%evidence%'").all();
   const audit = db.prepare("SELECT audit_id, case_id, created_at, before_value, after_value, metadata FROM case_audit WHERE before_value LIKE '%evidence%' OR after_value LIKE '%evidence%' OR metadata LIKE '%evidence%'").all();
   const caseUpdate = db.prepare('UPDATE cases SET metadata = ? WHERE case_id = ?');
-  const createdAtByCase = new Map(db.prepare('SELECT case_id, created_at FROM cases').all().map((row) => [row.case_id, row.created_at]));
+  const createdAtByCase = new Map(db.prepare('SELECT case_id, created_at FROM cases WHERE case_id IN (SELECT case_id FROM case_audit WHERE before_value LIKE \'%evidence%\' OR after_value LIKE \'%evidence%\' OR metadata LIKE \'%evidence%\')').all().map((row) => [row.case_id, row.created_at]));
   const auditUpdate = db.prepare('UPDATE case_audit SET before_value = ?, after_value = ?, metadata = ? WHERE audit_id = ?');
   let removed = 0;
   const scrub = (value, createdAt) => {
@@ -262,9 +262,12 @@ function purgeExpiredAutoModEvidence() {
         removed++;
       }
     }
-    if (value.metadata && typeof value.metadata === 'object') changed = scrub(value.metadata, value.createdAt || createdAt) || changed;
-    if (value.before && typeof value.before === 'object') changed = scrub(value.before, value.createdAt || createdAt) || changed;
-    if (value.after && typeof value.after === 'object') changed = scrub(value.after, value.createdAt || createdAt) || changed;
+    for (const child of Object.values(value)) {
+      if (!child || typeof child !== 'object') continue;
+      if (Array.isArray(child)) {
+        for (const item of child) if (item && typeof item === 'object') changed = scrub(item, value.createdAt || createdAt) || changed;
+      } else changed = scrub(child, value.createdAt || createdAt) || changed;
+    }
     return changed;
   };
   const transaction = db.transaction(() => {

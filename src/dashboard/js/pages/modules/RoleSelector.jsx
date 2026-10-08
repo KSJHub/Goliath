@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -100,7 +101,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   }
   async function deleteSelectedGroup() {
     if (!selectedGroup || selectedGroup.id === 'colours') return;
-    if (!window.confirm(`Delete ${selectedGroup.name}? Goliath-created roles for this group will also be deleted.`)) return;
+    if (!await goliathDialog.confirm(`Delete ${selectedGroup.name}? Goliath-created roles for this group will also be deleted.`, { title: 'Delete Role Group?', danger: true, confirmLabel: 'Delete Group' })) return;
     const result = await run(() => api.request(`${baseApi(guildId)}/groups/${encodeURIComponent(selectedGroup.id)}`, { method: 'DELETE' }), 'Selector group deleted.');
     if (!result) return;
     const fallback = result.groups?.find((group) => group.id === 'colours') || result.groups?.[0];
@@ -122,7 +123,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
       <label style={{ display: 'grid', gap: 6 }}><span style={{ color: theme.mutedText, fontWeight: 900 }}>Role format</span><Input theme={theme} value={config.style?.format || '🎭 | {role}'} onChange={(event) => setData({ ...data, config: { ...config, style: { ...config.style, format: event.target.value } } })} onBlur={() => saveConfig({ style: config.style })} /></label>
       <RoleSelect theme={theme} resources={roles} value={config.style?.anchorRoleId || ''} onChange={(value) => saveConfig({ style: { ...config.style, anchorRoleId: value || null } }, 'Anchor saved.')} label="Divider / Anchor Role" />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button disabled={busy} onClick={() => { const name = window.prompt('Divider role name', '🎭 | ROLE SELECTOR'); if (name) run(() => api.request(`${baseApi(guildId)}/create-divider`, { method: 'POST', body: JSON.stringify({ name }) }), 'Divider created.'); }} style={btn(theme)}>Create Divider</button>
+        <button disabled={busy} onClick={async () => { const name = await goliathDialog.prompt('Divider role name', { title: 'Create Divider Role', defaultValue: '🎭 | ROLE SELECTOR' }); if (name) run(() => api.request(`${baseApi(guildId)}/create-divider`, { method: 'POST', body: JSON.stringify({ name }) }), 'Divider created.'); }} style={btn(theme)}>Create Divider</button>
         <button disabled={busy} onClick={() => saveConfig({ style: { ...config.style, placement: config.style?.placement === 'above' ? 'below' : 'above' } }, 'Placement updated.')} style={btn(theme)}>{config.style?.placement === 'above' ? 'Switch to Below Anchor' : 'Switch to Above Anchor'}</button>
         <button disabled={busy} onClick={() => run(() => api.request(`${baseApi(guildId)}/scan-style`, { method: 'POST' }), 'Guild style scanned.')} style={btn(theme)}>Scan Guild Style</button>
         {config.style?.detectedFormat ? <button disabled={busy} onClick={() => run(() => api.request(`${baseApi(guildId)}/apply-style`, { method: 'POST' }), 'Suggested style applied.')} style={btn(theme)}>Apply Suggestion</button> : null}

@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import EmptyState from '../../shared/EmptyState.jsx';
 import { api } from '../../services/apiClient.js';
@@ -58,8 +59,8 @@ export default function TemporaryRoles({ theme, selectedGuild, selectedGuildData
 
   const patchSettings = (patch) => action('settings', () => api.request(`/api/temporary-roles/${guildId}/settings`, { method: 'PATCH', body: JSON.stringify({ settings: patch }) }), 'Settings saved.');
   async function assign() { const saved = await action('assign', () => api.request(`/api/temporary-roles/${guildId}/assignments`, { method: 'POST', body: JSON.stringify(draft) }), 'Temporary role assigned.'); if (saved) setDraft(emptyDraft); }
-  async function renew(item) { const value = Number(window.prompt('Renew for how many units?', '1')); if (!Number.isFinite(value) || value <= 0) return; const unit = window.prompt('Unit: minutes, hours, days, weeks, months or years', 'days'); if (!unit) return; await action(`renew-${item.assignmentId}`, () => api.request(`/api/temporary-roles/${guildId}/assignments/${item.assignmentId}/renew`, { method: 'POST', body: JSON.stringify({ value, unit, reason: item.reason }) }), 'Assignment renewed.'); }
-  async function remove(item) { if (!window.confirm(`Remove ${roleName(item.roleId)} from ${memberName(item.memberId)} now?`)) return; await action(`remove-${item.assignmentId}`, () => api.request(`/api/temporary-roles/${guildId}/assignments/${item.assignmentId}`, { method: 'DELETE' }), 'Assignment removed.'); }
+  async function renew(item) { const value = Number(await goliathDialog.prompt('Renew for how many units?', { title: 'Renew Temporary Role', defaultValue: '1' })); if (!Number.isFinite(value) || value <= 0) return; const unit = await goliathDialog.prompt('Unit: minutes, hours, days, weeks, months or years', { title: 'Renewal Unit', defaultValue: 'days' }); if (!unit) return; await action(`renew-${item.assignmentId}`, () => api.request(`/api/temporary-roles/${guildId}/assignments/${item.assignmentId}/renew`, { method: 'POST', body: JSON.stringify({ value, unit, reason: item.reason }) }), 'Assignment renewed.'); }
+  async function remove(item) { if (!await goliathDialog.confirm(`Remove ${roleName(item.roleId)} from ${memberName(item.memberId)} now?`, { title: 'Remove Temporary Role?', danger: true, confirmLabel: 'Remove Role' })) return; await action(`remove-${item.assignmentId}`, () => api.request(`/api/temporary-roles/${guildId}/assignments/${item.assignmentId}`, { method: 'DELETE' }), 'Assignment removed.'); }
 
   if (!guildId) return <EmptyState theme={theme} icon="⏱️" title="Select a server" description="Select a server to manage Temporary Roles." />;
   return <div style={{ display: 'grid', gap: 18 }}>

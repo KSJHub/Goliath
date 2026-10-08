@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient';
@@ -299,7 +300,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
 
   async function removeSelectedRole(role) {
     if (!role?.id) return;
-    const confirmed = window.confirm(`Remove Discord role "${role.name}"? This cannot be undone.`);
+    const confirmed = await goliathDialog.confirm(`Remove Discord role "${role.name}"? This cannot be undone.`, { title: 'Delete Discord Role?', danger: true, confirmLabel: 'Delete Role' });
     if (!confirmed) return;
     try {
       setDeletingRole(true);

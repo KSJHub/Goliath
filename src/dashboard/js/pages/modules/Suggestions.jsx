@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -101,7 +102,7 @@ export default function Suggestions({ theme, selectedGuild, selectedGuildData })
     const promptText = action === 'deny'
       ? `Deny suggestion ${item.suggestionId}. A reason is required:`
       : `Approve suggestion ${item.suggestionId}. Optional reason:`;
-    const reason = window.prompt(promptText, item.reviewReason || '');
+    const reason = await goliathDialog.prompt(promptText, { title: action === 'deny' ? 'Deny Suggestion' : 'Approve Suggestion', defaultValue: item.reviewReason || '' });
     if (reason === null) return;
     await runAction(`review-${item.suggestionId}`, () => api.request(`/api/suggestions/${guildId}/suggestions/${item.suggestionId}/review`, { method: 'POST', body: JSON.stringify({ action, reason }) }), `Suggestion ${action === 'approve' ? 'approved' : 'denied'}.`);
   }

@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -31,7 +32,7 @@ export default function Welcome({ theme, selectedGuild, selectedGuildData }) {
   async function chooseCustom(slot) { const id = slot === 'dm_welcome' ? 'welcome_custom_dm' : 'welcome_custom_public'; const exists = templates.some((t) => t.templateId === id); if (exists) return slot === 'dm_welcome' ? setDmMessageSource('custom', id) : setMessageSource('custom', id); if (slot === 'dm_welcome') { setOverview({ ...overview, dmMessageSource: 'custom' }); setConfig({ ...(config || {}), dmMessageSource: 'custom' }); } else { setOverview({ ...overview, messageSource: 'custom' }); setConfig({ ...(config || {}), messageSource: 'custom' }); } setNotice('Fill in the Custom Welcome editor below, then save it.'); }
   async function previewWelcome() { setBusy('preview'); setError(''); setNotice(''); try { const result = await api.request(`/api/welcome/${guildId}/preview`, { method: 'POST', body: JSON.stringify({ userId: selectedGuildData?.userId }) }); setPreview(result.preview || null); setNotice('Private Welcome preview generated. Nothing was posted to Discord.'); } catch (e) { setError(e.message || 'Failed to generate Welcome preview.'); } finally { setBusy(''); } }
   async function previewQueue() { setBusy('queue'); setError(''); try { const result = await api.request(`/api/welcome/${guildId}/scheduled/queue`); setQueue(Array.isArray(result.members) ? result.members : []); setNotice(`Scheduled Welcome queue contains ${result.count || 0} member(s).`); } catch (e) { setError(e.message || 'Failed to load queue.'); } finally { setBusy(''); } }
-  async function resetModule() { if (!window.confirm('Reset Instant and Scheduled Welcome settings and analytics?')) return; await act('reset', () => api.request(`/api/welcome/${guildId}/reset`, { method: 'POST' }), 'Welcome reset to defaults.'); setQueue([]); setPreview(null); }
+  async function resetModule() { if (!await goliathDialog.confirm('Reset Instant and Scheduled Welcome settings and analytics?', { title: 'Reset Welcome Settings?', danger: true, confirmLabel: 'Reset Welcome' })) return; await act('reset', () => api.request(`/api/welcome/${guildId}/reset`, { method: 'POST' }), 'Welcome reset to defaults.'); setQueue([]); setPreview(null); }
 
   if (!guildId) return <EmptyState theme={theme} icon="👋" title="Select a server" description="Select a server to manage Welcome." />;
   const customIds = ['welcome_default', 'dm_welcome_default', 'welcome_custom_public', 'welcome_custom_dm'];

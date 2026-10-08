@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -106,7 +107,7 @@ export default function Birthdays({ theme, selectedGuild, selectedGuildData }) {
   }
 
   async function removeMember(userId) {
-    if (!window.confirm('Remove this birthday record?')) return;
+    if (!await goliathDialog.confirm('Remove this birthday record?', { title: 'Remove Birthday?', danger: true, confirmLabel: 'Remove Birthday' })) return;
     await runAction(`remove-${userId}`, () => api.request(`/api/birthdays/${guildId}/members/${userId}`, { method: 'DELETE' }), 'Birthday record removed.');
   }
 
