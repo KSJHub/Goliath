@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 
 import App from './App';
+import GoliathDialogHost from './shared/GoliathDialogHost.jsx';
 import Appeals from './pages/moderation/Appeals';
 
 window.__GOLIATH_APPEALS_ENTRY__ = 'GOLIATH_APPEALS_ENTRY';
@@ -71,6 +72,7 @@ root.render(
   <React.StrictMode>
     <BrowserRouter>
       <RootComponent />
+      <GoliathDialogHost />
     </BrowserRouter>
   </React.StrictMode>
 );
