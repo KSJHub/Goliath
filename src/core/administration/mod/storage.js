@@ -219,7 +219,7 @@ function recordCaseAudit({ guildId, caseId, actorId = null, event, before = null
   const result = db.prepare('INSERT INTO case_audit (guild_id, case_id, actor_id, event, before_value, after_value, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
     String(guildId), Number(caseId), actorId ? String(actorId) : null, String(event), serializeAuditValue(before), serializeAuditValue(after), JSON.stringify(metadata || {}), now()
   );
-  return mapAudit(db.prepare('SELECT * FROM case_audit WHERE audit_id = ?').get(result.lastInsertRowid));
+  return mapAudit(db.prepare('SELECT a.*, c.created_at AS case_created_at FROM case_audit a LEFT JOIN cases c ON c.case_id = a.case_id AND c.guild_id = a.guild_id WHERE a.audit_id = ?').get(result.lastInsertRowid));
 }
 function getCaseAudit(guildId, caseId, { page = 0, pageSize = 25 } = {}) {
   purgeExpiredAutoModEvidence();
