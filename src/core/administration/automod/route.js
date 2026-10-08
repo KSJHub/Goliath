@@ -106,11 +106,11 @@ function normalizeAutomodConfig(config = {}) {
   const safeConfig = config && typeof config === 'object' && !Array.isArray(config)
     ? config
     : {};
-  // Severity thresholds must remain ordered so every level is reachable.
-  const low = normalizeNumber(safeConfig.risk?.low, 25, 1, 500);
-  const medium = normalizeNumber(safeConfig.risk?.medium, 50, low, 500);
-  const high = normalizeNumber(safeConfig.risk?.high, 75, medium, 500);
-  const critical = normalizeNumber(safeConfig.risk?.critical, 100, high, 500);
+  // Require distinct ascending thresholds so each severity band remains reachable.
+  const low = normalizeNumber(safeConfig.risk?.low, 25, 1, 497);
+  const medium = normalizeNumber(safeConfig.risk?.medium, 50, low + 1, 498);
+  const high = normalizeNumber(safeConfig.risk?.high, 75, medium + 1, 499);
+  const critical = normalizeNumber(safeConfig.risk?.critical, 100, high + 1, 500);
 
   return {
     dmUser: normalizeBoolean(safeConfig.dmUser, true),
