@@ -151,7 +151,9 @@ function countMentions(message) {
   const content = String(message.content || '');
   const userMentions = content.match(/<@!?\d+>/g) || [];
   const roleMentions = content.match(/<@&\d+>/g) || [];
-  const everyoneMentions = content.match(/(?:^|\s)@(everyone|here)\b/g) || [];
+  const everyoneMentions = message.mentions?.everyone
+    ? (content.match(/(?:^|\s)@(everyone|here)\b/g) || [])
+    : [];
   return userMentions.length + roleMentions.length + everyoneMentions.length;
 }
 
