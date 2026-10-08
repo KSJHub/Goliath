@@ -178,7 +178,7 @@ function startAuditGuildRegistryRefresh(client) {
       const registry = await refreshAuditGuildRegistry(
         client,
         'scheduled refresh',
-        { fetchRemote: true }
+        { fetchRemote: false }
       );
 
       if (!registry) {
