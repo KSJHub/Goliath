@@ -139,8 +139,13 @@ async function handle(client, interaction) {
   const action = id.slice(PREFIX.length);
   let result = null;
   if (action === 'open') {
+    // Guild provisioning may write configuration for many servers. Acknowledge
+    // the opener before doing that work, then render the private panel.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     provisionKnownGuilds(client);
-    await interaction.reply({ ...payload(client), flags: MessageFlags.Ephemeral }).catch(() => null);
+    await interaction.editReply(payload(client)).catch((error) => {
+      console.warn('[Global Notice Controls] Panel open failed:', error?.message || error);
+    });
     return true;
   }
   if (action === 'pause-all') { const n = applyAll(client, () => ({ paused: true })); result = `Paused maintenance/restart/recovery notice delivery for ${n} guild(s).`; }
