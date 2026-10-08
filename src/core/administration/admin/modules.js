@@ -30,7 +30,7 @@ const MODULE_CATALOG = [
   { key: 'birthdays', studio: 'communityStudio', route: 'admin:birthdays', label: '🎂 Birthdays', title: '🎂 Birthdays', summary: 'Birthday registration, celebrations and member birthday tools.' },
   { key: 'counting', studio: 'communityStudio', route: 'admin:module:counting:main:0', label: '🔢 Counting', title: '🔢 Counting', summary: 'Sequential community counting with configurable rules, hints and milestones.' },
   { key: 'giveaways', studio: 'communityStudio', route: 'admin:giveaways', label: '🎉 Giveaways', title: '🎉 Giveaways', summary: 'Giveaway creation, entries, winners and rerolls.' },
-  { key: 'invites', studio: 'communityStudio', route: 'admin:invites', label: '📨 Invite Studio', title: '📨 Invite Studio', summary: 'Create invite links, attach roles and track member joins.' },
+  { key: 'invites', studio: 'communityStudio', route: 'admin:invites', label: '📨 Invites', title: '📨 Invite Studio', summary: 'Create invite links, attach roles and track member joins.' },
   { key: 'leveling', studio: 'communityStudio', route: 'admin:leveling', label: '🏆 Leveling', title: '🏆 Leveling', summary: 'XP, levels, leaderboards and level roles.' },
   { key: 'polls', studio: 'communityStudio', route: 'admin:polls', label: '📊 Polls', title: '📊 Polls', summary: 'Poll creation, voting and results.' },
 
