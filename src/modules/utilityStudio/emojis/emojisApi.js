@@ -37,6 +37,7 @@ const CORE_FILENAME_PATTERNS = Object.freeze({
   twitch: /\btwitch\b/,
   whatsapp: /\bwhats\s*app\b/,
   x: /\b(?:twitter|x)\b/,
+  xtwitter: /\b(?:twitter|x|xtwitter)\b/,
   xbox: /\bxbox\b/,
   youtube: /\b(?:youtube|yt)\b/,
 });
@@ -331,7 +332,9 @@ function listCoreAssetFiles() {
 function coreAssetForAlias(alias, files = listCoreAssetFiles()) {
   const wanted = String(alias || '').trim().toLowerCase();
   if (!wanted) return null;
-  const exact = files.find((entry) => entry.normalised === wanted);
+  const lookupAlias = wanted === 'xtwitter' ? 'twitter' : wanted;
+  const exact = files.find((entry) => entry.normalised === wanted)
+    || files.find((entry) => entry.normalised === lookupAlias);
   if (exact) return exact;
   const pattern = CORE_FILENAME_PATTERNS[wanted];
   return pattern ? (files.find((entry) => pattern.test(entry.normalised)) || null) : null;
