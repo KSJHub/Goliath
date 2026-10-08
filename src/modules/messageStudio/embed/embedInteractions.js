@@ -1338,32 +1338,31 @@ async function handleCoreInteraction(i) {
       return true;
     }
 
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+
     try {
       const document = await fetchPresetImportJson(attachment);
       const imported = normalizePortablePresetDocument(document);
       const name = imported.name;
 
       if (!name) {
-        await i.reply({
+        await i.editReply({
           content: 'The imported preset does not contain a valid preset name.',
-          flags: MessageFlags.Ephemeral,
-        });
+          });
         return true;
       }
 
       if (name.startsWith('auto-')) {
-        await i.reply({
+        await i.editReply({
           content: 'Preset names beginning with "auto-" are reserved by Goliath.',
-          flags: MessageFlags.Ephemeral,
-        });
+          });
         return true;
       }
 
       if (guildManager.getEmbedPreset?.(guildId, name)) {
-        await i.reply({
+        await i.editReply({
           content: `A preset named "${name}" already exists. Rename or delete the existing preset before importing this file.`,
-          flags: MessageFlags.Ephemeral,
-        });
+          });
         return true;
       }
 
@@ -1375,10 +1374,9 @@ async function handleCoreInteraction(i) {
       );
 
       if (!saved) {
-        await i.reply({
+        await i.editReply({
           content: `Could not import preset "${name}".`,
-          flags: MessageFlags.Ephemeral,
-        });
+          });
         return true;
       }
 
@@ -1389,10 +1387,9 @@ async function handleCoreInteraction(i) {
         selectedPreset: name,
       });
 
-      await i.reply({
+      await i.editReply({
         content: `✅ Imported preset **${name}** successfully.`,
         ...panel.buildSettingsPanel(i),
-        flags: MessageFlags.Ephemeral,
       });
 
       return true;
@@ -1402,9 +1399,8 @@ async function handleCoreInteraction(i) {
         error?.message || error
       );
 
-      await i.reply({
+      await i.editReply({
         content: `❌ Preset import failed: ${error?.message || 'Unknown error.'}`,
-        flags: MessageFlags.Ephemeral,
       });
 
       return true;
