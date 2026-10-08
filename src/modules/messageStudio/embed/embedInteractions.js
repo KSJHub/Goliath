@@ -1708,7 +1708,7 @@ async function handleCoreInteraction(i) {
       }
     );
 
-    await i.editReply({
+    const mediaPanelPayload = {
       ...panel.buildMediaManagerPanel(
         i,
         who(i),
@@ -1716,7 +1716,19 @@ async function handleCoreInteraction(i) {
       ),
       content: null,
       attachments: [],
-    });
+    };
+    // A modal's deferred reply is not the original editor message.
+    // Refresh the editor in place when Discord supplies the source message.
+    if (i.message?.edit) {
+      try {
+        await i.message.edit(mediaPanelPayload);
+        await i.editReply({ content: '✅ Media Manager updated.' });
+        return true;
+      } catch (error) {
+        console.warn('[Embed Media] Could not refresh original editor message:', error?.message || error);
+      }
+    }
+    await i.editReply(mediaPanelPayload);
 
     return true;
   }
