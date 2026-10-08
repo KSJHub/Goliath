@@ -498,8 +498,8 @@ async function handleAutomodInteraction(interaction) {
     return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
   }
   if (id === 'admin:automod:reset') {
-    setAutomodEnabled(interaction.guild.id, false, interaction.user?.id || null);
     saveAutomodConfig(interaction.guild.id, defaults());
+    setAutomodEnabled(interaction.guild.id, false, interaction.user?.id || null);
     return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
   }
 
