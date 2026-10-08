@@ -319,7 +319,6 @@ function sendFailure(res, label, error, publicMessage) {
   return res.status(500).json({
     ok: false,
     error: publicMessage,
-    message: error.message,
   });
 }
 
