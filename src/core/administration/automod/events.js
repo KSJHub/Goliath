@@ -437,7 +437,7 @@ async function enforceIncident(message, config, violations) {
   }
   recordIncident(message,config);
   await sendAutoModLog(message,'Incident · '+severity.toUpperCase(),reason,actions,{...result,caseId,riskScore:score,rules:violations.map((v)=>v.name)});
-  return true;
+  return Boolean(result?.applied?.length);
 }
 
 async function handleAutoMod(message) {
