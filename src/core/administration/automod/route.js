@@ -106,6 +106,11 @@ function normalizeAutomodConfig(config = {}) {
   const safeConfig = config && typeof config === 'object' && !Array.isArray(config)
     ? config
     : {};
+  // Severity thresholds must remain ordered so every level is reachable.
+  const low = normalizeNumber(safeConfig.risk?.low, 25, 1, 500);
+  const medium = normalizeNumber(safeConfig.risk?.medium, 50, low, 500);
+  const high = normalizeNumber(safeConfig.risk?.high, 75, medium, 500);
+  const critical = normalizeNumber(safeConfig.risk?.critical, 100, high, 500);
 
   return {
     dmUser: normalizeBoolean(safeConfig.dmUser, true),
@@ -116,10 +121,10 @@ function normalizeAutomodConfig(config = {}) {
     evidenceRetentionDays: normalizeNumber(safeConfig.evidenceRetentionDays, 30, 0, 365),
     risk: {
       enabled: normalizeBoolean(safeConfig.risk?.enabled, true),
-      low: normalizeNumber(safeConfig.risk?.low, 25, 1, 500),
-      medium: normalizeNumber(safeConfig.risk?.medium, 50, 1, 500),
-      high: normalizeNumber(safeConfig.risk?.high, 75, 1, 500),
-      critical: normalizeNumber(safeConfig.risk?.critical, 100, 1, 500),
+      low,
+      medium,
+      high,
+      critical,
       repeatWindowHours: normalizeNumber(safeConfig.risk?.repeatWindowHours, 24, 1, 720),
       repeatWeight: normalizeNumber(safeConfig.risk?.repeatWeight, 10, 0, 100),
     },
