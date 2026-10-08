@@ -214,8 +214,9 @@ function purgeExpiredAutoModEvidence() {
   const current = Date.now();
   if (current - lastEvidencePurgeAt < 60000) return 0;
   const cases = db.prepare("SELECT case_id, created_at, metadata FROM cases WHERE metadata LIKE '%evidence%'").all();
-  const audit = db.prepare("SELECT audit_id, before_value, after_value, metadata FROM case_audit WHERE before_value LIKE '%evidence%' OR after_value LIKE '%evidence%' OR metadata LIKE '%evidence%'").all();
+  const audit = db.prepare("SELECT audit_id, case_id, created_at, before_value, after_value, metadata FROM case_audit WHERE before_value LIKE '%evidence%' OR after_value LIKE '%evidence%' OR metadata LIKE '%evidence%'").all();
   const caseUpdate = db.prepare('UPDATE cases SET metadata = ? WHERE case_id = ?');
+  const createdAtByCase = new Map(db.prepare('SELECT case_id, created_at FROM cases').all().map((row) => [row.case_id, row.created_at]));
   const auditUpdate = db.prepare('UPDATE case_audit SET before_value = ?, after_value = ?, metadata = ? WHERE audit_id = ?');
   let removed = 0;
   const scrub = (value, createdAt) => {
@@ -223,7 +224,10 @@ function purgeExpiredAutoModEvidence() {
     let changed = false;
     if (value.evidence && typeof value.evidence === 'object') {
       const evidence = value.evidence;
-      const expiry = Date.parse(evidence.expiresAt || '') || (Date.parse(createdAt || '') + Number(evidence.retentionDays) * 86400000);
+      const explicitExpiry = Date.parse(evidence.expiresAt || '');
+      const retentionDays = Number(evidence.retentionDays);
+      const fallbackExpiry = Number.isFinite(retentionDays) && retentionDays > 0 ? Date.parse(createdAt || '') + retentionDays * 86400000 : NaN;
+      const expiry = Number.isFinite(explicitExpiry) ? explicitExpiry : fallbackExpiry;
       if (Number.isFinite(expiry) && expiry <= current) {
         delete value.evidence;
         value.evidenceExpired = true;
@@ -249,7 +253,7 @@ function purgeExpiredAutoModEvidence() {
         if (!raw) return raw;
         let value;
         try { value = JSON.parse(raw); } catch { return raw; }
-        if (scrub(value, null)) { changed = true; return JSON.stringify(value); }
+        if (scrub(value, createdAtByCase.get(row.case_id) || row.created_at)) { changed = true; return JSON.stringify(value); }
         return raw;
       });
       if (changed) auditUpdate.run(...updated, row.audit_id);
