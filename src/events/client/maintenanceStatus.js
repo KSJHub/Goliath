@@ -87,14 +87,26 @@ async function relayRemoteAuditEvents(client, phase = 'scheduled') {
         const key = cursorKey(source.mode, item.file); const existing = cursors.files[key];
         if (!existing) { cursors.files[key] = { offset: fs.statSync(item.file).size, mode: source.mode, guildId: item.guildId, updatedAt: new Date().toISOString() }; continue; }
         const chunk = readNewLines(item.file, existing.offset);
+        let nextOffset = Number(existing.offset || 0);
+        let deliveryFailed = false;
         for (const line of chunk.lines) {
-          if (delivered >= RELAY_BATCH_LIMIT) break; let event; try { event = JSON.parse(line); } catch { continue; }
-          if (!event?.guildId || String(event.guildId) === String(auditRouter.getOwnerAuditGuildId?.() || '')) continue;
-          event.metadata = { ...(event.metadata || {}), collectorEnvironment: source.mode, relayedToCommandCenter: true };
-          await auditRouter.deliver(client, registryGuild(event.guildId, event), event);
-          delivered += 1;
+          if (delivered >= RELAY_BATCH_LIMIT) break;
+          let event;
+          try { event = JSON.parse(line); } catch { nextOffset += Buffer.byteLength(line + '\n', 'utf8'); continue; }
+          if (event?.guildId && String(event.guildId) !== String(auditRouter.getOwnerAuditGuildId?.() || '')) {
+            event.metadata = { ...(event.metadata || {}), collectorEnvironment: source.mode, relayedToCommandCenter: true };
+            const sent = await auditRouter.deliver(client, registryGuild(event.guildId, event), event);
+            if (!sent) { deliveryFailed = true; break; }
+            delivered += 1;
+          }
+          nextOffset += Buffer.byteLength(line + '\n', 'utf8');
         }
-        if (delivered < RELAY_BATCH_LIMIT || chunk.lines.length === 0) existing.offset = chunk.nextOffset;
+        existing.offset = chunk.lines.length ? nextOffset : chunk.nextOffset;
+        if (deliveryFailed) {
+          existing.updatedAt = new Date().toISOString();
+          writeJsonAtomic(RELAY_CURSOR_FILE, cursors);
+          return { delivered, filesChecked, deliveryFailed: true };
+        }
         existing.mode = source.mode; existing.guildId = item.guildId; existing.updatedAt = new Date().toISOString();
       }
       if (delivered >= RELAY_BATCH_LIMIT) break;

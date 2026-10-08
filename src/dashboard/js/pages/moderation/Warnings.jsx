@@ -32,8 +32,7 @@ function normalizeWarning(item = {}, guildId, index = 0) {
     moderatorId: item.moderatorId,
     reason: item.reason || 'No reason provided',
     createdAt: item.createdAt || item.date || item.timestamp,
-    cleared: item.cleared === true,
-    clearedAt: item.clearedAt,
+    expiresAt: item.expiresAt || null,
     stableKey:
       item.id ||
       item.warningId ||
@@ -151,7 +150,7 @@ const WarningItem = memo(function WarningItem({ item, active, theme, formatDate,
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <strong style={{ color: theme.cardText }}>Warning #{item.caseNumber || item.id || 'Unknown'}</strong>
-        <Badge theme={theme} tone={item.cleared ? 'success' : 'warning'}>{item.cleared ? 'Cleared' : 'Active'}</Badge>
+        <Badge theme={theme} tone="warning">Active</Badge>
       </div>
       <span style={{ color: theme.mutedText, fontSize: 13, fontWeight: 700 }}>User: {item.userTag || item.userId || 'Unknown'}</span>
       <span style={{ color: theme.cardText, fontSize: 14, lineHeight: 1.45, fontWeight: 700 }}>{item.reason}</span>
@@ -166,15 +165,15 @@ const WarningDetail = memo(function WarningDetail({ item, theme, formatDate, onC
       theme={theme}
       title={`Warning #${item.caseNumber || item.id || 'Unknown'}`}
       subtitle="Full warning record details."
-      actions={<Badge theme={theme} tone={item.cleared ? 'success' : 'warning'}>{item.cleared ? 'Cleared' : 'Active'}</Badge>}
+      actions={<Badge theme={theme} tone="warning">Active</Badge>}
     >
       <div style={{ display: 'grid', gap: 12 }}>
         <DetailRow theme={theme} label="User" value={formatUser(item.userTag, item.userId)} />
         <DetailRow theme={theme} label="Moderator" value={formatUser(item.moderatorTag, item.moderatorId)} />
         <DetailRow theme={theme} label="Created" value={formatDate(item.createdAt)} />
         <DetailRow theme={theme} label="Reason" value={item.reason} />
-        <DetailRow theme={theme} label="Status" value={item.cleared ? 'Cleared' : 'Active'} />
-        {item.cleared ? <DetailRow theme={theme} label="Cleared At" value={formatDate(item.clearedAt)} /> : null}
+        <DetailRow theme={theme} label="Status" value="Active" />
+        <DetailRow theme={theme} label="Expires" value={item.expiresAt ? formatDate(item.expiresAt) : 'No expiry'} />
       </div>
       <SecondaryButton theme={theme} onClick={onClose}>Close</SecondaryButton>
     </SectionCard>
@@ -258,14 +257,15 @@ export default function Warnings({ selectedGuild, theme }) {
       warning.moderatorTag,
       warning.moderatorId,
       warning.reason,
-      warning.cleared ? 'cleared' : 'active',
+      'active',
+      warning.expiresAt,
     ].filter(Boolean).join(' ').toLowerCase().includes(query));
   }, [warnings, search]);
 
   const stats = useMemo(() => ({
     total: warnings.length,
-    active: warnings.filter((warning) => !warning.cleared).length,
-    cleared: warnings.filter((warning) => warning.cleared).length,
+    withExpiry: warnings.filter((warning) => Boolean(warning.expiresAt)).length,
+    permanent: warnings.filter((warning) => !warning.expiresAt).length,
   }), [warnings]);
 
   const formatDate = useCallback((value) => {
@@ -277,7 +277,7 @@ export default function Warnings({ selectedGuild, theme }) {
   return (
     <PageShell
       title="Warnings"
-      subtitle={guildId ? 'Active and cleared warning records for this guild.' : 'Select a server to view warnings.'}
+      subtitle={guildId ? 'Current active warning records for this guild.' : 'Select a server to view warnings.'}
       theme={theme}
       guild={{ id: guildId, name: 'Warnings' }}
       actions={guildId ? (
@@ -295,9 +295,9 @@ export default function Warnings({ selectedGuild, theme }) {
 
       {guildId ? (
         <StatGrid min="min(220px, 100%)">
-          <SummaryStat theme={theme} label="Total Warnings" value={stats.total} accent="#3b82f6" description="Stored warning records" />
-          <SummaryStat theme={theme} label="Active" value={stats.active} accent="#f59e0b" description="Warnings currently active" />
-          <SummaryStat theme={theme} label="Cleared" value={stats.cleared} accent="#22c55e" description="Warnings already cleared" />
+          <SummaryStat theme={theme} label="Active Warnings" value={stats.total} accent="#f59e0b" description="Current warning records" />
+          <SummaryStat theme={theme} label="With Expiry" value={stats.withExpiry} accent="#3b82f6" description="Warnings with an expiry date" />
+          <SummaryStat theme={theme} label="No Expiry" value={stats.permanent} accent="#22c55e" description="Warnings without an expiry date" />
           <SummaryStat theme={theme} label="Results" value={filteredWarnings.length} description="Filtered warning list" />
         </StatGrid>
       ) : null}

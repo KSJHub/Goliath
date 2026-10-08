@@ -119,11 +119,11 @@ async function handleInviteStudioInteraction(interaction) {
 
   console.log('[Invite Studio DEBUG]', interaction.type, id);
 
-  if (id !== 'invites' && !id.startsWith('invites:')) return false;
+  if (id !== 'invites' && id !== 'admin:invites' && !id.startsWith('invites:')) return false;
 
   const state = panel.sessionFor(interaction);
 
-  if (id === 'invites') {
+  if (id === 'invites' || id === 'admin:invites') {
     state.page = 'overview';
     await update(interaction);
     return true;
