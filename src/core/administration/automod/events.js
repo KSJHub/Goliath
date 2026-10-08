@@ -347,7 +347,7 @@ async function collectAdvancedViolations(message, config) {
   }
   if (config.scamPatterns?.enabled && config.scamPatterns.phrases?.length) {
     const normalized=normalizeMessageText(content);
-    const hit=config.scamPatterns.phrases.find((phrase)=>normalized.includes(String(phrase).toLowerCase()));
+    const hit=config.scamPatterns.phrases.find((phrase)=>normalized.includes(normalizeMessageText(phrase)));
     if(hit) out.push({key:'scamPatterns',name:'Suspicious Content Protection',reason:'Configured suspicious phrase detected',risk:config.scamPatterns.risk,rule:config.scamPatterns});
   }
   if (config.attachments?.enabled) {
