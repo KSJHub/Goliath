@@ -366,11 +366,11 @@ router.post('/:guildId/reset', (req, res) => {
   if (!guildId) return undefined;
 
   try {
-    return sendSuccess(
-      res,
-      guildId,
-      saveConfig(guildId, normalizeAutomodConfig({}))
-    );
+    const saved = saveConfig(guildId, normalizeAutomodConfig({}), { emit: false });
+    guildManager.setModuleEnabled(guildId, MODULE, false);
+    const resetConfig = canonicalConfig(guildId, saved);
+    emitGuildUpdate(guildId, { section: MODULE, data: resetConfig });
+    return sendSuccess(res, guildId, resetConfig);
   } catch (error) {
     return sendFailure(res, 'reset', error, 'Failed to reset automod config.');
   }
