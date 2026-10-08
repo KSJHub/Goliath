@@ -132,11 +132,13 @@ function buildMetrics({
     backendOnline: getBoolean(
       statusData?.backendOnline,
       statusData?.backend?.online,
+      statusData?.success === true,
     ),
 
     apiOnline: getBoolean(
       statusData?.apiOnline,
       statusData?.api?.online,
+      statusData?.success === true,
     ),
 
     totalCases: cases.length,
