@@ -146,10 +146,13 @@ function evaluateCaps(content, rule) {
 }
 
 function countMentions(message) {
-  const users = message.mentions?.users?.size || 0;
-  const roles = message.mentions?.roles?.size || 0;
-  const everyone = message.mentions?.everyone ? 1 : 0;
-  return users + roles + everyone;
+  // Discord's mentions collections contain unique targets, not mention occurrences.
+  // Count raw tokens so repeating the same ping cannot bypass mention limits.
+  const content = String(message.content || '');
+  const userMentions = content.match(/<@!?\d+>/g) || [];
+  const roleMentions = content.match(/<@&\d+>/g) || [];
+  const everyoneMentions = content.match(/(?:^|\s)@(everyone|here)\b/g) || [];
+  return userMentions.length + roleMentions.length + everyoneMentions.length;
 }
 
 async function sendAutoModLog(message, ruleName, reason, actions, result) {
