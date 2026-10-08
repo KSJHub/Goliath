@@ -178,10 +178,13 @@ async function handle(client, interaction) {
   const state = stateFor(interaction);
   state.notice = null;
   if (action === 'open') return interaction.reply({ ...payload(client, interaction), flags: MessageFlags.Ephemeral }).then(() => true).catch(() => true);
+  // All remaining recognised controls refresh this panel, never open modals.
+  // Acknowledge before potentially expensive history/snapshot rendering.
+  if (!['guild', 'overview', 'changes', 'history', 'security', 'audit', 'scan', 'refresh'].includes(action)) return false;
+  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
   if (action === 'guild' && interaction.isStringSelectMenu?.()) { state.guildId = interaction.values[0]; state.view = 'overview'; }
   else if (['overview', 'changes', 'history', 'security', 'audit'].includes(action)) state.view = action;
   else if (action === 'scan' && state.guildId) {
-    await interaction.deferUpdate().catch(() => null);
     const item = knownGuilds(client).find((x) => x.id === state.guildId);
     const collector = collectorFor(item, client);
     const result = await observatory.requestScan(client, state.guildId, collector, interaction.user.id, 20000);
