@@ -178,7 +178,6 @@ async function sendAutoModLog(message, ruleName, reason, actions, result) {
       ...(result?.riskScore !== undefined ? [{ name: 'Risk Score', value: String(result.riskScore), inline: true }] : []),
       ...(result?.caseId ? [{ name: 'Case', value: '#'+result.caseId, inline: true }] : []),
       ...(result?.rules?.length ? [{ name: 'Protections Triggered', value: result.rules.join(', ').slice(0, 1024), inline: false }] : []),
-      { name: 'Message', value: String(message.content || '[no text content]').slice(0, 1000), inline: false },
     )
     .setTimestamp();
 
