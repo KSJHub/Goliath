@@ -230,7 +230,7 @@ function getCaseAudit(guildId, caseId, { page = 0, pageSize = 25 } = {}) {
   const total = db.prepare('SELECT COUNT(*) AS count FROM case_audit WHERE guild_id = ? AND case_id = ?').get(normalizedGuildId, normalizedCaseId).count;
   const totalPages = Math.ceil(total / safePageSize);
   const safePage = Math.max(0, Math.min(Math.trunc(Number(page) || 0), Math.max(0, totalPages - 1)));
-  const rows = db.prepare('SELECT * FROM case_audit WHERE guild_id = ? AND case_id = ? ORDER BY audit_id DESC LIMIT ? OFFSET ?').all(normalizedGuildId, normalizedCaseId, safePageSize, safePage * safePageSize);
+  const rows = db.prepare('SELECT a.*, c.created_at AS case_created_at FROM case_audit a LEFT JOIN cases c ON c.case_id = a.case_id AND c.guild_id = a.guild_id WHERE a.guild_id = ? AND a.case_id = ? ORDER BY a.audit_id DESC LIMIT ? OFFSET ?').all(normalizedGuildId, normalizedCaseId, safePageSize, safePage * safePageSize);
   return { results: rows.map(mapAudit), total, page: safePage, pageSize: safePageSize, totalPages };
 }
 
