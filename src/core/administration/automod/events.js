@@ -404,8 +404,11 @@ async function enforceIncident(message, config, violations) {
       const created=modStorage.createCase({guildId:message.guild.id,userId:message.author.id,moderatorId:message.client?.user?.id||'Goliath',action:caseAction,reason,metadata:{source:'automod',severity,riskScore:score,accountRiskBoost:accountBoost,rules:violations.map((item)=>item.key),channelId:message.channelId,messageId:message.id,evidence:config.evidenceRetentionDays>0?{content:String(message.content||'').slice(0,2000),attachments:[...(message.attachments?.values?.()||[])].map((a)=>({name:a.name,url:a.url})).slice(0,10),retentionDays:config.evidenceRetentionDays}:null,punishmentReport:result}});
       caseId=created?.caseId||null;
       if(caseId && appliedActions.includes('warn')) modStorage.addWarning({guildId:message.guild.id,userId:message.author.id,moderatorId:message.client?.user?.id||'Goliath',reason,caseId});
-      // Appeal notices must be dispatched by the canonical moderation/appeals service;
-      // storage does not expose a sendCaseAppealNotice method.
+      if (caseId && ['warn', 'timeout', 'kick', 'ban'].includes(caseAction)) {
+        await modStorage.sendCaseAppealNotice({ guild: message.guild, target: message.member, user: message.author, caseId }).catch((error) => {
+          console.error('[AutoMod] Appeal notice failed:', error?.message || error);
+        });
+      }
     } catch(error) { console.error('[AutoMod] Case creation failed:',error?.stack||error); }
   }
   recordIncident(message,config);
