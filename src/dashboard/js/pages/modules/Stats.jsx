@@ -168,6 +168,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
@@ -209,7 +210,17 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     }
     await load();
   }
-  async function deleteCounter(counter) { if (!window.confirm(`Delete “${counter.name || 'Counter'}” and its Discord channel?`)) return; await request(`/api/stats/${guildId}/counters/${encodeURIComponent(counter.id)}`, { method: 'DELETE' }); setDraft(null); await load(); }
+  async function deleteCounter(counter) {
+    setPendingDelete(counter);
+  }
+  async function confirmDeleteCounter() {
+    if (!pendingDelete || busy) return;
+    const counterId = pendingDelete.id;
+    await request(`/api/stats/${guildId}/counters/${encodeURIComponent(counterId)}`, { method: 'DELETE' });
+    setPendingDelete(null);
+    setDraft(null);
+    await load();
+  }
   async function saveDraft() {
     if (!draft?.segments?.length) return;
     const path = draft.id ? `/api/stats/${guildId}/counters/${encodeURIComponent(draft.id)}` : `/api/stats/${guildId}/counters`;
@@ -369,6 +380,18 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
   );
 
   return (
+    <>
+    {pendingDelete && <div role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setPendingDelete(null); }} style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(2,6,23,0.78)', display: 'grid', placeItems: 'center', padding: 20 }}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="stats-delete-title" aria-describedby="stats-delete-description" style={{ width: '100%', maxWidth: 470, border: `1px solid ${theme.cardBorder}`, borderRadius: 18, padding: 24, background: theme.cardBg, color: theme.text, boxShadow: '0 24px 80px rgba(0,0,0,0.45)' }}>
+        <h2 id="stats-delete-title" style={{ margin: '0 0 12px', fontSize: 22 }}>Delete Server Counter?</h2>
+        <p id="stats-delete-description" style={{ lineHeight: 1.65, margin: '0 0 10px' }}>You're about to permanently delete <strong>{pendingDelete.name || 'this counter'}</strong> and its associated Discord channel.</p>
+        <p style={{ color: theme.mutedText, margin: '0 0 24px' }}>This action cannot be undone.</p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+          <SecondaryButton onClick={() => setPendingDelete(null)} disabled={busy}>Cancel</SecondaryButton>
+          <SecondaryButton danger onClick={confirmDeleteCounter} disabled={busy}>{busy ? 'Deleting…' : 'Delete Counter'}</SecondaryButton>
+        </div>
+      </div>
+    </div>}
     <ModuleShell
       title="Server Counters"
       subtitle="Live Discord server counters with multi-value Statdock-style channels."
@@ -385,5 +408,6 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     >
       {{ [MODULE_TABS.overview]: overviewContent, counters: countersContent, settings: settingsContent }}
     </ModuleShell>
+    </>
   );
 }
