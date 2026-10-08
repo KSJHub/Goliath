@@ -264,6 +264,13 @@ function purgeExpiredAutoModEvidence() {
   return removed;
 }
 
+// Run retention cleanup even when moderators do not open a case.
+const evidenceRetentionTimer = setInterval(() => {
+  try { purgeExpiredAutoModEvidence(); }
+  catch (error) { console.error('[Moderation] Evidence retention cleanup failed:', error?.stack || error); }
+}, 60 * 60 * 1000);
+evidenceRetentionTimer.unref?.();
+
 function mapCase(row) {
   if (!row) return null;
   return {
