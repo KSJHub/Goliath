@@ -209,7 +209,7 @@ async function applyPunishmentEngine(input = {}, options = {}) {
   const blockedActions = [...new Set(result.blockedActions)];
   const blocked = blockedActions.length > 0;
   return {
-    ok: failed.length === 0,
+    ok: failed.length === 0 && blockedActions.length === 0 && applied.length > 0,
     punishments: list,
     applied,
     failed,
