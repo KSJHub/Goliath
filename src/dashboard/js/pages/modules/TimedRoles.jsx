@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -177,7 +178,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
   }
 
   async function deleteRule(ruleId) {
-    if (!window.confirm('Delete this timed role milestone?')) return;
+    if (!await goliathDialog.confirm('Delete this timed role milestone?', { title: 'Delete Timed Role Milestone?', danger: true, confirmLabel: 'Delete Milestone' })) return;
     await runAction(`delete-${ruleId}`, () => api.request(`/api/timed-roles/${guildId}/rules/${ruleId}`, { method: 'DELETE' }), 'Milestone deleted.');
   }
 

@@ -10,6 +10,9 @@ const surfaces = [
   ['src/core/ui/panelNavigation', ['createState', 'normalize', 'encodeState', 'decodeState', 'push', 'back', 'current', 'buildCustomId', 'parseCustomId', 'applyNavigationUI']],
   ['src/core/administration/mod/storage', ['searchCases', 'getCaseById', 'getCaseAudit', 'recordCaseAudit', 'updateCaseReason', 'updateCaseStatus', 'updateCaseNote', 'clearCaseNote']],
   ['src/owner/auditIntelligence/auditRouter', ['deliver', 'ensureAuditChannel', 'ensureUserAuditChannel', 'ensureReportRoutes', 'refreshUserSummary', 'getOwnerAuditGuildId', 'ensureCommandCenter', 'routeKeyForEvent', 'monitorKeyForEvent', 'monitoringEnabled', 'configuredRouteChannel', 'runLocalEndToEndProbe', 'runLiveEndToEndProbe', 'channelDeliveryState', 'inspectReportFeeds', 'inspectStructure', 'repairStructure', 'inspectHealth', 'repairHealth']],
+  ['src/modules/communityStudio/counting/counting', ['getSection', 'updateSection', 'mutateSection', 'expectedNext', 'resetProgress', 'resetWithMarker', 'setCurrentCountQueued', 'changeChannel', 'purgeCountingChannel', 'deployPlayerPanel', 'refreshPlayerPanel', 'handleMessageCreate', 'handleMessageDelete', 'handleMessageUpdate', 'registerProtectionEvents']],
+  ['src/modules/communityStudio/counting/countingHealth', ['buildHealthReport', 'repair']],
+  ['src/modules/communityStudio/counting/panel', ['buildPanel', 'buildRulesScreen', 'buildSettingsScreen', 'buildDefaultsConfirmation', 'buildAdvancedRulesModal', 'buildResetConfirmation', 'buildCleanupConfirmation', 'handleInteraction']],
 ];
 
 function load(file) {

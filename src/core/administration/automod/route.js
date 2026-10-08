@@ -106,6 +106,11 @@ function normalizeAutomodConfig(config = {}) {
   const safeConfig = config && typeof config === 'object' && !Array.isArray(config)
     ? config
     : {};
+  // Require distinct ascending thresholds so each severity band remains reachable.
+  const low = normalizeNumber(safeConfig.risk?.low, 25, 1, 497);
+  const medium = normalizeNumber(safeConfig.risk?.medium, 50, low + 1, 498);
+  const high = normalizeNumber(safeConfig.risk?.high, 75, medium + 1, 499);
+  const critical = normalizeNumber(safeConfig.risk?.critical, 100, high + 1, 500);
 
   return {
     dmUser: normalizeBoolean(safeConfig.dmUser, true),
@@ -116,10 +121,10 @@ function normalizeAutomodConfig(config = {}) {
     evidenceRetentionDays: normalizeNumber(safeConfig.evidenceRetentionDays, 30, 0, 365),
     risk: {
       enabled: normalizeBoolean(safeConfig.risk?.enabled, true),
-      low: normalizeNumber(safeConfig.risk?.low, 25, 1, 500),
-      medium: normalizeNumber(safeConfig.risk?.medium, 50, 1, 500),
-      high: normalizeNumber(safeConfig.risk?.high, 75, 1, 500),
-      critical: normalizeNumber(safeConfig.risk?.critical, 100, 1, 500),
+      low,
+      medium,
+      high,
+      critical,
       repeatWindowHours: normalizeNumber(safeConfig.risk?.repeatWindowHours, 24, 1, 720),
       repeatWeight: normalizeNumber(safeConfig.risk?.repeatWeight, 10, 0, 100),
     },
@@ -294,11 +299,11 @@ function readConfig(guildId) {
   );
 }
 
-function saveConfig(guildId, config) {
+function saveConfig(guildId, config, { emit = true } = {}) {
   const saved = guildManager.replaceGuildSection(guildId, MODULE, config);
   const responseConfig = canonicalConfig(guildId, saved);
 
-  emitGuildUpdate(guildId, {
+  if (emit) emitGuildUpdate(guildId, {
     section: MODULE,
     data: responseConfig,
   });
@@ -342,7 +347,6 @@ router.post('/:guildId', (req, res) => {
 
     if (Object.prototype.hasOwnProperty.call(body, 'enabled')) {
       if (typeof body.enabled !== 'boolean') return res.status(400).json({ ok: false, error: 'enabled must be a boolean.' });
-      guildManager.setModuleEnabled(guildId, MODULE, body.enabled);
     }
 
     const { enabled: _enabled, ...configPatch } = body;
@@ -350,7 +354,13 @@ router.post('/:guildId', (req, res) => {
       mergeAutomodConfig(readConfig(guildId), configPatch)
     );
 
-    return sendSuccess(res, guildId, saveConfig(guildId, payload));
+    const hasEnabled = Object.prototype.hasOwnProperty.call(body, 'enabled');
+    const saved = saveConfig(guildId, payload, { emit: !hasEnabled });
+    if (hasEnabled) {
+      guildManager.setModuleEnabled(guildId, MODULE, body.enabled);
+      emitGuildUpdate(guildId, { section: MODULE, data: canonicalConfig(guildId, saved) });
+    }
+    return sendSuccess(res, guildId, canonicalConfig(guildId, saved));
   } catch (error) {
     return sendFailure(res, 'save', error, 'Failed to save automod config.');
   }
@@ -361,11 +371,11 @@ router.post('/:guildId/reset', (req, res) => {
   if (!guildId) return undefined;
 
   try {
-    return sendSuccess(
-      res,
-      guildId,
-      saveConfig(guildId, normalizeAutomodConfig({}))
-    );
+    const saved = saveConfig(guildId, normalizeAutomodConfig({}), { emit: false });
+    guildManager.setModuleEnabled(guildId, MODULE, false);
+    const resetConfig = canonicalConfig(guildId, saved);
+    emitGuildUpdate(guildId, { section: MODULE, data: resetConfig });
+    return sendSuccess(res, guildId, resetConfig);
   } catch (error) {
     return sendFailure(res, 'reset', error, 'Failed to reset automod config.');
   }

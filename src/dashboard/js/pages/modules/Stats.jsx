@@ -169,6 +169,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [pendingReset, setPendingReset] = useState(false);
   const [error, setError] = useState('');
 
   async function load() {
@@ -271,8 +272,12 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     URL.revokeObjectURL(url);
   }
   async function resetStats() {
-    if (!window.confirm('Reset all stored Stats activity and counter configuration for this server? This cannot be undone.')) return;
+    setPendingReset(true);
+  }
+  async function confirmResetStats() {
+    if (!pendingReset || busy) return;
     await request(`/api/stats/${guildId}/reset`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+    setPendingReset(false);
     setDraft(null); setPreview(''); setHealth(null); await load();
   }
 
@@ -389,6 +394,17 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
           <SecondaryButton onClick={() => setPendingDelete(null)} disabled={busy}>Cancel</SecondaryButton>
           <SecondaryButton danger onClick={confirmDeleteCounter} disabled={busy}>{busy ? 'Deleting…' : 'Delete Counter'}</SecondaryButton>
+        </div>
+      </div>
+    </div>}
+    {pendingReset && <div role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setPendingReset(false); }} style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(2,6,23,0.78)', display: 'grid', placeItems: 'center', padding: 20 }}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="stats-reset-title" aria-describedby="stats-reset-description" style={{ width: '100%', maxWidth: 470, border: `1px solid ${theme.cardBorder}`, borderRadius: 18, padding: 24, background: theme.cardBg, color: theme.text, boxShadow: '0 24px 80px rgba(0,0,0,0.45)' }}>
+        <h2 id="stats-reset-title" style={{ margin: '0 0 12px', fontSize: 22 }}>Reset Server Statistics?</h2>
+        <p id="stats-reset-description" style={{ lineHeight: 1.65, margin: '0 0 10px' }}>This will permanently delete all recorded activity, saved counter configurations, and their associated Discord counter channels for <strong>{guild.name}</strong>.</p>
+        <p style={{ color: '#f87171', fontWeight: 800, margin: '0 0 24px' }}>This action cannot be undone.</p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+          <SecondaryButton onClick={() => setPendingReset(false)} disabled={busy}>Cancel</SecondaryButton>
+          <SecondaryButton danger onClick={confirmResetStats} disabled={busy}>{busy ? 'Resetting…' : 'Reset Statistics'}</SecondaryButton>
         </div>
       </div>
     </div>}

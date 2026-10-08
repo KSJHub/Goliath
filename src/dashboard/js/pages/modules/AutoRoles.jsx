@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -173,7 +174,7 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
   }
 
   async function resetModule() {
-    if (!window.confirm('Reset all Auto Roles settings and analytics?')) return;
+    if (!await goliathDialog.confirm('Reset all Auto Roles settings and analytics?', { title: 'Reset Auto Roles?', danger: true, confirmLabel: 'Reset Auto Roles' })) return;
     await runAction('reset', () => api.request(`/api/auto-roles/${guildId}/reset`, { method: 'POST' }), 'Auto Roles reset to defaults.');
   }
 

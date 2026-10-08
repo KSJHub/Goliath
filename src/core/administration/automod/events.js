@@ -146,10 +146,15 @@ function evaluateCaps(content, rule) {
 }
 
 function countMentions(message) {
-  const users = message.mentions?.users?.size || 0;
-  const roles = message.mentions?.roles?.size || 0;
-  const everyone = message.mentions?.everyone ? 1 : 0;
-  return users + roles + everyone;
+  // Discord's mentions collections contain unique targets, not mention occurrences.
+  // Count raw tokens so repeating the same ping cannot bypass mention limits.
+  const content = String(message.content || '');
+  const userMentions = content.match(/<@!?\d+>/g) || [];
+  const roleMentions = content.match(/<@&\d+>/g) || [];
+  const everyoneMentions = message.mentions?.everyone
+    ? (content.match(/(?:^|[^a-z0-9_])@(everyone|here)\b/gi) || [])
+    : [];
+  return userMentions.length + roleMentions.length + everyoneMentions.length;
 }
 
 async function sendAutoModLog(message, ruleName, reason, actions, result) {
@@ -173,7 +178,6 @@ async function sendAutoModLog(message, ruleName, reason, actions, result) {
       ...(result?.riskScore !== undefined ? [{ name: 'Risk Score', value: String(result.riskScore), inline: true }] : []),
       ...(result?.caseId ? [{ name: 'Case', value: '#'+result.caseId, inline: true }] : []),
       ...(result?.rules?.length ? [{ name: 'Protections Triggered', value: result.rules.join(', ').slice(0, 1024), inline: false }] : []),
-      { name: 'Message', value: String(message.content || '[no text content]').slice(0, 1000), inline: false },
     )
     .setTimestamp();
 
@@ -208,7 +212,7 @@ async function applyRule(message, config, ruleKey, ruleName, reason, actions) {
   }
 
   await sendAutoModLog(message, ruleName, reason, actions, result);
-  return true;
+  return Boolean(result?.applied?.length);
 }
 
 async function handleSpam(message, config) {
@@ -257,11 +261,27 @@ async function handleMentions(message, config) {
 const duplicateWindows = new Map();
 const incidentWindows = new Map();
 
+// Prevent inactive guild/member histories from accumulating indefinitely.
+const autoModWindowCleanup = setInterval(() => {
+  const now = Date.now();
+  const prune = (windows, ttl, timestamp) => {
+    for (const [key, entries] of windows) {
+      const recent = entries.filter((entry) => now - timestamp(entry) <= ttl);
+      if (recent.length) windows.set(key, recent);
+      else windows.delete(key);
+    }
+  };
+  prune(spamWindows, 3600 * 1000, (entry) => entry);
+  prune(duplicateWindows, 3600 * 1000, (entry) => entry.at);
+  prune(incidentWindows, 720 * 3600 * 1000, (entry) => entry);
+}, 60 * 60 * 1000);
+autoModWindowCleanup.unref?.();
+
 function normalizeMessageText(content) {
   return String(content || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 function inviteCodes(content) {
-  return [...String(content || '').matchAll(/(?:discord\.gg|discord(?:app)?\.com\/invite)\/([a-z0-9-]+)/gi)].map((match) => match[1].toLowerCase());
+  return [...String(content || '').matchAll(/(?:^|[^a-z0-9.-])(?:https?:\/\/)?(?:www\.)?(?:discord\.gg\/|discord(?:app)?\.com\/invite\/)([a-z0-9-]+)/gi)].map((match) => match[1].toLowerCase());
 }
 function countEmoji(content) {
   const custom = (String(content || '').match(/<a?:\w+:\d+>/g) || []).length;
@@ -269,7 +289,7 @@ function countEmoji(content) {
   return custom + unicode;
 }
 function attachmentExtension(attachment) {
-  const name = String(attachment?.name || attachment?.url || '').split('?')[0];
+  const name = String(attachment?.name || attachment?.url || '').split(/[?#]/)[0];
   const match = name.match(/\.([a-z0-9]{1,12})$/i);
   return match ? match[1].toLowerCase() : '';
 }
@@ -326,13 +346,21 @@ async function collectAdvancedViolations(message, config) {
   }
   if (config.scamPatterns?.enabled && config.scamPatterns.phrases?.length) {
     const normalized=normalizeMessageText(content);
-    const hit=config.scamPatterns.phrases.find((phrase)=>normalized.includes(String(phrase).toLowerCase()));
+    const hit=config.scamPatterns.phrases.find((phrase)=>{
+      const needle=normalizeMessageText(phrase);
+      return needle.length > 0 && normalized.includes(needle);
+    });
     if(hit) out.push({key:'scamPatterns',name:'Suspicious Content Protection',reason:'Configured suspicious phrase detected',risk:config.scamPatterns.risk,rule:config.scamPatterns});
   }
   if (config.attachments?.enabled) {
     const files = [...(message.attachments?.values?.() || [])];
-    const blocked = files.find((file) => config.attachments.blockedExtensions.includes(attachmentExtension(file)));
-    if (files.length > config.attachments.maxAttachments || blocked) out.push({ key:'attachments', name:'Attachment Protection', reason:blocked?'Blocked attachment type: .'+attachmentExtension(blocked):files.length+' attachments detected (limit '+config.attachments.maxAttachments+')', risk:config.attachments.risk, rule:config.attachments });
+    const blocked = files.find((file) => {
+      const nameExtension = attachmentExtension({ name: file?.name });
+      const urlExtension = attachmentExtension({ url: file?.url });
+      return config.attachments.blockedExtensions.includes(nameExtension)
+        || config.attachments.blockedExtensions.includes(urlExtension);
+    });
+    if (files.length > config.attachments.maxAttachments || blocked) out.push({ key:'attachments', name:'Attachment Protection', reason:blocked?'Blocked attachment type detected':files.length+' attachments detected (limit '+config.attachments.maxAttachments+')', risk:config.attachments.risk, rule:config.attachments });
   }
   return out;
 }
@@ -350,7 +378,10 @@ function collectCoreViolations(message, config) {
     const hit=evaluateCaps(content,config.caps); if(hit) out.push({key:'caps',name:'Caps Protection',reason:hit.reason,risk:config.caps.risk,rule:config.caps});
   }
   if (config.mentions.enabled) {
-    const users=message.mentions?.users?.size||0, roles=message.mentions?.roles?.size||0, total=countMentions(message);
+    const contentText = String(message.content || '');
+    const users = (contentText.match(/<@!?\d+>/g) || []).length;
+    const roles = (contentText.match(/<@&\d+>/g) || []).length;
+    const total = countMentions(message);
     if (total>config.mentions.maxMentions || users>config.mentions.maxUserMentions || roles>config.mentions.maxRoleMentions || (config.mentions.blockEveryone && message.mentions?.everyone)) out.push({key:'mentions',name:'Mention Protection',reason:total+' mentions detected',risk:config.mentions.risk,rule:config.mentions});
   }
   return out;
@@ -413,7 +444,7 @@ async function enforceIncident(message, config, violations) {
   }
   recordIncident(message,config);
   await sendAutoModLog(message,'Incident · '+severity.toUpperCase(),reason,actions,{...result,caseId,riskScore:score,rules:violations.map((v)=>v.name)});
-  return true;
+  return Boolean(result?.applied?.length);
 }
 
 async function handleAutoMod(message) {
