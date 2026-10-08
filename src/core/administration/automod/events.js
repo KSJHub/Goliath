@@ -212,7 +212,7 @@ async function applyRule(message, config, ruleKey, ruleName, reason, actions) {
   }
 
   await sendAutoModLog(message, ruleName, reason, actions, result);
-  return true;
+  return Boolean(result?.applied?.length);
 }
 
 async function handleSpam(message, config) {
