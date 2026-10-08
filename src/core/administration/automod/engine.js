@@ -213,8 +213,12 @@ async function applyPunishmentEngine(input = {}, options = {}) {
   const failed = [...new Set(result.failed)];
   const blockedActions = [...new Set(result.blockedActions)];
   const blocked = blockedActions.length > 0;
+  const failedEnforcementActions = failed.filter((action) => action !== 'dm');
+  const appliedEnforcementActions = applied.filter((action) => action !== 'dm');
+  const enforcementSucceeded = appliedEnforcementActions.length > 0;
+  const dmOnlySucceeded = applied.includes('dm') && appliedEnforcementActions.length === 0 && failedEnforcementActions.length === 0;
   return {
-    ok: failed.length === 0 && blockedActions.length === 0 && applied.length > 0,
+    ok: blockedActions.length === 0 && failedEnforcementActions.length === 0 && (enforcementSucceeded || dmOnlySucceeded),
     punishments: list,
     applied,
     failed,
