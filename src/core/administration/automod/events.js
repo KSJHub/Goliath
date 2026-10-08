@@ -369,7 +369,10 @@ function collectCoreViolations(message, config) {
     const hit=evaluateCaps(content,config.caps); if(hit) out.push({key:'caps',name:'Caps Protection',reason:hit.reason,risk:config.caps.risk,rule:config.caps});
   }
   if (config.mentions.enabled) {
-    const users=message.mentions?.users?.size||0, roles=message.mentions?.roles?.size||0, total=countMentions(message);
+    const contentText = String(message.content || '');
+    const users = (contentText.match(/<@!?\d+>/g) || []).length;
+    const roles = (contentText.match(/<@&\d+>/g) || []).length;
+    const total = countMentions(message);
     if (total>config.mentions.maxMentions || users>config.mentions.maxUserMentions || roles>config.mentions.maxRoleMentions || (config.mentions.blockEveryone && message.mentions?.everyone)) out.push({key:'mentions',name:'Mention Protection',reason:total+' mentions detected',risk:config.mentions.risk,rule:config.mentions});
   }
   return out;
