@@ -1,3 +1,4 @@
+import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -208,13 +209,13 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
 
   async function removePanel() {
     if (!selectedPanelId) return;
-    if (!window.confirm('Delete this verification panel message and its saved record?')) return;
+    if (!await goliathDialog.confirm('Delete this verification panel message and its saved record?', { title: 'Delete Verification Panel?', danger: true, confirmLabel: 'Delete Panel' })) return;
     await act('delete', () => api.deleteVerificationPanel(guildId, selectedPanelId), 'Verification panel deleted.');
     setSelectedPanelId('');
   }
 
   async function resetModule() {
-    if (!window.confirm('Reset all Verification settings, analytics and panel records?')) return;
+    if (!await goliathDialog.confirm('Reset all Verification settings, analytics and panel records?', { title: 'Reset Verification?', danger: true, confirmLabel: 'Reset Verification' })) return;
     await act('reset', () => api.resetVerification(guildId), 'Verification reset to defaults.');
     setSelectedPanelId('');
   }
