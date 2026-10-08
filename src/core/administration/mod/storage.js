@@ -243,7 +243,7 @@ function purgeExpiredAutoModEvidence() {
   const cases = db.prepare("SELECT case_id, created_at, metadata FROM cases WHERE metadata LIKE '%evidence%'").all();
   const audit = db.prepare("SELECT audit_id, case_id, created_at, before_value, after_value, metadata FROM case_audit WHERE before_value LIKE '%evidence%' OR after_value LIKE '%evidence%' OR metadata LIKE '%evidence%'").all();
   const caseUpdate = db.prepare('UPDATE cases SET metadata = ? WHERE case_id = ?');
-  const createdAtByCase = new Map(db.prepare('SELECT case_id, created_at FROM cases').all().map((row) => [row.case_id, row.created_at]));
+  const createdAtByCase = new Map(db.prepare('SELECT case_id, created_at FROM cases WHERE case_id IN (SELECT case_id FROM case_audit WHERE before_value LIKE \'%evidence%\' OR after_value LIKE \'%evidence%\' OR metadata LIKE \'%evidence%\')').all().map((row) => [row.case_id, row.created_at]));
   const auditUpdate = db.prepare('UPDATE case_audit SET before_value = ?, after_value = ?, metadata = ? WHERE audit_id = ?');
   let removed = 0;
   const scrub = (value, createdAt) => {
