@@ -257,6 +257,22 @@ async function handleMentions(message, config) {
 const duplicateWindows = new Map();
 const incidentWindows = new Map();
 
+// Prevent inactive guild/member histories from accumulating indefinitely.
+const autoModWindowCleanup = setInterval(() => {
+  const now = Date.now();
+  const prune = (windows, ttl, timestamp) => {
+    for (const [key, entries] of windows) {
+      const recent = entries.filter((entry) => now - timestamp(entry) <= ttl);
+      if (recent.length) windows.set(key, recent);
+      else windows.delete(key);
+    }
+  };
+  prune(spamWindows, 3600 * 1000, (entry) => entry);
+  prune(duplicateWindows, 3600 * 1000, (entry) => entry.at);
+  prune(incidentWindows, 720 * 3600 * 1000, (entry) => entry);
+}, 60 * 60 * 1000);
+autoModWindowCleanup.unref?.();
+
 function normalizeMessageText(content) {
   return String(content || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 }
