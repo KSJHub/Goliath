@@ -173,6 +173,33 @@ function parseAuditValue(value) {
   if (value === null || value === undefined || value === '') return null;
   try { return JSON.parse(value); } catch { return value; }
 }
+// Redact expired evidence at read time, including the interval between storage purges.
+function redactExpiredEvidence(value, createdAt) {
+  if (!value || typeof value !== 'object') return value;
+  const seen = new WeakSet();
+  const visit = (node, timestamp) => {
+    if (!node || typeof node !== 'object' || seen.has(node)) return;
+    seen.add(node);
+    const origin = node.createdAt || timestamp;
+    if (node.evidence && typeof node.evidence === 'object') {
+      const evidence = node.evidence;
+      const explicit = Date.parse(evidence.expiresAt || '');
+      const days = Number(evidence.retentionDays);
+      const fallback = Number.isFinite(days) && days > 0 ? Date.parse(origin || '') + days * 86400000 : NaN;
+      const expires = Number.isFinite(explicit) ? explicit : fallback;
+      if (Number.isFinite(expires) && expires <= Date.now()) {
+        delete node.evidence;
+        node.evidenceExpired = true;
+      }
+    }
+    for (const child of Object.values(node)) if (child && typeof child === 'object') {
+      if (Array.isArray(child)) child.forEach((item) => visit(item, origin));
+      else visit(child, origin);
+    }
+  };
+  visit(value, createdAt);
+  return value;
+}
 function mapAudit(row) {
   if (!row) return null;
   return {
@@ -181,9 +208,9 @@ function mapAudit(row) {
     caseId: row.case_id,
     actorId: row.actor_id || null,
     event: row.event,
-    before: parseAuditValue(row.before_value),
-    after: parseAuditValue(row.after_value),
-    metadata: parseMetadata(row.metadata),
+    before: redactExpiredEvidence(parseAuditValue(row.before_value), row.case_created_at || row.created_at),
+    after: redactExpiredEvidence(parseAuditValue(row.after_value), row.case_created_at || row.created_at),
+    metadata: redactExpiredEvidence(parseMetadata(row.metadata), row.case_created_at || row.created_at),
     createdAt: row.created_at,
   };
 }
@@ -280,7 +307,7 @@ function mapCase(row) {
     moderatorId: row.moderator_id,
     action: row.action,
     reason: row.reason,
-    metadata: parseMetadata(row.metadata),
+    metadata: redactExpiredEvidence(parseMetadata(row.metadata), row.created_at),
     status: row.status,
     relatedCaseId: row.related_case_id,
     note: row.note || null,
