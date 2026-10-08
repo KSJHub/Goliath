@@ -3,14 +3,15 @@
 // Moderation panel layout contract: feature rows first; the final row is navigation,
 // with Back first and Export immediately after it when export is available.
 const express = require('express');
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const security = require('../../security/protection/core');
 const { enforceCommandAccess } = require('../../commands/commandAccess');
 const { errorEmbed } = require('../../ui/embeds');
 const { safeEditReply } = require('../../ui/interactionResponse');
 require('./caseManagementUx');
 const { openModPanel } = require('./panel');
 const { recordModerationSystemEvent, getModerationDoctorStatus } = require('./permissions');
-const { db, getCaseById, getCasesForUser } = require('./storage');
+const { db, getCaseById, getCasesForUser, getAllCases } = require('./storage');
 const { getAppealEligibility, getCaseAppeals, submitAppeal } = require('./cases');
 
 const router = express.Router();
@@ -115,6 +116,85 @@ function safeAppealCase(req, modCase, userId) {
     appeals,
   };
 }
+
+async function requireModerationGuildAccess(req, res, next) {
+  try {
+    const userId = String(req.session?.user?.id || '').trim();
+    if (!/^\d{16,20}$/.test(userId)) {
+      return res.status(401).json({ error: 'Authentication required.' });
+    }
+
+    const guildId = String(req.params.guildId || '').trim();
+    if (!/^\d{16,20}$/.test(guildId)) {
+      return res.status(400).json({ error: 'Invalid guild ID.' });
+    }
+
+    if (security.isBotOwner(userId)) return next();
+
+    const client = req.client;
+    const guild = client?.guilds?.cache?.get(guildId)
+      || await client?.guilds?.fetch(guildId).catch(() => null);
+
+    if (!guild) return res.status(403).json({ error: 'Guild unavailable.' });
+
+    const member = guild.members.cache.get(userId)
+      || await guild.members.fetch(userId).catch(() => null);
+
+    const permitted = Boolean(
+      member?.permissions?.has(PermissionFlagsBits.Administrator)
+      || member?.permissions?.has(PermissionFlagsBits.ManageGuild)
+    );
+
+    if (!permitted) return res.status(403).json({ error: 'Manage Server permission required.' });
+
+    return next();
+  } catch (error) {
+    console.error('[Moderation dashboard access]', error);
+    return res.status(403).json({ error: 'Unable to verify guild access.' });
+  }
+}
+
+router.get('/:guildId', requireModerationGuildAccess, (req, res) => {
+  try {
+    const cases = getAllCases(req.params.guildId).map((item) => ({
+      ...item,
+      caseNumber: item.caseId,
+      targetId: item.userId,
+      cleared: item.status === 'cleared',
+      clearedAt: item.status === 'cleared' ? item.updatedAt : null,
+    }));
+    return res.json({ cases });
+  } catch (error) {
+    console.error('[Moderation dashboard cases]', error);
+    return res.status(500).json({ error: 'Unable to load cases.' });
+  }
+});
+
+router.get('/:guildId/warnings', requireModerationGuildAccess, (req, res) => {
+  try {
+    const guildId = req.params.guildId;
+    const warnings = db.prepare(
+      'SELECT * FROM warnings WHERE guild_id = ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY created_at DESC'
+    ).all(guildId, new Date().toISOString()).map((row) => ({
+      id: row.id,
+      warningId: row.id,
+      guildId: row.guild_id,
+      caseId: row.case_id,
+      caseNumber: row.case_id,
+      userId: row.user_id,
+      moderatorId: row.moderator_id,
+      reason: row.reason,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      cleared: false,
+      clearedAt: null,
+    }));
+    return res.json({ warnings });
+  } catch (error) {
+    console.error('[Moderation dashboard warnings]', error);
+    return res.status(500).json({ error: 'Unable to load warnings.' });
+  }
+});
 
 router.get('/appeals/me', requireAppealSession, (req, res) => {
   try {

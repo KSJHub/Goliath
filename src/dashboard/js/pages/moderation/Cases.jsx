@@ -69,6 +69,7 @@ function normalizeCase(item = {}, guildId, index = 0) {
     moderatorId: item.moderatorId,
     createdAt: item.createdAt || item.date || item.timestamp,
     reason: item.reason,
+    status: String(item.status || (item.cleared ? 'cleared' : 'active')).toLowerCase(),
     cleared: item.cleared === true,
     clearedAt: item.clearedAt,
     stableKey:
@@ -223,12 +224,12 @@ const CaseListItem = memo(function CaseListItem({ item, active, theme, formatDat
   );
 });
 
-const CaseDetail = memo(function CaseDetail({ item, theme, formatDate, onClose, onClear, clearing }) {
+const CaseDetail = memo(function CaseDetail({ item, theme, formatDate, onClose }) {
   return (
     <SectionCard
       theme={theme}
       title={`Case #${item.caseNumber || item.id || 'Unknown'}`}
-      subtitle={item.cleared ? 'This case has been cleared.' : 'Full moderation case details.'}
+      subtitle="Full moderation case details. Case management is available through Goliath's moderation controls."
       actions={<Badge theme={theme} tone={getActionTone(item.action)}>{formatAction(item.action)}</Badge>}
     >
       <div style={{ display: 'grid', gap: 12, minWidth: 0 }}>
@@ -240,18 +241,13 @@ const CaseDetail = memo(function CaseDetail({ item, theme, formatDate, onClose, 
         <DetailRow
           theme={theme}
           label="Status"
-          value={item.cleared ? 'Cleared' : 'Active'}
-          accent={item.cleared ? theme.success : getActionAccent(theme, item.action)}
+          value={item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'Unknown'}
+          accent={item.status === 'reversed' || item.status === 'cleared' ? theme.success : getActionAccent(theme, item.action)}
         />
         {item.cleared ? <DetailRow theme={theme} label="Cleared At" value={formatDate(item.clearedAt)} /> : null}
       </div>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', width: '100%' }}>
         <SecondaryButton theme={theme} onClick={onClose}>Close</SecondaryButton>
-        {!item.cleared ? (
-          <SecondaryButton theme={theme} onClick={onClear} disabled={clearing}>
-            {clearing ? 'Clearing...' : 'Clear Case'}
-          </SecondaryButton>
-        ) : null}
       </div>
     </SectionCard>
   );
@@ -261,7 +257,6 @@ export default function Cases({ selectedGuild, theme }) {
   const guildId = getGuildId(selectedGuild);
   const [cases, setCases] = useState([]);
   const [selectedCase, setSelectedCase] = useState(null);
-  const [clearingCase, setClearingCase] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -299,34 +294,6 @@ export default function Cases({ selectedGuild, theme }) {
     }
   }, [guildId]);
 
-  const handleClearCase = useCallback(async (item) => {
-    if (!guildId || !item?.caseNumber) return;
-
-    try {
-      setClearingCase(String(item.caseNumber));
-      setError('');
-      setSyncMessage('');
-
-      const result = await api.clearCase(guildId, item.caseNumber);
-      const nextCases = normalizeCases(result?.cases || result?.data || result, guildId);
-
-      if (nextCases.length) {
-        setCases(nextCases);
-        setSelectedCase(
-          nextCases.find((caseItem) => String(caseItem.caseNumber) === String(item.caseNumber)) || null,
-        );
-      } else {
-        await loadCases({ quiet: true });
-      }
-
-      setSyncMessage('✅ Case cleared.');
-    } catch (err) {
-      console.error(err);
-      setError('Failed to clear case.');
-    } finally {
-      setClearingCase('');
-    }
-  }, [guildId, loadCases]);
 
   useEffect(() => {
     loadCases();
@@ -363,8 +330,9 @@ export default function Cases({ selectedGuild, theme }) {
 
   const stats = useMemo(() => ({
     total: cases.length,
-    active: cases.filter((item) => !item.cleared).length,
-    cleared: cases.filter((item) => item.cleared).length,
+    active: cases.filter((item) => item.status === 'active').length,
+    reversed: cases.filter((item) => item.status === 'reversed').length,
+    expired: cases.filter((item) => item.status === 'expired').length,
   }), [cases]);
 
   const formatDate = useCallback((value) => {
@@ -376,7 +344,7 @@ export default function Cases({ selectedGuild, theme }) {
   return (
     <PageShell
       title="Cases"
-      subtitle={guildId ? 'Moderation case history, actions, targets, moderators, and clear status.' : 'Select a server to view moderation cases.'}
+      subtitle={guildId ? 'Moderation case history, actions, targets, moderators, and recorded statuses.' : 'Select a server to view moderation cases.'}
       theme={theme}
       guild={{ id: guildId, name: 'Cases' }}
       actions={guildId ? (
@@ -397,8 +365,9 @@ export default function Cases({ selectedGuild, theme }) {
         <>
           <StatGrid min="min(200px, 100%)">
             <SummaryStat theme={theme} label="Total Cases" value={stats.total} accent="#3b82f6" description="Stored moderation records" />
-            <SummaryStat theme={theme} label="Active" value={stats.active} accent="#f59e0b" description="Cases not cleared" />
-            <SummaryStat theme={theme} label="Cleared" value={stats.cleared} accent="#22c55e" description="Cleared case records" />
+            <SummaryStat theme={theme} label="Active" value={stats.active} accent="#f59e0b" description="Active case records" />
+            <SummaryStat theme={theme} label="Reversed" value={stats.reversed} accent="#22c55e" description="Reversed case records" />
+            <SummaryStat theme={theme} label="Expired" value={stats.expired} accent="#94a3b8" description="Expired case records" />
             <SummaryStat theme={theme} label="Results" value={filteredCases.length} description="Current filtered list" />
           </StatGrid>
 
@@ -432,8 +401,6 @@ export default function Cases({ selectedGuild, theme }) {
                   theme={theme}
                   formatDate={formatDate}
                   onClose={() => setSelectedCase(null)}
-                  onClear={() => handleClearCase(selectedCase)}
-                  clearing={clearingCase === String(selectedCase.caseNumber)}
                 />
               ) : (
                 <EmptyState theme={theme} title="No case selected" text="Select a case from the list to view full details." />
