@@ -21,8 +21,8 @@ if (!globalThis[PATCH_KEY]) {
     if (
       exported
       && typeof exported === 'object'
-      && typeof exported.refreshDashboard === 'function'
       && /[\\/]src[\\/]core[\\/]administration[\\/]mod[\\/]panel\.js$/.test(String(resolved))
+      && typeof exported.refreshDashboard === 'function'
       && !exported.refreshDashboard.__goliathAcknowledgedRefreshGuard
     ) {
       const originalRefreshDashboard = exported.refreshDashboard;
