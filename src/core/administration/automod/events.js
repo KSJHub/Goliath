@@ -346,7 +346,10 @@ async function collectAdvancedViolations(message, config) {
   }
   if (config.scamPatterns?.enabled && config.scamPatterns.phrases?.length) {
     const normalized=normalizeMessageText(content);
-    const hit=config.scamPatterns.phrases.find((phrase)=>normalized.includes(normalizeMessageText(phrase)));
+    const hit=config.scamPatterns.phrases.find((phrase)=>{
+      const needle=normalizeMessageText(phrase);
+      return needle.length > 0 && normalized.includes(needle);
+    });
     if(hit) out.push({key:'scamPatterns',name:'Suspicious Content Protection',reason:'Configured suspicious phrase detected',risk:config.scamPatterns.risk,rule:config.scamPatterns});
   }
   if (config.attachments?.enabled) {
