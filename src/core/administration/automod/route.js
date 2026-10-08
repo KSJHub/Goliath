@@ -294,11 +294,11 @@ function readConfig(guildId) {
   );
 }
 
-function saveConfig(guildId, config) {
+function saveConfig(guildId, config, { emit = true } = {}) {
   const saved = guildManager.replaceGuildSection(guildId, MODULE, config);
   const responseConfig = canonicalConfig(guildId, saved);
 
-  emitGuildUpdate(guildId, {
+  if (emit) emitGuildUpdate(guildId, {
     section: MODULE,
     data: responseConfig,
   });
@@ -349,9 +349,11 @@ router.post('/:guildId', (req, res) => {
       mergeAutomodConfig(readConfig(guildId), configPatch)
     );
 
-    const saved = saveConfig(guildId, payload);
-    if (Object.prototype.hasOwnProperty.call(body, 'enabled')) {
+    const hasEnabled = Object.prototype.hasOwnProperty.call(body, 'enabled');
+    const saved = saveConfig(guildId, payload, { emit: !hasEnabled });
+    if (hasEnabled) {
       guildManager.setModuleEnabled(guildId, MODULE, body.enabled);
+      emitGuildUpdate(guildId, { section: MODULE, data: canonicalConfig(guildId, saved) });
     }
     return sendSuccess(res, guildId, canonicalConfig(guildId, saved));
   } catch (error) {
