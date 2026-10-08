@@ -802,6 +802,9 @@ async function handlePresetInteraction(i) {
     const preset =
       panel.presetData(state);
 
+    // Acknowledge the modal before potentially slow media persistence.
+    await i.deferUpdate();
+
     // Finish media persistence before the preset is committed. Discord upload
     // URLs can expire; the cached asset is the durable source used after reload.
     try {
@@ -819,9 +822,9 @@ async function handlePresetInteraction(i) {
       );
 
     if (!saved) {
-      await i.reply({
+      await i.followUp({
         content: `Could not save preset "${name}".`,
-        flags: 64,
+        flags: MessageFlags.Ephemeral,
       });
       return true;
     }
@@ -832,7 +835,7 @@ async function handlePresetInteraction(i) {
       hasUnsavedChanges: false,
     });
 
-    await i.update(
+    await i.editReply(
       panel.buildPresetsPanel(i)
     );
 
