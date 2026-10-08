@@ -175,6 +175,7 @@ function parseAuditValue(value) {
 }
 function mapAudit(row) {
   if (!row) return null;
+  purgeExpiredAutoModEvidence();
   return {
     auditId: row.audit_id,
     guildId: row.guild_id,
@@ -206,8 +207,62 @@ function getCaseAudit(guildId, caseId, { page = 0, pageSize = 25 } = {}) {
   return { results: rows.map(mapAudit), total, page: safePage, pageSize: safePageSize, totalPages };
 }
 
+// Remove expired AutoMod evidence from both case records and historical audit snapshots.
+// Run at most once per minute during moderation reads; the first read after restart runs it.
+let lastEvidencePurgeAt = 0;
+function purgeExpiredAutoModEvidence() {
+  const current = Date.now();
+  if (current - lastEvidencePurgeAt < 60000) return 0;
+  const cases = db.prepare("SELECT case_id, created_at, metadata FROM cases WHERE metadata LIKE '%evidence%'").all();
+  const audit = db.prepare("SELECT audit_id, before_value, after_value, metadata FROM case_audit WHERE before_value LIKE '%evidence%' OR after_value LIKE '%evidence%' OR metadata LIKE '%evidence%'").all();
+  const caseUpdate = db.prepare('UPDATE cases SET metadata = ? WHERE case_id = ?');
+  const auditUpdate = db.prepare('UPDATE case_audit SET before_value = ?, after_value = ?, metadata = ? WHERE audit_id = ?');
+  let removed = 0;
+  const scrub = (value, createdAt) => {
+    if (!value || typeof value !== 'object') return false;
+    let changed = false;
+    if (value.evidence && typeof value.evidence === 'object') {
+      const evidence = value.evidence;
+      const expiry = Date.parse(evidence.expiresAt || '') || (Date.parse(createdAt || '') + Number(evidence.retentionDays) * 86400000);
+      if (Number.isFinite(expiry) && expiry <= current) {
+        delete value.evidence;
+        value.evidenceExpired = true;
+        changed = true;
+        removed++;
+      }
+    }
+    if (value.metadata && typeof value.metadata === 'object') changed = scrub(value.metadata, value.createdAt || createdAt) || changed;
+    if (value.before && typeof value.before === 'object') changed = scrub(value.before, value.createdAt || createdAt) || changed;
+    if (value.after && typeof value.after === 'object') changed = scrub(value.after, value.createdAt || createdAt) || changed;
+    return changed;
+  };
+  const transaction = db.transaction(() => {
+    for (const row of cases) {
+      let value;
+      try { value = JSON.parse(row.metadata); } catch { continue; }
+      if (scrub(value, row.created_at)) caseUpdate.run(JSON.stringify(value), row.case_id);
+    }
+    for (const row of audit) {
+      const values = [row.before_value, row.after_value, row.metadata];
+      let changed = false;
+      const updated = values.map((raw) => {
+        if (!raw) return raw;
+        let value;
+        try { value = JSON.parse(raw); } catch { return raw; }
+        if (scrub(value, null)) { changed = true; return JSON.stringify(value); }
+        return raw;
+      });
+      if (changed) auditUpdate.run(...updated, row.audit_id);
+    }
+  });
+  transaction();
+  lastEvidencePurgeAt = current;
+  return removed;
+}
+
 function mapCase(row) {
   if (!row) return null;
+  purgeExpiredAutoModEvidence();
   return {
     caseId: row.case_id,
     guildId: row.guild_id,
