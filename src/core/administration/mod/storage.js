@@ -175,7 +175,6 @@ function parseAuditValue(value) {
 }
 function mapAudit(row) {
   if (!row) return null;
-  purgeExpiredAutoModEvidence();
   return {
     auditId: row.audit_id,
     guildId: row.guild_id,
@@ -196,6 +195,7 @@ function recordCaseAudit({ guildId, caseId, actorId = null, event, before = null
   return mapAudit(db.prepare('SELECT * FROM case_audit WHERE audit_id = ?').get(result.lastInsertRowid));
 }
 function getCaseAudit(guildId, caseId, { page = 0, pageSize = 25 } = {}) {
+  purgeExpiredAutoModEvidence();
   const normalizedGuildId = String(guildId || '').trim();
   const normalizedCaseId = Number(caseId);
   if (!normalizedGuildId || !Number.isInteger(normalizedCaseId) || normalizedCaseId <= 0) return { results: [], total: 0, page: 0, pageSize: 25, totalPages: 0 };
@@ -262,7 +262,6 @@ function purgeExpiredAutoModEvidence() {
 
 function mapCase(row) {
   if (!row) return null;
-  purgeExpiredAutoModEvidence();
   return {
     caseId: row.case_id,
     guildId: row.guild_id,
@@ -300,7 +299,7 @@ function createCase({ guildId, userId, moderatorId, action, reason, metadata = {
   }
   return created;
 }
-function getCaseById(guildId, caseId) { return mapCase(db.prepare('SELECT * FROM cases WHERE guild_id = ? AND case_id = ?').get(guildId, Number(caseId))); }
+function getCaseById(guildId, caseId) { purgeExpiredAutoModEvidence(); return mapCase(db.prepare('SELECT * FROM cases WHERE guild_id = ? AND case_id = ?').get(guildId, Number(caseId))); }
 function proceedingOperationTimestamp(execution, mode) {
   if (!execution || typeof execution !== 'object') return 0;
   const value = mode === 'reversal'
@@ -350,8 +349,9 @@ function claimProceedingOperationAtomic(guildId, caseId, { mode = 'execution', c
   if (outcome?.ok && outcome.case) emitCaseUpdated(normalizedGuildId, outcome.case);
   return outcome;
 }
-function getCasesForUser(guildId, userId) { return db.prepare('SELECT * FROM cases WHERE guild_id = ? AND user_id = ? ORDER BY case_id DESC').all(guildId, userId).map(mapCase); }
+function getCasesForUser(guildId, userId) { purgeExpiredAutoModEvidence(); return db.prepare('SELECT * FROM cases WHERE guild_id = ? AND user_id = ? ORDER BY case_id DESC').all(guildId, userId).map(mapCase); }
 function getCasesByModerator(guildId, moderatorId, filters = {}) {
+  purgeExpiredAutoModEvidence();
   let query = 'SELECT * FROM cases WHERE guild_id = ? AND moderator_id = ?';
   const params = [guildId, moderatorId];
   if (filters.action) { query += ' AND action = ?'; params.push(filters.action); }
@@ -359,17 +359,19 @@ function getCasesByModerator(guildId, moderatorId, filters = {}) {
   return db.prepare(`${query} ORDER BY case_id DESC`).all(...params).map(mapCase);
 }
 function getFilteredCases(guildId, userId, filters = {}) {
+  purgeExpiredAutoModEvidence();
   let query = 'SELECT * FROM cases WHERE guild_id = ? AND user_id = ?';
   const params = [guildId, userId];
   if (filters.action) { query += ' AND action = ?'; params.push(filters.action); }
   if (filters.status) { query += ' AND status = ?'; params.push(filters.status); }
   return db.prepare(`${query} ORDER BY case_id DESC`).all(...params).map(mapCase);
 }
-function getAllCases(guildId) { return db.prepare('SELECT * FROM cases WHERE guild_id = ? ORDER BY case_id DESC').all(guildId).map(mapCase); }
+function getAllCases(guildId) { purgeExpiredAutoModEvidence(); return db.prepare('SELECT * FROM cases WHERE guild_id = ? ORDER BY case_id DESC').all(guildId).map(mapCase); }
 function searchCaseIds(guildId, partial = '') {
   return db.prepare('SELECT case_id, action, status, user_id FROM cases WHERE guild_id = ? AND CAST(case_id AS TEXT) LIKE ? ORDER BY case_id DESC LIMIT 25').all(guildId, `%${partial}%`).map((row) => ({ caseId: row.case_id, action: row.action, status: row.status, userId: row.user_id }));
 }
 function searchCases(guildId, filters = {}) {
+  purgeExpiredAutoModEvidence();
   const normalizedGuildId = String(guildId || '').trim();
   if (!normalizedGuildId) return { results: [], total: 0, page: 0, pageSize: 25, totalPages: 0 };
   const conditions = ['guild_id = ?'];
