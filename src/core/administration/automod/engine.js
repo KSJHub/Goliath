@@ -124,8 +124,13 @@ async function safeBan(context, reason, deleteDays = 0) {
 async function safeWarnChannel(message, reason) {
   try {
     if (!message?.channel || !message?.author) return false;
-    const sent = await message.channel.send({ content: `⚠️ ${message.author}, your message was blocked: ${reason}` });
-    setTimeout(() => { sent.delete().catch(() => {}); }, 5000);
+    const safeReason = String(reason || 'AutoMod rule triggered').slice(0, 1500);
+    const sent = await message.channel.send({
+      content: `⚠️ ${message.author}, your message was blocked: ${safeReason}`,
+      allowedMentions: { parse: [] },
+    });
+    const cleanup = setTimeout(() => { sent.delete().catch(() => {}); }, 5000);
+    cleanup.unref?.();
     return true;
   } catch (error) {
     console.error('❌ Punishment engine channel warn failed:', error);
