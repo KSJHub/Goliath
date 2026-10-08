@@ -5,8 +5,8 @@ const waiting = [];
 function requestDialog(options) {
   return new Promise((resolve) => {
     const entry = { options, resolve };
-    if (showDialog) showDialog(entry);
-    else waiting.push(entry);
+    waiting.push(entry);
+    showDialog?.();
   });
 }
 export const goliathDialog = {
@@ -21,10 +21,13 @@ export default function GoliathDialogHost() {
   const dialogRef = useRef(null);
   const previousFocusRef = useRef(null);
   useEffect(() => {
-    showDialog = (entry) => setCurrent((previous) => previous || entry);
-    if (waiting.length) showDialog(waiting.shift());
+    showDialog = () => setCurrent((previous) => previous || waiting.shift() || null);
+    showDialog();
     return () => { showDialog = null; };
   }, []);
+  useEffect(() => {
+    if (!current && waiting.length) setCurrent(waiting.shift());
+  }, [current]);
   useEffect(() => {
     if (!current) return undefined;
     previousFocusRef.current = document.activeElement;
@@ -40,7 +43,7 @@ export default function GoliathDialogHost() {
   }, [current]);
   function finish(value) {
     current?.resolve(value);
-    setCurrent(waiting.shift() || null);
+    setCurrent(null);
   }
   useEffect(() => {
     if (!current) return undefined;
