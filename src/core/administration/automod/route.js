@@ -342,7 +342,6 @@ router.post('/:guildId', (req, res) => {
 
     if (Object.prototype.hasOwnProperty.call(body, 'enabled')) {
       if (typeof body.enabled !== 'boolean') return res.status(400).json({ ok: false, error: 'enabled must be a boolean.' });
-      guildManager.setModuleEnabled(guildId, MODULE, body.enabled);
     }
 
     const { enabled: _enabled, ...configPatch } = body;
@@ -350,7 +349,11 @@ router.post('/:guildId', (req, res) => {
       mergeAutomodConfig(readConfig(guildId), configPatch)
     );
 
-    return sendSuccess(res, guildId, saveConfig(guildId, payload));
+    const saved = saveConfig(guildId, payload);
+    if (Object.prototype.hasOwnProperty.call(body, 'enabled')) {
+      guildManager.setModuleEnabled(guildId, MODULE, body.enabled);
+    }
+    return sendSuccess(res, guildId, canonicalConfig(guildId, saved));
   } catch (error) {
     return sendFailure(res, 'save', error, 'Failed to save automod config.');
   }
