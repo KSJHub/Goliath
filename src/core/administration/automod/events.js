@@ -91,7 +91,7 @@ function extractDomains(content) {
   const text=String(content||'');
   const matches=[
     ...(text.match(/(?:https?:\/\/|www\.)[^\s<>()]+/gi)||[]),
-    ...(text.match(/\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}(?:\/[^\s<>()]*)?/gi)||[]),
+    ...(text.match(/(?:^|[^a-z0-9@])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}(?:\/[^\s<>()]*)?)/gi)||[]).map((match) => match.replace(/^[^a-z0-9]+/i, '')),
   ];
   const domains=[];
   for(const raw of matches){
