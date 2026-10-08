@@ -62,6 +62,7 @@ function resolveButton(interaction) {
 }
 async function ephemeral(interaction, payload) {
   const body = typeof payload === 'string' ? { content: payload } : payload;
+  if (interaction.deferred && !interaction.replied && interaction.__goliathEmbedRoleAction) return interaction.editReply(body);
   if (interaction.deferred || interaction.replied) return interaction.followUp({ ...body, flags: MessageFlags.Ephemeral });
   return interaction.reply({ ...body, flags: MessageFlags.Ephemeral });
 }
@@ -75,6 +76,7 @@ async function roleIsSafe(roleId, guild) {
   return { ok: true, role };
 }
 async function executeRoleAction(interaction, action, value) {
+  if (!interaction.deferred && !interaction.replied) { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); interaction.__goliathEmbedRoleAction = true; }
   const roleId = String(resolved(value, interaction) || '').match(/\d{15,25}/)?.[0] || null;
   if (!roleId) return ephemeral(interaction, '❌ This button does not have a valid role configured.');
   const safe = await roleIsSafe(roleId, interaction.guild);
