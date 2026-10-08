@@ -10,8 +10,6 @@ const {
 const MODULE_KEY = 'stats';
 const MAX_ITEMS = 10;
 const MAX_SNAPSHOTS = 120;
-let runtimeConfigListener = null;
-
 const DEFAULT_STATS = {
   trackMessages: true,
   trackVoice: true,
@@ -104,51 +102,27 @@ function getStats(guildId) {
   return normalizeStats(getModuleSection(guildId, MODULE_KEY, DEFAULT_STATS));
 }
 
-function notifyRuntimeConfigChange(guildId, patch) {
-  if (typeof runtimeConfigListener !== 'function') return;
-  try { runtimeConfigListener(String(guildId), patch || {}); }
-  catch (error) { console.warn('[Stats] Runtime config reconciliation failed:', error?.message || error); }
-}
-
-function setRuntimeConfigListener(listener) {
-  runtimeConfigListener = typeof listener === 'function' ? listener : null;
-}
-
 function saveStats(guildId, stats, guildOrMeta = {}) {
-  const before = getStats(guildId);
-  const saved = normalizeStats(saveModuleSection(guildId, MODULE_KEY, normalizeStats(stats), guildOrMeta));
-  if ((before.trackVoice !== false) !== (saved.trackVoice !== false)) notifyRuntimeConfigChange(guildId, { trackVoice: saved.trackVoice !== false });
-  return saved;
+  return normalizeStats(saveModuleSection(guildId, MODULE_KEY, normalizeStats(stats), guildOrMeta));
 }
 
 function updateStats(guildId, updater, guildOrMeta = {}) {
-  let voiceChanged = false;
-  let nextVoice = true;
-  const saved = normalizeStats(updateModuleSection(
+  return normalizeStats(updateModuleSection(
     guildId,
     MODULE_KEY,
     (current) => {
       const normalized = normalizeStats(current);
-      const previousVoice = normalized.trackVoice !== false;
       const next = typeof updater === 'function' ? updater(copy(normalized)) : updater;
-      const finalStats = normalizeStats(next);
-      nextVoice = finalStats.trackVoice !== false;
-      voiceChanged = previousVoice !== nextVoice;
-      return finalStats;
+      return normalizeStats(next);
     },
     DEFAULT_STATS,
     guildOrMeta
   ));
-  if (voiceChanged) notifyRuntimeConfigChange(guildId, { trackVoice: nextVoice });
-  return saved;
 }
 
 function setEnabled(guildId, enabled, guildOrMeta = {}) {
-  const wasEnabled = guildManager.isModuleEnabled(guildId, MODULE_KEY);
   guildManager.setModuleEnabled(guildId, MODULE_KEY, enabled === true, guildOrMeta);
-  const isNowEnabled = guildManager.isModuleEnabled(guildId, MODULE_KEY);
-  if (wasEnabled !== isNowEnabled) notifyRuntimeConfigChange(guildId, { enabled: isNowEnabled });
-  return { ...getStats(guildId), enabled: isNowEnabled };
+  return { ...getStats(guildId), enabled: guildManager.isModuleEnabled(guildId, MODULE_KEY) };
 }
 
 function isEnabled(guildId) {
@@ -160,6 +134,11 @@ function ignored(stats, member, channelId) {
   if (Array.isArray(stats.ignoredChannels) && stats.ignoredChannels.includes(channelId)) return true;
   const ignoredRoles = new Set(Array.isArray(stats.ignoredRoles) ? stats.ignoredRoles : []);
   return Boolean(ignoredRoles.size && member?.roles?.cache?.some?.((role) => ignoredRoles.has(role.id)));
+}
+
+function isIgnoredActivity(member, channelId) {
+  if (!member?.guild?.id) return true;
+  return ignored(getStats(member.guild.id), member, channelId);
 }
 
 function addMessage(message) {
@@ -196,11 +175,37 @@ function addVoiceMinutes(member, channelId, minutes) {
   }, member.guild);
 }
 
+function addVoiceInterval(member, channelId, startedAt, endedAt = Date.now()) {
+  if (!member?.guild?.id) return null;
+  const start = Number(startedAt || 0), end = Number(endedAt || 0);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return getStats(member.guild.id);
+  if (!isEnabled(member.guild.id)) return getStats(member.guild.id);
+  return updateStats(member.guild.id, (stats) => {
+    if (stats.trackVoice === false || ignored(stats, member, channelId)) return stats;
+    let cursor = start;
+    while (cursor < end) {
+      const date = new Date(cursor);
+      const nextMidnight = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
+      const sliceEnd = Math.min(end, nextMidnight);
+      const minutes = Math.max(0, (sliceEnd - cursor) / 60000);
+      const key = dayKey(cursor);
+      stats.data.voice[key] = stats.data.voice[key] || { totalMinutes: 0, users: {}, channels: {} };
+      const bucket = stats.data.voice[key];
+      bucket.totalMinutes = Number(bucket.totalMinutes || 0) + minutes;
+      addToMap(bucket.users, member.user?.id || member.id, minutes);
+      addToMap(bucket.channels, channelId, minutes);
+      cursor = sliceEnd;
+    }
+    stats.updatedAt = new Date().toISOString();
+    return stats;
+  }, member.guild);
+}
+
 function addMemberEvent(member, type) {
   if (!member?.guild?.id) return null;
   if (!isEnabled(member.guild.id)) return getStats(member.guild.id);
   return updateStats(member.guild.id, (stats) => {
-    if (stats.trackMembers === false) return stats;
+    if (stats.trackMembers === false || ignored(stats, member, null)) return stats;
     if (type === 'join') stats.data.members.joins = Number(stats.data.members.joins || 0) + 1;
     if (type === 'leave') stats.data.members.leaves = Number(stats.data.members.leaves || 0) + 1;
     stats.data.members.snapshots = Array.isArray(stats.data.members.snapshots) ? stats.data.members.snapshots : [];
@@ -257,9 +262,10 @@ module.exports = {
   updateStats,
   setEnabled,
   isEnabled,
-  setRuntimeConfigListener,
+  isIgnoredActivity,
   addMessage,
   addVoiceMinutes,
+  addVoiceInterval,
   addMemberEvent,
   resetStats,
   getSummary,

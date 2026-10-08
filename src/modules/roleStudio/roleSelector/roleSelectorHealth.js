@@ -380,7 +380,7 @@ function flattenStatsRows(usage) {
   return rows;
 }
 
-async function buildPublicStatsPayloadV2(guild, deployment) {
+async function buildPublicStatsPayload(guild, deployment) {
   const usage = await usageForStatsDeployment(guild, deployment);
   const rows = flattenStatsRows(usage);
   const limit = deployment.topLimit || 10;
@@ -421,7 +421,7 @@ async function syncOneStatsDeployment(guild, deployment) {
   if (!deployment || deployment.status === 'retired') return { updated: false, reason: 'retired' };
   const { message } = await fetchStatsMessage(guild, deployment);
   if (!message || !statsOwned(guild, message)) return { updated: false, reason: message ? 'not_owned' : 'missing' };
-  await message.edit(await buildPublicStatsPayloadV2(guild, deployment));
+  await message.edit(await buildPublicStatsPayload(guild, deployment));
   return { updated: true, messageId: message.id, channelId: message.channel.id };
 }
 
@@ -493,7 +493,7 @@ function statsNav(back = 'admin:roleSelector:deployment') {
   );
 }
 
-async function buildStatsDeploymentPanelV2(i, selectedId = null) {
+async function buildStatsDeploymentPanel(i, selectedId = null) {
   const list = statsDeploymentList(roleSelector.getSection(i.guildId));
   const selected = selectedId ? list.find((item) => item.id === selectedId) : null;
 
@@ -557,7 +557,7 @@ async function buildStatsDeploymentPanelV2(i, selectedId = null) {
   };
 }
 
-async function deployStatsPanelV2(i, deploymentId) {
+async function deployStatsPanel(i, deploymentId) {
   const list = statsDeploymentList(roleSelector.getSection(i.guildId));
   const index = list.findIndex((item) => item.id === deploymentId);
   if (index < 0) throw new Error('Create a stats panel first.');
@@ -568,13 +568,13 @@ async function deployStatsPanelV2(i, deploymentId) {
   if (!channel?.send) throw new Error('Choose a sendable text channel.');
   let message = deployment.messageId ? await channel.messages.fetch(deployment.messageId).catch(() => null) : null;
   if (message && !statsOwned(i.guild, message)) message = null;
-  message = message ? await message.edit(await buildPublicStatsPayloadV2(i.guild, deployment)) : await channel.send(await buildPublicStatsPayloadV2(i.guild, deployment));
+  message = message ? await message.edit(await buildPublicStatsPayload(i.guild, deployment)) : await channel.send(await buildPublicStatsPayload(i.guild, deployment));
   list[index] = { ...deployment, messageId: message.id, status: 'active' };
   saveStatsDeployments(i.guildId, list, { actorId: i.user.id, action: 'role_selector_stats_deploy' });
   return message;
 }
 
-async function deleteStatsPanelV2(i, deploymentId) {
+async function deleteStatsPanel(i, deploymentId) {
   const list = statsDeploymentList(roleSelector.getSection(i.guildId));
   const index = list.findIndex((item) => item.id === deploymentId);
   if (index < 0) throw new Error('Choose a stats panel first.');
@@ -588,7 +588,7 @@ async function deleteStatsPanelV2(i, deploymentId) {
   saveStatsDeployments(i.guildId, list, { actorId: i.user.id, action: 'role_selector_stats_deployment_delete' });
 }
 
-async function buildMemberLeaderboardV2(guild, deploymentId, page = 0) {
+async function buildMemberLeaderboard(guild, deploymentId, page = 0) {
   const deployment = statsDeploymentById(guild.id, deploymentId);
   if (!deployment) throw new Error('That stats panel no longer exists.');
   const usage = await usageForStatsDeployment(guild, deployment);
@@ -637,7 +637,7 @@ async function buildMemberLeaderboardV2(guild, deploymentId, page = 0) {
   };
 }
 
-async function buildChoicePickerV2(guild, deploymentId, page = 0) {
+async function buildChoicePicker(guild, deploymentId, page = 0) {
   const deployment = statsDeploymentById(guild.id, deploymentId);
   if (!deployment) throw new Error('That stats panel no longer exists.');
   const usage = await usageForStatsDeployment(guild, deployment);
@@ -680,7 +680,7 @@ async function buildChoicePickerV2(guild, deploymentId, page = 0) {
   };
 }
 
-async function buildChoiceMembersV2(guild, deploymentId, groupId, optionId, page = 0) {
+async function buildChoiceMembers(guild, deploymentId, groupId, optionId, page = 0) {
   const deployment = statsDeploymentById(guild.id, deploymentId);
   if (!deployment) throw new Error('That stats panel no longer exists.');
   const usage = await usageForStatsDeployment(guild, deployment);
@@ -711,7 +711,7 @@ async function buildChoiceMembersV2(guild, deploymentId, groupId, optionId, page
   };
 }
 
-async function buildFullBreakdownV2(guild, deploymentId) {
+async function buildFullBreakdown(guild, deploymentId) {
   const deployment = statsDeploymentById(guild.id, deploymentId);
   if (!deployment) throw new Error('That stats panel no longer exists.');
   const usage = await usageForStatsDeployment(guild, deployment);
@@ -737,15 +737,15 @@ async function buildFullBreakdownV2(guild, deploymentId) {
   };
 }
 
-async function handleStatsInteractionV2(i, id) {
+async function handleStatsInteraction(i, id) {
   const actor = { actorId: i.user?.id };
 
   if (id === 'admin:roleSelector:stats' || id === 'admin:roleSelector:statsPublic') {
-    await statsRespond(i, await buildStatsDeploymentPanelV2(i));
+    await statsRespond(i, await buildStatsDeploymentPanel(i));
     return true;
   }
   if (id === 'admin:roleSelector:statsDeploymentSelect' && i.values?.[0] !== '__none__') {
-    await statsRespond(i, await buildStatsDeploymentPanelV2(i, i.values[0]));
+    await statsRespond(i, await buildStatsDeploymentPanel(i, i.values[0]));
     return true;
   }
   if (id === 'admin:roleSelector:statsDeploymentCreate') {
@@ -755,7 +755,7 @@ async function handleStatsInteractionV2(i, id) {
     const deployment = normalizeStatsDeployment({ id: candidate, mode: 'all', groupIds: [], topLimit: 10 });
     list.push(deployment);
     saveStatsDeployments(i.guildId, list, { ...actor, action: 'role_selector_stats_deployment_create' });
-    await statsRespond(i, await buildStatsDeploymentPanelV2(i, deployment.id));
+    await statsRespond(i, await buildStatsDeploymentPanel(i, deployment.id));
     return true;
   }
   if (id.startsWith('admin:roleSelector:statsDeploymentChannel:')) {
@@ -772,7 +772,7 @@ async function handleStatsInteractionV2(i, id) {
     }
     list[index] = { ...current, channelId: target, messageId: current.channelId === target ? current.messageId : null };
     saveStatsDeployments(i.guildId, list, { ...actor, action: 'role_selector_stats_channel' });
-    await statsRespond(i, await buildStatsDeploymentPanelV2(i, deploymentId));
+    await statsRespond(i, await buildStatsDeploymentPanel(i, deploymentId));
     return true;
   }
   if (id.startsWith('admin:roleSelector:statsDeploymentMode:')) {
@@ -786,7 +786,7 @@ async function handleStatsInteractionV2(i, id) {
     list[index] = { ...current, mode, groupIds: mode === 'all' ? [] : mode === 'single' ? current.groupIds.slice(0, 1) : current.groupIds };
     saveStatsDeployments(i.guildId, list, { ...actor, action: 'role_selector_stats_mode' });
     await syncOneStatsDeployment(i.guild, list[index]).catch(() => null);
-    await statsRespond(i, await buildStatsDeploymentPanelV2(i, deploymentId));
+    await statsRespond(i, await buildStatsDeploymentPanel(i, deploymentId));
     return true;
   }
   if (id.startsWith('admin:roleSelector:statsDeploymentGroups:')) {
@@ -799,7 +799,7 @@ async function handleStatsInteractionV2(i, id) {
     list[index] = { ...current, groupIds: current.mode === 'single' ? selected.slice(0, 1) : selected };
     saveStatsDeployments(i.guildId, list, { ...actor, action: 'role_selector_stats_groups' });
     await syncOneStatsDeployment(i.guild, list[index]).catch(() => null);
-    await statsRespond(i, await buildStatsDeploymentPanelV2(i, deploymentId));
+    await statsRespond(i, await buildStatsDeploymentPanel(i, deploymentId));
     return true;
   }
   if (id.startsWith('admin:roleSelector:statsDeploymentLimit:')) {
@@ -812,28 +812,28 @@ async function handleStatsInteractionV2(i, id) {
     list[index] = { ...list[index], topLimit: limits[(currentIndex + 1 + limits.length) % limits.length] };
     saveStatsDeployments(i.guildId, list, { ...actor, action: 'role_selector_stats_limit' });
     await syncOneStatsDeployment(i.guild, list[index]).catch(() => null);
-    await statsRespond(i, await buildStatsDeploymentPanelV2(i, deploymentId));
+    await statsRespond(i, await buildStatsDeploymentPanel(i, deploymentId));
     return true;
   }
   if (id.startsWith('admin:roleSelector:statsDeploy:')) {
     const deploymentId = id.slice('admin:roleSelector:statsDeploy:'.length);
-    const message = await deployStatsPanelV2(i, deploymentId);
-    const payload = await buildStatsDeploymentPanelV2(i, deploymentId);
+    const message = await deployStatsPanel(i, deploymentId);
+    const payload = await buildStatsDeploymentPanel(i, deploymentId);
     payload.content = `✅ Stats panel deployed in <#${message.channel.id}>.`;
     await statsRespond(i, payload);
     return true;
   }
   if (id.startsWith('admin:roleSelector:statsDeploymentDelete:')) {
     const deploymentId = id.slice('admin:roleSelector:statsDeploymentDelete:'.length);
-    await deleteStatsPanelV2(i, deploymentId);
-    await statsRespond(i, await buildStatsDeploymentPanelV2(i));
+    await deleteStatsPanel(i, deploymentId);
+    await statsRespond(i, await buildStatsDeploymentPanel(i));
     return true;
   }
 
   if (id.startsWith('roleSelector:statsMembers:')) {
     roleSelector.assertModuleEnabled(i.guildId);
     const deploymentId = id.slice('roleSelector:statsMembers:'.length);
-    const payload = await buildMemberLeaderboardV2(i.guild, deploymentId, 0);
+    const payload = await buildMemberLeaderboard(i.guild, deploymentId, 0);
     if (i.deferred || i.replied) await i.editReply(payload); else await i.reply({ ...payload, flags: 64 });
     return true;
   }
@@ -841,19 +841,19 @@ async function handleStatsInteractionV2(i, id) {
     roleSelector.assertModuleEnabled(i.guildId);
     const parts = id.slice('roleSelector:statsMemberLeaderboardPage:'.length).split(':');
     const deploymentId = parts[0];
-    await i.update(await buildMemberLeaderboardV2(i.guild, deploymentId, Number(parts[1]) || 0));
+    await i.update(await buildMemberLeaderboard(i.guild, deploymentId, Number(parts[1]) || 0));
     return true;
   }
   if (id.startsWith('roleSelector:statsChoicePicker:')) {
     roleSelector.assertModuleEnabled(i.guildId);
     const deploymentId = id.slice('roleSelector:statsChoicePicker:'.length);
-    await i.update(await buildChoicePickerV2(i.guild, deploymentId, 0));
+    await i.update(await buildChoicePicker(i.guild, deploymentId, 0));
     return true;
   }
   if (id.startsWith('roleSelector:statsChoicePickerPage:')) {
     roleSelector.assertModuleEnabled(i.guildId);
     const parts = id.slice('roleSelector:statsChoicePickerPage:'.length).split(':');
-    await i.update(await buildChoicePickerV2(i.guild, parts[0], Number(parts[1]) || 0));
+    await i.update(await buildChoicePicker(i.guild, parts[0], Number(parts[1]) || 0));
     return true;
   }
   if (id.startsWith('roleSelector:statsMemberChoice:')) {
@@ -869,7 +869,7 @@ async function handleStatsInteractionV2(i, id) {
     value.groupId = groupId;
     value.optionId = optionId;
     value.page = 0;
-    await i.update(await buildChoiceMembersV2(i.guild, deploymentId, groupId, optionId, 0));
+    await i.update(await buildChoiceMembers(i.guild, deploymentId, groupId, optionId, 0));
     return true;
   }
   if (id.startsWith('roleSelector:statsChoiceMembersPage:')) {
@@ -878,17 +878,17 @@ async function handleStatsInteractionV2(i, id) {
     const deploymentId = parts[0];
     const value = statsState(i);
     if (value.deploymentId !== deploymentId || !value.groupId || value.optionId == null) {
-      await i.update(await buildChoicePickerV2(i.guild, deploymentId, 0));
+      await i.update(await buildChoicePicker(i.guild, deploymentId, 0));
       return true;
     }
     value.page = Number(parts[1]) || 0;
-    await i.update(await buildChoiceMembersV2(i.guild, deploymentId, value.groupId, value.optionId, value.page));
+    await i.update(await buildChoiceMembers(i.guild, deploymentId, value.groupId, value.optionId, value.page));
     return true;
   }
   if (id.startsWith('roleSelector:statsBreakdown:')) {
     roleSelector.assertModuleEnabled(i.guildId);
     const deploymentId = id.slice('roleSelector:statsBreakdown:'.length);
-    const payload = await buildFullBreakdownV2(i.guild, deploymentId);
+    const payload = await buildFullBreakdown(i.guild, deploymentId);
     if (i.deferred || i.replied) await i.editReply(payload); else await i.reply({ ...payload, flags: 64 });
     return true;
   }
@@ -925,7 +925,7 @@ function installStatsPanelExtension() {
     console.error('[RoleSelectorStats] Failed to load Role Selector panel:', error);
     return;
   }
-  if (!panel || panel.__statsDeploymentManagerV2 || typeof panel.handleRoleSelectorInteraction !== 'function') return;
+  if (!panel || panel.__statsDeploymentManager || typeof panel.handleRoleSelectorInteraction !== 'function') return;
 
   const original = panel.handleRoleSelectorInteraction;
   panel.handleRoleSelectorInteraction = async function handleRoleSelectorInteractionWithStats(i) {
@@ -936,7 +936,7 @@ function installStatsPanelExtension() {
           const access = await security.enforceInteractionSecurity(i, { level: 'admin', guildOnly: true });
           if (!access.allowed) return true;
         }
-        return await handleStatsInteractionV2(i, id);
+        return await handleStatsInteraction(i, id);
       } catch (error) {
         console.error('[RoleSelectorStats]', error);
         const payload = { content: `❌ ${error.message || 'Role Selector stats failed.'}`, flags: 64 };
@@ -952,7 +952,7 @@ function installStatsPanelExtension() {
     }
     return handled;
   };
-  panel.__statsDeploymentManagerV2 = true;
+  panel.__statsDeploymentManager = true;
 }
 
 queueMicrotask(installStatsPanelExtension);

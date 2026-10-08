@@ -12,15 +12,10 @@ function setEnabled(guildId, enabled, guildOrMeta = {}) {
 }
 
 function updateStats(guildId, updater, guildOrMeta = {}) {
-  const before = statsStore.getStats(guildId);
+  const hasLiveGuild = guildOrMeta?.id === String(guildId) && guildOrMeta?.voiceStates?.cache;
+  if (hasLiveGuild) statsManager.flushGuildVoiceSessions(guildOrMeta);
   const stored = statsStore.updateStats(guildId, updater, guildOrMeta);
-  if (
-    guildOrMeta?.id === String(guildId) &&
-    guildOrMeta?.voiceStates?.cache &&
-    (before.trackVoice !== false) !== (stored.trackVoice !== false)
-  ) {
-    statsManager.reconcileGuildVoiceSessions(guildOrMeta);
-  }
+  if (hasLiveGuild) statsManager.reconcileGuildVoiceSessions(guildOrMeta);
   return stored;
 }
 

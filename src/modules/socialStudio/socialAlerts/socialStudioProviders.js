@@ -11,6 +11,7 @@ const x = require('./providers/x');
 const PROVIDERS = Object.freeze({ twitch, youtube, tiktok, kick, facebook, instagram, x });
 const PLATFORMS = Object.freeze(Object.keys(PROVIDERS));
 const DEFAULT_PROVIDER_TIMEOUT_MS = 15000;
+const MAX_TIKTOK_VIEWERS = 100000000;
 
 const PROVIDER_CAPABILITIES = Object.freeze({
   twitch: { providerClass: 'official_api', alertTypes: ['live', 'vod', 'clip'] },
@@ -33,9 +34,17 @@ function providerInfo(platform) {
 }
 
 function providerCatalog() { return PLATFORMS.map((platform) => providerInfo(platform)); }
+function sanitizeProviderReason(value) {
+  let message = String(value || '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 500);
+  message = message
+    .replace(/\b(bearer|basic)\s+[a-z0-9._~+/=-]+/gi, '$1 [REDACTED]')
+    .replace(/([?&](?:access_token|token|api_key|apikey|key|client_secret|secret|authorization)=)[^&\s]+/gi, '$1[REDACTED]')
+    .replace(/\b(access[_ -]?token|api[_ -]?key|client[_ -]?secret|authorization|password)\b\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]');
+  return message || null;
+}
 function unavailable(platform, reason, status = 'unavailable', providerSource = null, failureCategory = null) {
   const info = providerInfo(platform);
-  return { platform, status, isLive: null, checkedAt: new Date().toISOString(), reason, failureCategory, providerSource: providerSource || info.providerClass || 'unknown' };
+  return { platform, status, isLive: null, checkedAt: new Date().toISOString(), reason: sanitizeProviderReason(reason), failureCategory, providerSource: providerSource || info.providerClass || 'unknown' };
 }
 function providerTimeoutMs() {
   const configured = Number(process.env.SOCIAL_PROVIDER_TIMEOUT_MS || DEFAULT_PROVIDER_TIMEOUT_MS);
@@ -46,9 +55,10 @@ function classifyProviderFailure(error) {
   const statusCode = Number(error?.status || error?.statusCode || error?.response?.status || 0);
   if (/timed out after \d+ms/.test(message) || message.includes('timeout')) return 'timeout';
   if (statusCode === 401 || message.includes('unauthorized') || message.includes('invalid token')) return 'authentication';
+  if (statusCode === 429 || message.includes('rate limit') || message.includes('rate-limit') || message.includes('too many requests') || message.includes('quota exceeded') || message.includes('quotaexceeded') || message.includes('daily limit')) return 'rate_limited';
+  if (statusCode === 403 && (message.includes('quota') || message.includes('daily limit') || message.includes('rate limit'))) return 'rate_limited';
   if (statusCode === 403 || message.includes('forbidden') || message.includes('permission')) return 'permission';
   if (statusCode === 404 || message.includes('not found')) return 'not_found';
-  if (statusCode === 429 || message.includes('rate limit') || message.includes('too many requests')) return 'rate_limited';
   if (statusCode >= 500 || message.includes('service unavailable') || message.includes('bad gateway')) return 'provider_unavailable';
   if (message.includes('json') || message.includes('parse') || message.includes('malformed') || message.includes('invalid response')) return 'invalid_response';
   if (message.includes('network') || message.includes('fetch failed') || message.includes('econn') || message.includes('enotfound')) return 'network';
@@ -65,7 +75,7 @@ function diagnosticHealth(diagnostic = {}) {
 }
 function diagnosticRecord(diagnostic = {}) {
   const health = diagnostic.health || diagnosticHealth(diagnostic);
-  return { checkedAt: diagnostic.checkedAt || new Date().toISOString(), status: diagnostic.status || 'unknown', isLive: typeof diagnostic.isLive === 'boolean' ? diagnostic.isLive : null, latencyMs: Number.isFinite(Number(diagnostic.latencyMs)) ? Number(diagnostic.latencyMs) : null, providerClass: diagnostic.providerClass || null, providerSource: diagnostic.providerSource || null, configured: diagnostic.configured !== false, failureCategory: diagnostic.failureCategory || null, reason: diagnostic.reason || null, deliveryReady: typeof diagnostic.deliveryReady === 'boolean' ? diagnostic.deliveryReady : null, deliveryChannelId: diagnostic.deliveryChannelId || null, deliveryReason: diagnostic.deliveryReason || null, health: { level: health.level || 'unknown', healthy: health.healthy === true, actionable: health.actionable === true, label: health.label || 'Unknown' } };
+  return { checkedAt: diagnostic.checkedAt || new Date().toISOString(), status: diagnostic.status || 'unknown', isLive: typeof diagnostic.isLive === 'boolean' ? diagnostic.isLive : null, latencyMs: Number.isFinite(Number(diagnostic.latencyMs)) ? Number(diagnostic.latencyMs) : null, providerClass: diagnostic.providerClass || null, providerSource: diagnostic.providerSource || null, configured: diagnostic.configured !== false, failureCategory: diagnostic.failureCategory || null, reason: sanitizeProviderReason(diagnostic.reason), deliveryReady: typeof diagnostic.deliveryReady === 'boolean' ? diagnostic.deliveryReady : null, deliveryChannelId: diagnostic.deliveryChannelId || null, deliveryReason: sanitizeProviderReason(diagnostic.deliveryReason), health: { level: health.level || 'unknown', healthy: health.healthy === true, actionable: health.actionable === true, label: health.label || 'Unknown' } };
 }
 function applyDiagnosticState(account = {}, diagnostic = {}) {
   const record = diagnosticRecord(diagnostic);
@@ -89,11 +99,51 @@ async function runProviderCheck(provider, account, platform) {
   try { return await Promise.race([Promise.resolve().then(() => provider.check({ ...account, platform })), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${provider.label || platform} provider check timed out after ${timeoutMs}ms.`)), timeoutMs); timer.unref?.(); })]); }
   finally { if (timer) clearTimeout(timer); }
 }
+function stabilizeLiveCheck(account = {}, checked = {}) {
+  if (checked?.isLive !== true || !checked.event || typeof checked.event !== 'object') return checked;
+  const previous = account?.state?.isLive === true && account.state.lastLiveEvent && typeof account.state.lastLiveEvent === 'object'
+    ? account.state.lastLiveEvent
+    : null;
+  const sameBroadcast = previous && sameLiveEvent(previous, checked.event);
+  if (!sameBroadcast) return checked;
+  const event = { ...checked.event };
+  for (const key of ['title', 'thumbnail', 'startedAt', 'category', 'language', 'profileUrl', 'url']) {
+    if (!event[key] && previous[key]) event[key] = previous[key];
+  }
+  if ((event.viewerCount === null || event.viewerCount === undefined || event.viewerCount === '') && previous.viewerCount !== null && previous.viewerCount !== undefined) event.viewerCount = previous.viewerCount;
+  return { ...checked, avatar: checked.avatar || account.avatar || account.avatarUrl || null, event };
+}
+function saneTikTokViewerCount(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || number > MAX_TIKTOK_VIEWERS) return null;
+  return Math.floor(number);
+}
+function sameLiveEvent(previous = {}, incoming = {}) {
+  const previousId = String(previous.id || '').trim();
+  const incomingId = String(incoming.id || '').trim();
+  return Boolean(previousId && incomingId && previousId === incomingId);
+}
+function stabilizeTikTokCheck(account = {}, checked = {}) {
+  if (checked?.isLive !== true || !checked.event || typeof checked.event !== 'object') return checked;
+  const previous = account?.state?.isLive === true && account.state.lastLiveEvent && typeof account.state.lastLiveEvent === 'object' ? account.state.lastLiveEvent : null;
+  const sameBroadcast = previous && sameLiveEvent(previous, checked.event);
+  const incomingViewerCount = saneTikTokViewerCount(checked.event.viewerCount);
+  const previousViewerCount = sameBroadcast ? saneTikTokViewerCount(previous.viewerCount) : null;
+  const thumbnail = checked.event.thumbnail || (sameBroadcast ? previous.thumbnail : null) || account.avatar || account.avatarUrl || null;
+  const startedAt = checked.event.startedAt || (sameBroadcast ? previous.startedAt : null) || account?.state?.liveStartedAt || null;
+  const title = checked.event.title || (sameBroadcast ? previous.title : null);
+  const event = { ...checked.event, ...(title ? { title } : {}), ...(thumbnail ? { thumbnail } : {}), ...(startedAt ? { startedAt } : {}), viewerCount: incomingViewerCount ?? previousViewerCount ?? null };
+  return { ...checked, avatar: checked.avatar || account.avatar || account.avatarUrl || null, event };
+}
 async function checkAccount(account = {}) {
   const platform = String(account.platform || '').trim().toLowerCase(); const provider = PROVIDERS[platform]; const info = providerInfo(platform);
   if (!provider) return unavailable(platform, 'Unsupported social platform.', 'unsupported', 'unsupported', 'unsupported');
   if (!info.configured) return unavailable(platform, `${info.label} provider configuration is required before checks can run.`, 'configuration_required', info.providerClass, 'configuration');
-  try { const checked = await runProviderCheck(provider, account, platform); return { ...checked, platform, failureCategory: checked?.failureCategory || null, providerSource: checked?.providerSource || info.providerClass }; }
+  try {
+    const checked = await runProviderCheck(provider, account, platform);
+    const normalized = platform === 'tiktok' ? stabilizeTikTokCheck(account, checked) : stabilizeLiveCheck(account, checked);
+    return { ...normalized, platform, reason: sanitizeProviderReason(normalized?.reason), failureCategory: normalized?.failureCategory || null, providerSource: normalized?.providerSource || info.providerClass };
+  }
   catch (error) { const failureCategory = classifyProviderFailure(error); return unavailable(platform, error?.message || 'Provider check failed.', failureCategory === 'timeout' ? 'timeout' : 'unavailable', info.providerClass, failureCategory); }
 }
 function resolveAccountIdentity(account = {}, checked = {}) {
@@ -101,21 +151,18 @@ function resolveAccountIdentity(account = {}, checked = {}) {
 }
 async function diagnoseAccount(account = {}, options = {}) {
   const startedAt = Date.now(); const checked = await checkAccount(account); const identity = resolveAccountIdentity(account, checked); const deliveryChannelId = options.deliveryChannelId || null; const info = providerInfo(account.platform || checked.platform);
-  const diagnostic = { accountId: account.accountId || account.id || null, platform: String(account.platform || checked.platform || '').trim().toLowerCase(), status: checked.status, isLive: checked.isLive, live: checked.event || null, events: Array.isArray(checked.events) ? checked.events : [], checkedAt: checked.checkedAt || new Date().toISOString(), latencyMs: Date.now() - startedAt, ...identity, reason: checked.reason || null, failureCategory: checked.failureCategory || null, providerSource: checked.providerSource || info.providerClass || null, providerClass: info.providerClass, configured: info.configured, supportedAlertTypes: info.supportedAlertTypes, deliveryReady: options.includeDelivery === true ? Boolean(deliveryChannelId) : null, deliveryChannelId: options.includeDelivery === true ? deliveryChannelId : null, deliveryReason: options.includeDelivery === true && !deliveryChannelId ? `No alert channel configured for ${account.platform}/live.` : null, delivered: [] };
+  const diagnostic = { accountId: account.accountId || account.id || null, platform: String(account.platform || checked.platform || '').trim().toLowerCase(), status: checked.status, isLive: checked.isLive, live: checked.event || null, events: Array.isArray(checked.events) ? checked.events : [], checkedAt: checked.checkedAt || new Date().toISOString(), latencyMs: Date.now() - startedAt, ...identity, reason: sanitizeProviderReason(checked.reason), failureCategory: checked.failureCategory || null, providerSource: checked.providerSource || info.providerClass || null, providerClass: info.providerClass, configured: info.configured, supportedAlertTypes: info.supportedAlertTypes, deliveryReady: options.includeDelivery === true ? Boolean(deliveryChannelId) : null, deliveryChannelId: options.includeDelivery === true ? deliveryChannelId : null, deliveryReason: options.includeDelivery === true && !deliveryChannelId ? `No alert channel configured for ${account.platform}/live.` : null, delivered: [] };
   return { ...diagnostic, health: diagnosticHealth(diagnostic) };
 }
-
 async function diagnoseAccounts(accounts = [], options = {}) {
   const enabledOnly = options.enabledOnly !== false;
   const source = Array.isArray(accounts) ? accounts : Object.values(accounts || {});
   const selected = source.filter((account) => account && (!enabledOnly || account.enabled !== false));
   const concurrency = Math.max(1, Math.min(10, Number(options.concurrency || 4)));
-  const results = new Array(selected.length);
-  let cursor = 0;
+  const results = new Array(selected.length); let cursor = 0;
   async function worker() {
     while (cursor < selected.length) {
-      const index = cursor++;
-      const account = selected[index];
+      const index = cursor++; const account = selected[index];
       const deliveryChannelId = account.alertChannelId || options.deliveryChannelId || null;
       results[index] = await diagnoseAccount(account, { includeDelivery: options.includeDelivery === true, deliveryChannelId });
     }
@@ -124,4 +171,4 @@ async function diagnoseAccounts(accounts = [], options = {}) {
   return { diagnostics: results, summary: summarizeDiagnostics(results), checkedAt: new Date().toISOString() };
 }
 
-module.exports = { PLATFORMS, providerInfo, providerCatalog, checkAccount, diagnoseAccount, diagnoseAccounts, resolveAccountIdentity, classifyProviderFailure, diagnosticHealth, diagnosticRecord, applyDiagnosticState, summarizeDiagnostics };
+module.exports = { PLATFORMS, providerInfo, providerCatalog, checkAccount, diagnoseAccount, diagnoseAccounts, resolveAccountIdentity, classifyProviderFailure, diagnosticHealth, diagnosticRecord, applyDiagnosticState, summarizeDiagnostics, sanitizeProviderReason };

@@ -27,6 +27,7 @@ function normalizeCreator(creator = {}) {
       : [],
     notes: creator.notes || '',
     adminNotes: creator.adminNotes || '',
+    showProfileInLive: creator.showProfileInLive !== false,
     enabled: creator.enabled !== false,
     status: creator.status || 'active',
   };
@@ -46,7 +47,13 @@ function normalizeSection(input = {}) {
       : 'none',
     notificationRoleId: section.notificationRoleId || null,
     creators: Object.fromEntries(Object.entries(object(section.creators)).map(([id, creator]) => [id, normalizeCreator(creator)])),
-    accounts: object(section.accounts),
+    accounts: Object.fromEntries(Object.entries(object(section.accounts)).map(([id, account]) => {
+      const current = object(account);
+      const canonical = String(current.externalId || current.normalizedUsername || current.username || current.canonicalIdentity || '').trim().toLowerCase();
+      const previous = String(current.canonicalIdentity || '').trim().toLowerCase();
+      const aliases = [...new Set([...(Array.isArray(current.identityAliases) ? current.identityAliases : []), previous, current.externalId, current.normalizedUsername, current.username].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean))].filter((value) => value !== canonical).slice(-25);
+      return [id, { ...current, canonicalIdentity: canonical, identityAliases: aliases }];
+    })),
     settings: object(section.settings),
     templates: object(section.templates),
     history: array(section.history),
@@ -215,6 +222,7 @@ function completeCreatorProfile(member, values = {}, meta = {}) {
       .filter(Boolean),
     notes: clean(values.notes, 1000),
     adminNotes: clean(values.adminNotes, 1000),
+    showProfileInLive: values.showProfileInLive !== false,
     enabled: current.enabled !== false,
     status: 'active',
     departureType: null,
@@ -263,18 +271,58 @@ function markCreatorActive(guildId, ownerDiscordId, meta = {}) {
   }), meta);
 }
 
+function resetDepartedAccountState(account = {}) {
+  const state = account.state && typeof account.state === 'object' ? { ...account.state } : {};
+  return {
+    ...state,
+    isLive: false,
+    liveEventId: null,
+    liveStartedAt: null,
+    lastLiveEvent: null,
+    lastLiveEndedAt: null,
+    lastAlertKey: null,
+    lastAlertAt: null,
+    lastAlertMessageId: null,
+    lastAlertChannelId: null,
+    lastLiveMessageId: null,
+    lastLiveMessageChannelId: null,
+    lastLiveMessageUpdatedAt: null,
+    pendingDelivery: null,
+    pendingEndedEvent: null,
+    lastDeliveryError: null,
+    deliveredEventKeys: [],
+    peakViewers: 0,
+  };
+}
+
 function markCreatorDeparted(guildId, ownerDiscordId, departureType = 'left', meta = {}) {
   const creator = findCreatorByOwner(guildId, ownerDiscordId);
   if (!creator) return null;
 
   const leftAt = new Date();
-  return updateCreator(guildId, creator.creatorId, (current) => ({
-    ...current,
-    status: departureType === 'kicked' ? 'kicked' : 'left_server',
-    departureType: departureType === 'kicked' ? 'kicked' : 'left',
-    leftAt: leftAt.toISOString(),
-    scheduledDeletionAt: new Date(leftAt.getTime() + CREATOR_DELETE_GRACE_MS).toISOString(),
-  }), meta);
+  const scheduledDeletionAt = new Date(leftAt.getTime() + CREATOR_DELETE_GRACE_MS).toISOString();
+
+  updateSection(guildId, (section) => {
+    const current = section.creators[String(creator.creatorId)];
+    if (!current) return section;
+
+    current.status = departureType === 'kicked' ? 'kicked' : 'left_server';
+    current.departureType = departureType === 'kicked' ? 'kicked' : 'left';
+    current.leftAt = leftAt.toISOString();
+    current.scheduledDeletionAt = scheduledDeletionAt;
+    current.updatedAt = leftAt.toISOString();
+
+    for (const accountId of array(current.accountIds)) {
+      const account = section.accounts[String(accountId)];
+      if (!account) continue;
+      account.state = resetDepartedAccountState(account);
+      account.updatedAt = leftAt.toISOString();
+    }
+
+    return section;
+  }, meta);
+
+  return getCreator(guildId, creator.creatorId);
 }
 
 function getExpiredCreators(guildId, nowMs = Date.now()) {
@@ -372,20 +420,64 @@ function upsertCreatorAccount(guildId, creatorId, account, duplicateAccountIds =
     const duplicateIds = new Set(array(duplicateAccountIds).map(String).filter(Boolean));
     duplicateIds.delete(accountId);
 
-    for (const duplicateId of duplicateIds) delete section.accounts[duplicateId];
+    for (const duplicateId of duplicateIds) {
+      if (duplicateId === accountId) continue;
+      delete section.accounts[duplicateId];
+    }
     for (const item of Object.values(section.creators)) {
       item.accountIds = array(item.accountIds)
         .map(String)
         .filter((value) => !duplicateIds.has(value));
     }
 
+    // A relink must never leave the same account attached to multiple creators.
+    for (const item of Object.values(section.creators)) {
+      if (String(item.creatorId) === id) continue;
+      item.accountIds = array(item.accountIds)
+        .map(String)
+        .filter((value) => value !== accountId);
+      item.updatedAt = new Date().toISOString();
+    }
+
     const timestamp = new Date().toISOString();
     const current = section.accounts[accountId] || {};
+    const incoming = object(account);
+    const existingProvider = String(current.platform || current.provider || '').trim().toLowerCase();
+    const incomingProvider = String(incoming.platform || incoming.provider || '').trim().toLowerCase();
+    const existingIdentity = String(current.canonicalIdentity || current.externalId || current.normalizedUsername || current.username || '').trim().toLowerCase();
+    const incomingIdentity = String(incoming.canonicalIdentity || incoming.externalId || incoming.normalizedUsername || incoming.username || '').trim().toLowerCase();
+    const identityChanged = Boolean(current.accountId) && (
+      (existingProvider && incomingProvider && existingProvider !== incomingProvider)
+      || (existingIdentity && incomingIdentity && existingIdentity !== incomingIdentity)
+    );
+    const runtimeState = identityChanged
+      ? {
+        ...(current.state || {}),
+        isLive: false,
+        liveEventId: null,
+        liveStartedAt: null,
+        lastLiveEvent: null,
+        lastLiveEndedAt: null,
+        lastAlertKey: null,
+        lastAlertAt: null,
+        lastAlertMessageId: null,
+        lastAlertChannelId: null,
+        lastLiveMessageId: null,
+        lastLiveMessageChannelId: null,
+        lastLiveMessageUpdatedAt: null,
+        pendingDelivery: null,
+        pendingEndedEvent: null,
+        lastDeliveryError: null,
+        peakViewers: 0,
+        deliveredEventKeys: [],
+      }
+      : current.state;
     const nextAccount = {
       ...current,
-      ...object(account),
+      ...incoming,
       accountId,
-      createdAt: current.createdAt || account.createdAt || timestamp,
+      state: runtimeState,
+      createdAt: current.createdAt || incoming.createdAt || timestamp,
       updatedAt: timestamp,
     };
 
@@ -404,12 +496,35 @@ function deleteAccount(guildId, accountId, meta = {}) {
   let deleted = false;
 
   updateSection(guildId, (section) => {
-    if (!section.accounts[id]) return section;
+    const account = section.accounts[id];
+    if (!account) return section;
 
     delete section.accounts[id];
     for (const creator of Object.values(section.creators)) {
       creator.accountIds = array(creator.accountIds).filter((value) => String(value) !== id);
       creator.updatedAt = new Date().toISOString();
+    }
+
+    // Account deletion is terminal for its runtime session. Do not leave
+    // orphaned LIVE/pending-delivery state in any persisted collections.
+    for (const key of ['history', 'queue']) {
+      if (!Array.isArray(section[key])) continue;
+      section[key] = section[key].filter((entry) => {
+        if (!entry || typeof entry !== 'object') return true;
+        return String(entry.accountId || '') !== id;
+      });
+    }
+    const creatorId = Object.values(section.creators).find((creator) =>
+      array(creator.accountIds).map(String).includes(id)
+    )?.creatorId || account.creatorId || null;
+    if (creatorId) {
+      for (const key of ['drafts', 'scheduledPosts', 'notifications']) {
+        const collection = object(section[key]);
+        for (const [entryId, value] of Object.entries(collection)) {
+          if (String(value?.accountId || '') === id) delete collection[entryId];
+        }
+        if (section[key]) section[key] = collection;
+      }
     }
 
     deleted = true;

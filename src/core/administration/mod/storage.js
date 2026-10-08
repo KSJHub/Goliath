@@ -173,6 +173,33 @@ function parseAuditValue(value) {
   if (value === null || value === undefined || value === '') return null;
   try { return JSON.parse(value); } catch { return value; }
 }
+// Redact expired evidence at read time, including the interval between storage purges.
+function redactExpiredEvidence(value, createdAt) {
+  if (!value || typeof value !== 'object') return value;
+  const seen = new WeakSet();
+  const visit = (node, timestamp) => {
+    if (!node || typeof node !== 'object' || seen.has(node)) return;
+    seen.add(node);
+    const origin = node.createdAt || timestamp;
+    if (node.evidence && typeof node.evidence === 'object') {
+      const evidence = node.evidence;
+      const explicit = Date.parse(evidence.expiresAt || '');
+      const days = Number(evidence.retentionDays);
+      const fallback = Number.isFinite(days) && days > 0 ? Date.parse(origin || '') + days * 86400000 : NaN;
+      const expires = Number.isFinite(explicit) ? explicit : fallback;
+      if (Number.isFinite(expires) && expires <= Date.now()) {
+        delete node.evidence;
+        node.evidenceExpired = true;
+      }
+    }
+    for (const child of Object.values(node)) if (child && typeof child === 'object') {
+      if (Array.isArray(child)) child.forEach((item) => visit(item, origin));
+      else visit(child, origin);
+    }
+  };
+  visit(value, createdAt);
+  return value;
+}
 function mapAudit(row) {
   if (!row) return null;
   return {
@@ -181,9 +208,9 @@ function mapAudit(row) {
     caseId: row.case_id,
     actorId: row.actor_id || null,
     event: row.event,
-    before: parseAuditValue(row.before_value),
-    after: parseAuditValue(row.after_value),
-    metadata: parseMetadata(row.metadata),
+    before: redactExpiredEvidence(parseAuditValue(row.before_value), row.case_created_at || row.created_at),
+    after: redactExpiredEvidence(parseAuditValue(row.after_value), row.case_created_at || row.created_at),
+    metadata: redactExpiredEvidence(parseMetadata(row.metadata), row.case_created_at || row.created_at),
     createdAt: row.created_at,
   };
 }
@@ -195,6 +222,7 @@ function recordCaseAudit({ guildId, caseId, actorId = null, event, before = null
   return mapAudit(db.prepare('SELECT * FROM case_audit WHERE audit_id = ?').get(result.lastInsertRowid));
 }
 function getCaseAudit(guildId, caseId, { page = 0, pageSize = 25 } = {}) {
+  purgeExpiredAutoModEvidence();
   const normalizedGuildId = String(guildId || '').trim();
   const normalizedCaseId = Number(caseId);
   if (!normalizedGuildId || !Number.isInteger(normalizedCaseId) || normalizedCaseId <= 0) return { results: [], total: 0, page: 0, pageSize: 25, totalPages: 0 };
@@ -202,9 +230,73 @@ function getCaseAudit(guildId, caseId, { page = 0, pageSize = 25 } = {}) {
   const total = db.prepare('SELECT COUNT(*) AS count FROM case_audit WHERE guild_id = ? AND case_id = ?').get(normalizedGuildId, normalizedCaseId).count;
   const totalPages = Math.ceil(total / safePageSize);
   const safePage = Math.max(0, Math.min(Math.trunc(Number(page) || 0), Math.max(0, totalPages - 1)));
-  const rows = db.prepare('SELECT * FROM case_audit WHERE guild_id = ? AND case_id = ? ORDER BY audit_id DESC LIMIT ? OFFSET ?').all(normalizedGuildId, normalizedCaseId, safePageSize, safePage * safePageSize);
+  const rows = db.prepare('SELECT a.*, c.created_at AS case_created_at FROM case_audit a LEFT JOIN cases c ON c.case_id = a.case_id AND c.guild_id = a.guild_id WHERE a.guild_id = ? AND a.case_id = ? ORDER BY a.audit_id DESC LIMIT ? OFFSET ?').all(normalizedGuildId, normalizedCaseId, safePageSize, safePage * safePageSize);
   return { results: rows.map(mapAudit), total, page: safePage, pageSize: safePageSize, totalPages };
 }
+
+// Remove expired AutoMod evidence from both case records and historical audit snapshots.
+// Run at most once per minute during moderation reads; the first read after restart runs it.
+let lastEvidencePurgeAt = 0;
+function purgeExpiredAutoModEvidence() {
+  const current = Date.now();
+  if (current - lastEvidencePurgeAt < 60000) return 0;
+  const cases = db.prepare("SELECT case_id, created_at, metadata FROM cases WHERE metadata LIKE '%evidence%'").all();
+  const audit = db.prepare("SELECT audit_id, case_id, created_at, before_value, after_value, metadata FROM case_audit WHERE before_value LIKE '%evidence%' OR after_value LIKE '%evidence%' OR metadata LIKE '%evidence%'").all();
+  const caseUpdate = db.prepare('UPDATE cases SET metadata = ? WHERE case_id = ?');
+  const createdAtByCase = new Map(db.prepare('SELECT case_id, created_at FROM cases').all().map((row) => [row.case_id, row.created_at]));
+  const auditUpdate = db.prepare('UPDATE case_audit SET before_value = ?, after_value = ?, metadata = ? WHERE audit_id = ?');
+  let removed = 0;
+  const scrub = (value, createdAt) => {
+    if (!value || typeof value !== 'object') return false;
+    let changed = false;
+    if (value.evidence && typeof value.evidence === 'object') {
+      const evidence = value.evidence;
+      const explicitExpiry = Date.parse(evidence.expiresAt || '');
+      const retentionDays = Number(evidence.retentionDays);
+      const fallbackExpiry = Number.isFinite(retentionDays) && retentionDays > 0 ? Date.parse(createdAt || '') + retentionDays * 86400000 : NaN;
+      const expiry = Number.isFinite(explicitExpiry) ? explicitExpiry : fallbackExpiry;
+      if (Number.isFinite(expiry) && expiry <= current) {
+        delete value.evidence;
+        value.evidenceExpired = true;
+        changed = true;
+        removed++;
+      }
+    }
+    if (value.metadata && typeof value.metadata === 'object') changed = scrub(value.metadata, value.createdAt || createdAt) || changed;
+    if (value.before && typeof value.before === 'object') changed = scrub(value.before, value.createdAt || createdAt) || changed;
+    if (value.after && typeof value.after === 'object') changed = scrub(value.after, value.createdAt || createdAt) || changed;
+    return changed;
+  };
+  const transaction = db.transaction(() => {
+    for (const row of cases) {
+      let value;
+      try { value = JSON.parse(row.metadata); } catch { continue; }
+      if (scrub(value, row.created_at)) caseUpdate.run(JSON.stringify(value), row.case_id);
+    }
+    for (const row of audit) {
+      const values = [row.before_value, row.after_value, row.metadata];
+      let changed = false;
+      const updated = values.map((raw) => {
+        if (!raw) return raw;
+        let value;
+        try { value = JSON.parse(raw); } catch { return raw; }
+        if (scrub(value, createdAtByCase.get(row.case_id) || row.created_at)) { changed = true; return JSON.stringify(value); }
+        return raw;
+      });
+      if (changed) auditUpdate.run(...updated, row.audit_id);
+    }
+  });
+  transaction();
+  lastEvidencePurgeAt = current;
+  return removed;
+}
+
+// Run retention cleanup even when moderators do not open a case.
+const evidenceRetentionTimer = setInterval(() => {
+  try { purgeExpiredAutoModEvidence(); }
+  catch (error) { console.error('[Moderation] Evidence retention cleanup failed:', error?.stack || error); }
+}, 60 * 60 * 1000);
+evidenceRetentionTimer.unref?.();
 
 function mapCase(row) {
   if (!row) return null;
@@ -215,7 +307,7 @@ function mapCase(row) {
     moderatorId: row.moderator_id,
     action: row.action,
     reason: row.reason,
-    metadata: parseMetadata(row.metadata),
+    metadata: redactExpiredEvidence(parseMetadata(row.metadata), row.created_at),
     status: row.status,
     relatedCaseId: row.related_case_id,
     note: row.note || null,
@@ -245,7 +337,7 @@ function createCase({ guildId, userId, moderatorId, action, reason, metadata = {
   }
   return created;
 }
-function getCaseById(guildId, caseId) { return mapCase(db.prepare('SELECT * FROM cases WHERE guild_id = ? AND case_id = ?').get(guildId, Number(caseId))); }
+function getCaseById(guildId, caseId) { purgeExpiredAutoModEvidence(); return mapCase(db.prepare('SELECT * FROM cases WHERE guild_id = ? AND case_id = ?').get(guildId, Number(caseId))); }
 function proceedingOperationTimestamp(execution, mode) {
   if (!execution || typeof execution !== 'object') return 0;
   const value = mode === 'reversal'
@@ -295,8 +387,9 @@ function claimProceedingOperationAtomic(guildId, caseId, { mode = 'execution', c
   if (outcome?.ok && outcome.case) emitCaseUpdated(normalizedGuildId, outcome.case);
   return outcome;
 }
-function getCasesForUser(guildId, userId) { return db.prepare('SELECT * FROM cases WHERE guild_id = ? AND user_id = ? ORDER BY case_id DESC').all(guildId, userId).map(mapCase); }
+function getCasesForUser(guildId, userId) { purgeExpiredAutoModEvidence(); return db.prepare('SELECT * FROM cases WHERE guild_id = ? AND user_id = ? ORDER BY case_id DESC').all(guildId, userId).map(mapCase); }
 function getCasesByModerator(guildId, moderatorId, filters = {}) {
+  purgeExpiredAutoModEvidence();
   let query = 'SELECT * FROM cases WHERE guild_id = ? AND moderator_id = ?';
   const params = [guildId, moderatorId];
   if (filters.action) { query += ' AND action = ?'; params.push(filters.action); }
@@ -304,17 +397,19 @@ function getCasesByModerator(guildId, moderatorId, filters = {}) {
   return db.prepare(`${query} ORDER BY case_id DESC`).all(...params).map(mapCase);
 }
 function getFilteredCases(guildId, userId, filters = {}) {
+  purgeExpiredAutoModEvidence();
   let query = 'SELECT * FROM cases WHERE guild_id = ? AND user_id = ?';
   const params = [guildId, userId];
   if (filters.action) { query += ' AND action = ?'; params.push(filters.action); }
   if (filters.status) { query += ' AND status = ?'; params.push(filters.status); }
   return db.prepare(`${query} ORDER BY case_id DESC`).all(...params).map(mapCase);
 }
-function getAllCases(guildId) { return db.prepare('SELECT * FROM cases WHERE guild_id = ? ORDER BY case_id DESC').all(guildId).map(mapCase); }
+function getAllCases(guildId) { purgeExpiredAutoModEvidence(); return db.prepare('SELECT * FROM cases WHERE guild_id = ? ORDER BY case_id DESC').all(guildId).map(mapCase); }
 function searchCaseIds(guildId, partial = '') {
   return db.prepare('SELECT case_id, action, status, user_id FROM cases WHERE guild_id = ? AND CAST(case_id AS TEXT) LIKE ? ORDER BY case_id DESC LIMIT 25').all(guildId, `%${partial}%`).map((row) => ({ caseId: row.case_id, action: row.action, status: row.status, userId: row.user_id }));
 }
 function searchCases(guildId, filters = {}) {
+  purgeExpiredAutoModEvidence();
   const normalizedGuildId = String(guildId || '').trim();
   if (!normalizedGuildId) return { results: [], total: 0, page: 0, pageSize: 25, totalPages: 0 };
   const conditions = ['guild_id = ?'];
@@ -711,6 +806,9 @@ function persistAppealNotice(guildId, caseId, notice) {
   const modCase = getCaseById(guildId, caseId);
   if (!modCase) return null;
   const metadata = { ...(modCase.metadata || {}), appealNotice: notice };
+  if (metadata.punishmentReport && typeof metadata.punishmentReport === 'object') {
+    metadata.punishmentReport = { ...metadata.punishmentReport, dmSent: Boolean(notice?.sent), dmError: notice?.error || null };
+  }
   const updatedAt = now();
   const result = db.prepare('UPDATE cases SET metadata = ?, updated_at = ? WHERE guild_id = ? AND case_id = ?').run(JSON.stringify(metadata), updatedAt, String(guildId), Number(caseId));
   if (!result.changes) return null;

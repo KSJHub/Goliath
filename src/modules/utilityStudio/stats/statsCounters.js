@@ -27,6 +27,7 @@ const DEFAULT_COUNTER_SUITE = Object.freeze([
 
 const dockSchedules = new Map();
 const dockRefreshInFlight = new Set();
+const suiteCreateInFlight = new Set();
 function safeString(value, max = 100) { return String(value ?? '').trim().slice(0, max); }
 function validId(value) { return /^\d{15,25}$/.test(String(value || '').trim()); }
 function cleanType(value) {
@@ -143,6 +144,7 @@ async function deleteManagedChannel(guild, channel, reason, actionLabel) { if (!
 function scheduleKey(guildId, dockId) { return `${guildId}:${dockId}`; }
 function clearDockSchedule(guildId, dockId) { const key = scheduleKey(guildId, dockId), current = dockSchedules.get(key); if (current?.timer) clearInterval(current.timer); dockSchedules.delete(key); dockRefreshInFlight.delete(key); }
 function markNextDue(guildId, dock) { const key = scheduleKey(guildId, dock.id), current = dockSchedules.get(key) || {}; current.nextDue = Date.now() + Math.max(10, Number(dock.frequencyMinutes || 10)) * 60000; dockSchedules.set(key, current); }
+function stopAllCounterSchedules() { for (const current of dockSchedules.values()) if (current?.timer) clearInterval(current.timer); dockSchedules.clear(); dockRefreshInFlight.clear(); return true; }
 async function refreshDock(guild, dockInput, { force = false, fetchMembers = true } = {}) {
   const dock = typeof dockInput === 'string' ? listCounters(guild.id).find((item) => item.id === dockInput || item.channelId === dockInput) : normalizeStoredDock(dockInput);
   if (!dock?.enabled || !dock.channelId) return null;
@@ -150,7 +152,23 @@ async function refreshDock(guild, dockInput, { force = false, fetchMembers = tru
   if (!force && schedule?.nextDue && Date.now() < schedule.nextDue) return { id: dock.id, skipped: true };
   if (dockRefreshInFlight.has(key)) return { id: dock.id, skipped: true };
   dockRefreshInFlight.add(key);
-  try { if (fetchMembers) await guild.members.fetch({ withPresences: true }).catch(() => guild.members.fetch().catch(() => null)); const channel = guild.channels.cache.get(dock.channelId) || await guild.channels.fetch(dock.channelId).catch(() => null); if (!channel?.setName) return null; const summary = statsStore.getSummary(guild.id), name = renderCounterName(guild, summary, dock), changed = channel.name !== name; if (changed) await channel.setName(name, 'Goliath Stats counter refresh').catch(() => null); markNextDue(guild.id, dock); return { id: dock.id, channelId: dock.channelId, name, changed, skipped: false }; } finally { dockRefreshInFlight.delete(key); }
+  try {
+    if (fetchMembers) await guild.members.fetch({ withPresences: true }).catch(() => guild.members.fetch().catch(() => null));
+    let channel = guild.channels.cache.get(dock.channelId) || await guild.channels.fetch(dock.channelId).catch(() => null);
+    if (!channel?.setName) return null;
+    const summary = statsStore.getSummary(guild.id), name = renderCounterName(guild, summary, dock), changed = channel.name !== name;
+    if (changed) {
+      try { await channel.setName(name, 'Goliath Stats counter refresh'); }
+      catch (firstError) {
+        channel = await guild.channels.fetch(dock.channelId).catch(() => null);
+        if (!channel?.setName) throw firstError;
+        try { await channel.setName(name, 'Goliath Stats counter refresh'); }
+        catch (secondError) { throw new Error(`Goliath could not refresh Stats counter ${dock.id}. Discord returned: ${secondError?.message || firstError?.message || 'Unknown Discord error'}`); }
+      }
+    }
+    markNextDue(guild.id, dock);
+    return { id: dock.id, channelId: dock.channelId, name, changed, skipped: false };
+  } finally { dockRefreshInFlight.delete(key); }
 }
 function ensureDockSchedule(guild, dock) { if (!dock?.enabled || !dock.channelId) { if (dock?.id) clearDockSchedule(guild.id, dock.id); return null; } const key = scheduleKey(guild.id, dock.id), frequencyMinutes = Math.max(10, Number(dock.frequencyMinutes || 10)), current = dockSchedules.get(key); if (current?.timer && current.frequencyMinutes === frequencyMinutes) return current; if (current?.timer) clearInterval(current.timer); // Scheduled counter refreshes must use the existing Discord cache.
   // Fetching the entire guild with presences on every counter cycle causes
@@ -199,14 +217,127 @@ async function refreshCounters(guild, options = {}) {
 
   return results;
 }
-async function findOrCreateCategory(guild, name = '📊 SERVER STATS') { const wanted = safeString(name, 100) || '📊 SERVER STATS'; const existing = guild.channels.cache.find((channel) => channel.type === ChannelType.GuildCategory && channel.name.toLowerCase() === wanted.toLowerCase()); if (existing) { await ensureManageChannels(guild, existing, 'manage the Stats category'); return existing; } const me = await getBotMember(guild); const permissionOverwrites = me ? [{ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels] }] : []; const created = await guild.channels.create({ name: wanted, type: ChannelType.GuildCategory, permissionOverwrites, reason: 'Goliath Stats setup' }); await ensureManageChannels(guild, created, 'manage the Stats category'); return created; }
-async function createCounterChannel(guild, input, parentId = null) { const dock = cleanDock(input), summary = statsStore.getSummary(guild.id), name = renderCounterName(guild, summary, dock), isText = dock.channelType === 'text'; const me = await getBotMember(guild), parent = parentId ? guild.channels.cache.get(parentId) || await guild.channels.fetch(parentId).catch(() => null) : null; if (parent) await ensureManageChannels(guild, parent, 'create Stats counters here'); const permissionOverwrites = [{ id: guild.roles.everyone.id, deny: [isText ? PermissionFlagsBits.SendMessages : PermissionFlagsBits.Connect] }]; if (me) permissionOverwrites.push({ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels] }); const channel = await guild.channels.create({ name, type: isText ? ChannelType.GuildText : ChannelType.GuildVoice, parent: parentId || dock.categoryId || undefined, permissionOverwrites, reason: 'Goliath Stats counter setup' }); await ensureManageChannels(guild, channel, 'manage this Stats counter'); return channel; }
-async function createDock(guild, input = {}, guildOrMeta = {}) { if (!guild?.id) throw new Error('A guild is required.'); const base = cleanDock(input), category = base.categoryId ? guild.channels.cache.get(base.categoryId) || await guild.channels.fetch(base.categoryId).catch(() => null) : await findOrCreateCategory(guild, input.categoryName || statsStore.getStats(guild.id).settings?.categoryName || '📊 SERVER STATS'); if (category) await ensureManageChannels(guild, category, 'create Stats counters here'); const channel = await createCounterChannel(guild, base, category?.id || null), dock = { ...base, channelId: channel.id, categoryId: category?.id || null, enabled: true }; saveDock(guild.id, dock, guildOrMeta || guild); ensureDockSchedule(guild, dock); return dock; }
-async function updateDock(guild, id, changes = {}, guildOrMeta = {}) { const existing = listCounters(guild.id).find((item) => item.id === id || item.channelId === id); if (!existing) throw new Error('Counter not found.'); let next = cleanDock({ ...existing, ...changes, id: existing.id, channelId: existing.channelId, segments: changes.segments || existing.segments }); if (existing.channelId && existing.channelType !== next.channelType) { const oldChannel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null), parentId = oldChannel?.parentId || existing.categoryId || null; if (oldChannel) await deleteManagedChannel(guild, oldChannel, 'Goliath Stats counter channel type changed', 'replace this counter channel'); const replacement = await createCounterChannel(guild, { ...next, channelId: null }, parentId); next = { ...next, channelId: replacement.id, categoryId: parentId || next.categoryId }; } saveDock(guild.id, next, guildOrMeta || guild); clearDockSchedule(guild.id, next.id); ensureDockSchedule(guild, next); await refreshDock(guild, next, { force: true, fetchMembers: true }); return next; }
-async function setDockEnabled(guild, id, enabled, guildOrMeta = {}) { const existing = listCounters(guild.id).find((item) => item.id === id || item.channelId === id); if (!existing) throw new Error('Counter not found.'); if (enabled && !existing.channelId) return createDock(guild, { ...existing, id: existing.id }, guildOrMeta || guild); if (!enabled && existing.channelId) { const channel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null); if (channel) await deleteManagedChannel(guild, channel, 'Goliath Stats counter disabled', 'disable this counter'); clearDockSchedule(guild.id, existing.id); const next = { ...existing, channelId: null, enabled: false }; saveDock(guild.id, next, guildOrMeta || guild); return next; } const next = { ...existing, enabled: Boolean(enabled) }; saveDock(guild.id, next, guildOrMeta || guild); if (next.enabled) ensureDockSchedule(guild, next); else clearDockSchedule(guild.id, next.id); return next; }
-async function deleteDock(guild, id, guildOrMeta = {}) { const existing = listCounters(guild.id).find((item) => item.id === id || item.channelId === id); if (!existing) return false; if (existing.channelId) { const channel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null); if (channel) await deleteManagedChannel(guild, channel, 'Goliath Stats counter deleted', 'delete this counter'); } clearDockSchedule(guild.id, existing.id); removeCounter(guild.id, existing.id, guildOrMeta || guild); return true; }
+async function findOrCreateCategory(guild, name = '📊 SERVER STATS') {
+  const wanted = safeString(name, 100) || '📊 SERVER STATS';
+  const existing = guild.channels.cache.find((channel) => channel.type === ChannelType.GuildCategory && channel.name.toLowerCase() === wanted.toLowerCase());
+  if (existing) { await ensureManageChannels(guild, existing, 'manage the Stats category'); return existing; }
+  const me = await getBotMember(guild);
+  const permissionOverwrites = me ? [{ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels] }] : [];
+  const created = await guild.channels.create({ name: wanted, type: ChannelType.GuildCategory, permissionOverwrites, reason: 'Goliath Stats setup' });
+  try { await ensureManageChannels(guild, created, 'manage the Stats category'); }
+  catch (error) { await created.delete('Rollback unusable Goliath Stats category').catch(() => null); throw error; }
+  return created;
+}
+async function createCounterChannel(guild, input, parentId = null) {
+  const dock = cleanDock(input), summary = statsStore.getSummary(guild.id), name = renderCounterName(guild, summary, dock), isText = dock.channelType === 'text';
+  const me = await getBotMember(guild), parent = parentId ? guild.channels.cache.get(parentId) || await guild.channels.fetch(parentId).catch(() => null) : null;
+  if (parent) await ensureManageChannels(guild, parent, 'create Stats counters here');
+  const permissionOverwrites = [{ id: guild.roles.everyone.id, deny: [isText ? PermissionFlagsBits.SendMessages : PermissionFlagsBits.Connect] }];
+  if (me) permissionOverwrites.push({ id: me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels] });
+  const channel = await guild.channels.create({ name, type: isText ? ChannelType.GuildText : ChannelType.GuildVoice, parent: parentId || dock.categoryId || undefined, permissionOverwrites, reason: 'Goliath Stats counter setup' });
+  try { await ensureManageChannels(guild, channel, 'manage this Stats counter'); }
+  catch (error) { await channel.delete('Rollback unusable Goliath Stats counter').catch(() => null); throw error; }
+  return channel;
+}
+async function createDock(guild, input = {}, guildOrMeta = {}) {
+  if (!guild?.id) throw new Error('A guild is required.');
+  const base = cleanDock(input);
+  const category = base.categoryId ? guild.channels.cache.get(base.categoryId) || await guild.channels.fetch(base.categoryId).catch(() => null) : await findOrCreateCategory(guild, input.categoryName || statsStore.getStats(guild.id).settings?.categoryName || '📊 SERVER STATS');
+  if (category) await ensureManageChannels(guild, category, 'create Stats counters here');
+  const channel = await createCounterChannel(guild, base, category?.id || null);
+  const dock = { ...base, channelId: channel.id, categoryId: category?.id || null, enabled: true };
+  try { saveDock(guild.id, dock, guildOrMeta || guild); }
+  catch (error) {
+    await channel.delete('Rollback failed Goliath Stats counter persistence').catch(() => null);
+    throw error;
+  }
+  ensureDockSchedule(guild, dock);
+  return dock;
+}
+async function updateDock(guild, id, changes = {}, guildOrMeta = {}) {
+  const existing = listCounters(guild.id).find((item) => item.id === id || item.channelId === id);
+  if (!existing) throw new Error('Counter not found.');
+  let next = cleanDock({ ...existing, ...changes, id: existing.id, channelId: existing.channelId, segments: changes.segments || existing.segments });
+  if (existing.channelId && existing.channelType !== next.channelType) {
+    const oldChannel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null);
+    const parentId = oldChannel?.parentId || existing.categoryId || null;
+    const replacementChannel = await createCounterChannel(guild, { ...next, channelId: null }, parentId);
+    next = { ...next, channelId: replacementChannel.id, categoryId: parentId || next.categoryId };
+    try { saveDock(guild.id, next, guildOrMeta || guild); }
+    catch (error) {
+      await replacementChannel.delete('Rollback failed Goliath Stats counter persistence').catch(() => null);
+      throw error;
+    }
+    try {
+      if (oldChannel) await deleteManagedChannel(guild, oldChannel, 'Goliath Stats counter channel type changed', 'replace this counter channel');
+    } catch (error) {
+      saveDock(guild.id, existing, guildOrMeta || guild);
+      await replacementChannel.delete('Rollback failed Goliath Stats counter type change').catch(() => null);
+      throw error;
+    }
+  } else {
+    saveDock(guild.id, next, guildOrMeta || guild);
+  }
+  clearDockSchedule(guild.id, next.id);
+  ensureDockSchedule(guild, next);
+  await refreshDock(guild, next, { force: true, fetchMembers: true });
+  return next;
+}
+async function setDockEnabled(guild, id, enabled, guildOrMeta = {}) { const existing = listCounters(guild.id).find((item) => item.id === id || item.channelId === id); if (!existing) throw new Error('Counter not found.'); if (enabled && !existing.channelId) return createDock(guild, { ...existing, id: existing.id }, guildOrMeta || guild); if (!enabled && existing.channelId) {
+    const channel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null);
+    const next = { ...existing, channelId: null, enabled: false };
+    saveDock(guild.id, next, guildOrMeta || guild);
+    try { if (channel) await deleteManagedChannel(guild, channel, 'Goliath Stats counter disabled', 'disable this counter'); }
+    catch (error) { saveDock(guild.id, existing, guildOrMeta || guild); throw error; }
+    clearDockSchedule(guild.id, existing.id);
+    return next;
+  } const next = { ...existing, enabled: Boolean(enabled) }; saveDock(guild.id, next, guildOrMeta || guild); if (next.enabled) ensureDockSchedule(guild, next); else clearDockSchedule(guild.id, next.id); return next; }
+async function deleteDock(guild, id, guildOrMeta = {}) {
+  const existing = listCounters(guild.id).find((item) => item.id === id || item.channelId === id);
+  if (!existing) return false;
+  const channel = existing.channelId ? guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null) : null;
+  removeCounter(guild.id, existing.id, guildOrMeta || guild);
+  try { if (channel) await deleteManagedChannel(guild, channel, 'Goliath Stats counter deleted', 'delete this counter'); }
+  catch (error) { saveDock(guild.id, existing, guildOrMeta || guild); throw error; }
+  clearDockSchedule(guild.id, existing.id);
+  return true;
+}
 function samePreset(dock, preset) { if (!dock || !preset) return false; const dockTypes = (dock.segments || []).map((segment) => `${segment.type}:${JSON.stringify(segment.options || {})}`), presetTypes = (preset.segments || []).map((segment) => `${segment.type}:${JSON.stringify(normalizeCounterOptions(segment.type, segment.options || {}))}`); return JSON.stringify(dockTypes) === JSON.stringify(presetTypes); }
-async function createCounterSuite(guild, options = {}) { if (!guild?.id) throw new Error('A guild is required to create counter channels.'); await guild.channels.fetch().catch(() => null); await guild.members.fetch({ withPresences: true }).catch(() => guild.members.fetch().catch(() => null)); await guild.roles.fetch().catch(() => null); const category = await findOrCreateCategory(guild, options.categoryName || statsStore.getStats(guild.id).settings?.categoryName || '📊 SERVER STATS'), created = [], reused = []; for (const preset of DEFAULT_COUNTER_SUITE) { const existing = listCounters(guild.id).find((dock) => dock.source === 'default-suite' && samePreset(dock, preset)); if (existing?.channelId) { const channel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null); if (channel) { reused.push(existing); ensureDockSchedule(guild, existing); continue; } } const dock = await createDock(guild, { name: preset.name || 'Counter', template: preset.template, segments: preset.segments, categoryId: category.id, channelType: options.channelType || 'voice', frequencyMinutes: Number(options.frequencyMinutes || statsStore.getStats(guild.id).settings?.defaultFrequencyMinutes || 10), source: 'default-suite' }, guild); created.push(dock); } await refreshCounters(guild, { force: true }); return { categoryId: category.id, created, reused }; }
+async function createCounterSuite(guild, options = {}) {
+  if (!guild?.id) throw new Error('A guild is required to create counter channels.');
+  if (suiteCreateInFlight.has(guild.id)) throw new Error('Stats Quick Setup is already running for this server.');
+  suiteCreateInFlight.add(guild.id);
+  try {
+    await guild.channels.fetch().catch(() => null);
+    await guild.members.fetch({ withPresences: true }).catch(() => guild.members.fetch().catch(() => null));
+    await guild.roles.fetch().catch(() => null);
+    const category = await findOrCreateCategory(guild, options.categoryName || statsStore.getStats(guild.id).settings?.categoryName || '📊 SERVER STATS');
+    const created = [], reused = [];
+    for (const preset of DEFAULT_COUNTER_SUITE) {
+      const existing = listCounters(guild.id).find((dock) => dock.source === 'default-suite' && samePreset(dock, preset));
+      if (existing?.channelId) {
+        const channel = guild.channels.cache.get(existing.channelId) || await guild.channels.fetch(existing.channelId).catch(() => null);
+        if (channel) { reused.push(existing); ensureDockSchedule(guild, existing); continue; }
+      }
+      const dock = await createDock(guild, {
+        id: existing?.id,
+        createdAt: existing?.createdAt,
+        name: preset.name || 'Counter',
+        template: preset.template,
+        segments: preset.segments,
+        categoryId: category.id,
+        channelType: options.channelType || 'voice',
+        frequencyMinutes: Number(options.frequencyMinutes || statsStore.getStats(guild.id).settings?.defaultFrequencyMinutes || 10),
+        source: 'default-suite',
+      }, guild);
+      created.push(dock);
+    }
+    await refreshCounters(guild, { force: true });
+    return { categoryId: category.id, created, reused };
+  } finally {
+    suiteCreateInFlight.delete(guild.id);
+  }
+}
 function previewDock(guild, input = {}) { return renderCounterName(guild, statsStore.getSummary(guild.id), cleanDock(input)); }
 
-module.exports = { COUNTER_TYPES, STATUS_VALUES, DEFAULT_COUNTER_SUITE, PRESENCE_TRIO_PRESET, cleanCounter, cleanDock, cleanSegment, listCounters, addCounter, saveDock, upsertCounterByType, removeCounter, refreshCounters, refreshDock, createCounterSuite, createDock, updateDock, setDockEnabled, deleteDock, previewDock, defaultTemplate, renderCounterName, ensureManageChannels, findOrCreateCategory };
+module.exports = { COUNTER_TYPES, STATUS_VALUES, DEFAULT_COUNTER_SUITE, PRESENCE_TRIO_PRESET, cleanCounter, cleanDock, cleanSegment, listCounters, addCounter, saveDock, upsertCounterByType, removeCounter, refreshCounters, refreshDock, createCounterSuite, createDock, updateDock, setDockEnabled, deleteDock, previewDock, defaultTemplate, renderCounterName, ensureManageChannels, findOrCreateCategory, stopAllCounterSchedules };

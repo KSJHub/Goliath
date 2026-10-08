@@ -178,16 +178,25 @@ function redactSecrets(value) {
 async function handleMonitoringAction(interaction, id) {
   const config = store.getConfig(interaction.guildId);
   config.settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
+  config.settings.suppressDuplicates = true;
   if (id === `${P}automation:interval`) {
-    const value = String(interaction.values?.[0] || '');
-    if (!MONITORING_INTERVALS.has(value)) throw new Error('Choose a valid monitoring interval.');
-    config.settings.checkIntervalMs = Number(value);
+    const values = [...MONITORING_INTERVALS].map(Number).sort((x, y) => x - y);
+    const current = Number(config.settings.checkIntervalMs || 300000);
+    const index = Math.max(0, values.indexOf(current));
+    config.settings.checkIntervalMs = values[(index + 1) % values.length];
     saveSettings(interaction, config);
     return updatePanel(interaction, monitoringPayload(interaction));
   }
-  if (id === `${P}automation:dupes`) { config.settings.suppressDuplicates = String(interaction.values?.[0]) !== 'false'; saveSettings(interaction, config); return updatePanel(interaction, monitoringPayload(interaction)); }
-  if (id === `${P}automation:retry`) { config.settings.retryDeliveries = String(interaction.values?.[0]) !== 'false'; saveSettings(interaction, config); return updatePanel(interaction, monitoringPayload(interaction)); }
-  if (id === `${P}toggle`) { store.setEnabled(interaction.guildId, config.enabled !== true, { actorId: interaction.user?.id || null, guild: interaction.guild }); return updatePanel(interaction, monitoringPayload(interaction)); }
+  if (id === `${P}automation:dupes`) {
+    config.settings.suppressDuplicates = true;
+    saveSettings(interaction, config);
+    return updatePanel(interaction, monitoringPayload(interaction));
+  }
+  if (id === `${P}automation:retry`) {
+    config.settings.retryDeliveries = config.settings.retryDeliveries === false;
+    saveSettings(interaction, config);
+    return updatePanel(interaction, monitoringPayload(interaction));
+  }
   if (id === `${P}automation:quiet`) {
     if (interaction.isButton?.()) { await interaction.showModal(quietHoursModal(config)); return true; }
     if (interaction.isModalSubmit?.()) {
@@ -212,20 +221,22 @@ async function handleMonitoringAction(interaction, id) {
 async function handleLiveMessageAction(interaction, id) {
   const config = store.getConfig(interaction.guildId);
   config.settings = config.settings && typeof config.settings === 'object' ? config.settings : {};
-  if (id === `${P}automation:liverefresh`) {
-    config.settings.liveMessageRefreshEnabled = config.settings.liveMessageRefreshEnabled === false;
-    if (!LIVE_REFRESH_INTERVALS.has(String(config.settings.liveMessageRefreshMs))) config.settings.liveMessageRefreshMs = 600000;
+  config.settings.editLiveNotifications = true;
+  if (id === `${P}automation:liverefreshrate` || id === `${P}automation:liverefresh`) {
+    const values = [600000, 900000, 1200000, 1800000, 2700000, 3600000];
+    if (config.settings.liveMessageRefreshEnabled === false) {
+      config.settings.liveMessageRefreshEnabled = true;
+      config.settings.liveMessageRefreshMs = values[0];
+    } else {
+      const current = Number(config.settings.liveMessageRefreshMs || 600000);
+      const index = Math.max(0, values.indexOf(current));
+      if (index >= values.length - 1) config.settings.liveMessageRefreshEnabled = false;
+      else config.settings.liveMessageRefreshMs = values[index + 1];
+    }
     saveSettings(interaction, config);
     return updatePanel(interaction, canonicalLiveMessagesPayload(interaction));
   }
-  if (id === `${P}automation:liverefreshrate`) {
-    const value = String(interaction.values?.[0] || '');
-    if (!LIVE_REFRESH_INTERVALS.has(value)) throw new Error('Choose a valid LIVE message refresh rate.');
-    config.settings.liveMessageRefreshMs = Number(value);
-    saveSettings(interaction, config);
-    return updatePanel(interaction, canonicalLiveMessagesPayload(interaction));
-  }
-  const keyById = { [`${P}automation:editlive`]: 'editLiveNotifications', [`${P}automation:deleteended`]: 'deleteEndedNotifications', [`${P}automation:viewers`]: 'includeViewerCount', [`${P}automation:duration`]: 'includeLiveDuration' };
+  const keyById = { [`${P}automation:viewers`]: 'includeViewerCount', [`${P}automation:duration`]: 'includeLiveDuration' };
   const setting = keyById[id];
   if (!setting) return false;
   config.settings[setting] = config.settings[setting] === false;
@@ -240,7 +251,22 @@ async function handleDiagnosticsAction(interaction, id) {
   if (id === `${P}data:refresh`) return updatePanel(interaction, diagnosticsPayload(interaction));
   if (id === `${P}test`) {
     if (!config.alertsChannelId) throw new Error('Choose an alert channel first.');
-    return followUp(interaction, { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Test').setDescription(`✅ Notification routing is working.\n\nThis private preview was opened from ${interaction.channelId ? `<#${interaction.channelId}>` : 'this setup channel'}.\n\nThumbnails, platform metadata and template variables will be applied to real provider events.`).setFooter({ text: 'Social Studio • Test' }).setTimestamp()] });
+    const channel = interaction.guild?.channels?.cache?.get(config.alertsChannelId)
+      || await interaction.guild?.channels?.fetch?.(config.alertsChannelId).catch(() => null);
+    if (!channel?.isTextBased?.() || typeof channel.send !== 'function') throw new Error('The configured Social Studio alert channel is unavailable or not text based.');
+    const target = config.notificationMentionMode === 'role' && config.notificationRoleId
+      ? `<@&${config.notificationRoleId}>`
+      : config.notificationMentionMode === 'everyone'
+        ? '@everyone'
+        : config.notificationMentionMode === 'here'
+          ? '@here'
+          : 'No notification ping';
+    const message = await channel.send({
+      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🧪 Social Studio Delivery Test').setDescription(`✅ Test delivery reached this channel successfully.\n\n**Configured LIVE notification target:** ${target}\n**Ping safety:** No members were pinged by this test.\n\nReal provider events keep their normal templates, metadata and media.`).setFooter({ text: 'Goliath Social Studio • Safe Test' }).setTimestamp()],
+      allowedMentions: { parse: [], roles: [] },
+    });
+    // Keep the message ID inside the same template literal; a stray backtick here breaks DEV syntax validation.
+    return followUp(interaction, { content: `📨 Test delivered successfully in <#${channel.id}> without pinging members. Message ID: \`${message.id}\`.` });
   }
   if (id === `${P}testing:last`) {
     const latest = history.at(-1);
@@ -278,7 +304,7 @@ async function handle(interaction) {
   if (id === `${P}liveMessages`) return updatePanel(interaction, canonicalLiveMessagesPayload(interaction));
   if ([`${P}test`, `${P}testing:last`, `${P}testing:diagnostics`, `${P}data:refresh`, `${P}data:export`, `${P}data:export:config`, `${P}data:clear`].includes(id)) return handleDiagnosticsAction(interaction, id);
   if ([`${P}automation:interval`, `${P}automation:dupes`, `${P}automation:retry`, `${P}automation:quiet`, `${P}toggle`].includes(id)) return handleMonitoringAction(interaction, id);
-  if ([`${P}automation:editlive`, `${P}automation:deleteended`, `${P}automation:viewers`, `${P}automation:duration`, `${P}automation:liverefresh`, `${P}automation:liverefreshrate`].includes(id)) return handleLiveMessageAction(interaction, id);
+  if ([`${P}automation:editlive`, `${P}automation:viewers`, `${P}automation:duration`, `${P}automation:liverefresh`, `${P}automation:liverefreshrate`].includes(id)) return handleLiveMessageAction(interaction, id);
   if (![`${P}creator:edit`, `${P}creator:clear`, `${P}creator:delete`].includes(id)) return false;
   const creatorId = selectedCreatorId(interaction);
   if (!creatorId) throw new Error('Select a creator profile first.');

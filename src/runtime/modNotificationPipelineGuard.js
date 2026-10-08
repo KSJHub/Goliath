@@ -24,6 +24,9 @@ if (!globalThis[PATCH_KEY]) {
 
   function persistNotice(guildId, modCase, notice) {
     const metadata = { ...(modCase.metadata || {}), appealNotice: notice };
+    if (metadata.punishmentReport && typeof metadata.punishmentReport === 'object') {
+      metadata.punishmentReport = { ...metadata.punishmentReport, dmSent: Boolean(notice?.sent), dmError: notice?.error || null };
+    }
     const updatedAt = new Date().toISOString();
     const result = storage.db.prepare('UPDATE cases SET metadata = ?, updated_at = ? WHERE guild_id = ? AND case_id = ?').run(JSON.stringify(metadata), updatedAt, String(guildId), Number(modCase.caseId));
     if (!result.changes) return null;

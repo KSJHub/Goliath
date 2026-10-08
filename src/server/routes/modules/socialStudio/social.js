@@ -2,8 +2,9 @@
 
 const crypto = require('crypto');
 const express = require('express');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../../core/guild/guildManager');
+const security = require('../../../../core/security/protection/core');
 const { replaceVariables } = require('../../../../core/guild/guildVariables');
 const { ALERT_TYPES, normalizeTemplates, resolveTemplate } = require('../../../../modules/socialStudio/socialAlerts/socialStudioTemplates');
 const { PLATFORMS, providerCatalog, diagnoseAccount, diagnoseAccounts, applyDiagnosticState } = require('../../../../modules/socialStudio/socialAlerts/socialStudioProviders');
@@ -28,8 +29,121 @@ function guildId(req) {
   if (!/^\d{15,25}$/.test(id)) throw new Error('Invalid guild ID.');
   return id;
 }
-function actor(req) { return { actorId: req.session?.user?.id || req.body?.actorId || null }; }
+const ACCOUNT_INPUT_KEYS = new Set([
+  'accountId', 'platform', 'displayName', 'username', 'normalizedUsername', 'externalId',
+  'sourceInput', 'url', 'profileUrl', 'avatar', 'alertChannelId', 'alertChannels',
+  'mentionRoleId', 'mentionMode', 'alertTypes', 'enabled',
+]);
+const CREATOR_INPUT_KEYS = new Set([
+  'creatorId', 'ownerDiscordId', 'status', 'displayName', 'group', 'tags', 'notes',
+  'adminNotes', 'enabled', 'accountIds',
+]);
+const CONFIG_INPUT_KEYS = new Set([
+  'alertsChannelId', 'logChannelId', 'alertChannels', 'platformChannels',
+  'managerRoleIds', 'userRoleIds', 'notificationMentionMode', 'notificationRoleId',
+  'liveRoleId', 'settings', 'templates',
+]);
+const pickKeys = (value, allowed) => Object.fromEntries(
+  Object.entries(isObject(value) ? value : {}).filter(([key]) => allowed.has(key)),
+);
+const roleIds = (value, excludedId = null) => [...new Set((Array.isArray(value) ? value : []).map(discordId).filter((id) => id && id !== excludedId))];
+const alertChannels = (value) => Object.fromEntries(
+  Object.entries(isObject(value) ? value : {})
+    .map(([type, id]) => [clean(type, 20).toLowerCase(), discordId(id)])
+    .filter(([type, id]) => ALERT_TYPES.includes(type) && id),
+);
+const platformChannels = (value) => Object.fromEntries(
+  Object.entries(isObject(value) ? value : {})
+    .map(([platform, id]) => [clean(platform, 20).toLowerCase(), discordId(id)])
+    .filter(([platform, id]) => PLATFORMS.includes(platform) && id),
+);
+function sanitizeAccountInput(value = {}) {
+  const input = pickKeys(value, ACCOUNT_INPUT_KEYS);
+  input.accountId = clean(input.accountId, 80) || undefined;
+  input.platform = clean(input.platform, 20).toLowerCase();
+  input.displayName = clean(input.displayName, 120);
+  input.username = clean(input.username, 500);
+  input.normalizedUsername = clean(input.normalizedUsername, 500);
+  input.externalId = clean(input.externalId, 200);
+  input.sourceInput = clean(input.sourceInput, 1000);
+  input.url = clean(input.url, 1000);
+  input.profileUrl = clean(input.profileUrl, 1000);
+  input.avatar = clean(input.avatar, 1000);
+  if (Object.prototype.hasOwnProperty.call(input, 'alertChannelId')) input.alertChannelId = discordId(input.alertChannelId);
+  if (Object.prototype.hasOwnProperty.call(input, 'alertChannels')) input.alertChannels = alertChannels(input.alertChannels);
+  if (Object.prototype.hasOwnProperty.call(input, 'mentionRoleId')) input.mentionRoleId = discordId(input.mentionRoleId);
+  if (Object.prototype.hasOwnProperty.call(input, 'mentionMode')) input.mentionMode = ['none', 'role', 'everyone', 'here'].includes(input.mentionMode) ? input.mentionMode : 'none';
+  if (Object.prototype.hasOwnProperty.call(input, 'alertTypes')) input.alertTypes = [...new Set((Array.isArray(input.alertTypes) ? input.alertTypes : []).map((item) => clean(item, 20).toLowerCase()).filter((item) => ALERT_TYPES.includes(item)))];
+  if (Object.prototype.hasOwnProperty.call(input, 'enabled')) input.enabled = input.enabled === true;
+  return input;
+}
+function sanitizeCreatorInput(value = {}) {
+  const input = pickKeys(value, CREATOR_INPUT_KEYS);
+  input.creatorId = clean(input.creatorId, 80) || undefined;
+  if (Object.prototype.hasOwnProperty.call(input, 'ownerDiscordId')) input.ownerDiscordId = discordId(input.ownerDiscordId);
+  input.status = clean(input.status, 40).toLowerCase();
+  if (!CREATOR_STATUSES.includes(input.status)) input.status = 'active';
+  input.displayName = clean(input.displayName, 120);
+  input.group = clean(input.group, 120);
+  input.tags = [...new Set((Array.isArray(input.tags) ? input.tags : []).map((item) => clean(item, 60)).filter(Boolean))];
+  input.notes = clean(input.notes, 2000);
+  input.adminNotes = clean(input.adminNotes, 2000);
+  if (Object.prototype.hasOwnProperty.call(input, 'enabled')) input.enabled = input.enabled === true;
+  input.accountIds = [...new Set((Array.isArray(input.accountIds) ? input.accountIds : []).map((item) => clean(item, 80)).filter(Boolean))];
+  return input;
+}
+function sanitizeConfigInput(value = {}, guildIdValue = null) {
+  const input = pickKeys(value, CONFIG_INPUT_KEYS);
+  if (Object.prototype.hasOwnProperty.call(input, 'alertsChannelId')) input.alertsChannelId = discordId(input.alertsChannelId);
+  if (Object.prototype.hasOwnProperty.call(input, 'logChannelId')) input.logChannelId = discordId(input.logChannelId);
+  if (Object.prototype.hasOwnProperty.call(input, 'alertChannels')) input.alertChannels = alertChannels(input.alertChannels);
+  if (Object.prototype.hasOwnProperty.call(input, 'platformChannels')) input.platformChannels = platformChannels(input.platformChannels);
+  if (Object.prototype.hasOwnProperty.call(input, 'managerRoleIds')) input.managerRoleIds = roleIds(input.managerRoleIds, guildIdValue);
+  if (Object.prototype.hasOwnProperty.call(input, 'userRoleIds')) input.userRoleIds = roleIds(input.userRoleIds, guildIdValue);
+  if (Object.prototype.hasOwnProperty.call(input, 'notificationRoleId')) input.notificationRoleId = discordId(input.notificationRoleId);
+  if (Object.prototype.hasOwnProperty.call(input, 'liveRoleId')) input.liveRoleId = discordId(input.liveRoleId);
+  if (Object.prototype.hasOwnProperty.call(input, 'notificationMentionMode')) input.notificationMentionMode = ['none', 'role', 'everyone', 'here'].includes(input.notificationMentionMode) ? input.notificationMentionMode : 'none';
+  if (Object.prototype.hasOwnProperty.call(input, 'settings') && isObject(input.settings)) {
+    const allowedSettings = new Set(['checkIntervalMs','retryIntervalMs','retryDeliveries','maxDeliveryAttempts','cooldownMs','suppressDuplicates','editLiveNotifications','includeViewerCount','includeLiveDuration','thumbnailPreference','platformPriority','quietHours','liveRefreshEnabled','liveRefreshSeconds']);
+    input.settings = pickKeys(input.settings, allowedSettings);
+    if (isObject(input.settings.quietHours)) input.settings.quietHours = pickKeys(input.settings.quietHours, new Set(['enabled','start','end','timezone']));
+    if (Array.isArray(input.settings.platformPriority)) input.settings.platformPriority = input.settings.platformPriority.map((item) => clean(item, 20).toLowerCase()).filter((item) => PLATFORMS.includes(item));
+  }
+  if (Object.prototype.hasOwnProperty.call(input, 'templates')) input.templates = normalizeTemplates(input.templates);
+  return input;
+}
+function actor(req) { return { actorId: req.moduleActorId || req.session?.user?.id || null }; }
 function client(req) { return req.client || req.app?.get?.('goliath.client') || req.app?.locals?.client || global.client || null; }
+async function requireManageAccess(req, res, next) {
+  try {
+    const userId = clean(req.session?.user?.id, 25);
+    if (!/^\d{15,25}$/.test(userId)) return res.status(401).json({ success: false, error: 'Authentication required.' });
+    const id = guildId(req);
+    req.moduleActorId = userId;
+    if (security.isBotOwner(userId)) return next();
+
+    const discordGuild = await guild(req, id);
+    if (!discordGuild) return res.status(403).json({ success: false, error: 'Guild is unavailable or not accessible.' });
+
+    const member = discordGuild.members.cache.get(userId) || await discordGuild.members.fetch(userId).catch(() => null);
+    const storedConfig = guildManager.getGuildSection(id, 'social', {});
+    const managerRoleIds = Array.isArray(storedConfig?.managerRoleIds)
+      ? storedConfig.managerRoleIds.map(discordId).filter(Boolean)
+      : [];
+
+    const allowed = Boolean(
+      discordGuild.ownerId === userId
+      || member?.permissions?.has(PermissionFlagsBits.Administrator)
+      || managerRoleIds.some((roleId) => member?.roles?.cache?.has?.(roleId)),
+    );
+
+    if (!allowed) return res.status(403).json({ success: false, error: 'Social Studio management permission is required.' });
+    return next();
+  } catch (error) {
+    return failure(res, error, 403);
+  }
+}
+
 async function guild(req, id) {
   const bot = client(req);
   if (!bot?.guilds) return null;
@@ -52,7 +166,6 @@ function defaults() {
       cooldownMs: 300000,
       suppressDuplicates: true,
       editLiveNotifications: true,
-      deleteEndedNotifications: true,
       includeViewerCount: true,
       includeLiveDuration: true,
       thumbnailPreference: 'stream',
@@ -64,6 +177,20 @@ function defaults() {
     analytics: { alertsSent: 0, checks: 0, failures: 0, simulations: 0 },
     updatedAt: null,
   };
+}
+function accountIdentityKey(value = {}) {
+  const platform = clean(value.platform, 20).toLowerCase();
+  const identity = clean(
+    value.canonicalIdentity || value.externalId || value.normalizedUsername || value.username || value.url,
+    500,
+  ).toLowerCase();
+  return platform && identity ? platform + ':' + identity : null;
+}
+function assertAccountIdentityAvailable(config, account, ignoreAccountId = null) {
+  const key = accountIdentityKey(account);
+  if (!key) return;
+  const duplicate = Object.values(config.accounts || {}).find((item) => item.accountId !== ignoreAccountId && accountIdentityKey(item) === key);
+  if (duplicate) throw new Error('That social account is already linked in this server.');
 }
 function normalizeAccount(value = {}, existingId = null) {
   const platform = clean(value.platform, 20).toLowerCase();
@@ -150,7 +277,6 @@ function normalize(raw = {}) {
       cooldownMs: asNumber(settings.cooldownMs, 300000, 0, 86400000),
       suppressDuplicates: settings.suppressDuplicates !== false,
       editLiveNotifications: settings.editLiveNotifications !== false,
-      deleteEndedNotifications: settings.deleteEndedNotifications !== false,
       includeViewerCount: settings.includeViewerCount !== false,
       includeLiveDuration: settings.includeLiveDuration !== false,
       thumbnailPreference: ['stream', 'creator', 'none'].includes(settings.thumbnailPreference) ? settings.thumbnailPreference : 'stream',
@@ -203,6 +329,7 @@ function health(config, discordGuild = null) {
     || Object.values(config.platformChannels || {}).some(Boolean)
     || Object.values(config.accounts).some((item) => item.alertChannelId || Object.values(item.alertChannels || {}).some(Boolean));
   if (!hasRoutedChannel) issues.push({ severity: 'warning', code: 'alert_channel_missing', message: 'No alert channel is configured.' });
+  if (discordGuild) issues.push(...validateDiscordTargets(discordGuild, config));
   if (discordGuild && config.liveRoleId) {
     const role = discordGuild.roles.cache.get(config.liveRoleId);
     if (!role) issues.push({ severity: 'error', code: 'live_role_missing', message: 'Configured LIVE role is unavailable.' });
@@ -232,6 +359,30 @@ function health(config, discordGuild = null) {
   return { healthy: errors === 0, grade: score >= 90 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : 'D', score, issues, checkedAt: now() };
 }
 function render(template, values) { return replaceVariables(String(template || ''), values); }
+function validateDiscordTargets(discordGuild, config) {
+  const issues = [];
+  const channelIds = new Set();
+  if (config.alertsChannelId) channelIds.add(config.alertsChannelId);
+  for (const account of Object.values(config.accounts || {})) {
+    if (account.alertChannelId) channelIds.add(account.alertChannelId);
+    for (const id of Object.values(account.alertChannels || {})) if (id) channelIds.add(id);
+  }
+  for (const channelId of channelIds) {
+    const channel = discordGuild?.channels?.cache?.get(channelId);
+    if (!channel) issues.push({ code: 'channel_missing', channelId });
+    else if (!channel.isTextBased?.()) issues.push({ code: 'channel_not_text_based', channelId });
+    else if (typeof channel.send !== 'function') issues.push({ code: 'channel_not_sendable', channelId });
+  }
+  const roleIds = new Set();
+  if (config.notificationRoleId) roleIds.add(config.notificationRoleId);
+  for (const account of Object.values(config.accounts || {})) if (account.mentionRoleId) roleIds.add(account.mentionRoleId);
+  for (const roleId of roleIds) {
+    const role = discordGuild?.roles?.cache?.get(roleId);
+    if (!role) issues.push({ code: 'role_missing', roleId });
+    else if (role.managed) issues.push({ code: 'role_managed', roleId });
+  }
+  return issues;
+}
 function preview(account, config, alertType) {
   const creator = Object.values(config.creators).find((item) => item.accountIds.includes(account.accountId));
   const template = resolveTemplate(config.templates, alertType);
@@ -241,6 +392,8 @@ function preview(account, config, alertType) {
 async function sendSimulation(req, id, account, data) {
   const discordGuild = await guild(req, id);
   if (!discordGuild) throw new Error('Discord guild is unavailable.');
+  const targetIssues = validateDiscordTargets(discordGuild, getConfig(id));
+  if (targetIssues.length) throw new Error('Configured Discord target is unavailable or invalid.');
   const channelId = account.alertChannelId || getConfig(id).alertsChannelId;
   if (!channelId) throw new Error('No alert channel is configured.');
   const channel = discordGuild.channels.cache.get(channelId) || await discordGuild.channels.fetch(channelId).catch(() => null);
@@ -251,6 +404,8 @@ async function sendSimulation(req, id, account, data) {
   return channel.send({ content, embeds: [embed], components, allowedMentions: { parse: account.mentionMode === 'everyone' ? ['everyone'] : [], roles: account.mentionRoleId ? [account.mentionRoleId] : [] } });
 }
 
+router.use(requireManageAccess);
+
 router.get('/:guildId', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, config: getConfig(id) }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/overview', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, overview: overview(getConfig(id)) }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/providers', (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, providers: providerCatalog() }); } catch (error) { return failure(res, error, 400); } });
@@ -259,9 +414,9 @@ router.get('/:guildId/queue', (req, res) => { try { const id = guildId(req); con
 router.get('/:guildId/creator-hub', (req, res) => { try { const id = guildId(req); const config = getConfig(id); return success(res, { guildId: id, creators: Object.values(config.creators), accounts: Object.values(config.accounts) }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/creator-hub/diagnostics', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const result = health(config); return success(res, { guildId: id, diagnostics: { health: result, runtime: { state: result.healthy ? (result.issues.length ? 'warning' : 'healthy') : 'error', startedAt: runtime.startedAt, warningCount: result.issues.filter((item) => item.severity === 'warning').length, errorCount: result.issues.filter((item) => item.severity === 'error').length, issues: result.issues, scheduler: { started: config.enabled, tickIntervalMs: config.settings.checkIntervalMs }, queue: { started: config.enabled && config.settings.retryDeliveries, intervalMs: config.settings.retryIntervalMs }, incidentMonitor: { started: true, intervalMs: 60000 } } } }); } catch (error) { return failure(res, error, 400); } });
 router.get('/:guildId/health', async (req, res) => { try { const id = guildId(req); return success(res, { guildId: id, health: health(getConfig(id), await guild(req, id)) }); } catch (error) { return failure(res, error, 400); } });
-router.patch('/:guildId/config', (req, res) => { try { const id = guildId(req); const current = getConfig(id); const body = isObject(req.body) ? req.body : {}; if (typeof body.enabled === 'boolean') guildManager.setModuleEnabled(id, 'social', body.enabled, actor(req)); const { enabled: _enabled, ...bodyConfig } = body; const incomingTemplates = normalizeTemplates(bodyConfig.templates); const config = { ...current, ...bodyConfig, settings: { ...current.settings, ...(isObject(bodyConfig.settings) ? bodyConfig.settings : {}) }, templates: isObject(bodyConfig.templates) ? { ...current.templates, ...incomingTemplates, defaults: { ...current.templates.defaults, ...incomingTemplates.defaults }, custom: { ...current.templates.custom, ...incomingTemplates.custom } } : current.templates }; return success(res, { guildId: id, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/accounts', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const account = normalizeAccount(req.body || {}); config.accounts[account.accountId] = account; history(config, { status: 'created', accountId: account.accountId, platform: account.platform, alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, account, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
-router.delete('/:guildId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const accountId = clean(req.params.accountId, 80); if (!config.accounts[accountId]) throw new Error('Social account was not found.'); delete config.accounts[accountId]; Object.values(config.creators).forEach((creator) => { creator.accountIds = creator.accountIds.filter((item) => item !== accountId); }); history(config, { status: 'deleted', accountId, alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
+router.patch('/:guildId/config', (req, res) => { try { const id = guildId(req); const current = getConfig(id); const body = isObject(req.body) ? req.body : {}; if (typeof body.enabled === 'boolean') guildManager.setModuleEnabled(id, 'social', body.enabled, actor(req)); const bodyConfig = sanitizeConfigInput(body, id); const incomingTemplates = normalizeTemplates(bodyConfig.templates); const config = { ...current, ...bodyConfig, settings: { ...current.settings, ...(isObject(bodyConfig.settings) ? bodyConfig.settings : {}) }, templates: isObject(bodyConfig.templates) ? { ...current.templates, ...incomingTemplates, defaults: { ...current.templates.defaults, ...incomingTemplates.defaults }, custom: { ...current.templates.custom, ...incomingTemplates.custom } } : current.templates }; history(config, { status: 'config_updated', creator: 'System', alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/accounts', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const account = normalizeAccount(sanitizeAccountInput(req.body || {})); assertAccountIdentityAvailable(config, account); config.accounts[account.accountId] = account; history(config, { status: 'created', accountId: account.accountId, platform: account.platform, alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, account, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
+router.delete('/:guildId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const accountId = clean(req.params.accountId, 80); const existingAccount = config.accounts[accountId]; if (!existingAccount) throw new Error('Social account was not found.'); delete config.accounts[accountId]; Object.values(config.creators).forEach((creator) => { creator.accountIds = (creator.accountIds || []).filter((item) => item !== accountId); }); config.queue = (config.queue || []).filter((item) => String(item?.accountId || '') !== accountId); history(config, { status: 'deleted', accountId, platform: existingAccount.platform || null, alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/check', async (req, res) => {
   try {
     const id = guildId(req);
@@ -317,14 +472,14 @@ router.post('/:guildId/accounts/:accountId/check', async (req, res) => {
     return failure(res, error, 400);
   }
 });
-router.post('/:guildId/creator-hub', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = normalizeCreator(req.body || {}, null, config.accounts); config.creators[creator.creatorId] = creator; history(config, { status: 'creator_created', creator: creator.displayName, alertType: null }); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
-router.patch('/:guildId/creator-hub/:creatorId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creatorId = clean(req.params.creatorId, 80); const existing = config.creators[creatorId]; if (!existing) throw new Error('Creator profile was not found.'); const creator = normalizeCreator({ ...existing, ...(req.body || {}), creatorId, ownerDiscordId: existing.ownerDiscordId }, creatorId, config.accounts); config.creators[creatorId] = creator; return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/creator-hub/:creatorId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = config.creators[clean(req.params.creatorId, 80)]; const accountId = clean(req.params.accountId, 80); if (!creator || !config.accounts[accountId]) throw new Error('Creator or account was not found.'); Object.values(config.creators).forEach((item) => { item.accountIds = (item.accountIds || []).filter((id) => id !== accountId); }); creator.accountIds = [...new Set([...creator.accountIds, accountId])]; creator.updatedAt = now(); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/creator-hub', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = normalizeCreator(sanitizeCreatorInput(req.body || {}), null, config.accounts); config.creators[creator.creatorId] = creator; history(config, { status: 'creator_created', creator: creator.displayName, creatorId: creator.creatorId, alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
+router.patch('/:guildId/creator-hub/:creatorId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creatorId = clean(req.params.creatorId, 80); const existing = config.creators[creatorId]; if (!existing) throw new Error('Creator profile was not found.'); const creator = normalizeCreator({ ...existing, ...sanitizeCreatorInput(req.body || {}), creatorId, ownerDiscordId: existing.ownerDiscordId }, creatorId, config.accounts); config.creators[creatorId] = creator; history(config, { status: 'creator_updated', creator: creator.displayName, creatorId, alertType: null, actorId: actor(req).actorId }); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/creator-hub/:creatorId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = config.creators[clean(req.params.creatorId, 80)]; const accountId = clean(req.params.accountId, 80); if (!creator || !config.accounts[accountId]) throw new Error('Creator or account was not found.'); Object.values(config.creators).forEach((item) => { item.accountIds = (item.accountIds || []).filter((id) => id !== accountId); }); creator.accountIds = [...new Set([...(creator.accountIds || []), accountId])]; creator.updatedAt = now(); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.delete('/:guildId/creator-hub/:creatorId/accounts/:accountId', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const creator = config.creators[clean(req.params.creatorId, 80)]; if (!creator) throw new Error('Creator profile was not found.'); creator.accountIds = creator.accountIds.filter((item) => item !== clean(req.params.accountId, 80)); creator.updatedAt = now(); return success(res, { guildId: id, creator, config: saveConfig(id, config, actor(req)) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/creator-hub/rebuild', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const linked = new Set(Object.values(config.creators).flatMap((creator) => creator.accountIds)); let created = 0; for (const account of Object.values(config.accounts)) { if (linked.has(account.accountId)) continue; const creator = normalizeCreator({ displayName: account.displayName || account.username, accountIds: [account.accountId], tags: [account.platform] }, null, config.accounts); config.creators[creator.creatorId] = creator; created += 1; } const saved = saveConfig(id, config, actor(req)); return success(res, { guildId: id, created, creators: Object.values(saved.creators) }); } catch (error) { return failure(res, error, 400); } });
 router.post('/:guildId/creator-hub/accounts/:accountId/simulate', async (req, res) => { try { const id = guildId(req); const config = getConfig(id); const account = config.accounts[clean(req.params.accountId, 80)]; if (!account) throw new Error('Social account was not found.'); const alertType = ALERT_TYPES.includes(req.body?.alertType) ? req.body.alertType : 'live'; const data = preview(account, config, alertType); let messageId = null; if (req.body?.send === true) { const message = await sendSimulation(req, id, account, data); messageId = message.id; config.analytics.alertsSent = Number(config.analytics.alertsSent || 0) + 1; runtime.deliveries += 1; } config.analytics.simulations = Number(config.analytics.simulations || 0) + 1; history(config, { status: req.body?.send === true ? 'simulation_sent' : 'simulation_previewed', accountId: account.accountId, platform: account.platform, alertType }); saveConfig(id, config, actor(req)); return success(res, { guildId: id, preview: data, sent: req.body?.send === true, messageId }); } catch (error) { runtime.errors += 1; return failure(res, error, 400); } });
-router.post('/:guildId/queue/process', (req, res) => { try { const id = guildId(req); const config = getConfig(id); let processed = 0; config.queue = config.queue.map((item) => { if (!['pending', 'retry'].includes(item.status)) return item; processed += 1; return { ...item, status: 'processed', processedAt: now() }; }); return success(res, { guildId: id, processed, queue: saveConfig(id, config, actor(req)).queue }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/queue/:itemId/retry', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const item = config.queue.find((entry) => entry.id === clean(req.params.itemId, 100)); if (!item) throw new Error('Queue item was not found.'); item.status = 'retry'; item.nextAttemptAt = now(); item.attempts = Number(item.attempts || 0) + 1; return success(res, { guildId: id, item, queue: saveConfig(id, config, actor(req)).queue }); } catch (error) { return failure(res, error, 400); } });
-router.post('/:guildId/repair', async (req, res) => { try { const id = guildId(req); const discordGuild = await guild(req, id); const config = getConfig(id); let repaired = 0; for (const account of Object.values(config.accounts)) { const validAlertTypes = account.alertTypes.filter((item) => ALERT_TYPES.includes(item)); if (validAlertTypes.length !== account.alertTypes.length) { account.alertTypes = validAlertTypes; repaired += 1; } if (!account.alertTypes.length) { account.alertTypes = ['live']; repaired += 1; } } const validQueue = config.queue.filter((item) => item && item.id).slice(-500); if (validQueue.length !== config.queue.length) { config.queue = validQueue; repaired += 1; } history(config, { status: 'repair', creator: 'System', alertType: null, repaired }); const saved = saveConfig(id, config, actor(req)); return success(res, { guildId: id, repaired, health: health(saved, discordGuild), config: saved }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/queue/process', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const currentTime = Date.now(); let processed = 0; let skipped = 0; const maxAttempts = Math.max(1, Number(config.settings?.maxDeliveryAttempts || 5)); config.queue = (config.queue || []).map((item) => { if (!item || !['pending', 'retry'].includes(item.status)) return item; const dueAt = item.nextAttemptAt ? new Date(item.nextAttemptAt).getTime() : 0; const attempts = Number(item.attempts || 0); if (dueAt && dueAt > currentTime) { skipped += 1; return item; } if (attempts >= maxAttempts) return { ...item, status: 'failed', failedAt: item.failedAt || now() }; processed += 1; return { ...item, status: 'processed', processedAt: now() }; }); return success(res, { guildId: id, processed, skipped, queue: saveConfig(id, config, actor(req)).queue }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/queue/:itemId/retry', (req, res) => { try { const id = guildId(req); const config = getConfig(id); const item = config.queue.find((entry) => entry.id === clean(req.params.itemId, 100)); if (!item) throw new Error('Queue item was not found.'); const maxAttempts = Math.max(1, Number(config.settings?.maxDeliveryAttempts || 5)); const attempts = Number(item.attempts || 0); if (attempts >= maxAttempts) throw new Error('Queue item has reached the maximum delivery attempts.'); item.status = 'retry'; item.nextAttemptAt = now(); item.attempts = attempts + 1; return success(res, { guildId: id, item, queue: saveConfig(id, config, actor(req)).queue }); } catch (error) { return failure(res, error, 400); } });
+router.post('/:guildId/repair', async (req, res) => { try { const id = guildId(req); const discordGuild = await guild(req, id); const config = getConfig(id); let repaired = 0; for (const account of Object.values(config.accounts)) { const validAlertTypes = account.alertTypes.filter((item) => ALERT_TYPES.includes(item)); if (validAlertTypes.length !== account.alertTypes.length) { account.alertTypes = validAlertTypes; repaired += 1; } if (!account.alertTypes.length) { account.alertTypes = ['live']; repaired += 1; } } const validQueue = (config.queue || []).filter((item) => item && item.id && (!item.accountId || config.accounts[item.accountId])).slice(-500); if (validQueue.length !== (config.queue || []).length) { config.queue = validQueue; repaired += 1; } for (const creator of Object.values(config.creators || {})) { const validIds = [...new Set((creator.accountIds || []).filter((accountId) => config.accounts[accountId]))]; if (validIds.length !== (creator.accountIds || []).length) { creator.accountIds = validIds; creator.updatedAt = now(); repaired += 1; } } history(config, { status: 'repair', creator: 'System', alertType: null, repaired }); const saved = saveConfig(id, config, actor(req)); return success(res, { guildId: id, repaired, health: health(saved, discordGuild), config: saved }); } catch (error) { return failure(res, error, 400); } });
 
 module.exports = router;

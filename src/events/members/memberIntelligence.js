@@ -4,12 +4,6 @@ const intelligence = require('../../core/administration/mod/intelligence');
 const joinIntelligence = require('../../core/administration/mod/joinIntelligence');
 const continuousIntelligence = require('../../core/administration/mod/continuousIntelligence');
 
-try {
-  require('../../modules/securityStudio/verificationIntelligenceExtension').install();
-} catch (error) {
-  console.warn('[Join Intelligence] Verification UI extension failed to load:', error?.message || error);
-}
-
 module.exports = [
   {
     name: 'guildMemberAdd',

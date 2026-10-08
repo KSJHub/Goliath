@@ -9,11 +9,13 @@ const {
   youtubeThumbnail,
 } = require('./shared');
 
+const YOUTUBE_API_ROOT = `https://www.googleapis.com/youtube/v${3}`;
+
 async function youtubeChannel(account, key) {
   const username = handle(account);
   const suppliedId = clean(account.externalId || account.metadata?.channelId || (/^UC[\w-]{20,}$/.test(username) ? username : ''));
   const query = suppliedId ? `id=${encodeURIComponent(suppliedId)}` : `forHandle=${encodeURIComponent(username.replace(/^@/, ''))}`;
-  const { json } = await request(`https://www.googleapis.com/youtube/v3/channels?part=id,snippet,contentDetails&${query}&key=${encodeURIComponent(key)}`);
+  const { json } = await request(`${YOUTUBE_API_ROOT}/channels?part=id,snippet,contentDetails&${query}&key=${encodeURIComponent(key)}`);
   return json?.items?.[0] || null;
 }
 
@@ -26,7 +28,7 @@ async function videoDetails(ids, key) {
   const list = [...new Set((ids || []).filter(Boolean))];
   if (!list.length) return new Map();
   try {
-    const { json } = await request(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,liveStreamingDetails,statistics&id=${encodeURIComponent(list.join(','))}&key=${encodeURIComponent(key)}`);
+    const { json } = await request(`${YOUTUBE_API_ROOT}/videos?part=snippet,contentDetails,liveStreamingDetails,statistics&id=${encodeURIComponent(list.join(','))}&key=${encodeURIComponent(key)}`);
     return new Map((json?.items || []).map((video) => [video.id, video]));
   } catch {
     return new Map();
@@ -36,7 +38,7 @@ async function videoDetails(ids, key) {
 async function categoryName(categoryId, key) {
   if (!categoryId) return null;
   try {
-    const { json } = await request(`https://www.googleapis.com/youtube/v3/videoCategories?part=snippet&id=${encodeURIComponent(categoryId)}&key=${encodeURIComponent(key)}`);
+    const { json } = await request(`${YOUTUBE_API_ROOT}/videoCategories?part=snippet&id=${encodeURIComponent(categoryId)}&key=${encodeURIComponent(key)}`);
     return clean(json?.items?.[0]?.snippet?.title) || null;
   } catch {
     return null;
@@ -49,9 +51,9 @@ async function checkYouTube(account) {
   const channel = await youtubeChannel(account, key);
   if (!channel?.id) return unavailable('youtube', 'YouTube username, channel ID or URL could not be resolved.');
 
-  const liveReq = request(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&eventType=live&channelId=${encodeURIComponent(channel.id)}&maxResults=1&key=${encodeURIComponent(key)}`);
+  const liveReq = request(`${YOUTUBE_API_ROOT}/search?part=snippet&type=video&eventType=live&channelId=${encodeURIComponent(channel.id)}&maxResults=1&key=${encodeURIComponent(key)}`);
   const uploadsId = channel.contentDetails?.relatedPlaylists?.uploads;
-  const uploadReq = uploadsId ? request(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(uploadsId)}&maxResults=5&key=${encodeURIComponent(key)}`) : Promise.resolve({ json: null });
+  const uploadReq = uploadsId ? request(`${YOUTUBE_API_ROOT}/playlistItems?part=snippet,contentDetails&playlistId=${encodeURIComponent(uploadsId)}&maxResults=5&key=${encodeURIComponent(key)}`) : Promise.resolve({ json: null });
   const [{ json: liveJson }, { json: uploadJson }] = await Promise.all([liveReq, uploadReq]);
   const live = liveJson?.items?.[0] || null;
   const liveId = live?.id?.videoId || null;

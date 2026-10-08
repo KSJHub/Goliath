@@ -16,6 +16,8 @@ const TIKTOK_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 const RETRYABLE_CONNECT_CODES = new Set(['UND_ERR_CONNECT_TIMEOUT', 'ENETUNREACH', 'EHOSTUNREACH', 'ETIMEDOUT']);
 const PAUSE_BOOLEAN_KEYS = ['isPaused', 'is_paused', 'paused', 'livePaused', 'live_paused'];
 const PAUSE_STATUS_KEYS = ['liveStatus', 'live_status', 'playbackStatus', 'playback_status', 'streamStatus', 'stream_status', 'playerStatus', 'player_status'];
+const MAX_TIKTOK_LIVE_AGE_MS = 48 * 60 * 60 * 1000;
+const MAX_TIKTOK_START_FUTURE_MS = 5 * 60 * 1000;
 
 function networkErrorCode(error) {
   let current = error;
@@ -81,6 +83,32 @@ function tiktokUsername(account) {
   return '';
 }
 
+function saneTikTokStartedAt(value) {
+  const iso = isoFromProviderEpoch(value);
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  const current = Date.now();
+  if (!Number.isFinite(ms)) return null;
+  if (ms > current + MAX_TIKTOK_START_FUTURE_MS) return null;
+  if (ms < current - MAX_TIKTOK_LIVE_AGE_MS) return null;
+  return iso;
+}
+
+function extractRoomId(body) {
+  if (!body) return '';
+  const patterns = [
+    /"roomId"\s*:\s*"([1-9]\d*)"/i,
+    /"roomId"\s*:\s*([1-9]\d*)/i,
+    /"room_id"\s*:\s*"([1-9]\d*)"/i,
+    /"room_id"\s*:\s*([1-9]\d*)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = body.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return '';
+}
+
 function pausedValue(value) {
   if (value === true || value === 1) return true;
   const normalized = String(value ?? '').trim().toLowerCase();
@@ -109,7 +137,16 @@ function htmlPausedState(body) {
   return explicitBoolean || explicitStatus || humanMarker;
 }
 
-function tiktokApiResult(json, fallbackUsername, fallbackId, source) {
+function stableTikTokLiveEventId(roomId, priorLiveEventId = '') {
+  const room = clean(roomId);
+  const prior = clean(priorLiveEventId);
+  // If a public-page fallback had to create a synthetic id, keep it for the
+  // remainder of that LIVE so API recovery cannot look like a second broadcast.
+  if (prior.startsWith('tiktok-live:')) return prior;
+  return room || prior;
+}
+
+function tiktokApiResult(json, fallbackUsername, fallbackId, source, priorLiveEventId = '') {
   const user = json?.data?.user && typeof json.data.user === 'object' ? json.data.user : {};
   const liveRoom = json?.data?.liveRoom && typeof json.data.liveRoom === 'object' ? json.data.liveRoom : {};
   const rawStatus = liveRoom.status ?? user.status;
@@ -129,7 +166,7 @@ function tiktokApiResult(json, fallbackUsername, fallbackId, source) {
   const avatar = user.avatarLarger || user.avatarMedium || user.avatarThumb || liveRoom.owner?.avatarLarger || null;
   const rawViewerCount = liveRoom.user_count ?? liveRoom.userCount ?? liveRoom.viewer_count ?? liveRoom.viewerCount;
   const viewerCount = Number(rawViewerCount);
-  const startedAt = isoFromProviderEpoch(liveRoom.start_time || liveRoom.startTime);
+  const startedAt = saneTikTokStartedAt(liveRoom.start_time || liveRoom.startTime);
 
   return result('tiktok', {
     isLive: true,
@@ -141,7 +178,7 @@ function tiktokApiResult(json, fallbackUsername, fallbackId, source) {
     avatar,
     event: {
       type: 'live',
-      id: roomId || `tiktok-live:${resolvedUsername || resolvedUserId || fallbackUsername || fallbackId}`,
+      id: stableTikTokLiveEventId(roomId, priorLiveEventId),
       title: clean(liveRoom.title) || `${resolvedUsername || fallbackUsername || 'Creator'} is LIVE on TikTok`,
       url: resolvedLiveUrl || 'https://www.tiktok.com/live',
       thumbnail: cover || avatar || null,
@@ -168,11 +205,12 @@ async function checkTikTok(account) {
   if (!username && !userId) return unavailable('tiktok', 'TikTok username, channel ID or URL could not be resolved.');
 
   const errors = [];
+  const priorLiveEventId = account?.state?.isLive === true ? clean(account.state.liveEventId) : '';
 
   if (username) {
     try {
       const json = await tiktokApiLookup({ username });
-      const resolved = tiktokApiResult(json, username, userId, 'tiktok_api_live_username');
+      const resolved = tiktokApiResult(json, username, userId, 'tiktok_api_live_username', priorLiveEventId);
       if (resolved) return resolved;
     } catch (error) { errors.push(`username API: ${error.message}`); }
   }
@@ -180,7 +218,7 @@ async function checkTikTok(account) {
   if (userId) {
     try {
       const json = await tiktokApiLookup({ userId });
-      const resolved = tiktokApiResult(json, username, userId, 'tiktok_api_live_id');
+      const resolved = tiktokApiResult(json, username, userId, 'tiktok_api_live_id', priorLiveEventId);
       if (resolved) return resolved;
     } catch (error) { errors.push(`ID API: ${error.message}`); }
   }
@@ -223,12 +261,12 @@ async function checkTikTok(account) {
             resolvedUsername: sigiUsername,
             event: {
               type: 'live',
-              id: sigiRoomId,
+              id: stableTikTokLiveEventId(sigiRoomId, priorLiveEventId),
               title: clean(sigiRoom.title) || `${sigiUsername} is LIVE on TikTok`,
               url: liveUrl,
               thumbnail: cover,
               viewerCount: Number.isFinite(viewerCount) && viewerCount > 0 ? viewerCount : null,
-              startedAt: isoFromProviderEpoch(sigiRoom.startTime || sigiRoom.start_time),
+              startedAt: saneTikTokStartedAt(sigiRoom.startTime || sigiRoom.start_time),
               liveStatus: sigiPaused ? 'PAUSED' : 'LIVE',
               paused: sigiPaused,
             },
@@ -239,7 +277,8 @@ async function checkTikTok(account) {
       }
     }
     const ended = /LIVE\s+has\s+ended|live\s+(?:has\s+)?ended|room\s+(?:has\s+)?ended|stream\s+(?:has\s+)?ended/i.test(body);
-    const hasRoom = /"roomId"\s*:\s*"?[1-9]\d*/i.test(body) || /"room_id"\s*:\s*"?[1-9]\d*/i.test(body);
+    const pageRoomId = extractRoomId(body);
+    const hasRoom = Boolean(pageRoomId);
     const directLiveStatus = /"status"\s*:\s*2\b/.test(body) || /"isLive"\s*:\s*true/i.test(body);
     const escapedUsername = username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const creatorMarker = new RegExp(`(?:uniqueId|unique_id|author|nickname)[^\\n]{0,200}${escapedUsername}`, 'i').test(body);
@@ -262,7 +301,7 @@ async function checkTikTok(account) {
       resolvedUsername: username,
       event: {
         type: 'live',
-        id: `tiktok-live:${username}`,
+        id: stableTikTokLiveEventId(pageRoomId, priorLiveEventId) || `tiktok-live:${username.toLowerCase()}`,
         title: pageTitle || `${username} is LIVE on TikTok`,
         url: liveUrl,
         thumbnail: ogImage || null,

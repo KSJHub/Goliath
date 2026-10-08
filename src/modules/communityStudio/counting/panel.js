@@ -5,6 +5,7 @@ const {
   EmbedBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
 const counting = require('./counting');
+const countingHealth = require('./countingHealth');
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
 
 const PREFIX = 'admin:module:counting';
@@ -22,11 +23,16 @@ function formatHintThreshold(value) {
   if (value === null || value === undefined || value === '') return 'Never reveal';
   return `After ${value} mistake${Number(value) === 1 ? '' : 's'}`;
 }
+function formatFailureLimit(value) {
+  if (!Number(value)) return 'Off: mistakes do not reset the run';
+  if (Number(value) === 1) return '1 wrong answer: sudden death';
+  return `${value} wrong answers before reset`;
+}
 function formatCleanup(value) {
   if (value === null || value === undefined || value === '') return 'Keep replies';
   return `Delete after ${value}s`;
 }
-function footer(embed, memberDisplayName) { return embed.setFooter({ text: `Requested by ${memberDisplayName}` }).setTimestamp(); }
+function footer(embed) { return embed.setFooter({ text: 'Goliath Counting' }).setTimestamp(); }
 function channelSelector(section) {
   return new ChannelSelectMenuBuilder().setCustomId(`${PREFIX}:channel`).setPlaceholder(section.channelId ? 'Change the counting channel' : 'Choose the counting channel').setChannelTypes(ChannelType.GuildText).setMinValues(0).setMaxValues(1);
 }
@@ -35,75 +41,179 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
   const section = counting.getSection(guild.id);
   const enabled = isModuleEnabled(guild.id, counting.MODULE_KEY);
   const hasChannel = Boolean(section.channelId);
-  const channel = hasChannel ? `<#${section.channelId}>` : '**Not chosen yet**';
-  const lastCounter = section.lastCounterId ? `<@${section.lastCounterId}>` : 'Nobody yet';
-  const embed = footer(new EmbedBuilder().setColor(PANEL_COLOR).setTitle('🔢 Counting').setDescription([
-    'Set up and manage your server’s counting game from one place.', '',
-    `**${enabled ? '🟢 Running' : '⚪ Disabled'}** • ${channel}`,
-    !hasChannel ? '\n⚠️ **Choose a counting channel first.** Goliath will unlock **Enable** and **Player Panel** once a channel is selected.' : '',
-  ].filter(Boolean).join('\n')).addFields(
-    { name: '📊 Current Game', value: [`**Current:** \`${section.currentCount}\`  •  **Next:** \`${counting.expectedNext(section)}\`  •  **Record:** \`${section.highestCount}\``, `**Last Counter:** ${lastCounter}`].join('\n') },
-    { name: '🎮 Rules', value: [
-      `**Start At:** \`${section.startingNumber}\``, `**Turns:** ${formatTurnLimit(section.maxConsecutivePerMember)}`,
-      `**Hint:** ${formatHintThreshold(section.answerAfterFailures)}`,
-      `**Numbers Only:** ${section.numbersOnly ? 'On ✅ — non-counting messages are removed' : 'Off — normal chat is allowed'}`,
-      `**Wrong Counts:** ${section.deleteIncorrect ? 'Deleted ✅' : 'Kept'}`,
-      `**Milestones:** ${section.milestoneAnnouncements ? `Every ${section.milestoneInterval} 🎉` : 'Off'}`,
-    ].join('\n') },
-    { name: '💬 Goliath Responses', value: [`**Banter:** ${section.funnyResponses ? 'On 😂 — playful rotating reactions' : 'Off — simple responses'}`, `**Reply Timing:** ${formatCleanup(section.responseCleanupSeconds)}`].join('\n') },
-    { name: '🧭 What the controls do', value: [
-      '**Game Rules** changes where the game starts, turns per member and when hints appear.',
-      '**Set Count** moves the current game to a specific number without changing your setup.',
-      '**Milestones** controls celebrations and how often they happen.',
-      '**Player Panel** posts or refreshes the member-friendly instructions in the counting channel.',
-      '**Reset** ends the current run and starts again without changing your channel or rules.',
-    ].join('\n') },
-  ), memberDisplayName);
+  const channel = hasChannel ? '<#' + section.channelId + '>' : '**Not configured**';
+  const lastCounter = section.lastCounterId ? '<@' + section.lastCounterId + '>' : 'Nobody yet';
+  const status = enabled ? '🟢 Running' : '⚪ Disabled';
+
+  const embed = footer(new EmbedBuilder()
+    .setColor(PANEL_COLOR)
+    .setTitle('🔢 Counting Management')
+    .setDescription([
+      '**' + status + '**  •  ' + channel,
+      !hasChannel ? '\n⚠️ Choose a Counting channel to enable the game and deploy the Player Panel.' : '',
+    ].filter(Boolean).join('\n'))
+    .addFields(
+      {
+        name: '📊 Live Game',
+        value: [
+          '**Current**  \`' + section.currentCount + '\`   •   **Next**  \`' + counting.expectedNext(section) + '\`   •   **Record**  \`' + section.highestCount + '\`',
+          '**Last Counter:** ' + lastCounter,
+        ].join('\n'),
+      },
+      {
+        name: '🎮 Game Rules',
+        value: [
+          '**Preset:** ' + (counting.rulesAreDefault(section) ? 'Goliath Defaults' : 'Custom'),
+          '**Turns:** ' + formatTurnLimit(section.maxConsecutivePerMember),
+          '**Game Over:** ' + formatFailureLimit(section.failureLimit),
+          '**Hints:** ' + formatHintThreshold(section.answerAfterFailures) + '   •   **Milestones:** ' + (section.milestoneAnnouncements ? 'Every ' + section.milestoneInterval : 'Off'),
+        ].join('\n'),
+      },
+      {
+        name: '🛡️ Channel Behaviour',
+        value: [
+          '**Numbers Only:** ' + (section.numbersOnly ? 'On' : 'Off') + '   •   **Wrong Counts:** ' + (section.deleteIncorrect ? 'Delete' : 'Keep'),
+          '**Banter:** ' + (section.funnyResponses ? 'On' : 'Off') + '   •   **Reply Timing:** ' + formatCleanup(section.responseCleanupSeconds),
+        ].join('\n'),
+      },
+    ));
+
   return { content: null, embeds: [embed], components: [
     row(channelSelector(section)),
-    row(button(`${PREFIX}:rules:edit`, '⚙️ Game Rules', ButtonStyle.Primary), button(`${PREFIX}:setCurrent`, '🎯 Set Count', ButtonStyle.Secondary), button(`${PREFIX}:milestones`, '🎉 Milestones', ButtonStyle.Secondary)),
-    row(button(`${PREFIX}:toggle:numbersOnly`, section.numbersOnly ? '🔢 Numbers Only: On' : '🔢 Numbers Only: Off', ButtonStyle.Secondary), button(`${PREFIX}:toggle:delete`, section.deleteIncorrect ? '🗑️ Wrong Counts: Delete' : '🗑️ Wrong Counts: Keep', ButtonStyle.Secondary)),
-    row(button(`${PREFIX}:toggle:funny`, section.funnyResponses ? '😂 Banter: On' : '😂 Banter: Off', ButtonStyle.Secondary), button(`${PREFIX}:responses:timing`, '⏱️ Reply Timing', ButtonStyle.Secondary), button(`${PREFIX}:playerPanel`, section.playerPanelMessageId ? '📢 Update Player Panel' : '📢 Player Panel', ButtonStyle.Secondary, !hasChannel)),
-    row(button(`${PREFIX}:toggle:enabled`, enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Secondary : ButtonStyle.Success, !hasChannel && !enabled), button(`${PREFIX}:reset`, '♻️ Reset', ButtonStyle.Danger), button('admin:studio:communityStudio', '⬅️ Back', ButtonStyle.Secondary)),
+    row(
+      button(PREFIX + ':playerPanel', '📢 Player Panel', ButtonStyle.Secondary, !hasChannel),
+      button(PREFIX + ':rules', '🎮 Game Rules', ButtonStyle.Primary),
+      button(PREFIX + ':reset', '♻️ Reset Game', ButtonStyle.Danger),
+    ),
+    row(
+      button('admin:studio:communityStudio', '⬅️ Back', ButtonStyle.Secondary),
+      button(PREFIX + ':settings', '⚙️ Settings', ButtonStyle.Secondary),
+    ),
   ] };
 }
-
-function buildChannelScreen(guild, memberDisplayName) { return buildPanel(guild, memberDisplayName); }
-function buildRulesScreen(guild, memberDisplayName) { return buildPanel(guild, memberDisplayName); }
-function buildResponsesScreen(guild, memberDisplayName) { return buildPanel(guild, memberDisplayName); }
+function buildRulesScreen(guild) {
+  const section = counting.getSection(guild.id);
+  const embed = footer(new EmbedBuilder()
+    .setColor(PANEL_COLOR)
+    .setTitle('🎮 Counting Game Rules')
+    .setDescription([
+      'Set the game rules and choose how Goliath handles Counting messages.',
+      '',
+      '**🎮 Configure Game**',
+      '👤 **Turns:** ' + formatTurnLimit(section.maxConsecutivePerMember) + '   •   💀 **Game Over:** ' + formatFailureLimit(section.failureLimit),
+      '💡 **Hints:** ' + formatHintThreshold(section.answerAfterFailures) + '   •   🎯 **Milestones:** ' + (section.milestoneAnnouncements ? 'Every ' + section.milestoneInterval : 'Off'),
+      '',
+      '**⏱️ Reply Timing:** ' + formatCleanup(section.responseCleanupSeconds),
+      '',
+      '**🔢 Numbers Only:** ' + (section.numbersOnly ? 'On' : 'Off') + '   •   **🗑️ Wrong Counts:** ' + (section.deleteIncorrect ? 'Delete' : 'Keep'),
+      '**😂 Banter:** ' + (section.funnyResponses ? 'On' : 'Off'),
+      '',
+      '**Preset:** ' + (counting.rulesAreDefault(section) ? 'Goliath Defaults' : 'Custom'),
+    ].join('\n')));
+  return { content: null, embeds: [embed], components: [
+    row(
+      button(PREFIX + ':rules:advanced', '🎮 Configure Game', ButtonStyle.Primary),
+      button(PREFIX + ':rules:toggle:numbers', '🔢 Numbers Only: ' + (section.numbersOnly ? 'On' : 'Off'), ButtonStyle.Secondary),
+      button(PREFIX + ':rules:toggle:delete', '🗑️ Wrong Counts: ' + (section.deleteIncorrect ? 'Delete' : 'Keep'), ButtonStyle.Secondary),
+    ),
+    row(
+      button(PREFIX + ':rules:toggle:banter', '😂 Banter: ' + (section.funnyResponses ? 'On' : 'Off'), ButtonStyle.Secondary),
+      button(PREFIX + ':rules:cycle:timing', '⏱️ Reply Timing: ' + (section.responseCleanupSeconds === null ? 'Keep' : section.responseCleanupSeconds + 's'), ButtonStyle.Secondary),
+    ),
+    row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
+  ] };
+}
+function buildSettingsScreen(guild) {
+  const section = counting.getSection(guild.id);
+  const enabled = isModuleEnabled(guild.id, counting.MODULE_KEY);
+  const embed = footer(new EmbedBuilder()
+    .setColor(PANEL_COLOR)
+    .setTitle('⚙️ Counting Settings')
+    .setDescription([
+      '**Module Controls**',
+      'Manage the Counting module without changing the current game from the main panel.',
+      '',
+      '**⏸️ Disable Counting**',
+      'Pauses Counting in this server. Your channel, rules, current count and record are kept.',
+      '',
+      '**🔄 Defaults**',
+      'Restores Goliath\'s recommended game rules. The current count, record, channel and Player Panel are not reset.',
+      '',
+      '**🩺 Health**',
+      'Checks the Counting setup, channel access and configuration for problems.',
+      '',
+      '**Status:** ' + (enabled ? '🟢 Running' : '⚪ Disabled') + '   •   **Channel:** ' + (section.channelId ? '<#' + section.channelId + '>' : 'Not configured'),
+    ].join('\n')));
+  return { content: null, embeds: [embed], components: [
+    row(
+      button(PREFIX + ':toggle:enabled', enabled ? '⏸️ Disable Counting' : '▶️ Enable Counting', enabled ? ButtonStyle.Danger : ButtonStyle.Success, !section.channelId && !enabled),
+      button(PREFIX + ':defaults', '🔄 Defaults', ButtonStyle.Secondary),
+      button(PREFIX + ':health', '🩺 Health', ButtonStyle.Secondary),
+    ),
+    row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
+  ] };
+}
+function buildDefaultsConfirmation() {
+  return {
+    content: null,
+    embeds: [footer(new EmbedBuilder()
+      .setColor(PANEL_COLOR)
+      .setTitle('🔄 Restore Counting Defaults?')
+      .setDescription([
+        'This will restore Goliath\'s recommended Counting rules:',
+        '',
+        '👤 **Turns:** 1 number per member',
+        '💀 **Game Over:** 1 wrong answer',
+        '💡 **Hints:** Off',
+        '🔢 **Numbers Only:** On',
+        '🗑️ **Wrong Counts:** Delete',
+        '😂 **Banter:** On',
+        '⏱️ **Reply Timing:** Delete after 8s',
+        '🎉 **Milestones:** Every 5 counts',
+        '',
+        '**Your current count, server record, Counting channel and Player Panel will be kept.**',
+      ].join('\n')))],
+    components: [
+      row(
+        button(PREFIX + ':defaults:confirm', '🔄 Restore Defaults', ButtonStyle.Danger),
+        button(PREFIX + ':settings', 'Cancel', ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
 function textInput(customId, label, value, { required = false, placeholder = null } = {}) {
   const input = new TextInputBuilder().setCustomId(customId).setLabel(label).setStyle(TextInputStyle.Short).setRequired(required);
   if (value !== null && value !== undefined && value !== '') input.setValue(String(value));
   if (placeholder) input.setPlaceholder(placeholder);
   return input;
 }
-function buildRulesModal(guildId) {
+function buildAdvancedRulesModal(guildId) {
   const section = counting.getSection(guildId);
-  return new ModalBuilder().setCustomId(`${PREFIX}:rules:save`).setTitle('Counting Game Rules').addComponents(
-    row(textInput('startingNumber', 'Start at — default 1', section.startingNumber, { required: true, placeholder: 'Number a new/reset game begins from' })),
-    row(textInput('maxConsecutive', 'Turns per member — blank = unlimited', section.maxConsecutivePerMember, { placeholder: '1 = one turn, 3 = up to three turns' })),
-    row(textInput('answerAfter', 'Hint after mistakes — blank = never', section.answerAfterFailures, { placeholder: '2 = reveal the answer after two mistakes' })),
+  return new ModalBuilder().setCustomId(`${PREFIX}:rules:advanced:save`).setTitle('Counting Advanced Values').addComponents(
+    row(textInput('currentCount', 'Current count', section.currentCount, { required: true, placeholder: '0 = next number is 1' })),
+    row(textInput('maxConsecutive', 'Custom turns (blank = unlimited)', section.maxConsecutivePerMember, { placeholder: 'Example: 5' })),
+    row(textInput('failureLimit', 'Custom Game Over limit (0 = off)', section.failureLimit, { required: true, placeholder: 'Example: 5' })),
+    row(textInput('answerAfter', 'Custom hint threshold (blank = off)', section.answerAfterFailures, { placeholder: 'Example: 4' })),
+    row(textInput('milestoneInterval', 'Milestone interval (0 = off)', section.milestoneAnnouncements ? section.milestoneInterval : 0, { required: true, placeholder: '0 = off, 25 = every 25 counts' })),
   );
 }
-function buildTimingModal(guildId) {
-  const section = counting.getSection(guildId);
-  return new ModalBuilder().setCustomId(`${PREFIX}:responses:timing:save`).setTitle('Goliath Reply Timing').addComponents(row(textInput('cleanupSeconds', 'Keep replies for seconds', section.responseCleanupSeconds, { placeholder: '8 = delete after 8s; blank = keep' })));
-}
-function buildSetCurrentModal(guildId) {
-  const section = counting.getSection(guildId);
-  return new ModalBuilder().setCustomId(`${PREFIX}:setCurrent:save`).setTitle('Set Current Count').addComponents(row(textInput('currentCount', 'Game has currently reached', section.currentCount, { required: true, placeholder: 'Example: 50 means the next count must be 51' })));
-}
-function buildMilestonesModal(guildId) {
-  const section = counting.getSection(guildId);
-  return new ModalBuilder().setCustomId(`${PREFIX}:milestones:save`).setTitle('Counting Milestones').addComponents(
-    row(textInput('enabled', 'Milestones — on or off', section.milestoneAnnouncements ? 'on' : 'off', { required: true, placeholder: 'on or off' })),
-    row(textInput('interval', 'Celebrate every how many counts?', section.milestoneInterval, { required: true, placeholder: '100 = 100, 200, 300...' })),
-  );
+function buildCleanupConfirmation(channelId, mode = 'move') {
+  const mention = `<#${channelId}>`;
+  const reset = mode === 'reset';
+  return { content: [
+    '🧹 **Clean up the previous Counting messages?**', '',
+    reset ? `Would you like Goliath to remove the previous game messages from ${mention} before starting again?` : `Counting has moved. Would you like Goliath to remove the old Counting messages from ${mention}?`,
+    '', 'This cleanup is restricted to this Counting channel only.', '**Deleted messages cannot be recovered.**',
+  ].join('\n'), embeds: [], components: [row(
+    button(`${PREFIX}:cleanup:${reset ? 'reset' : 'move'}:yes:${channelId}`, reset ? '🗑️ Yes, Clear Previous Game' : '🗑️ Yes, Clean Up', ButtonStyle.Danger),
+    button(`${PREFIX}:cleanup:${reset ? 'reset' : 'move'}:no:${channelId}`, '➡️ No, Keep Messages', ButtonStyle.Secondary),
+  )] };
 }
 function buildResetConfirmation(guildId) {
   const section = counting.getSection(guildId);
-  return { content: ['⚠️ **Start the counting game again?**', '', `This ends the current run and starts again from **${section.startingNumber}**.`, '', 'Goliath will replace the current player panel with one **COUNTING — RESET** panel in the counting channel. Everything above it belongs to the previous run.', '', 'Your counting channel and configured rules stay exactly as they are.', '', '**This cannot be undone.**'].join('\n'), embeds: [], components: [row(button(`${PREFIX}:reset:confirm`, '🔄 Yes, Start Again', ButtonStyle.Danger), button(`${PREFIX}:main:0`, 'Cancel', ButtonStyle.Secondary))] };
+  return { content: ['⚠️ **Start the counting game again?**', '', 'This ends the current run and starts again from **1**.', '', 'Goliath will replace the current player panel with one **COUNTING: RESET** panel in the counting channel. Everything above it belongs to the previous run.', '', 'Your counting channel and configured rules stay exactly as they are.', '', '**This cannot be undone.**'].join('\n'), embeds: [], components: [row(button(`${PREFIX}:reset:confirm`, '🔄 Yes, Start Again', ButtonStyle.Danger), button(`${PREFIX}:main:0`, 'Cancel', ButtonStyle.Secondary))] };
 }
+function sectionMilestoneFallback(section) { return Number.isSafeInteger(Number(section?.milestoneInterval)) && Number(section.milestoneInterval) > 0 ? Number(section.milestoneInterval) : counting.DEFAULTS.milestoneInterval; }
 function parseRequiredInteger(interaction, fieldId, label, min = 0) {
   const raw = interaction.fields.getTextInputValue(fieldId).trim();
   if (!/^\d+$/.test(raw)) throw new Error(`${label} must be a whole number.`);
@@ -119,12 +229,25 @@ function parseOptionalPositiveInteger(interaction, fieldId, label) {
   if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${label} must be 1 or higher, or left blank.`);
   return value;
 }
-function parseOnOff(interaction, fieldId, label) {
-  const raw = interaction.fields.getTextInputValue(fieldId).trim().toLowerCase();
-  if (['on', 'yes', 'true', 'enabled', 'enable'].includes(raw)) return true;
-  if (['off', 'no', 'false', 'disabled', 'disable'].includes(raw)) return false;
-  throw new Error(`${label} must be On or Off.`);
-}
+const HEALTH_LABELS = Object.freeze({
+  channel_not_configured: 'Counting is enabled but no channel is configured.',
+  channel_missing: 'The configured Counting channel no longer exists.',
+  channel_not_text_based: 'The configured Counting channel is not a usable text channel.',
+  view_channel_missing: 'Goliath cannot view the Counting channel.',
+  send_messages_missing: 'Goliath cannot send messages in the Counting channel.',
+  embed_links_missing: 'Goliath cannot send embedded Counting panels in the channel.',
+  add_reactions_missing: 'Goliath cannot add the correct-answer reactions.',
+  read_history_missing: 'Goliath cannot read message history in the Counting channel.',
+  manage_messages_missing: 'Goliath cannot delete wrong answers in the Counting channel.',
+  current_count_invalid: 'The saved current count is invalid.',
+  record_invalid: 'The saved server record is invalid.',
+  turn_state_inconsistent: 'The saved turn state is inconsistent.',
+  turn_state_stale: 'The saved turn state is stale.',
+  player_panel_not_deployed: 'The Player Panel is not currently deployed.',
+  player_panel_unreachable: 'The saved Player Panel cannot be reached.',
+  player_panel_missing: 'The saved Player Panel message was deleted or is missing.',
+});
+function healthLabel(item) { return HEALTH_LABELS[item.code] || item.code; }
 async function safeUpdate(interaction, payload) { if (interaction.deferred || interaction.replied) await interaction.editReply(payload); else await interaction.update(payload); return true; }
 async function handleInteraction(interaction) {
   const id = String(interaction.customId || '');
@@ -133,49 +256,117 @@ async function handleInteraction(interaction) {
   const actorId = interaction.user?.id || null;
   try {
     if (id === `${PREFIX}:main:0`) return safeUpdate(interaction, buildPanel(interaction.guild, name));
-    if (id === `${PREFIX}:channel:screen` || id === `${PREFIX}:rules:screen` || id === `${PREFIX}:responses:screen`) return safeUpdate(interaction, buildPanel(interaction.guild, name));
+    if (id === `${PREFIX}:settings`) return safeUpdate(interaction, buildSettingsScreen(interaction.guild));
+    if (id === `${PREFIX}:rules`) return safeUpdate(interaction, buildRulesScreen(interaction.guild));
+    if (id === `${PREFIX}:defaults`) return safeUpdate(interaction, buildDefaultsConfirmation());
+    if (id === `${PREFIX}:defaults:confirm`) {
+      await counting.mutateSection(interaction.guild.id, (section) => ({
+        ...section,
+        maxConsecutivePerMember: counting.DEFAULTS.maxConsecutivePerMember,
+        numbersOnly: counting.DEFAULTS.numbersOnly,
+        deleteIncorrect: counting.DEFAULTS.deleteIncorrect,
+        funnyResponses: counting.DEFAULTS.funnyResponses,
+        answerAfterFailures: counting.DEFAULTS.answerAfterFailures,
+        responseCleanupSeconds: counting.DEFAULTS.responseCleanupSeconds,
+        milestoneAnnouncements: counting.DEFAULTS.milestoneAnnouncements,
+        milestoneInterval: counting.DEFAULTS.milestoneInterval,
+        failureLimit: counting.DEFAULTS.failureLimit,
+      }), { actorId, action: 'counting_defaults_restored' });
+      await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
+      return safeUpdate(interaction, buildSettingsScreen(interaction.guild));
+    }
     if (interaction.isChannelSelectMenu?.() && id === `${PREFIX}:channel`) {
-      const old = counting.getSection(interaction.guild.id); const channelId = interaction.values?.[0] || null;
-      if (old.channelId && old.channelId !== channelId && old.playerPanelMessageId) {
-        const oldChannel = interaction.guild.channels.cache.get(old.channelId) || await interaction.guild.channels.fetch(old.channelId).catch(() => null);
-        const oldPanel = oldChannel?.messages ? await oldChannel.messages.fetch(old.playerPanelMessageId).catch(() => null) : null;
-        if (oldPanel) await oldPanel.delete().catch(() => null);
-      }
-      counting.updateSection(interaction.guild.id, (section) => ({ ...section, channelId, playerPanelMessageId: channelId === section.channelId ? section.playerPanelMessageId : null }), { actorId, action: 'counting_channel_changed' });
+      const channelId = interaction.values?.[0] || null;
+      const before = counting.getSection(interaction.guild.id);
+      await counting.changeChannel(interaction.guild, channelId, { actorId, action: 'counting_channel_changed' });
+      if (before.channelId && before.channelId !== channelId) return safeUpdate(interaction, buildCleanupConfirmation(before.channelId, 'move'));
       return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
     if (id === `${PREFIX}:toggle:enabled`) {
       const currentlyEnabled = isModuleEnabled(interaction.guild.id, counting.MODULE_KEY);
       if (!currentlyEnabled && !counting.getSection(interaction.guild.id).channelId) throw new Error('Choose a counting channel before enabling the game.');
       setModuleEnabled(interaction.guild.id, counting.MODULE_KEY, !currentlyEnabled, { actorId, action: 'counting_toggle_enabled' });
-      return safeUpdate(interaction, buildPanel(interaction.guild, name));
+      return safeUpdate(interaction, buildSettingsScreen(interaction.guild));
     }
-    if (id === `${PREFIX}:toggle:numbersOnly`) { counting.updateSection(interaction.guild.id, (section) => ({ ...section, numbersOnly: !section.numbersOnly }), { actorId, action: 'counting_toggle_numbers_only' }); await counting.refreshPlayerPanel(interaction.guild).catch(() => null); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (id === `${PREFIX}:toggle:delete`) { counting.updateSection(interaction.guild.id, (section) => ({ ...section, deleteIncorrect: !section.deleteIncorrect }), { actorId, action: 'counting_toggle_delete' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (id === `${PREFIX}:toggle:funny`) { counting.updateSection(interaction.guild.id, (section) => ({ ...section, funnyResponses: !section.funnyResponses }), { actorId, action: 'counting_toggle_funny' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (id === `${PREFIX}:rules:edit`) { await interaction.showModal(buildRulesModal(interaction.guild.id)); return true; }
-    if (id === `${PREFIX}:responses:timing`) { await interaction.showModal(buildTimingModal(interaction.guild.id)); return true; }
-    if (id === `${PREFIX}:setCurrent`) { await interaction.showModal(buildSetCurrentModal(interaction.guild.id)); return true; }
-    if (id === `${PREFIX}:milestones` || id === `${PREFIX}:toggle:milestones`) { await interaction.showModal(buildMilestonesModal(interaction.guild.id)); return true; }
-    if (interaction.isModalSubmit?.() && id === `${PREFIX}:rules:save`) {
-      const old = counting.getSection(interaction.guild.id);
-      const startingNumber = parseRequiredInteger(interaction, 'startingNumber', 'Starting number', 0);
+    if (id === `${PREFIX}:rules:toggle:numbers` || id === `${PREFIX}:rules:toggle:delete` || id === `${PREFIX}:rules:toggle:banter`) {
+      const key = id.endsWith(':numbers') ? 'numbersOnly' : id.endsWith(':delete') ? 'deleteIncorrect' : 'funnyResponses';
+      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, [key]: !section[key] }), { actorId, action: 'counting_toggle_' + key });
+      await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
+      return safeUpdate(interaction, buildRulesScreen(interaction.guild));
+    }
+    if (id === `${PREFIX}:rules:cycle:timing`) {
+      const current = counting.getSection(interaction.guild.id).responseCleanupSeconds;
+      const values = [5, 8, 10, 15, null];
+      const index = values.findIndex((value) => value === current);
+      const next = values[(index < 0 ? 0 : index + 1) % values.length];
+      await counting.mutateSection(interaction.guild.id, (section) => ({ ...section, responseCleanupSeconds: next }), { actorId, action: 'counting_cycle_reply_timing' });
+      return safeUpdate(interaction, buildRulesScreen(interaction.guild));
+    }
+    if (id === `${PREFIX}:rules:advanced`) { await interaction.showModal(buildAdvancedRulesModal(interaction.guild.id)); return true; }
+    if (interaction.isModalSubmit?.() && id === `${PREFIX}:rules:advanced:save`) {
+      const before = counting.getSection(interaction.guild.id);
+      const currentCount = parseRequiredInteger(interaction, 'currentCount', 'Current count', 0);
       const maxConsecutivePerMember = parseOptionalPositiveInteger(interaction, 'maxConsecutive', 'Turns per member');
+      const failureLimit = parseRequiredInteger(interaction, 'failureLimit', 'Wrong answers before reset', 0);
       const answerAfterFailures = parseOptionalPositiveInteger(interaction, 'answerAfter', 'Hint threshold');
-      const hasProgress = old.currentCount >= old.startingNumber || Object.values(old.memberStats || {}).some((stats) => Number(stats?.validCounts || 0) > 0);
-      counting.updateSection(interaction.guild.id, (section) => ({ ...section, startingNumber, maxConsecutivePerMember, answerAfterFailures, ...(!hasProgress ? { currentCount: startingNumber - 1, highestCount: startingNumber - 1, lastCounterId: null, consecutiveCount: 0, failureStreak: 0, acceptedMessages: {} } : {}) }), { actorId, action: 'counting_rules_saved' });
-      await counting.refreshPlayerPanel(interaction.guild).catch(() => null); return safeUpdate(interaction, buildPanel(interaction.guild, name));
+      const milestoneValue = parseRequiredInteger(interaction, 'milestoneInterval', 'Milestone interval', 0);
+      const milestoneAnnouncements = milestoneValue > 0;
+      const milestoneInterval = milestoneAnnouncements ? milestoneValue : sectionMilestoneFallback(before);
+      if (currentCount !== before.currentCount) await counting.setCurrentCountQueued(interaction.guild.id, currentCount, { actorId, action: 'counting_set_current_from_rules' });
+      await counting.mutateSection(interaction.guild.id, (section) => ({
+        ...section, maxConsecutivePerMember, failureLimit, answerAfterFailures, milestoneAnnouncements, milestoneInterval,
+      }), { actorId, action: 'counting_advanced_rules_saved' });
+      await counting.refreshPlayerPanel(interaction.guild).catch(() => null);
+      return safeUpdate(interaction, buildRulesScreen(interaction.guild));
     }
-    if (interaction.isModalSubmit?.() && id === `${PREFIX}:responses:timing:save`) { const responseCleanupSeconds = parseOptionalPositiveInteger(interaction, 'cleanupSeconds', 'Reply cleanup time'); counting.updateSection(interaction.guild.id, (section) => ({ ...section, responseCleanupSeconds }), { actorId, action: 'counting_response_timing_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (interaction.isModalSubmit?.() && id === `${PREFIX}:setCurrent:save`) { const currentCount = parseRequiredInteger(interaction, 'currentCount', 'Current count', 0); counting.setCurrentCount(interaction.guild.id, currentCount, { actorId, action: 'counting_set_current' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
-    if (interaction.isModalSubmit?.() && id === `${PREFIX}:milestones:save`) { const milestoneAnnouncements = parseOnOff(interaction, 'enabled', 'Milestones'); const milestoneInterval = parseRequiredInteger(interaction, 'interval', 'Milestone interval', 1); counting.updateSection(interaction.guild.id, (section) => ({ ...section, milestoneAnnouncements, milestoneInterval }), { actorId, action: 'counting_milestones_saved' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (id === `${PREFIX}:health`) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const health = await countingHealth.buildHealthReport(interaction.guild);
+      const lines = [
+        `**Status:** ${health.healthy ? 'Healthy ✅' : 'Needs attention ⚠️'}`,
+        `**Configured:** ${health.configured ? 'Yes' : 'No'} • **Enabled:** ${health.enabled ? 'Yes' : 'No'}`,
+        '',
+        health.issues.length ? '**Issues**\n' + health.issues.map((item) => `• ${healthLabel(item)}`).join('\n') : '**Issues**\n• None',
+        health.warnings.length ? '**Warnings**\n' + health.warnings.map((item) => `• ${healthLabel(item)}`).join('\n') : '**Warnings**\n• None',
+      ];
+      await interaction.editReply({ content: lines.join('\n'), components: health.issues.length || health.warnings.length ? [row(button(`${PREFIX}:health:repair`, '🛠️ Safe Repair', ButtonStyle.Primary))] : [] });
+      return true;
+    }
+    if (id === `${PREFIX}:health:repair`) {
+      await interaction.deferUpdate();
+      const health = await countingHealth.repair(interaction.guild, { actorId });
+      const lines = [
+        `**Repair complete:** ${health.healthy ? 'Healthy ✅' : 'Still needs attention ⚠️'}`,
+        health.issues.length ? '**Remaining issues**\n' + health.issues.map((item) => `• ${item.code}`).join('\n') : '**Remaining issues**\n• None',
+        health.warnings.length ? '**Remaining warnings**\n' + health.warnings.map((item) => `• ${item.code}`).join('\n') : '**Remaining warnings**\n• None',
+      ];
+      await interaction.editReply({ content: lines.join('\n'), components: [] });
+      return true;
+    }
     if (id === `${PREFIX}:playerPanel`) {
       if (!counting.getSection(interaction.guild.id).channelId) throw new Error('Choose a counting channel before deploying the player panel.');
       await counting.deployPlayerPanel(interaction.guild, { actorId });
       return safeUpdate(interaction, buildPanel(interaction.guild, name));
     }
     if (id === `${PREFIX}:reset`) return safeUpdate(interaction, buildResetConfirmation(interaction.guild.id));
-    if (id === `${PREFIX}:reset:confirm`) { await interaction.deferUpdate(); await counting.resetWithMarker(interaction.guild, { actorId, action: 'counting_reset_progress' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+    if (id === `${PREFIX}:reset:confirm`) {
+      const section = counting.getSection(interaction.guild.id);
+      if (!section.channelId) { await counting.resetWithMarker(interaction.guild, { actorId, action: 'counting_reset_progress' }); return safeUpdate(interaction, buildPanel(interaction.guild, name)); }
+      return safeUpdate(interaction, buildCleanupConfirmation(section.channelId, 'reset'));
+    }
+    if (id.startsWith(`${PREFIX}:cleanup:`)) {
+      const parts = id.split(':');
+      const mode = parts[4];
+      const choice = parts[5];
+      const channelId = parts[6];
+      const section = counting.getSection(interaction.guild.id);
+      if (mode === 'reset' && String(section.channelId) !== String(channelId)) throw new Error('The Counting channel changed before cleanup could run.');
+      if (mode === 'move' && String(section.channelId) === String(channelId)) throw new Error('Cleanup is only available for the previous Counting channel after a move.');
+      await interaction.deferUpdate();
+      if (choice === 'yes') await counting.purgeCountingChannel(interaction.guild, channelId, { actorId, action: `counting_${mode}_cleanup` });
+      if (mode === 'reset') await counting.resetWithMarker(interaction.guild, { actorId, action: 'counting_reset_progress' });
+      return safeUpdate(interaction, buildPanel(interaction.guild, name));
+    }
     return safeUpdate(interaction, buildPanel(interaction.guild, name));
   } catch (error) {
     const payload = { content: `❌ Counting setup failed: ${error.message}`, flags: MessageFlags.Ephemeral };
@@ -183,4 +374,4 @@ async function handleInteraction(interaction) {
     return true;
   }
 }
-module.exports = { buildPanel, buildChannelScreen, buildRulesScreen, buildResponsesScreen, buildRulesModal, buildTimingModal, buildSetCurrentModal, buildMilestonesModal, buildResetConfirmation, handleInteraction };
+module.exports = { buildPanel, buildRulesScreen, buildSettingsScreen, buildDefaultsConfirmation, buildAdvancedRulesModal, buildResetConfirmation, buildCleanupConfirmation, handleInteraction };

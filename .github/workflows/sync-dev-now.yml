@@ -54,11 +54,29 @@ jobs:
             cleanup_remote() { git remote set-url origin "https://github.com/${{ github.repository }}.git" || true; }
             trap cleanup_remote EXIT
 
+            retry_git() {
+              local attempt=1
+              local max_attempts=5
+              local delay=3
+              while true; do
+                if "$@"; then return 0; fi
+                if [ "$attempt" -ge "$max_attempts" ]; then
+                  echo "GitHub operation failed after ${max_attempts} attempts: $*" >&2
+                  return 1
+                fi
+                echo "⚠️ GitHub operation failed (attempt ${attempt}/${max_attempts}); retrying in ${delay}s..." >&2
+                sleep "$delay"
+                attempt=$((attempt + 1))
+                delay=$((delay * 2))
+              done
+            }
             remote_dev_sha() {
-              git ls-remote origin refs/heads/dev | awk 'NR==1 {print $1}'
+              local output
+              output="$(retry_git git ls-remote origin refs/heads/dev)" || return 1
+              printf '%s\n' "$output" | awk 'NR==1 {print $1}'
             }
             ensure_expected_commit() {
-              git cat-file -e "$EXPECTED_SHA^{commit}" 2>/dev/null || git fetch --no-tags origin "$EXPECTED_SHA"
+              git cat-file -e "$EXPECTED_SHA^{commit}" 2>/dev/null || retry_git git fetch --no-tags origin "$EXPECTED_SHA"
             }
 
             LATEST_SHA="$(remote_dev_sha)"

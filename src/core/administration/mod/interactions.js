@@ -735,9 +735,14 @@ async function handleCancelButton(i) {
     statusFilter: parts[4] || 'all',
     page: Number.isFinite(requestedPage) ? Math.max(0, Math.trunc(requestedPage)) : 0,
   };
+  const token = parts[6] && parts[6] !== 'legacy' ? parts[6] : null;
   let removed = 0;
-  if (i.guild?.id && i.user?.id) removed = db.prepare('DELETE FROM pending_actions WHERE guild_id = ? AND moderator_id = ?').run(String(i.guild.id), String(i.user.id)).changes;
-  recordModerationSystemEvent({ interaction: i, event: 'moderation.action.cancelled', targetId: targetId === 'none' ? null : targetId, metadata: { pendingActionsRemoved: removed, returnView: context.view } });
+  if (i.guild?.id && i.user?.id) {
+    removed = token
+      ? db.prepare('DELETE FROM pending_actions WHERE guild_id = ? AND moderator_id = ? AND token = ?').run(String(i.guild.id), String(i.user.id), String(token)).changes
+      : db.prepare('DELETE FROM pending_actions WHERE guild_id = ? AND moderator_id = ?').run(String(i.guild.id), String(i.user.id)).changes;
+  }
+  recordModerationSystemEvent({ interaction: i, event: 'moderation.action.cancelled', targetId: targetId === 'none' ? null : targetId, metadata: { pendingActionsRemoved: removed, scopedToToken: Boolean(token), returnView: context.view } });
   if (i.message && typeof i.update === 'function') {
     await i.update({ content: '❌ Cancelled — no moderation action was applied.', embeds: [], components: [] });
     const target = targetId !== 'none' ? await fetchTarget(i.guild, targetId) : null;

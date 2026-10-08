@@ -3,7 +3,7 @@ const path = require('node:path');
 
 const router = express.Router();
 
-const { readJsonSafe } = require('../../core/guild/fileStore');
+const fs = require('node:fs');
 const notifications = require('../../core/notifications/notificationStore');
 const { resolveToken, getRequiredTokenEnvName } = require('../../config/tokenResolver');
 
@@ -17,6 +17,17 @@ let cachedBotProfile = null;
 let cachedBotProfileExpiresAt = 0;
 
 const guildStatsCache = new Map();
+
+function readCasesSafe() {
+  try {
+    if (!fs.existsSync(CASES_PATH)) return [];
+    const parsed = JSON.parse(fs.readFileSync(CASES_PATH, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn('[StatusRoute] Failed to read moderation cases:', error?.message || error);
+    return [];
+  }
+}
 
 function notifyRuntime(guildId, payload = {}, options = {}) {
   if (!guildId) return null;
@@ -282,7 +293,7 @@ router.get('/overview', async (req, res) => {
       latencyMs: bot.latencyMs,
       bot,
       guild,
-      cases: readJsonSafe(CASES_PATH, []),
+      cases: readCasesSafe(),
       updatedAt: new Date().toISOString(),
     };
     evaluateRuntimeNotifications(guildId, payload);

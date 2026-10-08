@@ -6,6 +6,8 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
+  RoleSelectMenuBuilder,
+  UserSelectMenuBuilder,
   ChannelType,
   StringSelectMenuBuilder,
   ModalBuilder,
@@ -27,7 +29,13 @@ const AUTOMOD_RULES = {
   antiLinks: { label: '🔗 Links', title: '🔗 Link Protection', editLabel: '🌐 Domains', defaults: { enabled: false, allowStaff: true, allowedDomains: [], deniedDomains: [], actions: ['delete'] } },
   badWords: { label: '🤬 Bad Words', title: '🤬 Bad Word Filter', editLabel: '📝 Word List', defaults: { enabled: false, words: [], actions: ['delete'] } },
   caps: { label: '🔠 Caps', title: '🔠 Caps Protection', editLabel: '📏 Thresholds', defaults: { enabled: false, percent: 70, minLength: 12, actions: ['warn'] } },
-  mentions: { label: '📣 Mentions', title: '📣 Mention Protection', editLabel: '📣 Limit', defaults: { enabled: false, maxMentions: 5, actions: ['warn'] } },
+  mentions: { label: '📣 Mentions', title: '📣 Mention Protection', editLabel: '📣 Limits', defaults: { enabled: false, maxMentions: 5, maxUserMentions: 5, maxRoleMentions: 3, blockEveryone: true, risk: 35, timeoutMinutes: 10, actions: ['warn'] } },
+  invites: { label: '✉️ Invites', title: '✉️ Invite Protection', editLabel: '🔗 Invites', defaults: { enabled: false, allowOwnServer: true, allowedCodes: [], risk: 35, timeoutMinutes: 10, actions: ['delete'] } },
+  duplicates: { label: '♻️ Duplicates', title: '♻️ Duplicate Protection', editLabel: '⏱️ Limits', defaults: { enabled: false, maxDuplicates: 3, intervalSeconds: 30, risk: 25, timeoutMinutes: 10, actions: ['delete'] } },
+  flood: { label: '🌊 Flood', title: '🌊 Flood Protection', editLabel: '📏 Limits', defaults: { enabled: false, maxLines: 12, maxCharacters: 1800, maxRepeatedCharacters: 12, risk: 20, timeoutMinutes: 10, actions: ['delete'] } },
+  emojiSpam: { label: '😀 Emoji', title: '😀 Emoji Protection', editLabel: '😀 Limit', defaults: { enabled: false, maxEmojis: 15, risk: 15, timeoutMinutes: 10, actions: ['delete'] } },
+  attachments: { label: '📎 Attachments', title: '📎 Attachment Protection', editLabel: '📎 Limits', defaults: { enabled: false, maxAttachments: 5, blockedExtensions: [], risk: 20, timeoutMinutes: 10, actions: ['delete'] } },
+  scamPatterns: { label: '🚨 Suspicious', title: '🚨 Suspicious Content Protection', editLabel: '📝 Patterns', defaults: { enabled: false, phrases: [], risk: 45, timeoutMinutes: 30, actions: ['delete', 'timeout'] } },
 };
 const AUTOMOD_RULE_KEYS = Object.keys(AUTOMOD_RULES);
 const AUTOMOD_ACTIONS = ['dm', 'delete', 'warn', 'timeout', 'kick', 'ban'];
@@ -38,6 +46,12 @@ const DEFAULT_DM_MESSAGES = {
   badWords: '⚠️ **{server} AutoMod**\nBad Word Filter triggered: {reason}',
   caps: '⚠️ **{server} AutoMod**\nCaps Protection triggered: {reason}',
   mentions: '⚠️ **{server} AutoMod**\nMention Protection triggered: {reason}',
+  invites: '⚠️ **{server} AutoMod**\nInvite Protection triggered: {reason}',
+  duplicates: '⚠️ **{server} AutoMod**\nDuplicate Message Protection triggered: {reason}',
+  flood: '⚠️ **{server} AutoMod**\nFlood Protection triggered: {reason}',
+  emojiSpam: '⚠️ **{server} AutoMod**\nEmoji Protection triggered: {reason}',
+  attachments: '⚠️ **{server} AutoMod**\nAttachment Protection triggered: {reason}',
+  scamPatterns: '⚠️ **{server} AutoMod**\nSuspicious Content Protection triggered: {reason}',
 };
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
@@ -62,7 +76,7 @@ function normalizeActions(value, fallback = ['delete']) {
   const actions = [...new Set((Array.isArray(value) ? value : value ? [value] : fallback)
     .map((entry) => String(entry).toLowerCase())
     .filter((entry) => AUTOMOD_ACTIONS.includes(entry)))];
-  const compatible = actions.includes('ban') ? actions.filter((entry) => entry !== 'kick') : actions;
+  const compatible = actions.includes('ban') ? actions.filter((entry) => entry !== 'kick' && entry !== 'timeout') : actions.includes('kick') ? actions.filter((entry) => entry !== 'timeout') : actions;
   return compatible.length ? compatible : [...fallback];
 }
 
@@ -75,6 +89,12 @@ function defaults() {
     ...Object.fromEntries(AUTOMOD_RULE_KEYS.map((key) => [key, { ...AUTOMOD_RULES[key].defaults }])),
     ignoredRoles: [],
     ignoredChannels: [],
+    ignoredCategories: [],
+    ignoredUsers: [],
+    caseMode: 'punishments',
+    evidenceRetentionDays: 30,
+    risk: { enabled: true, low: 25, medium: 50, high: 75, critical: 100, repeatWindowHours: 24, repeatWeight: 10 },
+    accountRisk: { enabled: false, newAccountDays: 7, newMemberHours: 24, riskBoost: 15 },
   };
 }
 
@@ -90,9 +110,14 @@ function getAutomodConfig(guildId) {
   output.antiLinks.allowedDomains = Array.isArray(output.antiLinks.allowedDomains) ? output.antiLinks.allowedDomains : [];
   output.antiLinks.deniedDomains = Array.isArray(output.antiLinks.deniedDomains) ? output.antiLinks.deniedDomains : [];
   output.badWords.words = Array.isArray(output.badWords.words) ? output.badWords.words : [];
+  output.invites.allowedCodes = Array.isArray(output.invites.allowedCodes) ? output.invites.allowedCodes : [];
+  output.attachments.blockedExtensions = Array.isArray(output.attachments.blockedExtensions) ? output.attachments.blockedExtensions : [];
+  output.scamPatterns.phrases = Array.isArray(output.scamPatterns.phrases) ? output.scamPatterns.phrases : [];
   output.dmMessages = { ...DEFAULT_DM_MESSAGES, ...(current.dmMessages || {}) };
   output.ignoredRoles = Array.isArray(current.ignoredRoles) ? current.ignoredRoles : [];
   output.ignoredChannels = Array.isArray(current.ignoredChannels) ? current.ignoredChannels : [];
+  output.ignoredCategories = Array.isArray(current.ignoredCategories) ? current.ignoredCategories : [];
+  output.ignoredUsers = Array.isArray(current.ignoredUsers) ? current.ignoredUsers : [];
   return output;
 }
 
@@ -133,20 +158,31 @@ const navRow = (route, nextId, settingsId = null) => row(backButton(route), ...(
 function buildAutomodPanel(guild, name = 'Unknown User') {
   const config = getAutomodConfig(guild.id);
   const enabledRules = AUTOMOD_RULE_KEYS.filter((key) => config[key].enabled).length;
-  const buttons = AUTOMOD_RULE_KEYS.map((key) => [key, AUTOMOD_RULES[key].label, config[key].enabled ? ButtonStyle.Success : ButtonStyle.Secondary]);
+  const selector = new StringSelectMenuBuilder()
+    .setCustomId('admin:automod:protection')
+    .setPlaceholder('Choose a protection to manage')
+    .addOptions(AUTOMOD_RULE_KEYS.map((key) => ({
+      label: AUTOMOD_RULES[key].title.replace(/^\S+\s/, '').slice(0, 100),
+      value: key,
+      description: (config[key].enabled ? 'Enabled' : 'Disabled') + ' • Risk ' + Number(config[key].risk || 0),
+    })));
   return {
     embeds: [createEmbed('🤖 AutoMod Protection', [
-      `**System:** ${status(config.enabled)}`,
-      `**Protection rules:** ${enabledRules}/${AUTOMOD_RULE_KEYS.length} enabled`,
+      '**System:** ' + status(config.enabled),
+      '**Protections:** ' + enabledRules + '/' + AUTOMOD_RULE_KEYS.length + ' enabled',
+      '**Case policy:** ' + String(config.caseMode || 'punishments'),
+      '**Evidence retention:** ' + Number(config.evidenceRetentionDays || 0) + ' days',
+      '**Account context:** ' + (config.accountRisk?.enabled ? 'Enabled • '+config.accountRisk.riskBoost+' risk boost' : 'Disabled'),
+      '**Exceptions:** ' + ((config.ignoredRoles?.length || 0) + (config.ignoredChannels?.length || 0) + (config.ignoredCategories?.length || 0) + (config.ignoredUsers?.length || 0)),
       '',
-      ...AUTOMOD_RULE_KEYS.map((key) => `**${AUTOMOD_RULES[key].label}:** ${status(config[key].enabled)}`),
+      'AutoMod evaluates every enabled protection together, correlates violations into one incident and applies one compatible enforcement decision.',
       '',
-      'Select a protection rule, or open system settings.',
+      ...AUTOMOD_RULE_KEYS.map((key) => AUTOMOD_RULES[key].label + ': **' + (config[key].enabled ? 'ON' : 'OFF') + '**'),
     ].join('\n'), name, config.enabled ? ENABLED_COLOR : DISABLED_COLOR)],
     components: [
-      row(...buttons.slice(0, 3).map(([key, label, style]) => button(`admin:automod:rule:${key}`, label, style))),
-      row(...buttons.slice(3).map(([key, label, style]) => button(`admin:automod:rule:${key}`, label, style))),
-      navRow('admin:automod', 'admin:adminpanel', 'admin:automod:configure'),
+      row(selector),
+      row(button('admin:automod:configure', '⚙️ System Settings'), button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Secondary)),
+      navRow('admin:automod', 'admin:adminpanel'),
     ],
   };
 }
@@ -157,6 +193,7 @@ function buildAutomodConfigurePanel(guild, name = 'Unknown User') {
     embeds: [createEmbed('⚙️ AutoMod Settings', [
       `**AutoMod:** ${status(config.enabled)}`,
       `**DM users:** ${status(config.dmUser !== false)}`,
+      `**Simulation:** ${config.shadowMode ? 'ON — log only' : 'OFF — enforcement active'}`,
       `**AutoMod log:** ${getLogChannelId(guild.id) ? `<#${getLogChannelId(guild.id)}>` : 'Not set'}`,
       '',
       'Configure AutoMod status, logging and the DM sent for each infraction.',
@@ -165,20 +202,77 @@ function buildAutomodConfigurePanel(guild, name = 'Unknown User') {
       row(
         button('admin:automod:toggle', config.enabled ? 'Disable AutoMod' : 'Enable AutoMod', config.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
         button('admin:automod:dm', config.dmUser !== false ? 'Disable DMs' : 'Enable DMs', config.dmUser !== false ? ButtonStyle.Danger : ButtonStyle.Success),
-        button('admin:automod:dmmessage', '✉️ DM Message', ButtonStyle.Primary)
+        button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Primary)
       ),
-      row(button('admin:setautomodlog', '🤖 AutoMod Log', ButtonStyle.Secondary), button('admin:automod:reset', '♻️ Reset', ButtonStyle.Danger)),
+      row(button('admin:automod:shadow', config.shadowMode ? 'Disable Simulation' : 'Enable Simulation', ButtonStyle.Secondary)),
+      row(button('admin:setautomodlog', '🤖 AutoMod Log', ButtonStyle.Secondary), button('admin:automod:exemptions', '🧩 Exemptions', ButtonStyle.Secondary), button('admin:automod:reset', '♻️ Reset', ButtonStyle.Danger)),
       navRow('admin:automod:configure', 'admin:automod:rule:antiSpam'),
     ],
   };
 }
 
+function buildRiskPanel(guild, name = 'Unknown User') {
+  const config = getAutomodConfig(guild.id);
+  const risk = config.risk || {};
+  return {
+    embeds: [createEmbed('🎯 AutoMod Risk, Cases & Evidence', [
+      '**Risk engine:** ' + status(risk.enabled !== false),
+      '**Thresholds:** Low ' + (risk.low || 25) + ' • Medium ' + (risk.medium || 50) + ' • High ' + (risk.high || 75) + ' • Critical ' + (risk.critical || 100),
+      '**Repeat window:** ' + (risk.repeatWindowHours || 24) + 'h • +' + (risk.repeatWeight || 10) + ' risk per recent incident',
+      '**Case policy:** ' + (config.caseMode || 'punishments'),
+      '**Evidence retention:** ' + Number(config.evidenceRetentionDays || 0) + ' days',
+      '',
+      'Risk combines every protection triggered by the same message. Repeat incidents increase risk without silently changing the configured punishment actions.',
+    ].join('\n'), name, PANEL_COLOR)],
+    components: [
+      row(button('admin:automod:risk:edit', '⚙️ Configure Risk & Cases'), button('admin:automod', '🛡️ Protections', ButtonStyle.Secondary)),
+      row(backButton('admin:automod:configure')),
+    ],
+  };
+}
+function buildRiskModal(config) {
+  const risk=config.risk||{};
+  return new ModalBuilder().setCustomId('admin:automod:risk:modal').setTitle('Risk, Cases & Evidence').addComponents(
+    textInput('thresholds','Risk thresholds: low,medium,high,critical',[risk.low||25,risk.medium||50,risk.high||75,risk.critical||100].join(',')),
+    textInput('repeat','Repeat window hours, risk weight',[risk.repeatWindowHours||24,risk.repeatWeight||10].join(',')),
+    textInput('caseMode','Case mode: off/punishments/medium/all',config.caseMode||'punishments'),
+    textInput('retention','Evidence retention days (0-365)',config.evidenceRetentionDays??30),
+    textInput('accountRisk','Account risk: on/off,days,hours,boost',[(config.accountRisk?.enabled?'on':'off'),config.accountRisk?.newAccountDays??7,config.accountRisk?.newMemberHours??24,config.accountRisk?.riskBoost??15].join(','))
+  );
+}
+function buildRuleDmModal(key, config) {
+  return new ModalBuilder().setCustomId('admin:automod:rule:'+key+':dm:modal').setTitle('Member Notice').addComponents(
+    textInput('message','DM message for this protection',config.dmMessages?.[key]||DEFAULT_DM_MESSAGES[key],{required:false,style:TextInputStyle.Paragraph,maxLength:1000})
+  );
+}
+
+function buildExemptionsPanel(guild, name='Unknown User') {
+  const config=getAutomodConfig(guild.id);
+  const roles=new RoleSelectMenuBuilder().setCustomId('admin:automod:exemptions:roles').setPlaceholder('Ignored roles').setMinValues(0).setMaxValues(25);
+  const channels=new ChannelSelectMenuBuilder().setCustomId('admin:automod:exemptions:channels').setPlaceholder('Ignored channels').setMinValues(0).setMaxValues(25).addChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement,ChannelType.GuildForum);
+  const categories=new ChannelSelectMenuBuilder().setCustomId('admin:automod:exemptions:categories').setPlaceholder('Ignored categories').setMinValues(0).setMaxValues(25).addChannelTypes(ChannelType.GuildCategory);
+  const users=new UserSelectMenuBuilder().setCustomId('admin:automod:exemptions:users').setPlaceholder('Ignored members').setMinValues(0).setMaxValues(25);
+  if(config.ignoredRoles?.length) roles.setDefaultRoles(config.ignoredRoles.slice(0,25));
+  if(config.ignoredChannels?.length) channels.setDefaultChannels(config.ignoredChannels.slice(0,25));
+  if(config.ignoredCategories?.length) categories.setDefaultChannels(config.ignoredCategories.slice(0,25));
+  if(config.ignoredUsers?.length) users.setDefaultUsers(config.ignoredUsers.slice(0,25));
+  return {embeds:[createEmbed('🧩 AutoMod Exemptions',['**Roles:** '+(config.ignoredRoles?.length||0),'**Channels:** '+(config.ignoredChannels?.length||0),'**Categories:** '+(config.ignoredCategories?.length||0),'**Members:** '+(config.ignoredUsers?.length||0),'','Selected resources bypass all Goliath AutoMod message protections. Rule-specific allow lists remain configured inside each protection.'].join('\n'),name)],components:[row(roles),row(channels),row(categories),row(users),row(backButton('admin:automod:configure'))]};
+}
+
 function ruleSummary(key, rule) {
-  if (key === 'antiSpam') return `**Maximum messages:** ${rule.maxMessages}\n**Window:** ${rule.intervalSeconds} seconds\n**Actions:** ${formatActions(rule.actions)}`;
-  if (key === 'antiLinks') return `**Staff bypass:** ${rule.allowStaff ? 'Yes' : 'No'}\n**Allowed domains:** ${rule.allowedDomains?.length || 0}\n**Denied domains:** ${rule.deniedDomains?.length || 0}\n**Actions:** ${formatActions(rule.actions)}`;
-  if (key === 'badWords') return `**Blocked words:** ${rule.words?.length || 0}\n**Actions:** ${formatActions(rule.actions)}`;
-  if (key === 'caps') return `**Caps threshold:** ${rule.percent}%\n**Minimum length:** ${rule.minLength}\n**Actions:** ${formatActions(rule.actions)}`;
-  return `**Maximum mentions:** ${rule.maxMentions}\n**Actions:** ${formatActions(rule.actions)}`;
+  const enforcement='**Risk:** '+Number(rule.risk||0)+'\n**Timeout:** '+Number(rule.timeoutMinutes||10)+' minutes\n**Actions:** '+formatActions(rule.actions);
+  if(key==='antiSpam') return '**Maximum messages:** '+rule.maxMessages+'\n**Window:** '+rule.intervalSeconds+' seconds\n'+enforcement;
+  if(key==='antiLinks') return '**Staff bypass:** '+(rule.allowStaff?'Yes':'No')+'\n**Allowed domains:** '+(rule.allowedDomains?.length||0)+'\n**Denied domains:** '+(rule.deniedDomains?.length||0)+'\n'+enforcement;
+  if(key==='badWords') return '**Blocked words/phrases:** '+(rule.words?.length||0)+'\n**Matching:** '+(rule.matchMode||'boundary')+'\n'+enforcement;
+  if(key==='caps') return '**Caps threshold:** '+rule.percent+'%\n**Minimum length:** '+rule.minLength+'\n'+enforcement;
+  if(key==='mentions') return '**Total mentions:** '+rule.maxMentions+'\n**User/Role limits:** '+rule.maxUserMentions+'/'+rule.maxRoleMentions+'\n**@everyone/@here:** '+(rule.blockEveryone?'Blocked':'Allowed')+'\n'+enforcement;
+  if(key==='invites') return '**Allow own server:** '+(rule.allowOwnServer?'Yes':'No')+'\n**Allowed invite codes:** '+(rule.allowedCodes?.length||0)+'\n'+enforcement;
+  if(key==='duplicates') return '**Duplicates:** '+rule.maxDuplicates+' in '+rule.intervalSeconds+' seconds\n'+enforcement;
+  if(key==='flood') return '**Lines:** '+rule.maxLines+'\n**Characters:** '+rule.maxCharacters+'\n**Repeated characters:** '+rule.maxRepeatedCharacters+'\n'+enforcement;
+  if(key==='emojiSpam') return '**Maximum emojis:** '+rule.maxEmojis+'\n'+enforcement;
+  if(key==='attachments') return '**Maximum attachments:** '+rule.maxAttachments+'\n**Blocked extensions:** '+(rule.blockedExtensions?.join(', ')||'None')+'\n'+enforcement;
+  if(key==='scamPatterns') return '**Configured suspicious phrases:** '+(rule.phrases?.length||0)+'\n'+enforcement;
+  return enforcement;
 }
 
 function nextRuleId(key) {
@@ -203,7 +297,7 @@ function buildAutomodRulePanel(guild, key, name = 'Unknown User') {
   return {
     embeds: [createEmbed(meta.title, [`**Status:** ${status(rule.enabled)}`, '', ruleSummary(key, rule), '', 'Choose the exact settings and select every action that should run when this rule triggers.'].join('\n'), name, rule.enabled ? ENABLED_COLOR : DISABLED_COLOR)],
     components: [
-      row(button(`${route}:toggle`, rule.enabled ? 'Disable' : 'Enable', rule.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button(`${route}:edit`, meta.editLabel)),
+      row(button(`${route}:toggle`, rule.enabled ? 'Disable' : 'Enable', rule.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button(`${route}:edit`, meta.editLabel), button(`${route}:dm`, '✉️ DM Notice', ButtonStyle.Secondary)),
       row(buildActionSelect(key, rule)),
       navRow(route, nextRuleId(key), `${route}:edit`),
     ],
@@ -220,16 +314,19 @@ function textInput(id, label, value, { placeholder = '', required = true, style 
 }
 
 function buildRuleModal(key, rule) {
-  const modal = new ModalBuilder().setCustomId(`admin:automod:rule:${key}:modal`).setTitle(`${AUTOMOD_RULES[key].title} Settings`);
-  if (key === 'antiSpam') modal.addComponents(textInput('maxMessages', 'Maximum messages', rule.maxMessages), textInput('intervalSeconds', 'Time window in seconds', rule.intervalSeconds));
-  if (key === 'antiLinks') modal.addComponents(
-    textInput('allowStaff', 'Allow staff? true or false', rule.allowStaff),
-    textInput('allowedDomains', 'Allowed domains, comma separated', (rule.allowedDomains || []).join(', '), { placeholder: 'trusted.example, discord.com', required: false, style: TextInputStyle.Paragraph }),
-    textInput('deniedDomains', 'Denied domains, comma separated', (rule.deniedDomains || []).join(', '), { placeholder: 'blocked.example, scam.example', required: false, style: TextInputStyle.Paragraph })
-  );
-  if (key === 'badWords') modal.addComponents(textInput('words', 'Blocked words, comma separated', (rule.words || []).join(', '), { placeholder: 'word1, word2', required: false, style: TextInputStyle.Paragraph }));
-  if (key === 'caps') modal.addComponents(textInput('percent', 'Capital letter percentage', rule.percent), textInput('minLength', 'Minimum message length', rule.minLength));
-  if (key === 'mentions') modal.addComponents(textInput('maxMentions', 'Maximum mentions', rule.maxMentions));
+  const modal=new ModalBuilder().setCustomId('admin:automod:rule:'+key+':modal').setTitle(AUTOMOD_RULES[key].title+' Settings');
+  const enforcement=[textInput('risk','Risk points (0-100)',rule.risk??20),textInput('timeoutMinutes','Timeout minutes',rule.timeoutMinutes??10)];
+  if(key==='antiSpam') modal.addComponents(textInput('maxMessages','Maximum messages',rule.maxMessages),textInput('intervalSeconds','Time window in seconds',rule.intervalSeconds),...enforcement);
+  if(key==='antiLinks') modal.addComponents(textInput('allowStaff','Allow staff? true or false',rule.allowStaff),textInput('allowedDomains','Allowed domains, comma separated',(rule.allowedDomains||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),textInput('deniedDomains','Denied domains, comma separated',(rule.deniedDomains||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),textInput('risk','Risk points (0-100)',rule.risk??30));
+  if(key==='badWords') modal.addComponents(textInput('words','Blocked words/phrases, comma separated',(rule.words||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),textInput('matchMode','Match mode: boundary or contains',rule.matchMode||'boundary'),...enforcement);
+  if(key==='caps') modal.addComponents(textInput('percent','Capital letter percentage',rule.percent),textInput('minLength','Minimum message length',rule.minLength),...enforcement);
+  if(key==='mentions') modal.addComponents(textInput('maxMentions','Maximum total mentions',rule.maxMentions),textInput('maxUserMentions','Maximum user mentions',rule.maxUserMentions),textInput('maxRoleMentions','Maximum role mentions',rule.maxRoleMentions),textInput('blockEveryone','Block @everyone/@here? true/false',rule.blockEveryone),textInput('risk','Risk points (0-100)',rule.risk??35));
+  if(key==='invites') modal.addComponents(textInput('allowOwnServer','Allow own server? true/false',rule.allowOwnServer),textInput('allowedCodes','Allowed invite codes',(rule.allowedCodes||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),...enforcement);
+  if(key==='duplicates') modal.addComponents(textInput('maxDuplicates','Maximum duplicate messages',rule.maxDuplicates),textInput('intervalSeconds','Window in seconds',rule.intervalSeconds),...enforcement);
+  if(key==='flood') modal.addComponents(textInput('maxLines','Maximum lines',rule.maxLines),textInput('maxCharacters','Maximum characters',rule.maxCharacters),textInput('maxRepeatedCharacters','Repeated character limit',rule.maxRepeatedCharacters),textInput('risk','Risk points (0-100)',rule.risk??20),textInput('timeoutMinutes','Timeout minutes',rule.timeoutMinutes??10));
+  if(key==='emojiSpam') modal.addComponents(textInput('maxEmojis','Maximum emojis',rule.maxEmojis),...enforcement);
+  if(key==='attachments') modal.addComponents(textInput('maxAttachments','Maximum attachments',rule.maxAttachments),textInput('blockedExtensions','Blocked extensions, comma separated',(rule.blockedExtensions||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),...enforcement);
+  if(key==='scamPatterns') modal.addComponents(textInput('phrases','Suspicious phrases, comma separated',(rule.phrases||[]).join(', '),{required:false,style:TextInputStyle.Paragraph}),...enforcement);
   return modal;
 }
 
@@ -263,6 +360,28 @@ async function updatePanel(interaction, panel) {
 }
 
 async function handleAutomodModal(interaction) {
+  if (interaction.customId === 'admin:automod:risk:modal') {
+    const config=getAutomodConfig(interaction.guild.id);
+    const thresholds=interaction.fields.getTextInputValue('thresholds').split(',').map((v)=>parsePositive(v,0,1,500));
+    const repeat=interaction.fields.getTextInputValue('repeat').split(',').map((v)=>parsePositive(v,0,0,1000));
+    const requested=interaction.fields.getTextInputValue('caseMode').trim().toLowerCase();
+    config.risk={...(config.risk||{}),low:thresholds[0]||25,medium:thresholds[1]||50,high:thresholds[2]||75,critical:thresholds[3]||100,repeatWindowHours:repeat[0]||24,repeatWeight:Number.isFinite(repeat[1])?repeat[1]:10};
+    config.caseMode=['off','punishments','medium','all'].includes(requested)?requested:'punishments';
+    config.evidenceRetentionDays=parsePositive(interaction.fields.getTextInputValue('retention'),30,0,365);
+    const account=interaction.fields.getTextInputValue('accountRisk').split(',').map((v)=>v.trim());
+    config.accountRisk={enabled:['on','true','enabled','yes'].includes(String(account[0]).toLowerCase()),newAccountDays:parsePositive(account[1],7,0,365),newMemberHours:parsePositive(account[2],24,0,720),riskBoost:parsePositive(account[3],15,0,100)};
+    saveAutomodConfig(interaction.guild.id,config);
+    await interaction.reply({content:'✅ AutoMod risk, case and evidence policy saved.',flags:64});
+    return true;
+  }
+  const dmMatch=interaction.customId.match(/^admin:automod:rule:([^:]+):dm:modal$/);
+  if(dmMatch && AUTOMOD_RULES[dmMatch[1]]) {
+    const key=dmMatch[1],config=getAutomodConfig(interaction.guild.id),dmMessages={...config.dmMessages};
+    dmMessages[key]=interaction.fields.getTextInputValue('message').trim()||DEFAULT_DM_MESSAGES[key];
+    saveAutomodConfig(interaction.guild.id,{...config,dmMessages});
+    await interaction.reply({content:'✅ Member notice saved.',flags:64});
+    return true;
+  }
   if (interaction.customId === 'admin:automod:dmmessage:modal') {
     const config = getAutomodConfig(interaction.guild.id);
     const dmMessages = { ...config.dmMessages };
@@ -280,6 +399,11 @@ async function handleAutomodModal(interaction) {
   const key = match[1];
   const config = getAutomodConfig(interaction.guild.id);
   const rule = { ...config[key] };
+  const optionalField = (fieldId) => { try { return interaction.fields.getTextInputValue(fieldId); } catch { return null; } };
+  const riskValue=optionalField('risk');
+  const timeoutValue=optionalField('timeoutMinutes');
+  if(riskValue!==null) rule.risk=parsePositive(riskValue,rule.risk??20,0,100);
+  if(timeoutValue!==null) rule.timeoutMinutes=parsePositive(timeoutValue,rule.timeoutMinutes??10,1,40320);
   if (key === 'antiSpam') {
     rule.maxMessages = parsePositive(interaction.fields.getTextInputValue('maxMessages'), rule.maxMessages, 2, 100);
     rule.intervalSeconds = parsePositive(interaction.fields.getTextInputValue('intervalSeconds'), rule.intervalSeconds, 1, 3600);
@@ -294,7 +418,19 @@ async function handleAutomodModal(interaction) {
     rule.percent = parsePositive(interaction.fields.getTextInputValue('percent'), rule.percent, 1, 100);
     rule.minLength = parsePositive(interaction.fields.getTextInputValue('minLength'), rule.minLength, 1, 500);
   }
-  if (key === 'mentions') rule.maxMentions = parsePositive(interaction.fields.getTextInputValue('maxMentions'), rule.maxMentions, 1, 100);
+  if (key === 'mentions') {
+    rule.maxMentions=parsePositive(interaction.fields.getTextInputValue('maxMentions'),rule.maxMentions,1,100);
+    rule.maxUserMentions=parsePositive(interaction.fields.getTextInputValue('maxUserMentions'),rule.maxUserMentions,1,100);
+    rule.maxRoleMentions=parsePositive(interaction.fields.getTextInputValue('maxRoleMentions'),rule.maxRoleMentions,1,100);
+    rule.blockEveryone=interaction.fields.getTextInputValue('blockEveryone').trim().toLowerCase()!=='false';
+  }
+  if (key === 'invites') { rule.allowOwnServer=interaction.fields.getTextInputValue('allowOwnServer').trim().toLowerCase()!=='false'; rule.allowedCodes=parseList(interaction.fields.getTextInputValue('allowedCodes')); }
+  if (key === 'duplicates') { rule.maxDuplicates=parsePositive(interaction.fields.getTextInputValue('maxDuplicates'),rule.maxDuplicates,2,50); rule.intervalSeconds=parsePositive(interaction.fields.getTextInputValue('intervalSeconds'),rule.intervalSeconds,1,3600); }
+  if (key === 'flood') { rule.maxLines=parsePositive(interaction.fields.getTextInputValue('maxLines'),rule.maxLines,2,100); rule.maxCharacters=parsePositive(interaction.fields.getTextInputValue('maxCharacters'),rule.maxCharacters,50,4000); rule.maxRepeatedCharacters=parsePositive(interaction.fields.getTextInputValue('maxRepeatedCharacters'),rule.maxRepeatedCharacters,3,100); }
+  if (key === 'emojiSpam') rule.maxEmojis=parsePositive(interaction.fields.getTextInputValue('maxEmojis'),rule.maxEmojis,2,100);
+  if (key === 'attachments') { rule.maxAttachments=parsePositive(interaction.fields.getTextInputValue('maxAttachments'),rule.maxAttachments,1,10); rule.blockedExtensions=parseList(interaction.fields.getTextInputValue('blockedExtensions')).map((entry)=>entry.replace(/^\./,'')); }
+  if (key === 'badWords') rule.matchMode=(optionalField('matchMode')||'boundary').trim().toLowerCase()==='contains'?'contains':'boundary';
+  if (key === 'scamPatterns') rule.phrases=parseList(interaction.fields.getTextInputValue('phrases'));
   saveAutomodConfig(interaction.guild.id, { ...config, [key]: rule });
   await interaction.reply({ content: `✅ ${AUTOMOD_RULES[key].title} settings saved.`, flags: 64 });
   return true;
@@ -310,11 +446,22 @@ async function handleAutomodInteraction(interaction) {
 
   const name = getMemberDisplayName(interaction);
   if (interaction.isModalSubmit?.()) return handleAutomodModal(interaction);
+  if ((interaction.isRoleSelectMenu?.() || interaction.isUserSelectMenu?.() || interaction.isChannelSelectMenu?.()) && id.startsWith('admin:automod:exemptions:')) {
+    const config=getAutomodConfig(interaction.guild.id);
+    const type=id.split(':').pop();
+    const field={roles:'ignoredRoles',channels:'ignoredChannels',categories:'ignoredCategories',users:'ignoredUsers'}[type];
+    if(field){saveAutomodConfig(interaction.guild.id,{...config,[field]:interaction.values||[]});return updatePanel(interaction,buildExemptionsPanel(interaction.guild,name));}
+  }
   if (interaction.isChannelSelectMenu?.() && id === 'admin:selectautomodlog') {
     setLogChannelId(interaction.guild.id, interaction.values?.[0] || null);
     return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
   }
   if (interaction.isStringSelectMenu?.()) {
+    if (id === 'admin:automod:protection') {
+      const key = interaction.values?.[0];
+      if (!AUTOMOD_RULES[key]) return false;
+      return updatePanel(interaction, buildAutomodRulePanel(interaction.guild, key, name));
+    }
     const match = id.match(/^admin:automod:rule:([^:]+):actions$/);
     if (!match || !AUTOMOD_RULES[match[1]]) return false;
     const key = match[1];
@@ -326,7 +473,15 @@ async function handleAutomodInteraction(interaction) {
   if (!interaction.isButton?.()) return false;
 
   if (id === 'admin:automod') return updatePanel(interaction, buildAutomodPanel(interaction.guild, name));
+  if (id === 'admin:automod:shadow') {
+    const config=getAutomodConfig(interaction.guild.id);
+    saveAutomodConfig(interaction.guild.id,{...config,shadowMode:!config.shadowMode});
+    return updatePanel(interaction,buildAutomodConfigurePanel(interaction.guild,name));
+  }
   if (id === 'admin:automod:configure') return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
+  if (id === 'admin:automod:risk') return updatePanel(interaction, buildRiskPanel(interaction.guild, name));
+  if (id === 'admin:automod:exemptions') return updatePanel(interaction, buildExemptionsPanel(interaction.guild, name));
+  if (id === 'admin:automod:risk:edit') { await interaction.showModal(buildRiskModal(getAutomodConfig(interaction.guild.id))); return true; }
   if (id === 'admin:setautomodlog' || id === 'admin:channel:automodlog') return updatePanel(interaction, buildLogChannelPanel());
   if (id === 'admin:automod:dmmessage') {
     await interaction.showModal(buildDmMessagesModal(getAutomodConfig(interaction.guild.id)));
@@ -348,13 +503,17 @@ async function handleAutomodInteraction(interaction) {
     return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
   }
 
-  const ruleMatch = id.match(/^admin:automod:rule:([^:]+)(?::(toggle|edit))?$/);
+  const ruleMatch = id.match(/^admin:automod:rule:([^:]+)(?::(toggle|edit|dm))?$/);
   if (ruleMatch && AUTOMOD_RULES[ruleMatch[1]]) {
     const key = ruleMatch[1];
     const action = ruleMatch[2];
     if (!action) return updatePanel(interaction, buildAutomodRulePanel(interaction.guild, key, name));
     const config = getAutomodConfig(interaction.guild.id);
     const rule = { ...config[key] };
+    if (action === 'dm') {
+      await interaction.showModal(buildRuleDmModal(key, config));
+      return true;
+    }
     if (action === 'edit') {
       await interaction.showModal(buildRuleModal(key, rule));
       return true;
@@ -375,6 +534,8 @@ module.exports = {
   buildAutomodPanel,
   buildAutomodConfigurePanel,
   buildAutomodRulePanel,
+  buildRiskPanel,
+  buildExemptionsPanel,
   buildLogChannelPanel,
   handleAutomodInteraction,
 };

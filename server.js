@@ -248,6 +248,24 @@ client.once('clientReady', async () => {
   backupScheduler.startServerBackupScheduler?.(client);
 });
 
+let shutdownInProgress = false;
+async function gracefulShutdown(signal) {
+  if (shutdownInProgress) return;
+  shutdownInProgress = true;
+  console.log(`[Runtime] ${signal} received. Shutting down cleanly.`);
+  const forceTimer = setTimeout(() => process.exit(0), 8000);
+  forceTimer.unref?.();
+  try { require('./src/modules/utilityStudio/stats/stats').shutdown(client); }
+  catch (error) { console.error('[Stats] Shutdown failed:', error?.stack || error?.message || error); }
+  try { if (server.listening) await new Promise((resolve) => server.close(() => resolve())); }
+  catch (error) { console.warn('[Runtime] HTTP shutdown failed:', error?.message || error); }
+  try { client.destroy(); } catch {}
+  clearTimeout(forceTimer);
+  process.exit(0);
+}
+process.once('SIGTERM', () => { void gracefulShutdown('SIGTERM'); });
+process.once('SIGINT', () => { void gracefulShutdown('SIGINT'); });
+
 const token = resolveToken(botMode, config);
 loginWithRetry(client, token, { label: `Discord:${botMode}` }).catch((error) => {
   console.error(`[Discord:${botMode}] Unable to establish a Discord connection. Exiting so the process manager can recover.`);

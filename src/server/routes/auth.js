@@ -3,9 +3,9 @@ const express = require('express');
 const security = require('../../core/security/protection/core');
 
 const router = express.Router();
-// v7 hands an authenticated Appeals login directly back to the validated route
+// Hands an authenticated Appeals login directly back to the validated route
 // using a no-cache HTML handoff instead of relying on SPA/hash redirect recovery.
-const AUTH_FLOW_REVISION = 'appeals-state-v7';
+const AUTH_FLOW_REVISION = 'appeals-state';
 
 /* ---------------- HELPERS ---------------- */
 

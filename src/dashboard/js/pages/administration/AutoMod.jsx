@@ -1,554 +1,105 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-
 import { api } from '../../services/apiClient';
 import { joinGuildRoom, listenForGuildUpdate } from '../../services/socketClient';
-import PageShell, {
-  LoadingPanel,
-  Notice,
-  PrimaryButton,
-  SectionCard,
-  StatGrid,
-  SummaryStat,
-} from '../../shared/PageShell';
+import PageShell, { LoadingPanel, Notice, PrimaryButton, SectionCard, StatGrid, SummaryStat } from '../../shared/PageShell';
 import { PAGE_LAYOUTS } from '../../ui/layout';
 import { createAutoModPageStyles } from '../../ui/components';
 
-const PAGE_KEY = 'automod';
-const RULE_KEYS = ['antiSpam', 'antiLinks'];
-const PUNISHMENT_OPTIONS = [
-  ['delete', 'Delete message'],
-  ['warn', 'Warn user'],
-  ['dm', 'Warn user by DM'],
-  ['timeout', 'Timeout user'],
-  ['kick', 'Kick user'],
-  ['ban', 'Ban user'],
+const PAGE_KEY='automod';
+const ACTIONS=[['delete','Delete'],['warn','Warn'],['dm','DM'],['timeout','Timeout'],['kick','Kick'],['ban','Ban']];
+const RULES=[
+  ['antiSpam','Spam','Message-rate and burst protection.'],
+  ['antiLinks','Links','Domain allow/deny protection.'],
+  ['badWords','Words & Phrases','Blocked content with boundary-aware matching.'],
+  ['caps','Caps','Excessive capital-letter protection.'],
+  ['mentions','Mentions','User, role and everyone mention limits.'],
+  ['invites','Invites','Discord invite protection.'],
+  ['duplicates','Duplicates','Repeated-message protection.'],
+  ['flood','Flood','Line, length and repeated-character protection.'],
+  ['emojiSpam','Emoji','Excessive emoji protection.'],
+  ['attachments','Attachments','Attachment count and extension protection.'],
+  ['scamPatterns','Suspicious Content','Configured high-risk phrase and combined-content protection.'],
 ];
-
-const DEFAULT_FORM = Object.freeze({
-  enabled: false,
-  dmUser: true,
-  dmMessages: {
-    antiSpam: '⚠️ **{server} AutoMod**\nSpam Protection triggered: {reason}',
-    antiLinks: '⚠️ **{server} AutoMod**\nLink Protection triggered: {reason}',
-  },
-  antiSpam: {
-    enabled: false,
-    maxMessages: 5,
-    intervalSeconds: 10,
-    actions: ['delete'],
-  },
-  antiLinks: {
-    enabled: false,
-    allowStaff: true,
-    allowedDomains: '',
-    deniedDomains: '',
-    actions: ['delete'],
-  },
-  ignoredRoles: '',
-  ignoredChannels: '',
-});
-
-function createDefaultForm() {
-  return {
-    ...DEFAULT_FORM,
-    dmMessages: { ...DEFAULT_FORM.dmMessages },
-    antiSpam: { ...DEFAULT_FORM.antiSpam, actions: [...DEFAULT_FORM.antiSpam.actions] },
-    antiLinks: { ...DEFAULT_FORM.antiLinks, actions: [...DEFAULT_FORM.antiLinks.actions] },
-  };
+const DM_DEFAULT=(name)=>'⚠️ **{server} AutoMod**\n'+name+' triggered: {reason}';
+const DEFAULT_RULE={enabled:false,risk:20,timeoutMinutes:10,actions:['delete']};
+function defaults(){
+  const out={enabled:false,dmUser:true,shadowMode:false,caseMode:'punishments',evidenceRetentionDays:30,accountRisk:{enabled:false,newAccountDays:7,newMemberHours:24,riskBoost:15},risk:{enabled:true,low:25,medium:50,high:75,critical:100,repeatWindowHours:24,repeatWeight:10},dmMessages:{},ignoredRoles:'',ignoredChannels:'',ignoredCategories:'',ignoredUsers:''};
+  for(const [key,name] of RULES){out[key]={...DEFAULT_RULE};out.dmMessages[key]=DM_DEFAULT(name);}
+  Object.assign(out.antiSpam,{maxMessages:5,intervalSeconds:10});
+  Object.assign(out.antiLinks,{allowStaff:true,allowedDomains:'',deniedDomains:'',risk:30});
+  Object.assign(out.badWords,{words:'',matchMode:'boundary',risk:25});
+  Object.assign(out.caps,{percent:70,minLength:12,risk:10,actions:['warn']});
+  Object.assign(out.mentions,{maxMentions:5,maxUserMentions:5,maxRoleMentions:3,blockEveryone:true,risk:35,actions:['warn']});
+  Object.assign(out.invites,{allowOwnServer:true,allowedCodes:'',risk:35});
+  Object.assign(out.duplicates,{maxDuplicates:3,intervalSeconds:30,risk:25});
+  Object.assign(out.flood,{maxLines:12,maxCharacters:1800,maxRepeatedCharacters:12});
+  Object.assign(out.emojiSpam,{maxEmojis:15,risk:15});
+  Object.assign(out.attachments,{maxAttachments:5,blockedExtensions:''});
+  Object.assign(out.scamPatterns,{phrases:'',risk:45,timeoutMinutes:30,actions:['delete','timeout']});
+  return out;
 }
-
-function normalizeActions(value) {
-  const values = Array.isArray(value) ? value : value ? [value] : ['delete'];
-  const cleaned = values
-    .map((item) => String(item || '').trim().toLowerCase())
-    .filter((item) => PUNISHMENT_OPTIONS.some(([option]) => option === item));
-
-  if (cleaned.includes('ban')) {
-    return [...new Set(cleaned.filter((item) => item !== 'kick'))];
-  }
-
-  return cleaned.length ? [...new Set(cleaned)] : ['delete'];
+const listText=(v)=>Array.isArray(v)?v.join(', '):String(v||'');
+const parseList=(v,domain=false)=>[...new Set(String(v||'').split(/[\n,]/).map(x=>x.trim().toLowerCase()).map(x=>domain?x.replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/.*$/,''):x).filter(Boolean))];
+function normalizeActions(v){let a=[...new Set((Array.isArray(v)?v:['delete']).filter(x=>ACTIONS.some(([k])=>k===x)))];if(a.includes('ban'))a=a.filter(x=>x!=='kick'&&x!=='timeout');else if(a.includes('kick'))a=a.filter(x=>x!=='timeout');return a.length?a:['delete'];}
+function normalize(data={}){
+  const base=defaults(),out={...base,...data,risk:{...base.risk,...(data.risk||{})},accountRisk:{...base.accountRisk,...(data.accountRisk||{})},dmMessages:{...base.dmMessages,...(data.dmMessages||{})}};
+  for(const [key] of RULES)out[key]={...base[key],...(data[key]||{}),actions:normalizeActions(data[key]?.actions||data[key]?.action)};
+  out.antiLinks.allowedDomains=listText(out.antiLinks.allowedDomains);out.antiLinks.deniedDomains=listText(out.antiLinks.deniedDomains);
+  out.badWords.words=listText(out.badWords.words);out.invites.allowedCodes=listText(out.invites.allowedCodes);out.attachments.blockedExtensions=listText(out.attachments.blockedExtensions);out.scamPatterns.phrases=listText(out.scamPatterns.phrases);
+  for(const key of ['ignoredRoles','ignoredChannels','ignoredCategories','ignoredUsers'])out[key]=listText(data[key]);
+  return out;
 }
-
-function listText(value) {
-  return Array.isArray(value) ? value.join(', ') : String(value || '');
+function Toggle({checked,onChange}){return <button type="button" onClick={()=>onChange(!checked)} style={{border:'1px solid '+(checked?'rgba(34,197,94,.45)':'rgba(239,68,68,.45)'),background:checked?'rgba(34,197,94,.14)':'rgba(239,68,68,.14)',color:checked?'#86efac':'#fca5a5',borderRadius:999,padding:'8px 12px',fontWeight:900,cursor:'pointer'}}>{checked?'Enabled':'Disabled'}</button>;}
+function Field({label,value,onChange,styles,type='text',min,max}){return <label style={{display:'grid',gap:7}}><span style={styles.label}>{label}</span><input style={styles.input} type={type} min={min} max={max} value={value} onChange={e=>onChange(e.target.value)}/></label>;}
+function Area({label,value,onChange,styles,placeholder=''}){return <label style={{display:'grid',gap:7}}><span style={styles.label}>{label}</span><textarea rows={3} style={styles.textarea} value={value} placeholder={placeholder} onChange={e=>onChange(e.target.value)}/></label>;}
+function ActionPicker({value,onChange,styles}){const selected=normalizeActions(value);return <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{ACTIONS.map(([key,label])=><button key={key} type="button" onClick={()=>{let next=selected.includes(key)?selected.filter(x=>x!==key):[...selected,key];onChange(normalizeActions(next.length?next:['delete']));}} style={{...styles.input,width:'auto',cursor:'pointer',background:selected.includes(key)?'rgba(59,130,246,.16)':styles.input.background}}>{label}</button>)}</div>;}
+function Specific({ruleKey,rule,set,styles}){
+  if(ruleKey==='antiSpam')return <><Field styles={styles} label="Max messages" type="number" value={rule.maxMessages} onChange={v=>set('maxMessages',v)}/><Field styles={styles} label="Window seconds" type="number" value={rule.intervalSeconds} onChange={v=>set('intervalSeconds',v)}/></>;
+  if(ruleKey==='antiLinks')return <><Toggle checked={rule.allowStaff} onChange={v=>set('allowStaff',v)}/><Area styles={styles} label="Allowed domains" value={rule.allowedDomains} onChange={v=>set('allowedDomains',v)}/><Area styles={styles} label="Denied domains" value={rule.deniedDomains} onChange={v=>set('deniedDomains',v)}/></>;
+  if(ruleKey==='badWords')return <><Area styles={styles} label="Blocked words / phrases" value={rule.words} onChange={v=>set('words',v)}/><Field styles={styles} label="Match mode (boundary/contains)" value={rule.matchMode} onChange={v=>set('matchMode',v)}/></>;
+  if(ruleKey==='caps')return <><Field styles={styles} label="Caps %" type="number" value={rule.percent} onChange={v=>set('percent',v)}/><Field styles={styles} label="Minimum length" type="number" value={rule.minLength} onChange={v=>set('minLength',v)}/></>;
+  if(ruleKey==='mentions')return <><Field styles={styles} label="Total mentions" type="number" value={rule.maxMentions} onChange={v=>set('maxMentions',v)}/><Field styles={styles} label="User mentions" type="number" value={rule.maxUserMentions} onChange={v=>set('maxUserMentions',v)}/><Field styles={styles} label="Role mentions" type="number" value={rule.maxRoleMentions} onChange={v=>set('maxRoleMentions',v)}/><Toggle checked={rule.blockEveryone} onChange={v=>set('blockEveryone',v)}/></>;
+  if(ruleKey==='invites')return <><Toggle checked={rule.allowOwnServer} onChange={v=>set('allowOwnServer',v)}/><Area styles={styles} label="Allowed invite codes" value={rule.allowedCodes} onChange={v=>set('allowedCodes',v)}/></>;
+  if(ruleKey==='duplicates')return <><Field styles={styles} label="Duplicate limit" type="number" value={rule.maxDuplicates} onChange={v=>set('maxDuplicates',v)}/><Field styles={styles} label="Window seconds" type="number" value={rule.intervalSeconds} onChange={v=>set('intervalSeconds',v)}/></>;
+  if(ruleKey==='flood')return <><Field styles={styles} label="Max lines" type="number" value={rule.maxLines} onChange={v=>set('maxLines',v)}/><Field styles={styles} label="Max characters" type="number" value={rule.maxCharacters} onChange={v=>set('maxCharacters',v)}/><Field styles={styles} label="Repeated character limit" type="number" value={rule.maxRepeatedCharacters} onChange={v=>set('maxRepeatedCharacters',v)}/></>;
+  if(ruleKey==='emojiSpam')return <Field styles={styles} label="Max emojis" type="number" value={rule.maxEmojis} onChange={v=>set('maxEmojis',v)}/>;
+  if(ruleKey==='scamPatterns')return <Area styles={styles} label="Suspicious phrases" value={rule.phrases} onChange={v=>set('phrases',v)}/>;
+  return <><Field styles={styles} label="Max attachments" type="number" value={rule.maxAttachments} onChange={v=>set('maxAttachments',v)}/><Area styles={styles} label="Blocked extensions" value={rule.blockedExtensions} onChange={v=>set('blockedExtensions',v)}/></>;
 }
-
-function normalizeAutoModForm(data = {}) {
-  return {
-    enabled: data?.enabled === true,
-    dmUser: data?.dmUser !== false,
-    dmMessages: {
-      antiSpam: String(data?.dmMessages?.antiSpam || DEFAULT_FORM.dmMessages.antiSpam),
-      antiLinks: String(data?.dmMessages?.antiLinks || DEFAULT_FORM.dmMessages.antiLinks),
-    },
-    antiSpam: {
-      enabled: data?.antiSpam?.enabled === true,
-      maxMessages: Number(data?.antiSpam?.maxMessages ?? DEFAULT_FORM.antiSpam.maxMessages),
-      intervalSeconds: Number(data?.antiSpam?.intervalSeconds ?? DEFAULT_FORM.antiSpam.intervalSeconds),
-      actions: normalizeActions(data?.antiSpam?.actions || data?.antiSpam?.action),
-    },
-    antiLinks: {
-      enabled: data?.antiLinks?.enabled === true,
-      allowStaff: data?.antiLinks?.allowStaff !== false,
-      allowedDomains: listText(data?.antiLinks?.allowedDomains),
-      deniedDomains: listText(data?.antiLinks?.deniedDomains),
-      actions: normalizeActions(data?.antiLinks?.actions || data?.antiLinks?.action),
-    },
-    ignoredRoles: listText(data?.ignoredRoles),
-    ignoredChannels: listText(data?.ignoredChannels),
-  };
-}
-
-function parseList(value, domainMode = false) {
-  return String(value || '')
-    .split(/[\n,]/)
-    .map((item) => item.trim().toLowerCase())
-    .map((item) => (
-      domainMode
-        ? item.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '')
-        : item
-    ))
-    .filter(Boolean)
-    .filter((item, index, list) => list.indexOf(item) === index);
-}
-
-function Toggle({ checked, onChange, disabled = false }) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      style={{
-        border: checked ? '1px solid rgba(34,197,94,.45)' : '1px solid rgba(239,68,68,.45)',
-        background: checked ? 'rgba(34,197,94,.14)' : 'rgba(239,68,68,.14)',
-        color: checked ? '#86efac' : '#fca5a5',
-        borderRadius: 999,
-        padding: '8px 12px',
-        fontWeight: 900,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-      }}
-    >
-      {checked ? 'Enabled' : 'Disabled'}
-    </button>
-  );
-}
-
-function Field({ label, value, onChange, type = 'text', min, max, styles }) {
-  return (
-    <label style={{ display: 'grid', gap: 7 }}>
-      <span style={styles.label}>{label}</span>
-      <input
-        type={type}
-        min={min}
-        max={max}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        style={styles.input}
-      />
-    </label>
-  );
-}
-
-function TextArea({ label, value, onChange, placeholder, styles, rows = 3 }) {
-  return (
-    <label style={{ display: 'grid', gap: 7 }}>
-      <span style={styles.label}>{label}</span>
-      <textarea
-        rows={rows}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        style={styles.textarea}
-      />
-    </label>
-  );
-}
-
-function Punishments({ value, onChange, styles }) {
-  const selected = normalizeActions(value);
-
-  return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-      {PUNISHMENT_OPTIONS.map(([optionValue, label]) => {
-        const active = selected.includes(optionValue);
-
-        return (
-          <button
-            key={optionValue}
-            type="button"
-            onClick={() => {
-              let next = active
-                ? selected.filter((item) => item !== optionValue)
-                : [...selected, optionValue];
-
-              if (optionValue === 'ban' && !active) next = next.filter((item) => item !== 'kick');
-              if (optionValue === 'kick' && !active) next = next.filter((item) => item !== 'ban');
-              onChange(next.length ? next : ['delete']);
-            }}
-            style={{
-              ...styles.input,
-              width: 'auto',
-              cursor: 'pointer',
-              background: active ? 'rgba(59,130,246,.16)' : styles.input.background,
-            }}
-          >
-            {label}
-          </button>
-        );
-      })}
+export default function AutoMod({selectedGuild,theme}){
+ const styles=useMemo(()=>createAutoModPageStyles(theme),[theme]),page=PAGE_LAYOUTS[PAGE_KEY]||{};
+ const [form,setForm]=useState(defaults),[cases,setCases]=useState([]),[nativeRules,setNativeRules]=useState([]),[health,setHealth]=useState(null),[loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[message,setMessage]=useState('');
+ useEffect(()=>{let live=true;(async()=>{if(!selectedGuild){setForm(defaults());return;}try{setLoading(true);const [data,caseData,nativeData,healthData]=await Promise.all([api.getAutoModConfig(selectedGuild),api.getCases(selectedGuild).catch(()=>[]),api.getNativeAutoModRules(selectedGuild).catch(()=>({rules:[]})),api.getAutoModHealth(selectedGuild).catch(()=>null)]);if(live){setForm(normalize(data?.config||data));setNativeRules(nativeData?.rules||[]);setHealth(healthData);const rows=Array.isArray(caseData)?caseData:(caseData?.cases||[]);setCases(rows.filter(entry=>entry?.action==='automod'||entry?.metadata?.source==='automod').slice(0,50));}}catch(e){console.error(e);if(live)setMessage('❌ Could not load AutoMod.');}finally{if(live)setLoading(false);}})();return()=>{live=false};},[selectedGuild]);
+ useEffect(()=>{if(!selectedGuild)return;joinGuildRoom(selectedGuild);return listenForGuildUpdate('automod',(data)=>{setForm(normalize(data));setMessage('🔄 AutoMod updated live.');});},[selectedGuild]);
+ const setRule=useCallback((key,field,value)=>setForm(f=>({...f,[key]:{...f[key],[field]:value}})),[]);
+ const applyPreset=(preset)=>setForm(current=>{
+   const next={...current,preset};
+   for(const [key] of RULES)next[key]={...current[key]};
+   if(preset==='relaxed'){for(const key of ['antiSpam','antiLinks','badWords','mentions','invites'])next[key].enabled=true;next.risk={...current.risk,low:30,medium:60,high:90,critical:120};}
+   if(preset==='balanced'){for(const [key] of RULES)next[key].enabled=!['attachments'].includes(key);next.risk={...current.risk,low:25,medium:50,high:75,critical:100};}
+   if(preset==='strict'){for(const [key] of RULES)next[key].enabled=true;next.risk={...current.risk,low:20,medium:40,high:60,critical:80};}
+   return next;
+ });
+ const enabled=RULES.filter(([key])=>form[key]?.enabled).length;
+ const highRisk=cases.filter(entry=>['high','critical'].includes(String(entry?.metadata?.severity||'').toLowerCase())).length;
+ const recentRules=cases.reduce((map,entry)=>{for(const key of entry?.metadata?.rules||[])map[key]=(map[key]||0)+1;return map;},{});
+ const save=useCallback(async()=>{if(!selectedGuild)return;try{setSaving(true);const payload={...form,ignoredRoles:parseList(form.ignoredRoles),ignoredChannels:parseList(form.ignoredChannels),ignoredCategories:parseList(form.ignoredCategories),ignoredUsers:parseList(form.ignoredUsers)};for(const [key] of RULES){payload[key]={...form[key],actions:normalizeActions(form[key].actions)};}payload.antiLinks={...payload.antiLinks,allowedDomains:parseList(form.antiLinks.allowedDomains,true),deniedDomains:parseList(form.antiLinks.deniedDomains,true)};payload.badWords={...payload.badWords,words:parseList(form.badWords.words)};payload.invites={...payload.invites,allowedCodes:parseList(form.invites.allowedCodes)};payload.attachments={...payload.attachments,blockedExtensions:parseList(form.attachments.blockedExtensions)};payload.scamPatterns={...payload.scamPatterns,phrases:parseList(form.scamPatterns.phrases)};const saved=await api.saveAutoModConfig(selectedGuild,payload);setForm(normalize(saved?.config||saved));setMessage('✅ AutoMod settings saved.');}catch(e){console.error(e);setMessage('❌ Failed to save AutoMod.');}finally{setSaving(false);}},[form,selectedGuild]);
+ return <PageShell title={page.title||'AutoMod'} subtitle="Full automated protection, enforcement, cases and evidence control." theme={theme}>
+  {!selectedGuild?<Notice theme={theme} tone="info">Select a guild to manage AutoMod.</Notice>:null}{message?<Notice theme={theme} tone={message.startsWith('❌')?'danger':'success'}>{message}</Notice>:null}
+  <StatGrid><SummaryStat theme={theme} label="AutoMod" value={form.enabled?'Enabled':'Disabled'} accent={form.enabled?theme.success:theme.danger}/><SummaryStat theme={theme} label="Protections" value={enabled+'/'+RULES.length}/><SummaryStat theme={theme} label="Case Policy" value={form.caseMode}/><SummaryStat theme={theme} label="Evidence" value={form.evidenceRetentionDays+' days'}/><SummaryStat theme={theme} label="Recorded Incidents" value={cases.length}/><SummaryStat theme={theme} label="High/Critical" value={highRisk}/></StatGrid>
+  <SectionCard theme={theme} title="System" subtitle="Master protection, presets and member-notice controls. Presets remain fully editable after applying." padding="20px"><div style={{display:'flex',gap:16,flexWrap:'wrap'}}><div><span style={styles.label}>AutoMod</span><Toggle checked={form.enabled} onChange={v=>setForm(f=>({...f,enabled:v}))}/></div><div><span style={styles.label}>Member DMs</span><Toggle checked={form.dmUser} onChange={v=>setForm(f=>({...f,dmUser:v}))}/></div><div><span style={styles.label}>Simulation / log only</span><Toggle checked={form.shadowMode} onChange={v=>setForm(f=>({...f,shadowMode:v}))}/></div></div><div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:16}}>{['relaxed','balanced','strict'].map(preset=><button key={preset} type="button" style={{...styles.input,width:'auto',cursor:'pointer'}} onClick={()=>applyPreset(preset)}>Apply {preset}</button>)}</div></SectionCard>
+  <SectionCard theme={theme} title="Risk, Cases & Evidence" subtitle="Transparent scoring and persistent moderation history." padding="20px"><div style={styles.ruleMiniGrid}><Field styles={styles} label="Low risk" type="number" value={form.risk.low} onChange={v=>setForm(f=>({...f,risk:{...f.risk,low:v}}))}/><Field styles={styles} label="Medium risk" type="number" value={form.risk.medium} onChange={v=>setForm(f=>({...f,risk:{...f.risk,medium:v}}))}/><Field styles={styles} label="High risk" type="number" value={form.risk.high} onChange={v=>setForm(f=>({...f,risk:{...f.risk,high:v}}))}/><Field styles={styles} label="Critical risk" type="number" value={form.risk.critical} onChange={v=>setForm(f=>({...f,risk:{...f.risk,critical:v}}))}/><Field styles={styles} label="Repeat window hours" type="number" value={form.risk.repeatWindowHours} onChange={v=>setForm(f=>({...f,risk:{...f.risk,repeatWindowHours:v}}))}/><Field styles={styles} label="Repeat risk weight" type="number" value={form.risk.repeatWeight} onChange={v=>setForm(f=>({...f,risk:{...f.risk,repeatWeight:v}}))}/><Field styles={styles} label="Case mode (off/punishments/medium/all)" value={form.caseMode} onChange={v=>setForm(f=>({...f,caseMode:v}))}/><Field styles={styles} label="Evidence retention days" type="number" min="0" max="365" value={form.evidenceRetentionDays} onChange={v=>setForm(f=>({...f,evidenceRetentionDays:v}))}/></div><div style={{marginTop:16,display:'flex',gap:12,flexWrap:'wrap'}}><div><span style={styles.label}>Account risk context</span><Toggle checked={form.accountRisk.enabled} onChange={v=>setForm(f=>({...f,accountRisk:{...f.accountRisk,enabled:v}}))}/></div><Field styles={styles} label="New account days" type="number" value={form.accountRisk.newAccountDays} onChange={v=>setForm(f=>({...f,accountRisk:{...f.accountRisk,newAccountDays:v}}))}/><Field styles={styles} label="New member hours" type="number" value={form.accountRisk.newMemberHours} onChange={v=>setForm(f=>({...f,accountRisk:{...f.accountRisk,newMemberHours:v}}))}/><Field styles={styles} label="Risk boost" type="number" value={form.accountRisk.riskBoost} onChange={v=>setForm(f=>({...f,accountRisk:{...f.accountRisk,riskBoost:v}}))}/></div></SectionCard>
+  <SectionCard theme={theme} title="Protections" subtitle="Every enabled protection is evaluated before one correlated enforcement decision is made." padding="20px">{loading?<LoadingPanel theme={theme} text="Loading AutoMod..."/>:<div style={{display:'grid',gap:14}}>{RULES.map(([key,name,description])=><div key={key} style={{border:'1px solid '+theme.cardBorder,borderRadius:16,padding:16,display:'grid',gap:14,background:theme.softBg}}><div style={{display:'flex',justifyContent:'space-between',gap:12}}><div><h3 style={{margin:0,color:theme.cardText}}>{name}</h3><p style={{color:theme.mutedText,margin:'5px 0 0'}}>{description}</p></div><Toggle checked={form[key].enabled} onChange={v=>setRule(key,'enabled',v)}/></div><div style={styles.ruleMiniGrid}><Field styles={styles} label="Risk points" type="number" min="0" max="100" value={form[key].risk} onChange={v=>setRule(key,'risk',v)}/><Field styles={styles} label="Timeout minutes" type="number" min="1" value={form[key].timeoutMinutes} onChange={v=>setRule(key,'timeoutMinutes',v)}/></div><Specific ruleKey={key} rule={form[key]} set={(field,value)=>setRule(key,field,value)} styles={styles}/><div><span style={styles.label}>Enforcement actions</span><ActionPicker value={form[key].actions} onChange={v=>setRule(key,'actions',v)} styles={styles}/></div><Area styles={styles} label="Member DM notice" value={form.dmMessages[key]} onChange={v=>setForm(f=>({...f,dmMessages:{...f.dmMessages,[key]:v}}))}/></div>)}</div>}</SectionCard>
+  <SectionCard theme={theme} title="Health & Diagnostics" subtitle="Checks whether Goliath can enforce the configured protections." padding="20px">
+    <div style={{fontWeight:900,marginBottom:10,color:health?.status==='healthy'?theme.success:theme.warning}}>{health?.status==='healthy'?'Healthy':'Attention Required'}</div>
+    <div style={{display:'grid',gap:6,color:theme.mutedText}}>
+      {(health?.permissions||[]).map(check=><div key={check.name}>{check.ok?'OK':'MISSING'} • {check.name}</div>)}
+      {(health?.issues||[]).map((issue,index)=><div key={index}>Attention • {issue}</div>)}
     </div>
-  );
-}
-
-function RuleCard({
-  title,
-  description,
-  enabled,
-  onEnabledChange,
-  actions,
-  onActionsChange,
-  children,
-  theme,
-  styles,
-}) {
-  return (
-    <div
-      style={{
-        border: `1px solid ${theme.cardBorder}`,
-        borderRadius: 16,
-        padding: 16,
-        display: 'grid',
-        gap: 14,
-        background: theme.softBg,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <h3 style={{ margin: 0, color: theme.cardText, fontSize: 16 }}>{title}</h3>
-          <p style={{ margin: '5px 0 0', color: theme.mutedText, fontSize: 13 }}>{description}</p>
-        </div>
-        <Toggle checked={enabled} onChange={onEnabledChange} />
-      </div>
-
-      <div style={{ display: 'grid', gap: 8 }}>
-        <span style={styles.label}>Actions</span>
-        <Punishments value={actions} onChange={onActionsChange} styles={styles} />
-      </div>
-
-      {children}
-    </div>
-  );
-}
-
-export default function AutoMod({ selectedGuild, theme }) {
-  const styles = useMemo(() => createAutoModPageStyles(theme), [theme]);
-  const page = PAGE_LAYOUTS[PAGE_KEY] || {
-    title: 'AutoMod',
-    description: 'Configure automated moderation rules.',
-  };
-
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [saveMessage, setSaveMessage] = useState('');
-  const [form, setForm] = useState(createDefaultForm);
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function load() {
-      if (!selectedGuild) {
-        if (mounted) {
-          setForm(createDefaultForm());
-          setError('');
-          setSaveMessage('');
-          setLoading(false);
-        }
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError('');
-        setSaveMessage('');
-        const data = await api.getAutoModConfig(selectedGuild);
-        if (mounted) setForm(normalizeAutoModForm(data));
-      } catch (loadError) {
-        console.error(loadError);
-        if (mounted) {
-          setForm(createDefaultForm());
-          setError('Could not load AutoMod config.');
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [selectedGuild]);
-
-  useEffect(() => {
-    if (!selectedGuild) return undefined;
-
-    joinGuildRoom(selectedGuild);
-    return listenForGuildUpdate('automod', (data, payload = {}) => {
-      setForm(normalizeAutoModForm(data));
-      setSaveMessage(
-        payload.source === 'dashboard'
-          ? '✅ AutoMod synced live.'
-          : '🔄 AutoMod updated live.'
-      );
-    });
-  }, [selectedGuild]);
-
-  const updateSection = useCallback((section, field, value) => {
-    setForm((current) => ({
-      ...current,
-      [section]: {
-        ...current[section],
-        [field]: value,
-      },
-    }));
-  }, []);
-
-  const enabledCount = RULE_KEYS.filter((key) => form[key]?.enabled).length;
-
-  const handleSave = useCallback(async () => {
-    if (!selectedGuild) {
-      setSaveMessage('❌ Select a guild first.');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setSaveMessage('');
-      setError('');
-
-      const payload = {
-        enabled: form.enabled,
-        dmUser: form.dmUser,
-        dmMessages: {
-          antiSpam: form.dmMessages.antiSpam,
-          antiLinks: form.dmMessages.antiLinks,
-        },
-        antiSpam: {
-          enabled: form.antiSpam.enabled,
-          maxMessages: Number(form.antiSpam.maxMessages),
-          intervalSeconds: Number(form.antiSpam.intervalSeconds),
-          actions: normalizeActions(form.antiSpam.actions),
-        },
-        antiLinks: {
-          enabled: form.antiLinks.enabled,
-          allowStaff: form.antiLinks.allowStaff,
-          allowedDomains: parseList(form.antiLinks.allowedDomains, true),
-          deniedDomains: parseList(form.antiLinks.deniedDomains, true),
-          actions: normalizeActions(form.antiLinks.actions),
-        },
-        ignoredRoles: parseList(form.ignoredRoles),
-        ignoredChannels: parseList(form.ignoredChannels),
-      };
-
-      const saved = await api.saveAutoModConfig(selectedGuild, payload);
-      if (saved?.config) setForm(normalizeAutoModForm(saved.config));
-      setSaveMessage('✅ AutoMod config saved successfully.');
-    } catch (saveError) {
-      console.error(saveError);
-      setSaveMessage('❌ Failed to save AutoMod config.');
-    } finally {
-      setSaving(false);
-    }
-  }, [form, selectedGuild]);
-
-  return (
-    <PageShell
-      title={page.title || 'AutoMod'}
-      subtitle={page.description || 'Configure automated moderation rules.'}
-      theme={theme}
-    >
-      {!selectedGuild ? (
-        <Notice theme={theme} tone="info">Select a guild to edit AutoMod settings.</Notice>
-      ) : null}
-      {error ? <Notice theme={theme} tone="danger">{error}</Notice> : null}
-      {saveMessage ? (
-        <Notice theme={theme} tone={saveMessage.startsWith('❌') ? 'danger' : 'success'}>
-          {saveMessage}
-        </Notice>
-      ) : null}
-
-      <StatGrid>
-        <SummaryStat
-          theme={theme}
-          label="Module"
-          value={form.enabled ? 'Enabled' : 'Disabled'}
-          accent={form.enabled ? theme.success : theme.danger}
-        />
-        <SummaryStat theme={theme} label="Enabled Rules" value={`${enabledCount}/2`} />
-        <SummaryStat
-          theme={theme}
-          label="User DMs"
-          value={form.dmUser ? 'Enabled' : 'Disabled'}
-          accent={form.dmUser ? theme.success : theme.danger}
-        />
-      </StatGrid>
-
-      <SectionCard
-        theme={theme}
-        title="Module Settings"
-        subtitle="Control whether AutoMod runs and whether members receive direct-message notices."
-        padding="20px"
-      >
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ display: 'grid', gap: 7 }}>
-            <span style={styles.label}>AutoMod Module</span>
-            <Toggle
-              checked={form.enabled}
-              onChange={(value) => setForm((current) => ({ ...current, enabled: value }))}
-            />
-          </div>
-          <div style={{ display: 'grid', gap: 7 }}>
-            <span style={styles.label}>DM User</span>
-            <Toggle
-              checked={form.dmUser}
-              onChange={(value) => setForm((current) => ({ ...current, dmUser: value }))}
-            />
-          </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard theme={theme} title="Rules" subtitle="Manage the AutoMod rules enforced by the live message runtime." padding="20px">
-        {loading ? (
-          <LoadingPanel theme={theme} text="Loading AutoMod config..." />
-        ) : (
-          <div style={{ display: 'grid', gap: 14 }}>
-            <RuleCard
-              title="Anti Spam"
-              description="Stops users sending too many messages too quickly."
-              enabled={form.antiSpam.enabled}
-              onEnabledChange={(value) => updateSection('antiSpam', 'enabled', value)}
-              actions={form.antiSpam.actions}
-              onActionsChange={(value) => updateSection('antiSpam', 'actions', value)}
-              theme={theme}
-              styles={styles}
-            >
-              <div style={styles.ruleMiniGrid}>
-                <Field
-                  styles={styles}
-                  label="Max Messages"
-                  type="number"
-                  min="2"
-                  max="100"
-                  value={form.antiSpam.maxMessages}
-                  onChange={(value) => updateSection('antiSpam', 'maxMessages', value)}
-                />
-                <Field
-                  styles={styles}
-                  label="Interval Seconds"
-                  type="number"
-                  min="1"
-                  max="3600"
-                  value={form.antiSpam.intervalSeconds}
-                  onChange={(value) => updateSection('antiSpam', 'intervalSeconds', value)}
-                />
-              </div>
-              <TextArea
-                styles={styles}
-                label="DM Message"
-                value={form.dmMessages.antiSpam}
-                onChange={(value) => setForm((current) => ({
-                  ...current,
-                  dmMessages: { ...current.dmMessages, antiSpam: value },
-                }))}
-                placeholder="Spam Protection triggered: {reason}"
-              />
-            </RuleCard>
-
-            <RuleCard
-              title="Anti Links"
-              description="Controls posted links using allowed and denied domain lists."
-              enabled={form.antiLinks.enabled}
-              onEnabledChange={(value) => updateSection('antiLinks', 'enabled', value)}
-              actions={form.antiLinks.actions}
-              onActionsChange={(value) => updateSection('antiLinks', 'actions', value)}
-              theme={theme}
-              styles={styles}
-            >
-              <div style={{ display: 'grid', gap: 7, justifyItems: 'start' }}>
-                <span style={styles.label}>Allow Management / Moderators</span>
-                <Toggle
-                  checked={form.antiLinks.allowStaff}
-                  onChange={(value) => updateSection('antiLinks', 'allowStaff', value)}
-                />
-              </div>
-              <TextArea
-                styles={styles}
-                label="Allowed Domains"
-                value={form.antiLinks.allowedDomains}
-                onChange={(value) => updateSection('antiLinks', 'allowedDomains', value)}
-                placeholder="youtube.com, youtu.be"
-              />
-              <TextArea
-                styles={styles}
-                label="Denied Domains"
-                value={form.antiLinks.deniedDomains}
-                onChange={(value) => updateSection('antiLinks', 'deniedDomains', value)}
-                placeholder="scam-site.example"
-              />
-              <TextArea
-                styles={styles}
-                label="DM Message"
-                value={form.dmMessages.antiLinks}
-                onChange={(value) => setForm((current) => ({
-                  ...current,
-                  dmMessages: { ...current.dmMessages, antiLinks: value },
-                }))}
-                placeholder="Link Protection triggered: {reason}"
-              />
-            </RuleCard>
-          </div>
-        )}
-      </SectionCard>
-
-      <SectionCard
-        theme={theme}
-        title="Ignored Discord IDs"
-        subtitle="Comma-separated role and channel IDs that AutoMod should ignore."
-        padding="20px"
-      >
-        <div style={styles.ruleMiniGrid}>
-          <TextArea
-            styles={styles}
-            label="Ignored Role IDs"
-            value={form.ignoredRoles}
-            onChange={(value) => setForm((current) => ({ ...current, ignoredRoles: value }))}
-            placeholder="123456789012345678, 234567890123456789"
-          />
-          <TextArea
-            styles={styles}
-            label="Ignored Channel IDs"
-            value={form.ignoredChannels}
-            onChange={(value) => setForm((current) => ({ ...current, ignoredChannels: value }))}
-            placeholder="123456789012345678, 234567890123456789"
-          />
-        </div>
-      </SectionCard>
-
-      <div style={styles.saveRow}>
-        <PrimaryButton onClick={handleSave} disabled={!selectedGuild || saving || loading}>
-          {saving ? 'Saving...' : 'Save AutoMod Settings'}
-        </PrimaryButton>
-      </div>
-    </PageShell>
-  );
+  </SectionCard>
+  <SectionCard theme={theme} title="Discord Native AutoMod" subtitle="Native Discord rules are monitored by Goliath Audit Intelligence and can be enabled or disabled here." padding="20px"><div style={{display:'grid',gap:10}}>{nativeRules.length?nativeRules.map(rule=><div key={rule.id} style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',padding:12,border:'1px solid '+theme.cardBorder,borderRadius:12}}><div><strong style={{color:theme.cardText}}>{rule.name}</strong><div style={{color:theme.mutedText,marginTop:4}}>Trigger {String(rule.triggerType)} • {rule.actions?.length||0} action(s)</div></div><Toggle checked={rule.enabled} onChange={async enabled=>{try{const result=await api.updateNativeAutoModRule(selectedGuild,rule.id,{enabled});setNativeRules(rows=>rows.map(item=>item.id===rule.id?(result?.rule||{...item,enabled}):item));setMessage('✅ Discord AutoMod rule updated.');}catch(e){console.error(e);setMessage('❌ Failed to update Discord AutoMod rule.');}}}/></div>):<div style={{color:theme.mutedText}}>No Discord-native AutoMod rules are configured on this server.</div>}</div></SectionCard>
+  <SectionCard theme={theme} title="Incidents & Analytics" subtitle="Live AutoMod cases are stored in the canonical moderation case system." padding="20px"><div style={{display:'grid',gap:12}}><div style={styles.ruleMiniGrid}>{RULES.map(([key,name])=><div key={key} style={{padding:12,border:'1px solid '+theme.cardBorder,borderRadius:12}}><strong style={{color:theme.cardText}}>{name}</strong><div style={{color:theme.mutedText,marginTop:4}}>{recentRules[key]||0} recorded incidents</div></div>)}</div>{cases.slice(0,8).map(entry=><div key={entry.caseId||entry.id} style={{padding:12,border:'1px solid '+theme.cardBorder,borderRadius:12,color:theme.cardText}}><strong>Case #{entry.caseId||entry.id}</strong> • {String(entry?.metadata?.severity||'notice').toUpperCase()} • Risk {entry?.metadata?.riskScore??0}<div style={{color:theme.mutedText,marginTop:4}}>{entry.reason||'AutoMod incident'}</div></div>)}</div></SectionCard>
+  <SectionCard theme={theme} title="Exemptions" subtitle="Global AutoMod bypasses. Rule-specific allow lists remain inside their protection." padding="20px"><div style={styles.ruleMiniGrid}>{[['ignoredRoles','Role IDs'],['ignoredChannels','Channel IDs'],['ignoredCategories','Category IDs'],['ignoredUsers','User IDs']].map(([key,label])=><Area key={key} styles={styles} label={label} value={form[key]} onChange={v=>setForm(f=>({...f,[key]:v}))}/>)}</div></SectionCard>
+  <div style={styles.saveRow}><PrimaryButton onClick={save} disabled={!selectedGuild||saving||loading}>{saving?'Saving...':'Save AutoMod Settings'}</PrimaryButton></div>
+ </PageShell>;
 }

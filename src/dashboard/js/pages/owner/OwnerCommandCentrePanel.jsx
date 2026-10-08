@@ -148,7 +148,7 @@ export default function OwnerCommandCentrePanel({ theme, guilds = [], runtime = 
     <section style={{ border: `1px solid ${viewTheme.cardBorder}`, background: viewTheme.cardBg, color: viewTheme.cardText, borderRadius: 22, padding: 20, boxShadow: viewTheme.shadow, display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div>
-          <div style={{ color: viewTheme.mutedText, fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Owner View Phase 2</div>
+          <div style={{ color: viewTheme.mutedText, fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Owner View</div>
           <h3 style={{ margin: '6px 0 0' }}>Command Centre Summary</h3>
           <p style={{ margin: '8px 0 0', color: viewTheme.mutedText, lineHeight: 1.5 }}>A single operational snapshot for servers, environments, live activity and platform alerts.</p>
         </div>

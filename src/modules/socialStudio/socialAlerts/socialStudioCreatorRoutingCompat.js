@@ -63,37 +63,28 @@ function channelsHubPayload(interaction) {
   const config = store.getConfig(interaction.guildId);
   const creatorCount = sortedCreators(config).filter((creator) => creator.alertChannelId || Object.values(cloneObject(creator.platformChannels)).some(Boolean)).length;
   const platformCount = PLATFORMS.filter((platform) => config.platformChannels?.[platform]).length;
-  const dedicatedCount = ALERT_TYPES.filter((type) => config.alertChannels?.[type]).length;
+  const contentCount = ALERT_TYPES.filter((type) => config.alertChannels?.[type]).length;
   const description = [
-    'Choose how Social Studio routes automatic posts. All routing layers work together; configuring one does not disable the others.', '',
-    `**🏠 Default Channels** • ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : 'Not set'} • ${dedicatedCount} dedicated content route${dedicatedCount === 1 ? '' : 's'}`,
-    `**👤 Creator Overrides** • ${creatorCount} configured`, `**📱 Platform Overrides** • ${platformCount} configured`, '',
-    '**Routing Priority**', '1. Creator + Platform override', '2. Creator/User override', '3. Platform override', '4. Dedicated content-type channel', '5. Default channel',
+    'Choose the routing layer you want to configure. The most specific configured route wins, then Social Studio falls back through the remaining layers.',
+    '',
+    `**🌐 Default** • ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : 'Not set'}`,
+    `**👤 Creator** • ${creatorCount} override${creatorCount === 1 ? '' : 's'} configured`,
+    `**📺 Platform** • ${platformCount} override${platformCount === 1 ? '' : 's'} configured`,
+    `**📂 Content** • ${contentCount} override${contentCount === 1 ? '' : 's'} configured`,
+    '',
+    '**Routing Priority**',
+    'Creator + Platform → Creator → Platform → Content → Default',
   ].join('\n');
   const components = [
     row(
-      button(
-        `${P}channel:default:open`,
-        '🏠 Default Channels',
-        ButtonStyle.Primary,
-      ),
-      button(
-        `${P}channel:creator:open`,
-        '👤 Creator Overrides',
-        ButtonStyle.Primary,
-      ),
-      button(
-        `${P}channel:platform:open`,
-        '📱 Platform Overrides',
-        ButtonStyle.Primary,
-      ),
+      button(`${P}channel:default:open`, '🌐 Default', ButtonStyle.Primary),
+      button(`${P}channel:creator:open`, '👤 Creator', ButtonStyle.Primary),
+      button(`${P}channel:platform:open`, '📺 Platform', ButtonStyle.Primary),
+      button(`${P}channel:content:open`, '📂 Content', ButtonStyle.Primary),
     ),
-    goliathNavigation(
-      `${P}settings`,
-      `${P}settings`,
-    ),
+    goliathNavigation(`${P}settings`, `${P}settings`),
   ];
-  return { embeds: [embed(config, '📂 Channels', description, interaction)], components };
+  return { embeds: [embed(config, '🎯 Routing', description, interaction)], components };
 }
 function defaultChannelsPayload(interaction) {
   const config = store.getConfig(interaction.guildId); const state = getSession(interaction); const routeType = ALERT_TYPES.includes(state.routeType) ? state.routeType : 'default'; const selected = routeType === 'default' ? config.alertsChannelId : config.alertChannels?.[routeType];
@@ -312,7 +303,8 @@ async function update(interaction, payload) { if (interaction.deferred || intera
 async function handle(interaction) {
   const id = String(interaction?.customId || ''); if (!interaction.guildId) return false;
   if (id === `${P}channels`) { setSession(interaction, { view: 'hub' }); return update(interaction, channelsHubPayload(interaction)); }
-  if (id === `${P}channel:default:open`) { setSession(interaction, { view: 'default' }); return update(interaction, defaultChannelsPayload(interaction)); }
+  if (id === `${P}channel:default:open`) { setSession(interaction, { view: 'default', routeType: 'default' }); return update(interaction, defaultChannelsPayload(interaction)); }
+  if (id === `${P}channel:content:open`) { setSession(interaction, { view: 'default', routeType: 'live' }); return update(interaction, defaultChannelsPayload(interaction)); }
   if (id === `${P}channel:type`) { setSession(interaction, { routeType: interaction.values?.[0] || 'default', view: 'default' }); return update(interaction, defaultChannelsPayload(interaction)); }
   if (id === `${P}channel:route`) { const config = store.getConfig(interaction.guildId); const type = getSession(interaction).routeType || 'default'; const channelId = interaction.values?.[0] || null; if (type === 'default') config.alertsChannelId = channelId; else { config.alertChannels = cloneObject(config.alertChannels); config.alertChannels[type] = channelId; } save(interaction, config); return update(interaction, defaultChannelsPayload(interaction)); }
   if (id === `${P}channel:default`) { const config = store.getConfig(interaction.guildId); const type = getSession(interaction).routeType || 'default'; if (type !== 'default') { config.alertChannels = cloneObject(config.alertChannels); delete config.alertChannels[type]; save(interaction, config); } return update(interaction, defaultChannelsPayload(interaction)); }

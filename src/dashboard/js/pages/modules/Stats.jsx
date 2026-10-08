@@ -168,6 +168,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const [error, setError] = useState('');
 
   async function load() {
@@ -200,8 +201,26 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
 
   async function quickSetup() { await request(`/api/stats/${guildId}/counters/setup`, { method: 'POST', body: '{}' }); await load(); }
   async function refreshCounters() { await request(`/api/stats/${guildId}/refresh`, { method: 'POST', body: '{}' }); await load(); }
-  async function toggleCounter(counter) { await request(`/api/stats/${guildId}/counters/${encodeURIComponent(counter.id)}/toggle`, { method: 'POST', body: JSON.stringify({ enabled: !counter.enabled }) }); await load(); }
-  async function deleteCounter(counter) { if (!window.confirm(`Delete “${counter.name || 'Counter'}” and its Discord channel?`)) return; await request(`/api/stats/${guildId}/counters/${encodeURIComponent(counter.id)}`, { method: 'DELETE' }); setDraft(null); await load(); }
+  async function toggleCounter(counter) {
+    const result = await request(`/api/stats/${guildId}/counters/${encodeURIComponent(counter.id)}/toggle`, { method: 'POST', body: JSON.stringify({ enabled: !counter.enabled }) });
+    if (Array.isArray(result.counters)) {
+      setConfig((current) => ({ ...(current || {}), counters: result.counters }));
+    } else if (result.counter) {
+      setConfig((current) => ({ ...(current || {}), counters: (current?.counters || []).map((item) => item.id === result.counter.id ? result.counter : item) }));
+    }
+    await load();
+  }
+  async function deleteCounter(counter) {
+    setPendingDelete(counter);
+  }
+  async function confirmDeleteCounter() {
+    if (!pendingDelete || busy) return;
+    const counterId = pendingDelete.id;
+    await request(`/api/stats/${guildId}/counters/${encodeURIComponent(counterId)}`, { method: 'DELETE' });
+    setPendingDelete(null);
+    setDraft(null);
+    await load();
+  }
   async function saveDraft() {
     if (!draft?.segments?.length) return;
     const path = draft.id ? `/api/stats/${guildId}/counters/${encodeURIComponent(draft.id)}` : `/api/stats/${guildId}/counters`;
@@ -216,6 +235,11 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     const next = { ...(config?.settings || {}), ...patch };
     const result = await request(`/api/stats/${guildId}/config`, { method: 'PATCH', body: JSON.stringify({ settings: next }) });
     setConfig(result.config || config);
+  }
+  async function toggleModule() {
+    const result = await request(`/api/stats/${guildId}/config`, { method: 'PATCH', body: JSON.stringify({ enabled: config?.enabled === false }) });
+    setConfig(result.config || config);
+    await load();
   }
   async function saveTrackingFilters() {
     const payload = {
@@ -237,6 +261,19 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     const result = await request(`/api/stats/${guildId}/repair`, { method: 'POST', body: '{}' });
     setHealth(result.result?.health || null);
     await load();
+  }
+  async function exportStats() {
+    const result = await request(`/api/stats/${guildId}/export`);
+    const blob = new Blob([JSON.stringify(result.export || {}, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = `goliath-stats-${guildId}.json`; link.click();
+    URL.revokeObjectURL(url);
+  }
+  async function resetStats() {
+    if (!window.confirm('Reset all stored Stats activity and counter configuration for this server? This cannot be undone.')) return;
+    await request(`/api/stats/${guildId}/reset`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+    setDraft(null); setPreview(''); setHealth(null); await load();
   }
 
   if (!guildId) return <EmptyState theme={theme} title="Select a server" text="Select a server to manage its counters." />;
@@ -299,6 +336,8 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Counter category name<input value={config?.settings?.categoryName || '📊 SERVER STATS'} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), categoryName: event.target.value } })} onBlur={(event) => saveSettings({ categoryName: event.target.value })} style={control(theme)} /></label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default timezone<input value={config?.settings?.timeZone || 'Europe/London'} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), timeZone: event.target.value } })} onBlur={(event) => saveSettings({ timeZone: event.target.value })} style={control(theme)} /></label>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Default update frequency<select value={config?.settings?.defaultFrequencyMinutes || 10} onChange={(event) => { const value = Number(event.target.value); setConfig({ ...config, settings: { ...(config?.settings || {}), defaultFrequencyMinutes: value } }); saveSettings({ defaultFrequencyMinutes: value }); }} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></label>
+          <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Activity retention (days)<input type="number" min="1" max="365" value={config?.settings?.retentionDays || 30} onChange={(event) => setConfig({ ...config, settings: { ...(config?.settings || {}), retentionDays: Number(event.target.value) } })} onBlur={(event) => saveSettings({ retentionDays: Number(event.target.value) })} style={control(theme)} /></label>
+          <div><PrimaryButton onClick={toggleModule} disabled={busy}>{config?.enabled === false ? '▶️ Enable Server Counters' : '⏸️ Disable Server Counters'}</PrimaryButton></div>
         </div>
       </SectionCard>
 
@@ -332,7 +371,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
             <Row theme={theme} label="Missing channels" value={health.counters?.missing ?? 0} />
             {health.issues?.length ? <div style={{ padding: 12, borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>{health.issues.map((issue, index) => <div key={`${issue.code}-${index}`}>• {issue.code.replaceAll('_', ' ')}</div>)}</div> : <div style={{ color: theme.mutedText }}>No issues found.</div>}
           </> : <div style={{ color: theme.mutedText }}>Run a health check to inspect the live counter setup.</div>}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><SecondaryButton onClick={runHealthCheck} disabled={busy}>🩺 Run Health Check</SecondaryButton><SecondaryButton onClick={repairStats} disabled={busy}>🔧 Repair Issues</SecondaryButton></div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><SecondaryButton onClick={runHealthCheck} disabled={busy}>🩺 Run Health Check</SecondaryButton><SecondaryButton onClick={repairStats} disabled={busy}>🔧 Repair Issues</SecondaryButton><SecondaryButton onClick={exportStats} disabled={busy}>📤 Export</SecondaryButton><SecondaryButton danger onClick={resetStats} disabled={busy}>🗑️ Reset Stats</SecondaryButton></div>
         </div>
       </SectionCard>
 
@@ -341,6 +380,18 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
   );
 
   return (
+    <>
+    {pendingDelete && <div role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setPendingDelete(null); }} style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(2,6,23,0.78)', display: 'grid', placeItems: 'center', padding: 20 }}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="stats-delete-title" aria-describedby="stats-delete-description" style={{ width: '100%', maxWidth: 470, border: `1px solid ${theme.cardBorder}`, borderRadius: 18, padding: 24, background: theme.cardBg, color: theme.text, boxShadow: '0 24px 80px rgba(0,0,0,0.45)' }}>
+        <h2 id="stats-delete-title" style={{ margin: '0 0 12px', fontSize: 22 }}>Delete Server Counter?</h2>
+        <p id="stats-delete-description" style={{ lineHeight: 1.65, margin: '0 0 10px' }}>You're about to permanently delete <strong>{pendingDelete.name || 'this counter'}</strong> and its associated Discord channel.</p>
+        <p style={{ color: theme.mutedText, margin: '0 0 24px' }}>This action cannot be undone.</p>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+          <SecondaryButton onClick={() => setPendingDelete(null)} disabled={busy}>Cancel</SecondaryButton>
+          <SecondaryButton danger onClick={confirmDeleteCounter} disabled={busy}>{busy ? 'Deleting…' : 'Delete Counter'}</SecondaryButton>
+        </div>
+      </div>
+    </div>}
     <ModuleShell
       title="Server Counters"
       subtitle="Live Discord server counters with multi-value Statdock-style channels."
@@ -357,5 +408,6 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
     >
       {{ [MODULE_TABS.overview]: overviewContent, counters: countersContent, settings: settingsContent }}
     </ModuleShell>
+    </>
   );
 }

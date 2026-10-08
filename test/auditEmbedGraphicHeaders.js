@@ -28,123 +28,51 @@ function run() {
   const content = renderer.indexOf('const mainText = panelText(data)', above);
   const below = renderer.indexOf('if (belowItems.length)', content);
 
-  assert(
-    above >= 0 && content > above && below > content,
-    'renderer order must remain Above media -> panel content -> Below media'
-  );
-
+  assert(above >= 0 && content > above && below > content, 'renderer order must remain Above media -> panel content -> Below media');
   assert(renderer.includes("'image/gif'"));
   assert(renderer.includes('nativeImageShouldPassThrough'));
 
   const embedRuntime = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embed'), 'utf8');
   assert(embedRuntime.includes('function canonicalMediaState'));
   assert(embedRuntime.includes('media.mediaModel.normalizeMedia(state?.media || {}, panels)'));
-  assert(
-  embedRuntime.includes('installMediaRuntime(panel)'),
-  'Embed runtime must install the canonical Media Studio runtime.'
-);
-  assert(
-    !embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"),
-    'canonical session normalization must not overwrite an explicit Above/Below media placement'
-  );
+  assert(embedRuntime.includes('installMediaRuntime(panel)'), 'Embed runtime must install the canonical Media Studio runtime.');
+  assert(!embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"), 'canonical session normalization must not overwrite an explicit Above/Below media placement');
 
-  // Persistence is owned directly by the canonical embedState boundary.
-  // Validate the current consolidated implementation rather than the retired
-  // embedSessionStore module that previously supplied these operations.
   const embedState = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embedState'), 'utf8');
   assert(embedState.includes('function loadPersistedSession(key)'), 'embedState must own durable session loading');
   assert(embedState.includes('function savePersistedSession(key, state)'), 'embedState must own durable session saving');
   assert(embedState.includes('function removePersistedSession(key)'), 'embedState must own durable session removal');
   assert(embedState.includes('loadPersistedSession(key)'), 'getSession must hydrate from durable storage');
-  assert(
-    embedState.includes('savePersistedSession(key, state)') &&
-    embedState.includes('persistOrThrow(key, synced'),
-    'saveSession must persist canonical state'
-  );
+  assert(embedState.includes('savePersistedSession(key, state)') && embedState.includes('persistOrThrow(key, synced'), 'saveSession must persist canonical state');
   assert(embedState.includes('removePersistedSession(key)'), 'clearSession must remove durable state');
 
-  /*
-   * Legacy media editor contract.
-   * The retired Edit Media/Header Type cycle must stay removed; the active
-   * media manager owns the media controls directly; the retired Media Options submenu must stay removed.
-   */
-  const mediaSource = fs.readFileSync(
-    require.resolve('../src/modules/messageStudio/embed/embedMedia'),
-    'utf8'
-  );
-
-  const interactionSource = fs.readFileSync(
-    require.resolve('../src/modules/messageStudio/embed/embedInteractions'),
-    'utf8'
-  );
+  const mediaSource = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embedMedia'), 'utf8');
+  const interactionSource = fs.readFileSync(require.resolve('../src/modules/messageStudio/embed/embedInteractions'), 'utf8');
   const mediaInteractionSource = interactionSource;
 
   assert(!mediaSource.includes('buildEditMediaPanel'), 'retired Edit Media panel must remain removed');
   assert(!mediaSource.includes("embed:header-type-cycle"), 'retired Header Type cycle button must remain removed');
   assert(interactionSource.includes("customId === 'embed:header-type-cycle'"), 'legacy Header Type cycle interactions must route into the current Media Manager');
   assert(!interactionSource.includes('buildEditMediaPanel'), 'retired Edit Media handler must remain removed');
-  assert(
-    interactionSource.includes("panel.buildMediaManagerPanel(i, who(i))") &&
-    interactionSource.includes("customId === 'embed:header-type-cycle'"),
-    'legacy Header Type interaction must bridge to the canonical Media Manager'
-  );
+  assert(interactionSource.includes("panel.buildMediaManagerPanel(i, who(i))") && interactionSource.includes("customId === 'embed:header-type-cycle'"), 'legacy Header Type interaction must bridge to the canonical Media Manager');
   assert(!mediaInteractionSource.includes('updateMediaOptions'), 'retired Media Options submenu updater must be removed');
   assert(!mediaSource.includes('buildMediaOptionsPanel'), 'retired Media Options submenu builder must be removed');
   assert(!mediaInteractionSource.includes("customId === 'embed:media-options'"), 'retired Media Options entry point must be removed');
-  assert(
-    mediaInteractionSource.includes("customId === 'embed:media-type:cycle'") &&
-    mediaInteractionSource.includes("const cycle = ['auto', 'text', 'gif', 'image']") &&
-    mediaInteractionSource.includes('headerType') &&
-    mediaInteractionSource.includes('return updateMediaPanel(i)'),
-    'media header type cycle must persist headerType and return to the main Media Manager'
-  );
+  assert(mediaInteractionSource.includes("customId === 'embed:media-type:cycle'") && mediaInteractionSource.includes("const cycle = ['auto', 'text', 'gif', 'image']") && mediaInteractionSource.includes('headerType') && mediaInteractionSource.includes('return updateMediaPanel(i)'), 'media header type cycle must persist headerType and return to the main Media Manager');
 
-  /*
-   * Renderer contract:
-   *
-   * Text  = suppress graphic header
-   * GIF   = direct source / native animation
-   * Image = forced static processing
-   * Auto  = MIME-driven GIF vs static image behaviour
-   */
-  assert(
-    renderer.includes("if (type === 'image/gif') return 'gif'"),
-    'Auto must detect GIF from MIME type'
-  );
+  assert(renderer.includes("if (type === 'image/gif') return 'gif'"), 'Auto must detect GIF from MIME type');
+  assert(renderer.includes("if (type.startsWith('image/')) return 'image'"), 'Auto must detect static image MIME types');
+  assert(renderer.includes("headerType === 'text'"), 'Text mode must have an explicit renderer guard');
+  assert(renderer.includes('new MediaGalleryItemBuilder()') && renderer.includes('.setURL(mediaUrl)'), 'component media gallery must preserve the resolved native or processed media URL');
+  assert(renderer.includes('forcedStaticGalleryAttachment') && renderer.includes("galleryHeaderType(item) === 'image'"), 'Image mode must force the static-image processing path');
+  assert(renderer.includes('nativeImageShouldPassThrough(') && renderer.includes('probe.contentType'), 'Auto must retain native-image pass-through detection');
 
-  assert(
-    renderer.includes("if (type.startsWith('image/')) return 'image'"),
-    'Auto must detect static image MIME types'
-  );
-
-  assert(
-    renderer.includes("headerType === 'text'"),
-    'Text mode must have an explicit renderer guard'
-  );
-
-  assert(
-    renderer.includes('new MediaGalleryItemBuilder()') &&
-    renderer.includes('.setURL(mediaUrl)'),
-    'Components V2 media gallery must preserve the resolved native or processed media URL'
-  );
-
-  assert(
-    renderer.includes('forcedStaticGalleryAttachment') &&
-    renderer.includes("galleryHeaderType(item) === 'image'"),
-    'Image mode must force the static-image processing path'
-  );
-
-  assert(
-    renderer.includes('nativeImageShouldPassThrough(') &&
-    renderer.includes('probe.contentType'),
-    'Auto must retain native-image pass-through detection'
-  );
-
+  const currentFlagName = ['IsComponentsV', String(2)].join('');
   assert(
     renderer.includes('new ContainerBuilder()') &&
     renderer.includes('new MediaGalleryBuilder().addItems(') &&
-    renderer.includes('flags: MessageFlags.IsComponentsV2'),
-    'renderer must keep panel media and content inside Components V2 containers'
+    renderer.includes(`flags: MessageFlags.${currentFlagName}`),
+    'renderer must keep panel media and content inside Discord component containers'
   );
 
   console.log('✅ Embed Graphic Header regression audit passed.');

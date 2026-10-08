@@ -32,7 +32,9 @@ Timeline does not duplicate this responsibility. Timeline is internal audit-hist
 
 ## Runtime
 
-Stats records configured message, voice and membership activity. Voice sessions are attributed to their active channel, channel moves close the old session and open the new one, and startup reconciliation seeds sessions for users already visible in voice after Goliath reconnects. Historical message, voice and member-snapshot data is pruned according to the configured retention period.
+Stats starts once from `server.js` after startup guild synchronization. It records configured message, voice and membership activity. Voice sessions are attributed to their active channel, channel moves close the old session and open the new one, and startup reconciliation seeds only currently eligible users already visible in voice after Goliath reconnects. Changes to module state, voice tracking, bot exclusion, ignored channels or ignored roles close valid sessions at the change boundary and reseed from that instant so disabled/ignored time is never backdated. Historical message, voice and member-snapshot data is pruned according to the configured retention period.
+
+On SIGTERM/SIGINT, Goliath flushes active Stats voice sessions, stops global and per-counter schedules, closes HTTP and destroys the Discord client before exit.
 
 Counter refreshes are queued after relevant activity. Counter docks also maintain their own configured refresh schedules, with in-flight protection to prevent overlapping refresh work.
 
@@ -46,6 +48,7 @@ The Stats panel supports:
 - View activity totals
 - List configured counters
 - Open health and settings controls
+- Configure retention, timezone and default refresh frequency
 
 ## API
 
@@ -65,10 +68,12 @@ Stats API routes require an authenticated dashboard user. Bot owners are permitt
 
 ## Health and repair
 
-Health checks enabled counter resources, configured categories, counter permissions, deleted role/channel references, datetime timezone configuration, retention configuration and the global Stats scheduler state. Disabled counters do not create false missing-resource faults.
+Health checks enabled counter resources, configured categories, duplicate or malformed counter records, counter permissions, deleted role/channel references, datetime/default timezone configuration, retention configuration and the global Stats scheduler state. Disabled counters do not create false missing-resource faults.
 
-Repair is targeted: missing enabled counter channels are recreated from their stored dock configuration instead of invoking the unrelated default counter suite. Repair then refreshes counters and returns a post-repair health result.
+Repair is targeted: missing enabled counter channels are recreated from their stored dock configuration, missing/moved categories are reconciled, manageable permission faults are repaired, and a stopped scheduler can be restarted. Repair then reconciles voice state, refreshes counters and returns a post-repair health result.
+
+Counter creation, type replacement, disable and delete paths use rollback/restore behavior around Discord and persistence failures. Quick Setup is guarded against concurrent execution and reuses an existing default dock identity when its Discord channel has been deleted. Confirmed reset removes managed counter channels before resetting stored Stats data.
 
 ## Completion state
 
-Stats remains `IN_PROGRESS` until startup wiring, remaining failure-path/state-integrity checks, dashboard parity, repository validation and live DEV testing are complete.
+Stats code hardening is complete on DEV. Final sign-off requires the repository validation/build/deploy gate to pass and the live Discord behavior checklist to be exercised against the running DEV bot.

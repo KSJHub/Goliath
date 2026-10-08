@@ -93,7 +93,7 @@ async function persistentImageAttachment(source, guildId = 'global', name = 'emb
   if (!cached?.buffer) return null;
   const contentType = contentTypeBase(cached.meta?.contentType || cached.contentType || '');
   const extension = contentType === 'image/gif' ? 'gif' : 'png';
-  const safeName = String(name || 'embed-persistent-image').replace(/[^a-zA-Z0-9._-]/g, '-').replace(/\\.(png|gif)$/i, '');
+  const safeName = String(name || 'embed-persistent-image').replace(/[^a-zA-Z0-9._-]/g, '-').replace(/\.(png|gif)$/i, '');
   const filename = safeName + '.' + extension;
   return { attachment: new AttachmentBuilder(cached.buffer, { name: filename }), url: 'attachment://' + filename };
 }
@@ -111,24 +111,16 @@ function itemPlacement(item) { return String(item?.placement || '').toLowerCase(
 
 function galleryHeaderType(item) {
   const value = String(item?.headerType || 'auto').toLowerCase();
-  return ['auto', 'text', 'gif', 'image'].includes(value)
-    ? value
-    : 'auto';
+  return ['auto', 'text', 'gif', 'image'].includes(value) ? value : 'auto';
 }
-
 function resolvedGalleryHeaderType(item, contentType = '') {
   const requested = galleryHeaderType(item);
-
   if (requested !== 'auto') return requested;
-
   const type = contentTypeBase(contentType);
-
   if (type === 'image/gif') return 'gif';
   if (type.startsWith('image/')) return 'image';
-
   return 'image';
 }
-
 function galleryAlignment(item) { const value = String(item?.alignment || 'left').toLowerCase(); return value === 'center' || value === 'right' ? value : 'left'; }
 function applyMediaAlignmentMap(mediaState, alignmentMap = {}) {
   const media = mediaState && typeof mediaState === 'object' ? JSON.parse(JSON.stringify(mediaState)) : {}; const panels = Array.isArray(media.panels) ? media.panels : [];
@@ -136,590 +128,90 @@ function applyMediaAlignmentMap(mediaState, alignmentMap = {}) {
   return media;
 }
 async function alignedGalleryAttachment(source, alignment, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
-  let cached = cachedAssetFor(guildId, source);
-  if (!cached?.buffer) cached = await ensureAssetCached(guildId, source);
-  if (!cached?.buffer) return null;
+  let cached = cachedAssetFor(guildId, source); if (!cached?.buffer) cached = await ensureAssetCached(guildId, source); if (!cached?.buffer) return null;
   const type = contentTypeBase(cached.meta?.contentType || cached.contentType || ''); if (type && !STATIC_RASTER_TYPES.has(type)) return null;
   const trimmed = await sharp(cached.buffer, { failOn: 'warning' }).ensureAlpha().trim({ background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
   const visible = await sharp(trimmed, { failOn: 'warning' }).resize({ width: visibleWidth, height: visibleWidth, fit: 'inside', withoutEnlargement: false }).ensureAlpha().png().toBuffer();
-  const meta = await sharp(visible).metadata();
-  const width = Number(meta.width || visibleWidth);
-  const height = Number(meta.height || visibleWidth);
-  const canvasWidth = SINGLE_IMAGE_CANVAS_WIDTH;
-  const canvasHeight = SINGLE_IMAGE_VISIBLE_WIDTH;
-  const left = alignment === 'right'
-    ? Math.max(0, canvasWidth - width)
-    : alignment === 'center'
-      ? Math.max(0, Math.floor((canvasWidth - width) / 2))
-      : 0;
-  const top = Math.max(0, Math.floor((canvasHeight - height) / 2));
-
-  const output = await sharp({
-    create: {
-      width: canvasWidth,
-      height: canvasHeight,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
-    }
-  }).composite([{ input: visible, left, top }]).png().toBuffer();
-
-  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
-  return {
-    attachment: new AttachmentBuilder(output, { name }),
-    url: `attachment://${name}`
-  };
+  const meta = await sharp(visible).metadata(); const width = Number(meta.width || visibleWidth); const height = Number(meta.height || visibleWidth); const canvasWidth = SINGLE_IMAGE_CANVAS_WIDTH; const canvasHeight = SINGLE_IMAGE_VISIBLE_WIDTH;
+  const left = alignment === 'right' ? Math.max(0, canvasWidth - width) : alignment === 'center' ? Math.max(0, Math.floor((canvasWidth - width) / 2)) : 0; const top = Math.max(0, Math.floor((canvasHeight - height) / 2));
+  const output = await sharp({ create: { width: canvasWidth, height: canvasHeight, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: visible, left, top }]).png().toBuffer();
+  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`; return { attachment: new AttachmentBuilder(output, { name }), url: `attachment://${name}` };
 }
 async function removeConnectedCornerBackground(input, tolerance = 42) {
-  const { data, info } = await sharp(input, { failOn: 'warning' })
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  const { width, height, channels } = info;
-  if (!width || !height || channels < 4) return input;
-
-  const pixelCount = width * height;
-  const visited = new Uint8Array(pixelCount);
-  const queue = new Int32Array(pixelCount);
-  let head = 0;
-  let tail = 0;
-
-  const cornerIndexes = [
-    0,
-    width - 1,
-    (height - 1) * width,
-    pixelCount - 1
-  ];
-
-  const colours = cornerIndexes
-    .map((index) => {
-      const offset = index * channels;
-      return {
-        r: data[offset],
-        g: data[offset + 1],
-        b: data[offset + 2],
-        a: data[offset + 3]
-      };
-    })
-    .filter((c) => c.a > 0);
-
+  const { data, info } = await sharp(input, { failOn: 'warning' }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info; if (!width || !height || channels < 4) return input;
+  const pixelCount = width * height; const visited = new Uint8Array(pixelCount); const queue = new Int32Array(pixelCount); let head = 0; let tail = 0;
+  const cornerIndexes = [0, width - 1, (height - 1) * width, pixelCount - 1];
+  const colours = cornerIndexes.map((index) => { const offset = index * channels; return { r: data[offset], g: data[offset + 1], b: data[offset + 2], a: data[offset + 3] }; }).filter((c) => c.a > 0);
   if (!colours.length) return input;
-
   const threshold = tolerance * tolerance * 3;
-  const matchesBackground = (index) => {
-    const offset = index * channels;
-    if (data[offset + 3] === 0) return true;
-
-    const r = data[offset];
-    const g = data[offset + 1];
-    const b = data[offset + 2];
-
-    return colours.some((c) => {
-      const dr = r - c.r;
-      const dg = g - c.g;
-      const db = b - c.b;
-      return (dr * dr) + (dg * dg) + (db * db) <= threshold;
-    });
-  };
-
-  const enqueue = (index) => {
-    if (index < 0 || index >= pixelCount || visited[index]) return;
-    if (!matchesBackground(index)) return;
-    visited[index] = 1;
-    queue[tail++] = index;
-  };
-
-  for (let x = 0; x < width; x += 1) {
-    enqueue(x);
-    enqueue((height - 1) * width + x);
-  }
-  for (let y = 1; y < height - 1; y += 1) {
-    enqueue(y * width);
-    enqueue(y * width + width - 1);
-  }
-
-  while (head < tail) {
-    const index = queue[head++];
-    const offset = index * channels;
-    data[offset + 3] = 0;
-
-    const x = index % width;
-    const y = Math.floor(index / width);
-
-    if (x > 0) enqueue(index - 1);
-    if (x < width - 1) enqueue(index + 1);
-    if (y > 0) enqueue(index - width);
-    if (y < height - 1) enqueue(index + width);
-  }
-
-  return sharp(data, {
-    raw: { width, height, channels }
-  }).png().toBuffer();
+  const matchesBackground = (index) => { const offset = index * channels; if (data[offset + 3] === 0) return true; const r = data[offset]; const g = data[offset + 1]; const b = data[offset + 2]; return colours.some((c) => { const dr = r - c.r; const dg = g - c.g; const db = b - c.b; return (dr * dr) + (dg * dg) + (db * db) <= threshold; }); };
+  const enqueue = (index) => { if (index < 0 || index >= pixelCount || visited[index]) return; if (!matchesBackground(index)) return; visited[index] = 1; queue[tail++] = index; };
+  for (let x = 0; x < width; x += 1) { enqueue(x); enqueue((height - 1) * width + x); }
+  for (let y = 1; y < height - 1; y += 1) { enqueue(y * width); enqueue(y * width + width - 1); }
+  while (head < tail) { const index = queue[head++]; const offset = index * channels; data[offset + 3] = 0; const x = index % width; const y = Math.floor(index / width); if (x > 0) enqueue(index - 1); if (x < width - 1) enqueue(index + 1); if (y > 0) enqueue(index - width); if (y < height - 1) enqueue(index + width); }
+  return sharp(data, { raw: { width, height, channels } }).png().toBuffer();
 }
-
 async function forcedStaticGalleryAttachment(source, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH) {
-  let cached = cachedAssetFor(guildId, source);
-
-  if (!cached?.buffer) {
-    cached = await ensureAssetCached(guildId, source);
-  }
-
-  if (!cached?.buffer) return null;
-
-  const flattened = await sharp(cached.buffer, {
-    failOn: 'warning',
-    animated: false,
-    page: 0,
-  })
-    .ensureAlpha()
-    .png()
-    .toBuffer();
-
-  const transparent = await removeConnectedCornerBackground(flattened);
-
-  const visible = await sharp(transparent, { failOn: 'warning' })
-    .ensureAlpha()
-    .resize({
-      width: visibleWidth,
-      withoutEnlargement: true,
-      fit: 'inside',
-    })
-    .png()
-    .toBuffer();
-
-  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
-
-  return {
-    attachment: new AttachmentBuilder(visible, { name }),
-    url: `attachment://${name}`,
-  };
+  let cached = cachedAssetFor(guildId, source); if (!cached?.buffer) cached = await ensureAssetCached(guildId, source); if (!cached?.buffer) return null;
+  const flattened = await sharp(cached.buffer, { failOn: 'warning', animated: false, page: 0 }).ensureAlpha().png().toBuffer();
+  return plainGalleryAttachmentBuffer(flattened, panelIndex, itemIndex, visibleWidth, 'center');
 }
-
+async function plainGalleryAttachmentBuffer(buffer, panelIndex, itemIndex, visibleWidth, alignment) {
+  const transparent = await removeConnectedCornerBackground(buffer);
+  const sourceMeta = await sharp(transparent).metadata(); const sourceWidth = Number(sourceMeta.width || 1); const sourceHeight = Number(sourceMeta.height || 1); const sourceAspectRatio = sourceWidth / Math.max(1, sourceHeight);
+  const isLargeMedia = visibleWidth === SINGLE_IMAGE_VISIBLE_WIDTH; const isWideLargeMedia = isLargeMedia && sourceAspectRatio >= 1.5; const effectiveVisibleWidth = isWideLargeMedia ? SINGLE_IMAGE_VISIBLE_WIDTH * 2 : visibleWidth;
+  const visible = await sharp(transparent, { failOn: 'warning' }).ensureAlpha().resize({ width: effectiveVisibleWidth, withoutEnlargement: true, fit: 'inside' }).png().toBuffer();
+  const meta = await sharp(visible).metadata(); const width = Number(meta.width || effectiveVisibleWidth); const height = Number(meta.height || 1); const normalizedAlignment = galleryAlignment({ alignment });
+  const alignmentCanvasWidth = isWideLargeMedia ? width : isLargeMedia && (normalizedAlignment === 'center' || normalizedAlignment === 'right') ? SINGLE_IMAGE_VISIBLE_WIDTH * 2 : SINGLE_IMAGE_CANVAS_WIDTH;
+  const left = normalizedAlignment === 'right' ? Math.max(0, alignmentCanvasWidth - width) : normalizedAlignment === 'center' ? Math.max(0, Math.floor((alignmentCanvasWidth - width) / 2)) : 0;
+  const output = await sharp({ create: { width: alignmentCanvasWidth, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: visible, left, top: 0 }]).png().toBuffer();
+  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`; return { attachment: new AttachmentBuilder(output, { name }), url: `attachment://${name}` };
+}
 async function plainGalleryAttachment(source, panelIndex, itemIndex, guildId = 'global', visibleWidth = SINGLE_IMAGE_VISIBLE_WIDTH, alignment = 'left') {
-  let cached = cachedAssetFor(guildId, source);
-  if (!cached?.buffer) cached = await ensureAssetCached(guildId, source);
-  if (!cached?.buffer) return null;
-
-  const type = contentTypeBase(cached.meta?.contentType || cached.contentType || '');
-  if (type && !STATIC_RASTER_TYPES.has(type)) return null;
-
-  const transparent = await removeConnectedCornerBackground(cached.buffer);
-
-  /*
-   * Wide landscape media needs its own LARGE treatment.
-   *
-   * Do not change the existing Small/Medium or square/portrait Large
-   * behaviour. Only LARGE media with an aspect ratio of at least 1.5
-   * enters this path.
-   */
-  const sourceMeta = await sharp(transparent).metadata();
-  const sourceWidth = Number(sourceMeta.width || 1);
-  const sourceHeight = Number(sourceMeta.height || 1);
-  const sourceAspectRatio = sourceWidth / Math.max(1, sourceHeight);
-
-  const isLargeMedia =
-    visibleWidth === SINGLE_IMAGE_VISIBLE_WIDTH;
-
-  const isWideLargeMedia =
-    isLargeMedia &&
-    sourceAspectRatio >= 1.5;
-
-  /*
-   * Discord scales the complete transparent alignment canvas.
-   * Wide LARGE media therefore needs a larger visible render target
-   * so the banner remains visually large after alignment padding.
-   */
-  const effectiveVisibleWidth =
-    isWideLargeMedia
-      ? SINGLE_IMAGE_VISIBLE_WIDTH * 2
-      : visibleWidth;
-
-  const visible = await sharp(transparent, { failOn: 'warning' })
-    .ensureAlpha()
-    .resize({
-      width: effectiveVisibleWidth,
-      withoutEnlargement: true,
-      fit: 'inside'
-    })
-    .png()
-    .toBuffer();
-
-  const meta = await sharp(visible).metadata();
-  const width = Number(meta.width || effectiveVisibleWidth);
-  const height = Number(meta.height || 1);
-
-  const normalizedAlignment = galleryAlignment({ alignment });
-
-  /*
-   * Existing Large Centre/Right behaviour remains unchanged for normal
-   * artwork. Wide LARGE media gets its own alignment canvas.
-   */
-  const alignmentCanvasWidth =
-    isWideLargeMedia
-      ? width
-      : isLargeMedia &&
-        (
-          normalizedAlignment === 'center' ||
-          normalizedAlignment === 'right'
-        )
-        ? SINGLE_IMAGE_VISIBLE_WIDTH * 2
-        : SINGLE_IMAGE_CANVAS_WIDTH;
-
-  const left =
-    normalizedAlignment === 'right'
-      ? Math.max(0, alignmentCanvasWidth - width)
-      : normalizedAlignment === 'center'
-        ? Math.max(
-            0,
-            Math.floor((alignmentCanvasWidth - width) / 2)
-          )
-        : 0;
-
-  const output = await sharp({
-    create: {
-      width: alignmentCanvasWidth,
-      height,
-      channels: 4,
-      background: {
-        r: 0,
-        g: 0,
-        b: 0,
-        alpha: 0,
-      },
-    },
-  })
-    .composite([
-      {
-        input: visible,
-        left,
-        top: 0,
-      },
-    ])
-    .png()
-    .toBuffer();
-
-  const name = `embed-panel-${panelIndex + 1}-media-${itemIndex + 1}.png`;
-
-  return {
-    attachment: new AttachmentBuilder(output, { name }),
-    url: `attachment://${name}`,
-  };
+  let cached = cachedAssetFor(guildId, source); if (!cached?.buffer) cached = await ensureAssetCached(guildId, source); if (!cached?.buffer) return null;
+  const type = contentTypeBase(cached.meta?.contentType || cached.contentType || ''); if (type && !STATIC_RASTER_TYPES.has(type)) return null;
+  return plainGalleryAttachmentBuffer(cached.buffer, panelIndex, itemIndex, visibleWidth, alignment);
 }
-async function galleryItems(media, interaction, placement = null, payloadFiles = null, panelIndex = 0) {
-  return [];
-}
+async function galleryItems(media, interaction, placement = null, payloadFiles = null, panelIndex = 0) { return []; }
 
 async function buildEmbedPayload(options = {}) {
-  const {
-    embeds = [],
-    actionRows = [],
-    allowUserPing = false,
-    userId = null,
-    ephemeral = false,
-    interaction = null,
-  } = options;
-
-  const mediaState = applyMediaAlignmentMap(
-    options.media || null,
-    options.mediaAlignment || {}
-  );
-
-  const files = [];
-  const components = [];
-
-  const resolvedEmbeds = await resolveApplicationEmojiShortcodes(
-    embeds,
-    interaction
-  );
-
-  const client = interaction?.client || null;
-  const guildId = interactionGuildId(interaction);
-
-  const resolvedActionRows =
-    client && guildId !== 'global'
-      ? await emojiPayload.resolveComponents(
-          client,
-          guildId,
-          actionRows,
-          'embed'
-        )
-      : actionRows;
-
-  await validateApplicationEmojiUsage(
-    resolvedEmbeds,
-    resolvedActionRows,
-    interaction
-  );
-
+  const { embeds = [], actionRows = [], allowUserPing = false, userId = null, ephemeral = false, interaction = null } = options;
+  const mediaState = applyMediaAlignmentMap(options.media || null, options.mediaAlignment || {}); const files = []; const components = [];
+  const resolvedEmbeds = await resolveApplicationEmojiShortcodes(embeds, interaction); const client = interaction?.client || null; const guildId = interactionGuildId(interaction);
+  const resolvedActionRows = client && guildId !== 'global' ? await emojiPayload.resolveComponents(client, guildId, actionRows, 'embed') : actionRows;
+  await validateApplicationEmojiUsage(resolvedEmbeds, resolvedActionRows, interaction);
   for (let index = 0; index < resolvedEmbeds.length; index += 1) {
-    const sourceEmbed = resolvedEmbeds[index];
-    const data =
-      typeof sourceEmbed?.toJSON === 'function'
-        ? sourceEmbed.toJSON()
-        : sourceEmbed;
-
-    if (!data || typeof data !== 'object') continue;
-
-    const hasPanelMediaState =
-      Array.isArray(mediaState?.panels) &&
-      index < mediaState.panels.length;
-
-    const media = panelMedia(mediaState, index);
-
-    const container = new ContainerBuilder();
-
-    if (Number.isInteger(data.color)) {
-      container.setAccentColor(data.color);
-    }
-
-    const aboveItems = [];
-    const belowItems = [];
-
+    const sourceEmbed = resolvedEmbeds[index]; const data = typeof sourceEmbed?.toJSON === 'function' ? sourceEmbed.toJSON() : sourceEmbed; if (!data || typeof data !== 'object') continue;
+    const hasPanelMediaState = Array.isArray(mediaState?.panels) && index < mediaState.panels.length; const media = panelMedia(mediaState, index); const container = new ContainerBuilder();
+    if (Number.isInteger(data.color)) container.setAccentColor(data.color);
+    const aboveItems = []; const belowItems = [];
     if (hasPanelMediaState) {
-      const gallery = Array.isArray(media?.gallery)
-        ? media.gallery.slice(0, 10)
-        : [];
-
-      for (
-        let itemIndex = 0;
-        itemIndex < gallery.length;
-        itemIndex += 1
-      ) {
-        const item = gallery[itemIndex];
-        const source = resolveSource(item?.source, interaction);
-
-        if (!source) continue;
-
-        const probe = await probeRemoteSource(
-          source,
-          'media',
-          guildId
-        );
-
-        const mediaType = String(
-          item?.type || 'auto'
-        ).toLowerCase();
-
-        /*
-         * Components V2 Media Gallery supports Discord media directly.
-         * Video URLs can therefore remain native instead of being silently
-         * discarded by the old EmbedBuilder renderer.
-         */
-        const placement = itemPlacement(item);
-
-        const headerType =
-          placement === 'above'
-            ? resolvedGalleryHeaderType(
-                item,
-                probe.contentType
-              )
-            : 'image';
-
-        /*
-         * Type: Text suppresses an Above Content graphic.
-         */
-        if (
-          placement === 'above' &&
-          headerType === 'text'
-        ) {
-          continue;
-        }
-
-        let mediaUrl = source;
-
-        const forceStatic =
-          placement === 'above' &&
-          galleryHeaderType(item) === 'image';
-
-        const nativePassThrough =
-          mediaType === 'video' ||
-          nativeImageShouldPassThrough(
-            probe.contentType
-          );
-
-        /*
-         * Preserve GIF animation and other native Discord media.
-         * Static raster images keep Goliath's existing processing pipeline.
-         */
-        if (!nativePassThrough || forceStatic) {
-          const prepared = forceStatic
-            ? await forcedStaticGalleryAttachment(
-                source,
-                index,
-                itemIndex,
-                guildId,
-                galleryImageWidth(item)
-              )
-            : await plainGalleryAttachment(
-                source,
-                index,
-                itemIndex,
-                guildId,
-                galleryImageWidth(item),
-                galleryAlignment(item)
-              );
-
-          if (!prepared) continue;
-
-          files.push(prepared.attachment);
-          mediaUrl = prepared.url;
-        }
-
-        const galleryItem =
-          new MediaGalleryItemBuilder()
-            .setURL(mediaUrl)
-            .setSpoiler(Boolean(item?.spoiler));
-
-        if (item?.alt) {
-          galleryItem.setDescription(
-            String(item.alt).slice(0, 1024)
-          );
-        }
-
-        (
-          placement === 'above'
-            ? aboveItems
-            : belowItems
-        ).push(galleryItem);
+      const gallery = Array.isArray(media?.gallery) ? media.gallery.slice(0, 10) : [];
+      for (let itemIndex = 0; itemIndex < gallery.length; itemIndex += 1) {
+        const item = gallery[itemIndex]; const source = resolveSource(item?.source, interaction); if (!source) continue; const probe = await probeRemoteSource(source, 'media', guildId); const mediaType = String(item?.type || 'auto').toLowerCase(); const placement = itemPlacement(item);
+        const headerType = placement === 'above' ? resolvedGalleryHeaderType(item, probe.contentType) : 'image'; if (placement === 'above' && headerType === 'text') continue;
+        let mediaUrl = source; const forceStatic = placement === 'above' && galleryHeaderType(item) === 'image'; const nativePassThrough = mediaType === 'video' || nativeImageShouldPassThrough(probe.contentType);
+        if (!nativePassThrough || forceStatic) { const prepared = forceStatic ? await forcedStaticGalleryAttachment(source, index, itemIndex, guildId, galleryImageWidth(item)) : await plainGalleryAttachment(source, index, itemIndex, guildId, galleryImageWidth(item), galleryAlignment(item)); if (!prepared) continue; files.push(prepared.attachment); mediaUrl = prepared.url; }
+        const galleryItem = new MediaGalleryItemBuilder().setURL(mediaUrl).setSpoiler(Boolean(item?.spoiler)); if (item?.alt) galleryItem.setDescription(String(item.alt).slice(0, 1024)); (placement === 'above' ? aboveItems : belowItems).push(galleryItem);
       }
     }
-
-    /*
-     * ABOVE CONTENT
-     */
-    if (aboveItems.length) {
-      container.addMediaGalleryComponents(
-        new MediaGalleryBuilder().addItems(
-          ...aboveItems
-        )
-      );
-    }
-
-    /*
-     * PANEL CONTENT
-     *
-     * Components V2 does not use EmbedBuilder for the visual body.
-     * Existing embed data is converted into Discord markdown.
-     */
-    const mainText = panelText(data);
-    const footText = footerText(data);
-
-    const thumbSource = resolveSource(
-      hasPanelMediaState
-        ? media?.thumbnail?.source
-        : data.thumbnail?.url,
-      interaction
-    );
-
+    if (aboveItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...aboveItems));
+    const mainText = panelText(data); const footText = footerText(data); const thumbSource = resolveSource(hasPanelMediaState ? media?.thumbnail?.source : data.thumbnail?.url, interaction);
     if (mainText) {
-      if (thumbSource) {
-        await probeRemoteSource(
-          thumbSource,
-          'thumbnail',
-          guildId
-        );
-
-        let thumbUrl = thumbSource;
-
-        if (isHttpsUrl(thumbSource)) {
-          const preparedThumb =
-            await persistentImageAttachment(
-              thumbSource,
-              guildId,
-              'embed-panel-' +
-                (index + 1) +
-                '-thumbnail'
-            );
-
-          if (preparedThumb) {
-            files.push(preparedThumb.attachment);
-            thumbUrl = preparedThumb.url;
-          }
-        }
-
-        const section =
-          new SectionBuilder()
-            .addTextDisplayComponents(
-              new TextDisplayBuilder().setContent(
-                mainText.slice(0, 4000)
-              )
-            )
-            .setThumbnailAccessory(
-              new ThumbnailBuilder()
-                .setURL(thumbUrl)
-            );
-
-        container.addSectionComponents(section);
-      } else {
-        container.addTextDisplayComponents(
-          new TextDisplayBuilder().setContent(
-            mainText.slice(0, 4000)
-          )
-        );
-      }
+      if (thumbSource) { await probeRemoteSource(thumbSource, 'thumbnail', guildId); let thumbUrl = thumbSource; if (isHttpsUrl(thumbSource)) { const preparedThumb = await persistentImageAttachment(thumbSource, guildId, 'embed-panel-' + (index + 1) + '-thumbnail'); if (preparedThumb) { files.push(preparedThumb.attachment); thumbUrl = preparedThumb.url; } } const section = new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(mainText.slice(0, 4000))).setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbUrl)); container.addSectionComponents(section); }
+      else container.addTextDisplayComponents(new TextDisplayBuilder().setContent(mainText.slice(0, 4000)));
     }
-
-    if (footText) {
-      container.addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          footText.slice(0, 4000)
-        )
-      );
-    }
-
-    /*
-     * BELOW CONTENT
-     */
-    if (belowItems.length) {
-      container.addMediaGalleryComponents(
-        new MediaGalleryBuilder().addItems(
-          ...belowItems
-        )
-      );
-    }
-
+    if (footText) container.addTextDisplayComponents(new TextDisplayBuilder().setContent(footText.slice(0, 4000)));
+    if (belowItems.length) container.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(...belowItems));
     components.push(container);
   }
-
-  /*
-   * Message Studio buttons remain outside the individual panel containers
-   * but inside the same Components V2 message.
-   */
-  for (const row of resolvedActionRows || []) {
-    components.push(row);
-  }
-
-  const payload = {
-    components,
-    files,
-    flags: MessageFlags.IsComponentsV2,
-  };
-
-  if (allowUserPing && userId) {
-    /*
-     * Components V2 cannot use normal message content, so represent the
-     * requested ping as a Text Display at the start of the message.
-     */
-    payload.components.unshift(
-      new TextDisplayBuilder().setContent(
-        `<@${userId}>`
-      )
-    );
-  }
-
-  if (ephemeral) {
-    payload.flags |= MessageFlags.Ephemeral;
-  }
-
+  for (const row of resolvedActionRows || []) components.push(row);
+  const payload = { components, files, flags: MessageFlags.IsComponentsV2 };
+  if (allowUserPing && userId) payload.components.unshift(new TextDisplayBuilder().setContent(`<@${userId}>`));
+  if (ephemeral) payload.flags |= MessageFlags.Ephemeral;
   return payload;
 }
-
-async function resolveApplicationEmojiShortcodes(embeds, interaction) { return embeds || []; }
+async function resolveApplicationEmojiShortcodes(embeds, interaction) { const client = interaction?.client || null; const guildId = interactionGuildId(interaction); if (!client || guildId === 'global') return embeds || []; return emojis.resolveEmbeds(client, guildId, embeds || [], 'embed'); }
 async function validateApplicationEmojiUsage() { return true; }
-
-module.exports = {
-  buildEmbedPayload,
-  makeCenteredPortrait,
-  applyMediaAlignmentMap,
-  persistentImageAttachment,
-};
+module.exports = { buildEmbedPayload, makeCenteredPortrait, applyMediaAlignmentMap, persistentImageAttachment };
