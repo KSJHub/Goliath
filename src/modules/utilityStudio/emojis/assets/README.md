@@ -22,10 +22,10 @@ Locked aliases, in order:
 14. `twitch`
 15. `twitter`
 16. `whatsapp`
-17. `x`
+17. `xtwitter`
 18. `xbox`
 19. `youtube`
 
-Preferred source filenames are `<alias>.png`, for example `youtube.png`. The startup matcher also accepts the existing descriptive platform filenames when the alias can be identified unambiguously.
+Preferred source filenames are `<alias>.png`, for example `youtube.png`. The X/Twitter core alias is `xtwitter` and may use the existing `twitter.png` source file. The startup matcher also accepts existing descriptive platform filenames when the alias can be identified unambiguously.
 
 Core files are system assets. Guild Emoji Studio favourites are a separate optional pool and must not own, rename, replace, or delete these Core resources.

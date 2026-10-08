@@ -163,7 +163,7 @@ async function cleanupRetiredGuildCommands(rest, clientId, guildIds, dryRun = fa
       commands = await rest.get(Routes.applicationGuildCommands(clientId, guildId));
     } catch (error) {
       if (isInaccessibleGuildError(error)) {
-        console.warn(`[CommandSync] Skipped retired-command cleanup for inaccessible guild ${guildId} (Discord ${discordErrorCode(error)}).`);
+        console.info(`[CommandSync] Retired-command cleanup skipped for inaccessible guild ${guildId} (Discord ${discordErrorCode(error)}); no action required.`);
         continue;
       }
       throw error;
@@ -184,7 +184,7 @@ async function cleanupRetiredGuildCommands(rest, clientId, guildIds, dryRun = fa
         console.log(`[CommandSync] Removed guild /${command.name} from ${guildId}`);
       } catch (error) {
         if (isInaccessibleGuildError(error)) {
-          console.warn(`[CommandSync] Could not remove guild /${command.name} from inaccessible guild ${guildId} (Discord ${discordErrorCode(error)}).`);
+          console.info(`[CommandSync] Could not remove guild /${command.name} from inaccessible guild ${guildId} (Discord ${discordErrorCode(error)}); no action required.`);
           continue;
         }
         throw error;

@@ -143,7 +143,7 @@ async function refreshAuditGuildRegistry(
       await client.guilds.fetch();
     } catch (error) {
       terminal.warn(
-        `Audit guild registry cache refresh failed ` +
+        `Audit guild registry remote refresh unavailable; using cached registry ` +
         `(${reason}): ${error?.message || error}`
       );
     }
@@ -178,7 +178,7 @@ function startAuditGuildRegistryRefresh(client) {
       const registry = await refreshAuditGuildRegistry(
         client,
         'scheduled refresh',
-        { fetchRemote: true }
+        { fetchRemote: false }
       );
 
       if (!registry) {
