@@ -94,6 +94,7 @@ async function rejectWrongCount(message, section, expected) {
       topContributor ? `🏆 **Top contributor:** <@${topContributor.userId}> with **${topContributor.validCounts}** successful count${topContributor.validCounts === 1 ? '' : 's'}` : '🏆 **Top contributor:** No successful counts this run',
       '', 'Back to **1**. Try not to break it this time. 👀', '**Next number: 1**',
     ].join('\n')).setFooter({ text: 'Goliath Counting' }).setTimestamp()], allowedMentions: { users: [message.author.id], parse: [] } }).catch(() => null);
+    await refreshPlayerPanel(message.guild, updated).catch(() => null);
     return true;
   }
   const revealAt = section.answerAfterFailures;
