@@ -116,6 +116,10 @@ module.exports = {
     client.prependListener(Events.InteractionCreate, (interaction) => {
       const originalId = String(interaction?.customId || '');
       if (!originalId.startsWith(PREFIX) || originalId === `${PREFIX}open`) return;
+      // Only claim controls this router actually handles. Unknown actions must
+      // remain available to other handlers instead of being silently swallowed.
+      const action = originalId.slice(PREFIX.length);
+      if (!['pause-all', 'resume-all', 'maintenance', 'restart', 'recovery', 'refresh'].includes(action)) return;
 
       // Start the real action immediately, then remove it from the broad
       // owner:commandcenter:* namespace before Audit Intelligence's generic
