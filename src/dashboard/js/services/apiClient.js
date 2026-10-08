@@ -41,7 +41,7 @@ function buildQuery(params = {}) {
 export const api = {
   request,
   buildQuery,
-  getStatus: (guildId = '') => request(`/api/status${guildId ? `?guildId=${guildId}` : ''}`),
+  getStatus: (guildId = '') => request(`/api/status/overview${guildId ? `?guildId=${encodeURIComponent(guildId)}` : ''}`),
   getAuthMe: () => request('/api/auth/me'),
   getLoginUrl: () => apiUrl('/api/auth/login'),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
