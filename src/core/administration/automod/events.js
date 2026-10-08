@@ -354,8 +354,13 @@ async function collectAdvancedViolations(message, config) {
   }
   if (config.attachments?.enabled) {
     const files = [...(message.attachments?.values?.() || [])];
-    const blocked = files.find((file) => config.attachments.blockedExtensions.includes(attachmentExtension(file)));
-    if (files.length > config.attachments.maxAttachments || blocked) out.push({ key:'attachments', name:'Attachment Protection', reason:blocked?'Blocked attachment type: .'+attachmentExtension(blocked):files.length+' attachments detected (limit '+config.attachments.maxAttachments+')', risk:config.attachments.risk, rule:config.attachments });
+    const blocked = files.find((file) => {
+      const nameExtension = attachmentExtension({ name: file?.name });
+      const urlExtension = attachmentExtension({ url: file?.url });
+      return config.attachments.blockedExtensions.includes(nameExtension)
+        || config.attachments.blockedExtensions.includes(urlExtension);
+    });
+    if (files.length > config.attachments.maxAttachments || blocked) out.push({ key:'attachments', name:'Attachment Protection', reason:blocked?'Blocked attachment type detected':files.length+' attachments detected (limit '+config.attachments.maxAttachments+')', risk:config.attachments.risk, rule:config.attachments });
   }
   return out;
 }
