@@ -153,7 +153,7 @@ async function sendPunishmentDm(context, options, punishments) {
 
 async function executePunishment(punishment, context, options) {
   if (punishment === 'delete') return safeDelete(context.message);
-  if (punishment === 'warn') return context.message ? safeWarnChannel(context.message, options.reason) : true;
+  if (punishment === 'warn') return context.message ? safeWarnChannel(context.message, options.reason) : false;
   if (punishment === 'timeout') return safeTimeout(context.member, options.timeoutDurationMs, options.actionReason);
   if (punishment === 'kick') return safeKick(context.member, options.actionReason);
   if (punishment === 'ban') return safeBan(context, options.actionReason, options.deleteDays);
