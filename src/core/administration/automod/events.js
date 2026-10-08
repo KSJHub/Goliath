@@ -282,7 +282,7 @@ function normalizeMessageText(content) {
   return String(content || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 function inviteCodes(content) {
-  return [...String(content || '').matchAll(/(?:discord\.gg|discord(?:app)?\.com\/invite)\/([a-z0-9-]+)/gi)].map((match) => match[1].toLowerCase());
+  return [...String(content || '').matchAll(/(?:https?:\/\/)?(?:www\.)?(?:discord\.gg\/|discord(?:app)?\.com\/invite\/)([a-z0-9-]+)/gi)].map((match) => match[1].toLowerCase());
 }
 function countEmoji(content) {
   const custom = (String(content || '').match(/<a?:\w+:\d+>/g) || []).length;
