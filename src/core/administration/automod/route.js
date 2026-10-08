@@ -342,7 +342,8 @@ router.post('/:guildId', (req, res) => {
     const body = getBody(req);
 
     if (Object.prototype.hasOwnProperty.call(body, 'enabled')) {
-      guildManager.setModuleEnabled(guildId, MODULE, body.enabled === true);
+      if (typeof body.enabled !== 'boolean') return res.status(400).json({ ok: false, error: 'enabled must be a boolean.' });
+      guildManager.setModuleEnabled(guildId, MODULE, body.enabled);
     }
 
     const { enabled: _enabled, ...configPatch } = body;
