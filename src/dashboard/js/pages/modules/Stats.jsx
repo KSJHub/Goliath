@@ -200,7 +200,15 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
 
   async function quickSetup() { await request(`/api/stats/${guildId}/counters/setup`, { method: 'POST', body: '{}' }); await load(); }
   async function refreshCounters() { await request(`/api/stats/${guildId}/refresh`, { method: 'POST', body: '{}' }); await load(); }
-  async function toggleCounter(counter) { await request(`/api/stats/${guildId}/counters/${encodeURIComponent(counter.id)}/toggle`, { method: 'POST', body: JSON.stringify({ enabled: !counter.enabled }) }); await load(); }
+  async function toggleCounter(counter) {
+    const result = await request(`/api/stats/${guildId}/counters/${encodeURIComponent(counter.id)}/toggle`, { method: 'POST', body: JSON.stringify({ enabled: !counter.enabled }) });
+    if (Array.isArray(result.counters)) {
+      setConfig((current) => ({ ...(current || {}), counters: result.counters }));
+    } else if (result.counter) {
+      setConfig((current) => ({ ...(current || {}), counters: (current?.counters || []).map((item) => item.id === result.counter.id ? result.counter : item) }));
+    }
+    await load();
+  }
   async function deleteCounter(counter) { if (!window.confirm(`Delete “${counter.name || 'Counter'}” and its Discord channel?`)) return; await request(`/api/stats/${guildId}/counters/${encodeURIComponent(counter.id)}`, { method: 'DELETE' }); setDraft(null); await load(); }
   async function saveDraft() {
     if (!draft?.segments?.length) return;
