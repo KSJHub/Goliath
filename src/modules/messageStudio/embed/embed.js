@@ -185,7 +185,7 @@ async function handleInteraction(interaction) {
   let deploymentKey = 'custom'; try { deploymentKey = deployments.getDeploymentKeyFromState(state); } catch {}
   const lockKey = `${guildId}:${deploymentKey}`;
   if (deliveryLocks.has(lockKey)) { await deliveryReply(interaction, '⏳ That Embed Studio deployment is already being processed. Please wait for it to finish.'); return true; }
-  const run = (async () => { const permissionFailure = await attachmentPermissionFailure(interaction, state, customId); if (permissionFailure) { await deliveryReply(interaction, permissionFailure); return true; } if (customId === 'embed:update-existing' && await updateExistingCanonical(interaction, state)) return true; return rawHandleInteraction(interaction); })();
+  const run = (async () => { if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate(); const permissionFailure = await attachmentPermissionFailure(interaction, state, customId); if (permissionFailure) { await deliveryReply(interaction, permissionFailure); return true; } if (customId === 'embed:update-existing' && await updateExistingCanonical(interaction, state)) return true; return rawHandleInteraction(interaction); })();
   deliveryLocks.set(lockKey, run); try { return await run; } finally { if (deliveryLocks.get(lockKey) === run) deliveryLocks.delete(lockKey); }
 }
 interactions.handleInteraction = handleInteraction;
