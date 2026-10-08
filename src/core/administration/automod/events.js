@@ -131,7 +131,7 @@ function findBadWord(content, words, mode = 'boundary') {
   if (mode === 'contains') return words.find((word) => lower.includes(word)) || null;
   return words.find((word) => {
     const escaped = String(word).replace(/[.*+?^$()|[\]\\]/g, '\\$&');
-    return new RegExp('(^|[^a-z0-9])' + escaped + '([^a-z0-9]|$)', 'i').test(lower);
+    return new RegExp('(^|[^\\p{L}\\p{N}_])' + escaped + '([^\\p{L}\\p{N}_]|$)', 'iu').test(lower);
   }) || null;
 }
 
