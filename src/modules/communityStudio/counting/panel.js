@@ -50,7 +50,7 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
     .setTitle('🔢 Counting Management')
     .setDescription([
       '**' + status + '**  •  ' + channel,
-      !hasChannel ? '\n⚠️ Choose a Counting channel to enable the game and deploy the Player Panel.' : '',
+      !hasChannel ? '\n⚠️ Choose a Counting channel before Counting can process messages or deploy the Player Panel.' : '',
     ].filter(Boolean).join('\n'))
     .addFields(
       {
@@ -146,7 +146,7 @@ function buildSettingsScreen(guild) {
     ].join('\n')));
   return { content: null, embeds: [embed], components: [
     row(
-      button(PREFIX + ':toggle:enabled', enabled ? '⏸️ Disable Counting' : '▶️ Enable Counting', enabled ? ButtonStyle.Danger : ButtonStyle.Success, !section.channelId && !enabled),
+      button(PREFIX + ':toggle:enabled', enabled ? '⏸️ Disable Counting' : '▶️ Enable Counting', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
       button(PREFIX + ':defaults', '🔄 Defaults', ButtonStyle.Secondary),
       button(PREFIX + ':health', '🩺 Health', ButtonStyle.Secondary),
     ),
@@ -284,7 +284,6 @@ async function handleInteraction(interaction) {
     }
     if (id === `${PREFIX}:toggle:enabled`) {
       const currentlyEnabled = isModuleEnabled(interaction.guild.id, counting.MODULE_KEY);
-      if (!currentlyEnabled && !counting.getSection(interaction.guild.id).channelId) throw new Error('Choose a counting channel before enabling the game.');
       setModuleEnabled(interaction.guild.id, counting.MODULE_KEY, !currentlyEnabled, { actorId, action: 'counting_toggle_enabled' });
       return safeUpdate(interaction, buildSettingsScreen(interaction.guild));
     }
