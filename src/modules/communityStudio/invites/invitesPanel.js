@@ -104,18 +104,18 @@ function publicView(interaction) {
   const member = section.settings.memberInviteTemplate;
   const official = section.settings.officialInvite;
   const ready = Boolean(config.channelId && official.code);
-  const deployed = Boolean(config.messageId && config.channelId);
-  const panelUrl = deployed ? `https://discord.com/channels/${interaction.guildId}/${config.channelId}/${config.messageId}` : null;
+  const verified = sessionFor(interaction).panelDeployment;
+  const deployed = Boolean(config.messageId && config.channelId && verified?.messageId === config.messageId && verified?.channelId === config.channelId && verified.status === 'deployed');
+  const panelStatus = !config.messageId ? '⚪ Not Deployed' : verified?.messageId === config.messageId && verified?.channelId === config.channelId ? (verified.status === 'deployed' ? '🟢 Deployed' : verified.status === 'missing' ? '⚪ Not Deployed · Message missing' : '🟡 Not Verified') : '🟡 Not Verified';
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🏆 Public Panel & Leaderboard')
       .setDescription('Configure and publish the community invite panel.')
       .addFields(
-        { name: 'Panel Status', value: deployed ? '🟢 Deployed (saved)' : '⚪ Not deployed', inline: true },
+        { name: 'Panel Status', value: panelStatus, inline: true },
         { name: 'Panel Channel', value: config.channelId ? `<#${config.channelId}>` : '⚠️ Not selected', inline: true },
         { name: 'Leaderboard', value: `Top ${config.leaderboardLimit}`, inline: true },
         { name: 'Member Invites', value: member.enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
         { name: 'Official Invite', value: official.code ? '🟢 Configured' : '⚠️ Not configured', inline: true },
-        ...(panelUrl ? [{ name: 'Deployed Message', value: `[View public panel](${panelUrl})`, inline: false }] : []),
         ...(!ready ? [{ name: '⚠️ Setup Required', value: [
           !config.channelId ? 'Select a panel channel.' : null,
           !official.code ? 'Create the official invite.' : null,
@@ -128,7 +128,7 @@ function publicView(interaction) {
       row(button('invites:panel-deploy', deployed ? '🔄 Update Panel' : '📢 Publish Panel', ButtonStyle.Success, !ready),
         button('invites:panel-embed-modal', '✏️ Edit Panel', ButtonStyle.Secondary),
         button('invites:panel-preview', '👁️ Preview Panel', ButtonStyle.Secondary, !official.code),
-        ...(panelUrl ? [new ButtonBuilder().setLabel('👁️ View Panel').setStyle(ButtonStyle.Link).setURL(panelUrl)] : [])),
+        ),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
   };
