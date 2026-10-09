@@ -1,6 +1,6 @@
 'use strict';
 
-const { MessageFlags, PermissionFlagsBits } = require('discord.js');
+const { EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
 const invites = require('./invites');
