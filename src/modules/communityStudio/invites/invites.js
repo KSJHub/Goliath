@@ -28,7 +28,7 @@ function defaults() {
       ignoreBots: true,
       logChannelId: null,
       rewardRoles: [],
-      officialInvite: { channelId: null, code: null, roleIds: [], maxAge: 0, maxUses: 0 },
+      officialInvite: { channelId: null, code: null, roleIds: [], maxAge: 0, maxUses: 0, linkType: 'standard', vanityCode: null },
       memberInviteTemplate: {
         enabled: true,
         channelId: null,
@@ -116,6 +116,8 @@ function normalize(section = {}) {
         channelId: cleanId(officialInvite.channelId || settings.managedInviteChannelId || settings.channelId),
         code: clean(officialInvite.code || settings.managedInviteCode || settings.inviteCode, 100) || null,
         roleIds: normalizeRoleIds(officialInvite.roleIds),
+        linkType: officialInvite.linkType === 'vanity' ? 'vanity' : 'standard',
+        vanityCode: clean(officialInvite.vanityCode, 100) || null,
         maxAge: 0,
         maxUses: 0,
       },
@@ -290,6 +292,30 @@ async function trackJoin(member, meta = {}) {
 async function trackLeave(member, meta = {}) { const section = getSection(member.guild.id); const record = section.members[member.id]; if (!record || record.leftAt) return null; updateSection(member.guild.id, (current) => { const inviters = { ...current.inviters }; if (record.inviterId && current.settings.removeOnLeave) { const stats = inviterStats(current, record.inviterId); stats.active = Math.max(0, stats.active - 1); stats.left += 1; inviters[record.inviterId] = stats; } return { ...current, inviters, members: { ...current.members, [member.id]: { ...record, leftAt: now() } } }; }, meta); addAnalytics(member.guild.id, { leaves: 1, lastLeaveAt: now() }, meta); return record; }
 function leaderboard(guildId, limit = 25) { const section = getSection(guildId); const personalOwners = new Set(listInviteLinks(guildId).filter((link) => link.personal).map((link) => link.inviterId)); return Object.values(section.inviters).filter((entry) => personalOwners.has(entry.inviterId)).map((entry) => ({ ...entry, score: Number(entry.active || 0) + Number(entry.bonus || 0) })).sort((a, b) => b.score - a.score || b.total - a.total).slice(0, Math.max(1, Math.min(100, Number(limit || 25)))); }
 function setBonus(guildId, inviterId, bonus, meta = {}) { const id = cleanId(inviterId); if (!id) throw new Error('A valid inviter is required.'); return updateSection(guildId, (section) => { const stats = inviterStats(section, id); stats.bonus = Math.max(-100000, Math.min(100000, Number(bonus || 0))); return { ...section, inviters: { ...section.inviters, [id]: stats } }; }, meta).inviters[id]; }
+async function getVanityStatus(guild) {
+  try {
+    const data = await guild.fetchVanityData();
+    return { available: Boolean(data?.code), code: data?.code || null, verified: true };
+  } catch {
+    return { available: false, code: null, verified: false };
+  }
+}
+async function syncVanityStatus(guild) {
+  const status = await getVanityStatus(guild);
+  if (status.verified) {
+    const section = getSection(guild.id);
+    const config = section.settings.officialInvite;
+    if (config.vanityCode !== status.code) {
+      updateSettings(guild.id, { officialInvite: { ...config, vanityCode: status.code } }, { action: 'invite_vanity_status_sync' });
+    }
+  }
+  return status;
+}
+function officialDisplayUrl(guildId) {
+  const config = getSection(guildId).settings.officialInvite;
+  if (config.linkType === 'vanity' && config.vanityCode) return `https://discord.gg/${config.vanityCode}`;
+  return config.code ? `https://discord.gg/${config.code}` : null;
+}
 async function buildHealth(guild) {
   const section = getSection(guild.id);
   const settings = section.settings;
@@ -320,6 +346,11 @@ async function buildHealth(guild) {
     } catch {
       check('Official Invite', 'warning', 'Could not verify with Discord; validity unknown.', 'official_unverified');
     }
+  }
+  if (settings.officialInvite.linkType === 'vanity') {
+    const vanity = await getVanityStatus(guild);
+    check('Vanity Invite', !vanity.verified ? 'warning' : vanity.available ? 'healthy' : 'warning',
+      !vanity.verified ? 'Vanity status could not be verified; standard invite fallback remains available.' : vanity.available ? `Custom invite available: discord.gg/${vanity.code}` : 'Custom invite unavailable; standard invite fallback is used.', 'vanity_status');
   }
   const roleIds = settings.officialInvite.roleIds || [];
   if (!roleIds.length) check('Join Roles', 'healthy', 'No automatic join roles configured.');
@@ -365,4 +396,4 @@ async function repair(guild, meta = {}) {
 }
 async function startup(client) { if (client.__goliathInvitesStarted) return; client.__goliathInvitesStarted = true; const panels = require('./invitesPublicPanels'); for (const guild of client.guilds.cache.values()) { if (!guildManager.isModuleEnabled(guild.id, SECTION)) continue; await syncGuild(guild, { action: 'invites_startup_sync' }).catch(() => null); panels.startAutoRefresh(guild, TWO_HOURS_MS); } }
 
-module.exports = { SECTION, TWO_HOURS_MS, defaults, getSection, setEnabled, updateSettings, addHistory, syncGuild, trackJoin, trackLeave, leaderboard, setBonus, createInviteLink, deleteInviteLink, listInviteLinks, listAdminInviteLinks, findPersonalInvite, createPersonalInvite, deletePersonalInvite, ensureOfficialInvite, buildHealth, repair, startup, applyInviteRoles, exportConfiguration: getSection, reset: (guildId, meta = {}) => saveSection(guildId, defaults(), meta) };
+module.exports = { SECTION, TWO_HOURS_MS, defaults, getSection, setEnabled, updateSettings, addHistory, syncGuild, trackJoin, trackLeave, leaderboard, setBonus, createInviteLink, deleteInviteLink, listInviteLinks, listAdminInviteLinks, findPersonalInvite, createPersonalInvite, deletePersonalInvite, ensureOfficialInvite, getVanityStatus, syncVanityStatus, officialDisplayUrl, buildHealth, repair, startup, applyInviteRoles, exportConfiguration: getSection, reset: (guildId, meta = {}) => saveSection(guildId, defaults(), meta) };
