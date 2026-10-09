@@ -9,7 +9,7 @@ function rolePages(guild, selected = [], page = 0) {
     .sort((a, b) => b.position - a.position || a.id.localeCompare(b.id));
   const selectedIds = new Set(selected.map(String));
   const count = Math.max(1, Math.ceil(roles.length / PAGE_SIZE));
-  const current = Math.max(0, Math.min(Number.isInteger(page) ? page : 0, count - 1));
+  const current = Math.max(0, Math.min(Number.isSafeInteger(page) ? page : 0, count - 1));
   return { roles: roles.slice(current * PAGE_SIZE, (current + 1) * PAGE_SIZE), all: roles,
     selectedIds, page: current, pages: count };
 }
@@ -31,7 +31,9 @@ function rolePageSelect(customId, placeholder, info) {
 }
 function mergePageSelection(previous, visibleRoles, chosen, limit = 10) {
   const visible = new Set(visibleRoles.map(role => role.id));
-  const merged = [...new Set([...previous.map(String).filter(id => !visible.has(id)), ...chosen.map(String)])];
+  const chosenIds = chosen.map(String);
+  if (chosenIds.some(id => !visible.has(id))) throw new Error('Role selection is no longer valid for this page. Please refresh the panel.');
+  const merged = [...new Set([...previous.map(String).filter(id => !visible.has(id)), ...chosenIds])];
   if (merged.length > limit) throw new Error(`Select no more than ${limit} roles across all pages.`);
   return merged;
 }
