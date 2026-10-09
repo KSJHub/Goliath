@@ -328,23 +328,39 @@ async function handleInviteStudioInteraction(interaction) {
     if (!armed) { state.officialConfirm = { action: 'regenerate', until: Date.now() + 30000 }; await update(interaction); return true; }
     state.officialConfirm = null;
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const result = await invites.ensureOfficialInvite(interaction.guild, meta(interaction, 'invite_official_regenerate'), true);
-    await interaction.editReply('Official invite regenerated: ' + result.invite.url);
+    try {
+      const result = await invites.ensureOfficialInvite(interaction.guild, meta(interaction, 'invite_official_regenerate'), true);
+      state.officialLive = { code: result.invite.code, exists: true, uses: Number(result.invite.uses || 0) };
+      await interaction.editReply('Official invite regenerated: ' + result.invite.url);
+    } catch (error) {
+      await interaction.editReply('Regeneration failed: ' + String(error.message || error).slice(0, 1700));
+    }
     return true;
   }
 
   if (id === 'invites:official-create') {
-    await interaction.deferReply({
-      flags: MessageFlags.Ephemeral,
-    });
-
-    const result = await invites.ensureOfficialInvite(
-      interaction.guild,
-      meta(interaction, 'invite_official_create'),
+    const config = invites.getSection(interaction.guildId).settings.officialInvite;
+    const record = config.code ? invites.getSection(interaction.guildId).inviteLinks[config.code] : null;
+    const changed = config.code && record && (
+      record.channelId !== config.channelId ||
+      Number(record.maxAge || 0) !== Number(config.maxAge || 0) ||
+      Number(record.maxUses || 0) !== Number(config.maxUses || 0) ||
+      JSON.stringify([...(record.roleIds || [])].sort()) !== JSON.stringify([...(config.roleIds || [])].sort())
     );
-
-    await interaction.editReply(`✅ Official invite ready: ${result.invite.url}`);
-
+    if (changed && !(state.officialConfirm?.action === 'update' && state.officialConfirm.until > Date.now())) {
+      state.officialConfirm = { action: 'update', until: Date.now() + 30000 };
+      await update(interaction);
+      return true;
+    }
+    state.officialConfirm = null;
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+      const result = await invites.ensureOfficialInvite(interaction.guild, meta(interaction, 'invite_official_create'));
+      state.officialLive = { code: result.invite.code, exists: true, uses: Number(result.invite.uses || 0) };
+      await interaction.editReply('✅ Official invite ready: ' + result.invite.url);
+    } catch (error) {
+      await interaction.editReply('❌ Invite update failed: ' + String(error.message || error).slice(0, 1700));
+    }
     return true;
   }
 
