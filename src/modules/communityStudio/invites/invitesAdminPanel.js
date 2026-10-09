@@ -705,19 +705,6 @@ async function handleMemberInteraction(interaction) {
     });
 
     try {
-      const section = invites.getSection(interaction.guildId);
-      const memberTemplate = section.settings.memberInviteTemplate;
-      const fallbackChannelId = memberTemplate.channelId
-        || section.settings.officialInvite.channelId
-        || section.settings.publicPanel.channelId
-        || interaction.channelId;
-
-      if (!memberTemplate.channelId && fallbackChannelId) {
-        nested(interaction, 'memberInviteTemplate', {
-          channelId: fallbackChannelId,
-        });
-      }
-
       const result = await invites.createPersonalInvite(
         interaction.guild,
         interaction.user.id,
