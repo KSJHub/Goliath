@@ -386,6 +386,36 @@ function dashboardImportAudit() {
   return errors.length === 0;
 }
 
+function backendRelativeImportAudit() {
+  section('Backend relative imports');
+  const files = [
+    ...walk(absolute('scripts'), ['.js', '.cjs', '.mjs']),
+    ...walk(absolute('src'), ['.js', '.cjs', '.mjs']).filter((file) => !file.startsWith(absolute('src/dashboard') + path.sep)),
+    absolute('server.js'),
+  ].filter((file) => fs.existsSync(file));
+  const patterns = [
+    /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+    /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+    /\b(?:import|export)\s+(?:[^'";]+?\s+from\s+)?['"]([^'"]+)['"]/g,
+  ];
+  const missing = new Set();
+  for (const file of files.sort()) {
+    const source = fs.readFileSync(file, 'utf8');
+    for (const pattern of patterns) {
+      pattern.lastIndex = 0;
+      for (const match of source.matchAll(pattern)) {
+        const spec = match[1];
+        if (!spec.startsWith('.')) continue;
+        try { require.resolve(path.resolve(path.dirname(file), spec)); }
+        catch { missing.add(`${relative(file)} -> ${spec}`); }
+      }
+    }
+  }
+  for (const entry of missing) console.error(`❌ ${entry}`);
+  if (!missing.size) console.log(`✅ Relative import audit: ${files.length} backend files`);
+  return missing.size === 0;
+}
+
 function auditCommand() {
   section('Goliath audit');
   return [projectShape, commandAudit, dashboardAudit, dashboardImportAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit]
@@ -472,7 +502,7 @@ function promote(target) {
 }
 
 const commands = {
-  doctor: () => doctor(process.argv[3]), audit: auditCommand, 'dashboard-imports': dashboardImportAudit,
+  doctor: () => doctor(process.argv[3]), audit: auditCommand, 'dashboard-imports': dashboardImportAudit, 'backend-imports': backendRelativeImportAudit,
   'deploy-plan': () => deployPlan(process.argv[3], process.argv[4], process.argv[5]),
   'sync-commands': () => syncCommands(process.argv[3]), promote: () => promote(process.argv[3]), guilds: guildAudit, media: mediaAudit,
 };
