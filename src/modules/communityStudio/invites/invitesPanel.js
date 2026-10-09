@@ -75,6 +75,14 @@ function officialView(interaction) {
   };
 }
 
+function officialLimitsModal(interaction) {
+  const config = invites.getSection(interaction.guildId).settings.officialInvite;
+  return new ModalBuilder().setCustomId('invites:official-limits-submit').setTitle('Official Invite Limits').addComponents(
+    row(new TextInputBuilder().setCustomId('maxAge').setLabel('Expiry in seconds (0 = never)').setStyle(TextInputStyle.Short).setValue(String(config.maxAge || 0)).setRequired(true)),
+    row(new TextInputBuilder().setCustomId('maxUses').setLabel('Maximum uses (0 = unlimited)').setStyle(TextInputStyle.Short).setValue(String(config.maxUses || 0)).setRequired(true)),
+  );
+}
+
 function publicView(interaction) {
   const section = invites.getSection(interaction.guildId);
   const config = section.settings.publicPanel;
@@ -204,4 +212,5 @@ function dmModal(interaction) {
     row(new TextInputBuilder().setCustomId('message').setLabel('DM message').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(config.dmMessage)),
   );
 }
-module.exports = { sessionFor, buildInviteStudioPayload, buildPublicPayload, profilePayload, personalInvitePayload, embedModal, dmModal };
+module.exports = {
+  officialLimitsModal, sessionFor, buildInviteStudioPayload, buildPublicPayload, profilePayload, personalInvitePayload, embedModal, dmModal };
