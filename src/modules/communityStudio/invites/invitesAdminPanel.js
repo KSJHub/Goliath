@@ -394,37 +394,28 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
-  if (id === 'invites:health') {
-    const health = await invites.buildHealth(
-      interaction.guild,
-    );
-
-    await interaction.reply({
-      content: health.healthy
-        ? '✅ Invite Studio is healthy.'
-        : `❌ ${health.issues.map((issue) => issue.code).join(', ')}`,
-      flags: MessageFlags.Ephemeral,
-    });
-
-    return true;
-  }
-
-  if (id === 'invites:repair') {
-    await interaction.deferReply({
-      flags: MessageFlags.Ephemeral,
-    });
-
-    const health = await invites.repair(
-      interaction.guild,
-      meta(interaction, 'invite_repair'),
-    );
-
-    await interaction.editReply(
-      health.healthy
-        ? '✅ Repair completed.'
-        : '⚠️ Repair completed with remaining issues.',
-    );
-
+  if (id === 'invites:health' || id === 'invites:repair') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+      const health = id === 'invites:repair'
+        ? await invites.repair(interaction.guild, meta(interaction, 'invite_repair'))
+        : await invites.buildHealth(interaction.guild);
+      const status = (value) => value === 'healthy' ? '🟢' : value === 'issue' ? '🔴' : '🟡';
+      const report = new EmbedBuilder()
+        .setColor(health.issues.length ? 0xED4245 : health.warnings.length ? 0xFEE75C : 0x57F287)
+        .setTitle(id === 'invites:repair' ? '🔧 Invite Repair Report' : '🩺 Invite Studio Health')
+        .setDescription(`${health.enabled ? '🟢 Module enabled' : '🔴 Module disabled'} · ${health.issues.length} issues · ${health.warnings.length} warnings\nChecks report the current state without deleting existing invite links.`)
+        .addFields(health.checks.map((check) => ({
+          name: `${status(check.status)} ${check.name}`,
+          value: check.detail,
+          inline: false,
+        })))
+        .setFooter({ text: 'Goliath Invites · Diagnostics' })
+        .setTimestamp(new Date(health.checkedAt));
+      await interaction.editReply({ embeds: [report] });
+    } catch (error) {
+      await interaction.editReply({ content: `❌ Diagnostics failed: ${String(error.message || error).slice(0, 1700)}` });
+    }
     return true;
   }
 
