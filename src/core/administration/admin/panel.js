@@ -46,6 +46,7 @@ const AUTHORITY_TIER_ORDER = Object.keys(AUTHORITY_TIERS).sort((a, b) => AUTHORI
 
 const CORE_GUILD_PERMISSIONS = [
   { key: 'admin.dashboard.view', label: 'View Admin Hub', group: 'Administration' },
+  { key: 'admin.security.manage', label: 'Manage Guild Security & Recovery', group: 'Administration' },
   { key: 'admin.automod.manage', label: 'Manage AutoMod', group: 'Administration' },
   { key: 'admin.modules.manage', label: 'Manage All Studios & Modules', group: 'Administration' },
   { key: 'admin.logs.manage', label: 'Manage Log Channels', group: 'Administration' },
