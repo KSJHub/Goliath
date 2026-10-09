@@ -202,15 +202,19 @@ function adminView(interaction) {
   const enabled = isModuleEnabled(interaction.guildId, 'invites');
   const state = sessionFor(interaction);
   const armed = state.resetConfirmUntil > Date.now();
+  const member = section.settings.memberInviteTemplate;
+  const roles = member.roleIdsOverride ?? ((member.roleIds || []).length ? member.roleIds : section.settings.officialInvite.roleIds);
+  const memberInfo = rolePages(interaction.guild, roles || [], state.memberRolePage || 0);
+  state.memberRolePage = memberInfo.page;
   return {
     embeds: [new EmbedBuilder().setColor(enabled ? 0x57F287 : 0xED4245).setTitle('🛠️ Invite Studio Admin')
       .setDescription(armed ? '⚠️ Reset armed. Confirm within 30 seconds.' : 'Manage member links, health, repairs and leaderboard data.')],
     components: [
-      row(button('invites:invite-manager', 'Invite Manager', ButtonStyle.Primary), button('invites:health', 'Health'), button('invites:repair', 'Repair'), button('invites:member-enabled', section.settings.memberInviteTemplate.enabled ? 'Disable Member Invites' : 'Enable Member Invites', section.settings.memberInviteTemplate.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button('invites:member-inherit', 'Use Official Destination', ButtonStyle.Secondary, !section.settings.memberInviteTemplate.channelId)),
+      row(button('invites:invite-manager', 'Invite Manager', ButtonStyle.Primary), button('invites:health', 'Health'), button('invites:repair', 'Repair'), button('invites:member-enabled', section.settings.memberInviteTemplate.enabled ? 'Disable Member Invites' : 'Enable Member Invites', section.settings.memberInviteTemplate.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button('invites:member-inherit', 'Use Official Destination', ButtonStyle.Secondary, !member.channelId)),
       row(new ChannelSelectMenuBuilder().setCustomId('invites:member-channel').setPlaceholder('📍 Override member destination (optional)').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      row(button('invites:official-regenerate', state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now() ? 'Confirm Regenerate' : 'Regenerate Official Invite', ButtonStyle.Secondary, !section.settings.officialInvite.code), button('invites:official-delete', state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now() ? 'Confirm Delete' : 'Delete Official Invite', ButtonStyle.Danger, !section.settings.officialInvite.code)),
-      row(button(armed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', armed ? 'Confirm Reset' : 'Reset Leaderboard', ButtonStyle.Danger), button('invites:default-panel', 'Restore Defaults'), button('invites:toggle', enabled ? 'Disable' : 'Enable', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
-      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
+      ...(memberInfo.roles.length ? [row(rolePageSelect(`invites:member-roles:${memberInfo.page}`, '🎭 Override member join roles', memberInfo))] : []),
+      row(button('invites:official-regenerate', state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now() ? 'Confirm Regenerate' : 'Regenerate Official Invite', ButtonStyle.Secondary, !section.settings.officialInvite.code), button('invites:official-delete', state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now() ? 'Confirm Delete' : 'Delete Official Invite', ButtonStyle.Danger, !section.settings.officialInvite.code), button(armed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', armed ? 'Confirm Reset' : 'Reset Leaderboard', ButtonStyle.Danger), button('invites:default-panel', 'Restore Defaults')),
+      row(button('invites:toggle', enabled ? 'Disable Module' : 'Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success), button('invites:member-roles-inherit', 'Use Official Roles', ButtonStyle.Secondary, !member.roleIdsOverride && !(member.roleIds || []).length), button('invites:member-role-next', 'Member Roles ▶', ButtonStyle.Secondary, memberInfo.pages <= 1), button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
     ],
   };
 }
