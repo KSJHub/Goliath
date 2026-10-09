@@ -66,7 +66,7 @@ function officialView(interaction) {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🌍 Official Invite')
       .setDescription('Create and manage your server’s official invitation link.')
       .addFields(
-        { name: 'Status', value: liveStatus + (!config.channelId ? '\\nChoose a destination channel to enable Create Invite.' : ''), inline: false },
+        { name: 'Status', value: liveStatus + (!config.channelId ? '\nChoose a destination channel to enable Create Invite.' : ''), inline: false },
         { name: '🔗 Invite Link', value: officialUrl(config.code) || 'No link created yet', inline: false },
         { name: '📍 Destination', value: config.channelId ? `<#${config.channelId}>` : 'Not selected', inline: true },
         { name: '👥 Uses', value: configured ? (live?.exists ? String(live.uses) + ' (Discord)' : String(link?.uses || 0) + ' (recorded)') : '—', inline: true },
