@@ -223,6 +223,11 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
+  if (id === 'invites:member-roles-inherit') {
+    nested(interaction, 'memberInviteTemplate', { roleIdsOverride: null, roleIds: [] });
+    await update(interaction);
+    return true;
+  }
   if (id === 'invites:member-inherit') {
     nested(interaction, 'memberInviteTemplate', { channelId: null });
     await update(interaction);
@@ -251,7 +256,7 @@ async function handleInviteStudioInteraction(interaction) {
     const info = rolePages(interaction.guild, config.roleIds || [], page);
     if (info.page !== page) throw new Error('Role page expired. Reopen Invites.');
     const chosen = mergePageSelection(config.roleIds || [], info.roles, interaction.values || []);
-    nested(interaction, 'memberInviteTemplate', { roleIds: chosen });
+    nested(interaction, 'memberInviteTemplate', { roleIdsOverride: chosen, roleIds: [] });
     panel.sessionFor(interaction).memberRolePage = page;
     await update(interaction);
     return true;
@@ -301,6 +306,34 @@ async function handleInviteStudioInteraction(interaction) {
 
   if (id === 'invites:member-limits') {
     await interaction.showModal(panel.memberLimitsModal(interaction));
+    return true;
+  }
+  if (id === 'invites:shared-limits') {
+    await interaction.showModal(panel.sharedLimitsModal(interaction));
+    return true;
+  }
+  if (id === 'invites:shared-limits-submit') {
+    const ageOptions = { never: 0, '30 minutes': 1800, '1 hour': 3600, '6 hours': 21600, '12 hours': 43200, '1 day': 86400, '7 days': 604800, '30 days': 2592000 };
+    const readAge = (key) => { const raw = interaction.fields.getTextInputValue(key).trim().toLowerCase(); return Object.prototype.hasOwnProperty.call(ageOptions, raw) ? ageOptions[raw] : Number(raw); };
+    const readUses = (key) => { const raw = interaction.fields.getTextInputValue(key).trim().toLowerCase(); return raw === 'unlimited' ? 0 : Number(raw); };
+    const officialAge = readAge('officialAge');
+    const officialUses = readUses('officialUses');
+    const memberAgeText = interaction.fields.getTextInputValue('memberAge').trim().toLowerCase();
+    const memberUsesText = interaction.fields.getTextInputValue('memberUses').trim().toLowerCase();
+    const inherit = memberAgeText === 'inherit' && memberUsesText === 'inherit';
+    const memberAge = inherit ? null : readAge('memberAge');
+    const memberUses = inherit ? null : readUses('memberUses');
+    const validAges = [0, 1800, 3600, 21600, 43200, 86400, 604800, 2592000];
+    const validUses = [0, 1, 5, 10, 25, 50, 100];
+    if ((!inherit && (memberAgeText === 'inherit' || memberUsesText === 'inherit')) ||
+        !validAges.includes(officialAge) || !validUses.includes(officialUses) ||
+        (!inherit && (!validAges.includes(memberAge) || !validUses.includes(memberUses)))) {
+      await interaction.reply({ content: 'Invalid limits. Use Never, 30 minutes, 1 hour, 6 hours, 12 hours, 1 day, 7 days, or 30 days for expiry; Unlimited, 1, 5, 10, 25, 50, or 100 for uses. Set BOTH member fields to Inherit to use official limits.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    nested(interaction, 'officialInvite', { maxAge: officialAge, maxUses: officialUses });
+    nested(interaction, 'memberInviteTemplate', { limitsOverride: inherit ? null : { maxAge: memberAge, maxUses: memberUses }, maxAge: 0, maxUses: 0 });
+    await interaction.reply({ content: '✅ Shared limits saved. Update the official invite to apply official changes. Newly generated member links inherit these settings unless overridden; existing personal links are unchanged.', flags: MessageFlags.Ephemeral });
     return true;
   }
   if (id === 'invites:official-limits') {
