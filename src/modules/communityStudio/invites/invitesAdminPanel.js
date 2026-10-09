@@ -187,13 +187,6 @@ async function handleInviteStudioInteraction(interaction) {
     return handleMemberInteraction(interaction);
   }
 
-  if (id === 'invites:vanity-check') {
-    await interaction.deferUpdate();
-    const status = await invites.syncVanityStatus(interaction.guild);
-    state.vanityStatus = status;
-    await interaction.editReply(panel.buildInviteStudioPayload(interaction));
-    return true;
-  }
 
   if (id === 'invites:official-link-type' && interaction.isStringSelectMenu()) {
     const linkType = interaction.values[0] === 'vanity' ? 'vanity' : 'standard';
@@ -328,16 +321,23 @@ async function handleInviteStudioInteraction(interaction) {
   }
 
   if (id === 'invites:official-verify') {
+    await interaction.deferUpdate();
     const config = invites.getSection(interaction.guildId).settings.officialInvite;
+    state.vanityStatus = await invites.syncVanityStatus(interaction.guild);
     if (!config.code) {
-      await interaction.reply({ content: 'No official invite exists.', flags: MessageFlags.Ephemeral });
-      return true;
+      state.officialLive = null;
+    } else {
+      try {
+        const live = await interaction.guild.invites.fetch(config.code);
+        state.officialLive = { code: config.code, exists: Boolean(live), uses: Number(live?.uses || 0) };
+      } catch (error) {
+        state.officialLive = { code: config.code, exists: [10006, 10008].includes(Number(error?.code)) ? false : null, uses: 0 };
+      }
     }
-    const live = await interaction.guild.invites.fetch(config.code).catch(() => null);
-    state.officialLive = { code: config.code, exists: Boolean(live), uses: Number(live?.uses || 0) };
-    await interaction.reply({ content: live ? 'Official invite verified: ' + live.url + ' — ' + live.uses + ' uses.' : 'Official invite is no longer available on Discord. Use Update Invite to repair it.', flags: MessageFlags.Ephemeral });
+    await interaction.editReply(panel.buildInviteStudioPayload(interaction));
     return true;
   }
+
   if (id === 'invites:official-regenerate') {
     const armed = state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now();
     if (!armed) { state.officialConfirm = { action: 'regenerate', until: Date.now() + 30000 }; await update(interaction); return true; }
