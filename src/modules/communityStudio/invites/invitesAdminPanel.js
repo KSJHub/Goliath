@@ -122,6 +122,12 @@ async function handleInviteStudioInteraction(interaction) {
 
   if (id !== 'invites' && id !== 'admin:invites' && !id.startsWith('invites:')) return false;
 
+  const publicActions = new Set(['invites:member-profile', 'invites:member-refresh', 'invites:member-personal']);
+  if (!publicActions.has(id) && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    await interaction.reply({ content: 'Manage Server permission is required.', flags: MessageFlags.Ephemeral });
+    return true;
+  }
+
   const state = panel.sessionFor(interaction);
 
   if (id === 'invites' || id === 'admin:invites') {
