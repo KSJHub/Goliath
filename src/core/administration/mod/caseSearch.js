@@ -685,6 +685,7 @@ async function handleCaseSearchModal(i) {
     const target = getCaseById(i.guild.id, targetCaseId);
     if (!target) return safeReply(i, ephemeralError('Merge target case not found.'));
     if (isCaseReadOnly(target)) return safeReply(i, ephemeralError('The merge target was locked or merged before submission.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = mergeCases(i.guild.id, targetCaseId, Number(sourceRaw), i.user?.id || null);
     if (!result.ok) return safeReply(i, ephemeralError(result.error || 'Failed to merge cases.'));
     return refreshCaseDetail(i, token, targetCaseId);
@@ -695,6 +696,7 @@ async function handleCaseSearchModal(i) {
     if (!stateFor(token, i.guild.id)) return safeReply(i, ephemeralError('This search has expired. Please start a new search.'));
     const targetCaseId = Number(targetCaseIdRaw), sourceRaw = input(i, 'source_case_id');
     if (!Number.isInteger(targetCaseId) || targetCaseId <= 0 || !/^\d+$/.test(sourceRaw)) return safeReply(i, ephemeralError('Case IDs must be positive integers.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = splitMergedCase(i.guild.id, targetCaseId, Number(sourceRaw), i.user?.id || null);
     if (!result.ok) return safeReply(i, ephemeralError(result.error || 'Failed to split case.'));
     return refreshCaseDetail(i, token, targetCaseId);
@@ -705,6 +707,7 @@ async function handleCaseSearchModal(i) {
     if (!stateFor(token, i.guild.id)) return safeReply(i, ephemeralError('This search has expired. Please start a new search.'));
     const contextCaseId = Number(contextCaseIdRaw);
     if (!Number.isInteger(contextCaseId) || contextCaseId <= 0) return safeReply(i, ephemeralError('Context case ID is invalid.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = bulkUpdateCases(i.guild.id, input(i, 'case_ids'), input(i, 'operation'), input(i, 'value'), i.user?.id || null);
     if (result.error) return safeReply(i, ephemeralError(result.error));
     const context = getCaseById(i.guild.id, contextCaseId);
