@@ -222,43 +222,37 @@ const backButton = (route) => button(panelNav.buildCustomId(canonicalState(route
 
 function buildAdminPanel(guild, name = 'Unknown User', interaction = null) {
   const can = (key) => !interaction || hasGuildPermission(interaction, key);
-  const fields = [];
-  const actions = [];
+  const sections = [];
 
-  if (!interaction || canManageGuildAuthority(interaction)) {
-    fields.push({ name: '👥 Staff & Permissions', value: 'Map guild roles to Goliath authority and control exact powers', inline: true });
-    actions.push(['admin:adminpanel', '👥 Permissions', ButtonStyle.Primary]);
-  }
-  if (can('admin.security.manage')) {
-    fields.push({ name: '🛡️ Security Hub', value: 'Guild protection, AutoMod, threat response, verification and recovery', inline: true });
-    actions.push(['admin:security-hub', '🛡️ Security Hub', ButtonStyle.Primary]);
+  if (can('admin.backups.view')) {
+    sections.push({ title: '🧱 Backup & Recovery', description: 'Backups and restoration requests', id: 'admin:backups', label: '🧱 Backups', style: ButtonStyle.Primary });
   }
   if (!interaction || hasAnyModulePermission(interaction)) {
-    fields.push({ name: '🧩 Goliath Studios', value: 'Configure only the Studios assigned to your Goliath authority profile', inline: true });
-    actions.push(['admin:modules', '🧩 Studios', ButtonStyle.Primary]);
+    sections.push({ title: '🧩 Goliath Studios', description: 'Modules and integrations', id: 'admin:modules', label: '🧩 Studios', style: ButtonStyle.Primary });
   }
   if (can('admin.logs.manage')) {
-    fields.push({ name: '📋 Logs & Audit', value: `${Object.values(LOG_TYPES).filter((value) => getLogChannelId(guild.id, value.key)).length}/5 log channels configured`, inline: true });
-    actions.push(['admin:logs', '📋 Logs', ButtonStyle.Primary]);
-  }
-  if (can('admin.backups.view')) {
-    fields.push({ name: '🧱 Backup & Recovery', value: 'Server backup visibility and recovery requests', inline: true });
-    actions.push(['admin:backups', '🧱 Backups', ButtonStyle.Primary]);
+    const configured = Object.values(LOG_TYPES).filter((value) => getLogChannelId(guild.id, value.key)).length;
+    sections.push({ title: '📋 Logs & Audit', description: `Activity records • ${configured}/5 log channels`, id: 'admin:logs', label: '📋 Logs', style: ButtonStyle.Primary });
   }
   if (can('mod.panel.view')) {
-    fields.push({ name: '🔐 Moderation Hub', value: 'Moderation cases, actions and tooling', inline: true });
-    actions.push(['admin:modpanel', '🔐 Moderation', ButtonStyle.Primary]);
+    sections.push({ title: '🔐 Moderation Hub', description: 'Cases and moderation tools', id: 'admin:modpanel', label: '🔐 Moderation', style: ButtonStyle.Primary });
+  }
+  if (can('admin.security.manage')) {
+    sections.push({ title: '🛡️ Security Hub', description: 'Protection, AutoMod and recovery', id: 'admin:security-hub', label: '🛡️ Security Hub', style: ButtonStyle.Primary });
+  }
+  if (!interaction || canManageGuildAuthority(interaction)) {
+    sections.push({ title: '👥 Staff & Permissions', description: 'Roles and authority control', id: 'admin:adminpanel', label: '👥 Permissions', style: ButtonStyle.Primary });
   }
   if (can('admin.purge')) {
-    fields.push({ name: '🧹 Server Utilities', value: 'Controlled server maintenance actions', inline: true });
-    actions.push(['admin:purge', '🧹 Purge', ButtonStyle.Danger]);
+    sections.push({ title: '🧹 Server Utilities', description: 'Maintenance and cleanup', id: 'admin:purge', label: '🧹 Purge', style: ButtonStyle.Danger });
   }
 
-  const embed = createEmbed('🛠️ Goliath Administration', 'Choose an administration area. Only controls assigned to your Goliath authority profile are shown.', name);
-  if (fields.length) embed.addFields(fields);
+  const embed = createEmbed('🛠️ Goliath Administration', 'Manage your server through Goliath’s administration controls. Only areas permitted by your guild authority profile are shown.', name);
+  if (sections.length) embed.addFields(sections.map((section) => ({ name: section.title, value: section.description, inline: true })));
   else embed.setDescription('No guild-manageable administration controls are currently assigned to your roles.');
-  return { embeds: [embed], components: buttonRows(actions, 3) };
+  return { embeds: [embed], components: buttonRows(sections.map((section) => [section.id, section.label, section.style]), 3) };
 }
+
 function buildAdminToolsPanel(guild, name = 'Unknown User', interaction = null) { const authority = getAuthorityConfig(guild.id); const description = ['**Guild Authority Control**', authority.configured ? 'Status: **Configured ✅**' : 'Status: **Legacy access fallback ⚠️**', '', ...Object.entries(AUTHORITY_TIERS).map(([key, tier]) => `${tier.emoji} **${tier.label}** — ${formatRoleList(authority.tiers[key].roleIds)}`), '', 'Each mapped role has its own permission profile. Authority tiers provide defaults and hierarchy only.', 'Guild authority controls Goliath access only. Goliath-owner/root authority is separate and is never exposed here.'].join('\n'); const components = canManageGuildAuthority(interaction) ? [...buttonRows([['admin:authority', '⚙️ Authority Control', ButtonStyle.Success], ['admin:setadminlog', '📋 Set Admin Log', ButtonStyle.Secondary]], 2), row(backButton('admin:adminpanel'))] : [row(backButton('admin:adminpanel'))]; return { embeds: [createEmbed('👥 Staff & Permissions', description, name)], components }; }
 function buildAuthorityPanel(guild, name = 'Unknown User') { const config = getAuthorityConfig(guild.id); const embed = createEmbed('⚙️ Guild Authority Control', ['Map this guild’s Discord roles to Goliath authority tiers. Role names do not matter.', '', '**Guild Owner** — implicit full guild authority; cannot be removed here.', ...Object.entries(AUTHORITY_TIERS).map(([key, tier]) => `${tier.emoji} **${tier.label}:** ${formatRoleList(config.tiers[key].roleIds)}`), '', '**How it works** — tiers define hierarchy and starting templates; every mapped Discord role receives its own independent permission profile.', 'Studio and module permissions are individually configurable. Granting a Studio grants all modules inside it; individual module permissions can be granted without the whole Studio.', '', config.configured ? 'Configured role mappings are active. Goliath now resolves guild access from these mappings.' : 'No mappings yet. Existing Discord Administrator/Moderator fallback remains active until you configure roles.', '', '🔒 Goliath-owner/root permissions are not part of this system.'].join('\n'), name); return { embeds: [embed], components: [row(button('admin:authority:roles:administrator', '👑 Admin Roles'), button('admin:authority:roles:moderator', '🛡️ Mod Roles'), button('admin:authority:roles:juniorModerator', '🔰 Junior Mod Roles')), row(button('admin:authority:permissions:administrator:0', '👑 Admin Template', ButtonStyle.Secondary), button('admin:authority:permissions:moderator:0', '🛡️ Mod Template', ButtonStyle.Secondary), button('admin:authority:permissions:juniorModerator:0', '🔰 Junior Template', ButtonStyle.Secondary)), row(backButton('admin:authority'))] }; }
 function buildAuthorityRolesPanel(guild, tierKey, name = 'Unknown User') { const tier = AUTHORITY_TIERS[tierKey]; if (!tier) return buildAuthorityPanel(guild, name); const config = getAuthorityConfig(guild.id); const mapped = config.tiers[tierKey].roleIds; const components = [row(new RoleSelectMenuBuilder().setCustomId(`admin:authority:roles:select:${tierKey}`).setPlaceholder(`Select ${tier.label} roles`).setMinValues(0).setMaxValues(10))]; if (mapped.length) components.push(row(new StringSelectMenuBuilder().setCustomId(`admin:authority:profile:select:${tierKey}`).setPlaceholder('Edit a mapped role permission profile').addOptions(mapped.slice(0, 25).map((roleId) => ({ label: String(guild.roles?.cache?.get(roleId)?.name || `Role ${roleId}`).slice(0, 100), value: roleId, description: `${tier.label} role profile`.slice(0, 100) }))))); components.push(row(button(`admin:authority:roles:clear:${tierKey}`, 'Clear Roles', ButtonStyle.Danger), backButton(`admin:authority:roles:${tierKey}`))); return { embeds: [createEmbed(`${tier.emoji} ${tier.label} Roles`, `${tier.description}\n\n**Mapped roles:**\n${formatRoleList(mapped)}\n\nSelect roles for this hierarchy tier. Every mapped role gets an independent permission profile initialized from the ${tier.label} template.`, name)], components }; }
