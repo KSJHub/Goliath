@@ -232,15 +232,15 @@ function buildPublicPayload(guildId, sourceSection = null) {
   const entries = invites.leaderboard(guildId, panel.leaderboardLimit);
   const lines = entries.length
     ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** referral${entry.score === 1 ? '' : 's'}`).join('\n')
-    : '✨ No referrals recorded yet. Share your personal link and be the first on the leaderboard!';
-  const description = `${panel.description}\n\n💎 **Invite friends • Earn referrals • Rise through the ranks**`;
+    : 'No referrals yet — be the first on the board!';
+  const description = panel.description;
   return {
     embeds: [new EmbedBuilder().setColor(panel.color).setTitle(panel.title)
       .setDescription(description)
       .addFields(
-        { name: '🌍 Join the Server', value: `Ready to join? **[Use our official invitation](${url})**\nPermanent link · Unlimited uses`, inline: false },
-        { name: `🏆 Community Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
-        { name: '💎 Your Personal Invite', value: memberEnabled ? 'Want to invite friends? Select **My Invite Link** to get your own permanent, unlimited-use link. Track your progress with **My Stats**.' : 'Personal invite creation is currently paused. You can still view your stats and the leaderboard.', inline: false },
+        { name: '🔗 Official Invitation', value: `**[Join the community](${url})** · Permanent, unlimited-use link`, inline: false },
+        { name: `🏆 Top Inviters · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
+        { name: '💎 Earn Your Place', value: memberEnabled ? 'Get your referral link with **My Invite Link**, then follow your progress in **My Stats**.' : 'Personal invite creation is paused. Your stats and leaderboard remain available.', inline: false },
       )
       .setFooter({ text: panel.footer }).setTimestamp()],
     components: [row(
