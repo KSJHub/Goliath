@@ -91,13 +91,16 @@ function officialView(interaction) {
   };
 }
 
-function officialLimitsModal(interaction) {
-  const config = invites.getSection(interaction.guildId).settings.officialInvite;
-  return new ModalBuilder().setCustomId('invites:official-limits-submit').setTitle('Official Invite Limits').addComponents(
+function inviteLimitsModal(interaction, member = false) {
+  const config = invites.getSection(interaction.guildId).settings[member ? 'memberInviteTemplate' : 'officialInvite'];
+  return new ModalBuilder().setCustomId(member ? 'invites:member-limits-submit' : 'invites:official-limits-submit').setTitle(member ? 'Member Invite Limits' : 'Official Invite Limits').addComponents(
     row(new TextInputBuilder().setCustomId('maxAge').setLabel('Expiry: Never, 1 hour, 1 day, 7 days...').setStyle(TextInputStyle.Short).setValue(({0:'Never',1800:'30 minutes',3600:'1 hour',21600:'6 hours',43200:'12 hours',86400:'1 day',604800:'7 days',2592000:'30 days'})[config.maxAge || 0] || 'Never').setRequired(true)),
     row(new TextInputBuilder().setCustomId('maxUses').setLabel('Maximum uses: Unlimited, 1, 5, 10...').setStyle(TextInputStyle.Short).setValue(config.maxUses ? String(config.maxUses) : 'Unlimited').setRequired(true)),
   );
 }
+
+const officialLimitsModal = (interaction) => inviteLimitsModal(interaction);
+const memberLimitsModal = (interaction) => inviteLimitsModal(interaction, true);
 
 function publicView(interaction) {
   const section = invites.getSection(interaction.guildId);
@@ -146,7 +149,7 @@ function memberSettingsView(interaction) {
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('invites:member-channel').setPlaceholder('📍 Select member invite destination').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       ...(info.roles.length ? [row(rolePageSelect(`invites:member-roles:${info.page}`, '🎭 Select join roles (optional)', info))] : []),
-      row(button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
+      row(button('invites:member-limits', 'Link Limits', ButtonStyle.Primary), button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
       ...(info.pages > 1 ? [row(button('invites:member-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:member-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1))] : []),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
@@ -243,4 +246,4 @@ function dmModal(interaction) {
   );
 }
 module.exports = {
-  officialLimitsModal, sessionFor, buildInviteStudioPayload, buildPublicPayload, profilePayload, personalInvitePayload, embedModal, dmModal };
+  officialLimitsModal, memberLimitsModal, sessionFor, buildInviteStudioPayload, buildPublicPayload, profilePayload, personalInvitePayload, embedModal, dmModal };
