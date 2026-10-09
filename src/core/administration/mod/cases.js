@@ -1005,14 +1005,15 @@ async function submitCaseModal(interaction, { fetchTarget, refreshCasesDashboard
     const [, caseIdRaw] = id.split(':');
     const modCase = getCaseById(interaction.guild.id, Number(caseIdRaw));
     if (!modCase) return safeReply(interaction, ephemeralError('Case not found.'));
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: 64 });
     const result = submitAppeal(interaction.guild.id, modCase.caseId, {
       appellantId: interaction.fields.getTextInputValue('appellant_id') || modCase.userId,
       grounds: interaction.fields.getTextInputValue('grounds'),
       requestedResolution: interaction.fields.getTextInputValue('requested_resolution'),
       source: 'staff-recorded',
     }, interaction.user?.id || null);
-    if (!result.ok) return safeReply(interaction, ephemeralError(result.error || 'Failed to submit appeal.'));
-    return safeReply(interaction, { ...buildAppealDetailPayload(result.case, result.appeal), flags: 64 });
+    if (!result.ok) return safeEditReply(interaction, ephemeralError(result.error || 'Failed to submit appeal.'));
+    return safeEditReply(interaction, { ...buildAppealDetailPayload(result.case, result.appeal), flags: 64 });
   }
   if (id.startsWith('mod_submit_case_detail:')) {
     const targetId = getTargetIdFromCustomId(id); const caseId = getCaseIdFromModal(interaction);
