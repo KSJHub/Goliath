@@ -216,11 +216,30 @@ function managerView(interaction) {
 function buildPublicPayload(guildId, sourceSection = null) {
   const section = sourceSection || invites.getSection(guildId);
   const panel = section.settings.publicPanel;
+  const memberEnabled = section.settings.memberInviteTemplate.enabled;
   const url = officialUrl(section.settings.officialInvite.code);
   if (!url) throw new Error('Create the official invite before sending the public panel.');
   const entries = invites.leaderboard(guildId, panel.leaderboardLimit);
-  const lines = entries.length ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** valid invite${entry.score === 1 ? '' : 's'}`).join('\n') : 'No member invites have been recorded yet.';
-  return { embeds: [new EmbedBuilder().setColor(panel.color).setTitle(panel.title).setDescription(panel.description).addFields({ name: 'Official Server Invite', value: url }, { name: '🏆 Invite Leaderboard', value: lines }).setFooter({ text: panel.footer }).setTimestamp()], components: [row(button('invites:member-personal', 'Create My Link', ButtonStyle.Primary), button('invites:member-profile', 'My Profile'), button('invites:member-refresh', 'Update Leaderboard'))] };
+  const lines = entries.length
+    ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** valid referral${entry.score === 1 ? '' : 's'}`).join('\n')
+    : 'No referrals recorded yet. Be the first to invite someone!';
+  const description = panel.description + (memberEnabled
+    ? '\n\n**Want to compete?** Get your personal invite link below, share it with friends, and track your progress.'
+    : '\n\nPersonal referral link requests are currently disabled.');
+  return {
+    embeds: [new EmbedBuilder().setColor(panel.color).setTitle(panel.title)
+      .setDescription(description)
+      .addFields(
+        { name: '🔗 Official Server Invite', value: `[Join the server](${url})\nShare this link to invite someone directly.`, inline: false },
+        { name: `🏆 Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
+      )
+      .setFooter({ text: panel.footer }).setTimestamp()],
+    components: [row(
+      button('invites:member-personal', '🔗 My Invite Link', ButtonStyle.Primary, !memberEnabled),
+      button('invites:member-profile', '📊 My Stats'),
+      button('invites:member-refresh', '🔄 Refresh Leaderboard'),
+    )],
+  };
 }
 
 function profilePayload(guild, user) {
