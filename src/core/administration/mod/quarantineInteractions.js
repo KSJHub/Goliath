@@ -647,11 +647,12 @@ async function submitInvestigationRoomNote(interaction, targetId) {
   if (!canUseInvestigationRoomControls(interaction, snapshot)) return safeReply(interaction, { content: '❌ Only the lead investigator or server owner can add room notes.', flags: 64 });
   const note = fieldValue(interaction, 'note').slice(0, 1000);
   if (!note) return safeReply(interaction, { content: '❌ The note cannot be empty.', flags: 64 });
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
   if (snapshot.caseId) {
     recordCaseAudit({ guildId: interaction.guild.id, caseId: snapshot.caseId, actorId: interaction.user.id, event: 'case.investigation.room_note_added', before: null, after: { note }, metadata: { targetId: String(targetId), interviewChannelId: snapshot.interviewChannelId || null, staffOnly: true } });
   }
   recordModerationSystemEvent({ interaction, event: 'moderation.investigation.room_note_added', action: 'investigation_note', targetId: String(targetId), after: { note }, metadata: { caseId: snapshot.caseId || null, interviewChannelId: snapshot.interviewChannelId || null } });
-  return safeReply(interaction, { content: `✅ Staff note added${snapshot.caseId ? ` to **Case #${snapshot.caseId}**` : ''}.`, flags: 64 });
+  return safeEditReply(interaction, { content: `✅ Staff note added${snapshot.caseId ? ` to **Case #${snapshot.caseId}**` : ''}.`, flags: 64 });
 }
 
 async function removeQuarantine(interaction, targetId) {
