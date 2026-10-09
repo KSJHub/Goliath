@@ -97,9 +97,9 @@ async function publishResumedChallenge(interaction, userId, resumed) {
 async function handleMemberAction(interaction, parsed) {
   if (clean(interaction.user?.id) !== clean(parsed.userId)) { await interaction.reply({ content: '❌ This Verification challenge belongs to another member.', flags: MessageFlags.Ephemeral }); return true; }
   const state = runtime.sessionState(interaction.guildId, parsed.userId); const challenge = state.activeChallenge;
-  if (!challenge || challenge.challengeId !== parsed.challengeId) { await interaction.reply({ content: '❌ This Verification challenge is no longer active.', flags: MessageFlags.Ephemeral }); return true; }
+  if (!challenge || challenge.challengeId !== parsed.challengeId || challenge.status !== 'pending' || ['verified','quarantined','rejected','failed','timed_out'].includes(state.state)) { await interaction.reply({ content: '❌ This Verification challenge is no longer active.', flags: MessageFlags.Ephemeral }); return true; }
   const recovery = runtime.recover(interaction.guildId, parsed.userId);
-  if (recovery?.changed && !runtime.sessionState(interaction.guildId, parsed.userId).activeChallenge) { await interaction.reply({ content: '❌ This Verification challenge has expired. Start Verification again.', flags: MessageFlags.Ephemeral }); return true; }
+  if (recovery?.changed && runtime.sessionState(interaction.guildId, parsed.userId).activeChallenge?.status !== 'pending') { await interaction.reply({ content: '❌ This Verification challenge has expired. Start Verification again.', flags: MessageFlags.Ephemeral }); return true; }
   await interaction.showModal(buildAnswerModal(parsed.userId, challenge));
   return true;
 }
@@ -107,7 +107,7 @@ async function handleMemberAction(interaction, parsed) {
 async function handleAnswerModal(interaction, parsed, manager) {
   if (clean(interaction.user?.id) !== clean(parsed.userId)) { await interaction.reply({ content: '❌ This Verification challenge belongs to another member.', flags: MessageFlags.Ephemeral }); return true; }
   const answer = interaction.fields.getTextInputValue(ANSWER_FIELD_ID);
-  const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
+  const current = runtime.sessionState(interaction.guildId, parsed.userId);if (!current.activeChallenge || current.activeChallenge.challengeId !== parsed.challengeId || current.activeChallenge.status !== 'pending' || ['verified','quarantined','rejected','failed','timed_out'].includes(current.state)) { await interaction.reply({ content: '❌ This Verification challenge is no longer active.', flags: MessageFlags.Ephemeral }); return true; }const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
   if (!result.ok) {
     const failure = await recordTerminalFailure(interaction, parsed, result, manager);
     const message = failure?.quarantined ? '⛔ Verification failed and your account has been moved to quarantine for staff review.' : result.reason === 'expired' ? '⏱️ This challenge expired. Start Verification again.' : result.complete ? '❌ That answer was incorrect and this challenge has ended.' : '❌ That answer was incorrect. Try again.';
