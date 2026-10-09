@@ -328,6 +328,7 @@ function formatRoles(ids = []) {
 function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
   const section = forms.getSection(guild.id);
   const moduleEnabled = isModuleEnabled(guild.id, 'forms');
+  const roleInfo = rolePages(guild, section.managerRoleIds || [], rolePage);
   const formItems = Object.values(section.forms || {});
   const submissions = Object.values(section.submissions || {});
   const pending = submissions.filter((submission) => submission.status === 'pending').length;
