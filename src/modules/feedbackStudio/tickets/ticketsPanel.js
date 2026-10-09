@@ -947,6 +947,8 @@ let ticketSetupPanelApi;
       return true;
     }
 
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     const guard = await ticketGuard.canCreateTicket({
       guildId: guild.id,
       userId: interaction.user.id,
@@ -965,19 +967,14 @@ let ticketSetupPanelApi;
     if (!guard.allowed) {
       const existingChannelId = getTicketChannelId(guard.ticket);
 
-      await interaction.reply({
+      await interaction.editReply({
         content: existingChannelId
           ? `❌ ${guard.reason}\nExisting ticket: <#${existingChannelId}>`
           : `❌ ${guard.reason}`,
-        flags: MessageFlags.Ephemeral,
       });
 
       return true;
     }
-
-    await interaction.deferReply({
-      flags: MessageFlags.Ephemeral,
-    });
 
     const ticket = await createNewTicket({
       guildId: guild.id,
@@ -1314,6 +1311,13 @@ let ticketSetupPanelApi;
 
   async function safeReply(interaction, payload = {}) {
     try {
+      if (interaction.deferred && !interaction.replied) {
+        return interaction.editReply(payload).catch((error) => {
+          console.error('[TicketsSetup] editReply failed:', error);
+          return null;
+        });
+      }
+
       if (alreadyHandled(interaction)) {
         return interaction.followUp(payload).catch((error) => {
           console.error('[TicketsSetup] followUp failed:', error);
