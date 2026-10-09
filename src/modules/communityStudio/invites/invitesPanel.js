@@ -210,9 +210,9 @@ function buildPublicPayload(guildId, sourceSection = null) {
   if (!url) throw new Error('Create the official invite before sending the public panel.');
   const entries = invites.leaderboard(guildId, panel.leaderboardLimit);
   const lines = entries.length
-    ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** valid referral${entry.score === 1 ? '' : 's'}`).join('\n')
-    : '🏆 **No referrals yet**\nBe the first to invite a friend and claim the top spot!';
-  const description = panel.description + '\n\n**Invite friends. Grow the community. Climb the leaderboard.**';
+    ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** valid referral${entry.score === 1 ? '' : 's'}`).join('\\n')
+    : '🏆 **No referrals yet**\\nBe the first to invite a friend and claim the top spot!';
+  const description = panel.description + '\\n\\n**Invite friends. Grow the community. Climb the leaderboard.**';
   return {
     embeds: [new EmbedBuilder().setColor(panel.color).setTitle(panel.title)
       .setDescription(description)
