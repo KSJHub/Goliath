@@ -1297,6 +1297,35 @@ function adminModuleRoutingAudit() {
     assert(advertisedPrefixes.length >= 40, `Expected deep module namespace coverage, found only ${advertisedPrefixes.length} prefixes`);
     for (const prefix of advertisedPrefixes) assert(router.includes(prefix), `Advertised module interaction namespace disappeared: ${prefix}`);
     
+    // Regression gate for interaction acknowledgements, permission boundaries and security separation.
+    const adminCommand = fs.readFileSync(root + '/src/core/administration/admin/command.js', 'utf8');
+    const securityPanels = fs.readFileSync(root + '/src/core/administration/admin/securityHubPanels.js', 'utf8');
+    const modCommand = fs.readFileSync(root + '/src/core/administration/mod/command.js', 'utf8');
+    const responseGuard = fs.readFileSync(root + '/src/runtime/interactionResponseGuard.js', 'utf8');
+    const interactionContracts = [
+      [router.includes('handledInteractions.add(interaction)'), 'duplicate interaction protection'],
+      [router.includes('wrapInteractionResponses(interaction)'), 'interaction response normalization'],
+      [router.includes('await enforceAdminModuleAuthority(interaction)'), 'module authority check before dispatch'],
+      [router.includes('await safeInteractionError(interaction,new Error('), 'unknown component response'],
+      [router.includes('if(!await callHandler(embedStudio'), 'Embed Studio missing-handler response'],
+      [router.includes('if(!await callHandler(privateRoomsPanel'), 'Private Rooms missing-handler response'],
+      [router.includes('if(!await callHandler(roleSelectorPanel'), 'Role Selector missing-handler response'],
+      [router.includes('if(!await callHandler(modInteractions'), 'moderation missing-handler response'],
+      [router.includes('if(!await callHandler(socialCreatorActionCompat'), 'Social creator missing-handler response'],
+      [adminCommand.includes('if (!canUseServerSecurity(interaction))'), 'guild security permission guard'],
+      [adminCommand.includes('if (!isGuildOwner(interaction))'), 'owner-only security isolation guard'],
+      [adminCommand.includes('if (!canUseSettings(interaction))'), 'admin settings permission guard'],
+      [adminCommand.includes('recordCaseAudit('), 'security containment case audit persistence'],
+      [securityPanels.includes('interaction.guild?.ownerId !== interaction.user?.id'), 'owner-only recovery control'],
+      [modCommand.includes('enforceCommandAccess(interaction,command)'), 'moderation command access control'],
+      [responseGuard.includes('module.exports'), 'shared interaction response guard exports'],
+    ];
+    for (const [present, label] of interactionContracts) assert(present, `Backend regression: missing ${label}`);
+    const authorityPosition = router.indexOf('await enforceAdminModuleAuthority(interaction)');
+    const genericModulePosition = router.indexOf("callHandler(moduleAdminPanels,'handleModuleAdminInteraction',interaction)");
+    assert(authorityPosition >= 0 && authorityPosition < genericModulePosition, 'Module authority must run before generic module dispatch');
+    console.log(`✅ Backend interaction, guild/owner permission and persistence contracts passed: ${interactionContracts.length} checks.`);
+
     console.log(`✅ Admin module routing audit passed: ${entries.length} modules across ${new Set(entries.map((entry) => entry.studio)).size} studios; root and child routing contracts guarded.`);
     return true;
   } catch (error) {
