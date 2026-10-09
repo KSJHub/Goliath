@@ -224,30 +224,34 @@ function buildAdminPanel(guild, name = 'Unknown User', interaction = null) {
   const can = (key) => !interaction || hasGuildPermission(interaction, key);
   const sections = [];
 
-  if (can('admin.backups.view')) {
-    sections.push({ title: '🧱 Backup & Recovery', description: 'Backups and restoration requests', id: 'admin:backups', label: '🧱 Backups', style: ButtonStyle.Primary });
+  // Navigation starts with existing moderation and member panels, then Studios.
+  if (can('mod.panel.view')) {
+    sections.push({ title: '🔐 Moderation Hub', description: 'Open the existing /mod panel', id: 'admin:modpanel', label: '🔐 Mod Hub', style: ButtonStyle.Primary });
   }
+  sections.push({ title: '👤 User Hub', description: 'Open your personal /user panel', id: 'admin:userpanel', label: '👤 User Hub', style: ButtonStyle.Primary });
   if (!interaction || hasAnyModulePermission(interaction)) {
-    sections.push({ title: '🧩 Goliath Studios', description: 'Modules and integrations', id: 'admin:modules', label: '🧩 Studios', style: ButtonStyle.Primary });
+    sections.push({ title: '🧩 Goliath Studios', description: 'Manage permitted Studios and modules', id: 'admin:modules', label: '🧩 Studios', style: ButtonStyle.Primary });
+  }
+
+  // Server management stays permission-aware and is ordered by category.
+  if (can('admin.backups.view')) {
+    sections.push({ title: '🧱 Backup & Recovery', description: 'Backups and restoration requests', id: 'admin:backups', label: '🧱 Backups', style: ButtonStyle.Secondary });
   }
   if (can('admin.logs.manage')) {
     const configured = Object.values(LOG_TYPES).filter((value) => getLogChannelId(guild.id, value.key)).length;
-    sections.push({ title: '📋 Logs & Audit', description: `Activity records • ${configured}/5 log channels`, id: 'admin:logs', label: '📋 Logs', style: ButtonStyle.Primary });
-  }
-  if (can('mod.panel.view')) {
-    sections.push({ title: '🔐 Moderation Hub', description: 'Cases and moderation tools', id: 'admin:modpanel', label: '🔐 Moderation', style: ButtonStyle.Primary });
+    sections.push({ title: '📋 Logs & Audit', description: `Activity records • ${configured}/5 log channels`, id: 'admin:logs', label: '📋 Logs', style: ButtonStyle.Secondary });
   }
   if (can('admin.security.manage')) {
-    sections.push({ title: '🛡️ Security Hub', description: 'Protection, AutoMod and recovery', id: 'admin:security-hub', label: '🛡️ Security Hub', style: ButtonStyle.Primary });
+    sections.push({ title: '🛡️ Security Hub', description: 'Protection, AutoMod and recovery', id: 'admin:security-hub', label: '🛡️ Security Hub', style: ButtonStyle.Secondary });
   }
   if (!interaction || canManageGuildAuthority(interaction)) {
-    sections.push({ title: '👥 Staff & Permissions', description: 'Roles and authority control', id: 'admin:adminpanel', label: '👥 Permissions', style: ButtonStyle.Primary });
+    sections.push({ title: '👥 Staff & Permissions', description: 'Roles and authority control', id: 'admin:adminpanel', label: '👥 Permissions', style: ButtonStyle.Secondary });
   }
   if (can('admin.purge')) {
     sections.push({ title: '🧹 Server Utilities', description: 'Maintenance and cleanup', id: 'admin:purge', label: '🧹 Purge', style: ButtonStyle.Danger });
   }
 
-  const embed = createEmbed('🛠️ Goliath Administration', 'Manage your server through Goliath’s administration controls. Only areas permitted by your guild authority profile are shown.', name);
+  const embed = createEmbed('🛠️ Goliath Administration', '**Goliath Panels** → **Studios** → **Server Management**\\nOnly controls available to your guild authority profile are shown.', name);
   if (sections.length) embed.addFields(sections.map((section) => ({ name: section.title, value: section.description, inline: true })));
   else embed.setDescription('No guild-manageable administration controls are currently assigned to your roles.');
   return { embeds: [embed], components: buttonRows(sections.map((section) => [section.id, section.label, section.style]), 3) };
@@ -358,6 +362,7 @@ async function handleAdminNavigation(interaction) {
   const authorityProfileReset = id.match(/^admin:authority:profile:reset:(\d{15,25}):(\d+)$/); if (authorityProfileReset) { const [, roleId, pageRaw] = authorityProfileReset; const config = getAuthorityConfig(interaction.guild.id); const profile = config.roleProfiles?.[roleId]; if (!profile || !config.tiers[profile.tier]) return openRoute(interaction, 'admin:authority', name); profile.permissions = { ...config.tiers[profile.tier].permissions }; saveAuthorityConfig(interaction.guild.id, config); return openRoute(interaction, `admin:authority:profile:${roleId}:${Number(pageRaw) || 0}`, name); }
   if (id === 'admin:purge') { if (!hasGuildPermission(interaction, 'admin.purge')) return deny(interaction); await interaction.showModal(buildPurgeModal()); return true; }
   if (id === 'admin:modpanel') { if (!hasGuildPermission(interaction, 'mod.panel.view')) return deny(interaction); await interaction.deferUpdate(); await modPanel.openModPanel(interaction); return true; }
+  if (id === 'admin:userpanel') { const { buildUserHomePanel } = require('../user/interactions'); await interaction.deferUpdate(); await interaction.editReply(buildUserHomePanel(interaction)); return true; }
   if (LOG_BUTTON_TO_TYPE[id]) return updatePanel(interaction, buildChannelPanel(LOG_BUTTON_TO_TYPE[id]), `admin:channel:${LOG_BUTTON_TO_TYPE[id]}`);
   if (id === 'admin:embed') { const { buildEmbedPanel } = require('../../../modules/messageStudio/embed/embedPanel'); return updatePanel(interaction, buildEmbedPanel(interaction, name), 'admin:embed'); }
   if (id === 'admin:tickets') { const { sendSetupPanel } = require('../../../modules/feedbackStudio/tickets/ticketsPanel'); return sendSetupPanel(interaction); }
