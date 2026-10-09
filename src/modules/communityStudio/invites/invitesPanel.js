@@ -122,22 +122,32 @@ function publicView(interaction) {
 }
 
 function memberSettingsView(interaction) {
-  const config = invites.getSection(interaction.guildId).settings.memberInviteTemplate;
+  const section = invites.getSection(interaction.guildId);
+  const config = section.settings.memberInviteTemplate;
   const state = sessionFor(interaction);
   const info = rolePages(interaction.guild, config.roleIds || [], state.memberRolePage || 0);
   state.memberRolePage = info.page;
+  const personalLinks = invites.listInviteLinks(interaction.guildId).filter((link) => link.personal).length;
+  const ageLabels = { 0: 'Never', 1800: '30 minutes', 3600: '1 hour', 21600: '6 hours', 43200: '12 hours', 86400: '1 day', 604800: '7 days', 2592000: '30 days' };
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('👥 Member Link Settings')
+    embeds: [new EmbedBuilder().setColor(config.enabled ? 0x57F287 : 0xED4245).setTitle('👥 Member Invites')
+      .setDescription('Configure personal referral links that members can request from the public invite panel.')
       .addFields(
-        { name: 'Status', value: config.enabled ? 'Enabled' : 'Disabled', inline: true },
-        { name: 'Channel', value: config.channelId ? `<#${config.channelId}>` : 'Not selected', inline: true },
-        { name: 'Roles', value: roleList(config.roleIds), inline: false },
-        { name: 'Role Selection', value: `Page ${info.page + 1}/${info.pages}`, inline: true },
+        { name: 'Status', value: config.enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
+        { name: 'Personal Links', value: String(personalLinks), inline: true },
+        { name: 'Destination', value: config.channelId ? `<#${config.channelId}>` : '⚠️ Not selected', inline: true },
+        { name: 'Expiry', value: ageLabels[config.maxAge || 0] || 'Never', inline: true },
+        { name: 'Maximum Uses', value: config.maxUses ? String(config.maxUses) : 'Unlimited', inline: true },
+        { name: 'Join Roles', value: roleList(config.roleIds), inline: false },
+        ...(!config.channelId ? [{ name: 'Setup Required', value: 'Choose a destination channel before members can reliably receive personal links.', inline: false }] : []),
+        ...(info.pages > 1 ? [{ name: 'Role Selection', value: `Page ${info.page + 1} of ${info.pages}`, inline: false }] : []),
       )],
     components: [
-      row(new ChannelSelectMenuBuilder().setCustomId('invites:member-channel').setPlaceholder('Select member invite channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      ...(info.roles.length ? [row(rolePageSelect(`invites:member-roles:${info.page}`, 'Roles granted to invitees', info))] : []),
-      row(button('invites:member-enabled', config.enabled ? 'Disable Links' : 'Enable Links'), button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary), button('invites:member-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:member-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
+      row(new ChannelSelectMenuBuilder().setCustomId('invites:member-channel').setPlaceholder('📍 Select member invite destination').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
+      ...(info.roles.length ? [row(rolePageSelect(`invites:member-roles:${info.page}`, '🎭 Select join roles (optional)', info))] : []),
+      row(button('invites:member-enabled', config.enabled ? 'Disable Member Invites' : 'Enable Member Invites', config.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
+        button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
+      ...(info.pages > 1 ? [row(button('invites:member-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:member-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1))] : []),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
   };
