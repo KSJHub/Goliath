@@ -185,9 +185,9 @@ function adminView(interaction) {
       components.push(row(
         button('invites:member-enabled', memberEnabled ? '👥 Member Invites: On' : '👥 Member Invites: Off'),
         button('invites:member-dm-modal', '✏️ Edit Invite DM'),
+        button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm',
+          resetArmed ? '⚠️ Confirm Leaderboard Reset' : '🏆 Reset Leaderboard'),
       ));
-      components.push(row(button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm',
-        resetArmed ? '⚠️ Confirm Leaderboard Reset' : '🏆 Reset Leaderboard')));
       if (resetArmed) embed.addFields({ name: '⚠️ Confirm Score Reset', value: 'Confirm within 30 seconds to clear leaderboard scores. Personal invite links remain.', inline: false });
     }
     if (page === 'official') {
