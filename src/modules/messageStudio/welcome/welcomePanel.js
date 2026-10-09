@@ -63,7 +63,7 @@ function saveCustomWelcome(interaction,scope){
   const existing=embedTemplateManager.getTemplate(guildId,templateId);
   const saved=embedTemplateManager.saveTemplate(guildId,{
     ...(existing||{}),templateId,name:customTemplateName(scope),module:'welcome',templateType:scope==='dm'?'dmWelcome':'welcome',content,
-    embed:{...(existing?.embed||{}),title,description:description||(content?'\\u200b':''),color,footer:{...(existing?.embed?.footer||{}),text:footer}},
+    embed:{...(existing?.embed||{}),title,description:description||(content?'\u200b':''),color,footer:{...(existing?.embed?.footer||{}),text:footer}},
     tags:['welcome','custom']
   });
   welcome.bindWelcomeTemplate(guildId,saved.templateId,slot,{actorId:interaction.user.id});
