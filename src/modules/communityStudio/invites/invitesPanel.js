@@ -295,7 +295,6 @@ function buildPublicPayload(guildId, sourceSection = null) {
       button('invites:member-personal', '🔗 My Invite Link', ButtonStyle.Primary, !memberEnabled),
       button('invites:member-profile', '📊 My Stats'),
       button('invites:member-refresh', '🔄 Refresh Leaderboard'),
-      new ButtonBuilder().setLabel('🔗 Join the Community').setStyle(ButtonStyle.Link).setURL(url),
     )],
   };
 }
