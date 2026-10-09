@@ -178,6 +178,7 @@ async function handleInviteStudioInteraction(interaction) {
   if (settingsPages[id]) {
     state.page = 'admin-config';
     state.settingsPage = settingsPages[id];
+    if (state.settingsPage === 'panel') await checkPanelDeployment(interaction);
     await update(interaction);
     return true;
   }
@@ -508,6 +509,40 @@ async function handleInviteStudioInteraction(interaction) {
       await interaction.editReply({ embeds: [report] });
     } catch (error) {
       await interaction.editReply({ content: `❌ Diagnostics failed: ${String(error.message || error).slice(0, 1700)}` });
+    }
+    return true;
+  }
+
+  if (id === 'invites:settings-panel-delete') {
+    const config = invites.getSection(interaction.guildId).settings.publicPanel;
+    if (!config.channelId || !config.messageId) {
+      state.panelDeleteConfirmUntil = 0;
+      await interaction.reply({ content: 'ℹ️ No deployed public panel is recorded for this guild.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    if (!(state.panelDeleteConfirmUntil > Date.now())) {
+      state.panelDeleteConfirmUntil = Date.now() + 30000;
+      await update(interaction);
+      return true;
+    }
+    state.panelDeleteConfirmUntil = 0;
+    await interaction.deferUpdate();
+    try {
+      const channel = await interaction.guild.channels.fetch(config.channelId);
+      if (!channel?.messages) throw new Error('Saved panel channel is inaccessible. The deployment record was not cleared.');
+      const message = await channel.messages.fetch(config.messageId).catch((error) => {
+        if (Number(error?.code) === 10008) return null;
+        throw error;
+      });
+      if (message) await message.delete();
+      invites.updateSettings(interaction.guildId, {
+        publicPanel: { ...config, channelId: config.channelId, messageId: null, lastRefreshedAt: null },
+      }, meta(interaction, 'invite_public_panel_delete'));
+      await checkPanelDeployment(interaction);
+      await interaction.editReply(panel.buildInviteStudioPayload(interaction));
+    } catch (error) {
+      await interaction.editReply(panel.buildInviteStudioPayload(interaction));
+      await interaction.followUp({ content: '❌ Panel deletion failed: ' + String(error.message || error).slice(0, 1400), flags: MessageFlags.Ephemeral });
     }
     return true;
   }
