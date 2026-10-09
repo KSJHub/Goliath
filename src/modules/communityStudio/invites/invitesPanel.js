@@ -266,7 +266,6 @@ function profilePayload(guild, user) {
         { name: '🏆 Rank', value: rank >= 0 ? `#${rank + 1}` : 'Unranked', inline: true },
         { name: '💎 Score', value: String(score), inline: true },
         { name: '👥 Active Referrals', value: String(stats.active || 0), inline: true },
-        { name: '📈 Lifetime Joins', value: String(stats.total || 0), inline: true },
         { name: '🔗 Personal Invite', value: personal ? `[Open your invite](${officialUrl(personal.code)})\nPermanent · Unlimited uses` : 'No personal link created yet.', inline: false },
       )
       .setFooter({ text: 'Goliath Invites · Member Stats' }).setTimestamp()],
