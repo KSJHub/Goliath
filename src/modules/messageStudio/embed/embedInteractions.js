@@ -1906,7 +1906,8 @@ async function handleLegacyInteraction(i) {
   const state = panel.getSession(i);
 
   if (customId === 'admin:embed') {
-    await i.update({
+    if (!i.deferred && !i.replied) await i.deferUpdate();
+    await i.editReply({
       ...panel.buildEditorPanel(i, name),
       attachments: [],
     });
@@ -2073,28 +2074,32 @@ async function handleLegacyInteraction(i) {
       return true;
     }
     if (customId === 'embed:builder') {
-      await i.update({
+      if (!i.deferred && !i.replied) await i.deferUpdate();
+      await i.editReply({
         ...panel.buildBuilderPanel(i, name),
         attachments: [],
       });
       return true;
     }
     if (customId === 'embed:panel-colour') {
-      await i.update({
+      if (!i.deferred && !i.replied) await i.deferUpdate();
+      await i.editReply({
         ...panel.buildPanelColourPanel(i, name),
         attachments: [],
       });
       return true;
     }
     if (customId === 'embed:presets') {
-      await i.update({
+      if (!i.deferred && !i.replied) await i.deferUpdate();
+      await i.editReply({
         ...panel.buildPresetsPanel(i, name),
         attachments: [],
       });
       return true;
     }
     if (customId === 'embed:panels') {
-      await i.update({
+      if (!i.deferred && !i.replied) await i.deferUpdate();
+      await i.editReply({
         ...panel.buildPanelsPanel(i, name),
         attachments: [],
       });
