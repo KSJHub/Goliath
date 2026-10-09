@@ -1030,6 +1030,10 @@ let ticketInteractionHandlerApi;
     try {
       const resolvedPayload = await resolveInteractionPayload(interaction, payload);
 
+      if (interaction.deferred && !interaction.replied) {
+        return interaction.editReply(resolvedPayload).catch(() => null);
+      }
+
       if (alreadyHandled(interaction)) {
         return interaction.followUp(resolvedPayload).catch(() => null);
       }
