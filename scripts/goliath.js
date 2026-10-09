@@ -1886,11 +1886,11 @@ function welcomeEmbedDeliveryAudit() {
     const delivery = read('src/modules/messageStudio/embed/embedTemplateDelivery.js');
     const panel = read('src/modules/messageStudio/welcome/welcomePanel.js');
     
-    assert(welcomeEntry.includes("require('./welcomeCore')"), 'Stable Welcome entry point must use the canonical Welcome implementation.');
-    assert(welcome.includes("require('../embed/embedTemplateDelivery')"), 'Welcome must use the shared Embed Studio delivery service.');
+    assert(welcomeEntry.includes("require(" + "'./welcomeCore'" + ")"), 'Stable Welcome entry point must use the canonical Welcome implementation.');
+    assert(welcome.includes("require(" + "'../embed/embedTemplateDelivery'" + ")"), 'Welcome must use the shared Embed Studio delivery service.');
     assert(welcome.includes('buildTemplateDeliveryPayload({'), 'Welcome payloads must delegate to the shared delivery service.');
     assert(!welcome.includes('buildPreviewEmbeds(state, renderInteraction)'), 'Welcome must not keep a private embed-only renderer.');
-    assert(delivery.includes("require('./embedRenderer')"), 'Shared delivery must use the canonical Embed Studio renderer.');
+    assert(delivery.includes("require(" + "'./embedRenderer'" + ")"), 'Shared delivery must use the canonical Embed Studio renderer.');
     assert(delivery.includes('buildEmbedPayload({'), 'Shared delivery must build the same canonical payload as Embed Studio.');
     assert(delivery.includes('media: state.media'), 'Shared delivery must preserve saved Embed Studio media.');
     assert(delivery.includes('actionRows'), 'Shared delivery must preserve saved Embed Studio buttons/actions.');
