@@ -416,6 +416,55 @@ function backendRelativeImportAudit() {
   return missing.size === 0;
 }
 
+function runtimeContractsAudit() {
+  section('Runtime contracts');
+  const surfaces = [
+  ['src/modules/socialStudio/socialAlerts/socialStudio', ['getAccess', 'findByOwnerDiscordId', 'getAccountsForCreator', 'completeCreatorProfile']],
+  ['src/modules/socialStudio/socialAlerts/socialStudioMonitor', ['startupSocialStudio', 'checkGuildAccounts', 'forcePostCreatorLive', 'projectLiveRefreshState', 'projectGuildConfig', 'projectedOptions', 'projectedRefreshTimestamp', 'repairLiveRollovers', 'buildLiveFields', 'livePlatformField']],
+  ['src/core/administration/admin/panel', ['buildAdminPanel', 'handleAdminNavigation', 'getAuthorityConfig', 'hasGuildPermission', 'getAuthorityContext', 'canManageGuildAuthority']],
+  ['src/core/ui/panelNavigation', ['createState', 'normalize', 'encodeState', 'decodeState', 'push', 'back', 'current', 'buildCustomId', 'parseCustomId', 'applyNavigationUI']],
+  ['src/core/administration/mod/storage', ['searchCases', 'getCaseById', 'getCaseAudit', 'recordCaseAudit', 'updateCaseReason', 'updateCaseStatus', 'updateCaseNote', 'clearCaseNote']],
+  ['src/owner/auditIntelligence/auditRouter', ['deliver', 'ensureAuditChannel', 'ensureUserAuditChannel', 'ensureReportRoutes', 'refreshUserSummary', 'getOwnerAuditGuildId', 'ensureCommandCenter', 'routeKeyForEvent', 'monitorKeyForEvent', 'monitoringEnabled', 'configuredRouteChannel', 'runLocalEndToEndProbe', 'runLiveEndToEndProbe', 'channelDeliveryState', 'inspectReportFeeds', 'inspectStructure', 'repairStructure', 'inspectHealth', 'repairHealth']],
+  ['src/modules/communityStudio/counting/counting', ['getSection', 'updateSection', 'mutateSection', 'expectedNext', 'resetProgress', 'resetWithMarker', 'setCurrentCountQueued', 'changeChannel', 'purgeCountingChannel', 'deployPlayerPanel', 'refreshPlayerPanel', 'handleMessageCreate', 'handleMessageDelete', 'handleMessageUpdate', 'registerProtectionEvents']],
+  ['src/modules/communityStudio/counting/countingHealth', ['buildHealthReport', 'repair']],
+  ['src/modules/communityStudio/counting/panel', ['buildPanel', 'buildRulesScreen', 'buildSettingsScreen', 'buildDefaultsConfirmation', 'buildAdvancedRulesModal', 'buildResetConfirmation', 'buildCleanupConfirmation', 'handleInteraction']],
+];
+  let failed = false;
+  for (const [file, names] of surfaces) {
+    let mod;
+    try { mod = require(absolute(file)); }
+    catch (error) {
+      console.error(`❌ ./${file}: ${error.message}`);
+      failed = true;
+      continue;
+    }
+    const missing = names.filter((name) => typeof mod?.[name] !== 'function');
+    console.log(`${missing.length ? '❌' : '✅'} ./${file}`);
+    if (missing.length) {
+      failed = true;
+      console.error(` - missing ${missing.join(', ')}`);
+    }
+  }
+  const social = require(absolute('src/modules/socialStudio/socialAlerts/socialStudio'));
+  const userMethods = ['buildLanding', 'buildDenied', 'buildCreate', 'buildProfile', 'buildSection', 'handleInteraction', 'canAccess'];
+  const missingUser = userMethods.filter((name) => typeof social?.user?.[name] !== 'function');
+  console.log(`${missingUser.length ? '❌' : '✅'} ./src/modules/socialStudio/socialAlerts/socialStudio.user`);
+  if (missingUser.length) {
+    failed = true;
+    console.error(` - missing ${missingUser.join(', ')}`);
+  }
+  const adminCommandSource = fs.readFileSync(absolute('src/core/administration/admin/command.js'), 'utf8');
+  if (adminCommandSource.includes('isGoliathOwner ? null : interaction')) {
+    failed = true;
+    console.error('❌ ./src/core/administration/admin/command owner interaction contract');
+    console.error(' - Goliath owner must retain the real Discord interaction');
+  } else {
+    console.log('✅ ./src/core/administration/admin/command owner interaction contract');
+  }
+  if (!failed) console.log(`✅ Runtime contract audit: ${surfaces.length + 1} surfaces`);
+  return !failed;
+}
+
 function auditCommand() {
   section('Goliath audit');
   return [projectShape, commandAudit, dashboardAudit, dashboardImportAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit]
@@ -502,7 +551,7 @@ function promote(target) {
 }
 
 const commands = {
-  doctor: () => doctor(process.argv[3]), audit: auditCommand, 'dashboard-imports': dashboardImportAudit, 'backend-imports': backendRelativeImportAudit,
+  doctor: () => doctor(process.argv[3]), audit: auditCommand, 'dashboard-imports': dashboardImportAudit, 'backend-imports': backendRelativeImportAudit, 'runtime-contracts': runtimeContractsAudit,
   'deploy-plan': () => deployPlan(process.argv[3], process.argv[4], process.argv[5]),
   'sync-commands': () => syncCommands(process.argv[3]), promote: () => promote(process.argv[3]), guilds: guildAudit, media: mediaAudit,
 };
