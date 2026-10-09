@@ -90,7 +90,6 @@ function officialView(interaction) {
 
       row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
         ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
-        button('invites:member-dm-modal', 'Edit Referral DM', ButtonStyle.Primary),
         button('invites:invite-manager', 'Manage Links', ButtonStyle.Secondary)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
         button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0),
@@ -158,6 +157,7 @@ function adminView(interaction) {
     components: [
       row(button('invites:health', 'System Health'),
         button('invites:repair', 'Repair Invites'),
+        button('invites:member-dm-modal', 'Edit Referral DM', ButtonStyle.Secondary),
         button('invites:member-enabled', memberEnabled ? 'Disable Referrals' : 'Enable Referrals', ButtonStyle.Secondary),
         button('invites:toggle', enabled ? 'Disable Studio' : 'Enable Studio', ButtonStyle.Secondary)),
       row(button('invites:official-regenerate', regenerateArmed ? 'Confirm Replace' : 'Replace Invite', ButtonStyle.Secondary, !configured),
