@@ -38,7 +38,7 @@ function overview(interaction) {
         { name: 'Tracked Joins', value: String(trackedJoins), inline: true },
       )],
     components: [
-      row(button('invites:official-settings', 'Official Invite', ButtonStyle.Primary), button('invites:member-settings', 'Member Invites', ButtonStyle.Primary), button('invites:public-config', 'Public Panel & Leaderboard', ButtonStyle.Primary)),
+      row(button('invites:official-settings', 'Invite Management', ButtonStyle.Primary), button('invites:public-config', 'Public Panel & Leaderboard', ButtonStyle.Primary)),
       row(button('admin:modules', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
   };
@@ -47,10 +47,14 @@ function overview(interaction) {
 function officialView(interaction) {
   const section = invites.getSection(interaction.guildId);
   const config = section.settings.officialInvite;
+  const member = section.settings.memberInviteTemplate;
+  const memberLinks = invites.listInviteLinks(interaction.guildId).filter((link) => link.personal).length;
   const link = config.code ? section.inviteLinks[config.code] : null;
   const state = sessionFor(interaction);
   const info = rolePages(interaction.guild, config.roleIds || [], state.officialRolePage || 0);
   state.officialRolePage = info.page;
+  const memberInfo = rolePages(interaction.guild, member.roleIds || [], state.memberRolePage || 0);
+  state.memberRolePage = memberInfo.page;
   const ageNames = { 0: 'Never', 1800: '30 minutes', 3600: '1 hour', 21600: '6 hours', 43200: '12 hours', 86400: '1 day', 604800: '7 days', 2592000: '30 days' };
   const expires = link?.expiresAt ? new Date(link.expiresAt) : null;
   const expiryLabel = expires && Number.isFinite(expires.getTime()) ? `<t:${Math.floor(expires.getTime() / 1000)}:R>` : 'Never';
@@ -65,28 +69,34 @@ function officialView(interaction) {
   const updateArmed = state.officialConfirm?.action === 'update' && state.officialConfirm.until > Date.now();
   const liveStatus = !configured ? '⚪ Not configured' : live?.exists === false ? '🔴 Link missing or expired' : live?.exists === true ? (matching ? '🟢 Verified active' : '🟠 Settings saved — update invite to apply') : (matching ? '🟡 Saved — verify live status' : '🟠 Changes pending — update invite');
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🌍 Official Invite')
-      .setDescription('Create and manage your server’s official invitation link.')
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🔗 Invite Management')
+      .setDescription('**🌍 Official Invite** is the server’s main link. **👥 Member Invites** are personal referral links; they use the official destination by default unless an override is set.')
       .addFields(
         { name: 'Status', value: liveStatus + (!config.channelId ? '\nChoose a destination channel to enable Create Invite.' : ''), inline: false },
         { name: '🔗 Invite Link', value: officialUrl(config.code) || 'No link created yet', inline: false },
-        { name: '📍 Destination', value: config.channelId ? `<#${config.channelId}>` : 'Not selected', inline: true },
+        { name: '📍 Official Destination', value: (config.channelId ? `<#${config.channelId}>` : 'Not selected') + '\nChannel opened by the official invite.', inline: true },
         { name: '👥 Uses', value: configured ? (live?.exists ? String(live.uses) + ' (Discord)' : String(link?.uses || 0) + ' (recorded)') : '—', inline: true },
         { name: '⏳ Expires', value: configured ? expiryLabel : ageNames[config.maxAge || 0] || 'Never', inline: true },
         { name: '🔢 Maximum Uses', value: config.maxUses ? String(config.maxUses) : 'Unlimited', inline: true },
-        { name: '🎭 Join Roles', value: roleList(config.roleIds), inline: false },
+        { name: '🎭 Official Join Roles', value: roleList(config.roleIds) + '\nGoliath grants these after an attributed official-invite join.', inline: false },
+        { name: '👥 Member Invites', value: `${member.enabled ? '🟢 Enabled' : '🔴 Disabled'} • ${memberLinks} personal link(s)`, inline: false },
+        { name: 'Member Destination', value: member.channelId ? `<#${member.channelId}> (override)` : config.channelId ? `<#${config.channelId}> (inherits official)` : 'Not configured', inline: true },
+        { name: 'Member Limits', value: `${ageNames[member.maxAge || 0] || 'Never'} expiry • ${member.maxUses || 'Unlimited'} uses per link`, inline: true },
+        { name: 'Member Join Roles', value: roleList(member.roleIds) + '\nGoliath grants these after an attributed member-referral join.', inline: false },
 
         ...(updateArmed ? [{ name: '⚠️ Confirm Replacement', value: 'The current invite will be replaced and its old URL will stop working. Press Confirm Update within 30 seconds.', inline: false }] : []),
         ...(info.pages > 1 ? [{ name: 'Role Selection', value: `Page ${info.page + 1} of ${info.pages}`, inline: false }] : []),
       )],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Select destination channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Select join roles (optional)', info))] : []),
+      ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Official invite join roles (optional)', info))] : []),
+      ...(memberInfo.roles.length ? [row(rolePageSelect(`invites:member-roles:${memberInfo.page}`, '🎭 Member invite join roles (optional)', memberInfo))] : []),
       row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
         button('invites:official-limits', 'Link Limits', ButtonStyle.Primary),
-        ...(configured ? [button('invites:official-verify', 'Verify Link')] : [])),
-      ...(info.pages > 1 ? [row(button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1))] : []),
-      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
+        ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
+        button('invites:member-limits', 'Member Limits', ButtonStyle.Primary),
+        button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
+      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'), ...(info.pages > 1 ? [button('invites:official-role-prev', '◀ Official', ButtonStyle.Secondary, info.page === 0), button('invites:official-role-next', 'Official ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)] : []), ...(memberInfo.pages > 1 ? [button('invites:member-role-prev', '◀ Member', ButtonStyle.Secondary, memberInfo.page === 0), button('invites:member-role-next', 'Member ▶', ButtonStyle.Secondary, memberInfo.page >= memberInfo.pages - 1)] : [])),
     ],
   };
 }
@@ -223,7 +233,7 @@ function buildInviteStudioPayload(interaction, forcedPage = null) {
   if (forcedPage === 'configure') state.page = 'overview';
   if (state.page === 'official-settings') return officialView(interaction);
   if (state.page === 'public-config') return publicView(interaction);
-  if (state.page === 'member-settings') return memberSettingsView(interaction);
+  if (state.page === 'member-settings') return officialView(interaction);
   if (state.page === 'admin-config') return adminView(interaction);
   if (state.page === 'invite-manager') return managerView(interaction);
   return overview(interaction);
