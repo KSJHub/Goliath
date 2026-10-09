@@ -32,6 +32,8 @@ contains(challengeRuntime, 'verificationChallenges.expire(guildId, userId, activ
 contains(challengeRuntime, 'active = verificationChallenges.active(guildId, userId)', 'refresh challenge after expiry');
 contains(challengeInteractions, 'session.securityConfigRevision', 'reject stale member challenge interactions');
 contains(manager, 'Quarantine role transition could not be confirmed.', 'verify quarantine roles before state change');
+contains(manager, "roles.length!==roleIds(s,'quarantine').length", 'reject missing configured quarantine roles');
+contains(manager, 'm.guild.members.fetch({user:m.id,force:true})', 'confirm quarantine against fresh Discord member state');
 contains(panel, 'finalNav()]};}', 'consistent Verification navigation');
 
 
