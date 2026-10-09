@@ -825,6 +825,7 @@ async function routeButtonsAndSelects(i) {
   }
   if (i.isStringSelectMenu?.()) return routeHandlers(i, [caseProceeding.handleProceedingInteraction, handleMemberScanStringSelect, handleCaseSearchSelect]);
   if (!i.isButton?.()) return false;
+  if (i.customId === 'mod:close') { await i.deferUpdate(); await i.deleteReply().catch(() => null); return true; }
   return routeHandlers(i, [handleExportInteraction, handleConfirmButton, caseProceeding.handleProceedingInteraction, value => handleCaseAction(value, { fetchTarget, createConfirmation }), handleMemberScanButton, handleDashboardNavigation, handleCancelButton, handleBulkButton, handleOpenActionButton, handleCaseToolButton]);
 }
 async function routeModModal(i) {
