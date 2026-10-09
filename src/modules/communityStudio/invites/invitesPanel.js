@@ -74,7 +74,7 @@ function officialView(interaction) {
       .addFields(
         { name: '🌍 OFFICIAL INVITE', value: `**${liveStatus}**\n${invites.officialDisplayUrl(interaction.guildId) || 'No invite link created'}`, inline: false },
         { name: '⭐ Official Link Type', value: config.linkType === 'vanity' ? `Custom / Vanity${config.vanityCode ? ` · discord.gg/${config.vanityCode}` : ' · Standard fallback active'}` : 'Standard Discord Invite', inline: false },
-        { name: '✨ Vanity Availability', value: !vanity ? 'Not checked' : !vanity.verified ? '🟡 Unable to verify' : vanity.available ? `🟢 Available · discord.gg/${vanity.code}` : '⚪ Not available for this guild', inline: false },
+        { name: '✨ Vanity Availability', value: !vanity ? '🟡 Not checked' : vanity.status === 'active' ? `🟢 ${vanity.detail}` : vanity.status === 'permission' ? `🔴 ${vanity.detail}` : vanity.status === 'unavailable' ? `⚪ ${vanity.detail}` : `🟡 ${vanity.detail}`, inline: false },
         { name: '📍 Destination', value: officialDestination, inline: true },
         { name: '👥 Uses', value: officialUses, inline: true },
         { name: '♾️ Link Policy', value: 'Never expires · Unlimited uses', inline: true },
@@ -95,6 +95,7 @@ function officialView(interaction) {
       row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
         ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
         button('invites:invite-manager', '👥 Member Invites', ButtonStyle.Secondary)),
+      row(button('invites:vanity-check', '🔄 Check Vanity URL')),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
         button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0),
         button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
