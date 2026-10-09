@@ -168,8 +168,31 @@ async function handleInviteStudioInteraction(interaction) {
     'invites:invite-manager': 'invite-manager',
   };
 
+  const settingsPages = {
+    'invites:settings-home': 'home',
+    'invites:settings-health': 'health',
+    'invites:settings-members': 'members',
+    'invites:settings-official': 'official',
+    'invites:settings-panel': 'panel',
+  };
+  if (settingsPages[id]) {
+    state.page = 'admin-config';
+    state.settingsPage = settingsPages[id];
+    await update(interaction);
+    return true;
+  }
+  if (id === 'invites:settings-manage-links' || id === 'invites:settings-official-manage' || id === 'invites:settings-panel-manage') {
+    state.page = id === 'invites:settings-manage-links' ? 'invite-manager' :
+      id === 'invites:settings-official-manage' ? 'official-settings' : 'public-config';
+    if (state.page === 'official-settings') state.vanityStatus = await invites.syncVanityStatus(interaction.guild);
+    if (state.page === 'public-config') await checkPanelDeployment(interaction);
+    await update(interaction);
+    return true;
+  }
+
   if (pages[id]) {
     state.page = pages[id];
+    if (state.page === 'admin-config') state.settingsPage = 'home';
     if (state.page === 'official-settings' || state.page === 'public-config') {
       state.vanityStatus = await invites.syncVanityStatus(interaction.guild);
     }
