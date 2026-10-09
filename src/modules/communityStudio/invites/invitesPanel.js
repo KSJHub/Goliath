@@ -6,6 +6,7 @@ const {
   TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } = require('discord.js');
 const invites = require('./invites');
+const { rolePages, rolePageSelect } = require('../../../core/ui/rolePagination');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
 const { replaceVars } = require('../../../core/guild/guildVariables');
 
@@ -44,17 +45,21 @@ function overview(interaction) {
 
 function officialView(interaction) {
   const config = invites.getSection(interaction.guildId).settings.officialInvite;
+  const state = sessionFor(interaction);
+  const info = rolePages(interaction.guild, config.roleIds || [], state.officialRolePage || 0);
+  state.officialRolePage = info.page;
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🌍 Official Invite Settings')
       .addFields(
         { name: 'Current Link', value: officialUrl(config.code) || 'None', inline: false },
         { name: 'Channel', value: config.channelId ? `<#${config.channelId}>` : 'Not selected', inline: true },
         { name: 'Roles', value: roleList(config.roleIds), inline: true },
+        { name: 'Role Selection', value: `Page ${info.page + 1}/${info.pages}`, inline: true },
       )],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('Select invite channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      row(new RoleSelectMenuBuilder().setCustomId('invites:official-roles').setPlaceholder('Roles granted to invitees').setMinValues(0).setMaxValues(10)),
-      row(button('invites:official-create', 'Create / Repair Link', ButtonStyle.Success, !config.channelId), button('invites:official-delete', 'Delete Link', ButtonStyle.Danger, !config.code), button('invites:home', 'Back')),
+      ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, 'Roles granted to invitees', info))] : []),
+      row(button('invites:official-create', 'Create / Repair Link', ButtonStyle.Success, !config.channelId), button('invites:official-delete', 'Delete Link', ButtonStyle.Danger, !config.code), button('invites:home', 'Back'), button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
     ],
   };
 }
@@ -82,17 +87,21 @@ function publicView(interaction) {
 
 function memberSettingsView(interaction) {
   const config = invites.getSection(interaction.guildId).settings.memberInviteTemplate;
+  const state = sessionFor(interaction);
+  const info = rolePages(interaction.guild, config.roleIds || [], state.memberRolePage || 0);
+  state.memberRolePage = info.page;
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('👥 Member Link Settings')
       .addFields(
         { name: 'Status', value: config.enabled ? 'Enabled' : 'Disabled', inline: true },
         { name: 'Channel', value: config.channelId ? `<#${config.channelId}>` : 'Not selected', inline: true },
         { name: 'Roles', value: roleList(config.roleIds), inline: false },
+        { name: 'Role Selection', value: `Page ${info.page + 1}/${info.pages}`, inline: true },
       )],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('invites:member-channel').setPlaceholder('Select member invite channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      row(new RoleSelectMenuBuilder().setCustomId('invites:member-roles').setPlaceholder('Roles granted to invitees').setMinValues(0).setMaxValues(10)),
-      row(button('invites:member-enabled', config.enabled ? 'Disable Links' : 'Enable Links'), button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary), button('invites:public-config', 'Back')),
+      ...(info.roles.length ? [row(rolePageSelect(`invites:member-roles:${info.page}`, 'Roles granted to invitees', info))] : []),
+      row(button('invites:member-enabled', config.enabled ? 'Disable Links' : 'Enable Links'), button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary), button('invites:public-config', 'Back'), button('invites:member-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:member-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
     ],
   };
 }
