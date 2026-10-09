@@ -2598,29 +2598,27 @@ let ticketSetupPanelApi;
       return true;
     }
 
-    if (action === 'set_staff') {
-      updatePanel(interaction.guild.id, panelId, {
-        staffRoleIds: interaction.values || [],
-      });
-
+    if (action === 'role_prev' || action === 'role_next') {
+      const key = roleEditorKey(interaction);
+      const current = roleEditorPages.get(key) || 0;
+      const info = rolePages(interaction.guild, [], current);
+      roleEditorPages.set(key, Math.max(0, Math.min(info.pages - 1, info.page + (action === 'role_next' ? 1 : -1))));
       await showRoleEditor(interaction, panelId);
       return true;
     }
 
-    if (action === 'set_manager') {
-      updatePanel(interaction.guild.id, panelId, {
-        managerRoleIds: interaction.values || [],
-      });
-
-      await showRoleEditor(interaction, panelId);
-      return true;
-    }
-
-    if (action === 'set_viewer') {
-      updatePanel(interaction.guild.id, panelId, {
-        viewerRoleIds: interaction.values || [],
-      });
-
+    const roleFields = { set_staff: 'staffRoleIds', set_manager: 'managerRoleIds', set_viewer: 'viewerRoleIds' };
+    if (Object.hasOwn(roleFields, action) && interaction.isStringSelectMenu?.()) {
+      const page = Number(customId.split(':')[3]);
+      if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+      const record = getPanel(interaction.guild.id, panelId);
+      if (!record) throw new Error('Ticket panel not found.');
+      const field = roleFields[action];
+      const info = rolePages(interaction.guild, record[field] || [], page);
+      if (info.page !== page) throw new Error('Role page expired.');
+      const selected = mergePageSelection(record[field] || [], info.roles, interaction.values || []);
+      updatePanel(interaction.guild.id, panelId, { [field]: selected });
+      roleEditorPages.set(roleEditorKey(interaction), page);
       await showRoleEditor(interaction, panelId);
       return true;
     }
