@@ -192,10 +192,6 @@ function adminView(interaction) {
     }
     if (page === 'official') {
       components.push(row(
-        button('invites:settings-official-manage', '🔗 Invite Management'),
-        button('invites:official-verify', '🔍 Verify Link'),
-      ));
-      components.push(row(
         button('invites:official-regenerate', regenerateArmed ? '⚠️ Confirm Replace' : '🔄 Replace Official Invite', ButtonStyle.Secondary, !configured),
         button('invites:official-delete', deleteArmed ? '⚠️ Confirm Delete' : '🗑️ Delete Official Invite', ButtonStyle.Secondary, !configured),
       ));
