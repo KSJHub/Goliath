@@ -1236,6 +1236,9 @@ let ticketInteractionHandlerApi;
 
     if (denied) return denied;
 
+    const deferred = await safeDefer(interaction, true);
+    if (!deferred) return true;
+
     const updated = await ticketActions.claim(
       ticket,
       interaction.user,
@@ -1246,7 +1249,7 @@ let ticketInteractionHandlerApi;
 
     await refreshTicketButtons(interaction, updated);
 
-    return safeReply(interaction, {
+    return safeEditOrReply(interaction, {
       content: `🎫 Ticket claimed by <@${interaction.user.id}>.`,
     });
   }
