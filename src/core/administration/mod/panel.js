@@ -174,7 +174,7 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
   const rows = [];
   const finalButtons = [];
   if (active === 'actions') {
-    finalButtons.push(new ButtonBuilder().setCustomId('admin:home').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
+    finalButtons.push(new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'view_analytics')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
   } else if (active === 'analytics') {
@@ -377,7 +377,7 @@ function getCasesPageData(guildId, targetId, options = {}) { const actionFilter 
 
 async function buildDashboardPayload(discord, interaction, target, view = DEFAULT_VIEW, options = {}) {
   await syncExpiredWarningsToCases(interaction.guild.id);
-  const context = normalizeDashboardContext({ ...options, view }); let safeView = context.view;
+  const context = normalizeDashboardContext({ ...options, view }); context.adminOrigin = options.adminOrigin === true || interaction.message?.components?.some((row) => row.components?.some((component) => component.customId === 'admin:home')); let safeView = context.view;
   if (!canViewDashboardSection(interaction.member, interaction.guild, safeView)) safeView = DEFAULT_VIEW;
   const targetId = target?.id || null; const stats = buildTargetStats(interaction.guild.id, target); const staff = getStaffDisplay(interaction.member, interaction.guild); const staffDisplay = `${staff.badge} ${staff.label} • ${interaction.member}`;
   const embeds = []; const components = safeView === 'analytics' ? [] : [buildUserSelectRow()];
