@@ -251,7 +251,7 @@ function buildAdminPanel(guild, name = 'Unknown User', interaction = null) {
     sections.push({ title: '🧹 Server Utilities', description: 'Maintenance and cleanup', id: 'admin:purge', label: '🧹 Purge', style: ButtonStyle.Danger });
   }
 
-  const embed = createEmbed('🛠️ Goliath Administration', '**Goliath Panels** → **Studios** → **Server Management**\\nOnly controls available to your guild authority profile are shown.', name);
+  const embed = createEmbed('🛠️ Goliath Administration', '**Goliath Panels** → **Studios** → **Server Management**\nOnly controls available to your guild authority profile are shown.', name);
   if (sections.length) embed.addFields(sections.map((section) => ({ name: section.title, value: section.description, inline: true })));
   else embed.setDescription('No guild-manageable administration controls are currently assigned to your roles.');
   return { embeds: [embed], components: buttonRows(sections.map((section) => [section.id, section.label, section.style]), 3) };
