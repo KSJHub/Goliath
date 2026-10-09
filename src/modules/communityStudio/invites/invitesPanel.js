@@ -173,14 +173,23 @@ function managerView(interaction) {
   const state = sessionFor(interaction);
   const links = invites.listInviteLinks(interaction.guildId).filter((link) => link.personal && link.inviterId);
   const selected = links.find((link) => link.inviterId === state.selectedUserId);
+  const section = invites.getSection(interaction.guildId);
+  const selectedStats = selected ? section.inviters?.[selected.inviterId] || {} : {};
+  const selectedScore = Math.max(0, Number(selectedStats.active || 0) + Number(selectedStats.bonus || 0));
   const list = links.slice(0, state.displayLimit || links.length).map((link, index) => `${index + 1}. <@${link.inviterId}> — ${officialUrl(link.code)} — ${link.uses || 0} uses`).join('\n') || 'No personal links yet.';
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('🗂️ Invite Manager').setDescription(list);
-  if (selected) embed.addFields({ name: 'Selected', value: `<@${selected.inviterId}>\n${officialUrl(selected.code)}` });
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('👥 Manage Links')
+    .setDescription('Select a member to view or manage their personal referral link.')
+    .addFields(
+      { name: 'Personal Links', value: String(links.length), inline: true },
+      { name: 'Tracked Joins', value: String(Number(section.analytics?.tracked || 0)), inline: true },
+      { name: 'Member Links', value: list.slice(0, 1024), inline: false },
+    );
+  if (selected) embed.addFields({ name: 'Selected Member', value: `<@${selected.inviterId}>\n${officialUrl(selected.code)}\n**Referral Score:** ${selectedScore}` });
   return { embeds: [embed], components: [
     row(new StringSelectMenuBuilder().setCustomId('invites:manager-display').setPlaceholder('Members shown').addOptions([5, 10, 15, 20, 0].map((value) => ({ label: value ? `Display ${value}` : 'Display All', value: String(value) })))),
     row(new UserSelectMenuBuilder().setCustomId('invites:manager-select-member').setPlaceholder('Select a member').setMinValues(1).setMaxValues(1)),
-    row(button('invites:manager-verify', 'Verify', ButtonStyle.Secondary, !selected), button('invites:manager-resend', 'Resend', ButtonStyle.Primary, !selected), button('invites:manager-delete', 'Delete', ButtonStyle.Danger, !selected), button('invites:manager-reset-member', 'Reset Score', ButtonStyle.Danger, !selected)),
-    row(button('invites:admin-config', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
+    row(button('invites:manager-verify', 'Verify Link', ButtonStyle.Secondary, !selected), button('invites:manager-resend', 'Resend DM', ButtonStyle.Secondary, !selected), button('invites:manager-delete', 'Remove Link', ButtonStyle.Secondary, !selected), button('invites:manager-reset-member', 'Reset Score', ButtonStyle.Secondary, !selected)),
+    row(button('invites:admin-config', '⬅️ Back')),
   ] };
 }
 
