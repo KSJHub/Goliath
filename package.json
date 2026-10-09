@@ -30,7 +30,7 @@
     "audit:embed-studio-preview": "node scripts/goliath.js embed-studio-preview",
     "audit:embed-media-alignment": "node scripts/goliath.js embed-media-alignment",
     "audit:embed-session-persistence": "node scripts/goliath.js embed-session-persistence",
-    "audit:embed-state-persistence-boundary": "node test/auditEmbedStatePersistenceBoundary.js",
+    "audit:embed-state-persistence-boundary": "node scripts/goliath.js embed-state-persistence-boundary",
     "audit:embed-template-binding-lifecycle": "node test/auditEmbedTemplateBindingLifecycle.js",
     "doctor": "npm run syntax && npm run imports && npm run dashboard-imports && npm run contracts && npm run audit:guild-variables && npm run audit:internal-version-naming && npm run audit:verification-lifecycle && npm run audit:embed-studio-preview && npm run audit:embed-media-alignment && npm run audit:embed-session-persistence && npm run audit:embed-state-persistence-boundary && npm run audit:embed-template-binding-lifecycle && npm run social-live-audit && npm run social-lifecycle-audit && npm run social-live-presentation-audit && node -e \"require('./scripts/goliath.js'); process.exit(process.exitCode || 0)\" doctor",
     "audit": "node scripts/goliath.js audit"
