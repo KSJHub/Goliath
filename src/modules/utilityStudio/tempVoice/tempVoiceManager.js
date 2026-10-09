@@ -138,7 +138,7 @@ async function handleVoiceStateUpdate(oldState, newState) {
       const hub = tempVoiceStore.findHubByJoinChannel(guild.id, newState.channelId);
       if (hub) await createTempChannel(newState, hub);
     }
-    if (oldState.channelId && oldState.channelId !== newState.channelId) await cleanupTempChannel(oldState);
+    if (tempVoiceStore.isEnabled(guild.id) && oldState.channelId && oldState.channelId !== newState.channelId) await cleanupTempChannel(oldState);
     return true;
   } catch (error) {
     console.error('[TempVoice] voiceStateUpdate failed:', error);
