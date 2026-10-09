@@ -1991,7 +1991,7 @@ async function handleLegacyInteraction(i) {
     ).trim();
 
     if (!/^\d{17,20}$/.test(channelId)) {
-      await i.editReply({
+      await i.reply({
         content:
           '❌ That is not a valid Discord channel ID.',
         flags: MessageFlags.Ephemeral,
@@ -2117,34 +2117,34 @@ async function handleLegacyInteraction(i) {
       return true;
     }
     if (customId === 'embed:panel-add') {
-      if (state.panels.length >= panel.MAX_PANELS) { await i.editReply({ content: 'Maximum panel limit reached.', flags: 64 }); return true; }
+      if (state.panels.length >= panel.MAX_PANELS) { await i.reply({ content: 'Maximum panel limit reached.', flags: 64 }); return true; }
       const panels = [...state.panels, panel.basePanel({ title: `Panel ${state.panels.length + 1}`, description: 'Add content here.', color: state.color })]; panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: panels.length - 1, selectedFieldIndex: null }); await i.update(panel.buildPanelsPanel(i, name)); return true;
     }
     if (customId === 'embed:panel-duplicate') {
-      if (state.panels.length >= panel.MAX_PANELS) { await i.editReply({ content: 'Maximum panel limit reached.', flags: 64 }); return true; }
+      if (state.panels.length >= panel.MAX_PANELS) { await i.reply({ content: 'Maximum panel limit reached.', flags: 64 }); return true; }
       const panels = [...state.panels]; panels.splice(state.selectedPanelIndex + 1, 0, panel.clone(state.panels[state.selectedPanelIndex])); panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: state.selectedPanelIndex + 1, selectedFieldIndex: null }); await i.update(panel.buildPanelsPanel(i, name)); return true;
     }
     if (customId === 'embed:panel-remove') {
-      if (state.panels.length <= 1) { await i.editReply({ content: 'You need at least one panel.', flags: 64 }); return true; }
+      if (state.panels.length <= 1) { await i.reply({ content: 'You need at least one panel.', flags: 64 }); return true; }
       const panels = [...state.panels]; panels.splice(state.selectedPanelIndex, 1); panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: Math.max(0, state.selectedPanelIndex - 1), selectedFieldIndex: null }); await i.update(panel.buildPanelsPanel(i, name)); return true;
     }
     if (customId === 'embed:panel-up' || customId === 'embed:panel-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedPanelIndex + delta; if (target < 0 || target >= state.panels.length) return true; const panels = [...state.panels]; [panels[state.selectedPanelIndex], panels[target]] = [panels[target], panels[state.selectedPanelIndex]]; panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: target }); await i.update(panel.buildPanelsPanel(i, name)); return true; }
     if (customId === 'embed:field-add') { await i.showModal(panel.fieldModal(state)); return true; }
-    if (customId === 'embed:field-edit') { if (!Number.isInteger(state.selectedFieldIndex)) { await i.editReply({ content: 'Select a field first.', flags: 64 }); return true; } await i.showModal(panel.fieldModal(state, state.selectedFieldIndex)); return true; }
+    if (customId === 'embed:field-edit') { if (!Number.isInteger(state.selectedFieldIndex)) { await i.reply({ content: 'Select a field first.', flags: 64 }); return true; } await i.showModal(panel.fieldModal(state, state.selectedFieldIndex)); return true; }
     if (customId === 'embed:field-remove-selected') { const fields = [...(state.fields || [])]; if (Number.isInteger(state.selectedFieldIndex)) fields.splice(state.selectedFieldIndex, 1); panel.markUnsaved(i, panel.saveSelected({ ...state, selectedFieldIndex: null }, { fields })); await i.update(panel.buildFieldsPanel(i, name)); return true; }
     if (customId === 'embed:button-add') { await i.showModal(panel.buttonModal(state)); return true; }
-    if (customId === 'embed:button-edit') { if (!Number.isInteger(state.selectedButtonIndex)) { await i.editReply({ content: 'Select a button first.', flags: 64 }); return true; } await i.showModal(panel.buttonModal(state, state.selectedButtonIndex)); return true; }
+    if (customId === 'embed:button-edit') { if (!Number.isInteger(state.selectedButtonIndex)) { await i.reply({ content: 'Select a button first.', flags: 64 }); return true; } await i.showModal(panel.buttonModal(state, state.selectedButtonIndex)); return true; }
     if (customId === 'embed:button-remove-selected') { const buttons = [...(state.buttons || [])]; if (Number.isInteger(state.selectedButtonIndex)) buttons.splice(state.selectedButtonIndex, 1); panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: null }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
     if (customId === 'embed:button-move-up' || customId === 'embed:button-move-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedButtonIndex + delta; if (!Number.isInteger(state.selectedButtonIndex) || target < 0 || target >= (state.buttons || []).length) return true; const buttons = [...state.buttons]; [buttons[state.selectedButtonIndex], buttons[target]] = [buttons[target], buttons[state.selectedButtonIndex]]; panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: target }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
 
   }
 
   if (i.isModalSubmit?.()) {
-    if (customId === 'embed:save-color') { const hex = i.fields.getTextInputValue('hex'); if (!panel.validHex(hex)) { await i.editReply({ content: 'Invalid HEX.', flags: 64 }); return true; } panel.markUnsaved(i, panel.saveSelected(state, { color: panel.normHex(hex) })); await i.editReply({ ...panel.buildEditorPanel(i, name), flags: 64 }); return true; }
-    if (customId.startsWith('embed:save-content:')) { panel.markUnsaved(i, panel.saveSelected(state, { title: i.fields.getTextInputValue('title'), description: i.fields.getTextInputValue('description') })); await i.editReply({ ...panel.buildContentManagerPanel(i), flags: 64 }); return true; }
-    if (customId.startsWith('embed:save-media:')) { panel.markUnsaved(i, panel.saveSelected(state, { authorIcon: i.fields.getTextInputValue('authorIcon'), thumbnail: i.fields.getTextInputValue('thumbnail'), image: i.fields.getTextInputValue('image'), authorUrl: i.fields.getTextInputValue('authorUrl'), footerIcon: i.fields.getTextInputValue('footerIcon') })); await i.editReply({ ...panel.buildBuilderPanel(i, name), flags: 64 }); return true; }
-    if (customId === 'embed:field-save-new' || customId.startsWith('embed:field-save:')) { const fields = [...(state.fields || [])]; const field = { name: i.fields.getTextInputValue('name'), value: i.fields.getTextInputValue('value'), inline: /^y(es)?$/i.test(i.fields.getTextInputValue('layout')) }; if (customId === 'embed:field-save-new') fields.push(field); else fields[Number(customId.split(':').pop())] = field; panel.markUnsaved(i, panel.saveSelected(state, { fields })); await i.editReply({ ...panel.buildFieldsPanel(i, name), flags: 64 }); return true; }
-    if (customId === 'embed:button-save-new' || customId.startsWith('embed:button-save:')) { const buttons = [...(state.buttons || [])]; const entry = { label: i.fields.getTextInputValue('label'), emoji: i.fields.getTextInputValue('emoji'), style: i.fields.getTextInputValue('style'), url: i.fields.getTextInputValue('url') }; if (customId === 'embed:button-save-new') buttons.push(entry); else buttons[Number(customId.split(':').pop())] = entry; panel.markUnsaved(i, { ...state, buttons }); await i.editReply({ ...panel.buildButtonsPanel(i, name), flags: 64 }); return true; }
+    if (customId === 'embed:save-color') { const hex = i.fields.getTextInputValue('hex'); if (!panel.validHex(hex)) { await i.reply({ content: 'Invalid HEX.', flags: 64 }); return true; } panel.markUnsaved(i, panel.saveSelected(state, { color: panel.normHex(hex) })); await i.reply({ ...panel.buildEditorPanel(i, name), flags: 64 }); return true; }
+    if (customId.startsWith('embed:save-content:')) { panel.markUnsaved(i, panel.saveSelected(state, { title: i.fields.getTextInputValue('title'), description: i.fields.getTextInputValue('description') })); await i.reply({ ...panel.buildContentManagerPanel(i), flags: 64 }); return true; }
+    if (customId.startsWith('embed:save-media:')) { panel.markUnsaved(i, panel.saveSelected(state, { authorIcon: i.fields.getTextInputValue('authorIcon'), thumbnail: i.fields.getTextInputValue('thumbnail'), image: i.fields.getTextInputValue('image'), authorUrl: i.fields.getTextInputValue('authorUrl'), footerIcon: i.fields.getTextInputValue('footerIcon') })); await i.reply({ ...panel.buildBuilderPanel(i, name), flags: 64 }); return true; }
+    if (customId === 'embed:field-save-new' || customId.startsWith('embed:field-save:')) { const fields = [...(state.fields || [])]; const field = { name: i.fields.getTextInputValue('name'), value: i.fields.getTextInputValue('value'), inline: /^y(es)?$/i.test(i.fields.getTextInputValue('layout')) }; if (customId === 'embed:field-save-new') fields.push(field); else fields[Number(customId.split(':').pop())] = field; panel.markUnsaved(i, panel.saveSelected(state, { fields })); await i.reply({ ...panel.buildFieldsPanel(i, name), flags: 64 }); return true; }
+    if (customId === 'embed:button-save-new' || customId.startsWith('embed:button-save:')) { const buttons = [...(state.buttons || [])]; const entry = { label: i.fields.getTextInputValue('label'), emoji: i.fields.getTextInputValue('emoji'), style: i.fields.getTextInputValue('style'), url: i.fields.getTextInputValue('url') }; if (customId === 'embed:button-save-new') buttons.push(entry); else buttons[Number(customId.split(':').pop())] = entry; panel.markUnsaved(i, { ...state, buttons }); await i.reply({ ...panel.buildButtonsPanel(i, name), flags: 64 }); return true; }
   }
 
   return false;
