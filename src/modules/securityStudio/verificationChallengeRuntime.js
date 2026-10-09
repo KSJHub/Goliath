@@ -57,6 +57,10 @@ function startStep(guildId, userId, method, settings = {}) {
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', method, state: session.state };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed', method };
   const active = verificationChallenges.active(guildId, userId);
+  if (active?.status === 'pending' && verificationChallenges.isExpired(active)) {
+    verificationChallenges.expire(guildId, userId, active.challengeId);
+    return { ok: false, reason: 'expired_challenge', method };
+  }
   if (active?.status === 'pending') {
     if (active.method !== method) return { ok: false, reason: 'different_challenge_active', method, activeMethod: active.method, challenge: active };
     return {
