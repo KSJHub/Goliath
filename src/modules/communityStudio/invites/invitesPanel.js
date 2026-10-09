@@ -285,7 +285,17 @@ function personalInvitePayload(interaction, result) {
     '{user}': interaction.user.username,
     '{invite}': url,
   });
-  return { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(render(template.dmTitle)).setDescription(render(template.dmMessage)).setTimestamp()] };
+  const message = render(template.dmMessage).replaceAll(url, '').trim();
+  return { embeds: [new EmbedBuilder().setColor(0x5865F2)
+    .setTitle(render(template.dmTitle))
+    .setDescription(message || 'Your permanent personal invite is ready to share!')
+    .addFields(
+      { name: '🔗 Your Referral Link', value: `**[Open and share your invite](${url})**\n${url}\nPermanent · Unlimited uses` },
+      { name: '🏆 How Referrals Work', value: 'Share your link with friends. Eligible joins contribute to your referral score and leaderboard position.' },
+      { name: '📊 Track Your Progress', value: 'Open the community invite panel and select **My Stats** to view your rank, score and active referrals.' },
+    )
+    .setFooter({ text: result.created ? 'Goliath Invites · Personal Link Created' : 'Goliath Invites · Your Existing Link' })
+    .setTimestamp()] };
 }
 
 function buildInviteStudioPayload(interaction, forcedPage = null) {
@@ -309,10 +319,11 @@ function embedModal(interaction) {
 }
 function dmModal(interaction) {
   const config = invites.getSection(interaction.guildId).settings.memberInviteTemplate;
-  return new ModalBuilder().setCustomId('invites:member-dm-submit').setTitle('Edit Referral DM').addComponents(
-    row(new TextInputBuilder().setCustomId('title').setLabel('DM title').setStyle(TextInputStyle.Short).setRequired(true).setValue(config.dmTitle)),
-    row(new TextInputBuilder().setCustomId('message').setLabel('DM message').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(config.dmMessage)),
+  return new ModalBuilder().setCustomId('invites:member-dm-submit').setTitle('Edit Personal Invite DM').addComponents(
+    row(new TextInputBuilder().setCustomId('title').setLabel('DM Title').setPlaceholder('💎 Your Personal Invite for {server}').setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(config.dmTitle)),
+    row(new TextInputBuilder().setCustomId('message').setLabel('Personal Welcome Message').setPlaceholder('Hi {user}! Your personal referral link is ready.').setStyle(TextInputStyle.Paragraph).setMaxLength(3000).setRequired(true).setValue(config.dmMessage)),
   );
 }
+
 module.exports = {
   sessionFor, buildInviteStudioPayload, buildPublicPayload, profilePayload, personalInvitePayload, embedModal, dmModal };
