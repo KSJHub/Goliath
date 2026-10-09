@@ -98,31 +98,6 @@ function officialView(interaction) {
   };
 }
 
-function inviteLimitsModal(interaction, member = false) {
-  const config = invites.getSection(interaction.guildId).settings[member ? 'memberInviteTemplate' : 'officialInvite'];
-  return new ModalBuilder().setCustomId(member ? 'invites:member-limits-submit' : 'invites:official-limits-submit').setTitle(member ? 'Member Invite Limits' : 'Official Invite Limits').addComponents(
-    row(new TextInputBuilder().setCustomId('maxAge').setLabel('Expiry: Never, 1 hour, 1 day, 7 days...').setStyle(TextInputStyle.Short).setValue(({0:'Never',1800:'30 minutes',3600:'1 hour',21600:'6 hours',43200:'12 hours',86400:'1 day',604800:'7 days',2592000:'30 days'})[config.maxAge || 0] || 'Never').setRequired(true)),
-    row(new TextInputBuilder().setCustomId('maxUses').setLabel('Maximum uses: Unlimited, 1, 5, 10...').setStyle(TextInputStyle.Short).setValue(config.maxUses ? String(config.maxUses) : 'Unlimited').setRequired(true)),
-  );
-}
-
-function sharedLimitsModal(interaction) {
-  const section = invites.getSection(interaction.guildId);
-  const official = section.settings.officialInvite;
-  const member = section.settings.memberInviteTemplate;
-  const override = member.limitsOverride || ((member.maxAge || member.maxUses) ? { maxAge: member.maxAge, maxUses: member.maxUses } : null);
-  const names = {0:'Never',1800:'30 minutes',3600:'1 hour',21600:'6 hours',43200:'12 hours',86400:'1 day',604800:'7 days',2592000:'30 days'};
-  return new ModalBuilder().setCustomId('invites:shared-limits-submit').setTitle('Shared Invite Limits').addComponents(
-    row(new TextInputBuilder().setCustomId('officialAge').setLabel('Official expiry (Never, 1 day, 7 days...)').setStyle(TextInputStyle.Short).setRequired(true).setValue(names[official.maxAge || 0] || 'Never')),
-    row(new TextInputBuilder().setCustomId('officialUses').setLabel('Official uses (Unlimited, 1, 5, 10...)').setStyle(TextInputStyle.Short).setRequired(true).setValue(official.maxUses ? String(official.maxUses) : 'Unlimited')),
-    row(new TextInputBuilder().setCustomId('memberAge').setLabel('Member expiry (Inherit or duration)').setStyle(TextInputStyle.Short).setRequired(true).setValue(override ? names[override.maxAge || 0] || 'Never' : 'Inherit')),
-    row(new TextInputBuilder().setCustomId('memberUses').setLabel('Member uses (Inherit or number)').setStyle(TextInputStyle.Short).setRequired(true).setValue(override ? (override.maxUses ? String(override.maxUses) : 'Unlimited') : 'Inherit')),
-  );
-}
-
-const officialLimitsModal = (interaction) => inviteLimitsModal(interaction);
-const memberLimitsModal = (interaction) => inviteLimitsModal(interaction, true);
-
 function publicView(interaction) {
   const section = invites.getSection(interaction.guildId);
   const config = section.settings.publicPanel;
@@ -147,38 +122,6 @@ function publicView(interaction) {
       row(new StringSelectMenuBuilder().setCustomId('invites:panel-limit').setPlaceholder(`🏆 Leaderboard size: Top ${config.leaderboardLimit}`).addOptions([5, 10, 15, 20, 25].map((value) => ({ label: `Top ${value}`, value: String(value) })))),
       row(button('invites:panel-deploy', deployed ? 'Update Public Panel' : 'Publish Public Panel', ButtonStyle.Success, !ready),
         button('invites:panel-embed-modal', 'Edit Panel Text', ButtonStyle.Primary)),
-      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
-    ],
-  };
-}
-
-function memberSettingsView(interaction) {
-  const section = invites.getSection(interaction.guildId);
-  const config = section.settings.memberInviteTemplate;
-  const state = sessionFor(interaction);
-  const info = rolePages(interaction.guild, config.roleIds || [], state.memberRolePage || 0);
-  state.memberRolePage = info.page;
-  const personalLinks = invites.listInviteLinks(interaction.guildId).filter((link) => link.personal).length;
-  const ageLabels = { 0: 'Never', 1800: '30 minutes', 3600: '1 hour', 21600: '6 hours', 43200: '12 hours', 86400: '1 day', 604800: '7 days', 2592000: '30 days' };
-  return {
-    embeds: [new EmbedBuilder().setColor(config.enabled ? 0x57F287 : 0xED4245).setTitle('👥 Member Invites')
-      .setDescription('Members can request a personal referral link from the public invite panel. Configure where those links lead, which roles Goliath grants after an attributed join, and the message members receive.')
-      .addFields(
-        { name: 'Status', value: config.enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-        { name: 'Personal Links', value: `${personalLinks} active personal link(s) managed by Goliath`, inline: true },
-        { name: 'Destination', value: (config.channelId ? `<#${config.channelId}>` : '⚠️ Not selected') + '\nChannel that personal invites open.', inline: true },
-        { name: 'Expiry', value: (ageLabels[config.maxAge || 0] || 'Never') + '\nHow long a new link remains valid.', inline: true },
-        { name: 'Maximum Uses', value: (config.maxUses ? String(config.maxUses) : 'Unlimited') + '\nHow many joins each link permits.', inline: true },
-        { name: 'Join Roles', value: roleList(config.roleIds) + '\nOptional roles Goliath assigns after a tracked join; Discord does not grant these automatically.', inline: false },
-        { name: 'Member DM', value: 'Edit the title and message sent to members with their personal invite link.', inline: false },
-        ...(!config.channelId ? [{ name: 'Setup Required', value: 'Choose a destination channel before members can reliably receive personal links.', inline: false }] : []),
-        ...(info.pages > 1 ? [{ name: 'Role Selection', value: `Page ${info.page + 1} of ${info.pages}`, inline: false }] : []),
-      )],
-    components: [
-      row(new ChannelSelectMenuBuilder().setCustomId('invites:member-channel').setPlaceholder('📍 Select member invite destination').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      ...(info.roles.length ? [row(rolePageSelect(`invites:member-roles:${info.page}`, '🎭 Select join roles (optional)', info))] : []),
-      row(button('invites:member-limits', 'Link Limits', ButtonStyle.Primary), button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
-      ...(info.pages > 1 ? [row(button('invites:member-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:member-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1))] : []),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
   };
@@ -268,7 +211,6 @@ function buildInviteStudioPayload(interaction, forcedPage = null) {
   if (forcedPage === 'configure') state.page = 'overview';
   if (state.page === 'official-settings') return officialView(interaction);
   if (state.page === 'public-config') return publicView(interaction);
-  if (state.page === 'member-settings') return officialView(interaction);
   if (state.page === 'admin-config') return adminView(interaction);
   if (state.page === 'invite-manager') return managerView(interaction);
   return overview(interaction);
@@ -285,10 +227,10 @@ function embedModal(interaction) {
 }
 function dmModal(interaction) {
   const config = invites.getSection(interaction.guildId).settings.memberInviteTemplate;
-  return new ModalBuilder().setCustomId('invites:member-dm-submit').setTitle('Edit Member Invite DM').addComponents(
+  return new ModalBuilder().setCustomId('invites:member-dm-submit').setTitle('Edit Referral DM').addComponents(
     row(new TextInputBuilder().setCustomId('title').setLabel('DM title').setStyle(TextInputStyle.Short).setRequired(true).setValue(config.dmTitle)),
     row(new TextInputBuilder().setCustomId('message').setLabel('DM message').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(config.dmMessage)),
   );
 }
 module.exports = {
-  officialLimitsModal, memberLimitsModal, sharedLimitsModal, sessionFor, buildInviteStudioPayload, buildPublicPayload, profilePayload, personalInvitePayload, embedModal, dmModal };
+  sessionFor, buildInviteStudioPayload, buildPublicPayload, profilePayload, personalInvitePayload, embedModal, dmModal };
