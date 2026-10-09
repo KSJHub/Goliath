@@ -104,24 +104,30 @@ function publicView(interaction) {
   const member = section.settings.memberInviteTemplate;
   const official = section.settings.officialInvite;
   const ready = Boolean(config.channelId && official.code);
-  const deployed = Boolean(config.messageId);
+  const deployed = Boolean(config.messageId && config.channelId);
+  const panelUrl = deployed ? `https://discord.com/channels/${interaction.guildId}/${config.channelId}/${config.messageId}` : null;
   return {
-    embeds: [new EmbedBuilder().setColor(config.color).setTitle('🏆 Public Panel & Leaderboard')
-      .setDescription('Publish the community invite panel and referral leaderboard in a server channel. Members can use the official link or request their own tracked referral link.')
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🏆 Public Panel & Leaderboard')
+      .setDescription('Configure and publish the community invite panel.')
       .addFields(
-        { name: 'Status', value: deployed ? '🟢 Deployed' : '⚪ Not deployed', inline: true },
-        { name: 'Panel Channel', value: (config.channelId ? `<#${config.channelId}>` : '⚠️ Not selected') + '\nWhere Goliath posts the public panel.', inline: true },
-        { name: 'Official Invite', value: officialUrl(official.code) || '⚠️ Create an official invite first', inline: false },
-        { name: 'Leaderboard', value: `Top ${config.leaderboardLimit} members\nShows referral rankings on the public panel.`, inline: true },
-        { name: 'Personal Referral Links', value: member.enabled ? '🟢 Enabled — members can request their own links.' : '🔴 Disabled — members cannot request new links.', inline: true },
-        { name: 'Panel Message', value: deployed && config.channelId ? `[View deployed panel](https://discord.com/channels/${interaction.guildId}/${config.channelId}/${config.messageId})` : 'Not posted yet', inline: false },
-        ...(!ready ? [{ name: 'Setup Required', value: 'Choose a panel channel and create the official invite before publishing.', inline: false }] : []),
-      )],
+        { name: 'Panel Status', value: deployed ? '🟢 Deployed (saved)' : '⚪ Not deployed', inline: true },
+        { name: 'Panel Channel', value: config.channelId ? `<#${config.channelId}>` : '⚠️ Not selected', inline: true },
+        { name: 'Leaderboard', value: `Top ${config.leaderboardLimit}`, inline: true },
+        { name: 'Member Invites', value: member.enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
+        { name: 'Official Invite', value: official.code ? '🟢 Configured' : '⚠️ Not configured', inline: true },
+        ...(panelUrl ? [{ name: 'Deployed Message', value: `[View public panel](${panelUrl})`, inline: false }] : []),
+        ...(!ready ? [{ name: '⚠️ Setup Required', value: [
+          !config.channelId ? 'Select a panel channel.' : null,
+          !official.code ? 'Create the official invite.' : null,
+        ].filter(Boolean).join(' '), inline: false }] : []),
+      )
+      .setFooter({ text: 'Goliath Invites · Public Panel' }).setTimestamp()],
     components: [
-      row(new ChannelSelectMenuBuilder().setCustomId('invites:panel-channel').setPlaceholder('📍 Where should the public panel be posted?').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      row(new StringSelectMenuBuilder().setCustomId('invites:panel-limit').setPlaceholder(`🏆 Leaderboard size: Top ${config.leaderboardLimit}`).addOptions([5, 10, 15, 20, 25].map((value) => ({ label: `Top ${value}`, value: String(value) })))),
-      row(button('invites:panel-deploy', deployed ? 'Update Public Panel' : 'Publish Public Panel', ButtonStyle.Success, !ready),
-        button('invites:panel-embed-modal', 'Edit Panel Text', ButtonStyle.Primary)),
+      row(new ChannelSelectMenuBuilder().setCustomId('invites:panel-channel').setPlaceholder('📍 Select panel channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
+      row(new StringSelectMenuBuilder().setCustomId('invites:panel-limit').setPlaceholder(`🏆 Leaderboard: Top ${config.leaderboardLimit}`).addOptions([5, 10, 15, 20, 25].map((value) => ({ label: `Top ${value}`, value: String(value) })))),
+      row(button('invites:panel-deploy', deployed ? '🔄 Update Panel' : '📢 Publish Panel', ButtonStyle.Success, !ready),
+        button('invites:panel-embed-modal', '✏️ Edit Panel', ButtonStyle.Secondary),
+        ...(panelUrl ? [new ButtonBuilder().setLabel('👁️ View Panel').setStyle(ButtonStyle.Link).setURL(panelUrl)] : [])),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
   };
@@ -205,7 +211,7 @@ function buildPublicPayload(guildId, sourceSection = null) {
   const entries = invites.leaderboard(guildId, panel.leaderboardLimit);
   const lines = entries.length
     ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** valid referral${entry.score === 1 ? '' : 's'}`).join('\n')
-    : 'No referrals recorded yet. Be the first to invite someone!';
+    : '🏆 **No referrals yet**\\nBe the first to invite a friend and claim the top spot!';
   const description = panel.description + (memberEnabled
     ? '\n\n**Want to compete?** Get your personal invite link below, share it with friends, and track your progress.'
     : '\n\nPersonal referral link requests are currently disabled.');
@@ -215,6 +221,7 @@ function buildPublicPayload(guildId, sourceSection = null) {
       .addFields(
         { name: '🔗 Official Server Invite', value: `[Join the server](${url})\nShare this link to invite someone directly.`, inline: false },
         { name: `🏆 Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
+        { name: '👥 Your Personal Invite', value: memberEnabled ? 'Use **My Invite Link** below to get your own link and track successful referrals.' : 'New personal invite requests are currently disabled.', inline: false },
       )
       .setFooter({ text: panel.footer }).setTimestamp()],
     components: [row(
