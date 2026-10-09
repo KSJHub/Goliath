@@ -210,16 +210,16 @@ function buildPublicPayload(guildId, sourceSection = null) {
   if (!url) throw new Error('Create the official invite before sending the public panel.');
   const entries = invites.leaderboard(guildId, panel.leaderboardLimit);
   const lines = entries.length
-    ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** valid referral${entry.score === 1 ? '' : 's'}`).join('\\n')
-    : '🏆 **No referrals yet**\\nBe the first to invite a friend and claim the top spot!';
-  const description = panel.description + '\\n\\n**Invite friends. Grow the community. Climb the leaderboard.**';
+    ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** referral${entry.score === 1 ? '' : 's'}`).join('\n')
+    : 'No referrals yet. **Be the first to claim the top spot!**';
+  const description = panel.description + '\n\n**Invite friends · Grow the community · Climb the leaderboard**';
   return {
     embeds: [new EmbedBuilder().setColor(panel.color).setTitle(panel.title)
       .setDescription(description)
       .addFields(
-        { name: '🔗 Official Server Invite', value: `[Join the server](${url})\nShare this link to invite someone directly.`, inline: false },
+        { name: '🔗 Official Server Invite', value: `[Join our community](${url})`, inline: false },
         { name: `🏆 Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
-        { name: '👥 Your Personal Invite', value: memberEnabled ? 'Use **My Invite Link** below to get your own link and track successful referrals.' : 'New personal invite requests are currently disabled.', inline: false },
+        { name: '💎 Your Personal Invite', value: memberEnabled ? 'Select **My Invite Link** below to share your link and earn referral points.' : 'New personal invite requests are currently disabled.', inline: false },
       )
       .setFooter({ text: panel.footer }).setTimestamp()],
     components: [row(
@@ -236,7 +236,22 @@ function profilePayload(guild, user) {
   const score = Math.max(0, Number(stats.active || 0) + Number(stats.bonus || 0));
   const rank = invites.leaderboard(guild.id, 100).findIndex((entry) => entry.inviterId === user.id);
   const personal = invites.findPersonalInvite(guild.id, user.id);
-  return { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`💎 ${user.displayName || user.username}'s Invite Profile`).setThumbnail(user.displayAvatarURL?.() || null).addFields({ name: 'Rank', value: rank >= 0 ? `#${rank + 1}` : 'Unranked', inline: true }, { name: 'Score', value: String(score), inline: true }, { name: 'Lifetime', value: String(stats.total || 0), inline: true }, { name: 'Active', value: String(stats.active || 0), inline: true }, { name: 'Personal Link', value: officialUrl(personal?.code) || 'No personal invite yet' }).setTimestamp()], components: [row(button('invites:member-personal', personal ? 'Resend My Link' : 'Get My Link', ButtonStyle.Primary))], flags: MessageFlags.Ephemeral };
+  return {
+    embeds: [new EmbedBuilder().setColor(0x5865F2)
+      .setTitle('💎 My Invite Stats')
+      .setDescription(`Referral progress for **${user.displayName || user.username}**.`)
+      .setThumbnail(user.displayAvatarURL?.() || null)
+      .addFields(
+        { name: '🏆 Rank', value: rank >= 0 ? `#${rank + 1}` : 'Unranked', inline: true },
+        { name: '💎 Score', value: String(score), inline: true },
+        { name: '👥 Active Referrals', value: String(stats.active || 0), inline: true },
+        { name: '📈 Lifetime Joins', value: String(stats.total || 0), inline: true },
+        { name: '🔗 Personal Invite', value: personal ? `[Open your invite](${officialUrl(personal.code)})\\nPermanent · Unlimited uses` : 'No personal link created yet.', inline: false },
+      )
+      .setFooter({ text: 'Goliath Invites · Member Stats' }).setTimestamp()],
+    components: [row(button('invites:member-personal', personal ? '📩 Resend My Link' : '🔗 Get My Link', ButtonStyle.Primary))],
+    flags: MessageFlags.Ephemeral,
+  };
 }
 
 function personalInvitePayload(interaction, result) {
