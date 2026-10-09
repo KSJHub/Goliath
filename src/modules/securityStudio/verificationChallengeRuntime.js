@@ -59,7 +59,7 @@ function startStep(guildId, userId, method, settings = {}) {
   const active = verificationChallenges.active(guildId, userId);
   if (active?.status === 'pending' && verificationChallenges.isExpired(active)) {
     verificationChallenges.expire(guildId, userId, active.challengeId);
-    return { ok: false, reason: 'expired_challenge', method };
+    // The expired challenge is closed; continue below to create a fresh challenge.
   }
   if (active?.status === 'pending') {
     if (active.method !== method) return { ok: false, reason: 'different_challenge_active', method, activeMethod: active.method, challenge: active };
