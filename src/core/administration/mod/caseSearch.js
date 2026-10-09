@@ -451,11 +451,13 @@ async function submitCaseSearch(i) {
   if (!canUseModAction(i.member, i.guild, 'view_case_detail')) return safeReply(i, ephemeralError('No permission to search moderation cases.'));
   const f = filtersFrom(i);
   if (f.error) return safeReply(i, ephemeralError(f.error));
+  if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
   const token = remember(i.guild.id, f), r = searchCases(i.guild.id, f);
   return safeReply(i, { ...payload(r, token), flags: 64 });
 }
 
 async function refreshCaseDetail(i, token, caseId) {
+  if (!i.deferred && !i.replied) await i.deferUpdate();
   const c = getCaseById(i.guild.id, caseId);
   if (!c) return safeReply(i, ephemeralError('Case not found.'));
   const audit = getCaseAudit(i.guild.id, caseId, { page: 0, pageSize: AUDIT_PAGE_SIZE });
@@ -639,6 +641,7 @@ async function handleCaseSearchSelect(i) {
   const id = String(i.customId || '');
   if (!id.startsWith('mod_case_search_select:')) return false;
   if (!canUseModAction(i.member, i.guild, 'view_case_detail')) return safeReply(i, ephemeralError('No permission to view case details.'));
+  if (!i.deferred && !i.replied) await i.deferUpdate();
   const [, token] = id.split(':');
   if (!stateFor(token, i.guild.id)) return safeReply(i, ephemeralError('This search has expired. Please start a new search.'));
   const caseId = Number(i.values?.[0]), c = getCaseById(i.guild.id, caseId);
