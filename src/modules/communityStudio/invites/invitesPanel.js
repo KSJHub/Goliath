@@ -71,7 +71,7 @@ function officialView(interaction) {
         )],
       components: [
         row(button('invites:official-start', config.code ? '✏️ Edit Invite' : '➕ Create Invite', ButtonStyle.Success), ...(config.code ? [button('invites:official-regenerate', 'Regenerate'), button('invites:official-delete', 'Delete', ButtonStyle.Danger)] : [])),
-        row(button('invites:home', '⬅️ Back')),
+        row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
       ],
     };
   }
@@ -90,7 +90,8 @@ function officialView(interaction) {
     components.push(row(new StringSelectMenuBuilder().setCustomId('invites:official-uses').setPlaceholder('🔢 Maximum uses').addOptions([0, 1, 5, 10, 25, 50, 100].map((value) => ({ label: value ? String(value) : 'Unlimited', value: String(value), default: value === Number(draft.maxUses || 0) })))));
   }
   if (step === 2 && info.pages > 1) components.push(row(button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)));
-  components.push(row(button('invites:official-back', '⬅️ Back'), button(step === 4 ? 'invites:official-create' : 'invites:official-next', step === 4 ? (config.code ? '✅ Apply Changes' : '✅ Create Invite') : 'Next ➡️', ButtonStyle.Success, step === 1 && !draft.channelId)));
+  components.push(row(button(step === 4 ? 'invites:official-create' : 'invites:official-next', step === 4 ? (config.code ? '✅ Apply Changes' : '✅ Create Invite') : 'Next ➡️', ButtonStyle.Success, step === 1 && !draft.channelId)));
+  components.push(row(button('invites:official-back', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')));
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🌍 Official Invite • ' + headings[step])
       .setDescription(descriptions[step])
@@ -123,7 +124,8 @@ function publicView(interaction) {
       row(new ChannelSelectMenuBuilder().setCustomId('invites:panel-channel').setPlaceholder('Select panel channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       row(new StringSelectMenuBuilder().setCustomId('invites:panel-limit').setPlaceholder(`Leaderboard: Top ${config.leaderboardLimit}`).addOptions([5, 10, 15, 20, 25].map((value) => ({ label: `Top ${value}`, value: String(value) })))),
       row(button('invites:member-settings', 'Member Link Settings', ButtonStyle.Primary), button('invites:panel-embed-modal', 'Edit Panel Text', ButtonStyle.Primary)),
-      row(button('invites:panel-deploy', 'Send / Update Panel', ButtonStyle.Success, !config.channelId || !section.settings.officialInvite.code), button('invites:home', 'Back')),
+      row(button('invites:panel-deploy', 'Send / Update Panel', ButtonStyle.Success, !config.channelId || !section.settings.officialInvite.code)),
+      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
   };
 }
@@ -144,7 +146,8 @@ function memberSettingsView(interaction) {
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('invites:member-channel').setPlaceholder('Select member invite channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       ...(info.roles.length ? [row(rolePageSelect(`invites:member-roles:${info.page}`, 'Roles granted to invitees', info))] : []),
-      row(button('invites:member-enabled', config.enabled ? 'Disable Links' : 'Enable Links'), button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary), button('invites:public-config', 'Back'), button('invites:member-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:member-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
+      row(button('invites:member-enabled', config.enabled ? 'Disable Links' : 'Enable Links'), button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary), button('invites:member-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:member-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
+      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
   };
 }
@@ -160,7 +163,7 @@ function adminView(interaction) {
     components: [
       row(button('invites:invite-manager', 'Invite Manager', ButtonStyle.Primary), button('invites:health', 'Health'), button('invites:repair', 'Repair')),
       row(button(armed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', armed ? 'Confirm Reset' : 'Reset Leaderboard', ButtonStyle.Danger), button('invites:default-panel', 'Restore Defaults'), button('invites:toggle', enabled ? 'Disable' : 'Enable', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
-      row(button('invites:home', 'Back')),
+      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
     ],
   };
 }
@@ -176,7 +179,7 @@ function managerView(interaction) {
     row(new StringSelectMenuBuilder().setCustomId('invites:manager-display').setPlaceholder('Members shown').addOptions([5, 10, 15, 20, 0].map((value) => ({ label: value ? `Display ${value}` : 'Display All', value: String(value) })))),
     row(new UserSelectMenuBuilder().setCustomId('invites:manager-select-member').setPlaceholder('Select a member').setMinValues(1).setMaxValues(1)),
     row(button('invites:manager-verify', 'Verify', ButtonStyle.Secondary, !selected), button('invites:manager-resend', 'Resend', ButtonStyle.Primary, !selected), button('invites:manager-delete', 'Delete', ButtonStyle.Danger, !selected), button('invites:manager-reset-member', 'Reset Score', ButtonStyle.Danger, !selected)),
-    row(button('invites:admin-config', 'Back')),
+    row(button('invites:admin-config', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
   ] };
 }
 
