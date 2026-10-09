@@ -53,8 +53,6 @@ function officialView(interaction) {
   const state = sessionFor(interaction);
   const info = rolePages(interaction.guild, config.roleIds || [], state.officialRolePage || 0);
   state.officialRolePage = info.page;
-  const memberInfo = rolePages(interaction.guild, member.roleIds || [], state.memberRolePage || 0);
-  state.memberRolePage = memberInfo.page;
   const ageNames = { 0: 'Never', 1800: '30 minutes', 3600: '1 hour', 21600: '6 hours', 43200: '12 hours', 86400: '1 day', 604800: '7 days', 2592000: '30 days' };
   const expires = link?.expiresAt ? new Date(link.expiresAt) : null;
   const expiryLabel = expires && Number.isFinite(expires.getTime()) ? `<t:${Math.floor(expires.getTime() / 1000)}:R>` : 'Never';
@@ -73,12 +71,14 @@ function officialView(interaction) {
   const officialDestination = config.channelId ? `<#${config.channelId}>` : 'Not selected';
   const memberDestination = member.channelId ? `<#${member.channelId}> (override)` : config.channelId ? 'Same as official' : 'Not configured';
   const officialUses = configured ? (live?.exists ? `${live.uses} (Discord)` : `${link?.uses || 0} (recorded)`) : '—';
-  const memberExpiry = ageNames[member.maxAge || 0] || 'Never';
-  const memberUses = member.maxUses ? String(member.maxUses) : 'Unlimited';
+  const memberLimits = member.limitsOverride || ((member.maxAge || member.maxUses) ? { maxAge: member.maxAge, maxUses: member.maxUses } : null);
+  const memberRoles = member.roleIdsOverride ?? ((member.roleIds || []).length ? member.roleIds : config.roleIds);
+  const memberExpiry = ageNames[memberLimits ? memberLimits.maxAge : config.maxAge] || 'Never';
+  const memberUses = (memberLimits ? memberLimits.maxUses : config.maxUses) || 'Unlimited';
   const officialExpiry = configured ? expiryLabel : ageNames[config.maxAge || 0] || 'Never';
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🔗 Invite Management')
-      .setDescription('Manage the official server link and personal referral links. Member invites inherit the official destination unless overridden in Settings.')
+      .setDescription('One shared invite configuration. Member referrals inherit destination, roles and limits unless overridden in Settings.')
       .addFields(
         { name: '🌍 OFFICIAL INVITE', value: `**${liveStatus}**\n${officialUrl(config.code) || 'No invite link created'}`, inline: false },
         { name: '📍 Destination', value: officialDestination, inline: true },
@@ -89,26 +89,24 @@ function officialView(interaction) {
         { name: '\u200b', value: '\u200b', inline: false },
         { name: '👥 MEMBER INVITES', value: `${member.enabled ? '🟢 Enabled' : '🔴 Disabled'} · **${memberLinks}** personal links\nMembers share individual links to earn tracked referrals.`, inline: false },
         { name: '📍 Destination', value: memberDestination, inline: true },
-        { name: '⏳ Expiry / Uses', value: `${memberExpiry} / ${memberUses}`, inline: true },
-        { name: '🎭 Join Roles', value: roleList(member.roleIds), inline: true },
+        { name: '⏳ Expiry / Uses', value: `${memberExpiry} / ${memberUses}${memberLimits ? ' (override)' : ' (inherited)'}`, inline: true },
+        { name: '🎭 Join Roles', value: roleList(memberRoles) + (member.roleIdsOverride || (member.roleIds || []).length ? ' (override)' : ' (inherited)'), inline: true },
         ...(!config.channelId ? [{ name: '⚠️ Setup Required', value: 'Select an official destination channel before creating the invite.', inline: false }] : []),
-        ...(configured && !needsUpdate ? [{ name: 'Update Invite', value: 'Already up to date. Change the official destination, roles or limits to enable updating.', inline: false }] : []),
+
         ...(updateArmed ? [{ name: '⚠️ Confirm Replacement', value: 'Updating replaces the existing official link. Confirm within 30 seconds.', inline: false }] : []),
         ...(info.pages > 1 ? [{ name: 'Official Role Page', value: `${info.page + 1}/${info.pages}`, inline: true }] : []),
-        ...(memberInfo.pages > 1 ? [{ name: 'Member Role Page', value: `${memberInfo.page + 1}/${memberInfo.pages}`, inline: true }] : []),
+
       )],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Official invite destination').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Official join roles (optional)', info))] : []),
-      ...(memberInfo.roles.length ? [row(rolePageSelect(`invites:member-roles:${memberInfo.page}`, '🎭 Member join roles (optional)', memberInfo))] : []),
+
       row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
-        button('invites:official-limits', 'Official Limits', ButtonStyle.Primary),
+        button('invites:shared-limits', 'Link Limits', ButtonStyle.Primary),
         ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
-        button('invites:member-limits', 'Member Limits', ButtonStyle.Primary),
         button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
-        ...(info.pages > 1 ? [button('invites:official-role-next', 'Official Roles ▶')] : []),
-        ...(memberInfo.pages > 1 ? [button('invites:member-role-next', 'Member Roles ▶')] : [])),
+        ...(info.pages > 1 ? [button('invites:official-role-next', 'Roles ▶')] : [])),
     ],
   };
 }
@@ -118,6 +116,20 @@ function inviteLimitsModal(interaction, member = false) {
   return new ModalBuilder().setCustomId(member ? 'invites:member-limits-submit' : 'invites:official-limits-submit').setTitle(member ? 'Member Invite Limits' : 'Official Invite Limits').addComponents(
     row(new TextInputBuilder().setCustomId('maxAge').setLabel('Expiry: Never, 1 hour, 1 day, 7 days...').setStyle(TextInputStyle.Short).setValue(({0:'Never',1800:'30 minutes',3600:'1 hour',21600:'6 hours',43200:'12 hours',86400:'1 day',604800:'7 days',2592000:'30 days'})[config.maxAge || 0] || 'Never').setRequired(true)),
     row(new TextInputBuilder().setCustomId('maxUses').setLabel('Maximum uses: Unlimited, 1, 5, 10...').setStyle(TextInputStyle.Short).setValue(config.maxUses ? String(config.maxUses) : 'Unlimited').setRequired(true)),
+  );
+}
+
+function sharedLimitsModal(interaction) {
+  const section = invites.getSection(interaction.guildId);
+  const official = section.settings.officialInvite;
+  const member = section.settings.memberInviteTemplate;
+  const override = member.limitsOverride || ((member.maxAge || member.maxUses) ? { maxAge: member.maxAge, maxUses: member.maxUses } : null);
+  const names = {0:'Never',1800:'30 minutes',3600:'1 hour',21600:'6 hours',43200:'12 hours',86400:'1 day',604800:'7 days',2592000:'30 days'};
+  return new ModalBuilder().setCustomId('invites:shared-limits-submit').setTitle('Shared Invite Limits').addComponents(
+    row(new TextInputBuilder().setCustomId('officialAge').setLabel('Official expiry (Never, 1 day, 7 days...)').setStyle(TextInputStyle.Short).setRequired(true).setValue(names[official.maxAge || 0] || 'Never')),
+    row(new TextInputBuilder().setCustomId('officialUses').setLabel('Official uses (Unlimited, 1, 5, 10...)').setStyle(TextInputStyle.Short).setRequired(true).setValue(official.maxUses ? String(official.maxUses) : 'Unlimited')),
+    row(new TextInputBuilder().setCustomId('memberAge').setLabel('Member expiry (Inherit or duration)').setStyle(TextInputStyle.Short).setRequired(true).setValue(override ? names[override.maxAge || 0] || 'Never' : 'Inherit')),
+    row(new TextInputBuilder().setCustomId('memberUses').setLabel('Member uses (Inherit or number)').setStyle(TextInputStyle.Short).setRequired(true).setValue(override ? (override.maxUses ? String(override.maxUses) : 'Unlimited') : 'Inherit')),
   );
 }
 
@@ -294,4 +306,4 @@ function dmModal(interaction) {
   );
 }
 module.exports = {
-  officialLimitsModal, memberLimitsModal, sessionFor, buildInviteStudioPayload, buildPublicPayload, profilePayload, personalInvitePayload, embedModal, dmModal };
+  officialLimitsModal, memberLimitsModal, sharedLimitsModal, sessionFor, buildInviteStudioPayload, buildPublicPayload, profilePayload, personalInvitePayload, embedModal, dmModal };
