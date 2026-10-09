@@ -495,7 +495,7 @@ async function handlePresetInteraction(i) {
       `[Embed Presets] Loaded "${name}" with ${galleryCount} gallery media item(s).`
     );
 
-    await i.update(
+    await i.editReply(
       panel.buildEditorPanel(
         i,
         panel.memberName(i)
@@ -1742,17 +1742,17 @@ async function handleCoreInteraction(i) {
   if (i.isModalSubmit?.() && (customId === 'embed:media-gallery-save-new' || customId.startsWith('embed:media-gallery-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-gallery-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.gallery[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeGalleryItem({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt'), type: existing.type, headerType: existing.headerType, spoiler: existing.spoiler, placement: existing.placement, alignment: existing.alignment, size: existing.size }); if (!entry.source) { await i.reply({ content: 'A media URL or variable is required.', flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; let selectedMediaIndex; if (editingIndex == null) { if (gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: 'Maximum gallery item limit reached.', flags: 64 }); return true; } gallery.push(entry); selectedMediaIndex = gallery.length - 1; } else { gallery[editingIndex] = entry; selectedMediaIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex }); return replyMediaPanel(i); }
   if (i.isModalSubmit?.() && (customId === 'embed:media-file-save-new' || customId.startsWith('embed:media-file-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-file-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.files[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeFile({ source: i.fields.getTextInputValue('source'), name: i.fields.getTextInputValue('name'), description: i.fields.getTextInputValue('description'), spoiler: existing.spoiler === true }); if (!entry.source) { await i.reply({ content: 'A file URL or variable is required.', flags: 64 }); return true; } const files = [...panelMedia.files]; let selectedFileIndex; if (editingIndex == null) { if (files.length >= panel.mediaModel.MAX_FILES) { await i.reply({ content: 'Maximum file limit reached.', flags: 64 }); return true; } files.push(entry); selectedFileIndex = files.length - 1; } else { files[editingIndex] = entry; selectedFileIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, files }, { selectedFileIndex }); return replyMediaPanel(i); }
 
-  if (customId === 'embed:test-send') { try { const payload = await buildPayload(state, i, true); payload.allowedMentions = panel.allowedMentions(state, i); await i.reply(payload); } catch (error) { console.error('[Embed] test payload failed:', error); await i.reply({ content: `❌ Embed test failed: ${error?.message || error}`, flags: 64 }); } return true; }
+  if (customId === 'embed:test-send') { await i.deferReply({ flags: MessageFlags.Ephemeral }); try { const payload = await buildPayload(state, i, true); payload.allowedMentions = panel.allowedMentions(state, i); await i.editReply(payload); } catch (error) { console.error('[Embed] test payload failed:', error); await i.editReply({ content: `❌ Embed test failed: ${error?.message || error}`, flags: 64 }); } return true; }
 
   if (customId === 'embed:use') {
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
     const channel =
       i.guild.channels.cache.get(state.channelId) ||
       await i.guild.channels.fetch(state.channelId).catch(() => null);
 
     if (!isTextBasedChannel(channel)) {
-      await i.reply({
+      await i.editReply({
         content: 'Invalid channel.',
-        flags: 64,
       });
       return true;
     }
@@ -1769,9 +1769,8 @@ async function handleCoreInteraction(i) {
     );
 
     if (!access.ok) {
-      await i.reply({
+      await i.editReply({
         content: panel.trim(access.message, 1800),
-        flags: 64,
       });
       return true;
     }
@@ -1836,9 +1835,8 @@ async function handleCoreInteraction(i) {
         selectedPreset: presetName,
       });
 
-      await i.reply({
+      await i.editReply({
         content: `✅ Embed posted to <#${state.channelId}> and saved as active`,
-        flags: 64,
       });
     } catch (error) {
       if (sent) {
@@ -1870,17 +1868,15 @@ async function handleCoreInteraction(i) {
           }
         );
 
-        await i.reply({
+        await i.editReply({
           content: rollbackSucceeded
             ? '❌ The embed could not be fully saved by Goliath. The Discord message was rolled back and the editor remains unsaved.'
             : `🚨 The embed could not be fully saved by Goliath, and the Discord message could not be rolled back. Message ID: ${sent.id}. The editor remains unsaved and this deployment requires reconciliation.`,
-          flags: 64,
-        });
+          });
       } else {
-        await i.reply({
+        await i.editReply({
           content: panel.embedOperationError(error, channel.id, 'send'),
-          flags: 64,
-        });
+          });
       }
     }
 
@@ -1995,7 +1991,7 @@ async function handleLegacyInteraction(i) {
     ).trim();
 
     if (!/^\d{17,20}$/.test(channelId)) {
-      await i.reply({
+      await i.editReply({
         content:
           '❌ That is not a valid Discord channel ID.',
         flags: MessageFlags.Ephemeral,
@@ -2121,34 +2117,34 @@ async function handleLegacyInteraction(i) {
       return true;
     }
     if (customId === 'embed:panel-add') {
-      if (state.panels.length >= panel.MAX_PANELS) { await i.reply({ content: 'Maximum panel limit reached.', flags: 64 }); return true; }
+      if (state.panels.length >= panel.MAX_PANELS) { await i.editReply({ content: 'Maximum panel limit reached.', flags: 64 }); return true; }
       const panels = [...state.panels, panel.basePanel({ title: `Panel ${state.panels.length + 1}`, description: 'Add content here.', color: state.color })]; panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: panels.length - 1, selectedFieldIndex: null }); await i.update(panel.buildPanelsPanel(i, name)); return true;
     }
     if (customId === 'embed:panel-duplicate') {
-      if (state.panels.length >= panel.MAX_PANELS) { await i.reply({ content: 'Maximum panel limit reached.', flags: 64 }); return true; }
+      if (state.panels.length >= panel.MAX_PANELS) { await i.editReply({ content: 'Maximum panel limit reached.', flags: 64 }); return true; }
       const panels = [...state.panels]; panels.splice(state.selectedPanelIndex + 1, 0, panel.clone(state.panels[state.selectedPanelIndex])); panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: state.selectedPanelIndex + 1, selectedFieldIndex: null }); await i.update(panel.buildPanelsPanel(i, name)); return true;
     }
     if (customId === 'embed:panel-remove') {
-      if (state.panels.length <= 1) { await i.reply({ content: 'You need at least one panel.', flags: 64 }); return true; }
+      if (state.panels.length <= 1) { await i.editReply({ content: 'You need at least one panel.', flags: 64 }); return true; }
       const panels = [...state.panels]; panels.splice(state.selectedPanelIndex, 1); panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: Math.max(0, state.selectedPanelIndex - 1), selectedFieldIndex: null }); await i.update(panel.buildPanelsPanel(i, name)); return true;
     }
     if (customId === 'embed:panel-up' || customId === 'embed:panel-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedPanelIndex + delta; if (target < 0 || target >= state.panels.length) return true; const panels = [...state.panels]; [panels[state.selectedPanelIndex], panels[target]] = [panels[target], panels[state.selectedPanelIndex]]; panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: target }); await i.update(panel.buildPanelsPanel(i, name)); return true; }
     if (customId === 'embed:field-add') { await i.showModal(panel.fieldModal(state)); return true; }
-    if (customId === 'embed:field-edit') { if (!Number.isInteger(state.selectedFieldIndex)) { await i.reply({ content: 'Select a field first.', flags: 64 }); return true; } await i.showModal(panel.fieldModal(state, state.selectedFieldIndex)); return true; }
+    if (customId === 'embed:field-edit') { if (!Number.isInteger(state.selectedFieldIndex)) { await i.editReply({ content: 'Select a field first.', flags: 64 }); return true; } await i.showModal(panel.fieldModal(state, state.selectedFieldIndex)); return true; }
     if (customId === 'embed:field-remove-selected') { const fields = [...(state.fields || [])]; if (Number.isInteger(state.selectedFieldIndex)) fields.splice(state.selectedFieldIndex, 1); panel.markUnsaved(i, panel.saveSelected({ ...state, selectedFieldIndex: null }, { fields })); await i.update(panel.buildFieldsPanel(i, name)); return true; }
     if (customId === 'embed:button-add') { await i.showModal(panel.buttonModal(state)); return true; }
-    if (customId === 'embed:button-edit') { if (!Number.isInteger(state.selectedButtonIndex)) { await i.reply({ content: 'Select a button first.', flags: 64 }); return true; } await i.showModal(panel.buttonModal(state, state.selectedButtonIndex)); return true; }
+    if (customId === 'embed:button-edit') { if (!Number.isInteger(state.selectedButtonIndex)) { await i.editReply({ content: 'Select a button first.', flags: 64 }); return true; } await i.showModal(panel.buttonModal(state, state.selectedButtonIndex)); return true; }
     if (customId === 'embed:button-remove-selected') { const buttons = [...(state.buttons || [])]; if (Number.isInteger(state.selectedButtonIndex)) buttons.splice(state.selectedButtonIndex, 1); panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: null }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
     if (customId === 'embed:button-move-up' || customId === 'embed:button-move-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedButtonIndex + delta; if (!Number.isInteger(state.selectedButtonIndex) || target < 0 || target >= (state.buttons || []).length) return true; const buttons = [...state.buttons]; [buttons[state.selectedButtonIndex], buttons[target]] = [buttons[target], buttons[state.selectedButtonIndex]]; panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: target }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
 
   }
 
   if (i.isModalSubmit?.()) {
-    if (customId === 'embed:save-color') { const hex = i.fields.getTextInputValue('hex'); if (!panel.validHex(hex)) { await i.reply({ content: 'Invalid HEX.', flags: 64 }); return true; } panel.markUnsaved(i, panel.saveSelected(state, { color: panel.normHex(hex) })); await i.reply({ ...panel.buildEditorPanel(i, name), flags: 64 }); return true; }
-    if (customId.startsWith('embed:save-content:')) { panel.markUnsaved(i, panel.saveSelected(state, { title: i.fields.getTextInputValue('title'), description: i.fields.getTextInputValue('description') })); await i.reply({ ...panel.buildContentManagerPanel(i), flags: 64 }); return true; }
-    if (customId.startsWith('embed:save-media:')) { panel.markUnsaved(i, panel.saveSelected(state, { authorIcon: i.fields.getTextInputValue('authorIcon'), thumbnail: i.fields.getTextInputValue('thumbnail'), image: i.fields.getTextInputValue('image'), authorUrl: i.fields.getTextInputValue('authorUrl'), footerIcon: i.fields.getTextInputValue('footerIcon') })); await i.reply({ ...panel.buildBuilderPanel(i, name), flags: 64 }); return true; }
-    if (customId === 'embed:field-save-new' || customId.startsWith('embed:field-save:')) { const fields = [...(state.fields || [])]; const field = { name: i.fields.getTextInputValue('name'), value: i.fields.getTextInputValue('value'), inline: /^y(es)?$/i.test(i.fields.getTextInputValue('layout')) }; if (customId === 'embed:field-save-new') fields.push(field); else fields[Number(customId.split(':').pop())] = field; panel.markUnsaved(i, panel.saveSelected(state, { fields })); await i.reply({ ...panel.buildFieldsPanel(i, name), flags: 64 }); return true; }
-    if (customId === 'embed:button-save-new' || customId.startsWith('embed:button-save:')) { const buttons = [...(state.buttons || [])]; const entry = { label: i.fields.getTextInputValue('label'), emoji: i.fields.getTextInputValue('emoji'), style: i.fields.getTextInputValue('style'), url: i.fields.getTextInputValue('url') }; if (customId === 'embed:button-save-new') buttons.push(entry); else buttons[Number(customId.split(':').pop())] = entry; panel.markUnsaved(i, { ...state, buttons }); await i.reply({ ...panel.buildButtonsPanel(i, name), flags: 64 }); return true; }
+    if (customId === 'embed:save-color') { const hex = i.fields.getTextInputValue('hex'); if (!panel.validHex(hex)) { await i.editReply({ content: 'Invalid HEX.', flags: 64 }); return true; } panel.markUnsaved(i, panel.saveSelected(state, { color: panel.normHex(hex) })); await i.editReply({ ...panel.buildEditorPanel(i, name), flags: 64 }); return true; }
+    if (customId.startsWith('embed:save-content:')) { panel.markUnsaved(i, panel.saveSelected(state, { title: i.fields.getTextInputValue('title'), description: i.fields.getTextInputValue('description') })); await i.editReply({ ...panel.buildContentManagerPanel(i), flags: 64 }); return true; }
+    if (customId.startsWith('embed:save-media:')) { panel.markUnsaved(i, panel.saveSelected(state, { authorIcon: i.fields.getTextInputValue('authorIcon'), thumbnail: i.fields.getTextInputValue('thumbnail'), image: i.fields.getTextInputValue('image'), authorUrl: i.fields.getTextInputValue('authorUrl'), footerIcon: i.fields.getTextInputValue('footerIcon') })); await i.editReply({ ...panel.buildBuilderPanel(i, name), flags: 64 }); return true; }
+    if (customId === 'embed:field-save-new' || customId.startsWith('embed:field-save:')) { const fields = [...(state.fields || [])]; const field = { name: i.fields.getTextInputValue('name'), value: i.fields.getTextInputValue('value'), inline: /^y(es)?$/i.test(i.fields.getTextInputValue('layout')) }; if (customId === 'embed:field-save-new') fields.push(field); else fields[Number(customId.split(':').pop())] = field; panel.markUnsaved(i, panel.saveSelected(state, { fields })); await i.editReply({ ...panel.buildFieldsPanel(i, name), flags: 64 }); return true; }
+    if (customId === 'embed:button-save-new' || customId.startsWith('embed:button-save:')) { const buttons = [...(state.buttons || [])]; const entry = { label: i.fields.getTextInputValue('label'), emoji: i.fields.getTextInputValue('emoji'), style: i.fields.getTextInputValue('style'), url: i.fields.getTextInputValue('url') }; if (customId === 'embed:button-save-new') buttons.push(entry); else buttons[Number(customId.split(':').pop())] = entry; panel.markUnsaved(i, { ...state, buttons }); await i.editReply({ ...panel.buildButtonsPanel(i, name), flags: 64 }); return true; }
   }
 
   return false;
