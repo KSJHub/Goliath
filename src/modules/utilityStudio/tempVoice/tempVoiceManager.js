@@ -120,7 +120,7 @@ async function createTempChannel(newState, hub) {
 async function cleanupTempChannel(oldState) {
   const guild = oldState.guild;
   const oldChannel = oldState.channel;
-  if (!guild || !oldChannel) return null;
+  if (!guild?.id || !oldChannel || !tempVoiceStore.isEnabled(guild.id)) return null;
   const section = tempVoiceStore.getTempVoiceSection(guild.id);
   const tempChannel = section.channels?.[oldChannel.id] || null;
   if (!tempChannel || (oldChannel.members?.size || 0) > 0) return null;
