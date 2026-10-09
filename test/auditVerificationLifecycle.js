@@ -75,7 +75,8 @@ for (const section of ['roles', 'security', 'intelligence', 'flow', 'messages', 
   contains(panel, `'${section}'`, `admin section ${section}`);
   contains(panel, `admin:verification:page:${section}`, `admin navigation ${section}`);
 }
-contains(panel, 'Verification · Front Door', 'new Verification home');
+contains(panel, "emb('🛡️ Verification'", 'Verification home title');
+assert(!panel.includes('Front Door'), 'Legacy Front Door wording must not appear in Verification panel');
 contains(panel, 'Verification · Security', 'Security control page');
 contains(panel, 'NEW MEMBER → PENDING → VERIFYING → VERIFIED → SERVER', 'canonical member journey');
 contains(panel, 'admin:verification:security:', 'stackable security controls');
