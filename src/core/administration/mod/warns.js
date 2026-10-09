@@ -21,7 +21,7 @@ const {
   emitCaseStatusUpdated,
   sendModLog,
 } = require('./storage');
-const { safeReply, ephemeralError } = require('../../../core/ui/interactionResponse');
+const { safeReply, safeEditReply, ephemeralError } = require('../../../core/ui/interactionResponse');
 const { ensureActionAccess, requireModeratableTarget, recordModerationSystemEvent } = require('./permissions');
 
 const NO_EXPIRY_VALUES = new Set(['', 'never', 'none']);
