@@ -25,6 +25,8 @@ const challengeInteractions = read('./src/modules/securityStudio/verificationCha
 
 // Guard the security handoff and challenge recovery against regressions.
 contains(manager, 'pendingSecurity:true', 'manager delegates security checks to continuation');
+contains(manager, 'Verification starting roles could not be confirmed.', 'block security flow if starting roles fail');
+contains(manager, 'pending.some(role=>confirmed.roles.cache.has(role.id))', 'confirm pending roles removed before security flow');
 contains(flow, 'challengeRuntime.startStep(g.id,m.id,step,s)', 'challenge reuse validated by runtime');
 assert(!flow.includes("active?.status==='pending'?{ok:true,pending:true"), 'Continuation must not bypass challenge runtime validation.');
 contains(challengeRuntime, "reason: 'security_configuration_changed'", 'reject outdated security challenges');
