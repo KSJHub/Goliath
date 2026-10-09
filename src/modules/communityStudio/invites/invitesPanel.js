@@ -204,8 +204,8 @@ function adminView(interaction) {
       components.push(row(
         button('invites:panel-embed-modal', '✏️ Edit Panel'),
         button('invites:panel-preview', '👁️ Preview Panel', ButtonStyle.Secondary, !configured),
+        button('invites:default-panel', panelResetArmed ? '⚠️ Confirm Panel Reset' : '🧹 Reset Public Panel'),
       ));
-      components.push(row(button('invites:default-panel', panelResetArmed ? '⚠️ Confirm Panel Reset' : '🧹 Reset Public Panel')));
       if (panelResetArmed) embed.addFields({ name: '⚠️ Confirm Panel Reset', value: 'Confirm within 30 seconds to restore default panel text. Channel, deployed message and invite DM are preserved.', inline: false });
     }
     components.push(row(button('invites:settings-home', '⬅️ Back')));
