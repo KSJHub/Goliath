@@ -127,13 +127,24 @@ async function handleStaffAction(interaction, parsed, manager) {
   if (!result.complete || !result.action) { await interaction.reply({ content: `❌ Staff action failed: ${result.reason || 'challenge unavailable'}.`, flags: MessageFlags.Ephemeral }); return true; }
   let resumed = null;
   if (result.quarantine) {
-    if (typeof manager?.quarantineVerificationMember === 'function') await manager.quarantineVerificationMember(interaction.guild, parsed.userId, 'Quarantined by Verification staff approval');
-    else verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'quarantined', quarantinedAt: new Date().toISOString() });
+    if (typeof manager?.quarantineVerificationMember !== 'function') {
+      await interaction.reply({ content: 'Quarantine service is unavailable. Contact an administrator.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    const outcome = await manager.quarantineVerificationMember(interaction.guild, parsed.userId, 'Staff-directed verification quarantine');
+    if (!outcome?.quarantined) {
+      await interaction.reply({ content: 'Quarantine could not be applied. Check the role configuration and permissions.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
   } else if (result.recordFailure) {
-    if (typeof manager?.recordVerificationFailure === 'function') await manager.recordVerificationFailure(interaction.guild, parsed.userId, 'staff_approval', 'Rejected by Verification staff');
-    else {
-      verificationStore.recordAttempt(interaction.guildId, parsed.userId, { failed: true, step: 'staff_approval', reason: 'Rejected by Verification staff' });
-      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'security_failed', step: 'staff_approval', reason: 'Rejected by Verification staff', staffUserId: clean(interaction.user.id) });
+    if (typeof manager?.recordVerificationFailure !== 'function') {
+      await interaction.reply({ content: 'Verification failure service is unavailable. Contact an administrator.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    const outcome = await manager.recordVerificationFailure(interaction.guild, parsed.userId, 'staff_approval', 'Rejected by Verification staff');
+    if (!outcome?.quarantined) {
+      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'rejected', activeSecurityMethod: null });
+      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_verification_rejected', staffUserId: clean(interaction.user.id) });
     }
   } else resumed = await maybeResumeFlow(interaction, result, manager, parsed.userId);
   if (resumed?.challenge) await publishResumedChallenge(interaction, parsed.userId, resumed).catch(error => console.error('[Verification] Could not publish resumed challenge:', error));
