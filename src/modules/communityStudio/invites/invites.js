@@ -37,8 +37,8 @@ function defaults() {
         maxUses: 0,
         temporary: false,
         autoReplaceMissing: true,
-        dmTitle: '🔗 Your personal invite for {server}',
-        dmMessage: 'Share this link with friends. Every valid join counts towards your Invite Studio score.\n\n{invite}',
+        dmTitle: '💎 Your Personal Invite to {server}',
+        dmMessage: "Hey {user}! 👋\\n\\nYour very own invitation to **{server}** is ready!\\n\\nInvite your friends, grow our community and earn your place on the referral leaderboard. Every eligible referral brings you one step closer to the top! 🏆\\n\\n**Share your link, bring your friends and let the competition begin! 💎**",
       },
       publicPanel: {
         channelId: null,
@@ -135,8 +135,8 @@ function normalize(section = {}) {
         limitsOverride: null,
         temporary: false,
         autoReplaceMissing: memberTemplate.autoReplaceMissing !== false,
-        dmTitle: clean(memberTemplate.dmTitle || base.settings.memberInviteTemplate.dmTitle, 256),
-        dmMessage: clean(memberTemplate.dmMessage || base.settings.memberInviteTemplate.dmMessage, 3500),
+        dmTitle: clean(memberTemplate.dmTitle === "🔗 Your personal invite for {server}" ? base.settings.memberInviteTemplate.dmTitle : (memberTemplate.dmTitle || base.settings.memberInviteTemplate.dmTitle), 256),
+        dmMessage: clean(memberTemplate.dmMessage === "Share this link with friends. Every valid join counts towards your Invite Studio score.\\n\\n{invite}" ? base.settings.memberInviteTemplate.dmMessage : (memberTemplate.dmMessage || base.settings.memberInviteTemplate.dmMessage), 3500),
       },
       publicPanel: {
         ...base.settings.publicPanel,
