@@ -140,7 +140,7 @@ async function handleInviteStudioInteraction(interaction) {
     'invites:home': 'overview',
     'invites:official-settings': 'official-settings',
     'invites:public-config': 'public-config',
-    'invites:member-settings': 'member-settings',
+    'invites:member-settings': 'official',
     'invites:admin-config': 'admin-config',
     'invites:invite-manager': 'invite-manager',
   };
