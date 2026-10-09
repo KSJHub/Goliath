@@ -1317,7 +1317,7 @@ function adminModuleRoutingAudit() {
       [adminCommand.includes('if (!canUseSettings(interaction))'), 'admin settings permission guard'],
       [adminCommand.includes('recordCaseAudit('), 'security containment case audit persistence'],
       [securityPanels.includes('interaction.guild?.ownerId !== interaction.user?.id'), 'owner-only recovery control'],
-      [modCommand.includes('enforceCommandAccess(interaction,command)'), 'moderation command access control'],
+      [modCommand.includes('enforceCommandAccess(interaction, command)'), 'moderation command access control'],
       [responseGuard.includes('module.exports'), 'shared interaction response guard exports'],
     ];
     for (const [present, label] of interactionContracts) assert(present, `Backend regression: missing ${label}`);
