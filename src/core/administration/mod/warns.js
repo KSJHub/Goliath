@@ -427,6 +427,7 @@ async function submitWarning(interaction, target) {
 }
 
 async function submitWarningModal(interaction, targetId, refreshDashboard = null) {
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: 64 });
   const target = await requireModeratableTarget(interaction, targetId, 'warn');
   if (!target) return { ok: false, handled: true, target: null, error: 'Warning target unavailable or denied.' };
   const result = await submitWarning(interaction, target);
