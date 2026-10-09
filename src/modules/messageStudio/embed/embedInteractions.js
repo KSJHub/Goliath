@@ -1082,6 +1082,8 @@ async function handlePresetInteraction(i) {
       return true;
     }
 
+    await i.deferUpdate();
+
     const saved =
       guildManager.saveEmbedPreset?.(
         guildId,
@@ -1091,9 +1093,9 @@ async function handlePresetInteraction(i) {
       );
 
     if (!saved) {
-      await i.reply({
+      await i.followUp({
         content: 'Could not duplicate that preset.',
-        flags: 64,
+        flags: MessageFlags.Ephemeral,
       });
       return true;
     }
@@ -1103,7 +1105,7 @@ async function handlePresetInteraction(i) {
       selectedPreset: copyName,
     });
 
-    await i.update(
+    await i.editReply(
       panel.buildPresetsPanel(i)
     );
 
