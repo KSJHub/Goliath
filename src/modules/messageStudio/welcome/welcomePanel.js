@@ -45,7 +45,7 @@ function customTemplateName(scope){return scope==='dm'?'Custom DM Welcome':'Cust
 function customEditorModal(guildId,scope){
   const template=embedTemplateManager.getTemplate(guildId,customTemplateId(scope));
   const embed=template?.embed||{};
-  const input=(id,label,value,maxLength,style=TextInputStyle.Short,required=false)=>new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required).setMaxLength(maxLength).setValue(String(value||'').slice(0,maxLength));
+  const input=(id,label,value,maxLength,style=TextInputStyle.Short,required=false)=>{const field=new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required).setMaxLength(maxLength);const initial=String(value||'').replace(/^\u200b$/,'').slice(0,maxLength);if(initial)field.setValue(initial);return field;};
   return new ModalBuilder().setCustomId(scope==='dm'?'admin:welcome:customDmSubmit':'admin:welcome:customPublicSubmit').setTitle(scope==='dm'?'Edit DM Welcome':'Edit Public Welcome').addComponents(
     row(input('content','Message text',template?.content,1800,TextInputStyle.Paragraph)),
     row(input('title','Embed title',embed.title,256)),
