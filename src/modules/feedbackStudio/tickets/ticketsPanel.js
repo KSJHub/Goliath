@@ -2051,8 +2051,8 @@ let ticketSetupPanelApi;
 
     return safeUpdate(interaction, {
       content: null,
-      embeds: [buildRoleEditorEmbed(panel)],
-      components: buildRoleEditorControls(panel),
+      embeds: [buildRoleEditorEmbed(panel).addFields({ name: 'Role Selection', value: (() => { const info = rolePages(interaction.guild, [], roleEditorPages.get(roleEditorKey(interaction)) || 0); return `Page ${info.page + 1}/${info.pages}`; })() })],
+      components: buildRoleEditorControls(panel, interaction.guild, roleEditorPages.get(roleEditorKey(interaction)) || 0),
     });
   }
 
