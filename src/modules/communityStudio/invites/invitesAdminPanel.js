@@ -294,16 +294,17 @@ async function handleInviteStudioInteraction(interaction) {
   }
 
   if (id === 'invites:member-dm-submit') {
-    nested(interaction, 'memberInviteTemplate', {
-      dmTitle: interaction.fields.getTextInputValue('title'),
-      dmMessage: interaction.fields.getTextInputValue('message'),
-    });
-
+    const dmTitle = interaction.fields.getTextInputValue('title').trim();
+    const dmMessage = interaction.fields.getTextInputValue('message').trim();
+    if (!dmTitle || !dmMessage || dmTitle.length > 256 || dmMessage.length > 3000) {
+      await interaction.reply({ content: '❌ Provide a DM title (up to 256 characters) and a welcome message (up to 3000 characters).', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    nested(interaction, 'memberInviteTemplate', { dmTitle, dmMessage });
     await interaction.reply({
-      content: '✅ Member DM saved.',
+      content: '✅ Personal invite DM saved. Goliath automatically adds the referral link, scoring explanation and My Stats guidance. Available placeholders: `{user}`, `{server}`, `{invite}`.',
       flags: MessageFlags.Ephemeral,
     });
-
     return true;
   }
 
