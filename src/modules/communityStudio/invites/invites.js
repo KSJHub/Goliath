@@ -28,7 +28,7 @@ function defaults() {
       ignoreBots: true,
       logChannelId: null,
       rewardRoles: [],
-      officialInvite: { channelId: null, code: null, roleIds: [] },
+      officialInvite: { channelId: null, code: null, roleIds: [], maxAge: 0, maxUses: 0 },
       memberInviteTemplate: {
         enabled: true,
         channelId: null,
@@ -116,6 +116,8 @@ function normalize(section = {}) {
         channelId: cleanId(officialInvite.channelId || settings.managedInviteChannelId || settings.channelId),
         code: clean(officialInvite.code || settings.managedInviteCode || settings.inviteCode, 100) || null,
         roleIds: normalizeRoleIds(officialInvite.roleIds),
+        maxAge: MAX_AGE_OPTIONS.has(Number(officialInvite.maxAge)) ? Number(officialInvite.maxAge) : 0,
+        maxUses: MAX_USES_OPTIONS.has(Number(officialInvite.maxUses)) ? Number(officialInvite.maxUses) : 0,
       },
       memberInviteTemplate: {
         ...base.settings.memberInviteTemplate,
@@ -234,13 +236,26 @@ async function createPersonalInvite(guild, userId, _channelId = null, meta = {})
 }
 async function deletePersonalInvite(guild, userId, meta = {}) { const record = findPersonalInvite(guild.id, userId); if (!record) return false; await deleteInviteLink(guild, record.code, meta); return true; }
 
-async function ensureOfficialInvite(guild, meta = {}) {
+async function ensureOfficialInvite(guild, meta = {}, regenerate = false) {
   const section = getSection(guild.id);
   const config = section.settings.officialInvite;
   if (!config.channelId) throw new Error('Select the official invite channel first.');
-  if (config.code) { const live = await guild.invites.fetch(config.code).catch(() => null); if (live) return { invite: live, created: false }; }
-  const result = await createInviteLink(guild, { channelId: config.channelId, maxAge: 0, maxUses: 0, temporary: false, roleIds: config.roleIds, official: true }, meta);
+  const previous = config.code ? await guild.invites.fetch(config.code).catch(() => null) : null;
+  const saved = config.code ? section.inviteLinks[config.code] : null;
+  const sameConfig = previous && saved && saved.channelId === config.channelId &&
+    saved.maxAge === config.maxAge && saved.maxUses === config.maxUses &&
+    JSON.stringify([...saved.roleIds].sort()) === JSON.stringify([...config.roleIds].sort());
+  if (sameConfig && !regenerate) return { invite: previous, created: false };
+  const result = await createInviteLink(guild, { channelId: config.channelId, maxAge: config.maxAge, maxUses: config.maxUses, temporary: false, roleIds: config.roleIds, official: true }, meta);
   updateSettings(guild.id, { officialInvite: { ...config, code: result.invite.code } }, meta);
+  if (config.code && config.code !== result.invite.code) {
+    if (previous) await previous.delete('Goliath official invite replaced').catch(() => null);
+    updateSection(guild.id, (current) => {
+      const inviteLinks = { ...current.inviteLinks };
+      delete inviteLinks[config.code];
+      return { ...current, inviteLinks };
+    }, meta);
+  }
   return { invite: result.invite, created: true };
 }
 
