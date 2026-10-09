@@ -62,37 +62,29 @@ function lockdownSlowmode(state) {
 }
 function navRow(backId, refreshId = null) {
   const buttons = [new ButtonBuilder().setCustomId(backId).setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary)];
-  buttons.push(new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('⚙️').setStyle(ButtonStyle.Secondary));
+  buttons.push(new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('🔧').setStyle(ButtonStyle.Secondary));
   if (refreshId) buttons.push(new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary));
   return new ActionRowBuilder().addComponents(buttons);
 }
 
 function addAdminControls(panel, interaction) {
-  if (!panel) return panel;
-  const showSettings = canUseSettings(interaction);
-  const showSecurity = canUseServerSecurity(interaction);
-  if (!showSettings && !showSecurity) return panel;
+  if (!panel || !canUseSettings(interaction)) return panel;
   const embeds = [...(panel.embeds || [])];
   if (embeds[0]) {
-    const fields = [];
-    if (showSettings) fields.push({ name: '⚙️ Settings', value: 'General Goliath server configuration and administration defaults', inline: true });
-    if (showSecurity) fields.push({ name: '🛡️ Security Hub', value: 'Guild protection, threat response, member security, verification, isolation, health and recovery', inline: true });
-    embeds[0] = EmbedBuilder.from(embeds[0]).addFields(fields);
+    embeds[0] = EmbedBuilder.from(embeds[0]).addFields({
+      name: '🔧 Settings',
+      value: 'General Goliath server configuration and defaults',
+      inline: true,
+    });
   }
   const components = [...(panel.components || [])];
-  const controls = [];
-  if (showSettings) controls.push(new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('⚙️').setStyle(ButtonStyle.Secondary));
-  if (showSecurity) controls.push(new ButtonBuilder().setCustomId(SECURITY_HUB_ID).setLabel('Security Hub').setEmoji('🛡️').setStyle(ButtonStyle.Primary));
-  if (controls.length) {
-    if (components.length < 5) components.push(new ActionRowBuilder().addComponents(controls));
-    else {
-      for (let index = components.length - 1; index >= 0 && controls.length; index -= 1) {
-        const existing = components[index], rowComponents = existing?.components || [];
-        const isButtonRow = rowComponents.length > 0 && rowComponents.every((component) => component?.data?.type === 2);
-        if (!isButtonRow || rowComponents.length >= 5) continue;
-        existing.addComponents(...controls.splice(0, 5 - rowComponents.length));
-      }
-    }
+  const settingsButton = new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('🔧').setStyle(ButtonStyle.Secondary);
+  const lastRow = components[components.length - 1];
+  const rowButtons = lastRow?.components || [];
+  if (rowButtons.length && rowButtons.length < 5 && rowButtons.every((component) => component?.data?.type === 2)) {
+    lastRow.addComponents(settingsButton);
+  } else if (components.length < 5) {
+    components.push(new ActionRowBuilder().addComponents(settingsButton));
   }
   return { ...panel, embeds, components };
 }
