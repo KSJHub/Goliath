@@ -5,6 +5,7 @@ const { updateModuleSection } = require('../../../core/guild/moduleSectionManage
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
 const invites = require('./invites');
 const panel = require('./invitesPanel');
+const { rolePages, mergePageSelection } = require('../../../core/ui/rolePagination');
 const tracking = require('./invitesTracking');
 
 const meta = (interaction, action) => ({
@@ -161,10 +162,23 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
-  if (id === 'invites:official-roles' && interaction.isRoleSelectMenu()) {
-    nested(interaction, 'officialInvite', {
-      roleIds: interaction.values,
-    });
+  if (id === 'invites:official-role-prev' || id === 'invites:official-role-next') {
+    const state = panel.sessionFor(interaction);
+    const config = invites.getSection(interaction.guildId).settings.officialInvite;
+    const info = rolePages(interaction.guild, config.roleIds || [], state.officialRolePage || 0);
+    state.officialRolePage = Math.max(0, Math.min(info.pages - 1, info.page + (id.endsWith('next') ? 1 : -1)));
+    await update(interaction);
+    return true;
+  }
+  if (id.startsWith('invites:official-roles:') && interaction.isStringSelectMenu?.()) {
+    const page = Number(id.slice('invites:official-roles:'.length));
+    if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+    const config = invites.getSection(interaction.guildId).settings.officialInvite;
+    const info = rolePages(interaction.guild, config.roleIds || [], page);
+    if (info.page !== page) throw new Error('Role page expired. Reopen Invites.');
+    const chosen = mergePageSelection(config.roleIds || [], info.roles, interaction.values || []);
+    nested(interaction, 'officialInvite', { roleIds: chosen });
+    panel.sessionFor(interaction).officialRolePage = page;
     await update(interaction);
     return true;
   }
@@ -213,10 +227,23 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
-  if (id === 'invites:member-roles') {
-    nested(interaction, 'memberInviteTemplate', {
-      roleIds: interaction.values,
-    });
+  if (id === 'invites:member-role-prev' || id === 'invites:member-role-next') {
+    const state = panel.sessionFor(interaction);
+    const config = invites.getSection(interaction.guildId).settings.memberInviteTemplate;
+    const info = rolePages(interaction.guild, config.roleIds || [], state.memberRolePage || 0);
+    state.memberRolePage = Math.max(0, Math.min(info.pages - 1, info.page + (id.endsWith('next') ? 1 : -1)));
+    await update(interaction);
+    return true;
+  }
+  if (id.startsWith('invites:member-roles:') && interaction.isStringSelectMenu?.()) {
+    const page = Number(id.slice('invites:member-roles:'.length));
+    if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+    const config = invites.getSection(interaction.guildId).settings.memberInviteTemplate;
+    const info = rolePages(interaction.guild, config.roleIds || [], page);
+    if (info.page !== page) throw new Error('Role page expired. Reopen Invites.');
+    const chosen = mergePageSelection(config.roleIds || [], info.roles, interaction.values || []);
+    nested(interaction, 'memberInviteTemplate', { roleIds: chosen });
+    panel.sessionFor(interaction).memberRolePage = page;
     await update(interaction);
     return true;
   }
