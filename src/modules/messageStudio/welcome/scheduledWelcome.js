@@ -155,7 +155,7 @@ async function getWaitingMembers(guild) {
   return members.filter((member) => !completed.has(member.id));
 }
 
-async function runScheduledWelcome(guild, options = {}) {
+async function executeScheduledWelcome(guild, options = {}) {
   let config = getScheduledConfig(guild.id);
   if (!options.force && !guildManager.isModuleEnabled(guild.id, MODULE)) return { skipped: true, reason: 'welcome_disabled' };
   if (!options.force && !config.enabled) return { skipped: true, reason: 'scheduled_disabled' };
@@ -231,6 +231,20 @@ async function runScheduledWelcome(guild, options = {}) {
   updateScheduledConfig(guild.id, { analytics, completedMemberIds: [...completed] }, { actorId: options.actorId, action: 'scheduled_welcome_run' });
 
   return { skipped: false, empty: false, welcomed, messagesSent, sendFailed, roleRemovalFailed, errors };
+}
+
+
+const activeRuns = new Set();
+
+async function runScheduledWelcome(guild, options = {}) {
+  if (!guild?.id) throw new Error('Scheduled Welcome requires a guild.');
+  if (activeRuns.has(guild.id)) return { skipped: true, reason: 'already_running' };
+  activeRuns.add(guild.id);
+  try {
+    return await executeScheduledWelcome(guild, options);
+  } finally {
+    activeRuns.delete(guild.id);
+  }
 }
 
 module.exports = {
