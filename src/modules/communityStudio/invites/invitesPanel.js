@@ -93,8 +93,8 @@ function officialView(interaction) {
 function officialLimitsModal(interaction) {
   const config = invites.getSection(interaction.guildId).settings.officialInvite;
   return new ModalBuilder().setCustomId('invites:official-limits-submit').setTitle('Official Invite Limits').addComponents(
-    row(new TextInputBuilder().setCustomId('maxAge').setLabel('Expiry: 0, 1800, 3600, 86400, 604800...').setStyle(TextInputStyle.Short).setValue(String(config.maxAge || 0)).setRequired(true)),
-    row(new TextInputBuilder().setCustomId('maxUses').setLabel('Uses: 0, 1, 5, 10, 25, 50, 100').setStyle(TextInputStyle.Short).setValue(String(config.maxUses || 0)).setRequired(true)),
+    row(new TextInputBuilder().setCustomId('maxAge').setLabel('Expiry: Never, 1 hour, 1 day, 7 days...').setStyle(TextInputStyle.Short).setValue(({0:'Never',1800:'30 minutes',3600:'1 hour',21600:'6 hours',43200:'12 hours',86400:'1 day',604800:'7 days',2592000:'30 days'})[config.maxAge || 0] || 'Never').setRequired(true)),
+    row(new TextInputBuilder().setCustomId('maxUses').setLabel('Maximum uses: Unlimited, 1, 5, 10...').setStyle(TextInputStyle.Short).setValue(config.maxUses ? String(config.maxUses) : 'Unlimited').setRequired(true)),
   );
 }
 
