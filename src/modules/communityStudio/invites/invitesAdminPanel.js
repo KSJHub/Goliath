@@ -161,16 +161,15 @@ async function handleInviteStudioInteraction(interaction) {
   }
 
   if (id === 'invites:official-channel' && interaction.isChannelSelectMenu()) {
-    nested(interaction, 'officialInvite', {
-      channelId: interaction.values[0],
-    });
+    if (state.officialStep) state.officialDraft = { ...state.officialDraft, channelId: interaction.values[0] };
+    else nested(interaction, 'officialInvite', { channelId: interaction.values[0] });
     await update(interaction);
     return true;
   }
 
   if (id === 'invites:official-role-prev' || id === 'invites:official-role-next') {
     const state = panel.sessionFor(interaction);
-    const config = invites.getSection(interaction.guildId).settings.officialInvite;
+    const config = state.officialDraft || invites.getSection(interaction.guildId).settings.officialInvite;
     const info = rolePages(interaction.guild, config.roleIds || [], state.officialRolePage || 0);
     state.officialRolePage = Math.max(0, Math.min(info.pages - 1, info.page + (id.endsWith('next') ? 1 : -1)));
     await update(interaction);
@@ -179,11 +178,12 @@ async function handleInviteStudioInteraction(interaction) {
   if (id.startsWith('invites:official-roles:') && interaction.isStringSelectMenu?.()) {
     const page = Number(id.slice('invites:official-roles:'.length));
     if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
-    const config = invites.getSection(interaction.guildId).settings.officialInvite;
+    const config = state.officialDraft || invites.getSection(interaction.guildId).settings.officialInvite;
     const info = rolePages(interaction.guild, config.roleIds || [], page);
     if (info.page !== page) throw new Error('Role page expired. Reopen Invites.');
     const chosen = mergePageSelection(config.roleIds || [], info.roles, interaction.values || []);
-    nested(interaction, 'officialInvite', { roleIds: chosen });
+    if (state.officialStep) state.officialDraft = { ...state.officialDraft, roleIds: chosen };
+    else nested(interaction, 'officialInvite', { roleIds: chosen });
     panel.sessionFor(interaction).officialRolePage = page;
     await update(interaction);
     return true;
@@ -296,6 +296,36 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
+  if (id === 'invites:official-start') {
+    state.officialDraft = { ...invites.getSection(interaction.guildId).settings.officialInvite };
+    state.officialStep = 1;
+    state.officialRolePage = 0;
+    await update(interaction);
+    return true;
+  }
+  if (id === 'invites:official-back') {
+    state.officialStep = Math.max(0, (state.officialStep || 1) - 1);
+    await update(interaction);
+    return true;
+  }
+  if (id === 'invites:official-next') {
+    if (state.officialStep === 1 && !state.officialDraft?.channelId) {
+      await interaction.reply({ content: 'Choose a destination channel first.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    state.officialStep = Math.min(4, (state.officialStep || 1) + 1);
+    await update(interaction);
+    return true;
+  }
+  if (id === 'invites:official-age' || id === 'invites:official-uses') {
+    const value = Number(interaction.values[0]);
+    const allowed = id.endsWith('age') ? [0, 1800, 3600, 21600, 43200, 86400, 604800, 2592000] : [0, 1, 5, 10, 25, 50, 100];
+    if (!allowed.includes(value)) throw new Error('Invalid invite limit.');
+    state.officialDraft = { ...state.officialDraft, [id.endsWith('age') ? 'maxAge' : 'maxUses']: value };
+    await update(interaction);
+    return true;
+  }
+
   if (id === 'invites:official-limits') {
     await interaction.showModal(panel.officialLimitsModal(interaction));
     return true;
@@ -319,6 +349,11 @@ async function handleInviteStudioInteraction(interaction) {
   }
 
   if (id === 'invites:official-create') {
+    if (state.officialStep !== 4 || !state.officialDraft?.channelId) {
+      await interaction.reply({ content: 'Complete the official invite setup first.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    nested(interaction, 'officialInvite', state.officialDraft);
     await interaction.deferReply({
       flags: MessageFlags.Ephemeral,
     });
@@ -328,9 +363,9 @@ async function handleInviteStudioInteraction(interaction) {
       meta(interaction, 'invite_official_create'),
     );
 
-    await interaction.editReply(
-      `✅ Official invite ready: ${result.invite.url}`,
-    );
+    state.officialStep = 0;
+    state.officialDraft = null;
+    await interaction.editReply(`✅ Official invite ready: ${result.invite.url}`);
 
     return true;
   }
