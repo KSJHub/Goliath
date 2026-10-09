@@ -621,9 +621,9 @@ async function changeInvestigationAccess(interaction, action) {
       ],
     });
   } catch (error) {
-    return interaction.editReply({
+    return safeReply(interaction, {
       content: `❌ I couldn't change that investigation access: ${error.message}`,
-      components: [],
+      flags: 64,
     });
   }
 }
