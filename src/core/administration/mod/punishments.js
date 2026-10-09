@@ -221,15 +221,15 @@ function buildBulkPreview(options, batchId) {
 }
 async function submitBulkModal(interaction, buttonAction) {
   const parsed = parseBulkModalPayload(interaction, buttonAction);
-  if (parsed.error) return safeReply(interaction, ephemeralError(parsed.error));
+  if (parsed.error) return safeEditReply(interaction, ephemeralError(parsed.error));
   const permission = BULK_PERMISSION_ACTIONS[parsed.payload.actionType];
   if (!permission || !(await ensureActionAccess(interaction, permission))) return true;
   const errors = validateBulkOptions(parsed.payload.actionType, parsed.payload);
-  if (errors.length) return safeReply(interaction, { content: errors.join('\n'), flags: 64 });
+  if (errors.length) return safeEditReply(interaction, { content: errors.join('\n'), flags: 64 });
   const batchId = `bulk_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`;
   const payload = { ...parsed.payload, bulkBatchId: batchId };
   const token = createPendingAction(interaction.guild.id, { moderatorId: interaction.user.id, type: 'bulk', payload });
-  return safeReply(interaction, { content: buildBulkPreview(payload, batchId), components: buildConfirmRow(buildConfirmCustomId(token, { view: 'tools' }), buildCancelCustomId('none', { view: 'tools' }, token)), flags: 64 });
+  return safeEditReply(interaction, { content: buildBulkPreview(payload, batchId), components: buildConfirmRow(buildConfirmCustomId(token, { view: 'tools' }), buildCancelCustomId('none', { view: 'tools' }, token)), flags: 64 });
 }
 
 async function executeRemoveWarning(interaction, pending, fallbackTarget) {

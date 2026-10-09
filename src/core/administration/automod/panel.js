@@ -17,6 +17,7 @@ const {
 } = require('discord.js');
 const guildManager = require('../../guild/guildManager');
 const panelNav = require('../../ui/panelNavigation');
+const { rolePages, rolePageSelect, mergePageSelection } = require('../../ui/rolePagination');
 const security = require('../../security/protection/core');
 
 const PANEL_COLOR = '#5865F2';
@@ -246,17 +247,17 @@ function buildRuleDmModal(key, config) {
   );
 }
 
-function buildExemptionsPanel(guild, name='Unknown User') {
+function buildExemptionsPanel(guild, name='Unknown User', page=0) {
   const config=getAutomodConfig(guild.id);
-  const roles=new RoleSelectMenuBuilder().setCustomId('admin:automod:exemptions:roles').setPlaceholder('Ignored roles').setMinValues(0).setMaxValues(25);
+  const info=rolePages(guild,config.ignoredRoles||[],page);
+  const roles=rolePageSelect(`admin:automod:exemptions:roles:${info.page}`,'Ignored roles',info);
   const channels=new ChannelSelectMenuBuilder().setCustomId('admin:automod:exemptions:channels').setPlaceholder('Ignored channels').setMinValues(0).setMaxValues(25).addChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement,ChannelType.GuildForum);
   const categories=new ChannelSelectMenuBuilder().setCustomId('admin:automod:exemptions:categories').setPlaceholder('Ignored categories').setMinValues(0).setMaxValues(25).addChannelTypes(ChannelType.GuildCategory);
   const users=new UserSelectMenuBuilder().setCustomId('admin:automod:exemptions:users').setPlaceholder('Ignored members').setMinValues(0).setMaxValues(25);
-  if(config.ignoredRoles?.length) roles.setDefaultRoles(config.ignoredRoles.slice(0,25));
   if(config.ignoredChannels?.length) channels.setDefaultChannels(config.ignoredChannels.slice(0,25));
   if(config.ignoredCategories?.length) categories.setDefaultChannels(config.ignoredCategories.slice(0,25));
   if(config.ignoredUsers?.length) users.setDefaultUsers(config.ignoredUsers.slice(0,25));
-  return {embeds:[createEmbed('🧩 AutoMod Exemptions',['**Roles:** '+(config.ignoredRoles?.length||0),'**Channels:** '+(config.ignoredChannels?.length||0),'**Categories:** '+(config.ignoredCategories?.length||0),'**Members:** '+(config.ignoredUsers?.length||0),'','Selected resources bypass all Goliath AutoMod message protections. Rule-specific allow lists remain configured inside each protection.'].join('\n'),name)],components:[row(roles),row(channels),row(categories),row(users),row(backButton('admin:automod:configure'))]};
+  return {embeds:[createEmbed('🧩 AutoMod Exemptions',['**Roles:** '+(config.ignoredRoles?.length||0),`**Role Selection · Page ${info.page+1}/${info.pages}**`,'**Channels:** '+(config.ignoredChannels?.length||0),'**Categories:** '+(config.ignoredCategories?.length||0),'**Members:** '+(config.ignoredUsers?.length||0),'','Selected resources bypass all Goliath AutoMod message protections. Rule-specific allow lists remain configured inside each protection.'].join('\n'),name)],components:[...(roles?[row(roles)]:[]),row(channels),row(categories),row(users),row(backButton('admin:automod:configure'),button(`admin:automod:exemptions:page:${Math.max(0,info.page-1)}`,'◀ Roles',ButtonStyle.Secondary,info.page===0),button(`admin:automod:exemptions:page:${Math.min(info.pages-1,info.page+1)}`,'Roles ▶',ButtonStyle.Secondary,info.page>=info.pages-1))]};
 }
 
 function ruleSummary(key, rule) {
@@ -481,6 +482,22 @@ async function handleAutomodInteraction(interaction) {
   if (id === 'admin:automod:configure') return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
   if (id === 'admin:automod:risk') return updatePanel(interaction, buildRiskPanel(interaction.guild, name));
   if (id === 'admin:automod:exemptions') return updatePanel(interaction, buildExemptionsPanel(interaction.guild, name));
+  if (id.startsWith('admin:automod:exemptions:page:')) {
+    const page=Number(id.slice('admin:automod:exemptions:page:'.length));
+    if(!Number.isSafeInteger(page)||page<0) throw new Error('Invalid role page.');
+    return updatePanel(interaction,buildExemptionsPanel(interaction.guild,name,page));
+  }
+  if (interaction.isStringSelectMenu?.() && id.startsWith('admin:automod:exemptions:roles:')) {
+    const page=Number(id.slice('admin:automod:exemptions:roles:'.length));
+    if(!Number.isSafeInteger(page)||page<0) throw new Error('Invalid role page.');
+    const config=getAutomodConfig(interaction.guild.id);
+    const info=rolePages(interaction.guild,config.ignoredRoles||[],page);
+    if(info.page!==page) throw new Error('Role page expired.');
+    const chosen=mergePageSelection(config.ignoredRoles||[],info.roles,interaction.values||[],25);
+    saveAutomodConfig(interaction.guild.id,{...config,ignoredRoles:chosen});
+    return updatePanel(interaction,buildExemptionsPanel(interaction.guild,name,page));
+  }
+
   if (id === 'admin:automod:risk:edit') { await interaction.showModal(buildRiskModal(getAutomodConfig(interaction.guild.id))); return true; }
   if (id === 'admin:setautomodlog' || id === 'admin:channel:automodlog') return updatePanel(interaction, buildLogChannelPanel());
   if (id === 'admin:automod:dmmessage') {

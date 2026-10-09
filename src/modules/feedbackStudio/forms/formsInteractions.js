@@ -8,6 +8,7 @@ const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guild
 
 async function safeReply(interaction, content) {
   const payload = { content, flags: MessageFlags.Ephemeral };
+  if (interaction.deferred && !interaction.replied && interaction.isModalSubmit?.()) return interaction.editReply({ content }).catch(() => null);
   if (interaction.deferred || interaction.replied) return interaction.followUp(payload).catch(() => null);
   return interaction.reply(payload).catch(() => null);
 }
@@ -35,12 +36,13 @@ async function handleMemberInteraction(interaction) {
     if (parsed.action === 'open') { await interaction.showModal(panel.buildFormModal(form)); return true; }
     const { answers, errors } = panel.collectModalAnswers(interaction, form);
     if (errors.length) return safeReply(interaction, panel.buildValidationErrorReply(errors));
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const submission = forms.saveSubmission(interaction.guildId, {
       formId: form.formId, userId: interaction.user.id, userTag: interaction.user.tag,
       answers, status: 'pending', workflow: { source: 'discord_modal', submittedAt: new Date().toISOString(), modalFieldCount: Object.keys(answers).length },
     }, interaction.guild);
     const result = await tracking.createTicketForSubmission({ interaction, form, submission });
-    return safeReply(interaction, panel.buildSubmissionReply(form, submission, result));
+    return interaction.editReply({ content: panel.buildSubmissionReply(form, submission, result) });
   } catch (error) { await safeReply(interaction, `❌ Form action failed: ${error.message}`); return true; }
 }
 
@@ -53,20 +55,24 @@ async function handleAdminInteraction(interaction) {
     if (customId === 'admin:forms') return safeUpdate(interaction, panel.buildFormsAdminPanel(interaction.guild, displayName));
     if (interaction.isChannelSelectMenu?.()) {
       const value = interaction.values?.[0] || null; const prop = customId.split(':')[2];
+      if (!['submitChannel', 'logChannel'].includes(prop)) return false;
+      await interaction.deferUpdate();
       if (prop === 'submitChannel') save((s) => ({ ...s, submitChannelId: value }));
       if (prop === 'logChannel') save((s) => ({ ...s, logChannelId: value }));
       return safeUpdate(interaction, panel.buildFormsAdminPanel(interaction.guild, displayName));
     }
     if (interaction.isRoleSelectMenu?.() && customId === 'admin:forms:managerRoles') {
+      await interaction.deferUpdate();
       save((s) => ({ ...s, managerRoleIds: [...new Set(interaction.values || [])] }));
       return safeUpdate(interaction, panel.buildFormsAdminPanel(interaction.guild, displayName));
     }
+    if (['admin:forms:enable', 'admin:forms:disable', 'admin:forms:toggleReview', 'admin:forms:toggleAnonymous', 'admin:forms:toggleStore'].includes(customId)) await interaction.deferUpdate();
     if (customId.endsWith(':enable')) setModuleEnabled(interaction.guild.id, 'forms', true, { actorId: interaction.user.id, action: 'forms_admin_enable' });
     if (customId.endsWith(':disable')) setModuleEnabled(interaction.guild.id, 'forms', false, { actorId: interaction.user.id, action: 'forms_admin_disable' });
     if (customId.endsWith(':toggleReview')) save((s) => ({ ...s, requireReview: !s.requireReview }));
     if (customId.endsWith(':toggleAnonymous')) save((s) => ({ ...s, anonymousSubmissions: !s.anonymousSubmissions }));
     if (customId.endsWith(':toggleStore')) save((s) => ({ ...s, storeResponses: !s.storeResponses }));
-    if (customId.endsWith(':deployDefault')) { await interaction.deferUpdate().catch(() => null); await panel.deployDefaultForm(interaction.guild, interaction.user.id); }
+    if (customId.endsWith(':deployDefault')) { await interaction.deferUpdate(); await panel.deployDefaultForm(interaction.guild, interaction.user.id); }
     return safeUpdate(interaction, panel.buildFormsAdminPanel(interaction.guild, displayName));
   } catch (error) { await safeReply(interaction, `❌ Forms setup failed: ${error.message}`); return true; }
 }

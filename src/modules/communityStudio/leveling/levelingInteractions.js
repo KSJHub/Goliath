@@ -2,6 +2,7 @@
 
 const leveling = require('./leveling');
 const panel = require('./levelingPanel');
+const { rolePages, mergePageSelection } = require('../../../core/ui/rolePagination');
 const tracking = require('./levelingTracking');
 const { setModuleEnabled, getGuildFilePath } = require('../../../core/guild/guildManager');
 const { getModuleSection } = require('../../../core/guild/moduleSectionManager');
@@ -522,6 +523,29 @@ async function handleLevelingInteraction(interaction) {
   const displayName = memberName(interaction);
 
   try {
+    for (const [key, field, render] of [
+      ['manager', 'managerRoleIds', panel.buildLevelingPanel],
+      ['ignored', 'ignoredRoleIds', panel.buildTrackingRulesPanel],
+    ]) {
+      const browsePrefix = `admin:leveling:${key}Page:`;
+      const selectPrefix = `admin:leveling:${key === 'manager' ? 'managerRoles' : 'ignoredRoles'}:`;
+      if (customId.startsWith(browsePrefix)) {
+        const page = Number(customId.slice(browsePrefix.length));
+        if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+        return safeUpdate(interaction, render(interaction.guild, displayName, page));
+      }
+      if (interaction.isStringSelectMenu?.() && customId.startsWith(selectPrefix)) {
+        const page = Number(customId.slice(selectPrefix.length));
+        if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+        const section = leveling.getSection(interaction.guildId);
+        const info = rolePages(interaction.guild, section[field] || [], page);
+        if (info.page !== page) throw new Error('Role page expired. Reopen Leveling.');
+        const chosen = mergePageSelection(section[field] || [], info.roles, interaction.values || [], key === 'ignored' ? 25 : 10);
+        save(current => ({ ...current, [field]: chosen }));
+        if (key === 'ignored') refreshVoiceTracking(interaction);
+        return safeUpdate(interaction, render(interaction.guild, displayName, page));
+      }
+    }
     if (customId === 'admin:leveling') {
       return safeUpdate(interaction, panel.buildLevelingPanel(interaction.guild, displayName));
     }
@@ -842,14 +866,8 @@ async function handleLevelingInteraction(interaction) {
       return safeUpdate(interaction, panel.buildRankRewardsPanel(interaction.guild, displayName));
     } else if (interaction.isChannelSelectMenu?.() && customId === 'admin:leveling:announceChannel') {
       save((section) => ({ ...section, announceChannelId: interaction.values?.[0] || null }));
-    } else if (interaction.isRoleSelectMenu?.() && customId === 'admin:leveling:managerRoles') {
-      save((section) => ({ ...section, managerRoleIds: [...new Set(interaction.values || [])] }));
     } else if (interaction.isChannelSelectMenu?.() && customId === 'admin:leveling:ignoredChannels') {
       save((section) => ({ ...section, ignoredChannelIds: [...new Set(interaction.values || [])] }));
-      refreshVoiceTracking(interaction);
-      return safeUpdate(interaction, panel.buildTrackingRulesPanel(interaction.guild, displayName));
-    } else if (interaction.isRoleSelectMenu?.() && customId === 'admin:leveling:ignoredRoles') {
-      save((section) => ({ ...section, ignoredRoleIds: [...new Set(interaction.values || [])] }));
       refreshVoiceTracking(interaction);
       return safeUpdate(interaction, panel.buildTrackingRulesPanel(interaction.guild, displayName));
     } else if (interaction.isRoleSelectMenu?.() && customId === 'admin:leveling:levelRoles') {

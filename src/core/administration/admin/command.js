@@ -53,7 +53,7 @@ function canUseSettings(interaction) {
   if (!interaction?.guild || !interaction?.user?.id) return false;
   return security.isBotOwner(interaction.user.id) || interaction.guild.ownerId === interaction.user.id || adminPanel.hasGuildPermission(interaction, 'admin.dashboard.view');
 }
-function canUseServerSecurity(interaction) { return canUseSettings(interaction); }
+function canUseServerSecurity(interaction) { return Boolean(interaction?.guild && interaction?.user?.id && adminPanel.hasGuildPermission(interaction, 'admin.security.manage')); }
 function discordTime(value) { const ms = Number(value); return Number.isFinite(ms) && ms > 0 ? `<t:${Math.floor(ms / 1000)}:R>` : 'Not set'; }
 function lockdownSlowmode(state) {
   if (!state.active) return 'Not imposed';
@@ -62,37 +62,29 @@ function lockdownSlowmode(state) {
 }
 function navRow(backId, refreshId = null) {
   const buttons = [new ButtonBuilder().setCustomId(backId).setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary)];
-  buttons.push(new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('⚙️').setStyle(ButtonStyle.Secondary));
+  buttons.push(new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('🔧').setStyle(ButtonStyle.Secondary));
   if (refreshId) buttons.push(new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary));
   return new ActionRowBuilder().addComponents(buttons);
 }
 
 function addAdminControls(panel, interaction) {
-  if (!panel) return panel;
-  const showSettings = canUseSettings(interaction);
-  const showSecurity = canUseServerSecurity(interaction);
-  if (!showSettings && !showSecurity) return panel;
+  if (!panel || !canUseSettings(interaction)) return panel;
   const embeds = [...(panel.embeds || [])];
   if (embeds[0]) {
-    const fields = [];
-    if (showSettings) fields.push({ name: '⚙️ Settings', value: 'General Goliath server configuration and administration defaults', inline: true });
-    if (showSecurity) fields.push({ name: '🛡️ Security Hub', value: 'Guild protection, threat response, member security, verification, isolation, health and recovery', inline: true });
-    embeds[0] = EmbedBuilder.from(embeds[0]).addFields(fields);
+    embeds[0] = EmbedBuilder.from(embeds[0]).addFields({
+      name: '🔧 Settings',
+      value: 'General Goliath server configuration and defaults',
+      inline: true,
+    });
   }
   const components = [...(panel.components || [])];
-  const controls = [];
-  if (showSettings) controls.push(new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('⚙️').setStyle(ButtonStyle.Secondary));
-  if (showSecurity) controls.push(new ButtonBuilder().setCustomId(SECURITY_HUB_ID).setLabel('Security Hub').setEmoji('🛡️').setStyle(ButtonStyle.Primary));
-  if (controls.length) {
-    if (components.length < 5) components.push(new ActionRowBuilder().addComponents(controls));
-    else {
-      for (let index = components.length - 1; index >= 0 && controls.length; index -= 1) {
-        const existing = components[index], rowComponents = existing?.components || [];
-        const isButtonRow = rowComponents.length > 0 && rowComponents.every((component) => component?.data?.type === 2);
-        if (!isButtonRow || rowComponents.length >= 5) continue;
-        existing.addComponents(...controls.splice(0, 5 - rowComponents.length));
-      }
-    }
+  const settingsButton = new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('🔧').setStyle(ButtonStyle.Secondary);
+  const lastRow = components[components.length - 1];
+  const rowButtons = lastRow?.components || [];
+  if (rowButtons.length && rowButtons.length < 5 && rowButtons.every((component) => component?.data?.type === 2)) {
+    lastRow.addComponents(settingsButton);
+  } else if (components.length < 5) {
+    components.push(new ActionRowBuilder().addComponents(settingsButton));
   }
   return { ...panel, embeds, components };
 }
@@ -114,9 +106,9 @@ function buildSecurityHub(interaction) {
   const embed = new EmbedBuilder().setColor(restrictions ? 0xFEE75C : 0x5865F2).setTitle('🛡️ Security Hub').setDescription(['**Goliath central guild protection and security management.**','','Choose a security area below. Guild-wide protection is kept separate from owner-only containment.'].join('\n'))
     .addFields({ name: 'Guild Restrictions', value: restrictions ? `🟠 **${restrictions} active**` : '🟢 Normal', inline: true }, { name: 'Investigations', value: `**${investigationCount}** active`, inline: true }, { name: 'Full Isolation', value: `**${isolationCount}** active`, inline: true })
     .setFooter({ text: `Security Hub • Requested by ${memberDisplayName(interaction)}` }).setTimestamp();
-  const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(LOCKDOWN_HUB_ID).setLabel('Lockdown & Restrictions').setEmoji('🔒').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(THREAT_HUB_ID).setLabel('Threat Protection').setEmoji('⚡').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(ANTINUKE_HUB_ID).setLabel('Anti-Nuke').setEmoji('💥').setStyle(ButtonStyle.Primary));
-  const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(AUTOMOD_HUB_ID).setLabel('AutoMod').setEmoji('🤖').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(MEMBER_HUB_ID).setLabel('Member Security').setEmoji('👤').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(VERIFICATION_HUB_ID).setLabel('Verification').setEmoji('🛂').setStyle(ButtonStyle.Secondary));
-  const row3 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(ISOLATION_HUB_ID).setLabel('Full Security Isolation').setEmoji('🚨').setStyle(ButtonStyle.Danger).setDisabled(!isGuildOwner(interaction)), new ButtonBuilder().setCustomId(HEALTH_HUB_ID).setLabel('Security Health').setEmoji('🩺').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(RECOVERY_HUB_ID).setLabel('Recovery Controls').setEmoji('🧰').setStyle(ButtonStyle.Secondary));
+  const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(AUTOMOD_HUB_ID).setLabel('AutoMod').setEmoji('🤖').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(ANTINUKE_HUB_ID).setLabel('Anti-Nuke').setEmoji('💥').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(ISOLATION_HUB_ID).setLabel('Full Security Isolation').setEmoji('🚨').setStyle(ButtonStyle.Danger).setDisabled(!isGuildOwner(interaction)));
+  const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(LOCKDOWN_HUB_ID).setLabel('Lockdown & Restrictions').setEmoji('🔒').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(MEMBER_HUB_ID).setLabel('Member Security').setEmoji('👤').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(RECOVERY_HUB_ID).setLabel('Recovery Controls').setEmoji('🧰').setStyle(ButtonStyle.Secondary));
+  const row3 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(HEALTH_HUB_ID).setLabel('Security Health').setEmoji('🩺').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(THREAT_HUB_ID).setLabel('Threat Protection').setEmoji('⚡').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(VERIFICATION_HUB_ID).setLabel('Verification').setEmoji('🛂').setStyle(ButtonStyle.Secondary));
   return { embeds: [embed], components: [row1, row2, row3, navRow(SECURITY_HUB_BACK_ID, SECURITY_HUB_REFRESH_ID)] };
 }
 
@@ -188,5 +180,5 @@ async function handleSecurityIsolationInteraction(interaction) {
 
 function wireClient(client) { if (!client || wiredClients.has(client)) return false; wiredClients.add(client); client.on(Events.InteractionCreate, async (interaction) => { try { if (await handleSecurityHubInteraction(interaction)) return; if (await handleServerSecurityInteraction(interaction)) return; if (await handleSecurityIsolationInteraction(interaction)) return; await handleSettingsInteraction(interaction); } catch (error) { console.error('❌ Admin command interaction failed:', error?.stack || error?.message || error); if (interaction?.deferred || interaction?.replied) await interaction?.editReply?.({ content:'❌ Failed to process the admin control.' }).catch(()=>null); else await interaction?.reply?.({ content:'❌ Failed to process the admin control.',flags:64 }).catch(()=>null); } }); return true; }
 
-const command = { category:'Admin', help:{name:'admin',description:'Open admin controls and server tools.',usage:'/admin'}, access:{level:'admin',ownerOnly:false}, data:new SlashCommandBuilder().setName('admin').setDescription('🔏 Open Goliath’s server administration, configuration and management tools').setDMPermission(false), wireClient, async execute(interaction) { try { if (!interaction.guild) return safeEditReply(interaction,{embeds:[errorEmbed('This command can only be used inside a server.')]}); const displayName=memberDisplayName(interaction), isLegacyAdmin=security.hasPermission(interaction,'admin'), hasConfiguredAdminAccess=adminPanel.hasGuildPermission(interaction,'admin.dashboard.view'), canManageAuthority=adminPanel.canManageGuildAuthority(interaction), canManageSocial=typeof socialStudioPanel.canManageSocialStudio==='function'&&socialStudioPanel.canManageSocialStudio(interaction); if(!isLegacyAdmin&&!hasConfiguredAdminAccess&&!canManageAuthority&&canManageSocial) return safeEditReply(interaction,socialStudioPanel.buildSocialAdminPanel(interaction.guild,displayName)); if(!isLegacyAdmin&&!hasConfiguredAdminAccess&&!canManageAuthority){const denied=await enforceCommandAccess(interaction,command);if(denied)return;} return safeEditReply(interaction,addAdminControls(adminPanel.buildAdminPanel(interaction.guild,displayName,interaction),interaction)); } catch(error){if(error?.code===10062||error?.code===40060)return;console.error('❌ Admin command failed:',error);return safeEditReply(interaction,{embeds:[errorEmbed('Failed to open the admin panel. Please try again.')],components:[]});} } };
+const command = { category:'Admin', help:{name:'admin',description:'Open admin controls and server tools.',usage:'/admin'}, access:{level:'admin',ownerOnly:false}, data:new SlashCommandBuilder().setName('admin').setDescription('🔏 Open Goliath’s server administration, configuration and management tools').setDMPermission(false), wireClient, async execute(interaction) { try { if (!interaction.guild) return safeEditReply(interaction,{embeds:[errorEmbed('This command can only be used inside a server.')]}); const displayName=memberDisplayName(interaction), isLegacyAdmin=security.hasPermission(interaction,'admin'), hasConfiguredAdminAccess=adminPanel.hasGuildPermission(interaction,'admin.dashboard.view'), canManageAuthority=adminPanel.canManageGuildAuthority(interaction), canManageSocial=typeof socialStudioPanel.canManageSocialStudio==='function'&&socialStudioPanel.canManageSocialStudio(interaction); if(!isLegacyAdmin&&!hasConfiguredAdminAccess&&!canManageAuthority&&canManageSocial) return safeEditReply(interaction,socialStudioPanel.buildSocialAdminPanel(interaction.guild,displayName)); if(!isLegacyAdmin&&!hasConfiguredAdminAccess&&!canManageAuthority&&!canUseServerSecurity(interaction)){const denied=await enforceCommandAccess(interaction,command);if(denied)return;} return safeEditReply(interaction,addAdminControls(adminPanel.buildAdminPanel(interaction.guild,displayName,interaction),interaction)); } catch(error){if(error?.code===10062||error?.code===40060)return;console.error('❌ Admin command failed:',error);return safeEditReply(interaction,{embeds:[errorEmbed('Failed to open the admin panel. Please try again.')],components:[]});} } };
 module.exports=command;

@@ -120,21 +120,24 @@ function installSettingsTransfer(targetPanel, targetInteractions) {
     const customId = String(interaction?.customId || '');
     if (customId === 'embed:settings-paste' && interaction.isButton?.()) { await interaction.showModal(targetPanel.settingsPasteModal()); return true; }
     if (customId === 'embed:settings-paste-save' && interaction.isModalSubmit?.()) {
-      try { const name = await importTransferDocument(interaction, targetPanel, interaction.fields.getTextInputValue('preset_json')); await interaction.reply({ content: `✅ Imported preset **${name}** successfully.`, ...targetPanel.buildSettingsPanel(interaction), flags: MessageFlags.Ephemeral }); }
-      catch (error) { await interaction.reply({ content: `❌ Preset import failed: ${error?.message || 'Unknown error.'}`, flags: MessageFlags.Ephemeral }); }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try { const name = await importTransferDocument(interaction, targetPanel, interaction.fields.getTextInputValue('preset_json')); await interaction.editReply({ content: `✅ Imported preset **${name}** successfully.`, ...targetPanel.buildSettingsPanel(interaction) }); }
+      catch (error) { await interaction.editReply({ content: `❌ Preset import failed: ${error?.message || 'Unknown error.'}` }); }
       return true;
     }
     if (customId === 'embed:settings-export-code' && interaction.isButton?.()) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
         const { name, document } = selectedTransferExport(interaction, targetPanel); const json = JSON.stringify(document, null, 2); const chunks = transferCodeChunks(json);
-        await interaction.reply({ content: `📋 JSON code for **${name}**${chunks.length > 1 ? ` (${chunks.length} copyable parts)` : ''}:\n\n\`\`\`json\n${chunks[0]}\n\`\`\``, flags: MessageFlags.Ephemeral });
+        await interaction.editReply({ content: `📋 JSON code for **${name}**${chunks.length > 1 ? ` (${chunks.length} copyable parts)` : ''}:\n\n\`\`\`json\n${chunks[0]}\n\`\`\``, flags: MessageFlags.Ephemeral });
         for (let index = 1; index < chunks.length; index += 1) await interaction.followUp({ content: `**Part ${index + 1}/${chunks.length}**\n\`\`\`json\n${chunks[index]}\n\`\`\``, flags: MessageFlags.Ephemeral });
-      } catch (error) { await interaction.reply({ content: `❌ Preset export failed: ${error?.message || 'Unknown error.'}`, flags: MessageFlags.Ephemeral }); }
+      } catch (error) { await interaction.editReply({ content: `❌ Preset export failed: ${error?.message || 'Unknown error.'}` }); }
       return true;
     }
     if (customId === 'embed:settings-export' && interaction.isButton?.()) {
-      try { const { name, document } = selectedTransferExport(interaction, targetPanel); const attachment = new AttachmentBuilder(Buffer.from(JSON.stringify(document, null, 2), 'utf8'), { name: safeTransferFilename(name) }); await interaction.reply({ content: `📤 Exported preset **${name}**.`, files: [attachment], flags: MessageFlags.Ephemeral }); }
-      catch (error) { await interaction.reply({ content: `❌ Preset export failed: ${error?.message || 'Unknown error.'}`, flags: MessageFlags.Ephemeral }); }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try { const { name, document } = selectedTransferExport(interaction, targetPanel); const attachment = new AttachmentBuilder(Buffer.from(JSON.stringify(document, null, 2), 'utf8'), { name: safeTransferFilename(name) }); await interaction.editReply({ content: `📤 Exported preset **${name}**.`, files: [attachment], flags: MessageFlags.Ephemeral }); }
+      catch (error) { await interaction.editReply({ content: `❌ Preset export failed: ${error?.message || 'Unknown error.'}` }); }
       return true;
     }
     return originalHandle(interaction);
@@ -150,7 +153,7 @@ installSettingsTransfer(panel, interactions);
 const rawHandleInteraction = interactions.handleInteraction.bind(interactions);
 async function deliveryReply(interaction, content) {
   const payload = { content, flags: 64 };
-  try { if (interaction?.deferred || interaction?.replied) return await interaction.followUp(payload); return await interaction.reply(payload); } catch { return true; }
+  try { if (interaction?.deferred && !interaction?.replied) return await interaction.editReply({ content }); if (interaction?.replied) return await interaction.followUp(payload); return await interaction.reply(payload); } catch { return true; }
 }
 async function updateExistingCanonical(interaction, state) {
   if (!interaction?.guild) return false;
@@ -185,7 +188,7 @@ async function handleInteraction(interaction) {
   let deploymentKey = 'custom'; try { deploymentKey = deployments.getDeploymentKeyFromState(state); } catch {}
   const lockKey = `${guildId}:${deploymentKey}`;
   if (deliveryLocks.has(lockKey)) { await deliveryReply(interaction, '⏳ That Embed Studio deployment is already being processed. Please wait for it to finish.'); return true; }
-  const run = (async () => { const permissionFailure = await attachmentPermissionFailure(interaction, state, customId); if (permissionFailure) { await deliveryReply(interaction, permissionFailure); return true; } if (customId === 'embed:update-existing' && await updateExistingCanonical(interaction, state)) return true; return rawHandleInteraction(interaction); })();
+  const run = (async () => { if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: MessageFlags.Ephemeral }); const permissionFailure = await attachmentPermissionFailure(interaction, state, customId); if (permissionFailure) { await deliveryReply(interaction, permissionFailure); return true; } if (customId === 'embed:update-existing' && await updateExistingCanonical(interaction, state)) return true; return rawHandleInteraction(interaction); })();
   deliveryLocks.set(lockKey, run); try { return await run; } finally { if (deliveryLocks.get(lockKey) === run) deliveryLocks.delete(lockKey); }
 }
 interactions.handleInteraction = handleInteraction;

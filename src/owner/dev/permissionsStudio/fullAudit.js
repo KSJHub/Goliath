@@ -98,25 +98,31 @@ async function scan(interaction) {
 async function handle(interaction) {
   const raw = String(interaction.customId || '');
   if (!raw.startsWith(PREFIX)) return false;
-  const guild = await getGuild(interaction);
-  if (!guild) { await interaction.reply({ content: '❌ Server context unavailable.', ephemeral: true }); return true; }
   const action = raw.slice(PREFIX.length).replace(/:guild:\d{16,25}$/, '');
+  if (!['rescan', 'open'].includes(action)) return false;
+  // Guild resolution can take five seconds. Acknowledge the component first.
+  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
   if (action === 'rescan') return scan(interaction);
+  const guild = await getGuild(interaction);
+  if (!guild) {
+    await interaction.followUp({ content: '❌ Server context unavailable.', ephemeral: true });
+    return true;
+  }
   if (action === 'open') {
     const [kind, id] = String(interaction.values?.[0] || '').split(':');
     if (kind === 'role') {
       const role = guild.roles.cache.get(id);
-      if (!role) { await interaction.reply({ content: '❌ That role is no longer available.', ephemeral: true }); return true; }
+      if (!role) { await interaction.followUp({ content: '❌ That role is no longer available.', ephemeral: true }); return true; }
       const studio = require('./index');
       const panel = require('./panel');
-      await interaction.update(panel.role(guild, role, { clipboard: null, history: [] }));
+      await interaction.editReply(panel.role(guild, role, { clipboard: null, history: [] }));
       return true;
     }
     if (kind === 'channel') {
       const channel = guild.channels.cache.get(id);
-      if (!channel) { await interaction.reply({ content: '❌ That channel is no longer available.', ephemeral: true }); return true; }
+      if (!channel) { await interaction.followUp({ content: '❌ That channel is no longer available.', ephemeral: true }); return true; }
       const panel = require('./panel');
-      await interaction.update(panel.channel(guild, channel, { clipboard: null, history: [] }));
+      await interaction.editReply(panel.channel(guild, channel, { clipboard: null, history: [] }));
       return true;
     }
   }

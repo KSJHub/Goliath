@@ -2,6 +2,7 @@
 
 const { Events, REST, Routes } = require('discord.js');
 const { resolveTokenDetails } = require('../../config/tokenResolver');
+const auditStore = require('../../owner/auditIntelligence/auditStore');
 
 const RETIRED_GUILD_COMMANDS = new Set([
   'commandcenter',
@@ -10,12 +11,15 @@ const RETIRED_GUILD_COMMANDS = new Set([
 
 async function removeRetiredGuildCommands(client, rest, applicationId) {
   let removed = 0;
+  const privateGuildId = String(auditStore.getConfig()?.commandCenter?.guildId || '').trim();
+  const preservePrivate = String(process.env.BOT_MODE || '').trim().toUpperCase() === 'DEV';
 
   for (const guild of client.guilds.cache.values()) {
     try {
       const commands = await rest.get(Routes.applicationGuildCommands(applicationId, guild.id));
       for (const command of commands || []) {
         if (!RETIRED_GUILD_COMMANDS.has(String(command?.name || ''))) continue;
+        if (preservePrivate && String(guild.id) === privateGuildId && command.name === 'commandcenter') continue;
         await rest.delete(Routes.applicationGuildCommand(applicationId, guild.id, command.id));
         removed += 1;
         console.warn(`[CommandGuard] Removed forbidden guild /${command.name} from ${guild.name} (${guild.id}).`);

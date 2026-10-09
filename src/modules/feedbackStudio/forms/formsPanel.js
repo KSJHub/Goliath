@@ -16,6 +16,7 @@ const {
 } = require('discord.js');
 
 const forms = require('./forms');
+const { rolePages, rolePageSelect, mergePageSelection } = require('../../../core/ui/rolePagination');
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
 const {
   DEFAULT_BOT_CHANNEL_PERMISSIONS,
@@ -324,9 +325,10 @@ function formatRoles(ids = []) {
   return list.length ? list.map((id) => `<@&${id}>`).join(', ') : '`None`';
 }
 
-function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User') {
+function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
   const section = forms.getSection(guild.id);
   const moduleEnabled = isModuleEnabled(guild.id, 'forms');
+  const roleInfo = rolePages(guild, section.managerRoleIds || [], rolePage);
   const formItems = Object.values(section.forms || {});
   const submissions = Object.values(section.submissions || {});
   const pending = submissions.filter((submission) => submission.status === 'pending').length;
@@ -341,6 +343,7 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User') {
       `**Submit Channel:** ${formatChannel(section.submitChannelId)}`,
       `**Log Channel:** ${formatChannel(section.logChannelId)}`,
       `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`,
+      `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`,
       `**Require Review:** ${section.requireReview !== false ? 'Yes ✅' : 'No ❌'}`,
       `**Anonymous:** ${section.anonymousSubmissions ? 'Yes ✅' : 'No ❌'}`,
       `**Store Responses:** ${section.storeResponses !== false ? 'Yes ✅' : 'No ❌'}`,
@@ -360,9 +363,7 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User') {
       row(
         new ChannelSelectMenuBuilder().setCustomId('admin:forms:logChannel').setPlaceholder('Log/review channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)
       ),
-      row(
-        new RoleSelectMenuBuilder().setCustomId('admin:forms:managerRoles').setPlaceholder('Manager roles').setMinValues(0).setMaxValues(10)
-      ),
+      ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:forms:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
       row(
         button('admin:forms:deployDefault', '🚀 Deploy Form', ButtonStyle.Success),
         button(moduleEnabled ? 'admin:forms:disable' : 'admin:forms:enable', moduleEnabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
@@ -370,7 +371,9 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User') {
         button('admin:forms:toggleAnonymous', '👤 Anonymous', ButtonStyle.Secondary),
         button('admin:forms:toggleStore', '💾 Store', ButtonStyle.Secondary)
       ),
-      row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary)),
+      row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary),
+        button(`admin:forms:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, '◀ Roles', ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
+        button(`admin:forms:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, 'Roles ▶', ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
     ],
   };
 }
@@ -407,9 +410,20 @@ async function handleFormsAdminInteraction(interaction) {
       return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName));
     }
 
-    if (interaction.isRoleSelectMenu?.() && customId === 'admin:forms:managerRoles') {
-      save(interaction.guild, (section) => ({ ...section, managerRoleIds: [...new Set(interaction.values || [])] }));
-      return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName));
+    if (customId.startsWith('admin:forms:roleBrowse:')) {
+      const page = Number(customId.slice('admin:forms:roleBrowse:'.length));
+      if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+      return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName, page));
+    }
+    if (interaction.isStringSelectMenu?.() && customId.startsWith('admin:forms:managerRoles:')) {
+      const page = Number(customId.slice('admin:forms:managerRoles:'.length));
+      if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+      const current = forms.getFormsSection(interaction.guild.id);
+      const info = rolePages(interaction.guild, current.managerRoleIds || [], page);
+      if (info.page !== page) throw new Error('Role page expired. Reopen Forms.');
+      const chosen = mergePageSelection(current.managerRoleIds || [], info.roles, interaction.values || []);
+      save(interaction.guild, section => ({ ...section, managerRoleIds: chosen }));
+      return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName, page));
     }
 
     if (customId === 'admin:forms:enable' || customId === 'admin:forms:disable') {

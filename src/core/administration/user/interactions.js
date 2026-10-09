@@ -116,6 +116,11 @@ function buildUserHomePanel(interaction) {
 
 async function updatePanel(interaction, payload) {
   const sortedPayload = profileDevelopmentPage.sortNonNavigationButtons(payload);
+  const adminOrigin = interaction.message?.components?.some((row) => row.components?.some((component) => component.customId === 'admin:userpanel:back'));
+  if (adminOrigin) {
+    const back = sortedPayload.components?.flatMap((row) => row.components || []).find((component) => component.data?.custom_id === 'user:close');
+    if (back) back.setCustomId('admin:userpanel:back');
+  }
   if (interaction.deferred || interaction.replied) {
     await interaction.editReply(sortedPayload);
     return true;

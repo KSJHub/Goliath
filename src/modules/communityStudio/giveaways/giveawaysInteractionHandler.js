@@ -5,6 +5,7 @@ const giveawaysStore = require('./giveawaysStore');
 const guildManager = require('../../../core/guild/guildManager');
 const giveawaysManager = require('./giveawaysManager');
 const giveawaysPanel = require('./giveawaysAdminPanel');
+const { rolePages, mergePageSelection } = require('../../../core/ui/rolePagination');
 
 function getMemberDisplayName(interaction) { return interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User'; }
 function save(guild, updater) { return giveawaysStore.updateSection(guild.id, updater, guild); }
@@ -76,9 +77,20 @@ async function handleGiveawaysAdminInteraction(interaction) {
       if (prop === 'logChannel') save(interaction.guild, (section) => ({ ...section, logChannelId: value }));
       return safeUpdate(interaction, giveawaysPanel.buildGiveawaysAdminPanel(interaction.guild, memberDisplayName));
     }
-    if (interaction.isRoleSelectMenu?.() && customId === 'admin:giveaways:managerRoles') {
-      save(interaction.guild, (section) => ({ ...section, managerRoleIds: [...new Set(interaction.values || [])] }));
-      return safeUpdate(interaction, giveawaysPanel.buildGiveawaysAdminPanel(interaction.guild, memberDisplayName));
+    if (customId.startsWith('admin:giveaways:roleBrowse:')) {
+      const page = Number(customId.slice('admin:giveaways:roleBrowse:'.length));
+      if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+      return safeUpdate(interaction, giveawaysPanel.buildGiveawaysAdminPanel(interaction.guild, memberDisplayName, page));
+    }
+    if (interaction.isStringSelectMenu?.() && customId.startsWith('admin:giveaways:managerRoles:')) {
+      const page = Number(customId.slice('admin:giveaways:managerRoles:'.length));
+      if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+      const current = giveawaysStore.getSection(interaction.guild.id);
+      const info = rolePages(interaction.guild, current.managerRoleIds || [], page);
+      if (info.page !== page) throw new Error('Role page expired. Reopen Giveaways.');
+      const chosen = mergePageSelection(current.managerRoleIds || [], info.roles, interaction.values || []);
+      save(interaction.guild, section => ({ ...section, managerRoleIds: chosen }));
+      return safeUpdate(interaction, giveawaysPanel.buildGiveawaysAdminPanel(interaction.guild, memberDisplayName, page));
     }
     if (customId === 'admin:giveaways:enable') {
       guildManager.setModuleEnabled(interaction.guild.id, 'giveaways', true);

@@ -155,7 +155,7 @@ async function getWaitingMembers(guild) {
   return members.filter((member) => !completed.has(member.id));
 }
 
-async function runScheduledWelcome(guild, options = {}) {
+async function executeScheduledWelcome(guild, options = {}) {
   let config = getScheduledConfig(guild.id);
   if (!options.force && !guildManager.isModuleEnabled(guild.id, MODULE)) return { skipped: true, reason: 'welcome_disabled' };
   if (!options.force && !config.enabled) return { skipped: true, reason: 'scheduled_disabled' };
@@ -197,16 +197,17 @@ async function runScheduledWelcome(guild, options = {}) {
       await channel.send(payload);
       messagesSent += 1;
       welcomed += batch.length;
-      for (const member of batch) {
-        if (!config.removeQueueRole) {
-          completed.add(member.id);
-          continue;
-        }
-        const removal = await queue.removeQueueRole(member, config.queueRoleId);
-        if (!removal.removed && !removal.skipped) {
-          roleRemovalFailed += 1;
-          completed.add(member.id);
-          errors.push(`${member.id}: welcome sent but queue role removal failed: ${removal.error || 'Unknown error'}`);
+      // Persist successful delivery before attempting role cleanup. A role
+      // removal failure must never make an already-sent welcome eligible again.
+      for (const member of batch) completed.add(member.id);
+      updateScheduledConfig(guild.id, { completedMemberIds: [...completed] }, { actorId: options.actorId, action: 'scheduled_welcome_delivery_checkpoint' });
+      if (config.removeQueueRole) {
+        for (const member of batch) {
+          const removal = await queue.removeQueueRole(member, config.queueRoleId);
+          if (!removal.removed && !removal.skipped) {
+            roleRemovalFailed += 1;
+            errors.push(`${member.id}: welcome sent but queue role removal failed: ${removal.error || 'Unknown error'}`);
+          }
         }
       }
     } catch (error) {
@@ -230,6 +231,20 @@ async function runScheduledWelcome(guild, options = {}) {
   updateScheduledConfig(guild.id, { analytics, completedMemberIds: [...completed] }, { actorId: options.actorId, action: 'scheduled_welcome_run' });
 
   return { skipped: false, empty: false, welcomed, messagesSent, sendFailed, roleRemovalFailed, errors };
+}
+
+
+const activeRuns = new Set();
+
+async function runScheduledWelcome(guild, options = {}) {
+  if (!guild?.id) throw new Error('Scheduled Welcome requires a guild.');
+  if (activeRuns.has(guild.id)) return { skipped: true, reason: 'already_running' };
+  activeRuns.add(guild.id);
+  try {
+    return await executeScheduledWelcome(guild, options);
+  } finally {
+    activeRuns.delete(guild.id);
+  }
 }
 
 module.exports = {

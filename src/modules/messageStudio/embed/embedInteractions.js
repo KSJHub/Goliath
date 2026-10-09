@@ -62,6 +62,7 @@ function resolveButton(interaction) {
 }
 async function ephemeral(interaction, payload) {
   const body = typeof payload === 'string' ? { content: payload } : payload;
+  if (interaction.deferred && !interaction.replied && interaction.__goliathEmbedRoleAction) return interaction.editReply(body);
   if (interaction.deferred || interaction.replied) return interaction.followUp({ ...body, flags: MessageFlags.Ephemeral });
   return interaction.reply({ ...body, flags: MessageFlags.Ephemeral });
 }
@@ -75,6 +76,7 @@ async function roleIsSafe(roleId, guild) {
   return { ok: true, role };
 }
 async function executeRoleAction(interaction, action, value) {
+  if (!interaction.deferred && !interaction.replied) { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); interaction.__goliathEmbedRoleAction = true; }
   const roleId = String(resolved(value, interaction) || '').match(/\d{15,25}/)?.[0] || null;
   if (!roleId) return ephemeral(interaction, '❌ This button does not have a valid role configured.');
   const safe = await roleIsSafe(roleId, interaction.guild);
@@ -449,6 +451,8 @@ async function handlePresetInteraction(i) {
      * explicitly afterwards so preset media cannot be lost by any
      * legacy panel/state compatibility layer.
      */
+    // Acknowledge before refreshing media, which can involve network requests.
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     // Refresh/verify durable media assets when a preset is loaded. If the
     // Discord CDN URL has expired, the cached copy is what deployment uses.
     try {
@@ -491,7 +495,7 @@ async function handlePresetInteraction(i) {
       `[Embed Presets] Loaded "${name}" with ${galleryCount} gallery media item(s).`
     );
 
-    await i.update(
+    await i.editReply(
       panel.buildEditorPanel(
         i,
         panel.memberName(i)
@@ -798,6 +802,9 @@ async function handlePresetInteraction(i) {
     const preset =
       panel.presetData(state);
 
+    // Acknowledge the modal before potentially slow media persistence.
+    await i.deferUpdate();
+
     // Finish media persistence before the preset is committed. Discord upload
     // URLs can expire; the cached asset is the durable source used after reload.
     try {
@@ -815,9 +822,9 @@ async function handlePresetInteraction(i) {
       );
 
     if (!saved) {
-      await i.reply({
+      await i.followUp({
         content: `Could not save preset "${name}".`,
-        flags: 64,
+        flags: MessageFlags.Ephemeral,
       });
       return true;
     }
@@ -828,7 +835,7 @@ async function handlePresetInteraction(i) {
       hasUnsavedChanges: false,
     });
 
-    await i.update(
+    await i.editReply(
       panel.buildPresetsPanel(i)
     );
 
@@ -1075,6 +1082,8 @@ async function handlePresetInteraction(i) {
       return true;
     }
 
+    await i.deferUpdate();
+
     const saved =
       guildManager.saveEmbedPreset?.(
         guildId,
@@ -1084,9 +1093,9 @@ async function handlePresetInteraction(i) {
       );
 
     if (!saved) {
-      await i.reply({
+      await i.followUp({
         content: 'Could not duplicate that preset.',
-        flags: 64,
+        flags: MessageFlags.Ephemeral,
       });
       return true;
     }
@@ -1096,7 +1105,7 @@ async function handlePresetInteraction(i) {
       selectedPreset: copyName,
     });
 
-    await i.update(
+    await i.editReply(
       panel.buildPresetsPanel(i)
     );
 
@@ -1130,7 +1139,8 @@ async function handleBuilderInteractions(i) {
   // Never recreate the retired UI: acknowledge the stale control by routing
   // the user directly into the current Media Manager.
   if (i.isButton?.() && customId === 'embed:header-type-cycle') {
-    await i.update({
+    if (!i.deferred && !i.replied) await i.deferUpdate();
+    await i.editReply({
       ...panel.buildMediaManagerPanel(i, who(i)),
       attachments: [],
     });
@@ -1228,12 +1238,12 @@ async function handleBuilderInteractions(i) {
     if (customId === 'embed:button-row-select') { if (buttonIndex == null) return updateButtons(i); const raw = String(i.values?.[0] || 'auto'); const row = manualRow(raw); if (raw !== 'auto' && row == null) return true; if (row != null) { const assigned = buttons.filter((button, idx) => idx !== buttonIndex && manualRow(button?.row) === row).length; if (assigned >= panel.MAX_BUTTONS_PER_ROW) { await i.reply({ content: `⚠️ Row ${row + 1} already has ${panel.MAX_BUTTONS_PER_ROW} explicitly placed buttons. Choose another row or Auto placement.`, flags: 64 }); return true; } } buttons[buttonIndex] = { ...buttons[buttonIndex], row: row == null ? null : row }; saveButtons(i, state, buttons, buttonIndex); return updateButtonOptions(i); }
   }
 
-  if (i.isRoleSelectMenu?.() && customId === 'embed:button-action-role') { if (buttonIndex == null || !roleAction(buttons[buttonIndex]?.action)) return updateButtonOptions(i); const roleId = String(i.values?.[0] || ''); const role = i.guild?.roles?.cache?.get?.(roleId) || (await i.guild?.roles?.fetch?.(roleId).catch(() => null)); if (!role || role.id === i.guildId || role.managed) { await i.reply({ content: '⚠️ Select a normal server role. Managed/integration roles and @everyone cannot be used.', flags: 64 }); return true; } buttons[buttonIndex] = { ...buttons[buttonIndex], actionValue: role.id }; saveButtons(i, state, buttons, buttonIndex); return updateButtonOptions(i); }
+  if (i.isRoleSelectMenu?.() && customId === 'embed:button-action-role') { if (buttonIndex == null || !roleAction(buttons[buttonIndex]?.action)) return updateButtonOptions(i); const roleId = String(i.values?.[0] || ''); if (!i.deferred && !i.replied) await i.deferUpdate(); const role = i.guild?.roles?.cache?.get?.(roleId) || (await i.guild?.roles?.fetch?.(roleId).catch(() => null)); if (!role || role.id === i.guildId || role.managed) { await i.followUp({ content: '⚠️ Select a normal server role. Managed/integration roles and @everyone cannot be used.', flags: MessageFlags.Ephemeral }); return true; } buttons[buttonIndex] = { ...buttons[buttonIndex], actionValue: role.id }; saveButtons(i, state, buttons, buttonIndex); return updateButtonOptions(i); }
 
   if (i.isModalSubmit?.() && customId.startsWith('embed:appearance-details-save:')) { saveAppearance(i, state, { authorName: i.fields.getTextInputValue('authorName'), authorUrl: i.fields.getTextInputValue('authorUrl'), footer: i.fields.getTextInputValue('footer') }); await i.reply({ ...panel.buildContentManagerPanel(i), flags: 64 }); return true; }
   if (i.isModalSubmit?.() && customId.startsWith('embed:appearance-icon-url-save:')) { const kind = customId.split(':')[3]; if (!validKind(kind)) return true; saveAppearance(i, state, { [iconField(kind)]: i.fields.getTextInputValue('source') }); await i.reply({ ...panel.buildAppearanceIconPanel(i, kind), flags: 64 }); return true; }
-  if (i.isModalSubmit?.() && customId.startsWith('embed:appearance-icon-upload-save:')) { const kind = customId.split(':').pop(); if (!validKind(kind)) return true; const uploaded = i.fields.getUploadedFiles('icon_file', true); const attachment = [...(uploaded?.values?.() || [])][0]; if (!attachment) { await i.reply({ content: 'No icon was uploaded.', flags: 64 }); return true; } const contentType = String(attachment.contentType || '').toLowerCase(); if (contentType && !contentType.startsWith('image/')) { await i.reply({ content: '⚠️ Author and footer icons must be image files.', flags: 64 }); return true; } try { await media.ensureAssetCached('global', attachment.url); } catch (error) { console.warn('[Embed Media] appearance icon persistence failed:', attachment?.name || attachment?.url, error?.message || error); } saveAppearance(i, state, { [iconField(kind)]: attachment.url }); await i.reply({ content: `✅ ${kind === 'author' ? 'Author' : 'Footer'} icon uploaded.`, ...panel.buildAppearanceIconPanel(i, kind), flags: 64 }); return true; }
-  if (i.isModalSubmit?.() && customId === 'embed:thumbnail-upload-save') { const uploaded = i.fields.getUploadedFiles('thumbnail_file', true); const attachment = [...(uploaded?.values?.() || [])][0]; if (!attachment) { await i.reply({ content: 'No thumbnail was uploaded.', flags: 64 }); return true; } const contentType = String(attachment.contentType || '').toLowerCase(); if (contentType && !contentType.startsWith('image/')) { await i.reply({ content: '⚠️ Thumbnails must be image files.', flags: 64 }); return true; } try { await media.ensureAssetCached('global', attachment.url); } catch (error) { console.warn('[Embed Media] thumbnail persistence failed:', attachment?.name || attachment?.url, error?.message || error); } saveThumbnailState(i, state, { source: attachment.url, alt: attachment.description || attachment.name || '' }); await i.reply({ content: '✅ Thumbnail uploaded.', ...panel.buildThumbnailOptionsPanel(i), flags: 64 }); return true; }
+  if (i.isModalSubmit?.() && customId.startsWith('embed:appearance-icon-upload-save:')) { const kind = customId.split(':').pop(); if (!validKind(kind)) return true; const uploaded = i.fields.getUploadedFiles('icon_file', true); const attachment = [...(uploaded?.values?.() || [])][0]; if (!attachment) { await i.reply({ content: 'No icon was uploaded.', flags: 64 }); return true; } const contentType = String(attachment.contentType || '').toLowerCase(); if (contentType && !contentType.startsWith('image/')) { await i.reply({ content: '⚠️ Author and footer icons must be image files.', flags: 64 }); return true; } await i.deferReply({ flags: MessageFlags.Ephemeral }); try { await media.ensureAssetCached('global', attachment.url); } catch (error) { console.warn('[Embed Media] appearance icon persistence failed:', attachment?.name || attachment?.url, error?.message || error); } saveAppearance(i, state, { [iconField(kind)]: attachment.url }); await i.editReply({ content: `✅ ${kind === 'author' ? 'Author' : 'Footer'} icon uploaded.`, ...panel.buildAppearanceIconPanel(i, kind) }); return true; }
+  if (i.isModalSubmit?.() && customId === 'embed:thumbnail-upload-save') { const uploaded = i.fields.getUploadedFiles('thumbnail_file', true); const attachment = [...(uploaded?.values?.() || [])][0]; if (!attachment) { await i.reply({ content: 'No thumbnail was uploaded.', flags: 64 }); return true; } const contentType = String(attachment.contentType || '').toLowerCase(); if (contentType && !contentType.startsWith('image/')) { await i.reply({ content: '⚠️ Thumbnails must be image files.', flags: 64 }); return true; } await i.deferReply({ flags: MessageFlags.Ephemeral }); try { await media.ensureAssetCached('global', attachment.url); } catch (error) { console.warn('[Embed Media] thumbnail persistence failed:', attachment?.name || attachment?.url, error?.message || error); } saveThumbnailState(i, state, { source: attachment.url, alt: attachment.description || attachment.name || '' }); await i.editReply({ content: '✅ Thumbnail uploaded.', ...panel.buildThumbnailOptionsPanel(i) }); return true; }
 
   if (i.isModalSubmit?.() && (customId === 'embed:field-manager-save-new' || customId.startsWith('embed:field-manager-save:'))) { const name = String(i.fields.getTextInputValue('name') || '').trim(); const value = String(i.fields.getTextInputValue('value') || '').trim(); if (!name || !value) { await i.reply({ content: 'Field name and content are required.', flags: 64 }); return true; } const editingIndex = customId === 'embed:field-manager-save-new' ? null : Number(customId.split(':').pop()); let nextFieldIndex; if (editingIndex == null) { if (fields.length >= panel.MAX_EMBED_FIELDS) { await i.reply({ content: `Maximum of ${panel.MAX_EMBED_FIELDS} fields reached.`, flags: 64 }); return true; } fields.push({ name: name.slice(0, 256), value: value.slice(0, 1024), inline: false }); nextFieldIndex = fields.length - 1; } else { const existing = fields[editingIndex] || { inline: false }; fields[editingIndex] = { ...existing, name: name.slice(0, 256), value: value.slice(0, 1024), inline: Boolean(existing.inline) }; nextFieldIndex = editingIndex; } saveFields(i, state, fields, nextFieldIndex); return replyFields(i); }
   if (i.isModalSubmit?.() && (customId === 'embed:button-manager-save-new' || customId.startsWith('embed:button-manager-save:'))) { const label = String(i.fields.getTextInputValue('label') || '').trim().slice(0, 80); const emoji = String(i.fields.getTextInputValue('emoji') || '').trim().slice(0, 100); const url = String(i.fields.getTextInputValue('url') || '').trim(); if (!label) { await i.reply({ content: 'A button label is required.', flags: 64 }); return true; } if (!validUrlOrVariable(url)) { await i.reply({ content: 'Button links must be HTTP/HTTPS URLs or a URL-producing Embed Studio variable.', flags: 64 }); return true; } const editingIndex = customId === 'embed:button-manager-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (buttons[editingIndex] || {}) : {}; const entry = { ...existing, label, emoji, url, ...(url ? { action: '', actionValue: '' } : {}), style: ['primary', 'secondary', 'success', 'danger'].includes(String(existing.style || '').toLowerCase()) ? String(existing.style).toLowerCase() : 'primary' }; let nextButtonIndex; if (editingIndex == null) { if (buttons.length >= panel.MAX_EMBED_BUTTONS) { await i.reply({ content: `Maximum of ${panel.MAX_EMBED_BUTTONS} buttons reached.`, flags: 64 }); return true; } buttons.push({ ...entry, action: '', actionValue: '', row: null }); nextButtonIndex = buttons.length - 1; } else { buttons[editingIndex] = entry; nextButtonIndex = editingIndex; } saveButtons(i, state, buttons, nextButtonIndex); return replyButtons(i); }
@@ -1334,32 +1344,31 @@ async function handleCoreInteraction(i) {
       return true;
     }
 
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+
     try {
       const document = await fetchPresetImportJson(attachment);
       const imported = normalizePortablePresetDocument(document);
       const name = imported.name;
 
       if (!name) {
-        await i.reply({
+        await i.editReply({
           content: 'The imported preset does not contain a valid preset name.',
-          flags: MessageFlags.Ephemeral,
-        });
+          });
         return true;
       }
 
       if (name.startsWith('auto-')) {
-        await i.reply({
+        await i.editReply({
           content: 'Preset names beginning with "auto-" are reserved by Goliath.',
-          flags: MessageFlags.Ephemeral,
-        });
+          });
         return true;
       }
 
       if (guildManager.getEmbedPreset?.(guildId, name)) {
-        await i.reply({
+        await i.editReply({
           content: `A preset named "${name}" already exists. Rename or delete the existing preset before importing this file.`,
-          flags: MessageFlags.Ephemeral,
-        });
+          });
         return true;
       }
 
@@ -1371,10 +1380,9 @@ async function handleCoreInteraction(i) {
       );
 
       if (!saved) {
-        await i.reply({
+        await i.editReply({
           content: `Could not import preset "${name}".`,
-          flags: MessageFlags.Ephemeral,
-        });
+          });
         return true;
       }
 
@@ -1385,10 +1393,9 @@ async function handleCoreInteraction(i) {
         selectedPreset: name,
       });
 
-      await i.reply({
+      await i.editReply({
         content: `✅ Imported preset **${name}** successfully.`,
         ...panel.buildSettingsPanel(i),
-        flags: MessageFlags.Ephemeral,
       });
 
       return true;
@@ -1398,9 +1405,8 @@ async function handleCoreInteraction(i) {
         error?.message || error
       );
 
-      await i.reply({
+      await i.editReply({
         content: `❌ Preset import failed: ${error?.message || 'Unknown error.'}`,
-        flags: MessageFlags.Ephemeral,
       });
 
       return true;
@@ -1613,6 +1619,8 @@ async function handleCoreInteraction(i) {
       return true;
     }
 
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+
     let addedGallery = 0;
     let addedFiles = 0;
     let skipped = 0;
@@ -1685,7 +1693,7 @@ async function handleCoreInteraction(i) {
     }
 
     if (!addedGallery && !addedFiles) {
-      await i.reply({
+      await i.editReply({
         content: '⚠️ Nothing could be added because the applicable media/file limits have been reached.',
         flags: 64,
       });
@@ -1706,7 +1714,7 @@ async function handleCoreInteraction(i) {
       }
     );
 
-    await i.update({
+    const mediaPanelPayload = {
       ...panel.buildMediaManagerPanel(
         i,
         who(i),
@@ -1714,7 +1722,19 @@ async function handleCoreInteraction(i) {
       ),
       content: null,
       attachments: [],
-    });
+    };
+    // A modal's deferred reply is not the original editor message.
+    // Refresh the editor in place when Discord supplies the source message.
+    if (i.message?.edit) {
+      try {
+        await i.message.edit(mediaPanelPayload);
+        await i.editReply({ content: '✅ Media Manager updated.' });
+        return true;
+      } catch (error) {
+        console.warn('[Embed Media] Could not refresh original editor message:', error?.message || error);
+      }
+    }
+    await i.editReply(mediaPanelPayload);
 
     return true;
   }
@@ -1725,17 +1745,17 @@ async function handleCoreInteraction(i) {
   if (i.isModalSubmit?.() && (customId === 'embed:media-gallery-save-new' || customId.startsWith('embed:media-gallery-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-gallery-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.gallery[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeGalleryItem({ source: i.fields.getTextInputValue('source'), alt: i.fields.getTextInputValue('alt'), type: existing.type, headerType: existing.headerType, spoiler: existing.spoiler, placement: existing.placement, alignment: existing.alignment, size: existing.size }); if (!entry.source) { await i.reply({ content: 'A media URL or variable is required.', flags: 64 }); return true; } const gallery = [...panelMedia.gallery]; let selectedMediaIndex; if (editingIndex == null) { if (gallery.length >= panel.mediaModel.MAX_GALLERY_ITEMS) { await i.reply({ content: 'Maximum gallery item limit reached.', flags: 64 }); return true; } gallery.push(entry); selectedMediaIndex = gallery.length - 1; } else { gallery[editingIndex] = entry; selectedMediaIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, gallery }, { selectedMediaIndex }); return replyMediaPanel(i); }
   if (i.isModalSubmit?.() && (customId === 'embed:media-file-save-new' || customId.startsWith('embed:media-file-save:'))) { const panelMedia = panel.getPanelMedia(state); const editingIndex = customId === 'embed:media-file-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (panelMedia.files[editingIndex] || {}) : {}; const entry = panel.mediaModel.normalizeFile({ source: i.fields.getTextInputValue('source'), name: i.fields.getTextInputValue('name'), description: i.fields.getTextInputValue('description'), spoiler: existing.spoiler === true }); if (!entry.source) { await i.reply({ content: 'A file URL or variable is required.', flags: 64 }); return true; } const files = [...panelMedia.files]; let selectedFileIndex; if (editingIndex == null) { if (files.length >= panel.mediaModel.MAX_FILES) { await i.reply({ content: 'Maximum file limit reached.', flags: 64 }); return true; } files.push(entry); selectedFileIndex = files.length - 1; } else { files[editingIndex] = entry; selectedFileIndex = editingIndex; } saveMediaState(i, state, { ...panelMedia, files }, { selectedFileIndex }); return replyMediaPanel(i); }
 
-  if (customId === 'embed:test-send') { try { const payload = await buildPayload(state, i, true); payload.allowedMentions = panel.allowedMentions(state, i); await i.reply(payload); } catch (error) { console.error('[Embed] test payload failed:', error); await i.reply({ content: `❌ Embed test failed: ${error?.message || error}`, flags: 64 }); } return true; }
+  if (customId === 'embed:test-send') { await i.deferReply({ flags: MessageFlags.Ephemeral }); try { const payload = await buildPayload(state, i, true); payload.allowedMentions = panel.allowedMentions(state, i); await i.editReply(payload); } catch (error) { console.error('[Embed] test payload failed:', error); await i.editReply({ content: `❌ Embed test failed: ${error?.message || error}`, flags: 64 }); } return true; }
 
   if (customId === 'embed:use') {
+    if (!i.deferred && !i.replied) await i.deferReply({ flags: MessageFlags.Ephemeral });
     const channel =
       i.guild.channels.cache.get(state.channelId) ||
       await i.guild.channels.fetch(state.channelId).catch(() => null);
 
     if (!isTextBasedChannel(channel)) {
-      await i.reply({
+      await i.editReply({
         content: 'Invalid channel.',
-        flags: 64,
       });
       return true;
     }
@@ -1752,9 +1772,8 @@ async function handleCoreInteraction(i) {
     );
 
     if (!access.ok) {
-      await i.reply({
+      await i.editReply({
         content: panel.trim(access.message, 1800),
-        flags: 64,
       });
       return true;
     }
@@ -1819,9 +1838,8 @@ async function handleCoreInteraction(i) {
         selectedPreset: presetName,
       });
 
-      await i.reply({
+      await i.editReply({
         content: `✅ Embed posted to <#${state.channelId}> and saved as active`,
-        flags: 64,
       });
     } catch (error) {
       if (sent) {
@@ -1853,17 +1871,15 @@ async function handleCoreInteraction(i) {
           }
         );
 
-        await i.reply({
+        await i.editReply({
           content: rollbackSucceeded
             ? '❌ The embed could not be fully saved by Goliath. The Discord message was rolled back and the editor remains unsaved.'
             : `🚨 The embed could not be fully saved by Goliath, and the Discord message could not be rolled back. Message ID: ${sent.id}. The editor remains unsaved and this deployment requires reconciliation.`,
-          flags: 64,
-        });
+          });
       } else {
-        await i.reply({
+        await i.editReply({
           content: panel.embedOperationError(error, channel.id, 'send'),
-          flags: 64,
-        });
+          });
       }
     }
 
@@ -1876,10 +1892,12 @@ async function handleCoreInteraction(i) {
 async function legacyReplyOrUpdate(i, payload) {
   const safePayload = { ...payload, flags: 64 };
   if (i.isModalSubmit?.()) {
+    if (i.deferred || i.replied) return i.editReply(payload);
     if (typeof i.update === 'function') return i.update(payload);
     if (i.deferred || i.replied) return i.editReply(safePayload);
     return i.reply(safePayload);
   }
+  if (i.deferred || i.replied) return i.editReply(payload);
   return i.update(payload);
 }
 
@@ -1890,7 +1908,8 @@ async function handleLegacyInteraction(i) {
   const state = panel.getSession(i);
 
   if (customId === 'admin:embed') {
-    await i.update({
+    if (!i.deferred && !i.replied) await i.deferUpdate();
+    await i.editReply({
       ...panel.buildEditorPanel(i, name),
       attachments: [],
     });
@@ -1986,6 +2005,8 @@ async function handleLegacyInteraction(i) {
       return true;
     }
 
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+
     const channel =
       i.guild?.channels?.cache?.get(channelId) ||
       await i.guild?.channels
@@ -2000,10 +2021,9 @@ async function handleLegacyInteraction(i) {
         channel.type !== 5
       )
     ) {
-      await i.reply({
+      await i.editReply({
         content:
           '❌ That channel was not found in this server, or it is not a text/announcement channel.',
-        flags: MessageFlags.Ephemeral,
       });
 
       return true;
@@ -2023,13 +2043,12 @@ async function handleLegacyInteraction(i) {
     );
 
     if (!access.ok) {
-      await i.reply({
+      await i.editReply({
         content: panel.trim(
           access.message ||
             'Goliath cannot deploy to that channel.',
           1800
         ),
-        flags: MessageFlags.Ephemeral,
       });
 
       return true;
@@ -2057,28 +2076,32 @@ async function handleLegacyInteraction(i) {
       return true;
     }
     if (customId === 'embed:builder') {
-      await i.update({
+      if (!i.deferred && !i.replied) await i.deferUpdate();
+      await i.editReply({
         ...panel.buildBuilderPanel(i, name),
         attachments: [],
       });
       return true;
     }
     if (customId === 'embed:panel-colour') {
-      await i.update({
+      if (!i.deferred && !i.replied) await i.deferUpdate();
+      await i.editReply({
         ...panel.buildPanelColourPanel(i, name),
         attachments: [],
       });
       return true;
     }
     if (customId === 'embed:presets') {
-      await i.update({
+      if (!i.deferred && !i.replied) await i.deferUpdate();
+      await i.editReply({
         ...panel.buildPresetsPanel(i, name),
         attachments: [],
       });
       return true;
     }
     if (customId === 'embed:panels') {
-      await i.update({
+      if (!i.deferred && !i.replied) await i.deferUpdate();
+      await i.editReply({
         ...panel.buildPanelsPanel(i, name),
         attachments: [],
       });
@@ -2114,14 +2137,14 @@ async function handleLegacyInteraction(i) {
       if (state.panels.length <= 1) { await i.reply({ content: 'You need at least one panel.', flags: 64 }); return true; }
       const panels = [...state.panels]; panels.splice(state.selectedPanelIndex, 1); panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: Math.max(0, state.selectedPanelIndex - 1), selectedFieldIndex: null }); await i.update(panel.buildPanelsPanel(i, name)); return true;
     }
-    if (customId === 'embed:panel-up' || customId === 'embed:panel-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedPanelIndex + delta; if (target < 0 || target >= state.panels.length) return true; const panels = [...state.panels]; [panels[state.selectedPanelIndex], panels[target]] = [panels[target], panels[state.selectedPanelIndex]]; panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: target }); await i.update(panel.buildPanelsPanel(i, name)); return true; }
+    if (customId === 'embed:panel-up' || customId === 'embed:panel-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedPanelIndex + delta; if (target < 0 || target >= state.panels.length) { await i.deferUpdate(); return true; } const panels = [...state.panels]; [panels[state.selectedPanelIndex], panels[target]] = [panels[target], panels[state.selectedPanelIndex]]; panel.markUnsaved(i, { ...state, panels, selectedPanelIndex: target }); await i.update(panel.buildPanelsPanel(i, name)); return true; }
     if (customId === 'embed:field-add') { await i.showModal(panel.fieldModal(state)); return true; }
     if (customId === 'embed:field-edit') { if (!Number.isInteger(state.selectedFieldIndex)) { await i.reply({ content: 'Select a field first.', flags: 64 }); return true; } await i.showModal(panel.fieldModal(state, state.selectedFieldIndex)); return true; }
     if (customId === 'embed:field-remove-selected') { const fields = [...(state.fields || [])]; if (Number.isInteger(state.selectedFieldIndex)) fields.splice(state.selectedFieldIndex, 1); panel.markUnsaved(i, panel.saveSelected({ ...state, selectedFieldIndex: null }, { fields })); await i.update(panel.buildFieldsPanel(i, name)); return true; }
     if (customId === 'embed:button-add') { await i.showModal(panel.buttonModal(state)); return true; }
     if (customId === 'embed:button-edit') { if (!Number.isInteger(state.selectedButtonIndex)) { await i.reply({ content: 'Select a button first.', flags: 64 }); return true; } await i.showModal(panel.buttonModal(state, state.selectedButtonIndex)); return true; }
     if (customId === 'embed:button-remove-selected') { const buttons = [...(state.buttons || [])]; if (Number.isInteger(state.selectedButtonIndex)) buttons.splice(state.selectedButtonIndex, 1); panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: null }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
-    if (customId === 'embed:button-move-up' || customId === 'embed:button-move-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedButtonIndex + delta; if (!Number.isInteger(state.selectedButtonIndex) || target < 0 || target >= (state.buttons || []).length) return true; const buttons = [...state.buttons]; [buttons[state.selectedButtonIndex], buttons[target]] = [buttons[target], buttons[state.selectedButtonIndex]]; panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: target }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
+    if (customId === 'embed:button-move-up' || customId === 'embed:button-move-down') { const delta = customId.endsWith('up') ? -1 : 1; const target = state.selectedButtonIndex + delta; if (!Number.isInteger(state.selectedButtonIndex) || target < 0 || target >= (state.buttons || []).length) { await i.deferUpdate(); return true; } const buttons = [...state.buttons]; [buttons[state.selectedButtonIndex], buttons[target]] = [buttons[target], buttons[state.selectedButtonIndex]]; panel.markUnsaved(i, { ...state, buttons, selectedButtonIndex: target }); await i.update(panel.buildButtonsPanel(i, name)); return true; }
 
   }
 
@@ -2137,6 +2160,7 @@ async function handleLegacyInteraction(i) {
 }
 
 async function showReadiness(interaction) {
+  if (!interaction.deferred && !interaction.replied && (interaction.isButton?.() || interaction.isStringSelectMenu?.() || interaction.isRoleSelectMenu?.())) await interaction.deferUpdate();
   const payload = panel.buildReadinessPanel(interaction);
   if (interaction.deferred || interaction.replied) await interaction.editReply(payload);
   else if (interaction.isButton?.() || interaction.isStringSelectMenu?.() || interaction.isRoleSelectMenu?.()) await interaction.update(payload);
@@ -2146,6 +2170,7 @@ async function showReadiness(interaction) {
 async function updateWith(interaction, payload) { if (interaction.deferred || interaction.replied) await interaction.editReply(payload); else await interaction.update(payload); return true; }
 function selectState(interaction, patch = {}) { const state = panel.getSession(interaction); return panel.saveSession(interaction, { ...state, ...patch }); }
 async function routeReadinessFix(interaction) {
+  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
   const report = panel.getReadinessReport(interaction); const target = panel.getReadinessFixTarget(report); const state = panel.getSession(interaction);
   if (target.type === 'channel') return updateWith(interaction, panel.buildEditorPanel(interaction, panel.memberName?.(interaction)));
   if (target.type === 'button') { const buttons = Array.isArray(state.buttons) ? state.buttons : []; const selectedButtonIndex = Number.isInteger(target.index) && buttons[target.index] ? target.index : (buttons.length ? 0 : null); selectState(interaction, { selectedButtonIndex }); return updateWith(interaction, panel.buildButtonsManagerPanel(interaction)); }
@@ -2176,7 +2201,8 @@ async function handleInteraction(interaction) {
       selectedFieldIndex: null,
     });
 
-    await interaction.update({
+    if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+    await interaction.editReply({
       ...panel.buildBuilderPanel(
         interaction,
         panel.memberName(interaction)
@@ -2186,7 +2212,7 @@ async function handleInteraction(interaction) {
 
     return true;
   }
-  if (interaction.isButton?.() && customId === 'embed:actions') { await interaction.update(panel.buildActionsPanel(interaction)); return true; }
+  if (interaction.isButton?.() && customId === 'embed:actions') { if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate(); await interaction.editReply(panel.buildActionsPanel(interaction)); return true; }
   if ((customId === 'embed:readiness' || customId === 'embed:readiness-refresh') && interaction.isButton?.()) return showReadiness(interaction);
   if (customId === 'embed:readiness-fix' && interaction.isButton?.()) return routeReadinessFix(interaction);
   if (DELIVERY_ACTIONS.has(customId)) {

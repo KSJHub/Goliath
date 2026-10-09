@@ -115,14 +115,20 @@ function managementPayload(interaction) { const section = birthdays.getSection(i
 function toolsPayload(interaction) {
   const enabled = guildManager.isModuleEnabled(interaction.guildId, 'birthdays');
   return {
-    embeds: [new EmbedBuilder().setColor(enabled ? 0x5865F2 : 0x747F8D).setTitle('⚙️ Birthday Settings').setDescription('Birthday diagnostics, testing and data tools.').setFooter({ text: 'Goliath Birthdays · Settings' }).setTimestamp()],
+    embeds: [new EmbedBuilder()
+      .setColor(enabled ? 0x5865F2 : 0xED4245)
+      .setTitle('⚙️ Birthday Settings')
+      .setDescription('Manage birthday diagnostics, testing and data.')
+      .addFields({ name: 'Module Status', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true })],
     components: [
-      row(button(`admin:birthdays:${enabled ? 'disable' : 'enable'}`, enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Primary), button('admin:birthdays:testmenu', '🧪 Test Centre'), button('admin:birthdays:health', '🩺 Health')),
+      row(button('admin:birthdays:testmenu', '🧪 Test Centre'), button('admin:birthdays:health', '🩺 System Health')),
       row(button('admin:birthdays:import', '📥 Import'), button('admin:birthdays:export', '📤 Export')),
-      row(button('admin:birthdays', '⬅️ Back')),
+      row(button('admin:birthdays', '⬅️ Back'),
+        button(`admin:birthdays:${enabled ? 'disable' : 'enable'}`, enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
     ],
   };
 }
+
 function settingsModal(section) { return new ModalBuilder().setCustomId('admin:birthdays:settings:submit').setTitle('Birthday Celebration Time').addComponents(row(new TextInputBuilder().setCustomId('time').setLabel('Celebration time (HH:MM)').setStyle(TextInputStyle.Short).setRequired(true).setValue(section.settings.announcementTime).setPlaceholder('09:00'))); }
 function customTimezoneModal(section) { return new ModalBuilder().setCustomId('admin:birthdays:timezone:custom:submit').setTitle('Custom Birthday Timezone').addComponents(row(new TextInputBuilder().setCustomId('timezone').setLabel('IANA timezone').setStyle(TextInputStyle.Short).setRequired(true).setValue(section.settings.timezone).setPlaceholder('Europe/London'))); }
 function messagesModal(section, type) { const group = type === 'group'; const values = group ? section.settings.groupMessageTemplates : section.settings.messageTemplates; return new ModalBuilder().setCustomId(`admin:birthdays:messages:${type}:submit`).setTitle(group ? 'Group Birthday Messages' : 'Individual Birthday Messages').addComponents(row(new TextInputBuilder().setCustomId('messages').setLabel('One rotating message per line').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(4000).setValue(values.join('\n')))); }

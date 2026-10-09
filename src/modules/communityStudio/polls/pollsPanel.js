@@ -15,6 +15,7 @@ const {
 } = require('discord.js');
 const polls = require('./polls');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
+const { rolePages, rolePageSelect } = require('../../../core/ui/rolePagination');
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const button = (customId, label, style = ButtonStyle.Primary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
@@ -49,20 +50,23 @@ function buildPollsAdminPanel(guild, memberDisplayName = 'Unknown User') {
     row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary)),
   ] };
 }
-function buildSettingsPanel(guild, memberDisplayName = 'Unknown User') {
+function buildSettingsPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
   const section = polls.getSection(guild.id);
+  const roleInfo = rolePages(guild, section.managerRoleIds || [], rolePage);
   const embed = new EmbedBuilder().setColor(0x5865f2).setTitle('📊 Poll Settings').setDescription([
     `**Default Channel:** ${formatChannel(section.defaultChannelId || section.settings?.defaultChannelId)}`,
     `**Results Channel:** ${formatChannel(section.resultsChannelId)}`,
-    `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`, '',
+    `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`, `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`, '',
     'Use the selectors and buttons below. Auto-close hours are configured from the dashboard.',
   ].join('\n')).setFooter({ text: `Requested by ${memberDisplayName}` });
   return { embeds: [embed], components: [
     row(new ChannelSelectMenuBuilder().setCustomId('admin:polls:defaultChannel').setPlaceholder('Default poll channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     row(new ChannelSelectMenuBuilder().setCustomId('admin:polls:resultsChannel').setPlaceholder('Results channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
-    row(new RoleSelectMenuBuilder().setCustomId('admin:polls:managerRoles').setPlaceholder('Manager roles').setMinValues(0).setMaxValues(10)),
+    ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:polls:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
     row(button('admin:polls:toggleAnonymous', '👤 Anonymous', ButtonStyle.Secondary), button('admin:polls:toggleMultiple', '☑️ Multiple', ButtonStyle.Secondary), button('admin:polls:toggleLive', '📈 Live Results', ButtonStyle.Secondary)),
-    row(button('admin:polls', '⬅️ Back', ButtonStyle.Secondary)),
+    row(button('admin:polls', '⬅️ Back', ButtonStyle.Secondary),
+      button(`admin:polls:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, '◀ Roles', ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
+      button(`admin:polls:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, 'Roles ▶', ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
   ] };
 }
 function buildManagePanel(guild) {

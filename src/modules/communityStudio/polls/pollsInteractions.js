@@ -5,6 +5,7 @@ const polls = require('./polls');
 const tracking = require('./pollsTracking');
 const panel = require('./pollsPanel');
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
+const { rolePages, mergePageSelection } = require('../../../core/ui/rolePagination');
 
 const getMemberDisplayName = (interaction) => interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
 async function safeUpdate(interaction, payload) {
@@ -53,9 +54,20 @@ async function handlePollsInteraction(interaction) {
       if (prop === 'resultsChannel') updateSection(interaction.guild, (section) => ({ ...section, resultsChannelId: value }), actorId);
       return safeUpdate(interaction, panel.buildSettingsPanel(interaction.guild, memberDisplayName));
     }
-    if (interaction.isRoleSelectMenu?.() && customId === 'admin:polls:managerRoles') {
-      updateSection(interaction.guild, (section) => ({ ...section, managerRoleIds: [...new Set(interaction.values || [])] }), actorId);
-      return safeUpdate(interaction, panel.buildSettingsPanel(interaction.guild, memberDisplayName));
+    if (customId.startsWith('admin:polls:roleBrowse:')) {
+      const page = Number(customId.slice('admin:polls:roleBrowse:'.length));
+      if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+      return safeUpdate(interaction, panel.buildSettingsPanel(interaction.guild, memberDisplayName, page));
+    }
+    if (interaction.isStringSelectMenu?.() && customId.startsWith('admin:polls:managerRoles:')) {
+      const page = Number(customId.slice('admin:polls:managerRoles:'.length));
+      if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+      const section = polls.getSection(interaction.guild.id);
+      const info = rolePages(interaction.guild, section.managerRoleIds || [], page);
+      if (info.page !== page) throw new Error('Role page expired. Reopen Poll Settings.');
+      const chosen = mergePageSelection(section.managerRoleIds || [], info.roles, interaction.values || []);
+      updateSection(interaction.guild, (current) => ({ ...current, managerRoleIds: chosen }), actorId);
+      return safeUpdate(interaction, panel.buildSettingsPanel(interaction.guild, memberDisplayName, page));
     }
     if (customId === 'admin:polls:toggleAnonymous') updateSection(interaction.guild, (section) => ({ ...section, anonymousVoting: !section.anonymousVoting, settings: { ...(section.settings || {}), anonymousVotes: !section.anonymousVoting } }), actorId);
     if (customId === 'admin:polls:toggleMultiple') updateSection(interaction.guild, (section) => ({ ...section, allowMultipleChoice: !section.allowMultipleChoice, settings: { ...(section.settings || {}), allowMultipleVotes: !section.allowMultipleChoice } }), actorId);

@@ -23,7 +23,7 @@ const suggestionsInteractions = optionalRequire('suggestions', '../../modules/fe
 const giveawaysInteractionHandler = optionalRequire('giveaways', '../../modules/communityStudio/giveaways/giveawaysInteractionHandler');
 const formsInteractions = optionalRequire('forms', '../../modules/feedbackStudio/forms/formsInteractions');
 const faqInteractions = optionalRequire('faq', '../../modules/feedbackStudio/faq/faqInteractions');
-const embedPanel = optionalRequire('embed interactions', '../../modules/messageStudio/embed/embedInteractions');
+const embedStudio = optionalRequire('embed studio', '../../modules/messageStudio/embed/embed');
 const duplicator = optionalRequire('duplicator', '../../owner/dev/duplicator');
 const permissionsStudioInteractions = optionalRequire('permissions studio', './permissionsStudio');
 const adminPanel = optionalRequire('admin panel', '../../core/administration/admin/panel');
@@ -177,7 +177,7 @@ function sanitizeComponentPayload(payload,interaction){if(!payload||typeof paylo
 function wrapInteractionResponses(interaction){if(!interaction||interaction.__goliathResponsesWrapped)return;interaction.__goliathResponsesWrapped=true;const originals={};for(const methodName of ['reply','update','editReply','followUp'])if(typeof interaction[methodName]==='function')originals[methodName]=interaction[methodName].bind(interaction);for(const methodName of Object.keys(originals)){interaction[methodName]=(payload,...args)=>{const sanitized=sanitizeComponentPayload(payload,interaction);const isPanelPayload=Array.isArray(sanitized?.embeds)||Array.isArray(sanitized?.components);const canReuseModalSource=methodName==='reply'&&interaction.isModalSubmit?.()&&interaction.isFromMessage?.()&&!interaction.deferred&&!interaction.replied&&isPanelPayload&&typeof originals.update==='function';if(canReuseModalSource){const updatePayload={...sanitized};delete updatePayload.ephemeral;delete updatePayload.flags;return originals.update(updatePayload,...args);}return originals[methodName](sanitized,...args);};}}
 const startsWith=(interaction,prefix)=>String(interaction?.customId||'').startsWith(prefix);
 function isVerificationMemberInteraction(interaction){if(!interaction?.isButton?.())return false;return typeof verificationManager?.parseVerifyCustomId==='function'&&Boolean(verificationManager.parseVerifyCustomId(interaction.customId));}
-async function safeInteractionError(interaction,error=null){const detail=error?.message?`\n\`${String(error.message).slice(0,300)}\``:'';const payload={content:`❌ Interaction failed.${detail}`,flags:MessageFlags.Ephemeral};try{if(interaction?.isAutocomplete?.()){await interaction.respond([]).catch(()=>null);return;}if(interaction?.deferred||interaction?.replied){await interaction.editReply(payload).catch(()=>interaction.followUp(payload).catch(()=>null));return;}await interaction?.reply?.(payload).catch(()=>null);}catch{}}
+async function safeInteractionError(interaction,error=null){const detail=error?.message?`\n\`${String(error.message).slice(0,300)}\``:'';const payload={content:`❌ Interaction failed.${detail}`,flags:MessageFlags.Ephemeral};try{if(interaction?.isAutocomplete?.()){await interaction.respond([]).catch(()=>null);return;}if(interaction?.deferred||interaction?.replied){if(interaction.isMessageComponent?.()&&!interaction.isModalSubmit?.()){await interaction.followUp(payload).catch(()=>null);}else{await interaction.editReply(payload).catch(()=>interaction.followUp(payload).catch(()=>null));}return;}await interaction?.reply?.(payload).catch(()=>null);}catch{}}
 async function fetchFreshMember(interaction){const guild=interaction?.guild;const userId=interaction?.user?.id;if(!guild||!userId)return null;return guild.members.fetch({user:userId,force:true}).catch(()=>guild.members.fetch(userId).catch(()=>null));}
 async function handleVerificationMemberInteraction(interaction){
   if(typeof verificationManager?.verifyMember!=='function')throw new Error('Verification handler is unavailable.');
@@ -222,20 +222,25 @@ module.exports={
       if(customId.startsWith('mod_')||customId.startsWith('mod:')){if(!await callHandler(modInteractions,'handleModInteraction',interaction))throw new Error(`Mod did not handle ${customId}.`);return;}
       if(isVerificationMemberInteraction(interaction)){await handleVerificationMemberInteraction(interaction);return;}
       if(await enforceAdminModuleAuthority(interaction))return;
-      if(customId==='admin:studio:roleStudio'){interaction.customId='admin:roleStudio:handled';const payload=await roleStudioPanel.buildRoleStudioPanel(interaction.guild,interaction.member?.displayName||interaction.user?.username||'Unknown User');if(interaction.deferred||interaction.replied)await interaction.editReply(payload);else await interaction.update(payload);return;}
-      if(customId.startsWith('admin:roleSelector')||customId.startsWith('roleSelector:')||customId.startsWith('admin:colourRoles')||customId.startsWith('colourRoles:')){await roleSelectorPanel.handleRoleSelectorInteraction(interaction);return;}
-      if(customId.startsWith('admin:privateRooms')||customId.startsWith('user:privateRooms:')||customId.startsWith('privateRooms:')){if(customId.startsWith('admin:privateRooms')){await privateRoomsPanel.handleAdminInteraction(interaction);return;}if(customId.startsWith('user:privateRooms:')){await privateRoomsPanel.handleUserInteraction(interaction);return;}if(typeof privateRoomsPanel.handleInteraction==='function'){await privateRoomsPanel.handleInteraction(interaction);return;}}
+      if(customId==='admin:studio:roleStudio'){if(!roleStudioPanel||typeof roleStudioPanel.buildRoleStudioPanel!=='function')throw new Error('Role Studio panel is unavailable.');if(!interaction.deferred&&!interaction.replied)await interaction.deferUpdate();const payload=await roleStudioPanel.buildRoleStudioPanel(interaction.guild,interaction.member?.displayName||interaction.user?.username||'Unknown User');await interaction.editReply(payload);return;}
+      if(customId.startsWith('admin:roleSelector')||customId.startsWith('roleSelector:')||customId.startsWith('admin:colourRoles')||customId.startsWith('colourRoles:')){if(!await callHandler(roleSelectorPanel,'handleRoleSelectorInteraction',interaction))throw new Error(`Role Selector did not handle ${customId}.`);return;}
+      if(customId.startsWith('admin:privateRooms')||customId.startsWith('user:privateRooms:')||customId.startsWith('privateRooms:')){const handler=customId.startsWith('admin:privateRooms')?'handleAdminInteraction':customId.startsWith('user:privateRooms:')?'handleUserInteraction':'handleInteraction';if(!await callHandler(privateRoomsPanel,handler,interaction))throw new Error(`Private Rooms did not handle ${customId}.`);return;}
       const isTicketRuntimeInteraction=customId.startsWith('ticket_')||customId.startsWith('goliath_ticket_');
       if(isTicketRuntimeInteraction&&interaction.guildId&&guildManager.isModuleEnabled?.(interaction.guildId,'tickets')===false){await interaction.reply({content:'❌ Tickets is currently disabled for this server.',flags:MessageFlags.Ephemeral});return;}
       if(await callHandler(userPanelInteractions,'handleUserPanelInteraction',interaction))return;
-      if(await callHandler(restoreRequestManager,'handleRestoreRequestInteraction',interaction))return;
-      if(await callHandler(embedPanel,'handleEmbedInteraction',interaction))return;
+      if(await callHandler(restoreRequestManager,'handleRestoreButton',interaction))return;
+      if (customId === 'admin:embed' || customId.startsWith('embed:')) {
+        if (!embedStudio || typeof embedStudio.handleInteraction !== 'function') throw new Error('Embed Studio interaction handler is unavailable.');
+        if (!await callHandler(embedStudio, 'handleInteraction', interaction)) throw new Error(`Embed Studio did not handle ${customId}.`);
+        return;
+      }
       if(await callHandler(verificationAdminPanel,'handleVerificationAdminInteraction',interaction))return;
       if(await callHandler(automodPanel,'handleAutomodInteraction',interaction))return;
-      if((startsWith(interaction,'admin:birthdays')||startsWith(interaction,'birthdays:user:'))&&await callHandler(birthdaysPanel,'handleBirthdayInteraction',interaction))return;
+      if(startsWith(interaction,'admin:birthdays')){if(!await callHandler(birthdaysPanel,'handleAdmin',interaction))throw new Error(`Birthdays administration did not handle ${customId}.`);return;}
+      if(startsWith(interaction,'birthdays:user:')){if(!await callHandler(birthdaysPanel,'handleUser',interaction))throw new Error(`Birthdays member controls did not handle ${customId}.`);return;}
       if(startsWith(interaction,'admin:invites')||startsWith(interaction,'invites:')){const invites=loadInvitesAdminPanel();if(!invites)throw invitesAdminPanelError||new Error('Invite Studio handler unavailable.');await invites.handleInviteStudioInteraction(interaction);return;}
       if((startsWith(interaction,'admin:social')||startsWith(interaction,'social:'))&&await callHandler(socialAdminPanel,'handleInteraction',interaction))return;
-      if(startsWith(interaction,'social:creator:')){await callHandler(socialCreatorActionCompat,'handleCreatorInteraction',interaction);return;}
+      if(startsWith(interaction,'social:creator:')){if(!await callHandler(socialCreatorActionCompat,'handle',interaction))throw new Error(`Social creator controls did not handle ${customId}.`);return;}
       if(startsWith(interaction,'admin:autoRoles')&&await callHandler(autorolesPanel,'handleAutoRolesInteraction',interaction))return;
       if(startsWith(interaction,'admin:temporaryRoles')&&await callHandler(temporaryRolesPanel,'handleTemporaryRolesInteraction',interaction))return;
       if(startsWith(interaction,'admin:timedRoles')&&await callHandler(timedRolesPanel,'handleTimedRolesInteraction',interaction))return;
@@ -261,6 +266,13 @@ module.exports={
       if(await callHandler(suggestionsInteractions,'handleSuggestionsInteraction',interaction))return;
       if(await callHandler(giveawaysInteractionHandler,'handleGiveawayInteraction',interaction))return;
       if(await callHandler(ticketInteractionHandler,'handleTicketInteraction',interaction,client))return;
+      // An unrecognised component must receive a response instead of silently
+      // expiring. Commands and autocomplete are handled separately above.
+      if(interaction.isMessageComponent?.()||interaction.isModalSubmit?.()){
+        console.warn(`[InteractionCreate] Unhandled component: ${customId}`);
+        await safeInteractionError(interaction,new Error('This control is no longer available or its handler is missing.'));
+        return;
+      }
     }catch(error){console.error('[InteractionCreate] Failed to handle interaction:',error);await safeInteractionError(interaction,error);}
   },
 };
