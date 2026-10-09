@@ -141,14 +141,14 @@ function adminView(interaction) {
   const panelResetArmed = state.panelResetConfirmUntil > Date.now();
   return {
     embeds: [new EmbedBuilder().setColor(enabled ? 0x5865F2 : 0xED4245).setTitle('⚙️ Invite Studio Settings')
-      .setDescription('Control Invite Studio, check system health and manage server-wide settings.')
+      .setDescription('Manage member invites, maintenance and server-wide controls.')
       .addFields(
         { name: 'Module', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-        { name: 'Referrals', value: memberEnabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
+        { name: 'Member Invites', value: memberEnabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
         { name: 'Official Invite', value: configured ? 'Configured' : 'Not configured', inline: true },
         { name: 'Personal Links', value: String(linkCount), inline: true },
-        { name: '🔧 System Maintenance', value: 'Check invite health, repair issues and manage module controls.', inline: false },
-        { name: '⚠️ Advanced Controls', value: 'Replace or delete the official invite, reset scores or restore public panel defaults.', inline: false },
+        { name: '🔧 Maintenance', value: 'Check health, repair invites or edit the member invite DM.', inline: false },
+        { name: '⚠️ Advanced Actions', value: 'Replace or delete the official link, reset the panel or clear referral scores.', inline: false },
         ...(panelResetArmed ? [{ name: '⚠️ Panel Reset', value: 'Press Confirm Panel Reset within 30 seconds. Public panel text will revert to defaults; the deployed panel and referral DM will be preserved.', inline: false }] : []),
         ...(resetArmed ? [{ name: '⚠️ Reset Confirmation', value: 'Press Confirm Reset within 30 seconds to clear leaderboard scores.', inline: false }] : []),
         ...(regenerateArmed ? [{ name: '⚠️ Replacement Confirmation', value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false }] : []),
@@ -157,13 +157,13 @@ function adminView(interaction) {
     components: [
       row(button('invites:health', 'System Health'),
         button('invites:repair', 'Repair Invites'),
-        button('invites:member-dm-modal', 'Edit Referral DM', ButtonStyle.Secondary)),
+        button('invites:member-dm-modal', 'Edit Member Invite DM', ButtonStyle.Secondary),
+        button('invites:member-enabled', memberEnabled ? 'Disable Member Invites' : 'Enable Member Invites', ButtonStyle.Secondary)),
       row(button('invites:official-regenerate', regenerateArmed ? 'Confirm Replace' : 'Replace Invite', ButtonStyle.Secondary, !configured),
         button('invites:default-panel', panelResetArmed ? 'Confirm Panel Reset' : 'Reset Panel', ButtonStyle.Secondary),
         button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? 'Confirm Reset' : 'Reset Scores', ButtonStyle.Secondary),
         button('invites:official-delete', deleteArmed ? 'Confirm Delete' : 'Delete Invite', ButtonStyle.Secondary, !configured)),
       row(button('invites:official-settings', '⬅️ Back'),
-        button('invites:member-enabled', memberEnabled ? 'Disable Referrals' : 'Enable Referrals', ButtonStyle.Secondary),
         button('invites:toggle', enabled ? 'Disable Studio' : 'Enable Studio', ButtonStyle.Secondary)),
     ],
   };
