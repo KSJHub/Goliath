@@ -16,6 +16,7 @@ const {
 } = require('discord.js');
 
 const forms = require('./forms');
+const { rolePages, rolePageSelect, mergePageSelection } = require('../../../core/ui/rolePagination');
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
 const {
   DEFAULT_BOT_CHANNEL_PERMISSIONS,
@@ -324,7 +325,7 @@ function formatRoles(ids = []) {
   return list.length ? list.map((id) => `<@&${id}>`).join(', ') : '`None`';
 }
 
-function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User') {
+function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
   const section = forms.getSection(guild.id);
   const moduleEnabled = isModuleEnabled(guild.id, 'forms');
   const formItems = Object.values(section.forms || {});
@@ -341,6 +342,7 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User') {
       `**Submit Channel:** ${formatChannel(section.submitChannelId)}`,
       `**Log Channel:** ${formatChannel(section.logChannelId)}`,
       `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`,
+      `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`,
       `**Require Review:** ${section.requireReview !== false ? 'Yes ✅' : 'No ❌'}`,
       `**Anonymous:** ${section.anonymousSubmissions ? 'Yes ✅' : 'No ❌'}`,
       `**Store Responses:** ${section.storeResponses !== false ? 'Yes ✅' : 'No ❌'}`,
@@ -360,9 +362,7 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User') {
       row(
         new ChannelSelectMenuBuilder().setCustomId('admin:forms:logChannel').setPlaceholder('Log/review channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)
       ),
-      row(
-        new RoleSelectMenuBuilder().setCustomId('admin:forms:managerRoles').setPlaceholder('Manager roles').setMinValues(0).setMaxValues(10)
-      ),
+      ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:forms:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
       row(
         button('admin:forms:deployDefault', '🚀 Deploy Form', ButtonStyle.Success),
         button(moduleEnabled ? 'admin:forms:disable' : 'admin:forms:enable', moduleEnabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
@@ -370,7 +370,9 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User') {
         button('admin:forms:toggleAnonymous', '👤 Anonymous', ButtonStyle.Secondary),
         button('admin:forms:toggleStore', '💾 Store', ButtonStyle.Secondary)
       ),
-      row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary)),
+      row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary),
+        button(`admin:forms:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, '◀ Roles', ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
+        button(`admin:forms:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, 'Roles ▶', ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
     ],
   };
 }
