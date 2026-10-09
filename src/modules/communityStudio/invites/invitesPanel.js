@@ -96,7 +96,7 @@ function officialView(interaction) {
         ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
         button('invites:member-limits', 'Member Limits', ButtonStyle.Primary),
         button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
-      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'), ...(info.pages > 1 ? [button('invites:official-role-prev', '◀ Official', ButtonStyle.Secondary, info.page === 0), button('invites:official-role-next', 'Official ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)] : []), ...(memberInfo.pages > 1 ? [button('invites:member-role-prev', '◀ Member', ButtonStyle.Secondary, memberInfo.page === 0), button('invites:member-role-next', 'Member ▶', ButtonStyle.Secondary, memberInfo.page >= memberInfo.pages - 1)] : [])),
+      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'), ...(info.pages > 1 ? [button('invites:official-role-next', 'Official Roles ▶', ButtonStyle.Secondary)] : []), ...(memberInfo.pages > 1 ? [button('invites:member-role-next', 'Member Roles ▶', ButtonStyle.Secondary)] : [])),
     ],
   };
 }
@@ -175,8 +175,8 @@ function adminView(interaction) {
     embeds: [new EmbedBuilder().setColor(enabled ? 0x57F287 : 0xED4245).setTitle('🛠️ Invite Studio Admin')
       .setDescription(armed ? '⚠️ Reset armed. Confirm within 30 seconds.' : 'Manage member links, health, repairs and leaderboard data.')],
     components: [
-      row(button('invites:invite-manager', 'Invite Manager', ButtonStyle.Primary), button('invites:health', 'Health'), button('invites:repair', 'Repair')),
-      row(button('invites:member-enabled', section.settings.memberInviteTemplate.enabled ? 'Disable Member Invites' : 'Enable Member Invites', section.settings.memberInviteTemplate.enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
+      row(button('invites:invite-manager', 'Invite Manager', ButtonStyle.Primary), button('invites:health', 'Health'), button('invites:repair', 'Repair'), button('invites:member-enabled', section.settings.memberInviteTemplate.enabled ? 'Disable Member Invites' : 'Enable Member Invites', section.settings.memberInviteTemplate.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button('invites:member-inherit', 'Use Official Destination', ButtonStyle.Secondary, !section.settings.memberInviteTemplate.channelId)),
+      row(new ChannelSelectMenuBuilder().setCustomId('invites:member-channel').setPlaceholder('📍 Override member destination (optional)').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       row(button('invites:official-regenerate', state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now() ? 'Confirm Regenerate' : 'Regenerate Official Invite', ButtonStyle.Secondary, !section.settings.officialInvite.code), button('invites:official-delete', state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now() ? 'Confirm Delete' : 'Delete Official Invite', ButtonStyle.Danger, !section.settings.officialInvite.code)),
       row(button(armed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', armed ? 'Confirm Reset' : 'Reset Leaderboard', ButtonStyle.Danger), button('invites:default-panel', 'Restore Defaults'), button('invites:toggle', enabled ? 'Disable' : 'Enable', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
