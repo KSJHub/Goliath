@@ -141,14 +141,12 @@ function adminView(interaction) {
   const panelResetArmed = state.panelResetConfirmUntil > Date.now();
   return {
     embeds: [new EmbedBuilder().setColor(enabled ? 0x5865F2 : 0xED4245).setTitle('⚙️ Invite Studio Settings')
-      .setDescription('Manage member invites, maintenance and server-wide controls.')
+      .setDescription('Configure member invitations and maintain the server’s invite system.')
       .addFields(
-        { name: 'Module', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
+        { name: 'Module Status', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
         { name: 'Member Invites', value: memberEnabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-        { name: 'Official Invite', value: configured ? 'Configured' : 'Not configured', inline: true },
+        { name: 'Official Invite', value: configured ? '🟢 Configured' : '⚪ Not configured', inline: true },
         { name: 'Personal Links', value: String(linkCount), inline: true },
-        { name: '🔧 Maintenance', value: 'Check health, repair invites or edit the member invite DM.', inline: false },
-        { name: '⚠️ Advanced Actions', value: 'Replace or delete the official link, reset the panel or clear referral scores.', inline: false },
         ...(panelResetArmed ? [{ name: '⚠️ Panel Reset', value: 'Press Confirm Panel Reset within 30 seconds. Public panel text will revert to defaults; the deployed panel and referral DM will be preserved.', inline: false }] : []),
         ...(resetArmed ? [{ name: '⚠️ Reset Confirmation', value: 'Press Confirm Reset within 30 seconds to clear leaderboard scores.', inline: false }] : []),
         ...(regenerateArmed ? [{ name: '⚠️ Replacement Confirmation', value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false }] : []),
