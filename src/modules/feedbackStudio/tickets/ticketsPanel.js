@@ -2333,6 +2333,9 @@ let ticketSetupPanelApi;
       );
     }
 
+    const deferred = await safeDefer(interaction, true);
+    if (!deferred) return true;
+
     updatePanel(interaction.guild.id, panelId, {
       maxOpenTicketsPerUser: value,
     });
@@ -2362,6 +2365,9 @@ let ticketSetupPanelApi;
         })
       );
     }
+
+    const deferred = await safeDefer(interaction, true);
+    if (!deferred) return true;
 
     updatePanel(interaction.guild.id, panelId, {
       cooldownMs: seconds * 1000,
@@ -2420,6 +2426,9 @@ let ticketSetupPanelApi;
         })
       );
     }
+
+    const deferred = await safeDefer(interaction, true);
+    if (!deferred) return true;
 
     updatePanel(interaction.guild.id, panelId, {
       appearance: {
@@ -2577,6 +2586,9 @@ let ticketSetupPanelApi;
         return true;
       }
 
+      const deferred = await safeDefer(interaction, true);
+      if (!deferred) return true;
+
       const updated = updatePanel(interaction.guild.id, panelId, {
         oneActivePerType: panel.oneActivePerType === false,
       });
@@ -2648,6 +2660,9 @@ let ticketSetupPanelApi;
         return true;
       }
 
+      const deferred = await safeDefer(interaction, true);
+      if (!deferred) return true;
+
       const deployChannel = await fetchDeployChannel(interaction, panel);
 
       if (!deployChannel) {
@@ -2660,9 +2675,6 @@ let ticketSetupPanelApi;
         );
         return true;
       }
-
-      const deferred = await safeDefer(interaction, true);
-      if (!deferred) return true;
 
       await deployPanel({
         guild: interaction.guild,
@@ -2686,6 +2698,9 @@ let ticketSetupPanelApi;
         return true;
       }
 
+      const deferred = await safeDefer(interaction, true);
+      if (!deferred) return true;
+
       const deployChannel = await fetchDeployChannel(interaction, panel);
 
       if (!deployChannel) {
@@ -2697,9 +2712,6 @@ let ticketSetupPanelApi;
         );
         return true;
       }
-
-      const deferred = await safeDefer(interaction, true);
-      if (!deferred) return true;
 
       await redeployPanel({
         guild: interaction.guild,
@@ -2753,6 +2765,9 @@ let ticketSetupPanelApi;
     }
 
     if (action === 'refresh_deployed') {
+      const deferred = await safeDefer(interaction, true);
+      if (!deferred) return true;
+
       const panel = getPanel(interaction.guild.id, panelId);
 
       if (panel) {
