@@ -47,56 +47,41 @@ function overview(interaction) {
 function officialView(interaction) {
   const section = invites.getSection(interaction.guildId);
   const config = section.settings.officialInvite;
+  const link = config.code ? section.inviteLinks[config.code] : null;
   const state = sessionFor(interaction);
-  const step = state.officialStep || 0;
-  const draft = state.officialDraft || config;
-  const info = rolePages(interaction.guild, draft.roleIds || [], state.officialRolePage || 0);
+  const info = rolePages(interaction.guild, config.roleIds || [], state.officialRolePage || 0);
   state.officialRolePage = info.page;
   const ageNames = { 0: 'Never', 1800: '30 minutes', 3600: '1 hour', 21600: '6 hours', 43200: '12 hours', 86400: '1 day', 604800: '7 days', 2592000: '30 days' };
-  const summary = [
-    { name: 'Destination', value: draft.channelId ? `<#${draft.channelId}>` : 'Not selected', inline: true },
-    { name: 'Join Roles', value: roleList(draft.roleIds), inline: false },
-    { name: 'Expiry', value: ageNames[draft.maxAge || 0] || 'Never', inline: true },
-    { name: 'Maximum Uses', value: draft.maxUses ? String(draft.maxUses) : 'Unlimited', inline: true },
-  ];
-  if (!step) {
-    const link = config.code ? section.inviteLinks[config.code] : null;
-    return {
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🌍 Official Invite')
-        .setDescription(config.code ? 'Your official invitation is configured. Manage it below.' : 'Create your first official server invitation with a guided setup.')
-        .addFields(
-          { name: 'Status', value: config.code ? '🟢 Configured' : '⚪ Not configured', inline: true },
-          { name: 'Invite Link', value: officialUrl(config.code) || 'No link created yet', inline: false },
-          ...(config.code ? [{ name: 'Recorded Uses', value: String(link?.uses || 0), inline: true }] : []),
-        )],
-      components: [
-        row(button('invites:official-start', config.code ? '✏️ Edit Invite' : '➕ Create Invite', ButtonStyle.Success), ...(config.code ? [button('invites:official-regenerate', 'Regenerate'), button('invites:official-delete', 'Delete', ButtonStyle.Danger)] : [])),
-        row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
-      ],
-    };
-  }
-  const headings = { 1: '1/4 — Choose Destination', 2: '2/4 — Assign Join Roles', 3: '3/4 — Link Limits', 4: '4/4 — Review & Create' };
-  const descriptions = {
-    1: 'Choose the channel this invite will open. This is required.',
-    2: 'Optional: select roles granted automatically to members joining with this link.',
-    3: 'Optional: choose expiry and usage limits. The defaults are unlimited.',
-    4: 'Review your selections before creating or replacing the official link.',
-  };
-  const components = [];
-  if (step === 1) components.push(row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Select destination channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)));
-  if (step === 2 && info.roles.length) components.push(row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Select optional join roles', info)));
-  if (step === 3) {
-    components.push(row(new StringSelectMenuBuilder().setCustomId('invites:official-age').setPlaceholder('⏳ Invite expiry').addOptions(Object.entries(ageNames).map(([value, label]) => ({ label, value, default: Number(value) === Number(draft.maxAge || 0) })))));
-    components.push(row(new StringSelectMenuBuilder().setCustomId('invites:official-uses').setPlaceholder('🔢 Maximum uses').addOptions([0, 1, 5, 10, 25, 50, 100].map((value) => ({ label: value ? String(value) : 'Unlimited', value: String(value), default: value === Number(draft.maxUses || 0) })))));
-  }
-  if (step === 2 && info.pages > 1) components.push(row(button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)));
-  components.push(row(button(step === 4 ? 'invites:official-create' : 'invites:official-next', step === 4 ? (config.code ? '✅ Apply Changes' : '✅ Create Invite') : 'Next ➡️', ButtonStyle.Success, step === 1 && !draft.channelId)));
-  components.push(row(button('invites:official-back', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')));
+  const expires = link?.expiresAt ? new Date(link.expiresAt) : null;
+  const expiryLabel = expires && Number.isFinite(expires.getTime()) ? `<t:${Math.floor(expires.getTime() / 1000)}:R>` : 'Never';
+  const configured = Boolean(config.code);
+  const matching = link && link.channelId === config.channelId &&
+    Number(link.maxAge || 0) === Number(config.maxAge || 0) &&
+    Number(link.maxUses || 0) === Number(config.maxUses || 0) &&
+    JSON.stringify([...(link.roleIds || [])].sort()) === JSON.stringify([...(config.roleIds || [])].sort());
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🌍 Official Invite • ' + headings[step])
-      .setDescription(descriptions[step])
-      .addFields(...(step === 4 ? summary : step === 1 ? [summary[0]] : step === 2 ? [summary[1]] : summary.slice(2)))],
-    components,
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🌍 Official Invite')
+      .setDescription('Create and manage your server’s official invitation link.')
+      .addFields(
+        { name: 'Status', value: !configured ? '⚪ Not configured' : matching ? '🟢 Configured' : '🟠 Changes pending — update invite', inline: false },
+        { name: '🔗 Invite Link', value: officialUrl(config.code) || 'No link created yet', inline: false },
+        { name: '📍 Destination', value: config.channelId ? `<#${config.channelId}>` : 'Not selected', inline: true },
+        { name: '👥 Recorded Uses', value: configured ? String(link?.uses || 0) : '—', inline: true },
+        { name: '⏳ Link Expires', value: configured ? expiryLabel : '—', inline: true },
+        { name: '⚙️ Expiry', value: ageNames[config.maxAge || 0] || 'Never', inline: true },
+        { name: '🔢 Maximum Uses', value: config.maxUses ? String(config.maxUses) : 'Unlimited', inline: true },
+        { name: '🎭 Join Roles', value: roleList(config.roleIds), inline: false },
+        ...(info.pages > 1 ? [{ name: 'Role Selection', value: `Page ${info.page + 1} of ${info.pages}`, inline: false }] : []),
+      )],
+    components: [
+      row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Select destination channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
+      ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Select join roles (optional)', info))] : []),
+      row(button('invites:official-create', configured ? 'Update Invite' : 'Create Invite', ButtonStyle.Success, !config.channelId),
+        button('invites:official-limits', 'Link Limits', ButtonStyle.Primary),
+        ...(configured ? [button('invites:official-regenerate', 'Regenerate'), button('invites:official-delete', 'Delete', ButtonStyle.Danger)] : [])),
+      ...(info.pages > 1 ? [row(button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1))] : []),
+      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
+    ],
   };
 }
 
