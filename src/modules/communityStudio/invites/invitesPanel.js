@@ -140,18 +140,21 @@ function adminView(interaction) {
   const linkCount = links.filter((link) => link.personal).length;
   const panelResetArmed = state.panelResetConfirmUntil > Date.now();
   return {
-    embeds: [new EmbedBuilder().setColor(enabled ? 0x5865F2 : 0xED4245).setTitle('⚙️ Invite Studio Settings')
-      .setDescription('Configure member invitations and maintain the server’s invite system.')
+    embeds: [new EmbedBuilder()
+      .setColor(enabled ? 0x5865F2 : 0xED4245)
+      .setTitle('⚙️ Invite Studio Settings')
+      .setDescription('Invite health, member links and server-wide controls.')
       .addFields(
-        { name: 'Module Status', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-        { name: 'Member Invites', value: memberEnabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-        { name: 'Official Invite', value: configured ? '🟢 Configured' : '⚪ Not configured', inline: true },
-        { name: 'Personal Links', value: String(linkCount), inline: true },
-        ...(panelResetArmed ? [{ name: '⚠️ Panel Reset', value: 'Press Confirm Panel Reset within 30 seconds. Public panel text will revert to defaults; the deployed panel and referral DM will be preserved.', inline: false }] : []),
-        ...(resetArmed ? [{ name: '⚠️ Reset Confirmation', value: 'Press Confirm Reset within 30 seconds to clear leaderboard scores.', inline: false }] : []),
-        ...(regenerateArmed ? [{ name: '⚠️ Replacement Confirmation', value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false }] : []),
-        ...(deleteArmed ? [{ name: '⚠️ Delete Confirmation', value: 'Press Confirm Delete within 30 seconds to delete the official invite.', inline: false }] : []),
-      )],
+        { name: 'Module', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
+        { name: 'Member Invites', value: `${memberEnabled ? '🟢 On' : '🔴 Off'} · ${linkCount} links`, inline: true },
+        { name: 'Official Invite', value: configured ? '🟢 Configured' : '⚪ Not set', inline: true },
+        ...(panelResetArmed ? [{ name: '⚠️ Confirm Panel Reset', value: 'Confirm within 30 seconds to restore public panel text. Channel, deployed message and invite DM are preserved.', inline: false }] : []),
+        ...(resetArmed ? [{ name: '⚠️ Confirm Score Reset', value: 'Confirm within 30 seconds to clear leaderboard scores.', inline: false }] : []),
+        ...(regenerateArmed ? [{ name: '⚠️ Confirm Invite Replacement', value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false }] : []),
+        ...(deleteArmed ? [{ name: '⚠️ Confirm Invite Deletion', value: 'Confirm within 30 seconds to delete the official invite.', inline: false }] : []),
+      )
+      .setFooter({ text: 'Goliath Invites · Settings' })
+      .setTimestamp()],
     components: [
       row(button('invites:health', '🩺 System Health'),
         button('invites:repair', '🔧 Repair Invites'),
