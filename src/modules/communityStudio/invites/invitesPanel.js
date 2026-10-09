@@ -90,7 +90,8 @@ function officialView(interaction) {
 
       row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
         ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
-        button('invites:member-dm-modal', 'Edit Referral DM', ButtonStyle.Primary)),
+        button('invites:member-dm-modal', 'Edit Referral DM', ButtonStyle.Primary),
+        button('invites:invite-manager', 'Manage Links', ButtonStyle.Secondary)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
         button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0),
         button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
@@ -155,8 +156,7 @@ function adminView(interaction) {
         ...(deleteArmed ? [{ name: '⚠️ Delete Confirmation', value: 'Press Confirm Delete within 30 seconds to delete the official invite.', inline: false }] : []),
       )],
     components: [
-      row(button('invites:invite-manager', 'Manage Links', ButtonStyle.Primary),
-        button('invites:health', 'System Health'),
+      row(button('invites:health', 'System Health'),
         button('invites:repair', 'Repair Invites'),
         button('invites:member-enabled', memberEnabled ? 'Disable Referrals' : 'Enable Referrals', ButtonStyle.Secondary),
         button('invites:toggle', enabled ? 'Disable Studio' : 'Enable Studio', ButtonStyle.Secondary)),
@@ -189,7 +189,7 @@ function managerView(interaction) {
     row(new StringSelectMenuBuilder().setCustomId('invites:manager-display').setPlaceholder('Members shown').addOptions([5, 10, 15, 20, 0].map((value) => ({ label: value ? `Display ${value}` : 'Display All', value: String(value) })))),
     row(new UserSelectMenuBuilder().setCustomId('invites:manager-select-member').setPlaceholder('Select a member').setMinValues(1).setMaxValues(1)),
     row(button('invites:manager-verify', 'Verify Link', ButtonStyle.Secondary, !selected), button('invites:manager-resend', 'Resend DM', ButtonStyle.Secondary, !selected), button('invites:manager-delete', 'Remove Link', ButtonStyle.Secondary, !selected), button('invites:manager-reset-member', 'Reset Score', ButtonStyle.Secondary, !selected)),
-    row(button('invites:admin-config', '⬅️ Back')),
+    row(button('invites:official-settings', '⬅️ Back')),
   ] };
 }
 
