@@ -39,4 +39,11 @@ assert(dashboard.includes('scheduledHealth?.stuckMemberIds?.length'), 'Dashboard
 assert(dashboard.includes('Members per batch'), 'Dashboard must expose the scheduled batch-size control.');
 assert(route.includes("router.post('/:guildId/custom-message'"), 'Dashboard custom Welcome editor must save through the canonical API.');
 
+assert(scheduled.includes('const activeRuns = new Set()'), 'Scheduled Welcome must maintain a per-guild active-run guard.');
+assert(scheduled.includes("reason: 'already_running'"), 'Overlapping Scheduled Welcome runs must return an explicit skip reason.');
+assert(scheduled.includes('activeRuns.delete(guild.id)'), 'Scheduled Welcome must release its active-run guard.');
+assert(panel.includes("result.reason==='already_running'"), 'Discord Scheduled Welcome must explain overlapping runs.');
+assert(dashboard.includes("result.reason === 'already_running'"), 'Dashboard Scheduled Welcome must explain overlapping runs.');
+assert(dashboard.includes('if (result.skipped)'), 'Dashboard Scheduled Welcome must not report skipped runs as successful.');
+
 console.log('✅ Welcome ↔ Embed Studio delivery contract audit passed.');
