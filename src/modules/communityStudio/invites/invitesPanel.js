@@ -142,13 +142,13 @@ function adminView(interaction) {
   const panelResetArmed = state.panelResetConfirmUntil > Date.now();
   return {
     embeds: [new EmbedBuilder().setColor(enabled ? 0x5865F2 : 0xED4245).setTitle('⚙️ Invite Studio Settings')
-      .setDescription('Manage invitation links, member referrals and maintenance.')
+      .setDescription('Control Invite Studio, check system health and manage server-wide settings.')
       .addFields(
         { name: 'Module', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
         { name: 'Referrals', value: memberEnabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
         { name: 'Official Invite', value: configured ? 'Configured' : 'Not configured', inline: true },
         { name: 'Personal Links', value: String(linkCount), inline: true },
-        { name: '🔧 Management', value: 'Manage links, check system health and repair issues.', inline: false },
+        { name: '🔧 System Maintenance', value: 'Check invite health, repair issues and manage module controls.', inline: false },
         { name: '⚠️ Advanced Controls', value: 'Replace or delete the official invite, reset scores or restore public panel defaults.', inline: false },
         ...(panelResetArmed ? [{ name: '⚠️ Panel Reset', value: 'Press Confirm Panel Reset within 30 seconds. Public panel text will revert to defaults; the deployed panel and referral DM will be preserved.', inline: false }] : []),
         ...(resetArmed ? [{ name: '⚠️ Reset Confirmation', value: 'Press Confirm Reset within 30 seconds to clear leaderboard scores.', inline: false }] : []),
@@ -176,6 +176,7 @@ function managerView(interaction) {
   const section = invites.getSection(interaction.guildId);
   const selectedStats = selected ? section.inviters?.[selected.inviterId] || {} : {};
   const selectedScore = Math.max(0, Number(selectedStats.active || 0) + Number(selectedStats.bonus || 0));
+  const memberConfirm = state.memberConfirm?.userId === state.selectedUserId && state.memberConfirm.until > Date.now() ? state.memberConfirm : null;
   const list = links.slice(0, state.displayLimit || links.length).map((link, index) => `${index + 1}. <@${link.inviterId}> — ${officialUrl(link.code)} — ${link.uses || 0} uses`).join('\n') || 'No personal links yet.';
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('👥 Manage Links')
     .setDescription('Select a member to view or manage their personal referral link.')
@@ -185,10 +186,11 @@ function managerView(interaction) {
       { name: 'Member Links', value: list.slice(0, 1024), inline: false },
     );
   if (selected) embed.addFields({ name: 'Selected Member', value: `<@${selected.inviterId}>\n${officialUrl(selected.code)}\n**Referral Score:** ${selectedScore}` });
+  if (memberConfirm) embed.addFields({ name: '⚠️ Confirm Member Action', value: memberConfirm.action === 'delete' ? 'Confirm within 30 seconds to remove this member’s personal link. Their referral history is not reset.' : 'Confirm within 30 seconds to reset this member’s referral score. Their personal link will be kept.' });
   return { embeds: [embed], components: [
     row(new StringSelectMenuBuilder().setCustomId('invites:manager-display').setPlaceholder('Members shown').addOptions([5, 10, 15, 20, 0].map((value) => ({ label: value ? `Display ${value}` : 'Display All', value: String(value) })))),
     row(new UserSelectMenuBuilder().setCustomId('invites:manager-select-member').setPlaceholder('Select a member').setMinValues(1).setMaxValues(1)),
-    row(button('invites:manager-verify', 'Verify Link', ButtonStyle.Secondary, !selected), button('invites:manager-resend', 'Resend DM', ButtonStyle.Secondary, !selected), button('invites:manager-delete', 'Remove Link', ButtonStyle.Secondary, !selected), button('invites:manager-reset-member', 'Reset Score', ButtonStyle.Secondary, !selected)),
+    row(button('invites:manager-verify', 'Verify Link', ButtonStyle.Secondary, !selected), button('invites:manager-resend', 'Resend DM', ButtonStyle.Secondary, !selected), button('invites:manager-delete', memberConfirm?.action === 'delete' ? 'Confirm Remove' : 'Remove Link', ButtonStyle.Secondary, !selected), button('invites:manager-reset-member', memberConfirm?.action === 'reset' ? 'Confirm Score Reset' : 'Reset Score', ButtonStyle.Secondary, !selected)),
     row(button('invites:official-settings', '⬅️ Back')),
   ] };
 }
