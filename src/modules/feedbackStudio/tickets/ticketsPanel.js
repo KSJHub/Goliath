@@ -1882,52 +1882,25 @@ let ticketSetupPanelApi;
     ];
   }
 
-  function buildRoleEditorControls(panel) {
-    return [
-      new ActionRowBuilder().addComponents(
-        new RoleSelectMenuBuilder()
-          .setCustomId(`ticket_setup:set_staff:${panel.panelId}`)
-          .setPlaceholder(
-            Array.isArray(panel.staffRoleIds) && panel.staffRoleIds.length
-              ? `👥 Staff Roles • ${panel.staffRoleIds.length} selected`
-              : '👥 Staff Roles'
-          )
-          .setMinValues(0)
-          .setMaxValues(10)
-      ),
+  const { rolePages, rolePageSelect, mergePageSelection } = require('../../../core/ui/rolePagination');
+  const roleEditorPages = new Map();
+  const roleEditorKey = interaction => `${interaction.guildId}:${interaction.user.id}`;
 
-      new ActionRowBuilder().addComponents(
-        new RoleSelectMenuBuilder()
-          .setCustomId(`ticket_setup:set_manager:${panel.panelId}`)
-          .setPlaceholder(
-            Array.isArray(panel.managerRoleIds) && panel.managerRoleIds.length
-              ? `🛡️ Manager Roles • ${panel.managerRoleIds.length} selected`
-              : '🛡️ Manager Roles'
-          )
-          .setMinValues(0)
-          .setMaxValues(10)
-      ),
-
-      new ActionRowBuilder().addComponents(
-        new RoleSelectMenuBuilder()
-          .setCustomId(`ticket_setup:set_viewer:${panel.panelId}`)
-          .setPlaceholder(
-            Array.isArray(panel.viewerRoleIds) && panel.viewerRoleIds.length
-              ? `👁️ Viewer Roles • ${panel.viewerRoleIds.length} selected`
-              : '👁️ Viewer Roles'
-          )
-          .setMinValues(0)
-          .setMaxValues(10)
-      ),
-
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`ticket_setup:management:${panel.panelId}`)
-          .setLabel('Back To Manage Ticket')
-          .setStyle(ButtonStyle.Secondary)
-          .setEmoji('⬅️')
-      ),
-    ];
+  function buildRoleEditorControls(panel, guild, page = 0) {
+    if (!guild) return [];
+    const info = rolePages(guild, [], page);
+    const rows = [['staff', 'staffRoleIds'], ['manager', 'managerRoleIds'], ['viewer', 'viewerRoleIds']]
+      .map(([kind, field]) => {
+        const data = rolePages(guild, panel[field] || [], info.page);
+        const select = rolePageSelect(`ticket_setup:set_${kind}:${panel.panelId}:${info.page}`, `${kind} roles`, data);
+        return select ? new ActionRowBuilder().addComponents(select) : null;
+      }).filter(Boolean);
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`ticket_setup:management:${panel.panelId}`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`ticket_setup:role_prev:${panel.panelId}`).setLabel('◀ Roles').setStyle(ButtonStyle.Secondary).setDisabled(info.page === 0),
+      new ButtonBuilder().setCustomId(`ticket_setup:role_next:${panel.panelId}`).setLabel('Roles ▶').setStyle(ButtonStyle.Secondary).setDisabled(info.page >= info.pages - 1)
+    ));
+    return rows;
   }
 
   function buildAppearanceControls(panel) {
