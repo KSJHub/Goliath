@@ -488,6 +488,7 @@ async function handleInviteStudioInteraction(interaction) {
     interaction.isUserSelectMenu()
   ) {
     state.selectedUserId = interaction.values[0];
+    state.memberConfirm = null;
     await update(interaction);
     return true;
   }
@@ -533,35 +534,39 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
-  if (id === 'invites:manager-delete') {
-    await invites.deletePersonalInvite(
-      interaction.guild,
-      selected.inviterId,
-      meta(interaction, 'invite_manager_delete'),
-    );
-
-    state.selectedUserId = null;
-
-    await interaction.reply({
-      content: '✅ Personal link deleted.',
-      flags: MessageFlags.Ephemeral,
-    });
-
-    return true;
-  }
-
-  if (id === 'invites:manager-reset-member') {
-    resetMemberScore(
-      interaction.guildId,
-      selected.inviterId,
-      meta(interaction, 'invite_member_reset'),
-    );
-
-    await interaction.reply({
-      content: '✅ Member score reset.',
-      flags: MessageFlags.Ephemeral,
-    });
-
+  if (id === 'invites:manager-delete' || id === 'invites:manager-reset-member') {
+    const action = id === 'invites:manager-delete' ? 'delete' : 'reset';
+    const armed = state.memberConfirm?.action === action &&
+      state.memberConfirm?.userId === selected.inviterId &&
+      state.memberConfirm.until > Date.now();
+    if (!armed) {
+      state.memberConfirm = { action, userId: selected.inviterId, until: Date.now() + 30000 };
+      await update(interaction);
+      return true;
+    }
+    state.memberConfirm = null;
+    if (action === 'delete') {
+      await invites.deletePersonalInvite(
+        interaction.guild,
+        selected.inviterId,
+        meta(interaction, 'invite_manager_delete'),
+      );
+      state.selectedUserId = null;
+      await interaction.reply({
+        content: '✅ Personal link removed. Referral history was not reset.',
+        flags: MessageFlags.Ephemeral,
+      });
+    } else {
+      resetMemberScore(
+        interaction.guildId,
+        selected.inviterId,
+        meta(interaction, 'invite_member_reset'),
+      );
+      await interaction.reply({
+        content: '✅ Member score reset. Their personal link was kept.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
     return true;
   }
 
