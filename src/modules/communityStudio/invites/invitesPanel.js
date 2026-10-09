@@ -92,7 +92,7 @@ function officialView(interaction) {
       row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Official invite destination').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Official join roles (optional)', info))] : []),
 
-      row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
+      row(button('invites:official-create', !configured ? '📢 Create Invite' : updateArmed ? '⚠️ Confirm Replacement' : needsUpdate ? '🔄 Update Invite' : '💾 Save Invite Settings', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId),
         button('invites:official-verify', '🔍 Verify Link', ButtonStyle.Secondary),
         button('invites:invite-manager', '👥 Member Invites', ButtonStyle.Secondary)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
