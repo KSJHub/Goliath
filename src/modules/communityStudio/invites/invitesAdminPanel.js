@@ -253,9 +253,11 @@ async function handleInviteStudioInteraction(interaction) {
     const page = Number(id.slice('invites:member-roles:'.length));
     if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
     const config = invites.getSection(interaction.guildId).settings.memberInviteTemplate;
-    const info = rolePages(interaction.guild, config.roleIds || [], page);
+    const inherited = invites.getSection(interaction.guildId).settings.officialInvite.roleIds || [];
+    const selected = config.roleIdsOverride ?? ((config.roleIds || []).length ? config.roleIds : inherited);
+    const info = rolePages(interaction.guild, selected, page);
     if (info.page !== page) throw new Error('Role page expired. Reopen Invites.');
-    const chosen = mergePageSelection(config.roleIds || [], info.roles, interaction.values || []);
+    const chosen = mergePageSelection(selected, info.roles, interaction.values || []);
     nested(interaction, 'memberInviteTemplate', { roleIdsOverride: chosen, roleIds: [] });
     panel.sessionFor(interaction).memberRolePage = page;
     await update(interaction);
