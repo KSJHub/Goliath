@@ -294,11 +294,15 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
+  if (id === 'invites:member-limits') {
+    await interaction.showModal(panel.memberLimitsModal(interaction));
+    return true;
+  }
   if (id === 'invites:official-limits') {
     await interaction.showModal(panel.officialLimitsModal(interaction));
     return true;
   }
-  if (id === 'invites:official-limits-submit') {
+  if (id === 'invites:official-limits-submit' || id === 'invites:member-limits-submit') {
     const ageInput = interaction.fields.getTextInputValue('maxAge').trim().toLowerCase();
     const ageOptions = { never: 0, '30 minutes': 1800, '1 hour': 3600, '6 hours': 21600, '12 hours': 43200, '1 day': 86400, '7 days': 604800, '30 days': 2592000 };
     const maxAge = Object.prototype.hasOwnProperty.call(ageOptions, ageInput) ? ageOptions[ageInput] : Number(ageInput);
@@ -308,8 +312,9 @@ async function handleInviteStudioInteraction(interaction) {
       await interaction.reply({ content: 'Invalid limits. Expiry: Never, 30 minutes, 1 hour, 6 hours, 12 hours, 1 day, 7 days, or 30 days. Uses: Unlimited, 1, 5, 10, 25, 50, or 100.', flags: MessageFlags.Ephemeral });
       return true;
     }
-    nested(interaction, 'officialInvite', { maxAge, maxUses });
-    await interaction.reply({ content: 'Limits saved. Use Create / Repair to apply.', flags: MessageFlags.Ephemeral });
+    const member = id === 'invites:member-limits-submit';
+    nested(interaction, member ? 'memberInviteTemplate' : 'officialInvite', { maxAge, maxUses });
+    await interaction.reply({ content: member ? '✅ Member invite limits saved. These limits apply to newly created personal links; existing links keep their original limits.' : '✅ Official invite limits saved. Use Update Invite to apply them.', flags: MessageFlags.Ephemeral });
     return true;
   }
   if (id === 'invites:official-verify') {
