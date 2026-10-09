@@ -133,7 +133,7 @@ jobs:
 
             echo "🔎 Validate DEV"
             BOT_MODE=dev npm run doctor
-            node test/auditEmbedGraphicHeaders.js
+            node scripts/goliath.js embed-graphic-headers
             node - <<'NODE'
             const fs=require('node:fs'),assert=require('node:assert/strict');
             const maintenance=fs.readFileSync('src/owner/dev/maintenanceStatus.js','utf8');
