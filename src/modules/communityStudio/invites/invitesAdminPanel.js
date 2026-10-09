@@ -356,13 +356,14 @@ async function handleInviteStudioInteraction(interaction) {
   if (id === 'invites:official-create') {
     const config = invites.getSection(interaction.guildId).settings.officialInvite;
     const record = config.code ? invites.getSection(interaction.guildId).inviteLinks[config.code] : null;
-    const changed = config.code && record && (
+    const changed = Boolean(config.code && record && (
       record.channelId !== config.channelId ||
-      Number(record.maxAge || 0) !== Number(config.maxAge || 0) ||
-      Number(record.maxUses || 0) !== Number(config.maxUses || 0) ||
+      Number(record.maxAge || 0) !== 0 ||
+      Number(record.maxUses || 0) !== 0 ||
       JSON.stringify([...(record.roleIds || [])].sort()) !== JSON.stringify([...(config.roleIds || [])].sort())
-    );
-    if (changed && !(state.officialConfirm?.action === 'update' && state.officialConfirm.until > Date.now())) {
+    ));
+    const confirmed = state.officialConfirm?.action === 'update' && state.officialConfirm.until > Date.now();
+    if (changed && !confirmed) {
       state.officialConfirm = { action: 'update', until: Date.now() + 30000 };
       await update(interaction);
       return true;
@@ -370,9 +371,14 @@ async function handleInviteStudioInteraction(interaction) {
     state.officialConfirm = null;
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
+      // A vanity preference never replaces the saved standard invite.
+      state.vanityStatus = await invites.syncVanityStatus(interaction.guild);
       const result = await invites.ensureOfficialInvite(interaction.guild, meta(interaction, 'invite_official_create'));
       state.officialLive = { code: result.invite.code, exists: true, uses: Number(result.invite.uses || 0) };
-      await interaction.editReply('✅ Official invite ready: ' + result.invite.url);
+      await interaction.editReply(result.created
+        ? '✅ Official standard invite created/updated: ' + result.invite.url + '. Your vanity preference is saved separately.'
+        : '✅ Invite settings saved. Your existing standard invite is unchanged. ' +
+          (config.linkType === 'vanity' ? 'The vanity URL will be used when Discord confirms one is available.' : 'Standard invite mode is selected.'));
     } catch (error) {
       await interaction.editReply('❌ Invite update failed: ' + String(error.message || error).slice(0, 1700));
     }
