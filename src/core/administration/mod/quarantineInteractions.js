@@ -291,11 +291,13 @@ async function openInvestigationAccess(interaction, targetId) {
     });
   }
 
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+
   const target = interaction.guild.members.cache.get(String(targetId))
     || await interaction.guild.members.fetch(String(targetId)).catch(() => null);
 
   if (!target) {
-    return safeReply(interaction, {
+    return safeEditReply(interaction, {
       content: '❌ The investigated member could not be found.',
       flags: 64,
     });
@@ -360,7 +362,7 @@ async function openInvestigationAccess(interaction, targetId) {
       .setDisabled(allowedIds.length === 0)
   );
 
-  return safeReply(interaction, {
+  return safeEditReply(interaction, {
     embeds: [embed],
     components: [
       new Discord.ActionRowBuilder().addComponents(channelSelect),
