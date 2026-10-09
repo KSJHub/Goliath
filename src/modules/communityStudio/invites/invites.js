@@ -295,9 +295,15 @@ function setBonus(guildId, inviterId, bonus, meta = {}) { const id = cleanId(inv
 async function getVanityStatus(guild) {
   try {
     const data = await guild.fetchVanityData();
-    return { available: Boolean(data?.code), code: data?.code || null, verified: true };
-  } catch {
-    return { available: false, code: null, verified: false };
+    return { available: Boolean(data?.code), code: data?.code || null, verified: true,
+      status: data?.code ? 'active' : 'unavailable',
+      detail: data?.code ? `Vanity URL active: discord.gg/${data.code}` : 'No vanity URL is currently configured or available for this guild.' };
+  } catch (error) {
+    const code = Number(error?.code || error?.rawError?.code || 0);
+    const forbidden = code === 50013 || code === 50001 || Number(error?.status) === 403;
+    return { available: false, code: null, verified: false,
+      status: forbidden ? 'permission' : 'unknown',
+      detail: forbidden ? 'Discord denied access to vanity information. Check the bot permissions and guild eligibility.' : 'Discord vanity verification is temporarily unavailable. Try checking again.' };
   }
 }
 async function syncVanityStatus(guild) {
