@@ -299,17 +299,34 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
   if (id === 'invites:official-limits-submit') {
-    const maxAge = Number(interaction.fields.getTextInputValue('maxAge'));
-    const maxUses = Number(interaction.fields.getTextInputValue('maxUses'));
+    const ageInput = interaction.fields.getTextInputValue('maxAge').trim().toLowerCase();
+    const ageOptions = { never: 0, '30 minutes': 1800, '1 hour': 3600, '6 hours': 21600, '12 hours': 43200, '1 day': 86400, '7 days': 604800, '30 days': 2592000 };
+    const maxAge = Object.prototype.hasOwnProperty.call(ageOptions, ageInput) ? ageOptions[ageInput] : Number(ageInput);
+    const usesInput = interaction.fields.getTextInputValue('maxUses').trim().toLowerCase();
+    const maxUses = usesInput === 'unlimited' ? 0 : Number(usesInput);
     if (![0, 1800, 3600, 21600, 43200, 86400, 604800, 2592000].includes(maxAge) || ![0, 1, 5, 10, 25, 50, 100].includes(maxUses)) {
-      await interaction.reply({ content: 'Invalid invite limits.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: 'Invalid limits. Expiry: Never, 30 minutes, 1 hour, 6 hours, 12 hours, 1 day, 7 days, or 30 days. Uses: Unlimited, 1, 5, 10, 25, 50, or 100.', flags: MessageFlags.Ephemeral });
       return true;
     }
     nested(interaction, 'officialInvite', { maxAge, maxUses });
     await interaction.reply({ content: 'Limits saved. Use Create / Repair to apply.', flags: MessageFlags.Ephemeral });
     return true;
   }
+  if (id === 'invites:official-verify') {
+    const config = invites.getSection(interaction.guildId).settings.officialInvite;
+    if (!config.code) {
+      await interaction.reply({ content: 'No official invite exists.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    const live = await interaction.guild.invites.fetch(config.code).catch(() => null);
+    state.officialLive = { code: config.code, exists: Boolean(live), uses: Number(live?.uses || 0) };
+    await interaction.reply({ content: live ? 'Official invite verified: ' + live.url + ' — ' + live.uses + ' uses.' : 'Official invite is no longer available on Discord. Use Update Invite to repair it.', flags: MessageFlags.Ephemeral });
+    return true;
+  }
   if (id === 'invites:official-regenerate') {
+    const armed = state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now();
+    if (!armed) { state.officialConfirm = { action: 'regenerate', until: Date.now() + 30000 }; await update(interaction); return true; }
+    state.officialConfirm = null;
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const result = await invites.ensureOfficialInvite(interaction.guild, meta(interaction, 'invite_official_regenerate'), true);
     await interaction.editReply('Official invite regenerated: ' + result.invite.url);
@@ -332,6 +349,9 @@ async function handleInviteStudioInteraction(interaction) {
   }
 
   if (id === 'invites:official-delete') {
+    const armed = state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now();
+    if (!armed) { state.officialConfirm = { action: 'delete', until: Date.now() + 30000 }; await update(interaction); return true; }
+    state.officialConfirm = null;
     await interaction.deferReply({
       flags: MessageFlags.Ephemeral,
     });
