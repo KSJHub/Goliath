@@ -170,7 +170,7 @@ async function handleInviteStudioInteraction(interaction) {
     const state = panel.sessionFor(interaction);
     const config = invites.getSection(interaction.guildId).settings.officialInvite;
     const info = rolePages(interaction.guild, config.roleIds || [], state.officialRolePage || 0);
-    state.officialRolePage = id.endsWith('next') ? (info.page + 1) % info.pages : (info.page + info.pages - 1) % info.pages;
+    state.officialRolePage = Math.max(0, Math.min(info.pages - 1, info.page + (id.endsWith('next') ? 1 : -1)));
     await update(interaction);
     return true;
   }
