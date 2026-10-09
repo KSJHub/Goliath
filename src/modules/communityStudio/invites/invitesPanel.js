@@ -148,6 +148,7 @@ function adminView(interaction) {
   const links = invites.listInviteLinks(interaction.guildId).filter((link) => link.personal).length;
   const resetArmed = state.resetConfirmUntil > Date.now();
   const panelResetArmed = state.panelResetConfirmUntil > Date.now();
+  const panelDeleteArmed = state.panelDeleteConfirmUntil > Date.now();
   const regenerateArmed = state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now();
   const deleteArmed = state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now();
   const pages = {
@@ -200,7 +201,17 @@ function adminView(interaction) {
     }
     if (page === 'panel') {
       const config = section.settings.publicPanel;
-      embed.addFields({ name: 'Deployment', value: config.channelId && config.messageId ? '🟡 Saved deployment · verify in Public Panel' : '⚪ Not deployed', inline: false });
+      const deployment = state.panelDeployment;
+      const saved = Boolean(config.channelId && config.messageId);
+      const status = !saved ? '⚪ Not deployed' : deployment?.channelId === config.channelId && deployment?.messageId === config.messageId
+        ? deployment.status === 'deployed' ? '🟢 Deployed' : deployment.status === 'missing' ? '🔴 Message missing' : '🟡 Verification unavailable'
+        : '🟡 Saved · Not yet verified';
+      embed.addFields({ name: 'Deployment', value: status, inline: false });
+      if (saved) embed.addFields(
+        { name: 'Panel Channel', value: `<#${config.channelId}>`, inline: true },
+        { name: 'Message ID', value: `\`${config.messageId}\``, inline: true },
+        { name: 'Panel Message', value: `[View deployed panel](https://discord.com/channels/${interaction.guildId}/${config.channelId}/${config.messageId})`, inline: false },
+      );
       components.push(row(
         button('invites:panel-embed-modal', '✏️ Edit Panel'),
         button('invites:panel-preview', '👁️ Preview Panel', ButtonStyle.Secondary, !configured),
@@ -208,7 +219,8 @@ function adminView(interaction) {
       ));
       if (panelResetArmed) embed.addFields({ name: '⚠️ Confirm Panel Reset', value: 'Confirm within 30 seconds to restore default panel text. Channel, deployed message and invite DM are preserved.', inline: false });
     }
-    components.push(row(button('invites:settings-home', '⬅️ Back')));
+    components.push(row(button('invites:settings-home', '⬅️ Back'), ...(page === 'panel' ? [button('invites:settings-panel-delete', panelDeleteArmed ? '⚠️ Confirm Delete Panel' : '🗑️ Delete Deployed Panel', ButtonStyle.Danger, !section.settings.publicPanel.messageId)] : [])));
+    if (page === 'panel' && panelDeleteArmed) embed.addFields({ name: '⚠️ Confirm Deletion', value: 'Confirm within 30 seconds to delete the deployed Discord message and clear its saved deployment IDs. Referral scores and panel design remain intact.', inline: false });
   }
   return { embeds: [embed], components };
 }
