@@ -482,6 +482,22 @@ async function handleAutomodInteraction(interaction) {
   if (id === 'admin:automod:configure') return updatePanel(interaction, buildAutomodConfigurePanel(interaction.guild, name));
   if (id === 'admin:automod:risk') return updatePanel(interaction, buildRiskPanel(interaction.guild, name));
   if (id === 'admin:automod:exemptions') return updatePanel(interaction, buildExemptionsPanel(interaction.guild, name));
+  if (id.startsWith('admin:automod:exemptions:page:')) {
+    const page=Number(id.slice('admin:automod:exemptions:page:'.length));
+    if(!Number.isSafeInteger(page)||page<0) throw new Error('Invalid role page.');
+    return updatePanel(interaction,buildExemptionsPanel(interaction.guild,name,page));
+  }
+  if (interaction.isStringSelectMenu?.() && id.startsWith('admin:automod:exemptions:roles:')) {
+    const page=Number(id.slice('admin:automod:exemptions:roles:'.length));
+    if(!Number.isSafeInteger(page)||page<0) throw new Error('Invalid role page.');
+    const config=getAutomodConfig(interaction.guild.id);
+    const info=rolePages(interaction.guild,config.ignoredRoles||[],page);
+    if(info.page!==page) throw new Error('Role page expired.');
+    const chosen=mergePageSelection(config.ignoredRoles||[],info.roles,interaction.values||[],25);
+    saveAutomodConfig(interaction.guild.id,{...config,ignoredRoles:chosen});
+    return updatePanel(interaction,buildExemptionsPanel(interaction.guild,name,page));
+  }
+
   if (id === 'admin:automod:risk:edit') { await interaction.showModal(buildRiskModal(getAutomodConfig(interaction.guild.id))); return true; }
   if (id === 'admin:setautomodlog' || id === 'admin:channel:automodlog') return updatePanel(interaction, buildLogChannelPanel());
   if (id === 'admin:automod:dmmessage') {
