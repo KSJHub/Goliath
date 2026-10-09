@@ -290,6 +290,28 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
+  if (id === 'invites:official-limits') {
+    await interaction.showModal(panel.officialLimitsModal(interaction));
+    return true;
+  }
+  if (id === 'invites:official-limits-submit') {
+    const maxAge = Number(interaction.fields.getTextInputValue('maxAge'));
+    const maxUses = Number(interaction.fields.getTextInputValue('maxUses'));
+    if (![0, 1800, 3600, 21600, 43200, 86400, 604800, 2592000].includes(maxAge) || ![0, 1, 5, 10, 25, 50, 100].includes(maxUses)) {
+      await interaction.reply({ content: 'Invalid invite limits.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    nested(interaction, 'officialInvite', { maxAge, maxUses });
+    await interaction.reply({ content: 'Limits saved. Use Create / Repair to apply.', flags: MessageFlags.Ephemeral });
+    return true;
+  }
+  if (id === 'invites:official-regenerate') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const result = await invites.ensureOfficialInvite(interaction.guild, meta(interaction, 'invite_official_regenerate'), true);
+    await interaction.editReply('Official invite regenerated: ' + result.invite.url);
+    return true;
+  }
+
   if (id === 'invites:official-create') {
     await interaction.deferReply({
       flags: MessageFlags.Ephemeral,
