@@ -1307,7 +1307,7 @@ function adminModuleRoutingAudit() {
       [router.includes('wrapInteractionResponses(interaction)'), 'interaction response normalization'],
       [router.includes('await enforceAdminModuleAuthority(interaction)'), 'module authority check before dispatch'],
       [router.includes('await safeInteractionError(interaction,new Error('), 'unknown component response'],
-      [router.includes('if(!await callHandler(embedStudio'), 'Embed Studio missing-handler response'],
+      [router.includes("if (!await callHandler(embedStudio, 'handleInteraction', interaction)"), 'Embed Studio missing-handler response'],
       [router.includes('if(!await callHandler(privateRoomsPanel'), 'Private Rooms missing-handler response'],
       [router.includes('if(!await callHandler(roleSelectorPanel'), 'Role Selector missing-handler response'],
       [router.includes('if(!await callHandler(modInteractions'), 'moderation missing-handler response'],
