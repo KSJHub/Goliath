@@ -21,7 +21,7 @@ const {
   emitCaseStatusUpdated,
   sendModLog,
 } = require('./storage');
-const { safeReply, ephemeralError } = require('../../../core/ui/interactionResponse');
+const { safeReply, safeEditReply, ephemeralError } = require('../../../core/ui/interactionResponse');
 const { ensureActionAccess, requireModeratableTarget, recordModerationSystemEvent } = require('./permissions');
 
 const NO_EXPIRY_VALUES = new Set(['', 'never', 'none']);
@@ -332,7 +332,7 @@ async function showRemoveWarningModal(interaction, targetId) {
 async function submitWarning(interaction, target) {
   if (!interaction?.guild || !interaction?.user || !target) {
     const error = 'Could not resolve the warning target.';
-    await safeReply(interaction, ephemeralError(error));
+    await safeEditReply(interaction, ephemeralError(error));
     return { ok: false, target, error };
   }
   const reason = interaction.fields.getTextInputValue('reason').trim();
@@ -341,14 +341,14 @@ async function submitWarning(interaction, target) {
   const strikeWeight = parseStrikeWeight(weightRaw);
   if (!strikeWeight) {
     const error = 'Strike weight must be a whole number from 1 to 5.';
-    await safeReply(interaction, ephemeralError(error));
+    await safeEditReply(interaction, ephemeralError(error));
     return { ok: false, target, error };
   }
   const normalizedExpiry = expiryRaw.trim().toLowerCase();
   const expiresAt = parseWarningExpiry(expiryRaw);
   if (!NO_EXPIRY_VALUES.has(normalizedExpiry) && !expiresAt) {
     const error = 'Invalid warning expiry. Use `7d`, `2w`, `1m`, or `never`.';
-    await safeReply(interaction, ephemeralError(error));
+    await safeEditReply(interaction, ephemeralError(error));
     return { ok: false, target, error };
   }
   try {
@@ -417,18 +417,24 @@ async function submitWarning(interaction, target) {
     ];
     if (warningContext.repeatInfo.isRepeatPattern) extra.push(`🔁 Repeat reason detected (${warningContext.repeatInfo.repeatCount} matching active warnings)`);
     if (escalatedCase) extra.push(`⚡ Auto escalation triggered: **${escalatedCase.action}** (Case #${escalatedCase.caseId})`);
-    await safeReply(interaction, { content: [`⚠️ Warned **${target.user.tag}** • Case #${modCase.caseId}`, ...extra].join('\n'), flags: 64 });
+    await safeEditReply(interaction, { content: [`⚠️ Warned **${target.user.tag}** • Case #${modCase.caseId}`, ...extra].join('\n'), flags: 64 });
     return { ok: true, target, modCase, warningContext, escalatedCase, strikeWeight };
   } catch (error) {
     console.error('❌ Warn error:', error);
-    await safeReply(interaction, ephemeralError('Failed to warn user.'));
+    await safeEditReply(interaction, ephemeralError('Failed to warn user.'));
     return { ok: false, target, error };
   }
 }
 
 async function submitWarningModal(interaction, targetId, refreshDashboard = null) {
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: 64 });
   const target = await requireModeratableTarget(interaction, targetId, 'warn');
-  if (!target) return { ok: false, handled: true, target: null, error: 'Warning target unavailable or denied.' };
+  if (!target) {
+    if (interaction.deferred && !interaction.replied) {
+      await safeEditReply(interaction, ephemeralError('Warning target unavailable or denied.'));
+    }
+    return { ok: false, handled: true, target: null, error: 'Warning target unavailable or denied.' };
+  }
   const result = await submitWarning(interaction, target);
   if (result?.ok && typeof refreshDashboard === 'function') await refreshDashboard(interaction, target);
   return result;

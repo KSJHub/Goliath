@@ -2,6 +2,8 @@
 
 const { Events } = require('discord.js');
 const terminal = require('../../core/logging/terminalLogger').createLogger('commands');
+const auditStore = require('../../owner/auditIntelligence/auditStore');
+const commandCenter = require('../../owner/auditIntelligence/auditEvents');
 
 const RETIRED_GUILD_COMMANDS = new Set(['commandcenter', 'Convert Emoji Shortcodes']);
 const inFlightGuilds = new Map();
@@ -41,20 +43,23 @@ async function reconcileGuildCommands(guild, client, reason = 'manual') {
       return { guildId: guild.id, skipped: true, reason: 'no-commands' };
     }
 
-    // SET is authoritative for this guild. Canonical commands, including
-    // /owner, are registered from their command builders. Retired/private
-    // commands such as /commandcenter are intentionally absent here.
-    await guild.commands.set(normalCommands);
+    // Preserve the DEV-only owner command in its configured private guild.
+    // Guild command SET replaces the entire registration list, so omitting it
+    // would undo Audit Intelligence's private registration on every startup.
+    const privateGuildId = String(auditStore.getConfig()?.commandCenter?.guildId || '').trim();
+    const privateCommand = resolvedBotMode(client) === 'DEV' && privateGuildId === String(guild.id)
+      && commandCenter?.data?.toJSON ? [commandCenter.data.toJSON()] : [];
+    await guild.commands.set([...normalCommands, ...privateCommand]);
 
     terminal.success(
       `Guild commands reconciled for ${guild.name || guild.id} (${guild.id}) — `
-      + `${normalCommands.length} public command(s), 0 retired/private (${reason}).`
+      + `${normalCommands.length} public command(s), ${privateCommand.length} private (${reason}).`
     );
 
     return {
       guildId: guild.id,
       commands: normalCommands.length,
-      protectedCommands: 0,
+      protectedCommands: privateCommand.length,
       skipped: false,
       reason,
     };

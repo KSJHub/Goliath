@@ -46,8 +46,8 @@ jobs:
         run: |
           set -euo pipefail
           BOT_MODE=dev npm run doctor
-          node test/auditEmbedGraphicHeaders.js
-          node test/auditRuntimeContracts.js
+          node scripts/goliath.js embed-graphic-headers
+          node scripts/goliath.js runtime-contracts
           node <<'NODE'
           const fs=require('node:fs'),assert=require('node:assert/strict');
           const maintenance=fs.readFileSync('src/owner/dev/maintenanceStatus.js','utf8');
@@ -158,8 +158,8 @@ jobs:
             const Database=require('better-sqlite3');const db=new Database(':memory:');db.prepare('select 1').get();db.close();console.log('✅ native SQLite operational');
             NODE
             BOT_MODE="$ENVIRONMENT" npm run doctor
-            node test/auditEmbedGraphicHeaders.js
-            node test/auditRuntimeContracts.js
+            node scripts/goliath.js embed-graphic-headers
+            node scripts/goliath.js runtime-contracts
 
             rm -rf dist
             npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn

@@ -125,11 +125,26 @@ function registerEvents(client, options = {}) {
     .filter((group) => group.eventName !== 'clientReady');
 
   async function executeHandler(eventName, handler, args) {
+    const startedAt = Date.now();
     try {
       await handler.execute(...args, client);
     } catch (error) {
       console.error(`[Events] ${eventName} handler failed: ${handler.file}`);
       console.error(error?.stack || error?.message || error);
+    } finally {
+      // Interaction handlers share a three-second Discord acknowledgement window.
+      // Surface slow handlers without changing ordering or modal behaviour.
+      if (eventName === 'interactionCreate') {
+        const elapsed = Date.now() - startedAt;
+        if (elapsed >= 1000) {
+          const interaction = args[0];
+          console.warn(
+            `[Events] Slow interaction handler (${elapsed}ms): ${handler.file}; ` +
+            `interaction=${interaction?.customId || interaction?.commandName || interaction?.id || 'unknown'}; ` +
+            `acknowledged=${Boolean(interaction?.deferred || interaction?.replied)}`
+          );
+        }
+      }
     }
   }
 

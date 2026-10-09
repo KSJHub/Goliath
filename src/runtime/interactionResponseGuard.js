@@ -41,8 +41,8 @@ function wrapResponses(interaction) {
         return await originalDeferUpdate(...args);
       } catch (error) {
         if (isAcknowledgementError(error)) {
-          logIgnoredAcknowledgementError(interaction, 'deferUpdate', error);
-          return interaction;
+          console.error('[InteractionGuard] Discord acknowledgement failed during deferUpdate:', error);
+          throw error;
         }
         throw error;
       }
@@ -59,8 +59,8 @@ function wrapResponses(interaction) {
         return await originalUpdate(payload);
       } catch (error) {
         if (isAcknowledgementError(error)) {
-          logIgnoredAcknowledgementError(interaction, 'update', error);
-          return interaction;
+          console.error('[InteractionGuard] Discord acknowledgement failed during update:', error);
+          throw error;
         }
         throw error;
       }
@@ -77,8 +77,8 @@ function wrapResponses(interaction) {
         return await originalReply(payload);
       } catch (error) {
         if (isAcknowledgementError(error)) {
-          logIgnoredAcknowledgementError(interaction, 'reply', error);
-          return interaction;
+          console.error('[InteractionGuard] Discord acknowledgement failed during reply:', error);
+          throw error;
         }
         throw error;
       }

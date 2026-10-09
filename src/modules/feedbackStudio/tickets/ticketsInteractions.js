@@ -1030,6 +1030,10 @@ let ticketInteractionHandlerApi;
     try {
       const resolvedPayload = await resolveInteractionPayload(interaction, payload);
 
+      if (interaction.deferred && !interaction.replied) {
+        return interaction.editReply(resolvedPayload).catch(() => null);
+      }
+
       if (alreadyHandled(interaction)) {
         return interaction.followUp(resolvedPayload).catch(() => null);
       }
@@ -1236,6 +1240,9 @@ let ticketInteractionHandlerApi;
 
     if (denied) return denied;
 
+    const deferred = await safeDefer(interaction, true);
+    if (!deferred) return true;
+
     const updated = await ticketActions.claim(
       ticket,
       interaction.user,
@@ -1246,7 +1253,7 @@ let ticketInteractionHandlerApi;
 
     await refreshTicketButtons(interaction, updated);
 
-    return safeReply(interaction, {
+    return safeEditOrReply(interaction, {
       content: `🎫 Ticket claimed by <@${interaction.user.id}>.`,
     });
   }
@@ -1297,6 +1304,9 @@ let ticketInteractionHandlerApi;
       interaction.fields.getTextInputValue(INPUT_IDS.CLOSE_REASON) ||
       'No reason provided.';
 
+    const deferred = await safeDefer(interaction, true);
+    if (!deferred) return true;
+
     const updated = await ticketActions.close(
       ticket,
       interaction.user,
@@ -1309,7 +1319,7 @@ let ticketInteractionHandlerApi;
 
     await refreshTicketButtons(interaction, updated);
 
-    return safeReply(
+    return safeEditOrReply(
       interaction,
       ephemeralPayload({
         content: `🔒 Ticket closed. Reason: ${reason}`,
@@ -1459,6 +1469,9 @@ let ticketInteractionHandlerApi;
       return deny(interaction, 'Invalid user ID.');
     }
 
+    const deferred = await safeDefer(interaction, true);
+    if (!deferred) return true;
+
     const channel =
       interaction.channel ||
       (ticket.discordChannelId
@@ -1497,7 +1510,7 @@ let ticketInteractionHandlerApi;
       }
     );
 
-    return safeReply(
+    return safeEditOrReply(
       interaction,
       ephemeralPayload({
         content: `✅ Added <@${userId}> to this ticket.`,
@@ -1551,6 +1564,9 @@ let ticketInteractionHandlerApi;
 
     const priority = normalizePriority(interaction.values?.[0]);
 
+    const deferred = await safeDefer(interaction, true);
+    if (!deferred) return true;
+
     const updated = await ticketActions.setPriority(
       ticket,
       priority,
@@ -1562,7 +1578,7 @@ let ticketInteractionHandlerApi;
 
     await refreshTicketButtons(interaction, updated);
 
-    return safeReply(
+    return safeEditOrReply(
       interaction,
       ephemeralPayload({
         content: `⚠️ Priority updated to **${formatPriority(priority)}**.`,

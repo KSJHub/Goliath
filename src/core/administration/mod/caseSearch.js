@@ -451,11 +451,13 @@ async function submitCaseSearch(i) {
   if (!canUseModAction(i.member, i.guild, 'view_case_detail')) return safeReply(i, ephemeralError('No permission to search moderation cases.'));
   const f = filtersFrom(i);
   if (f.error) return safeReply(i, ephemeralError(f.error));
+  if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
   const token = remember(i.guild.id, f), r = searchCases(i.guild.id, f);
-  return safeReply(i, { ...payload(r, token), flags: 64 });
+  return i.editReply(payload(r, token));
 }
 
 async function refreshCaseDetail(i, token, caseId) {
+  if (!i.deferred && !i.replied) await i.deferUpdate();
   const c = getCaseById(i.guild.id, caseId);
   if (!c) return safeReply(i, ephemeralError('Case not found.'));
   const audit = getCaseAudit(i.guild.id, caseId, { page: 0, pageSize: AUDIT_PAGE_SIZE });
@@ -639,6 +641,7 @@ async function handleCaseSearchSelect(i) {
   const id = String(i.customId || '');
   if (!id.startsWith('mod_case_search_select:')) return false;
   if (!canUseModAction(i.member, i.guild, 'view_case_detail')) return safeReply(i, ephemeralError('No permission to view case details.'));
+  if (!i.deferred && !i.replied) await i.deferUpdate();
   const [, token] = id.split(':');
   if (!stateFor(token, i.guild.id)) return safeReply(i, ephemeralError('This search has expired. Please start a new search.'));
   const caseId = Number(i.values?.[0]), c = getCaseById(i.guild.id, caseId);
@@ -656,6 +659,7 @@ async function handleCaseSearchModal(i) {
     const caseId = Number(caseIdRaw), c = getCaseById(i.guild.id, caseId);
     if (!c) return safeReply(i, ephemeralError('Case not found.'));
     if (isCaseReadOnly(c)) return safeReply(i, ephemeralError('This case became locked or merged before evidence was submitted.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = addCaseEvidence(i.guild.id, caseId, { messageUrl: input(i, 'message_url'), channelId: input(i, 'channel_id'), messageId: input(i, 'message_id'), attachmentUrl: input(i, 'attachment_url'), note: input(i, 'evidence_note') }, i.user?.id || null);
     if (!result.ok) return safeReply(i, ephemeralError(result.error || 'Failed to add evidence.'));
     return i.update(evidenceViewer(result.case, token, 0));
@@ -667,6 +671,7 @@ async function handleCaseSearchModal(i) {
     const caseId = Number(caseIdRaw), c = getCaseById(i.guild.id, caseId);
     if (!c) return safeReply(i, ephemeralError('Case not found.'));
     if (isCaseReadOnly(c)) return safeReply(i, ephemeralError('This case became locked or merged before evidence removal was submitted.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = removeCaseEvidence(i.guild.id, caseId, input(i, 'evidence_id'), input(i, 'remove_reason'), i.user?.id || null);
     if (!result.ok) return safeReply(i, ephemeralError(result.error || 'Failed to remove evidence.'));
     return i.update(evidenceViewer(result.case, token, 0));
@@ -680,6 +685,7 @@ async function handleCaseSearchModal(i) {
     const target = getCaseById(i.guild.id, targetCaseId);
     if (!target) return safeReply(i, ephemeralError('Merge target case not found.'));
     if (isCaseReadOnly(target)) return safeReply(i, ephemeralError('The merge target was locked or merged before submission.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = mergeCases(i.guild.id, targetCaseId, Number(sourceRaw), i.user?.id || null);
     if (!result.ok) return safeReply(i, ephemeralError(result.error || 'Failed to merge cases.'));
     return refreshCaseDetail(i, token, targetCaseId);
@@ -690,6 +696,7 @@ async function handleCaseSearchModal(i) {
     if (!stateFor(token, i.guild.id)) return safeReply(i, ephemeralError('This search has expired. Please start a new search.'));
     const targetCaseId = Number(targetCaseIdRaw), sourceRaw = input(i, 'source_case_id');
     if (!Number.isInteger(targetCaseId) || targetCaseId <= 0 || !/^\d+$/.test(sourceRaw)) return safeReply(i, ephemeralError('Case IDs must be positive integers.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = splitMergedCase(i.guild.id, targetCaseId, Number(sourceRaw), i.user?.id || null);
     if (!result.ok) return safeReply(i, ephemeralError(result.error || 'Failed to split case.'));
     return refreshCaseDetail(i, token, targetCaseId);
@@ -700,6 +707,7 @@ async function handleCaseSearchModal(i) {
     if (!stateFor(token, i.guild.id)) return safeReply(i, ephemeralError('This search has expired. Please start a new search.'));
     const contextCaseId = Number(contextCaseIdRaw);
     if (!Number.isInteger(contextCaseId) || contextCaseId <= 0) return safeReply(i, ephemeralError('Context case ID is invalid.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = bulkUpdateCases(i.guild.id, input(i, 'case_ids'), input(i, 'operation'), input(i, 'value'), i.user?.id || null);
     if (result.error) return safeReply(i, ephemeralError(result.error));
     const context = getCaseById(i.guild.id, contextCaseId);
@@ -717,6 +725,7 @@ async function handleCaseSearchModal(i) {
     const existing = getCaseById(i.guild.id, caseId);
     if (!existing) return safeReply(i, ephemeralError('Case not found.'));
     if (isCaseReadOnly(existing)) return safeReply(i, ephemeralError('This case became locked or merged before the edit was submitted.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const updated = updateCaseReason(i.guild.id, caseId, reason, i.user?.id || null);
     if (!updated) return safeReply(i, ephemeralError('Failed to update case reason.'));
     return refreshCaseDetail(i, token, caseId);
@@ -728,6 +737,7 @@ async function handleCaseSearchModal(i) {
     const caseId = Number(caseIdRaw), existing = getCaseById(i.guild.id, Number(caseIdRaw));
     if (!existing) return safeReply(i, ephemeralError('Case not found.'));
     if (isCaseReadOnly(existing)) return safeReply(i, ephemeralError('This case became locked or merged before the edit was submitted.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const updated = updateCaseTags(i.guild.id, caseId, input(i, 'tags'), i.user?.id || null);
     if (!updated) return safeReply(i, ephemeralError('Failed to update case tags.'));
     return refreshCaseDetail(i, token, caseId);
@@ -741,6 +751,7 @@ async function handleCaseSearchModal(i) {
     const existing = getCaseById(i.guild.id, caseId);
     if (!existing) return safeReply(i, ephemeralError('Case not found.'));
     if (isCaseReadOnly(existing)) return safeReply(i, ephemeralError('This case became locked or merged before the relationship was submitted.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = linkCases(i.guild.id, caseId, Number(relatedRaw), i.user?.id || null);
     if (!result.ok) return safeReply(i, ephemeralError(result.error || 'Failed to link cases.'));
     return refreshCaseDetail(i, token, caseId);
