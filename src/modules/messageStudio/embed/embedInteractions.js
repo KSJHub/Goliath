@@ -1893,6 +1893,7 @@ async function handleCoreInteraction(i) {
 async function legacyReplyOrUpdate(i, payload) {
   const safePayload = { ...payload, flags: 64 };
   if (i.isModalSubmit?.()) {
+    if (i.deferred || i.replied) return i.editReply(payload);
     if (typeof i.update === 'function') return i.update(payload);
     if (i.deferred || i.replied) return i.editReply(safePayload);
     return i.reply(safePayload);
@@ -2003,6 +2004,8 @@ async function handleLegacyInteraction(i) {
       return true;
     }
 
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+
     const channel =
       i.guild?.channels?.cache?.get(channelId) ||
       await i.guild?.channels
@@ -2017,10 +2020,9 @@ async function handleLegacyInteraction(i) {
         channel.type !== 5
       )
     ) {
-      await i.reply({
+      await i.editReply({
         content:
           '❌ That channel was not found in this server, or it is not a text/announcement channel.',
-        flags: MessageFlags.Ephemeral,
       });
 
       return true;
@@ -2040,13 +2042,12 @@ async function handleLegacyInteraction(i) {
     );
 
     if (!access.ok) {
-      await i.reply({
+      await i.editReply({
         content: panel.trim(
           access.message ||
             'Goliath cannot deploy to that channel.',
           1800
         ),
-        flags: MessageFlags.Ephemeral,
       });
 
       return true;
