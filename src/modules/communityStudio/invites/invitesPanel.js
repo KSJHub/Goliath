@@ -157,14 +157,14 @@ function adminView(interaction) {
     components: [
       row(button('invites:health', 'System Health'),
         button('invites:repair', 'Repair Invites'),
-        button('invites:member-dm-modal', 'Edit Referral DM', ButtonStyle.Secondary),
-        button('invites:member-enabled', memberEnabled ? 'Disable Referrals' : 'Enable Referrals', ButtonStyle.Secondary),
-        button('invites:toggle', enabled ? 'Disable Studio' : 'Enable Studio', ButtonStyle.Secondary)),
+        button('invites:member-dm-modal', 'Edit Referral DM', ButtonStyle.Secondary)),
       row(button('invites:official-regenerate', regenerateArmed ? 'Confirm Replace' : 'Replace Invite', ButtonStyle.Secondary, !configured),
         button('invites:default-panel', panelResetArmed ? 'Confirm Panel Reset' : 'Reset Panel', ButtonStyle.Secondary),
         button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? 'Confirm Reset' : 'Reset Scores', ButtonStyle.Secondary),
         button('invites:official-delete', deleteArmed ? 'Confirm Delete' : 'Delete Invite', ButtonStyle.Secondary, !configured)),
-      row(button('invites:official-settings', '⬅️ Back')),
+      row(button('invites:official-settings', '⬅️ Back'),
+        button('invites:member-enabled', memberEnabled ? 'Disable Referrals' : 'Enable Referrals', ButtonStyle.Secondary),
+        button('invites:toggle', enabled ? 'Disable Studio' : 'Enable Studio', ButtonStyle.Secondary)),
     ],
   };
 }
