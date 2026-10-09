@@ -659,6 +659,7 @@ async function handleCaseSearchModal(i) {
     const caseId = Number(caseIdRaw), c = getCaseById(i.guild.id, caseId);
     if (!c) return safeReply(i, ephemeralError('Case not found.'));
     if (isCaseReadOnly(c)) return safeReply(i, ephemeralError('This case became locked or merged before evidence was submitted.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = addCaseEvidence(i.guild.id, caseId, { messageUrl: input(i, 'message_url'), channelId: input(i, 'channel_id'), messageId: input(i, 'message_id'), attachmentUrl: input(i, 'attachment_url'), note: input(i, 'evidence_note') }, i.user?.id || null);
     if (!result.ok) return safeReply(i, ephemeralError(result.error || 'Failed to add evidence.'));
     return i.update(evidenceViewer(result.case, token, 0));
@@ -670,6 +671,7 @@ async function handleCaseSearchModal(i) {
     const caseId = Number(caseIdRaw), c = getCaseById(i.guild.id, caseId);
     if (!c) return safeReply(i, ephemeralError('Case not found.'));
     if (isCaseReadOnly(c)) return safeReply(i, ephemeralError('This case became locked or merged before evidence removal was submitted.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = removeCaseEvidence(i.guild.id, caseId, input(i, 'evidence_id'), input(i, 'remove_reason'), i.user?.id || null);
     if (!result.ok) return safeReply(i, ephemeralError(result.error || 'Failed to remove evidence.'));
     return i.update(evidenceViewer(result.case, token, 0));
