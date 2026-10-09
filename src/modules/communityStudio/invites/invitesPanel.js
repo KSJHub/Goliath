@@ -27,17 +27,18 @@ function overview(interaction) {
   const enabled = isModuleEnabled(interaction.guildId, 'invites');
   const official = section.settings.officialInvite;
   const memberLinks = invites.listInviteLinks(interaction.guildId).filter((link) => link.personal).length;
+  const trackedJoins = Number(section.analytics?.tracked || 0);
   return {
     embeds: [new EmbedBuilder().setColor(enabled ? 0x57F287 : 0xED4245).setTitle('📨 Invite Studio')
-      .setDescription('Configure official invites, member links, the public leaderboard and administration.')
+      .setDescription('Manage server invitations, member referrals and invite leaderboards.\n\n' + (enabled ? '🟢 **Module Enabled**' : '🔴 **Module Disabled**'))
       .addFields(
-        { name: 'Status', value: enabled ? 'Enabled' : 'Disabled', inline: true },
         { name: 'Official Invite', value: officialUrl(official.code) || 'Not configured', inline: true },
-        { name: 'Member Links', value: String(memberLinks), inline: true },
         { name: 'Public Panel', value: section.settings.publicPanel.messageId ? 'Deployed' : 'Not deployed', inline: true },
+        { name: 'Member Links', value: String(memberLinks), inline: true },
+        { name: 'Tracked Joins', value: String(trackedJoins), inline: true },
       )],
     components: [
-      row(button('invites:official-settings', 'Official Invite', ButtonStyle.Primary), button('invites:public-config', 'Public Panel', ButtonStyle.Primary)),
+      row(button('invites:official-settings', 'Official Invite', ButtonStyle.Primary), button('invites:member-settings', 'Member Invites', ButtonStyle.Primary), button('invites:public-config', 'Public Panel & Leaderboard', ButtonStyle.Primary)),
       row(button('admin:modules', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
   };
