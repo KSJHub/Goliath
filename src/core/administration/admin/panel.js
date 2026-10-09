@@ -229,9 +229,9 @@ function buildAdminPanel(guild, name = 'Unknown User', interaction = null) {
     fields.push({ name: '👥 Staff & Permissions', value: 'Map guild roles to Goliath authority and control exact powers', inline: true });
     actions.push(['admin:adminpanel', '👥 Permissions', ButtonStyle.Primary]);
   }
-  if (can('admin.automod.manage')) {
-    fields.push({ name: '🛡️ Security & AutoMod', value: 'Protection rules and automated enforcement', inline: true });
-    actions.push(['admin:automod', '🛡️ Security', ButtonStyle.Primary]);
+  if (can('admin.security.manage')) {
+    fields.push({ name: '🛡️ Security Hub', value: 'Guild protection, AutoMod, threat response, verification and recovery', inline: true });
+    actions.push(['admin:security-hub', '🛡️ Security Hub', ButtonStyle.Primary]);
   }
   if (!interaction || hasAnyModulePermission(interaction)) {
     fields.push({ name: '🧩 Goliath Studios', value: 'Configure only the Studios assigned to your Goliath authority profile', inline: true });
