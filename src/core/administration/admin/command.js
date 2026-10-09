@@ -53,7 +53,7 @@ function canUseSettings(interaction) {
   if (!interaction?.guild || !interaction?.user?.id) return false;
   return security.isBotOwner(interaction.user.id) || interaction.guild.ownerId === interaction.user.id || adminPanel.hasGuildPermission(interaction, 'admin.dashboard.view');
 }
-function canUseServerSecurity(interaction) { return canUseSettings(interaction); }
+function canUseServerSecurity(interaction) { return Boolean(interaction?.guild && interaction?.user?.id && adminPanel.hasGuildPermission(interaction, 'admin.security.manage')); }
 function discordTime(value) { const ms = Number(value); return Number.isFinite(ms) && ms > 0 ? `<t:${Math.floor(ms / 1000)}:R>` : 'Not set'; }
 function lockdownSlowmode(state) {
   if (!state.active) return 'Not imposed';
