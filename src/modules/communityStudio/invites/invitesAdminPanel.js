@@ -170,6 +170,9 @@ async function handleInviteStudioInteraction(interaction) {
 
   if (pages[id]) {
     state.page = pages[id];
+    if (state.page === 'official-settings' || state.page === 'public-config') {
+      state.vanityStatus = await invites.syncVanityStatus(interaction.guild);
+    }
     if (state.page === 'public-config') await checkPanelDeployment(interaction);
     await update(interaction);
     return true;
@@ -182,6 +185,15 @@ async function handleInviteStudioInteraction(interaction) {
     id === 'invites:member-personal'
   ) {
     return handleMemberInteraction(interaction);
+  }
+
+  if (id === 'invites:official-link-type' && interaction.isStringSelectMenu()) {
+    const linkType = interaction.values[0] === 'vanity' ? 'vanity' : 'standard';
+    const vanity = await invites.syncVanityStatus(interaction.guild);
+    state.vanityStatus = vanity;
+    nested(interaction, 'officialInvite', { linkType });
+    await update(interaction);
+    return true;
   }
 
   if (id === 'invites:official-channel' && interaction.isChannelSelectMenu()) {
@@ -230,6 +242,7 @@ async function handleInviteStudioInteraction(interaction) {
 
   if (id === 'invites:panel-preview') {
     try {
+      state.vanityStatus = await invites.syncVanityStatus(interaction.guild);
       const payload = panel.buildPublicPayload(interaction.guildId);
       await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
     } catch (error) {
@@ -389,6 +402,7 @@ async function handleInviteStudioInteraction(interaction) {
     });
 
     try {
+      state.vanityStatus = await invites.syncVanityStatus(interaction.guild);
       const message = await tracking.deployPublicPanel(
         interaction.guild,
         meta(interaction, 'invite_panel_deploy'),
