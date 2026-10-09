@@ -72,7 +72,12 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
   const refreshed = verificationStore.getSession(guild.id, member.id) || session;
   const history = verificationStore.getSecurityHistory?.(guild.id, member.id) || section?.securityHistory?.[member.id] || [];
   const staffPing = staffRoleIds.map(id => `<@&${id}>`).join(' ');
-  await channel.send({ content: `${staffPing}${staffPing ? '\n' : ''}${caseSummary(member, reason, refreshed, history)}`, allowedMentions: { roles: staffRoleIds, users: [member.id] } }).catch(() => null);
+  try {
+    await channel.send({ content: `${staffPing}${staffPing ? '\n' : ''}${caseSummary(member, reason, refreshed, history)}`, allowedMentions: { roles: staffRoleIds, users: [member.id], parse: [] } });
+  } catch (error) {
+    verificationStore.addSecurityHistory(guild.id, member.id, { type: 'quarantine_case_notification_failed', channelId: channel.id, reason: String(error?.message || error).slice(0, 300) });
+    return { ok: false, channel, created: true, message: 'Private quarantine case created, but staff notification failed.' };
+  }
   return { ok: true, channel, created: true };
 }
 
@@ -80,7 +85,10 @@ async function closeQuarantineCase(guild, userId, reason = 'Verification quarant
   const session = verificationStore.getSession(guild.id, userId) || {};
   if (!session.quarantineChannelId) return { ok: true, skipped: true };
   const channel = guild.channels.cache.get(session.quarantineChannelId) || await guild.channels.fetch(session.quarantineChannelId).catch(() => null);
-  if (channel) await channel.delete(reason).catch(() => null);
+  if (channel) {
+    try { await channel.delete(reason); }
+    catch (error) { verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_case_close_failed', channelId: channel.id, reason: String(error?.message || error).slice(0, 300) }); return { ok: false, message: 'Could not delete the quarantine case channel.', channelId: channel.id }; }
+  }
   verificationStore.upsertSession(guild.id, userId, { quarantineChannelId: null, quarantineCaseClosedAt: new Date().toISOString() });
   verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_case_closed', reason });
   return { ok: true };
