@@ -290,8 +290,79 @@ async function trackJoin(member, meta = {}) {
 async function trackLeave(member, meta = {}) { const section = getSection(member.guild.id); const record = section.members[member.id]; if (!record || record.leftAt) return null; updateSection(member.guild.id, (current) => { const inviters = { ...current.inviters }; if (record.inviterId && current.settings.removeOnLeave) { const stats = inviterStats(current, record.inviterId); stats.active = Math.max(0, stats.active - 1); stats.left += 1; inviters[record.inviterId] = stats; } return { ...current, inviters, members: { ...current.members, [member.id]: { ...record, leftAt: now() } } }; }, meta); addAnalytics(member.guild.id, { leaves: 1, lastLeaveAt: now() }, meta); return record; }
 function leaderboard(guildId, limit = 25) { const section = getSection(guildId); const personalOwners = new Set(listInviteLinks(guildId).filter((link) => link.personal).map((link) => link.inviterId)); return Object.values(section.inviters).filter((entry) => personalOwners.has(entry.inviterId)).map((entry) => ({ ...entry, score: Number(entry.active || 0) + Number(entry.bonus || 0) })).sort((a, b) => b.score - a.score || b.total - a.total).slice(0, Math.max(1, Math.min(100, Number(limit || 25)))); }
 function setBonus(guildId, inviterId, bonus, meta = {}) { const id = cleanId(inviterId); if (!id) throw new Error('A valid inviter is required.'); return updateSection(guildId, (section) => { const stats = inviterStats(section, id); stats.bonus = Math.max(-100000, Math.min(100000, Number(bonus || 0))); return { ...section, inviters: { ...section.inviters, [id]: stats } }; }, meta).inviters[id]; }
-async function buildHealth(guild) { const section = getSection(guild.id); const issues = []; const warnings = []; const me = guild.members.me; if (!me?.permissions.has(PermissionFlagsBits.CreateInstantInvite)) issues.push({ code: 'create_invite_missing' }); if (section.settings.memberInviteTemplate.roleIds.length && !me?.permissions.has(PermissionFlagsBits.ManageRoles)) issues.push({ code: 'manage_roles_missing' }); if (!section.settings.officialInvite.channelId) warnings.push({ code: 'official_invite_channel_missing' }); if (!section.settings.officialInvite.channelId) warnings.push({ code: 'member_invite_channel_missing' }); return { module: SECTION, healthy: issues.length === 0, enabled: guildManager.isModuleEnabled(guild.id, SECTION), issues, warnings, checkedAt: now() }; }
-async function repair(guild, meta = {}) { await syncGuild(guild, meta).catch(() => null); if (getSection(guild.id).settings.officialInvite.channelId) await ensureOfficialInvite(guild, meta).catch(() => null); return buildHealth(guild); }
+async function buildHealth(guild) {
+  const section = getSection(guild.id);
+  const settings = section.settings;
+  const issues = [];
+  const warnings = [];
+  const checks = [];
+  const enabled = guildManager.isModuleEnabled(guild.id, SECTION);
+  const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
+  const check = (name, status, detail, code) => {
+    checks.push({ name, status, detail });
+    if (status === 'issue') issues.push({ code, detail });
+    if (status === 'warning') warnings.push({ code, detail });
+  };
+  const channel = settings.officialInvite.channelId
+    ? await guild.channels.fetch(settings.officialInvite.channelId).catch(() => null)
+    : null;
+  const channelPerms = channel && me ? channel.permissionsFor(me) : null;
+  const canInvite = Boolean(channel?.createInvite && channelPerms?.has(PermissionFlagsBits.CreateInstantInvite));
+  const officialCode = settings.officialInvite.code;
+  if (!channel) check('Destination Channel', 'warning', 'Select a valid invite destination channel.', 'destination_missing');
+  else check('Destination Channel', canInvite ? 'healthy' : 'issue',
+    canInvite ? 'Channel accessible; invite creation permitted.' : 'Missing Create Invite permission or channel access.', 'destination_permissions');
+  if (!officialCode) check('Official Invite', 'warning', 'No official invite configured.', 'official_missing');
+  else {
+    try {
+      const live = await guild.invites.fetch(officialCode);
+      check('Official Invite', live ? 'healthy' : 'issue', live ? 'Verified with Discord.' : 'Invite not found.', 'official_invalid');
+    } catch {
+      check('Official Invite', 'warning', 'Could not verify with Discord; validity unknown.', 'official_unverified');
+    }
+  }
+  const roleIds = settings.officialInvite.roleIds || [];
+  if (!roleIds.length) check('Join Roles', 'healthy', 'No automatic join roles configured.');
+  else {
+    const missing = roleIds.filter((id) => !guild.roles.cache.has(id));
+    const manageable = Boolean(me?.permissions.has(PermissionFlagsBits.ManageRoles));
+    const blocked = roleIds.filter((id) => {
+      const role = guild.roles.cache.get(id);
+      return role && (role.managed || !me || me.roles.highest.position <= role.position);
+    });
+    check('Join Roles', missing.length || blocked.length || !manageable ? 'issue' : 'healthy',
+      missing.length || blocked.length || !manageable ? `${missing.length} missing, ${blocked.length} unassignable; Manage Roles: ${manageable ? 'yes' : 'no'}.` : `${roleIds.length} role(s) assignable.`, 'join_roles_unassignable');
+  }
+  const personal = Object.values(section.inviteLinks || {}).filter((link) => link.personal);
+  const invalid = personal.filter((link) => !link.code || !link.inviterId || link.channelId !== settings.officialInvite.channelId || Number(link.maxAge || 0) !== 0 || Number(link.maxUses || 0) !== 0);
+  check('Member Invites', invalid.length ? 'warning' : 'healthy',
+    `${personal.length} recorded personal links; ${invalid.length} configuration inconsistencies. New requests: ${settings.memberInviteTemplate.enabled ? 'on' : 'off'}.`, 'member_link_mismatch');
+  const stats = Object.values(section.inviters || {});
+  const malformed = stats.filter((record) => !Number.isFinite(Number(record.active || 0)) || !Number.isFinite(Number(record.total || 0)));
+  check('Referral Tracking', malformed.length ? 'warning' : settings.trackingEnabled ? 'healthy' : 'warning',
+    malformed.length ? `${malformed.length} invalid member statistic record(s).` : `Tracking ${settings.trackingEnabled ? 'enabled' : 'disabled'}; ${Number(section.analytics?.tracked || 0)} tracked joins.`, 'tracking_attention');
+  const panel = settings.publicPanel;
+  if (!panel.channelId || !panel.messageId) check('Public Panel', 'warning', 'No published panel recorded.', 'panel_not_deployed');
+  else {
+    const panelChannel = await guild.channels.fetch(panel.channelId).catch(() => null);
+    const perms = panelChannel && me ? panelChannel.permissionsFor(me) : null;
+    if (!panelChannel?.messages || !perms?.has(PermissionFlagsBits.ViewChannel) || !perms.has(PermissionFlagsBits.SendMessages) || !perms.has(PermissionFlagsBits.EmbedLinks)) {
+      check('Public Panel', 'issue', 'Channel unavailable or missing View/Send/Embed permissions.', 'panel_permissions');
+    } else {
+      const message = await panelChannel.messages.fetch(panel.messageId).catch(() => null);
+      check('Public Panel', message ? 'healthy' : 'warning',
+        message ? 'Published message verified; channel permissions available.' : 'Saved message could not be verified.', 'panel_unverified');
+    }
+  }
+  return { module: SECTION, healthy: issues.length === 0, enabled, issues, warnings, checks, checkedAt: now() };
+}
+async function repair(guild, meta = {}) {
+  await syncGuild(guild, meta).catch(() => null);
+  // Never silently replace an existing permanent official invite.
+  const official = getSection(guild.id).settings.officialInvite;
+  if (official.channelId && !official.code) await ensureOfficialInvite(guild, meta).catch(() => null);
+  return buildHealth(guild);
+}
 async function startup(client) { if (client.__goliathInvitesStarted) return; client.__goliathInvitesStarted = true; const panels = require('./invitesPublicPanels'); for (const guild of client.guilds.cache.values()) { if (!guildManager.isModuleEnabled(guild.id, SECTION)) continue; await syncGuild(guild, { action: 'invites_startup_sync' }).catch(() => null); panels.startAutoRefresh(guild, TWO_HOURS_MS); } }
 
 module.exports = { SECTION, TWO_HOURS_MS, defaults, getSection, setEnabled, updateSettings, addHistory, syncGuild, trackJoin, trackLeave, leaderboard, setBonus, createInviteLink, deleteInviteLink, listInviteLinks, listAdminInviteLinks, findPersonalInvite, createPersonalInvite, deletePersonalInvite, ensureOfficialInvite, buildHealth, repair, startup, applyInviteRoles, exportConfiguration: getSection, reset: (guildId, meta = {}) => saveSection(guildId, defaults(), meta) };
