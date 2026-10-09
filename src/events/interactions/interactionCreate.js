@@ -266,6 +266,13 @@ module.exports={
       if(await callHandler(suggestionsInteractions,'handleSuggestionsInteraction',interaction))return;
       if(await callHandler(giveawaysInteractionHandler,'handleGiveawayInteraction',interaction))return;
       if(await callHandler(ticketInteractionHandler,'handleTicketInteraction',interaction,client))return;
+      // An unrecognised component must receive a response instead of silently
+      // expiring. Commands and autocomplete are handled separately above.
+      if(interaction.isMessageComponent?.()||interaction.isModalSubmit?.()){
+        console.warn(`[InteractionCreate] Unhandled component: ${customId}`);
+        await safeInteractionError(interaction,new Error('This control is no longer available or its handler is missing.'));
+        return;
+      }
     }catch(error){console.error('[InteractionCreate] Failed to handle interaction:',error);await safeInteractionError(interaction,error);}
   },
 };
