@@ -1896,6 +1896,7 @@ async function legacyReplyOrUpdate(i, payload) {
     if (i.deferred || i.replied) return i.editReply(safePayload);
     return i.reply(safePayload);
   }
+  if (i.deferred || i.replied) return i.editReply(payload);
   return i.update(payload);
 }
 
@@ -2197,7 +2198,8 @@ async function handleInteraction(interaction) {
       selectedFieldIndex: null,
     });
 
-    await interaction.update({
+    if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+    await interaction.editReply({
       ...panel.buildBuilderPanel(
         interaction,
         panel.memberName(interaction)
