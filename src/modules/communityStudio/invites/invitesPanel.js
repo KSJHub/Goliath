@@ -32,7 +32,7 @@ function overview(interaction) {
     embeds: [new EmbedBuilder().setColor(enabled ? 0x57F287 : 0xED4245).setTitle('📨 Invite Studio')
       .setDescription('Manage server invitations, member referrals and invite leaderboards.\n\n' + (enabled ? '🟢 **Module Enabled**' : '🔴 **Module Disabled**'))
       .addFields(
-        { name: 'Official Invite', value: officialUrl(official.code) || 'Not configured', inline: true },
+        { name: 'Official Invite', value: invites.officialDisplayUrl(interaction.guildId) || 'Not configured', inline: true },
         { name: 'Public Panel', value: section.settings.publicPanel.messageId ? 'Deployed' : 'Not deployed', inline: true },
         { name: 'Member Links', value: String(memberLinks), inline: true },
         { name: 'Tracked Joins', value: String(trackedJoins), inline: true },
@@ -48,6 +48,7 @@ function officialView(interaction) {
   const section = invites.getSection(interaction.guildId);
   const config = section.settings.officialInvite;
   const member = section.settings.memberInviteTemplate;
+  const vanity = sessionFor(interaction).vanityStatus;
   const memberLinks = invites.listInviteLinks(interaction.guildId).filter((link) => link.personal).length;
   const link = config.code ? section.inviteLinks[config.code] : null;
   const state = sessionFor(interaction);
@@ -71,7 +72,9 @@ function officialView(interaction) {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🔗 Invite Management')
       .setDescription('Choose the invite destination and optional join roles. Every official and member referral link is permanent, unlimited, and uses these settings.')
       .addFields(
-        { name: '🌍 OFFICIAL INVITE', value: `**${liveStatus}**\n${officialUrl(config.code) || 'No invite link created'}`, inline: false },
+        { name: '🌍 OFFICIAL INVITE', value: `**${liveStatus}**\n${invites.officialDisplayUrl(interaction.guildId) || 'No invite link created'}`, inline: false },
+        { name: '⭐ Official Link Type', value: config.linkType === 'vanity' ? `Custom / Vanity${config.vanityCode ? ` · discord.gg/${config.vanityCode}` : ' · Standard fallback active'}` : 'Standard Discord Invite', inline: false },
+        { name: '✨ Vanity Availability', value: !vanity ? 'Not checked' : !vanity.verified ? '🟡 Unable to verify' : vanity.available ? `🟢 Available · discord.gg/${vanity.code}` : '⚪ Not available for this guild', inline: false },
         { name: '📍 Destination', value: officialDestination, inline: true },
         { name: '👥 Uses', value: officialUses, inline: true },
         { name: '♾️ Link Policy', value: 'Never expires · Unlimited uses', inline: true },
@@ -85,6 +88,7 @@ function officialView(interaction) {
 
       )],
     components: [
+      row(new StringSelectMenuBuilder().setCustomId('invites:official-link-type').setPlaceholder('⭐ Official invite type').addOptions([{ label: 'Standard Discord Invite', value: 'standard', default: config.linkType !== 'vanity' }, { label: 'Custom / Vanity Invite', value: 'vanity', default: config.linkType === 'vanity', description: 'Uses vanity when available; otherwise standard fallback' }])),
       row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Official invite destination').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Official join roles (optional)', info))] : []),
 
@@ -227,7 +231,7 @@ function buildPublicPayload(guildId, sourceSection = null) {
   const section = sourceSection || invites.getSection(guildId);
   const panel = section.settings.publicPanel;
   const memberEnabled = section.settings.memberInviteTemplate.enabled;
-  const url = officialUrl(section.settings.officialInvite.code);
+  const url = invites.officialDisplayUrl(guildId);
   if (!url) throw new Error('Create the official invite before sending the public panel.');
   const entries = invites.leaderboard(guildId, panel.leaderboardLimit);
   const lines = entries.length
