@@ -68,35 +68,42 @@ function officialView(interaction) {
   const needsUpdate = configured && (!matching || live?.exists === false);
   const updateArmed = state.officialConfirm?.action === 'update' && state.officialConfirm.until > Date.now();
   const liveStatus = !configured ? '⚪ Not configured' : live?.exists === false ? '🔴 Link missing or expired' : live?.exists === true ? (matching ? '🟢 Verified active' : '🟠 Settings saved — update invite to apply') : (matching ? '🟡 Saved — verify live status' : '🟠 Changes pending — update invite');
+  const officialDestination = config.channelId ? `<#${config.channelId}>` : 'Not selected';
+  const memberDestination = member.channelId ? `<#${member.channelId}> (override)` : config.channelId ? 'Same as official' : 'Not configured';
+  const officialUses = configured ? (live?.exists ? `${live.uses} (Discord)` : `${link?.uses || 0} (recorded)`) : '—';
+  const memberExpiry = ageNames[member.maxAge || 0] || 'Never';
+  const memberUses = member.maxUses ? String(member.maxUses) : 'Unlimited';
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🔗 Invite Management')
-      .setDescription('**🌍 Official Invite** is the server’s main link. **👥 Member Invites** are personal referral links; they use the official destination by default unless an override is set.')
+      .setDescription('Manage the server’s official invite and personal member referral links. Member links use the official destination unless overridden in Settings.')
       .addFields(
-        { name: 'Status', value: liveStatus + (!config.channelId ? '\nChoose a destination channel to enable Create Invite.' : ''), inline: false },
-        { name: '🔗 Invite Link', value: officialUrl(config.code) || 'No link created yet', inline: false },
-        { name: '📍 Official Destination', value: (config.channelId ? `<#${config.channelId}>` : 'Not selected') + '\nChannel opened by the official invite.', inline: true },
-        { name: '👥 Uses', value: configured ? (live?.exists ? String(live.uses) + ' (Discord)' : String(link?.uses || 0) + ' (recorded)') : '—', inline: true },
+        { name: '🌍 OFFICIAL INVITE', value: `**Status:** ${liveStatus}\n**Link:** ${officialUrl(config.code) || 'Not created'}`, inline: false },
+        { name: '📍 Destination', value: officialDestination, inline: true },
+        { name: '👥 Uses', value: officialUses, inline: true },
         { name: '⏳ Expires', value: configured ? expiryLabel : ageNames[config.maxAge || 0] || 'Never', inline: true },
-        { name: '🔢 Maximum Uses', value: config.maxUses ? String(config.maxUses) : 'Unlimited', inline: true },
-        { name: '🎭 Official Join Roles', value: roleList(config.roleIds) + '\nGoliath grants these after an attributed official-invite join.', inline: false },
-        { name: '👥 Member Invites', value: `${member.enabled ? '🟢 Enabled' : '🔴 Disabled'} • ${memberLinks} personal link(s)`, inline: false },
-        { name: 'Member Destination', value: member.channelId ? `<#${member.channelId}> (override)` : config.channelId ? `<#${config.channelId}> (inherits official)` : 'Not configured', inline: true },
-        { name: 'Member Limits', value: `${ageNames[member.maxAge || 0] || 'Never'} expiry • ${member.maxUses || 'Unlimited'} uses per link`, inline: true },
-        { name: 'Member Join Roles', value: roleList(member.roleIds) + '\nGoliath grants these after an attributed member-referral join.', inline: false },
-
-        ...(updateArmed ? [{ name: '⚠️ Confirm Replacement', value: 'The current invite will be replaced and its old URL will stop working. Press Confirm Update within 30 seconds.', inline: false }] : []),
-        ...(info.pages > 1 ? [{ name: 'Role Selection', value: `Page ${info.page + 1} of ${info.pages}`, inline: false }] : []),
+        { name: '🔢 Use Limit', value: config.maxUses ? String(config.maxUses) : 'Unlimited', inline: true },
+        { name: '🎭 Join Roles', value: roleList(config.roleIds), inline: true },
+        { name: '👥 MEMBER INVITES', value: `**Status:** ${member.enabled ? '🟢 Enabled' : '🔴 Disabled'}  •  **Personal links:** ${memberLinks}\nMembers receive individual links so their referrals can be tracked.`, inline: false },
+        { name: '📍 Destination', value: memberDestination, inline: true },
+        { name: '⏳ Expiry / Uses', value: `${memberExpiry} / ${memberUses}`, inline: true },
+        { name: '🎭 Join Roles', value: roleList(member.roleIds), inline: true },
+        ...(!config.channelId ? [{ name: '⚠️ Setup Required', value: 'Choose an official destination channel to create links.', inline: false }] : []),
+        ...(updateArmed ? [{ name: '⚠️ Confirm Replacement', value: 'Updating replaces the existing official link. Confirm within 30 seconds.', inline: false }] : []),
+        ...(info.pages > 1 ? [{ name: 'Official Role Page', value: `${info.page + 1}/${info.pages}`, inline: true }] : []),
+        ...(memberInfo.pages > 1 ? [{ name: 'Member Role Page', value: `${memberInfo.page + 1}/${memberInfo.pages}`, inline: true }] : []),
       )],
     components: [
-      row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Select destination channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Official invite join roles (optional)', info))] : []),
-      ...(memberInfo.roles.length ? [row(rolePageSelect(`invites:member-roles:${memberInfo.page}`, '🎭 Member invite join roles (optional)', memberInfo))] : []),
+      row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Official invite destination').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
+      ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Official join roles (optional)', info))] : []),
+      ...(memberInfo.roles.length ? [row(rolePageSelect(`invites:member-roles:${memberInfo.page}`, '🎭 Member join roles (optional)', memberInfo))] : []),
       row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
-        button('invites:official-limits', 'Link Limits', ButtonStyle.Primary),
+        button('invites:official-limits', 'Official Limits', ButtonStyle.Primary),
         ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
         button('invites:member-limits', 'Member Limits', ButtonStyle.Primary),
-        button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
-      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'), ...(info.pages > 1 ? [button('invites:official-role-next', 'Official Roles ▶', ButtonStyle.Secondary)] : []), ...(memberInfo.pages > 1 ? [button('invites:member-role-next', 'Member Roles ▶', ButtonStyle.Secondary)] : [])),
+        button('invites:member-dm-modal', 'Member DM', ButtonStyle.Primary)),
+      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
+        ...(info.pages > 1 ? [button('invites:official-role-next', 'Official Roles ▶')] : []),
+        ...(memberInfo.pages > 1 ? [button('invites:member-role-next', 'Member Roles ▶')] : [])),
     ],
   };
 }
