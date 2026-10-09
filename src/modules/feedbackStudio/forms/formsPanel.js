@@ -409,9 +409,20 @@ async function handleFormsAdminInteraction(interaction) {
       return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName));
     }
 
-    if (interaction.isRoleSelectMenu?.() && customId === 'admin:forms:managerRoles') {
-      save(interaction.guild, (section) => ({ ...section, managerRoleIds: [...new Set(interaction.values || [])] }));
-      return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName));
+    if (customId.startsWith('admin:forms:roleBrowse:')) {
+      const page = Number(customId.slice('admin:forms:roleBrowse:'.length));
+      if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+      return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName, page));
+    }
+    if (interaction.isStringSelectMenu?.() && customId.startsWith('admin:forms:managerRoles:')) {
+      const page = Number(customId.slice('admin:forms:managerRoles:'.length));
+      if (!Number.isSafeInteger(page) || page < 0) throw new Error('Invalid role page.');
+      const current = forms.getFormsSection(interaction.guild.id);
+      const info = rolePages(interaction.guild, current.managerRoleIds || [], page);
+      if (info.page !== page) throw new Error('Role page expired. Reopen Forms.');
+      const chosen = mergePageSelection(current.managerRoleIds || [], info.roles, interaction.values || []);
+      save(interaction.guild, section => ({ ...section, managerRoleIds: chosen }));
+      return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName, page));
     }
 
     if (customId === 'admin:forms:enable' || customId === 'admin:forms:disable') {
