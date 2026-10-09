@@ -878,6 +878,7 @@ async function handleCaseAction(interaction, { fetchTarget, createConfirmation }
     const state = getAppealQueueState(token, interaction.guild.id);
     if (!state) return safeReply(interaction, ephemeralError('This appeal queue session expired. Open the queue again.'));
     if (!['pending', 'approved', 'denied', 'all'].includes(status)) return safeReply(interaction, ephemeralError('That appeal status filter is invalid.'));
+    if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
     state.filters = { ...state.filters, status };
     state.createdAt = Date.now();
     return interaction.update(buildAppealQueuePayload(interaction.guild.id, 0, state.filters, token));
@@ -887,6 +888,7 @@ async function handleCaseAction(interaction, { fetchTarget, createConfirmation }
     const [, token, pageRaw] = id.split(':');
     const state = getAppealQueueState(token, interaction.guild.id);
     if (!state) return safeReply(interaction, ephemeralError('This appeal queue session expired. Open the queue again.'));
+    if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
     state.createdAt = Date.now();
     return interaction.update(buildAppealQueuePayload(interaction.guild.id, pageRaw, state.filters, token));
   }
