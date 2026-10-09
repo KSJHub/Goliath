@@ -144,7 +144,7 @@ function normalize(section = {}) {
         channelId: cleanId(publicPanel.channelId),
         messageId: cleanId(publicPanel.messageId),
         title: clean(publicPanel.title === "🌍 Join Our Community" ? base.settings.publicPanel.title : (publicPanel.title || base.settings.publicPanel.title), 256),
-        description: clean((publicPanel.description === "Use our official server invite below, or create your own personal link to compete on the leaderboard." ? base.settings.publicPanel.description : (publicPanel.description || base.settings.publicPanel.description)).replace(/\\\\n/g, '\\n'), 4000),
+        description: clean((publicPanel.description === "Use our official server invite below, or create your own personal link to compete on the leaderboard." ? base.settings.publicPanel.description : (publicPanel.description || base.settings.publicPanel.description)).replace(/\\n/g, '\n'), 4000),
         color: /^#[0-9a-f]{6}$/i.test(String(publicPanel.color || '')) ? publicPanel.color : base.settings.publicPanel.color,
         footer: clean(publicPanel.footer === "Leaderboard refreshes automatically every 2 hours" ? base.settings.publicPanel.footer : (publicPanel.footer || base.settings.publicPanel.footer), 2048),
         buttonLabel: clean(publicPanel.buttonLabel || base.settings.publicPanel.buttonLabel, 80),
