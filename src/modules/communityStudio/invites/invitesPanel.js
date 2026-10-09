@@ -127,6 +127,7 @@ function publicView(interaction) {
       row(new StringSelectMenuBuilder().setCustomId('invites:panel-limit').setPlaceholder(`🏆 Leaderboard: Top ${config.leaderboardLimit}`).addOptions([5, 10, 15, 20, 25].map((value) => ({ label: `Top ${value}`, value: String(value) })))),
       row(button('invites:panel-deploy', deployed ? '🔄 Update Panel' : '📢 Publish Panel', ButtonStyle.Success, !ready),
         button('invites:panel-embed-modal', '✏️ Edit Panel', ButtonStyle.Secondary),
+        button('invites:panel-preview', '👁️ Preview Panel', ButtonStyle.Secondary, !official.code),
         ...(panelUrl ? [new ButtonBuilder().setLabel('👁️ View Panel').setStyle(ButtonStyle.Link).setURL(panelUrl)] : [])),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
@@ -231,15 +232,15 @@ function buildPublicPayload(guildId, sourceSection = null) {
   const entries = invites.leaderboard(guildId, panel.leaderboardLimit);
   const lines = entries.length
     ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** referral${entry.score === 1 ? '' : 's'}`).join('\n')
-    : 'No referrals yet. **Be the first to claim the top spot!**';
-  const description = panel.description + '\n\n**Invite friends · Grow the community · Climb the leaderboard**';
+    : '✨ No referrals recorded yet. Share your personal link and be the first on the leaderboard!';
+  const description = `${panel.description}\n\n💎 **Invite friends • Earn referrals • Rise through the ranks**`;
   return {
     embeds: [new EmbedBuilder().setColor(panel.color).setTitle(panel.title)
       .setDescription(description)
       .addFields(
-        { name: '🔗 Official Server Invite', value: `[Join our community](${url})`, inline: false },
-        { name: `🏆 Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
-        { name: '💎 Your Personal Invite', value: memberEnabled ? 'Select **My Invite Link** below to share your link and earn referral points.' : 'New personal invite requests are currently disabled.', inline: false },
+        { name: '🌍 Join the Server', value: `Ready to join? **[Use our official invitation](${url})**\nPermanent link · Unlimited uses`, inline: false },
+        { name: `🏆 Community Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
+        { name: '💎 Your Personal Invite', value: memberEnabled ? 'Want to invite friends? Select **My Invite Link** to get your own permanent, unlimited-use link. Track your progress with **My Stats**.' : 'Personal invite creation is currently paused. You can still view your stats and the leaderboard.', inline: false },
       )
       .setFooter({ text: panel.footer }).setTimestamp()],
     components: [row(
@@ -296,11 +297,11 @@ function buildInviteStudioPayload(interaction, forcedPage = null) {
 
 function embedModal(interaction) {
   const config = invites.getSection(interaction.guildId).settings.publicPanel;
-  return new ModalBuilder().setCustomId('invites:panel-embed-submit').setTitle('Edit Invite Panel').addComponents(
-    row(new TextInputBuilder().setCustomId('title').setLabel('Title').setStyle(TextInputStyle.Short).setRequired(true).setValue(config.title)),
-    row(new TextInputBuilder().setCustomId('description').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(config.description)),
-    row(new TextInputBuilder().setCustomId('footer').setLabel('Footer').setStyle(TextInputStyle.Short).setRequired(true).setValue(config.footer)),
-    row(new TextInputBuilder().setCustomId('color').setLabel('Colour hex').setStyle(TextInputStyle.Short).setRequired(true).setValue(config.color)),
+  return new ModalBuilder().setCustomId('invites:panel-embed-submit').setTitle('Edit Community Invite Panel').addComponents(
+    row(new TextInputBuilder().setCustomId('title').setLabel('Panel Title').setPlaceholder('🌍 Join Our Community').setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(config.title)),
+    row(new TextInputBuilder().setCustomId('description').setLabel('Welcome Message').setPlaceholder('Welcome! Invite friends and climb the leaderboard.').setStyle(TextInputStyle.Paragraph).setMaxLength(1800).setRequired(true).setValue(config.description)),
+    row(new TextInputBuilder().setCustomId('footer').setLabel('Footer Message').setPlaceholder('Leaderboard updates every 2 hours').setStyle(TextInputStyle.Short).setMaxLength(2048).setRequired(true).setValue(config.footer)),
+    row(new TextInputBuilder().setCustomId('color').setLabel('Embed Colour (6-digit hex)').setPlaceholder('#5865F2').setStyle(TextInputStyle.Short).setMinLength(7).setMaxLength(7).setRequired(true).setValue(config.color)),
   );
 }
 function dmModal(interaction) {
