@@ -725,6 +725,7 @@ async function handleCaseSearchModal(i) {
     const existing = getCaseById(i.guild.id, caseId);
     if (!existing) return safeReply(i, ephemeralError('Case not found.'));
     if (isCaseReadOnly(existing)) return safeReply(i, ephemeralError('This case became locked or merged before the edit was submitted.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const updated = updateCaseReason(i.guild.id, caseId, reason, i.user?.id || null);
     if (!updated) return safeReply(i, ephemeralError('Failed to update case reason.'));
     return refreshCaseDetail(i, token, caseId);
@@ -736,6 +737,7 @@ async function handleCaseSearchModal(i) {
     const caseId = Number(caseIdRaw), existing = getCaseById(i.guild.id, Number(caseIdRaw));
     if (!existing) return safeReply(i, ephemeralError('Case not found.'));
     if (isCaseReadOnly(existing)) return safeReply(i, ephemeralError('This case became locked or merged before the edit was submitted.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const updated = updateCaseTags(i.guild.id, caseId, input(i, 'tags'), i.user?.id || null);
     if (!updated) return safeReply(i, ephemeralError('Failed to update case tags.'));
     return refreshCaseDetail(i, token, caseId);
@@ -749,6 +751,7 @@ async function handleCaseSearchModal(i) {
     const existing = getCaseById(i.guild.id, caseId);
     if (!existing) return safeReply(i, ephemeralError('Case not found.'));
     if (isCaseReadOnly(existing)) return safeReply(i, ephemeralError('This case became locked or merged before the relationship was submitted.'));
+    if (!i.deferred && !i.replied) await i.deferUpdate();
     const result = linkCases(i.guild.id, caseId, Number(relatedRaw), i.user?.id || null);
     if (!result.ok) return safeReply(i, ephemeralError(result.error || 'Failed to link cases.'));
     return refreshCaseDetail(i, token, caseId);
