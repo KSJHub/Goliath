@@ -187,6 +187,14 @@ async function handleInviteStudioInteraction(interaction) {
     return handleMemberInteraction(interaction);
   }
 
+  if (id === 'invites:vanity-check') {
+    await interaction.deferUpdate();
+    const status = await invites.syncVanityStatus(interaction.guild);
+    state.vanityStatus = status;
+    await interaction.editReply(panel.buildInviteStudioPayload(interaction));
+    return true;
+  }
+
   if (id === 'invites:official-link-type' && interaction.isStringSelectMenu()) {
     const linkType = interaction.values[0] === 'vanity' ? 'vanity' : 'standard';
     const vanity = await invites.syncVanityStatus(interaction.guild);
