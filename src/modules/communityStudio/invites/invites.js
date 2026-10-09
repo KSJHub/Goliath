@@ -201,15 +201,15 @@ async function createInviteLink(guild, options = {}, meta = {}) {
   const me = await validateRoles(guild, roleIds);
   const permissions = channel.permissionsFor(me);
   if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions.has(PermissionFlagsBits.CreateInstantInvite)) throw new Error(`Goliath needs View Channel and Create Invite in ${channel}.`);
-  const maxAge = MAX_AGE_OPTIONS.has(Number(options.maxAge)) ? Number(options.maxAge) : 0;
-  const maxUses = MAX_USES_OPTIONS.has(Number(options.maxUses)) ? Number(options.maxUses) : 0;
+  const maxAge = 0;
+  const maxUses = 0;
   const personal = options.personal === true;
   const official = options.official === true;
   if (!personal && !official) {
     const duplicate = listInviteLinks(guild.id).find((link) => !link.personal && !link.official && link.channelId === channelId && link.maxAge === maxAge && link.maxUses === maxUses && link.temporary === (options.temporary === true) && JSON.stringify([...link.roleIds].sort()) === JSON.stringify([...roleIds].sort()));
     if (duplicate) { const live = await guild.invites.fetch(duplicate.code).catch(() => null); if (live) return { invite: live, record: duplicate, created: false }; }
   }
-  const invite = await channel.createInvite({ maxAge, maxUses, temporary: options.temporary === true, unique: true, reason: official ? 'Goliath official Invite Studio link' : personal ? `Goliath personal invite for ${options.inviterId}` : 'Goliath Invite Studio link' });
+  const invite = await channel.createInvite({ maxAge, maxUses, temporary: false, unique: true, reason: official ? 'Goliath official Invite Studio link' : personal ? `Goliath personal invite for ${options.inviterId}` : 'Goliath Invite Studio link' });
   const record = normalizeInviteLink({ code: invite.code, channelId: channel.id, inviterId: personal ? cleanId(options.inviterId) : null, roleIds, maxAge, maxUses, temporary: options.temporary === true, personal, official, uses: invite.uses || 0, expiresAt: invite.expiresAt?.toISOString?.() || null });
   updateSection(guild.id, (section) => ({ ...section, inviteLinks: { ...section.inviteLinks, [record.code]: record } }), meta);
   addHistory(guild.id, { type: official ? 'official_link_created' : personal ? 'personal_link_created' : 'link_created', inviteCode: record.code, inviterId: record.inviterId }, meta);
