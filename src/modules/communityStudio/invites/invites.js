@@ -233,7 +233,10 @@ async function createPersonalInvite(guild, userId, _channelId = null, meta = {})
     if (!template.autoReplaceMissing) throw new Error('Your saved invite no longer exists. Ask management to replace it.');
     updateSection(guild.id, (section) => { const inviteLinks = { ...section.inviteLinks }; delete inviteLinks[existing.code]; return { ...section, inviteLinks }; }, meta);
   }
-  return createInviteLink(guild, { channelId: destinationId, maxAge: template.maxAge, maxUses: template.maxUses, temporary: template.temporary, roleIds: template.roleIds, inviterId: id, personal: true }, { ...meta, actorId: id });
+  const official = getSection(guild.id).settings.officialInvite;
+  const limits = template.limitsOverride || ((template.maxAge || template.maxUses) ? { maxAge: template.maxAge, maxUses: template.maxUses } : null);
+  const roles = template.roleIdsOverride ?? ((template.roleIds || []).length ? template.roleIds : official.roleIds);
+  return createInviteLink(guild, { channelId: destinationId, maxAge: limits ? limits.maxAge : official.maxAge, maxUses: limits ? limits.maxUses : official.maxUses, temporary: template.temporary, roleIds: roles, inviterId: id, personal: true }, { ...meta, actorId: id });
 }
 async function deletePersonalInvite(guild, userId, meta = {}) { const record = findPersonalInvite(guild.id, userId); if (!record) return false; await deleteInviteLink(guild, record.code, meta); return true; }
 
