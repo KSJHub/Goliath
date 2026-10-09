@@ -505,6 +505,8 @@ async function changeInvestigationAccess(interaction, action) {
     });
   }
 
+  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+
   const target = interaction.guild.members.cache.get(String(targetId))
     || await interaction.guild.members.fetch(String(targetId)).catch(() => null);
 
@@ -535,8 +537,6 @@ async function changeInvestigationAccess(interaction, action) {
       });
     }
   }
-
-  await interaction.deferUpdate();
 
   try {
     const result = await investigationAccess.updateAccess(
