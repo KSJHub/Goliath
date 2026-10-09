@@ -34,6 +34,7 @@ contains(challengeInteractions, 'session.securityConfigRevision', 'reject stale 
 contains(manager, 'Quarantine role transition could not be confirmed.', 'verify quarantine roles before state change');
 contains(manager, "roles.length!==roleIds(s,'quarantine').length", 'reject missing configured quarantine roles');
 contains(manager, 'm.guild.members.fetch({user:m.id,force:true})', 'confirm quarantine against fresh Discord member state');
+assert((manager.match(/m\.guild\.members\.fetch\(\{user:m\.id,force:true\}\)/g)||[]).length>=2, 'Quarantine and bypass completion must independently confirm fresh Discord roles.');
 contains(panel, 'finalNav()]};}', 'consistent Verification navigation');
 
 
