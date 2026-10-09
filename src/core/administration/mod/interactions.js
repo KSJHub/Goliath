@@ -411,6 +411,7 @@ function buildComparisonPayload(i, primary, secondary, origin = 'scan') {
 async function runMemberScan(i, targetId, { record = true } = {}) {
   const allowed = await ensureScanCapability(i, 'scan_run', '❌ You do not have permission to run a member intelligence scan.');
   if (!allowed) return true;
+  if (!i.deferred && !i.replied && i.isMessageComponent?.()) await i.deferUpdate();
   const target = await fetchTarget(i.guild, targetId);
   if (!target) return safeReply(i, { content: '❌ Could not find that member in this server.', flags: 64 });
   const report = buildMemberScanPayload(i, target);
@@ -515,6 +516,7 @@ async function runMemberComparison(i, primaryId, secondaryId, origin = 'scan') {
   const allowed = await ensureScanCapability(i, 'scan_compare', '❌ You do not have permission to compare member intelligence.');
   if (!allowed) return true;
   if (!primaryId || !secondaryId || String(primaryId) === String(secondaryId)) return safeReply(i, { content: '❌ Select a different member to compare against.', flags: 64 });
+  if (!i.deferred && !i.replied && i.isMessageComponent?.()) await i.deferUpdate();
   const [primary, secondary] = await Promise.all([fetchTarget(i.guild, primaryId), fetchTarget(i.guild, secondaryId)]);
   if (!primary || !secondary) return safeReply(i, { content: '❌ One of those members could not be found in this server.', flags: 64 });
   const payload = buildComparisonPayload(i, primary, secondary, origin);
