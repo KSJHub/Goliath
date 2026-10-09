@@ -90,7 +90,7 @@ function officialView(interaction) {
 
       row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
         ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
-        button('invites:invite-manager', 'Manage Links', ButtonStyle.Secondary)),
+        button('invites:invite-manager', '👥 Member Invites', ButtonStyle.Secondary)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
         button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0),
         button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
@@ -168,8 +168,8 @@ function adminView(interaction) {
         button('invites:member-enabled', memberEnabled ? '👥 Member Invites: On' : '👥 Member Invites: Off', ButtonStyle.Secondary)),
       row(button('invites:official-regenerate', regenerateArmed ? '⚠️ Confirm Replace' : '🔄 Replace Invite', ButtonStyle.Secondary, !configured),
         button('invites:default-panel', panelResetArmed ? '⚠️ Confirm Panel Reset' : '🧹 Reset Panel', ButtonStyle.Secondary),
-        button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? '⚠️ Confirm Reset' : '🏆 Reset Scores', ButtonStyle.Secondary),
-        button('invites:official-delete', deleteArmed ? '⚠️ Confirm Delete' : '🗑️ Delete Invite', ButtonStyle.Secondary, !configured)),
+        button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? '⚠️ Confirm Leaderboard Reset' : '🏆 Reset Leaderboard', ButtonStyle.Secondary),
+        button('invites:official-delete', deleteArmed ? '⚠️ Confirm Official Delete' : '🗑️ Delete Official Invite', ButtonStyle.Secondary, !configured)),
       row(button('invites:official-settings', '⬅️ Back'),
         button('invites:toggle', enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
     ],
@@ -183,23 +183,37 @@ function managerView(interaction) {
   const section = invites.getSection(interaction.guildId);
   const selectedStats = selected ? section.inviters?.[selected.inviterId] || {} : {};
   const selectedScore = Math.max(0, Number(selectedStats.active || 0) + Number(selectedStats.bonus || 0));
-  const memberConfirm = state.memberConfirm?.userId === state.selectedUserId && state.memberConfirm.until > Date.now() ? state.memberConfirm : null;
-  const list = links.slice(0, state.displayLimit || links.length).map((link, index) => `${index + 1}. <@${link.inviterId}> — ${officialUrl(link.code)} — ${link.uses || 0} uses`).join('\n') || 'No personal links yet.';
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('👥 Manage Links')
-    .setDescription('Select a member to view or manage their personal referral link.')
+  const memberConfirm = selected && state.memberConfirm?.userId === selected.inviterId && state.memberConfirm.until > Date.now() ? state.memberConfirm : null;
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('👥 Member Invite Manager')
+    .setDescription('Manage personal invite links and member referral scores.')
     .addFields(
       { name: 'Personal Links', value: String(links.length), inline: true },
       { name: 'Tracked Joins', value: String(Number(section.analytics?.tracked || 0)), inline: true },
-      { name: 'Member Links', value: list.slice(0, 1024), inline: false },
+      { name: 'Member Invites', value: section.settings.memberInviteTemplate.enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
     );
-  if (selected) embed.addFields({ name: 'Selected Member', value: `<@${selected.inviterId}>\n${officialUrl(selected.code)}\n**Referral Score:** ${selectedScore}` });
+  if (!links.length) {
+    embed.addFields({ name: 'No member invite links yet', value: 'Members can create their personal links through **My Invite Link** on the public panel. They will appear here automatically.' });
+  } else if (selected) {
+    embed.addFields({ name: 'Selected Member', value: `<@${selected.inviterId}>\n[Personal Invite](${officialUrl(selected.code)}) · ${selected.uses || 0} recorded uses\n**Referral Score:** ${selectedScore}` });
+  } else {
+    const list = links.slice(0, state.displayLimit || links.length).map((link, index) => `${index + 1}. <@${link.inviterId}> — ${link.uses || 0} recorded uses`).join('\n');
+    embed.addFields({ name: 'Member Links', value: list.slice(0, 1024) });
+  }
   if (memberConfirm) embed.addFields({ name: '⚠️ Confirm Member Action', value: memberConfirm.action === 'delete' ? 'Confirm within 30 seconds to remove this member’s personal link. Their referral history is not reset.' : 'Confirm within 30 seconds to reset this member’s referral score. Their personal link will be kept.' });
-  return { embeds: [embed], components: [
-    row(new StringSelectMenuBuilder().setCustomId('invites:manager-display').setPlaceholder('Members shown').addOptions([5, 10, 15, 20, 0].map((value) => ({ label: value ? `Display ${value}` : 'Display All', value: String(value) })))),
-    row(new UserSelectMenuBuilder().setCustomId('invites:manager-select-member').setPlaceholder('Select a member').setMinValues(1).setMaxValues(1)),
-    row(button('invites:manager-verify', 'Verify Link', ButtonStyle.Secondary, !selected), button('invites:manager-resend', 'Resend DM', ButtonStyle.Secondary, !selected), button('invites:manager-delete', memberConfirm?.action === 'delete' ? 'Confirm Remove' : 'Remove Link', ButtonStyle.Secondary, !selected), button('invites:manager-reset-member', memberConfirm?.action === 'reset' ? 'Confirm Score Reset' : 'Reset Score', ButtonStyle.Secondary, !selected)),
-    row(button('invites:official-settings', '⬅️ Back')),
-  ] };
+  embed.setFooter({ text: 'Goliath Invites · Member Management' }).setTimestamp();
+  const components = [];
+  if (links.length) {
+    components.push(row(new StringSelectMenuBuilder().setCustomId('invites:manager-display').setPlaceholder('👥 Members shown').addOptions([5, 10, 15, 20, 0].map((value) => ({ label: value ? `Display ${value}` : 'Display All', value: String(value) })))));
+    components.push(row(new UserSelectMenuBuilder().setCustomId('invites:manager-select-member').setPlaceholder('👤 Select a member').setMinValues(1).setMaxValues(1)));
+    if (selected) components.push(row(
+      button('invites:manager-verify', '🔍 Verify Link'),
+      button('invites:manager-resend', '📩 Send Invite DM'),
+      button('invites:manager-delete', memberConfirm?.action === 'delete' ? '⚠️ Confirm Removal' : '🗑️ Remove Member Link'),
+      button('invites:manager-reset-member', memberConfirm?.action === 'reset' ? '⚠️ Confirm Score Reset' : '🏆 Reset Member Score'),
+    ));
+  }
+  components.push(row(button('invites:official-settings', '⬅️ Back')));
+  return { embeds: [embed], components };
 }
 
 function buildPublicPayload(guildId, sourceSection = null) {
