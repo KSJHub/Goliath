@@ -20,6 +20,20 @@ const store = read('./src/modules/securityStudio/verificationStore.js');
 const manager = read('./src/modules/securityStudio/verificationManager.js');
 const panel = read('./src/modules/securityStudio/verificationPanel.js');
 const memberIntelligence = read('./src/events/members/memberIntelligence.js');
+const challengeRuntime = read('./src/modules/securityStudio/verificationChallengeRuntime.js');
+const challengeInteractions = read('./src/modules/securityStudio/verificationChallengeInteractions.js');
+
+// Guard the security handoff and challenge recovery against regressions.
+contains(manager, 'pendingSecurity:true', 'manager delegates security checks to continuation');
+contains(flow, 'challengeRuntime.startStep(g.id,m.id,step,s)', 'challenge reuse validated by runtime');
+assert(!flow.includes("active?.status==='pending'?{ok:true,pending:true"), 'Continuation must not bypass challenge runtime validation.');
+contains(challengeRuntime, "reason: 'security_configuration_changed'", 'reject outdated security challenges');
+contains(challengeRuntime, 'verificationChallenges.expire(guildId, userId, active.challengeId)', 'expire old challenge before restarting');
+contains(challengeRuntime, 'active = verificationChallenges.active(guildId, userId)', 'refresh challenge after expiry');
+contains(challengeInteractions, 'session.securityConfigRevision', 'reject stale member challenge interactions');
+contains(manager, 'Quarantine role transition could not be confirmed.', 'verify quarantine roles before state change');
+contains(panel, 'finalNav()]};}', 'consistent Verification navigation');
+
 
 for (const state of ['new', 'pending', 'verifying', 'verified', 'quarantined', 'review', 'rejected']) {
   contains(store, `'${state}'`, `persistent lifecycle state ${state}`);
