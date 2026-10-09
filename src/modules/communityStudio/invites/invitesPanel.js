@@ -274,7 +274,7 @@ function buildPublicPayload(guildId, sourceSection = null) {
     embeds: [new EmbedBuilder().setColor(panel.color).setTitle(panel.title)
       .setDescription(description)
       .addFields(
-        { name: '🔗 Official Server Invite', value: `**[Join the server](${url})**\n${url}`, inline: false },
+        { name: '🔗 Official Server Invite', value: `**[Join the community](${url})** · ${url}`, inline: false },
         { name: `🏆 Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
         { name: '💎 Your Personal Invite', value: memberEnabled ? 'Select **My Invite Link** to get your own referral link, share it with friends and climb the rankings. Use **My Stats** to track your progress.' : 'Personal invite creation is currently paused. Your stats and the leaderboard remain available.', inline: false },
       )
