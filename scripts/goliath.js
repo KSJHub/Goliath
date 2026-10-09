@@ -1976,7 +1976,7 @@ function auditCommand() {
 function doctor(target = '') {
   const suites = { goodbye: goodbyeAudit, reaction: reactionRolesAudit, reactionroles: reactionRolesAudit, 'reaction-roles': reactionRolesAudit, 'role-studio': roleStudioAudit, rolestudio: roleStudioAudit, invites: inviteStudioAudit };
   if (target) return suites[target]?.() ?? false;
-  return [projectShape, commandAudit, dashboardAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit]
+  return [projectShape, commandAudit, dashboardAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit]
     .map((suite) => suite()).every(Boolean);
 }
 function promote(target) {
