@@ -59,35 +59,40 @@ function officialView(interaction) {
   const expires = link?.expiresAt ? new Date(link.expiresAt) : null;
   const expiryLabel = expires && Number.isFinite(expires.getTime()) ? `<t:${Math.floor(expires.getTime() / 1000)}:R>` : 'Never';
   const configured = Boolean(config.code);
-  const confirmation = state.officialConfirm && state.officialConfirm.until > Date.now() ? state.officialConfirm.action : null;
   const live = state.officialLive?.code === config.code ? state.officialLive : null;
-  const matching = link && link.channelId === config.channelId &&
+  const matching = Boolean(link) && link.channelId === config.channelId &&
     Number(link.maxAge || 0) === Number(config.maxAge || 0) &&
     Number(link.maxUses || 0) === Number(config.maxUses || 0) &&
     JSON.stringify([...(link.roleIds || [])].sort()) === JSON.stringify([...(config.roleIds || [])].sort());
   const needsUpdate = configured && (!matching || live?.exists === false);
   const updateArmed = state.officialConfirm?.action === 'update' && state.officialConfirm.until > Date.now();
-  const liveStatus = !configured ? '⚪ Not configured' : live?.exists === false ? '🔴 Link missing or expired' : live?.exists === true ? (matching ? '🟢 Verified active' : '🟠 Settings saved — update invite to apply') : (matching ? '🟡 Saved — verify live status' : '🟠 Changes pending — update invite');
+  const liveStatus = !configured ? '⚪ Not configured' :
+    live?.exists === false ? '🔴 Link unavailable — update required' :
+    !matching ? '🟠 Changes saved — update required' :
+    live?.exists === true ? '🟢 Verified active' : '🟡 Configured — not recently verified';
   const officialDestination = config.channelId ? `<#${config.channelId}>` : 'Not selected';
   const memberDestination = member.channelId ? `<#${member.channelId}> (override)` : config.channelId ? 'Same as official' : 'Not configured';
   const officialUses = configured ? (live?.exists ? `${live.uses} (Discord)` : `${link?.uses || 0} (recorded)`) : '—';
   const memberExpiry = ageNames[member.maxAge || 0] || 'Never';
   const memberUses = member.maxUses ? String(member.maxUses) : 'Unlimited';
+  const officialExpiry = configured ? expiryLabel : ageNames[config.maxAge || 0] || 'Never';
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🔗 Invite Management')
-      .setDescription('Manage the server’s official invite and personal member referral links. Member links use the official destination unless overridden in Settings.')
+      .setDescription('Manage the official server link and personal referral links. Member invites inherit the official destination unless overridden in Settings.')
       .addFields(
-        { name: '🌍 OFFICIAL INVITE', value: `**Status:** ${liveStatus}\n**Link:** ${officialUrl(config.code) || 'Not created'}`, inline: false },
+        { name: '🌍 OFFICIAL INVITE', value: `**${liveStatus}**\n${officialUrl(config.code) || 'No invite link created'}`, inline: false },
         { name: '📍 Destination', value: officialDestination, inline: true },
         { name: '👥 Uses', value: officialUses, inline: true },
-        { name: '⏳ Expires', value: configured ? expiryLabel : ageNames[config.maxAge || 0] || 'Never', inline: true },
+        { name: '⏳ Expires', value: officialExpiry, inline: true },
         { name: '🔢 Use Limit', value: config.maxUses ? String(config.maxUses) : 'Unlimited', inline: true },
         { name: '🎭 Join Roles', value: roleList(config.roleIds), inline: true },
-        { name: '👥 MEMBER INVITES', value: `**Status:** ${member.enabled ? '🟢 Enabled' : '🔴 Disabled'}  •  **Personal links:** ${memberLinks}\nMembers receive individual links so their referrals can be tracked.`, inline: false },
+        { name: '\u200b', value: '\u200b', inline: false },
+        { name: '👥 MEMBER INVITES', value: `${member.enabled ? '🟢 Enabled' : '🔴 Disabled'} · **${memberLinks}** personal links\nMembers share individual links to earn tracked referrals.`, inline: false },
         { name: '📍 Destination', value: memberDestination, inline: true },
         { name: '⏳ Expiry / Uses', value: `${memberExpiry} / ${memberUses}`, inline: true },
         { name: '🎭 Join Roles', value: roleList(member.roleIds), inline: true },
-        ...(!config.channelId ? [{ name: '⚠️ Setup Required', value: 'Choose an official destination channel to create links.', inline: false }] : []),
+        ...(!config.channelId ? [{ name: '⚠️ Setup Required', value: 'Select an official destination channel before creating the invite.', inline: false }] : []),
+        ...(configured && !needsUpdate ? [{ name: 'Update Invite', value: 'Already up to date. Change the official destination, roles or limits to enable updating.', inline: false }] : []),
         ...(updateArmed ? [{ name: '⚠️ Confirm Replacement', value: 'Updating replaces the existing official link. Confirm within 30 seconds.', inline: false }] : []),
         ...(info.pages > 1 ? [{ name: 'Official Role Page', value: `${info.page + 1}/${info.pages}`, inline: true }] : []),
         ...(memberInfo.pages > 1 ? [{ name: 'Member Role Page', value: `${memberInfo.page + 1}/${memberInfo.pages}`, inline: true }] : []),
@@ -100,7 +105,7 @@ function officialView(interaction) {
         button('invites:official-limits', 'Official Limits', ButtonStyle.Primary),
         ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
         button('invites:member-limits', 'Member Limits', ButtonStyle.Primary),
-        button('invites:member-dm-modal', 'Member DM', ButtonStyle.Primary)),
+        button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
         ...(info.pages > 1 ? [button('invites:official-role-next', 'Official Roles ▶')] : []),
         ...(memberInfo.pages > 1 ? [button('invites:member-role-next', 'Member Roles ▶')] : [])),
