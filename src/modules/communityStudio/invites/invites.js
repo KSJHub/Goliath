@@ -116,8 +116,8 @@ function normalize(section = {}) {
         channelId: cleanId(officialInvite.channelId || settings.managedInviteChannelId || settings.channelId),
         code: clean(officialInvite.code || settings.managedInviteCode || settings.inviteCode, 100) || null,
         roleIds: normalizeRoleIds(officialInvite.roleIds),
-        maxAge: MAX_AGE_OPTIONS.has(Number(officialInvite.maxAge)) ? Number(officialInvite.maxAge) : 0,
-        maxUses: MAX_USES_OPTIONS.has(Number(officialInvite.maxUses)) ? Number(officialInvite.maxUses) : 0,
+        maxAge: 0,
+        maxUses: 0,
       },
       memberInviteTemplate: {
         ...base.settings.memberInviteTemplate,
@@ -125,9 +125,13 @@ function normalize(section = {}) {
         enabled: memberTemplate.enabled !== false,
         channelId: cleanId(memberTemplate.channelId),
         roleIds: normalizeRoleIds(memberTemplate.roleIds),
-        maxAge: MAX_AGE_OPTIONS.has(Number(memberTemplate.maxAge)) ? Number(memberTemplate.maxAge) : 0,
-        maxUses: MAX_USES_OPTIONS.has(Number(memberTemplate.maxUses)) ? Number(memberTemplate.maxUses) : 0,
-        temporary: memberTemplate.temporary === true,
+        maxAge: 0,
+        maxUses: 0,
+        channelId: null,
+        roleIds: [],
+        roleIdsOverride: null,
+        limitsOverride: null,
+        temporary: false,
         autoReplaceMissing: memberTemplate.autoReplaceMissing !== false,
         dmTitle: clean(memberTemplate.dmTitle || base.settings.memberInviteTemplate.dmTitle, 256),
         dmMessage: clean(memberTemplate.dmMessage || base.settings.memberInviteTemplate.dmMessage, 3500),
@@ -224,7 +228,7 @@ async function createPersonalInvite(guild, userId, _channelId = null, meta = {})
   if (!id) throw new Error('A valid member is required.');
   const template = getSection(guild.id).settings.memberInviteTemplate;
   if (!template.enabled) throw new Error('Member invite creation is disabled by management.');
-  const destinationId = template.channelId || getSection(guild.id).settings.officialInvite.channelId;
+  const destinationId = getSection(guild.id).settings.officialInvite.channelId;
   if (!destinationId) throw new Error('Management must configure the official invite destination first.');
   const existing = findPersonalInvite(guild.id, id);
   if (existing) {
@@ -234,9 +238,7 @@ async function createPersonalInvite(guild, userId, _channelId = null, meta = {})
     updateSection(guild.id, (section) => { const inviteLinks = { ...section.inviteLinks }; delete inviteLinks[existing.code]; return { ...section, inviteLinks }; }, meta);
   }
   const official = getSection(guild.id).settings.officialInvite;
-  const limits = template.limitsOverride || ((template.maxAge || template.maxUses) ? { maxAge: template.maxAge, maxUses: template.maxUses } : null);
-  const roles = template.roleIdsOverride ?? ((template.roleIds || []).length ? template.roleIds : official.roleIds);
-  return createInviteLink(guild, { channelId: destinationId, maxAge: limits ? limits.maxAge : official.maxAge, maxUses: limits ? limits.maxUses : official.maxUses, temporary: template.temporary, roleIds: roles, inviterId: id, personal: true }, { ...meta, actorId: id });
+  return createInviteLink(guild, { channelId: destinationId, maxAge: 0, maxUses: 0, temporary: false, roleIds: official.roleIds, inviterId: id, personal: true }, { ...meta, actorId: id });
 }
 async function deletePersonalInvite(guild, userId, meta = {}) { const record = findPersonalInvite(guild.id, userId); if (!record) return false; await deleteInviteLink(guild, record.code, meta); return true; }
 
@@ -247,10 +249,10 @@ async function ensureOfficialInvite(guild, meta = {}, regenerate = false) {
   const previous = config.code ? await guild.invites.fetch(config.code).catch(() => null) : null;
   const saved = config.code ? section.inviteLinks[config.code] : null;
   const sameConfig = previous && saved && saved.channelId === config.channelId &&
-    saved.maxAge === config.maxAge && saved.maxUses === config.maxUses &&
+    saved.maxAge === 0 && saved.maxUses === 0 &&
     JSON.stringify([...saved.roleIds].sort()) === JSON.stringify([...config.roleIds].sort());
   if (sameConfig && !regenerate) return { invite: previous, created: false };
-  const result = await createInviteLink(guild, { channelId: config.channelId, maxAge: config.maxAge, maxUses: config.maxUses, temporary: false, roleIds: config.roleIds, official: true }, meta);
+  const result = await createInviteLink(guild, { channelId: config.channelId, maxAge: 0, maxUses: 0, temporary: false, roleIds: config.roleIds, official: true }, meta);
   updateSettings(guild.id, { officialInvite: { ...config, code: result.invite.code } }, meta);
   if (config.code && config.code !== result.invite.code) {
     if (previous) await previous.delete('Goliath official invite replaced').catch(() => null);
@@ -288,7 +290,7 @@ async function trackJoin(member, meta = {}) {
 async function trackLeave(member, meta = {}) { const section = getSection(member.guild.id); const record = section.members[member.id]; if (!record || record.leftAt) return null; updateSection(member.guild.id, (current) => { const inviters = { ...current.inviters }; if (record.inviterId && current.settings.removeOnLeave) { const stats = inviterStats(current, record.inviterId); stats.active = Math.max(0, stats.active - 1); stats.left += 1; inviters[record.inviterId] = stats; } return { ...current, inviters, members: { ...current.members, [member.id]: { ...record, leftAt: now() } } }; }, meta); addAnalytics(member.guild.id, { leaves: 1, lastLeaveAt: now() }, meta); return record; }
 function leaderboard(guildId, limit = 25) { const section = getSection(guildId); const personalOwners = new Set(listInviteLinks(guildId).filter((link) => link.personal).map((link) => link.inviterId)); return Object.values(section.inviters).filter((entry) => personalOwners.has(entry.inviterId)).map((entry) => ({ ...entry, score: Number(entry.active || 0) + Number(entry.bonus || 0) })).sort((a, b) => b.score - a.score || b.total - a.total).slice(0, Math.max(1, Math.min(100, Number(limit || 25)))); }
 function setBonus(guildId, inviterId, bonus, meta = {}) { const id = cleanId(inviterId); if (!id) throw new Error('A valid inviter is required.'); return updateSection(guildId, (section) => { const stats = inviterStats(section, id); stats.bonus = Math.max(-100000, Math.min(100000, Number(bonus || 0))); return { ...section, inviters: { ...section.inviters, [id]: stats } }; }, meta).inviters[id]; }
-async function buildHealth(guild) { const section = getSection(guild.id); const issues = []; const warnings = []; const me = guild.members.me; if (!me?.permissions.has(PermissionFlagsBits.CreateInstantInvite)) issues.push({ code: 'create_invite_missing' }); if (section.settings.memberInviteTemplate.roleIds.length && !me?.permissions.has(PermissionFlagsBits.ManageRoles)) issues.push({ code: 'manage_roles_missing' }); if (!section.settings.officialInvite.channelId) warnings.push({ code: 'official_invite_channel_missing' }); if (!section.settings.memberInviteTemplate.channelId && !section.settings.officialInvite.channelId) warnings.push({ code: 'member_invite_channel_missing' }); return { module: SECTION, healthy: issues.length === 0, enabled: guildManager.isModuleEnabled(guild.id, SECTION), issues, warnings, checkedAt: now() }; }
+async function buildHealth(guild) { const section = getSection(guild.id); const issues = []; const warnings = []; const me = guild.members.me; if (!me?.permissions.has(PermissionFlagsBits.CreateInstantInvite)) issues.push({ code: 'create_invite_missing' }); if (section.settings.memberInviteTemplate.roleIds.length && !me?.permissions.has(PermissionFlagsBits.ManageRoles)) issues.push({ code: 'manage_roles_missing' }); if (!section.settings.officialInvite.channelId) warnings.push({ code: 'official_invite_channel_missing' }); if (!section.settings.officialInvite.channelId) warnings.push({ code: 'member_invite_channel_missing' }); return { module: SECTION, healthy: issues.length === 0, enabled: guildManager.isModuleEnabled(guild.id, SECTION), issues, warnings, checkedAt: now() }; }
 async function repair(guild, meta = {}) { await syncGuild(guild, meta).catch(() => null); if (getSection(guild.id).settings.officialInvite.channelId) await ensureOfficialInvite(guild, meta).catch(() => null); return buildHealth(guild); }
 async function startup(client) { if (client.__goliathInvitesStarted) return; client.__goliathInvitesStarted = true; const panels = require('./invitesPublicPanels'); for (const guild of client.guilds.cache.values()) { if (!guildManager.isModuleEnabled(guild.id, SECTION)) continue; await syncGuild(guild, { action: 'invites_startup_sync' }).catch(() => null); panels.startAutoRefresh(guild, TWO_HOURS_MS); } }
 
