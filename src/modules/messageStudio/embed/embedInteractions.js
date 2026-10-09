@@ -1745,7 +1745,7 @@ async function handleCoreInteraction(i) {
   if (customId === 'embed:test-send') { await i.deferReply({ flags: MessageFlags.Ephemeral }); try { const payload = await buildPayload(state, i, true); payload.allowedMentions = panel.allowedMentions(state, i); await i.editReply(payload); } catch (error) { console.error('[Embed] test payload failed:', error); await i.editReply({ content: `❌ Embed test failed: ${error?.message || error}`, flags: 64 }); } return true; }
 
   if (customId === 'embed:use') {
-    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!i.deferred && !i.replied) await i.deferReply({ flags: MessageFlags.Ephemeral });
     const channel =
       i.guild.channels.cache.get(state.channelId) ||
       await i.guild.channels.fetch(state.channelId).catch(() => null);
