@@ -56,10 +56,10 @@ function startStep(guildId, userId, method, settings = {}) {
   const session = verificationStore.getSession(guildId, userId) || {};
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', method, state: session.state };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed', method };
-  const active = verificationChallenges.active(guildId, userId);
+  let active = verificationChallenges.active(guildId, userId);
   if (active?.status === 'pending' && verificationChallenges.isExpired(active)) {
     verificationChallenges.expire(guildId, userId, active.challengeId);
-    // The expired challenge is closed; continue below to create a fresh challenge.
+    active = verificationChallenges.active(guildId, userId);
   }
   if (active?.status === 'pending') {
     if (active.method !== method) return { ok: false, reason: 'different_challenge_active', method, activeMethod: active.method, challenge: active };
