@@ -170,7 +170,7 @@ async function handleInviteStudioInteraction(interaction) {
     const state = panel.sessionFor(interaction);
     const config = invites.getSection(interaction.guildId).settings.officialInvite;
     const info = rolePages(interaction.guild, config.roleIds || [], state.officialRolePage || 0);
-    state.officialRolePage = Math.max(0, Math.min(info.pages - 1, info.page + (id.endsWith('next') ? 1 : -1)));
+    state.officialRolePage = id.endsWith('next') ? (info.page + 1) % info.pages : (info.page + info.pages - 1) % info.pages;
     await update(interaction);
     return true;
   }
@@ -223,6 +223,11 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
+  if (id === 'invites:member-inherit') {
+    nested(interaction, 'memberInviteTemplate', { channelId: null });
+    await update(interaction);
+    return true;
+  }
   if (id === 'invites:member-channel') {
     nested(interaction, 'memberInviteTemplate', {
       channelId: interaction.values[0],
