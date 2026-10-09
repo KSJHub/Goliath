@@ -655,11 +655,18 @@ async function submitInvestigationRoomNote(interaction, targetId) {
 }
 
 async function removeQuarantine(interaction, targetId) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+  }
+
   const target = await resolveTarget(interaction, targetId, 'remove_quarantine');
-  if (!target) return true;
+  if (!target) {
+    await safeEditReply(interaction, { content: '❌ Unable to resolve or authorise the member for isolation release.', flags: 64 });
+    return true;
+  }
   const snapshot = currentSnapshot(interaction, target.id);
   if (!snapshot) {
-    return safeReply(interaction, { content: `⚠️ **${target.user.tag}** is not currently isolated.`, flags: 64 });
+    return safeEditReply(interaction, { content: `⚠️ **${target.user.tag}** is not currently isolated.`, flags: 64 });
   }
   const mode = getQuarantineMode(snapshot);
 
@@ -672,14 +679,10 @@ async function removeQuarantine(interaction, targetId) {
       reason: 'Full Security Isolation release is only available from /admin.',
       metadata: { containmentMode: mode, caseId: snapshot.caseId || null },
     });
-    return safeReply(interaction, {
+    return safeEditReply(interaction, {
       content: '🚨 **Full Security Isolation can only be cleared from `/admin` by the server owner.**',
       flags: 64,
     });
-  }
-
-  if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
   }
 
   const result = await restoreQuarantinedMember(interaction.guild, target, {
