@@ -175,7 +175,7 @@ function adminView(interaction) {
       button('invites:settings-panel', '📢 Public Panel'),
     ));
     // Keep the original Back and module toggle row unchanged.
-    components.push(row(button('invites:official-settings', '⬅️ Back'),
+    components.push(row(button('invites:home', '⬅️ Back'),
       button('invites:toggle', enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success)));
   } else {
     if (page === 'health') components.push(row(
