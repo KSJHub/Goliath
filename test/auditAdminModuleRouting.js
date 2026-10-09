@@ -48,7 +48,7 @@ for (const entry of entries.filter((entry) => !entry.route.startsWith('admin:mod
 }
 
 assert(verification.includes("id!=='admin:verification'&&!id.startsWith('admin:verification:')"), 'Verification handler does not accept the admin:verification root route');
-assert(verification.includes("if(id==='admin:verification'){await respond(i,buildVerificationAdminPanel(i.guild,user,'home',st));return true;}"), 'Verification root route does not open the Front Door panel');
+assert(verification.includes("if(id==='admin:verification'){await respond(i,buildVerificationAdminPanel(i.guild,user,'home',st));return true;}"), 'Verification root route does not open the Verification panel');
 
 const unsafeGuard = /if\(startsWith\(interaction,'admin:[^']+'\)\)\{await callHandler\([^;]+;return;\}/g;
 assert.deepEqual(router.match(unsafeGuard) || [], [], 'Found an admin prefix guard that swallows an unhandled interaction');
