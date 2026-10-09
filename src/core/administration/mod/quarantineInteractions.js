@@ -439,6 +439,8 @@ async function selectInvestigationAccessChannel(interaction) {
     });
   }
 
+  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+
   const channel = interaction.guild.channels.cache.get(channelId)
     || await interaction.guild.channels.fetch(channelId).catch(() => null);
 
