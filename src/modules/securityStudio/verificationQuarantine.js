@@ -115,9 +115,18 @@ async function reconcileModerationRelease(guild, userId, actorId, reason = 'Mod 
   const settings = verificationStore.normalizeSettings(section?.settings || {});
   const pendingIds = cleanIds(settings.roles?.pending);
   const quarantineIds = cleanIds(settings.roles?.quarantine);
-  if (member) {
-    for (const roleId of quarantineIds) if (member.roles.cache.has(roleId)) await member.roles.remove(roleId, 'Goliath Verification moderation review cleared').catch(() => null);
-    for (const roleId of pendingIds) if (!member.roles.cache.has(roleId)) await member.roles.add(roleId, 'Goliath Verification moderation review cleared').catch(() => null);
+  if (!member) return { ok: false, message: 'Member is unavailable; Mod Hub release cannot restore Verification roles.' };
+  if (!pendingIds.length) return { ok: false, message: 'Pending Verification roles must be configured before Mod Hub release.' };
+  for (const roleId of pendingIds) {
+    const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+    if (!role) return { ok: false, message: 'A configured Pending Verification role no longer exists.' };
+  }
+  try {
+    for (const roleId of pendingIds) if (!member.roles.cache.has(roleId)) await member.roles.add(roleId, 'Goliath Verification moderation review cleared');
+    for (const roleId of quarantineIds) if (member.roles.cache.has(roleId)) await member.roles.remove(roleId, 'Goliath Verification moderation review cleared');
+  } catch (error) {
+    verificationStore.addSecurityHistory(guild.id, userId, { type: 'moderation_release_role_failed', actorId: actorId || null, reason: String(error?.message || error).slice(0, 300) });
+    return { ok: false, message: 'Could not restore Pending roles or remove Quarantine roles after Mod Hub review.' };
   }
   verificationStore.clearAttempts(guild.id, userId);
   verificationStore.upsertSession(guild.id, userId, {
