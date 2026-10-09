@@ -131,22 +131,22 @@ function memberSettingsView(interaction) {
   const ageLabels = { 0: 'Never', 1800: '30 minutes', 3600: '1 hour', 21600: '6 hours', 43200: '12 hours', 86400: '1 day', 604800: '7 days', 2592000: '30 days' };
   return {
     embeds: [new EmbedBuilder().setColor(config.enabled ? 0x57F287 : 0xED4245).setTitle('👥 Member Invites')
-      .setDescription('Configure personal referral links that members can request from the public invite panel.')
+      .setDescription('Members can request a personal referral link from the public invite panel. Configure where those links lead, which roles Goliath grants after an attributed join, and the message members receive.')
       .addFields(
         { name: 'Status', value: config.enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-        { name: 'Personal Links', value: String(personalLinks), inline: true },
-        { name: 'Destination', value: config.channelId ? `<#${config.channelId}>` : '⚠️ Not selected', inline: true },
-        { name: 'Expiry', value: ageLabels[config.maxAge || 0] || 'Never', inline: true },
-        { name: 'Maximum Uses', value: config.maxUses ? String(config.maxUses) : 'Unlimited', inline: true },
-        { name: 'Join Roles', value: roleList(config.roleIds), inline: false },
+        { name: 'Personal Links', value: `${personalLinks} active personal link(s) managed by Goliath`, inline: true },
+        { name: 'Destination', value: (config.channelId ? `<#${config.channelId}>` : '⚠️ Not selected') + '\nChannel that personal invites open.', inline: true },
+        { name: 'Expiry', value: (ageLabels[config.maxAge || 0] || 'Never') + '\nHow long a new link remains valid.', inline: true },
+        { name: 'Maximum Uses', value: (config.maxUses ? String(config.maxUses) : 'Unlimited') + '\nHow many joins each link permits.', inline: true },
+        { name: 'Join Roles', value: roleList(config.roleIds) + '\nOptional roles Goliath assigns after a tracked join; Discord does not grant these automatically.', inline: false },
+        { name: 'Member DM', value: 'Edit the title and message sent to members with their personal invite link.', inline: false },
         ...(!config.channelId ? [{ name: 'Setup Required', value: 'Choose a destination channel before members can reliably receive personal links.', inline: false }] : []),
         ...(info.pages > 1 ? [{ name: 'Role Selection', value: `Page ${info.page + 1} of ${info.pages}`, inline: false }] : []),
       )],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('invites:member-channel').setPlaceholder('📍 Select member invite destination').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       ...(info.roles.length ? [row(rolePageSelect(`invites:member-roles:${info.page}`, '🎭 Select join roles (optional)', info))] : []),
-      row(button('invites:member-enabled', config.enabled ? 'Disable Member Invites' : 'Enable Member Invites', config.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
+      row(button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
       ...(info.pages > 1 ? [row(button('invites:member-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:member-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1))] : []),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
@@ -163,6 +163,7 @@ function adminView(interaction) {
       .setDescription(armed ? '⚠️ Reset armed. Confirm within 30 seconds.' : 'Manage member links, health, repairs and leaderboard data.')],
     components: [
       row(button('invites:invite-manager', 'Invite Manager', ButtonStyle.Primary), button('invites:health', 'Health'), button('invites:repair', 'Repair')),
+      row(button('invites:member-enabled', section.settings.memberInviteTemplate.enabled ? 'Disable Member Invites' : 'Enable Member Invites', section.settings.memberInviteTemplate.enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
       row(button('invites:official-regenerate', state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now() ? 'Confirm Regenerate' : 'Regenerate Official Invite', ButtonStyle.Secondary, !section.settings.officialInvite.code), button('invites:official-delete', state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now() ? 'Confirm Delete' : 'Delete Official Invite', ButtonStyle.Danger, !section.settings.officialInvite.code)),
       row(button(armed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', armed ? 'Confirm Reset' : 'Reset Leaderboard', ButtonStyle.Danger), button('invites:default-panel', 'Restore Defaults'), button('invites:toggle', enabled ? 'Disable' : 'Enable', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
