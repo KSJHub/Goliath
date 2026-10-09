@@ -151,14 +151,16 @@ function adminView(interaction) {
         ...(deleteArmed ? [{ name: '⚠️ Delete Confirmation', value: 'Press Confirm Delete within 30 seconds to delete the official invite.', inline: false }] : []),
       )],
     components: [
-      row(button('invites:invite-manager', 'Invite Manager', ButtonStyle.Primary), button('invites:health', 'Health'), button('invites:repair', 'Repair')),
-      row(button('invites:member-enabled', memberEnabled ? 'Disable Referrals' : 'Enable Referrals', memberEnabled ? ButtonStyle.Secondary : ButtonStyle.Success),
+      row(button('invites:invite-manager', 'Manage Member Links', ButtonStyle.Primary),
+        button('invites:health', 'Health'),
+        button('invites:repair', 'Repair'),
+        button('invites:member-enabled', memberEnabled ? 'Disable Referrals' : 'Enable Referrals', memberEnabled ? ButtonStyle.Secondary : ButtonStyle.Success),
         button('invites:toggle', enabled ? 'Disable Module' : 'Enable Module', enabled ? ButtonStyle.Secondary : ButtonStyle.Success)),
       row(button('invites:official-regenerate', regenerateArmed ? 'Confirm Regenerate' : 'Regenerate Invite', regenerateArmed ? ButtonStyle.Danger : ButtonStyle.Secondary, !configured),
         button('invites:official-delete', deleteArmed ? 'Confirm Delete' : 'Delete Invite', ButtonStyle.Danger, !configured),
-        button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? 'Confirm Reset' : 'Reset Leaderboard', ButtonStyle.Danger)),
-      row(button('invites:default-panel', 'Restore Panel Defaults')),
-      row(button('invites:official-settings', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
+        button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? 'Confirm Reset' : 'Reset Leaderboard', ButtonStyle.Danger),
+        button('invites:default-panel', 'Restore Panel Defaults')),
+      row(button('invites:official-settings', '⬅️ Back')),
     ],
   };
 }
