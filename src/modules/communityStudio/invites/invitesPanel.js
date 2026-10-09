@@ -156,13 +156,13 @@ function adminView(interaction) {
       row(button('invites:health', 'System Health'),
         button('invites:repair', 'Repair Invites'),
         button('invites:member-dm-modal', 'Edit Member Invite DM', ButtonStyle.Secondary),
-        button('invites:member-enabled', memberEnabled ? 'Disable Member Invites' : 'Enable Member Invites', ButtonStyle.Secondary)),
+        button('invites:member-enabled', memberEnabled ? 'Member Invites: On' : 'Member Invites: Off', ButtonStyle.Secondary)),
       row(button('invites:official-regenerate', regenerateArmed ? 'Confirm Replace' : 'Replace Invite', ButtonStyle.Secondary, !configured),
         button('invites:default-panel', panelResetArmed ? 'Confirm Panel Reset' : 'Reset Panel', ButtonStyle.Secondary),
         button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? 'Confirm Reset' : 'Reset Scores', ButtonStyle.Secondary),
         button('invites:official-delete', deleteArmed ? 'Confirm Delete' : 'Delete Invite', ButtonStyle.Secondary, !configured)),
       row(button('invites:official-settings', '⬅️ Back'),
-        button('invites:toggle', enabled ? 'Disable Studio' : 'Enable Studio', ButtonStyle.Secondary)),
+        button('invites:toggle', enabled ? 'Studio: On' : 'Studio: Off', ButtonStyle.Secondary)),
     ],
   };
 }
