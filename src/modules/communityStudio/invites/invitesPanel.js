@@ -37,8 +37,8 @@ function overview(interaction) {
         { name: 'Public Panel', value: section.settings.publicPanel.messageId ? 'Deployed' : 'Not deployed', inline: true },
       )],
     components: [
-      row(button('invites:official-settings', 'Official Invite', ButtonStyle.Primary), button('invites:public-config', 'Public Panel', ButtonStyle.Primary), button('invites:admin-config', 'Admin', ButtonStyle.Primary)),
-      row(button('admin:modules', 'Back to Modules')),
+      row(button('invites:official-settings', 'Official Invite', ButtonStyle.Primary), button('invites:public-config', 'Public Panel', ButtonStyle.Primary)),
+      row(button('admin:modules', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
   };
 }
