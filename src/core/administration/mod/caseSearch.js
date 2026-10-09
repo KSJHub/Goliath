@@ -453,7 +453,7 @@ async function submitCaseSearch(i) {
   if (f.error) return safeReply(i, ephemeralError(f.error));
   if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
   const token = remember(i.guild.id, f), r = searchCases(i.guild.id, f);
-  return safeReply(i, { ...payload(r, token), flags: 64 });
+  return i.editReply(payload(r, token));
 }
 
 async function refreshCaseDetail(i, token, caseId) {
