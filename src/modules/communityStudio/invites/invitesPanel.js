@@ -53,14 +53,11 @@ function officialView(interaction) {
   const state = sessionFor(interaction);
   const info = rolePages(interaction.guild, config.roleIds || [], state.officialRolePage || 0);
   state.officialRolePage = info.page;
-  const ageNames = { 0: 'Never', 1800: '30 minutes', 3600: '1 hour', 21600: '6 hours', 43200: '12 hours', 86400: '1 day', 604800: '7 days', 2592000: '30 days' };
-  const expires = link?.expiresAt ? new Date(link.expiresAt) : null;
-  const expiryLabel = expires && Number.isFinite(expires.getTime()) ? `<t:${Math.floor(expires.getTime() / 1000)}:R>` : 'Never';
   const configured = Boolean(config.code);
   const live = state.officialLive?.code === config.code ? state.officialLive : null;
   const matching = Boolean(link) && link.channelId === config.channelId &&
-    Number(link.maxAge || 0) === Number(config.maxAge || 0) &&
-    Number(link.maxUses || 0) === Number(config.maxUses || 0) &&
+    Number(link.maxAge || 0) === 0 &&
+    Number(link.maxUses || 0) === 0 &&
     JSON.stringify([...(link.roleIds || [])].sort()) === JSON.stringify([...(config.roleIds || [])].sort());
   const needsUpdate = configured && (!matching || live?.exists === false);
   const updateArmed = state.officialConfirm?.action === 'update' && state.officialConfirm.until > Date.now();
@@ -69,28 +66,18 @@ function officialView(interaction) {
     !matching ? '🟠 Changes saved — update required' :
     live?.exists === true ? '🟢 Verified active' : '🟡 Configured — not recently verified';
   const officialDestination = config.channelId ? `<#${config.channelId}>` : 'Not selected';
-  const memberDestination = member.channelId ? `<#${member.channelId}> (override)` : config.channelId ? 'Same as official' : 'Not configured';
   const officialUses = configured ? (live?.exists ? `${live.uses} (Discord)` : `${link?.uses || 0} (recorded)`) : '—';
-  const memberLimits = member.limitsOverride || ((member.maxAge || member.maxUses) ? { maxAge: member.maxAge, maxUses: member.maxUses } : null);
-  const memberRoles = member.roleIdsOverride ?? ((member.roleIds || []).length ? member.roleIds : config.roleIds);
-  const memberExpiry = ageNames[memberLimits ? memberLimits.maxAge : config.maxAge] || 'Never';
-  const memberUses = (memberLimits ? memberLimits.maxUses : config.maxUses) || 'Unlimited';
-  const officialExpiry = configured ? expiryLabel : ageNames[config.maxAge || 0] || 'Never';
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🔗 Invite Management')
-      .setDescription('One shared invite configuration. Member referrals inherit destination, roles and limits unless overridden in Settings.')
+      .setDescription('Choose the invite destination and optional join roles. Every official and member referral link is permanent, unlimited, and uses these settings.')
       .addFields(
         { name: '🌍 OFFICIAL INVITE', value: `**${liveStatus}**\n${officialUrl(config.code) || 'No invite link created'}`, inline: false },
         { name: '📍 Destination', value: officialDestination, inline: true },
         { name: '👥 Uses', value: officialUses, inline: true },
-        { name: '⏳ Expires', value: officialExpiry, inline: true },
-        { name: '🔢 Use Limit', value: config.maxUses ? String(config.maxUses) : 'Unlimited', inline: true },
+        { name: '♾️ Link Policy', value: 'Never expires · Unlimited uses', inline: true },
         { name: '🎭 Join Roles', value: roleList(config.roleIds), inline: true },
-        { name: '\u200b', value: '\u200b', inline: false },
         { name: '👥 MEMBER INVITES', value: `${member.enabled ? '🟢 Enabled' : '🔴 Disabled'} · **${memberLinks}** personal links\nMembers share individual links to earn tracked referrals.`, inline: false },
-        { name: '📍 Destination', value: memberDestination, inline: true },
-        { name: '⏳ Expiry / Uses', value: `${memberExpiry} / ${memberUses}${memberLimits ? ' (override)' : ' (inherited)'}`, inline: true },
-        { name: '🎭 Join Roles', value: roleList(memberRoles) + (member.roleIdsOverride || (member.roleIds || []).length ? ' (override)' : ' (inherited)'), inline: true },
+        { name: 'Shared Settings', value: 'Same destination and join roles as the official invite · Never expires · Unlimited uses', inline: false },
         ...(!config.channelId ? [{ name: '⚠️ Setup Required', value: 'Select an official destination channel before creating the invite.', inline: false }] : []),
 
         ...(updateArmed ? [{ name: '⚠️ Confirm Replacement', value: 'Updating replaces the existing official link. Confirm within 30 seconds.', inline: false }] : []),
@@ -102,9 +89,8 @@ function officialView(interaction) {
       ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Official join roles (optional)', info))] : []),
 
       row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
-        button('invites:shared-limits', 'Link Limits', ButtonStyle.Primary),
         ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
-        button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
+        button('invites:member-dm-modal', 'Edit Referral DM', ButtonStyle.Primary)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
         button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0),
         button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
@@ -203,19 +189,13 @@ function adminView(interaction) {
   const enabled = isModuleEnabled(interaction.guildId, 'invites');
   const state = sessionFor(interaction);
   const armed = state.resetConfirmUntil > Date.now();
-  const member = section.settings.memberInviteTemplate;
-  const roles = member.roleIdsOverride ?? ((member.roleIds || []).length ? member.roleIds : section.settings.officialInvite.roleIds);
-  const memberInfo = rolePages(interaction.guild, roles || [], state.memberRolePage || 0);
-  state.memberRolePage = memberInfo.page;
   return {
     embeds: [new EmbedBuilder().setColor(enabled ? 0x57F287 : 0xED4245).setTitle('🛠️ Invite Studio Admin')
       .setDescription(armed ? '⚠️ Reset armed. Confirm within 30 seconds.' : 'Manage member links, health, repairs and leaderboard data.')],
     components: [
-      row(button('invites:invite-manager', 'Invite Manager', ButtonStyle.Primary), button('invites:health', 'Health'), button('invites:repair', 'Repair'), button('invites:member-enabled', section.settings.memberInviteTemplate.enabled ? 'Disable Member Invites' : 'Enable Member Invites', section.settings.memberInviteTemplate.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button('invites:member-inherit', 'Use Official Destination', ButtonStyle.Secondary, !member.channelId)),
-      row(new ChannelSelectMenuBuilder().setCustomId('invites:member-channel').setPlaceholder('📍 Override member destination (optional)').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      ...(memberInfo.roles.length ? [row(rolePageSelect(`invites:member-roles:${memberInfo.page}`, '🎭 Override member join roles', memberInfo))] : []),
+      row(button('invites:invite-manager', 'Invite Manager', ButtonStyle.Primary), button('invites:health', 'Health'), button('invites:repair', 'Repair'), button('invites:member-enabled', section.settings.memberInviteTemplate.enabled ? 'Disable Member Invites' : 'Enable Member Invites', section.settings.memberInviteTemplate.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button('invites:toggle', enabled ? 'Disable Module' : 'Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
       row(button('invites:official-regenerate', state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now() ? 'Confirm Regenerate' : 'Regenerate Official Invite', ButtonStyle.Secondary, !section.settings.officialInvite.code), button('invites:official-delete', state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now() ? 'Confirm Delete' : 'Delete Official Invite', ButtonStyle.Danger, !section.settings.officialInvite.code), button(armed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', armed ? 'Confirm Reset' : 'Reset Leaderboard', ButtonStyle.Danger), button('invites:default-panel', 'Restore Defaults')),
-      row(button('invites:toggle', enabled ? 'Disable Module' : 'Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success), button('invites:member-roles-inherit', 'Use Official Roles', ButtonStyle.Secondary, !member.roleIdsOverride && !(member.roleIds || []).length), button('invites:member-role-next', 'Member Roles ▶', ButtonStyle.Secondary, memberInfo.pages <= 1), button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
+      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
     ],
   };
 }
