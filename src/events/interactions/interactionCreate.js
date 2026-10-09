@@ -236,7 +236,8 @@ module.exports={
       }
       if(await callHandler(verificationAdminPanel,'handleVerificationAdminInteraction',interaction))return;
       if(await callHandler(automodPanel,'handleAutomodInteraction',interaction))return;
-      if((startsWith(interaction,'admin:birthdays')||startsWith(interaction,'birthdays:user:'))&&await callHandler(birthdaysPanel,'handleBirthdayInteraction',interaction))return;
+      if(startsWith(interaction,'admin:birthdays')){if(!await callHandler(birthdaysPanel,'handleAdmin',interaction))throw new Error(`Birthdays administration did not handle ${customId}.`);return;}
+      if(startsWith(interaction,'birthdays:user:')){if(!await callHandler(birthdaysPanel,'handleUser',interaction))throw new Error(`Birthdays member controls did not handle ${customId}.`);return;}
       if(startsWith(interaction,'admin:invites')||startsWith(interaction,'invites:')){const invites=loadInvitesAdminPanel();if(!invites)throw invitesAdminPanelError||new Error('Invite Studio handler unavailable.');await invites.handleInviteStudioInteraction(interaction);return;}
       if((startsWith(interaction,'admin:social')||startsWith(interaction,'social:'))&&await callHandler(socialAdminPanel,'handleInteraction',interaction))return;
       if(startsWith(interaction,'social:creator:')){await callHandler(socialCreatorActionCompat,'handleCreatorInteraction',interaction);return;}
