@@ -138,6 +138,7 @@ function adminView(interaction) {
   const deleteArmed = state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now();
   const links = invites.listInviteLinks(interaction.guildId);
   const linkCount = links.filter((link) => link.personal).length;
+  const panelResetArmed = state.panelResetConfirmUntil > Date.now();
   return {
     embeds: [new EmbedBuilder().setColor(enabled ? 0x5865F2 : 0xED4245).setTitle('⚙️ Invite Studio Settings')
       .setDescription('Manage invitation links, member referrals and maintenance.')
@@ -148,6 +149,7 @@ function adminView(interaction) {
         { name: 'Personal Links', value: String(linkCount), inline: true },
         { name: '🔧 Management', value: 'Manage links, check system health and repair issues.', inline: false },
         { name: '⚠️ Advanced Controls', value: 'Replace or delete the official invite, reset scores or restore public panel defaults.', inline: false },
+        ...(panelResetArmed ? [{ name: '⚠️ Panel Reset', value: 'Press Confirm Panel Reset within 30 seconds. Public panel text will revert to defaults; the deployed panel and referral DM will be preserved.', inline: false }] : []),
         ...(resetArmed ? [{ name: '⚠️ Reset Confirmation', value: 'Press Confirm Reset within 30 seconds to clear leaderboard scores.', inline: false }] : []),
         ...(regenerateArmed ? [{ name: '⚠️ Replacement Confirmation', value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false }] : []),
         ...(deleteArmed ? [{ name: '⚠️ Delete Confirmation', value: 'Press Confirm Delete within 30 seconds to delete the official invite.', inline: false }] : []),
@@ -159,7 +161,7 @@ function adminView(interaction) {
         button('invites:member-enabled', memberEnabled ? 'Disable Referrals' : 'Enable Referrals', ButtonStyle.Secondary),
         button('invites:toggle', enabled ? 'Disable Studio' : 'Enable Studio', ButtonStyle.Secondary)),
       row(button('invites:official-regenerate', regenerateArmed ? 'Confirm Replace' : 'Replace Invite', ButtonStyle.Secondary, !configured),
-        button('invites:default-panel', 'Reset Panel', ButtonStyle.Secondary),
+        button('invites:default-panel', panelResetArmed ? 'Confirm Panel Reset' : 'Reset Panel', ButtonStyle.Secondary),
         button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? 'Confirm Reset' : 'Reset Scores', ButtonStyle.Secondary),
         button('invites:official-delete', deleteArmed ? 'Confirm Delete' : 'Delete Invite', ButtonStyle.Secondary, !configured)),
       row(button('invites:official-settings', '⬅️ Back')),
