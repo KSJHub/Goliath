@@ -2159,6 +2159,7 @@ async function handleLegacyInteraction(i) {
 }
 
 async function showReadiness(interaction) {
+  if (!interaction.deferred && !interaction.replied && (interaction.isButton?.() || interaction.isStringSelectMenu?.() || interaction.isRoleSelectMenu?.())) await interaction.deferUpdate();
   const payload = panel.buildReadinessPanel(interaction);
   if (interaction.deferred || interaction.replied) await interaction.editReply(payload);
   else if (interaction.isButton?.() || interaction.isStringSelectMenu?.() || interaction.isRoleSelectMenu?.()) await interaction.update(payload);
@@ -2168,6 +2169,7 @@ async function showReadiness(interaction) {
 async function updateWith(interaction, payload) { if (interaction.deferred || interaction.replied) await interaction.editReply(payload); else await interaction.update(payload); return true; }
 function selectState(interaction, patch = {}) { const state = panel.getSession(interaction); return panel.saveSession(interaction, { ...state, ...patch }); }
 async function routeReadinessFix(interaction) {
+  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
   const report = panel.getReadinessReport(interaction); const target = panel.getReadinessFixTarget(report); const state = panel.getSession(interaction);
   if (target.type === 'channel') return updateWith(interaction, panel.buildEditorPanel(interaction, panel.memberName?.(interaction)));
   if (target.type === 'button') { const buttons = Array.isArray(state.buttons) ? state.buttons : []; const selectedButtonIndex = Number.isInteger(target.index) && buttons[target.index] ? target.index : (buttons.length ? 0 : null); selectState(interaction, { selectedButtonIndex }); return updateWith(interaction, panel.buildButtonsManagerPanel(interaction)); }
