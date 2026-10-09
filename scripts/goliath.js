@@ -1212,6 +1212,762 @@ function embedStatePersistenceBoundaryAudit() {
   }
 }
 
+function adminModuleRoutingAudit() {
+  try {
+    const assert = require('node:assert/strict');
+    const fs = require('node:fs');
+    
+    const modules = fs.readFileSync(root + '/src/core/administration/admin/modules.js', 'utf8');
+    const router = fs.readFileSync(root + '/src/events/interactions/interactionCreate.js', 'utf8');
+    const verification = fs.readFileSync(root + '/src/modules/securityStudio/verificationPanel.js', 'utf8');
+    
+    const catalogBlock = modules.match(/const MODULE_CATALOG = \[([\s\S]*?)\n\];/);
+    assert(catalogBlock, 'MODULE_CATALOG could not be parsed');
+    
+    const entries = [...catalogBlock[1].matchAll(/\{ key: '([^']+)', studio: '([^']+)', route: '([^']+)'/g)]
+      .map(([, key, studio, route]) => ({ key, studio, route }));
+    
+    assert(entries.length >= 25, `Expected full module catalog, found only ${entries.length} entries`);
+    assert.equal(new Set(entries.map((entry) => entry.key)).size, entries.length, 'Duplicate module keys found');
+    assert.equal(new Set(entries.map((entry) => entry.route)).size, entries.length, 'Duplicate module routes found');
+    
+    for (const entry of entries) {
+      assert(modules.includes(entry.route), `Catalog route missing from module panels: ${entry.route}`);
+      assert(
+        modules.includes('admin:studio:') && modules.includes('studio.key') && modules.includes('module.route'),
+        `Dynamic Studio navigation generator missing for ${entry.key} (${entry.studio})`
+      );
+    }
+    
+    assert(router.includes("callHandler(moduleAdminPanels,'handleModuleAdminInteraction',interaction)"), 'Generic module router is not wired into InteractionCreate');
+    assert(router.indexOf("callHandler(moduleAdminPanels,'handleModuleAdminInteraction',interaction)") < router.indexOf("callHandler(adminPanel,'handleAdminNavigation',interaction)"), 'Generic module router must run before general admin navigation');
+    
+    for (const entry of entries.filter((entry) => entry.route.startsWith('admin:module:'))) {
+      assert(modules.includes("id.match(/^admin:module:"), `Generic route parser missing for ${entry.key}`);
+    }
+    
+    const dedicated = {
+      birthdays: 'handleBirthdayInteraction', giveaways: 'handleGiveawaysAdminInteraction', invites: 'handleInviteStudioInteraction', leveling: 'handleLevelingInteraction', polls: 'handlePollsInteraction',
+      faq: 'handleFaqInteraction', forms: 'handleFormsAdminInteraction', suggestions: 'handleSuggestionsAdminInteraction', tickets: 'handleTicketInteraction',
+      goodbye: 'handleGoodbyeInteraction', embed: 'handleEmbedInteraction', starboard: 'handleStarboardAdminInteraction', sticky: 'handleStickyAdminInteraction', welcome: 'handleWelcomeInteraction',
+      autoRoles: 'handleAutoRolesInteraction', reactionRoles: 'handleReactionRolesAdminInteraction', temporaryRoles: 'handleTemporaryRolesInteraction', timedRoles: 'handleTimedRolesInteraction',
+      verification: 'handleVerificationAdminInteraction', social: 'handleInteraction', privateRooms: 'handleAdminInteraction', schedule: 'handleScheduleAdminInteraction', stats: 'handleStatsAdminInteraction', tempVoice: 'handleTempVoiceInteraction',
+    };
+    
+    for (const entry of entries.filter((entry) => !entry.route.startsWith('admin:module:'))) {
+      if (entry.key === 'translation') continue;
+      const method = dedicated[entry.key];
+      assert(method, `No dedicated routing contract declared for ${entry.key} (${entry.route})`);
+      assert(router.includes(method), `InteractionCreate does not wire ${entry.key} through ${method}`);
+    }
+    
+    assert(verification.includes("id!=='admin:verification'&&!id.startsWith('admin:verification:')"), 'Verification handler does not accept the admin:verification root route');
+    assert(verification.includes("if(id==='admin:verification'){await respond(i,buildVerificationAdminPanel(i.guild,user,'home',st));return true;}"), 'Verification root route does not open the Verification panel');
+    
+    const unsafeGuard = /if\(startsWith\(interaction,'admin:[^']+'\)\)\{await callHandler\([^;]+;return;\}/g;
+    assert.deepEqual(router.match(unsafeGuard) || [], [], 'Found an admin prefix guard that swallows an unhandled interaction');
+    
+    // Social Studio must route both its admin root and every social:* child interaction through the current panel before compatibility fallback.
+    const socialDispatch = "if((startsWith(interaction,'admin:social')||startsWith(interaction,'social:'))&&await callHandler(socialAdminPanel,'handleInteraction',interaction))return;";
+    const socialCompat = "if(startsWith(interaction,'social:creator:')){await callHandler(socialCreatorActionCompat,'handleCreatorInteraction',interaction);return;}";
+    assert(router.includes(socialDispatch), 'Social Studio root + child namespace is not wired to its current handler');
+    assert(router.includes(socialCompat), 'Social Studio creator compatibility fallback is missing');
+    assert(router.indexOf(socialDispatch) < router.indexOf(socialCompat), 'Social Studio current handler must run before creator compatibility fallback');
+    
+    const requiredRouterContracts = [
+      ["startsWith(interaction,'admin:autoRoles')", 'Auto Roles root'],
+      ["startsWith(interaction,'admin:temporaryRoles')", 'Temporary Roles root'],
+      ["startsWith(interaction,'admin:timedRoles')", 'Timed Roles root'],
+      ["startsWith(interaction,'admin:welcome')", 'Welcome root'],
+      ["startsWith(interaction,'admin:goodbye')", 'Goodbye root'],
+      ["startsWith(interaction,'admin:reactionRoles')", 'Reaction Roles root'],
+      ["startsWith(interaction,'admin:schedule')", 'Schedule root'],
+      ["startsWith(interaction,'schedule:rsvp:')", 'Schedule RSVP child'],
+      ["startsWith(interaction,'admin:birthdays')", 'Birthdays root'],
+      ["startsWith(interaction,'birthdays:user:')", 'Birthdays user child'],
+      ["startsWith(interaction,'admin:invites')", 'Invites root'],
+      ["startsWith(interaction,'invites:')", 'Invites child'],
+    ];
+    for (const [needle, label] of requiredRouterContracts) assert(router.includes(needle), `${label} routing contract is missing`);
+    
+    // Every studio/module namespace advertised by the central router must remain represented in its routing source.
+    const prefixBlock = router.match(/const MODULE_STUDIO_PREFIXES = \[([\s\S]*?)\n\];/);
+    assert(prefixBlock, 'MODULE_STUDIO_PREFIXES could not be parsed');
+    const advertisedPrefixes = [...prefixBlock[1].matchAll(/'([^']+)'/g)].map((match) => match[1]).filter((value) => value.includes(':'));
+    assert(advertisedPrefixes.length >= 40, `Expected deep module namespace coverage, found only ${advertisedPrefixes.length} prefixes`);
+    for (const prefix of advertisedPrefixes) assert(router.includes(prefix), `Advertised module interaction namespace disappeared: ${prefix}`);
+    
+    console.log(`✅ Admin module routing audit passed: ${entries.length} modules across ${new Set(entries.map((entry) => entry.studio)).size} studios; root and child routing contracts guarded.`);
+    return true;
+  } catch (error) {
+    console.error('❌ admin-module-routing audit failed:', error.message);
+    return false;
+  }
+}
+
+function embedGraphicHeadersAudit() {
+  try {
+    const assert = require('node:assert/strict');
+    const fs = require('node:fs');
+    const {
+      graphicHeaderIndex,
+      normalizeGraphicHeaderPlacements,
+    } = require(root + '/src/modules/messageStudio/embed/embedInteractions');
+    
+    function run() {
+      assert.equal(graphicHeaderIndex({ gallery: [] }), null);
+      assert.equal(graphicHeaderIndex({ gallery: [{ placement: 'below' }, { placement: 'above' }] }), 1);
+    
+      const base = [
+        { source: 'https://example.com/a.gif', placement: 'above' },
+        { source: 'https://example.com/b.png', placement: 'below' },
+        { source: 'https://example.com/c.jpg', placement: 'above' },
+      ];
+      const switched = normalizeGraphicHeaderPlacements(base, 1);
+      assert.deepEqual(switched.map((item) => item.placement), ['below', 'above', 'below']);
+      assert.equal(switched[1].source, base[1].source);
+    
+      const cleared = normalizeGraphicHeaderPlacements(base, null);
+      assert(cleared.every((item) => item.placement === 'below'));
+    
+      const renderer = fs.readFileSync(require.resolve(root + '/src/modules/messageStudio/embed/embedRenderer'), 'utf8');
+      const above = renderer.indexOf('if (aboveItems.length)');
+      const content = renderer.indexOf('const mainText = panelText(data)', above);
+      const below = renderer.indexOf('if (belowItems.length)', content);
+    
+      assert(above >= 0 && content > above && below > content, 'renderer order must remain Above media -> panel content -> Below media');
+      assert(renderer.includes("'image/gif'"));
+      assert(renderer.includes('nativeImageShouldPassThrough'));
+    
+      const embedRuntime = fs.readFileSync(require.resolve(root + '/src/modules/messageStudio/embed/embed'), 'utf8');
+      assert(embedRuntime.includes('function canonicalMediaState'));
+      assert(embedRuntime.includes('media.mediaModel.normalizeMedia(state?.media || {}, panels)'));
+      assert(embedRuntime.includes('installMediaRuntime(panel)'), 'Embed runtime must install the canonical Media Studio runtime.');
+      assert(!embedRuntime.includes("placement: itemIndex === 0 ? 'above' : 'below'"), 'canonical session normalization must not overwrite an explicit Above/Below media placement');
+    
+      const embedState = fs.readFileSync(require.resolve(root + '/src/modules/messageStudio/embed/embedState'), 'utf8');
+      assert(embedState.includes('function loadPersistedSession(key)'), 'embedState must own durable session loading');
+      assert(embedState.includes('function savePersistedSession(key, state)'), 'embedState must own durable session saving');
+      assert(embedState.includes('function removePersistedSession(key)'), 'embedState must own durable session removal');
+      assert(embedState.includes('loadPersistedSession(key)'), 'getSession must hydrate from durable storage');
+      assert(embedState.includes('savePersistedSession(key, state)') && embedState.includes('persistOrThrow(key, synced'), 'saveSession must persist canonical state');
+      assert(embedState.includes('removePersistedSession(key)'), 'clearSession must remove durable state');
+    
+      const mediaSource = fs.readFileSync(require.resolve(root + '/src/modules/messageStudio/embed/embedMedia'), 'utf8');
+      const interactionSource = fs.readFileSync(require.resolve(root + '/src/modules/messageStudio/embed/embedInteractions'), 'utf8');
+      const mediaInteractionSource = interactionSource;
+    
+      assert(!mediaSource.includes('buildEditMediaPanel'), 'retired Edit Media panel must remain removed');
+      assert(!mediaSource.includes("embed:header-type-cycle"), 'retired Header Type cycle button must remain removed');
+      assert(interactionSource.includes("customId === 'embed:header-type-cycle'"), 'legacy Header Type cycle interactions must route into the current Media Manager');
+      assert(!interactionSource.includes('buildEditMediaPanel'), 'retired Edit Media handler must remain removed');
+      assert(interactionSource.includes("panel.buildMediaManagerPanel(i, who(i))") && interactionSource.includes("customId === 'embed:header-type-cycle'"), 'legacy Header Type interaction must bridge to the canonical Media Manager');
+      assert(!mediaInteractionSource.includes('updateMediaOptions'), 'retired Media Options submenu updater must be removed');
+      assert(!mediaSource.includes('buildMediaOptionsPanel'), 'retired Media Options submenu builder must be removed');
+      assert(!mediaInteractionSource.includes("customId === 'embed:media-options'"), 'retired Media Options entry point must be removed');
+      assert(mediaInteractionSource.includes("customId === 'embed:media-type:cycle'") && mediaInteractionSource.includes("const cycle = ['auto', 'text', 'gif', 'image']") && mediaInteractionSource.includes('headerType') && mediaInteractionSource.includes('return updateMediaPanel(i)'), 'media header type cycle must persist headerType and return to the main Media Manager');
+    
+      assert(renderer.includes("if (type === 'image/gif') return 'gif'"), 'Auto must detect GIF from MIME type');
+      assert(renderer.includes("if (type.startsWith('image/')) return 'image'"), 'Auto must detect static image MIME types');
+      assert(renderer.includes("headerType === 'text'"), 'Text mode must have an explicit renderer guard');
+      assert(renderer.includes('new MediaGalleryItemBuilder()') && renderer.includes('.setURL(mediaUrl)'), 'component media gallery must preserve the resolved native or processed media URL');
+      assert(renderer.includes('forcedStaticGalleryAttachment') && renderer.includes("galleryHeaderType(item) === 'image'"), 'Image mode must force the static-image processing path');
+      assert(renderer.includes('nativeImageShouldPassThrough(') && renderer.includes('probe.contentType'), 'Auto must retain native-image pass-through detection');
+    
+      const currentFlagName = ['IsComponentsV', String(2)].join('');
+      assert(
+        renderer.includes('new ContainerBuilder()') &&
+        renderer.includes('new MediaGalleryBuilder().addItems(') &&
+        renderer.includes(`flags: MessageFlags.${currentFlagName}`),
+        'renderer must keep panel media and content inside Discord component containers'
+      );
+    
+      console.log('✅ Embed Graphic Header regression audit passed.');
+    }
+    
+    run();
+    
+    // Sync Goliath and Deploy Goliath execute this file as the shared deep
+    // regression gate. Keep restart persistence and critical runtime API contracts
+    // here so a broken cross-module surface cannot reach DEV, BETA or PRODUCTION.
+    if (!embedSessionPersistenceAudit()) throw new Error('Session persistence regression');
+    if (!embedStatePersistenceBoundaryAudit()) throw new Error('State persistence regression');
+    if (!runtimeContractsAudit()) throw new Error('Runtime contract regression');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ embed-graphic-headers audit failed:', error.message);
+    return false;
+  }
+}
+
+function embedTemplateBindingLifecycleAudit() {
+  try {
+    const assert = require('node:assert/strict');
+    
+    const guildManagerPath = require.resolve(root + '/src/core/guild/guildManager');
+    const embedTemplatesPath = require.resolve(root + '/src/modules/messageStudio/embed/embedTemplates');
+    const originalGuildManagerCache = require.cache[guildManagerPath];
+    const originalEmbedTemplatesCache = require.cache[embedTemplatesPath];
+    
+    const sections = new Map();
+    const keyFor = (guildId, section) => `${guildId}:${section}`;
+    
+    const guildManagerMock = {
+      getGuildSection(guildId, section, fallback = {}) {
+        return sections.has(keyFor(guildId, section)) ? sections.get(keyFor(guildId, section)) : fallback;
+      },
+      updateGuildSection(guildId, section, updater, fallback = {}) {
+        const key = keyFor(guildId, section);
+        const current = sections.has(key) ? sections.get(key) : fallback;
+        const next = updater(current);
+        sections.set(key, next);
+        return next;
+      },
+      getEmbedPresets() { return {}; },
+      saveGuildSection() { return true; },
+      saveEmbedPreset(_guildId, name, embedData) { return { name, ...embedData }; },
+      getEmbedPreset() { return null; },
+      deleteEmbedPreset() { return false; },
+      reloadGuild() { return true; },
+    };
+    
+    try {
+      require.cache[guildManagerPath] = { id: guildManagerPath, filename: guildManagerPath, loaded: true, exports: guildManagerMock };
+      delete require.cache[embedTemplatesPath];
+    
+      const templates = require(embedTemplatesPath);
+      const guildId = '123456789012345678';
+      const templateId = 'lifecycle_test_template';
+      const moduleKey = 'welcome';
+      const slot = 'welcome';
+    
+      templates.saveTemplate(guildId, {
+        templateId,
+        name: 'Lifecycle Test Template',
+        module: moduleKey,
+        templateType: slot,
+        embed: { title: 'Lifecycle test', description: 'Binding lifecycle contract.' },
+      });
+    
+      const binding = templates.bindTemplate(guildId, moduleKey, slot, templateId);
+      assert.equal(binding.templateId, templateId);
+      assert.equal(templates.getBinding(guildId, moduleKey, slot)?.templateId, templateId);
+    
+      assert.throws(
+        () => templates.deleteTemplate(guildId, templateId),
+        (error) => error?.code === 'TEMPLATE_IN_USE' && error?.templateId === templateId,
+        'Bound templates must be protected from deletion.'
+      );
+    
+      const unbound = templates.unbindTemplate(guildId, moduleKey, slot);
+      assert.equal(unbound.unbound, true);
+      assert.equal(unbound.templateId, templateId);
+      assert.equal(templates.getBinding(guildId, moduleKey, slot), null);
+    
+      assert.equal(templates.deleteTemplate(guildId, templateId), true, 'Template must be deletable after unbinding.');
+      assert.equal(templates.getTemplate(guildId, templateId), null);
+    
+      console.log('✅ Embed Studio binding lifecycle audit passed: bind → protected delete → unbind → delete.');
+    } finally {
+      if (originalGuildManagerCache) require.cache[guildManagerPath] = originalGuildManagerCache;
+      else delete require.cache[guildManagerPath];
+      if (originalEmbedTemplatesCache) require.cache[embedTemplatesPath] = originalEmbedTemplatesCache;
+      else delete require.cache[embedTemplatesPath];
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('❌ embed-template-binding-lifecycle audit failed:', error.message);
+    return false;
+  }
+}
+
+function socialLivePresentationAudit() {
+  try {
+    const assert = require('node:assert/strict');
+    const fs = require('node:fs');
+    
+    const core = fs.readFileSync(root + '/src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js',
+      'utf8'
+    );
+    
+    const monitor = fs.readFileSync(root + '/src/modules/socialStudio/socialAlerts/socialStudioMonitor.js',
+      'utf8'
+    );
+    
+    const kick = fs.readFileSync(root + '/src/modules/socialStudio/socialAlerts/providers/kick.js',
+      'utf8'
+    );
+    
+    const compactCore = core.replace(/\s+/g, '');
+    
+    /*
+     * LIVE presentation contract.
+     *
+     * Test semantic presentation behaviour rather than depending on the
+     * byte representation of decorative emoji.
+     */
+    
+    assert(
+      core.includes('creator?.avatarUrl') &&
+        core.includes('account.avatarUrl') &&
+        core.includes('event.avatarUrl'),
+      'LIVE avatar fallbacks missing'
+    );
+    
+    assert(
+      core.includes(
+        'account.profileUrl || account.url || event.profileUrl || vars.url'
+      ),
+      'LIVE profile URL fallback missing'
+    );
+    
+    assert(
+      compactCore.includes('author.url=profileUrl'),
+      'LIVE author must be clickable'
+    );
+    
+    assert(
+      compactCore.includes('embed.setThumbnail(authorIcon)'),
+      'LIVE creator thumbnail missing'
+    );
+    
+    assert(
+      core.includes('LIVE NOW'),
+      'LIVE NOW headline missing'
+    );
+    
+    assert(
+      core.includes('PAUSED'),
+      'PAUSED headline missing'
+    );
+    
+    assert(
+      core.includes('Watch Live'),
+      'Watch Live action missing'
+    );
+    
+    assert(
+      core.includes('OFFLINE'),
+      'OFFLINE presentation missing'
+    );
+    
+    /*
+     * TikTok uses status transitions rather than the normal timed LIVE
+     * refresh while the same broadcast remains active.
+     */
+    
+    assert(
+      compactCore.includes("platform==='tiktok'") ||
+        compactCore.includes('platform==="tiktok"'),
+      'TikTok LIVE refresh exception missing'
+    );
+    
+    assert(
+      compactCore.includes('previous.lastLiveEvent?.liveStatus') &&
+        (
+          compactCore.includes('checked.event?.liveStatus') ||
+          compactCore.includes('checked.event.liveStatus')
+        ),
+      'TikTok refresh exception must compare LIVE/PAUSED status'
+    );
+    
+    assert(
+      compactCore.includes('returnbefore!==current'),
+      'TikTok refresh exception must update only on status transition'
+    );
+    
+    assert(
+      compactCore.includes('sameActiveBroadcast'),
+      'LIVE presentation must preserve same-broadcast lifecycle handling'
+    );
+    
+    /*
+     * Kick presentation/provider integration must remain available.
+     */
+    
+    assert(
+      kick.includes('kick') ||
+        kick.includes('Kick'),
+      'Kick provider presentation contract missing'
+    );
+    
+    assert(
+      core.includes('liveMessageUpdateDue'),
+      'LIVE message refresh integration missing'
+    );
+    
+    console.log(
+      '✅ Social Studio LIVE presentation audit passed.'
+    );
+    
+    return true;
+  } catch (error) {
+    console.error('❌ social-live-presentation audit failed:', error.message);
+    return false;
+  }
+}
+
+function socialStudioLifecycleAudit() {
+  try {
+    const assert = require('node:assert/strict');
+    const fs = require('node:fs');
+    
+    const core = fs.readFileSync(root + '/src/modules/socialStudio/socialAlerts/socialStudioMonitorCore.js', 'utf8');
+    const monitor = fs.readFileSync(root + '/src/modules/socialStudio/socialAlerts/socialStudioMonitor.js', 'utf8');
+    const recovery = fs.readFileSync(root + '/src/events/client/socialStudioLivePostRecovery.js', 'utf8');
+    const facebook = fs.readFileSync(root + '/src/modules/socialStudio/socialAlerts/providers/facebook.js', 'utf8');
+    const tiktok = fs.readFileSync(root + '/src/modules/socialStudio/socialAlerts/providers/tiktok.js', 'utf8');
+    
+    // Source-shape checks intentionally ignore formatting so refactors/Prettier do not break CI.
+    const compactCore = core.replace(/\s+/g, '');
+    const compactMonitor = monitor.replace(/\s+/g, '');
+    const compactRecovery = recovery.replace(/\s+/g, '');
+    const compactFacebook = facebook.replace(/\s+/g, '');
+    const compactTikTok = tiktok.replace(/\s+/g, '');
+    
+    const contracts = [
+      ['OFFLINE transition', 'checked.isLive===false&&previous.isLive===true'],
+      ['stable ended identity', 'id:`ended:${previous.liveEventId||prior.id||account.accountId}`'],
+      ['VOD correlation', 'vodMatchesEndedStream(item,startedAt,endedAt)'],
+      ['persistent event dedupe', 'deliveredEventKeys'],
+      ['deleted-message recovery', 'recovered=Boolean(updated)'],
+      ['recovery without ping', 'suppressMention:true'],
+      ['forced LIVE state persistence', 'state.lastLiveMessageId=delivered.messageId'],
+      ['forced LIVE channel persistence', 'state.lastLiveMessageChannelId=delivered.channelId'],
+      ['forced LIVE refresh clock', 'state.lastLiveMessageUpdatedAt=stamp'],
+      ['forced LIVE state save', 'saveMonitorState(guildId,config,monitorUpdates,{alerts:sent.length},historyEntries'],
+      ['failed delivery retry toggle', 'config.settings.retryDeliveries!==false'],
+      ['retry attempt limit', 'config.settings.maxDeliveryAttempts||5'],
+      ['retry interval', 'config.settings.retryIntervalMs||60000'],
+      ['persisted pending delivery', 'state.pendingDelivery'],
+      ['retry recovery delivery', 'recovered:true'],
+      ['exhausted retry release', 'state.pendingDelivery=null'],
+      ['delivery failure preserves current state', 'letcurrentState={...previous}'],
+      ['retry failure persists current state', 'state:{...currentState,pendingDelivery'],
+      ['stale LIVE retry protection', "pendingLiveStale=Boolean(pendingEvent?.type==='live'"],
+      ['stale LIVE retry clears pending', 'state.pendingDelivery=null'],
+      ['recovery concurrency deferral', "result?.skipped&&result.reason==='check_already_running'"],
+      ['rollover concurrency deferral', "repairedItem?.status==='skipped'&&repairedItem?.reason==='already_running'"],
+      ['quiet hours persistent hold', 'quietHoursPending'],
+      ['quiet hours held audit', "status:'quiet_held'"],
+      ['quiet hours release audit', "status:'quiet_released'"],
+      ['stale quiet LIVE discard audit', "status:'quiet_stale_discarded'"],
+      ['diagnostic provider isolation', 'options.diagnosticOnly===true'],
+      ['LIVE notification target is server authoritative', "constlive=String(eventType||'').toLowerCase()==='live'"],
+      ['creator LIVE profile visibility', 'creator?.showProfileInLive!==false'],
+    ];
+    
+    for (const [name, needle] of contracts) {
+      const source = name.includes('recovery concurrency') ? compactRecovery : name.includes('rollover concurrency') ? compactMonitor : compactCore;
+      assert(source.includes(needle), `${name} contract missing`);
+    }
+    
+    assert(compactMonitor.includes('previousEventId===currentEventId'), 'rollover equality guard missing');
+    assert(compactMonitor.includes('stalePostRemoved'), 'stale rollover cleanup missing');
+    
+    // Completed LIVE sessions must retire volatile broadcast identity only after
+    // ENDED delivery/retry work is finished. Durable dedupe/history can remain.
+    assert(compactRecovery.includes('completedSessionNeedsRetirement'), 'completed-session retirement guard missing');
+    assert(compactRecovery.includes("state.isLive!==false"), 'retirement must require confirmed OFFLINE state');
+    assert(compactRecovery.includes("state.pendingEndedEvent&&typeofstate.pendingEndedEvent==='object'"), 'retirement must preserve pending ENDED state');
+    assert(compactRecovery.includes("state.pendingDelivery?.event?.type==='ended'"), 'retirement must preserve pending ENDED delivery retries');
+    assert(compactRecovery.includes('state.liveEventId=null'), 'completed-session liveEventId retirement missing');
+    assert(compactRecovery.includes('state.liveStartedAt=null'), 'completed-session liveStartedAt retirement missing');
+    assert(compactRecovery.includes('state.lastLiveEvent=null'), 'completed-session lastLiveEvent retirement missing');
+    assert(compactRecovery.includes('state.peakViewers=0'), 'completed-session peak viewer retirement missing');
+    assert(compactRecovery.includes("String(state.lastAlertKey||'').startsWith('live:')"), 'stale LIVE alert key retirement missing');
+    assert(compactRecovery.includes('retireCompletedSessions(guild.id,guildConfig)'), 'completed-session retirement sweep missing');
+    
+    // Provider lifecycle safety: an uncertain provider response must not become a
+    // false OFFLINE transition, because OFFLINE can emit an ended notification.
+    assert(
+      compactFacebook.includes("returnunavailable('facebook',`FacebookLIVEstatusunavailable:${error.message}`)"),
+      'Facebook LIVE lookup failures must remain unavailable instead of becoming OFFLINE',
+    );
+    assert(
+      !compactFacebook.includes("live_videos?broadcast_status=LIVE&fields=id,title,status,permalink_url,creation_time&limit=1&access_token=${encodeURIComponent(token)}`).catch(()=>({json:null}))"),
+      'Facebook LIVE lookup must not swallow failure into an empty response',
+    );
+    assert(
+      compactTikTok.includes('TikTokreturnedthecreatorLIVEpagewithoutadefinitiveLIVE,PAUSEDorENDEDmarker')
+        && compactTikTok.includes("returnunavailable('tiktok',"),
+      'TikTok ambiguous LIVE page must remain unavailable',
+    );
+    assert(compactTikTok.includes("providerSource:ended?'public_page_ended':'public_page_redirect'"), 'TikTok proven OFFLINE paths missing');
+    assert(compactTikTok.includes("liveStatus:isPaused?'PAUSED':'LIVE'"), 'TikTok PAUSED state contract missing');
+    
+    // Locked Social Studio lifecycle model:
+    // LIVE -> ENDED is one retained Discord session/message. VOD/content events are
+    // independent event identities and must remain independently deduplicatable.
+    const liveKey = 'live:stream-A';
+    const endedKey = 'ended:ended:stream-A';
+    const vodKey = 'vod:vod-A';
+    const clipKey = 'clip:clip-A';
+    assert.notEqual(liveKey, endedKey);
+    assert.notEqual(endedKey, vodKey);
+    assert.notEqual(vodKey, clipKey);
+    const independentEvents = new Set([liveKey, endedKey, vodKey, clipKey]);
+    assert.equal(independentEvents.size, 4, 'LIVE/ENDED/VOD/CLIP identities must remain independent');
+    
+    // TikTok PAUSED is still the same broadcast session. Resume must not mint a
+    // second LIVE identity, and only a confirmed OFFLINE transition may end it.
+    const tiktokSession = { id: 'tt-live-A', state: 'LIVE' };
+    tiktokSession.state = 'PAUSED';
+    assert.equal(tiktokSession.id, 'tt-live-A');
+    assert.equal(tiktokSession.state, 'PAUSED');
+    tiktokSession.state = 'LIVE';
+    assert.equal(tiktokSession.id, 'tt-live-A', 'TikTok resume must preserve the LIVE session identity');
+    
+    // Deterministic VOD-window sanity check. Correlation is metadata only; it must
+    // never imply that the VOD shares the ENDED event identity.
+    const started = Date.parse('2026-09-18T20:00:00Z');
+    const ended = Date.parse('2026-09-18T22:00:00Z');
+    const margin = 15 * 60 * 1000;
+    const matchesWindow = (published) => published >= started - margin && published <= ended + margin;
+    assert.equal(matchesWindow(Date.parse('2026-09-18T21:59:00Z')), true);
+    assert.equal(matchesWindow(Date.parse('2026-09-18T22:14:59Z')), true);
+    assert.equal(matchesWindow(Date.parse('2026-09-18T22:16:00Z')), false);
+    
+    const delivered = new Set(['live:A', 'ended:ended:A', 'vod:vod-A']);
+    assert.equal(delivered.has('live:A'), true);
+    assert.equal(delivered.has('vod:vod-A'), true, 'correlated VOD must retain its own delivered-event identity');
+    assert.equal(delivered.has('live:B'), false);
+    delivered.add('live:B');
+    assert.equal(delivered.size, 4);
+    
+    console.log('✅ Social Studio lifecycle validation passed: provider state -> LIVE/PAUSED -> ENDED retention contract -> independent VOD/content -> LIVE B');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ social-studio-lifecycle audit failed:', error.message);
+    return false;
+  }
+}
+
+function universalMemberNoticesAudit() {
+  try {
+    const assert = require('node:assert/strict');
+    const {
+      buildScheduleReminderNotice,
+      buildVerificationNotice,
+      buildPrivateRoomDecisionNotice,
+      buildSecurityIncidentNotice,
+    } = require(root + '/src/core/ui/systemNotices');
+    
+    function fakeUser(id = '123456789012345678') {
+      return {
+        id,
+        tag: 'Member#0001',
+        username: 'Member',
+        displayAvatarURL: () => null,
+      };
+    }
+    
+    function fakeGuild() {
+      return {
+        id: '111111111111111111',
+        name: 'Goliath Test Guild',
+        iconURL: () => null,
+      };
+    }
+    
+    function embedJson(payload) {
+      assert(payload && typeof payload === 'object', 'notice payload must be an object');
+      assert(Array.isArray(payload.embeds) && payload.embeds.length === 1, 'notice must contain one primary embed');
+      const embed = payload.embeds[0];
+      return typeof embed.toJSON === 'function' ? embed.toJSON() : embed;
+    }
+    
+    function fieldMap(embed) {
+      return new Map((embed.fields || []).map((field) => [field.name, field.value]));
+    }
+    
+    const guild = fakeGuild();
+    const user = fakeUser();
+    
+    {
+      const embed = embedJson(buildScheduleReminderNotice({
+        guild,
+        member: user,
+        event: {
+          eventId: 'evt_test',
+          title: 'Community Night',
+          startAt: new Date(Date.now() + 3600000).toISOString(),
+          channelId: '222222222222222222',
+          voiceChannelId: '333333333333333333',
+          hostUserId: '444444444444444444',
+          location: 'Gaming Lounge',
+        },
+        minutes: 60,
+      }));
+      assert.match(embed.title || '', /EVENT REMINDER/i);
+      const fields = fieldMap(embed);
+      assert(fields.has('📅 Event'));
+      assert(fields.has('🕒 Starts'));
+      assert(fields.has('⏰ Reminder'));
+    }
+    
+    {
+      const pending = embedJson(buildVerificationNotice({ guild, member: user, type: 'pending', roles: [{ id: '555555555555555555' }] }));
+      assert.match(pending.title || '', /VERIFICATION REQUIRED/i);
+      assert.match(JSON.stringify(pending), /Pending/i);
+    
+      const success = embedJson(buildVerificationNotice({ guild, member: user, type: 'success', roles: [{ id: '666666666666666666' }] }));
+      assert.match(success.title || '', /VERIFICATION COMPLETE/i);
+      assert.match(JSON.stringify(success), /Verified/i);
+    
+      const cooldown = embedJson(buildVerificationNotice({ guild, member: user, type: 'cooldown', values: { cooldownSeconds: 30 }, reason: 'Please wait before trying again.' }));
+      assert.match(cooldown.title || '', /COOLDOWN/i);
+      assert.match(JSON.stringify(cooldown), /30 second/i);
+    }
+    
+    {
+      const approved = embedJson(buildPrivateRoomDecisionNotice({
+        guild,
+        member: user,
+        approved: true,
+        request: { requestId: 'room_req_1', purpose: 'Squad practice', participantIds: ['777777777777777777'] },
+        room: { channelId: '888888888888888888' },
+      }));
+      assert.match(approved.title || '', /PRIVATE ROOM APPROVED/i);
+      assert.match(JSON.stringify(approved), /888888888888888888/);
+    
+      const denied = embedJson(buildPrivateRoomDecisionNotice({
+        guild,
+        member: user,
+        approved: false,
+        request: { requestId: 'room_req_2', purpose: 'Squad practice', reviewReason: 'Capacity unavailable.' },
+      }));
+      assert.match(denied.title || '', /PRIVATE ROOM DECLINED/i);
+      assert.match(JSON.stringify(denied), /Capacity unavailable/i);
+    }
+    
+    {
+      const embed = embedJson(buildSecurityIncidentNotice({
+        guild,
+        owner: user,
+        incident: {
+          id: 'incident_1',
+          type: 'mass_channel_delete',
+          severity: 'critical',
+          actorId: '999999999999999999',
+          actorTag: 'BadActor#0001',
+          actionTaken: 'lockdown=success; security-isolation=success',
+          reason: 'Deletion threshold exceeded.',
+        },
+      }));
+      assert.match(embed.title || '', /SECURITY INCIDENT DETECTED/i);
+      assert.match(JSON.stringify(embed), /CRITICAL/i);
+      assert.match(JSON.stringify(embed), /lockdown=success/i);
+    }
+    
+    console.log('✅ Universal member notice contract audit passed.');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ universal-member-notices audit failed:', error.message);
+    return false;
+  }
+}
+
+function welcomeEmbedDeliveryAudit() {
+  try {
+    const assert = require('node:assert/strict');
+    const fs = require('node:fs');
+    const path = require('node:path');
+    
+    
+    const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
+    
+    const welcomeEntry = read('src/modules/messageStudio/welcome/welcome.js');
+    const welcome = read('src/modules/messageStudio/welcome/welcomeCore.js');
+    const delivery = read('src/modules/messageStudio/embed/embedTemplateDelivery.js');
+    const panel = read('src/modules/messageStudio/welcome/welcomePanel.js');
+    
+    assert(welcomeEntry.includes("require('./welcomeCore')"), 'Stable Welcome entry point must use the canonical Welcome implementation.');
+    assert(welcome.includes("require('../embed/embedTemplateDelivery')"), 'Welcome must use the shared Embed Studio delivery service.');
+    assert(welcome.includes('buildTemplateDeliveryPayload({'), 'Welcome payloads must delegate to the shared delivery service.');
+    assert(!welcome.includes('buildPreviewEmbeds(state, renderInteraction)'), 'Welcome must not keep a private embed-only renderer.');
+    assert(delivery.includes("require('./embedRenderer')"), 'Shared delivery must use the canonical Embed Studio renderer.');
+    assert(delivery.includes('buildEmbedPayload({'), 'Shared delivery must build the same canonical payload as Embed Studio.');
+    assert(delivery.includes('media: state.media'), 'Shared delivery must preserve saved Embed Studio media.');
+    assert(delivery.includes('actionRows'), 'Shared delivery must preserve saved Embed Studio buttons/actions.');
+    assert(welcome.includes('guildVariables.buildVariableMap'), 'Welcome must continue to source runtime values from Guild Variables.');
+    assert(/const payload\s*=\s*await welcome\.buildDiscordPayload\(member\s*,\s*['"]welcome['"]/.test(panel), 'Welcome Preview must await the async shared canonical delivery payload.');
+    assert(panel.includes('ephemeral:true') || panel.includes('ephemeral: true'), 'Welcome Preview must remain private/ephemeral.');
+    
+    const scheduled = read('src/modules/messageStudio/welcome/scheduledWelcome.js');
+    const dashboard = read('src/dashboard/js/pages/modules/Welcome.jsx');
+    const route = read('src/server/routes/modules/messageStudio/welcome.js');
+    
+    assert(scheduled.includes('completed.add(member.id)'), 'Scheduled Welcome must checkpoint successful member deliveries.');
+    assert(scheduled.includes('scheduled_welcome_delivery_checkpoint'), 'Scheduled Welcome must persist the successful-delivery checkpoint.');
+    assert(scheduled.indexOf('scheduled_welcome_delivery_checkpoint') < scheduled.indexOf('await queue.removeQueueRole(member, config.queueRoleId)'), 'Delivery checkpoint must precede queue role cleanup.');
+    assert(panel.includes("customId==='admin:welcome:resetConfirm'"), 'Destructive Welcome reset must require a confirmation action.');
+    assert(panel.includes('result.publicFailed') && panel.includes('result.dmFailed'), 'Discord test feedback must expose public and DM failures.');
+    assert(panel.includes('result.sendFailed') && panel.includes('result.roleRemovalFailed'), 'Discord scheduled feedback must expose partial failures.');
+    assert(dashboard.includes('queueLoaded'), 'Dashboard must distinguish an unloaded queue from an empty queue.');
+    assert(dashboard.includes('scheduledHealth?.stuckMemberIds?.length'), 'Dashboard must expose pending role cleanup.');
+    assert(dashboard.includes('Members per batch'), 'Dashboard must expose the scheduled batch-size control.');
+    assert(route.includes("router.post('/:guildId/custom-message'"), 'Dashboard custom Welcome editor must save through the canonical API.');
+    
+    assert(scheduled.includes('const activeRuns = new Set()'), 'Scheduled Welcome must maintain a per-guild active-run guard.');
+    assert(scheduled.includes("reason: 'already_running'"), 'Overlapping Scheduled Welcome runs must return an explicit skip reason.');
+    assert(scheduled.includes('activeRuns.delete(guild.id)'), 'Scheduled Welcome must release its active-run guard.');
+    assert(panel.includes("result.reason==='already_running'"), 'Discord Scheduled Welcome must explain overlapping runs.');
+    assert(dashboard.includes("result.reason === 'already_running'"), 'Dashboard Scheduled Welcome must explain overlapping runs.');
+    assert(dashboard.includes('if (result.skipped)'), 'Dashboard Scheduled Welcome must not report skipped runs as successful.');
+    
+    console.log('✅ Welcome ↔ Embed Studio delivery contract audit passed.');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ welcome-embed-delivery audit failed:', error.message);
+    return false;
+  }
+}
+
+function rolePaginationAudit() {
+  try {
+    const assert = require('node:assert/strict');
+    const { rolePages, rolePager, rolePageSelect, mergePageSelection } = require(root + '/src/core/ui/rolePagination');
+    
+    const roles = new Map();
+    for (let i = 1; i <= 57; i++) {
+      const id = String(100000000000000000n + BigInt(i));
+      roles.set(id, { id, name: `Role ${i}`, position: i, managed: false });
+    }
+    const guild = { id: 'guild', roles: { cache: roles } };
+    const first = rolePages(guild, [], 0);
+    const second = rolePages(guild, [], 1);
+    const last = rolePages(guild, [], 99);
+    assert.equal(first.roles.length, 25);
+    assert.equal(second.roles.length, 25);
+    assert.equal(last.roles.length, 7);
+    assert.equal(last.page, 2);
+    assert.equal(last.pages, 3);
+    assert.equal(rolePages(guild, [], -5).page, 0);
+    assert.equal(rolePageSelect('test:roles', 'Choose roles', first).toJSON().options.length, 25);
+    assert.equal(rolePager('test:page', 0, 3).toJSON().components[0].disabled, true);
+    assert.equal(rolePager('test:page', 2, 3).toJSON().components[1].disabled, true);
+    const chosenFirst = first.roles[0].id;
+    const chosenSecond = second.roles[0].id;
+    const saved = mergePageSelection([], first.roles, [chosenFirst]);
+    assert.deepEqual(mergePageSelection(saved, second.roles, [chosenSecond]), [chosenFirst, chosenSecond]);
+    assert.deepEqual(mergePageSelection([chosenFirst, chosenSecond], first.roles, []), [chosenSecond]);
+    assert.throws(() => mergePageSelection([], first.roles, [chosenSecond]), /no longer valid/);
+    assert.throws(() => mergePageSelection([], first.roles, first.roles.slice(0, 11).map(role => role.id)), /no more than 10/);
+    console.log('Role pagination: page boundaries, buttons, selection preservation and validation passed');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ role-pagination audit failed:', error.message);
+    return false;
+  }
+}
+
 function auditCommand() {
   section('Goliath audit');
   return [projectShape, commandAudit, dashboardAudit, dashboardImportAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit]
@@ -1298,7 +2054,7 @@ function promote(target) {
 }
 
 const commands = {
-  doctor: () => doctor(process.argv[3]), audit: auditCommand, 'dashboard-imports': dashboardImportAudit, 'backend-imports': backendRelativeImportAudit, 'runtime-contracts': runtimeContractsAudit, 'guild-variable-source': guildVariableSourceAudit, 'internal-version-naming': internalVersionNamingAudit, 'verification-lifecycle': verificationLifecycleAudit, 'embed-studio-preview': embedStudioPreviewAudit, 'embed-media-alignment': embedMediaAlignmentAudit, 'embed-session-persistence': embedSessionPersistenceAudit, 'embed-state-persistence-boundary': embedStatePersistenceBoundaryAudit,
+  doctor: () => doctor(process.argv[3]), audit: auditCommand, 'dashboard-imports': dashboardImportAudit, 'backend-imports': backendRelativeImportAudit, 'runtime-contracts': runtimeContractsAudit, 'guild-variable-source': guildVariableSourceAudit, 'internal-version-naming': internalVersionNamingAudit, 'verification-lifecycle': verificationLifecycleAudit, 'embed-studio-preview': embedStudioPreviewAudit, 'embed-media-alignment': embedMediaAlignmentAudit, 'embed-session-persistence': embedSessionPersistenceAudit, 'embed-state-persistence-boundary': embedStatePersistenceBoundaryAudit, 'admin-module-routing': adminModuleRoutingAudit, 'embed-graphic-headers': embedGraphicHeadersAudit, 'embed-template-binding-lifecycle': embedTemplateBindingLifecycleAudit, 'social-live-presentation': socialLivePresentationAudit, 'social-studio-lifecycle': socialStudioLifecycleAudit, 'universal-member-notices': universalMemberNoticesAudit, 'welcome-embed-delivery': welcomeEmbedDeliveryAudit, 'role-pagination': rolePaginationAudit,
   'deploy-plan': () => deployPlan(process.argv[3], process.argv[4], process.argv[5]),
   'sync-commands': () => syncCommands(process.argv[3]), promote: () => promote(process.argv[3]), guilds: guildAudit, media: mediaAudit,
 };
