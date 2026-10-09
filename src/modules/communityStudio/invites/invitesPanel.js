@@ -144,41 +144,79 @@ function adminView(interaction) {
   const memberEnabled = section.settings.memberInviteTemplate.enabled;
   const configured = Boolean(section.settings.officialInvite.code);
   const state = sessionFor(interaction);
+  const page = state.settingsPage || 'home';
+  const links = invites.listInviteLinks(interaction.guildId).filter((link) => link.personal).length;
   const resetArmed = state.resetConfirmUntil > Date.now();
+  const panelResetArmed = state.panelResetConfirmUntil > Date.now();
   const regenerateArmed = state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now();
   const deleteArmed = state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now();
-  const links = invites.listInviteLinks(interaction.guildId);
-  const linkCount = links.filter((link) => link.personal).length;
-  const panelResetArmed = state.panelResetConfirmUntil > Date.now();
-  return {
-    embeds: [new EmbedBuilder()
-      .setColor(enabled ? 0x5865F2 : 0xED4245)
-      .setTitle('⚙️ Invite Studio Settings')
-      .setDescription('Invite health, member links and server-wide controls.')
-      .addFields(
-        { name: 'Module', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-        { name: 'Member Invites', value: `${memberEnabled ? '🟢 On' : '🔴 Off'} · ${linkCount} links`, inline: true },
-        { name: 'Official Invite', value: configured ? '🟢 Configured' : '⚪ Not set', inline: true },
-        ...(panelResetArmed ? [{ name: '⚠️ Confirm Panel Reset', value: 'Confirm within 30 seconds to restore public panel text. Channel, deployed message and invite DM are preserved.', inline: false }] : []),
-        ...(resetArmed ? [{ name: '⚠️ Confirm Score Reset', value: 'Confirm within 30 seconds to clear leaderboard scores.', inline: false }] : []),
-        ...(regenerateArmed ? [{ name: '⚠️ Confirm Invite Replacement', value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false }] : []),
-        ...(deleteArmed ? [{ name: '⚠️ Confirm Invite Deletion', value: 'Confirm within 30 seconds to delete the official invite.', inline: false }] : []),
-      )
-      .setFooter({ text: 'Goliath Invites · Settings' })
-      .setTimestamp()],
-    components: [
-      row(button('invites:health', '🩺 System Health'),
-        button('invites:repair', '🔧 Repair Invites'),
-        button('invites:member-dm-modal', '✏️ Edit Invite DM', ButtonStyle.Secondary),
-        button('invites:member-enabled', memberEnabled ? '👥 Member Invites: On' : '👥 Member Invites: Off', ButtonStyle.Secondary)),
-      row(button('invites:official-regenerate', regenerateArmed ? '⚠️ Confirm Replace' : '🔄 Replace Invite', ButtonStyle.Secondary, !configured),
-        button('invites:default-panel', panelResetArmed ? '⚠️ Confirm Panel Reset' : '🧹 Reset Panel', ButtonStyle.Secondary),
-        button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? '⚠️ Confirm Leaderboard Reset' : '🏆 Reset Leaderboard', ButtonStyle.Secondary),
-        button('invites:official-delete', deleteArmed ? '⚠️ Confirm Official Delete' : '🗑️ Delete Official Invite', ButtonStyle.Secondary, !configured)),
-      row(button('invites:official-settings', '⬅️ Back'),
-        button('invites:toggle', enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
-    ],
+  const pages = {
+    home: ['⚙️ Invite Studio Settings', 'Choose an area to manage invites, referrals, diagnostics or the public panel.'],
+    health: ['🩺 System Health', 'Run diagnostics and repair supported problems without deliberately replacing permanent links.'],
+    members: ['👥 Member Invites', 'Manage member referral access, invite DMs and individual links or scores.'],
+    official: ['🔗 Official Invite', 'Advanced official invitation maintenance. Destination, roles and vanity preference are configured in Invite Management.'],
+    panel: ['📢 Public Panel', 'Edit, preview, publish and reset the community invitation panel.'],
   };
+  const [title, description] = pages[page] || pages.home;
+  const embed = new EmbedBuilder().setColor(enabled ? 0x5865F2 : 0xED4245)
+    .setTitle(title).setDescription(description)
+    .addFields(
+      { name: 'Module', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
+      { name: 'Member Invites', value: `${memberEnabled ? '🟢 On' : '🔴 Off'} · ${links} links`, inline: true },
+      { name: 'Official Invite', value: configured ? '🟢 Configured' : '⚪ Not set', inline: true },
+    ).setFooter({ text: 'Goliath Invites · Settings' }).setTimestamp();
+  const components = [];
+  if (page === 'home') {
+    components.push(row(
+      button('invites:settings-health', '🩺 System Health'),
+      button('invites:settings-members', '👥 Member Invites'),
+      button('invites:settings-official', '🔗 Official Invite'),
+      button('invites:settings-panel', '📢 Public Panel'),
+    ));
+    // Keep the original Back and module toggle row unchanged.
+    components.push(row(button('invites:official-settings', '⬅️ Back'),
+      button('invites:toggle', enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success)));
+  } else {
+    if (page === 'health') components.push(row(
+      button('invites:health', '🩺 Run Health Check'),
+      button('invites:repair', '🔧 Repair Invites'),
+    ));
+    if (page === 'members') {
+      components.push(row(
+        button('invites:member-enabled', memberEnabled ? '👥 Member Invites: On' : '👥 Member Invites: Off'),
+        button('invites:member-dm-modal', '✏️ Edit Invite DM'),
+        button('invites:settings-manage-links', '👥 Manage Member Links'),
+      ));
+      components.push(row(button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm',
+        resetArmed ? '⚠️ Confirm Leaderboard Reset' : '🏆 Reset Leaderboard')));
+      if (resetArmed) embed.addFields({ name: '⚠️ Confirm Score Reset', value: 'Confirm within 30 seconds to clear leaderboard scores. Personal invite links remain.', inline: false });
+    }
+    if (page === 'official') {
+      components.push(row(
+        button('invites:settings-official-manage', '🔗 Invite Management'),
+        button('invites:official-verify', '🔍 Verify Link'),
+      ));
+      components.push(row(
+        button('invites:official-regenerate', regenerateArmed ? '⚠️ Confirm Replace' : '🔄 Replace Official Invite', ButtonStyle.Secondary, !configured),
+        button('invites:official-delete', deleteArmed ? '⚠️ Confirm Delete' : '🗑️ Delete Official Invite', ButtonStyle.Secondary, !configured),
+      ));
+      if (regenerateArmed) embed.addFields({ name: '⚠️ Confirm Invite Replacement', value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false });
+      if (deleteArmed) embed.addFields({ name: '⚠️ Confirm Invite Deletion', value: 'Confirm within 30 seconds to delete the official invite.', inline: false });
+    }
+    if (page === 'panel') {
+      const config = section.settings.publicPanel;
+      embed.addFields({ name: 'Deployment', value: config.channelId && config.messageId ? '🟡 Saved deployment · verify in Public Panel' : '⚪ Not deployed', inline: false });
+      components.push(row(
+        button('invites:panel-embed-modal', '✏️ Edit Panel'),
+        button('invites:panel-preview', '👁️ Preview Panel', ButtonStyle.Secondary, !configured),
+        button('invites:settings-panel-manage', '📢 Publish / Update'),
+      ));
+      components.push(row(button('invites:default-panel', panelResetArmed ? '⚠️ Confirm Panel Reset' : '🧹 Reset Public Panel')));
+      if (panelResetArmed) embed.addFields({ name: '⚠️ Confirm Panel Reset', value: 'Confirm within 30 seconds to restore default panel text. Channel, deployed message and invite DM are preserved.', inline: false });
+    }
+    components.push(row(button('invites:settings-home', '⬅️ Back')));
+  }
+  return { embeds: [embed], components };
 }
 
 function managerView(interaction) {
