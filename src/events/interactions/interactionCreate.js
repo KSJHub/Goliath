@@ -23,7 +23,7 @@ const suggestionsInteractions = optionalRequire('suggestions', '../../modules/fe
 const giveawaysInteractionHandler = optionalRequire('giveaways', '../../modules/communityStudio/giveaways/giveawaysInteractionHandler');
 const formsInteractions = optionalRequire('forms', '../../modules/feedbackStudio/forms/formsInteractions');
 const faqInteractions = optionalRequire('faq', '../../modules/feedbackStudio/faq/faqInteractions');
-const embedPanel = optionalRequire('embed interactions', '../../modules/messageStudio/embed/embedInteractions');
+const embedStudio = optionalRequire('embed studio', '../../modules/messageStudio/embed/embed');
 const duplicator = optionalRequire('duplicator', '../../owner/dev/duplicator');
 const permissionsStudioInteractions = optionalRequire('permissions studio', './permissionsStudio');
 const adminPanel = optionalRequire('admin panel', '../../core/administration/admin/panel');
@@ -229,7 +229,7 @@ module.exports={
       if(isTicketRuntimeInteraction&&interaction.guildId&&guildManager.isModuleEnabled?.(interaction.guildId,'tickets')===false){await interaction.reply({content:'❌ Tickets is currently disabled for this server.',flags:MessageFlags.Ephemeral});return;}
       if(await callHandler(userPanelInteractions,'handleUserPanelInteraction',interaction))return;
       if(await callHandler(restoreRequestManager,'handleRestoreRequestInteraction',interaction))return;
-      if(await callHandler(embedPanel,'handleEmbedInteraction',interaction))return;
+      if((customId === 'admin:embed' || customId.startsWith('embed:')) && await callHandler(embedStudio,'handleInteraction',interaction))return;
       if(await callHandler(verificationAdminPanel,'handleVerificationAdminInteraction',interaction))return;
       if(await callHandler(automodPanel,'handleAutomodInteraction',interaction))return;
       if((startsWith(interaction,'admin:birthdays')||startsWith(interaction,'birthdays:user:'))&&await callHandler(birthdaysPanel,'handleBirthdayInteraction',interaction))return;
