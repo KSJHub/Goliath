@@ -61,7 +61,9 @@ function officialView(interaction) {
     Number(link.maxAge || 0) === Number(config.maxAge || 0) &&
     Number(link.maxUses || 0) === Number(config.maxUses || 0) &&
     JSON.stringify([...(link.roleIds || [])].sort()) === JSON.stringify([...(config.roleIds || [])].sort());
-  const liveStatus = !configured ? '⚪ Not configured' : live?.exists === false ? '🔴 Link missing or expired' : live?.exists === true ? (matching ? '🟢 Verified active' : '🟠 Changes pending — update invite') : (matching ? '🟡 Saved — verify live status' : '🟠 Changes pending — update invite');
+  const needsUpdate = configured && (!matching || live?.exists === false);
+  const updateArmed = state.officialConfirm?.action === 'update' && state.officialConfirm.until > Date.now();
+  const liveStatus = !configured ? '⚪ Not configured' : live?.exists === false ? '🔴 Link missing or expired' : live?.exists === true ? (matching ? '🟢 Verified active' : '🟠 Settings saved — update invite to apply') : (matching ? '🟡 Saved — verify live status' : '🟠 Changes pending — update invite');
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🌍 Official Invite')
       .setDescription('Create and manage your server’s official invitation link.')
@@ -70,20 +72,19 @@ function officialView(interaction) {
         { name: '🔗 Invite Link', value: officialUrl(config.code) || 'No link created yet', inline: false },
         { name: '📍 Destination', value: config.channelId ? `<#${config.channelId}>` : 'Not selected', inline: true },
         { name: '👥 Uses', value: configured ? (live?.exists ? String(live.uses) + ' (Discord)' : String(link?.uses || 0) + ' (recorded)') : '—', inline: true },
-        { name: '⏳ Link Expires', value: configured ? expiryLabel : '—', inline: true },
-        { name: '⚙️ Expiry', value: ageNames[config.maxAge || 0] || 'Never', inline: true },
+        { name: '⏳ Expires', value: configured ? expiryLabel : ageNames[config.maxAge || 0] || 'Never', inline: true },
         { name: '🔢 Maximum Uses', value: config.maxUses ? String(config.maxUses) : 'Unlimited', inline: true },
         { name: '🎭 Join Roles', value: roleList(config.roleIds), inline: false },
-        { name: 'Role Assignment', value: 'Goliath assigns selected roles after an attributed join; Discord does not grant them through the invite itself.', inline: false },
-        ...(confirmation ? [{ name: '⚠️ Confirmation Required', value: confirmation === 'delete' ? 'Press Confirm Delete again within 30 seconds to revoke the link.' : 'Press Confirm Regenerate again within 30 seconds. The old link will stop working.', inline: false }] : []),
+
+        ...(updateArmed ? [{ name: '⚠️ Confirm Replacement', value: 'The current invite will be replaced and its old URL will stop working. Press Confirm Update within 30 seconds.', inline: false }] : []),
         ...(info.pages > 1 ? [{ name: 'Role Selection', value: `Page ${info.page + 1} of ${info.pages}`, inline: false }] : []),
       )],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Select destination channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Select join roles (optional)', info))] : []),
-      row(button('invites:official-create', configured ? 'Update Invite' : 'Create Invite', ButtonStyle.Success, !config.channelId),
+      row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
         button('invites:official-limits', 'Link Limits', ButtonStyle.Primary),
-        ...(configured ? [button('invites:official-verify', 'Verify / Link'), button('invites:official-regenerate', confirmation === 'regenerate' ? 'Confirm Regenerate' : 'Regenerate', confirmation === 'regenerate' ? ButtonStyle.Danger : ButtonStyle.Secondary), button('invites:official-delete', confirmation === 'delete' ? 'Confirm Delete' : 'Delete', ButtonStyle.Danger)] : [])),
+        ...(configured ? [button('invites:official-verify', 'Verify Link')] : [])),
       ...(info.pages > 1 ? [row(button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0), button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1))] : []),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
     ],
@@ -152,6 +153,7 @@ function adminView(interaction) {
       .setDescription(armed ? '⚠️ Reset armed. Confirm within 30 seconds.' : 'Manage member links, health, repairs and leaderboard data.')],
     components: [
       row(button('invites:invite-manager', 'Invite Manager', ButtonStyle.Primary), button('invites:health', 'Health'), button('invites:repair', 'Repair')),
+      row(button('invites:official-regenerate', state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now() ? 'Confirm Regenerate' : 'Regenerate Official Invite', ButtonStyle.Secondary, !section.settings.officialInvite.code), button('invites:official-delete', state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now() ? 'Confirm Delete' : 'Delete Official Invite', ButtonStyle.Danger, !section.settings.officialInvite.code)),
       row(button(armed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', armed ? 'Confirm Reset' : 'Reset Leaderboard', ButtonStyle.Danger), button('invites:default-panel', 'Restore Defaults'), button('invites:toggle', enabled ? 'Disable' : 'Enable', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings', ButtonStyle.Secondary, true)),
     ],
