@@ -9,6 +9,7 @@ const STAFF_ACTION_PREFIX = 'verify:staff';
 const TERMINAL_STATES = new Set(['verified', 'quarantined', 'rejected', 'failed', 'timed_out']);
 
 const clean = value => String(value ?? '').trim();
+const isOutdatedSecuritySession = (guildId, session) => Number(session.securityConfigRevision || 0) !== Number(verificationStore.getVerificationSection(guildId).configRevision || 1);
 
 function challengeConfig(settings = {}, method) {
   const security = settings.security || {};
@@ -54,6 +55,7 @@ function startStep(guildId, userId, method, settings = {}) {
   if (!INTERACTIVE_METHODS.has(method)) return { ok: false, reason: 'not_interactive', method };
   const session = verificationStore.getSession(guildId, userId) || {};
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', method, state: session.state };
+  if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed', method };
   const active = verificationChallenges.active(guildId, userId);
   if (active?.status === 'pending') {
     if (active.method !== method) return { ok: false, reason: 'different_challenge_active', method, activeMethod: active.method, challenge: active };
@@ -77,6 +79,7 @@ function submitAnswer(guildId, actingUserId, targetUserId, challengeId, supplied
   if (clean(actingUserId) !== clean(targetUserId)) return { ok: false, reason: 'wrong_member' };
   const session = verificationStore.getSession(guildId, targetUserId) || {};
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', state: session.state };
+  if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed' };
   const active = verificationChallenges.active(guildId, targetUserId);
   if (!active || clean(active.challengeId) !== clean(challengeId)) return { ok: false, reason: 'stale_challenge' };
   const result = verificationChallenges.answer(guildId, targetUserId, challengeId, suppliedAnswer);
@@ -88,6 +91,7 @@ function submitAnswer(guildId, actingUserId, targetUserId, challengeId, supplied
 function resolveStaffAction(guildId, targetUserId, challengeId, staffUserId, action) {
   const session = verificationStore.getSession(guildId, targetUserId) || {};
   if (TERMINAL_STATES.has(session.state)) return { ok: false, complete: false, reason: 'terminal_session', state: session.state };
+  if (isOutdatedSecuritySession(guildId, session)) return { ok: false, complete: false, reason: 'security_configuration_changed' };
   const active = verificationChallenges.active(guildId, targetUserId);
   if (!active || clean(active.challengeId) !== clean(challengeId) || active.method !== 'staff_approval') return { ok: false, complete: false, reason: 'stale_challenge' };
   const result = verificationChallenges.staffAction(guildId, targetUserId, challengeId, staffUserId, action);
