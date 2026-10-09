@@ -106,7 +106,8 @@ function officialView(interaction) {
         ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
         button('invites:member-dm-modal', 'Edit Member DM', ButtonStyle.Primary)),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
-        ...(info.pages > 1 ? [button('invites:official-role-next', 'Roles ▶')] : [])),
+        button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0),
+        button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
     ],
   };
 }
