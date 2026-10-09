@@ -115,6 +115,29 @@ async function resend(interaction, record) {
   return live.url;
 }
 
+async function checkPanelDeployment(interaction) {
+  const config = invites.getSection(interaction.guildId).settings.publicPanel;
+  const state = panel.sessionFor(interaction);
+  const result = { channelId: config.channelId, messageId: config.messageId, status: 'missing' };
+  if (!config.channelId || !config.messageId) {
+    state.panelDeployment = result;
+    return result;
+  }
+  try {
+    const channel = await interaction.guild.channels.fetch(config.channelId);
+    if (!channel?.messages) {
+      result.status = 'unknown';
+    } else {
+      const message = await channel.messages.fetch(config.messageId);
+      result.status = message ? 'deployed' : 'missing';
+    }
+  } catch (error) {
+    result.status = [10003, 10008].includes(Number(error.code)) ? 'missing' : 'unknown';
+  }
+  state.panelDeployment = result;
+  return result;
+}
+
 async function handleInviteStudioInteraction(interaction) {
   const id = String(interaction.customId || '');
 
@@ -147,6 +170,7 @@ async function handleInviteStudioInteraction(interaction) {
 
   if (pages[id]) {
     state.page = pages[id];
+    if (state.page === 'public-config') await checkPanelDeployment(interaction);
     await update(interaction);
     return true;
   }
@@ -191,6 +215,7 @@ async function handleInviteStudioInteraction(interaction) {
     nested(interaction, 'publicPanel', {
       channelId: interaction.values[0],
     });
+    await checkPanelDeployment(interaction);
     await update(interaction);
     return true;
   }
@@ -369,6 +394,7 @@ async function handleInviteStudioInteraction(interaction) {
         meta(interaction, 'invite_panel_deploy'),
       );
 
+      await checkPanelDeployment(interaction);
       await interaction.editReply(
         `✅ Public invite panel sent / updated in <#${message.channelId}>.`,
       );
