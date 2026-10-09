@@ -480,7 +480,7 @@ async function selectInvestigationAccessChannel(interaction) {
       .setDisabled(allowedIds.size === 0)
   );
 
-  return interaction.update({
+  return interaction.editReply({
     components: [
       new Discord.ActionRowBuilder().addComponents(
         new Discord.ChannelSelectMenuBuilder()
