@@ -93,9 +93,8 @@ function officialView(interaction) {
       ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Official join roles (optional)', info))] : []),
 
       row(button('invites:official-create', !configured ? 'Create Invite' : updateArmed ? 'Confirm Update' : 'Update Invite', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId || (configured && !needsUpdate)),
-        ...(configured ? [button('invites:official-verify', 'Verify Link')] : []),
+        button('invites:official-verify', '🔍 Verify Link', ButtonStyle.Secondary),
         button('invites:invite-manager', '👥 Member Invites', ButtonStyle.Secondary)),
-      row(button('invites:vanity-check', '🔄 Check Vanity URL')),
       row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
         button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0),
         button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
