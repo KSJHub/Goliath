@@ -429,29 +429,20 @@ async function handleInviteStudioInteraction(interaction) {
   }
 
   if (id === 'invites:default-panel') {
-    const defaults = invites.defaults().settings;
-    const current = invites.getSection(interaction.guildId).settings;
-
+    if (!(state.panelResetConfirmUntil > Date.now())) {
+      state.panelResetConfirmUntil = Date.now() + 30000;
+      await update(interaction);
+      return true;
+    }
+    state.panelResetConfirmUntil = 0;
+    const defaults = invites.defaults().settings.publicPanel;
+    const current = invites.getSection(interaction.guildId).settings.publicPanel;
     invites.updateSettings(
       interaction.guildId,
-      {
-        publicPanel: {
-          ...current.publicPanel,
-          ...defaults.publicPanel,
-        },
-        memberInviteTemplate: {
-          ...current.memberInviteTemplate,
-          ...defaults.memberInviteTemplate,
-        },
-      },
-      meta(interaction, 'invite_defaults'),
+      { publicPanel: { ...current, title: defaults.title, description: defaults.description, footer: defaults.footer, color: defaults.color } },
+      meta(interaction, 'invite_panel_defaults'),
     );
-
-    await interaction.reply({
-      content: '✅ Defaults restored.',
-      flags: MessageFlags.Ephemeral,
-    });
-
+    await interaction.reply({ content: '✅ Public panel text defaults restored. Channel, deployed message and referral DM were preserved.', flags: MessageFlags.Ephemeral });
     return true;
   }
 
