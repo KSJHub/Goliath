@@ -203,21 +203,36 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
+  if (id === 'invites:panel-preview') {
+    try {
+      const payload = panel.buildPublicPayload(interaction.guildId);
+      await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
+    } catch (error) {
+      await interaction.reply({ content: `❌ Preview unavailable: ${String(error.message || error).slice(0, 1700)}`, flags: MessageFlags.Ephemeral });
+    }
+    return true;
+  }
+
   if (id === 'invites:panel-embed-modal') {
     await interaction.showModal(panel.embedModal(interaction));
     return true;
   }
 
   if (id === 'invites:panel-embed-submit') {
-    nested(interaction, 'publicPanel', {
-      title: interaction.fields.getTextInputValue('title'),
-      description: interaction.fields.getTextInputValue('description'),
-      footer: interaction.fields.getTextInputValue('footer'),
-      color: interaction.fields.getTextInputValue('color'),
-    });
-
+    const title = interaction.fields.getTextInputValue('title').trim();
+    const description = interaction.fields.getTextInputValue('description').trim();
+    const footer = interaction.fields.getTextInputValue('footer').trim();
+    const color = interaction.fields.getTextInputValue('color').trim();
+    if (!title || !description || !footer || title.length > 256 || description.length > 1800 || footer.length > 2048 || !/^#[0-9a-fA-F]{6}$/.test(color)) {
+      await interaction.reply({
+        content: '❌ Check your panel fields. Title, welcome message and footer cannot be empty; embed colour must be a 6-digit hex such as #5865F2.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+    nested(interaction, 'publicPanel', { title, description, footer, color: color.toUpperCase() });
     await interaction.reply({
-      content: '✅ Public panel text saved.',
+      content: '✅ Invite panel design saved. Use **👁️ Preview Panel** to review it, then **Publish/Update Panel** to apply it publicly.',
       flags: MessageFlags.Ephemeral,
     });
     return true;
