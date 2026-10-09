@@ -718,6 +718,7 @@ async function handleConfirmButton(i) {
   }
   CONFIRM_LOCKS.add(lockKey);
   try {
+    if (!i.deferred && !i.replied && i.isMessageComponent?.()) await i.deferUpdate();
     const result = await executePendingAction(Discord, i, token, context);
     recordModerationSystemEvent({ interaction: i, event: 'moderation.confirmation.processed', metadata: { tokenPresent: true, handled: Boolean(result) } });
     return result;
