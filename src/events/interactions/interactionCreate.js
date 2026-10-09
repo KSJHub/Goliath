@@ -229,7 +229,11 @@ module.exports={
       if(isTicketRuntimeInteraction&&interaction.guildId&&guildManager.isModuleEnabled?.(interaction.guildId,'tickets')===false){await interaction.reply({content:'❌ Tickets is currently disabled for this server.',flags:MessageFlags.Ephemeral});return;}
       if(await callHandler(userPanelInteractions,'handleUserPanelInteraction',interaction))return;
       if(await callHandler(restoreRequestManager,'handleRestoreRequestInteraction',interaction))return;
-      if((customId === 'admin:embed' || customId.startsWith('embed:')) && await callHandler(embedStudio,'handleInteraction',interaction))return;
+      if (customId === 'admin:embed' || customId.startsWith('embed:')) {
+        if (!embedStudio || typeof embedStudio.handleInteraction !== 'function') throw new Error('Embed Studio interaction handler is unavailable.');
+        if (!await callHandler(embedStudio, 'handleInteraction', interaction)) throw new Error(`Embed Studio did not handle ${customId}.`);
+        return;
+      }
       if(await callHandler(verificationAdminPanel,'handleVerificationAdminInteraction',interaction))return;
       if(await callHandler(automodPanel,'handleAutomodInteraction',interaction))return;
       if((startsWith(interaction,'admin:birthdays')||startsWith(interaction,'birthdays:user:'))&&await callHandler(birthdaysPanel,'handleBirthdayInteraction',interaction))return;
