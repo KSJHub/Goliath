@@ -758,6 +758,7 @@ async function handleBulkModal(i) {
   if (!String(i.customId || '').startsWith('mod_submit_bulk_')) return false;
   const action = getBulkAction(i.customId); if (!action) return false;
   const allowed = await ensureActionAccess(i, `bulk_${action}`, `❌ No permission to use bulk ${action}.`); if (!allowed) return true;
+  if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
   recordModerationSystemEvent({ interaction: i, event: 'moderation.bulk.requested', action, metadata: { operation: fieldValue(i, 'operation') || action } });
   return submitBulkModal(i, action);
 }
