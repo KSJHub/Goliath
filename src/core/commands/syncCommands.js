@@ -170,7 +170,9 @@ async function cleanupRetiredGuildCommands(rest, clientId, guildIds, dryRun = fa
     }
 
     const stale = (commands || []).filter((command) =>
-      RETIRED_GUILD_COMMAND_NAMES.has(String(command?.name || '')),
+      RETIRED_GUILD_COMMAND_NAMES.has(String(command?.name || ''))
+      && !(String(process.env.BOT_MODE || '').trim().toUpperCase() === 'DEV'
+        && String(guildId) === commandCenterGuildId() && command.name === 'commandcenter'),
     );
 
     for (const command of stale) {

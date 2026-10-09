@@ -131,25 +131,18 @@ function applyAll(client, patchFactory) {
 
 async function handle(client, interaction) {
   const id = String(interaction.customId || '');
-  if (!id.startsWith(PREFIX)) return false;
+  // The dedicated Command Center router owns every control inside the panel.
+  // This bootstrap handler only opens it, avoiding duplicate guild-wide writes.
+  if (id !== `${PREFIX}open`) return false;
   if (!security.isBotOwner(interaction.user?.id)) {
     await interaction.reply({ content: '❌ Owner-only control.', flags: MessageFlags.Ephemeral }).catch(() => null);
     return true;
   }
-  const action = id.slice(PREFIX.length);
-  let result = null;
-  if (action === 'open') {
-    provisionKnownGuilds(client);
-    await interaction.reply({ ...payload(client), flags: MessageFlags.Ephemeral }).catch(() => null);
-    return true;
-  }
-  if (action === 'pause-all') { const n = applyAll(client, () => ({ paused: true })); result = `Paused maintenance/restart/recovery notice delivery for ${n} guild(s).`; }
-  else if (action === 'resume-all') { const n = applyAll(client, () => ({ paused: false })); result = `Resumed operational notice delivery for ${n} guild(s).`; }
-  else if (['maintenance', 'restart', 'recovery'].includes(action)) {
-    const a = aggregate(client); const turnOn = !a.settings.every((x) => x.notices[action] !== false);
-    const n = applyAll(client, () => ({ [action]: turnOn })); result = `${action} notices ${turnOn ? 'enabled' : 'disabled'} for ${n} guild(s).`;
-  }
-  await interaction.update(payload(client, result)).catch(() => null);
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  provisionKnownGuilds(client);
+  await interaction.editReply(payload(client)).catch((error) => {
+    console.warn('[Global Notice Controls] Panel open failed:', error?.message || error);
+  });
   return true;
 }
 

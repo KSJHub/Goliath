@@ -411,6 +411,7 @@ function buildComparisonPayload(i, primary, secondary, origin = 'scan') {
 async function runMemberScan(i, targetId, { record = true } = {}) {
   const allowed = await ensureScanCapability(i, 'scan_run', '❌ You do not have permission to run a member intelligence scan.');
   if (!allowed) return true;
+  if (!i.deferred && !i.replied && i.isMessageComponent?.()) await i.deferUpdate();
   const target = await fetchTarget(i.guild, targetId);
   if (!target) return safeReply(i, { content: '❌ Could not find that member in this server.', flags: 64 });
   const report = buildMemberScanPayload(i, target);
@@ -515,6 +516,7 @@ async function runMemberComparison(i, primaryId, secondaryId, origin = 'scan') {
   const allowed = await ensureScanCapability(i, 'scan_compare', '❌ You do not have permission to compare member intelligence.');
   if (!allowed) return true;
   if (!primaryId || !secondaryId || String(primaryId) === String(secondaryId)) return safeReply(i, { content: '❌ Select a different member to compare against.', flags: 64 });
+  if (!i.deferred && !i.replied && i.isMessageComponent?.()) await i.deferUpdate();
   const [primary, secondary] = await Promise.all([fetchTarget(i.guild, primaryId), fetchTarget(i.guild, secondaryId)]);
   if (!primary || !secondary) return safeReply(i, { content: '❌ One of those members could not be found in this server.', flags: 64 });
   const payload = buildComparisonPayload(i, primary, secondary, origin);
@@ -716,6 +718,7 @@ async function handleConfirmButton(i) {
   }
   CONFIRM_LOCKS.add(lockKey);
   try {
+    if (!i.deferred && !i.replied && i.isMessageComponent?.()) await i.deferUpdate();
     const result = await executePendingAction(Discord, i, token, context);
     recordModerationSystemEvent({ interaction: i, event: 'moderation.confirmation.processed', metadata: { tokenPresent: true, handled: Boolean(result) } });
     return result;
@@ -755,6 +758,7 @@ async function handleBulkModal(i) {
   if (!String(i.customId || '').startsWith('mod_submit_bulk_')) return false;
   const action = getBulkAction(i.customId); if (!action) return false;
   const allowed = await ensureActionAccess(i, `bulk_${action}`, `❌ No permission to use bulk ${action}.`); if (!allowed) return true;
+  if (!i.deferred && !i.replied) await i.deferReply({ flags: 64 });
   recordModerationSystemEvent({ interaction: i, event: 'moderation.bulk.requested', action, metadata: { operation: fieldValue(i, 'operation') || action } });
   return submitBulkModal(i, action);
 }
@@ -821,6 +825,7 @@ async function routeButtonsAndSelects(i) {
   }
   if (i.isStringSelectMenu?.()) return routeHandlers(i, [caseProceeding.handleProceedingInteraction, handleMemberScanStringSelect, handleCaseSearchSelect]);
   if (!i.isButton?.()) return false;
+  if (i.customId === 'mod:close') { await i.deferUpdate(); await i.deleteReply().catch(() => null); return true; }
   return routeHandlers(i, [handleExportInteraction, handleConfirmButton, caseProceeding.handleProceedingInteraction, value => handleCaseAction(value, { fetchTarget, createConfirmation }), handleMemberScanButton, handleDashboardNavigation, handleCancelButton, handleBulkButton, handleOpenActionButton, handleCaseToolButton]);
 }
 async function routeModModal(i) {

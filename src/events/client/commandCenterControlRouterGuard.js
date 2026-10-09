@@ -78,6 +78,11 @@ async function handle(client, interaction, originalId) {
   // the already-open panel, which were being swallowed by Audit Intelligence.
   if (action === 'open') return;
 
+  // Acknowledge before updating settings across potentially many guilds.
+  // All supported actions only refresh this existing panel (no modal opens).
+  if (!['pause-all', 'resume-all', 'maintenance', 'restart', 'recovery', 'refresh'].includes(action)) return;
+  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+
   let result = null;
   if (action === 'pause-all') {
     const n = applyAll(client, () => ({ paused: true }));
@@ -97,11 +102,9 @@ async function handle(client, interaction, originalId) {
   }
 
   const embed = refreshedEmbed(client, interaction.message?.embeds?.[0], result);
-  if (!interaction.replied && !interaction.deferred) {
-    await interaction.update({ embeds: [embed], components: interaction.message?.components || [], allowedMentions: { parse: [] } }).catch((error) => {
-      console.warn('[CommandCenter Control Router] Global notice update failed:', error?.message || error);
-    });
-  }
+  await interaction.editReply({ embeds: [embed], components: interaction.message?.components || [], allowedMentions: { parse: [] } }).catch((error) => {
+    console.warn('[CommandCenter Control Router] Global notice update failed:', error?.message || error);
+  });
 }
 
 module.exports = {
@@ -113,6 +116,10 @@ module.exports = {
     client.prependListener(Events.InteractionCreate, (interaction) => {
       const originalId = String(interaction?.customId || '');
       if (!originalId.startsWith(PREFIX) || originalId === `${PREFIX}open`) return;
+      // Only claim controls this router actually handles. Unknown actions must
+      // remain available to other handlers instead of being silently swallowed.
+      const action = originalId.slice(PREFIX.length);
+      if (!['pause-all', 'resume-all', 'maintenance', 'restart', 'recovery', 'refresh'].includes(action)) return;
 
       // Start the real action immediately, then remove it from the broad
       // owner:commandcenter:* namespace before Audit Intelligence's generic

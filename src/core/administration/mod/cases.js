@@ -878,6 +878,7 @@ async function handleCaseAction(interaction, { fetchTarget, createConfirmation }
     const state = getAppealQueueState(token, interaction.guild.id);
     if (!state) return safeReply(interaction, ephemeralError('This appeal queue session expired. Open the queue again.'));
     if (!['pending', 'approved', 'denied', 'all'].includes(status)) return safeReply(interaction, ephemeralError('That appeal status filter is invalid.'));
+    if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
     state.filters = { ...state.filters, status };
     state.createdAt = Date.now();
     return interaction.update(buildAppealQueuePayload(interaction.guild.id, 0, state.filters, token));
@@ -887,6 +888,7 @@ async function handleCaseAction(interaction, { fetchTarget, createConfirmation }
     const [, token, pageRaw] = id.split(':');
     const state = getAppealQueueState(token, interaction.guild.id);
     if (!state) return safeReply(interaction, ephemeralError('This appeal queue session expired. Open the queue again.'));
+    if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
     state.createdAt = Date.now();
     return interaction.update(buildAppealQueuePayload(interaction.guild.id, pageRaw, state.filters, token));
   }
@@ -1005,14 +1007,15 @@ async function submitCaseModal(interaction, { fetchTarget, refreshCasesDashboard
     const [, caseIdRaw] = id.split(':');
     const modCase = getCaseById(interaction.guild.id, Number(caseIdRaw));
     if (!modCase) return safeReply(interaction, ephemeralError('Case not found.'));
+    if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: 64 });
     const result = submitAppeal(interaction.guild.id, modCase.caseId, {
       appellantId: interaction.fields.getTextInputValue('appellant_id') || modCase.userId,
       grounds: interaction.fields.getTextInputValue('grounds'),
       requestedResolution: interaction.fields.getTextInputValue('requested_resolution'),
       source: 'staff-recorded',
     }, interaction.user?.id || null);
-    if (!result.ok) return safeReply(interaction, ephemeralError(result.error || 'Failed to submit appeal.'));
-    return safeReply(interaction, { ...buildAppealDetailPayload(result.case, result.appeal), flags: 64 });
+    if (!result.ok) return safeEditReply(interaction, ephemeralError(result.error || 'Failed to submit appeal.'));
+    return safeEditReply(interaction, { ...buildAppealDetailPayload(result.case, result.appeal), flags: 64 });
   }
   if (id.startsWith('mod_submit_case_detail:')) {
     const targetId = getTargetIdFromCustomId(id); const caseId = getCaseIdFromModal(interaction);

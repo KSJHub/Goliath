@@ -15,6 +15,7 @@ const {
   TextInputStyle,
 } = require('discord.js');
 const leveling = require('./leveling');
+const { rolePages, rolePageSelect } = require('../../../core/ui/rolePagination');
 const { isModuleEnabled } = require('../../../core/guild/guildManager');
 
 const LEADERBOARD_PAGE_SIZE = 10;
@@ -194,8 +195,9 @@ function rewardLines(section, limit = 15) {
     .join('\n');
 }
 
-function buildLevelingPanel(guild, memberDisplayName = 'Unknown User') {
+function buildLevelingPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
   const section = leveling.getSection(guild.id);
+  const roleInfo = rolePages(guild, section.managerRoleIds || [], rolePage);
   const enabled = isModuleEnabled(guild.id, 'leveling');
   const activeUsers = Object.values(section.users || {});
   const pausedUsers = Object.values(section.pausedUsers || {});
@@ -219,6 +221,7 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User') {
         ? `🟢 **${activeMultiplier.name || 'Active Multiplier'}** · ${activeMultiplier.value}×`
         : formatMultiplier(section),
       '',
+      `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`,
       '**Level Reward Roles**',
       rewardLines(section),
       '',
@@ -239,11 +242,7 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User') {
         .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setMinValues(0)
         .setMaxValues(1)),
-      row(new RoleSelectMenuBuilder()
-        .setCustomId('admin:leveling:managerRoles')
-        .setPlaceholder('Manager roles')
-        .setMinValues(0)
-        .setMaxValues(10)),
+      ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:leveling:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
       row(
         button(enabled ? 'admin:leveling:disable' : 'admin:leveling:enable', enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
         button('admin:leveling:toggleMessages', section.xpSources.message.enabled ? '💬 Messages On' : '💬 Messages Off', ButtonStyle.Secondary),
@@ -262,6 +261,8 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User') {
         button('admin:leveling:maintenance', '🧰 Maintenance', ButtonStyle.Primary),
         button('admin:leveling:trackingRules', '🚫 XP Exclusions', ButtonStyle.Secondary),
         button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary),
+        button(`admin:leveling:managerPage:${Math.max(0, roleInfo.page - 1)}`, '◀ Roles', ButtonStyle.Secondary, roleInfo.page === 0),
+        button(`admin:leveling:managerPage:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, 'Roles ▶', ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1),
       ),
     ],
   };
@@ -504,10 +505,11 @@ function buildMaintenanceLogPanel(guild, memberDisplayName = 'Unknown User') {
   };
 }
 
-function buildTrackingRulesPanel(guild, memberDisplayName = 'Unknown User') {
+function buildTrackingRulesPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
   const section = leveling.getSection(guild.id);
   const ignoredChannels = Array.isArray(section.ignoredChannelIds) ? section.ignoredChannelIds : [];
   const ignoredRoles = Array.isArray(section.ignoredRoleIds) ? section.ignoredRoleIds : [];
+  const roleInfo = rolePages(guild, ignoredRoles, rolePage);
   return {
     embeds: [new EmbedBuilder()
       .setColor(0x5865f2)
@@ -517,6 +519,7 @@ function buildTrackingRulesPanel(guild, memberDisplayName = 'Unknown User') {
         '',
         `**Ignored Channels:** ${formatChannels(ignoredChannels)}`,
         `**Ignored Roles:** ${formatRoles(ignoredRoles)}`,
+        `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`,
         '',
         'Channel exclusions apply to both message and voice XP. Role exclusions apply to the member everywhere in this server.',
       ].join('\n'))
@@ -529,13 +532,10 @@ function buildTrackingRulesPanel(guild, memberDisplayName = 'Unknown User') {
         .setMinValues(0)
         .setMaxValues(25)
         .setDefaultChannels(...ignoredChannels.slice(0, 25))),
-      row(new RoleSelectMenuBuilder()
-        .setCustomId('admin:leveling:ignoredRoles')
-        .setPlaceholder('Choose roles that must not earn XP')
-        .setMinValues(0)
-        .setMaxValues(25)
-        .setDefaultRoles(...ignoredRoles.slice(0, 25))),
-      row(button('admin:leveling', '⬅️ Back', ButtonStyle.Secondary)),
+      ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:leveling:ignoredRoles:${roleInfo.page}`, 'Choose roles that must not earn XP', roleInfo))] : []),
+      row(button('admin:leveling', '⬅️ Back', ButtonStyle.Secondary),
+        button(`admin:leveling:ignoredPage:${Math.max(0, roleInfo.page - 1)}`, '◀ Roles', ButtonStyle.Secondary, roleInfo.page === 0),
+        button(`admin:leveling:ignoredPage:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, 'Roles ▶', ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1)),
     ],
   };
 }

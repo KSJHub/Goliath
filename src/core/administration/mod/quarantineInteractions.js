@@ -291,11 +291,13 @@ async function openInvestigationAccess(interaction, targetId) {
     });
   }
 
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+
   const target = interaction.guild.members.cache.get(String(targetId))
     || await interaction.guild.members.fetch(String(targetId)).catch(() => null);
 
   if (!target) {
-    return safeReply(interaction, {
+    return safeEditReply(interaction, {
       content: '❌ The investigated member could not be found.',
       flags: 64,
     });
@@ -360,7 +362,7 @@ async function openInvestigationAccess(interaction, targetId) {
       .setDisabled(allowedIds.length === 0)
   );
 
-  return safeReply(interaction, {
+  return safeEditReply(interaction, {
     embeds: [embed],
     components: [
       new Discord.ActionRowBuilder().addComponents(channelSelect),
@@ -439,6 +441,8 @@ async function selectInvestigationAccessChannel(interaction) {
     });
   }
 
+  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+
   const channel = interaction.guild.channels.cache.get(channelId)
     || await interaction.guild.channels.fetch(channelId).catch(() => null);
 
@@ -476,7 +480,7 @@ async function selectInvestigationAccessChannel(interaction) {
       .setDisabled(allowedIds.size === 0)
   );
 
-  return interaction.update({
+  return interaction.editReply({
     components: [
       new Discord.ActionRowBuilder().addComponents(
         new Discord.ChannelSelectMenuBuilder()
@@ -504,6 +508,8 @@ async function changeInvestigationAccess(interaction, action) {
       flags: 64,
     });
   }
+
+  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
 
   const target = interaction.guild.members.cache.get(String(targetId))
     || await interaction.guild.members.fetch(String(targetId)).catch(() => null);
@@ -535,8 +541,6 @@ async function changeInvestigationAccess(interaction, action) {
       });
     }
   }
-
-  await interaction.deferUpdate();
 
   try {
     const result = await investigationAccess.updateAccess(
@@ -617,9 +621,9 @@ async function changeInvestigationAccess(interaction, action) {
       ],
     });
   } catch (error) {
-    return interaction.editReply({
+    return safeReply(interaction, {
       content: `❌ I couldn't change that investigation access: ${error.message}`,
-      components: [],
+      flags: 64,
     });
   }
 }
@@ -643,19 +647,27 @@ async function submitInvestigationRoomNote(interaction, targetId) {
   if (!canUseInvestigationRoomControls(interaction, snapshot)) return safeReply(interaction, { content: '❌ Only the lead investigator or server owner can add room notes.', flags: 64 });
   const note = fieldValue(interaction, 'note').slice(0, 1000);
   if (!note) return safeReply(interaction, { content: '❌ The note cannot be empty.', flags: 64 });
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
   if (snapshot.caseId) {
     recordCaseAudit({ guildId: interaction.guild.id, caseId: snapshot.caseId, actorId: interaction.user.id, event: 'case.investigation.room_note_added', before: null, after: { note }, metadata: { targetId: String(targetId), interviewChannelId: snapshot.interviewChannelId || null, staffOnly: true } });
   }
   recordModerationSystemEvent({ interaction, event: 'moderation.investigation.room_note_added', action: 'investigation_note', targetId: String(targetId), after: { note }, metadata: { caseId: snapshot.caseId || null, interviewChannelId: snapshot.interviewChannelId || null } });
-  return safeReply(interaction, { content: `✅ Staff note added${snapshot.caseId ? ` to **Case #${snapshot.caseId}**` : ''}.`, flags: 64 });
+  return safeEditReply(interaction, { content: `✅ Staff note added${snapshot.caseId ? ` to **Case #${snapshot.caseId}**` : ''}.`, flags: 64 });
 }
 
 async function removeQuarantine(interaction, targetId) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+  }
+
   const target = await resolveTarget(interaction, targetId, 'remove_quarantine');
-  if (!target) return true;
+  if (!target) {
+    await safeEditReply(interaction, { content: '❌ Unable to resolve or authorise the member for isolation release.', flags: 64 });
+    return true;
+  }
   const snapshot = currentSnapshot(interaction, target.id);
   if (!snapshot) {
-    return safeReply(interaction, { content: `⚠️ **${target.user.tag}** is not currently isolated.`, flags: 64 });
+    return safeEditReply(interaction, { content: `⚠️ **${target.user.tag}** is not currently isolated.`, flags: 64 });
   }
   const mode = getQuarantineMode(snapshot);
 
@@ -668,14 +680,10 @@ async function removeQuarantine(interaction, targetId) {
       reason: 'Full Security Isolation release is only available from /admin.',
       metadata: { containmentMode: mode, caseId: snapshot.caseId || null },
     });
-    return safeReply(interaction, {
+    return safeEditReply(interaction, {
       content: '🚨 **Full Security Isolation can only be cleared from `/admin` by the server owner.**',
       flags: 64,
     });
-  }
-
-  if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
   }
 
   const result = await restoreQuarantinedMember(interaction.guild, target, {

@@ -240,7 +240,9 @@ function normalizeAutomodConfig(config = {}) {
     attachments: {
       enabled: normalizeBoolean(safeConfig.attachments?.enabled, false),
       maxAttachments: normalizeNumber(safeConfig.attachments?.maxAttachments, 5, 1, 10),
-      blockedExtensions: normalizeStringArray(safeConfig.attachments?.blockedExtensions).map((item) => item.replace(/^\./, '')),
+      blockedExtensions: [...new Set(normalizeStringArray(safeConfig.attachments?.blockedExtensions)
+        .map((item) => item.replace(/^\./, ''))
+        .filter((item) => /^[a-z0-9]{1,12}$/.test(item)))],
       risk: normalizeNumber(safeConfig.attachments?.risk, 20, 0, 100),
       timeoutMinutes: normalizeNumber(safeConfig.attachments?.timeoutMinutes, 10, 1, 40320),
       actions: normalizeActions(safeConfig.attachments?.actions, ['delete']),

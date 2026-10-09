@@ -2328,6 +2328,12 @@ async function handleInteraction(i) {
     return respond(i, buildSectionPanel(i, section));
   }
 
+  // Compatibility actions share this panel's guild-management permission guard.
+  // Handle them before reporting an unknown control, rather than letting the
+  // central dispatcher time out on legacy creator and diagnostic buttons.
+  const creatorCompat = require('./socialStudioCreatorActionCompat');
+  if (await creatorCompat.handle(i)) return true;
+
   throw new Error(
     `Unknown Social Studio interaction: ${id}`,
   );
