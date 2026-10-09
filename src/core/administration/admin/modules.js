@@ -268,9 +268,15 @@ function updateRoleSelection(guild, moduleKey, fieldKeyName, values = []) { cons
 async function handleModuleAdminInteraction(interaction) {
   const id = String(interaction.customId || '');
   const name = getMemberDisplayName(interaction);
-  if (id === 'admin:modules') return safeUpdate(interaction, buildModuleListPanel(name));
+  if (id === 'admin:modules') {
+    if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+    return safeUpdate(interaction, buildModuleListPanel(name));
+  }
   const studio = id.match(/^admin:studio:([a-zA-Z0-9_-]+)$/);
-  if (studio && interaction.isButton?.()) return safeUpdate(interaction, buildStudioPanel(studio[1], name));
+  if (studio && interaction.isButton?.()) {
+    if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+    return safeUpdate(interaction, buildStudioPanel(studio[1], name));
+  }
   if (id.startsWith('admin:module:emojis:')) {
     const emojiPanel = require('../../../modules/utilityStudio/emojis/emojisPanel');
     return emojiPanel.handleDiscordInteraction?.(interaction) || false;
