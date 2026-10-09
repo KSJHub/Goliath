@@ -185,17 +185,23 @@ function managerView(interaction) {
   const selectedScore = Math.max(0, Number(selectedStats.active || 0) + Number(selectedStats.bonus || 0));
   const memberConfirm = selected && state.memberConfirm?.userId === selected.inviterId && state.memberConfirm.until > Date.now() ? state.memberConfirm : null;
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('👥 Member Invite Manager')
-    .setDescription('Manage personal invite links and member referral scores.')
+    .setDescription('Administrator controls for members’ personal referral links and individual invite scores.')
     .addFields(
       { name: 'Personal Links', value: String(links.length), inline: true },
       { name: 'Tracked Joins', value: String(Number(section.analytics?.tracked || 0)), inline: true },
       { name: 'Member Invites', value: section.settings.memberInviteTemplate.enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
     );
   if (!links.length) {
-    embed.addFields({ name: 'No member invite links yet', value: 'Members can create their personal links through **My Invite Link** on the public panel. They will appear here automatically.' });
+    embed.addFields(
+      { name: 'ℹ️ What is Member Invite Manager?', value: 'Administrators can manage members’ permanent personal referral links, review invite activity and control individual referral scores. Members create their links using **My Invite Link** on the public community panel; those links appear here automatically.' },
+      { name: '🛠️ Management Tools', value: '**Verify Link** — check a member’s invite with Discord.\n**Send Invite DM** — resend their invite message.\n**Remove Member Link** — remove their link without resetting referral history.\n**Reset Member Score** — clear their individual score while keeping the link.' },
+      { name: '📭 No Personal Invites Yet', value: 'No members have generated a personal invite link. Once someone creates one, their link and management options will appear here.' },
+    );
   } else if (selected) {
+    embed.addFields({ name: 'ℹ️ Member Management', value: 'Verify or resend this member’s link, or use the confirmed removal and score-reset actions below.' });
     embed.addFields({ name: 'Selected Member', value: `<@${selected.inviterId}>\n[Personal Invite](${officialUrl(selected.code)}) · ${selected.uses || 0} recorded uses\n**Referral Score:** ${selectedScore}` });
   } else {
+    embed.addFields({ name: 'ℹ️ Member Management', value: 'Select a member to verify or resend their personal invite, remove their link or reset their individual score.' });
     const list = links.slice(0, state.displayLimit || links.length).map((link, index) => `${index + 1}. <@${link.inviterId}> — ${link.uses || 0} recorded uses`).join('\n');
     embed.addFields({ name: 'Member Links', value: list.slice(0, 1024) });
   }
