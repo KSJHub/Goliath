@@ -97,6 +97,9 @@ async function publishResumedChallenge(interaction, userId, resumed) {
 async function handleMemberAction(interaction, parsed) {
   if (clean(interaction.user?.id) !== clean(parsed.userId)) { await interaction.reply({ content: '❌ This Verification challenge belongs to another member.', flags: MessageFlags.Ephemeral }); return true; }
   const state = runtime.sessionState(interaction.guildId, parsed.userId); const challenge = state.activeChallenge;
+  const session = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
+  const config = verificationStore.getVerificationSection(interaction.guildId);
+  if (Number(session.securityConfigRevision || 0) !== Number(config.configRevision || 1)) { await interaction.reply({ content: '❌ Verification settings changed. Start Verification again for the updated checks.', flags: MessageFlags.Ephemeral }); return true; }
   if (!challenge || challenge.challengeId !== parsed.challengeId || challenge.status !== 'pending' || ['verified','quarantined','rejected','failed','timed_out'].includes(state.state)) { await interaction.reply({ content: '❌ This Verification challenge is no longer active.', flags: MessageFlags.Ephemeral }); return true; }
   const recovery = runtime.recover(interaction.guildId, parsed.userId);
   if (recovery?.changed && runtime.sessionState(interaction.guildId, parsed.userId).activeChallenge?.status !== 'pending') { await interaction.reply({ content: '❌ This Verification challenge has expired. Start Verification again.', flags: MessageFlags.Ephemeral }); return true; }
@@ -110,7 +113,7 @@ async function handleAnswerModal(interaction, parsed, manager) {
   const current = runtime.sessionState(interaction.guildId, parsed.userId);if (!current.activeChallenge || current.activeChallenge.challengeId !== parsed.challengeId || current.activeChallenge.status !== 'pending' || ['verified','quarantined','rejected','failed','timed_out'].includes(current.state)) { await interaction.reply({ content: '❌ This Verification challenge is no longer active.', flags: MessageFlags.Ephemeral }); return true; }const result = runtime.submitAnswer(interaction.guildId, interaction.user.id, parsed.userId, parsed.challengeId, answer);
   if (!result.ok) {
     const failure = await recordTerminalFailure(interaction, parsed, result, manager);
-    const message = failure?.quarantined ? '⛔ Verification failed and your account has been moved to quarantine for staff review.' : result.reason === 'expired' ? '⏱️ This challenge expired. Start Verification again.' : result.complete ? '❌ That answer was incorrect and this challenge has ended.' : '❌ That answer was incorrect. Try again.';
+    const message = failure?.quarantined ? '⛔ Verification failed and your account has been moved to quarantine for staff review.' : result.reason === 'security_configuration_changed' ? '❌ Verification settings changed. Start Verification again.' : result.reason === 'expired' ? '⏱️ This challenge expired. Start Verification again.' : result.complete ? '❌ That answer was incorrect and this challenge has ended.' : '❌ That answer was incorrect. Try again.';
     await interaction.reply({ content: message, flags: MessageFlags.Ephemeral }); return true;
   }
   const resumed = await maybeResumeFlow(interaction, result, manager);
