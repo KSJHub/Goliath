@@ -1139,7 +1139,8 @@ async function handleBuilderInteractions(i) {
   // Never recreate the retired UI: acknowledge the stale control by routing
   // the user directly into the current Media Manager.
   if (i.isButton?.() && customId === 'embed:header-type-cycle') {
-    await i.update({
+    if (!i.deferred && !i.replied) await i.deferUpdate();
+    await i.editReply({
       ...panel.buildMediaManagerPanel(i, who(i)),
       attachments: [],
     });
@@ -2211,7 +2212,7 @@ async function handleInteraction(interaction) {
 
     return true;
   }
-  if (interaction.isButton?.() && customId === 'embed:actions') { await interaction.update(panel.buildActionsPanel(interaction)); return true; }
+  if (interaction.isButton?.() && customId === 'embed:actions') { if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate(); await interaction.editReply(panel.buildActionsPanel(interaction)); return true; }
   if ((customId === 'embed:readiness' || customId === 'embed:readiness-refresh') && interaction.isButton?.()) return showReadiness(interaction);
   if (customId === 'embed:readiness-fix' && interaction.isButton?.()) return routeReadinessFix(interaction);
   if (DELIVERY_ACTIONS.has(customId)) {
