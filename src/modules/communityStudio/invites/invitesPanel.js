@@ -136,30 +136,32 @@ function adminView(interaction) {
   const resetArmed = state.resetConfirmUntil > Date.now();
   const regenerateArmed = state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now();
   const deleteArmed = state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now();
-  const linkCount = invites.listInviteLinks(interaction.guildId).filter((link) => link.personal).length;
+  const links = invites.listInviteLinks(interaction.guildId);
+  const linkCount = links.filter((link) => link.personal).length;
   return {
     embeds: [new EmbedBuilder().setColor(enabled ? 0x5865F2 : 0xED4245).setTitle('⚙️ Invite Studio Settings')
-      .setDescription('Manage referral links, check invite health and maintain the server’s official invite. All new links share the official destination and optional join roles; links never expire and have unlimited uses.')
+      .setDescription('Manage invitation links, member referrals and maintenance.')
       .addFields(
         { name: 'Module', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-        { name: 'Member Referrals', value: `${memberEnabled ? '🟢 Enabled' : '🔴 Disabled'} · ${linkCount} personal links`, inline: true },
+        { name: 'Referrals', value: memberEnabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
         { name: 'Official Invite', value: configured ? 'Configured' : 'Not configured', inline: true },
-        { name: '🔧 Maintenance', value: '**Invite Manager** — review individual member links.\n**Health** — inspect invite configuration and tracking.\n**Repair** — attempt to restore missing or broken invite resources.', inline: false },
-        { name: '⚠️ Advanced Actions', value: '**Regenerate** — replace the official invite URL (the old link may stop working).\n**Delete** — remove the official invite.\n**Reset Leaderboard** — clear tracked referral scores.\n**Restore Defaults** — restore public panel defaults.', inline: false },
+        { name: 'Personal Links', value: String(linkCount), inline: true },
+        { name: '🔧 Management', value: 'Manage links, check system health and repair issues.', inline: false },
+        { name: '⚠️ Advanced Controls', value: 'Replace or delete the official invite, reset scores or restore public panel defaults.', inline: false },
         ...(resetArmed ? [{ name: '⚠️ Reset Confirmation', value: 'Press Confirm Reset within 30 seconds to clear leaderboard scores.', inline: false }] : []),
-        ...(regenerateArmed ? [{ name: '⚠️ Regeneration Confirmation', value: 'Press Confirm Regenerate within 30 seconds to replace the official invite.', inline: false }] : []),
+        ...(regenerateArmed ? [{ name: '⚠️ Replacement Confirmation', value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false }] : []),
         ...(deleteArmed ? [{ name: '⚠️ Delete Confirmation', value: 'Press Confirm Delete within 30 seconds to delete the official invite.', inline: false }] : []),
       )],
     components: [
-      row(button('invites:invite-manager', 'Manage Member Links', ButtonStyle.Primary),
-        button('invites:health', 'Health'),
-        button('invites:repair', 'Repair'),
-        button('invites:member-enabled', memberEnabled ? 'Disable Referrals' : 'Enable Referrals', memberEnabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button('invites:toggle', enabled ? 'Disable Module' : 'Enable Module', enabled ? ButtonStyle.Secondary : ButtonStyle.Success)),
-      row(button('invites:official-regenerate', regenerateArmed ? 'Confirm Regenerate' : 'Regenerate Invite', regenerateArmed ? ButtonStyle.Danger : ButtonStyle.Secondary, !configured),
-        button('invites:official-delete', deleteArmed ? 'Confirm Delete' : 'Delete Invite', ButtonStyle.Danger, !configured),
-        button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? 'Confirm Reset' : 'Reset Leaderboard', ButtonStyle.Danger),
-        button('invites:default-panel', 'Restore Panel Defaults')),
+      row(button('invites:invite-manager', 'Manage Links', ButtonStyle.Primary),
+        button('invites:health', 'System Health'),
+        button('invites:repair', 'Repair Invites'),
+        button('invites:member-enabled', memberEnabled ? 'Disable Referrals' : 'Enable Referrals', ButtonStyle.Secondary),
+        button('invites:toggle', enabled ? 'Disable Studio' : 'Enable Studio', ButtonStyle.Secondary)),
+      row(button('invites:official-regenerate', regenerateArmed ? 'Confirm Replace' : 'Replace Invite', ButtonStyle.Secondary, !configured),
+        button('invites:default-panel', 'Reset Panel', ButtonStyle.Secondary),
+        button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm', resetArmed ? 'Confirm Reset' : 'Reset Scores', ButtonStyle.Secondary),
+        button('invites:official-delete', deleteArmed ? 'Confirm Delete' : 'Delete Invite', ButtonStyle.Secondary, !configured)),
       row(button('invites:official-settings', '⬅️ Back')),
     ],
   };
