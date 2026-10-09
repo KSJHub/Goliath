@@ -228,7 +228,7 @@ module.exports={
       const isTicketRuntimeInteraction=customId.startsWith('ticket_')||customId.startsWith('goliath_ticket_');
       if(isTicketRuntimeInteraction&&interaction.guildId&&guildManager.isModuleEnabled?.(interaction.guildId,'tickets')===false){await interaction.reply({content:'❌ Tickets is currently disabled for this server.',flags:MessageFlags.Ephemeral});return;}
       if(await callHandler(userPanelInteractions,'handleUserPanelInteraction',interaction))return;
-      if(await callHandler(restoreRequestManager,'handleRestoreRequestInteraction',interaction))return;
+      if(await callHandler(restoreRequestManager,'handleRestoreButton',interaction))return;
       if (customId === 'admin:embed' || customId.startsWith('embed:')) {
         if (!embedStudio || typeof embedStudio.handleInteraction !== 'function') throw new Error('Embed Studio interaction handler is unavailable.');
         if (!await callHandler(embedStudio, 'handleInteraction', interaction)) throw new Error(`Embed Studio did not handle ${customId}.`);
@@ -240,7 +240,7 @@ module.exports={
       if(startsWith(interaction,'birthdays:user:')){if(!await callHandler(birthdaysPanel,'handleUser',interaction))throw new Error(`Birthdays member controls did not handle ${customId}.`);return;}
       if(startsWith(interaction,'admin:invites')||startsWith(interaction,'invites:')){const invites=loadInvitesAdminPanel();if(!invites)throw invitesAdminPanelError||new Error('Invite Studio handler unavailable.');await invites.handleInviteStudioInteraction(interaction);return;}
       if((startsWith(interaction,'admin:social')||startsWith(interaction,'social:'))&&await callHandler(socialAdminPanel,'handleInteraction',interaction))return;
-      if(startsWith(interaction,'social:creator:')){await callHandler(socialCreatorActionCompat,'handleCreatorInteraction',interaction);return;}
+      if(startsWith(interaction,'social:creator:')){if(!await callHandler(socialCreatorActionCompat,'handle',interaction))throw new Error(`Social creator controls did not handle ${customId}.`);return;}
       if(startsWith(interaction,'admin:autoRoles')&&await callHandler(autorolesPanel,'handleAutoRolesInteraction',interaction))return;
       if(startsWith(interaction,'admin:temporaryRoles')&&await callHandler(temporaryRolesPanel,'handleTemporaryRolesInteraction',interaction))return;
       if(startsWith(interaction,'admin:timedRoles')&&await callHandler(timedRolesPanel,'handleTimedRolesInteraction',interaction))return;
