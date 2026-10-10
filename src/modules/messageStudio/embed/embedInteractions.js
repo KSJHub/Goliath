@@ -1946,6 +1946,36 @@ async function handleLegacyInteraction(i) {
     if (customId === 'embed:button-select') { panel.saveSession(i, { ...state, selectedButtonIndex: Number(i.values[0]) }); await legacyReplyOrUpdate(i, panel.buildButtonsPanel(i, name)); return true; }
   }
 
+  if (i.isButton?.() && (customId === 'embed:channel-prev' || customId === 'embed:channel-next')) {
+    // Match the 24 channel options displayed in the destination dropdown.
+    const channels = Array.from(i.guild?.channels?.cache?.values?.() || [])
+      .filter(channel => channel.type === 0 || channel.type === 5)
+      .sort((a, b) => (Number(a.rawPosition ?? a.position ?? 0) - Number(b.rawPosition ?? b.position ?? 0))
+        || String(a.name || '').localeCompare(String(b.name || '')))
+      .slice(0, 24);
+    if (!channels.length) {
+      await i.reply({ content: '❌ No text or announcement channels are available.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    const current = channels.findIndex(channel => channel.id === state.channelId);
+    const step = customId === 'embed:channel-next' ? 1 : -1;
+    const nextIndex = current < 0 ? (step > 0 ? 0 : channels.length - 1)
+      : (current + step + channels.length) % channels.length;
+    const channel = channels[nextIndex];
+    const access = await validateChannelAccess(i.guild, channel.id, [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.EmbedLinks,
+    ], { scope: 'embed.destination' });
+    if (!access.ok) {
+      await i.reply({ content: panel.trim(access.message || 'Goliath cannot deploy to that channel.', 1800), flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    panel.markUnsaved(i, { ...state, channelId: channel.id });
+    await legacyReplyOrUpdate(i, panel.buildEditorPanel(i, name));
+    return true;
+  }
+
   if (
     i.isStringSelectMenu?.() &&
     customId === 'embed:channel'
