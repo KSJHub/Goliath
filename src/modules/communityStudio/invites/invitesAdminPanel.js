@@ -269,10 +269,16 @@ async function handleInviteStudioInteraction(interaction) {
     try {
       state.vanityStatus = await invites.syncVanityStatus(interaction.guild);
       const payload = panel.buildPublicPayload(interaction.guildId);
-      // Apply the current saved colour to the exact embed sent in the preview response.
-      const savedColor = invites.getSection(interaction.guildId).settings.publicPanel.color;
-      payload.embeds[0].setColor(savedColor);
-      await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
+      // Production preview: use the approved gold directly and expose the outgoing
+      // colour in the response so the live Discord payload can be verified.
+      payload.embeds[0].setColor(0xD4AF37);
+      const outgoingColor = payload.embeds[0].toJSON().color;
+      console.info('[Invite Studio Preview]', interaction.guildId, 'embed colour:', outgoingColor.toString(16).padStart(6, '0'));
+      await interaction.reply({
+        ...payload,
+        content: 'Preview embed colour: #' + outgoingColor.toString(16).padStart(6, '0').toUpperCase(),
+        flags: MessageFlags.Ephemeral,
+      });
     } catch (error) {
       await interaction.reply({ content: `❌ Preview unavailable: ${String(error.message || error).slice(0, 1700)}`, flags: MessageFlags.Ephemeral });
     }
