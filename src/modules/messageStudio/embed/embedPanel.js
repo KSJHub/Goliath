@@ -1439,7 +1439,8 @@ function buildPanelsPanel(i, who) {
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("embed:settings")
-          .setLabel("⚙️ Settings")
+          .setLabel("Settings")
+          .setEmoji("⚙️")
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("embed:helpers")
@@ -1482,7 +1483,8 @@ function buildFieldsPanel(i, who) {
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("embed:settings")
-        .setLabel("⚙️ Settings")
+        .setLabel("Settings")
+        .setEmoji("⚙️")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
@@ -1619,7 +1621,8 @@ function buildFieldsManagerPanel(interaction) {
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("embed:settings")
-        .setLabel("⚙️ Settings")
+        .setLabel("Settings")
+        .setEmoji("⚙️")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
@@ -1663,7 +1666,8 @@ function buildButtonsPanel(i, who) {
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("embed:settings")
-        .setLabel("⚙️ Settings")
+        .setLabel("Settings")
+        .setEmoji("⚙️")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
@@ -1778,7 +1782,8 @@ function buildButtonsManagerPanel(interaction) {
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("embed:settings")
-        .setLabel("⚙️ Settings")
+        .setLabel("Settings")
+        .setEmoji("⚙️")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
@@ -2440,7 +2445,8 @@ function buildHelpersPanel(i) {
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("embed:settings")
-          .setLabel("⚙️ Settings")
+          .setLabel("Settings")
+          .setEmoji("⚙️")
           .setStyle(ButtonStyle.Secondary),
       )
     ],
@@ -2751,7 +2757,8 @@ function buildContentManagerPanel(interaction) {
 
         new ButtonBuilder()
           .setCustomId("embed:settings")
-          .setLabel("⚙️ Settings")
+          .setLabel("Settings")
+          .setEmoji("⚙️")
           .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
@@ -2795,7 +2802,8 @@ function buildAppearancePanel(interaction) {
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("embed:settings")
-          .setLabel("⚙️ Settings")
+          .setLabel("Settings")
+          .setEmoji("⚙️")
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId("embed:helpers")
