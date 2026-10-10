@@ -281,17 +281,20 @@ function buildPublicPayload(guildId, sourceSection = null) {
   const lines = entries.length
     ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** referral${entry.score === 1 ? '' : 's'}`).join('\n')
     : 'No referrals yet — be the first on the board!';
-  const description = panel.description.replace(/\n\n🏆 \*\*Share your link, build your referrals and compete for the top spot!\*\*/g, '');
+  const description = [
+    '**Share your link, build your referrals and compete for the top spot!**',
+    '',
+    '**Your invites. Your referrals. Your place on the leaderboard.**',
+  ].join('\n');
   return {
     embeds: [new EmbedBuilder().setColor(0xD4AF37).setTitle(panel.title)
       .setDescription(description)
       .addFields(
         { name: '🔗 Official Server Invite', value: `**[Join the community](${url})** · ${url}`, inline: false },
-        { name: '🏆 Share your link, build your referrals and compete for the top spot!', value: '\u200b', inline: false },
         { name: '💎 Your Personal Invite', value: memberEnabled ? 'Select **My Invite Link** to get your own referral link, share it with friends and climb the rankings. Use **My Stats** to track your progress.' : 'Personal invite creation is currently paused. Your stats and the leaderboard remain available.', inline: false },
         { name: `🏆 Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
       )
-      .setFooter({ text: panel.footer }).setTimestamp()],
+      .setFooter({ text: '💎 Goliath Invites · Leaderboard updates every 2 hours' }).setTimestamp()],
     components: [row(
       button('invites:member-personal', '🔗 My Invite Link', ButtonStyle.Primary, !memberEnabled),
       button('invites:member-profile', '📊 My Stats'),
