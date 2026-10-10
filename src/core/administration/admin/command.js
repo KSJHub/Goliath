@@ -95,7 +95,7 @@ function buildSettingsPanel(interaction) {
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ Goliath Settings').setDescription('General server-level Goliath configuration and administration defaults.')
     .addFields({ name: 'Server', value: `${interaction.guild.name}\n\`${interaction.guild.id}\``, inline: true }, { name: 'Authority', value: authority.configured ? 'Configured ✅' : 'Legacy fallback ⚠️', inline: true }, { name: 'Log Channels', value: `${configuredLogs}/5 configured`, inline: true })
     .setFooter({ text: `Requested by ${memberDisplayName(interaction)}` }).setTimestamp();
-  return { embeds: [embed], components: [navRow(SETTINGS_BACK_ID)] };
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(SETTINGS_BACK_ID).setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary))] };
 }
 
 function buildSecurityHub(interaction) {
