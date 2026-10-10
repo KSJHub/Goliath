@@ -1806,7 +1806,7 @@ function buildButtonOptionsPanel(interaction) {
   ];
   if (roleActions.has(action)) details.push(`**Role:** ${buttonManagerRoleDisplay(interaction, item.actionValue)}`);
   if (action === "reply") details.push(`**Reply:** ${item.actionValue ? trim(buttonResolved(item.actionValue, interaction), 900) : "Not configured"}`);
-  details.push("", "Choose the action and row placement below. Auto placement fills the first available row. A Discord button row can never contain more than 5 buttons.");
+  details.push("", "Choose a button style or select 🔗 Link to configure its optional URL. Auto placement fills the first available row. Discord allows at most 5 buttons per row.");
 
   const rows = [
     new ActionRowBuilder().addComponents(
@@ -1814,6 +1814,7 @@ function buildButtonOptionsPanel(interaction) {
       new ButtonBuilder().setCustomId("embed:button-style:secondary").setLabel("⚪ Secondary").setStyle(style === "secondary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("embed:button-style:success").setLabel("🟢 Success").setStyle(style === "success" ? ButtonStyle.Primary : ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("embed:button-style:danger").setLabel("🔴 Danger").setStyle(style === "danger" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("embed:button-link-edit").setLabel("🔗 Link").setStyle(item.url ? ButtonStyle.Primary : ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId("embed:button-action-select").setPlaceholder("Choose button action").setMinValues(1).setMaxValues(1).addOptions([
