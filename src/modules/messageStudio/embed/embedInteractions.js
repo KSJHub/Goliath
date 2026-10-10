@@ -1256,7 +1256,23 @@ async function handleCoreInteraction(i) {
   const customId = String(i.customId || '');
   const state = panel.getSession(i);
 
+  if (customId === 'embed:settings-back' && i.isButton?.()) {
+    const previous = panel.getSession(i).settingsReturnTo;
+    const name = panel.memberName(i);
+    const destination = previous === 'studio'
+      ? panel.buildEditorPanel(i, name)
+      : panel.buildBuilderPanel(i, name);
+    await i.update({ ...destination, attachments: [] });
+    return true;
+  }
+
   if (customId === 'embed:settings' && i.isButton?.()) {
+    const componentIds = (i.message?.components || []).flatMap(row =>
+      (row.components || []).map(component => component.customId || component.custom_id || '')
+    );
+    // The main studio has a destination selector; builder screens do not.
+    const settingsReturnTo = componentIds.includes('embed:channel') ? 'studio' : 'builder';
+    panel.saveSession(i, { ...state, settingsReturnTo });
     // Settings is a control-only page. Explicitly clear attachments from the
     // previous Builder/Media response so an old preview cannot remain on the
     // edited Discord message.
