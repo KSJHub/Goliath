@@ -283,7 +283,6 @@ function buildPublicPayload(guildId, sourceSection = null) {
     : 'No referrals yet — be the first on the board!';
   const description = [
     '**Share your link, build your referrals and compete for the top spot!**',
-    '',
     '**Your invites. Your referrals. Your place on the leaderboard.**',
     '​',
   ].join('\n');
