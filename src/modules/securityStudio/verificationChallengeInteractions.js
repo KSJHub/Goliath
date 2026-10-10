@@ -146,6 +146,21 @@ async function handleStaffAction(interaction, parsed, manager) {
     await interaction.reply({ content: 'Verification member is unavailable. Staff action was not recorded; check whether the member has left the server.', flags: MessageFlags.Ephemeral });
     return true;
   }
+  if (parsed.action === 'quarantine') {
+    const configured = section.settings?.roles?.quarantine || [];
+    const ids = [...new Set((Array.isArray(configured) ? configured : []).map(clean).filter(Boolean))];
+    if (!ids.length) {
+      await interaction.reply({ content: 'Quarantine roles are not configured. Staff action was not recorded.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    for (const roleId of ids) {
+      const role = interaction.guild.roles.cache.get(roleId) || await interaction.guild.roles.fetch(roleId).catch(() => null);
+      if (!role || !role.editable) {
+        await interaction.reply({ content: 'A configured Quarantine role is missing or cannot be managed by Goliath. Staff action was not recorded.', flags: MessageFlags.Ephemeral });
+        return true;
+      }
+    }
+  }
   const result = runtime.resolveStaffAction(interaction.guildId, parsed.userId, parsed.challengeId, interaction.user.id, parsed.action);
   if (!result.complete || !result.action) { await interaction.reply({ content: `❌ Staff action failed: ${result.reason || 'challenge unavailable'}.`, flags: MessageFlags.Ephemeral }); return true; }
   let resumed = null;
