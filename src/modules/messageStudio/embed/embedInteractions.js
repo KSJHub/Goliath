@@ -1256,7 +1256,23 @@ async function handleCoreInteraction(i) {
   const customId = String(i.customId || '');
   const state = panel.getSession(i);
 
+  if (customId === 'embed:settings-back' && i.isButton?.()) {
+    const previous = panel.getSession(i).settingsReturnTo;
+    const name = panel.memberName(i);
+    const destination = previous === 'studio'
+      ? panel.buildEditorPanel(i, name)
+      : panel.buildBuilderPanel(i, name);
+    await i.update({ ...destination, attachments: [] });
+    return true;
+  }
+
   if (customId === 'embed:settings' && i.isButton?.()) {
+    const componentIds = (i.message?.components || []).flatMap(row =>
+      (row.components || []).map(component => component.customId || component.custom_id || '')
+    );
+    // The main studio has a destination selector; builder screens do not.
+    const settingsReturnTo = componentIds.includes('embed:channel') ? 'studio' : 'builder';
+    panel.saveSession(i, { ...state, settingsReturnTo });
     // Settings is a control-only page. Explicitly clear attachments from the
     // previous Builder/Media response so an old preview cannot remain on the
     // edited Discord message.
@@ -1944,6 +1960,18 @@ async function handleLegacyInteraction(i) {
     if (customId === 'embed:field-layout') { panel.markUnsaved(i, { ...state, fieldLayout: i.values[0] }); await legacyReplyOrUpdate(i, panel.buildFieldsPanel(i, name)); return true; }
     if (customId === 'embed:field-select') { panel.saveSession(i, { ...state, selectedFieldIndex: Number(i.values[0]) }); await legacyReplyOrUpdate(i, panel.buildFieldsPanel(i, name)); return true; }
     if (customId === 'embed:button-select') { panel.saveSession(i, { ...state, selectedButtonIndex: Number(i.values[0]) }); await legacyReplyOrUpdate(i, panel.buildButtonsPanel(i, name)); return true; }
+  }
+
+  if (i.isButton?.() && (customId === 'embed:channel-prev' || customId === 'embed:channel-next')) {
+    const channelCount = Array.from(i.guild?.channels?.cache?.values?.() || [])
+      .filter(channel => channel.type === 0 || channel.type === 5).length;
+    const pageCount = Math.max(1, Math.ceil(channelCount / 24));
+    const currentPage = Math.min(pageCount - 1, Math.max(0, Number(state.channelPage) || 0));
+    const step = customId === 'embed:channel-next' ? 1 : -1;
+    const channelPage = Math.min(pageCount - 1, Math.max(0, currentPage + step));
+    panel.saveSession(i, { ...state, channelPage });
+    await legacyReplyOrUpdate(i, panel.buildEditorPanel(i, name));
+    return true;
   }
 
   if (

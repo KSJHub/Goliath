@@ -296,6 +296,7 @@ function defaultState() {
     template: "custom",
     selectedPreset: null,
     channelId: null,
+    channelPage: 0,
     selectedPanelIndex: 0,
     panels: [p],
     allowUserPing: false,
@@ -863,7 +864,7 @@ function buildEditorPanel(i, who = "Unknown User") {
                   String(b.name || "")
                 );
               })
-              .slice(0, 24)
+              .slice(Math.max(0, Number(s.channelPage) || 0) * 24, (Math.max(0, Number(s.channelPage) || 0) + 1) * 24)
               .map((channel) => ({
                 label: String(
                   channel.name || channel.id
@@ -937,12 +938,18 @@ function buildEditorPanel(i, who = "Unknown User") {
           ? [
               new ButtonBuilder()
                 .setCustomId("embed:update-existing")
-                .setLabel("Update Existing")
+                .setLabel("Update")
                 .setEmoji("♻️")
                 .setStyle(ButtonStyle.Success)
                 .setDisabled(!canDeploy),
             ]
-          : [])
+          : []),
+
+        new ButtonBuilder()
+          .setCustomId("embed:readiness")
+          .setLabel("Review")
+          .setEmoji("📋")
+          .setStyle(ButtonStyle.Secondary)
       ),
 
       /*
@@ -955,10 +962,16 @@ function buildEditorPanel(i, who = "Unknown User") {
           .setEmoji("⬅️")
           .setStyle(ButtonStyle.Secondary),
 
+        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+
         new ButtonBuilder()
-          .setCustomId("embed:settings")
-          .setLabel("Settings")
-          .setEmoji("⚙️")
+          .setCustomId("embed:channel-prev")
+          .setLabel("◀ Chan")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:channel-next")
+          .setLabel("Chan ▶")
           .setStyle(ButtonStyle.Secondary)
       ),
     ],
@@ -1420,10 +1433,7 @@ function buildPanelsPanel(i, who) {
           .setCustomId("embed:builder")
           .setLabel("⬅️ Back")
           .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId("embed:settings")
-          .setLabel("⚙️ Settings")
-          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
         new ButtonBuilder()
           .setCustomId("embed:helpers")
           .setLabel("📖 Variables")
@@ -1463,10 +1473,7 @@ function buildFieldsPanel(i, who) {
         .setCustomId("embed:builder")
         .setLabel("⬅️ Back")
         .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId("embed:settings")
-        .setLabel("⚙️ Settings")
-        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
         .setLabel("📖 Variables")
@@ -1600,10 +1607,7 @@ function buildFieldsManagerPanel(interaction) {
         .setCustomId("embed:builder")
         .setLabel("⬅️ Back")
         .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId("embed:settings")
-        .setLabel("⚙️ Settings")
-        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
         .setLabel("📖 Variables")
@@ -1644,10 +1648,7 @@ function buildButtonsPanel(i, who) {
         .setCustomId("embed:builder")
         .setLabel("⬅️ Back")
         .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId("embed:settings")
-        .setLabel("⚙️ Settings")
-        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
         .setLabel("📖 Variables")
@@ -1759,10 +1760,7 @@ function buildButtonsManagerPanel(interaction) {
         .setCustomId("embed:builder")
         .setLabel("⬅️ Back")
         .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId("embed:settings")
-        .setLabel("⚙️ Settings")
-        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
         .setLabel("📖 Variables")
@@ -2388,7 +2386,7 @@ function buildSettingsPanel(interaction) {
 
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId("embed:builder")
+          .setCustomId("embed:settings-back")
           .setLabel("Back")
           .setEmoji("⬅️")
           .setStyle(ButtonStyle.Secondary),
@@ -2421,10 +2419,7 @@ function buildHelpersPanel(i) {
           .setCustomId("embed:builder")
           .setLabel("⬅️ Back")
           .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId("embed:settings")
-          .setLabel("⚙️ Settings")
-          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
       )
     ],
   };
@@ -2732,10 +2727,7 @@ function buildContentManagerPanel(interaction) {
           .setLabel("⬅️ Back")
           .setStyle(ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId("embed:settings")
-          .setLabel("⚙️ Settings")
-          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
 
         new ButtonBuilder()
           .setCustomId("embed:helpers")
@@ -2776,10 +2768,7 @@ function buildAppearancePanel(interaction) {
           .setCustomId("embed:builder")
           .setLabel("⬅️ Back")
           .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId("embed:settings")
-          .setLabel("⚙️ Settings")
-          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
         new ButtonBuilder()
           .setCustomId("embed:helpers")
           .setLabel("📖 Variables")

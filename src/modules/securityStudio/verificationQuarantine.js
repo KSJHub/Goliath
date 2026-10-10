@@ -86,7 +86,16 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
 async function closeQuarantineCase(guild, userId, reason = 'Verification quarantine resolved') {
   const session = verificationStore.getSession(guild.id, userId) || {};
   if (!session.quarantineChannelId) return { ok: true, skipped: true };
-  const channel = guild.channels.cache.get(session.quarantineChannelId) || await guild.channels.fetch(session.quarantineChannelId).catch(() => null);
+  let channel = guild.channels.cache.get(session.quarantineChannelId);
+  if (!channel) {
+    try { channel = await guild.channels.fetch(session.quarantineChannelId); }
+    catch (error) {
+      if (Number(error?.code) !== 10003) {
+        verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_case_close_failed', channelId: session.quarantineChannelId, reason: String(error?.message || error).slice(0, 300) });
+        return { ok: false, channelId: session.quarantineChannelId, message: 'Could not confirm whether the quarantine case channel still exists.' };
+      }
+    }
+  }
   if (channel) {
     try { await channel.delete(reason); }
     catch (error) { verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_case_close_failed', channelId: channel.id, reason: String(error?.message || error).slice(0, 300) }); return { ok: false, message: 'Could not delete the quarantine case channel.', channelId: channel.id }; }
@@ -108,10 +117,44 @@ async function escalateToModHub(guild, member, actorId, reason) {
   return quarantineMember(guild, member, { reason: reason || 'Escalated from Verification quarantine', quarantinedBy: actorId || guild.client?.user?.id || null, source: 'verification', mode: QUARANTINE_MODES.INVESTIGATION });
 }
 
+async function restorePendingRoles(member, pendingIds, quarantineIds, reason) {
+  const added = [];
+  const removed = [];
+  try {
+    for (const roleId of pendingIds) {
+      if (!member.roles.cache.has(roleId)) {
+        await member.roles.add(roleId, reason);
+        added.push(roleId);
+      }
+    }
+    for (const roleId of quarantineIds) {
+      if (member.roles.cache.has(roleId)) {
+        await member.roles.remove(roleId, reason);
+        removed.push(roleId);
+      }
+    }
+  } catch (error) {
+    const rollbackErrors = [];
+    for (const roleId of removed.reverse()) {
+      try { await member.roles.add(roleId, 'Goliath Verification role rollback'); }
+      catch (rollbackError) { rollbackErrors.push(String(rollbackError?.message || rollbackError)); }
+    }
+    for (const roleId of added.reverse()) {
+      try { await member.roles.remove(roleId, 'Goliath Verification role rollback'); }
+      catch (rollbackError) { rollbackErrors.push(String(rollbackError?.message || rollbackError)); }
+    }
+    if (rollbackErrors.length) {
+      verificationStore.addSecurityHistory(member.guild.id, member.id, { type: 'quarantine_role_rollback_failed', failures: rollbackErrors.slice(0, 10) });
+      throw new Error('Role transition failed and rollback was incomplete; staff intervention required.');
+    }
+    throw error;
+  }
+}
+
 async function reconcileModerationRelease(guild, userId, actorId, reason = 'Mod Hub investigation cleared') {
   if (!guild || !userId) return { ok: false, message: 'Verification reconciliation target is unavailable.' };
   const session = verificationStore.getSession(guild.id, userId) || {};
-  if (session.state !== 'review' && !session.quarantineEscalatedAt && !session.moderationIsolationMode) return { ok: true, skipped: true };
+  if (session.state !== 'review') return { ok: true, skipped: true };
   const member = await guild.members.fetch(userId).catch(() => null);
   const section = verificationStore.getVerificationSection(guild.id);
   const settings = verificationStore.normalizeSettings(section?.settings || {});
@@ -124,8 +167,7 @@ async function reconcileModerationRelease(guild, userId, actorId, reason = 'Mod 
     if (!role) return { ok: false, message: 'A configured Pending Verification role no longer exists.' };
   }
   try {
-    for (const roleId of pendingIds) if (!member.roles.cache.has(roleId)) await member.roles.add(roleId, 'Goliath Verification moderation review cleared');
-    for (const roleId of quarantineIds) if (member.roles.cache.has(roleId)) await member.roles.remove(roleId, 'Goliath Verification moderation review cleared');
+    await restorePendingRoles(member, pendingIds, quarantineIds, 'Goliath Verification moderation review cleared');
   } catch (error) {
     verificationStore.addSecurityHistory(guild.id, userId, { type: 'moderation_release_role_failed', actorId: actorId || null, reason: String(error?.message || error).slice(0, 300) });
     return { ok: false, message: 'Could not restore Pending roles or remove Quarantine roles after Mod Hub review.' };
@@ -153,6 +195,8 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
   const section = verificationStore.getVerificationSection(guild.id);
   const settings = verificationStore.normalizeSettings(section?.settings || {});
   const member = await guild.members.fetch(userId).catch(() => null);
+  const session = verificationStore.getSession(guild.id, userId) || {};
+  if (session.state !== 'quarantined') return { ok: false, message: 'This member is not in active Verification quarantine. Mod Hub investigations must be resolved through Mod Hub.' };
   const quarantineIds = cleanIds(settings.roles?.quarantine);
   const pendingIds = cleanIds(settings.roles?.pending);
   if (resolution === 'escalate') {
@@ -182,8 +226,7 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
     }
     if (missing.length) return { ok: false, message: 'Configured Pending roles are missing; release was not applied.' };
     try {
-      for (const roleId of pendingIds) if (!member.roles.cache.has(roleId)) await member.roles.add(roleId, 'Goliath Verification quarantine released');
-      for (const roleId of quarantineIds) if (member.roles.cache.has(roleId)) await member.roles.remove(roleId, 'Goliath Verification quarantine released');
+      await restorePendingRoles(member, pendingIds, quarantineIds, 'Goliath Verification quarantine released');
     } catch (error) {
       verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_release_role_failed', actorId: actorId || null, reason: String(error?.message || error).slice(0, 300) });
       return { ok: false, message: 'Could not restore Pending roles and remove Quarantine roles; check permissions.' };
@@ -191,7 +234,8 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
     verificationStore.clearAttempts(guild.id, userId);
     verificationStore.upsertSession(guild.id, userId, { state: 'pending', failedAttempts: 0, activeChallenge: null, activeSecurityMethod: null, completedSecurity: [], quarantineReleasedAt: new Date().toISOString(), quarantineReleasedBy: actorId || null });
     verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_released', actorId: actorId || null, reason: reason || 'Released by staff' });
-    await closeQuarantineCase(guild, userId, 'Verification quarantine released');
+    const closure = await closeQuarantineCase(guild, userId, 'Verification quarantine released').catch(error => ({ ok: false, message: String(error?.message || error) }));
+    if (!closure?.ok) return { ok: true, released: true, cleanupPending: true, member, message: 'Member released to Pending Verification, but the quarantine case channel requires manual cleanup.' };
     return { ok: true, released: true, member, message: 'Member released from quarantine and returned to Pending Verification.' };
   }
   try {
@@ -202,7 +246,8 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
   }
   verificationStore.upsertSession(guild.id, userId, { state: 'rejected', activeChallenge: null, activeSecurityMethod: null, quarantineRejectedAt: new Date().toISOString(), quarantineRejectedBy: actorId || null });
   verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_rejected', actorId: actorId || null, reason: reason || 'Rejected by staff' });
-  await closeQuarantineCase(guild, userId, 'Verification quarantine rejected');
+  const closure = await closeQuarantineCase(guild, userId, 'Verification quarantine rejected').catch(error => ({ ok: false, message: String(error?.message || error) }));
+  if (!closure?.ok) return { ok: true, rejected: true, cleanupPending: true, member, message: 'Member rejected from Verification quarantine, but the quarantine case channel requires manual cleanup.' };
   return { ok: true, rejected: true, member, message: 'Member rejected from Verification quarantine.' };
 }
 
