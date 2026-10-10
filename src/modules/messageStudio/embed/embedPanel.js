@@ -2405,7 +2405,7 @@ function buildSettingsPanel(interaction) {
 
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId("embed:builder")
+          .setCustomId("embed:settings-back")
           .setLabel("Back")
           .setEmoji("⬅️")
           .setStyle(ButtonStyle.Secondary),
