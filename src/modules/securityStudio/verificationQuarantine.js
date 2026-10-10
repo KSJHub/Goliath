@@ -86,7 +86,16 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
 async function closeQuarantineCase(guild, userId, reason = 'Verification quarantine resolved') {
   const session = verificationStore.getSession(guild.id, userId) || {};
   if (!session.quarantineChannelId) return { ok: true, skipped: true };
-  const channel = guild.channels.cache.get(session.quarantineChannelId) || await guild.channels.fetch(session.quarantineChannelId).catch(() => null);
+  let channel = guild.channels.cache.get(session.quarantineChannelId);
+  if (!channel) {
+    try { channel = await guild.channels.fetch(session.quarantineChannelId); }
+    catch (error) {
+      if (Number(error?.code) !== 10003) {
+        verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_case_close_failed', channelId: session.quarantineChannelId, reason: String(error?.message || error).slice(0, 300) });
+        return { ok: false, channelId: session.quarantineChannelId, message: 'Could not confirm whether the quarantine case channel still exists.' };
+      }
+    }
+  }
   if (channel) {
     try { await channel.delete(reason); }
     catch (error) { verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_case_close_failed', channelId: channel.id, reason: String(error?.message || error).slice(0, 300) }); return { ok: false, message: 'Could not delete the quarantine case channel.', channelId: channel.id }; }
