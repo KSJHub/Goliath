@@ -44,7 +44,7 @@ function defaults() {
         channelId: null,
         messageId: null,
         title: "💎 Invite & Climb the Leaderboard",
-        description: "**Share your link, build your referrals and compete for the top spot!**\n\n**Your invites. Your referrals. Your place on the leaderboard.**\n\n\u200b",
+        description: "**Share your link, build your referrals and compete for the top spot!**\n\n**Your invites. Your referrals. Your place on the leaderboard.**",
         color: '#D4AF37',
         footer: "💎 Goliath Invites · Leaderboard updates every 2 hours",
         buttonLabel: 'Join Server',
