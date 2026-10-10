@@ -965,7 +965,7 @@ function buildEditorPanel(i, who = "Unknown User") {
         new ButtonBuilder()
           .setCustomId("embed:settings")
           .setLabel("Settings")
-          .setEmoji("🔧")
+          .setEmoji("⚙️")
           .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
