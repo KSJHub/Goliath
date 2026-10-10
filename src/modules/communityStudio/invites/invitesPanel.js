@@ -355,13 +355,11 @@ function buildInviteStudioPayload(interaction, forcedPage = null) {
 
 function embedModal(interaction) {
   const config = invites.getSection(interaction.guildId).settings.publicPanel;
-  // The editor must open with the approved Invite Studio design.
-  const approved = invites.defaults().settings.publicPanel;
   return new ModalBuilder().setCustomId('invites:panel-embed-submit-v2').setTitle('Edit Community Invite Panel').addComponents(
-    row(new TextInputBuilder().setCustomId('panel-v2-title').setLabel('Panel Title').setPlaceholder(approved.title).setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(approved.title)),
-    row(new TextInputBuilder().setCustomId('panel-v2-description').setLabel('Referral Message').setPlaceholder('Share your link, build your referrals and compete for the top spot!').setStyle(TextInputStyle.Paragraph).setMaxLength(1800).setRequired(true).setValue(approved.description)),
-    row(new TextInputBuilder().setCustomId('panel-v2-footer').setLabel('Footer Message').setPlaceholder(approved.footer).setStyle(TextInputStyle.Short).setMaxLength(2048).setRequired(true).setValue(approved.footer)),
-    row(new TextInputBuilder().setCustomId('panel-v2-color').setLabel('Embed Colour (6-digit hex)').setPlaceholder(approved.color).setStyle(TextInputStyle.Short).setMinLength(7).setMaxLength(7).setRequired(true).setValue(approved.color)),
+    row(new TextInputBuilder().setCustomId('panel-v2-title').setLabel('Panel Title').setPlaceholder(config.title).setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(config.title)),
+    row(new TextInputBuilder().setCustomId('panel-v2-description').setLabel('Referral Message').setPlaceholder('Share your link, build your referrals and compete for the top spot!').setStyle(TextInputStyle.Paragraph).setMaxLength(1800).setRequired(true).setValue(config.description)),
+    row(new TextInputBuilder().setCustomId('panel-v2-footer').setLabel('Footer Message').setPlaceholder(config.footer).setStyle(TextInputStyle.Short).setMaxLength(2048).setRequired(true).setValue(config.footer)),
+    row(new TextInputBuilder().setCustomId('panel-v2-color').setLabel('Embed Colour (6-digit hex)').setPlaceholder(config.color).setStyle(TextInputStyle.Short).setMinLength(7).setMaxLength(7).setRequired(true).setValue(config.color)),
   );
 }
 function dmModal(interaction) {
