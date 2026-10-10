@@ -27,6 +27,7 @@ const embedStudio = optionalRequire('embed studio', '../../modules/messageStudio
 const duplicator = optionalRequire('duplicator', '../../owner/dev/duplicator');
 const permissionsStudioInteractions = optionalRequire('permissions studio', './permissionsStudio');
 const adminPanel = optionalRequire('admin panel', '../../core/administration/admin/panel');
+const adminCommand = optionalRequire('admin security controls', '../../core/administration/admin/command');
 const automodPanel = optionalRequire('automod panel', '../../core/administration/automod/panel');
 const modInteractions = optionalRequire('mod interactions', '../../core/administration/mod/interactions');
 const restoreRequestManager = optionalRequire('restore requests', '../../core/security/restoreBackup/requests');
@@ -218,6 +219,13 @@ module.exports={
       prepareLegacyRoleInteraction(interaction);
       const customId=String(interaction.customId||'');
       if (interaction.__goliathPermissionsStudioHandled) return;
+      if (customId.startsWith('admin:security-hub') || customId.startsWith('admin:server-security') || customId.startsWith('admin:security-isolation')) {
+        const method = customId.startsWith('admin:security-hub') ? 'handleSecurityHubInteraction'
+          : customId.startsWith('admin:server-security') ? 'handleServerSecurityInteraction'
+            : 'handleSecurityIsolationInteraction';
+        if (!await callHandler(adminCommand, method, interaction)) throw new Error(`Admin security control did not handle ${customId}.`);
+        return;
+      }
       if(customId.startsWith('permstudio:')||customId.startsWith('permedit:')||customId.startsWith('permbulk:')||customId.startsWith('permpreset:')||customId.startsWith('permsync:')||customId.startsWith('permaccess:')||customId.startsWith('permfinder:')||customId.startsWith('permaudit:')||customId.startsWith('permrestore:')){await permissionsStudioInteractions.execute(interaction,client);return;}
       if(customId.startsWith('mod_')||customId.startsWith('mod:')){if(!await callHandler(modInteractions,'handleModInteraction',interaction))throw new Error(`Mod did not handle ${customId}.`);return;}
       if(isVerificationMemberInteraction(interaction)){await handleVerificationMemberInteraction(interaction);return;}
