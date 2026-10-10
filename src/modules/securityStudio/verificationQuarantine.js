@@ -179,6 +179,12 @@ async function reconcileModerationRelease(guild, userId, actorId, reason = 'Mod 
     activeChallenge: null,
     activeSecurityMethod: null,
     completedSecurity: [],
+    requiredSecurity: [],
+    raidPressure: false,
+    raidPressureAt: null,
+    raidJoinCount: null,
+    intelligenceElevationRecordedAt: null,
+    intelligenceRequiredSecurity: [],
     moderationIsolationMode: null,
     moderationInterviewChannelId: null,
     moderationReviewClearedAt: new Date().toISOString(),
@@ -232,7 +238,7 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
       return { ok: false, message: 'Could not restore Pending roles and remove Quarantine roles; check permissions.' };
     }
     verificationStore.clearAttempts(guild.id, userId);
-    verificationStore.upsertSession(guild.id, userId, { state: 'pending', failedAttempts: 0, activeChallenge: null, activeSecurityMethod: null, completedSecurity: [], quarantineReleasedAt: new Date().toISOString(), quarantineReleasedBy: actorId || null });
+    verificationStore.upsertSession(guild.id, userId, { state: 'pending', failedAttempts: 0, activeChallenge: null, activeSecurityMethod: null, completedSecurity: [], requiredSecurity: [], raidPressure: false, raidPressureAt: null, raidJoinCount: null, intelligenceElevationRecordedAt: null, intelligenceRequiredSecurity: [], quarantineReleasedAt: new Date().toISOString(), quarantineReleasedBy: actorId || null });
     verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_released', actorId: actorId || null, reason: reason || 'Released by staff' });
     const closure = await closeQuarantineCase(guild, userId, 'Verification quarantine released').catch(error => ({ ok: false, message: String(error?.message || error) }));
     if (!closure?.ok) return { ok: true, released: true, cleanupPending: true, member, message: 'Member released to Pending Verification, but the quarantine case channel requires manual cleanup.' };
