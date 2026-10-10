@@ -269,6 +269,9 @@ async function handleInviteStudioInteraction(interaction) {
     try {
       state.vanityStatus = await invites.syncVanityStatus(interaction.guild);
       const payload = panel.buildPublicPayload(interaction.guildId);
+      // Apply the current saved colour to the exact embed sent in the preview response.
+      const savedColor = invites.getSection(interaction.guildId).settings.publicPanel.color;
+      payload.embeds[0].setColor(savedColor);
       await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
     } catch (error) {
       await interaction.reply({ content: `❌ Preview unavailable: ${String(error.message || error).slice(0, 1700)}`, flags: MessageFlags.Ephemeral });
