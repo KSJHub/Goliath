@@ -219,7 +219,7 @@ module.exports={
       prepareLegacyRoleInteraction(interaction);
       const customId=String(interaction.customId||'');
       if (interaction.__goliathPermissionsStudioHandled) return;
-      if (customId === 'admin:settings' || customId === 'admin:settings:back') {
+      if (['admin:settings', 'admin:settings:back', 'admin:settings:security-hub', 'admin:settings:back:security-hub'].includes(customId)) {
         if (!await callHandler(adminCommand, 'handleSettingsInteraction', interaction)) throw new Error(`Admin Settings did not handle ${customId}.`);
         return;
       }
