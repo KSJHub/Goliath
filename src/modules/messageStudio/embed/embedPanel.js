@@ -540,7 +540,7 @@ function layoutEmbedButtons(buttons = []) {
   }
   return rows;
 }
-function buildButtonRows(state, interaction = null) {
+function buildButtonRows(state, interaction = null, preview = false) {
   const output = [];
   for (const entries of layoutEmbedButtons(Array.isArray(state?.buttons) ? state.buttons : [])) {
     if (!entries.length) continue;
@@ -552,14 +552,15 @@ function buildButtonRows(state, interaction = null) {
       if (button?.emoji) builder.setEmoji(button.emoji);
       if (url) builder.setStyle(ButtonStyle.Link).setURL(url);
       else builder.setStyle(buttonStyleValue(button?.style)).setCustomId(buttonActionId(button, index));
+      if (preview) builder.setDisabled(true);
       row.addComponents(builder);
     }
     output.push(row);
   }
   return output.slice(0, MAX_DEPLOYED_BUTTON_ROWS);
 }
-function buttonRows(state, interaction = null) {
-  return buildButtonRows(state, interaction);
+function buttonRows(state, interaction = null, preview = false) {
+  return buildButtonRows(state, interaction, preview);
 }
 function buildEmbedPanel(interactionOrGuild, memberDisplayName = "Unknown User") {
   const fake = interactionOrGuild?.guild ? interactionOrGuild : { guild: interactionOrGuild, guildId: interactionOrGuild?.id, user: { id: "system" } };
@@ -924,8 +925,7 @@ function buildEditorPanel(i, who = "Unknown User") {
           .setCustomId("embed:test-send")
           .setLabel("Test Send")
           .setEmoji("🧪")
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(!report.ready),
+          .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId("embed:use")
