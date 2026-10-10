@@ -24,6 +24,10 @@ const SETTINGS_ID = 'admin:settings';
 const SETTINGS_BACK_ID = 'admin:settings:back';
 const SECURITY_SETTINGS_ID = 'admin:settings:security-hub';
 const SECURITY_SETTINGS_BACK_ID = 'admin:settings:back:security-hub';
+const RESTRICTIONS_SETTINGS_ID = 'admin:settings:restrictions';
+const RESTRICTIONS_SETTINGS_BACK_ID = 'admin:settings:back:restrictions';
+const ISOLATION_SETTINGS_ID = 'admin:settings:isolation';
+const ISOLATION_SETTINGS_BACK_ID = 'admin:settings:back:isolation';
 const SECURITY_HUB_ID = 'admin:security-hub';
 const SECURITY_HUB_BACK_ID = 'admin:security-hub:back';
 const SECURITY_HUB_REFRESH_ID = 'admin:security-hub:refresh';
@@ -122,7 +126,7 @@ function buildServerSecurityPanel(interaction, notice = null) {
     .setFooter({ text: `Guild security controls • Requested by ${memberDisplayName(interaction)}` }).setTimestamp();
   const recoveryRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(SERVER_SECURITY_RESTORE_LOCKDOWN_ID).setLabel('End Lockdown').setEmoji('🔓').setStyle(ButtonStyle.Primary).setDisabled(!lockdownActive), new ButtonBuilder().setCustomId(SERVER_SECURITY_RESTORE_INVITES_ID).setLabel('Restore Invites').setEmoji('📨').setStyle(ButtonStyle.Primary).setDisabled(!invitesActive), new ButtonBuilder().setCustomId(SERVER_SECURITY_RESTORE_ROLES_ID).setLabel('Restore Roles').setEmoji('🎭').setStyle(ButtonStyle.Primary).setDisabled(!rolesActive));
   const controlRow = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(SERVER_SECURITY_RESTORE_ALL_ID).setLabel('Restore All Guild Restrictions').setEmoji('🚨').setStyle(ButtonStyle.Danger).setDisabled(!anyActive));
-  return { embeds: [embed], components: [recoveryRow, controlRow, navRow(SECURITY_HUB_ID, SERVER_SECURITY_REFRESH_ID)] };
+  return { embeds: [embed], components: [recoveryRow, controlRow, navRow(SECURITY_HUB_ID, SERVER_SECURITY_REFRESH_ID, RESTRICTIONS_SETTINGS_ID)] };
 }
 
 function buildRestoreAllConfirmation(interaction) {
@@ -136,7 +140,7 @@ function buildSecurityIsolationPanel(interaction) {
   const state = getQuarantineState(interaction.guild.id);
   const securityEntries = Object.values(state.users || {}).filter((entry) => getQuarantineMode(entry) === QUARANTINE_MODES.SECURITY), investigations = Object.values(state.users || {}).filter((entry) => getQuarantineMode(entry) === QUARANTINE_MODES.INVESTIGATION);
   const embed = new EmbedBuilder().setColor(0xED4245).setTitle('🚨 Full Security Isolation').setDescription(['**Server-owner only emergency containment.**','','Select a member to apply Full Security Isolation. Existing Investigation containment can be escalated without losing its role snapshot or linked case.','','Anti-Nuke can still apply Full Security Isolation automatically when required.'].join('\n')).addFields({ name: 'Full Security', value: `**${securityEntries.length}** active`, inline: true }, { name: 'Investigations', value: `**${investigations.length}** active`, inline: true }).setTimestamp();
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId(SECURITY_SELECT_ID).setPlaceholder('Select member for security isolation').setMinValues(1).setMaxValues(1)), navRow(SECURITY_HUB_ID)] };
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId(SECURITY_SELECT_ID).setPlaceholder('Select member for security isolation').setMinValues(1).setMaxValues(1)), navRow(SECURITY_HUB_ID, null, ISOLATION_SETTINGS_ID)] };
 }
 function buildSecurityIsolationModal(target, escalating = false) { return new ModalBuilder().setCustomId(`admin:security-isolation:submit:${target.id}`).setTitle(escalating ? 'Escalate to Full Security' : 'Full Security Isolation').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel(escalating ? 'Reason for security escalation' : 'Security isolation reason').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(2).setMaxLength(500)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirmation').setLabel('Type FULL ISOLATION to confirm').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(14).setMaxLength(14))); }
 function buildSecurityReleasePanel(interaction, target, snapshot) { const embed = new EmbedBuilder().setColor(0xED4245).setTitle(`🚨 Security Isolation • ${target.user.tag}`).setDescription([`${target} is already in **Full Security Isolation**.`,'',`**Reason:** ${String(snapshot.reason || 'No reason recorded').slice(0,1000)}`,snapshot.caseId ? `**Case:** #${snapshot.caseId}` : '**Case:** No linked case','','Only the server owner can release this member from security containment.'].join('\n')).setTimestamp(); return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin:security-isolation:release:${target.id}`).setLabel('Clear Full Security Isolation').setEmoji('🔓').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(SECURITY_ID).setLabel('Back').setStyle(ButtonStyle.Secondary))] }; }
@@ -147,7 +151,32 @@ async function denyOwnerSecurity(interaction) { const payload = { content: '❌ 
 async function denyServerSecurity(interaction) { const payload = { content: '❌ You do not have permission to use the Security Hub.', flags: 64 }; if (interaction.replied || interaction.deferred) await interaction.editReply(payload).catch(() => null); else await interaction.reply(payload).catch(() => null); return true; }
 async function fetchSecurityTarget(interaction, targetId) { if (!targetId) return null; return interaction.guild.members.cache.get(String(targetId)) || interaction.guild.members.fetch(String(targetId)).catch(() => null); }
 
-async function handleSettingsInteraction(interaction) { const id = String(interaction?.customId || ''); if (![SETTINGS_ID, SETTINGS_BACK_ID, SECURITY_SETTINGS_ID, SECURITY_SETTINGS_BACK_ID].includes(id)) return false; if (!canUseSettings(interaction)) { await interaction.reply({ content: '❌ You do not have permission to open Goliath Settings.', flags: 64 }).catch(() => null); return true; } if (id === SETTINGS_ID || id === SECURITY_SETTINGS_ID) { await interaction.update(buildSettingsPanel(interaction, id === SECURITY_SETTINGS_ID ? SECURITY_SETTINGS_BACK_ID : SETTINGS_BACK_ID)); return true; } await interaction.update(id === SECURITY_SETTINGS_BACK_ID ? buildSecurityHub(interaction) : rootAdminPanel(interaction)); return true; }
+async function handleSettingsInteraction(interaction) {
+  const id = String(interaction?.customId || '');
+  const origins = {
+    [SETTINGS_ID]: SETTINGS_BACK_ID,
+    [SECURITY_SETTINGS_ID]: SECURITY_SETTINGS_BACK_ID,
+    [RESTRICTIONS_SETTINGS_ID]: RESTRICTIONS_SETTINGS_BACK_ID,
+    [ISOLATION_SETTINGS_ID]: ISOLATION_SETTINGS_BACK_ID,
+  };
+  if (!Object.hasOwn(origins, id) && ![SETTINGS_BACK_ID, SECURITY_SETTINGS_BACK_ID, RESTRICTIONS_SETTINGS_BACK_ID, ISOLATION_SETTINGS_BACK_ID].includes(id)) return false;
+  if (!canUseSettings(interaction)) {
+    await interaction.reply({ content: '❌ You do not have permission to open Goliath Settings.', flags: 64 }).catch(() => null);
+    return true;
+  }
+  if (Object.hasOwn(origins, id)) {
+    await interaction.update(buildSettingsPanel(interaction, origins[id]));
+    return true;
+  }
+  if (id !== SETTINGS_BACK_ID && !canUseServerSecurity(interaction)) return denyServerSecurity(interaction);
+  if (id === SECURITY_SETTINGS_BACK_ID) await interaction.update(buildSecurityHub(interaction));
+  else if (id === RESTRICTIONS_SETTINGS_BACK_ID) await interaction.update(buildServerSecurityPanel(interaction));
+  else if (id === ISOLATION_SETTINGS_BACK_ID) {
+    if (!isGuildOwner(interaction)) return denyOwnerSecurity(interaction);
+    await interaction.update(buildSecurityIsolationPanel(interaction));
+  } else await interaction.update(rootAdminPanel(interaction));
+  return true;
+}
 async function runServerSecurityRestore(interaction, type) { if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate(); const reason = `Manual guild security recovery by ${interaction.user.tag || interaction.user.id}`; let result; if (type === 'lockdown') result = await disableLockdown(interaction.guild, { reason, disabledByTag: interaction.user.tag || interaction.user.id }); if (type === 'invites') result = await restoreInvites(interaction.guild, { reason }); if (type === 'roles') result = await restoreRoles(interaction.guild, { reason }); const ok = Boolean(result?.success), detail = result?.reason || (ok ? 'Recovery completed successfully.' : 'Recovery failed.'); await interaction.editReply(buildServerSecurityPanel(interaction, `${ok ? '✅' : '❌'} **${type} recovery:** ${detail}`)); return true; }
 async function restoreAllServerSecurity(interaction) { if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate(); const reason = `Manual full guild security recovery by ${interaction.user.tag || interaction.user.id}`, results = []; const lockdown = getLockdownState(interaction.guild.id); if (lockdown.active) results.push(['Lockdown', await disableLockdown(interaction.guild, { reason, disabledByTag: interaction.user.tag || interaction.user.id })]); let emergency = getEmergencyControlState(interaction.guild.id); if (emergency.invites.active) results.push(['Invites', await restoreInvites(interaction.guild, { reason })]); emergency = getEmergencyControlState(interaction.guild.id); if (emergency.roles.active) results.push(['Roles', await restoreRoles(interaction.guild, { reason })]); const failed = results.filter(([, result]) => !result?.success); const notice = failed.length ? `⚠️ **Recovery completed with ${failed.length} failure(s).** Goliath retained recovery state that could not be safely restored.` : `✅ **Guild security recovery complete.** ${results.length || 'No'} active restriction${results.length === 1 ? '' : 's'} processed.`; await interaction.editReply(buildServerSecurityPanel(interaction, notice)); return true; }
 
