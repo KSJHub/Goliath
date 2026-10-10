@@ -112,7 +112,7 @@ function publicView(interaction) {
   const deployed = Boolean(config.messageId && config.channelId && verified?.messageId === config.messageId && verified?.channelId === config.channelId && verified.status === 'deployed');
   const panelStatus = !config.messageId ? '⚪ Not Deployed' : verified?.messageId === config.messageId && verified?.channelId === config.channelId ? (verified.status === 'deployed' ? '🟢 Deployed' : verified.status === 'missing' ? '⚪ Not Deployed · Message missing' : '🟡 Not Verified') : '🟡 Not Verified';
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🏆 Public Panel & Leaderboard')
+    embeds: [new EmbedBuilder().setColor(section.settings.publicPanel.color).setTitle('🏆 Public Panel & Leaderboard')
       .setDescription('Configure and publish the community invite panel.')
       .addFields(
         { name: 'Panel Status', value: panelStatus, inline: true },
