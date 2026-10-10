@@ -1222,6 +1222,7 @@ async function handleBuilderInteractions(i) {
     if (customId === 'embed:buttons') return updateButtons(i);
     if (customId === 'embed:button-manager-add') { if (buttons.length >= panel.MAX_EMBED_BUTTONS) { await i.reply({ content: `Maximum of ${panel.MAX_EMBED_BUTTONS} buttons reached.`, flags: 64 }); return true; } await i.showModal(panel.buttonEditorModal(state)); return true; }
     if (customId === 'embed:button-manager-edit') { if (buttonIndex == null) { await i.reply({ content: 'Select a button first.', flags: 64 }); return true; } await i.showModal(panel.buttonEditorModal(state, buttonIndex)); return true; }
+    if (customId === 'embed:button-link-edit') { if (buttonIndex == null) return updateButtons(i); await i.showModal(panel.buttonEditorModal(state, buttonIndex)); return true; }
     if (customId === 'embed:button-manager-options') { if (buttonIndex == null) { await i.reply({ content: 'Select a button first.', flags: 64 }); return true; } return updateButtonOptions(i); }
     if (customId === 'embed:button-options-back') return updateButtons(i);
     if (customId === 'embed:button-reply-edit') { if (buttonIndex == null || String(buttons[buttonIndex]?.action || '').toLowerCase() !== 'reply') return updateButtonOptions(i); await i.showModal(panel.buttonReplyModal(state)); return true; }
