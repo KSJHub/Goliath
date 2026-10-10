@@ -166,7 +166,12 @@ async function handleStaffAction(interaction, parsed, manager) {
     }
   } else resumed = await maybeResumeFlow(interaction, result, manager, parsed.userId);
   if (resumed?.challenge) await publishResumedChallenge(interaction, parsed.userId, resumed).catch(error => console.error('[Verification] Could not publish resumed challenge:', error));
-  await interaction.reply({ content: resumed?.complete ? `✅ Staff approval recorded. ${resumed.message}` : `✅ Verification staff action recorded: **${parsed.action}**.`, flags: MessageFlags.Ephemeral });
+  const actionMessage = resumed && !resumed.ok
+    ? `⚠️ Staff approval was recorded, but Verification could not continue: ${resumed.message || 'Unknown error'}`
+    : resumed?.complete
+      ? `✅ Staff approval recorded. ${resumed.message}`
+      : `✅ Verification staff action recorded: **${parsed.action}**.`;
+  await interaction.reply({ content: actionMessage, flags: MessageFlags.Ephemeral });
   return true;
 }
 
