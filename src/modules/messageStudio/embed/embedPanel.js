@@ -937,12 +937,18 @@ function buildEditorPanel(i, who = "Unknown User") {
           ? [
               new ButtonBuilder()
                 .setCustomId("embed:update-existing")
-                .setLabel("Update Existing")
+                .setLabel("Update")
                 .setEmoji("♻️")
                 .setStyle(ButtonStyle.Success)
                 .setDisabled(!canDeploy),
             ]
-          : [])
+          : []),
+
+        new ButtonBuilder()
+          .setCustomId("embed:readiness")
+          .setLabel("Review")
+          .setEmoji("📋")
+          .setStyle(ButtonStyle.Secondary)
       ),
 
       /*
@@ -959,6 +965,16 @@ function buildEditorPanel(i, who = "Unknown User") {
           .setCustomId("embed:settings")
           .setLabel("Settings")
           .setEmoji("⚙️")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:channel-prev")
+          .setLabel("<")
+          .setStyle(ButtonStyle.Secondary),
+
+        new ButtonBuilder()
+          .setCustomId("embed:channel-next")
+          .setLabel(">")
           .setStyle(ButtonStyle.Secondary)
       ),
     ],
