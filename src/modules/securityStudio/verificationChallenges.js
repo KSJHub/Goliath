@@ -303,7 +303,7 @@ function staffAction(guildId, userId, challengeId, staffUserId, action) {
   const updated = { ...challenge, status, resolvedAt: now(), resolvedBy: String(staffUserId || ''), staffAction: action };
   verificationStore.upsertSession(guildId, userId, { activeChallenge: updated, activeSecurityMethod: null });
   verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_verification_action', challengeId, action, staffUserId: String(staffUserId || '') });
-  verificationStore.incrementAnalytics(guildId, action === 'approve' ? { challengesPassed: 1, staffApprovals: 1 } : { challengesFailed: 1, staffRejections: 1 });
+  verificationStore.incrementAnalytics(guildId, action === 'approve' ? { challengesPassed: 1, staffApprovals: 1 } : action === 'reject' ? { challengesFailed: 1, staffRejections: 1 } : { challengesFailed: 1 });
   return { ok: action === 'approve', action, complete: true, challenge: publicChallenge(updated) };
 }
 

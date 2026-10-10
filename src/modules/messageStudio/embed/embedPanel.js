@@ -540,7 +540,7 @@ function layoutEmbedButtons(buttons = []) {
   }
   return rows;
 }
-function buildButtonRows(state, interaction = null) {
+function buildButtonRows(state, interaction = null, preview = false) {
   const output = [];
   for (const entries of layoutEmbedButtons(Array.isArray(state?.buttons) ? state.buttons : [])) {
     if (!entries.length) continue;
@@ -552,14 +552,15 @@ function buildButtonRows(state, interaction = null) {
       if (button?.emoji) builder.setEmoji(button.emoji);
       if (url) builder.setStyle(ButtonStyle.Link).setURL(url);
       else builder.setStyle(buttonStyleValue(button?.style)).setCustomId(buttonActionId(button, index));
+      if (preview) builder.setDisabled(true);
       row.addComponents(builder);
     }
     output.push(row);
   }
   return output.slice(0, MAX_DEPLOYED_BUTTON_ROWS);
 }
-function buttonRows(state, interaction = null) {
-  return buildButtonRows(state, interaction);
+function buttonRows(state, interaction = null, preview = false) {
+  return buildButtonRows(state, interaction, preview);
 }
 function buildEmbedPanel(interactionOrGuild, memberDisplayName = "Unknown User") {
   const fake = interactionOrGuild?.guild ? interactionOrGuild : { guild: interactionOrGuild, guildId: interactionOrGuild?.id, user: { id: "system" } };
@@ -924,8 +925,7 @@ function buildEditorPanel(i, who = "Unknown User") {
           .setCustomId("embed:test-send")
           .setLabel("Test Send")
           .setEmoji("🧪")
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(!report.ready),
+          .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId("embed:use")
@@ -1806,7 +1806,7 @@ function buildButtonOptionsPanel(interaction) {
   ];
   if (roleActions.has(action)) details.push(`**Role:** ${buttonManagerRoleDisplay(interaction, item.actionValue)}`);
   if (action === "reply") details.push(`**Reply:** ${item.actionValue ? trim(buttonResolved(item.actionValue, interaction), 900) : "Not configured"}`);
-  details.push("", "Choose the action and row placement below. Auto placement fills the first available row. A Discord button row can never contain more than 5 buttons.");
+  details.push("", "Choose a button style. Configure an optional URL in Edit Button. Auto placement fills the first available row. Discord allows at most 5 buttons per row.");
 
   const rows = [
     new ActionRowBuilder().addComponents(
@@ -2601,8 +2601,8 @@ function buttonEditorModal(state, index = null) {
     Number.isInteger(index) ? "Edit Button" : "Add Button",
     [
       input("label", "Button label", TextInputStyle.Short, item.label || "", true, 80),
-      input("emoji", "Emoji (optional)", TextInputStyle.Short, item.emoji || "", false, 100),
-      input("url", "Link URL / variable (optional)", TextInputStyle.Short, item.url || "", false, 4000),
+      input("emoji", "Emoji", TextInputStyle.Short, item.emoji || "", false, 100),
+      input("url", "Link URL / variable", TextInputStyle.Short, item.url || "", false, 4000),
     ],
   );
 }
