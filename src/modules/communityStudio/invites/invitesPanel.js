@@ -356,9 +356,9 @@ function embedModal(interaction) {
   const config = invites.getSection(interaction.guildId).settings.publicPanel;
   return new ModalBuilder().setCustomId('invites:panel-embed-submit').setTitle('Edit Community Invite Panel').addComponents(
     row(new TextInputBuilder().setCustomId('title').setLabel('Panel Title').setPlaceholder('💎 Invite & Climb the Leaderboard').setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(config.title)),
-    row(new TextInputBuilder().setCustomId('description').setLabel('Referral Message').setPlaceholder('Invite friends, earn referrals and climb the leaderboard.').setStyle(TextInputStyle.Paragraph).setMaxLength(1800).setRequired(true).setValue(config.description)),
-    row(new TextInputBuilder().setCustomId('footer').setLabel('Footer Message').setPlaceholder('Leaderboard updates every 2 hours').setStyle(TextInputStyle.Short).setMaxLength(2048).setRequired(true).setValue(config.footer)),
-    row(new TextInputBuilder().setCustomId('color').setLabel('Embed Colour (6-digit hex)').setPlaceholder('#5865F2').setStyle(TextInputStyle.Short).setMinLength(7).setMaxLength(7).setRequired(true).setValue(config.color)),
+    row(new TextInputBuilder().setCustomId('description').setLabel('Referral Message').setPlaceholder('Share your link, build your referrals and compete for the top spot!').setStyle(TextInputStyle.Paragraph).setMaxLength(1800).setRequired(true).setValue(config.description)),
+    row(new TextInputBuilder().setCustomId('footer').setLabel('Footer Message').setPlaceholder('💎 Goliath Invites · Leaderboard updates every 2 hours').setStyle(TextInputStyle.Short).setMaxLength(2048).setRequired(true).setValue(config.footer)),
+    row(new TextInputBuilder().setCustomId('color').setLabel('Embed Colour (6-digit hex)').setPlaceholder('#D4AF37').setStyle(TextInputStyle.Short).setMinLength(7).setMaxLength(7).setRequired(true).setValue(config.color)),
   );
 }
 function dmModal(interaction) {
