@@ -2601,8 +2601,8 @@ function buttonEditorModal(state, index = null) {
     Number.isInteger(index) ? "Edit Button" : "Add Button",
     [
       input("label", "Button label", TextInputStyle.Short, item.label || "", true, 80),
-      input("emoji", "Emoji (optional)", TextInputStyle.Short, item.emoji || "", false, 100),
-      input("url", "Link URL / variable (optional)", TextInputStyle.Short, item.url || "", false, 4000),
+      input("emoji", "Emoji", TextInputStyle.Short, item.emoji || "", false, 100),
+      input("url", "Link URL / variable", TextInputStyle.Short, item.url || "", false, 4000),
     ],
   );
 }
