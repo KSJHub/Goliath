@@ -355,11 +355,19 @@ function buildInviteStudioPayload(interaction, forcedPage = null) {
 
 function embedModal(interaction) {
   const config = invites.getSection(interaction.guildId).settings.publicPanel;
+  // Show approved defaults in the editor when this guild still has the legacy panel copy.
+  const legacy = String(config.description || '').includes('Bring your friends into the server using your own personal invite link.');
+  const defaultMessage = '**Share your link, build your referrals and compete for the top spot!**\\n\\n**Your invites. Your referrals. Your place on the leaderboard.**';
+  const editorDescription = legacy ? defaultMessage : config.description;
+  const editorFooter = legacy || String(config.footer || '').includes('Every Referral Counts')
+    ? '💎 Goliath Invites · Leaderboard updates every 2 hours' : config.footer;
+  const editorColor = legacy && String(config.color || '').toUpperCase() === '#5865F2'
+    ? '#D4AF37' : config.color;
   return new ModalBuilder().setCustomId('invites:panel-embed-submit').setTitle('Edit Community Invite Panel').addComponents(
     row(new TextInputBuilder().setCustomId('title').setLabel('Panel Title').setPlaceholder('💎 Invite & Climb the Leaderboard').setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(config.title)),
-    row(new TextInputBuilder().setCustomId('description').setLabel('Referral Message').setPlaceholder('Share your link, build your referrals and compete for the top spot!').setStyle(TextInputStyle.Paragraph).setMaxLength(1800).setRequired(true).setValue(config.description)),
-    row(new TextInputBuilder().setCustomId('footer').setLabel('Footer Message').setPlaceholder('💎 Goliath Invites · Leaderboard updates every 2 hours').setStyle(TextInputStyle.Short).setMaxLength(2048).setRequired(true).setValue(config.footer)),
-    row(new TextInputBuilder().setCustomId('color').setLabel('Embed Colour (6-digit hex)').setPlaceholder('#D4AF37').setStyle(TextInputStyle.Short).setMinLength(7).setMaxLength(7).setRequired(true).setValue(config.color)),
+    row(new TextInputBuilder().setCustomId('description').setLabel('Referral Message').setPlaceholder('Share your link, build your referrals and compete for the top spot!').setStyle(TextInputStyle.Paragraph).setMaxLength(1800).setRequired(true).setValue(editorDescription)),
+    row(new TextInputBuilder().setCustomId('footer').setLabel('Footer Message').setPlaceholder('💎 Goliath Invites · Leaderboard updates every 2 hours').setStyle(TextInputStyle.Short).setMaxLength(2048).setRequired(true).setValue(editorFooter)),
+    row(new TextInputBuilder().setCustomId('color').setLabel('Embed Colour (6-digit hex)').setPlaceholder('#D4AF37').setStyle(TextInputStyle.Short).setMinLength(7).setMaxLength(7).setRequired(true).setValue(editorColor)),
   );
 }
 function dmModal(interaction) {
