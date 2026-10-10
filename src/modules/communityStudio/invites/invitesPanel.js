@@ -361,7 +361,7 @@ function embedModal(interaction) {
   const editorDescription = legacy ? defaultMessage : config.description;
   const editorFooter = legacy || String(config.footer || '').includes('Every Referral Counts')
     ? '💎 Goliath Invites · Leaderboard updates every 2 hours' : config.footer;
-  const editorColor = legacy && String(config.color || '').toUpperCase() === '#5865F2'
+  const editorColor = String(config.color || '').toUpperCase() === '#5865F2' && (legacy || String(config.footer || '').includes('Every Referral Counts'))
     ? '#D4AF37' : config.color;
   return new ModalBuilder().setCustomId('invites:panel-embed-submit').setTitle('Edit Community Invite Panel').addComponents(
     row(new TextInputBuilder().setCustomId('title').setLabel('Panel Title').setPlaceholder('💎 Invite & Climb the Leaderboard').setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(config.title)),
