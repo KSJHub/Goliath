@@ -329,7 +329,7 @@ async function executeResponsePolicy({ guild, config, member, executor, analysis
 }
 
 async function handleDeleteEvent({ guild, target, actionType, auditType, incidentType, massIncidentType }) {
-  if (!guild) return null;
+  if (!guild?.id || !guildManager.isModuleEnabled(guild.id, 'security')) return null;
   const config = getAntiNukeConfig(guild.id);
   if (!config.enabled) return null;
   const capability = responseCapability(guild);
@@ -366,7 +366,7 @@ async function handleChannelDelete(channel) { return handleDeleteEvent({ guild: 
 async function handleRoleDelete(role) { return handleDeleteEvent({ guild: role.guild, target: role, actionType: 'roleDelete', auditType: AuditLogEvent.RoleDelete, incidentType: INCIDENT_TYPES.ROLE_DELETE, massIncidentType: INCIDENT_TYPES.MASS_ROLE_DELETE }); }
 
 async function handleRoleCreate(role) {
-  const guild = role?.guild; if (!guild) return null;
+  const guild = role?.guild; if (!guild?.id || !guildManager.isModuleEnabled(guild.id, 'security')) return null;
   const config = getAntiNukeConfig(guild.id); if (!config.enabled) return null;
   const capability = responseCapability(guild);
   const resolved = await resolveExecutor(guild, AuditLogEvent.RoleCreate, config); if (!resolved) return null;
@@ -377,7 +377,7 @@ async function handleRoleCreate(role) {
 }
 
 async function handleRoleUpdate(oldRole, newRole) {
-  const guild = newRole?.guild; if (!guild) return null;
+  const guild = newRole?.guild; if (!guild?.id || !guildManager.isModuleEnabled(guild.id, 'security')) return null;
   const config = getAntiNukeConfig(guild.id); if (!config.enabled) return null;
   const capability = responseCapability(guild);
   const resolved = await resolveExecutor(guild, AuditLogEvent.RoleUpdate, config); if (!resolved) return null;
@@ -390,7 +390,7 @@ async function handleRoleUpdate(oldRole, newRole) {
 async function handleWebhookCreate(webhook) { return handleWebhookObject(webhook, AuditLogEvent.WebhookCreate, INCIDENT_TYPES.WEBHOOK_CREATE || 'webhook_create', 'Webhook creation detected.'); }
 async function handleWebhookDelete(webhook) { return handleWebhookObject(webhook, AuditLogEvent.WebhookDelete, INCIDENT_TYPES.WEBHOOK_DELETE || 'webhook_delete', 'Webhook deletion detected.'); }
 async function handleWebhookObject(webhook, auditType, incidentType, reason) {
-  const guild = webhook?.guild; if (!guild) return null;
+  const guild = webhook?.guild; if (!guild?.id || !guildManager.isModuleEnabled(guild.id, 'security')) return null;
   const config = getAntiNukeConfig(guild.id); if (!config.enabled) return null;
   const capability = responseCapability(guild);
   const resolved = await resolveExecutor(guild, auditType, config); if (!resolved) return null;
@@ -399,7 +399,7 @@ async function handleWebhookObject(webhook, auditType, incidentType, reason) {
 }
 
 async function handleWebhookUpdate(channel) {
-  const guild = channel?.guild; if (!guild) return null;
+  const guild = channel?.guild; if (!guild?.id || !guildManager.isModuleEnabled(guild.id, 'security')) return null;
   const config = getAntiNukeConfig(guild.id); if (!config.enabled) return null;
   const capability = responseCapability(guild);
   let resolved = null;

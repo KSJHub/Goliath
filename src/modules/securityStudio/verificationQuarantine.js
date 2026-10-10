@@ -2,6 +2,7 @@
 
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const verificationStore = require('./verificationStore');
+const guildManager = require('../../core/guild/guildManager');
 const {
   QUARANTINE_MODES,
   quarantineMember,
@@ -42,6 +43,7 @@ function caseSummary(member, reason, session, history) {
 
 async function ensureQuarantineCase(guild, member, reason = 'Verification security policy') {
   if (!guild || !member) return { ok: false, message: 'Quarantine member is unavailable.' };
+  if (!guildManager.isModuleEnabled(guild.id, 'verification')) return { ok: false, disabled: true, message: 'Verification is disabled.' };
   const section = verificationStore.getVerificationSection(guild.id);
   const settings = verificationStore.normalizeSettings(section?.settings || {});
   if (settings.quarantine?.enabled === false) return { ok: true, skipped: true };

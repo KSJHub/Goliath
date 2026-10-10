@@ -281,11 +281,12 @@ async function handleInviteStudioInteraction(interaction) {
     return true;
   }
 
-  if (id === 'invites:panel-embed-submit') {
-    const title = interaction.fields.getTextInputValue('title').trim();
-    const description = interaction.fields.getTextInputValue('description').trim();
-    const footer = interaction.fields.getTextInputValue('footer').trim();
-    const color = interaction.fields.getTextInputValue('color').trim();
+  if (id === 'invites:panel-embed-submit' || id === 'invites:panel-embed-submit-v2') {
+    const fieldId = (name) => id === 'invites:panel-embed-submit-v2' ? `panel-v2-${name}` : name;
+    const title = interaction.fields.getTextInputValue(fieldId('title')).trim();
+    const description = interaction.fields.getTextInputValue(fieldId('description')).trim();
+    const footer = interaction.fields.getTextInputValue(fieldId('footer')).trim();
+    const color = interaction.fields.getTextInputValue(fieldId('color')).trim();
     if (!title || !description || !footer || title.length > 256 || description.length > 1800 || footer.length > 2048 || !/^#[0-9a-fA-F]{6}$/.test(color)) {
       await interaction.reply({
         content: '❌ Check your panel fields. Title, welcome message and footer cannot be empty; embed colour must be a 6-digit hex such as #5865F2.',
