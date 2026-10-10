@@ -111,7 +111,7 @@ async function escalateToModHub(guild, member, actorId, reason) {
 async function reconcileModerationRelease(guild, userId, actorId, reason = 'Mod Hub investigation cleared') {
   if (!guild || !userId) return { ok: false, message: 'Verification reconciliation target is unavailable.' };
   const session = verificationStore.getSession(guild.id, userId) || {};
-  if (session.state !== 'review' && !session.quarantineEscalatedAt && !session.moderationIsolationMode) return { ok: true, skipped: true };
+  if (session.state !== 'review') return { ok: true, skipped: true };
   const member = await guild.members.fetch(userId).catch(() => null);
   const section = verificationStore.getVerificationSection(guild.id);
   const settings = verificationStore.normalizeSettings(section?.settings || {});
