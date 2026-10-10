@@ -11,13 +11,22 @@ function verificationEnabled(guildId) { return Boolean(guildId) && guildManager.
 function settingsFor(guildId) { const section=verificationStore.getVerificationSection(guildId); return verificationStore.normalizeSettings(section?.settings||{}); }
 function raidPressure(guildId, settings) {
   const raid=settings.raid||{};
-  if(raid.enabled===false||raid.automatic===false) return {active:false,count:0};
-  const windowMs=Math.max(5,Number(raid.windowSeconds||60))*1000, threshold=Math.max(2,Number(raid.joinThreshold||10)), now=Date.now();
-  const recent=(joinWindows.get(guildId)||[]).filter(ts=>now-ts<=windowMs); recent.push(now); joinWindows.set(guildId,recent);
-  return {active:recent.length>=threshold,count:recent.length,threshold,windowSeconds:Math.round(windowMs/1000)};
+  if(raid.enabled===false||raid.automatic===false) {
+    joinWindows.delete(guildId);
+    return {active:false,count:0};
+  }
+  const seconds=Number(raid.windowSeconds), joins=Number(raid.joinThreshold);
+  const windowSeconds=Number.isFinite(seconds)?Math.max(5,Math.min(3600,Math.floor(seconds))):60;
+  const threshold=Number.isFinite(joins)?Math.max(2,Math.min(10000,Math.floor(joins))):10;
+  const windowMs=windowSeconds*1000, now=Date.now();
+  const recent=(joinWindows.get(guildId)||[]).filter(ts=>ts<=now&&now-ts<=windowMs);
+  recent.push(now);
+  joinWindows.set(guildId,recent);
+  return {active:recent.length>=threshold,count:recent.length,threshold,windowSeconds};
 }
 async function applyRaidPressure(member){
-  if(!member?.guild||member.user?.bot||!verificationEnabled(member.guild.id))return;
+  if(!member?.guild||member.user?.bot)return;
+  if(!verificationEnabled(member.guild.id)){joinWindows.delete(member.guild.id);return;}
   const settings=settingsFor(member.guild.id), pressure=raidPressure(member.guild.id,settings);
   if(!pressure.active||settings.raid?.elevateSecurity===false)return;
   const session=verificationStore.getSession(member.guild.id,member.id)||{};
