@@ -281,7 +281,8 @@ function buildPublicPayload(guildId, sourceSection = null) {
   const lines = entries.length
     ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** referral${entry.score === 1 ? '' : 's'}`).join('\n')
     : 'No referrals yet — be the first on the board!';
-  const description = panel.description;
+  // Saved panels may contain a legacy invisible spacer at the end of the introduction.
+  const description = panel.description.replace(/[\\s\\u200B]+$/gu, '');
   return {
     embeds: [new EmbedBuilder().setColor(panel.color).setTitle(panel.title)
       .setDescription(description)
