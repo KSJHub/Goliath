@@ -151,7 +151,8 @@ async function handleStaffAction(interaction, parsed, manager) {
     }
     const outcome = await manager.quarantineVerificationMember(interaction.guild, parsed.userId, 'Staff-directed verification quarantine');
     if (!outcome?.quarantined) {
-      await interaction.reply({ content: 'Quarantine could not be applied. Check the role configuration and permissions.', flags: MessageFlags.Ephemeral });
+      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_quarantine_action_failed', staffUserId: clean(interaction.user.id), reason: String(outcome?.message || 'Quarantine role transition failed').slice(0, 300) });
+      await interaction.reply({ content: `⚠️ Staff quarantine action was recorded, but quarantine could not be applied: ${outcome?.message || 'Check role configuration and permissions.'} Manual staff review is required.`, flags: MessageFlags.Ephemeral });
       return true;
     }
   } else if (result.recordFailure) {
