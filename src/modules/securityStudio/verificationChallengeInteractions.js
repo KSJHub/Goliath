@@ -141,6 +141,11 @@ async function handleStaffAction(interaction, parsed, manager) {
     await interaction.reply({ content: 'Verification action service is unavailable. Contact an administrator.', flags: MessageFlags.Ephemeral });
     return true;
   }
+  const targetMember = await interaction.guild?.members?.fetch(parsed.userId).catch(() => null);
+  if (!targetMember) {
+    await interaction.reply({ content: 'Verification member is unavailable. Staff action was not recorded; check whether the member has left the server.', flags: MessageFlags.Ephemeral });
+    return true;
+  }
   const result = runtime.resolveStaffAction(interaction.guildId, parsed.userId, parsed.challengeId, interaction.user.id, parsed.action);
   if (!result.complete || !result.action) { await interaction.reply({ content: `❌ Staff action failed: ${result.reason || 'challenge unavailable'}.`, flags: MessageFlags.Ephemeral }); return true; }
   let resumed = null;
