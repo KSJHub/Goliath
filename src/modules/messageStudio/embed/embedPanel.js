@@ -296,6 +296,7 @@ function defaultState() {
     template: "custom",
     selectedPreset: null,
     channelId: null,
+    channelPage: 0,
     selectedPanelIndex: 0,
     panels: [p],
     allowUserPing: false,
@@ -863,7 +864,7 @@ function buildEditorPanel(i, who = "Unknown User") {
                   String(b.name || "")
                 );
               })
-              .slice(0, 24)
+              .slice(Math.max(0, Number(s.channelPage) || 0) * 24, (Math.max(0, Number(s.channelPage) || 0) + 1) * 24)
               .map((channel) => ({
                 label: String(
                   channel.name || channel.id
