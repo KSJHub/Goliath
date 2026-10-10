@@ -281,14 +281,15 @@ function buildPublicPayload(guildId, sourceSection = null) {
   const lines = entries.length
     ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** referral${entry.score === 1 ? '' : 's'}`).join('\n')
     : 'No referrals yet — be the first on the board!';
-  const description = panel.description;
+  // Saved panels may contain a legacy invisible spacer at the end of the introduction.
+  const description = panel.description.replace(/[\\s\\u200B]+$/gu, '');
   return {
     embeds: [new EmbedBuilder().setColor(panel.color).setTitle(panel.title)
       .setDescription(description)
       .addFields(
-        { name: '🔗 Official Server Invite', value: `**[Join the community](${url})** · ${url}`, inline: false },
+        { name: '🔗 Official Server Invite', value: `**[Join the community](${url})** · ${url}\n​`, inline: false },
+        { name: '💎 Your Personal Invite', value: memberEnabled ? 'Select **My Invite Link** to get your own referral link, share it with friends and climb the rankings. Use **My Stats** to track your progress.\n​' : 'Personal invite creation is currently paused. Your stats and the leaderboard remain available.\n​', inline: false },
         { name: `🏆 Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
-        { name: '💎 Your Personal Invite', value: memberEnabled ? 'Select **My Invite Link** to get your own referral link, share it with friends and climb the rankings. Use **My Stats** to track your progress.' : 'Personal invite creation is currently paused. Your stats and the leaderboard remain available.', inline: false },
       )
       .setFooter({ text: panel.footer }).setTimestamp()],
     components: [row(
@@ -354,11 +355,13 @@ function buildInviteStudioPayload(interaction, forcedPage = null) {
 
 function embedModal(interaction) {
   const config = invites.getSection(interaction.guildId).settings.publicPanel;
-  return new ModalBuilder().setCustomId('invites:panel-embed-submit').setTitle('Edit Community Invite Panel').addComponents(
-    row(new TextInputBuilder().setCustomId('title').setLabel('Panel Title').setPlaceholder('💎 Invite & Climb the Leaderboard').setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(config.title)),
-    row(new TextInputBuilder().setCustomId('description').setLabel('Referral Message').setPlaceholder('Invite friends, earn referrals and climb the leaderboard.').setStyle(TextInputStyle.Paragraph).setMaxLength(1800).setRequired(true).setValue(config.description)),
-    row(new TextInputBuilder().setCustomId('footer').setLabel('Footer Message').setPlaceholder('Leaderboard updates every 2 hours').setStyle(TextInputStyle.Short).setMaxLength(2048).setRequired(true).setValue(config.footer)),
-    row(new TextInputBuilder().setCustomId('color').setLabel('Embed Colour (6-digit hex)').setPlaceholder('#5865F2').setStyle(TextInputStyle.Short).setMinLength(7).setMaxLength(7).setRequired(true).setValue(config.color)),
+  // The editor must open with the approved Invite Studio design.
+  const approved = invites.defaults().settings.publicPanel;
+  return new ModalBuilder().setCustomId('invites:panel-embed-submit-v2').setTitle('Edit Community Invite Panel').addComponents(
+    row(new TextInputBuilder().setCustomId('panel-v2-title').setLabel('Panel Title').setPlaceholder(approved.title).setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(approved.title)),
+    row(new TextInputBuilder().setCustomId('panel-v2-description').setLabel('Referral Message').setPlaceholder('Share your link, build your referrals and compete for the top spot!').setStyle(TextInputStyle.Paragraph).setMaxLength(1800).setRequired(true).setValue(approved.description)),
+    row(new TextInputBuilder().setCustomId('panel-v2-footer').setLabel('Footer Message').setPlaceholder(approved.footer).setStyle(TextInputStyle.Short).setMaxLength(2048).setRequired(true).setValue(approved.footer)),
+    row(new TextInputBuilder().setCustomId('panel-v2-color').setLabel('Embed Colour (6-digit hex)').setPlaceholder(approved.color).setStyle(TextInputStyle.Short).setMinLength(7).setMaxLength(7).setRequired(true).setValue(approved.color)),
   );
 }
 function dmModal(interaction) {

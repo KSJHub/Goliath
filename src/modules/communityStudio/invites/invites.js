@@ -44,9 +44,9 @@ function defaults() {
         channelId: null,
         messageId: null,
         title: "💎 Invite & Climb the Leaderboard",
-        description: "**Your invites. Your referrals. Your place on the leaderboard.**\n\nBring your friends into the server using your own personal invite link. Every eligible referral counts towards your score and helps you climb the rankings.\n\n🏆 **Share your link, build your referrals and compete for the top spot!**",
-        color: '#5865F2',
-        footer: "💎 Goliath Invites • Every Referral Counts • Leaderboard updates every 2 hours",
+        description: "**Share your link, build your referrals and compete for the top spot!**\n\n**Your invites. Your referrals. Your place on the leaderboard.**",
+        color: '#D4AF37',
+        footer: "💎 Goliath Invites · Leaderboard updates every 2 hours",
         buttonLabel: 'Join Server',
         leaderboardLimit: 10,
         lastRefreshedAt: null,
@@ -93,6 +93,15 @@ function normalize(section = {}) {
   const officialInvite = settings.officialInvite || {};
   const memberTemplate = settings.memberInviteTemplate || {};
   const publicPanel = settings.publicPanel || {};
+  // Upgrade the legacy Invite Studio copy without overwriting customised panels.
+  const legacyDescription = String(publicPanel.description || '').replace(/\\n/g, '\n').replace(/\s+/g, ' ').toLowerCase();
+  const legacyFooter = String(publicPanel.footer || '').replace(/\s+/g, ' ').toLowerCase();
+  // Older saved panels vary in spacing and wording; recognise the old copy without replacing custom designs.
+  const legacyPanelCopy = legacyDescription.includes('bring your friends into the server') ||
+    (legacyDescription.includes('your invites. your referrals. your place on the leaderboard.') &&
+      (legacyDescription.includes('every eligible referral') || legacyDescription.includes('climb the rankings')));
+  const legacyPanelFooter = legacyFooter.includes('every referral counts');
+
   const inviteLinks = {};
   for (const [code, link] of Object.entries(section.inviteLinks || {})) {
     const normalized = normalizeInviteLink(link, code);
@@ -144,9 +153,9 @@ function normalize(section = {}) {
         channelId: cleanId(publicPanel.channelId),
         messageId: cleanId(publicPanel.messageId),
         title: clean(publicPanel.title === "🌍 Join Our Community" ? base.settings.publicPanel.title : (publicPanel.title || base.settings.publicPanel.title), 256),
-        description: clean((publicPanel.description === "Use our official server invite below, or create your own personal link to compete on the leaderboard." ? base.settings.publicPanel.description : (publicPanel.description || base.settings.publicPanel.description)).replace(/^\s*💎\s*(?=\*\*Your invites\.)/, '').replace(/\\n/g, '\n'), 4000),
-        color: /^#[0-9a-f]{6}$/i.test(String(publicPanel.color || '')) ? publicPanel.color : base.settings.publicPanel.color,
-        footer: clean(publicPanel.footer === "Leaderboard refreshes automatically every 2 hours" ? base.settings.publicPanel.footer : (publicPanel.footer || base.settings.publicPanel.footer), 2048),
+        description: clean((legacyPanelCopy || publicPanel.description === "Use our official server invite below, or create your own personal link to compete on the leaderboard." ? base.settings.publicPanel.description : (publicPanel.description || base.settings.publicPanel.description)).replace(/^\s*💎\s*(?=\*\*Your invites\.)/, '').replace(/\\n/g, '\n'), 4000),
+        color: (legacyPanelCopy || legacyPanelFooter) && String(publicPanel.color || '').toUpperCase() === '#5865F2' ? base.settings.publicPanel.color : (/^#[0-9a-f]{6}$/i.test(String(publicPanel.color || '')) ? publicPanel.color : base.settings.publicPanel.color),
+        footer: clean(legacyPanelFooter || publicPanel.footer === "Leaderboard refreshes automatically every 2 hours" ? base.settings.publicPanel.footer : (publicPanel.footer || base.settings.publicPanel.footer), 2048),
         buttonLabel: clean(publicPanel.buttonLabel || base.settings.publicPanel.buttonLabel, 80),
         leaderboardLimit: Math.max(3, Math.min(25, Number(publicPanel.leaderboardLimit || 10))),
         lastRefreshedAt: publicPanel.lastRefreshedAt || null,

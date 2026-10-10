@@ -4,6 +4,7 @@ const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
+const guildManager = require('../../core/guild/guildManager');
 const runtime = require('./verificationChallengeRuntime');
 const verificationStore = require('./verificationStore');
 
@@ -158,6 +159,10 @@ async function handleStaffAction(interaction, parsed, manager) {
 async function handleVerificationChallengeInteraction(interaction, manager = null) {
   const customId = clean(interaction?.customId);
   if (!customId.startsWith('verify:')) return false;
+  if (!interaction.guildId || !guildManager.isModuleEnabled(interaction.guildId, 'verification')) {
+    await interaction.reply({ content: '⏸️ Verification is currently disabled on this server.', flags: MessageFlags.Ephemeral });
+    return true;
+  }
   const modal = parseAnswerModalId(customId);
   if (modal && interaction.isModalSubmit?.()) return handleAnswerModal(interaction, modal, manager);
   const parsed = runtime.parseActionId(customId);
