@@ -87,11 +87,16 @@ function resumedMemberPayload(userId, resumed) {
 
 async function publishResumedChallenge(interaction, userId, resumed) {
   if (!resumed?.challenge) return false;
-  const payload = resumed.challenge.method === 'staff_approval'
-    ? staffChallengePayload(userId, resumed.challenge)
-    : memberChallengePayload(userId, resumed.challenge);
-  if (!payload || !interaction.channel?.send) return false;
-  await interaction.channel.send({ content: `<@${userId}> ${resumed.message || 'Verification requires another security check.'}`, ...payload, allowedMentions: { users: [userId], roles: [], parse: [] } });
+  if (resumed.challenge.method === 'staff_approval') {
+    const payload = staffChallengePayload(userId, resumed.challenge);
+    if (!payload || !interaction.channel?.send) return false;
+    await interaction.channel.send({ content: `<@${userId}> ${resumed.message || 'Verification requires staff approval.'}`, ...payload, allowedMentions: { users: [userId], roles: [], parse: [] } });
+    return true;
+  }
+  const member = await interaction.guild?.members?.fetch(userId).catch(() => null);
+  if (!member?.send) return false;
+  const payload = memberChallengePayload(userId, resumed.challenge);
+  await member.send({ content: resumed.message || 'Continue with the next Verification security check.', ...payload, allowedMentions: { parse: [] } });
   return true;
 }
 
