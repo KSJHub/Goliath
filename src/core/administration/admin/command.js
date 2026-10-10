@@ -22,6 +22,8 @@ const { createCase, updateCaseStatus, recordCaseAudit } = require('../mod/storag
 
 const SETTINGS_ID = 'admin:settings';
 const SETTINGS_BACK_ID = 'admin:settings:back';
+const SECURITY_SETTINGS_ID = 'admin:settings:security-hub';
+const SECURITY_SETTINGS_BACK_ID = 'admin:settings:back:security-hub';
 const SECURITY_HUB_ID = 'admin:security-hub';
 const SECURITY_HUB_BACK_ID = 'admin:security-hub:back';
 const SECURITY_HUB_REFRESH_ID = 'admin:security-hub:refresh';
@@ -60,9 +62,9 @@ function lockdownSlowmode(state) {
   const severity = String(state.severity || '').toLowerCase();
   return ({ critical: '6 hours', high: '1 hour', medium: '10 minutes', low: '1 minute' })[severity] || 'Lockdown managed';
 }
-function navRow(backId, refreshId = null) {
+function navRow(backId, refreshId = null, settingsId = SETTINGS_ID) {
   const buttons = [new ButtonBuilder().setCustomId(backId).setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary)];
-  buttons.push(new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('🔧').setStyle(ButtonStyle.Secondary));
+  buttons.push(new ButtonBuilder().setCustomId(settingsId).setLabel('Settings').setEmoji('🔧').setStyle(ButtonStyle.Secondary));
   if (refreshId) buttons.push(new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary));
   return new ActionRowBuilder().addComponents(buttons);
 }
@@ -89,13 +91,13 @@ function addAdminControls(panel, interaction) {
   return { ...panel, embeds, components };
 }
 
-function buildSettingsPanel(interaction) {
+function buildSettingsPanel(interaction, backId = SETTINGS_BACK_ID) {
   const authority = adminPanel.getAuthorityConfig(interaction.guild.id);
   const configuredLogs = Object.values(adminPanel.LOG_TYPES || {}).filter((entry) => adminPanel.getLogChannelId(interaction.guild.id, entry.key)).length;
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ Goliath Settings').setDescription('General server-level Goliath configuration and administration defaults.')
     .addFields({ name: 'Server', value: `${interaction.guild.name}\n\`${interaction.guild.id}\``, inline: true }, { name: 'Authority', value: authority.configured ? 'Configured ✅' : 'Legacy fallback ⚠️', inline: true }, { name: 'Log Channels', value: `${configuredLogs}/5 configured`, inline: true })
     .setFooter({ text: `Requested by ${memberDisplayName(interaction)}` }).setTimestamp();
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(SETTINGS_BACK_ID).setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary))] };
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(backId).setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary))] };
 }
 
 function buildSecurityHub(interaction) {
@@ -109,7 +111,7 @@ function buildSecurityHub(interaction) {
   const row1 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(AUTOMOD_HUB_ID).setLabel('AutoMod').setEmoji('🤖').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(ANTINUKE_HUB_ID).setLabel('Anti-Nuke').setEmoji('💥').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(ISOLATION_HUB_ID).setLabel('Full Security Isolation').setEmoji('🚨').setStyle(ButtonStyle.Danger).setDisabled(!isGuildOwner(interaction)));
   const row2 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(LOCKDOWN_HUB_ID).setLabel('Lockdown & Restrictions').setEmoji('🔒').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(MEMBER_HUB_ID).setLabel('Member Security').setEmoji('👤').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(RECOVERY_HUB_ID).setLabel('Recovery Controls').setEmoji('🧰').setStyle(ButtonStyle.Secondary));
   const row3 = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(HEALTH_HUB_ID).setLabel('Security Health').setEmoji('🩺').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(THREAT_HUB_ID).setLabel('Threat Protection').setEmoji('⚡').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId(VERIFICATION_HUB_ID).setLabel('Verification').setEmoji('🛂').setStyle(ButtonStyle.Secondary));
-  return { embeds: [embed], components: [row1, row2, row3, navRow(SECURITY_HUB_BACK_ID, SECURITY_HUB_REFRESH_ID)] };
+  return { embeds: [embed], components: [row1, row2, row3, navRow(SECURITY_HUB_BACK_ID, SECURITY_HUB_REFRESH_ID, SECURITY_SETTINGS_ID)] };
 }
 
 function buildServerSecurityPanel(interaction, notice = null) {
@@ -145,7 +147,7 @@ async function denyOwnerSecurity(interaction) { const payload = { content: '❌ 
 async function denyServerSecurity(interaction) { const payload = { content: '❌ You do not have permission to use the Security Hub.', flags: 64 }; if (interaction.replied || interaction.deferred) await interaction.editReply(payload).catch(() => null); else await interaction.reply(payload).catch(() => null); return true; }
 async function fetchSecurityTarget(interaction, targetId) { if (!targetId) return null; return interaction.guild.members.cache.get(String(targetId)) || interaction.guild.members.fetch(String(targetId)).catch(() => null); }
 
-async function handleSettingsInteraction(interaction) { const id = String(interaction?.customId || ''); if (id !== SETTINGS_ID && id !== SETTINGS_BACK_ID) return false; if (!canUseSettings(interaction)) { await interaction.reply({ content: '❌ You do not have permission to open Goliath Settings.', flags: 64 }).catch(() => null); return true; } if (id === SETTINGS_ID) { await interaction.update(buildSettingsPanel(interaction)); return true; } await interaction.update(rootAdminPanel(interaction)); return true; }
+async function handleSettingsInteraction(interaction) { const id = String(interaction?.customId || ''); if (![SETTINGS_ID, SETTINGS_BACK_ID, SECURITY_SETTINGS_ID, SECURITY_SETTINGS_BACK_ID].includes(id)) return false; if (!canUseSettings(interaction)) { await interaction.reply({ content: '❌ You do not have permission to open Goliath Settings.', flags: 64 }).catch(() => null); return true; } if (id === SETTINGS_ID || id === SECURITY_SETTINGS_ID) { await interaction.update(buildSettingsPanel(interaction, id === SECURITY_SETTINGS_ID ? SECURITY_SETTINGS_BACK_ID : SETTINGS_BACK_ID)); return true; } await interaction.update(id === SECURITY_SETTINGS_BACK_ID ? buildSecurityHub(interaction) : rootAdminPanel(interaction)); return true; }
 async function runServerSecurityRestore(interaction, type) { if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate(); const reason = `Manual guild security recovery by ${interaction.user.tag || interaction.user.id}`; let result; if (type === 'lockdown') result = await disableLockdown(interaction.guild, { reason, disabledByTag: interaction.user.tag || interaction.user.id }); if (type === 'invites') result = await restoreInvites(interaction.guild, { reason }); if (type === 'roles') result = await restoreRoles(interaction.guild, { reason }); const ok = Boolean(result?.success), detail = result?.reason || (ok ? 'Recovery completed successfully.' : 'Recovery failed.'); await interaction.editReply(buildServerSecurityPanel(interaction, `${ok ? '✅' : '❌'} **${type} recovery:** ${detail}`)); return true; }
 async function restoreAllServerSecurity(interaction) { if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate(); const reason = `Manual full guild security recovery by ${interaction.user.tag || interaction.user.id}`, results = []; const lockdown = getLockdownState(interaction.guild.id); if (lockdown.active) results.push(['Lockdown', await disableLockdown(interaction.guild, { reason, disabledByTag: interaction.user.tag || interaction.user.id })]); let emergency = getEmergencyControlState(interaction.guild.id); if (emergency.invites.active) results.push(['Invites', await restoreInvites(interaction.guild, { reason })]); emergency = getEmergencyControlState(interaction.guild.id); if (emergency.roles.active) results.push(['Roles', await restoreRoles(interaction.guild, { reason })]); const failed = results.filter(([, result]) => !result?.success); const notice = failed.length ? `⚠️ **Recovery completed with ${failed.length} failure(s).** Goliath retained recovery state that could not be safely restored.` : `✅ **Guild security recovery complete.** ${results.length || 'No'} active restriction${results.length === 1 ? '' : 's'} processed.`; await interaction.editReply(buildServerSecurityPanel(interaction, notice)); return true; }
 
