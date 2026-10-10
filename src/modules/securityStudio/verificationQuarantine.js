@@ -191,7 +191,8 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
     verificationStore.clearAttempts(guild.id, userId);
     verificationStore.upsertSession(guild.id, userId, { state: 'pending', failedAttempts: 0, activeChallenge: null, activeSecurityMethod: null, completedSecurity: [], quarantineReleasedAt: new Date().toISOString(), quarantineReleasedBy: actorId || null });
     verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_released', actorId: actorId || null, reason: reason || 'Released by staff' });
-    await closeQuarantineCase(guild, userId, 'Verification quarantine released');
+    const closure = await closeQuarantineCase(guild, userId, 'Verification quarantine released').catch(error => ({ ok: false, message: String(error?.message || error) }));
+    if (!closure?.ok) return { ok: true, released: true, cleanupPending: true, member, message: 'Member released to Pending Verification, but the quarantine case channel requires manual cleanup.' };
     return { ok: true, released: true, member, message: 'Member released from quarantine and returned to Pending Verification.' };
   }
   try {
@@ -202,7 +203,8 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
   }
   verificationStore.upsertSession(guild.id, userId, { state: 'rejected', activeChallenge: null, activeSecurityMethod: null, quarantineRejectedAt: new Date().toISOString(), quarantineRejectedBy: actorId || null });
   verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_rejected', actorId: actorId || null, reason: reason || 'Rejected by staff' });
-  await closeQuarantineCase(guild, userId, 'Verification quarantine rejected');
+  const closure = await closeQuarantineCase(guild, userId, 'Verification quarantine rejected').catch(error => ({ ok: false, message: String(error?.message || error) }));
+  if (!closure?.ok) return { ok: true, rejected: true, cleanupPending: true, member, message: 'Member rejected from Verification quarantine, but the quarantine case channel requires manual cleanup.' };
   return { ok: true, rejected: true, member, message: 'Member rejected from Verification quarantine.' };
 }
 
