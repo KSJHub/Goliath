@@ -969,12 +969,12 @@ function buildEditorPanel(i, who = "Unknown User") {
 
         new ButtonBuilder()
           .setCustomId("embed:channel-prev")
-          .setLabel("<")
+          .setLabel("◀ Chan")
           .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId("embed:channel-next")
-          .setLabel(">")
+          .setLabel("Chan ▶")
           .setStyle(ButtonStyle.Secondary)
       ),
     ],
