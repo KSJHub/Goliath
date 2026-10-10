@@ -154,7 +154,7 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
   const settings = verificationStore.normalizeSettings(section?.settings || {});
   const member = await guild.members.fetch(userId).catch(() => null);
   const session = verificationStore.getSession(guild.id, userId) || {};
-  if (!['quarantined', 'review'].includes(session.state) && !session.quarantineChannelId && !session.quarantineEscalatedAt) return { ok: false, message: 'No active Verification quarantine case exists for this member.' };
+  if (session.state !== 'quarantined') return { ok: false, message: 'This member is not in active Verification quarantine. Mod Hub investigations must be resolved through Mod Hub.' };
   const quarantineIds = cleanIds(settings.roles?.quarantine);
   const pendingIds = cleanIds(settings.roles?.pending);
   if (resolution === 'escalate') {
