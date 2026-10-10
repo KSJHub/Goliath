@@ -132,6 +132,15 @@ async function handleAnswerModal(interaction, parsed, manager) {
 async function handleStaffAction(interaction, parsed, manager) {
   const section = verificationStore.getVerificationSection(interaction.guildId);
   if (!isStaff(interaction.member, section.settings || {})) { await interaction.reply({ content: '❌ You are not authorised to resolve Verification staff approvals.', flags: MessageFlags.Ephemeral }); return true; }
+  const requiredService = {
+    approve: 'resumeVerification',
+    reject: 'recordVerificationFailure',
+    quarantine: 'quarantineVerificationMember',
+  }[parsed.action];
+  if (requiredService && typeof manager?.[requiredService] !== 'function') {
+    await interaction.reply({ content: 'Verification action service is unavailable. Contact an administrator.', flags: MessageFlags.Ephemeral });
+    return true;
+  }
   const result = runtime.resolveStaffAction(interaction.guildId, parsed.userId, parsed.challengeId, interaction.user.id, parsed.action);
   if (!result.complete || !result.action) { await interaction.reply({ content: `❌ Staff action failed: ${result.reason || 'challenge unavailable'}.`, flags: MessageFlags.Ephemeral }); return true; }
   let resumed = null;
