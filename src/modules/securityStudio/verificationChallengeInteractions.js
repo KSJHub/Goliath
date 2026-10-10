@@ -161,6 +161,11 @@ async function handleStaffAction(interaction, parsed, manager) {
       return true;
     }
     const outcome = await manager.recordVerificationFailure(interaction.guild, parsed.userId, 'staff_approval', 'Rejected by Verification staff');
+    if (outcome?.quarantined !== true && outcome?.ok === false && !Number.isFinite(outcome?.failed)) {
+      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_rejection_processing_failed', staffUserId: clean(interaction.user.id), reason: String(outcome?.message || 'Failure processing did not complete').slice(0, 300) });
+      await interaction.reply({ content: `⚠️ Staff rejection was recorded, but its security transition could not complete: ${outcome?.message || 'Unknown failure'}. Manual staff review is required.`, flags: MessageFlags.Ephemeral });
+      return true;
+    }
     if (!outcome?.quarantined) {
       verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'rejected', activeSecurityMethod: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_verification_rejected', staffUserId: clean(interaction.user.id) });
