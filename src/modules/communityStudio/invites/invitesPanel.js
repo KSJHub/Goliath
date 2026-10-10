@@ -285,15 +285,13 @@ function buildPublicPayload(guildId, sourceSection = null) {
     '**Share your link, build your referrals and compete for the top spot!**',
     '',
     '**Your invites. Your referrals. Your place on the leaderboard.**',
-    '',
-    '\u200b',
   ].join('\n');
   return {
     embeds: [new EmbedBuilder().setColor(0xD4AF37).setTitle(panel.title)
       .setDescription(description)
       .addFields(
-        { name: '🔗 Official Server Invite', value: `**[Join the community](${url})** · ${url}\n\u200b`, inline: false },
-        { name: '💎 Your Personal Invite', value: memberEnabled ? 'Select **My Invite Link** to get your own referral link, share it with friends and climb the rankings. Use **My Stats** to track your progress.\n\u200b' : 'Personal invite creation is currently paused. Your stats and the leaderboard remain available.\n\u200b', inline: false },
+        { name: '🔗 Official Server Invite', value: `**[Join the community](${url})** · ${url}`, inline: false },
+        { name: '💎 Your Personal Invite', value: memberEnabled ? 'Select **My Invite Link** to get your own referral link, share it with friends and climb the rankings. Use **My Stats** to track your progress.' : 'Personal invite creation is currently paused. Your stats and the leaderboard remain available.', inline: false },
         { name: `🏆 Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
       )
       .setFooter({ text: '💎 Goliath Invites · Leaderboard updates every 2 hours' }).setTimestamp()],
