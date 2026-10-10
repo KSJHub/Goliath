@@ -357,7 +357,7 @@ function embedModal(interaction) {
   const config = invites.getSection(interaction.guildId).settings.publicPanel;
   // Show approved defaults in the editor when this guild still has the legacy panel copy.
   const legacy = String(config.description || '').includes('Bring your friends into the server using your own personal invite link.');
-  const defaultMessage = '**Share your link, build your referrals and compete for the top spot!**\\n\\n**Your invites. Your referrals. Your place on the leaderboard.**';
+  const defaultMessage = '**Share your link, build your referrals and compete for the top spot!**\n\n**Your invites. Your referrals. Your place on the leaderboard.**';
   const editorDescription = legacy ? defaultMessage : config.description;
   const editorFooter = legacy || String(config.footer || '').includes('Every Referral Counts')
     ? '💎 Goliath Invites · Leaderboard updates every 2 hours' : config.footer;
