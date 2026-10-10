@@ -278,7 +278,7 @@ function getReadinessReport(interaction, state = {}, options = {}) {
     if (url && action) pushUnique(errors, `Button ${number} cannot have both a link and a bot action.`);
     if (url && !isUsableUrl(url)) pushUnique(errors, `Button ${number} has an invalid link.`);
     if (action && !KNOWN_BUTTON_ACTIONS.has(action)) pushUnique(errors, `Button ${number} uses unsupported action \`${action}\`.`);
-    if (!url && !action) pushUnique(warnings, `Button ${number} has no link or action configured.`);
+    if (!url && !action) pushUnique(errors, `Button ${number} needs a link or bot action before publishing (optional while designing).`);
     if (action === 'reply' && !toCleanString(button?.actionValue)) pushUnique(errors, `Button ${number} Reply action has no reply text.`);
     if (ROLE_BUTTON_ACTIONS.has(action)) {
       const id = cleanRoleId(button?.actionValue);
@@ -290,12 +290,11 @@ function getReadinessReport(interaction, state = {}, options = {}) {
         else if (!role.editable) pushUnique(errors, `Button ${number} selected role is above Goliath or otherwise not editable.`);
       }
     }
-    const configuredRow = Number(button?.row);
+    const configuredRow = button?.row == null || button.row === '' || button.row === 'auto' ? null : Number(button.row);
     if (Number.isInteger(configuredRow) && configuredRow >= 0 && configuredRow < MAX_DEPLOYED_BUTTON_ROWS) rowCounts[configuredRow] += 1;
   });
-  rowCounts.forEach((count, index) => {
-    if (count > MAX_BUTTONS_PER_ROW) pushUnique(errors, `Button row ${index + 1} has ${count} buttons; Discord allows ${MAX_BUTTONS_PER_ROW}.`);
-  });
+  // Explicitly assigned buttons beyond row capacity are moved into Auto placement by the publisher.
+  // Readiness must not reject a row that the publisher will automatically rebalance.
   checks.push(`${buttons.length}/${MAX_BUTTONS} buttons`);
 
   const unknown = unknownVariables(state, options.helpers);
