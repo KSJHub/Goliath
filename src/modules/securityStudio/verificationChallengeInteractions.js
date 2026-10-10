@@ -160,6 +160,16 @@ async function handleStaffAction(interaction, parsed, manager) {
         return true;
       }
     }
+    const removalIds = [...new Set(['pending', 'verifying', 'verified', 'auto']
+      .flatMap(key => Array.isArray(section.settings?.roles?.[key]) ? section.settings.roles[key] : [])
+      .map(clean).filter(Boolean))].filter(id => !ids.includes(id));
+    for (const roleId of removalIds) {
+      const role = interaction.guild.roles.cache.get(roleId) || await interaction.guild.roles.fetch(roleId).catch(() => null);
+      if (!role || (targetMember.roles.cache.has(roleId) && !role.editable)) {
+        await interaction.reply({ content: 'A configured Verification role to remove is missing or cannot be managed by Goliath. Staff action was not recorded.', flags: MessageFlags.Ephemeral });
+        return true;
+      }
+    }
   }
   const result = runtime.resolveStaffAction(interaction.guildId, parsed.userId, parsed.challengeId, interaction.user.id, parsed.action);
   if (!result.complete || !result.action) { await interaction.reply({ content: `❌ Staff action failed: ${result.reason || 'challenge unavailable'}.`, flags: MessageFlags.Ephemeral }); return true; }
