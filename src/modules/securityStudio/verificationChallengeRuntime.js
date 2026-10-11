@@ -45,6 +45,7 @@ function sessionState(guildId, userId) {
 
 function markCompleted(guildId, userId, method) {
   const session = verificationStore.getSession(guildId, userId) || {};
+  if (TERMINAL_STATES.has(session.state)) return Array.isArray(session.completedSecurity) ? [...session.completedSecurity] : [];
   const completed = new Set(Array.isArray(session.completedSecurity) ? session.completedSecurity : []);
   completed.add(method);
   verificationStore.upsertSession(guildId, userId, { state: 'verifying', completedSecurity: [...completed], activeSecurityMethod: null, activeChallenge: null });
