@@ -130,6 +130,8 @@ function recover(guildId, userId) {
     reason = 'interrupted_staff_action_requires_review';
   } else if (before.staffActionProcessingPending && !TERMINAL_STATES.has(before.state)) {
     reason = 'staff_action_processing_in_progress';
+  } else if (TERMINAL_STATES.has(before.state) && [before.staffApprovalContinuationPending, before.staffActionProcessingPending].some(marker => marker && Number.isFinite(Date.parse(marker.recordedAt)) && Date.now() - Date.parse(marker.recordedAt) <= 120000)) {
+    reason = 'terminal_staff_action_finalization_in_progress';
   } else if (TERMINAL_STATES.has(before.state) && (challenge || before.activeSecurityMethod || before.staffApprovalContinuationPending || before.staffActionProcessingPending)) {
     verificationStore.upsertSession(guildId, userId, { activeChallenge: null, activeSecurityMethod: null, staffApprovalContinuationPending: null, staffActionProcessingPending: null }); changed = true; reason = 'terminal_session_cleaned';
   } else if (challenge?.method === 'staff_approval' && ['passed', 'failed'].includes(challenge.status) && ['approve', 'reject', 'quarantine'].includes(challenge.staffAction) && !TERMINAL_STATES.has(before.state) && (!Number.isFinite(Date.parse(challenge.resolvedAt)) || Date.now() - Date.parse(challenge.resolvedAt) > 120000)) {
