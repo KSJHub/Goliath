@@ -253,6 +253,15 @@ async function handleStaffAction(interaction, parsed, manager) {
     await interaction.reply({ content: `⚠️ Staff approval was recorded, but Verification could not continue: ${resumed?.message || 'Unknown error'}. Manual staff review is required.`, flags: MessageFlags.Ephemeral });
     return true;
   }
+  if (result.resumeFlow) {
+    const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
+    const pending = latest.staffApprovalContinuationPending;
+    if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId)) {
+      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_late_completion', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
+      await interaction.reply({ content: '⚠️ Approval continuation returned after its session entered review or changed. Manual staff review is required.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+  }
   if (resumed?.challenge) {
     let delivered = false;
     try {
