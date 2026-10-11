@@ -183,6 +183,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     try {
       outcome = await manager.quarantineVerificationMember(interaction.guild, parsed.userId, 'Staff-directed verification quarantine');
     } catch (error) {
+      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_quarantine_action_failed', staffUserId: clean(interaction.user.id), reason: String(error?.message || error).slice(0, 300) });
       await interaction.reply({ content: '⚠️ Staff quarantine action was recorded, but its role transition failed unexpectedly. Manual staff review is required.', flags: MessageFlags.Ephemeral });
       return true;
