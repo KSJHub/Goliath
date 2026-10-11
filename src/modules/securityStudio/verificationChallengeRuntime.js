@@ -113,7 +113,7 @@ function recover(guildId, userId) {
   const challenge = before.activeChallenge || null;
   let changed = false;
   let reason = 'healthy';
-  if (before.staffApprovalContinuationPending && !TERMINAL_STATES.has(before.state) && Date.now() - new Date(before.staffApprovalContinuationPending.recordedAt).getTime() > 120000) {
+  if (before.staffApprovalContinuationPending && !TERMINAL_STATES.has(before.state) && (!Number.isFinite(Date.parse(before.staffApprovalContinuationPending.recordedAt)) || Date.now() - Date.parse(before.staffApprovalContinuationPending.recordedAt) > 120000)) {
     verificationStore.upsertSession(guildId, userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffApprovalContinuationPending: null });
     verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_approval_continuation_interrupted', challengeId: before.staffApprovalContinuationPending.challengeId });
     changed = true;
