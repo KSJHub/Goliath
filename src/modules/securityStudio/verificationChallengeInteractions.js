@@ -194,6 +194,13 @@ async function handleStaffAction(interaction, parsed, manager) {
       await interaction.reply({ content: `⚠️ Staff quarantine action was recorded, but quarantine could not be applied: ${outcome?.message || 'Check role configuration and permissions.'} Manual staff review is required.`, flags: MessageFlags.Ephemeral });
       return true;
     }
+    const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
+    const pending = latest.staffActionProcessingPending;
+    if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.action !== 'quarantine') {
+      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_quarantine_late_completion', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
+      await interaction.reply({ content: '⚠️ Quarantine processing returned after its session entered review or changed. Confirm the member roles manually.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
     verificationStore.upsertSession(interaction.guildId, parsed.userId, { staffActionProcessingPending: null });
   } else if (result.recordFailure) {
     if (typeof manager?.recordVerificationFailure !== 'function') {
