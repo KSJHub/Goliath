@@ -113,7 +113,12 @@ function recover(guildId, userId) {
   const challenge = before.activeChallenge || null;
   let changed = false;
   let reason = 'healthy';
-  if (TERMINAL_STATES.has(before.state) && (challenge || before.activeSecurityMethod)) {
+  if (before.staffApprovalContinuationPending && !TERMINAL_STATES.has(before.state) && Date.now() - new Date(before.staffApprovalContinuationPending.recordedAt).getTime() > 120000) {
+    verificationStore.upsertSession(guildId, userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffApprovalContinuationPending: null });
+    verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_approval_continuation_interrupted', challengeId: before.staffApprovalContinuationPending.challengeId });
+    changed = true;
+    reason = 'interrupted_staff_approval_requires_review';
+  } else if (TERMINAL_STATES.has(before.state) && (challenge || before.activeSecurityMethod)) {
     verificationStore.upsertSession(guildId, userId, { activeChallenge: null, activeSecurityMethod: null }); changed = true; reason = 'terminal_session_cleaned';
   } else if (challenge?.method === 'staff_approval' && ['passed', 'failed'].includes(challenge.status) && ['approve', 'reject', 'quarantine'].includes(challenge.staffAction) && !TERMINAL_STATES.has(before.state)) {
     verificationStore.upsertSession(guildId, userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
