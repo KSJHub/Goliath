@@ -104,6 +104,9 @@ function resolveStaffAction(guildId, targetUserId, challengeId, staffUserId, act
     verificationStore.upsertSession(guildId, targetUserId, { staffApprovalContinuationPending: { challengeId: clean(challengeId), staffUserId: clean(staffUserId), recordedAt: new Date().toISOString() } });
     return { ...result, resumeFlow: true, completedSecurity: markCompleted(guildId, targetUserId, 'staff_approval') };
   }
+  if (result.complete && ['reject', 'quarantine'].includes(result.action)) {
+    verificationStore.upsertSession(guildId, targetUserId, { staffActionProcessingPending: { challengeId: clean(challengeId), staffUserId: clean(staffUserId), action: result.action, recordedAt: new Date().toISOString() } });
+  }
   return { ...result, resumeFlow: false, recordFailure: result.complete === true && result.action === 'reject', quarantine: result.complete === true && result.action === 'quarantine' };
 }
 
