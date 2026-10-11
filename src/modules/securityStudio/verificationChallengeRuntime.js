@@ -6,7 +6,7 @@ const verificationStore = require('./verificationStore');
 const INTERACTIVE_METHODS = new Set(['captcha', 'minigame', 'one_time_challenge', 'staff_approval']);
 const MEMBER_ACTION_PREFIX = 'verify:challenge';
 const STAFF_ACTION_PREFIX = 'verify:staff';
-const TERMINAL_STATES = new Set(['verified', 'quarantined', 'rejected', 'failed', 'timed_out']);
+const TERMINAL_STATES = new Set(['verified', 'quarantined', 'review', 'rejected', 'failed', 'timed_out']);
 
 const clean = value => String(value ?? '').trim();
 const isOutdatedSecuritySession = (guildId, session) => Number(session.securityConfigRevision || 0) !== Number(verificationStore.getVerificationSection(guildId).configRevision || 1);
