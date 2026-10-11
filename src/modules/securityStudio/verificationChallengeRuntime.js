@@ -120,7 +120,7 @@ function recover(guildId, userId) {
     reason = 'interrupted_staff_approval_requires_review';
   } else if (TERMINAL_STATES.has(before.state) && (challenge || before.activeSecurityMethod || before.staffApprovalContinuationPending)) {
     verificationStore.upsertSession(guildId, userId, { activeChallenge: null, activeSecurityMethod: null, staffApprovalContinuationPending: null }); changed = true; reason = 'terminal_session_cleaned';
-  } else if (challenge?.method === 'staff_approval' && ['passed', 'failed'].includes(challenge.status) && ['approve', 'reject', 'quarantine'].includes(challenge.staffAction) && !TERMINAL_STATES.has(before.state)) {
+  } else if (challenge?.method === 'staff_approval' && ['passed', 'failed'].includes(challenge.status) && ['approve', 'reject', 'quarantine'].includes(challenge.staffAction) && !TERMINAL_STATES.has(before.state) && (!Number.isFinite(Date.parse(challenge.resolvedAt)) || Date.now() - Date.parse(challenge.resolvedAt) > 120000)) {
     verificationStore.upsertSession(guildId, userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
     verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_action_recovery_review', challengeId: challenge.challengeId, action: challenge.staffAction });
     changed = true;
