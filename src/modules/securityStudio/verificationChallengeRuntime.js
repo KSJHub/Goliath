@@ -123,8 +123,15 @@ function recover(guildId, userId) {
     reason = 'interrupted_staff_approval_requires_review';
   } else if (before.staffApprovalContinuationPending && !TERMINAL_STATES.has(before.state)) {
     reason = 'staff_approval_continuation_in_progress';
-  } else if (TERMINAL_STATES.has(before.state) && (challenge || before.activeSecurityMethod || before.staffApprovalContinuationPending)) {
-    verificationStore.upsertSession(guildId, userId, { activeChallenge: null, activeSecurityMethod: null, staffApprovalContinuationPending: null }); changed = true; reason = 'terminal_session_cleaned';
+  } else if (before.staffActionProcessingPending && !TERMINAL_STATES.has(before.state) && (!Number.isFinite(Date.parse(before.staffActionProcessingPending.recordedAt)) || Date.now() - Date.parse(before.staffActionProcessingPending.recordedAt) > 120000)) {
+    verificationStore.upsertSession(guildId, userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null });
+    verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_action_processing_interrupted', challengeId: before.staffActionProcessingPending.challengeId, action: before.staffActionProcessingPending.action });
+    changed = true;
+    reason = 'interrupted_staff_action_requires_review';
+  } else if (before.staffActionProcessingPending && !TERMINAL_STATES.has(before.state)) {
+    reason = 'staff_action_processing_in_progress';
+  } else if (TERMINAL_STATES.has(before.state) && (challenge || before.activeSecurityMethod || before.staffApprovalContinuationPending || before.staffActionProcessingPending)) {
+    verificationStore.upsertSession(guildId, userId, { activeChallenge: null, activeSecurityMethod: null, staffApprovalContinuationPending: null, staffActionProcessingPending: null }); changed = true; reason = 'terminal_session_cleaned';
   } else if (challenge?.method === 'staff_approval' && ['passed', 'failed'].includes(challenge.status) && ['approve', 'reject', 'quarantine'].includes(challenge.staffAction) && !TERMINAL_STATES.has(before.state) && (!Number.isFinite(Date.parse(challenge.resolvedAt)) || Date.now() - Date.parse(challenge.resolvedAt) > 120000)) {
     verificationStore.upsertSession(guildId, userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
     verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_action_recovery_review', challengeId: challenge.challengeId, action: challenge.staffAction });
