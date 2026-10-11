@@ -234,7 +234,20 @@ async function handleStaffAction(interaction, parsed, manager) {
     await interaction.reply({ content: `⚠️ Staff approval was recorded, but Verification could not continue: ${resumed.message || 'Unknown error'}. Manual staff review is required.`, flags: MessageFlags.Ephemeral });
     return true;
   }
-  if (resumed?.challenge) await publishResumedChallenge(interaction, parsed.userId, resumed).catch(error => console.error('[Verification] Could not publish resumed challenge:', error));
+  if (resumed?.challenge) {
+    let delivered = false;
+    try {
+      delivered = await publishResumedChallenge(interaction, parsed.userId, resumed);
+    } catch (error) {
+      console.error('[Verification] Could not publish resumed challenge:', error);
+    }
+    if (!delivered) {
+      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_challenge_delivery_failed', staffUserId: clean(interaction.user.id), challengeId: clean(resumed.challenge.challengeId) });
+      await interaction.reply({ content: '⚠️ Staff approval was recorded, but the next Verification challenge could not be delivered. Manual staff review is required.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+  }
   const actionMessage = resumed && !resumed.ok
     ? `⚠️ Staff approval was recorded, but Verification could not continue: ${resumed.message || 'Unknown error'}`
     : resumed?.complete
