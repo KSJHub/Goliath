@@ -183,17 +183,18 @@ async function handleStaffAction(interaction, parsed, manager) {
     try {
       outcome = await manager.quarantineVerificationMember(interaction.guild, parsed.userId, 'Staff-directed verification quarantine');
     } catch (error) {
-      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_quarantine_action_failed', staffUserId: clean(interaction.user.id), reason: String(error?.message || error).slice(0, 300) });
       await interaction.reply({ content: '⚠️ Staff quarantine action was recorded, but its role transition failed unexpectedly. Manual staff review is required.', flags: MessageFlags.Ephemeral });
       return true;
     }
     if (!outcome?.quarantined) {
-      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_quarantine_action_failed', staffUserId: clean(interaction.user.id), reason: String(outcome?.message || 'Quarantine role transition failed').slice(0, 300) });
       await interaction.reply({ content: `⚠️ Staff quarantine action was recorded, but quarantine could not be applied: ${outcome?.message || 'Check role configuration and permissions.'} Manual staff review is required.`, flags: MessageFlags.Ephemeral });
       return true;
     }
+    verificationStore.upsertSession(interaction.guildId, parsed.userId, { staffActionProcessingPending: null });
   } else if (result.recordFailure) {
     if (typeof manager?.recordVerificationFailure !== 'function') {
       await interaction.reply({ content: 'Verification failure service is unavailable. Contact an administrator.', flags: MessageFlags.Ephemeral });
@@ -203,13 +204,13 @@ async function handleStaffAction(interaction, parsed, manager) {
     try {
       outcome = await manager.recordVerificationFailure(interaction.guild, parsed.userId, 'staff_approval', 'Rejected by Verification staff');
     } catch (error) {
-      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_rejection_processing_failed', staffUserId: clean(interaction.user.id), reason: String(error?.message || error).slice(0, 300) });
       await interaction.reply({ content: '⚠️ Staff rejection was recorded, but failure processing raised an unexpected error. Manual staff review is required.', flags: MessageFlags.Ephemeral });
       return true;
     }
     if (outcome?.quarantined !== true && outcome?.ok === false && !Number.isFinite(outcome?.failed)) {
-      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_rejection_processing_failed', staffUserId: clean(interaction.user.id), reason: String(outcome?.message || 'Failure processing did not complete').slice(0, 300) });
       await interaction.reply({ content: `⚠️ Staff rejection was recorded, but its security transition could not complete: ${outcome?.message || 'Unknown failure'}. Manual staff review is required.`, flags: MessageFlags.Ephemeral });
       return true;
@@ -218,20 +219,21 @@ async function handleStaffAction(interaction, parsed, manager) {
       verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'rejected', activeSecurityMethod: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_verification_rejected', staffUserId: clean(interaction.user.id) });
     }
+    verificationStore.upsertSession(interaction.guildId, parsed.userId, { staffActionProcessingPending: null });
   } else {
     try {
       resumed = await maybeResumeFlow(interaction, result, manager, parsed.userId);
     } catch (error) {
-      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_continuation_failed', staffUserId: clean(interaction.user.id), reason: String(error?.message || error).slice(0, 300) });
       await interaction.reply({ content: '⚠️ Staff approval was recorded, but Verification continuation failed unexpectedly. Manual staff review is required.', flags: MessageFlags.Ephemeral });
       return true;
     }
   }
   if (result.resumeFlow && (!resumed || (!resumed.ok && !resumed.pendingSecurity && !resumed.quarantined && !resumed.rejected))) {
-    verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+    verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
     verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_continuation_failed', staffUserId: clean(interaction.user.id), reason: String(resumed?.message || 'Continuation did not succeed').slice(0, 300) });
-    await interaction.reply({ content: `⚠️ Staff approval was recorded, but Verification could not continue: ${resumed.message || 'Unknown error'}. Manual staff review is required.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: `⚠️ Staff approval was recorded, but Verification could not continue: ${resumed?.message || 'Unknown error'}. Manual staff review is required.`, flags: MessageFlags.Ephemeral });
     return true;
   }
   if (resumed?.challenge) {
@@ -242,7 +244,7 @@ async function handleStaffAction(interaction, parsed, manager) {
       console.error('[Verification] Could not publish resumed challenge:', error);
     }
     if (!delivered) {
-      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null, staffApprovalContinuationPending: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_challenge_delivery_failed', staffUserId: clean(interaction.user.id), challengeId: clean(resumed.challenge.challengeId) });
       await interaction.reply({ content: '⚠️ Staff approval was recorded, but the next Verification challenge could not be delivered. Manual staff review is required.', flags: MessageFlags.Ephemeral });
       return true;
