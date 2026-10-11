@@ -248,6 +248,7 @@ async function handleStaffAction(interaction, parsed, manager) {
       return true;
     }
   }
+  if (result.resumeFlow) verificationStore.upsertSession(interaction.guildId, parsed.userId, { staffApprovalContinuationPending: null });
   const actionMessage = resumed && !resumed.ok
     ? `⚠️ Staff approval was recorded, but Verification could not continue: ${resumed.message || 'Unknown error'}`
     : resumed?.complete
