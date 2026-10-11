@@ -222,21 +222,18 @@ async function handleStaffAction(interaction, parsed, manager) {
       await interaction.reply({ content: `⚠️ Staff rejection was recorded, but its security transition could not complete: ${outcome?.message || 'Unknown failure'}. Manual staff review is required.`, flags: MessageFlags.Ephemeral });
       return true;
     }
+    const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
+    const pending = latest.staffActionProcessingPending;
+    if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.action !== 'reject') {
+      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_rejection_late_completion', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
+      await interaction.reply({ content: '⚠️ Rejection processing returned after its session entered review or changed. Manual staff review is required. Check quarantine roles if they were applied.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
     if (!outcome?.quarantined) {
-      const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
-      const pending = latest.staffActionProcessingPending;
-      if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.action !== 'reject') {
-        verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_rejection_late_completion', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
-        await interaction.reply({ content: '⚠️ Rejection processing returned after its session entered review or changed. Manual staff review is required.', flags: MessageFlags.Ephemeral });
-        return true;
-      }
       verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'rejected', activeSecurityMethod: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_verification_rejected', staffUserId: clean(interaction.user.id) });
     }
-    const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
-    if (latest.staffActionProcessingPending?.challengeId === clean(parsed.challengeId) && latest.staffActionProcessingPending?.action === 'reject') {
-      verificationStore.upsertSession(interaction.guildId, parsed.userId, { staffActionProcessingPending: null });
-    }
+    verificationStore.upsertSession(interaction.guildId, parsed.userId, { staffActionProcessingPending: null });
   } else {
     try {
       resumed = await maybeResumeFlow(interaction, result, manager, parsed.userId);
