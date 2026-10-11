@@ -96,9 +96,11 @@ function submitAnswer(guildId, actingUserId, targetUserId, challengeId, supplied
 function resolveStaffAction(guildId, targetUserId, challengeId, staffUserId, action) {
   const session = verificationStore.getSession(guildId, targetUserId) || {};
   if (TERMINAL_STATES.has(session.state)) return { ok: false, complete: false, reason: 'terminal_session', state: session.state };
+  if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, complete: false, reason: 'staff_action_in_progress' };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, complete: false, reason: 'security_configuration_changed' };
   const active = verificationChallenges.active(guildId, targetUserId);
   if (!active || clean(active.challengeId) !== clean(challengeId) || active.method !== 'staff_approval') return { ok: false, complete: false, reason: 'stale_challenge' };
+  if (active.status !== 'pending') return { ok: false, complete: false, reason: 'challenge_closed' };
   const result = verificationChallenges.staffAction(guildId, targetUserId, challengeId, staffUserId, action);
   if (result.ok && result.action === 'approve') {
     verificationStore.upsertSession(guildId, targetUserId, { staffApprovalContinuationPending: { challengeId: clean(challengeId), staffUserId: clean(staffUserId), recordedAt: new Date().toISOString() } });
