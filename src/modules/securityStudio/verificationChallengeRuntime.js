@@ -112,6 +112,11 @@ function recover(guildId, userId) {
   let reason = 'healthy';
   if (TERMINAL_STATES.has(before.state) && (challenge || before.activeSecurityMethod)) {
     verificationStore.upsertSession(guildId, userId, { activeChallenge: null, activeSecurityMethod: null }); changed = true; reason = 'terminal_session_cleaned';
+  } else if (challenge?.method === 'staff_approval' && challenge.status === 'failed' && ['reject', 'quarantine'].includes(challenge.staffAction) && !TERMINAL_STATES.has(before.state)) {
+    verificationStore.upsertSession(guildId, userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+    verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_action_recovery_review', challengeId: challenge.challengeId, action: challenge.staffAction });
+    changed = true;
+    reason = 'interrupted_staff_action_requires_review';
   } else if (challenge?.status === 'pending' && verificationChallenges.isExpired(challenge)) {
     verificationChallenges.expire(guildId, userId, challenge.challengeId); changed = true; reason = 'expired_challenge_closed';
   } else if (!challenge && before.activeSecurityMethod) {
