@@ -230,7 +230,7 @@ async function handleStaffAction(interaction, parsed, manager) {
   }
   if (result.resumeFlow && (!resumed || (!resumed.ok && !resumed.pendingSecurity && !resumed.quarantined && !resumed.rejected))) {
     verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
-    verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_continuation_failed', staffUserId: clean(interaction.user.id), reason: String(resumed.message || 'Continuation did not succeed').slice(0, 300) });
+    verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_continuation_failed', staffUserId: clean(interaction.user.id), reason: String(resumed?.message || 'Continuation did not succeed').slice(0, 300) });
     await interaction.reply({ content: `⚠️ Staff approval was recorded, but Verification could not continue: ${resumed.message || 'Unknown error'}. Manual staff review is required.`, flags: MessageFlags.Ephemeral });
     return true;
   }
