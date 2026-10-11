@@ -118,6 +118,8 @@ function recover(guildId, userId) {
     verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_approval_continuation_interrupted', challengeId: before.staffApprovalContinuationPending.challengeId });
     changed = true;
     reason = 'interrupted_staff_approval_requires_review';
+  } else if (before.staffApprovalContinuationPending && !TERMINAL_STATES.has(before.state)) {
+    reason = 'staff_approval_continuation_in_progress';
   } else if (TERMINAL_STATES.has(before.state) && (challenge || before.activeSecurityMethod || before.staffApprovalContinuationPending)) {
     verificationStore.upsertSession(guildId, userId, { activeChallenge: null, activeSecurityMethod: null, staffApprovalContinuationPending: null }); changed = true; reason = 'terminal_session_cleaned';
   } else if (challenge?.method === 'staff_approval' && ['passed', 'failed'].includes(challenge.status) && ['approve', 'reject', 'quarantine'].includes(challenge.staffAction) && !TERMINAL_STATES.has(before.state) && (!Number.isFinite(Date.parse(challenge.resolvedAt)) || Date.now() - Date.parse(challenge.resolvedAt) > 120000)) {
