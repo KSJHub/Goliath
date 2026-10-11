@@ -22,6 +22,7 @@ function ensureSession(guildId, userId) {
   if (!session) throw new Error('No active Verification session exists for this member.');
   if (session.state === 'verified') throw new Error('This member is already verified.');
   if (session.state === 'quarantined') throw new Error('This member is quarantined and cannot start another challenge.');
+  if (session.state === 'review') throw new Error('This member is awaiting staff review and cannot start another challenge.');
   return session;
 }
 
