@@ -769,6 +769,19 @@ function verificationLifecycleAudit() {
     contains(manager, 'pending.some(role=>confirmed.roles.cache.has(role.id))', 'confirm pending roles removed before security flow');
     contains(flow, 'challengeRuntime.startStep(g.id,m.id,step,s)', 'challenge reuse validated by runtime');
     assert(!flow.includes("active?.status==='pending'?{ok:true,pending:true"), 'Continuation must not bypass challenge runtime validation.');
+    contains(challengeRuntime, "reason: 'staff_action_in_progress'", 'reject duplicate staff actions during processing');
+    contains(challengeRuntime, "active.status !== 'pending'", 'reject resolved staff challenges');
+    contains(challengeRuntime, "staffApprovalContinuationPending", 'persist approval continuation ownership');
+    contains(challengeRuntime, "staffActionProcessingPending", 'persist rejection and quarantine ownership');
+    contains(challengeRuntime, "interrupted_staff_action_requires_review", 'recover interrupted staff actions to review');
+    for (const action of ['reject', 'quarantine']) {
+      contains(challengeInteractions, "pending?.action !== '"+action+"'", action+' finalisation checks action ownership');
+    }
+    contains(challengeInteractions, 'pending?.staffUserId !== clean(interaction.user.id)', 'verify initiating staff identity');
+    contains(challengeInteractions, 'staff_approval_finalization_stale', 'recheck approval after challenge delivery');
+    contains(flow, 'quarantine_late_completion_requires_review', 'protect quarantine state from late completion');
+    contains(flow, 'verification_late_completion_requires_review', 'protect verification state from late completion');
+    contains(flow, "if(verificationStore.getSession(g.id,u)?.state==='review')", 'protect failure and quarantine services during review');
     contains(challengeRuntime, "reason: 'security_configuration_changed'", 'reject outdated security challenges');
     contains(challengeRuntime, 'verificationChallenges.expire(guildId, userId, active.challengeId)', 'expire old challenge before restarting');
     contains(challengeRuntime, 'active = verificationChallenges.active(guildId, userId)', 'refresh challenge after expiry');
