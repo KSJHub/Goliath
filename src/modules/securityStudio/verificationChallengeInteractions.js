@@ -218,7 +218,16 @@ async function handleStaffAction(interaction, parsed, manager) {
       verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'rejected', activeSecurityMethod: null });
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_verification_rejected', staffUserId: clean(interaction.user.id) });
     }
-  } else resumed = await maybeResumeFlow(interaction, result, manager, parsed.userId);
+  } else {
+    try {
+      resumed = await maybeResumeFlow(interaction, result, manager, parsed.userId);
+    } catch (error) {
+      verificationStore.upsertSession(interaction.guildId, parsed.userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_continuation_failed', staffUserId: clean(interaction.user.id), reason: String(error?.message || error).slice(0, 300) });
+      await interaction.reply({ content: '⚠️ Staff approval was recorded, but Verification continuation failed unexpectedly. Manual staff review is required.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+  }
   if (resumed?.challenge) await publishResumedChallenge(interaction, parsed.userId, resumed).catch(error => console.error('[Verification] Could not publish resumed challenge:', error));
   const actionMessage = resumed && !resumed.ok
     ? `⚠️ Staff approval was recorded, but Verification could not continue: ${resumed.message || 'Unknown error'}`
