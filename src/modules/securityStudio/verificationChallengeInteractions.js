@@ -273,7 +273,15 @@ async function handleStaffAction(interaction, parsed, manager) {
       return true;
     }
   }
-  if (result.resumeFlow) verificationStore.upsertSession(interaction.guildId, parsed.userId, { staffApprovalContinuationPending: null });
+  if (result.resumeFlow) {
+    const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
+    if (latest.state === 'review' || latest.staffApprovalContinuationPending?.challengeId !== clean(parsed.challengeId)) {
+      verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_finalization_stale', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
+      await interaction.reply({ content: '⚠️ Approval continuation changed while finalising. Staff must review the session and any challenge already delivered.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    verificationStore.upsertSession(interaction.guildId, parsed.userId, { staffApprovalContinuationPending: null });
+  }
   const actionMessage = resumed && !resumed.ok
     ? `⚠️ Staff approval was recorded, but Verification could not continue: ${resumed.message || 'Unknown error'}`
     : resumed?.complete
