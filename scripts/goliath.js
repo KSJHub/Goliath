@@ -781,6 +781,7 @@ function verificationLifecycleAudit() {
     contains(challengeInteractions, 'staff_approval_finalization_stale', 'recheck approval after challenge delivery');
     contains(flow, 'quarantine_late_completion_requires_review', 'protect quarantine state from late completion');
     contains(flow, 'verification_late_completion_requires_review', 'protect verification state from late completion');
+    contains(flow, 'Verification session changed while preparing security checks', 'recheck terminal state before continuing verification');
     contains(flow, "if(verificationStore.getSession(g.id,u)?.state==='review')", 'protect failure and quarantine services during review');
     contains(challengeRuntime, "reason: 'security_configuration_changed'", 'reject outdated security challenges');
     contains(challengeRuntime, 'verificationChallenges.expire(guildId, userId, active.challengeId)', 'expire old challenge before restarting');
