@@ -100,7 +100,10 @@ function resolveStaffAction(guildId, targetUserId, challengeId, staffUserId, act
   const active = verificationChallenges.active(guildId, targetUserId);
   if (!active || clean(active.challengeId) !== clean(challengeId) || active.method !== 'staff_approval') return { ok: false, complete: false, reason: 'stale_challenge' };
   const result = verificationChallenges.staffAction(guildId, targetUserId, challengeId, staffUserId, action);
-  if (result.ok && result.action === 'approve') return { ...result, resumeFlow: true, completedSecurity: markCompleted(guildId, targetUserId, 'staff_approval') };
+  if (result.ok && result.action === 'approve') {
+    verificationStore.upsertSession(guildId, targetUserId, { staffApprovalContinuationPending: { challengeId: clean(challengeId), staffUserId: clean(staffUserId), recordedAt: new Date().toISOString() } });
+    return { ...result, resumeFlow: true, completedSecurity: markCompleted(guildId, targetUserId, 'staff_approval') };
+  }
   return { ...result, resumeFlow: false, recordFailure: result.complete === true && result.action === 'reject', quarantine: result.complete === true && result.action === 'quarantine' };
 }
 
