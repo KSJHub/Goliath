@@ -196,7 +196,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     }
     const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
     const pending = latest.staffActionProcessingPending;
-    if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.action !== 'quarantine') {
+    if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.action !== 'quarantine' || pending?.staffUserId !== clean(interaction.user.id)) {
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_quarantine_late_completion', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
       await interaction.reply({ content: '⚠️ Quarantine processing returned after its session entered review or changed. Confirm the member roles manually.', flags: MessageFlags.Ephemeral });
       return true;
@@ -224,7 +224,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     }
     const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
     const pending = latest.staffActionProcessingPending;
-    if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.action !== 'reject') {
+    if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.action !== 'reject' || pending?.staffUserId !== clean(interaction.user.id)) {
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_rejection_late_completion', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
       await interaction.reply({ content: '⚠️ Rejection processing returned after its session entered review or changed. Manual staff review is required. Check quarantine roles if they were applied.', flags: MessageFlags.Ephemeral });
       return true;
@@ -253,7 +253,7 @@ async function handleStaffAction(interaction, parsed, manager) {
   if (result.resumeFlow) {
     const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
     const pending = latest.staffApprovalContinuationPending;
-    if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId)) {
+    if (latest.state === 'review' || pending?.challengeId !== clean(parsed.challengeId) || pending?.staffUserId !== clean(interaction.user.id)) {
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_late_completion', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
       await interaction.reply({ content: '⚠️ Approval continuation returned after its session entered review or changed. Manual staff review is required.', flags: MessageFlags.Ephemeral });
       return true;
@@ -275,7 +275,7 @@ async function handleStaffAction(interaction, parsed, manager) {
   }
   if (result.resumeFlow) {
     const latest = verificationStore.getSession(interaction.guildId, parsed.userId) || {};
-    if (latest.state === 'review' || latest.staffApprovalContinuationPending?.challengeId !== clean(parsed.challengeId)) {
+    if (latest.state === 'review' || latest.staffApprovalContinuationPending?.challengeId !== clean(parsed.challengeId) || latest.staffApprovalContinuationPending?.staffUserId !== clean(interaction.user.id)) {
       verificationStore.addSecurityHistory(interaction.guildId, parsed.userId, { type: 'staff_approval_finalization_stale', staffUserId: clean(interaction.user.id), challengeId: clean(parsed.challengeId) });
       await interaction.reply({ content: '⚠️ Approval continuation changed while finalising. Staff must review the session and any challenge already delivered.', flags: MessageFlags.Ephemeral });
       return true;
