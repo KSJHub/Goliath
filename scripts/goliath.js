@@ -801,6 +801,8 @@ function verificationLifecycleAudit() {
     assert(resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') >= 0 && resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') < resumeFlow.indexOf('const revision=Number(c.configRevision||1)'), 'Resume must block staff finalisation before changing security progress.');
     contains(flow, "session.state==='failed'||session.state==='timed_out'", 'do not resume failed or timed-out sessions');
     contains(flow, 'Verification failure processing cannot change a terminal session.', 'prevent stale failure processing');
+    contains(completionFlow, "type:'verification_role_transition_failed'", 'audit completion role transition failure');
+    contains(quarantineFlow, "type:'quarantine_role_transition_failed'", 'audit quarantine role transition failure');
     contains(flow, 'Quarantine cannot replace a terminal verification session', 'prevent stale quarantine transitions');
     contains(flow, "['verified','review','quarantined','rejected','failed','timed_out'].includes", 'do not reopen verified or other terminal sessions');
     contains(failureFlow, terminalGuard, 'protect failure service against review and all terminal states');
