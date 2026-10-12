@@ -772,6 +772,8 @@ function verificationLifecycleAudit() {
     contains(challengeRuntime, "reason: 'staff_action_in_progress'", 'reject duplicate staff actions during processing');
     contains(challengeRuntime, "if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress' }", 'block member answers during staff finalisation');
     contains(challengeRuntime, "active.status !== 'pending'", 'reject resolved staff challenges');
+    const startStepFlow = challengeRuntime.slice(challengeRuntime.indexOf('function startStep('), challengeRuntime.indexOf('function submitAnswer('));
+    contains(startStepFlow, "reason: 'staff_action_in_progress'", 'block challenge creation during staff finalisation');
     contains(challengeRuntime, "staffApprovalContinuationPending", 'persist approval continuation ownership');
     contains(challengeRuntime, "staffActionProcessingPending", 'persist rejection and quarantine ownership');
     contains(challengeRuntime, "interrupted_staff_action_requires_review", 'recover interrupted staff actions to review');
