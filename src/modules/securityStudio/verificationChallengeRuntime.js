@@ -84,6 +84,7 @@ function submitAnswer(guildId, actingUserId, targetUserId, challengeId, supplied
   if (clean(actingUserId) !== clean(targetUserId)) return { ok: false, reason: 'wrong_member' };
   const session = verificationStore.getSession(guildId, targetUserId) || {};
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', state: session.state };
+  if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress' };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed' };
   const active = verificationChallenges.active(guildId, targetUserId);
   if (!active || clean(active.challengeId) !== clean(challengeId)) return { ok: false, reason: 'stale_challenge' };
