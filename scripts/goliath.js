@@ -770,6 +770,7 @@ function verificationLifecycleAudit() {
     contains(flow, 'challengeRuntime.startStep(g.id,m.id,step,s)', 'challenge reuse validated by runtime');
     assert(!flow.includes("active?.status==='pending'?{ok:true,pending:true"), 'Continuation must not bypass challenge runtime validation.');
     contains(challengeRuntime, "reason: 'staff_action_in_progress'", 'reject duplicate staff actions during processing');
+    contains(challengeRuntime, "if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress' }", 'block member answers during staff finalisation');
     contains(challengeRuntime, "active.status !== 'pending'", 'reject resolved staff challenges');
     contains(challengeRuntime, "staffApprovalContinuationPending", 'persist approval continuation ownership');
     contains(challengeRuntime, "staffActionProcessingPending", 'persist rejection and quarantine ownership');
