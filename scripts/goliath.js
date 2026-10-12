@@ -801,6 +801,10 @@ function verificationLifecycleAudit() {
     assert(resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') >= 0 && resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') < resumeFlow.indexOf('const revision=Number(c.configRevision||1)'), 'Resume must block staff finalisation before changing security progress.');
     contains(flow, "session.state==='failed'||session.state==='timed_out'", 'do not resume failed or timed-out sessions');
     contains(flow, 'Verification failure processing cannot change a terminal session.', 'prevent stale failure processing');
+    contains(flow, 'async function withVerificationRoleLock(', 'serialize Verification role transitions');
+    contains(completionFlow, 'return withVerificationRoleLock(m.guild.id,m.id,async()=>{', 'lock completion role transition');
+    contains(quarantineFlow, 'return withVerificationRoleLock(g?.id,u,async()=>{', 'lock quarantine role transition');
+    contains(flow, 'finally{verificationRoleTransitions.delete(key);}', 'release Verification role lock after failures');
     contains(completionFlow, "type:'verification_role_transition_failed'", 'audit completion role transition failure');
     contains(completionFlow, "type:'verification_role_confirmation_failed'", 'audit unconfirmed completion roles enter review');
     assert(completionFlow.indexOf("type:'verification_role_confirmation_failed'") < completionFlow.indexOf("type:'verified'"), 'Completion role confirmation must precede verified state persistence.');
