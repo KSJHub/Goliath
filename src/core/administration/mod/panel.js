@@ -379,7 +379,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
   await syncExpiredWarningsToCases(interaction.guild.id);
   const context = normalizeDashboardContext({ ...options, view }); context.adminOrigin = options.adminOrigin === true || interaction.message?.components?.some((row) => row.components?.some((component) => component.customId === 'admin:home')); let safeView = context.view;
   if (!canViewDashboardSection(interaction.member, interaction.guild, safeView)) safeView = DEFAULT_VIEW;
-  const targetId = target?.id || null; const stats = buildTargetStats(interaction.guild.id, target); const staff = getStaffDisplay(interaction.member, interaction.guild); const staffDisplay = `${staff.badge} ${staff.label} • ${interaction.member}`;
+  const targetId = target?.id || null; const stats = buildTargetStats(interaction.guild.id, target); const staff = getStaffDisplay(interaction.member, interaction.guild); const staffDisplay = `${staff.roleId ? `<@&${staff.roleId}>` : staff.label} • ${interaction.member}`;
   const embeds = []; const components = safeView === 'analytics' ? [] : [buildUserSelectRow()];
   if (safeView === 'actions') { embeds.push(buildActionsEmbed(interaction, target, stats, staffDisplay)); components.push(...buildActionRows(target, stats, interaction.member, interaction.guild)); }
   else if (safeView === 'intelligence') { embeds.push(buildIntelligenceEmbed(interaction, target, interaction.member, interaction.guild)); components.push(...buildIntelligenceRows(targetId, interaction.member, interaction.guild)); }
