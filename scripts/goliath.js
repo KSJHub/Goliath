@@ -881,7 +881,7 @@ function verificationLifecycleAudit() {
         ensureQuarantineCase:async()=>({ok:true,channel:{id:'case'}})
       };
       const guild={id:'guild',members:{fetch:async()=>({
-        id:'member',guild,roles:{cache:{has:id=>mode==='quarantine'?id==='quarantine':id==='verified'}}
+        id:'member',guild,roles:{cache:{has:id=>mode==='mismatch'?false:mode==='quarantine'?id==='quarantine':id==='verified'}}
       })}};
       const member={id:'member',guild,roles:{cache:{has:()=>false}}};
       const transitionRoles=async()=>{transitions++;entered();await wait;if(mode==='throw')throw Error('simulated Discord role failure');};
