@@ -936,13 +936,15 @@ function verificationLifecycleAudit() {
         assert.equal(completionFailure.review,true);
         assert.equal(state,'review');
         assert.equal(transitions,1);
-        reset();state='rejected';
-        const terminalCompletion=await complete(member,config);
-        const terminalQuarantine=await quarantineVerificationMember(guild,'member');
-        assert.equal(terminalCompletion.review,true);
-        assert.equal(terminalQuarantine.review,true);
-        assert.equal(state,'rejected');
-        assert.equal(transitions,0);
+        for(const terminal of ['verified','quarantined','review','rejected','failed','timed_out']){
+          reset();state=terminal;
+          const terminalCompletion=await complete(member,config);
+          const terminalQuarantine=await quarantineVerificationMember(guild,'member');
+          assert.equal(terminalCompletion.review,true);
+          assert.equal(terminalQuarantine.review,true);
+          assert.equal(state,terminal);
+          assert.equal(transitions,0);
+        }
       })().catch(error=>{console.error(error);process.exitCode=1;});
     `;
     const integrationRun=spawnSync(process.execPath,['-e',integrationTest],{encoding:'utf8',timeout:5000});
