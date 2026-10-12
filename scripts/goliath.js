@@ -781,7 +781,13 @@ function verificationLifecycleAudit() {
     contains(challengeInteractions, 'pending?.staffUserId !== clean(interaction.user.id)', 'verify initiating staff identity');
     contains(challengeInteractions, 'staff_approval_finalization_stale', 'recheck approval after challenge delivery');
     contains(flow, 'quarantine_late_completion_requires_review', 'protect quarantine state from late completion');
-    assert((flow.match(/\['verified','quarantined','review','rejected','failed','timed_out'\]\.includes\(verificationStore\.getSession\((?:g\.id,u|m\.guild\.id,m\.id)\)\?\.state\)/g)||[]).length>=5, 'Completion, failure, and quarantine transitions must guard terminal states.');
+    const terminalGuard = "['verified','quarantined','review','rejected','failed','timed_out'].includes";
+    const completionFlow = flow.slice(flow.indexOf('async function complete('), flow.indexOf('async function recordVerificationFailure('));
+    const failureFlow = flow.slice(flow.indexOf('async function recordVerificationFailure('), flow.indexOf('async function quarantineVerificationMember('));
+    const quarantineFlow = flow.slice(flow.indexOf('async function quarantineVerificationMember('), flow.indexOf('async function resumeVerification('));
+    assert(completionFlow.split(terminalGuard).length >= 3, 'Completion must recheck terminal state before and after role changes.');
+    contains(failureFlow, terminalGuard, 'failure recording respects terminal states');
+    assert(quarantineFlow.split(terminalGuard).length >= 3, 'Quarantine must recheck terminal state before and after role changes.');
     contains(flow, 'verification_late_completion_requires_review', 'protect verification state from late completion');
     contains(flow, 'Verification session changed while preparing security checks', 'recheck terminal state before continuing verification');
     contains(flow, 'Verification failure processing cannot change a terminal session.', 'prevent stale failure processing');
