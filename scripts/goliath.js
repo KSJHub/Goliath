@@ -790,6 +790,7 @@ function verificationLifecycleAudit() {
     assert(quarantineFlow.split(terminalGuard).length >= 3, 'Quarantine must recheck terminal state before and after role changes.');
     contains(flow, 'verification_late_completion_requires_review', 'protect verification state from late completion');
     contains(flow, 'Verification session changed while preparing security checks', 'recheck terminal state before continuing verification');
+    contains(flow, "session.state==='failed'||session.state==='timed_out'", 'do not resume failed or timed-out sessions');
     contains(flow, 'Verification failure processing cannot change a terminal session.', 'prevent stale failure processing');
     contains(flow, 'Quarantine cannot replace a terminal verification session', 'prevent stale quarantine transitions');
     contains(flow, "['verified','review','quarantined','rejected','failed','timed_out'].includes", 'do not reopen verified or other terminal sessions');
