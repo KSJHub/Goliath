@@ -802,6 +802,8 @@ function verificationLifecycleAudit() {
     contains(flow, "session.state==='failed'||session.state==='timed_out'", 'do not resume failed or timed-out sessions');
     contains(flow, 'Verification failure processing cannot change a terminal session.', 'prevent stale failure processing');
     contains(completionFlow, "type:'verification_role_transition_failed'", 'audit completion role transition failure');
+    contains(completionFlow, "type:'verification_role_confirmation_failed'", 'audit unconfirmed completion roles enter review');
+    assert(completionFlow.indexOf("type:'verification_role_confirmation_failed'") < completionFlow.indexOf("type:'verified'"), 'Completion role confirmation must precede verified state persistence.');
     contains(quarantineFlow, "type:'quarantine_role_transition_failed'", 'audit quarantine role transition failure');
     contains(flow, 'Quarantine cannot replace a terminal verification session', 'prevent stale quarantine transitions');
     contains(flow, "['verified','review','quarantined','rejected','failed','timed_out'].includes", 'do not reopen verified or other terminal sessions');
