@@ -793,7 +793,8 @@ function verificationLifecycleAudit() {
     contains(flow, 'Verification failure processing cannot change a terminal session.', 'prevent stale failure processing');
     contains(flow, 'Quarantine cannot replace a terminal verification session', 'prevent stale quarantine transitions');
     contains(flow, "['verified','review','quarantined','rejected','failed','timed_out'].includes", 'do not reopen verified or other terminal sessions');
-    contains(flow, "if(verificationStore.getSession(g.id,u)?.state==='review')", 'protect failure and quarantine services during review');
+    contains(failureFlow, terminalGuard, 'protect failure service against review and all terminal states');
+    contains(quarantineFlow, terminalGuard, 'protect quarantine service against review and all terminal states');
     contains(challengeRuntime, "reason: 'security_configuration_changed'", 'reject outdated security challenges');
     contains(challengeRuntime, 'verificationChallenges.expire(guildId, userId, active.challengeId)', 'expire old challenge before restarting');
     contains(challengeRuntime, 'active = verificationChallenges.active(guildId, userId)', 'refresh challenge after expiry');
