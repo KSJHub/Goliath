@@ -56,6 +56,7 @@ function startStep(guildId, userId, method, settings = {}) {
   if (!INTERACTIVE_METHODS.has(method)) return { ok: false, reason: 'not_interactive', method };
   const session = verificationStore.getSession(guildId, userId) || {};
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', method, state: session.state };
+  if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress', method };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed', method };
   let active = verificationChallenges.active(guildId, userId);
   if (active?.status === 'pending' && verificationChallenges.isExpired(active)) {
