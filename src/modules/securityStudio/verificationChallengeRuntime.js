@@ -142,6 +142,8 @@ function recover(guildId, userId) {
     verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_action_recovery_review', challengeId: challenge.challengeId, action: challenge.staffAction });
     changed = true;
     reason = 'interrupted_staff_action_requires_review';
+  } else if (TERMINAL_STATES.has(before.state)) {
+    reason = 'terminal_session_unchanged';
   } else if (challenge?.status === 'pending' && verificationChallenges.isExpired(challenge)) {
     verificationChallenges.expire(guildId, userId, challenge.challengeId); changed = true; reason = 'expired_challenge_closed';
   } else if (!challenge && before.activeSecurityMethod) {
