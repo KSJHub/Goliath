@@ -1498,6 +1498,8 @@ function adminModuleRoutingAudit() {
     for (const prefix of advertisedPrefixes) assert(router.includes(prefix), `Advertised module interaction namespace disappeared: ${prefix}`);
     
     // Regression gate for interaction acknowledgements, permission boundaries and security separation.
+    const adminPanelSource = fs.readFileSync(root + '/src/core/administration/admin/panel.js', 'utf8');
+    assert(adminPanelSource.includes("interaction.__goliathLegacyRoleBase || interaction.customId"), 'Paginated authority role selections must resolve to their original handler ID');
     const adminCommand = fs.readFileSync(root + '/src/core/administration/admin/command.js', 'utf8');
     const securityPanels = fs.readFileSync(root + '/src/core/administration/admin/securityHubPanels.js', 'utf8');
     const modCommand = fs.readFileSync(root + '/src/core/administration/mod/command.js', 'utf8');
