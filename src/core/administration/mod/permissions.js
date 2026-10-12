@@ -276,13 +276,13 @@ function getStaffDisplay(member, guild) {
   if (config?.configured) {
     for (const [tier, level] of mappedTiers) {
       const roleId = (config.tiers?.[tier]?.roleIds || []).find(id => memberRoleIds.has(id) && guild.roles?.cache?.has(id));
-      if (roleId) return { level, label: guild.roles.cache.get(roleId).name, badge: getStaffBadge(level) };
+      if (roleId) return { level, label: guild.roles.cache.get(roleId).name, roleId, badge: getStaffBadge(level) };
     }
   }
   // The bot-owner identity is an internal privilege, not a guild-facing role.
   // Show the member's actual server role when no mapped authority role exists.
   const role = member.roles?.highest?.id !== guild.id ? member.roles?.highest : null;
-  if (role?.name) return { level: getStaffLevel(member, guild), label: role.name, badge: '🛡️' };
+  if (role?.name) return { level: getStaffLevel(member, guild), label: role.name, roleId: role.id, badge: '🛡️' };
   const level = getStaffLevel(member, guild);
   return { level, label: getStaffLevelLabel(level), badge: getStaffBadge(level) };
 }
