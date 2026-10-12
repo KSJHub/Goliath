@@ -828,6 +828,9 @@ function verificationLifecycleAudit() {
         assert.equal(blocked.pendingSecurity,true);
         const other=await withVerificationRoleLock('guild','other',async()=>({ok:true}));
         assert.equal(other.ok,true);
+        const otherGuild=await withVerificationRoleLock('other-guild','member',async()=>({ok:true}));
+        assert.equal(otherGuild.ok,true);
+        assert.equal(verificationRoleTransitions.has('guild:member'),true);
         release({ok:true});
         assert.equal((await first).ok,true);
         assert.equal(verificationRoleTransitions.has('guild:member'),false);
@@ -835,7 +838,9 @@ function verificationLifecycleAudit() {
         assert.equal(resumeAfter.reachedConfiguration,true);
         const again=await withVerificationRoleLock('guild','member',async()=>({ok:true}));
         assert.equal(again.ok,true);
-        try{await withVerificationRoleLock('guild','member',async()=>{throw Error('expected');});}catch(error){assert.equal(error.message,'expected');}
+        let caught=false;
+        try{await withVerificationRoleLock('guild','member',async()=>{throw Error('expected');});}catch(error){caught=true;assert.equal(error.message,'expected');}
+        assert.equal(caught,true,'Role transition errors must propagate to caller');
         assert.equal(verificationRoleTransitions.has('guild:member'),false);
       })().catch(error=>{console.error(error);process.exitCode=1;});
     `;
