@@ -795,6 +795,8 @@ function verificationLifecycleAudit() {
     assert(quarantineFlow.split(terminalGuard).length >= 3, 'Quarantine must recheck terminal state before and after role changes.');
     contains(flow, 'verification_late_completion_requires_review', 'protect verification state from late completion');
     contains(flow, 'Verification session changed while preparing security checks', 'recheck terminal state before continuing verification');
+    const resumeFlow = flow.slice(flow.indexOf('async function resumeVerification('));
+    assert(resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') >= 0 && resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') < resumeFlow.indexOf('const revision=Number(c.configRevision||1)'), 'Resume must block staff finalisation before changing security progress.');
     contains(flow, "session.state==='failed'||session.state==='timed_out'", 'do not resume failed or timed-out sessions');
     contains(flow, 'Verification failure processing cannot change a terminal session.', 'prevent stale failure processing');
     contains(flow, 'Quarantine cannot replace a terminal verification session', 'prevent stale quarantine transitions');
