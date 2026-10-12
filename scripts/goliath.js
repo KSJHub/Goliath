@@ -806,14 +806,24 @@ function verificationLifecycleAudit() {
     const lockSource = flow.slice(flow.indexOf('const verificationRoleTransitions='), flow.indexOf('const accountAgeDays='));
     assert(lockSource.startsWith('const verificationRoleTransitions='), 'Verification lock helper not found');
     assert(lockSource.includes('async function withVerificationRoleLock('), 'Verification lock implementation not found');
+    const resumeStart=flow.indexOf('async function resumeVerification(');
+    const resumeCut=flow.indexOf('const c=section(g.id)',resumeStart);
+    assert(resumeStart>=0&&resumeCut>resumeStart,'Verification resume guard extraction failed');
+    const resumePrefix=flow.slice(resumeStart,resumeCut)+'return{ok:true,reachedConfiguration:true};}';
     const lockTest = `
       const assert=require('node:assert/strict');
       ${lockSource}
+      const moduleEnabled=()=>true,disabledResult=()=>({disabled:true});
+      ${resumePrefix}
       (async()=>{
         let release;
         const gate=new Promise(resolve=>{release=resolve;});
         const first=withVerificationRoleLock('guild','member',()=>gate);
         assert.equal(verificationRoleTransitions.has('guild:member'),true);
+        const resumeBlocked=await resumeVerification({guild:{id:'guild'},member:{id:'member'}});
+        assert.equal(resumeBlocked.pendingSecurity,true);
+        const otherResume=await resumeVerification({guild:{id:'guild'},member:{id:'other'}});
+        assert.equal(otherResume.reachedConfiguration,true);
         const blocked=await withVerificationRoleLock('guild','member',async()=>({ok:true}));
         assert.equal(blocked.pendingSecurity,true);
         const other=await withVerificationRoleLock('guild','other',async()=>({ok:true}));
@@ -821,6 +831,8 @@ function verificationLifecycleAudit() {
         release({ok:true});
         assert.equal((await first).ok,true);
         assert.equal(verificationRoleTransitions.has('guild:member'),false);
+        const resumeAfter=await resumeVerification({guild:{id:'guild'},member:{id:'member'}});
+        assert.equal(resumeAfter.reachedConfiguration,true);
         const again=await withVerificationRoleLock('guild','member',async()=>({ok:true}));
         assert.equal(again.ok,true);
         try{await withVerificationRoleLock('guild','member',async()=>{throw Error('expected');});}catch(error){assert.equal(error.message,'expected');}
