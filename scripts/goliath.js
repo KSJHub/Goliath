@@ -884,7 +884,7 @@ function verificationLifecycleAudit() {
         id:'member',guild,roles:{cache:{has:id=>mode==='quarantine'?id==='quarantine':id==='verified'}}
       })}};
       const member={id:'member',guild,roles:{cache:{has:()=>false}}};
-      const transitionRoles=async()=>{transitions++;entered();await wait;};
+      const transitionRoles=async()=>{transitions++;entered();await wait;if(mode==='throw')throw Error('simulated Discord role failure');};
       ${completionSource}
       ${quarantineSource}
       (async()=>{
@@ -907,6 +907,20 @@ function verificationLifecycleAudit() {
         const quarantined=await quarantining;
         assert.equal(quarantined.quarantined,true);
         assert.equal(state,'quarantined');
+        assert.equal(transitions,1);
+        reset();mode='mismatch';
+        const mismatch=complete(member,config);
+        await started;release();
+        const unconfirmed=await mismatch;
+        assert.equal(unconfirmed.review,true);
+        assert.equal(state,'review');
+        assert.equal(transitions,1);
+        reset();mode='throw';
+        const failing=quarantineVerificationMember(guild,'member');
+        await started;release();
+        const failed=await failing;
+        assert.equal(failed.review,true);
+        assert.equal(state,'review');
         assert.equal(transitions,1);
       })().catch(error=>{console.error(error);process.exitCode=1;});
     `;
