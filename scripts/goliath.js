@@ -805,6 +805,9 @@ function verificationLifecycleAudit() {
     contains(completionFlow, "type:'verification_role_confirmation_failed'", 'audit unconfirmed completion roles enter review');
     assert(completionFlow.indexOf("type:'verification_role_confirmation_failed'") < completionFlow.indexOf("type:'verified'"), 'Completion role confirmation must precede verified state persistence.');
     contains(quarantineFlow, "type:'quarantine_role_transition_failed'", 'audit quarantine role transition failure');
+    contains(quarantineFlow, "type:'quarantine_role_confirmation_failed'", 'audit quarantine role confirmation failure');
+    const quarantineConfirmation = quarantineFlow.slice(quarantineFlow.indexOf('if(!confirmed||!q.every'), quarantineFlow.indexOf("type:'quarantine_role_confirmation_failed'"));
+    contains(quarantineConfirmation, terminalGuard, 'preserve terminal state when quarantine role confirmation fails');
     contains(flow, 'Quarantine cannot replace a terminal verification session', 'prevent stale quarantine transitions');
     contains(flow, "['verified','review','quarantined','rejected','failed','timed_out'].includes", 'do not reopen verified or other terminal sessions');
     contains(failureFlow, terminalGuard, 'protect failure service against review and all terminal states');
