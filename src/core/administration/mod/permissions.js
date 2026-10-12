@@ -248,6 +248,12 @@ function hasModPermission(member, guild = member?.guild) {
 function getStaffLevel(member, guild) {
   if (!member || !guild) return STAFF_LEVELS.NONE;
   if (security.isBotOwner(getId(member)) || isGuildOwner(member, guild.ownerId)) return STAFF_LEVELS.OWNER;
+  const panel = getAuthorityPanel();
+  const context = panel?.getAuthorityContext?.(buildAuthorityInteraction(member, guild));
+  if (context?.source === 'configured') {
+    const tiers = { administrator: STAFF_LEVELS.ADMIN, moderator: STAFF_LEVELS.MOD, juniorModerator: STAFF_LEVELS.JUNIOR_MOD };
+    return tiers[context.highestTier] || (context.permissions?.has('mod.panel.view') ? STAFF_LEVELS.HELPER : STAFF_LEVELS.NONE);
+  }
   if (hasPermission(member, PermissionFlagsBits.Administrator) || hasPermission(member, PermissionFlagsBits.BanMembers)) return STAFF_LEVELS.ADMIN;
   if (hasPermission(member, PermissionFlagsBits.KickMembers)) return STAFF_LEVELS.MOD;
   if (hasPermission(member, PermissionFlagsBits.ModerateMembers)) return STAFF_LEVELS.JUNIOR_MOD;
