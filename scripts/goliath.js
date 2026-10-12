@@ -800,6 +800,36 @@ function verificationLifecycleAudit() {
     const resumeFlow = flow.slice(flow.indexOf('async function resumeVerification('));
     contains(resumeFlow, "verificationRoleTransitions.has(String(g.id)+':'+String(m.id))", 'prevent resuming Verification during a member role transition');
     assert(resumeFlow.split("verificationRoleTransitions.has(String(g.id)+':'+String(m.id))").length >= 4, 'Resume must recheck role transition ownership before security state mutations.');
+
+    // Execute the real lock helper, not just a source-token contract.
+    const { spawnSync } = require('node:child_process');
+    const lockSource = flow.slice(flow.indexOf('const verificationRoleTransitions='), flow.indexOf('const accountAgeDays='));
+    assert(lockSource.startsWith('const verificationRoleTransitions='), 'Verification lock helper not found');
+    assert(lockSource.includes('async function withVerificationRoleLock('), 'Verification lock implementation not found');
+    const lockTest = `
+      const assert=require('node:assert/strict');
+      ${lockSource}
+      (async()=>{
+        let release;
+        const gate=new Promise(resolve=>{release=resolve;});
+        const first=withVerificationRoleLock('guild','member',()=>gate);
+        assert.equal(verificationRoleTransitions.has('guild:member'),true);
+        const blocked=await withVerificationRoleLock('guild','member',async()=>({ok:true}));
+        assert.equal(blocked.pendingSecurity,true);
+        const other=await withVerificationRoleLock('guild','other',async()=>({ok:true}));
+        assert.equal(other.ok,true);
+        release({ok:true});
+        assert.equal((await first).ok,true);
+        assert.equal(verificationRoleTransitions.has('guild:member'),false);
+        const again=await withVerificationRoleLock('guild','member',async()=>({ok:true}));
+        assert.equal(again.ok,true);
+        try{await withVerificationRoleLock('guild','member',async()=>{throw Error('expected');});}catch(error){assert.equal(error.message,'expected');}
+        assert.equal(verificationRoleTransitions.has('guild:member'),false);
+      })().catch(error=>{console.error(error);process.exitCode=1;});
+    `;
+    const lockRun=spawnSync(process.execPath,['-e',lockTest],{encoding:'utf8',timeout:5000});
+    assert.equal(lockRun.status,0,'Executable Verification lock regression failed: '+String(lockRun.stderr||lockRun.error||'unknown error'));
+
     assert(resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') >= 0 && resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') < resumeFlow.indexOf('const revision=Number(c.configRevision||1)'), 'Resume must block staff finalisation before changing security progress.');
     contains(flow, "session.state==='failed'||session.state==='timed_out'", 'do not resume failed or timed-out sessions');
     contains(flow, 'Verification failure processing cannot change a terminal session.', 'prevent stale failure processing');
