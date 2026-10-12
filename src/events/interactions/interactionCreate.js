@@ -217,7 +217,9 @@ module.exports={
       if(interaction.isChatInputCommand?.()){const command=client.commands?.get?.(interaction.commandName);if(!command)return;await command.execute(interaction,client);return;}
       if(await handleLegacyRolePage(interaction))return;
       prepareLegacyRoleInteraction(interaction);
-      const customId=String(interaction.customId||'');
+      // Paginated role selectors use a transport suffix. Route them by the original
+      // component ID, while preserving the selected role values prepared above.
+      const customId=String(interaction.__goliathLegacyRoleBase||interaction.customId||'');
       if (interaction.__goliathPermissionsStudioHandled) return;
       if (['admin:settings', 'admin:settings:back', 'admin:settings:security-hub', 'admin:settings:back:security-hub', 'admin:settings:restrictions', 'admin:settings:back:restrictions', 'admin:settings:isolation', 'admin:settings:back:isolation'].includes(customId)) {
         if (!await callHandler(adminCommand, 'handleSettingsInteraction', interaction)) throw new Error(`Admin Settings did not handle ${customId}.`);
