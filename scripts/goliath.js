@@ -775,6 +775,9 @@ function verificationLifecycleAudit() {
     contains(challengeRuntime, "staffApprovalContinuationPending", 'persist approval continuation ownership');
     contains(challengeRuntime, "staffActionProcessingPending", 'persist rejection and quarantine ownership');
     contains(challengeRuntime, "interrupted_staff_action_requires_review", 'recover interrupted staff actions to review');
+    const recovery = challengeRuntime.slice(challengeRuntime.indexOf('function recover(guildId, userId)'), challengeRuntime.indexOf('function recoverGuild(guildId)'));
+    assert(recovery.includes("} else if (TERMINAL_STATES.has(before.state)) {"), 'Recovery must preserve terminal states.');
+    assert(recovery.indexOf("} else if (TERMINAL_STATES.has(before.state)) {") < recovery.indexOf('verificationChallenges.isExpired(challenge)'), 'Terminal recovery guard must precede challenge expiry and marker repair.');
     for (const action of ['reject', 'quarantine']) {
       contains(challengeInteractions, "pending?.action !== '"+action+"'", action+' finalisation checks action ownership');
     }
