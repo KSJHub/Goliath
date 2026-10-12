@@ -847,6 +847,73 @@ function verificationLifecycleAudit() {
     const lockRun=spawnSync(process.execPath,['-e',lockTest],{encoding:'utf8',timeout:5000});
     assert.equal(lockRun.status,0,'Executable Verification lock regression failed: '+String(lockRun.stderr||lockRun.error||'unknown error'));
 
+    // Exercise completion and quarantine against mocked asynchronous Discord role operations.
+    const completionSource=completionFlow;
+    const quarantineSource=quarantineFlow;
+    const integrationTest = `
+      const assert=require('node:assert/strict');
+      ${lockSource}
+      const moduleEnabled=()=>true,disabledResult=()=>({disabled:true});
+      const roles={verified:['verified'],auto:[],pending:[],verifying:[],quarantine:['quarantine']};
+      const config={settings:{roles}};
+      const roleIds=(settings,key)=>settings.roles[key]||[];
+      const unique=values=>[...new Set(values)];
+      const fetchRoles=async(guild,ids)=>ids.map(id=>({id}));
+      const now=()=>new Date().toISOString();
+      const enabledSecurity=()=>[];
+      const section=()=>config;
+      let state='verifying',transitions=0,mode='normal',release,entered;
+      let wait,started;
+      function reset(){
+        state='verifying';transitions=0;mode='normal';
+        wait=new Promise(resolve=>{release=resolve;});
+        started=new Promise(resolve=>{entered=resolve;});
+      }
+      const verificationStore={
+        getSession:()=>({state}),
+        upsertSession:(guild,user,value)=>{if(value.state)state=value.state;},
+        addSecurityHistory:()=>{},
+        clearAttempts:()=>{},
+        incrementAnalytics:()=>{}
+      };
+      const verificationQuarantine={
+        closeQuarantineCase:async()=>{},
+        ensureQuarantineCase:async()=>({ok:true,channel:{id:'case'}})
+      };
+      const guild={id:'guild',members:{fetch:async()=>({
+        id:'member',guild,roles:{cache:{has:id=>mode==='quarantine'?id==='quarantine':id==='verified'}}
+      })}};
+      const member={id:'member',guild,roles:{cache:{has:()=>false}}};
+      const transitionRoles=async()=>{transitions++;entered();await wait;};
+      ${completionSource}
+      ${quarantineSource}
+      (async()=>{
+        reset();
+        const finishing=complete(member,config);
+        await started;
+        const denied=await quarantineVerificationMember(guild,'member');
+        assert.equal(denied.pendingSecurity,true);
+        release();
+        const finished=await finishing;
+        assert.equal(finished.complete,true);
+        assert.equal(state,'verified');
+        assert.equal(transitions,1);
+        reset();mode='quarantine';
+        const quarantining=quarantineVerificationMember(guild,'member');
+        await started;
+        const deniedCompletion=await complete(member,config);
+        assert.equal(deniedCompletion.pendingSecurity,true);
+        release();
+        const quarantined=await quarantining;
+        assert.equal(quarantined.quarantined,true);
+        assert.equal(state,'quarantined');
+        assert.equal(transitions,1);
+      })().catch(error=>{console.error(error);process.exitCode=1;});
+    `;
+    const integrationRun=spawnSync(process.execPath,['-e',integrationTest],{encoding:'utf8',timeout:5000});
+    assert.equal(integrationRun.status,0,'Executable Verification completion/quarantine integration failed: '+String(integrationRun.stderr||integrationRun.error||'unknown error'));
+
+
     assert(resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') >= 0 && resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') < resumeFlow.indexOf('const revision=Number(c.configRevision||1)'), 'Resume must block staff finalisation before changing security progress.');
     contains(flow, "session.state==='failed'||session.state==='timed_out'", 'do not resume failed or timed-out sessions');
     contains(flow, 'Verification failure processing cannot change a terminal session.', 'prevent stale failure processing');
