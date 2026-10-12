@@ -265,8 +265,24 @@ function getStaffLevelLabel(level) { return STAFF_LEVEL_LABELS[level] || 'Unknow
 function getStaffBadge(level) { return STAFF_BADGES[level] || '❔'; }
 function getStaffDisplay(member, guild) {
   if (!member || !guild) return { level: STAFF_LEVELS.NONE, label: STAFF_LEVEL_LABELS[STAFF_LEVELS.NONE], badge: STAFF_BADGES[STAFF_LEVELS.NONE] };
-  if (security.isBotOwner(getId(member))) return { level: STAFF_LEVELS.OWNER, label: 'Goliath Owner', badge: '👑' };
-  if (isGuildOwner(member, guild.ownerId)) return { level: STAFF_LEVELS.OWNER, label: 'Guild Owner', badge: '🏆' };
+  const panel = getAuthorityPanel();
+  const config = panel?.getAuthorityConfig?.(guild.id);
+  const memberRoleIds = new Set(member.roles?.cache ? [...member.roles.cache.keys()] : Array.isArray(member.roles) ? member.roles.map(String) : []);
+  const mappedTiers = [
+    ['administrator', STAFF_LEVELS.ADMIN],
+    ['moderator', STAFF_LEVELS.MOD],
+    ['juniorModerator', STAFF_LEVELS.JUNIOR_MOD],
+  ];
+  if (config?.configured) {
+    for (const [tier, level] of mappedTiers) {
+      const roleId = (config.tiers?.[tier]?.roleIds || []).find(id => memberRoleIds.has(id) && guild.roles?.cache?.has(id));
+      if (roleId) return { level, label: guild.roles.cache.get(roleId).name, badge: getStaffBadge(level) };
+    }
+  }
+  // The bot-owner identity is an internal privilege, not a guild-facing role.
+  // Show the member's actual server role when no mapped authority role exists.
+  const role = member.roles?.highest?.id !== guild.id ? member.roles?.highest : null;
+  if (role?.name) return { level: getStaffLevel(member, guild), label: role.name, badge: '🛡️' };
   const level = getStaffLevel(member, guild);
   return { level, label: getStaffLevelLabel(level), badge: getStaffBadge(level) };
 }
