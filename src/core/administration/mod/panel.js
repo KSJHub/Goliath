@@ -333,7 +333,7 @@ function buildAnalyticsOverviewEmbed(guild, analytics) {
     { name: '📁 Total Cases', value: `**${analytics.totalCases}**\n${analytics.activeCases} active`, inline: true },
     { name: '👥 Members', value: `**${analytics.uniqueUsers}**\n${analytics.repeatOffenders} repeat`, inline: true },
     { name: '🧾 Audit Events', value: `**${analytics.auditActions}**\nrecorded`, inline: true },
-    { name: '⚡ Moderation Actions', value: `Warnings **${Number(analytics.actionCounts.warn || 0)}**  •  Timeouts **${Number(analytics.actionCounts.timeout || 0)}**\nKicks **${Number(analytics.actionCounts.kick || 0)}**  •  Bans **${Number(analytics.actionCounts.ban || 0)}**`, inline: false },
+    { name: '⚡ Moderation Actions', value: `Warnings **${Number(analytics.actionCounts.warn || 0)}**  •  Timeouts **${Number(analytics.actionCounts.timeout || 0)}**  •  Kicks **${Number(analytics.actionCounts.kick || 0)}**  •  Bans **${Number(analytics.actionCounts.ban || 0)}**`, inline: false },
     { name: '⚖️ Appeals', value: `Pending **${appeal.pending}**  •  Approved **${appeal.approved}**  •  Denied **${appeal.denied}**`, inline: false },
     { name: '↩️ Case Outcomes', value: `Reversed **${analytics.reversedCases}**  •  Expired **${analytics.expiredCases}**  •  Reversal rate **${analytics.reversalRate}**`, inline: false },
     { name: '📈 Recent Activity', value: trend.slice(0, 1024), inline: false }
