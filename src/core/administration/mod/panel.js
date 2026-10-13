@@ -384,22 +384,16 @@ function buildModeratorAnalyticsEmbed(guild, analytics, currentUserId = null) {
 function buildAnalyticsRows(windowKey, mode = 'overview', moderatorId = null, currentUserId = null, returnTargetId = 'none') {
   const window = normalizeAnalyticsWindow(windowKey);
   const returnId = returnTargetId || 'none';
-  const viewButtons = [];
-  if (mode === 'moderator') {
-    viewButtons.push(new ButtonBuilder()
-      .setCustomId(`mod_analytics_overview:${window}:${returnId}`)
-      .setLabel('📊 Server')
-      .setStyle(ButtonStyle.Secondary));
-  }
-  if (!(mode === 'moderator' && moderatorId && currentUserId && String(moderatorId) === String(currentUserId))) {
-    viewButtons.push(new ButtonBuilder()
-      .setCustomId(`mod_analytics_my:${window}:${currentUserId || 'none'}:${returnId}`)
-      .setLabel('👤 My History')
-      .setStyle(ButtonStyle.Secondary));
-  }
-  viewButtons.push(new ButtonBuilder()
-    .setCustomId('mod_case_appeal_queue:0')
-    .setLabel('⚖️ Appeal Queue')
+  const windowButtons = Object.keys(ANALYTICS_WINDOWS).map((key) => new ButtonBuilder()
+    .setCustomId(`mod_analytics_window:${key}:${mode}:${moderatorId || 'none'}:${returnId}`)
+    .setLabel(ANALYTICS_WINDOW_LABELS[key])
+    .setStyle(window === key ? ButtonStyle.Primary : ButtonStyle.Secondary));
+  const ownHistory = mode === 'moderator' && moderatorId && currentUserId && String(moderatorId) === String(currentUserId);
+  windowButtons.push(new ButtonBuilder()
+    .setCustomId(ownHistory
+      ? `mod_analytics_overview:${window}:${returnId}`
+      : `mod_analytics_my:${window}:${currentUserId || 'none'}:${returnId}`)
+    .setLabel(ownHistory ? '📊 Server' : '👤 History')
     .setStyle(ButtonStyle.Secondary));
   return [
     new ActionRowBuilder().addComponents(
@@ -409,13 +403,7 @@ function buildAnalyticsRows(windowKey, mode = 'overview', moderatorId = null, cu
         .setMinValues(1)
         .setMaxValues(1)
     ),
-    new ActionRowBuilder().addComponents(
-      Object.keys(ANALYTICS_WINDOWS).map((key) => new ButtonBuilder()
-        .setCustomId(`mod_analytics_window:${key}:${mode}:${moderatorId || 'none'}:${returnId}`)
-        .setLabel(ANALYTICS_WINDOW_LABELS[key])
-        .setStyle(window === key ? ButtonStyle.Primary : ButtonStyle.Secondary))
-    ),
-    new ActionRowBuilder().addComponents(viewButtons),
+    new ActionRowBuilder().addComponents(windowButtons),
   ];
 }
 function buildTargetStats(guildId, target) { if (!target) return { warningCount: undefined, caseCount: undefined, lastCaseSummary: null }; const cases = getCasesForUser(guildId, target.id) || []; return { warningCount: getWarningCountForUser(guildId, target.id), caseCount: getCaseCountForUser(guildId, target.id), lastCaseSummary: cases[0] ? formatCaseSummary(cases[0]) : null }; }
