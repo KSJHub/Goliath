@@ -1073,6 +1073,7 @@ module.exports = {
   getBulkActionProgressEmbed,
   getBulkActionSummaryEmbed,
   getCaseAppeals,
+  listAppeals,
   getPendingAppeals,
   getAppealEligibility,
   submitAppeal,
