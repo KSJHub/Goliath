@@ -72,9 +72,9 @@ function buildMemberNotice(guild, options = {}) {
   ];
 
   const fields = [
-    field('🏠 Server', guild?.name || 'Discord Server', true),
-    reference ? field(`🆔 ${referenceLabel}`, reference, true) : null,
-    status ? field('📌 Status', status, true) : null,
+    ...(options.compactModerationLayout ? [] : [field('🏠 Server', guild?.name || 'Discord Server', true)]),
+    !options.compactModerationLayout && reference ? field(`🆔 ${referenceLabel}`, reference, true) : null,
+    !options.compactModerationLayout && status ? field('📌 Status', status, true) : null,
 
     ...suppliedFields.map(
       (item) => item && field(item.name, item.value, item.inline === true)
@@ -105,7 +105,7 @@ function buildMemberNotice(guild, options = {}) {
 
   const footerReference = options.footerLabel || reference;
 
-  const footerBits = [
+  const footerBits = options.compactModerationLayout ? ['Goliath', 'Moderation'] : [
     'Goliath',
     moduleName,
     guild?.name || 'Server',
@@ -143,17 +143,18 @@ function moderationNotice(guild, modCase, options = {}) {
   }[action] || { emoji: '🛡️', title: 'Moderation Notice', label: clean(action, 'Moderation Action', 80), color: COLORS.info, meaning: 'A moderation action has been recorded on your account.' };
 
   const caseId = modCase?.caseId || options.caseId;
-  const fields = [field('🛡️ Action', `**${meta.label}**`, true)];
+  const fields = options.compactModerationLayout ? [...(options.extraFields || [])] : [field('🛡️ Action', `**${meta.label}**`, true)];
   const duration = modCase?.metadata?.duration || modCase?.metadata?.durationRaw || options.duration;
-  if (duration) fields.push(field('⏱️ Duration', duration, true));
-  if (options.extraFields) fields.push(...options.extraFields);
+  if (duration && !options.compactModerationLayout) fields.push(field('⏱️ Duration', duration, true));
+  if (options.extraFields && !options.compactModerationLayout) fields.push(...options.extraFields);
   return buildMemberNotice(guild, {
     module: 'Goliath Moderation', emoji: meta.emoji, title: meta.title, color: meta.color,
-    description: options.description || 'This is an official Goliath moderation notice. The details below come from your recorded moderation case.',
+    description: options.description || (action === 'warn' ? "This is an official warning issued by Goliath on behalf of the server's management team." : 'This is an official Goliath moderation notice. The details below come from your recorded moderation case.'),
     reference: caseId ? `Case #${caseId}` : options.reference,
     status: options.status || modCase?.status || 'Active', fields,
     reason: modCase?.reason || options.reason || 'No reason provided', issuedBy: options.issuedBy,
-    meaning: options.meaning || meta.meaning, nextSteps: options.nextSteps, buttons: options.buttons,
+    meaning: options.meaning || (action === 'warn' ? 'A warning has been added to your personal record. Further incidents may result in permanent action.' : meta.meaning), nextSteps: options.nextSteps, buttons: options.buttons,
+    compactModerationLayout: options.compactModerationLayout,
   });
 }
 
