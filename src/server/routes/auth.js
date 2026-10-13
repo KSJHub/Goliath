@@ -329,8 +329,9 @@ router.get('/callback', async (req, res) => {
         return res.status(200).type('html').send(renderAppealsHandoff(stateReturnPath, clientUrl));
       }
 
-      const origin = requestOrigin(req, clientUrl);
-      return res.redirect(buildPostOAuthTarget(origin, stateReturnPath));
+      // Always return to the configured frontend origin; the OAuth callback
+      // may run on a separate API hostname that cannot serve dashboard routes.
+      return res.redirect(buildPostOAuthTarget(clientUrl, stateReturnPath));
     });
   } catch (error) {
     console.error('❌ Auth error', error);
