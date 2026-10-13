@@ -317,35 +317,38 @@ function buildAppealsOverviewEmbed(guild, filter = 'pending', page = 0) {
   return embed;
 }
 function buildAnalyticsOverviewEmbed(guild, analytics) {
-  const topModerators = analytics.topModerators.length
-    ? analytics.topModerators.map(([id, count], index) => `${index + 1}. <@${id}> — **${count}**`).join('\n')
-    : 'No moderator activity in this period.';
-  const topUsers = analytics.topUsers.length
-    ? analytics.topUsers.map(([id, count], index) => `${index + 1}. <@${id}> — **${count}**`).join('\n')
-    : 'No moderated members in this period.';
-  const trend = analytics.trend.length
-    ? analytics.trend.map((entry) => `**${entry.label}** — ${entry.count}`).join('\n')
-    : 'No moderation activity in the recent trend window.';
   const appeal = analytics.appealCounts;
-  const comparison = analytics.change === null
-    ? 'Previous period: no baseline available.'
-    : `Previous period: **${analytics.change >= 0 ? '+' : ''}${analytics.change}%** change in cases.`;
+  const topModerators = analytics.topModerators.slice(0, 3).map(([id, count], index) => `${index + 1}. <@${id}> — **${count}**`).join('\n');
+  const topUsers = analytics.topUsers.slice(0, 3).map(([id, count], index) => `${index + 1}. <@${id}> — **${count}**`).join('\n');
+  const recent = analytics.trend.slice(-7);
+  const maximum = Math.max(1, ...recent.map((entry) => Number(entry.count) || 0));
+  const trend = recent.length ? recent.map((entry) => {
+    const count = Number(entry.count) || 0;
+    const bar = count ? '▰'.repeat(Math.max(1, Math.round(count / maximum * 8))) : '—';
+    return `${entry.label}  ${bar}  **${count}**`;
+  }).join('\n') : 'No recent activity.';
+  const comparison = analytics.change === null ? '' : `\nCompared with previous period: **${analytics.change >= 0 ? '+' : ''}${analytics.change}%**`;
+  const fields = [
+    { name: '📁 Total Cases', value: `**${analytics.totalCases}**\n${analytics.activeCases} active`, inline: true },
+    { name: '👥 Members', value: `**${analytics.uniqueUsers}**\n${analytics.repeatOffenders} repeat`, inline: true },
+    { name: '🧾 Audit Events', value: `**${analytics.auditActions}**\nrecorded`, inline: true },
+    { name: '⚡ Moderation Actions', value: `Warnings **${Number(analytics.actionCounts.warn || 0)}**  •  Timeouts **${Number(analytics.actionCounts.timeout || 0)}**\nKicks **${Number(analytics.actionCounts.kick || 0)}**  •  Bans **${Number(analytics.actionCounts.ban || 0)}**`, inline: false },
+    { name: '⚖️ Appeals', value: `Pending **${appeal.pending}**  •  Approved **${appeal.approved}**  •  Denied **${appeal.denied}**`, inline: false },
+    { name: '↩️ Case Outcomes', value: `Reversed **${analytics.reversedCases}**  •  Expired **${analytics.expiredCases}**  •  Reversal rate **${analytics.reversalRate}**`, inline: false },
+    { name: '📈 Recent Activity', value: trend.slice(0, 1024), inline: false }
+  ];
+  if (topModerators || topUsers) {
+    fields.push(
+      { name: '🏆 Top Moderators', value: topModerators || 'No activity', inline: true },
+      { name: '👥 Frequent Members', value: topUsers || 'No activity', inline: true }
+    );
+  }
   return createEmbed({
     title: `📊 Moderation Analytics • ${analytics.windowLabel}`,
-    description: `**Server:** ${guild?.name || 'Server'}\n${comparison}`,
+    description: `**${guild?.name || 'Server'}** • Server-wide overview${comparison}`,
     color: COLORS.PRIMARY,
-    fields: [
-      { name: '📁 Cases', value: `**${analytics.totalCases} total** • ${analytics.activeCases} active • ${analytics.reversedCases} reversed • ${analytics.expiredCases} expired`, inline: false },
-      { name: '⚡ Actions', value: formatActionBreakdown(analytics.actionCounts), inline: false },
-      { name: '👥 Members', value: `Unique **${analytics.uniqueUsers}**\nRepeat **${analytics.repeatOffenders}**`, inline: true },
-      { name: '↩️ Reversal Rate', value: `**${analytics.reversalRate}**`, inline: true },
-      { name: '🧾 Audit Activity', value: `**${analytics.auditActions}** events`, inline: true },
-      { name: '⚖️ Appeals', value: `**${appeal.pending} pending** • ${appeal.approved} approved • ${appeal.denied} denied\nApproval rate **${analytics.appealApprovalRate}**`, inline: false },
-      { name: '🏆 Top Moderators', value: topModerators.slice(0, 1024), inline: true },
-      { name: '👥 Frequent Members', value: topUsers.slice(0, 1024), inline: true },
-      { name: '📈 Recent Activity', value: trend.slice(0, 1024), inline: false },
-    ],
-    footer: `Moderation activity • ${analytics.windowLabel.toLowerCase()} view`,
+    fields,
+    footer: `Server-wide moderation • ${analytics.windowLabel.toLowerCase()}`
   });
 }
 function buildModeratorAnalyticsEmbed(guild, analytics, currentUserId = null) {
