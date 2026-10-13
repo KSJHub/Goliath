@@ -352,34 +352,34 @@ function buildAnalyticsOverviewEmbed(guild, analytics) {
     footer: `Server-wide moderation • ${analytics.windowLabel.toLowerCase()}`
   });
 }
-function buildModeratorAnalyticsEmbed(guild, analytics, currentUserId = null) {
-  const appeals = analytics.moderatorAppeals;
-  const ownHistory = currentUserId && String(currentUserId) === String(analytics.moderatorId);
+function buildModeratorAnalyticsEmbed(guild, analytics) {
   const statuses = analytics.moderatorStatusCounts;
-  const totalAppeals = Number(appeals.pending || 0) + Number(appeals.approved || 0) + Number(appeals.denied || 0);
-  const recentActions = analytics.recentCases.length
-    ? analytics.recentCases.map((entry) => {
-        const when = getCaseTime(entry);
-        return `**#${entry.caseId}** • ${String(entry.action || 'unknown').toUpperCase()} • <@${entry.userId}>\n${getStatusLabel(entry)} • ${timestamp(when, 'f')}`;
-      }).join('\n\n')
-    : 'No moderation actions in this period.';
-  return createEmbed({
-    title: ownHistory ? '👤 My Moderation History' : '👤 Moderator History',
-    description: [
-      ownHistory ? 'Your moderation activity and case history.' : `Moderation activity and case history for <@${analytics.moderatorId}>.`,
-      '',
-      `**Period:** ${analytics.windowLabel}`,
-    ].join('\n'),
-    color: COLORS.PRIMARY,
-    fields: [
-      { name: '📁 Cases Handled', value: `Total **${analytics.moderatorCases}** • Active **${statuses.active || 0}** • Reversed **${statuses.reversed || 0}** • Expired **${statuses.expired || 0}**`, inline: false },
-      { name: '⚡ Actions Taken', value: `Warnings **${Number(analytics.moderatorActionCounts.warn || 0)}** • Timeouts **${Number(analytics.moderatorActionCounts.timeout || 0)}** • Kicks **${Number(analytics.moderatorActionCounts.kick || 0)}** • Bans **${Number(analytics.moderatorActionCounts.ban || 0)}**`, inline: false },
+  const moderatorId = analytics.moderatorId;
+  const moderatorName = guild?.members?.cache?.get(moderatorId)?.displayName
+    || guild?.client?.users?.cache?.get(moderatorId)?.username;
+  const memberLabel = moderatorName ? `**${moderatorName.replace(/([*_~`|])/g, '\\$1')}** • <@${moderatorId}>` : `<@${moderatorId}>`;
+  const fields = [];
+  if (analytics.moderatorCases === 0) {
+    fields.push({ name: '📁 No Activity', value: 'No moderation actions recorded for this moderator during the selected period.', inline: false });
+  } else {
+    fields.push(
+      { name: '📁 Cases Handled', value: `**${analytics.moderatorCases}**`, inline: true },
       { name: '👥 Members Moderated', value: `**${analytics.affectedUsers}**`, inline: true },
-      { name: '↩️ Reversal Rate', value: `**${analytics.moderatorReversalRate}**`, inline: true },
-      { name: '⚖️ Appeals', value: `**${totalAppeals}**`, inline: true },
-      { name: '🕘 Recent Actions', value: recentActions.slice(0, 1024), inline: false },
-    ],
-    footer: `${guild?.name || 'Server'} • ${analytics.windowLabel.toLowerCase()}`,
+      { name: '↩️ Reversed', value: `**${statuses.reversed || 0}**`, inline: true },
+      { name: '⚡ Actions Taken', value: `Warnings **${Number(analytics.moderatorActionCounts.warn || 0)}** • Timeouts **${Number(analytics.moderatorActionCounts.timeout || 0)}**\nKicks **${Number(analytics.moderatorActionCounts.kick || 0)}** • Bans **${Number(analytics.moderatorActionCounts.ban || 0)}**`, inline: false }
+    );
+    const recent = analytics.recentCases.slice(0, 5).map((entry) => {
+      const when = getCaseTime(entry);
+      return `**Case #${entry.caseId} • ${String(entry.action || 'unknown').toUpperCase()}** • ${getStatusLabel(entry)}\n<@${entry.userId}> • ${timestamp(when, 'f')}`;
+    }).join('\n\n');
+    fields.push({ name: '🕘 Recent Cases', value: recent.slice(0, 1024) || 'No recent cases in this period.', inline: false });
+  }
+  return createEmbed({
+    title: '👤 Moderator History',
+    description: `**Moderator:** ${memberLabel}\n**Server:** ${guild?.name || 'Server'}`,
+    color: COLORS.PRIMARY,
+    fields,
+    footer: `Moderator activity • ${analytics.windowLabel.toLowerCase()}`
   });
 }
 // Historical moderation actors are sourced from recorded case actions, not Discord's
