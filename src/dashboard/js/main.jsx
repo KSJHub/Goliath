@@ -42,6 +42,14 @@ function getOAuthAppealReturn() {
   }
 }
 
+// Upgrade previously sent hash-based DM links before authentication starts.
+const legacyAppealHash = window.location.hash.match(/^#\/appeals(?:\?([^#]*))?$/);
+if (legacyAppealHash) {
+  const reference = parseAppealReference(legacyAppealHash[1] || '');
+  const query = reference ? new URLSearchParams({ guild: reference.guild, case: reference.caseId }).toString() : '';
+  window.history.replaceState({}, '', query ? `/appeals?${query}` : '/appeals');
+}
+
 let pathname = window.location.pathname.replace(/\/+$/, '') || '/';
 let appealReference = getAppealReference();
 let oauthAppealReturn = null;
