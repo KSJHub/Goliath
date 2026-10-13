@@ -663,7 +663,10 @@ function buildCaseDetailEmbed(modCase) {
     embed.addFields({ name: '📨 Appeal Notice', value: notice.sent ? `Sent ✅${notice.sentAt ? ` • <t:${getCaseTimestamp(notice.sentAt)}:R>` : ''}` : `Failed ❌${notice.error ? ` • ${String(notice.error).slice(0, 250)}` : ''}`, inline: false });
   }
   if (modCase.note && String(modCase.note).trim()) embed.addFields({ name: 'Staff Note', value: String(modCase.note).slice(0, 1024), inline: false });
-  if (modCase.metadata && Object.keys(modCase.metadata).length) embed.addFields({ name: 'Metadata', value: `\`\`\`json\n${JSON.stringify(modCase.metadata, null, 2).slice(0, 900)}\n\`\`\``, inline: false });
+  // Keep internal metadata in SQLite and exports, not in the everyday moderator view.
+  if (modCase.action === 'warn' && Number.isFinite(Number(modCase.metadata?.strikeWeight))) {
+    embed.addFields({ name: '⚠️ Strike Weight', value: String(modCase.metadata.strikeWeight), inline: true });
+  }
   return embed;
 }
 function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
