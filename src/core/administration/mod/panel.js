@@ -74,6 +74,7 @@ function normalizeDashboardContext(context = {}) {
     analyticsMode: context.analyticsMode === 'moderator' ? 'moderator' : 'overview',
     analyticsModeratorId: context.analyticsModeratorId ? String(context.analyticsModeratorId) : null,
     analyticsReturnTargetId: context.analyticsReturnTargetId ? String(context.analyticsReturnTargetId) : null,
+    analyticsStaffPage: Math.max(0, Number(context.analyticsStaffPage) || 0),
   };
 }
 function getEmoji(key, fallback) { return EMOJIS?.[key] || fallback; }
@@ -381,9 +382,23 @@ function buildModeratorAnalyticsEmbed(guild, analytics, currentUserId = null) {
     footer: `${guild?.name || 'Server'} • ${analytics.windowLabel.toLowerCase()}`,
   });
 }
-function buildAnalyticsRows(windowKey, mode = 'overview', moderatorId = null, currentUserId = null, returnTargetId = 'none') {
+// Historical moderation actors are sourced from recorded case actions, not Discord's
+// unrestricted member selector. This also retains history for former moderators.
+function getRecordedModerators(guildId) {
+  const counts = new Map();
+  for (const entry of getAllCases(guildId) || []) {
+    const id = String(entry.moderatorId || '');
+    if (!/^\d{16,20}$/.test(id)) continue;
+    counts.set(id, (counts.get(id) || 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+function buildAnalyticsRows(guild, windowKey, mode = 'overview', moderatorId = null, currentUserId = null, returnTargetId = 'none', staffPage = 0) {
   const window = normalizeAnalyticsWindow(windowKey);
   const returnId = returnTargetId || 'none';
+  const recorded = getRecordedModerators(guild.id);
+  const pageCount = Math.max(1, Math.ceil(recorded.length / 25));
+  const page = Math.min(Math.max(0, Number(staffPage) || 0), pageCount - 1);
   const windowButtons = Object.keys(ANALYTICS_WINDOWS).map((key) => new ButtonBuilder()
     .setCustomId(`mod_analytics_window:${key}:${mode}:${moderatorId || 'none'}:${returnId}`)
     .setLabel(ANALYTICS_WINDOW_LABELS[key])
@@ -395,16 +410,24 @@ function buildAnalyticsRows(windowKey, mode = 'overview', moderatorId = null, cu
       : `mod_analytics_my:${window}:${currentUserId || 'none'}:${returnId}`)
     .setLabel(ownHistory ? '📊 Server' : '👤 History')
     .setStyle(ButtonStyle.Secondary));
-  return [
-    new ActionRowBuilder().addComponents(
-      new UserSelectMenuBuilder()
-        .setCustomId(`mod_analytics_moderator_select:${window}:${returnId}`)
-        .setPlaceholder('👤 Select moderator for history')
-        .setMinValues(1)
-        .setMaxValues(1)
-    ),
-    new ActionRowBuilder().addComponents(windowButtons),
-  ];
+  const rows = [];
+  if (recorded.length) {
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`mod_analytics_staff_select:${window}:${returnId}:${page}`)
+      .setPlaceholder(`Moderator history • ${recorded.length} recorded • ${page + 1}/${pageCount}`)
+      .setMinValues(1).setMaxValues(1)
+      .addOptions(recorded.slice(page * 25, page * 25 + 25).map(([id, count]) => {
+        const name = guild.members.cache.get(id)?.displayName || guild.client.users.cache.get(id)?.username || id;
+        return { label: String(name).slice(0, 100), value: id, description: `${count} recorded action${count === 1 ? '' : 's'} • ${id}`.slice(0, 100) };
+      }));
+    rows.push(new ActionRowBuilder().addComponents(menu));
+    if (pageCount > 1) rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`mod_analytics_staff_page:${window}:${mode}:${moderatorId || 'none'}:${returnId}:${page - 1}`).setLabel('◀ Staff').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+      new ButtonBuilder().setCustomId(`mod_analytics_staff_page:${window}:${mode}:${moderatorId || 'none'}:${returnId}:${page + 1}`).setLabel('Staff ▶').setStyle(ButtonStyle.Secondary).setDisabled(page + 1 >= pageCount)
+    ));
+  }
+  rows.push(new ActionRowBuilder().addComponents(windowButtons));
+  return rows;
 }
 function buildTargetStats(guildId, target) { if (!target) return { warningCount: undefined, caseCount: undefined, lastCaseSummary: null }; const cases = getCasesForUser(guildId, target.id) || []; return { warningCount: getWarningCountForUser(guildId, target.id), caseCount: getCaseCountForUser(guildId, target.id), lastCaseSummary: cases[0] ? formatCaseSummary(cases[0]) : null }; }
 function getCasesPageData(guildId, targetId, options = {}) { const actionFilter = options.actionFilter || 'all'; const statusFilter = options.statusFilter || 'all'; const filters = {}; if (actionFilter !== 'all') filters.action = actionFilter; if (statusFilter !== 'all') filters.status = statusFilter; const allCases = getFilteredCases(guildId, targetId, filters) || []; const totalPages = Math.max(1, Math.ceil(allCases.length / CASES_PER_PAGE)); const page = Math.max(0, Math.min(Number(options.page) || 0, totalPages - 1)); return { actionFilter, statusFilter, page, totalPages, pageCases: allCases.slice(page * CASES_PER_PAGE, (page + 1) * CASES_PER_PAGE) }; }
@@ -434,7 +457,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
       new ButtonBuilder().setCustomId(`mod_appeals_filter:${filter}:${data.currentPage + 1}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(data.currentPage + 1 >= data.totalPages)
     ));
   }
-  else if (safeView === 'analytics') { const window = context.analyticsWindow; if (context.analyticsMode === 'moderator' && context.analyticsModeratorId) embeds.push(buildModeratorAnalyticsEmbed(interaction.guild, getModeratorAnalytics(interaction.guild.id, context.analyticsModeratorId, window), interaction.user?.id || null)); else embeds.push(buildAnalyticsOverviewEmbed(interaction.guild, getModerationAnalytics(interaction.guild.id, window))); components.push(...buildAnalyticsRows(window, context.analyticsMode, context.analyticsModeratorId, interaction.user?.id || null, context.analyticsReturnTargetId || 'none')); }
+  else if (safeView === 'analytics') { const window = context.analyticsWindow; if (context.analyticsMode === 'moderator' && context.analyticsModeratorId) embeds.push(buildModeratorAnalyticsEmbed(interaction.guild, getModeratorAnalytics(interaction.guild.id, context.analyticsModeratorId, window), interaction.user?.id || null)); else embeds.push(buildAnalyticsOverviewEmbed(interaction.guild, getModerationAnalytics(interaction.guild.id, window))); components.push(...buildAnalyticsRows(interaction.guild, window, context.analyticsMode, context.analyticsModeratorId, interaction.user?.id || null, context.analyticsReturnTargetId || 'none', context.analyticsStaffPage)); }
   components.push(...buildDashboardNav(targetId, safeView, interaction.member, interaction.guild, context));
   return { embeds, components: validateDashboardComponents(components, safeView) };
 }
@@ -455,6 +478,10 @@ async function handleDashboardNavigation(interaction) {
     return renderDashboard(interaction, 'none', 'appeals', { appealFilter: ['all', 'resolved'].includes(filter) ? filter : 'pending', appealPage: Math.max(0, Number(pageRaw) || 0) });
   }
   if (id.startsWith('mod_analytics_') && !canViewDashboardSection(interaction.member, interaction.guild, 'analytics')) return safeReply(interaction, ephemeralError('No permission to view moderation analytics.'));
+  if (id.startsWith('mod_analytics_staff_page:')) {
+    const [, window, mode = 'overview', moderatorId = 'none', returnTargetId = 'none', page = '0'] = id.split(':');
+    return renderDashboard(interaction, 'none', 'analytics', { analyticsWindow: window, analyticsMode: mode, analyticsModeratorId: moderatorId === 'none' ? null : moderatorId, analyticsReturnTargetId: returnTargetId === 'none' ? null : returnTargetId, analyticsStaffPage: Math.max(0, Number(page) || 0) });
+  }
   if (id.startsWith('mod_analytics_window:')) { const [, window, mode = 'overview', moderatorId = 'none', returnTargetId = 'none'] = id.split(':'); return renderDashboard(interaction, 'none', 'analytics', { analyticsWindow: window, analyticsMode: mode, analyticsModeratorId: moderatorId === 'none' ? null : moderatorId, analyticsReturnTargetId: returnTargetId === 'none' ? null : returnTargetId }); }
   if (id.startsWith('mod_analytics_overview:')) { const [, window, returnTargetId = 'none'] = id.split(':'); return renderDashboard(interaction, 'none', 'analytics', { analyticsWindow: window, analyticsMode: 'overview', analyticsReturnTargetId: returnTargetId === 'none' ? null : returnTargetId }); }
   if (id.startsWith('mod_analytics_my:')) { const [, window, moderatorId, returnTargetId = 'none'] = id.split(':'); return renderDashboard(interaction, 'none', 'analytics', { analyticsWindow: window, analyticsMode: 'moderator', analyticsModeratorId: moderatorId, analyticsReturnTargetId: returnTargetId === 'none' ? null : returnTargetId }); }
@@ -462,6 +489,14 @@ async function handleDashboardNavigation(interaction) {
   if (id.startsWith('mod_dashboard:') || id.startsWith('mod_refresh:')) { const [, targetId = 'none', requested = DEFAULT_VIEW] = id.split(':'); if (normalizeView(requested) === 'intelligence') return false; return renderDashboard(interaction, normalizeView(requested) === 'analytics' ? 'none' : targetId, requested, normalizeView(requested) === 'analytics' ? { ...DEFAULT_ANALYTICS_CONTEXT, analyticsReturnTargetId: targetId === 'none' ? null : targetId } : {}); }
   if (id.startsWith('mod_filter_cases:') || id.startsWith('mod_case_page:')) { if (!canViewDashboardSection(interaction.member, interaction.guild, 'cases')) return safeReply(interaction, ephemeralError('No permission to view moderation cases.')); const [, targetId = 'none', actionFilter = 'all', statusFilter = 'all', page = '0'] = id.split(':'); return renderDashboard(interaction, targetId, 'cases', { actionFilter, statusFilter, page }); }
   return false;
+}
+async function handleAnalyticsStaffSelect(interaction) {
+  if (!String(interaction.customId || '').startsWith('mod_analytics_staff_select:')) return false;
+  if (!canUseModAction(interaction.member, interaction.guild, 'view_analytics')) return safeReply(interaction, ephemeralError('No permission to view moderation analytics.'));
+  const [, window, returnTargetId = 'none', page = '0'] = String(interaction.customId).split(':');
+  const moderatorId = String(interaction.values?.[0] || '');
+  if (!getRecordedModerators(interaction.guild.id).some(([id]) => id === moderatorId)) return safeReply(interaction, ephemeralError('This moderator has no recorded moderation actions.'));
+  return renderDashboard(interaction, 'none', 'analytics', { analyticsWindow: window, analyticsMode: 'moderator', analyticsModeratorId: moderatorId, analyticsReturnTargetId: returnTargetId === 'none' ? null : returnTargetId, analyticsStaffPage: Math.max(0, Number(page) || 0) });
 }
 async function handleUserSelectMenu(interaction) { if (String(interaction.customId || '').startsWith('mod_analytics_moderator_select:')) { if (!canUseModAction(interaction.member, interaction.guild, 'view_analytics')) return safeReply(interaction, ephemeralError('No permission to view moderation analytics.')); const [, window, returnTargetId = 'none'] = String(interaction.customId).split(':'); const moderatorId = interaction.values?.[0]; if (!moderatorId) return safeReply(interaction, ephemeralError('No moderator selected.')); return renderDashboard(interaction, 'none', 'analytics', { analyticsWindow: window, analyticsMode: 'moderator', analyticsModeratorId: moderatorId, analyticsReturnTargetId: returnTargetId === 'none' ? null : returnTargetId }); } if (interaction.customId !== 'mod_user_select') return false; const target = await fetchTarget(interaction.guild, interaction.values[0]); if (!target) return safeReply(interaction, ephemeralError('Could not find that member.')); return renderDashboard(interaction, target.id, 'actions'); }
 async function openExportModal(interaction, targetId = 'none') {
@@ -479,6 +514,7 @@ module.exports = {
   refreshCasesDashboard,
   handleDashboardNavigation,
   handleUserSelectMenu,
+  handleAnalyticsStaffSelect,
   handleExportInteraction,
   getModerationAnalytics,
   getModeratorAnalytics,
