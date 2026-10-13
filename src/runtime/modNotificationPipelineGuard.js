@@ -17,7 +17,12 @@ if (!globalThis[PATCH_KEY]) {
     kick: { emoji: '👢', label: 'Kick' }, ban: { emoji: '🔨', label: 'Ban' },
   });
   const actionMeta = (action) => ACTION_META[String(action || '').toLowerCase()] || { emoji: '🛡️', label: String(action || 'Moderation Action') };
-  const appealsBaseUrl = () => String(process.env.CLIENT_URL || process.env.DASHBOARD_CLIENT_URL || process.env.VITE_CLIENT_URL || 'https://goliath.ksjdigital.co.uk').trim().replace(/\/+$/, '');
+  const appealsBaseUrl = () => {
+    const configured = String(process.env.CLIENT_URL || process.env.DASHBOARD_CLIENT_URL || process.env.VITE_CLIENT_URL || 'https://goliath.ksjdigital.co.uk').trim();
+    const url = new URL(configured);
+    // Appeal URLs use browser pathname routing, never a legacy hash router.
+    return url.origin;
+  };
   const noticeAlreadyAttempted = (modCase) => Boolean(modCase?.metadata?.appealNotice?.attemptedAt);
   const departureNoticeKey = (guildId, userId) => `${String(guildId)}:${String(userId)}`;
   const durationValue = (modCase) => modCase?.metadata?.duration || modCase?.metadata?.durationRaw || null;
