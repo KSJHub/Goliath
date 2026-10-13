@@ -37,6 +37,7 @@ const {
   buildCaseFilterButtons,
   buildCasesPageButtons,
   getCaseAppeals,
+  listAppeals,
 } = require('./cases');
 const { getWarningCountForUser, syncExpiredWarningsToCases } = require('./warns');
 const { canUseModAction, getStaffDisplay, hasModPermission, fetchTarget } = require('./permissions');
@@ -276,13 +277,14 @@ function buildActionsEmbed(interaction, target, stats, staffDisplay) {
 function buildIntelligenceEmbed(interaction, target, member, guild) { const capabilities = []; if (canUseModAction(member, guild, 'scan_suspects')) capabilities.push('Suspected-account correlation'); if (canUseModAction(member, guild, 'scan_network')) capabilities.push('Network reputation and cross-guild intelligence'); if (canUseModAction(member, guild, 'scan_links')) capabilities.push('Persistent link evidence'); if (canUseModAction(member, guild, 'scan_notes')) capabilities.push('Investigation notes'); if (canUseModAction(member, guild, 'scan_watch')) capabilities.push('Investigation watch and Watchlist state'); return baseEmbed(interaction.client, COLORS.PRIMARY).setTitle('🧠 Member Intelligence').setDescription([target ? `**Active Member:** ${target.user} • \`${target.id}\`` : '**No member selected.**', '', 'Run **Full Member Scan** to open the complete intelligence workspace. Scan History remains available separately for previous snapshots and account comparison.', '', capabilities.length ? `**Included Intelligence:**\n${capabilities.map((value) => `• ${value}`).join('\n')}` : 'Your authority profile provides basic scan access only.', '', 'Evidence controls are kept inside the scan workspace so Back always returns to the correct panel and no duplicate scan is recorded unless you explicitly choose Rescan.'].join('\n')); }
 function buildCasesEmbed(target, cases = [], page = 0, totalPages = 1, actionFilter = 'all', statusFilter = 'all') { const description = cases.length ? cases.map((entry) => `**#${entry.caseId}** • ${String(entry.action || 'unknown').toUpperCase()} • ${getStatusLabel(entry)}\n${entry.reason || 'No reason provided'}\n<t:${Math.floor(getCaseTime(entry) / 1000)}:R>`).join('\n\n') : 'No cases found for this member.'; return createEmbed({ title: target?.user?.tag ? `📁 Cases • ${target.user.tag}` : '📁 Member Cases', description, color: COLORS.PRIMARY, footer: `Action: ${actionFilter} | Status: ${statusFilter} | Page ${page + 1}/${totalPages}` }); }
 function buildAppealsOverviewEmbed(guild, filter = 'pending') {
-  const rows = flattenAppeals(getAllCases(guild.id) || []).sort((a, b) => new Date(b.appeal.submittedAt || 0) - new Date(a.appeal.submittedAt || 0));
+  // Use the same canonical appeal query as the moderation case/appeal system.
+  const rows = listAppeals(guild.id, { status: 'all' }).map(({ case: modCase, appeal }) => ({ modCase, appeal }));
   const pending = rows.filter(({ appeal }) => (appeal.status || 'pending') === 'pending');
   const resolved = rows.filter(({ appeal }) => ['approved', 'denied'].includes(appeal.status));
   const entries = (filter === 'all' ? rows : filter === 'resolved' ? resolved : pending).slice(0, 10);
   const description = entries.length
     ? entries.map(({ modCase, appeal }) => `**Case #${modCase.caseId}** • <@${modCase.userId}> • **${String(appeal.status || 'pending').toUpperCase()}**\n${String(appeal.reason || appeal.message || 'No appeal details provided').slice(0, 170)}`).join('\n\n')
-    : 'No appeals have been submitted.';
+    : (rows.length ? 'No appeals match this filter.' : 'No appeals are recorded in this moderation database.');
   return createEmbed({ title: '⚖️ Moderation Appeals Hub', description: `Review appeals submitted through the Goliath Appeals Portal.\n\n**Pending:** ${pending.length}  •  **Resolved:** ${resolved.length}  •  **Total:** ${rows.length}\n\n**${filter === 'all' ? 'All Appeals' : filter === 'resolved' ? 'Resolved Appeals' : 'Pending Appeals'}**\n${description}`, color: COLORS.PRIMARY });
 }
 function buildAnalyticsOverviewEmbed(guild, analytics) {
