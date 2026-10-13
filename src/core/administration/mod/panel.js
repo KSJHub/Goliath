@@ -141,7 +141,7 @@ function getModerationAnalytics(guildId, windowKey = '30d') {
   const appealCounts = { pending: 0, approved: 0, denied: 0 }; for (const { appeal } of appealRows) increment(appealCounts, appeal.status || 'pending');
   const resolvedAppeals = appealCounts.approved + appealCounts.denied; const auditRows = getAuditRows(guildId, bounds); const moderatorAuditCounts = {}; for (const row of auditRows) increment(moderatorAuditCounts, row.actor_id);
   const trendDays = Math.min(7, ANALYTICS_WINDOWS[window] || 7); const trend = [];
-  for (let offset = trendDays - 1; offset >= 0; offset -= 1) { const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0); dayStart.setUTCDate(dayStart.getUTCDate() - offset); const start = dayStart.getTime(); const end = start + 86399999; trend.push({ label: dayStart.toISOString().slice(5, 10), count: cases.filter((modCase) => inBounds(getCaseTime(modCase), start, end)).length }); }
+  for (let offset = trendDays - 1; offset >= 0; offset -= 1) { const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0); dayStart.setUTCDate(dayStart.getUTCDate() - offset); const start = dayStart.getTime(); const end = start + 86399999; trend.push({ label: dayStart.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'UTC' }), count: cases.filter((modCase) => inBounds(getCaseTime(modCase), start, end)).length }); }
   return { window, windowLabel: ANALYTICS_WINDOW_LABELS[window], totalCases: cases.length, previousCases: previousCases.length, change: previousCases.length ? Math.round(((cases.length - previousCases.length) / previousCases.length) * 100) : null, activeCases: statusCounts.active || 0, reversedCases: statusCounts.reversed || 0, expiredCases: statusCounts.expired || 0, actionCounts, uniqueUsers: Object.keys(userCounts).length, repeatOffenders: Object.values(userCounts).filter((count) => count > 1).length, topModerators: topEntries(moderatorCounts), topUsers: topEntries(userCounts), appealCounts, resolvedAppeals, appealApprovalRate: percentage(appealCounts.approved, resolvedAppeals), reversalRate: percentage(statusCounts.reversed || 0, cases.length), auditActions: auditRows.length, moderatorAuditCounts, trend, cases };
 }
 function getModeratorAnalytics(guildId, moderatorId, windowKey = '30d') {
@@ -326,7 +326,7 @@ function buildAnalyticsOverviewEmbed(guild, analytics) {
   const trend = recent.length ? recent.map((entry) => {
     const count = Number(entry.count) || 0;
     const bar = count ? '▰'.repeat(Math.max(1, Math.round(count / maximum * 8))) : '—';
-    return `${entry.label}  ${bar}  **${count}**`;
+    return `\`${entry.label.padEnd(10, ' ')} ${bar.padEnd(8, ' ')} ${count}\``;
   }).join('\n') : 'No recent activity.';
   const comparison = analytics.change === null ? '' : `\nCompared with previous period: **${analytics.change >= 0 ? '+' : ''}${analytics.change}%**`;
   const fields = [
@@ -336,7 +336,7 @@ function buildAnalyticsOverviewEmbed(guild, analytics) {
     { name: '⚡ Moderation Actions', value: `Warnings **${Number(analytics.actionCounts.warn || 0)}**  •  Timeouts **${Number(analytics.actionCounts.timeout || 0)}**  •  Kicks **${Number(analytics.actionCounts.kick || 0)}**  •  Bans **${Number(analytics.actionCounts.ban || 0)}**`, inline: false },
     { name: '⚖️ Appeals', value: `Pending **${appeal.pending}**  •  Approved **${appeal.approved}**  •  Denied **${appeal.denied}**`, inline: false },
     { name: '↩️ Case Outcomes', value: `Reversed **${analytics.reversedCases}**  •  Expired **${analytics.expiredCases}**  •  Reversal rate **${analytics.reversalRate}**`, inline: false },
-    { name: '📈 Recent Activity', value: trend.slice(0, 1024), inline: false }
+    { name: '📈 Recent Activity · Last 7 Days', value: trend.slice(0, 1024), inline: false }
   ];
   if (topModerators || topUsers) {
     fields.push(
