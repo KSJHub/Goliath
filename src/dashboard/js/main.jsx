@@ -51,8 +51,11 @@ if (pathname === '/overview' || pathname === '/') {
   if (!appealReference && oauthAppealReturn?.reference) appealReference = oauthAppealReturn.reference;
 }
 
+// Appeal links must never silently enter the management dashboard. Recover
+// case deep links even when a proxy or an older login redirect used /overview.
 const isAppealsPath = pathname === '/appeals' || pathname.endsWith('/appeals');
-const isRecoveredAppealPath = Boolean(oauthAppealReturn) && (pathname === '/overview' || pathname === '/');
+const isAppealDeepLink = Boolean(appealReference) && (pathname === '/overview' || pathname === '/');
+const isRecoveredAppealPath = (Boolean(oauthAppealReturn) || isAppealDeepLink) && (pathname === '/overview' || pathname === '/');
 
 if ((isAppealsPath || isRecoveredAppealPath) && pathname !== '/appeals') {
   const params = new URLSearchParams();
