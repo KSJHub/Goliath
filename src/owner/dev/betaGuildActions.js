@@ -8,6 +8,51 @@ const security = require('../../core/security/protection/core');
 const PREFIX = 'ownerpanel:guildaccess:';
 const pending = new Map();
 
+// Matches the enabled DEV role permissions supplied by the owner.
+// BigInt preserves every permission bit, including newer Discord flags.
+const INVITE_PERMISSION_BITS = {
+  CreateInstantInvite: 0,
+  KickMembers: 1,
+  BanMembers: 2,
+  ManageChannels: 4,
+  ManageGuild: 5,
+  AddReactions: 6,
+  ViewAuditLog: 7,
+  ViewChannel: 10,
+  SendMessages: 11,
+  SendTTSMessages: 12,
+  ManageMessages: 13,
+  EmbedLinks: 14,
+  AttachFiles: 15,
+  ReadMessageHistory: 16,
+  Connect: 20,
+  Speak: 21,
+  MuteMembers: 22,
+  DeafenMembers: 23,
+  MoveMembers: 24,
+  UseVAD: 25,
+  ManageNicknames: 27,
+  ManageRoles: 28,
+  ManageWebhooks: 29,
+  ManageGuildExpressions: 30,
+  ManageEvents: 33,
+  ManageThreads: 34,
+  CreatePublicThreads: 35,
+  CreatePrivateThreads: 36,
+  SendMessagesInThreads: 38,
+  ModerateMembers: 40,
+  CreateGuildExpressions: 43,
+  CreateEvents: 44,
+  SetVoiceChannelStatus: 48,
+  SendPolls: 49,
+  UseExternalApps: 50,
+  PinMessages: 51,
+};
+const INVITE_PERMISSIONS = Object.values(INVITE_PERMISSION_BITS)
+  .reduce((mask, bit) => mask | (1n << BigInt(bit)), 0n)
+  .toString();
+
+
 function restartRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('ownerpanel:restart:ask:beta')
@@ -63,14 +108,14 @@ async function handle(interaction, api) {
         url.search = new URLSearchParams({
           client_id: api.botId,
           scope: 'bot applications.commands',
-          permissions: '0',
+          permissions: INVITE_PERMISSIONS,
           guild_id: guildId,
           disable_guild_select: 'true',
         }).toString();
         await interaction.editReply({
           content: `🔗 Invite BETA to **${guildId}**.\n` +
             'If you just approved it, restart BETA and wait for it to return before opening the invite.\n' +
-            'Discord requires Manage Server permission. Assign Goliath its required role permissions after joining.',
+            'The invite requests the configured DEV permission set (Administrator excluded). After joining, place the bot role above the roles it must manage.',
           components: [
             new ActionRowBuilder().addComponents(
               new ButtonBuilder().setLabel('Invite BETA Bot')
