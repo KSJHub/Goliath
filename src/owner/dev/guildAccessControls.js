@@ -30,16 +30,16 @@ function parseIds(value) {
     .map(id => id.trim()).filter(Boolean))];
 }
 
-function appendBetaGuild(id) {
+function appendBetaGuild(id, remove = false) {
   if (!validId(id)) throw new Error('Enter a valid Discord server ID.');
   const filename = path.join(ROOT, 'beta', '.env.beta');
   const original = fs.readFileSync(filename, 'utf8');
   const parsed = dotenv.parse(original);
-  const ids = parseIds(parsed.BETA_GUILD_IDS);
+  let ids = parseIds(parsed.BETA_GUILD_IDS);
   if (ids.some(value => !validId(value))) {
     throw new Error('Existing beta allowlist contains an invalid ID; no changes made.');
   }
-  if (ids.includes(id)) return { added: false, ids };
+  if (remove ? !ids.includes(id) : ids.includes(id)) return { added: false, ids };
   const matches = [...original.matchAll(
     /^[ \t]*(?:export[ \t]+)?BETA_GUILD_IDS[ \t]*=.*$/gm
   )];
@@ -47,7 +47,8 @@ function appendBetaGuild(id) {
     throw new Error('Duplicate beta allowlist entries; no changes made.');
   }
 
-  ids.push(id);
+  if (remove) ids = ids.filter(value => value !== id);
+  else ids.push(id);
   const line = `BETA_GUILD_IDS=${ids.join(',')}`;
   const eol = original.includes('\r\n') ? '\r\n' : '\n';
   const updated = matches.length
@@ -86,7 +87,13 @@ function buildRow() {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`${PREFIX}add`)
       .setLabel('Approve BETA Guild').setEmoji('➕')
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`${PREFIX}remove`)
+      .setLabel('Remove BETA Guild').setEmoji('➖')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`${PREFIX}invite`)
+      .setLabel('Invite BETA Bot').setEmoji('🔗')
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -148,6 +155,12 @@ async function handle(interaction) {
     });
     return true;
   }
+
+  if (await require('./betaGuildActions').handle(interaction, {
+    readEnv, parseIds, validId,
+    removeGuild: guildId => appendBetaGuild(guildId, true),
+    botId: MODES.beta,
+  })) return true;
 
   if (id === `${PREFIX}add`) {
     await interaction.showModal(
