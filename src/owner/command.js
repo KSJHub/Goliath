@@ -20,6 +20,7 @@ const testSecurity = require('./dev/testsecurity');
 const duplicator = require('./dev/duplicator');
 const maintenanceStatus = require('./dev/maintenanceStatus');
 const auditEvents = require('./auditIntelligence/auditEvents');
+const restartControls = require('./dev/restartControls');
 
 const OWNER_PREFIX = 'ownerpanel:';
 const SERVER_CONTEXT_MARKER = ':guild:';
@@ -291,7 +292,9 @@ function ownerHomePayload(interaction, notice = null) {
 
   const navigation = new ActionRowBuilder().addComponents(...navigationComponents);
 
-  return { embeds: [embed], components: [primary, navigation] };
+  const components = [primary, navigation];
+  if (isDev) components.push(restartControls.buildRow());
+  return { embeds: [embed], components };
 }
 
 function serverToolsPayload(interaction, explicitGuildId = null) {
@@ -572,6 +575,8 @@ async function handleOwnerPanelInteraction(interaction) {
     else await interaction.reply(ownerDeniedPayload()).catch(() => null);
     return true;
   }
+
+  if (await restartControls.handle(interaction)) return true;
 
   const contextGuildId = interactionGuildId(interaction, embeddedGuildId(rawId));
   if (contextGuildId) rememberOwnerGuild(interaction, contextGuildId);
