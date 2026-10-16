@@ -220,6 +220,15 @@ module.exports={
       // Paginated role selectors use a transport suffix. Route them by the original
       // component ID, while preserving the selected role values prepared above.
       const customId=String(interaction.__goliathLegacyRoleBase||interaction.customId||'');
+
+      if (customId.startsWith('ownerpanel:restart:') ||
+          customId.startsWith('ownerpanel:guildaccess:')) {
+        const ownerControls = require('../../owner/command');
+        if (!await ownerControls.handleOwnerPanelInteraction(interaction)) {
+          throw new Error('DEV owner control handler did not accept this action.');
+        }
+        return;
+      }
       if (interaction.__goliathPermissionsStudioHandled) return;
       if (['admin:settings', 'admin:settings:back', 'admin:settings:security-hub', 'admin:settings:back:security-hub', 'admin:settings:restrictions', 'admin:settings:back:restrictions', 'admin:settings:isolation', 'admin:settings:back:isolation'].includes(customId)) {
         if (!await callHandler(adminCommand, 'handleSettingsInteraction', interaction)) throw new Error(`Admin Settings did not handle ${customId}.`);

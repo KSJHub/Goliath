@@ -29,6 +29,7 @@ const OWNER_CONTEXT_TTL_MS = 30 * 60 * 1000;
 const DEVELOPMENT_TEST_GUILD_ID = process.env.TEST_GUILD_ID || '1515201360386068642';
 const wiredClients = new WeakSet();
 const ownerGuildContexts = new Map();
+const devControlInteractions = new WeakSet();
 
 function mode() {
   return normalizeBotMode(process.env.BOT_MODE);
@@ -569,6 +570,12 @@ async function resolveMaintenanceGuild(interaction, explicitGuildId = null) {
 
 async function handleOwnerPanelInteraction(interaction) {
   const rawId = String(interaction?.customId || '');
+  if (rawId.startsWith('ownerpanel:restart:') ||
+      rawId.startsWith('ownerpanel:guildaccess:')) {
+    if (devControlInteractions.has(interaction)) return true;
+    devControlInteractions.add(interaction);
+  }
+
   const id = baseOwnerCustomId(rawId);
   if (!id.startsWith(OWNER_PREFIX) && !id.startsWith('testsecurity:')) return false;
 
