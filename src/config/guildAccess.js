@@ -42,7 +42,11 @@ function getAllowedGuildIds(botMode = process.env.BOT_MODE) {
 }
 
 function isGuildAllowed(guildId, botMode, modeConfig) {
-  const safeConfig = normaliseModeConfig(modeConfig);
+  const safeConfig = {
+    ...normaliseModeConfig(modeConfig),
+    ...(normalizeBotMode(botMode || process.env.BOT_MODE) === 'BETA'
+      ? { strictGuildAccess: true } : {}),
+  };
 
   if (!safeConfig.strictGuildAccess) {
     return true;
@@ -51,7 +55,7 @@ function isGuildAllowed(guildId, botMode, modeConfig) {
   const allowedGuildIds = getAllowedGuildIds(botMode);
 
   if (!allowedGuildIds.length) {
-    return true;
+    return normalizeBotMode(botMode || process.env.BOT_MODE) !== 'BETA';
   }
 
   return allowedGuildIds.includes(String(guildId));
@@ -60,7 +64,11 @@ function isGuildAllowed(guildId, botMode, modeConfig) {
 async function enforceGuildAccess(guild, botMode = process.env.BOT_MODE, modeConfig) {
   if (!guild) return false;
 
-  const safeConfig = normaliseModeConfig(modeConfig);
+  const safeConfig = {
+    ...normaliseModeConfig(modeConfig),
+    ...(normalizeBotMode(botMode || process.env.BOT_MODE) === 'BETA'
+      ? { strictGuildAccess: true } : {}),
+  };
   const safeBotMode = normalizeBotMode(botMode);
 
   if (!safeConfig.strictGuildAccess) {
@@ -81,7 +89,7 @@ async function enforceGuildAccess(guild, botMode = process.env.BOT_MODE, modeCon
     console.warn(
       `⚠️ ${safeBotMode} mode has strict guild access enabled, but no allowed guild IDs are configured.`
     );
-    return true;
+    if (safeBotMode !== 'BETA') return true;
   }
 
   if (allowedGuildIds.includes(String(guild.id))) {
@@ -109,7 +117,11 @@ async function enforceGuildAccess(guild, botMode = process.env.BOT_MODE, modeCon
 async function enforceCurrentGuilds(client, botMode, modeConfig) {
   if (!client?.guilds?.cache) return;
 
-  const safeConfig = normaliseModeConfig(modeConfig);
+  const safeConfig = {
+    ...normaliseModeConfig(modeConfig),
+    ...(normalizeBotMode(botMode || process.env.BOT_MODE) === 'BETA'
+      ? { strictGuildAccess: true } : {}),
+  };
 
   if (!safeConfig.strictGuildAccess) {
     return;

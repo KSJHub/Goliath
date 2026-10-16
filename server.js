@@ -201,6 +201,12 @@ if (fs.existsSync(dashboardDist)) {
 }
 
 safeLoad('commands', () => commandHandler.loadCommands(client));
+client.on('guildCreate', (guild) => {
+  if (String(botMode).toUpperCase() !== 'BETA') return;
+  enforceGuildAccess(guild, botMode, config).catch((error) => {
+    console.error('[Guild Access] Join enforcement failed:', error.message);
+  });
+});
 registerEvents(client, { prepareInteraction });
 auditEvents.registerAuditEvents?.(client);
 

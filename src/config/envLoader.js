@@ -58,6 +58,10 @@ function loadEnvironment(mode = process.env.BOT_MODE) {
     }
   }
 
+  if (requestedMode === 'BETA') {
+    process.env.BETA_GUILD_IDS = String(result.parsed?.BETA_GUILD_IDS || '');
+  }
+
   process.env.BOT_MODE = requestedMode;
   normalizeClientUrlEnvironment();
   applyModePublicClientOrigin(requestedMode);
