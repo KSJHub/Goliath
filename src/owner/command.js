@@ -21,6 +21,7 @@ const duplicator = require('./dev/duplicator');
 const maintenanceStatus = require('./dev/maintenanceStatus');
 const auditEvents = require('./auditIntelligence/auditEvents');
 const restartControls = require('./dev/restartControls');
+const guildAccessControls = require('./dev/guildAccessControls');
 
 const OWNER_PREFIX = 'ownerpanel:';
 const SERVER_CONTEXT_MARKER = ':guild:';
@@ -294,6 +295,7 @@ function ownerHomePayload(interaction, notice = null) {
 
   const components = [primary, navigation];
   if (isDev) components.push(restartControls.buildRow());
+  if (isDev) components.push(guildAccessControls.buildRow());
   return { embeds: [embed], components };
 }
 
@@ -577,6 +579,7 @@ async function handleOwnerPanelInteraction(interaction) {
   }
 
   if (await restartControls.handle(interaction)) return true;
+  if (await guildAccessControls.handle(interaction)) return true;
 
   const contextGuildId = interactionGuildId(interaction, embeddedGuildId(rawId));
   if (contextGuildId) rememberOwnerGuild(interaction, contextGuildId);
