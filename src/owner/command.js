@@ -571,7 +571,8 @@ async function resolveMaintenanceGuild(interaction, explicitGuildId = null) {
 async function handleOwnerPanelInteraction(interaction) {
   const rawId = String(interaction?.customId || '');
   if (rawId.startsWith('ownerpanel:restart:') ||
-      rawId.startsWith('ownerpanel:guildaccess:')) {
+      rawId.startsWith('ownerpanel:guildaccess:') ||
+      /^ownerpanel:(?:home|refresh)(?::guild:\d+)?$/.test(rawId)) {
     if (devControlInteractions.has(interaction)) return true;
     devControlInteractions.add(interaction);
   }

@@ -222,7 +222,8 @@ module.exports={
       const customId=String(interaction.__goliathLegacyRoleBase||interaction.customId||'');
 
       if (customId.startsWith('ownerpanel:restart:') ||
-          customId.startsWith('ownerpanel:guildaccess:')) {
+          customId.startsWith('ownerpanel:guildaccess:') ||
+          /^ownerpanel:(?:home|refresh)(?::guild:\d+)?$/.test(customId)) {
         const ownerControls = require('../../owner/command');
         if (!await ownerControls.handleOwnerPanelInteraction(interaction)) {
           throw new Error('DEV owner control handler did not accept this action.');
