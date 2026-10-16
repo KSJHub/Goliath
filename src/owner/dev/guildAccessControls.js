@@ -5,7 +5,7 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const dotenv = require('dotenv');
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, EmbedBuilder,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
 const security = require('../../core/security/protection/core');
@@ -132,7 +132,7 @@ async function scanMode(mode) {
     lines.push('', 'Approved in .env.beta but not connected:',
       ...approved.filter(id => !connected.has(id)));
   }
-  return { mode, count: guilds.length, text: lines.join('\n') };
+  return { mode, bot, guilds, approved, count: guilds.length, text: lines.join('\n') };
 }
 
 async function handle(interaction) {
@@ -193,7 +193,67 @@ async function handle(interaction) {
           ? result.value.count + ' guild(s)' : 'scan failed'}`
       ).join(' • ');
       await interaction.editReply({
-        content: summary + '\nFull guild list attached. Membership does not confirm runtime connection health; beta approval reflects the saved file.',
+        content: null,
+        embeds: [new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('🌐 Goliath Connected Guilds')
+          .setDescription(
+            '**' + summary + '**\n\n' +
+            '✅ Approved in the BETA file • ⛔ Not approved\n' +
+            '🕓 Approved but not connected'
+          )
+          .addFields(...results.map((result, index) => {
+            const mode = modes[index];
+            const icon = { dev: '🧪', beta: '🔬', production: '🚀' }[mode];
+            if (result.status !== 'fulfilled') {
+              return {
+                name: `${icon} ${mode.toUpperCase()} — Scan unavailable`,
+                value: 'Could not retrieve this bot’s guild membership. See the attached report.',
+                inline: false,
+              };
+            }
+
+            const data = result.value;
+            const clean = value => String(value)
+              .replace(/[\r\n]/g, ' ')
+              .replace(/([\\`*_~|>])/g, '\\$1')
+              .slice(0, 120);
+            const entries = data.guilds.map(guild => {
+              const marker = mode === 'beta'
+                ? (data.approved.includes(guild.id) ? '✅' : '⛔')
+                : '🏠';
+              return `${marker} **${clean(guild.name)}**\n\`${guild.id}\``;
+            });
+
+            if (mode === 'beta') {
+              const connected = new Set(data.guilds.map(guild => guild.id));
+              for (const guildId of data.approved.filter(id => !connected.has(id))) {
+                entries.push(`🕓 Approved, awaiting connection\n\`${clean(guildId)}\``);
+              }
+            }
+
+            let value = '';
+            let shown = 0;
+            for (const entry of entries) {
+              if ((value + '\n\n' + entry).length > 850) break;
+              value += (value ? '\n\n' : '') + entry;
+              shown++;
+            }
+            if (!entries.length) value = '*No guilds connected.*';
+            if (shown < entries.length) {
+              value += `\n\n*${entries.length - shown} more entries in the attached report.*`;
+            }
+            return {
+              name: `${icon} ${mode.toUpperCase()} — ${data.count} connected`,
+              value,
+              inline: false,
+            };
+          }))
+          .setFooter({
+            text: 'Discord membership • BETA approval reflects the saved file; restart BETA after changes.',
+          })
+          .setTimestamp()
+        ],
         files: [{
           attachment: Buffer.from(report, 'utf8'),
           name: 'goliath-connected-guilds.txt',
