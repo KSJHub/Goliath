@@ -6,8 +6,9 @@ const { AuditLogEvent, PermissionFlagsBits } = require('discord.js');
 const { PROJECT_ROOT } = require('../../config/runtimePaths');
 
 const SHARED_ROOT = path.dirname(PROJECT_ROOT);
-const REQUEST_FILE = path.join(SHARED_ROOT, '.goliath-observatory-requests.json');
-const SNAPSHOT_DIR = path.join(SHARED_ROOT, '.goliath-observatory');
+const SHARED_OBSERVATORY_DIR = process.env.GOLIATH_OBSERVATORY_SHARED_DIR;
+const REQUEST_FILE = path.join(SHARED_OBSERVATORY_DIR || SHARED_ROOT, '.goliath-observatory-requests.json');
+const SNAPSHOT_DIR = SHARED_OBSERVATORY_DIR || path.join(SHARED_ROOT, '.goliath-observatory');
 const REQUEST_TTL_MS = 60 * 1000;
 const HISTORY_LIMIT = 30;
 
