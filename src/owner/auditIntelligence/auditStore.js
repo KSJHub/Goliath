@@ -9,7 +9,8 @@ const root = path.join(paths.data, 'audit');
 const HISTORY_LIMIT = 100;
 const LEGACY_CONFIG_FILE = path.join(root, 'config.json');
 const SHARED_ROOT = path.dirname(PROJECT_ROOT);
-const SHARED_CONFIG_FILE = path.join(SHARED_ROOT, '.goliath-audit-control.json');
+const SHARED_AUDIT_DIR = process.env.GOLIATH_AUDIT_SHARED_DIR || SHARED_ROOT;
+const SHARED_CONFIG_FILE = path.join(SHARED_AUDIT_DIR, '.goliath-audit-control.json');
 const COMMAND_CENTER_GUILD_ID = '1515201360386068642';
 const REGISTRY_MODES = ['DEV', 'BETA', 'PRODUCTION'];
 const LIVE_PROBE_REQUEST_LIMIT = 25;
@@ -18,7 +19,7 @@ const REMOTE_COMMAND_LIMIT = 100;
 const REMOTE_COMMAND_TTL_MS = 5 * 60 * 1000;
 
 function runtimeMode() { const mode=String(process.env.BOT_MODE || 'DEV').trim().toUpperCase(); if (mode==='PROD'||mode==='PRODUCTION') return 'PRODUCTION'; if (mode==='BETA') return 'BETA'; return 'DEV'; }
-function registryFile(mode=runtimeMode()) { return path.join(SHARED_ROOT, `.goliath-audit-registry-${String(mode).toLowerCase()}.json`); }
+function registryFile(mode=runtimeMode()) { return path.join(SHARED_AUDIT_DIR, `.goliath-audit-registry-${String(mode).toLowerCase()}.json`); }
 function scopedGuildIds(mode) { const envName=mode==='PRODUCTION'?'PRODUCTION_GUILD_IDS':`${mode}_GUILD_IDS`; return String(process.env[envName]||'').split(',').map(v=>v.trim()).filter(Boolean); }
 function ensure(dir){fs.mkdirSync(dir,{recursive:true});return dir;} function readJson(file,fallback={}){try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return fallback;}} function writeJson(file,value){ensure(path.dirname(file));fs.writeFileSync(file,`${JSON.stringify(value,null,2)}\n`,'utf8');} function monthKey(date=new Date()){return date.toISOString().slice(0,7);}
 function defaultConfig(){return{version:1,commandCenter:{guildId:COMMAND_CENTER_GUILD_ID,categoryId:null,channelId:null,messageId:null,layoutMode:'owner-managed',channelName:null,categoryName:null},autoProvision:true,guilds:{},control:{liveProbeRequests:[],remoteCommands:[]}};}
