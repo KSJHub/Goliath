@@ -75,8 +75,12 @@ function buildMetrics({
     statusData?.guilds?.[selectedGuildId] ||
     null;
 
-  const cases = normalizeArray(casesData);
-  const warnings = normalizeArray(warningsData);
+  const cases = normalizeArray(
+    Array.isArray(casesData) ? casesData : casesData?.cases
+  );
+  const warnings = normalizeArray(
+    Array.isArray(warningsData) ? warningsData : warningsData?.warnings
+  );
 
   const activeWarnings = warnings.filter((warning) => {
     const status = String(warning?.status || warning?.state || '').toLowerCase();
