@@ -2285,9 +2285,80 @@ function promote(target) {
 }
 
 
+
+const developmentReportStatus = {
+  reviewed: '2026-10-20',
+  decisions: [
+    'Beta access remains restricted to explicitly approved guilds.',
+    'Overview promotion requires confirmation that counters display correctly.'
+  ],
+  blockers: [
+    'Moderation/appeals: active database source remains unresolved in the recorded status.'
+  ],
+  unfinished: [
+    'Confirm invite-fix deployment and fresh invite permissions.',
+    'Complete live verification acceptance testing.',
+    'Finish appeal deployment checks and the management-dashboard security audit.'
+  ],
+  priorities: [
+    'Trace moderation and appeal data to the active process/database.',
+    'Validate Overview counters and preserve the remaining change.',
+    'Confirm beta invite permissions and complete live verification testing.'
+  ]
+};
+
+function buildDevelopmentReport() {
+  const now = new Date();
+  const since = new Date(now.getTime() - 7 * 86400000);
+  const git = (args) => {
+    const result = spawnSync('git', args, {
+      cwd: root, encoding: 'utf8', timeout: 15000
+    });
+    if (result.error || result.status !== 0) {
+      throw new Error('Git report failed: ' + (result.error?.message || result.stderr || 'unknown error'));
+    }
+    return result.stdout.trim();
+  };
+  const clean = (value) => value.replace(/[\r\n\t]/g, ' ').slice(0, 110);
+  const format = (date) => date.toLocaleDateString('en-GB', {
+    timeZone: 'Europe/London', day: 'numeric', month: 'short', year: 'numeric'
+  });
+  const commits = git([
+    'log', 'HEAD', '--since=' + since.toISOString(),
+    '--until=' + now.toISOString(), '--no-merges',
+    '--max-count=6', '--format=%h %s'
+  ]);
+  const changes = git(['status', '--short', '--untracked-files=no']);
+  const stale = now.getTime() - Date.parse(developmentReportStatus.reviewed + 'T00:00:00Z') > 14 * 86400000;
+  const bullet = (items) => items.map(item => '• ' + item).join('\n');
+  const activity = commits
+    ? bullet(commits.split('\n').map(clean))
+    : 'No commits recorded in this checkout during the reporting period.';
+  const working = changes
+    ? '\nTracked changes currently present:\n' + bullet(changes.split('\n').slice(0, 3).map(clean))
+    : '\nNo tracked working-tree changes at report time.';
+
+  return [
+    '**Reporting period: ' + format(since) + ' – ' + format(now) + '**',
+    'Source: local DEV Git history. Commits do not confirm deployment or testing.',
+    'Status notes reviewed: ' + developmentReportStatus.reviewed +
+      (stale ? ' — OUTDATED; review required.' : '') +
+      ' Unresolved notes are carried forward until updated.',
+    '',
+    '**Recorded code changes**', activity,
+    '', '**Key decisions**', bullet(developmentReportStatus.decisions),
+    '', '**Blockers**', bullet(developmentReportStatus.blockers),
+    '', '**In progress**', bullet(developmentReportStatus.unfinished) + working,
+    '', '**Next priorities**',
+    developmentReportStatus.priorities.map((item, index) => (index + 1) + '. ' + item).join('\n')
+  ].join('\n');
+}
+
+
 async function developmentSummaryCommand() {
   if (process.argv[3] === '--help') {
     console.log('Usage: node scripts/goliath.js summary [message-id] < summary.txt');
+    console.log('Automatic report: node scripts/goliath.js summary --auto [--preview]');
     console.log('Omit message-id to post; supply it to edit an existing Goliath message.');
     return true;
   }
@@ -2304,11 +2375,17 @@ const { resolveTokenDetails } = require('../src/config/tokenResolver');
 const { REST, Routes } = require('discord.js');
 
 async function main() {
-  if (process.stdin.isTTY) {
-    throw new Error('Supply the summary through standard input.');
+  const automatic = process.argv.includes('--auto');
+  const preview = process.argv.includes('--preview');
+  if (!automatic && process.stdin.isTTY) {
+    throw new Error('Supply report text through stdin, or use --auto.');
   }
 
-  const summary = fs.readFileSync(0, 'utf8').trim();
+  const summary = automatic ? buildDevelopmentReport() : fs.readFileSync(0, 'utf8').trim();
+  if (preview) {
+    console.log(summary);
+    return;
+  }
   if (!summary) throw new Error('Summary is empty.');
   if (summary.length > 4096) {
     throw new Error('Summary exceeds the 4,096-character embed limit. Nothing posted.');
@@ -2338,6 +2415,7 @@ async function main() {
     : null;
 
   const labels = {
+    'recorded code changes': '🛠️ Recorded Code Changes',
     completed: '✅ Completed',
     'key decisions': '📌 Key Decisions',
     decisions: '📌 Key Decisions',
@@ -2398,7 +2476,7 @@ async function main() {
   }
 
 
-  const messageId = process.argv[3];
+  const messageId = process.argv.slice(3).find(value => !value.startsWith('--'));
   if (messageId && !/^\d{17,20}$/.test(messageId)) {
     throw new Error('Invalid message ID. Nothing changed.');
   }
