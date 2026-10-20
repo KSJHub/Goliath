@@ -2307,53 +2307,95 @@ const developmentReportStatus = {
   ]
 };
 
+
 function buildDevelopmentReport() {
   const now = new Date();
   const since = new Date(now.getTime() - 7 * 86400000);
-  const git = (args) => {
-    const result = spawnSync('git', args, {
-      cwd: root, encoding: 'utf8', timeout: 15000
-    });
-    if (result.error || result.status !== 0) {
-      throw new Error('Git report failed: ' + (result.error?.message || result.stderr || 'unknown error'));
-    }
-    return result.stdout.trim();
-  };
-  const clean = (value) => value.replace(/[\r\n\t]/g, ' ').slice(0, 110);
-  const format = (date) => date.toLocaleDateString('en-GB', {
+  const format = date => date.toLocaleDateString('en-GB', {
     timeZone: 'Europe/London', day: 'numeric', month: 'short', year: 'numeric'
   });
-  const commits = git([
-    'log', 'HEAD', '--since=' + since.toISOString(),
-    '--until=' + now.toISOString(), '--no-merges',
-    '--max-count=6', '--format=%h %s'
-  ]);
-  const changes = git(['status', '--short', '--untracked-files=no']);
+  const bullet = items => items.map(item => '• ' + item).join('\n');
+  const clean = value => value.replace(/[\r\n\t]/g, ' ').slice(0, 90);
+  const snapshots = [];
+
+  for (const name of ['dev', 'beta', 'production']) {
+    const cwd = path.join(path.dirname(root), name);
+    const git = args => {
+      const result = spawnSync('git', args, {
+        cwd, encoding: 'utf8', timeout: 15000
+      });
+      if (result.error || result.status !== 0) {
+        throw new Error(name.toUpperCase() + ' Git read failed.');
+      }
+      return result.stdout.trimEnd();
+    };
+
+    try {
+      const branch = git(['branch', '--show-current']) || 'detached HEAD';
+      const head = git(['rev-parse', '--short', 'HEAD']);
+      const changes = git(['status', '--short', '--untracked-files=no']);
+      const logs = git([
+        'log', 'HEAD', '--since=' + since.toISOString(),
+        '--until=' + now.toISOString(), '--no-merges',
+        '--max-count=3', '--format=%h %s'
+      ]);
+      const tree = new Map(
+        git(['ls-tree', '-r', 'HEAD']).split('\n').filter(Boolean).map(line => {
+          const separator = line.indexOf('\t');
+          return [line.slice(separator + 1), line.slice(0, separator)];
+        })
+      );
+
+      snapshots.push({
+        name, tree,
+        text: [
+          'Branch: ' + clean(branch) + ' | Commit: ' + head,
+          changes
+            ? 'Tracked changes: ' + changes.split('\n').length + ' uncommitted path(s).'
+            : 'Tracked working tree: clean.',
+          '**Recent commits in this checkout**',
+          logs ? bullet(logs.split('\n').map(clean)) : 'No commits dated within this reporting period.'
+        ].join('\n')
+      });
+    } catch (error) {
+      snapshots.push({ name, tree: null, text: 'Unavailable — ' + error.message });
+    }
+  }
+
+  const compare = (left, right) => {
+    const a = snapshots.find(item => item.name === left);
+    const b = snapshots.find(item => item.name === right);
+    const label = left.toUpperCase() + ' → ' + right.toUpperCase();
+    if (!a.tree || !b.tree) return label + ': comparison unavailable.';
+    const paths = new Set([...a.tree.keys(), ...b.tree.keys()]);
+    const different = [...paths].filter(key => a.tree.get(key) !== b.tree.get(key)).length;
+    return label + ': ' + (
+      different
+        ? different + ' tracked path(s) differ; review before promotion.'
+        : 'committed file contents and modes match.'
+    );
+  };
+
   const stale = now.getTime() - Date.parse(developmentReportStatus.reviewed + 'T00:00:00Z') > 14 * 86400000;
-  const bullet = (items) => items.map(item => '• ' + item).join('\n');
-  const activity = commits
-    ? bullet(commits.split('\n').map(clean))
-    : 'No commits recorded in this checkout during the reporting period.';
-  const working = changes
-    ? '\nTracked changes currently present:\n' + bullet(changes.split('\n').slice(0, 3).map(clean))
-    : '\nNo tracked working-tree changes at report time.';
+  const headings = ['DEV — Development', 'BETA — Testing', 'PRODUCTION — Live'];
 
   return [
     '**Reporting period: ' + format(since) + ' – ' + format(now) + '**',
-    'Source: local DEV Git history. Commits do not confirm deployment or testing.',
+    'Checkout snapshots and commit history; deployment dates, running processes and test results are not verified.',
     'Status notes reviewed: ' + developmentReportStatus.reviewed +
       (stale ? ' — OUTDATED; review required.' : '') +
-      ' Unresolved notes are carried forward until updated.',
-    '',
-    '**Recorded code changes**', activity,
+      ' Unresolved notes are carried forward.',
+    ...snapshots.flatMap((item, index) => ['', '**' + headings[index] + '**', item.text]),
+    '', '**Promotion gaps**',
+    bullet([compare('dev', 'beta'), compare('beta', 'production')]),
+    'Committed files only; differences do not imply promotion direction.',
     '', '**Key decisions**', bullet(developmentReportStatus.decisions),
     '', '**Blockers**', bullet(developmentReportStatus.blockers),
-    '', '**In progress**', bullet(developmentReportStatus.unfinished) + working,
+    '', '**In progress**', bullet(developmentReportStatus.unfinished),
     '', '**Next priorities**',
     developmentReportStatus.priorities.map((item, index) => (index + 1) + '. ' + item).join('\n')
   ].join('\n');
 }
-
 
 async function developmentSummaryCommand() {
   if (process.argv[3] === '--help') {
@@ -2415,6 +2457,10 @@ async function main() {
     : null;
 
   const labels = {
+    'dev — development': '🔵 DEV — Development',
+    'beta — testing': '🟡 BETA — Testing',
+    'production — live': '🟢 PRODUCTION — Live',
+    'promotion gaps': '🔀 Promotion Gaps',
     'recorded code changes': '🛠️ Recorded Code Changes',
     completed: '✅ Completed',
     'key decisions': '📌 Key Decisions',
