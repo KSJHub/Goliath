@@ -49,6 +49,22 @@ function getNumber(...values) {
   return 0;
 }
 
+function getOptionalCount(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined || value === '') {
+      continue;
+    }
+
+    const number = Number(value);
+
+    if (Number.isFinite(number) && number >= 0) {
+      return number;
+    }
+  }
+
+  return null;
+}
+
 function getBoolean(...values) {
   return values.some(Boolean);
 }
@@ -75,8 +91,12 @@ function buildMetrics({
     statusData?.guilds?.[selectedGuildId] ||
     null;
 
-  const cases = normalizeArray(casesData);
-  const warnings = normalizeArray(warningsData);
+  const cases = normalizeArray(
+    Array.isArray(casesData) ? casesData : casesData?.cases
+  );
+  const warnings = normalizeArray(
+    Array.isArray(warningsData) ? warningsData : warningsData?.warnings
+  );
 
   const activeWarnings = warnings.filter((warning) => {
     const status = String(warning?.status || warning?.state || '').toLowerCase();
@@ -114,14 +134,14 @@ function buildMetrics({
       guildStatus?.memberCount,
     ),
 
-    humans: getNumber(
-      statusData?.humans,
+    humans: getOptionalCount(
       guildStatus?.humans,
+      statusData?.humans,
     ),
 
-    bots: getNumber(
-      statusData?.bots,
+    bots: getOptionalCount(
       guildStatus?.bots,
+      statusData?.bots,
     ),
 
     botOnline: getBoolean(
@@ -337,7 +357,7 @@ export default function Overview({
           <SummaryStat
             theme={theme}
             label="Humans"
-            value={metrics.humans}
+            value={metrics.humans ?? '—'}
             accent="#a855f7"
             description="Detected human users"
           />
@@ -345,7 +365,7 @@ export default function Overview({
           <SummaryStat
             theme={theme}
             label="Bots"
-            value={metrics.bots}
+            value={metrics.bots ?? '—'}
             accent="#3b82f6"
             description="Detected bot users"
           />
