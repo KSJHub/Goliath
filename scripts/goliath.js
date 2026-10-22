@@ -2133,6 +2133,19 @@ function welcomeEmbedDeliveryAudit() {
     const dashboard = read('src/dashboard/js/pages/modules/Welcome.jsx');
     const route = read('src/server/routes/modules/messageStudio/welcome.js');
     
+    // Delivery-failure regression contracts: public and DM attempts must remain independent.
+    const memberEvents = read('src/events/members/memberJoinLeave.js');
+    assert(memberEvents.includes("name:'guildMemberAdd'") && memberEvents.includes('welcomeManager.sendWelcome(member)'), 'Member join must invoke the canonical Welcome sender.');
+    assert(welcome.includes("reason: 'disabled'") && welcome.includes("reason: 'ignored_bot'"), 'Disabled Welcome and ignored bots must be skipped explicitly.');
+    assert(welcome.includes('if (config.channelId && options.skipPublic !== true)'), 'Public delivery must honour the configured channel and skip flag.');
+    assert(welcome.includes("errors.push('Welcome channel is unavailable.')"), 'Missing Welcome channels must produce an explicit delivery error.');
+    assert(welcome.includes('publicFailed = true') && welcome.includes('dmFailed = true'), 'Public and DM delivery failures must be tracked separately.');
+    assert(welcome.includes('if (config.dmEnabled && options.skipDm !== true && !member.user.bot)'), 'DM delivery must be independently gated and must exclude bots.');
+    assert(welcome.includes('await member.send(payload)') && welcome.includes('await channel.send(payload)'), 'Welcome must preserve separate public and DM send operations.');
+    assert(welcome.includes('incrementAnalytics(member.guild.id'), 'Welcome delivery must record analytics for sends, failures and skips.');
+    assert(welcome.includes('options.suppressPing === true') && welcome.includes('allowedMentions'), 'Welcome delivery must retain mention-suppression safeguards.');
+    assert(scheduled.includes('const activeRuns = new Set()'), 'Scheduled Welcome must guard against overlapping runs.');
+
     assert(scheduled.includes('completed.add(member.id)'), 'Scheduled Welcome must checkpoint successful member deliveries.');
     assert(scheduled.includes('scheduled_welcome_delivery_checkpoint'), 'Scheduled Welcome must persist the successful-delivery checkpoint.');
     assert(scheduled.indexOf('scheduled_welcome_delivery_checkpoint') < scheduled.indexOf('await queue.removeQueueRole(member, config.queueRoleId)'), 'Delivery checkpoint must precede queue role cleanup.');
