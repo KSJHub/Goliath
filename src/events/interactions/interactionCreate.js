@@ -245,6 +245,17 @@ module.exports={
       if(customId.startsWith('permstudio:')||customId.startsWith('permedit:')||customId.startsWith('permbulk:')||customId.startsWith('permpreset:')||customId.startsWith('permsync:')||customId.startsWith('permaccess:')||customId.startsWith('permfinder:')||customId.startsWith('permaudit:')||customId.startsWith('permrestore:')){await permissionsStudioInteractions.execute(interaction,client);return;}
       if(customId.startsWith('mod_')||customId.startsWith('mod:')){if(!await callHandler(modInteractions,'handleModInteraction',interaction))throw new Error(`Mod did not handle ${customId}.`);return;}
       if(isVerificationMemberInteraction(interaction)){await handleVerificationMemberInteraction(interaction);return;}
+      if(customId.startsWith('verify:challenge:')||customId.startsWith('verify:staff:')||customId.startsWith('verify:answer:')){
+        const runtimeServices={
+          resumeVerification:verificationFlowContinuation.resumeVerification,
+          recordVerificationFailure:verificationFlowContinuation.recordVerificationFailure,
+          quarantineVerificationMember:verificationFlowContinuation.quarantineVerificationMember,
+        };
+        const handled=await verificationChallengeInteractions.handleVerificationChallengeInteraction(interaction,runtimeServices);
+        if(!handled)throw new Error('Verification challenge action was not recognised.');
+        return;
+      }
+
       if(await enforceAdminModuleAuthority(interaction))return;
       if(customId==='admin:studio:roleStudio'){if(!roleStudioPanel||typeof roleStudioPanel.buildRoleStudioPanel!=='function')throw new Error('Role Studio panel is unavailable.');if(!interaction.deferred&&!interaction.replied)await interaction.deferUpdate();const payload=await roleStudioPanel.buildRoleStudioPanel(interaction.guild,interaction.member?.displayName||interaction.user?.username||'Unknown User');await interaction.editReply(payload);return;}
       if(customId.startsWith('admin:roleSelector')||customId.startsWith('roleSelector:')||customId.startsWith('admin:colourRoles')||customId.startsWith('colourRoles:')){if(!await callHandler(roleSelectorPanel,'handleRoleSelectorInteraction',interaction))throw new Error(`Role Selector did not handle ${customId}.`);return;}
