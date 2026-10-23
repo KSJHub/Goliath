@@ -223,7 +223,7 @@ function buildActionRows(target, stats, member, guild) {
   // Row 4: workspace views.
   const viewRow = [];
   if (canViewDashboardSection(member, guild, 'intelligence')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:intelligence`).setLabel('🧠 Intelligence').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
-  if (canViewDashboardSection(member, guild, 'cases')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:cases`).setLabel('📁 Cases').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
+  if (canViewDashboardSection(member, guild, 'cases')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:cases`).setLabel('📁 Cases').setStyle(ButtonStyle.Secondary));
   if (canViewDashboardSection(member, guild, 'appeals')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:none:appeals`).setLabel('⚖️ Appeals').setStyle(ButtonStyle.Secondary));
   if (canViewDashboardSection(member, guild, 'analytics')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
 
@@ -247,15 +247,15 @@ function buildActionsEmbed(interaction, target, stats, staffDisplay) {
   if (!target) return baseEmbed(interaction.client, COLORS.PRIMARY)
     .setTitle('🛡️ Goliath Moderation')
     .setDescription([
-      'Select a member, then choose an action or open their moderation records.',
+      'Select a member for actions, or open Cases to review records and quarantines.',
       '',
       `**Authority:** ${staffDisplay}`,
     ].join('\n'))
     .addFields(
-      { name: 'Open Cases', value: `**${overall.activeCases}**`, inline: true },
-      { name: 'Verification Quarantines', value: `**${overall.activeVerificationCases}**`, inline: true },
-      { name: 'Active Warnings', value: `**${overall.activeWarnings}**`, inline: true },
-      { name: 'Pending Appeals', value: `**${overall.pendingAppeals}**`, inline: true },
+      { name: 'Cases', value: `**${overall.activeCases}**`, inline: true },
+      { name: 'Quarantines', value: `**${overall.activeVerificationCases}**`, inline: true },
+      { name: 'Warnings', value: `**${overall.activeWarnings}**`, inline: true },
+      { name: 'Appeals', value: `**${overall.pendingAppeals}**`, inline: true },
     );
 
   const highestRole = target.roles?.highest && target.roles.highest.id !== interaction.guild.id ? `${target.roles.highest}` : 'No elevated role';
