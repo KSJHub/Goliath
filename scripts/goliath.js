@@ -1023,7 +1023,10 @@ function verificationLifecycleAudit() {
     assert(!panel.includes('Verification · Overview'), 'Legacy Verification Overview must not be reachable from the canonical panel.');
     assert(!panel.includes('admin:verification:page:workflow'), 'Legacy Workflow page must not remain in the canonical panel.');
     assert(!panel.includes('admin:verification:page:requirements'), 'Legacy Requirements page must not remain in the canonical panel.');
-    assert(!panel.includes('admin:verification:page:panel'), 'Legacy Panels page must not remain in the canonical panel.');
+    contains(panel, 'admin:verification:page:panel', 'member-facing Verification panel deployment navigation');
+    contains(panel, 'verificationManager.deployVerificationPanel(channel', 'Verification panel deployment action');
+    contains(panel, 'verificationManager.refreshVerificationPanel(', 'Verification panel refresh action');
+    contains(manager, 'No active Verification panel is deployed.', 'health check warns about missing Verification panel');
     assert(!memberIntelligence.includes('verificationIntelligenceExtension'), 'Member Intelligence must not monkey-patch the Verification admin UI.');
     assert(!fs.existsSync(absolute('src/modules/securityStudio/verificationIntelligenceExtension.js')), 'Legacy Verification UI compatibility extension must be removed.');
     
