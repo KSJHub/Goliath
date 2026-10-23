@@ -266,6 +266,11 @@ async function fetchMemberStats(guild) {
       const total = Number(guild.memberCount || 0);
 
       if (total > 0 && members.size !== total) {
+        console.warn(
+          '[StatusRoute] Incomplete member breakdown:',
+          guildId,
+          `fetched=${members.size} expected=${total}`
+        );
         setCached(memberStatsCache, guildId, unavailable, 60_000);
         return unavailable;
       }
