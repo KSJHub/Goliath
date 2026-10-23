@@ -120,7 +120,10 @@ async function handleAnswerModal(interaction, parsed, manager) {
   if (!result.ok) {
     const failure = await recordTerminalFailure(interaction, parsed, result, manager);
     const message = failure?.quarantined ? '⛔ Verification failed and your account has been moved to quarantine for staff review.' : result.reason === 'security_configuration_changed' ? '❌ Verification settings changed. Start Verification again.' : result.reason === 'expired' ? '⏱️ This challenge expired. Start Verification again.' : result.complete ? '❌ That answer was incorrect and this challenge has ended.' : '❌ That answer was incorrect. Try again.';
-    await interaction.reply({ content: message, flags: MessageFlags.Ephemeral }); return true;
+    const challengeUpdate = result.challenge && result.challenge.challengeId === parsed.challengeId
+      ? { embeds: [challengeEmbed(result.challenge)], components: result.complete ? [] : memberChallengePayload(parsed.userId, result.challenge).components }
+      : {};
+    await interaction.reply({ content: message, ...challengeUpdate, flags: MessageFlags.Ephemeral }); return true;
   }
   const resumed = await maybeResumeFlow(interaction, result, manager);
   if (resumed) { await interaction.reply({ ...resumedMemberPayload(parsed.userId, resumed), flags: MessageFlags.Ephemeral }); return true; }
