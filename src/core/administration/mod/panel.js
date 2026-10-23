@@ -221,6 +221,7 @@ function buildActionRows(target, stats, member, guild) {
   const viewRow = [];
   if (canViewDashboardSection(member, guild, 'intelligence')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:intelligence`).setLabel('🧠 Intelligence').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
   if (canViewDashboardSection(member, guild, 'cases')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:cases`).setLabel('📁 Cases').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
+  if (canUseModAction(member, guild, 'view_cases')) viewRow.push(new ButtonBuilder().setCustomId('mod_verification_cases').setLabel('🚨 Verification Cases').setStyle(ButtonStyle.Secondary));
   if (canViewDashboardSection(member, guild, 'appeals')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:none:appeals`).setLabel('⚖️ Appeals').setStyle(ButtonStyle.Secondary));
   if (canViewDashboardSection(member, guild, 'analytics')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
 
