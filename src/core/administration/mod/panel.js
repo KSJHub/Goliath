@@ -224,7 +224,6 @@ function buildActionRows(target, stats, member, guild) {
   const viewRow = [];
   if (canViewDashboardSection(member, guild, 'intelligence')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:intelligence`).setLabel('🧠 Intelligence').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
   if (canViewDashboardSection(member, guild, 'cases')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:cases`).setLabel('📁 Cases').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
-  if (canUseModAction(member, guild, 'view_cases')) viewRow.push(new ButtonBuilder().setCustomId('mod_verification_cases').setLabel('🚨 Verification Cases').setStyle(ButtonStyle.Secondary));
   if (canViewDashboardSection(member, guild, 'appeals')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:none:appeals`).setLabel('⚖️ Appeals').setStyle(ButtonStyle.Secondary));
   if (canViewDashboardSection(member, guild, 'analytics')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
 
@@ -445,7 +444,29 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
   const embeds = []; const components = (safeView === 'analytics' || safeView === 'appeals') ? [] : [buildUserSelectRow()];
   if (safeView === 'actions') { embeds.push(buildActionsEmbed(interaction, target, stats, staffDisplay)); components.push(...buildActionRows(target, stats, interaction.member, interaction.guild)); }
   else if (safeView === 'intelligence') { embeds.push(buildIntelligenceEmbed(interaction, target, interaction.member, interaction.guild)); components.push(...buildIntelligenceRows(targetId, interaction.member, interaction.guild)); }
-  else if (safeView === 'cases') { const proceedingView = caseProceeding.buildProceedingDashboard(interaction, target); embeds.push(proceedingView.embed); components.push(...proceedingView.components); }
+  else if (safeView === 'cases') {
+    const proceedingView = caseProceeding.buildProceedingDashboard(interaction, target);
+    const sessions = verificationStore.getVerificationSection(interaction.guild.id)?.sessions || {};
+    const quarantined = Object.entries(sessions).filter(([, session]) => session?.state === 'quarantined');
+    const selected = target ? quarantined.filter(([userId]) => userId === target.id) : quarantined;
+    if (selected.length) {
+      proceedingView.embed.addFields({
+        name: '🚨 Verification Quarantine · Entry Security',
+        value: selected.slice(0, 8).map(([userId, session]) =>
+          `<@${userId}> • ${Number(session.failedAttempts || 0)} failures${session.quarantineChannelId ? ` • <#${session.quarantineChannelId}>` : ''}`
+        ).join('\\n').slice(0, 1024),
+        inline: false,
+      });
+    }
+    embeds.push(proceedingView.embed);
+    components.push(...proceedingView.components);
+    if (canUseModAction(interaction.member, interaction.guild, 'view_cases')) {
+      const caseButtons = selected.slice(0, 4).map(([userId]) =>
+        new ButtonBuilder().setCustomId(`mod_verification_case:${userId}`)
+          .setLabel(`Review Verification · ${userId.slice(-6)}`).setStyle(ButtonStyle.Secondary));
+      if (caseButtons.length && components.length < 5) components.push(new ActionRowBuilder().addComponents(...caseButtons));
+    }
+  }
   else if (safeView === 'appeals') {
     const filter = ['pending', 'all', 'resolved'].includes(options.appealFilter) ? options.appealFilter : 'pending';
     const data = getAppealsPage(interaction.guild.id, filter, options.appealPage);
