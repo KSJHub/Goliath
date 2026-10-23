@@ -43,6 +43,7 @@ const { getWarningCountForUser, syncExpiredWarningsToCases } = require('./warns'
 const { canUseModAction, getStaffDisplay, hasModPermission, fetchTarget } = require('./permissions');
 const { getQuarantineState } = require('../../security/protection/quarantine');
 const caseProceeding = require('./caseProceeding');
+const verificationStore = require('../../../modules/securityStudio/verificationStore');
 
 const DEFAULT_VIEW = 'actions';
 const CASES_PER_PAGE = 5;
@@ -116,7 +117,9 @@ function workspaceStats(guildId) {
   catch { activeWarnings = cases.filter((entry) => entry.action === 'warn' && String(entry.status || 'active') === 'active').length; }
   let pendingAppeals = 0;
   for (const modCase of cases) for (const appeal of getCaseAppeals(modCase) || []) if ((appeal.status || 'pending') === 'pending') pendingAppeals += 1;
-  return { totalCases: cases.length, activeCases, activeWarnings, pendingAppeals };
+  const verificationSessions = verificationStore.getVerificationSection(guildId)?.sessions || {};
+  const activeVerificationCases = Object.values(verificationSessions).filter(session => session?.state === 'quarantined').length;
+  return { totalCases: cases.length, activeCases, activeVerificationCases, activeWarnings, pendingAppeals };
 }
 
 function analyticsBounds(windowKey, nowMs = Date.now()) {
@@ -251,6 +254,7 @@ function buildActionsEmbed(interaction, target, stats, staffDisplay) {
     ].join('\n'))
     .addFields(
       { name: 'Open Cases', value: `**${overall.activeCases}**`, inline: true },
+      { name: 'Verification Quarantines', value: `**${overall.activeVerificationCases}**`, inline: true },
       { name: 'Active Warnings', value: `**${overall.activeWarnings}**`, inline: true },
       { name: 'Pending Appeals', value: `**${overall.pendingAppeals}**`, inline: true },
     );
