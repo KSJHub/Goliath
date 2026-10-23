@@ -17,7 +17,12 @@ if (!globalThis[PATCH_KEY]) {
     kick: { emoji: '👢', label: 'Kick' }, ban: { emoji: '🔨', label: 'Ban' },
   });
   const actionMeta = (action) => ACTION_META[String(action || '').toLowerCase()] || { emoji: '🛡️', label: String(action || 'Moderation Action') };
-  const appealsBaseUrl = () => String(process.env.CLIENT_URL || process.env.DASHBOARD_CLIENT_URL || process.env.VITE_CLIENT_URL || 'https://goliath.ksjdigital.co.uk').trim().replace(/\/+$/, '');
+  const appealsBaseUrl = () => {
+    const configured = String(process.env.CLIENT_URL || process.env.DASHBOARD_CLIENT_URL || process.env.VITE_CLIENT_URL || 'https://goliath.ksjdigital.co.uk').trim();
+    const url = new URL(configured);
+    // Appeal URLs use browser pathname routing, never a legacy hash router.
+    return url.origin;
+  };
   const noticeAlreadyAttempted = (modCase) => Boolean(modCase?.metadata?.appealNotice?.attemptedAt);
   const departureNoticeKey = (guildId, userId) => `${String(guildId)}:${String(userId)}`;
   const durationValue = (modCase) => modCase?.metadata?.duration || modCase?.metadata?.durationRaw || null;
@@ -39,7 +44,7 @@ if (!globalThis[PATCH_KEY]) {
     const id = modCase?.moderatorId || modCase?.moderator_id || modCase?.actorId || modCase?.metadata?.moderatorId;
     if (!id) return 'Goliath Moderation';
     const member = guild?.members?.cache?.get?.(String(id));
-    return member ? `${member.displayName || member.user?.username || 'Management'} • <@${id}>` : `<@${id}>`;
+    return member ? (member.displayName || member.user?.username || 'Management') : (guild?.client?.users?.cache?.get?.(String(id))?.username || 'Management');
   }
 
   function buildMemberNoticePayload(guild, modCase) {
@@ -49,14 +54,20 @@ if (!globalThis[PATCH_KEY]) {
     const created = modCase.createdAt || modCase.created_at;
     const action = actionMeta(modCase.action);
     return moderationNotice(guild, modCase, {
-      status: '🔴 Active • Appeal Eligible',
+      compactModerationLayout: true,
+      status: '🔴 Active',
       issuedBy: issuerText(guild, modCase),
       extraFields: [
-        { name: '🪪 Case Identity', value: `**Case:** #${modCase.caseId}\n**Action:** ${action.emoji} ${action.label}${created ? `\n**Issued:** <t:${Math.floor(new Date(created).getTime() / 1000)}:F>` : ''}`, inline: false },
-        { name: '👤 Member', value: `<@${targetId}>\n\`${targetId}\``, inline: true },
-        { name: '⚖️ Appeal Status', value: '**Eligible**', inline: true },
+        { name: '🏠 Server', value: guild.name, inline: true },
+        { name: '🆔 Reference', value: `Case #${modCase.caseId}`, inline: true },
+        { name: '📌 Status', value: '🔴 Active', inline: true },
+        { name: '🛡️ Action', value: `${action.emoji} ${action.label}`, inline: true },
+        { name: '⚖️ Appeal Status', value: 'Eligible', inline: true },
+        { name: '\u200b', value: '\u200b', inline: true },
+        { name: '👤 Member', value: '<@' + targetId + '>\n`' + targetId + '`', inline: true },
+        { name: '📅 Issued', value: created ? `<t:${Math.floor(new Date(created).getTime() / 1000)}:F>` : 'Unknown', inline: true },
       ],
-      nextSteps: `If you believe this decision was incorrect, unfair, or important context was missed, request a Management review using **Appeal This Case** below. Goliath already knows the server, member, action and **Case #${modCase.caseId}**, so you do not need to enter those details again. Appeals remain available even if you are no longer in the server.`,
+      nextSteps: 'If you believe this warning was issued unfairly or in error, you can request a review using **Appeal This Case** below. Appeals remain available even if you leave the server.',
       buttons: [
         // URL buttons are deliberately used in DMs. They remain functional after
         // Kick/Ban and avoid Discord component-context failures outside a guild.

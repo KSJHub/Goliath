@@ -24,7 +24,7 @@ const ROUTE_PATHS = ROUTES.map((routeItem) => routeItem.path);
 const GUILD_REQUIRED_ROUTES = new Set([
   'overview', 'billing', 'cases', 'warnings', 'automod', 'generalSettings',
   'messages', 'forms', 'modules', 'logs', 'admin', 'moderation',
-  'embedStudio',
+  'embedStudio', 'freeGames',
 ]);
 
 function normalizeOwnerGuilds(payload) {

@@ -769,6 +769,206 @@ function verificationLifecycleAudit() {
     contains(manager, 'pending.some(role=>confirmed.roles.cache.has(role.id))', 'confirm pending roles removed before security flow');
     contains(flow, 'challengeRuntime.startStep(g.id,m.id,step,s)', 'challenge reuse validated by runtime');
     assert(!flow.includes("active?.status==='pending'?{ok:true,pending:true"), 'Continuation must not bypass challenge runtime validation.');
+    contains(challengeRuntime, "reason: 'staff_action_in_progress'", 'reject duplicate staff actions during processing');
+    const markCompletedFlow = challengeRuntime.slice(challengeRuntime.indexOf('function markCompleted('), challengeRuntime.indexOf('function startStep('));
+    contains(markCompletedFlow, 'if (session.staffActionProcessingPending)', 'prevent security completion during staff rejection or quarantine');
+    contains(challengeRuntime, "if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress' }", 'block member answers during staff finalisation');
+    contains(challengeRuntime, "active.status !== 'pending'", 'reject resolved staff challenges');
+    const startStepFlow = challengeRuntime.slice(challengeRuntime.indexOf('function startStep('), challengeRuntime.indexOf('function submitAnswer('));
+    contains(startStepFlow, "reason: 'staff_action_in_progress'", 'block challenge creation during staff finalisation');
+    contains(challengeRuntime, "staffApprovalContinuationPending", 'persist approval continuation ownership');
+    contains(challengeRuntime, "staffActionProcessingPending", 'persist rejection and quarantine ownership');
+    contains(challengeRuntime, "interrupted_staff_action_requires_review", 'recover interrupted staff actions to review');
+    const recovery = challengeRuntime.slice(challengeRuntime.indexOf('function recover(guildId, userId)'), challengeRuntime.indexOf('function recoverGuild(guildId)'));
+    assert(recovery.includes("} else if (TERMINAL_STATES.has(before.state)) {"), 'Recovery must preserve terminal states.');
+    assert(recovery.indexOf("} else if (TERMINAL_STATES.has(before.state)) {") < recovery.indexOf('verificationChallenges.isExpired(challenge)'), 'Terminal recovery guard must precede challenge expiry and marker repair.');
+    for (const action of ['reject', 'quarantine']) {
+      contains(challengeInteractions, "pending?.action !== '"+action+"'", action+' finalisation checks action ownership');
+    }
+    contains(challengeInteractions, 'pending?.staffUserId !== clean(interaction.user.id)', 'verify initiating staff identity');
+    contains(challengeInteractions, 'staff_approval_finalization_stale', 'recheck approval after challenge delivery');
+    contains(flow, 'quarantine_late_completion_requires_review', 'protect quarantine state from late completion');
+    const terminalGuard = "['verified','quarantined','review','rejected','failed','timed_out'].includes";
+    const completionFlow = flow.slice(flow.indexOf('async function complete('), flow.indexOf('async function recordVerificationFailure('));
+    const failureFlow = flow.slice(flow.indexOf('async function recordVerificationFailure('), flow.indexOf('async function quarantineVerificationMember('));
+    const quarantineFlow = flow.slice(flow.indexOf('async function quarantineVerificationMember('), flow.indexOf('async function resumeVerification('));
+    assert(completionFlow.split(terminalGuard).length >= 3, 'Completion must recheck terminal state before and after role changes.');
+    contains(failureFlow, terminalGuard, 'failure recording respects terminal states');
+    assert(quarantineFlow.split(terminalGuard).length >= 3, 'Quarantine must recheck terminal state before and after role changes.');
+    contains(flow, 'verification_late_completion_requires_review', 'protect verification state from late completion');
+    contains(flow, 'Verification session changed while preparing security checks', 'recheck terminal state before continuing verification');
+    const resumeFlow = flow.slice(flow.indexOf('async function resumeVerification('));
+    contains(resumeFlow, "verificationRoleTransitions.has(String(g.id)+':'+String(m.id))", 'prevent resuming Verification during a member role transition');
+    assert(resumeFlow.split("verificationRoleTransitions.has(String(g.id)+':'+String(m.id))").length >= 4, 'Resume must recheck role transition ownership before security state mutations.');
+
+    // Execute the real lock helper, not just a source-token contract.
+    const { spawnSync } = require('node:child_process');
+    const lockSource = flow.slice(flow.indexOf('const verificationRoleTransitions='), flow.indexOf('const accountAgeDays='));
+    assert(lockSource.startsWith('const verificationRoleTransitions='), 'Verification lock helper not found');
+    assert(lockSource.includes('async function withVerificationRoleLock('), 'Verification lock implementation not found');
+    const resumeStart=flow.indexOf('async function resumeVerification(');
+    const resumeCut=flow.indexOf('const c=section(g.id)',resumeStart);
+    assert(resumeStart>=0&&resumeCut>resumeStart,'Verification resume guard extraction failed');
+    const resumePrefix=flow.slice(resumeStart,resumeCut)+'return{ok:true,reachedConfiguration:true};}';
+    const lockTest = `
+      const assert=require('node:assert/strict');
+      ${lockSource}
+      const moduleEnabled=()=>true,disabledResult=()=>({disabled:true});
+      ${resumePrefix}
+      (async()=>{
+        let release;
+        const gate=new Promise(resolve=>{release=resolve;});
+        const first=withVerificationRoleLock('guild','member',()=>gate);
+        assert.equal(verificationRoleTransitions.has('guild:member'),true);
+        const resumeBlocked=await resumeVerification({guild:{id:'guild'},member:{id:'member'}});
+        assert.equal(resumeBlocked.pendingSecurity,true);
+        const otherResume=await resumeVerification({guild:{id:'guild'},member:{id:'other'}});
+        assert.equal(otherResume.reachedConfiguration,true);
+        const blocked=await withVerificationRoleLock('guild','member',async()=>({ok:true}));
+        assert.equal(blocked.pendingSecurity,true);
+        const other=await withVerificationRoleLock('guild','other',async()=>({ok:true}));
+        assert.equal(other.ok,true);
+        const otherGuild=await withVerificationRoleLock('other-guild','member',async()=>({ok:true}));
+        assert.equal(otherGuild.ok,true);
+        assert.equal(verificationRoleTransitions.has('guild:member'),true);
+        release({ok:true});
+        assert.equal((await first).ok,true);
+        assert.equal(verificationRoleTransitions.has('guild:member'),false);
+        const resumeAfter=await resumeVerification({guild:{id:'guild'},member:{id:'member'}});
+        assert.equal(resumeAfter.reachedConfiguration,true);
+        const again=await withVerificationRoleLock('guild','member',async()=>({ok:true}));
+        assert.equal(again.ok,true);
+        let caught=false;
+        try{await withVerificationRoleLock('guild','member',async()=>{throw Error('expected');});}catch(error){caught=true;assert.equal(error.message,'expected');}
+        assert.equal(caught,true,'Role transition errors must propagate to caller');
+        assert.equal(verificationRoleTransitions.has('guild:member'),false);
+      })().catch(error=>{console.error(error);process.exitCode=1;});
+    `;
+    const lockRun=spawnSync(process.execPath,['-e',lockTest],{encoding:'utf8',timeout:5000});
+    assert.equal(lockRun.status,0,'Executable Verification lock regression failed: '+String(lockRun.stderr||lockRun.error||'unknown error'));
+
+    // Exercise completion and quarantine against mocked asynchronous Discord role operations.
+    const completionSource=completionFlow;
+    const quarantineSource=quarantineFlow;
+    const integrationTest = `
+      const assert=require('node:assert/strict');
+      ${lockSource}
+      const moduleEnabled=()=>true,disabledResult=()=>({disabled:true});
+      const roles={verified:['verified'],auto:[],pending:[],verifying:[],quarantine:['quarantine']};
+      const config={settings:{roles}};
+      const roleIds=(settings,key)=>settings.roles[key]||[];
+      const unique=values=>[...new Set(values)];
+      const fetchRoles=async(guild,ids)=>ids.map(id=>({id}));
+      const now=()=>new Date().toISOString();
+      const enabledSecurity=()=>[];
+      const section=()=>config;
+      let state='verifying',transitions=0,mode='normal',release,entered;
+      let wait,started;
+      function reset(){
+        state='verifying';transitions=0;mode='normal';
+        wait=new Promise(resolve=>{release=resolve;});
+        started=new Promise(resolve=>{entered=resolve;});
+      }
+      const verificationStore={
+        getSession:()=>({state}),
+        upsertSession:(guild,user,value)=>{if(value.state)state=value.state;},
+        addSecurityHistory:()=>{},
+        clearAttempts:()=>{},
+        incrementAnalytics:()=>{}
+      };
+      const verificationQuarantine={
+        closeQuarantineCase:async()=>{},
+        ensureQuarantineCase:async()=>({ok:true,channel:{id:'case'}})
+      };
+      const guild={id:'guild',members:{fetch:async()=>({
+        id:'member',guild,roles:{cache:{has:id=>mode==='mismatch'?false:mode==='quarantine'?id==='quarantine':id==='verified'}}
+      })}};
+      const member={id:'member',guild,roles:{cache:{has:()=>false}}};
+      const transitionRoles=async()=>{transitions++;entered();await wait;if(mode==='throw')throw Error('simulated Discord role failure');};
+      ${completionSource}
+      ${quarantineSource}
+      (async()=>{
+        reset();
+        const finishing=complete(member,config);
+        await started;
+        const denied=await quarantineVerificationMember(guild,'member');
+        assert.equal(denied.pendingSecurity,true);
+        release();
+        const finished=await finishing;
+        assert.equal(finished.complete,true);
+        assert.equal(state,'verified');
+        assert.equal(transitions,1);
+        reset();mode='quarantine';
+        const quarantining=quarantineVerificationMember(guild,'member');
+        await started;
+        const deniedCompletion=await complete(member,config);
+        assert.equal(deniedCompletion.pendingSecurity,true);
+        release();
+        const quarantined=await quarantining;
+        assert.equal(quarantined.quarantined,true);
+        assert.equal(state,'quarantined');
+        assert.equal(transitions,1);
+        reset();mode='mismatch';
+        const mismatch=complete(member,config);
+        await started;release();
+        const unconfirmed=await mismatch;
+        assert.equal(unconfirmed.review,true);
+        assert.equal(state,'review');
+        assert.equal(transitions,1);
+        reset();mode='throw';
+        const failing=quarantineVerificationMember(guild,'member');
+        await started;release();
+        const failed=await failing;
+        assert.equal(failed.review,true);
+        assert.equal(state,'review');
+        assert.equal(transitions,1);
+        reset();mode='mismatch';
+        const badQuarantine=quarantineVerificationMember(guild,'member');
+        await started;release();
+        const quarantineMismatch=await badQuarantine;
+        assert.equal(quarantineMismatch.review,true);
+        assert.equal(state,'review');
+        assert.equal(transitions,1);
+        reset();mode='throw';
+        const badCompletion=complete(member,config);
+        await started;release();
+        const completionFailure=await badCompletion;
+        assert.equal(completionFailure.review,true);
+        assert.equal(state,'review');
+        assert.equal(transitions,1);
+        for(const terminal of ['verified','quarantined','review','rejected','failed','timed_out']){
+          reset();state=terminal;
+          const terminalCompletion=await complete(member,config);
+          const terminalQuarantine=await quarantineVerificationMember(guild,'member');
+          assert.equal(terminalCompletion.review,true);
+          assert.equal(terminalQuarantine.review,true);
+          assert.equal(state,terminal);
+          assert.equal(transitions,0);
+        }
+      })().catch(error=>{console.error(error);process.exitCode=1;});
+    `;
+    const integrationRun=spawnSync(process.execPath,['-e',integrationTest],{encoding:'utf8',timeout:5000});
+    assert.equal(integrationRun.status,0,'Executable Verification completion/quarantine integration failed: '+String(integrationRun.stderr||integrationRun.error||'unknown error'));
+
+
+    assert(resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') >= 0 && resumeFlow.indexOf('session.staffApprovalContinuationPending||session.staffActionProcessingPending') < resumeFlow.indexOf('const revision=Number(c.configRevision||1)'), 'Resume must block staff finalisation before changing security progress.');
+    contains(flow, "session.state==='failed'||session.state==='timed_out'", 'do not resume failed or timed-out sessions');
+    contains(flow, 'Verification failure processing cannot change a terminal session.', 'prevent stale failure processing');
+    contains(flow, 'async function withVerificationRoleLock(', 'serialize Verification role transitions');
+    contains(completionFlow, 'return withVerificationRoleLock(m.guild.id,m.id,async()=>{', 'lock completion role transition');
+    contains(quarantineFlow, 'return withVerificationRoleLock(g?.id,u,async()=>{', 'lock quarantine role transition');
+    contains(flow, 'finally{verificationRoleTransitions.delete(key);}', 'release Verification role lock after failures');
+    contains(completionFlow, "type:'verification_role_transition_failed'", 'audit completion role transition failure');
+    contains(completionFlow, "type:'verification_role_confirmation_failed'", 'audit unconfirmed completion roles enter review');
+    assert(completionFlow.indexOf("type:'verification_role_confirmation_failed'") < completionFlow.indexOf("type:'verified'"), 'Completion role confirmation must precede verified state persistence.');
+    contains(quarantineFlow, "type:'quarantine_role_transition_failed'", 'audit quarantine role transition failure');
+    contains(quarantineFlow, "type:'quarantine_role_confirmation_failed'", 'audit quarantine role confirmation failure');
+    const quarantineConfirmation = quarantineFlow.slice(quarantineFlow.indexOf('if(!confirmed||!q.every'), quarantineFlow.indexOf("type:'quarantine_role_confirmation_failed'"));
+    contains(quarantineConfirmation, terminalGuard, 'preserve terminal state when quarantine role confirmation fails');
+    contains(flow, 'Quarantine cannot replace a terminal verification session', 'prevent stale quarantine transitions');
+    contains(flow, "['verified','review','quarantined','rejected','failed','timed_out'].includes", 'do not reopen verified or other terminal sessions');
+    contains(failureFlow, terminalGuard, 'protect failure service against review and all terminal states');
+    contains(quarantineFlow, terminalGuard, 'protect quarantine service against review and all terminal states');
     contains(challengeRuntime, "reason: 'security_configuration_changed'", 'reject outdated security challenges');
     contains(challengeRuntime, 'verificationChallenges.expire(guildId, userId, active.challengeId)', 'expire old challenge before restarting');
     contains(challengeRuntime, 'active = verificationChallenges.active(guildId, userId)', 'refresh challenge after expiry');
@@ -1298,6 +1498,8 @@ function adminModuleRoutingAudit() {
     for (const prefix of advertisedPrefixes) assert(router.includes(prefix), `Advertised module interaction namespace disappeared: ${prefix}`);
     
     // Regression gate for interaction acknowledgements, permission boundaries and security separation.
+    const adminPanelSource = fs.readFileSync(root + '/src/core/administration/admin/panel.js', 'utf8');
+    assert(adminPanelSource.includes("interaction.__goliathLegacyRoleBase || interaction.customId"), 'Paginated authority role selections must resolve to their original handler ID');
     const adminCommand = fs.readFileSync(root + '/src/core/administration/admin/command.js', 'utf8');
     const securityPanels = fs.readFileSync(root + '/src/core/administration/admin/securityHubPanels.js', 'utf8');
     const modCommand = fs.readFileSync(root + '/src/core/administration/mod/command.js', 'utf8');
@@ -1931,6 +2133,19 @@ function welcomeEmbedDeliveryAudit() {
     const dashboard = read('src/dashboard/js/pages/modules/Welcome.jsx');
     const route = read('src/server/routes/modules/messageStudio/welcome.js');
     
+    // Delivery-failure regression contracts: public and DM attempts must remain independent.
+    const memberEvents = read('src/events/members/memberJoinLeave.js');
+    assert(memberEvents.includes("name:'guildMemberAdd'") && memberEvents.includes('welcomeManager.sendWelcome(member)'), 'Member join must invoke the canonical Welcome sender.');
+    assert(welcome.includes("reason: 'disabled'") && welcome.includes("reason: 'ignored_bot'"), 'Disabled Welcome and ignored bots must be skipped explicitly.');
+    assert(welcome.includes('if (config.channelId && options.skipPublic !== true)'), 'Public delivery must honour the configured channel and skip flag.');
+    assert(welcome.includes("errors.push('Welcome channel is unavailable.')"), 'Missing Welcome channels must produce an explicit delivery error.');
+    assert(welcome.includes('publicFailed = true') && welcome.includes('dmFailed = true'), 'Public and DM delivery failures must be tracked separately.');
+    assert(welcome.includes('if (config.dmEnabled && options.skipDm !== true && !member.user.bot)'), 'DM delivery must be independently gated and must exclude bots.');
+    assert(welcome.includes('await member.send(payload)') && welcome.includes('await channel.send(payload)'), 'Welcome must preserve separate public and DM send operations.');
+    assert(welcome.includes('incrementAnalytics(member.guild.id'), 'Welcome delivery must record analytics for sends, failures and skips.');
+    assert(welcome.includes('options.suppressPing === true') && welcome.includes('allowedMentions'), 'Welcome delivery must retain mention-suppression safeguards.');
+    assert(scheduled.includes('const activeRuns = new Set()'), 'Scheduled Welcome must guard against overlapping runs.');
+
     assert(scheduled.includes('completed.add(member.id)'), 'Scheduled Welcome must checkpoint successful member deliveries.');
     assert(scheduled.includes('scheduled_welcome_delivery_checkpoint'), 'Scheduled Welcome must persist the successful-delivery checkpoint.');
     assert(scheduled.indexOf('scheduled_welcome_delivery_checkpoint') < scheduled.indexOf('await queue.removeQueueRole(member, config.queueRoleId)'), 'Delivery checkpoint must precede queue role cleanup.');
@@ -2082,7 +2297,279 @@ function promote(target) {
   return true;
 }
 
+
+
+const developmentReportStatus = {
+  reviewed: '2026-10-20',
+  decisions: [
+    'Beta access remains restricted to explicitly approved guilds.',
+    'Overview promotion requires confirmation that counters display correctly.'
+  ],
+  blockers: [
+    'Moderation/appeals: active database source remains unresolved in the recorded status.'
+  ],
+  unfinished: [
+    'Confirm invite-fix deployment and fresh invite permissions.',
+    'Complete live verification acceptance testing.',
+    'Finish appeal deployment checks and the management-dashboard security audit.'
+  ],
+  priorities: [
+    'Trace moderation and appeal data to the active process/database.',
+    'Validate Overview counters and preserve the remaining change.',
+    'Confirm beta invite permissions and complete live verification testing.'
+  ]
+};
+
+
+function buildDevelopmentReport() {
+  const now = new Date();
+  const since = new Date(now.getTime() - 7 * 86400000);
+  const format = date => date.toLocaleDateString('en-GB', {
+    timeZone: 'Europe/London', day: 'numeric', month: 'short', year: 'numeric'
+  });
+  const bullet = items => items.map(item => '• ' + item).join('\n');
+  const clean = value => value.replace(/[\r\n\t]/g, ' ').slice(0, 90);
+  const snapshots = [];
+
+  for (const name of ['dev', 'beta', 'production']) {
+    const cwd = path.join(path.dirname(root), name);
+    const git = args => {
+      const result = spawnSync('git', args, {
+        cwd, encoding: 'utf8', timeout: 15000
+      });
+      if (result.error || result.status !== 0) {
+        throw new Error(name.toUpperCase() + ' Git read failed.');
+      }
+      return result.stdout.trimEnd();
+    };
+
+    try {
+      const branch = git(['branch', '--show-current']) || 'detached HEAD';
+      const head = git(['rev-parse', '--short', 'HEAD']);
+      const changes = git(['status', '--short', '--untracked-files=no']);
+      const logs = git([
+        'log', 'HEAD', '--since=' + since.toISOString(),
+        '--until=' + now.toISOString(), '--no-merges',
+        '--max-count=3', '--format=%h %s'
+      ]);
+      const tree = new Map(
+        git(['ls-tree', '-r', 'HEAD']).split('\n').filter(Boolean).map(line => {
+          const separator = line.indexOf('\t');
+          return [line.slice(separator + 1), line.slice(0, separator)];
+        })
+      );
+
+      snapshots.push({
+        name, tree,
+        text: [
+          'Branch: ' + clean(branch) + ' | Commit: ' + head,
+          changes
+            ? 'Tracked changes: ' + changes.split('\n').length + ' uncommitted path(s).'
+            : 'Tracked working tree: clean.',
+          '**Recent commits in this checkout**',
+          logs ? bullet(logs.split('\n').map(clean)) : 'No commits dated within this reporting period.'
+        ].join('\n')
+      });
+    } catch (error) {
+      snapshots.push({ name, tree: null, text: 'Unavailable — ' + error.message });
+    }
+  }
+
+  const compare = (left, right) => {
+    const a = snapshots.find(item => item.name === left);
+    const b = snapshots.find(item => item.name === right);
+    const label = left.toUpperCase() + ' → ' + right.toUpperCase();
+    if (!a.tree || !b.tree) return label + ': comparison unavailable.';
+    const paths = new Set([...a.tree.keys(), ...b.tree.keys()]);
+    const different = [...paths].filter(key => a.tree.get(key) !== b.tree.get(key)).length;
+    return label + ': ' + (
+      different
+        ? different + ' tracked path(s) differ; review before promotion.'
+        : 'committed file contents and modes match.'
+    );
+  };
+
+  const stale = now.getTime() - Date.parse(developmentReportStatus.reviewed + 'T00:00:00Z') > 14 * 86400000;
+  const headings = ['DEV — Development', 'BETA — Testing', 'PRODUCTION — Live'];
+
+  return [
+    '**Reporting period: ' + format(since) + ' – ' + format(now) + '**',
+    'Checkout snapshots and commit history; deployment dates, running processes and test results are not verified.',
+    'Status notes reviewed: ' + developmentReportStatus.reviewed +
+      (stale ? ' — OUTDATED; review required.' : '') +
+      ' Unresolved notes are carried forward.',
+    ...snapshots.flatMap((item, index) => ['', '**' + headings[index] + '**', item.text]),
+    '', '**Promotion gaps**',
+    bullet([compare('dev', 'beta'), compare('beta', 'production')]),
+    'Committed files only; differences do not imply promotion direction.',
+    '', '**Key decisions**', bullet(developmentReportStatus.decisions),
+    '', '**Blockers**', bullet(developmentReportStatus.blockers),
+    '', '**In progress**', bullet(developmentReportStatus.unfinished),
+    '', '**Next priorities**',
+    developmentReportStatus.priorities.map((item, index) => (index + 1) + '. ' + item).join('\n')
+  ].join('\n');
+}
+
+async function developmentSummaryCommand() {
+  if (process.argv[3] === '--help') {
+    console.log('Usage: node scripts/goliath.js summary [message-id] < summary.txt');
+    console.log('Automatic report: node scripts/goliath.js summary --auto [--preview]');
+    console.log('Omit message-id to post; supply it to edit an existing Goliath message.');
+    return true;
+  }
+
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+process.chdir(path.resolve(__dirname, '..'));
+require('../src/config/envLoader').loadEnvironment('dev');
+
+const { resolveTokenDetails } = require('../src/config/tokenResolver');
+const { REST, Routes } = require('discord.js');
+
+async function main() {
+  const automatic = process.argv.includes('--auto');
+  const preview = process.argv.includes('--preview');
+  if (!automatic && process.stdin.isTTY) {
+    throw new Error('Supply report text through stdin, or use --auto.');
+  }
+
+  const summary = automatic ? buildDevelopmentReport() : fs.readFileSync(0, 'utf8').trim();
+  if (preview) {
+    console.log(summary);
+    return;
+  }
+  if (!summary) throw new Error('Summary is empty.');
+  if (summary.length > 4096) {
+    throw new Error('Summary exceeds the 4,096-character embed limit. Nothing posted.');
+  }
+
+  const { token } = resolveTokenDetails({ mode: 'DEV' });
+  if (!token) throw new Error('DEV bot token is missing.');
+
+  const channelId = '1561885763652685896';
+  const guildId = '1515201360386068642';
+  const rest = new REST({ version: '10' }).setToken(token);
+  const channel = await rest.get(Routes.channel(channelId));
+
+  if (channel.guild_id !== guildId) {
+    throw new Error('Destination does not match KSJ Development.');
+  }
+
+
+  const guild = await rest.get(Routes.guild(channel.guild_id));
+  const bot = await rest.get(Routes.user('@me'));
+
+  const guildIcon = guild.icon
+    ? 'https://cdn.discordapp.com/icons/' + guild.id + '/' + guild.icon + '.png?size=256'
+    : null;
+  const botAvatar = bot.avatar
+    ? 'https://cdn.discordapp.com/avatars/' + bot.id + '/' + bot.avatar + '.png?size=128'
+    : null;
+
+  const labels = {
+    'dev — development': '🔵 DEV — Development',
+    'beta — testing': '🟡 BETA — Testing',
+    'production — live': '🟢 PRODUCTION — Live',
+    'promotion gaps': '🔀 Promotion Gaps',
+    'recorded code changes': '🛠️ Recorded Code Changes',
+    completed: '✅ Completed',
+    'key decisions': '📌 Key Decisions',
+    decisions: '📌 Key Decisions',
+    'blockers and unfinished work': '🚧 Blockers & Unfinished Work',
+    blockers: '🚧 Blockers',
+    'in progress': '🔧 In Progress',
+    'next priorities': '🎯 Next Priorities'
+  };
+
+  const reportFields = [];
+  const intro = [];
+  let section = null;
+
+  for (const line of summary.split(/\r?\n/)) {
+    const heading = line.trim().match(/^\*\*(.+?)\*\*$/);
+    const label = heading && labels[heading[1].trim().toLowerCase()];
+
+    if (label) {
+      section = { name: label, lines: [] };
+      reportFields.push(section);
+    } else if (section) {
+      section.lines.push(line);
+    } else {
+      intro.push(line);
+    }
+  }
+
+  const fields = reportFields.map(section => ({
+    name: section.name,
+    value: section.lines.join('\n').trim() || 'No update recorded.',
+    inline: false
+  }));
+
+  if (fields.length > 25 || fields.some(field => field.value.length > 1024)) {
+    throw new Error('A report section exceeds Discord field limits. Nothing posted.');
+  }
+
+  const embed = {
+    author: {
+      name: guild.name,
+      ...(botAvatar ? { icon_url: botAvatar } : {})
+    },
+    title: 'Weekly Development Update',
+    description: intro.join('\n').trim() || 'KSJ Goliath development progress and priorities.',
+    color: 0x004CFF,
+    ...(guildIcon ? { thumbnail: { url: guildIcon } } : {}),
+    fields,
+    footer: { text: 'KSJ Development • Goliath' },
+    timestamp: new Date().toISOString()
+  };
+
+  const embedLength = embed.title.length + embed.description.length
+    + embed.author.name.length + embed.footer.text.length
+    + fields.reduce((total, field) => total + field.name.length + field.value.length, 0);
+
+  if (embedLength > 6000) {
+    throw new Error('Report exceeds Discord embed limits. Nothing posted.');
+  }
+
+
+  const messageId = process.argv.slice(3).find(value => !value.startsWith('--'));
+  if (messageId && !/^\d{17,20}$/.test(messageId)) {
+    throw new Error('Invalid message ID. Nothing changed.');
+  }
+
+  if (messageId) {
+    const existing = await rest.get(Routes.channelMessage(channelId, messageId));
+    if (existing.author.id !== bot.id) {
+      throw new Error('That message belongs to another account. Nothing changed.');
+    }
+  }
+
+  const endpoint = messageId
+    ? Routes.channelMessage(channelId, messageId)
+    : Routes.channelMessages(channelId);
+  const method = messageId ? 'patch' : 'post';
+
+  const message = await rest[method](endpoint, {
+
+    body: {
+      embeds: [embed],
+      allowed_mentions: { parse: [] }
+    }
+  });
+
+  console.log(`✅ Posted: https://discord.com/channels/${guildId}/${channelId}/${message.id}`);
+}
+
+
+  await main();
+  return true;
+}
+
 const commands = {
+  summary: developmentSummaryCommand,
   doctor: () => doctor(process.argv[3]), audit: auditCommand, 'dashboard-imports': dashboardImportAudit, 'backend-imports': backendRelativeImportAudit, 'runtime-contracts': runtimeContractsAudit, 'guild-variable-source': guildVariableSourceAudit, 'internal-version-naming': internalVersionNamingAudit, 'verification-lifecycle': verificationLifecycleAudit, 'embed-studio-preview': embedStudioPreviewAudit, 'embed-media-alignment': embedMediaAlignmentAudit, 'embed-session-persistence': embedSessionPersistenceAudit, 'embed-state-persistence-boundary': embedStatePersistenceBoundaryAudit, 'admin-module-routing': adminModuleRoutingAudit, 'embed-graphic-headers': embedGraphicHeadersAudit, 'embed-template-binding-lifecycle': embedTemplateBindingLifecycleAudit, 'social-live-presentation': socialLivePresentationAudit, 'social-studio-lifecycle': socialStudioLifecycleAudit, 'universal-member-notices': universalMemberNoticesAudit, 'welcome-embed-delivery': welcomeEmbedDeliveryAudit, 'role-pagination': rolePaginationAudit,
   'deploy-plan': () => deployPlan(process.argv[3], process.argv[4], process.argv[5]),
   'sync-commands': () => syncCommands(process.argv[3]), promote: () => promote(process.argv[3]), guilds: guildAudit, media: mediaAudit,
@@ -2090,4 +2577,14 @@ const commands = {
 const command = process.argv[2] || 'doctor';
 const handler = commands[command];
 if (!handler) { console.error(`Unknown Goliath command: ${command}`); process.exitCode = 1; }
-else if (!handler()) process.exitCode = 1;
+else {
+  Promise.resolve()
+    .then(() => handler())
+    .then((result) => {
+      if (!result) process.exitCode = 1;
+    })
+    .catch((error) => {
+      console.error('Goliath command failed:', error.message);
+      process.exitCode = 1;
+    });
+}

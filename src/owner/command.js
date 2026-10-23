@@ -20,6 +20,8 @@ const testSecurity = require('./dev/testsecurity');
 const duplicator = require('./dev/duplicator');
 const maintenanceStatus = require('./dev/maintenanceStatus');
 const auditEvents = require('./auditIntelligence/auditEvents');
+const restartControls = require('./dev/restartControls');
+const guildAccessControls = require('./dev/guildAccessControls');
 
 const OWNER_PREFIX = 'ownerpanel:';
 const SERVER_CONTEXT_MARKER = ':guild:';
@@ -27,6 +29,7 @@ const OWNER_CONTEXT_TTL_MS = 30 * 60 * 1000;
 const DEVELOPMENT_TEST_GUILD_ID = process.env.TEST_GUILD_ID || '1515201360386068642';
 const wiredClients = new WeakSet();
 const ownerGuildContexts = new Map();
+const devControlInteractions = new WeakSet();
 
 function mode() {
   return normalizeBotMode(process.env.BOT_MODE);
@@ -291,7 +294,10 @@ function ownerHomePayload(interaction, notice = null) {
 
   const navigation = new ActionRowBuilder().addComponents(...navigationComponents);
 
-  return { embeds: [embed], components: [primary, navigation] };
+  const components = [primary, navigation];
+  if (isDev) components.push(restartControls.buildRow());
+  if (isDev) components.push(guildAccessControls.buildRow());
+  return { embeds: [embed], components };
 }
 
 function serverToolsPayload(interaction, explicitGuildId = null) {
@@ -564,6 +570,13 @@ async function resolveMaintenanceGuild(interaction, explicitGuildId = null) {
 
 async function handleOwnerPanelInteraction(interaction) {
   const rawId = String(interaction?.customId || '');
+  if (rawId.startsWith('ownerpanel:restart:') ||
+      rawId.startsWith('ownerpanel:guildaccess:') ||
+      /^ownerpanel:(?:home|refresh)(?::guild:\d+)?$/.test(rawId)) {
+    if (devControlInteractions.has(interaction)) return true;
+    devControlInteractions.add(interaction);
+  }
+
   const id = baseOwnerCustomId(rawId);
   if (!id.startsWith(OWNER_PREFIX) && !id.startsWith('testsecurity:')) return false;
 
@@ -572,6 +585,9 @@ async function handleOwnerPanelInteraction(interaction) {
     else await interaction.reply(ownerDeniedPayload()).catch(() => null);
     return true;
   }
+
+  if (await restartControls.handle(interaction)) return true;
+  if (await guildAccessControls.handle(interaction)) return true;
 
   const contextGuildId = interactionGuildId(interaction, embeddedGuildId(rawId));
   if (contextGuildId) rememberOwnerGuild(interaction, contextGuildId);

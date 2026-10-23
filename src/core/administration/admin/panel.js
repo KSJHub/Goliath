@@ -310,7 +310,7 @@ function panelForRoute(route, interaction, name) { if (route === 'admin:home') r
 const openRoute = (interaction, route, name) => updatePanel(interaction, panelForRoute(route, interaction, name), route);
 
 async function handleAdminNavigation(interaction) {
-  if (!interaction.guild) return false; const nav = panelNav.parseCustomId(interaction.customId); if (!String(interaction.customId || '').startsWith('admin:') && !nav) return false; const id = String(interaction.customId || '');
+  if (!interaction.guild) return false; const nav = panelNav.parseCustomId(interaction.customId); if (!String(interaction.customId || '').startsWith('admin:') && !nav) return false; const id = String(interaction.__goliathLegacyRoleBase || interaction.customId || '');
   const authorityControl = id.startsWith('admin:authority') || id === 'admin:adminpanel'; if (authorityControl && !canManageGuildAuthority(interaction)) return deny(interaction, '❌ Only the Guild Owner can change this guild’s Goliath authority configuration.');
   if (!canUseAdminPanel(interaction) && !hasGuildPermission(interaction, 'mod.panel.view') && !hasAnyModulePermission(interaction)) return deny(interaction, '❌ Your guild roles are not authorized to use this Goliath control.');
   if (id.startsWith('admin:automod') && !hasGuildPermission(interaction, 'admin.automod.manage')) return deny(interaction);

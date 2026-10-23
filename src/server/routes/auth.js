@@ -143,9 +143,9 @@ function buildPostOAuthTarget(origin, returnPath) {
   return `${safeOrigin}${safePath}`;
 }
 
-function renderAppealsHandoff(returnPath) {
+function renderAppealsHandoff(returnPath, clientUrl) {
   const safePath = safeReturnPath(returnPath);
-  const target = safePath.startsWith('/appeals') ? safePath : '/appeals';
+  const target = buildPostOAuthTarget(clientUrl, safePath.startsWith('/appeals') ? safePath : '/appeals');
   const escapedTarget = target.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   return `<!doctype html>
 <html lang="en">
@@ -326,11 +326,12 @@ router.get('/callback', async (req, res) => {
 
       if (stateReturnPath.startsWith('/appeals')) {
         res.clearCookie('goliath_oauth_return', { path: '/', sameSite: isProduction() ? 'none' : 'lax', secure: isProduction() });
-        return res.status(200).type('html').send(renderAppealsHandoff(stateReturnPath));
+        return res.status(200).type('html').send(renderAppealsHandoff(stateReturnPath, clientUrl));
       }
 
-      const origin = requestOrigin(req, clientUrl);
-      return res.redirect(buildPostOAuthTarget(origin, stateReturnPath));
+      // Always return to the configured frontend origin; the OAuth callback
+      // may run on a separate API hostname that cannot serve dashboard routes.
+      return res.redirect(buildPostOAuthTarget(clientUrl, stateReturnPath));
     });
   } catch (error) {
     console.error('❌ Auth error', error);

@@ -144,11 +144,11 @@ jobs:
             BACKUP_DIR="/home/goliath/.goliath-${ENVIRONMENT}-runtime-deploy-backup"
             rm -rf "$BACKUP_DIR" && mkdir -p "$BACKUP_DIR"
             if [ -d "$RUNTIME_DIR" ]; then tar --warning=no-file-changed --ignore-failed-read --exclude='*.tmp' -C "$RUNTIME_DIR" -cf - . | tar -C "$BACKUP_DIR" -xf -; fi
-            restore_runtime(){ mkdir -p "$RUNTIME_DIR"; rm -rf "$RUNTIME_DIR"/* "$RUNTIME_DIR"/.[!.]* "$RUNTIME_DIR"/..?* 2>/dev/null || true; [ ! -d "$BACKUP_DIR" ] || tar -C "$BACKUP_DIR" -cf - . | tar -C "$RUNTIME_DIR" -xf -; }
-            deploy_cleanup(){ status=$?; restore_runtime || true; rm -rf "$BACKUP_DIR"; cleanup_remote; exit "$status"; }
+            # Preserve live runtime in place: never unlink open SQLite files.
+            deploy_cleanup(){ status=$?; cleanup_remote; exit "$status"; }
             trap deploy_cleanup EXIT
             git reset --hard "$EXPECTED_SHA"
-            restore_runtime
+            test -d "$RUNTIME_DIR"
 
             echo "📦 Clean locked dependency install"
             rm -rf node_modules
@@ -192,7 +192,7 @@ jobs:
             case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; exit 1;; esac
             case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; exit 1;; esac
             echo "✅ $ENVIRONMENT stable: sha=$EXPECTED_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
-            restore_runtime
+            test -d "$RUNTIME_DIR"
             rm -rf "$BACKUP_DIR"
             trap - EXIT
             cleanup_remote
