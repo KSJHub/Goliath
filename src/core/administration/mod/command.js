@@ -261,7 +261,7 @@ router.post('/appeals/:guildId/:caseId', requireAppealSession, requireSameOrigin
 const command = {
   category: 'Moderation',
   help: { name: 'mod', description: '🔐 Open Goliath’s moderation hub and management tools.', usage: '/mod' },
-  access: { level: 'mod', ownerOnly: false },
+  access: { level: 'mod', permissionKey: 'mod.panel.view', ownerOnly: false },
   data: new SlashCommandBuilder()
     .setName('mod')
     .setDescription('🔑 Open Goliath’s moderation hub and management tools'),

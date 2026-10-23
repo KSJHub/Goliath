@@ -6,7 +6,7 @@ const verificationStore = require('./verificationStore');
 const INTERACTIVE_METHODS = new Set(['captcha', 'minigame', 'one_time_challenge', 'staff_approval']);
 const MEMBER_ACTION_PREFIX = 'verify:challenge';
 const STAFF_ACTION_PREFIX = 'verify:staff';
-const TERMINAL_STATES = new Set(['verified', 'quarantined', 'rejected', 'failed', 'timed_out']);
+const TERMINAL_STATES = new Set(['verified', 'quarantined', 'review', 'rejected', 'failed', 'timed_out']);
 
 const clean = value => String(value ?? '').trim();
 const isOutdatedSecuritySession = (guildId, session) => Number(session.securityConfigRevision || 0) !== Number(verificationStore.getVerificationSection(guildId).configRevision || 1);
@@ -45,6 +45,8 @@ function sessionState(guildId, userId) {
 
 function markCompleted(guildId, userId, method) {
   const session = verificationStore.getSession(guildId, userId) || {};
+  if (TERMINAL_STATES.has(session.state)) return Array.isArray(session.completedSecurity) ? [...session.completedSecurity] : [];
+  if (session.staffActionProcessingPending) return Array.isArray(session.completedSecurity) ? [...session.completedSecurity] : [];
   const completed = new Set(Array.isArray(session.completedSecurity) ? session.completedSecurity : []);
   completed.add(method);
   verificationStore.upsertSession(guildId, userId, { state: 'verifying', completedSecurity: [...completed], activeSecurityMethod: null, activeChallenge: null });
@@ -55,6 +57,7 @@ function startStep(guildId, userId, method, settings = {}) {
   if (!INTERACTIVE_METHODS.has(method)) return { ok: false, reason: 'not_interactive', method };
   const session = verificationStore.getSession(guildId, userId) || {};
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', method, state: session.state };
+  if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress', method };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed', method };
   let active = verificationChallenges.active(guildId, userId);
   if (active?.status === 'pending' && verificationChallenges.isExpired(active)) {
@@ -83,6 +86,7 @@ function submitAnswer(guildId, actingUserId, targetUserId, challengeId, supplied
   if (clean(actingUserId) !== clean(targetUserId)) return { ok: false, reason: 'wrong_member' };
   const session = verificationStore.getSession(guildId, targetUserId) || {};
   if (TERMINAL_STATES.has(session.state)) return { ok: false, reason: 'terminal_session', state: session.state };
+  if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress' };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed' };
   const active = verificationChallenges.active(guildId, targetUserId);
   if (!active || clean(active.challengeId) !== clean(challengeId)) return { ok: false, reason: 'stale_challenge' };
@@ -95,11 +99,19 @@ function submitAnswer(guildId, actingUserId, targetUserId, challengeId, supplied
 function resolveStaffAction(guildId, targetUserId, challengeId, staffUserId, action) {
   const session = verificationStore.getSession(guildId, targetUserId) || {};
   if (TERMINAL_STATES.has(session.state)) return { ok: false, complete: false, reason: 'terminal_session', state: session.state };
+  if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, complete: false, reason: 'staff_action_in_progress' };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, complete: false, reason: 'security_configuration_changed' };
   const active = verificationChallenges.active(guildId, targetUserId);
   if (!active || clean(active.challengeId) !== clean(challengeId) || active.method !== 'staff_approval') return { ok: false, complete: false, reason: 'stale_challenge' };
+  if (active.status !== 'pending') return { ok: false, complete: false, reason: 'challenge_closed' };
   const result = verificationChallenges.staffAction(guildId, targetUserId, challengeId, staffUserId, action);
-  if (result.ok && result.action === 'approve') return { ...result, resumeFlow: true, completedSecurity: markCompleted(guildId, targetUserId, 'staff_approval') };
+  if (result.ok && result.action === 'approve') {
+    verificationStore.upsertSession(guildId, targetUserId, { staffApprovalContinuationPending: { challengeId: clean(challengeId), staffUserId: clean(staffUserId), recordedAt: new Date().toISOString() } });
+    return { ...result, resumeFlow: true, completedSecurity: markCompleted(guildId, targetUserId, 'staff_approval') };
+  }
+  if (result.complete && ['reject', 'quarantine'].includes(result.action)) {
+    verificationStore.upsertSession(guildId, targetUserId, { staffActionProcessingPending: { challengeId: clean(challengeId), staffUserId: clean(staffUserId), action: result.action, recordedAt: new Date().toISOString() } });
+  }
   return { ...result, resumeFlow: false, recordFailure: result.complete === true && result.action === 'reject', quarantine: result.complete === true && result.action === 'quarantine' };
 }
 
@@ -109,8 +121,31 @@ function recover(guildId, userId) {
   const challenge = before.activeChallenge || null;
   let changed = false;
   let reason = 'healthy';
-  if (TERMINAL_STATES.has(before.state) && (challenge || before.activeSecurityMethod)) {
-    verificationStore.upsertSession(guildId, userId, { activeChallenge: null, activeSecurityMethod: null }); changed = true; reason = 'terminal_session_cleaned';
+  if (before.staffApprovalContinuationPending && !TERMINAL_STATES.has(before.state) && (!Number.isFinite(Date.parse(before.staffApprovalContinuationPending.recordedAt)) || Date.now() - Date.parse(before.staffApprovalContinuationPending.recordedAt) > 120000)) {
+    verificationStore.upsertSession(guildId, userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffApprovalContinuationPending: null });
+    verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_approval_continuation_interrupted', challengeId: before.staffApprovalContinuationPending.challengeId });
+    changed = true;
+    reason = 'interrupted_staff_approval_requires_review';
+  } else if (before.staffApprovalContinuationPending && !TERMINAL_STATES.has(before.state)) {
+    reason = 'staff_approval_continuation_in_progress';
+  } else if (before.staffActionProcessingPending && !TERMINAL_STATES.has(before.state) && (!Number.isFinite(Date.parse(before.staffActionProcessingPending.recordedAt)) || Date.now() - Date.parse(before.staffActionProcessingPending.recordedAt) > 120000)) {
+    verificationStore.upsertSession(guildId, userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null, staffActionProcessingPending: null });
+    verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_action_processing_interrupted', challengeId: before.staffActionProcessingPending.challengeId, action: before.staffActionProcessingPending.action });
+    changed = true;
+    reason = 'interrupted_staff_action_requires_review';
+  } else if (before.staffActionProcessingPending && !TERMINAL_STATES.has(before.state)) {
+    reason = 'staff_action_processing_in_progress';
+  } else if (TERMINAL_STATES.has(before.state) && [before.staffApprovalContinuationPending, before.staffActionProcessingPending].some(marker => marker && Number.isFinite(Date.parse(marker.recordedAt)) && Date.now() - Date.parse(marker.recordedAt) <= 120000)) {
+    reason = 'terminal_staff_action_finalization_in_progress';
+  } else if (TERMINAL_STATES.has(before.state) && (challenge || before.activeSecurityMethod || before.staffApprovalContinuationPending || before.staffActionProcessingPending)) {
+    verificationStore.upsertSession(guildId, userId, { activeChallenge: null, activeSecurityMethod: null, staffApprovalContinuationPending: null, staffActionProcessingPending: null }); changed = true; reason = 'terminal_session_cleaned';
+  } else if (challenge?.method === 'staff_approval' && ['passed', 'failed'].includes(challenge.status) && ['approve', 'reject', 'quarantine'].includes(challenge.staffAction) && !TERMINAL_STATES.has(before.state) && (!Number.isFinite(Date.parse(challenge.resolvedAt)) || Date.now() - Date.parse(challenge.resolvedAt) > 120000)) {
+    verificationStore.upsertSession(guildId, userId, { state: 'review', activeChallenge: null, activeSecurityMethod: null });
+    verificationStore.addSecurityHistory(guildId, userId, { type: 'staff_action_recovery_review', challengeId: challenge.challengeId, action: challenge.staffAction });
+    changed = true;
+    reason = 'interrupted_staff_action_requires_review';
+  } else if (TERMINAL_STATES.has(before.state)) {
+    reason = 'terminal_session_unchanged';
   } else if (challenge?.status === 'pending' && verificationChallenges.isExpired(challenge)) {
     verificationChallenges.expire(guildId, userId, challenge.challengeId); changed = true; reason = 'expired_challenge_closed';
   } else if (!challenge && before.activeSecurityMethod) {

@@ -1,6 +1,7 @@
 'use strict';
 
 const SECTION_PATHS = Object.freeze({
+  goliathAuthority: 'modules.goliathAuthority',
   tickets: 'modules.tickets',
   security: 'modules.security',
   logs: 'modules.logs',

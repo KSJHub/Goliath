@@ -12,11 +12,14 @@ const DISCORD_API = 'https://discord.com/api/v10';
 
 const BOT_PROFILE_CACHE_TTL_MS = 1000 * 60 * 5;
 const GUILD_STATS_CACHE_TTL_MS = 15_000;
+const MEMBER_STATS_CACHE_TTL_MS = 5 * 60_000;
 
 let cachedBotProfile = null;
 let cachedBotProfileExpiresAt = 0;
 
 const guildStatsCache = new Map();
+const memberStatsCache = new Map();
+const memberStatsPending = new Map();
 
 function readCasesSafe() {
   try {
@@ -245,6 +248,71 @@ async function fetchBotProfile(req) {
   return cachedBotProfile;
 }
 
+async function fetchMemberStats(guild) {
+  const guildId = guild.id;
+  const cached = getCached(memberStatsCache, guildId);
+
+  if (cached) return cached;
+
+  if (memberStatsPending.has(guildId)) {
+    return memberStatsPending.get(guildId);
+  }
+
+  const pending = (async () => {
+    const unavailable = { humans: null, bots: null };
+
+    try {
+      const members = await guild.members.fetch();
+      const total = Number(guild.memberCount || 0);
+
+      if (total > 0 && members.size !== total) {
+        setCached(memberStatsCache, guildId, unavailable, 60_000);
+        return unavailable;
+      }
+
+      const bots = members.filter(
+        (member) => member.user?.bot === true
+      ).size;
+
+      const data = {
+        humans: members.size - bots,
+        bots,
+      };
+
+      setCached(
+        memberStatsCache,
+        guildId,
+        data,
+        MEMBER_STATS_CACHE_TTL_MS
+      );
+
+      return data;
+    } catch (error) {
+      setCached(
+        memberStatsCache,
+        guildId,
+        unavailable,
+        60_000
+      );
+
+      console.warn(
+        '[StatusRoute] Member breakdown unavailable:',
+        guildId,
+        error?.message || error
+      );
+      return unavailable;
+    }
+  })();
+
+  memberStatsPending.set(guildId, pending);
+
+  try {
+    return await pending;
+  } finally {
+    memberStatsPending.delete(guildId);
+  }
+}
+
 async function fetchGuildStats(req, guildId) {
   const cached = getCached(guildStatsCache, guildId);
   if (cached) return cached;
@@ -258,8 +326,31 @@ async function fetchGuildStats(req, guildId) {
     return missing;
   }
 
+  let memberStats = getCached(memberStatsCache, guild.id);
+
+  if (
+    memberStats &&
+    Number.isInteger(memberStats.humans) &&
+    Number.isInteger(memberStats.bots) &&
+    memberStats.humans + memberStats.bots !== guild.memberCount
+  ) {
+    memberStatsCache.delete(guild.id);
+    memberStats = null;
+  }
+
+  if (!memberStats && !memberStatsPending.has(guild.id)) {
+    void fetchMemberStats(guild).catch((error) => {
+      console.warn(
+        '[StatusRoute] Background member fetch failed:',
+        guild.id,
+        error?.message || error
+      );
+    });
+  }
+
   const data = {
     connected: true,
+    ...(memberStats || { humans: null, bots: null }),
     id: guild.id,
     name: guild.name,
     iconUrl: guild.iconURL?.({ extension: 'png', size: 256 }) || buildGuildIconUrl(guild.id, guild.icon),

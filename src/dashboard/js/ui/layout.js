@@ -36,6 +36,7 @@ const Translation = lazy(() => import('../pages/modules/Translation'));
 const ReactionRoles = lazy(() => import('../pages/modules/ReactionRoles'));
 const Leveling = lazy(() => import('../pages/modules/Leveling'));
 const Polls = lazy(() => import('../pages/modules/Polls'));
+const FreeGames = lazy(() => import('../pages/modules/FreeGames'));
 const Stats = lazy(() => import('../pages/modules/Stats'));
 const Restore = lazy(() => import('../pages/security/Restore'));
 const Security = lazy(() => import('../pages/security/Security'));
@@ -113,6 +114,7 @@ export const ROUTES = [
   { key: 'forms', label: 'Forms', icon: 'modules', path: '/forms', component: Forms, hidden: true },
   { key: 'giveaways', label: 'Giveaways', icon: 'modules', path: '/giveaways', component: Giveaways, hidden: true },
   { key: 'polls', label: 'Polls', icon: 'modules', path: '/polls', component: Polls, hidden: true },
+  { key: 'freeGames', label: 'Free Games', icon: 'modules', path: '/free-games', component: FreeGames, hidden: true },
   { key: 'stats', label: 'Stats', icon: 'overview', path: '/stats', component: Stats, hidden: true },
   { key: 'social', label: 'Social Studio', icon: 'modules', path: '/social', component: Social, hidden: true },
   { key: 'schedule', label: 'Schedule', icon: 'modules', path: '/schedule', component: Schedule, hidden: true },

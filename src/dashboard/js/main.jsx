@@ -42,6 +42,14 @@ function getOAuthAppealReturn() {
   }
 }
 
+// Upgrade previously sent hash-based DM links before authentication starts.
+const legacyAppealHash = window.location.hash.match(/^#\/appeals(?:\?([^#]*))?$/);
+if (legacyAppealHash) {
+  const reference = parseAppealReference(legacyAppealHash[1] || '');
+  const query = reference ? new URLSearchParams({ guild: reference.guild, case: reference.caseId }).toString() : '';
+  window.history.replaceState({}, '', query ? `/appeals?${query}` : '/appeals');
+}
+
 let pathname = window.location.pathname.replace(/\/+$/, '') || '/';
 let appealReference = getAppealReference();
 let oauthAppealReturn = null;
@@ -51,8 +59,11 @@ if (pathname === '/overview' || pathname === '/') {
   if (!appealReference && oauthAppealReturn?.reference) appealReference = oauthAppealReturn.reference;
 }
 
+// Appeal links must never silently enter the management dashboard. Recover
+// case deep links even when a proxy or an older login redirect used /overview.
 const isAppealsPath = pathname === '/appeals' || pathname.endsWith('/appeals');
-const isRecoveredAppealPath = Boolean(oauthAppealReturn) && (pathname === '/overview' || pathname === '/');
+const isAppealDeepLink = Boolean(appealReference) && (pathname === '/overview' || pathname === '/');
+const isRecoveredAppealPath = (Boolean(oauthAppealReturn) || isAppealDeepLink) && (pathname === '/overview' || pathname === '/');
 
 if ((isAppealsPath || isRecoveredAppealPath) && pathname !== '/appeals') {
   const params = new URLSearchParams();

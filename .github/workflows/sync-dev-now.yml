@@ -103,16 +103,13 @@ jobs:
             if [ -d "$RUNTIME_DIR" ]; then
               tar --warning=no-file-changed --ignore-failed-read --exclude='*.tmp' -C "$RUNTIME_DIR" -cf - . | tar -C "$BACKUP_DIR" -xf -
             fi
-            restore_runtime() {
-              mkdir -p "$RUNTIME_DIR"
-              rm -rf "$RUNTIME_DIR"/* "$RUNTIME_DIR"/.[!.]* "$RUNTIME_DIR"/..?* 2>/dev/null || true
-              [ ! -d "$BACKUP_DIR" ] || tar -C "$BACKUP_DIR" -cf - . | tar -C "$RUNTIME_DIR" -xf -
-            }
-            finish() { status=$?; restore_runtime || true; rm -rf "$BACKUP_DIR"; cleanup_remote; exit "$status"; }
+            # Runtime is Git-ignored and must remain in place while SQLite is open.
+            # Never delete/recreate live runtime files as part of a deployment.
+            finish() { status=$?; cleanup_remote; exit "$status"; }
             trap finish EXIT
 
             git reset --hard "$EXPECTED_SHA"
-            restore_runtime
+            test -d "$RUNTIME_DIR"
 
             echo "📦 Clean locked dependency install"
             rm -rf node_modules
@@ -229,7 +226,7 @@ jobs:
             case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
 
             echo "✅ DEV stable: sha=$FINAL_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
-            restore_runtime
+            test -d "$RUNTIME_DIR"
             rm -rf "$BACKUP_DIR"
             trap - EXIT
             cleanup_remote

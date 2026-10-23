@@ -8,6 +8,10 @@ module.exports = {
 
       env: {
         BOT_MODE: 'dev',
+        GOLIATH_AUDIT_SHARED_DIR: '/var/lib/goliath/audit',
+        GOLIATH_OBSERVATORY_SHARED_DIR: '/var/lib/goliath/observatory',
+        GOLIATH_SENTINEL_SHARED_DIR: '/var/lib/goliath/sentinel',
+
         NODE_ENV: 'development',
         PORT: 3001,
         BOT_API_PORT: 3002,
@@ -30,6 +34,10 @@ module.exports = {
 
       env: {
         BOT_MODE: 'beta',
+        GOLIATH_AUDIT_SHARED_DIR: '/var/lib/goliath/audit',
+        GOLIATH_OBSERVATORY_SHARED_DIR: '/var/lib/goliath/observatory',
+        GOLIATH_SENTINEL_SHARED_DIR: '/var/lib/goliath/sentinel',
+
         NODE_ENV: 'production',
         PORT: 3011,
         BOT_API_PORT: 3012,
@@ -52,6 +60,10 @@ module.exports = {
 
       env: {
         BOT_MODE: 'production',
+        GOLIATH_AUDIT_SHARED_DIR: '/var/lib/goliath/audit',
+        GOLIATH_OBSERVATORY_SHARED_DIR: '/var/lib/goliath/observatory',
+        GOLIATH_SENTINEL_SHARED_DIR: '/var/lib/goliath/sentinel',
+
         NODE_ENV: 'production',
         PORT: 3021,
         BOT_API_PORT: 3022,
