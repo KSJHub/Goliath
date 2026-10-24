@@ -96,7 +96,8 @@ module.exports = [
   } },
   { name: Events.ThreadMembersUpdate, async execute(addedMembers, removedMembers, thread) {
     if (!thread?.guild || !hasActiveQuarantine(thread.guild.id)) return;
-    for (const threadMember of addedMembers?.values?.() || []) {
+    const additions = addedMembers?.values?.() || [];
+    for (const threadMember of additions) {
       const memberId = String(threadMember?.id || threadMember?.userId || '');
       if (!memberId || !getQuarantineState(thread.guild.id)?.users?.[memberId]) continue;
       const member = await thread.guild.members.fetch(memberId).catch(() => null);
