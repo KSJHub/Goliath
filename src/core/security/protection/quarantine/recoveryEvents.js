@@ -46,6 +46,11 @@ module.exports = [
     if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
     try { await syncQuarantineIsolation(channel.guild); } catch (error) { console.warn(`[QuarantineSystem] Failed to secure new channel ${channel.id}:`, error.message); }
   } },
+  { name: Events.ChannelUpdate, async execute(previous, channel) {
+    if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
+    try { await syncQuarantineIsolation(channel.guild); }
+    catch (error) { console.warn('[QuarantineSystem] Updated channel isolation failed:', error.message); }
+  } },
   { name: Events.ChannelDelete, async execute(channel) {
     if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
     const state = getQuarantineState(channel.guild.id);
