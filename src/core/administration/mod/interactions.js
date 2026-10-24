@@ -829,13 +829,7 @@ async function handleVerificationCases(i) {
  const button=(customId,label,style=Discord.ButtonStyle.Secondary)=>new Discord.ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
  const show=async payload=>{if(i.isMessageComponent?.())return i.update(payload);return i.reply({...payload,flags:64});};
  if(id==='mod_verification_cases') return panel.renderDashboard(i, 'none', 'cases', { actionFilter: 'quarantine' });
- if(false){
-  const lines=active.length?active.slice(0,10).map(([uid,v])=>`• <@${uid}> — ${Number(v.failedAttempts||0)} failures — ${v.quarantineChannelId?'<#'+v.quarantineChannelId+'>':'No case channel'}`):['No active Verification quarantine cases.'];
-  const embed=new Discord.EmbedBuilder().setColor(0x5865f2).setTitle('🚨 Verification Cases · Mod Hub').setDescription(['Verification quarantine is an entry-security state, not a moderation punishment. Escalate a case to create a Mod Hub investigation.','',...lines].join('\\n'));
-  const components=active.slice(0,20).reduce((rows,[uid],index)=>{if(index%5===0)rows.push(row(button('mod_verification_case:'+uid,'Review '+(i.guild.members.cache.get(uid)?.user?.username||uid).slice(0,55))));else rows[rows.length-1].addComponents(button('mod_verification_case:'+uid,'Review '+(i.guild.members.cache.get(uid)?.user?.username||uid).slice(0,55)));return rows;},[]);
-  components.push(row(button('mod:overview','Back to Mod Hub')));
-  return show({embeds:[embed],components});
- }
+
  const parts=id.split(':'),uid=parts[1],action=parts[2],confirm=parts[3];
  if(!/^\\d{15,22}$/.test(uid)||sessions[uid]?.state!=='quarantined')return safeReply(i,{content:'This Verification case is no longer active.',flags:64});
  if(!action){
