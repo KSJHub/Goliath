@@ -32,11 +32,12 @@
     "audit:embed-session-persistence": "node scripts/goliath.js embed-session-persistence",
     "audit:embed-state-persistence-boundary": "node scripts/goliath.js embed-state-persistence-boundary",
     "audit:embed-template-binding-lifecycle": "node scripts/goliath.js embed-template-binding-lifecycle",
-    "doctor": "npm run syntax && npm run imports && npm run dashboard-imports && npm run contracts && npm run audit:guild-variables && npm run audit:internal-version-naming && npm run audit:verification-lifecycle && npm run audit:embed-studio-preview && npm run audit:embed-media-alignment && npm run audit:embed-session-persistence && npm run audit:embed-state-persistence-boundary && npm run audit:embed-template-binding-lifecycle && npm run social-live-audit && npm run social-lifecycle-audit && npm run social-live-presentation-audit && node -e \"require('./scripts/goliath.js'); process.exit(process.exitCode || 0)\" doctor",
-    "audit": "node scripts/goliath.js audit"
+    "doctor": "npm run syntax && npm run imports && npm run dashboard-imports && npm run contracts && npm run audit:dependency-runtime && npm run audit:guild-variables && npm run audit:internal-version-naming && npm run audit:verification-lifecycle && npm run audit:embed-studio-preview && npm run audit:embed-media-alignment && npm run audit:embed-session-persistence && npm run audit:embed-state-persistence-boundary && npm run audit:embed-template-binding-lifecycle && npm run social-live-audit && npm run social-lifecycle-audit && npm run social-live-presentation-audit && node -e \"require('./scripts/goliath.js'); process.exit(process.exitCode || 0)\" doctor",
+    "audit": "node scripts/goliath.js audit",
+    "audit:dependency-runtime": "node --throw-deprecation scripts/dependency-runtime-check.js"
   },
   "dependencies": {
-    "better-sqlite3": "^12.8.0",
+    "better-sqlite3": "^13.0.3",
     "chalk": "^5.6.2",
     "cors": "^2.8.6",
     "discord.js": "^14.27.0",
@@ -50,7 +51,8 @@
     "react-router-dom": "^7.14.2",
     "sharp": "^0.35.4",
     "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "node-domexception": "file:vendor/native-domexception"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
@@ -58,5 +60,14 @@
     "nodemon": "^3.1.14",
     "vite": "^8.0.16"
   },
-  "overrides": { "undici": "6.28.1" }
+  "overrides": {
+    "undici": "6.28.1",
+    "node-domexception": "$node-domexception",
+    "node-fetch@^2.7.0": {
+      "whatwg-url": "14.2.0"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  }
 }

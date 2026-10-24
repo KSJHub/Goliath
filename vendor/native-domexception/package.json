@@ -1,0 +1,11 @@
+{
+  "name": "@goliath/native-domexception",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native Node.js DOMException compatibility export for fetch-blob.",
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  }
+}
