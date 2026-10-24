@@ -3,7 +3,7 @@ const { createHash } = require('node:crypto');
 const { PermissionFlagsBits: P } = require('discord.js');
 const store = require('./freeGames');
 const providers = require('./freeGamesProviders');
-const { buildListing, SECTIONS, line } = require('./freeGamesEmbeds');
+const { buildListing, SECTIONS, line, platformPresentation } = require('./freeGamesEmbeds');
 const locks = new Map();
 const timers = new WeakMap();
 const TICK_MS = 5 * 60_000;
@@ -59,7 +59,7 @@ async function processGuildUnlocked(guild) {
     for (const id of Object.keys(observed)) if (now - observed[id] > 180 * 86400_000) { delete observed[id]; delete firstSeen[id]; }
     store.update(guild.id, (current) => ({ ...current, state: { ...current.state, firstSeen, newSince, observed, pricing, warning: pricing.warning || null } }));
     config = store.getConfig(guild.id);
-    const pages = buildListing(offers, config, now);
+    const pages = buildListing(offers, config, now, platformPresentation(guild.client));
     for (const delivery of [...config.state.retired]) {
       await removeDelivery(guild, delivery);
       store.update(guild.id, (current) => ({ ...current, state: { ...current.state, retired: current.state.retired.filter((item) => item.messageId !== delivery.messageId) } }));

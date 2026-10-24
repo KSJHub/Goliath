@@ -2774,15 +2774,25 @@ async function freeGamesAudit() {
   const offer = { id: 'gamerpower:1', title: 'A Game (Steam) Key Giveaway', type: 'game', stores: ['steam', 'xbox', 'playstation'], url: 'https://www.gamerpower.com/offer/1', worth: '$10.00', endsAt: now + 3600000, endDateText: null };
   const offers = Array.from({ length: 120 }, (_, index) => ({ ...offer, id: `gamerpower:${index + 1}`, title: `Offer ${index} ` + 'Long title '.repeat(15), url: `https://www.gamerpower.com/offer/${index + 1}`, type: Object.keys(providers.TYPES)[index % 6] }));
   const pages = embeds.buildListing([...offers, offers[0]], config, now);
-  const text = pages.map(page => page.embeds[0].description).join('\n');
+  const text = pages.map(page => [page.embeds[0].description, ...page.embeds[0].fields.map(field => field.value)].join('\n')).join('\n');
   for (const item of offers) assert.equal(text.split(`](${item.url})`).length - 1, 1, 'Offer must appear exactly once');
   for (const page of pages) {
     const embed = page.embeds[0];
     assert(embed.description.length <= 4096);
-    assert(embed.title.length + embed.description.length + embed.footer.text.length < 6000);
+    assert(embed.fields.length <= 25);
+    for (const field of embed.fields) { assert(field.inline); assert(field.name.length <= 256); assert(field.value.length <= 1024); }
+    assert(embed.title.length + embed.description.length + embed.footer.text.length + embed.fields.reduce((sum, field) => sum + field.name.length + field.value.length, 0) < 6000);
     assert.deepEqual(page.allowedMentions, { parse: [] });
   }
   assert.equal(pages[0].embeds[0].title, '🎁 Free Games');
+  assert.equal(new Set(pages.map(page => page.embeds[0].color)).size, 3);
+  assert(pages[0].embeds[0].fields[0].name.startsWith('🚂'));
+  const icons = embeds.platformPresentation({ application: { emojis: { cache: { find: fn => [{ name: 'goliath_steam', id: '123456789012345678' }].find(fn) } } } });
+  assert.equal(icons.steam.emoji, '<:goliath_steam:123456789012345678>');
+  assert(icons.steam.imageUrl.includes('123456789012345678.png'));
+  assert.equal(icons.epic.emoji, '⚡');
+  const mixed = embeds.buildListing([offer, { ...offer, id: 'epic', stores: ['epic'] }, { ...offer, id: 'gog', stores: ['gog'] }], config, now);
+  assert.equal(mixed.length, 1); assert.equal(mixed[0].embeds[0].fields.length, 3);
   assert(text.includes('≈£8.00'));
   assert(!text.includes('🆕'));
   assert(embeds.line(offer, { [offer.id]: now }, now, config).includes('🆕'));

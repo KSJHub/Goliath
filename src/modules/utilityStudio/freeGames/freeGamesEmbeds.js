@@ -36,31 +36,60 @@ function orderedOffers(offers, now) {
     return (endA === endB ? 0 : endA - endB) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
   });
 }
-function buildListing(offers, config, now = Date.now()) {
+const PLATFORM_STYLE = Object.freeze({
+  steam: { alias: 'steam', emoji: '🚂' }, epic: { alias: 'epic', emoji: '⚡' },
+  gog: { emoji: '🟣' }, itchio: { emoji: '🎨' }, xbox: { alias: 'xbox', emoji: '🟢' },
+  playstation: { alias: 'playstation', emoji: '🔵' }, switch: { alias: 'nintendo', emoji: '🔴' },
+  android: { emoji: '🤖' }, ios: { emoji: '📱' }, drmFree: { emoji: '🔓' }, other: { emoji: '📦' },
+});
+function platformPresentation(client) {
+  return Object.fromEntries(Object.entries(STORES).map(([key, label]) => {
+    const style = PLATFORM_STYLE[key];
+    const core = style.alias && client?.application?.emojis?.cache?.find((emoji) => emoji.name === `goliath_${style.alias}`);
+    // Reuse the existing repo-managed core emoji bank; never create duplicate assets.
+    const emoji = core ? require('../emojis/emojis').render(core, style.emoji) : style.emoji;
+    return [key, { label, emoji, fallback: style.emoji, imageUrl: core && /^\d{16,20}$/.test(core.id) ? `https://cdn.discordapp.com/emojis/${core.id}.${core.animated ? 'gif' : 'png'}` : null }];
+  }));
+}
+function buildListing(offers, config, now = Date.now(), platforms = platformPresentation()) {
   const pages = [];
   const unique = orderedOffers(offers, now);
+  const pricing = config.pricing || config.state?.pricing;
+  const pricingNote = pricing?.mode === 'converted' ? `\n≈ Estimated ${pricing.currency} values from USD; Frankfurter rate dated ${pricing.date}. These are not regional store prices.` : pricing?.mode === 'source' ? '\nOriginal values supplied in USD.' : '';
+  const attribution = '\n[Offers provided by GamerPower](https://www.gamerpower.com/)\nCheck claim requirements and regional availability. Missing expiry means unknown; source times have no assumed timezone.' + pricingNote;
   for (const section of SECTIONS) {
     const items = unique.filter((offer) => section.types.includes(offer.type));
     if (!items.length) continue;
-    let text = `**${items.length} offer${items.length === 1 ? '' : 's'} available**\n\n`;
-    // Assign a multi-platform offer to its first selected store exactly once.
+    const fields = [];
     for (const [key, label] of Object.entries(STORES)) {
       const group = items.filter((offer) => offer.stores.find((store) => config.stores.includes(store)) === key);
       if (!group.length) continue;
-      let heading = `**${label} · ${group.length}**\n`;
+      let value = '';
+      let part = 1;
+      const name = () => `${platforms[key]?.emoji || PLATFORM_STYLE[key].emoji} ${label} · ${group.length}${part > 1 ? ' (continued)' : ''}`;
       for (const offer of group) {
-        const entry = line(offer, config.state?.newSince, now, { ...config, omitDlcLabel: true }) + '\n\n';
-        if (text.length + heading.length + entry.length > 3200) {
-          pages.push({ ...section, description: text }); text = ''; heading = `**${label} (continued)**\n`;
-        }
-        text += heading + entry; heading = '';
+        let entry = line({ ...offer, title: shortTitle(offer.title).slice(0, 70) }, config.state?.newSince, now, { ...config, omitDlcLabel: true }) + '\n\n';
+        // Retain the link for extreme provider URLs/titles without cutting Markdown mid-link.
+        if (entry.length > 1000) entry = `› [${escape(shortTitle(offer.title).slice(0, 60))}](${offer.url})${price(offer, config)}\n\n`;
+        if (value && value.length + entry.length > 1000) { fields.push({ name: name(), value: value.trim(), inline: true }); value = ''; part++; }
+        value += entry;
       }
+      if (value) fields.push({ name: name(), value: value.trim(), inline: true });
     }
-    if (text) pages.push({ ...section, description: text });
+    const description = `**${items.length} offer${items.length === 1 ? '' : 's'} available**` + attribution;
+    let page = { ...section, description, fields: [] };
+    let size = section.title.length + description.length + 80;
+    for (const field of fields) {
+      const length = field.name.length + field.value.length;
+      if (page.fields.length && (page.fields.length >= 6 || size + length > 5700)) {
+        pages.push(page); page = { ...section, description, fields: [] }; size = section.title.length + description.length + 80;
+      }
+      page.fields.push(field); size += length;
+    }
+    if (page.fields.length) pages.push(page);
   }
-  if (!pages.length) pages.push({ ...SECTIONS[0], description: 'No matching free offers are currently listed.\n' });
-  const pricing = config.pricing || config.state?.pricing;
-  const pricingNote = pricing?.mode === 'converted' ? `\n≈ Estimated ${pricing.currency} values from USD; Frankfurter rate dated ${pricing.date}. These are not regional store prices.` : pricing?.mode === 'source' ? '\nOriginal values supplied in USD.' : '';
-  return pages.map((page, index) => ({ embeds: [{ title: page.title, color: page.color, description: page.description + '\n[Offers provided by GamerPower](https://www.gamerpower.com/)\nCheck claim requirements and regional availability. Missing expiry means unknown; source times have no assumed timezone.' + pricingNote, footer: { text: `Goliath Free Games · ${index + 1}/${pages.length}` } }], allowedMentions: { parse: [] } }));
+  if (!pages.length) pages.push({ ...SECTIONS[0], description: 'No matching free offers are currently listed.' + attribution, fields: [] });
+  return pages.map((page, index) => ({ embeds: [{ title: page.title, color: page.color, description: page.description, fields: page.fields, footer: { text: `Goliath Free Games · ${index + 1}/${pages.length}` } }], allowedMentions: { parse: [] } }));
 }
-module.exports = { NEW_MS, ENDING_MS, SECTIONS, escape, line, price, shortTitle, orderedOffers, buildListing };
+
+module.exports = { NEW_MS, ENDING_MS, SECTIONS, PLATFORM_STYLE, platformPresentation, escape, line, price, shortTitle, orderedOffers, buildListing };
