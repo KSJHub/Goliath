@@ -37,6 +37,8 @@ module.exports = [
       const result = await recoverQuarantines(client);
       console.log(`[QuarantineSystem] Startup recovery: ${result.guilds} guild(s), ${result.active} active, ${result.reapplied} re-applied, ${result.restored} restored, ${result.failed} failed.`);
       for (const guild of client.guilds.cache.values()) {
+        const audit = require('../../../../modules/securityStudio/verificationQuarantine').auditLegacyQuarantineSessions(guild.id);
+        if (audit.needsReview) console.warn(`[QuarantineSystem] ${audit.needsReview} legacy Verification case(s) need manual reconciliation in guild ${guild.id}.`);
         const access = await recoverInvestigationInitiatorAccess(guild);
         if (access.checked) console.log(`[InvestigationIsolation] Initiator access recovery in ${guild.id}: ${access.restored}/${access.checked} restored, ${access.failed} failed.`);
       }
