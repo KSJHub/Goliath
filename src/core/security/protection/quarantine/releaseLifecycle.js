@@ -92,6 +92,7 @@ async function restoreQuarantinedMember(guild, member, options = {}) {
   const state = getQuarantineState(guild.id);
   const snapshot = state.users?.[member.id];
   if (!snapshot) return { success: false, reason: 'No quarantine snapshot' };
+  if (!Array.isArray(snapshot.roles)) return { success: false, reason: 'Original role snapshot is missing; manual review required before release.' };
   const mode = getQuarantineMode(snapshot);
   if (mode === QUARANTINE_MODES.SECURITY && options.system !== true && String(options.restoredBy || '') !== String(guild.ownerId || '')) return { success: false, mode, reason: 'Full Security Isolation can only be cleared manually by the server owner.' };
   const releaseKey = `${guild.id}:${member.id}`;
