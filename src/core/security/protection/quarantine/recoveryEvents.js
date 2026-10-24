@@ -58,7 +58,7 @@ module.exports = [
     const after = channel.permissionOverwrites?.cache?.get(roleId);
     const deniedBefore = Boolean(before?.deny?.has(PermissionFlagsBits.ViewChannel));
     const deniedAfter = Boolean(after?.deny?.has(PermissionFlagsBits.ViewChannel));
-    if (deniedBefore === deniedAfter || deniedAfter) return;
+    if (deniedAfter) return;
     try {
       const result = await syncQuarantineIsolation(channel.guild);
       if (!result.success) console.warn(`[QuarantineSystem] Updated channel isolation incomplete for ${channel.id}: ${result.reason || 'Unknown failure'}`);
