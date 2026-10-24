@@ -79,7 +79,7 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
   
   
   try {
-    await channel.send({ content: `${staffPing}${staffPing ? '\n' : ''}${caseSummary(member, reason, refreshed, history)}`, allowedMentions: { roles: staffRoleIds, users: [member.id], parse: [] } });
+    await channel.send({ content: caseSummary(member), allowedMentions: { roles: staffRoleIds, users: [member.id], parse: [] } });
   } catch (error) {
     verificationStore.addSecurityHistory(guild.id, member.id, { type: 'quarantine_case_notification_failed', channelId: channel.id, reason: String(error?.message || error).slice(0, 300) });
     return { ok: false, channel, created: true, message: 'Private quarantine case created, but staff notification failed.' };
