@@ -49,6 +49,23 @@ module.exports = [
       if (!result.success) console.warn(`[QuarantineSystem] New channel isolation incomplete for ${channel.id}: ${result.reason || 'Unknown failure'}`);
     } catch (error) { console.warn(`[QuarantineSystem] Failed to secure new channel ${channel.id}:`, error.message); }
   } },
+  { name: Events.ThreadCreate, async execute(thread) {
+    if (!thread?.guild || !hasActiveQuarantine(thread.guild.id)) return;
+    const state = getQuarantineState(thread.guild.id);
+    for (const snapshot of Object.values(state.users || {})) {
+      const member = await thread.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
+      if (!member) continue;
+      const roleId = state.roleId;
+      if (!roleId || !member.roles.cache.has(roleId)) {
+        const result = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+        if (!result.success) console.warn(`[QuarantineSystem] Thread isolation recovery failed for ${member.id}: ${result.reason || result.error || 'Unknown failure'}`);
+      }
+      const { PermissionFlagsBits } = require('discord.js');
+      if (thread.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) {
+        console.warn(`[QuarantineSystem] Thread ${thread.id} remains visible to quarantined member ${member.id}; review parent channel and member permissions.`);
+      }
+    }
+  } },
   { name: Events.ChannelUpdate, async execute(previous, channel) {
     if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
     const roleId = getQuarantineState(channel.guild.id)?.roleId;
