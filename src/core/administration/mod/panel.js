@@ -447,9 +447,9 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     const selected = target ? quarantined.filter(([userId]) => userId === target.id) : quarantined;
     if (selected.length) {
       proceedingView.embed.addFields({
-        name: '🚨 Verification Quarantine · Entry Security',
+        name: '🔒 Quarantines',
         value: selected.slice(0, 8).map(([userId, session]) =>
-          `<@${userId}> • ${Number(session.failedAttempts || 0)} failures${session.quarantineChannelId ? ` • <#${session.quarantineChannelId}>` : ''}`
+          `<@${userId}> · ${Number(session.failedAttempts || 0)} failed checks${session.quarantineChannelId ? ` · <#${session.quarantineChannelId}>` : ''}`
         ).join('\\n').slice(0, 1024),
         inline: false,
       });
@@ -459,7 +459,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     if (canUseModAction(interaction.member, interaction.guild, 'view_cases')) {
       const caseButtons = selected.slice(0, 4).map(([userId]) =>
         new ButtonBuilder().setCustomId(`mod_verification_case:${userId}`)
-          .setLabel(`Review Verification · ${userId.slice(-6)}`).setStyle(ButtonStyle.Secondary));
+          .setLabel(`Review · ${userId.slice(-6)}`).setStyle(ButtonStyle.Secondary));
       if (caseButtons.length && components.length < 5) components.push(new ActionRowBuilder().addComponents(...caseButtons));
     }
   }
