@@ -40,7 +40,7 @@ const {
   listAppeals,
 } = require('./cases');
 const { getWarningCountForUser, syncExpiredWarningsToCases } = require('./warns');
-const { canUseModAction, getStaffDisplay, hasModPermission, fetchTarget } = require('./permissions');
+const { canUseModAction, hasModPermission, fetchTarget } = require('./permissions');
 const { getQuarantineState } = require('../../security/protection/quarantine');
 const caseProceeding = require('./caseProceeding');
 const verificationStore = require('../../../modules/securityStudio/verificationStore');
@@ -246,32 +246,32 @@ function validateDashboardComponents(components, view) {
 function buildActionsEmbed(interaction, target, stats, staffDisplay) {
   const overall = workspaceStats(interaction.guild.id);
   if (!target) return baseEmbed(interaction.client, COLORS.PRIMARY)
-    .setTitle('🛡️ Goliath Moderation')
+    .setTitle('🛡️ Moderation Hub')
     .setDescription([
-      'Select a member for actions, or open Cases to review records and quarantines.',
+      '**Select a member** to view their profile and moderation actions.',
       '',
-      `**Authority:** ${staffDisplay}`,
+      `**Your Role:** ${staffDisplay}`,
       '',
-      `**Cases** ${overall.activeCases}  ·  **Warnings** ${overall.activeWarnings}  ·  **Appeals** ${overall.pendingAppeals}  ·  **Quarantines** ${overall.activeVerificationCases}`,
+      `**Active Cases:** ${overall.activeCases}  •  **Warnings:** ${overall.activeWarnings}`,
+      `**Pending Appeals:** ${overall.pendingAppeals}  •  **Quarantines:** ${overall.activeVerificationCases}`,
     ].join('\n'));
 
-  const highestRole = target.roles?.highest && target.roles.highest.id !== interaction.guild.id ? `${target.roles.highest}` : 'No elevated role';
-  const timeout = targetHasActiveTimeout(target) ? `Active until ${timestamp(target.communicationDisabledUntilTimestamp, 'f')}` : 'None';
+  const highestRole = target.roles?.highest && target.roles.highest.id !== interaction.guild.id ? `${target.roles.highest}` : 'No assigned role';
+  const timeout = targetHasActiveTimeout(target) ? `Until ${timestamp(target.communicationDisabledUntilTimestamp, 'f')}` : 'None';
   const embed = baseEmbed(interaction.client, COLORS.PRIMARY)
-    .setTitle(`🛡️ Moderation Workspace • ${target.user?.tag || target.user?.username || target.id}`)
+    .setTitle('🛡️ Moderation Hub')
     .setDescription([
-      `**Active Member:** ${target.user}`,
-      `**Authority:** ${staffDisplay}`,
+      `**Member:** ${target.user}  •  \`${target.id}\``,
+      `**Your Role:** ${staffDisplay}`,
       '',
-      'Choose an action below, or open Intelligence and Cases for this member.',
+      'Select a moderation action below, or review this member’s cases and intelligence.',
     ].join('\n'))
     .addFields(
-      { name: 'Identity', value: `**Discord ID:** \`${target.id}\`\n**Account Created:** ${timestamp(target.user?.createdTimestamp)}\n**Joined Server:** ${timestamp(target.joinedTimestamp)}`, inline: false },
-      { name: 'Server Position', value: `**Highest Role:** ${highestRole}\n**Timeout:** ${timeout}`, inline: true },
-      { name: 'Moderation', value: `**Warnings:** ${stats?.warningCount ?? 0}\n**Cases:** ${stats?.caseCount ?? 0}`, inline: true },
-      { name: 'Latest Case', value: stats?.lastCaseSummary || 'No cases found.', inline: false },
-      { name: 'Safety', value: 'Authority, Discord hierarchy, target safety and confirmation requirements are rechecked when an action is submitted.', inline: false },
-    );
+      { name: '👤 Member Profile', value: `**Joined:** ${timestamp(target.joinedTimestamp)}\n**Account Age:** ${timestamp(target.user?.createdTimestamp)}\n**Highest Role:** ${highestRole}`, inline: false },
+      { name: '🛡️ Current Status', value: `**Warnings:** ${stats?.warningCount ?? 0}\n**Timeout:** ${timeout}`, inline: true },
+      { name: '📁 Case Records', value: `**Total:** ${stats?.caseCount ?? 0}\n**Latest:** ${stats?.lastCaseSummary || 'None'}`, inline: true },
+    )
+    .setFooter({ text: 'Permissions, hierarchy and confirmation are checked before every action.' });
   const avatar = target.user?.displayAvatarURL?.({ size: 256 });
   if (avatar) embed.setThumbnail(avatar);
   return embed;
@@ -437,7 +437,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
   await syncExpiredWarningsToCases(interaction.guild.id);
   const context = normalizeDashboardContext({ ...options, view }); context.adminOrigin = options.adminOrigin === true || interaction.message?.components?.some((row) => row.components?.some((component) => component.customId === 'admin:home')); let safeView = context.view;
   if (!canViewDashboardSection(interaction.member, interaction.guild, safeView)) safeView = DEFAULT_VIEW;
-  const targetId = target?.id || null; const stats = buildTargetStats(interaction.guild.id, target); const staff = getStaffDisplay(interaction.member, interaction.guild); const staffDisplay = `${staff.roleId ? `<@&${staff.roleId}>` : staff.label} • ${interaction.member}`;
+  const targetId = target?.id || null; const stats = buildTargetStats(interaction.guild.id, target); const assignedRole = interaction.member?.roles?.highest; const staffDisplay = assignedRole && assignedRole.id !== interaction.guild.id ? `<@&${assignedRole.id}>` : 'No assigned role';
   const embeds = []; const components = (safeView === 'analytics' || safeView === 'appeals') ? [] : [buildUserSelectRow()];
   if (safeView === 'actions') { embeds.push(buildActionsEmbed(interaction, target, stats, staffDisplay)); components.push(...buildActionRows(target, stats, interaction.member, interaction.guild, context)); }
   else if (safeView === 'intelligence') { embeds.push(buildIntelligenceEmbed(interaction, target, interaction.member, interaction.guild)); components.push(...buildIntelligenceRows(targetId, interaction.member, interaction.guild)); }
