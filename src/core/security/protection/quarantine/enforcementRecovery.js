@@ -53,7 +53,7 @@ async function enforceQuarantineOnMember(member, options = {}) {
 
   try {
     const role = await ensureQuarantineRole(guild, options);
-    const isolation = await syncQuarantineIsolation(guild, { ...options, role, targetMemberId: member.id, rollbackMemberAllowsOnFailure: false });
+    const isolation = await syncQuarantineIsolation(guild, { ...options, role, targetMemberId: member.id, allowedChannelIds: mode === QUARANTINE_MODES.INVESTIGATION && snapshot.interviewChannelId ? [snapshot.interviewChannelId] : [], rollbackMemberAllowsOnFailure: false });
     if (!isolation.success) return { success: false, mode, reason: 'Quarantine isolation sync failed.', isolation };
     if (isolation.memberViewAllowRestores?.length) {
       const latest = getQuarantineState(guild.id);
