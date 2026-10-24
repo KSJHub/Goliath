@@ -44,7 +44,10 @@ module.exports = [
   } },
   { name: Events.ChannelCreate, async execute(channel) {
     if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
-    try { await syncQuarantineIsolation(channel.guild); } catch (error) { console.warn(`[QuarantineSystem] Failed to secure new channel ${channel.id}:`, error.message); }
+    try {
+      const result = await syncQuarantineIsolation(channel.guild);
+      if (!result.success) console.warn(`[QuarantineSystem] New channel isolation incomplete for ${channel.id}: ${result.reason || 'Unknown failure'}`);
+    } catch (error) { console.warn(`[QuarantineSystem] Failed to secure new channel ${channel.id}:`, error.message); }
   } },
   { name: Events.ChannelUpdate, async execute(previous, channel) {
     if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
