@@ -78,7 +78,7 @@ async function restoreExpiredQuarantines(client) {
       let state = getQuarantineState(guild.id);
       for (const userId of Object.keys(state.users || {})) {
         const snapshot = state.users[userId];
-        if (!snapshot?.expiresAt || Date.now() < Number(snapshot.expiresAt)) continue;
+        if (snapshot?.autoRelease !== true || !snapshot.expiresAt || Date.now() < Number(snapshot.expiresAt)) continue;
         result.checked += 1;
         const member = await guild.members.fetch(userId).catch(() => null);
         if (!member) {
