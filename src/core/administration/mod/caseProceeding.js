@@ -150,17 +150,16 @@ function buildProceedingDashboard(interaction, target) {
   const latest = cases.slice(0, 5);
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(target ? `📂 Case Management • ${target.displayName || target.user.globalName || target.user.username || target.user.tag}` : '📂 Case Management')
+    .setTitle(target ? `📂 Cases · ${target.displayName || target.user.globalName || target.user.username || target.user.tag}` : '📂 Cases')
     .setDescription(target
       ? ['Build the internal case file here. Only a **published record** is visible to the member.', '', `**Subject:** ${target.user} • \`${target.id}\``].join('\n')
-      : 'Select a member to open their case-management workspace.')
+      : 'Review case files and entry-security quarantines. Select a member to manage their records.')
     .addFields(
-      { name: '🔎 Investigating', value: `**${counts.investigation}**`, inline: true },
-      { name: '⚖️ Review Queue', value: `**${counts.review}**`, inline: true },
-      { name: '📜 Published', value: `**${counts.published}**`, inline: true },
-      { name: 'Case Workflow', value: 'Investigation → Review → Decision → Published record → Appeal', inline: false },
+      { name: 'Investigating', value: `**${counts.investigation}**`, inline: true },
+      { name: 'In Review', value: `**${counts.review}**`, inline: true },
+      { name: 'Published', value: `**${counts.published}**`, inline: true },
     )
-    .setFooter({ text: 'Private staff workspace • unpublished work is never shown to the member' })
+    .setFooter({ text: 'Staff only · Draft cases are private' })
     .setTimestamp();
   if (latest.length) embed.addFields({
     name: 'Recent Case Files',
