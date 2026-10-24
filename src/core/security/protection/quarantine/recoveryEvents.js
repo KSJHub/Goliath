@@ -96,6 +96,15 @@ module.exports = [
       }
     } catch (error) { console.warn(`[QuarantineSystem] Failed join enforcement for ${member.id}:`, error.message); }
   } },
+  { name: Events.GuildMemberUpdate, async execute(before, member) {
+    if (!member?.guild || !getQuarantineState(member.guild.id)?.users?.[member.id]) return;
+    const quarantineRoleId = getQuarantineState(member.guild.id)?.roleId;
+    if (!quarantineRoleId) return;
+    const roles = member.roles?.cache;
+    if (!roles || (roles.has(quarantineRoleId) && roles.filter(role => role.id !== member.guild.id && role.id !== quarantineRoleId).size === 0)) return;
+    const result = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+    if (!result.success) console.warn(`[QuarantineSystem] Member role recovery incomplete for ${member.id}: ${result.reason || result.error || 'Unknown failure'}`);
+  } },
   { name: Events.GuildRoleDelete, async execute(role) {
     if (!role?.guild || !hasActiveQuarantine(role.guild.id)) return;
     const state = getQuarantineState(role.guild.id);
