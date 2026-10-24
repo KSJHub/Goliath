@@ -301,4 +301,20 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
   return { ok: true, rejected: true, member, message: 'Member rejected from Verification quarantine.' };
 }
 
-module.exports = { ensureQuarantineCase, closeQuarantineCase, resolveQuarantineCase, escalateToModHub, reconcileModerationRelease };
+function auditLegacyQuarantineSessions(guildId) {
+  const sessions = verificationStore.getVerificationSection(guildId)?.sessions || {};
+  const users = getQuarantineState(guildId)?.users || {};
+  const cases = [];
+  for (const [userId, session] of Object.entries(sessions)) {
+    if (!['quarantined', 'review'].includes(session?.state)) continue;
+    const snapshot = users[userId];
+    const reason = !snapshot ? 'legacy_without_shared_snapshot'
+      : !Array.isArray(snapshot.roles) ? 'missing_original_roles'
+      : session.quarantineChannelId && snapshot.interviewChannelId && String(session.quarantineChannelId) !== String(snapshot.interviewChannelId) ? 'room_mismatch'
+      : null;
+    if (reason) cases.push({ userId, reason, verificationRoomId: session.quarantineChannelId || null, sharedRoomId: snapshot?.interviewChannelId || null });
+  }
+  return { checked: Object.keys(sessions).length, needsReview: cases.length, cases };
+}
+
+module.exports = { ensureQuarantineCase, closeQuarantineCase, resolveQuarantineCase, escalateToModHub, reconcileModerationRelease, auditLegacyQuarantineSessions };
