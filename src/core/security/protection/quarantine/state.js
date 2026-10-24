@@ -100,6 +100,53 @@ function getQuarantineMode(snapshot = {}) {
   return QUARANTINE_MODES.SECURITY;
 }
 
+function hasOriginalQuarantineRoles(snapshot = {}) {
+  return Array.isArray(snapshot?.roles) && snapshot.roles.every(id => typeof id === 'string' && /^\d{15,25}$/.test(id));
+}
+
+function isAutomaticQuarantineReleaseDue(snapshot = {}) {
+  const expiresAt = Number(snapshot?.expiresAt);
+  return snapshot?.autoRelease === true && Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() >= expiresAt;
+}
+
+// Read-only reconciliation: never infer original roles or migrate a legacy case.
+function auditQuarantineSnapshots(sessions = {}, users = {}) {
+  const roomOwners = new Map();
+  const link = (roomId, userId) => {
+    if (!roomId) return;
+    const key = String(roomId);
+    if (!roomOwners.has(key)) roomOwners.set(key, new Set());
+    roomOwners.get(key).add(userId);
+  };
+  for (const [userId, snapshot] of Object.entries(users)) link(snapshot?.interviewChannelId, userId);
+  for (const [userId, session] of Object.entries(sessions)) {
+    if (session?.state === 'quarantined' || (session?.state === 'review' && (session.quarantineChannelId || session.moderationIsolationMode))) link(session.quarantineChannelId, userId);
+  }
+  const cases = [];
+  for (const userId of new Set([...Object.keys(sessions), ...Object.keys(users)])) {
+    const session = sessions[userId];
+    const snapshot = users[userId];
+    const activeSession = session?.state === 'quarantined' || (session?.state === 'review' && (snapshot || session.quarantineChannelId || session.moderationIsolationMode));
+    if (!activeSession && !snapshot) continue; // A normal staff-approval review is not a legacy quarantine.
+    const reasons = [];
+    if (!snapshot) reasons.push('legacy_without_shared_snapshot');
+    else {
+      if (snapshot.allowedChannelIds?.length) reasons.push('legacy_extra_channel_access');
+      if (!Array.isArray(snapshot.roles)) reasons.push('missing_original_roles');
+      else if (!hasOriginalQuarantineRoles(snapshot)) reasons.push('invalid_original_roles');
+      if (getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION && !snapshot.interviewChannelId) reasons.push('missing_shared_room');
+      if (session?.quarantineChannelId && snapshot.interviewChannelId && String(session.quarantineChannelId) !== String(snapshot.interviewChannelId)) reasons.push('room_mismatch');
+      if (session?.moderationIsolationMode && session.moderationIsolationMode !== getQuarantineMode(snapshot)) reasons.push('isolation_mode_mismatch');
+      if ((snapshot.source === 'verification' && !activeSession) || (session?.moderationIsolationMode && !['quarantined', 'review'].includes(session.state))) reasons.push('verification_state_conflict');
+    }
+    const rooms = [activeSession && session?.quarantineChannelId, snapshot?.interviewChannelId].filter(Boolean).map(String);
+    const duplicateRoomIds = [...new Set(rooms.filter(id => roomOwners.get(id)?.size > 1))];
+    if (duplicateRoomIds.length) reasons.push('duplicate_room_assignment');
+    if (reasons.length) cases.push({ userId, reason: reasons[0], reasons, verificationState: session?.state || null, verificationRoomId: session?.quarantineChannelId || null, sharedRoomId: snapshot?.interviewChannelId || null, duplicateRoomIds });
+  }
+  return { checked: Object.keys(sessions).length, sharedChecked: Object.keys(users).length, needsReview: cases.length, cases };
+}
+
 module.exports = {
   DEFAULT_QUARANTINE_ROLE_NAME,
   DEFAULT_INVESTIGATION_CATEGORY_NAME,
@@ -107,6 +154,9 @@ module.exports = {
   MAX_PENDING_INVESTIGATION_ROOM_CLEANUPS,
   QUARANTINE_MODES,
   emptyQuarantineState,
+  auditQuarantineSnapshots,
+  isAutomaticQuarantineReleaseDue,
+  hasOriginalQuarantineRoles,
   normalizeUsers,
   normalizeArchivedRooms,
   normalizePendingRoomCleanups,

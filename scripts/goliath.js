@@ -2613,7 +2613,7 @@ async function main() {
 }
 
 
-function quarantineContainmentAudit() {
+async function quarantineContainmentAudit() {
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -2642,11 +2642,323 @@ required(recovery, 'Events.GuildMemberUpdate', 'Role changes must be recontained
 required(release, 'Array.isArray(snapshot.roles)', 'Release must reject missing original-role snapshots');
 required(release, 'releasesInProgress', 'Release transactions must be guarded against concurrent recovery');
 required(verification, 'auditLegacyQuarantineSessions', 'Legacy verification cases must be reported');
-required(verification, 'legacy_without_shared_snapshot', 'Missing legacy shared snapshots must be flagged');
-required(verification, 'missing_original_roles', 'Missing original roles must be flagged');
-console.log('Quarantine containment contract audit passed (static checks only; live Discord permissions still require testing).');
+required(read('src/core/security/protection/quarantine/state.js'), 'legacy_without_shared_snapshot', 'Missing legacy shared snapshots must be flagged');
+required(read('src/core/security/protection/quarantine/state.js'), 'missing_original_roles', 'Missing original roles must be flagged');
+// Load the real modules with explicit boundaries; fixtures never touch guild files or Discord.
+const { createRequire } = require('node:module');
+function load(file, mocks) {
+  const filename = path.join(root, file);
+  const localRequire = createRequire(filename);
+  const loaded = { exports: {} };
+  const fixtureRequire = id => {
+    if (Object.hasOwn(mocks, id)) return mocks[id];
+    if (id === 'discord.js' || id.startsWith('node:')) return localRequire(id);
+    throw new Error(`Unmocked quarantine audit dependency: ${file} -> ${id}`);
+  };
+  new Function('require', 'module', 'exports', '__filename', '__dirname', read(file))(fixtureRequire, loaded, loaded.exports, filename, path.dirname(filename));
+  return loaded.exports;
+}
+const base = 'src/core/security/protection/quarantine/';
+const { Collection, PermissionsBitField, PermissionFlagsBits: P, ChannelType, Events } = require('discord.js');
+const stateApi = load(base + 'state.js', { '../../../guild/guildManager': {}, '../../../../server/sockets/socketHub': {} });
+const { QUARANTINE_MODES, getQuarantineMode, auditQuarantineSnapshots, isAutomaticQuarantineReleaseDue, hasOriginalQuarantineRoles } = stateApi;
+const uid = '111111111111111111', other = '222222222222222222', originalRole = '333333333333333333';
+const sessions = { [uid]: { state: 'quarantined', quarantineChannelId: 'legacy' }, approval: { state: 'review' } };
+const snapshots = { [uid]: { mode: 'investigation', source: 'verification', interviewChannelId: 'shared' }, [other]: { mode: 'investigation', roles: [originalRole], interviewChannelId: 'shared' } };
+const before = JSON.stringify({ sessions, snapshots });
+const report = auditQuarantineSnapshots(sessions, snapshots);
+assert.equal(report.needsReview, 2);
+assert(report.cases.find(c => c.userId === uid).reasons.includes('missing_original_roles'));
+assert(report.cases.find(c => c.userId === uid).reasons.includes('room_mismatch'));
+assert(report.cases.every(c => c.reasons.includes('duplicate_room_assignment')));
+assert.equal(JSON.stringify({ sessions, snapshots }), before, 'Reconciliation must be read-only');
+assert.equal(auditQuarantineSnapshots({ approval: { state: 'review' } }, {}).needsReview, 0);
+assert.equal(auditQuarantineSnapshots(sessions, {}).cases[0].reason, 'legacy_without_shared_snapshot');
+assert(auditQuarantineSnapshots({ [uid]: { state: 'verified' } }, { [uid]: { source: 'verification', mode: 'investigation', roles: [], interviewChannelId: 'room' } }).cases[0].reasons.includes('verification_state_conflict'));
+assert.equal(auditQuarantineSnapshots({ [uid]: { state: 'quarantined' } }, { [uid]: { mode: 'investigation', roles: [] } }).cases[0].reason, 'missing_shared_room');
+assert.equal(auditQuarantineSnapshots({}, { [uid]: { mode: 'security', roles: [null] } }).cases[0].reason, 'invalid_original_roles');
+assert.equal(isAutomaticQuarantineReleaseDue({ expiresAt: 1 }), false);
+assert.equal(isAutomaticQuarantineReleaseDue({ expiresAt: 'invalid', autoRelease: true }), false);
+assert.equal(isAutomaticQuarantineReleaseDue({ expiresAt: 1, autoRelease: true }), true);
+
+function fixture(snapshot = {}) {
+  let state = { roleId: 'quarantine', users: { [uid]: { memberId: uid, mode: 'investigation', roles: [originalRole], interviewChannelId: 'room', ...snapshot } } };
+  const mutations = [];
+  const role = { id: 'quarantine', editable: true, position: 1 };
+  const guild = { id: 'guild', ownerId: 'owner', name: 'Fixture', roles: { cache: new Collection([[role.id, role], [originalRole, { id: originalRole, position: 2 }]]), fetch: async () => guild.roles.cache }, channels: { cache: new Collection() } };
+  const member = { id: uid, guild, user: { tag: 'Fixture' }, roles: { cache: new Collection([[role.id, role]]), set: async ids => { mutations.push(['roles', ...ids]); member.roles.cache = new Collection(ids.map(id => [id, guild.roles.cache.get(id) || { id }])); return member; } } };
+  guild.members = { me: { id: 'bot', roles: { highest: { position: 10 } }, permissions: new PermissionsBitField([P.ManageRoles, P.ManageChannels]) }, fetch: async () => member };
+  const api = { QUARANTINE_MODES, getQuarantineMode, isAutomaticQuarantineReleaseDue, hasOriginalQuarantineRoles, auditQuarantineSnapshots, getQuarantineState: () => structuredClone(state), saveQuarantineState: (g, value) => { state = structuredClone(value); }, emitCurrentQuarantineState: () => {}, normalizeArchivedRooms: v => v, normalizePendingRoomCleanups: v => v };
+  return { guild, member, role, api, mutations, get state() { return state; } };
+}
+// Legacy resolution cannot reconstruct already-removed roles or create a fresh room.
+{
+  const f = fixture();
+  delete f.state.users[uid];
+  const session = { state: 'quarantined', quarantineChannelId: 'legacy' };
+  const noMutation = () => { throw Error('Legacy audit attempted a mutation'); };
+  const verificationApi = load('src/modules/securityStudio/verificationQuarantine.js', {
+    './verificationStore': { getSession: () => session, getVerificationSection: () => ({ sessions: { [uid]: session } }), normalizeSettings: () => ({ roles: {} }), upsertSession: noMutation, addSecurityHistory: noMutation },
+    '../../core/guild/guildManager': { isModuleEnabled: () => true },
+    '../../core/security/protection/quarantine/state': stateApi,
+    '../../core/security/protection/quarantine': { ...f.api, quarantineMember: noMutation },
+  });
+  assert.equal((await verificationApi.ensureQuarantineCase(f.guild, f.member)).needsReview, true);
+  for (const action of ['release', 'reject', 'escalate']) assert.equal((await verificationApi.resolveQuarantineCase(f.guild, uid, action, 'staff')).needsReview, true);
+  assert.equal((await verificationApi.escalateToModHub(f.guild, f.member, 'staff')).needsReview, true);
+  assert.equal(verificationApi.auditLegacyQuarantineSessions(f.guild.id).needsReview, 1);
+  assert.equal(f.mutations.length, 0);
+}
+// Effective permission checks include threads, fresh roles and the authorised room.
+{
+  const f = fixture();
+  const access = (id, permissions) => ({ id, name: id, type: ChannelType.GuildText, permissionsFor: () => new PermissionsBitField(permissions) });
+  const room = access('room', [P.ViewChannel, P.SendMessages, P.ReadMessageHistory]);
+  const outside = access('outside', []);
+  f.guild.channels.cache = new Collection([[room.id, room], [outside.id, outside]]);
+  f.guild.channels.fetch = async () => f.guild.channels.cache;
+  let threads = new Collection();
+  f.guild.channels.fetchActiveThreads = async () => ({ threads });
+  const isolationApi = load(base + 'isolation.js', { './state': f.api, './roleManager': {} });
+  assert.equal((await isolationApi.verifyMemberContainment(f.guild, f.member, ['room'])).success, true);
+  threads.set('thread', access('thread', [P.ViewChannel]));
+  assert.equal((await isolationApi.verifyMemberContainment(f.guild, f.member, ['room'])).leaks[0].channelId, 'thread');
+  threads.clear();
+  room.permissionsFor = () => new PermissionsBitField([P.ViewChannel]);
+  assert.equal((await isolationApi.verifyMemberContainment(f.guild, f.member, ['room'])).success, false);
+  room.permissionsFor = () => new PermissionsBitField([P.ViewChannel, P.SendMessages, P.ReadMessageHistory]);
+  f.guild.channels.fetchActiveThreads = async () => { throw Error('Thread inventory unavailable'); };
+  assert.equal((await isolationApi.verifyMemberContainment(f.guild, f.member, ['room'])).success, false);
+  f.guild.channels.fetchActiveThreads = async () => ({ threads });
+  f.guild.channels.fetch = async () => { throw Error('Channel inventory unavailable'); };
+  assert.equal((await isolationApi.verifyMemberContainment(f.guild, f.member, ['room'])).success, false);
+  assert.equal((await isolationApi.syncQuarantineIsolation(f.guild, { role: f.role })).success, false);
+  assert.equal((await isolationApi.restoreMemberViewAllows(f.guild, uid, ['uncached'])).failed.length, 1);
+  f.guild.channels.fetch = async () => { throw Object.assign(Error('Deleted'), { code: 10003 }); };
+  assert.equal((await isolationApi.restoreMemberViewAllows(f.guild, uid, ['deleted'])).failed.length, 0);
+}
+// Execute the real release transaction, permission preflight and shared operation guard.
+{
+  const f = fixture();
+  const roleApi = load(base + 'memberLifecycle.js', { './state': f.api, './roleManager': {}, './isolation': {}, './investigationRooms': {}, '../../../../owner/dev/DevOverrideManager': {}, '../core': {} });
+  const releaseApi = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': { ensureQuarantineRole: async () => f.role }, './memberLifecycle': roleApi,
+    './isolation': { restoreMemberViewAllows: async () => ({ restored: [], failed: [] }), recontainMemberViewAllows: async () => ({ contained: [], failed: [] }), verifyMemberContainment: async () => ({ success: true }) },
+    '../../../../modules/securityStudio/verificationQuarantine': { reconcileModerationRelease: async () => ({ ok: true }) },
+  });
+  f.state.users[uid].roles = undefined;
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).success, false);
+  f.state.users[uid].roles = [null];
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).success, false);
+  f.state.users[uid].roles = [originalRole];
+  f.state.users[uid].mode = 'security';
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).success, false);
+  assert.equal(f.mutations.length, 0);
+  f.state.users[uid].mode = 'investigation';
+  f.guild.roles.cache.get(originalRole).position = 20;
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).success, false);
+  assert.equal(f.mutations.length, 0);
+  f.guild.roles.cache.get(originalRole).position = 2;
+  delete f.state.users[uid].interviewChannelId;
+  let unblock, entered;
+  const gate = new Promise(resolve => { unblock = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  const set = f.member.roles.set;
+  f.member.roles.set = async ids => { entered(); await gate; return set(ids); };
+  const pending = releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' });
+  await started;
+  assert.equal(releaseApi.isQuarantineReleaseInProgress(f.guild.id, uid), true);
+  assert.equal(releaseApi.tryBeginQuarantineOperation(f.guild.id, uid), false);
+  assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).busy, true);
+  unblock();
+  assert.equal((await pending).success, true);
+  assert.deepEqual(f.mutations, [['roles', originalRole]]);
+  assert.equal(f.state.users[uid], undefined);
+  assert.equal(releaseApi.isQuarantineReleaseInProgress(f.guild.id, uid), false);
+}
+// Partial channel restoration rolls back and preserves every original-role record.
+{
+  const f = fixture({ memberViewAllowRestores: ['outside'] });
+  const original = JSON.stringify(f.state.users[uid]);
+  const releaseApi = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': { ensureQuarantineRole: async () => f.role },
+    './memberLifecycle': { getRestorableRoleIds: async () => ({ restored: [originalRole], skipped: [] }) },
+    './isolation': { restoreMemberViewAllows: async () => ({ restored: ['outside'], failed: [{ channelId: 'blocked' }] }), recontainMemberViewAllows: async () => ({ contained: ['outside'], failed: [] }), verifyMemberContainment: async () => ({ success: true }) },
+  });
+  const result = await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' });
+  assert.equal(result.success, false);
+  assert.equal(result.rollback.verification.success, true);
+  assert.deepEqual(f.mutations, [['roles', originalRole], ['roles', 'quarantine']]);
+  assert.equal(JSON.stringify(f.state.users[uid]), original);
+  assert.equal((await releaseApi.clearExpiredAbsentMember(f.guild, uid, f.state)).cleared, false);
+}
+// Startup, scheduled expiry and rejoin enforcement share the same explicit release policy.
+{
+  const f = fixture({ expiresAt: 1, autoRelease: false });
+  const original = JSON.stringify(f.state.users[uid].roles);
+  let restored = 0, cleared = 0, roomCalls = 0, syncingFails = false, locked = false;
+  const recovery = load(base + 'enforcementRecovery.js', { './state': f.api, '../../../../owner/auditIntelligence/auditIntelligence': {},
+    './roleManager': { ensureQuarantineRole: async () => f.role },
+    './isolation': { syncQuarantineIsolation: async () => ({ success: !syncingFails, memberViewAllowRestores: ['outside'] }), verifyMemberContainment: async () => ({ success: true }) },
+    './investigationRooms': { ensureInvestigationRoomForSnapshot: async () => { roomCalls++; return { id: 'room' }; } },
+    './releaseLifecycle': { tryBeginQuarantineOperation: () => { if (locked) return false; locked = true; return true; }, endQuarantineOperation: () => { locked = false; }, restoreQuarantinedMember: async () => { restored++; return { success: true }; }, clearExpiredAbsentMember: async () => { cleared++; return { success: true }; }, retryPendingInvestigationRoomCleanups: async () => ({ checked: 0, archived: 0, failed: 0 }) },
+  });
+  assert.equal((await recovery.recoverGuildQuarantine(f.guild)).reapplied, 1);
+  assert.equal(restored, 0);
+  assert.equal(JSON.stringify(f.state.users[uid].roles), original);
+  assert.equal((await recovery.enforceQuarantineOnMember(f.member)).success, true); // Rejoin / role recovery.
+  assert.equal(roomCalls, 2);
+  locked = true;
+  assert.equal((await recovery.enforceQuarantineOnMember(f.member)).busy, true);
+  locked = false; syncingFails = true;
+  assert.equal((await recovery.enforceQuarantineOnMember(f.member)).success, false);
+  assert.deepEqual(f.state.users[uid].memberViewAllowRestores, ['outside']);
+  assert.equal(locked, false);
+  const client = { guilds: { cache: new Collection([[f.guild.id, f.guild]]) } };
+  assert.equal((await recovery.restoreExpiredQuarantines(client)).checked, 0);
+  f.guild.members.fetch = async () => { throw Object.assign(Error('Unknown Member'), { code: 10007 }); };
+  await recovery.recoverGuildQuarantine(f.guild);
+  assert.equal(cleared, 0);
+  f.state.users[uid].autoRelease = true;
+  assert.equal((await recovery.recoverGuildQuarantine(f.guild)).restored, 1);
+  assert.equal(cleared, 1);
+  f.guild.members.fetch = async () => { throw Error('Discord unavailable'); };
+  await assert.rejects(recovery.recoverGuildQuarantine(f.guild), /Discord unavailable/);
+  assert.equal(cleared, 1);
+  f.guild.members.fetch = async () => f.member;
+  assert.equal((await recovery.recoverGuildQuarantine(f.guild)).restored, 1);
+  assert.equal(restored, 1);
+}
+// Simultaneous initial quarantine requests cannot snapshot stripped roles or create two rooms.
+{
+  const f = fixture();
+  delete f.state.users[uid];
+  f.member.roles.cache = new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]);
+  let unblock, entered, created = 0;
+  const gate = new Promise(resolve => { unblock = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  const locks = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {} });
+  const lifecycle = load(base + 'memberLifecycle.js', { './state': f.api,
+    '../../../../owner/dev/DevOverrideManager': { shouldBlockOwnerDestructiveAction: () => false }, '../core': { canManageTargetMember: () => ({ allowed: true }) },
+    './roleManager': { ensureQuarantineRole: async () => { entered(); await gate; return f.role; } },
+    './isolation': { syncQuarantineIsolation: async () => ({ success: true, memberViewAllowRestores: [] }), verifyMemberContainment: async () => ({ success: true }) },
+    './investigationRooms': { createInvestigationRoom: async () => { created++; return { id: 'room' }; } }, './releaseLifecycle': locks,
+  });
+  const pending = lifecycle.quarantineMember(f.guild, f.member, { quarantinedBy: 'staff' });
+  await started;
+  assert.equal((await lifecycle.quarantineMember(f.guild, f.member, { quarantinedBy: 'staff' })).busy, true);
+  unblock();
+  assert.equal((await pending).success, true);
+  assert.equal(created, 1);
+  assert.deepEqual(f.state.users[uid].roles, [originalRole]);
+  assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, uid), false);
+}
+// Concurrent recovery and stale event snapshots must reuse the canonical room.
+{
+  const f = fixture();
+  f.guild.roles.cache = new Collection();
+  f.guild.channels.cache = new Collection();
+  f.guild.channels.cache.find = () => null;
+  let creates = 0;
+  const channel = { id: 'replacement', type: ChannelType.GuildText, permissionOverwrites: { edit: async () => {} }, send: async () => {} };
+  f.guild.channels.create = async options => { if (options.type === ChannelType.GuildText) { creates++; await Promise.resolve(); } return { ...channel, id: options.type === ChannelType.GuildCategory ? 'category' : channel.id, name: options.name }; };
+  f.guild.channels.fetch = async () => { throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
+  const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': { quarantineDenyOverwrite: () => ({ ViewChannel: false }), investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true }) } });
+  const stale = structuredClone(f.state.users[uid]);
+  const repaired = await Promise.all([rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale)]);
+  assert.equal(creates, 1);
+  assert.equal(repaired[0].id, repaired[1].id);
+  f.guild.channels.cache.set(channel.id, channel);
+  await rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale);
+  assert.equal(creates, 1);
+  f.guild.channels.cache.clear();
+  f.guild.channels.fetch = async () => { throw Error('Discord unavailable'); };
+  await assert.rejects(rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), /Discord unavailable/);
+  assert.equal(creates, 1);
+  delete f.state.users[uid];
+  assert.equal(await rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), null);
+}
+// Management controls cannot grant outside access or restore a revoked investigator's access.
+{
+  const f = fixture({ allowedChannelIds: ['one', 'two'] });
+  const accessWrites = [];
+  const one = { id: 'one', permissionOverwrites: { edit: async (id, value) => accessWrites.push(value.ViewChannel) } };
+  const two = { id: 'two', permissionOverwrites: { edit: async (id, value) => { accessWrites.push(value.ViewChannel); throw Error('Permission denied'); } } };
+  f.guild.channels.cache.set('one', one).set('two', two);
+  const access = load('src/core/administration/mod/investigationAccess.js', { '../../guild/guildManager': {}, '../../security/protection/quarantine': f.api, '../../../owner/auditIntelligence/auditIntelligence': {} });
+  const interaction = { guild: f.guild, user: { id: 'staff', tag: 'Staff' } };
+  await assert.rejects(access.updateAccess(interaction, f.member, 'add', one), /only to the assigned/);
+  assert.equal(accessWrites.length, 0);
+  await assert.rejects(access.updateAccess(interaction, f.member, 'clear'), /Permission denied/);
+  assert.deepEqual(accessWrites, [false, false], 'Failed cleanup must not regrant outside access');
+  f.guild.channels.cache.delete('two');
+  f.guild.channels.fetch = async () => { throw Error('Discord lookup unavailable'); };
+  await assert.rejects(access.updateAccess(interaction, f.member, 'clear'), /Discord lookup unavailable/);
+  assert.deepEqual(f.state.users[uid].allowedChannelIds, ['one', 'two']);
+  assert(auditQuarantineSnapshots({}, f.state.users).cases[0].reasons.includes('legacy_extra_channel_access'));
+  let authorised = true, grants = 0;
+  f.guild.channels.cache.set('room', { id: 'room', permissionOverwrites: { edit: async () => { grants++; } } });
+  f.guild.members.fetch = async () => ({ id: other });
+  const controls = load('src/core/administration/mod/quarantineInteractions.js', { '../../../core/ui/interactionResponse': {}, './permissions': { canUseModAction: () => authorised }, './storage': {}, '../../security/protection/quarantine': f.api, './panel': {}, './investigationAccess': access });
+  assert.equal((await controls.ensureInitiatorInterviewAccess(f.guild, 'room', other)).success, true);
+  assert.equal(grants, 1);
+  authorised = false;
+  assert.equal((await controls.ensureInitiatorInterviewAccess(f.guild, 'room', other)).success, false);
+  authorised = true;
+  f.state.users[other] = { mode: 'investigation', roles: [], interviewChannelId: 'different-room' };
+  assert.equal((await controls.ensureInitiatorInterviewAccess(f.guild, 'room', other)).success, false);
+  assert.equal(grants, 1);
+}
+// Real event routing: member joins, new/updated channels, deleted rooms and threads.
+{
+  const f = fixture();
+  let recoveries = 0, roomRepairs = 0, removals = 0, expired = false, releasing = false;
+  const events = load(base + 'recoveryEvents.js', { './state': f.api, './roleManager': { ensureQuarantineRole: async () => f.role }, './isolation': { syncQuarantineIsolation: async () => ({ success: true }) },
+    './investigationRooms': { ensureInvestigationRoomForSnapshot: async () => { roomRepairs++; return { id: 'room' }; } },
+    './enforcementRecovery': { enforceQuarantineOnMember: async () => { recoveries++; return { success: true, expired, interviewChannelId: 'room' }; } },
+    './expiryScheduler': {}, './releaseLifecycle': { isQuarantineReleaseInProgress: () => releasing }, '../../../administration/mod/quarantineInteractions': {},
+  });
+  const event = name => events.find(e => e.name === name).execute;
+  const outside = { id: 'outside', guild: f.guild, permissionsFor: () => new PermissionsBitField([P.ViewChannel]), members: { remove: async () => { removals++; } } };
+  await event(Events.GuildMemberAdd)(f.member);
+  assert.equal(recoveries, 1); assert.equal(roomRepairs, 1);
+  expired = true;
+  await event(Events.GuildMemberAdd)(f.member);
+  assert.equal(roomRepairs, 1, 'Expired rejoin must not recreate a released room');
+  expired = false;
+  await event(Events.ChannelCreate)(outside);
+  await event(Events.ChannelUpdate)({}, outside);
+  await event(Events.ThreadUpdate)({}, outside);
+  await event(Events.ThreadCreate)(outside);
+  await event(Events.ThreadMembersUpdate)(new Collection([[uid, { id: uid }]]), new Collection(), outside);
+  assert.equal(removals, 1);
+  releasing = true;
+  await event(Events.ThreadMembersUpdate)(new Collection([[uid, { id: uid }]]), new Collection(), outside);
+  assert.equal(removals, 1, 'Release must not race thread membership containment');
+  releasing = false;
+  await event(Events.ChannelDelete)({ id: 'room', guild: f.guild });
+  f.member.roles.cache.set(originalRole, { id: originalRole });
+  await event(Events.GuildMemberUpdate)({}, f.member);
+  assert(recoveries >= 9);
+}
+console.log('Quarantine containment audit passed: read-only legacy reconciliation, effective permissions/threads, release rollback/locking, expiry policy, restart/rejoin/events and room reuse (mocked Discord; live permissions not verified).');
 
 return true;
+}
+
+function legacyQuarantineAudit() {
+  const { getRuntimePaths, resolveBotMode } = require('../src/config/runtimePaths');
+  if (resolveBotMode(process.env.BOT_MODE) !== 'dev') throw new Error('Legacy quarantine audit is restricted to DEV.');
+  const directory = getRuntimePaths('dev').guilds;
+  if (!fs.existsSync(directory)) { console.error('DEV guild data is unavailable in this checkout; no live cases were audited.'); return false; }
+  const { auditQuarantineSnapshots } = require('../src/core/security/protection/quarantine/state');
+  const { getRoutedSection } = require('../src/core/guild/sectionRouting');
+  const reports = [];
+  for (const entry of fs.readdirSync(directory).filter(name => /^\d{16,20}\.json$/.test(name)).sort()) {
+    const raw = JSON.parse(fs.readFileSync(path.join(directory, entry), 'utf8'));
+    reports.push({ guildId: entry.slice(0, -5), ...auditQuarantineSnapshots(raw.modules?.verification?.sessions || {}, getRoutedSection(raw, 'security', {}).quarantine?.users || {}) });
+  }
+  console.log(JSON.stringify({ readOnly: true, mode: 'dev', guilds: reports.length, needsReview: reports.reduce((sum, report) => sum + report.needsReview, 0), reports }, null, 2));
+  if (!reports.length) { console.error('No DEV guild configurations found; live cases were not audited.'); return false; }
+  return reports.every(report => report.needsReview === 0);
 }
 
 async function dependencyRuntimeAudit() {
@@ -2903,6 +3215,7 @@ async function freeGamesAudit() {
 const commands = {
   'free-games': freeGamesAudit,
   'quarantine-containment': quarantineContainmentAudit,
+  'legacy-quarantine': legacyQuarantineAudit,
   'dependency-runtime': dependencyRuntimeAudit,
   summary: developmentSummaryCommand,
   doctor: () => doctor(process.argv[3]), audit: auditCommand, 'dashboard-imports': dashboardImportAudit, 'backend-imports': backendRelativeImportAudit, 'runtime-contracts': runtimeContractsAudit, 'guild-variable-source': guildVariableSourceAudit, 'internal-version-naming': internalVersionNamingAudit, 'verification-lifecycle': verificationLifecycleAudit, 'embed-studio-preview': embedStudioPreviewAudit, 'embed-media-alignment': embedMediaAlignmentAudit, 'embed-session-persistence': embedSessionPersistenceAudit, 'embed-state-persistence-boundary': embedStatePersistenceBoundaryAudit, 'admin-module-routing': adminModuleRoutingAudit, 'embed-graphic-headers': embedGraphicHeadersAudit, 'embed-template-binding-lifecycle': embedTemplateBindingLifecycleAudit, 'social-live-presentation': socialLivePresentationAudit, 'social-studio-lifecycle': socialStudioLifecycleAudit, 'universal-member-notices': universalMemberNoticesAudit, 'welcome-embed-delivery': welcomeEmbedDeliveryAudit, 'role-pagination': rolePaginationAudit,

@@ -104,6 +104,8 @@ async function quarantineMember(guild, member, options = {}) {
     return { success: false, alreadyQuarantined: true, mode: existingMode, reason: 'Member is already quarantined.' };
   }
 
+  const { tryBeginQuarantineOperation, endQuarantineOperation } = require('./releaseLifecycle');
+  if (!tryBeginQuarantineOperation(guild.id, member.id)) return { success: false, busy: true, reason: 'Quarantine operation already in progress.' };
   let interviewRoom = null; let snapshotRoles = []; let snapshotCaptured = false; let isolation = null; let quarantineRole = null;
   try {
     quarantineRole = await ensureQuarantineRole(guild, options);
@@ -130,7 +132,7 @@ async function quarantineMember(guild, member, options = {}) {
     if (interviewRoom) rollback.roomDeleted = await interviewRoom.delete('Rolling back failed investigation isolation').then(() => true).catch(() => false);
     if (isolation?.memberViewAllowRestores?.length) rollback.memberAccess = await restoreMemberViewAllows(guild, member.id, isolation.memberViewAllowRestores, { reason: 'Rolling back failed quarantine transaction' });
     return { success: false, mode, error: error.message, rollback };
-  }
+  } finally { endQuarantineOperation(guild.id, member.id); }
 }
 
 function attachQuarantineCase(guild, memberId, caseId) {

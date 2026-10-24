@@ -3,6 +3,7 @@
 const { ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const verificationStore = require('./verificationStore');
 const guildManager = require('../../core/guild/guildManager');
+const { auditQuarantineSnapshots } = require('../../core/security/protection/quarantine/state');
 const {
   QUARANTINE_MODES,
   quarantineMember,
@@ -53,6 +54,7 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
   if (settings.quarantine?.enabled === false) return { ok: true, skipped: true };
   const session = verificationStore.getSession(guild.id, member.id) || {};
   const sharedSnapshot = getQuarantineState(guild.id)?.users?.[member.id];
+  if (['quarantined', 'review'].includes(session.state) && !sharedSnapshot) return { ok: false, needsReview: true, message: 'Legacy quarantine has no shared original-role snapshot; manual reconciliation required.' };
   const sharedRoomId = sharedSnapshot?.interviewChannelId;
   if (sharedSnapshot && !sharedRoomId) return { ok: false, message: 'Member is in Security Isolation; no Verification interview room may be created.' };
   if (sharedRoomId) {
@@ -149,6 +151,8 @@ function activeModerationIsolation(guildId, userId) {
 
 async function escalateToModHub(guild, member, actorId, reason) {
   const existing = activeModerationIsolation(guild.id, member.id);
+  const session = verificationStore.getSession(guild.id, member.id);
+  if (!existing && ['quarantined', 'review'].includes(session?.state)) return { success: false, needsReview: true, reason: 'Legacy quarantine has no shared original-role snapshot; escalation cannot infer original roles.' };
   if (existing) {
     verificationStore.addSecurityHistory(guild.id, member.id, { type: 'existing_isolation_reused', actorId: actorId || null, reason });
     return { success: true, existing: true, mode: existing.mode, interviewChannelId: existing.snapshot?.interviewChannelId || null };
@@ -242,6 +246,8 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
   const member = await guild.members.fetch(userId).catch(() => null);
   const session = verificationStore.getSession(guild.id, userId) || {};
   if (session.state !== 'quarantined') return { ok: false, message: 'This member is not in active Verification quarantine. Mod Hub investigations must be resolved through Mod Hub.' };
+  const snapshot = activeModerationIsolation(guild.id, userId)?.snapshot;
+  if (!snapshot || !Array.isArray(snapshot.roles)) return { ok: false, needsReview: true, message: 'Original role snapshot is missing; manual reconciliation required before resolving quarantine.' };
   const quarantineIds = cleanIds(settings.roles?.quarantine);
   const pendingIds = cleanIds(settings.roles?.pending);
   if (resolution === 'escalate') {
@@ -302,19 +308,7 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
 }
 
 function auditLegacyQuarantineSessions(guildId) {
-  const sessions = verificationStore.getVerificationSection(guildId)?.sessions || {};
-  const users = getQuarantineState(guildId)?.users || {};
-  const cases = [];
-  for (const [userId, session] of Object.entries(sessions)) {
-    if (!['quarantined', 'review'].includes(session?.state)) continue;
-    const snapshot = users[userId];
-    const reason = !snapshot ? 'legacy_without_shared_snapshot'
-      : !Array.isArray(snapshot.roles) ? 'missing_original_roles'
-      : session.quarantineChannelId && snapshot.interviewChannelId && String(session.quarantineChannelId) !== String(snapshot.interviewChannelId) ? 'room_mismatch'
-      : null;
-    if (reason) cases.push({ userId, reason, verificationRoomId: session.quarantineChannelId || null, sharedRoomId: snapshot?.interviewChannelId || null });
-  }
-  return { checked: Object.keys(sessions).length, needsReview: cases.length, cases };
+  return auditQuarantineSnapshots(verificationStore.getVerificationSection(guildId)?.sessions || {}, getQuarantineState(guildId)?.users || {});
 }
 
 module.exports = { ensureQuarantineCase, closeQuarantineCase, resolveQuarantineCase, escalateToModHub, reconcileModerationRelease, auditLegacyQuarantineSessions };

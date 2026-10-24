@@ -10,6 +10,8 @@ const {
 } = require('discord.js');
 const {
   DEFAULT_INVESTIGATION_CATEGORY_NAME,
+  QUARANTINE_MODES,
+  getQuarantineMode,
   getQuarantineState,
   saveQuarantineState,
 } = require('./state');
@@ -136,9 +138,24 @@ async function createInvestigationRoom(guild, member, quarantineRole, options = 
   return channel;
 }
 
+const roomRecoveries = new Map();
 async function ensureInvestigationRoomForSnapshot(guild, member, role, snapshot, options = {}) {
+  const key = `${guild.id}:${member.id}`;
+  if (roomRecoveries.has(key)) return roomRecoveries.get(key);
+  const pending = repairInvestigationRoom(guild, member, role, options);
+  roomRecoveries.set(key, pending);
+  try { return await pending; } finally { roomRecoveries.delete(key); }
+}
+
+async function repairInvestigationRoom(guild, member, role, options = {}) {
+  // Event arguments may predate a replacement room or an authorised release.
+  const snapshot = getQuarantineState(guild.id)?.users?.[member.id];
+  if (!snapshot || getQuarantineMode(snapshot) !== QUARANTINE_MODES.INVESTIGATION) return null;
   let channel = snapshot?.interviewChannelId ? guild.channels.cache.get(String(snapshot.interviewChannelId)) : null;
-  if (!channel && snapshot?.interviewChannelId) channel = await guild.channels.fetch(String(snapshot.interviewChannelId)).catch(() => null);
+  if (!channel && snapshot?.interviewChannelId) {
+    try { channel = await guild.channels.fetch(String(snapshot.interviewChannelId)); }
+    catch (error) { if (Number(error?.code) !== 10003) throw error; }
+  }
   if (!channel) {
     channel = await createInvestigationRoom(guild, member, role, { ...options, reason: snapshot?.reason || options.reason });
     const state = getQuarantineState(guild.id);

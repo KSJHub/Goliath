@@ -99,6 +99,7 @@ module.exports = [
     const additions = addedMembers?.values?.() || [];
     for (const threadMember of additions) {
       const memberId = String(threadMember?.id || threadMember?.userId || '');
+      if (isQuarantineReleaseInProgress(thread.guild.id, memberId)) continue;
       if (!memberId || !getQuarantineState(thread.guild.id)?.users?.[memberId]) continue;
       const member = await thread.guild.members.fetch(memberId).catch(() => null);
       if (!member) continue;
@@ -122,7 +123,7 @@ module.exports = [
     const state = getQuarantineState(channel.guild.id);
     const exposed = [];
     for (const snapshot of Object.values(state.users || {})) {
-      if (String(snapshot.interviewChannelId || '') === String(channel.id)) continue;
+      if (getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION && String(snapshot.interviewChannelId || '') === String(channel.id)) continue;
       const member = await channel.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
       if (member && channel.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) exposed.push(member);
     }
@@ -144,7 +145,9 @@ module.exports = [
       const member = await channel.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
       if (!member) continue;
       try {
-        const room = await recoverInvestigationRoom(channel.guild, member, { ...snapshot, interviewChannelId: null });
+        const result = await enforceQuarantineOnMember(member);
+        if (!result.success || result.expired) continue;
+        const room = result.interviewChannelId ? { id: result.interviewChannelId } : null;
         if (room && snapshot.quarantinedBy) {
           const access = await ensureInitiatorInterviewAccess(channel.guild, room.id, snapshot.quarantinedBy);
           if (!access.success) console.warn(`[InvestigationIsolation] Failed to restore initiator access after room recreation for ${member.id}: ${access.reason}`);
@@ -158,6 +161,7 @@ module.exports = [
     try {
       const result = await enforceQuarantineOnMember(member);
       if (!result.success) { console.warn(`[QuarantineSystem] Failed to reapply quarantine to ${member.id}: ${result.error || result.reason}`); return; }
+      if (result.expired) return;
       if (getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION) {
         const room = await recoverInvestigationRoom(member.guild, member, snapshot);
         const roomId = room?.id || result.interviewChannelId;

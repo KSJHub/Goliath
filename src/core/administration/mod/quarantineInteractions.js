@@ -4,6 +4,7 @@ const Discord = require('discord.js');
 const { safeReply, safeEditReply } = require('../../../core/ui/interactionResponse');
 const {
   requireModeratableTarget,
+  canUseModAction,
   recordModerationSystemEvent,
 } = require('./permissions');
 const {
@@ -47,9 +48,10 @@ async function ensureInitiatorInterviewAccess(guild, channelId, initiatorId) {
   const channel = guild.channels.cache.get(String(channelId))
     || await guild.channels.fetch(String(channelId)).catch(() => null);
   if (!channel?.permissionOverwrites?.edit) return { success: false, reason: 'Investigation room is unavailable.' };
-  const member = guild.members.cache.get(String(initiatorId))
-    || await guild.members.fetch(String(initiatorId)).catch(() => null);
-  if (!member) return { success: false, reason: 'Initiating moderator is no longer in the guild.' };
+  const member = await guild.members.fetch({ user: String(initiatorId), force: true }).catch(() => null);
+  if (!member) return { success: false, reason: 'Initiating moderator is unavailable.' };
+  if (getQuarantineState(guild.id).users?.[member.id]) return { success: false, reason: 'A quarantined investigator cannot receive access to another investigation room.' };
+  if (!canUseModAction(member, guild, 'quarantine')) return { success: false, reason: 'Initiating moderator no longer has investigation authority.' };
   try {
     // Keep this to the permissions required to use the room. Asking Discord to
     // grant unrelated bits (for example ManageMessages) can return 50013 when
@@ -317,10 +319,10 @@ async function openInvestigationAccess(interaction, targetId) {
     .setDescription([
       `**Member:** ${target}`,
       '',
-      '**Currently Allowed**',
+      '**Legacy Additional Access**',
       allowedText,
       '',
-      'Select a normal server channel below, then choose whether to allow or remove access.',
+      'Investigation Isolation permits only the assigned private room. Select a channel below to revoke legacy additional access.',
       '',
       'Use **Room Only** to remove all additional channel access.',
     ].join('\n'))
@@ -340,13 +342,6 @@ async function openInvestigationAccess(interaction, targetId) {
     );
 
   const actions = new Discord.ActionRowBuilder().addComponents(
-    new Discord.ButtonBuilder()
-      .setCustomId(`mod_invroom_access_allow:${targetId}`)
-      .setLabel('Allow Access')
-      .setEmoji('➕')
-      .setStyle(Discord.ButtonStyle.Success)
-      .setDisabled(true),
-
     new Discord.ButtonBuilder()
       .setCustomId(`mod_invroom_access_remove:${targetId}`)
       .setLabel('Remove Access')
@@ -459,13 +454,6 @@ async function selectInvestigationAccessChannel(interaction) {
 
   const actions = new Discord.ActionRowBuilder().addComponents(
     new Discord.ButtonBuilder()
-      .setCustomId(`mod_invroom_access_allow:${targetId}:${channelId}`)
-      .setLabel('Allow Access')
-      .setEmoji('➕')
-      .setStyle(Discord.ButtonStyle.Success)
-      .setDisabled(allowedIds.has(channelId)),
-
-    new Discord.ButtonBuilder()
       .setCustomId(`mod_invroom_access_remove:${targetId}:${channelId}`)
       .setLabel('Remove Access')
       .setEmoji('➖')
@@ -570,7 +558,7 @@ async function changeInvestigationAccess(interaction, action) {
         '',
         `✅ ${actionText}`,
         '',
-        '**Currently Allowed**',
+        '**Legacy Additional Access**',
         allowedText,
         '',
         'Select another normal server channel below to continue managing access.',
