@@ -36,8 +36,8 @@ router.post('/:guildId/preview', async (req, res) => {
     const feed = await getOffers();
     const pricing = await getPricing(config);
     const offers = freeGames.filterOffers(feed.offers, config);
-    const { buildListing, SECTIONS, shortTitle, price, platformPresentation } = require('../../../../modules/utilityStudio/freeGames/freeGamesEmbeds');
-    const platforms = platformPresentation(req.freeGamesGuild.client);
+    const { buildListing, SECTIONS, shortTitle, price, loadPlatformPresentation } = require('../../../../modules/utilityStudio/freeGames/freeGamesEmbeds');
+    const platforms = await loadPlatformPresentation(req.freeGamesGuild.client, req.freeGamesGuild.id);
     return res.json({ success: true, platforms, offers: offers.map((offer) => ({ ...offer, displayTitle: shortTitle(offer.title), priceText: price(offer, { ...config, pricing }).replace(/[~\\]/g, '').trim() })), sections: SECTIONS.map(({ title, types, color }) => ({ title, types, color })), pricing, fetchedAt: feed.fetchedAt, pages: buildListing(offers, { ...config, pricing, listingUpdatedAt: feed.fetchedAt }, Date.now(), platforms) });
   } catch (error) { res.status(400).json({ success: false, error: error.message }); }
 });

@@ -28,7 +28,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     const current = generation.current;
     setBusy(true); setError(''); setNotice('');
     try {
-      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'showTimestamps', 'showExpiry', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
+      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
       const payload = await api.request(`/api/free-games/${guildId}${refresh ? '/refresh' : ''}`, refresh ? { method: 'POST' } : { method: 'PATCH', body: JSON.stringify(settings) });
       if (generation.current !== current) return;
       setData((old) => ({ ...old, config: payload.config })); setDraft(payload.config);
@@ -40,7 +40,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     const current = generation.current;
     setBusy(true); setError('');
     try {
-      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'showTimestamps', 'showExpiry', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
+      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
       const result = await api.request(`/api/free-games/${guildId}/preview`, { method: 'POST', body: JSON.stringify(settings) });
       if (current === generation.current) setPreview(result);
     } catch (err) { if (current === generation.current) setError(err.message); }
@@ -74,7 +74,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
               const platform = preview.platforms[key];
               return <div key={key} style={{ background: theme.softBg, border: `1px solid ${theme.cardBorder}`, borderRadius: 10, padding: 12, minWidth: 0 }}>
                 <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px' }}>{platform.imageUrl ? <img src={platform.imageUrl} alt="" width="22" height="22" /> : <span aria-hidden="true">{platform.fallback}</span>}{label} · {group.length}</h4>
-                <ul style={{ paddingLeft: 18, margin: 0 }}>{group.map((offer) => <li key={offer.id} style={{ marginTop: 12, overflowWrap: 'anywhere' }}><a href={offer.url} target="_blank" rel="noreferrer">{draft.showNew !== false && draft.state.newSince[offer.id] && Date.now() >= draft.state.newSince[offer.id] && Date.now() - draft.state.newSince[offer.id] < 86400000 ? '🆕 ' : ''}{offer.displayTitle}</a>{offer.priceText ? <> · <s>{offer.priceText}</s></> : null}<br /><span style={{ color: theme.mutedText }}>{data.types[offer.type]}{draft.showPlatforms !== false && offer.stores.filter((store) => draft.stores.includes(store)).length > 1 ? ` · ${offer.stores.filter((store) => draft.stores.includes(store)).map((store) => data.stores[store]).join(', ')}` : ''}{draft.showExpiry === false ? '' : offer.endsAt ? ` · Ends ${stamp(offer.endsAt, draft)}` : offer.endDateText ? ` · ${offer.endDateText} (source time; timezone unknown)` : ' · Expiry unknown'}</span></li>)}</ul>
+                <ul style={{ paddingLeft: 18, margin: 0 }}>{group.map((offer) => <li key={offer.id} style={{ marginTop: 12, overflowWrap: 'anywhere' }}><a href={offer.url} target="_blank" rel="noreferrer">{draft.showNew !== false && draft.state.newSince[offer.id] && Date.now() >= draft.state.newSince[offer.id] && Date.now() - draft.state.newSince[offer.id] < 86400000 ? '🆕 ' : ''}{offer.displayTitle}</a>{offer.priceText ? <> · <s>{offer.priceText}</s></> : null}<br /><span style={{ color: theme.mutedText }}>{data.types[offer.type]}{draft.showPlatforms !== false && offer.stores.filter((store) => draft.stores.includes(store)).length > 1 ? ` · ${offer.stores.filter((store) => draft.stores.includes(store)).map((store) => data.stores[store]).join(', ')}` : ''}</span></li>)}</ul>
               </div>;
             })}
           </div>
@@ -104,7 +104,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     <SectionCard theme={theme} title="Listing appearance">
       <div style={grid}>
         {select('layout', 'Platform layout', [['columns', 'Platform columns'], ['list', 'Stacked platform lists']])}
-        {[['showTimestamps', 'Footer timestamps'], ['showExpiry', 'Offer expiry'], ['showPlatforms', 'Additional platforms'], ['showNew', 'NEW markers'], ['showOfferCount', 'Offer counts']].map(([key, label]) => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" disabled={busy} checked={draft[key] !== false} onChange={(event) => patch({ [key]: event.target.checked })} />{label}</label>)}
+        {[['showTimestamps', 'Footer timestamps'], ['showPlatforms', 'Additional platforms'], ['showNew', 'NEW markers'], ['showOfferCount', 'Offer counts']].map(([key, label]) => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" disabled={busy} checked={draft[key] !== false} onChange={(event) => patch({ [key]: event.target.checked })} />{label}</label>)}
       </div>
       <p style={{ color: theme.mutedText }}>The public listing keeps a compact provider credit. Footer timestamps reflect the source feed update; Discord displays them in each viewer’s local time. You can also manage these settings through /admin → Modules → Utility → Free Games.</p>
     </SectionCard>
@@ -127,7 +127,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     {data.config.state.warning ? <p role="status">{data.config.state.warning}</p> : null}
     {data.config.state.error ? <p role="alert" style={{ color: '#fca5a5' }}>{data.config.state.error}</p> : null}
     <button style={button} disabled={busy || !data.config.enabled} onClick={() => act(true)}>Refresh saved listing now</button>
-    <p style={{ color: theme.mutedText }}>Checks run every five minutes; the shared offer feed refreshes every 15 minutes. NEW marks offers discovered after the initial baseline and lasts 24 hours. Offers with a reliable expiry instant receive a countdown and an ending-soon marker within 48 hours. When the provider supplies no timezone, its original expiry text is shown instead.</p>
+    <p style={{ color: theme.mutedText }}>Checks run every five minutes; the shared offer feed refreshes every 15 minutes. NEW marks offers discovered after the initial baseline and lasts 24 hours. Individual offers keep their dates hidden; the footer shows the source feed update time. Expiry data still filters out ended offers.</p>
     <a href="https://www.gamerpower.com/" target="_blank" rel="noreferrer">Offers provided by GamerPower</a>
   </div></SectionCard>{previewCard}</>;
   return <ModuleShell key={guildId} theme={theme} title="Free Games" subtitle="Automatically share free games from your selected stores." guild={selectedGuildData} status={data.config.enabled ? ((data.config.state.error || data.config.state.warning) ? 'Warning' : !data.config.channelId ? 'Needs setup' : !data.config.state.lastSuccess ? 'Pending' : 'Enabled') : 'Disabled'} updatedAt={stamp(data.config.state.lastSuccess, data.config)} templateCount={3} deploymentCount={data.config.state.deliveries.length} notice={error || notice} noticeTone={error ? 'danger' : 'info'} tabs={[{ key: 'overview', label: 'Overview' }, { key: 'configuration', label: 'Configuration' }]}>{{ overview, configuration }}</ModuleShell>;

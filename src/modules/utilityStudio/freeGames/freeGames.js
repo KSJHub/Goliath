@@ -3,7 +3,7 @@ const guildManager = require('../../../core/guild/guildManager');
 const { getModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const { STORES, TYPES, CURRENCIES } = require('./freeGamesProviders');
 const MODULE_KEY = 'freeGames';
-const DEFAULTS = { enabled: false, currency: 'GBP', priceMode: 'converted', locale: 'en-GB', timeZone: 'Europe/London', region: 'GB', layout: 'columns', showTimestamps: true, showExpiry: true, showPlatforms: true, showNew: true, showOfferCount: true, channelId: null, stores: Object.keys(STORES), types: ['game'], alerts: false, roleId: null, state: { firstSeen: {}, newSince: {}, observed: {}, deliveries: [], retired: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, offerCount: 0, pricing: null, warning: null } };
+const DEFAULTS = { enabled: false, currency: 'GBP', priceMode: 'converted', locale: 'en-GB', timeZone: 'Europe/London', region: 'GB', layout: 'columns', showTimestamps: true, showExpiry: false, showPlatforms: true, showNew: true, showOfferCount: true, channelId: null, stores: Object.keys(STORES), types: ['game'], alerts: false, roleId: null, state: { firstSeen: {}, newSince: {}, observed: {}, deliveries: [], retired: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, offerCount: 0, pricing: null, warning: null } };
 function getConfig(guildId) {
   const section = getModuleSection(guildId, MODULE_KEY, DEFAULTS);
   return { ...DEFAULTS, ...section, state: { ...structuredClone(DEFAULTS.state), ...section.state }, enabled: guildManager.isModuleEnabled(guildId, MODULE_KEY) };
@@ -66,7 +66,7 @@ function saveSettings(guildId, patch) {
 
 const PANEL_PREFIX = 'admin:module:freeGames:';
 const DISPLAY_OPTIONS = Object.freeze({
-  showTimestamps: 'Footer timestamps', showExpiry: 'Offer expiry',
+  showTimestamps: 'Footer timestamps',
   showPlatforms: 'Additional platforms', showNew: 'NEW markers', showOfferCount: 'Offer counts',
 });
 const PRICE_MODES = Object.freeze({ converted: 'Server currency', source: 'Source USD', hidden: 'Hide original prices' });
@@ -189,11 +189,11 @@ async function handleAdminInteraction(interaction) {
     if (['home', 'delivery', 'filters', 'pricing', 'display'].includes(action)) { await reply(buildAdminPanel(guild, action)); return true; }
     if (/^preview:\d+$/.test(action)) {
       const { getOffers, getPricing } = require('./freeGamesProviders');
-      const { buildListing, platformPresentation } = require('./freeGamesEmbeds');
+      const { buildListing, loadPlatformPresentation } = require('./freeGamesEmbeds');
       const c = getConfig(guild.id);
       const feed = await getOffers();
       const pricing = await getPricing(c);
-      const pages = buildListing(filterOffers(feed.offers, c), { ...c, pricing, listingUpdatedAt: feed.fetchedAt }, Date.now(), platformPresentation(guild.client));
+      const pages = buildListing(filterOffers(feed.offers, c), { ...c, pricing, listingUpdatedAt: feed.fetchedAt }, Date.now(), await loadPlatformPresentation(guild.client, guild.id));
       const page = Math.min(Number(action.split(':')[1]), pages.length - 1);
       await reply({ ...pages[page], content: 'Preview only · saved server settings · no listing or notifications posted',
         components: [componentRow(panelButton('preview:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0),

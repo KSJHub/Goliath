@@ -3103,6 +3103,35 @@ async function freeGamesAudit() {
   assert.equal(icons.steam.emoji, '<:goliath_steam:123456789012345678>');
   assert(icons.steam.imageUrl.includes('123456789012345678.png'));
   assert.equal(icons.epic.emoji, '⚡');
+  // Cold-cache platform icons must come from the shared Emoji module, including replacements.
+  {
+    const fs = require('node:fs'), vm = require('node:vm');
+    let loads = 0;
+    let emojiId = '123456789012345681';
+    const moduleFixture = { exports: {} };
+    const emojiService = {
+      render: (emoji) => '<:' + emoji.name + ':' + emoji.id + '>',
+      allowedGuildEmojis: async (_client, guildId, context) => {
+        assert.equal(guildId, 'fixture'); assert.equal(context, 'freeGames'); loads++;
+        return new Map([['steam', { name: 'goliath_steam', id: emojiId }], ['epic', { name: 'goliath_epic', id: '123456789012345682' }]]);
+      },
+    };
+    const source = fs.readFileSync(root + '/src/modules/utilityStudio/freeGames/freeGamesEmbeds.js', 'utf8');
+    vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(
+      name => name === './freeGamesProviders' ? providers : emojiService, moduleFixture, moduleFixture.exports);
+    const coldClient = { application: { emojis: { fetch: async () => { throw Error('Use the shared module'); }, cache: new Map() } } };
+    const resolved = await moduleFixture.exports.loadPlatformPresentation(coldClient, 'fixture');
+    assert.equal(loads, 1); assert.equal(resolved.steam.emoji, '<:goliath_steam:' + emojiId + '>');
+    assert.equal(resolved.epic.emoji, '<:goliath_epic:123456789012345682>');
+    emojiId = '123456789012345683';
+    assert((await moduleFixture.exports.loadPlatformPresentation(coldClient, 'fixture')).steam.emoji.includes(emojiId));
+  }
+  const datedOffer = { ...offer, endDateText: '2026-10-31 23:59:59' };
+  for (const entry of [datedOffer, { ...datedOffer, endsAt: null }]) {
+    const rendered = embeds.line(entry, {}, now, { ...config, showExpiry: true });
+    assert(!rendered.includes('<t:')); assert(!rendered.includes('23:59:59')); assert(!rendered.includes('source time'));
+  }
+
   const mixed = embeds.buildListing([offer, { ...offer, id: 'epic', stores: ['epic'] }, { ...offer, id: 'gog', stores: ['gog'] }], config, now);
   assert.equal(mixed.length, 1); assert.equal(mixed[0].embeds[0].fields.length, 3);
   assert(text.includes('≈£8.00'));
@@ -3286,7 +3315,7 @@ async function freeGamesAudit() {
     store.getConfig = priorConfig; providers.getOffers = priorOffers; providers.getPricing = priorPricing;
     delete require.cache[routePath]; if (priorRoute) require.cache[routePath] = priorRoute;
   }
-  console.log('✅ Free Games: Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
+  console.log('✅ Free Games: cold-cache core emoji resolution, footer-only timestamps, Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
   return true;
 }
 

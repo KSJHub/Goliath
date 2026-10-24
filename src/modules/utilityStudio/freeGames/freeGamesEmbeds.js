@@ -23,11 +23,9 @@ function price(offer, config) {
 }
 function line(offer, newSince = {}, now = Date.now(), config = {}) {
   const fresh = config.showNew !== false && newSince[offer.id] && now >= newSince[offer.id] && now - newSince[offer.id] < NEW_MS;
-  const ending = offer.endsAt && offer.endsAt > now && offer.endsAt - now <= ENDING_MS;
-  const end = config.showExpiry === false ? '' : offer.endsAt ? ` · ${ending ? '⏳ ' : ''}<t:${Math.floor(offer.endsAt / 1000)}:R>` : offer.endDateText ? ` · ${escape(offer.endDateText)} (source time)` : '';
   const selectedStores = offer.stores.filter((key) => config.stores?.includes(key));
   const platforms = config.showPlatforms !== false && selectedStores.length > 1 ? selectedStores.map((key) => STORES[key]).join(', ') : '';
-  return `› ${fresh ? '🆕 ' : ''}[${escape(shortTitle(offer.title))}](${offer.url})${price(offer, config)}${(offer.type !== 'game' && !(offer.type === 'dlc' && config.omitDlcLabel)) ? ` · ${TYPES[offer.type]}` : ''}${end}${platforms ? `\n  ${platforms}` : ''}`;
+  return `› ${fresh ? '🆕 ' : ''}[${escape(shortTitle(offer.title))}](${offer.url})${price(offer, config)}${(offer.type !== 'game' && !(offer.type === 'dlc' && config.omitDlcLabel)) ? ` · ${TYPES[offer.type]}` : ''}${platforms ? `\n  ${platforms}` : ''}`;
 }
 function orderedOffers(offers, now) {
   return [...new Map(offers.map((offer) => [offer.id, offer])).values()].sort((a, b) => {
@@ -42,14 +40,25 @@ const PLATFORM_STYLE = Object.freeze({
   playstation: { alias: 'playstation', emoji: '🔵' }, switch: { alias: 'nintendo', emoji: '🔴' },
   android: { emoji: '🤖' }, ios: { emoji: '📱' }, drmFree: { emoji: '🔓' }, other: { emoji: '📦' },
 });
-function platformPresentation(client) {
+function platformPresentation(client, bank = client?.application?.emojis?.cache) {
   return Object.fromEntries(Object.entries(STORES).map(([key, label]) => {
     const style = PLATFORM_STYLE[key];
-    const core = style.alias && client?.application?.emojis?.cache?.find((emoji) => emoji.name === `goliath_${style.alias}`);
+    const core = style.alias && (bank?.get?.(style.alias) || bank?.get?.(`goliath_${style.alias}`) || bank?.find?.((emoji) => emoji.name === `goliath_${style.alias}`));
     // Reuse the existing repo-managed core emoji bank; never create duplicate assets.
     const emoji = core ? require('../emojis/emojis').render(core, style.emoji) : style.emoji;
     return [key, { label, emoji, fallback: style.emoji, imageUrl: core && /^\d{16,20}$/.test(core.id) ? `https://cdn.discordapp.com/emojis/${core.id}.${core.animated ? 'gif' : 'png'}` : null }];
   }));
+}
+async function loadPlatformPresentation(client, guildId) {
+  if (!client?.application?.emojis?.fetch) return platformPresentation(client);
+  try {
+    // The shared Emoji module fetches the installed bank; a cold application cache is not authoritative.
+    const bank = await require('../emojis/emojis').allowedGuildEmojis(client, guildId, 'freeGames');
+    return platformPresentation(client, bank);
+  } catch (error) {
+    console.warn('[Free Games] Emoji bank unavailable; cached platform icons retained:', error.message);
+    return platformPresentation(client);
+  }
 }
 function buildListing(offers, config, now = Date.now(), platforms = platformPresentation()) {
   const pages = [];
@@ -90,4 +99,4 @@ function buildListing(offers, config, now = Date.now(), platforms = platformPres
   return pages.map((page, index) => ({ embeds: [{ title: page.title, color: page.color, description: page.description, fields: page.fields, footer: { text: `Goliath Free Games · ${index + 1}/${pages.length}${config.showTimestamps === false ? '' : ' · Updated'}` }, ...(config.showTimestamps === false ? {} : { timestamp: new Date(config.listingUpdatedAt || now).toISOString() }) }], allowedMentions: { parse: [] } }));
 }
 
-module.exports = { NEW_MS, ENDING_MS, SECTIONS, PLATFORM_STYLE, platformPresentation, escape, line, price, shortTitle, orderedOffers, buildListing };
+module.exports = { NEW_MS, ENDING_MS, SECTIONS, PLATFORM_STYLE, platformPresentation, loadPlatformPresentation, escape, line, price, shortTitle, orderedOffers, buildListing };
