@@ -85,10 +85,11 @@ async function syncQuarantineIsolation(guild, options = {}) {
   const failures = [];
   const memberViewAllowRestores = [];
   const targetMemberId = options.targetMemberId ? String(options.targetMemberId) : null;
+  const allowedChannelIds = new Set((options.allowedChannelIds || []).map(String));
 
   for (const [, channel] of channels || []) {
     if (!channel?.permissionOverwrites?.edit || channel.isThread?.()) continue;
-    if (targetMemberId) {
+    if (targetMemberId && !allowedChannelIds.has(String(channel.id))) {
       const memberOverwrite = channel.permissionOverwrites.cache?.get(targetMemberId);
       if (memberOverwrite?.allow?.has(PermissionFlagsBits.ViewChannel)) {
         const botPermissions = channel.permissionsFor?.(botMember);
