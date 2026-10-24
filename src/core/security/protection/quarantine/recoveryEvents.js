@@ -82,6 +82,21 @@ module.exports = [
       }
     }
   } },
+  { name: Events.ThreadMembersUpdate, async execute(addedMembers, removedMembers, thread) {
+    if (!thread?.guild || !hasActiveQuarantine(thread.guild.id)) return;
+    for (const threadMember of addedMembers?.values?.() || []) {
+      const memberId = String(threadMember?.id || threadMember?.userId || '');
+      if (!memberId || !getQuarantineState(thread.guild.id)?.users?.[memberId]) continue;
+      const member = await thread.guild.members.fetch(memberId).catch(() => null);
+      if (!member) continue;
+      const result = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+      if (!result.success) console.warn(`[QuarantineSystem] Thread member recovery failed for ${memberId}: ${result.reason || result.error || 'Unknown failure'}`);
+      if (thread.members?.remove) {
+        try { await thread.members.remove(memberId, 'Goliath quarantine isolation'); }
+        catch (error) { console.warn(`[QuarantineSystem] Could not remove quarantined member ${memberId} from thread ${thread.id}: ${error.message}`); }
+      }
+    }
+  } },
   { name: Events.ChannelUpdate, async execute(previous, channel) {
     if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
     const roleId = getQuarantineState(channel.guild.id)?.roleId;
