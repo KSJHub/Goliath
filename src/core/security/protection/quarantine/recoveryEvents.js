@@ -51,8 +51,18 @@ module.exports = [
   } },
   { name: Events.ChannelUpdate, async execute(previous, channel) {
     if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
-    try { await syncQuarantineIsolation(channel.guild); }
-    catch (error) { console.warn('[QuarantineSystem] Updated channel isolation failed:', error.message); }
+    const roleId = getQuarantineState(channel.guild.id)?.roleId;
+    if (!roleId) return;
+    const { PermissionFlagsBits } = require('discord.js');
+    const before = previous?.permissionOverwrites?.cache?.get(roleId);
+    const after = channel.permissionOverwrites?.cache?.get(roleId);
+    const deniedBefore = Boolean(before?.deny?.has(PermissionFlagsBits.ViewChannel));
+    const deniedAfter = Boolean(after?.deny?.has(PermissionFlagsBits.ViewChannel));
+    if (deniedBefore === deniedAfter || deniedAfter) return;
+    try {
+      const result = await syncQuarantineIsolation(channel.guild);
+      if (!result.success) console.warn(`[QuarantineSystem] Updated channel isolation incomplete for ${channel.id}: ${result.reason || 'Unknown failure'}`);
+    } catch (error) { console.warn('[QuarantineSystem] Updated channel isolation failed:', error.message); }
   } },
   { name: Events.ChannelDelete, async execute(channel) {
     if (!channel?.guild || !hasActiveQuarantine(channel.guild.id)) return;
