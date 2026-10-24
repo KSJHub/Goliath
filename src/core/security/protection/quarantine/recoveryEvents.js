@@ -51,6 +51,7 @@ module.exports = [
       const result = await syncQuarantineIsolation(channel.guild);
       if (!result.success) console.warn(`[QuarantineSystem] New channel isolation incomplete for ${channel.id}: ${result.reason || 'Unknown failure'}`);
       for (const snapshot of Object.values(getQuarantineState(channel.guild.id)?.users || {})) {
+        if (String(snapshot.interviewChannelId || '') === String(channel.id) && getQuarantineMode(snapshot) === QUARANTINE_MODES.INVESTIGATION) continue;
         const member = await channel.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
         if (!member) continue;
         const { PermissionFlagsBits } = require('discord.js');
