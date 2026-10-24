@@ -139,7 +139,7 @@ function sourceAudit() {
   section('Source audit');
   const errors = [];
   const mojibake = /[\u00e2\u00f0\u00ef\u00c3\ufffd]/g;
-  const windowsPath = /\b[A-Za-z]:\\[^\r\n'"`]+/g;
+  const windowsPath = /(?:^|[\s'"`])[A-Za-z]:\\[^\r\n'"`]+/g;
   for (const filePath of walk(root, [...JS_EXTENSIONS, '.json', '.md', '.txt', '.yml', '.yaml'])) {
     const source = read(filePath);
     const repoPath = relative(filePath);
@@ -2185,7 +2185,7 @@ function welcomeEmbedDeliveryAudit() {
     assert(welcome.includes('if (config.dmEnabled && options.skipDm !== true && !member.user.bot)'), 'DM delivery must be independently gated and must exclude bots.');
     assert(welcome.includes('await member.send(payload)') && welcome.includes('await channel.send(payload)'), 'Welcome must preserve separate public and DM send operations.');
     assert(welcome.includes('incrementAnalytics(member.guild.id'), 'Welcome delivery must record analytics for sends, failures and skips.');
-    assert(welcome.includes('options.suppressPing === true') && welcome.includes('allowedMentions'), 'Welcome delivery must retain mention-suppression safeguards.');
+    assert(welcome.includes('userPingEnabled = !isDm && config.allowUserPing !== false && options.suppressPing !== true') && welcome.includes('rolePingEnabled = !isDm && config.allowRolePings === true && options.suppressPing !== true') && welcome.includes('allowedMentions'), 'Welcome delivery must retain user and role mention-suppression safeguards.');
     assert(scheduled.includes('const activeRuns = new Set()'), 'Scheduled Welcome must guard against overlapping runs.');
 
     assert(scheduled.includes('completed.add(member.id)'), 'Scheduled Welcome must checkpoint successful member deliveries.');
@@ -2774,7 +2774,8 @@ const command = process.argv[2] || 'doctor';
 const handler = commands[command];
 if (!handler) { console.error(`Unknown Goliath command: ${command}`); process.exitCode = 1; }
 else {
-  Promise.resolve()
+  // Let the doctor wrapper wait for every audit before exiting past runtime handles.
+  module.exports = Promise.resolve()
     .then(() => handler())
     .then((result) => {
       if (!result) process.exitCode = 1;
