@@ -463,6 +463,9 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
       .setFooter({ text: 'Staff only · Select a record to review' });
     embeds.push(embed);
     components.length = 0;
+    components.push(new ActionRowBuilder().addComponents(new UserSelectMenuBuilder()
+      .setCustomId('mod_cases_user_select').setPlaceholder(target ? '👤 Change member filter' : '🔎 Search cases by member')
+      .setMinValues(1).setMaxValues(1)));
     components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
       .setCustomId('mod_cases_open_record').setPlaceholder(shown.length ? '📂 Open a case to review' : '📂 No active cases in this filter')
       .setDisabled(!shown.length)
@@ -471,9 +474,6 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
         description: e.reason.slice(0, 100),
         value: e.type === 'quarantine' ? `q:${e.userId}` : `c:${e.caseId}`
       })) : [{ label: 'No active records', value: 'none' }])));
-    components.push(new ActionRowBuilder().addComponents(new UserSelectMenuBuilder()
-      .setCustomId('mod_cases_user_select').setPlaceholder(target ? '👤 Change member filter' : '🔎 Search cases by member')
-      .setMinValues(1).setMaxValues(1)));
     components.push(new ActionRowBuilder().addComponents(...[['all','All'],['warn','Warnings'],['timeout','Timeouts'],['appeal','Appeals'],['quarantine','Quarantines']].map(([key,label]) =>
       new ButtonBuilder().setCustomId(`mod_cases_filter:${targetId || 'none'}:${key}`).setLabel(label).setStyle(filter === key ? ButtonStyle.Primary : ButtonStyle.Secondary))));
     const controls = [];
