@@ -885,8 +885,26 @@ function verificationLifecycleAudit() {
       })}};
       const member={id:'member',guild,roles:{cache:{has:()=>false}}};
       const transitionRoles=async()=>{transitions++;entered();await wait;if(mode==='throw')throw Error('simulated Discord role failure');};
-      ${completionSource}
-      ${quarantineSource}
+      // Resolve the extracted module's local dependency explicitly; never load live storage.
+      const sharedQuarantine={
+        QUARANTINE_MODES:{INVESTIGATION:'investigation'},
+        getQuarantineState:()=>({users:mode==='existing'?{member:{}}:{}}),
+        quarantineMember:async()=>{
+          await transitionRoles();
+          if(mode==='mismatch')return{success:false,reason:'simulated containment confirmation failure'};
+          if(mode==='dryRun')return{success:true,dryRun:true};
+          return{success:true,mode:'investigation',interviewChannelId:'case'};
+        }
+      };
+      const {complete,quarantineVerificationMember}=(function(require){
+        ${completionSource}
+        ${quarantineSource}
+        return{complete,quarantineVerificationMember};
+      })(id=>{
+        assert.equal(id,'../../core/security/protection/quarantine');
+        return sharedQuarantine;
+      });
+      const watchdog=setTimeout(()=>{console.error('Verification integration did not finish');process.exit(1);},4000);
       (async()=>{
         reset();
         const finishing=complete(member,config);
@@ -915,19 +933,12 @@ function verificationLifecycleAudit() {
         assert.equal(unconfirmed.review,true);
         assert.equal(state,'review');
         assert.equal(transitions,1);
-        reset();mode='throw';
-        const failing=quarantineVerificationMember(guild,'member');
-        await started;release();
-        const failed=await failing;
-        assert.equal(failed.review,true);
-        assert.equal(state,'review');
-        assert.equal(transitions,1);
         reset();mode='mismatch';
         const badQuarantine=quarantineVerificationMember(guild,'member');
         await started;release();
         const quarantineMismatch=await badQuarantine;
         assert.equal(quarantineMismatch.review,true);
-        assert.equal(state,'review');
+        assert.equal(state,'verifying');
         assert.equal(transitions,1);
         reset();mode='throw';
         const badCompletion=complete(member,config);
@@ -936,6 +947,33 @@ function verificationLifecycleAudit() {
         assert.equal(completionFailure.review,true);
         assert.equal(state,'review');
         assert.equal(transitions,1);
+        reset();mode='existing';
+        assert.equal((await quarantineVerificationMember(guild,'member')).review,true);
+        assert.equal(transitions,0);
+        assert.equal(state,'verifying');
+        reset();mode='dryRun';
+        const simulated=quarantineVerificationMember(guild,'member');
+        await started;release();
+        assert.equal((await simulated).review,true);
+        assert.equal(state,'verifying');
+        reset();mode='throw';
+        const thrown=quarantineVerificationMember(guild,'member');
+        const rejected=assert.rejects(thrown,/simulated Discord role failure/);
+        await started;release();await rejected;
+        assert.equal(state,'verifying');
+        assert.equal(verificationRoleTransitions.size,0);
+        for(const terminal of ['verified','quarantined','review','rejected','failed','timed_out']){
+          reset();mode='quarantine';
+          const late=quarantineVerificationMember(guild,'member');
+          await started;state=terminal;release();
+          assert.equal((await late).review,true);
+          assert.equal(state,terminal);
+          reset();
+          const lateComplete=complete(member,config);
+          await started;state=terminal;release();
+          assert.equal((await lateComplete).review,true);
+          assert.equal(state,terminal);
+        }
         for(const terminal of ['verified','quarantined','review','rejected','failed','timed_out']){
           reset();state=terminal;
           const terminalCompletion=await complete(member,config);
@@ -945,7 +983,7 @@ function verificationLifecycleAudit() {
           assert.equal(state,terminal);
           assert.equal(transitions,0);
         }
-      })().catch(error=>{console.error(error);process.exitCode=1;});
+      })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>clearTimeout(watchdog));
     `;
     const integrationRun=spawnSync(process.execPath,['-e',integrationTest],{encoding:'utf8',timeout:5000});
     assert.equal(integrationRun.status,0,'Executable Verification completion/quarantine integration failed: '+String(integrationRun.stderr||integrationRun.error||'unknown error'));
@@ -961,10 +999,11 @@ function verificationLifecycleAudit() {
     contains(completionFlow, "type:'verification_role_transition_failed'", 'audit completion role transition failure');
     contains(completionFlow, "type:'verification_role_confirmation_failed'", 'audit unconfirmed completion roles enter review');
     assert(completionFlow.indexOf("type:'verification_role_confirmation_failed'") < completionFlow.indexOf("type:'verified'"), 'Completion role confirmation must precede verified state persistence.');
-    contains(quarantineFlow, "type:'quarantine_role_transition_failed'", 'audit quarantine role transition failure');
-    contains(quarantineFlow, "type:'quarantine_role_confirmation_failed'", 'audit quarantine role confirmation failure');
-    const quarantineConfirmation = quarantineFlow.slice(quarantineFlow.indexOf('if(!confirmed||!q.every'), quarantineFlow.indexOf("type:'quarantine_role_confirmation_failed'"));
-    contains(quarantineConfirmation, terminalGuard, 'preserve terminal state when quarantine role confirmation fails');
+    contains(quarantineFlow, "type:'quarantine_shared_isolation_failed'", 'audit shared quarantine containment failure');
+    contains(quarantineFlow, 'if(!result.success)', 'fail closed when shared containment fails');
+    contains(quarantineFlow, 'if(result.dryRun)', 'do not persist simulated quarantine');
+    contains(quarantineFlow, 'getQuarantineState(g.id)', 'preserve existing shared isolation');
+    assert(quarantineFlow.indexOf('if(!result.success)') < quarantineFlow.indexOf("state:'quarantined'"), 'Shared containment must succeed before persisting quarantine.');
     contains(flow, 'Quarantine cannot replace a terminal verification session', 'prevent stale quarantine transitions');
     contains(flow, "['verified','review','quarantined','rejected','failed','timed_out'].includes", 'do not reopen verified or other terminal sessions');
     contains(failureFlow, terminalGuard, 'protect failure service against review and all terminal states');

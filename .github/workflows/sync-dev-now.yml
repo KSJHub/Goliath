@@ -15,7 +15,7 @@ concurrency:
 jobs:
   sync-dev:
     name: Validate, build and sync DEV
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Sync and verify DEV
