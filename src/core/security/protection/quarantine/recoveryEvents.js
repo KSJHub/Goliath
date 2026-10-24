@@ -73,7 +73,10 @@ module.exports = [
       }
       const { PermissionFlagsBits } = require('discord.js');
       if (thread.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) {
-        console.warn(`[QuarantineSystem] Thread ${thread.id} remains visible to quarantined member ${member.id}; review parent channel and member permissions.`);
+        const recovery = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+        if (!recovery.success || thread.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) {
+          console.warn(`[QuarantineSystem] Thread ${thread.id} remains visible to quarantined member ${member.id}; manual intervention required.`);
+        }
       }
     }
   } },
