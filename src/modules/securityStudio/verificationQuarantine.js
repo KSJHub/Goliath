@@ -1,6 +1,6 @@
 'use strict';
 
-const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const verificationStore = require('./verificationStore');
 const guildManager = require('../../core/guild/guildManager');
 const {
@@ -22,23 +22,27 @@ function safeChannelName(member) {
   return `verification-${base}`.slice(0, 90);
 }
 
-function caseSummary(member, reason, session, history) {
-  const failures = history.filter(entry => entry?.type === 'security_failed');
-  const flags = Array.isArray(session?.flags) ? session.flags : [];
-  const lines = [
-    '## 🚨 Verification Quarantine',
-    `**Member:** <@${member.id}> (\`${member.id}\`)`,
-    `**Reason:** ${String(reason || 'Verification security policy').slice(0, 800)}`,
-    `**Failed attempts:** ${Number(session?.failedAttempts || failures.length || 0)}`,
-    `**Completed security:** ${(session?.completedSecurity || []).join(', ') || 'None'}`,
-    `**Flags:** ${flags.length ? flags.map(flag => typeof flag === 'string' ? flag : flag?.reason || flag?.type || 'flag').join(', ') : 'None recorded'}`,
-  ];
-  if (failures.length) {
-    lines.push('', '**Recent failures:**');
-    for (const failure of failures.slice(-5)) lines.push(`- ${failure.step || 'security'} — ${String(failure.reason || 'Failed').slice(0, 300)}`);
-  }
-  lines.push('', 'Use the Goliath Mod Hub to review or escalate this member.');
-  return lines.join('\n').slice(0, 1900);
+function caseSummary(member) {
+  return [
+    '## 🛡️ Goliath · Security Review',
+    '⏳ **Verification on hold**',
+    '',
+    `Hello <@${member.id}>, your server access is temporarily restricted because Verification could not be completed.`,
+    'This does not necessarily mean you have broken any server rules.',
+    '',
+    '**What happens next?**',
+    'Management can review your case and allow you to retry Verification.',
+    'You may send a message here to explain the situation or ask for help.',
+    '',
+    '🔒 This channel is intended for you and authorised management.',
+    'Use **Request Review** once to notify staff, or **View Status** to check your current state.'
+  ].join('\\n');
+}
+function memberCaseButtons(userId) {
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`verify:quarantine:request:${userId}`).setLabel('Request Review').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`verify:quarantine:status:${userId}`).setLabel('View Status').setStyle(ButtonStyle.Secondary)
+  )];
 }
 
 async function ensureQuarantineCase(guild, member, reason = 'Verification security policy') {
@@ -72,8 +76,8 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
   verificationStore.upsertSession(guild.id, member.id, { quarantineChannelId: channel.id, quarantineCaseCreatedAt: new Date().toISOString() });
   verificationStore.addSecurityHistory(guild.id, member.id, { type: 'quarantine_case_created', channelId: channel.id, reason });
   const refreshed = verificationStore.getSession(guild.id, member.id) || session;
-  const history = verificationStore.getSecurityHistory?.(guild.id, member.id) || section?.securityHistory?.[member.id] || [];
-  const staffPing = staffRoleIds.map(id => `<@&${id}>`).join(' ');
+  
+  
   try {
     await channel.send({ content: `${staffPing}${staffPing ? '\n' : ''}${caseSummary(member, reason, refreshed, history)}`, allowedMentions: { roles: staffRoleIds, users: [member.id], parse: [] } });
   } catch (error) {
