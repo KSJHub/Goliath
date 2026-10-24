@@ -4,6 +4,7 @@ const auditIntelligence = require('../../../../owner/auditIntelligence/auditInte
 const {
   QUARANTINE_MODES,
   getQuarantineState,
+  saveQuarantineState,
   emitCurrentQuarantineState,
   getQuarantineMode,
 } = require('./state');
@@ -54,6 +55,14 @@ async function enforceQuarantineOnMember(member, options = {}) {
     const role = await ensureQuarantineRole(guild, options);
     const isolation = await syncQuarantineIsolation(guild, { ...options, role, targetMemberId: member.id, rollbackMemberAllowsOnFailure: false });
     if (!isolation.success) return { success: false, mode, reason: 'Quarantine isolation sync failed.', isolation };
+    if (isolation.memberViewAllowRestores?.length) {
+      const latest = getQuarantineState(guild.id);
+      const active = latest.users?.[member.id];
+      if (active) {
+        active.memberViewAllowRestores = [...new Set([...(active.memberViewAllowRestores || []), ...isolation.memberViewAllowRestores])];
+        saveQuarantineState(guild, latest);
+      }
+    }
     let interviewRoom = null;
     if (mode === QUARANTINE_MODES.INVESTIGATION) interviewRoom = await ensureInvestigationRoomForSnapshot(guild, member, role, snapshot, options);
     await member.roles.set([role.id], `Reapplying active Goliath ${mode} quarantine`);
