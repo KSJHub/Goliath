@@ -828,7 +828,8 @@ async function handleVerificationCases(i) {
  const row=(...buttons)=>new Discord.ActionRowBuilder().addComponents(...buttons);
  const button=(customId,label,style=Discord.ButtonStyle.Secondary)=>new Discord.ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
  const show=async payload=>{if(i.isMessageComponent?.())return i.update(payload);return i.reply({...payload,flags:64});};
- if(id==='mod_verification_cases'){
+ if(id==='mod_verification_cases') return panel.renderDashboard(i, 'none', 'cases', { actionFilter: 'quarantine' });
+ if(false){
   const lines=active.length?active.slice(0,10).map(([uid,v])=>`• <@${uid}> — ${Number(v.failedAttempts||0)} failures — ${v.quarantineChannelId?'<#'+v.quarantineChannelId+'>':'No case channel'}`):['No active Verification quarantine cases.'];
   const embed=new Discord.EmbedBuilder().setColor(0x5865f2).setTitle('🚨 Verification Cases · Mod Hub').setDescription(['Verification quarantine is an entry-security state, not a moderation punishment. Escalate a case to create a Mod Hub investigation.','',...lines].join('\\n'));
   const components=active.slice(0,20).reduce((rows,[uid],index)=>{if(index%5===0)rows.push(row(button('mod_verification_case:'+uid,'Review '+(i.guild.members.cache.get(uid)?.user?.username||uid).slice(0,55))));else rows[rows.length-1].addComponents(button('mod_verification_case:'+uid,'Review '+(i.guild.members.cache.get(uid)?.user?.username||uid).slice(0,55)));return rows;},[]);
@@ -840,7 +841,7 @@ async function handleVerificationCases(i) {
  if(!action){
   const v=sessions[uid];
   const embed=new Discord.EmbedBuilder().setColor(0xfee75c).setTitle('Verification Quarantine Review').setDescription(`Member: <@${uid}>\\nFailures: ${Number(v.failedAttempts||0)}\\nCase: ${v.quarantineChannelId?'<#'+v.quarantineChannelId+'>':'Unavailable'}\\n\\nRelease returns to Pending Verification; Reject ends entry; Escalate transfers to Mod Hub investigations.`);
-  return show({embeds:[embed],components:[row(button('mod_verification_case:'+uid+':release','Release',Discord.ButtonStyle.Success),button('mod_verification_case:'+uid+':reject','Reject',Discord.ButtonStyle.Danger),button('mod_verification_case:'+uid+':escalate','Escalate',Discord.ButtonStyle.Primary)),row(button('mod_verification_cases','Back'))]});
+  return show({embeds:[embed],components:[row(button('mod_verification_case:'+uid+':release','Release',Discord.ButtonStyle.Success),button('mod_verification_case:'+uid+':reject','Reject',Discord.ButtonStyle.Danger),button('mod_verification_case:'+uid+':escalate','Escalate',Discord.ButtonStyle.Primary)),row(button('mod_dashboard:none:cases','⬅️ Back to Cases'))]});
  }
  if(!['release','reject','escalate'].includes(action))return false;
  const permission=action==='release'?'remove_quarantine':action==='reject'?'kick':'quarantine';
@@ -850,7 +851,7 @@ async function handleVerificationCases(i) {
  const result=await verificationQuarantine.resolveQuarantineCase(i.guild,uid,action,i.user.id,'Mod Hub Verification review');
  if(!result?.ok)return i.editReply({content:'❌ '+String(result?.message||'Action failed'),embeds:[],components:[row(button('mod_verification_case:'+uid,'Back'))]});
  recordModerationSystemEvent({interaction:i,event:'moderation.verification_case_resolved',action,targetId:uid,reason:'Mod Hub Verification review'});
- return i.editReply({content:'✅ '+String(result.message||'Verification case updated.'),embeds:[],components:[row(button('mod_verification_cases','Back to Verification Cases'))]});
+ return i.editReply({content:'✅ '+String(result.message||'Verification case updated.'),embeds:[],components:[row(button('mod_dashboard:none:cases','⬅️ Back to Cases'))]});
 }
 async function routeButtonsAndSelects(i) {
   const denied = ensurePanelAccess(i); if (denied) return denied;
