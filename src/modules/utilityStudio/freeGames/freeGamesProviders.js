@@ -2,6 +2,9 @@
 
 const STORES = Object.freeze({ steam: 'Steam', epic: 'Epic Games Store', gog: 'GOG', itchio: 'itch.io', xbox: 'Xbox', playstation: 'PlayStation', switch: 'Nintendo Switch', android: 'Android', ios: 'iOS', drmFree: 'DRM-Free', other: 'Other platforms' });
 const TYPES = Object.freeze({ game: 'Games to keep', dlc: 'DLC', loot: 'In-game loot', beta: 'Beta / playtest access', demo: 'Demos', weekend: 'Free weekends / temporary access' });
+const CURRENCIES = Object.freeze(Intl.supportedValuesOf('currency'));
+const rateCache = new Map();
+const rateFlights = new Map();
 const CACHE_MS = 15 * 60_000;
 let cached = null;
 let inFlight = null;
@@ -40,7 +43,35 @@ function normalize(row, now = Date.now()) {
   if (endsAt && endsAt <= now) return null;
   // A date known to be in the past in every timezone can safely be excluded.
   if (/^\d{4}-\d\d-\d\d /.test(String(row.end_date)) && Date.parse(row.end_date.replace(' ', 'T') + 'Z') + 14 * 3600_000 <= now) return null;
-  return { id: `gamerpower:${row.id}`, title: String(row.title || 'Free offer').slice(0, 200), type, stores, url, worth: /^\$[\d,.]+$/.test(row.worth) ? row.worth : null, endsAt, endDateText: row.end_date && row.end_date !== 'N/A' ? String(row.end_date).slice(0, 40) : null, description: String(row.description || '').slice(0, 1000) };
+  return { id: `gamerpower:${row.id}`, title: String(row.title || 'Free offer').slice(0, 200), type, stores, url, image: safeUrl(row.image), worth: /^\$[\d,.]+$/.test(row.worth) ? row.worth : null, endsAt, endDateText: row.end_date && row.end_date !== 'N/A' ? String(row.end_date).slice(0, 40) : null, description: String(row.description || '').slice(0, 1000) };
+}
+// Indicative conversions of the provider's USD value, never regional store prices.
+async function getPricing(config) {
+  if (config.priceMode === 'hidden') return { mode: 'hidden', currency: config.currency };
+  if (config.priceMode === 'source' || config.currency === 'USD') return { mode: 'source', currency: 'USD' };
+  const currency = config.currency;
+  if (!CURRENCIES.includes(currency)) return { mode: 'unavailable', currency, warning: 'Choose a supported currency.' };
+  const previous = rateCache.get(currency);
+  if (previous && Date.now() < previous.retryAt) return previous.value;
+  if (rateFlights.has(currency)) return rateFlights.get(currency);
+  const task = (async () => {
+    try {
+      const response = await fetch(`https://api.frankfurter.dev/v2/rate/USD/${currency}`, { signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' } });
+      if (!response.ok) throw new Error('Rate unavailable');
+      const row = await response.json();
+      const age = Date.now() - Date.parse(row.date);
+      if (row.base !== 'USD' || row.quote !== currency || typeof row.rate !== 'number' || !Number.isFinite(row.rate) || row.rate <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(row.date) || !Number.isFinite(age) || age < -86400000 || age > 7 * 86400000) throw new Error('Invalid or stale rate');
+      const value = { mode: 'converted', currency, rate: row.rate, date: row.date };
+      rateCache.set(currency, { value, retryAt: Date.now() + 6 * 3600000 });
+      return value;
+    } catch {
+      const value = { mode: 'unavailable', currency, warning: `${currency} conversion unavailable; original prices are hidden. Free offers still update.` };
+      rateCache.set(currency, { value, retryAt: Date.now() + 5 * 60000 });
+      return value;
+    }
+  })().finally(() => rateFlights.delete(currency));
+  rateFlights.set(currency, task);
+  return task;
 }
 async function getOffers() {
   if (cached && Date.now() - cached.fetchedAt < CACHE_MS) return cached;
@@ -58,4 +89,4 @@ async function getOffers() {
   })().catch((error) => { retryAfter = Date.now() + 60_000; throw error; }).finally(() => { inFlight = null; });
   return inFlight;
 }
-module.exports = { STORES, TYPES, CACHE_MS, safeUrl, normalize, classify, getOffers };
+module.exports = { CURRENCIES, getPricing, STORES, TYPES, CACHE_MS, safeUrl, normalize, classify, getOffers };

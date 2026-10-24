@@ -3,7 +3,7 @@ const { createHash } = require('node:crypto');
 const { PermissionFlagsBits: P } = require('discord.js');
 const store = require('./freeGames');
 const providers = require('./freeGamesProviders');
-const { buildListing, escape } = require('./freeGamesEmbeds');
+const { buildListing, SECTIONS, line } = require('./freeGamesEmbeds');
 const locks = new Map();
 const timers = new WeakMap();
 const TICK_MS = 5 * 60_000;
@@ -47,13 +47,17 @@ async function processGuildUnlocked(guild) {
     const now = Date.now();
     const offers = store.filterOffers(feed.offers, config, now);
     const channel = await validateDestination(guild, config);
+    const pricing = await providers.getPricing(config);
+    const newSince = { ...config.state.newSince };
     const firstSeen = { ...config.state.firstSeen };
     const observed = { ...config.state.observed };
     const fresh = offers.filter((offer) => !observed[offer.id]);
+    for (const offer of fresh) if (config.state.initialized) newSince[offer.id] = now;
+    for (const id of Object.keys(newSince)) if (now - newSince[id] >= 24 * 3600000) delete newSince[id];
     for (const offer of feed.offers) { firstSeen[offer.id] ||= now; observed[offer.id] = now; }
     // Preserve deduplication across temporary feed omissions and restarts; bound old state.
     for (const id of Object.keys(observed)) if (now - observed[id] > 180 * 86400_000) { delete observed[id]; delete firstSeen[id]; }
-    store.update(guild.id, (current) => ({ ...current, state: { ...current.state, firstSeen, observed } }));
+    store.update(guild.id, (current) => ({ ...current, state: { ...current.state, firstSeen, newSince, observed, pricing, warning: pricing.warning || null } }));
     config = store.getConfig(guild.id);
     const pages = buildListing(offers, config, now);
     for (const delivery of [...config.state.retired]) {
@@ -67,7 +71,7 @@ async function processGuildUnlocked(guild) {
       if (!message) {
         // Recover a successful send whose ID was not persisted before a crash.
         const recent = await channel.messages.fetch({ limit: 100 });
-        message = recent.find((item) => item.author?.id === guild.client.user.id && item.embeds?.[0]?.title === '🎁 Free Games' && item.embeds?.[0]?.footer?.text?.startsWith(`Goliath Free Games · ${index + 1}/`));
+        message = recent.find((item) => item.author?.id === guild.client.user.id && SECTIONS.some((section) => section.title === item.embeds?.[0]?.title) && item.embeds?.[0]?.footer?.text?.startsWith(`Goliath Free Games · ${index + 1}/`));
       }
       const fingerprint = hash(pages[index]);
       if (!message) message = await channel.send({ ...pages[index], nonce: hash([guild.id, channel.id, index, Math.floor(now / 300000)]).slice(0, 24), enforceNonce: true });
@@ -82,13 +86,17 @@ async function processGuildUnlocked(guild) {
       let description = '';
       let included = 0;
       for (const offer of fresh) {
-        const line = `[${escape(offer.title)}](${offer.url}) · ${providers.TYPES[offer.type]}\n`;
-        if (description.length + line.length > 3300) break;
-        description += line; included++;
+        const entry = line(offer, newSince, now, config) + '\n';
+        if (description.length + entry.length > 3300) break;
+        description += entry; included++;
       }
       if (included < fresh.length) description += '\nSee the maintained listing for all offers.';
       description += '\n[Offers provided by GamerPower](https://www.gamerpower.com/)';
-      await channel.send({ content: config.roleId ? `<@&${config.roleId}>` : '', embeds: [{ title: `🎁 ${fresh.length} new free offer${fresh.length === 1 ? '' : 's'}`, description, color: 0xfbbf24 }], allowedMentions: { parse: [], roles: config.roleId ? [config.roleId] : [] } });
+      if (pricing.mode === 'converted') description += `\n≈ Estimated ${pricing.currency} values from USD; rate dated ${pricing.date}. Regional prices may differ.`;
+      else if (pricing.mode === 'source') description += '\nOriginal values supplied in USD.';
+      const first = fresh[0];
+      const detail = fresh.length === 1 && first.description ? first.description.slice(0, 400).replace(/@/g, '@\u200b') + '\n\n' : '';
+      await channel.send({ components: [{ type: 1, components: fresh.slice(0, 5).map((offer, index) => ({ type: 2, style: 5, label: fresh.length === 1 ? 'View offer & claim' : `View offer ${index + 1}`, url: offer.url })) }], content: config.roleId ? `<@&${config.roleId}>` : '', embeds: [{ title: `🎁 ${fresh.length} new free offer${fresh.length === 1 ? '' : 's'}`, description: detail + description, ...(first.image ? { thumbnail: { url: first.image } } : {}), color: 0xfbbf24 }], allowedMentions: { parse: [], roles: config.roleId ? [config.roleId] : [] } });
     }
     return { offerCount: offers.length, pages: pages.length };
   } catch (error) {

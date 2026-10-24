@@ -4,7 +4,7 @@ const { PermissionFlagsBits } = require('discord.js');
 const security = require('../../../../core/security/protection/core');
 const freeGames = require('../../../../modules/utilityStudio/freeGames/freeGames');
 const monitor = require('../../../../modules/utilityStudio/freeGames/freeGamesMonitor');
-const { STORES, TYPES } = require('../../../../modules/utilityStudio/freeGames/freeGamesProviders');
+const { STORES, TYPES, CURRENCIES, getOffers, getPricing } = require('../../../../modules/utilityStudio/freeGames/freeGamesProviders');
 const router = express.Router();
 router.use('/:guildId', async (req, res, next) => {
   try {
@@ -26,7 +26,18 @@ router.get('/:guildId', async (req, res) => {
   try {
     const guild = req.freeGamesGuild;
     await Promise.all([guild.channels.fetch(), guild.roles.fetch()]);
-    return res.json({ success: true, config: freeGames.getConfig(guild.id), stores: STORES, types: TYPES, channels: [...guild.channels.cache.values()].filter((channel) => [0, 5].includes(channel.type)).map(({ id, name, type }) => ({ id, name, type })), roles: [...guild.roles.cache.values()].filter((role) => role.id !== guild.id && !role.managed).map(({ id, name }) => ({ id, name })) });
+    return res.json({ success: true, config: freeGames.getConfig(guild.id), stores: STORES, types: TYPES, currencies: CURRENCIES, timeZones: Intl.supportedValuesOf('timeZone'), channels: [...guild.channels.cache.values()].filter((channel) => [0, 5].includes(channel.type)).map(({ id, name, type }) => ({ id, name, type })), roles: [...guild.roles.cache.values()].filter((role) => role.id !== guild.id && !role.managed).map(({ id, name }) => ({ id, name })) });
+  } catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
+router.post('/:guildId/preview', async (req, res) => {
+  try {
+    const previous = freeGames.getConfig(req.freeGamesGuild.id);
+    const config = { ...previous, ...freeGames.validateSettings(req.body || {}, previous) };
+    const feed = await getOffers();
+    const pricing = await getPricing(config);
+    const offers = freeGames.filterOffers(feed.offers, config);
+    const { buildListing, SECTIONS, shortTitle, price } = require('../../../../modules/utilityStudio/freeGames/freeGamesEmbeds');
+    return res.json({ success: true, offers: offers.map((offer) => ({ ...offer, displayTitle: shortTitle(offer.title), priceText: price(offer, { ...config, pricing }).replace(/[~\\]/g, '').trim() })), sections: SECTIONS.map(({ title, types }) => ({ title, types })), pricing, fetchedAt: feed.fetchedAt, pages: buildListing(offers, { ...config, pricing }) });
   } catch (error) { res.status(400).json({ success: false, error: error.message }); }
 });
 router.patch('/:guildId', async (req, res) => {

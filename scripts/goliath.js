@@ -2259,11 +2259,13 @@ function auditCommand() {
   return [projectShape, commandAudit, dashboardAudit, dashboardImportAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit]
     .map((suite) => suite()).every(Boolean);
 }
-function doctor(target = '') {
+async function doctor(target = '') {
   const suites = { goodbye: goodbyeAudit, reaction: reactionRolesAudit, reactionroles: reactionRolesAudit, 'reaction-roles': reactionRolesAudit, 'role-studio': roleStudioAudit, rolestudio: roleStudioAudit, invites: inviteStudioAudit };
   if (target) return suites[target]?.() ?? false;
-  return [projectShape, commandAudit, dashboardAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit]
-    .map((suite) => suite()).every(Boolean);
+  const suitesToRun = [projectShape, commandAudit, dashboardAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit, freeGamesAudit];
+  const results = [];
+  for (const suite of suitesToRun) results.push(await suite());
+  return results.every(Boolean);
 }
 function promote(target) {
   const environment = String(target || '').toLowerCase();
@@ -2762,7 +2764,134 @@ await main();
 return true;
 }
 
+async function freeGamesAudit() {
+  const assert = require('node:assert/strict');
+  const providers = require('../src/modules/utilityStudio/freeGames/freeGamesProviders');
+  const embeds = require('../src/modules/utilityStudio/freeGames/freeGamesEmbeds');
+  const store = require('../src/modules/utilityStudio/freeGames/freeGames');
+  const now = Date.now();
+  const config = { ...structuredClone(store.DEFAULTS), enabled: false, stores: Object.keys(providers.STORES), types: Object.keys(providers.TYPES), pricing: { mode: 'converted', currency: 'GBP', rate: 0.8, date: new Date(now).toISOString().slice(0, 10) } };
+  const offer = { id: 'gamerpower:1', title: 'A Game (Steam) Key Giveaway', type: 'game', stores: ['steam', 'xbox', 'playstation'], url: 'https://www.gamerpower.com/offer/1', worth: '$10.00', endsAt: now + 3600000, endDateText: null };
+  const offers = Array.from({ length: 120 }, (_, index) => ({ ...offer, id: `gamerpower:${index + 1}`, title: `Offer ${index} ` + 'Long title '.repeat(15), url: `https://www.gamerpower.com/offer/${index + 1}`, type: Object.keys(providers.TYPES)[index % 6] }));
+  const pages = embeds.buildListing([...offers, offers[0]], config, now);
+  const text = pages.map(page => page.embeds[0].description).join('\n');
+  for (const item of offers) assert.equal(text.split(`](${item.url})`).length - 1, 1, 'Offer must appear exactly once');
+  for (const page of pages) {
+    const embed = page.embeds[0];
+    assert(embed.description.length <= 4096);
+    assert(embed.title.length + embed.description.length + embed.footer.text.length < 6000);
+    assert.deepEqual(page.allowedMentions, { parse: [] });
+  }
+  assert.equal(pages[0].embeds[0].title, '🎁 Free Games');
+  assert(text.includes('≈£8.00'));
+  assert(!text.includes('🆕'));
+  assert(embeds.line(offer, { [offer.id]: now }, now, config).includes('🆕'));
+  assert(!embeds.line(offer, { [offer.id]: now - embeds.NEW_MS }, now, config).includes('🆕'));
+  assert.equal(embeds.shortTitle(offer.title), 'A Game');
+  assert.equal(embeds.price(offer, { ...config, pricing: { mode: 'hidden' } }), '');
+  assert.equal(embeds.price(offer, { ...config, pricing: { mode: 'unavailable' } }), '');
+  assert(embeds.price(offer, { ...config, pricing: { mode: 'source' } }).includes('US$10.00'));
+  const unknown = embeds.line({ ...offer, endsAt: null }, {}, now, config);
+  assert(!unknown.includes('<t:'));
+  assert.equal(embeds.orderedOffers([{ ...offer, id: 'later', endsAt: now + 7200000 }, offer], now)[0].id, offer.id);
+  assert.equal(store.validateSettings({ currency: 'JPY', locale: 'ja-JP', region: 'JP', timeZone: 'Asia/Tokyo' }, config).currency, 'JPY');
+  for (const patch of [{ currency: 'ZZZ' }, { priceMode: 'fake' }, { timeZone: 'invalid' }, { locale: 'not_a_locale' }, { region: 'ZZ' }]) assert.throws(() => store.validateSettings(patch, config));
+  const savedFetch = global.fetch;
+  let calls = 0;
+  try {
+    global.fetch = async () => { calls++; return { ok: true, json: async () => ({ base: 'USD', quote: 'GBP', rate: 0.8, date: new Date(now).toISOString().slice(0, 10) }) }; };
+    const [a, b] = await Promise.all([providers.getPricing(config), providers.getPricing(config)]);
+    assert.equal(a.rate, 0.8); assert.deepEqual(a, b); assert.equal(calls, 1);
+    global.fetch = async () => { throw Error('offline'); };
+    const failed = await providers.getPricing({ ...config, currency: 'EUR' });
+    assert.equal(failed.mode, 'unavailable'); assert(failed.warning);
+    assert.equal((await providers.getPricing({ ...config, priceMode: 'hidden' })).mode, 'hidden');
+  } finally { global.fetch = savedFetch; }
+  const monitor = require('../src/modules/utilityStudio/freeGames/freeGamesMonitor');
+  const originals = { getConfig: store.getConfig, update: store.update, getOffers: providers.getOffers, getPricing: providers.getPricing };
+  let state = { ...structuredClone(config), enabled: true, channelId: '123456789012345678', alerts: true, roleId: null };
+  let feedOffers = [offer];
+  const messages = new Map();
+  let serial = 0;
+  let alerts = 0;
+  let edits = 0;
+  const channel = { id: state.channelId, type: 0, permissionsFor: () => ({ has: () => true }), messages: { fetch: async (id) => {
+    if (typeof id === 'object') return { find: (fn) => [...messages.values()].find(fn) };
+    if (!messages.has(id)) throw Object.assign(Error('deleted'), { code: 10008 });
+    return messages.get(id);
+  } }, send: async (payload) => {
+    if (!payload.embeds[0].footer) { alerts++; return {}; }
+    const message = { id: String(++serial), author: { id: 'bot' }, embeds: payload.embeds, edit: async (next) => { edits++; message.embeds = next.embeds; }, delete: async () => messages.delete(message.id) };
+    messages.set(message.id, message); return message;
+  } };
+  const guild = { id: '123456789012345679', client: { user: { id: 'bot' } }, channels: { fetch: async () => channel }, members: { me: {} } };
+  try {
+    store.getConfig = () => structuredClone(state);
+    store.update = (id, fn) => { state = fn(structuredClone(state)); return state; };
+    providers.getOffers = async () => ({ offers: feedOffers, fetchedAt: now });
+    providers.getPricing = async () => config.pricing;
+    await monitor.processGuild(guild);
+    assert.equal(alerts, 0); assert.deepEqual(state.state.newSince, {});
+    assert.equal(messages.size, 1);
+    const baselineEdits = edits;
+    await Promise.all([monitor.processGuild(guild), monitor.processGuild(guild)]);
+    assert.equal(messages.size, 1); assert.equal(edits, baselineEdits);
+    const addition = { ...offer, id: 'gamerpower:999', title: 'New offer', type: 'dlc' };
+    feedOffers = [offer, addition];
+    await monitor.processGuild(guild);
+    assert.equal(alerts, 1); assert(state.state.newSince[addition.id]); assert.equal(messages.size, 2);
+    await monitor.processGuild(guild); assert.equal(alerts, 1);
+    messages.clear(); await monitor.processGuild(guild); assert.equal(messages.size, 2); assert.equal(alerts, 1);
+    providers.getOffers = async () => { throw Error('provider offline'); };
+    await assert.rejects(monitor.processGuild(guild), /provider offline/);
+    assert.equal(messages.size, 2); assert(state.state.error.includes('provider offline'));
+    providers.getOffers = async () => ({ offers: [offer], fetchedAt: now });
+    await monitor.processGuild(guild); assert.equal(messages.size, 1); assert.equal(state.state.error, null);
+  } finally {
+    store.getConfig = originals.getConfig; store.update = originals.update;
+    providers.getOffers = originals.getOffers; providers.getPricing = originals.getPricing;
+  }
+  // Verify the preview is access-controlled and never writes config or posts messages.
+  const express = require('express');
+  const http = require('node:http');
+  const { once } = require('node:events');
+  const routePath = require.resolve('../src/server/routes/modules/utilityStudio/freeGames');
+  const priorRoute = require.cache[routePath];
+  let server;
+  const priorConfig = store.getConfig;
+  const priorOffers = providers.getOffers;
+  const priorPricing = providers.getPricing;
+  try {
+    providers.getOffers = async () => ({ offers: [offer], fetchedAt: now });
+    providers.getPricing = async () => config.pricing;
+    store.getConfig = () => structuredClone(config);
+    delete require.cache[routePath];
+    const app = express(); app.use(express.json());
+    app.use((req, res, next) => {
+      req.session = req.headers['x-fixture-user'] ? { user: { id: '123456789012345680' } } : {};
+      req.client = { guilds: { cache: new Map([[guild.id, { ...guild, members: { fetch: async () => ({ permissions: { has: () => req.headers['x-fixture-user'] === 'manager' } }) } }]]) } };
+      next();
+    });
+    app.use('/api/free-games', require(routePath));
+    server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    const url = `http://127.0.0.1:${server.address().port}/api/free-games/${guild.id}/preview`;
+    assert.equal((await savedFetch(url, { method: 'POST' })).status, 401);
+    assert.equal((await savedFetch(url, { method: 'POST', headers: { 'x-fixture-user': 'member' } })).status, 403);
+    const response = await savedFetch(url, { method: 'POST', headers: { 'x-fixture-user': 'manager', 'content-type': 'application/json' }, body: JSON.stringify({ currency: 'GBP' }) });
+    assert.equal(response.status, 200);
+    const payload = await response.json(); assert.equal(payload.offers.length, 1); assert(payload.pages.length);
+    assert.equal(alerts, 1); assert.equal(messages.size, 1);
+  } finally {
+    if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+    store.getConfig = priorConfig; providers.getOffers = priorOffers; providers.getPricing = priorPricing;
+    delete require.cache[routePath]; if (priorRoute) require.cache[routePath] = priorRoute;
+  }
+  console.log('✅ Free Games: unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
+  return true;
+}
+
 const commands = {
+  'free-games': freeGamesAudit,
   'quarantine-containment': quarantineContainmentAudit,
   'dependency-runtime': dependencyRuntimeAudit,
   summary: developmentSummaryCommand,
