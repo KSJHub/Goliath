@@ -452,14 +452,17 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     const pendingAppeals = appeals.filter(({ appeal }) => (appeal?.status || 'pending') === 'pending').map(({ case: entry, appeal }) => ({ type: 'appeal', userId: String(entry?.userId || entry?.user_id || ''), caseId: entry?.caseId, reason: String(entry?.reason || 'Moderation appeal awaiting review'), status: 'pending' }));
     records.push(...pendingAppeals);
     const matches = records.filter(entry => filter === 'all' || (filter === 'warn' ? ['warn','warning'].includes(entry.type) : entry.type === filter));
-    const active = matches.filter(entry => ['active','pending','quarantined'].includes(entry.status));
+    const active = filter === 'warn' || filter === 'timeout'
+      ? matches
+      : matches.filter(entry => ['active','pending','quarantined'].includes(entry.status));
     const pages = Math.max(1, Math.ceil(active.length / 8)), page = Math.max(0, Math.min(context.page, pages - 1));
     const shown = active.slice(page * 8, (page + 1) * 8);
-    const embed = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle('📂 Cases · Review Centre')
+    const title = filter === 'warn' ? '⚠️ Warnings · Review Centre' : filter === 'timeout' ? '⌛ Timeouts · Review Centre' : filter === 'appeal' ? '⚖️ Appeals · Review Centre' : filter === 'quarantine' ? '🚨 Quarantines · Review Centre' : '📂 Cases · Review Centre';
+    const embed = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(title)
       .setDescription(target ? `👤 <@${target.id}> · Member records` : 'Review active cases, appeals and quarantines.')
       .addFields(
         { name: '📊 Overview', value: `⚠️ Warnings **${records.filter(e => ['warn','warning'].includes(e.type)).length}** · ⌛ Timeouts **${records.filter(e => e.type === 'timeout').length}** · ⚖️ Appeals **${appeals.length}** · 🚨 Quarantines **${quarantines.length}**`, inline: false },
-        { name: `📋 Active · ${filter === 'all' ? 'All types' : filter} · ${active.length} record(s)`, value: shown.length ? shown.map(e => `**${e.type.toUpperCase()}** · <@${e.userId}>${e.caseId ? ` · #${e.caseId}` : ''}\n${e.reason.slice(0, 110)}${e.channelId ? ` · <#${e.channelId}>` : ''}`).join('\n\n').slice(0, 1024) : 'No matching active records.', inline: false })
+        { name: `📋 ${filter === 'warn' || filter === 'timeout' ? 'History' : 'Active'} · ${filter === 'all' ? 'All types' : filter} · ${active.length} record(s)`, value: shown.length ? shown.map(e => `**${e.type.toUpperCase()}** · <@${e.userId}>${e.caseId ? ` · #${e.caseId}` : ''}\n${e.reason.slice(0, 110)}${e.channelId ? ` · <#${e.channelId}>` : ''}`).join('\n\n').slice(0, 1024) : (filter === 'warn' || filter === 'timeout' ? 'No matching records in this history.' : 'No matching active records.'), inline: false })
       .setFooter({ text: 'Staff only · Select a record to review' });
     embeds.push(embed);
     components.length = 0;
@@ -467,13 +470,13 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
       .setCustomId('mod_cases_user_select').setPlaceholder(target ? '👤 Change member filter' : '🔎 Search cases by member')
       .setMinValues(1).setMaxValues(1)));
     components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
-      .setCustomId('mod_cases_open_record').setPlaceholder(shown.length ? '📂 Open a case to review' : '📂 No active cases in this filter')
+      .setCustomId('mod_cases_open_record').setPlaceholder(shown.length ? '📂 Open a case to review' : '📂 No matching records')
       .setDisabled(!shown.length)
       .addOptions(shown.length ? shown.map(e => ({
-        label: `${e.type.toUpperCase()} · ${e.userId.slice(-6)}`.slice(0, 100),
+        label: `${e.type.toUpperCase()} · ${e.userId.slice(-6)} · ${e.status}`.slice(0, 100),
         description: e.reason.slice(0, 100),
         value: e.type === 'quarantine' ? `q:${e.userId}` : `c:${e.caseId}`
-      })) : [{ label: 'No active records', value: 'none' }])));
+      })) : [{ label: 'No matching records', value: 'none' }])));
     components.push(new ActionRowBuilder().addComponents(...[['all','All'],['warn','Warnings'],['timeout','Timeouts'],['appeal','Appeals'],['quarantine','Quarantines']].map(([key,label]) =>
       new ButtonBuilder().setCustomId(`mod_cases_filter:${targetId || 'none'}:${key}`).setLabel(label).setStyle(filter === key ? ButtonStyle.Primary : ButtonStyle.Secondary))));
     const controls = [];
