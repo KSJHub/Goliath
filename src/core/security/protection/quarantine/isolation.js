@@ -54,7 +54,9 @@ async function verifyMemberContainment(guild, member, allowedChannelIds = []) {
   const allowed = new Set((allowedChannelIds || []).filter(Boolean).map(String));
   const channels = await guild.channels.fetch().catch(() => guild.channels.cache);
   const leaks = [];
-  for (const [, channel] of channels || []) {
+  const activeThreads = await guild.channels.fetchActiveThreads().catch(() => null);
+  const candidates = [...(channels?.values?.() || []), ...(activeThreads?.threads?.values?.() || [])];
+  for (const channel of candidates) {
     if (!channel || channel.type === ChannelType.GuildCategory) continue;
     if (allowed.has(String(channel.id))) continue;
     const permissions = channel.permissionsFor?.(member);
