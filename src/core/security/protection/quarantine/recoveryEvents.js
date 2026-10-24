@@ -47,6 +47,16 @@ module.exports = [
     try {
       const result = await syncQuarantineIsolation(channel.guild);
       if (!result.success) console.warn(`[QuarantineSystem] New channel isolation incomplete for ${channel.id}: ${result.reason || 'Unknown failure'}`);
+      for (const snapshot of Object.values(getQuarantineState(channel.guild.id)?.users || {})) {
+        const member = await channel.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
+        if (!member) continue;
+        const { PermissionFlagsBits } = require('discord.js');
+        if (channel.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) {
+          console.warn(`[QuarantineSystem] New channel ${channel.id} exposes quarantined member ${member.id}; attempting containment recovery.`);
+          const recovery = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+          if (!recovery.success) console.warn(`[QuarantineSystem] Failed to contain member ${member.id} after channel creation: ${recovery.reason || recovery.error || 'Unknown failure'}`);
+        }
+      }
     } catch (error) { console.warn(`[QuarantineSystem] Failed to secure new channel ${channel.id}:`, error.message); }
   } },
   { name: Events.ThreadCreate, async execute(thread) {
