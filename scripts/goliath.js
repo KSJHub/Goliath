@@ -2758,8 +2758,7 @@ async function main() {
   }
 }
 
-return main();
-
+await main();
 return true;
 }
 
