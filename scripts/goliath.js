@@ -3301,7 +3301,21 @@ async function freeGamesAudit() {
       req.client = { guilds: { cache: new Map([[guild.id, { ...guild, members: { fetch: async () => ({ permissions: { has: () => req.headers['x-fixture-user'] === 'manager' } }) } }]]) } };
       next();
     });
-    app.use('/api/free-games', require(routePath));
+
+    const freeGamesRoutes = require(routePath);
+    const orderedChannels = freeGamesRoutes.orderListingChannels({ channels: { cache: new Map([
+      ['20', { id: '20', name: 'Alpha lower category', type: 4, rawPosition: 2 }],
+      ['200', { id: '200', name: 'lower-channel', type: 0, parentId: '20', rawPosition: 0 }],
+      ['102', { id: '102', name: 'top-second', type: 5, parentId: '10', rawPosition: 3 }],
+      ['10', { id: '10', name: 'Zulu first category', type: 4, rawPosition: 1 }],
+      ['101', { id: '101', name: 'top-first', type: 0, parentId: '10', rawPosition: 1 }],
+      ['1', { id: '1', name: 'uncategorized', type: 0, rawPosition: 5 }],
+      ['300', { id: '300', name: 'voice-excluded', type: 2, parentId: '10', rawPosition: 0 }],
+    ]) } });
+    assert.deepEqual(orderedChannels.map(channel => channel.id), ['1', '101', '102', '200']);
+    assert.equal(orderedChannels[1].groupName, 'Zulu first category');
+    assert.equal(orderedChannels[3].groupName, 'Alpha lower category');
+    app.use('/api/free-games', freeGamesRoutes);
     server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
     const url = `http://127.0.0.1:${server.address().port}/api/free-games/${guild.id}/preview`;
     assert.equal((await savedFetch(url, { method: 'POST' })).status, 401);
@@ -3315,7 +3329,7 @@ async function freeGamesAudit() {
     store.getConfig = priorConfig; providers.getOffers = priorOffers; providers.getPricing = priorPricing;
     delete require.cache[routePath]; if (priorRoute) require.cache[routePath] = priorRoute;
   }
-  console.log('✅ Free Games: cold-cache core emoji resolution, footer-only timestamps, Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
+  console.log('✅ Free Games: guild category/channel ordering, cold-cache core emoji resolution, footer-only timestamps, Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
   return true;
 }
 

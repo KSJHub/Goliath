@@ -215,6 +215,7 @@ function PageShell({
 
 export const SectionCard = memo(function SectionCard({
   theme,
+  themed = false,
   title,
   subtitle,
   actions = null,
@@ -225,13 +226,13 @@ export const SectionCard = memo(function SectionCard({
   return (
     <section
       style={{
-        background: 'linear-gradient(180deg, rgba(8,15,30,0.98), rgba(6,12,24,0.98))',
+        background: themed ? theme.cardBgSolid || theme.cardBg : 'linear-gradient(180deg, rgba(8,15,30,0.98), rgba(6,12,24,0.98))',
         border: `1px solid ${theme.cardBorder}`,
         borderRadius: 22,
         padding,
         minHeight,
         boxShadow:
-          '0 12px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03)',
+          themed ? theme.softShadow : '0 12px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03)',
         display: 'grid',
         gap: 16,
         width: '100%',
@@ -257,9 +258,9 @@ export const SectionCard = memo(function SectionCard({
                 style={{
                   margin: 0,
                   fontSize: 'clamp(18px, 2vw, 20px)',
-                  fontWeight: 900,
+                  fontWeight: themed ? 650 : 900,
                   letterSpacing: '-0.03em',
-                  color: '#ffffff',
+                  color: themed ? theme.cardText : '#ffffff',
                   overflowWrap: 'break-word',
                 }}
               >

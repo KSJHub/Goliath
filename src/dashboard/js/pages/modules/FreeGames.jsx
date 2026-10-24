@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../services/apiClient.js';
 import ModuleShell from '../../shared/ModuleShell.jsx';
 import { SectionCard } from '../../shared/PageShell.jsx';
-import { ChannelSelect, RoleSelect } from '../../ui/DiscordResourceSelects.jsx';
+import { ChannelSelect, RoleSelect, DiscordResourceSelect } from '../../ui/DiscordResourceSelects.jsx';
 
 function stamp(value, config = {}) { return value ? new Date(value).toLocaleString(config.locale || 'en-GB', { timeZone: config.timeZone || 'Europe/London' }) : 'Never'; }
 export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
@@ -46,16 +46,17 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     } catch (err) { if (current === generation.current) setError(err.message); }
     finally { if (current === generation.current) setBusy(false); }
   }
-  const button = { border: `1px solid ${theme.cardBorder}`, background: theme.softBg, color: theme.cardText, padding: '10px 16px', borderRadius: 12, fontWeight: 800, cursor: 'pointer' };
+  const button = { border: `1px solid ${theme.cardBorder}`, background: theme.softBg, color: theme.cardText, padding: '10px 16px', borderRadius: 12, fontWeight: 600, fontSize: 14, cursor: 'pointer' };
   if (!guildId) return <p>Select a server to configure Free Games.</p>;
   if (!draft) return <p role={error ? 'alert' : 'status'}>{error || 'Loading Free Games…'}</p>;
   const patch = (value) => { setPreview(null); setDraft((old) => ({ ...old, ...value })); };
   const toggle = (key, value, checked) => patch({ [key]: checked ? [...draft[key], value] : draft[key].filter((item) => item !== value) });
-  const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 };
-  const checks = (key, choices) => <div style={grid}>{Object.entries(choices).map(([value, label]) => <label key={value} style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" disabled={busy} checked={draft[key].includes(value)} onChange={(event) => toggle(key, value, event.target.checked)} />{label}</label>)}</div>;
-  const inputStyle = { ...button, width: '100%', boxSizing: 'border-box', marginTop: 6 };
-  const select = (key, label, choices) => <label>{label}<select style={inputStyle} disabled={busy} value={draft[key]} onChange={(event) => patch({ [key]: event.target.value })}>{choices.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>;
-  const previewCard = <SectionCard theme={theme} title="Preview matching offers">
+  const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))', gap: 14 };
+  const selectionStyle = (checked) => ({ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, padding: '13px 14px', borderRadius: 12, border: '1px solid ' + (checked ? theme.primaryBorder || theme.primary : theme.cardBorder), background: checked ? theme.primarySoft || theme.softBg : theme.softBg, color: theme.cardText, cursor: busy ? 'wait' : 'pointer', fontSize: 14, fontWeight: 500, lineHeight: 1.4 });
+  const checks = (key, choices) => <div style={grid}>{Object.entries(choices).map(([value, label]) => <label key={value} style={selectionStyle(draft[key].includes(value))}><input type="checkbox" disabled={busy} style={{ width: 16, height: 16, accentColor: theme.primary, flexShrink: 0 }} checked={draft[key].includes(value)} onChange={(event) => toggle(key, value, event.target.checked)} />{label}</label>)}</div>;
+  const inputStyle = { ...button, width: '100%', boxSizing: 'border-box', marginTop: 8, background: theme.inputBg || theme.softBg, color: theme.inputText || theme.cardText, fontWeight: 500, padding: '12px 14px' };
+  const select = (key, label, choices) => <DiscordResourceSelect searchable clearable={false} theme={theme} label={label} disabled={busy} value={draft[key]} placeholder="Choose an option" resources={choices.map(([id, name]) => ({ id, name }))} onChange={value => { if (value) patch({ [key]: value }); }} />;
+  const previewCard = <SectionCard themed theme={theme} title="Preview matching offers">
     <p style={{ color: theme.mutedText }}>Preview your current selections before saving. This does not post to Discord or send alerts.</p>
     <button style={button} disabled={busy} onClick={previewDraft}>{busy ? 'Working…' : 'Preview current selections'}</button>
     {preview ? <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
@@ -84,14 +85,14 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     </div> : null}
   </SectionCard>;
   const configuration = <div style={{ display: 'grid', gap: 18 }}>
-    <SectionCard theme={theme} title="Delivery">
+    <SectionCard themed theme={theme} title="Delivery">
       <fieldset disabled={busy} style={{ border: 0, padding: 0, display: 'grid', gap: 18 }}>
-        <label><input type="checkbox" checked={draft.enabled} onChange={(event) => patch({ enabled: event.target.checked })} /> Enable Free Games</label>
-        <ChannelSelect theme={theme} resources={data.channels} value={draft.channelId || ''} onChange={(channelId) => patch({ channelId: channelId || null })} label="Free Games channel" />
-        <p style={{ color: theme.mutedText, margin: 0 }}>A maintained catalogue split into Games, DLC & Add-ons, and Loot/Betas. Each offer appears once with its platforms. Extra messages are used when needed. Disabling pauses updates and leaves the listing in place. Changing channel moves the listing on its next update.</p>
+        <label style={{ ...selectionStyle(draft.enabled), justifyContent: 'space-between' }}><span><strong style={{ display: 'block', fontWeight: 600 }}>Automatic listings</strong><span style={{ color: theme.mutedText, fontSize: 13 }}>Keep your server’s free offers up to date.</span></span><input type="checkbox" role="switch" aria-label="Enable Free Games" checked={draft.enabled} style={{ accentColor: theme.primary, width: 20, height: 20, flexShrink: 0 }} onChange={(event) => patch({ enabled: event.target.checked })} /></label>
+        <ChannelSelect searchable disabled={busy} theme={theme} resources={data.channels} value={draft.channelId || ''} onChange={(channelId) => patch({ channelId: channelId || null })} label="Free Games channel" />
+        <p style={{ color: theme.mutedText, margin: 0 }}>Channels follow your server’s category order. Choose where the maintained catalogue is posted; pausing keeps existing messages.</p>
       </fieldset>
     </SectionCard>
-    <SectionCard theme={theme} title="Currency and regional formatting">
+    <SectionCard themed theme={theme} title="Currency and regional formatting">
       <div style={grid}>
         {select('currency', 'Display currency', data.currencies.map((code) => [code, code]))}
         {select('priceMode', 'Original price display', [['converted', 'Convert to selected currency (estimate)'], ['source', 'Show source USD'], ['hidden', 'Hide original prices']])}
@@ -101,26 +102,26 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
       </div>
       <p style={{ color: theme.mutedText }}>These settings also apply to the Discord management panel. GBP and UK formatting are the default. Converted values use dated exchange rates and show ≈; they are not verified local store prices. If conversion is unavailable, prices are hidden while offers continue updating. Locale changes number/date formatting; offer text remains in the provider’s language. Region records your preference; check each offer’s regional eligibility.</p>
     </SectionCard>
-    <SectionCard theme={theme} title="Listing appearance">
+    <SectionCard themed theme={theme} title="Listing appearance">
       <div style={grid}>
         {select('layout', 'Platform layout', [['columns', 'Platform columns'], ['list', 'Stacked platform lists']])}
-        {[['showTimestamps', 'Footer timestamps'], ['showPlatforms', 'Additional platforms'], ['showNew', 'NEW markers'], ['showOfferCount', 'Offer counts']].map(([key, label]) => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" disabled={busy} checked={draft[key] !== false} onChange={(event) => patch({ [key]: event.target.checked })} />{label}</label>)}
+        {[['showTimestamps', 'Footer timestamps'], ['showPlatforms', 'Additional platforms'], ['showNew', 'NEW markers'], ['showOfferCount', 'Offer counts']].map(([key, label]) => <label key={key} style={selectionStyle(draft[key] !== false)}><input type="checkbox" style={{ accentColor: theme.primary, width: 16, height: 16 }} disabled={busy} checked={draft[key] !== false} onChange={(event) => patch({ [key]: event.target.checked })} />{label}</label>)}
       </div>
       <p style={{ color: theme.mutedText }}>The public listing keeps a compact provider credit. Footer timestamps reflect the source feed update; Discord displays them in each viewer’s local time. You can also manage these settings through /admin → Modules → Utility → Free Games.</p>
     </SectionCard>
-    <SectionCard theme={theme} title="Stores and platforms">{checks('stores', data.stores)}</SectionCard>
-    <SectionCard theme={theme} title="Offer types">{checks('types', data.types)}<p style={{ color: theme.mutedText }}>Games to keep is the default. DLC and loot may require a base game. Beta access, demos and free weekends are temporary and labelled separately. Availability depends on the provider feed.</p></SectionCard>
-    <SectionCard theme={theme} title="New offer alerts">
+    <SectionCard themed theme={theme} title="Stores and platforms">{checks('stores', data.stores)}</SectionCard>
+    <SectionCard themed theme={theme} title="Offer types">{checks('types', data.types)}<p style={{ color: theme.mutedText }}>Games to keep is the default. DLC and loot may require a base game. Beta access, demos and free weekends are temporary and labelled separately. Availability depends on the provider feed.</p></SectionCard>
+    <SectionCard themed theme={theme} title="New offer alerts">
       <fieldset disabled={busy} style={{ border: 0, padding: 0, display: 'grid', gap: 16 }}>
-        <label><input type="checkbox" checked={draft.alerts} onChange={(event) => patch({ alerts: event.target.checked })} /> Post an alert for newly discovered offers</label>
-        <RoleSelect theme={theme} resources={data.roles} value={draft.roleId || ''} onChange={(roleId) => patch({ roleId: roleId || null })} placeholder="No role ping" label="Optional notification role" />
+        <label style={selectionStyle(draft.alerts)}><input type="checkbox" style={{ accentColor: theme.primary, width: 16, height: 16 }} checked={draft.alerts} onChange={(event) => patch({ alerts: event.target.checked })} /> Post an alert for newly discovered offers</label>
+        <RoleSelect searchable disabled={busy} theme={theme} resources={data.roles} value={draft.roleId || ''} onChange={(roleId) => patch({ roleId: roleId || null })} placeholder="No role ping" label="Optional notification role" />
         <p style={{ margin: 0, color: theme.mutedText }}>No role selected means no ping. Initial setup and filter changes establish a quiet baseline. Restarts and routine updates do not repeat alerts.</p>
       </fieldset>
     </SectionCard>
     {previewCard}
-    <button style={button} disabled={busy} onClick={() => act(false)}>{busy ? 'Working…' : 'Save settings'}</button>
+    <button style={{ ...button, background: theme.primary, color: theme.primaryText, borderColor: theme.primary, justifySelf: 'start', minWidth: 170 }} disabled={busy} onClick={() => act(false)}>{busy ? 'Working…' : 'Save settings'}</button>
   </div>;
-  const overview = <><SectionCard theme={theme} title="Free Games status"><div style={{ display: 'grid', gap: 12 }}>
+  const overview = <><SectionCard themed theme={theme} title="Free Games status"><div style={{ display: 'grid', gap: 12 }}>
     <p>{data.config.state.offerCount} matching offers · {data.config.state.deliveries.length} listing messages</p>
     <p>Last check: {stamp(data.config.state.lastCheck, data.config)}<br />Last successful update: {stamp(data.config.state.lastSuccess, data.config)}</p>
     <p>{!data.config.enabled ? 'Updates are paused.' : !data.config.channelId ? 'Needs setup: choose a destination channel.' : data.config.state.error ? 'Update failed. The last successful listing is retained.' : !data.config.state.lastSuccess ? 'Waiting for the first successful listing update.' : 'The last listing update succeeded.'}</p>
