@@ -250,13 +250,9 @@ function buildActionsEmbed(interaction, target, stats, staffDisplay) {
       'Select a member for actions, or open Cases to review records and quarantines.',
       '',
       `**Authority:** ${staffDisplay}`,
-    ].join('\n'))
-    .addFields(
-      { name: 'Cases', value: `**${overall.activeCases}**`, inline: true },
-      { name: 'Quarantines', value: `**${overall.activeVerificationCases}**`, inline: true },
-      { name: 'Warnings', value: `**${overall.activeWarnings}**`, inline: true },
-      { name: 'Appeals', value: `**${overall.pendingAppeals}**`, inline: true },
-    );
+      '',
+      `**Cases** ${overall.activeCases}  ·  **Warnings** ${overall.activeWarnings}  ·  **Appeals** ${overall.pendingAppeals}  ·  **Quarantines** ${overall.activeVerificationCases}`,
+    ].join('\n'));
 
   const highestRole = target.roles?.highest && target.roles.highest.id !== interaction.guild.id ? `${target.roles.highest}` : 'No elevated role';
   const timeout = targetHasActiveTimeout(target) ? `Active until ${timestamp(target.communicationDisabledUntilTimestamp, 'f')}` : 'None';
