@@ -54,7 +54,18 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
   const session = verificationStore.getSession(guild.id, member.id) || {};
   if (session.quarantineChannelId) {
     const existing = guild.channels.cache.get(session.quarantineChannelId) || await guild.channels.fetch(session.quarantineChannelId).catch(() => null);
-    if (existing) return { ok: true, channel: existing, existing: true };
+    if (existing) {
+      const permissions = existing.permissionsFor?.(member);
+      if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions.has(PermissionFlagsBits.SendMessages)) {
+        try {
+          await existing.permissionOverwrites.edit(member.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true }, { reason: 'Restore Verification case interview access' });
+        } catch (error) {
+          verificationStore.addSecurityHistory(guild.id, member.id, { type: 'quarantine_case_access_repair_failed', channelId: existing.id, reason: String(error?.message || error).slice(0, 300) });
+          return { ok: false, channel: existing, message: 'Existing Verification case access could not be restored.' };
+        }
+      }
+      return { ok: true, channel: existing, existing: true };
+    }
   }
   const parentId = settings.quarantine?.categoryId || null;
   if (parentId) {
