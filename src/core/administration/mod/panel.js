@@ -40,7 +40,7 @@ const {
   listAppeals,
 } = require('./cases');
 const { getWarningCountForUser, syncExpiredWarningsToCases } = require('./warns');
-const { canUseModAction, hasModPermission, fetchTarget } = require('./permissions');
+const { canUseModAction, getStaffDisplay, hasModPermission, fetchTarget } = require('./permissions');
 const { getQuarantineState } = require('../../security/protection/quarantine');
 const caseProceeding = require('./caseProceeding');
 const verificationStore = require('../../../modules/securityStudio/verificationStore');
@@ -437,7 +437,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
   await syncExpiredWarningsToCases(interaction.guild.id);
   const context = normalizeDashboardContext({ ...options, view }); context.adminOrigin = options.adminOrigin === true || interaction.message?.components?.some((row) => row.components?.some((component) => component.customId === 'admin:home')); let safeView = context.view;
   if (!canViewDashboardSection(interaction.member, interaction.guild, safeView)) safeView = DEFAULT_VIEW;
-  const targetId = target?.id || null; const stats = buildTargetStats(interaction.guild.id, target); const assignedRole = interaction.member?.roles?.highest; const staffDisplay = assignedRole && assignedRole.id !== interaction.guild.id ? `<@&${assignedRole.id}>` : 'No assigned role';
+  const targetId = target?.id || null; const stats = buildTargetStats(interaction.guild.id, target); const staff = getStaffDisplay(interaction.member, interaction.guild); const staffDisplay = staff.roleId ? `<@&${staff.roleId}>` : 'No configured moderation role';
   const embeds = []; const components = (safeView === 'analytics' || safeView === 'appeals') ? [] : [buildUserSelectRow()];
   if (safeView === 'actions') { embeds.push(buildActionsEmbed(interaction, target, stats, staffDisplay)); components.push(...buildActionRows(target, stats, interaction.member, interaction.guild, context)); }
   else if (safeView === 'intelligence') { embeds.push(buildIntelligenceEmbed(interaction, target, interaction.member, interaction.guild)); components.push(...buildIntelligenceRows(targetId, interaction.member, interaction.guild)); }
