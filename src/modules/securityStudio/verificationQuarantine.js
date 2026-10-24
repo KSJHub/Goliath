@@ -226,6 +226,7 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
     }
     return { ok: true, escalated: true, member, interviewChannelId: result.interviewChannelId || null, message: 'Verification quarantine escalated into the Mod Hub investigation workflow.' };
   }
+  if (activeModerationIsolation(guild.id, userId)) return { ok: false, message: 'An active Mod Hub isolation must be resolved through Mod Hub before Verification can release or reject this member.' };
   if (!member) return { ok: false, message: 'Member is unavailable; quarantine roles cannot be reconciled.' };
   if (resolution === 'release') {
     if (!pendingIds.length) return { ok: false, message: 'A Pending role must be configured before releasing quarantine.' };
