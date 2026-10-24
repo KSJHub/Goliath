@@ -52,7 +52,9 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
   const settings = verificationStore.normalizeSettings(section?.settings || {});
   if (settings.quarantine?.enabled === false) return { ok: true, skipped: true };
   const session = verificationStore.getSession(guild.id, member.id) || {};
-  const sharedRoomId = getQuarantineState(guild.id)?.users?.[member.id]?.interviewChannelId;
+  const sharedSnapshot = getQuarantineState(guild.id)?.users?.[member.id];
+  const sharedRoomId = sharedSnapshot?.interviewChannelId;
+  if (sharedSnapshot && !sharedRoomId) return { ok: false, message: 'Member is in Security Isolation; no Verification interview room may be created.' };
   if (sharedRoomId) {
     const room = await guild.channels.fetch(String(sharedRoomId)).catch(() => null);
     if (!room) return { ok: false, message: 'Shared investigation room is unavailable; Mod Hub recovery required.' };
