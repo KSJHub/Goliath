@@ -82,6 +82,11 @@ async function retryPendingInvestigationRoomCleanups(guild, options = {}) {
   return result;
 }
 
+const releasesInProgress = new Set();
+function isQuarantineReleaseInProgress(guildId, memberId) {
+  return releasesInProgress.has(`${guildId}:${memberId}`);
+}
+
 async function restoreQuarantinedMember(guild, member, options = {}) {
   if (!guild || !member) return { success: false, reason: 'Missing guild/member' };
   const state = getQuarantineState(guild.id);
@@ -89,6 +94,9 @@ async function restoreQuarantinedMember(guild, member, options = {}) {
   if (!snapshot) return { success: false, reason: 'No quarantine snapshot' };
   const mode = getQuarantineMode(snapshot);
   if (mode === QUARANTINE_MODES.SECURITY && options.system !== true && String(options.restoredBy || '') !== String(guild.ownerId || '')) return { success: false, mode, reason: 'Full Security Isolation can only be cleared manually by the server owner.' };
+  const releaseKey = `${guild.id}:${member.id}`;
+  if (releasesInProgress.has(releaseKey)) return { success: false, reason: 'Quarantine release already in progress.' };
+  releasesInProgress.add(releaseKey);
   try {
     const quarantineRoleId = state.roleId || null;
     const roles = await getRestorableRoleIds(guild, snapshot.roles, quarantineRoleId);
@@ -112,6 +120,7 @@ async function restoreQuarantinedMember(guild, member, options = {}) {
     emitCurrentQuarantineState(guild, 'member_restored', { memberId: member.id, mode, restoredRoles: roles.restored.length, skippedRoles: roles.skipped, archive, cleanupPending: archive?.success === false, restoredMemberChannelAllows: memberAccess.restored.length, verificationReconciled: verification?.reconciled === true });
     return { success: true, mode, restoredRoles: roles.restored.length, restoredRoleIds: roles.restored, skippedRoles: roles.skipped, memberAccess, archive, cleanupPending: archive?.success === false, verification };
   } catch (error) { return { success: false, mode, error: error.message }; }
+  finally { releasesInProgress.delete(releaseKey); }
 }
 
 async function clearExpiredAbsentMember(guild, userId, state) {
@@ -129,4 +138,4 @@ async function clearExpiredAbsentMember(guild, userId, state) {
   return { success: true, cleared: true, memberAccess, archive };
 }
 
-module.exports = { archiveInvestigationRoom, retryPendingInvestigationRoomCleanups, restoreQuarantinedMember, clearExpiredAbsentMember };
+module.exports = { isQuarantineReleaseInProgress, archiveInvestigationRoom, retryPendingInvestigationRoomCleanups, restoreQuarantinedMember, clearExpiredAbsentMember };
