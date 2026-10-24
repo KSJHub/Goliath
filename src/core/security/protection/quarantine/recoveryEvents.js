@@ -7,6 +7,7 @@ const { syncQuarantineIsolation } = require('./isolation');
 const { ensureInvestigationRoomForSnapshot } = require('./investigationRooms');
 const { enforceQuarantineOnMember, recoverGuildQuarantine, recoverQuarantines } = require('./enforcementRecovery');
 const { startQuarantineExpiryScheduler } = require('./expiryScheduler');
+const { isQuarantineReleaseInProgress } = require('./releaseLifecycle');
 const { ensureInitiatorInterviewAccess } = require('../../../administration/mod/quarantineInteractions');
 
 function hasActiveQuarantine(guildId) { return Object.keys(getQuarantineState(guildId)?.users || {}).length > 0; }
@@ -124,7 +125,7 @@ module.exports = [
     } catch (error) { console.warn(`[QuarantineSystem] Failed join enforcement for ${member.id}:`, error.message); }
   } },
   { name: Events.GuildMemberUpdate, async execute(before, member) {
-    if (!member?.guild || !getQuarantineState(member.guild.id)?.users?.[member.id]) return;
+    if (!member?.guild || isQuarantineReleaseInProgress(member.guild.id, member.id) || !getQuarantineState(member.guild.id)?.users?.[member.id]) return;
     const quarantineRoleId = getQuarantineState(member.guild.id)?.roleId;
     if (!quarantineRoleId) return;
     const roles = member.roles?.cache;
