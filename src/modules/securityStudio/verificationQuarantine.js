@@ -56,6 +56,14 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
   if (sharedRoomId) {
     const room = await guild.channels.fetch(String(sharedRoomId)).catch(() => null);
     if (!room) return { ok: false, message: 'Shared investigation room is unavailable; Mod Hub recovery required.' };
+    if (session.quarantineChannelId && String(session.quarantineChannelId) !== String(room.id)) {
+      const oldRoom = await guild.channels.fetch(String(session.quarantineChannelId)).catch(() => null);
+      if (oldRoom?.permissionOverwrites?.edit) {
+        try { await oldRoom.permissionOverwrites.edit(member.id, { ViewChannel: false }, { reason: 'Legacy Verification room superseded by shared investigation' }); }
+        catch (error) { return { ok: false, message: 'Legacy case room could not be isolated; staff review required.' }; }
+      }
+      verificationStore.addSecurityHistory(guild.id, member.id, { type: 'legacy_case_room_superseded', previousChannelId: session.quarantineChannelId, sharedChannelId: room.id });
+    }
     verificationStore.upsertSession(guild.id, member.id, { quarantineChannelId: room.id });
     return { ok: true, channel: room, existing: true, shared: true };
   }
