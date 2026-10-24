@@ -544,6 +544,7 @@ function canCloseProceeding(interaction) { return canUseModAction(interaction.me
 
 async function handleProceedingInteraction(interaction) {
   const id = String(interaction.customId || '');
+  if (id === 'mod_cases_open_record' && interaction.isStringSelectMenu?.()) { const value = String(interaction.values?.[0] || ''); if (value.startsWith('c:') && /^\\d+$/.test(value.slice(2))) return openCase(interaction, Number(value.slice(2))); return false; }
   if (!id.startsWith('mod_proceeding_')) return false;
   if (interaction.isStringSelectMenu?.()) {
     if (id.startsWith('mod_proceeding_open:')) return openCase(interaction, interaction.values?.[0]);
