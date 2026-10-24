@@ -101,6 +101,8 @@ async function restoreQuarantinedMember(guild, member, options = {}) {
   try {
     const quarantineRoleId = state.roleId || null;
     const roles = await getRestorableRoleIds(guild, snapshot.roles, quarantineRoleId);
+    const blockedRoles = roles.skipped.filter(entry => entry.reason === 'missing_manage_roles' || entry.reason === 'role_hierarchy');
+    if (blockedRoles.length) return { success: false, mode, reason: 'Cannot restore all manageable original roles; review bot permissions and role hierarchy before release.', blockedRoles };
     await member.roles.set(roles.restored, options.reason || 'Restoring quarantined member');
     const memberAccess = await restoreMemberViewAllows(guild, member.id, snapshot.memberViewAllowRestores, options);
     if (memberAccess.failed.length) {
