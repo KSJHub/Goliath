@@ -82,6 +82,17 @@ module.exports = [
       }
     }
   } },
+  { name: Events.ThreadUpdate, async execute(previous, thread) {
+    if (!thread?.guild || !hasActiveQuarantine(thread.guild.id)) return;
+    const { PermissionFlagsBits } = require('discord.js');
+    for (const snapshot of Object.values(getQuarantineState(thread.guild.id)?.users || {})) {
+      const member = await thread.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
+      if (!member || !thread.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) continue;
+      const result = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+      if (!result.success || thread.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel))
+        console.warn(`[QuarantineSystem] Updated thread ${thread.id} may expose quarantined member ${member.id}; manual review required.`);
+    }
+  } },
   { name: Events.ThreadMembersUpdate, async execute(addedMembers, removedMembers, thread) {
     if (!thread?.guild || !hasActiveQuarantine(thread.guild.id)) return;
     for (const threadMember of addedMembers?.values?.() || []) {
