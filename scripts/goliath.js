@@ -3118,6 +3118,84 @@ async function freeGamesAudit() {
   assert.equal(embeds.orderedOffers([{ ...offer, id: 'later', endsAt: now + 7200000 }, offer], now)[0].id, offer.id);
   assert.equal(store.validateSettings({ currency: 'JPY', locale: 'ja-JP', region: 'JP', timeZone: 'Asia/Tokyo' }, config).currency, 'JPY');
   for (const patch of [{ currency: 'ZZZ' }, { priceMode: 'fake' }, { timeZone: 'invalid' }, { locale: 'not_a_locale' }, { region: 'ZZ' }]) assert.throws(() => store.validateSettings(patch, config));
+
+  // Public presentation stays compact; source timestamps are stable between monitor ticks.
+  const listing = embeds.buildListing([offer], { ...config, listingUpdatedAt: now }, now)[0].embeds[0];
+  assert.equal(listing.timestamp, new Date(now).toISOString());
+  assert(!listing.description.includes('Estimated'));
+  assert(!listing.description.includes('Frankfurter'));
+  assert(listing.description.includes('GamerPower'));
+  const hiddenDetails = { ...config, layout: 'list', showTimestamps: false, showExpiry: false, showPlatforms: false, showNew: false, showOfferCount: false };
+  const cleanListing = embeds.buildListing([offer], hiddenDetails, now)[0].embeds[0];
+  assert.equal(cleanListing.timestamp, undefined);
+  assert(!cleanListing.description.includes('available'));
+  assert(cleanListing.fields.every(field => field.inline === false));
+  const cleanLine = embeds.line(offer, { [offer.id]: now }, now, hiddenDetails);
+  assert(!cleanLine.includes('<t:')); assert(!cleanLine.includes('🆕')); assert(!cleanLine.includes('Xbox'));
+  assert.equal(store.validateSettings({ layout: 'list', showTimestamps: false }, config).showTimestamps, false);
+  assert.throws(() => store.validateSettings({ layout: 'invalid' }, config));
+  assert.throws(() => store.validateSettings({ showExpiry: 'false' }, config));
+  for (const page of ['home', 'delivery', 'filters', 'pricing', 'display']) {
+    const payload = store.buildAdminPanel({ id: 'fixture' }, page, '', config);
+    assert(payload.components.length <= 5);
+    for (const row of payload.components) {
+      assert(row.components.length <= 5);
+      for (const component of row.components) {
+        assert(component.custom_id.length <= 100);
+        if (component.options) { assert(component.options.length <= 25); assert(component.max_values <= component.options.length); }
+      }
+    }
+    assert.deepEqual(payload.allowedMentions, { parse: [] });
+  }
+  assert.equal(store.regionalModal({ id: 'fixture' }, config).components.length, 4);
+  // Exercise the real Discord handler against in-memory config; never create guild data.
+  {
+    const fs = require('node:fs'), vm = require('node:vm');
+    let memory = structuredClone(config), writes = 0, sends = 0, permitted = true;
+    const mod = { exports: {} };
+    const injectedRequire = name => {
+      if (name.endsWith('/guildManager')) return { isModuleEnabled: () => memory.enabled };
+      if (name.endsWith('/moduleSectionManager')) return {
+        getModuleSection: () => structuredClone(memory),
+        updateModuleSection: (_id, _key, fn) => { memory = fn(structuredClone(memory)); writes++; return memory; },
+      };
+      if (name === './freeGamesProviders') return { ...providers, getOffers: async () => ({ offers: [offer], fetchedAt: now }), getPricing: async () => config.pricing };
+      if (name === './freeGamesEmbeds') return embeds;
+      if (name === './freeGamesMonitor') return { withGuildLock: async (_id, task) => task(), validateDestination: async () => { sends++; } };
+      if (name.endsWith('/security/protection/core')) return { isBotOwner: () => false };
+      if (name === 'discord.js') return require('discord.js');
+      throw new Error('Unexpected Free Games panel dependency: ' + name);
+    };
+    const source = fs.readFileSync(root + '/src/modules/utilityStudio/freeGames/freeGames.js', 'utf8');
+    vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(injectedRequire, mod, mod.exports);
+    const handler = mod.exports.handleAdminInteraction;
+    const guildFixture = { id: 'fixture', client: {}, members: { fetch: async () => ({ permissions: { has: () => permitted } }) } };
+    let last;
+    const interaction = action => ({
+      customId: 'admin:module:freeGames:' + action, guild: guildFixture, user: { id: 'manager', username: 'Manager' },
+      isButton: () => true, deferUpdate: async () => {}, editReply: async payload => { last = payload; },
+      update: async payload => { last = payload; }, deferred: true,
+    });
+    permitted = false;
+    await handler(interaction('enabled'));
+    assert.equal(writes, 0); assert.match(last.content, /Manage Server/);
+    permitted = true;
+    const settings = interaction('regionalSubmit');
+    settings.isModalSubmit = () => true;
+    settings.fields = { getTextInputValue: key => ({ currency: 'eur', locale: 'de-DE', timeZone: 'Europe/Berlin', region: 'de' })[key] };
+    await handler(settings);
+    assert.equal(memory.currency, 'EUR'); assert.equal(memory.region, 'DE'); assert.equal(writes, 1);
+    const before = JSON.stringify(memory);
+    const preview = interaction('preview:0'); await handler(preview);
+    assert.equal(JSON.stringify(memory), before); assert.equal(writes, 1); assert.equal(sends, 0);
+    assert.match(last.content, /Preview only/);
+    settings.fields.getTextInputValue = key => key === 'currency' ? 'ZZZ' : ({ locale: 'en-GB', timeZone: 'Europe/London', region: 'GB' })[key];
+    await handler(settings);
+    assert.equal(writes, 1); assert.equal(memory.currency, 'EUR');
+    const display = interaction('displayOptions');
+    display.isStringSelectMenu = () => true; display.values = ['showTimestamps']; await handler(display);
+    assert.equal(memory.showTimestamps, true); assert.equal(memory.showExpiry, false); assert.equal(memory.showPlatforms, false);
+  }
   const savedFetch = global.fetch;
   let calls = 0;
   try {
@@ -3142,7 +3220,7 @@ async function freeGamesAudit() {
     if (!messages.has(id)) throw Object.assign(Error('deleted'), { code: 10008 });
     return messages.get(id);
   } }, send: async (payload) => {
-    if (!payload.embeds[0].footer) { alerts++; return {}; }
+    if (/new free offers?$/.test(payload.embeds[0].title)) { alerts++; return {}; }
     const message = { id: String(++serial), author: { id: 'bot' }, embeds: payload.embeds, edit: async (next) => { edits++; message.embeds = next.embeds; }, delete: async () => messages.delete(message.id) };
     messages.set(message.id, message); return message;
   } };
@@ -3208,7 +3286,7 @@ async function freeGamesAudit() {
     store.getConfig = priorConfig; providers.getOffers = priorOffers; providers.getPricing = priorPricing;
     delete require.cache[routePath]; if (priorRoute) require.cache[routePath] = priorRoute;
   }
-  console.log('✅ Free Games: unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
+  console.log('✅ Free Games: Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
   return true;
 }
 

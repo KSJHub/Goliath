@@ -38,19 +38,13 @@ router.post('/:guildId/preview', async (req, res) => {
     const offers = freeGames.filterOffers(feed.offers, config);
     const { buildListing, SECTIONS, shortTitle, price, platformPresentation } = require('../../../../modules/utilityStudio/freeGames/freeGamesEmbeds');
     const platforms = platformPresentation(req.freeGamesGuild.client);
-    return res.json({ success: true, platforms, offers: offers.map((offer) => ({ ...offer, displayTitle: shortTitle(offer.title), priceText: price(offer, { ...config, pricing }).replace(/[~\\]/g, '').trim() })), sections: SECTIONS.map(({ title, types, color }) => ({ title, types, color })), pricing, fetchedAt: feed.fetchedAt, pages: buildListing(offers, { ...config, pricing }, Date.now(), platforms) });
+    return res.json({ success: true, platforms, offers: offers.map((offer) => ({ ...offer, displayTitle: shortTitle(offer.title), priceText: price(offer, { ...config, pricing }).replace(/[~\\]/g, '').trim() })), sections: SECTIONS.map(({ title, types, color }) => ({ title, types, color })), pricing, fetchedAt: feed.fetchedAt, pages: buildListing(offers, { ...config, pricing, listingUpdatedAt: feed.fetchedAt }, Date.now(), platforms) });
   } catch (error) { res.status(400).json({ success: false, error: error.message }); }
 });
 router.patch('/:guildId', async (req, res) => {
   try {
     const guild = req.freeGamesGuild;
-    const config = await monitor.withGuildLock(guild.id, async () => {
-      const previous = freeGames.getConfig(guild.id);
-      const patch = freeGames.validateSettings(req.body || {}, previous);
-      const proposed = { ...previous, ...patch };
-      if (proposed.enabled) await monitor.validateDestination(guild, proposed);
-      return freeGames.saveSettings(guild.id, patch);
-    });
+    const config = await freeGames.applySettings(guild, req.body || {});
     return res.json({ success: true, config });
   } catch (error) { res.status(400).json({ success: false, error: error.message }); }
 });

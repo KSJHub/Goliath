@@ -22,11 +22,11 @@ function price(offer, config) {
   return ` ~~${converted ? '≈' : ''}${escape(formatted)}~~`;
 }
 function line(offer, newSince = {}, now = Date.now(), config = {}) {
-  const fresh = newSince[offer.id] && now >= newSince[offer.id] && now - newSince[offer.id] < NEW_MS;
+  const fresh = config.showNew !== false && newSince[offer.id] && now >= newSince[offer.id] && now - newSince[offer.id] < NEW_MS;
   const ending = offer.endsAt && offer.endsAt > now && offer.endsAt - now <= ENDING_MS;
-  const end = offer.endsAt ? ` · ${ending ? '⏳ ' : ''}<t:${Math.floor(offer.endsAt / 1000)}:R>` : offer.endDateText ? ` · ${escape(offer.endDateText)} (source time)` : '';
+  const end = config.showExpiry === false ? '' : offer.endsAt ? ` · ${ending ? '⏳ ' : ''}<t:${Math.floor(offer.endsAt / 1000)}:R>` : offer.endDateText ? ` · ${escape(offer.endDateText)} (source time)` : '';
   const selectedStores = offer.stores.filter((key) => config.stores?.includes(key));
-  const platforms = selectedStores.length > 1 ? selectedStores.map((key) => STORES[key]).join(', ') : '';
+  const platforms = config.showPlatforms !== false && selectedStores.length > 1 ? selectedStores.map((key) => STORES[key]).join(', ') : '';
   return `› ${fresh ? '🆕 ' : ''}[${escape(shortTitle(offer.title))}](${offer.url})${price(offer, config)}${(offer.type !== 'game' && !(offer.type === 'dlc' && config.omitDlcLabel)) ? ` · ${TYPES[offer.type]}` : ''}${end}${platforms ? `\n  ${platforms}` : ''}`;
 }
 function orderedOffers(offers, now) {
@@ -54,9 +54,7 @@ function platformPresentation(client) {
 function buildListing(offers, config, now = Date.now(), platforms = platformPresentation()) {
   const pages = [];
   const unique = orderedOffers(offers, now);
-  const pricing = config.pricing || config.state?.pricing;
-  const pricingNote = pricing?.mode === 'converted' ? `\n≈ Estimated ${pricing.currency} values from USD; Frankfurter rate dated ${pricing.date}. These are not regional store prices.` : pricing?.mode === 'source' ? '\nOriginal values supplied in USD.' : '';
-  const attribution = '\n[Offers provided by GamerPower](https://www.gamerpower.com/)\nCheck claim requirements and regional availability. Missing expiry means unknown; source times have no assumed timezone.' + pricingNote;
+  const attribution = '\n[Offers provided by GamerPower](https://www.gamerpower.com/)';
   for (const section of SECTIONS) {
     const items = unique.filter((offer) => section.types.includes(offer.type));
     if (!items.length) continue;
@@ -71,12 +69,12 @@ function buildListing(offers, config, now = Date.now(), platforms = platformPres
         let entry = line({ ...offer, title: shortTitle(offer.title).slice(0, 70) }, config.state?.newSince, now, { ...config, omitDlcLabel: true }) + '\n\n';
         // Retain the link for extreme provider URLs/titles without cutting Markdown mid-link.
         if (entry.length > 1000) entry = `› [${escape(shortTitle(offer.title).slice(0, 60))}](${offer.url})${price(offer, config)}\n\n`;
-        if (value && value.length + entry.length > 1000) { fields.push({ name: name(), value: value.trim(), inline: true }); value = ''; part++; }
+        if (value && value.length + entry.length > 1000) { fields.push({ name: name(), value: value.trim(), inline: config.layout !== 'list' }); value = ''; part++; }
         value += entry;
       }
-      if (value) fields.push({ name: name(), value: value.trim(), inline: true });
+      if (value) fields.push({ name: name(), value: value.trim(), inline: config.layout !== 'list' });
     }
-    const description = `**${items.length} offer${items.length === 1 ? '' : 's'} available**` + attribution;
+    const description = (config.showOfferCount === false ? '' : `**${items.length} offer${items.length === 1 ? '' : 's'} available**`) + attribution;
     let page = { ...section, description, fields: [] };
     let size = section.title.length + description.length + 80;
     for (const field of fields) {
@@ -89,7 +87,7 @@ function buildListing(offers, config, now = Date.now(), platforms = platformPres
     if (page.fields.length) pages.push(page);
   }
   if (!pages.length) pages.push({ ...SECTIONS[0], description: 'No matching free offers are currently listed.' + attribution, fields: [] });
-  return pages.map((page, index) => ({ embeds: [{ title: page.title, color: page.color, description: page.description, fields: page.fields, footer: { text: `Goliath Free Games · ${index + 1}/${pages.length}` } }], allowedMentions: { parse: [] } }));
+  return pages.map((page, index) => ({ embeds: [{ title: page.title, color: page.color, description: page.description, fields: page.fields, footer: { text: `Goliath Free Games · ${index + 1}/${pages.length}${config.showTimestamps === false ? '' : ' · Updated'}` }, ...(config.showTimestamps === false ? {} : { timestamp: new Date(config.listingUpdatedAt || now).toISOString() }) }], allowedMentions: { parse: [] } }));
 }
 
 module.exports = { NEW_MS, ENDING_MS, SECTIONS, PLATFORM_STYLE, platformPresentation, escape, line, price, shortTitle, orderedOffers, buildListing };

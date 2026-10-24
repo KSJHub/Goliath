@@ -28,7 +28,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     const current = generation.current;
     setBusy(true); setError(''); setNotice('');
     try {
-      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region'].map((key) => [key, draft[key]]));
+      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'showTimestamps', 'showExpiry', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
       const payload = await api.request(`/api/free-games/${guildId}${refresh ? '/refresh' : ''}`, refresh ? { method: 'POST' } : { method: 'PATCH', body: JSON.stringify(settings) });
       if (generation.current !== current) return;
       setData((old) => ({ ...old, config: payload.config })); setDraft(payload.config);
@@ -40,7 +40,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     const current = generation.current;
     setBusy(true); setError('');
     try {
-      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region'].map((key) => [key, draft[key]]));
+      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'showTimestamps', 'showExpiry', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
       const result = await api.request(`/api/free-games/${guildId}/preview`, { method: 'POST', body: JSON.stringify(settings) });
       if (current === generation.current) setPreview(result);
     } catch (err) { if (current === generation.current) setError(err.message); }
@@ -61,24 +61,24 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     {preview ? <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
       <p>{preview.offers.length} unique matching offers · {preview.pages.length} Discord listing messages · Feed checked {stamp(preview.fetchedAt, draft)}</p>
       {preview.pricing.warning ? <p role="status">{preview.pricing.warning}</p> : null}
-      {preview.pricing.mode === 'converted' ? <p>≈ {preview.pricing.currency} estimates from USD · Frankfurter rate {preview.pricing.date}. Regional prices and eligibility can differ.</p> : null}
       <p style={{ color: theme.mutedText }}>Discord displays platform columns where space allows; narrow screens may stack them. Additional messages keep every offer accessible.</p>
       {preview.sections.map((section) => {
         const offers = preview.offers.filter((offer) => section.types.includes(offer.type));
         const accent = `#${section.color.toString(16).padStart(6, '0')}`;
         return offers.length ? <section key={section.title} style={{ border: `1px solid ${theme.cardBorder}`, borderLeft: `4px solid ${accent}`, borderRadius: 12, padding: 16, minWidth: 0 }}>
-          <h3 style={{ margin: '0 0 16px' }}>{section.title} · {offers.length}</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 16 }}>
+          <h3 style={{ margin: '0 0 16px' }}>{section.title}{draft.showOfferCount !== false ? ` · ${offers.length}` : ''}</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: draft.layout === 'list' ? '1fr' : 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 16 }}>
             {Object.entries(data.stores).map(([key, label]) => {
               const group = offers.filter((offer) => offer.stores.find((store) => draft.stores.includes(store)) === key);
               if (!group.length) return null;
               const platform = preview.platforms[key];
               return <div key={key} style={{ background: theme.softBg, border: `1px solid ${theme.cardBorder}`, borderRadius: 10, padding: 12, minWidth: 0 }}>
                 <h4 style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px' }}>{platform.imageUrl ? <img src={platform.imageUrl} alt="" width="22" height="22" /> : <span aria-hidden="true">{platform.fallback}</span>}{label} · {group.length}</h4>
-                <ul style={{ paddingLeft: 18, margin: 0 }}>{group.map((offer) => <li key={offer.id} style={{ marginTop: 12, overflowWrap: 'anywhere' }}><a href={offer.url} target="_blank" rel="noreferrer">{offer.displayTitle}</a>{offer.priceText ? <> · <s>{offer.priceText}</s></> : null}<br /><span style={{ color: theme.mutedText }}>{data.types[offer.type]}{offer.stores.filter((store) => draft.stores.includes(store)).length > 1 ? ` · ${offer.stores.filter((store) => draft.stores.includes(store)).map((store) => data.stores[store]).join(', ')}` : ''}{offer.endsAt ? ` · Ends ${stamp(offer.endsAt, draft)}` : offer.endDateText ? ` · ${offer.endDateText} (source time; timezone unknown)` : ' · Expiry unknown'}</span></li>)}</ul>
+                <ul style={{ paddingLeft: 18, margin: 0 }}>{group.map((offer) => <li key={offer.id} style={{ marginTop: 12, overflowWrap: 'anywhere' }}><a href={offer.url} target="_blank" rel="noreferrer">{draft.showNew !== false && draft.state.newSince[offer.id] && Date.now() >= draft.state.newSince[offer.id] && Date.now() - draft.state.newSince[offer.id] < 86400000 ? '🆕 ' : ''}{offer.displayTitle}</a>{offer.priceText ? <> · <s>{offer.priceText}</s></> : null}<br /><span style={{ color: theme.mutedText }}>{data.types[offer.type]}{draft.showPlatforms !== false && offer.stores.filter((store) => draft.stores.includes(store)).length > 1 ? ` · ${offer.stores.filter((store) => draft.stores.includes(store)).map((store) => data.stores[store]).join(', ')}` : ''}{draft.showExpiry === false ? '' : offer.endsAt ? ` · Ends ${stamp(offer.endsAt, draft)}` : offer.endDateText ? ` · ${offer.endDateText} (source time; timezone unknown)` : ' · Expiry unknown'}</span></li>)}</ul>
               </div>;
             })}
           </div>
+          <p style={{ color: theme.mutedText, fontSize: 12, marginBottom: 0 }}>Goliath Free Games{draft.showTimestamps !== false ? ` · Updated ${stamp(preview.fetchedAt, draft)}` : ''}</p>
         </section> : null;
       })}
     </div> : null}
@@ -99,7 +99,14 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
         <label>Region code<input style={inputStyle} disabled={busy} value={draft.region} onChange={(event) => patch({ region: event.target.value.toUpperCase() })} placeholder="GB" maxLength={2} /></label>
         <label>Timezone<input style={inputStyle} list="free-games-timezones" disabled={busy} value={draft.timeZone} onChange={(event) => patch({ timeZone: event.target.value })} /><datalist id="free-games-timezones">{data.timeZones.map((zone) => <option key={zone} value={zone} />)}</datalist></label>
       </div>
-      <p style={{ color: theme.mutedText }}>GBP and UK formatting are the default. Converted values use dated exchange rates and show ≈; they are not verified local store prices. If conversion is unavailable, prices are hidden while offers continue updating. Locale changes number/date formatting; offer text remains in the provider’s language. Region records your preference; check each offer’s regional eligibility.</p>
+      <p style={{ color: theme.mutedText }}>These settings also apply to the Discord management panel. GBP and UK formatting are the default. Converted values use dated exchange rates and show ≈; they are not verified local store prices. If conversion is unavailable, prices are hidden while offers continue updating. Locale changes number/date formatting; offer text remains in the provider’s language. Region records your preference; check each offer’s regional eligibility.</p>
+    </SectionCard>
+    <SectionCard theme={theme} title="Listing appearance">
+      <div style={grid}>
+        {select('layout', 'Platform layout', [['columns', 'Platform columns'], ['list', 'Stacked platform lists']])}
+        {[['showTimestamps', 'Footer timestamps'], ['showExpiry', 'Offer expiry'], ['showPlatforms', 'Additional platforms'], ['showNew', 'NEW markers'], ['showOfferCount', 'Offer counts']].map(([key, label]) => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" disabled={busy} checked={draft[key] !== false} onChange={(event) => patch({ [key]: event.target.checked })} />{label}</label>)}
+      </div>
+      <p style={{ color: theme.mutedText }}>The public listing keeps a compact provider credit. Footer timestamps reflect the source feed update; Discord displays them in each viewer’s local time. You can also manage these settings through /admin → Modules → Utility → Free Games.</p>
     </SectionCard>
     <SectionCard theme={theme} title="Stores and platforms">{checks('stores', data.stores)}</SectionCard>
     <SectionCard theme={theme} title="Offer types">{checks('types', data.types)}<p style={{ color: theme.mutedText }}>Games to keep is the default. DLC and loot may require a base game. Beta access, demos and free weekends are temporary and labelled separately. Availability depends on the provider feed.</p></SectionCard>
