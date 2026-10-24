@@ -36,7 +36,7 @@ function caseSummary(member) {
     '',
     '🔒 This channel is intended for you and authorised management.',
     'Use **Request Review** once to notify staff, or **View Status** to check your current state.'
-  ].join('\\n');
+  ].join('\n');
 }
 function memberCaseButtons(userId) {
   return [new ActionRowBuilder().addComponents(
