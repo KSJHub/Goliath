@@ -106,8 +106,8 @@ async function syncQuarantineIsolation(guild, options = {}) {
       }
     }
 
-    const rolePermissions = channel.permissionsFor?.(role);
-    if (!rolePermissions?.has(PermissionFlagsBits.ViewChannel)) { skipped += 1; continue; }
+    const existingDeny = channel.permissionOverwrites.cache?.get(role.id)?.deny?.has(PermissionFlagsBits.ViewChannel);
+    if (existingDeny) { skipped += 1; continue; }
     const botPermissions = channel.permissionsFor?.(botMember);
     if (!botPermissions?.has(PermissionFlagsBits.ManageRoles)) {
       failed += 1;
