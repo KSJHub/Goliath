@@ -47,7 +47,7 @@ const verificationStore = require('../../../modules/securityStudio/verificationS
 
 const DEFAULT_VIEW = 'actions';
 const CASES_PER_PAGE = 5;
-const VIEW_ALIASES = Object.freeze({ overview: 'actions', member: 'actions' });
+const VIEW_ALIASES = Object.freeze({ overview: 'actions', member: 'actions', warnings: 'cases' });
 const ALLOWED_VIEWS = new Set(['actions', 'intelligence', 'cases', 'appeals', 'analytics']);
 const ANALYTICS_WINDOWS = Object.freeze({ '7d': 7, '30d': 30, '90d': 90, all: null });
 const ANALYTICS_WINDOW_LABELS = Object.freeze({ '7d': '7 Days', '30d': '30 Days', '90d': '90 Days', all: 'All Time' });
@@ -200,34 +200,35 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
 }
 function buildUserSelectRow() { return new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('mod_user_select').setPlaceholder('👤 Select a member to investigate or moderate').setMinValues(1).setMaxValues(1)); }
 function actionPermissions(member, guild) { return { warn: canUseModAction(member, guild, 'warn'), timeout: canUseModAction(member, guild, 'timeout'), kick: canUseModAction(member, guild, 'kick'), quarantine: canUseModAction(member, guild, 'quarantine'), ban: canUseModAction(member, guild, 'ban'), removeWarning: canUseModAction(member, guild, 'remove_warning'), removeTimeout: canUseModAction(member, guild, 'remove_timeout'), removeQuarantine: canUseModAction(member, guild, 'remove_quarantine') }; }
-function buildActionRows(target, stats, member, guild) {
+function buildActionRows(target, stats, member, guild, context = {}) {
   const id = target?.id || 'none';
   const p = actionPermissions(member, guild);
   const disabled = !target;
   const quarantined = targetIsQuarantined(guild, target);
-
-  // Row 2: primary moderation actions. Keep this order consistent across the workspace.
-  const actionRow = [];
-  if (p.warn) actionRow.push(createSecondaryButton(`mod_open_warn:${id}`, 'Warn', getEmoji('WARNING', '⚠️')).setDisabled(disabled));
-  if (p.timeout) actionRow.push(createSecondaryButton(`mod_open_timeout:${id}`, 'Timeout', getEmoji('TIMEOUT', '⏳')).setDisabled(disabled));
-  if (p.quarantine) actionRow.push(createDangerButton(`mod_open_quarantine:${id}`, 'Quarantine', '☢️').setDisabled(disabled || quarantined));
-  if (p.kick) actionRow.push(createDangerButton(`mod_open_kick:${id}`, 'Kick', getEmoji('KICK', '👢')).setDisabled(disabled));
-  if (p.ban) actionRow.push(createDangerButton(`mod_open_ban:${id}`, 'Ban', getEmoji('BAN', '🔨')).setDisabled(disabled));
-
-  // Row 3: reversal / clear actions.
-  const clearRow = [];
-  if (p.removeTimeout) clearRow.push(createSecondaryButton(`mod_remove_timeout:${id}`, 'Clear Timeout', '⌛').setDisabled(disabled || !targetHasActiveTimeout(target)));
-  if (p.removeQuarantine) clearRow.push(createSecondaryButton(`mod_remove_quarantine:${id}`, 'Clear Quarantine', '☢️').setDisabled(disabled || !quarantined));
-  if (p.removeWarning) clearRow.push(createSecondaryButton(`mod_remove_warning:${id}`, 'Clear Warn', '⚠️').setDisabled(disabled || Number(stats?.warningCount || 0) <= 0));
-
-  // Row 4: workspace views.
-  const viewRow = [];
-  if (canViewDashboardSection(member, guild, 'intelligence')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:intelligence`).setLabel('🧠 Intelligence').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
-  if (canViewDashboardSection(member, guild, 'cases')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:cases`).setLabel('📁 Cases').setStyle(ButtonStyle.Secondary));
-  if (canViewDashboardSection(member, guild, 'appeals')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:none:appeals`).setLabel('⚖️ Appeals').setStyle(ButtonStyle.Secondary));
-  if (canViewDashboardSection(member, guild, 'analytics')) viewRow.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
-
-  return [buttonRow(actionRow), buttonRow(clearRow), buttonRow(viewRow)].filter(Boolean);
+  const actions = [];
+  if (p.warn) actions.push(createSecondaryButton(`mod_open_warn:${id}`, 'Warn', '⚠️').setDisabled(disabled));
+  if (p.timeout) actions.push(createSecondaryButton(`mod_open_timeout:${id}`, 'Timeout', '⌛').setDisabled(disabled));
+  if (p.quarantine) actions.push(createDangerButton(`mod_open_quarantine:${id}`, 'Investigate', '☢️').setDisabled(disabled || quarantined));
+  if (p.kick) actions.push(createDangerButton(`mod_open_kick:${id}`, 'Kick', '🥾').setDisabled(disabled));
+  if (p.ban) actions.push(createDangerButton(`mod_open_ban:${id}`, 'Ban', '🔨').setDisabled(disabled));
+  const reversals = [];
+  if (p.removeWarning) reversals.push(createSecondaryButton(`mod_remove_warning:${id}`, 'Clear Warn', '⚠️').setDisabled(disabled || Number(stats?.warningCount || 0) <= 0));
+  if (p.removeTimeout) reversals.push(createSecondaryButton(`mod_remove_timeout:${id}`, 'Clear Timeout', '⌛').setDisabled(disabled || !targetHasActiveTimeout(target)));
+  if (p.removeQuarantine) reversals.push(createSecondaryButton(`mod_remove_quarantine:${id}`, 'Clear Investigation', '🟠').setDisabled(disabled || !quarantined));
+  const management = [];
+  if (canViewDashboardSection(member, guild, 'cases')) {
+    management.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:cases`).setLabel('📁 Cases').setStyle(ButtonStyle.Secondary));
+    management.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:warnings`).setLabel('⚠️ Warnings').setStyle(ButtonStyle.Secondary));
+  }
+  if (canViewDashboardSection(member, guild, 'appeals')) management.push(new ButtonBuilder().setCustomId('mod_dashboard:none:appeals').setLabel('⚖️ Appeals').setStyle(ButtonStyle.Secondary));
+  if (canUseModAction(member, guild, 'view_cases')) management.push(new ButtonBuilder().setCustomId('mod_verification_cases').setLabel('🚨 Quarantines').setStyle(ButtonStyle.Secondary));
+  const tools = [
+    new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+  ];
+  if (canViewDashboardSection(member, guild, 'intelligence')) tools.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:intelligence`).setLabel('🧠 Intelligence').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
+  if (canViewDashboardSection(member, guild, 'analytics')) tools.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
+  if (canUseModAction(member, guild, 'export_cases')) tools.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
+  return [buttonRow(actions),buttonRow(reversals),buttonRow(management),buttonRow(tools)].filter(Boolean);
 }
 function buildIntelligenceRows(targetId, member, guild) {
   if (!targetId) return [];
@@ -438,7 +439,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
   if (!canViewDashboardSection(interaction.member, interaction.guild, safeView)) safeView = DEFAULT_VIEW;
   const targetId = target?.id || null; const stats = buildTargetStats(interaction.guild.id, target); const staff = getStaffDisplay(interaction.member, interaction.guild); const staffDisplay = `${staff.roleId ? `<@&${staff.roleId}>` : staff.label} • ${interaction.member}`;
   const embeds = []; const components = (safeView === 'analytics' || safeView === 'appeals') ? [] : [buildUserSelectRow()];
-  if (safeView === 'actions') { embeds.push(buildActionsEmbed(interaction, target, stats, staffDisplay)); components.push(...buildActionRows(target, stats, interaction.member, interaction.guild)); }
+  if (safeView === 'actions') { embeds.push(buildActionsEmbed(interaction, target, stats, staffDisplay)); components.push(...buildActionRows(target, stats, interaction.member, interaction.guild, context)); }
   else if (safeView === 'intelligence') { embeds.push(buildIntelligenceEmbed(interaction, target, interaction.member, interaction.guild)); components.push(...buildIntelligenceRows(targetId, interaction.member, interaction.guild)); }
   else if (safeView === 'cases') {
     const proceedingView = caseProceeding.buildProceedingDashboard(interaction, target);
@@ -480,7 +481,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     ));
   }
   else if (safeView === 'analytics') { const window = context.analyticsWindow; if (context.analyticsMode === 'moderator' && context.analyticsModeratorId) embeds.push(buildModeratorAnalyticsEmbed(interaction.guild, getModeratorAnalytics(interaction.guild.id, context.analyticsModeratorId, window), interaction.user?.id || null)); else embeds.push(buildAnalyticsOverviewEmbed(interaction.guild, getModerationAnalytics(interaction.guild.id, window))); components.push(...buildAnalyticsRows(interaction.guild, window, context.analyticsMode, context.analyticsModeratorId, interaction.user?.id || null, context.analyticsReturnTargetId || 'none', context.analyticsStaffPage)); }
-  components.push(...buildDashboardNav(targetId, safeView, interaction.member, interaction.guild, context));
+  if (safeView !== 'actions') components.push(...buildDashboardNav(targetId, safeView, interaction.member, interaction.guild, context));
   return { embeds, components: validateDashboardComponents(components, safeView) };
 }
 async function renderDashboard(interaction, targetId, view = DEFAULT_VIEW, context = {}) { const requestedView = normalizeView(view); if (!canViewDashboardSection(interaction.member, interaction.guild, requestedView)) return safeReply(interaction, ephemeralError('That moderation workspace is not available to your authority profile.')); if (!interaction.deferred && !interaction.replied && interaction.isMessageComponent?.()) await interaction.deferUpdate(); const target = targetId && targetId !== 'none' ? await fetchTarget(interaction.guild, targetId) : null; if (targetId && targetId !== 'none' && !target) return safeReply(interaction, ephemeralError('Could not find the selected member.')); await interaction.update(await buildDashboardPayload(Discord, interaction, target, requestedView, context)); return true; }
