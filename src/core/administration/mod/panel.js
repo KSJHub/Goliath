@@ -442,27 +442,36 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
   if (safeView === 'actions') { embeds.push(buildActionsEmbed(interaction, target, stats, staffDisplay)); components.push(...buildActionRows(target, stats, interaction.member, interaction.guild, context)); }
   else if (safeView === 'intelligence') { embeds.push(buildIntelligenceEmbed(interaction, target, interaction.member, interaction.guild)); components.push(...buildIntelligenceRows(targetId, interaction.member, interaction.guild)); }
   else if (safeView === 'cases') {
-    const proceedingView = caseProceeding.buildProceedingDashboard(interaction, target);
-    const sessions = verificationStore.getVerificationSection(interaction.guild.id)?.sessions || {};
-    const quarantined = Object.entries(sessions).filter(([, session]) => session?.state === 'quarantined');
-    const selected = target ? quarantined.filter(([userId]) => userId === target.id) : quarantined;
-    if (selected.length) {
-      proceedingView.embed.addFields({
-        name: '🔒 Quarantines',
-        value: selected.slice(0, 8).map(([userId, session]) =>
-          `<@${userId}> · ${Number(session.failedAttempts || 0)} failed checks${session.quarantineChannelId ? ` · <#${session.quarantineChannelId}>` : ''}`
-        ).join('\\n').slice(0, 1024),
-        inline: false,
-      });
-    }
-    embeds.push(proceedingView.embed);
-    components.push(...proceedingView.components);
-    if (canUseModAction(interaction.member, interaction.guild, 'view_cases')) {
-      const caseButtons = selected.slice(0, 4).map(([userId]) =>
-        new ButtonBuilder().setCustomId(`mod_verification_case:${userId}`)
-          .setLabel(`Review · ${userId.slice(-6)}`).setStyle(ButtonStyle.Secondary));
-      if (caseButtons.length && components.length < 5) components.push(new ActionRowBuilder().addComponents(...caseButtons));
-    }
+    const guildId = interaction.guild.id, filter = ['all','warn','timeout','appeal','quarantine'].includes(context.actionFilter) ? context.actionFilter : 'all';
+    const rawCases = (target ? getCasesForUser(guildId, target.id) : getAllCases(guildId)) || [];
+    const sessions = verificationStore.getVerificationSection(guildId)?.sessions || {};
+    const quarantines = Object.entries(sessions).filter(([id, session]) => session?.state === 'quarantined' && (!target || id === target.id));
+    const appeals = listAppeals(guildId, { status: 'all' }).filter(({ case: entry }) => !target || String(entry?.userId || entry?.user_id || '') === target.id);
+    const records = rawCases.map(entry => ({ type: String(entry.action || 'case').toLowerCase(), userId: String(entry.userId || entry.user_id || ''), reason: String(entry.reason || 'No reason provided'), caseId: entry.caseId, status: String(entry.status || 'active') }))
+      .concat(quarantines.map(([userId, session]) => ({ type: 'quarantine', userId, reason: 'Verification failed · ' + Number(session.failedAttempts || 0) + ' checks', status: 'active', channelId: session.quarantineChannelId })));
+    const matches = records.filter(entry => filter === 'all' || (filter === 'appeal' ? appeals.some(({ case: c }) => String(c.caseId) === String(entry.caseId)) : filter === 'warn' ? ['warn','warning'].includes(entry.type) : entry.type === filter));
+    const active = matches.filter(entry => ['active','pending','quarantined'].includes(entry.status));
+    const pages = Math.max(1, Math.ceil(active.length / 8)), page = Math.max(0, Math.min(context.page, pages - 1));
+    const shown = active.slice(page * 8, (page + 1) * 8);
+    const embed = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle('📂 Case Management')
+      .setDescription(target ? `**Member:** <@${target.id}> · Filtered records` : 'Active moderation cases across the server. Search for a member or filter by case type.')
+      .addFields(
+        { name: 'Warnings', value: String(records.filter(e => ['warn','warning'].includes(e.type)).length), inline: true },
+        { name: 'Timeouts', value: String(records.filter(e => e.type === 'timeout').length), inline: true },
+        { name: 'Appeals', value: String(appeals.length), inline: true },
+        { name: 'Quarantines', value: String(quarantines.length), inline: true },
+        { name: `Active cases · ${filter} · ${page + 1}/${pages}`, value: shown.length ? shown.map(e => `**${e.type.toUpperCase()}** · <@${e.userId}> · ${e.status}${e.caseId ? ` · #${e.caseId}` : ''}\n${e.reason.slice(0, 100)}${e.channelId ? ` · <#${e.channelId}>` : ''}`).join('\n').slice(0, 1024) : 'No matching active cases.', inline: false }
+      ).setFooter({ text: 'Staff only · Select a record to review' });
+    embeds.push(embed);
+    components[0] = new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('mod_cases_user_select').setPlaceholder('🔎 Search or filter by member').setMinValues(1).setMaxValues(1));
+    components.push(new ActionRowBuilder().addComponents(...[['all','All'],['warn','Warnings'],['timeout','Timeouts'],['appeal','Appeals'],['quarantine','Quarantines']].map(([key,label]) => new ButtonBuilder().setCustomId(`mod_cases_filter:${targetId || 'none'}:${key}`).setLabel(label).setStyle(filter === key ? ButtonStyle.Primary : ButtonStyle.Secondary))));
+    if (shown.length) components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('mod_cases_open_record').setPlaceholder('📂 Select a case to review').addOptions(shown.map(e => ({ label: `${e.type.toUpperCase()} · ${e.userId.slice(-6)}`.slice(0, 100), description: e.reason.slice(0, 100), value: e.type === 'quarantine' ? `q:${e.userId}` : `c:${e.caseId}` })))));
+    const controls = [];
+    if (target && canUseModAction(interaction.member, interaction.guild, 'view_cases')) controls.push(new ButtonBuilder().setCustomId(`mod_proceeding_new:${target.id}`).setLabel('➕ New Case').setStyle(ButtonStyle.Secondary));
+    if (pages > 1) controls.push(
+      new ButtonBuilder().setCustomId(`mod_cases_page:${targetId || 'none'}:${filter}:${page - 1}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+      new ButtonBuilder().setCustomId(`mod_cases_page:${targetId || 'none'}:${filter}:${page + 1}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page === pages - 1));
+    if (controls.length) components.push(new ActionRowBuilder().addComponents(controls));
   }
   else if (safeView === 'appeals') {
     const filter = ['pending', 'all', 'resolved'].includes(options.appealFilter) ? options.appealFilter : 'pending';
@@ -495,6 +504,8 @@ async function refreshCasesDashboard(interaction, target) {
 async function handleDashboardNavigation(interaction) {
   const id = String(interaction.customId || '');
   if (id === 'mod:overview') return renderDashboard(interaction, 'none', 'actions');
+  if (id.startsWith('mod_cases_filter:')) { const [, targetId, filter] = id.split(':'); return renderDashboard(interaction, targetId, 'cases', { actionFilter: filter }); }
+  if (id.startsWith('mod_cases_page:')) { const [, targetId, filter, page] = id.split(':'); return renderDashboard(interaction, targetId, 'cases', { actionFilter: filter, page: Number(page) || 0 }); }
   if (id.startsWith('mod_appeals_filter:')) {
     if (!canUseModAction(interaction.member, interaction.guild, 'view_appeals')) return safeReply(interaction, ephemeralError('No permission to view appeals.'));
     const [, filter, pageRaw = '0'] = id.split(':');
@@ -521,7 +532,7 @@ async function handleAnalyticsStaffSelect(interaction) {
   if (!getRecordedModerators(interaction.guild.id).some(([id]) => id === moderatorId)) return safeReply(interaction, ephemeralError('This moderator has no recorded moderation actions.'));
   return renderDashboard(interaction, 'none', 'analytics', { analyticsWindow: window, analyticsMode: 'moderator', analyticsModeratorId: moderatorId, analyticsReturnTargetId: returnTargetId === 'none' ? null : returnTargetId, analyticsStaffPage: Math.max(0, Number(page) || 0) });
 }
-async function handleUserSelectMenu(interaction) { if (String(interaction.customId || '').startsWith('mod_analytics_moderator_select:')) { if (!canUseModAction(interaction.member, interaction.guild, 'view_analytics')) return safeReply(interaction, ephemeralError('No permission to view moderation analytics.')); const [, window, returnTargetId = 'none'] = String(interaction.customId).split(':'); const moderatorId = interaction.values?.[0]; if (!moderatorId || !getRecordedModerators(interaction.guild.id).some(([id]) => id === String(moderatorId))) return safeReply(interaction, ephemeralError('This moderator has no recorded moderation actions.')); return renderDashboard(interaction, 'none', 'analytics', { analyticsWindow: window, analyticsMode: 'moderator', analyticsModeratorId: moderatorId, analyticsReturnTargetId: returnTargetId === 'none' ? null : returnTargetId }); } if (interaction.customId !== 'mod_user_select') return false; const target = await fetchTarget(interaction.guild, interaction.values[0]); if (!target) return safeReply(interaction, ephemeralError('Could not find that member.')); return renderDashboard(interaction, target.id, 'actions'); }
+async function handleUserSelectMenu(interaction) { if (String(interaction.customId || '').startsWith('mod_analytics_moderator_select:')) { if (!canUseModAction(interaction.member, interaction.guild, 'view_analytics')) return safeReply(interaction, ephemeralError('No permission to view moderation analytics.')); const [, window, returnTargetId = 'none'] = String(interaction.customId).split(':'); const moderatorId = interaction.values?.[0]; if (!moderatorId || !getRecordedModerators(interaction.guild.id).some(([id]) => id === String(moderatorId))) return safeReply(interaction, ephemeralError('This moderator has no recorded moderation actions.')); return renderDashboard(interaction, 'none', 'analytics', { analyticsWindow: window, analyticsMode: 'moderator', analyticsModeratorId: moderatorId, analyticsReturnTargetId: returnTargetId === 'none' ? null : returnTargetId }); } if (interaction.customId === 'mod_cases_user_select') { const selected = await fetchTarget(interaction.guild, interaction.values[0]); if (!selected) return safeReply(interaction, ephemeralError('Could not find that member.')); return renderDashboard(interaction, selected.id, 'cases'); } if (interaction.customId !== 'mod_user_select') return false; const target = await fetchTarget(interaction.guild, interaction.values[0]); if (!target) return safeReply(interaction, ephemeralError('Could not find that member.')); return renderDashboard(interaction, target.id, 'actions'); }
 async function openExportModal(interaction, targetId = 'none') {
   if (!canUseModAction(interaction.member, interaction.guild, 'export_cases')) return safeReply(interaction, ephemeralError('No permission to export moderation data.'));
   await interaction.showModal(buildExportModal(targetId));
