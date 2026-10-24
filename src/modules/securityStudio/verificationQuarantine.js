@@ -230,7 +230,11 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
     }
     verificationStore.upsertSession(guild.id, userId, { state: 'review', quarantineEscalatedAt: new Date().toISOString(), quarantineEscalatedBy: actorId || null, moderationIsolationMode: result.mode || QUARANTINE_MODES.INVESTIGATION, moderationInterviewChannelId: result.interviewChannelId || null });
     verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_escalated', actorId: actorId || null, reason: escalationReason, moderationIsolationMode: result.mode || QUARANTINE_MODES.INVESTIGATION, interviewChannelId: result.interviewChannelId || null, reusedExistingIsolation: result.existing === true });
-    const closure = await closeQuarantineCase(guild, userId, 'Verification case escalated to Mod Hub').catch(error => ({ ok: false, message: error?.message || 'Case cleanup failed' }));
+    const sharedRoomId = activeModerationIsolation(guild.id, userId)?.snapshot?.interviewChannelId || null;
+    const verificationRoomId = (verificationStore.getSession(guild.id, userId) || {}).quarantineChannelId || null;
+    const closure = sharedRoomId && String(sharedRoomId) === String(verificationRoomId)
+      ? { ok: true, retainedSharedRoom: true }
+      : await closeQuarantineCase(guild, userId, 'Verification case escalated to Mod Hub').catch(error => ({ ok: false, message: error?.message || 'Case cleanup failed' }));
     if (!closure?.ok) {
       verificationStore.addSecurityHistory(guild.id, userId, { type: 'quarantine_escalation_cleanup_failed', actorId: actorId || null, reason: closure?.message || 'Case cleanup failed' });
       return { ok: true, escalated: true, cleanupPending: true, member, interviewChannelId: result.interviewChannelId || null, message: 'Mod Hub escalation succeeded, but the old Verification case channel requires manual cleanup.' };
