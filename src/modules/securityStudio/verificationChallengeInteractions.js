@@ -301,6 +301,43 @@ async function handleVerificationChallengeInteraction(interaction, manager = nul
     await interaction.reply({ content: '⏸️ Verification is currently disabled on this server.', flags: MessageFlags.Ephemeral });
     return true;
   }
+  if (customId.startsWith('verify:quarantine:') && interaction.isButton?.()) {
+    const parts = customId.split(':');
+    const action = parts[2], userId = parts[3];
+    if (!['request', 'status'].includes(action) || !/^\\d{15,22}$/.test(userId)) return false;
+    if (clean(interaction.user?.id) !== userId) {
+      await interaction.reply({ content: 'This private review belongs to another member.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    const session = verificationStore.getSession(interaction.guildId, userId) || {};
+    if (session.state !== 'quarantined' || clean(session.quarantineChannelId) !== clean(interaction.channelId)) {
+      await interaction.reply({ content: 'This quarantine case is no longer active. Contact management if you need help.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    if (action === 'status') {
+      await interaction.reply({ content: session.quarantineReviewRequestedAt
+        ? '⏳ Your review has been requested. Management will assess your case. You can also send a message in this channel.'
+        : '⏳ Verification is on hold. You can request a management review or send a message here.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    if (session.quarantineReviewRequestedAt) {
+      await interaction.reply({ content: 'Your review request has already been recorded. Please wait for management.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+    const requestedAt = new Date().toISOString();
+    verificationStore.upsertSession(interaction.guildId, userId, { quarantineReviewRequestedAt: requestedAt });
+    verificationStore.addSecurityHistory(interaction.guildId, userId, { type: 'quarantine_review_requested', requestedAt });
+    await interaction.reply({ content: '✅ Review requested. Management has been notified in this private case channel.', flags: MessageFlags.Ephemeral });
+    const settings = verificationStore.normalizeSettings(verificationStore.getVerificationSection(interaction.guildId)?.settings || {});
+    const staffRoleIds = [...new Set((settings.quarantine?.staffRoleIds?.length ? settings.quarantine.staffRoleIds : settings.roles?.staff || []).map(String))];
+    try {
+      await interaction.channel.send({ content: `📩 **Management review requested** by <@${userId}>. Review this case through **/mod → Cases**. ${staffRoleIds.map(id => `<@&${id}>`).join(' ')}`,
+        allowedMentions: { users: [], roles: staffRoleIds, parse: [] } });
+    } catch (error) {
+      console.warn('[Verification] Could not post quarantine review request:', error?.message || error);
+    }
+    return true;
+  }
   const modal = parseAnswerModalId(customId);
   if (modal && interaction.isModalSubmit?.()) return handleAnswerModal(interaction, modal, manager);
   const parsed = runtime.parseActionId(customId);
