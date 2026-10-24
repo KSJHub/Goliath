@@ -86,10 +86,21 @@ module.exports = [
     const after = channel.permissionOverwrites?.cache?.get(roleId);
     const deniedBefore = Boolean(before?.deny?.has(PermissionFlagsBits.ViewChannel));
     const deniedAfter = Boolean(after?.deny?.has(PermissionFlagsBits.ViewChannel));
-    if (deniedAfter) return;
+    const state = getQuarantineState(channel.guild.id);
+    const exposed = [];
+    for (const snapshot of Object.values(state.users || {})) {
+      if (String(snapshot.interviewChannelId || '') === String(channel.id)) continue;
+      const member = await channel.guild.members.fetch(String(snapshot.memberId)).catch(() => null);
+      if (member && channel.permissionsFor?.(member)?.has(PermissionFlagsBits.ViewChannel)) exposed.push(member);
+    }
+    if (deniedAfter && !exposed.length) return;
     try {
       const result = await syncQuarantineIsolation(channel.guild);
       if (!result.success) console.warn(`[QuarantineSystem] Updated channel isolation incomplete for ${channel.id}: ${result.reason || 'Unknown failure'}`);
+      for (const member of exposed) {
+        const recovery = await enforceQuarantineOnMember(member).catch(error => ({ success: false, reason: error.message }));
+        if (!recovery.success) console.warn(`[QuarantineSystem] Member ${member.id} remains exposed after channel update: ${recovery.reason || recovery.error || 'Unknown failure'}`);
+      }
     } catch (error) { console.warn('[QuarantineSystem] Updated channel isolation failed:', error.message); }
   } },
   { name: Events.ChannelDelete, async execute(channel) {
