@@ -139,7 +139,10 @@ function activeModerationIsolation(guildId, userId) {
 
 async function escalateToModHub(guild, member, actorId, reason) {
   const existing = activeModerationIsolation(guild.id, member.id);
-  if (existing) return { success: true, existing: true, mode: existing.mode, interviewChannelId: existing.snapshot?.interviewChannelId || null };
+  if (existing) {
+    verificationStore.addSecurityHistory(guild.id, member.id, { type: 'existing_isolation_reused', actorId: actorId || null, reason });
+    return { success: true, existing: true, mode: existing.mode, interviewChannelId: existing.snapshot?.interviewChannelId || null };
+  }
   return quarantineMember(guild, member, { reason: reason || 'Escalated from Verification quarantine', quarantinedBy: actorId || guild.client?.user?.id || null, source: 'verification', mode: QUARANTINE_MODES.INVESTIGATION });
 }
 
