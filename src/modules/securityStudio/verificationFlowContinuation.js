@@ -24,6 +24,8 @@ async function quarantineVerificationMember(g,u,reason='Verification security po
     const { quarantineMember, QUARANTINE_MODES, getQuarantineState }=require('../../core/security/protection/quarantine');
     const existing=getQuarantineState(g.id)?.users?.[String(u)];
     if(existing)return{ok:false,review:true,message:'An active Mod Hub isolation already exists; use Mod Hub case management.'};
+    if(['verified','quarantined','review','rejected','failed','timed_out'].includes(verificationStore.getSession(g.id,u)?.state))
+      return{ok:false,review:true,message:'Verification session changed while preparing quarantine; staff review is required.'};
     const result=await quarantineMember(g,m,{mode:QUARANTINE_MODES.INVESTIGATION,source:'verification',reason,quarantinedBy:g.client?.user?.id||null});
     if(!result.success){
       verificationStore.addSecurityHistory(g.id,u,{type:'quarantine_shared_isolation_failed',reason,error:result.reason||result.error||'Unknown failure'});
