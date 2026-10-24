@@ -101,6 +101,10 @@ async function ensureQuarantineCase(guild, member, reason = 'Verification securi
 async function closeQuarantineCase(guild, userId, reason = 'Verification quarantine resolved') {
   const session = verificationStore.getSession(guild.id, userId) || {};
   if (!session.quarantineChannelId) return { ok: true, skipped: true };
+  const isolation = getQuarantineState(guild.id)?.users?.[String(userId)];
+  if (isolation?.interviewChannelId === session.quarantineChannelId) {
+    return { ok: false, message: 'Active shared investigation room requires Mod Hub resolution.' };
+  }
   let channel = guild.channels.cache.get(session.quarantineChannelId);
   if (!channel) {
     try { channel = await guild.channels.fetch(session.quarantineChannelId); }
