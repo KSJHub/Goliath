@@ -30,6 +30,11 @@ async function quarantineVerificationMember(g,u,reason='Verification security po
       return{ok:false,review:true,message:'Shared quarantine could not be secured. Staff review is required.'};
     }
     if(result.dryRun)return{ok:false,review:true,message:'Quarantine was not applied (test mode).'};
+    const latest=verificationStore.getSession(g.id,u)||{};
+    if(['verified','quarantined','review','rejected','failed','timed_out'].includes(latest.state)){
+      verificationStore.addSecurityHistory(g.id,u,{type:'quarantine_late_completion_requires_review',reason,sharedIsolation:true});
+      return{ok:false,review:true,message:'Quarantine applied, but Verification state changed during isolation; staff must reconcile the case in Mod Hub.'};
+    }
     verificationStore.upsertSession(g.id,u,{state:'quarantined',activeSecurityMethod:null,activeChallenge:null,quarantinedAt:now(),quarantineChannelId:result.interviewChannelId||null,moderationIsolationMode:result.mode,moderationInterviewChannelId:result.interviewChannelId||null});
     verificationStore.addSecurityHistory(g.id,u,{type:'quarantined',reason,sharedIsolation:true,channelId:result.interviewChannelId||null});
     verificationStore.incrementAnalytics(g.id,{quarantined:1,lastQuarantineAt:now()});
