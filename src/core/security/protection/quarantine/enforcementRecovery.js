@@ -39,7 +39,7 @@ async function enforceQuarantineOnMember(member, options = {}) {
   if (!snapshot) return { success: false, notQuarantined: true, reason: 'No quarantine snapshot' };
   const mode = getQuarantineMode(snapshot);
 
-  if (snapshot.expiresAt && Date.now() >= Number(snapshot.expiresAt)) {
+  if (snapshot.expiresAt && Date.now() >= Number(snapshot.expiresAt) && snapshot.autoRelease === true) {
     const restored = await restoreQuarantinedMember(guild, member, { reason: 'Automatic quarantine expiry during enforcement', system: true });
     await recordAutomaticAction(guild, {
       type: 'goliath.background.quarantine_expiry', success: restored.success, action: 'delete', memberId: member.id, memberTag: member.user?.tag,
