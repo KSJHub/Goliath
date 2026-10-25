@@ -289,30 +289,32 @@ function getAppealsPage(guildId, filter = 'pending', page = 0) {
 }
 function buildAppealsOverviewEmbed(guild, filter = 'pending', page = 0) {
   const data = getAppealsPage(guild.id, filter, page);
-  const section = filter === 'all' ? 'All appeals' : filter === 'resolved' ? 'Resolved appeals' : 'Awaiting review';
+  const totalInView = filter === 'all' ? data.all.length : filter === 'resolved' ? data.resolved.length : data.pending.length;
+  const viewLabel = filter === 'all' ? 'All Appeals' : filter === 'resolved' ? 'Resolved' : 'Pending Review';
   const embed = createEmbed({
     title: '⚖️ Moderation Appeals',
-    description: 'Review member appeals and record decisions. Select a case below to open its review.',
+    description: [
+      'Review submitted appeals, inspect their grounds and record a decision.',
+      '',
+      `**📥 Pending:** ${data.pending.length}   •   **✅ Resolved:** ${data.resolved.length}   •   **📋 Total:** ${data.all.length}`,
+      `**Viewing:** ${viewLabel}`,
+    ].join('\n'),
     color: COLORS.PRIMARY,
-    footer: `Showing ${data.entries.length ? data.currentPage * 5 + 1 : 0}–${data.currentPage * 5 + data.entries.length} of ${filter === 'all' ? data.all.length : filter === 'resolved' ? data.resolved.length : data.pending.length} appeals${data.totalPages > 1 ? ` • Page ${data.currentPage + 1}/${data.totalPages}` : ''}`
+    footer: `${totalInView ? `Appeals ${data.currentPage * 5 + 1}–${data.currentPage * 5 + data.entries.length} of ${totalInView}` : 'No appeals in this view'}${data.totalPages > 1 ? ` • Page ${data.currentPage + 1}/${data.totalPages}` : ''}`,
   });
-  embed.addFields(
-    { name: '📥 Pending', value: String(data.pending.length), inline: true },
-    { name: '✅ Resolved', value: String(data.resolved.length), inline: true },
-    { name: '📋 Total', value: String(data.all.length), inline: true }
-  );
   if (!data.entries.length) {
-    embed.addFields({ name: section, value: data.all.length ? 'No appeals in this view.' : 'No appeals have been submitted yet.' });
+    embed.addFields({ name: '📭 Nothing to Review', value: data.all.length ? 'No appeals match this filter.' : 'No appeals have been submitted yet.', inline: false });
   } else {
     for (const { case: modCase, appeal } of data.entries) {
-      const status = appeal.status === 'approved' ? '✅ Approved' : appeal.status === 'denied' ? '❌ Denied' : '⏳ Awaiting review';
-      const submitted = appeal.submittedAt ? ` • <t:${Math.floor(new Date(appeal.submittedAt).getTime() / 1000)}:R>` : '';
-      const grounds = String(appeal.grounds || appeal.reason || appeal.message || 'No appeal grounds recorded').replace(/\s+/g, ' ').slice(0, 160);
-      const outcome = appeal.status !== 'pending' && appeal.reviewNote ? `\n**Decision:** ${String(appeal.reviewNote).replace(/\s+/g, ' ').slice(0, 130)}` : '';
+      const status = appeal.status === 'approved' ? '✅ Approved' : appeal.status === 'denied' ? '❌ Denied' : '⏳ Pending';
+      const rawTime = new Date(appeal.submittedAt || 0).getTime();
+      const submitted = Number.isFinite(rawTime) && rawTime > 0 ? `<t:${Math.floor(rawTime / 1000)}:R>` : 'Unknown';
+      const grounds = String(appeal.grounds || appeal.reason || appeal.message || 'No appeal grounds recorded').replace(/\s+/g, ' ').slice(0, 220);
+      const outcome = appeal.status !== 'pending' && appeal.reviewNote ? `\n**Decision Note:** ${String(appeal.reviewNote).replace(/\s+/g, ' ').slice(0, 160)}` : '';
       embed.addFields({
-        name: `Case #${modCase.caseId} • ${String(modCase.action || 'case').toUpperCase()} • ${status}`,
-        value: `<@${modCase.userId}>${submitted}\n${grounds}${outcome}`,
-        inline: false
+        name: `📁 Case #${modCase.caseId}  •  ${String(modCase.action || 'case').toUpperCase()}  •  ${status}`,
+        value: `**Member:** <@${modCase.userId}>\n**Submitted:** ${submitted}\n**Appeal:** ${grounds}${outcome}`,
+        inline: false,
       });
     }
   }
@@ -495,7 +497,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
       new ButtonBuilder().setCustomId(`mod_appeals_filter:${filter}:${data.currentPage}`).setLabel('🔄 Refresh').setStyle(ButtonStyle.Secondary)
     ));
     if (data.entries.length) components.push(new ActionRowBuilder().addComponents(data.entries.map(({ case: modCase, appeal }) =>
-      new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`).setLabel(`${appeal.status === 'pending' ? 'Review' : 'View'} Case #${modCase.caseId}`).setStyle(appeal.status === 'pending' ? ButtonStyle.Success : ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`).setLabel(`${appeal.status === 'pending' ? '⚖️ Review' : '📁 View'} #${modCase.caseId}`).setStyle(appeal.status === 'pending' ? ButtonStyle.Success : ButtonStyle.Secondary)
     )));
     if (data.totalPages > 1) components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`mod_appeals_filter:${filter}:${data.currentPage - 1}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(data.currentPage === 0),
