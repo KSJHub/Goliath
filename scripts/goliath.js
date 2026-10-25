@@ -834,6 +834,121 @@ async function verificationAnswerAudit() {
   challenge = runtime().startStep(guild, user, 'staff_approval', {}).challenge;
   assert.equal(runtime().startStep(guild, user, 'staff_approval', {}).reused, true);
   assert.equal(challenge.method, 'staff_approval');
+  // Exhaust every generated arithmetic combination through the real verifier.
+  // A small serialised store keeps exhaustive generation separate from the full-store tests above.
+  let sample = null, draws = [], arithmeticCases = 0, gameCases = 0;
+  const exhaustive = load('src/modules/securityStudio/verificationChallenges.js', {
+    crypto: { ...crypto, randomInt: (min, max) => { const value = draws.length ? draws.shift() : min; assert(value >= min && value < max, 'Fixture random draw out of range'); return value; } },
+    './verificationStore': { getSession: () => clone(sample), upsertSession: (g, u, patch) => { sample = clone({ ...sample, ...patch }); }, addSecurityHistory: () => {}, incrementAnalytics: () => {} },
+  });
+  function begin(method, config, values = []) {
+    sample = { state: 'verifying' }; draws = [...values];
+    const challenge = exhaustive.start(guild, user, method, config);
+    assert.equal(draws.length, 0, 'Every specified generator input must be used');
+    assert.equal(exhaustive.hasAnswerVerifier(sample.activeChallenge), true);
+    assert.equal(challenge.answerHash, undefined); assert.equal(challenge.answerSalt, undefined);
+    return challenge;
+  }
+  function accept(c, answer) {
+    const result = exhaustive.answer(guild, user, c.challengeId, String(answer));
+    assert.equal(result.ok, true, c.prompt);
+    return result;
+  }
+  function checkMath(difficulty, a, b, op = '+') {
+    const values = difficulty === 'normal' ? [a, b, op === '+' ? 0 : 1] : [a, b];
+    const c = begin('captcha', { difficulty, maxChallengeAttempts: 3 }, values);
+    const x = op === '-' ? Math.max(a, b) : a, y = op === '-' ? Math.min(a, b) : b;
+    assert.equal(c.prompt, `Security check: what is ${x} ${op} ${y}?`);
+    const expected = op === '+' ? a + b : op === '-' ? Math.abs(a - b) : a * b;
+    const incorrect = exhaustive.answer(guild, user, c.challengeId, String(expected + 1));
+    assert.equal(incorrect.reason, 'incorrect');
+    assert.equal(incorrect.attempts, 1); assert.equal(incorrect.attemptsRemaining, 2);
+    const correct = accept(c, expected);
+    assert.equal(correct.reason, 'passed'); assert.equal(correct.complete, true);
+    assert.equal(correct.attempts, 2); assert.equal(correct.attemptsRemaining, 1);
+    arithmeticCases++;
+  }
+  for (let a = 2; a <= 20; a++) for (let b = 2; b <= 20; b++) checkMath('easy', a, b);
+  for (let a = 10; a <= 60; a++) for (let b = 2; b <= 30; b++) for (const op of ['+', '-']) checkMath('normal', a, b, op);
+  for (let a = 6; a <= 20; a++) for (let b = 2; b <= 12; b++) checkMath('hard', a, b, '×');
+  assert.equal(arithmeticCases, 3484);
+
+  const gameSolution = c => {
+    const body = c.prompt.split(':').slice(1).join(':').trim();
+    if (c.gameType === 'target_match') return body;
+    if (c.gameType === 'sequence') return body.split('·').map(value => value.trim()).join('');
+    if (c.gameType === 'order') return body.split(',').map(Number).sort((a, b) => a - b).join(' ');
+    if (c.gameType === 'memory_match') return body.split('·').map(value => value.trim()).join(' ');
+    if (c.gameType === 'odd_one_out') return c.prompt.split('?')[1].split('·').at(-1).trim();
+    if (c.gameType === 'reaction') return c.prompt.match(/\*\*(.+?)\*\*/)[1];
+    const terms = c.prompt.match(/\d+/g).map(Number);
+    assert.equal(terms.length, 4);
+    assert.equal(terms[1] - terms[0], terms[2] - terms[1]);
+    assert.equal(terms[2] - terms[1], terms[3] - terms[2]);
+    return String(terms[3] + terms[1] - terms[0]);
+  };
+  const checkGame = (gameType, values, config = {}) => {
+    const c = begin('minigame', { gameType, random: false, rounds: 1, maxChallengeAttempts: 3, ...config }, values);
+    assert.equal(c.gameType, gameType);
+    assert.equal(accept(c, gameSolution(c)).complete, true); gameCases++;
+    return c;
+  };
+  for (let start = 1; start <= 8; start++) for (let step = 2; step <= 6; step++) checkGame('pattern_match', [start, step]);
+  for (const values of [[99, 98, 11, 10, 50], [10, 10, 99, 99, 50], [99, 99, 99, 99, 99], [10, 11, 12, 13, 14]]) checkGame('order', values);
+  for (let index = 0; index < 5; index++) checkGame('target_match', [index]);
+  for (let index = 0; index < 3; index++) {
+    const c = checkGame('odd_one_out', [index]);
+    assert.equal(gameSolution(c), ['banana', 'guitar', 'window'][index]);
+  }
+  for (let index = 0; index < 4; index++) checkGame('reaction', [index]);
+  for (let a = 0; a < 6; a++) for (let b = 0; b < 6; b++) for (let c = 0; c < 6; c++) checkGame('memory_match', [a, b, c]);
+  for (const [difficulty, length] of [['easy', 4], ['normal', 5], ['hard', 7]]) {
+    for (const digit of [1, 9]) {
+      const c = checkGame('sequence', Array(length).fill(digit), { difficulty });
+      assert.equal(gameSolution(c), String(digit).repeat(length));
+    }
+  }
+  for (const gameType of exhaustive.GAME_TYPES) {
+    for (const rounds of [1, 2, 10]) {
+      let c = begin('minigame', { gameType, random: false, rounds, maxChallengeAttempts: 3 });
+      for (let round = 1; round <= rounds; round++) {
+        assert.equal(c.round, round); assert.equal(c.rounds, rounds);
+        assert.equal(c.passedRounds, round - 1); assert.equal(c.attempts, 0);
+        assert.equal(exhaustive.answer(guild, user, c.challengeId, 'incorrect-fixture').reason, 'incorrect');
+        const previousHash = sample.activeChallenge.answerHash;
+        const result = accept(c, gameSolution(c));
+        assert.equal(result.complete, round === rounds);
+        if (round < rounds) {
+          assert.equal(result.reason, 'next_round');
+          assert.notEqual(sample.activeChallenge.answerHash, previousHash);
+          c = result.challenge;
+        } else assert.equal(result.challenge.passedRounds, rounds);
+      }
+    }
+    const c = begin('minigame', { enabledGames: [gameType], random: true, rounds: 1, maxChallengeAttempts: 3 });
+    assert.equal(c.gameType, gameType); accept(c, gameSolution(c));
+  }
+  for (const code of [100000, 999999]) {
+    const c = begin('one_time_challenge', { maxChallengeAttempts: 3 }, [code]);
+    assert(c.prompt.endsWith(String(code))); accept(c, code);
+  }
+  challenge = begin('captcha', { difficulty: 'easy', maxChallengeAttempts: 3 }, [2, 2]);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const result = exhaustive.answer(guild, user, challenge.challengeId, '5');
+    assert.equal(result.attempts, attempt); assert.equal(result.attemptsRemaining, 3 - attempt);
+    assert.equal(result.complete, attempt === 3);
+  }
+  assert.equal(exhaustive.answer(guild, user, challenge.challengeId, '4').reason, 'challenge_closed');
+  challenge = begin('captcha', { difficulty: 'easy', maxChallengeAttempts: 3 }, [2, 2]);
+  for (let attempt = 0; attempt < 2; attempt++) exhaustive.answer(guild, user, challenge.challengeId, '5');
+  const lastAttempt = accept(challenge, '4');
+  assert.equal(lastAttempt.attempts, 3); assert.equal(lastAttempt.attemptsRemaining, 0);
+  assert.equal(lastAttempt.reason, 'passed');
+  challenge = begin('captcha', { difficulty: 'easy', maxChallengeAttempts: 3 }, [2, 2]);
+  sample.activeChallenge.expiresAt = new Date(Date.now() - 60000).toISOString();
+  assert.equal(exhaustive.answer(guild, user, challenge.challengeId, '4').reason, 'expired');
+  assert.equal(sample.activeChallenge.attempts, 0);
+  console.log(`✅ Verification calculations: all ${arithmeticCases} arithmetic combinations, ${gameCases} fixed mini-game cases, all seven game types across 1/2/10 rounds, attempt limits, expiry and code boundaries.`);
   console.log('✅ Verification answers: displayed arithmetic, persisted private verifiers, restarts/retries, one-time codes, multi-round games and broken-challenge recovery without failure penalties.');
 }
 
