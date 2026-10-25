@@ -47,7 +47,7 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
   }
   if (!channel) return { success: true, archived: false, missing: true, channelId: String(channelId) };
   try {
-    await channel.send({ content: `🔓 Investigation containment closed${snapshot.caseId ? ` • Case #${snapshot.caseId}` : ''}. The member's previous manageable roles have been restored.`, allowedMentions: { parse: [] } }).catch(() => null);
+    await channel.send({ content: `🔓 **Investigation Closed**\n\nYour investigation has ended, and your quarantine restrictions have been lifted.\n\nIf you need any further help, please contact server management.${snapshot.caseId ? `\n\n**Case reference:** #${snapshot.caseId}` : ''}`, allowedMentions: { parse: [] } }).catch(() => null);
     if (snapshot.memberId && channel.permissionOverwrites?.edit) await channel.permissionOverwrites.edit(String(snapshot.memberId), { ViewChannel: false }, { reason: options.reason || 'Investigation isolation closed' });
     const closedName = `closed-investigation-${String(snapshot.memberId || 'member').slice(-6)}-${Math.floor(Date.now() / 1000).toString(36)}`.slice(0, 100);
     await channel.setName(closedName, options.reason || 'Investigation isolation closed').catch(() => null);
