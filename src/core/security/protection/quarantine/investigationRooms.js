@@ -36,20 +36,16 @@ function cleanChannelName(value) {
 }
 
 function getInvestigationStaffRoleIds(guild, options = {}) {
-  const explicit = Array.isArray(options.staffRoleIds) ? options.staffRoleIds.map(String) : [];
-  const selected = new Set(explicit);
-  const staffPermissions = [
-    PermissionFlagsBits.Administrator,
-    PermissionFlagsBits.ManageGuild,
-    PermissionFlagsBits.ModerateMembers,
-    PermissionFlagsBits.KickMembers,
-    PermissionFlagsBits.BanMembers,
-  ];
-  for (const role of guild.roles.cache.values()) {
-    if (role.id === guild.id || role.managed) continue;
-    if (staffPermissions.some((permission) => role.permissions.has(permission))) selected.add(String(role.id));
-  }
-  return [...selected].filter((roleId) => guild.roles.cache.has(roleId)).slice(0, 80);
+  const { canUseModAction } = require('../../../administration/mod/permissions');
+  const everyone = guild.roles.everyone || guild.roles.cache.get(guild.id);
+  return [...guild.roles.cache.values()].filter(role => {
+    if (role.id === guild.id || role.managed || role.id === getQuarantineState(guild.id).roleId) return false;
+    // Resolve the actual Goliath authority profile; never infer authority from a role name.
+    const probe = { id: 'investigation-role-probe', guild, user: { id: 'investigation-role-probe' },
+      roles: { cache: new Map([[guild.id, everyone], [role.id, role]]), highest: role },
+      permissions: new (require('discord.js').PermissionsBitField)((role.permissions?.bitfield || 0n) | (everyone?.permissions?.bitfield || 0n)) };
+    return canUseModAction(probe, guild, 'quarantine');
+  }).map(role => role.id).slice(0, 80);
 }
 
 async function ensureInvestigationCategory(guild, options = {}) {
@@ -101,6 +97,30 @@ async function buildInvestigationRoomOverwrites(guild, member, quarantineRole, o
   return overwrites.slice(0, 95);
 }
 
+function investigationRoomControls(memberId, channelId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`mod_invroom_transcript:${memberId}:${channelId}`).setLabel('Transcript').setEmoji('📄').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_invroom_notify:${memberId}:${channelId}`).setLabel('Notify Management').setEmoji('🔔').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_invroom_close:${memberId}:${channelId}`).setLabel('Close Investigation').setEmoji('🔓').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`mod_invroom_delete:${memberId}:${channelId}`).setLabel('Delete Closed Room').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
+  );
+}
+
+async function notifyInvestigationManagement(channel, memberId, leadId = null) {
+  const guild = channel.guild;
+  await guild.roles.fetch();
+  const roleIds = getInvestigationStaffRoleIds(guild);
+  for (const id of roleIds) await channel.permissionOverwrites.edit(id, investigationStaffOverwrite(), { reason: 'Authorised management investigation access' });
+  const users = [...new Set([guild.ownerId, leadId].filter(id => /^\d{15,25}$/.test(String(id || '')) && id !== memberId))];
+  const bot = guild.members.me || await guild.members.fetchMe();
+  const pingRoles = roleIds.filter(id => guild.roles.cache.get(id)?.mentionable || (channel.permissionsFor?.(bot) || bot.permissions).has(PermissionFlagsBits.MentionEveryone));
+  await channel.send({
+    content: `🔔 **Management review requested**\n${[...roleIds.map(id => `<@&${id}>`), ...users.map(id => `<@${id}>`)].join(' ')}\nPlease join this room to review the investigation for <@${memberId}>.${pingRoles.length < roleIds.length ? '\nSome management roles cannot be pinged with my current Discord permissions.' : ''}`,
+    allowedMentions: { parse: [], roles: pingRoles, users },
+  });
+  return { roleIds, pingedRoleIds: pingRoles, userIds: users };
+}
+
 async function createInvestigationRoom(guild, member, quarantineRole, options = {}) {
   const category = await ensureInvestigationCategory(guild, options);
   const suffix = String(member.id).slice(-4);
@@ -131,10 +151,10 @@ async function createInvestigationRoom(guild, member, quarantineRole, options = 
     new ButtonBuilder().setCustomId(`mod_dashboard:${member.id}:intelligence`).setLabel('Intelligence').setEmoji('🧠').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_invroom_note:${member.id}`).setLabel('Add Staff Note').setEmoji('📝').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_invroom_access:${member.id}`).setLabel('Channel Access').setEmoji('🔐').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_remove_quarantine:${member.id}`).setLabel('Clear Investigation').setEmoji('🔓').setStyle(ButtonStyle.Success),
   );
-  await channel.send({ content: `${member}`, embeds: [intro], components: [controls], allowedMentions: { users: [member.id], roles: [], repliedUser: false } })
+  await channel.send({ content: `${member}`, embeds: [intro], components: [controls, investigationRoomControls(member.id, channel.id)], allowedMentions: { users: [member.id], roles: [], repliedUser: false } })
     .catch((error) => console.warn(`[QuarantineSystem] Failed to send investigation room intro in ${guild.id}:`, error.message));
+  await notifyInvestigationManagement(channel, member.id, options.quarantinedBy).catch(error => console.warn(`[QuarantineSystem] Management notification failed in ${guild.id}:`, error.message));
   return channel;
 }
 
@@ -178,5 +198,7 @@ module.exports = {
   ensureInvestigationCategory,
   buildInvestigationRoomOverwrites,
   createInvestigationRoom,
+  investigationRoomControls,
+  notifyInvestigationManagement,
   ensureInvestigationRoomForSnapshot,
 };

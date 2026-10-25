@@ -3169,10 +3169,10 @@ function fixture(snapshot = {}) {
   f.guild.channels.cache = new Collection();
   f.guild.channels.cache.find = () => null;
   let creates = 0;
-  const channel = { id: 'replacement', type: ChannelType.GuildText, permissionOverwrites: { edit: async () => {} }, send: async () => {} };
+  const channel = { id: 'replacement', guild: f.guild, type: ChannelType.GuildText, permissionOverwrites: { edit: async () => {} }, send: async () => {} };
   f.guild.channels.create = async options => { if (options.type === ChannelType.GuildText) { creates++; await Promise.resolve(); } return { ...channel, id: options.type === ChannelType.GuildCategory ? 'category' : channel.id, name: options.name }; };
   f.guild.channels.fetch = async () => { throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
-  const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': { quarantineDenyOverwrite: () => ({ ViewChannel: false }), investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true }) } });
+  const rooms = load(base + 'investigationRooms.js', { '../../../administration/mod/permissions': { canUseModAction: () => false }, './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': { quarantineDenyOverwrite: () => ({ ViewChannel: false }), investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true }) } });
   const stale = structuredClone(f.state.users[uid]);
   const repaired = await Promise.all([rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale)]);
   assert.equal(creates, 1);
@@ -3189,6 +3189,95 @@ function fixture(snapshot = {}) {
   assert.equal(creates, 1);
   delete f.state.users[uid];
   assert.equal(await rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), null);
+}
+// Room controls use fresh authority, keep transcripts private, and never delete an active room.
+{
+  const os = require('node:os');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-room-controls-'));
+  try {
+    const f = fixture();
+    const room = { id: 'room', guild: f.guild, messages: { fetch: async () => new Collection() }, permissionsFor: () => new PermissionsBitField([P.ViewChannel, P.ReadMessageHistory]), delete: async () => { events.push('delete'); } };
+    f.guild.channels.fetch = async () => room;
+    const actor = { id: other, permissions: new PermissionsBitField([P.ManageChannels]) };
+    f.guild.members.fetch = async () => actor;
+    let authorised = true, exportFailure = false, deliveryFailure = false, events = [], replies = [], restores = 0;
+    const htmlPath = path.join(temp, 'room.html'), jsonPath = path.join(temp, 'room.json');
+    fs.writeFileSync(htmlPath, '<html>record</html>'); fs.writeFileSync(jsonPath, '{}');
+    const controls = load('src/core/administration/mod/quarantineInteractions.js', {
+      '../../../core/ui/interactionResponse': { safeReply: async (i, p) => { replies.push(p); return true; }, safeEditReply: async (i, p) => { replies.push(p); return true; } },
+      './permissions': { canUseModAction: () => authorised, recordModerationSystemEvent: () => {}, requireModeratableTarget: async () => f.member },
+      './storage': {}, './panel': { refreshDashboard: async () => {} }, './investigationAccess': {},
+      '../../security/protection/quarantine': { ...f.api, restoreQuarantinedMember: async () => { restores++; return { success: true }; } },
+      '../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: {} }) },
+      '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { createTranscript: async (client, ticket, options) => {
+        events.push('export'); if (exportFailure) throw Error('export unavailable');
+        assert.equal(ticket.type, 'investigation'); assert.equal(options.requireComplete, true);
+        return { htmlPath, jsonPath, htmlFileName: 'room.html', jsonFileName: 'room.json', messageCount: 2, lastMessageId: null };
+      } },
+    });
+    const click = async (action, channelId = 'room') => {
+      const i = { customId: `mod_invroom_${action}:${uid}:room`, channelId, guild: f.guild, client: {}, user: { id: other },
+        isButton: () => true, deferReply: async () => { i.deferred = true; },
+        editReply: async p => { events.push('deliver'); if (deliveryFailure) throw Error('attachment delivery failed'); replies.push(p); return p; } };
+      await controls.handleQuarantineInteraction(i);
+    };
+    await click('delete_confirm'); assert.deepEqual(events, []); assert(replies.at(-1).content.includes('active investigation'));
+    await click('transcript', 'wrong-room'); assert.deepEqual(events, []);
+    authorised = false; await click('transcript'); assert.deepEqual(events, []);
+    authorised = true; await click('transcript'); assert.deepEqual(events, ['export', 'deliver']); assert.equal(replies.at(-1).flags, 64); assert.equal(replies.at(-1).files.length, 2);
+    events = []; await click('close_confirm'); assert.equal(restores, 1); assert.deepEqual(events, ['export', 'deliver']);
+    // Only an archived room may be deleted, and the transcript must be delivered first.
+    delete f.state.users[uid]; f.state.archivedRooms = [{ channelId: 'room', memberId: uid }];
+    events = []; exportFailure = true; await click('delete_confirm'); assert.deepEqual(events, ['export']);
+    events = []; exportFailure = false; deliveryFailure = true; await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver']);
+    events = []; deliveryFailure = false; room.messages.fetch = async () => new Collection([['new', { id: 'new' }]]);
+    await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver'], 'New messages after export must block deletion');
+    room.messages.fetch = async () => new Collection();
+    events = []; await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver', 'delete']); assert(f.state.archivedRooms[0].deletedAt);
+    assert(f.state.archivedRooms[0].roomTranscript, 'Deletion must retain its transcript record');
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+}
+// Shared transcript exporter refuses a truncated history and retains normal ticket output.
+{
+  const os = require('node:os');
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-room-transcript-'));
+  try {
+    const message = id => ({ id, author: { id: uid, username: 'Test' }, createdTimestamp: Number(id), createdAt: new Date(Number(id)), content: '<script>alert(1)</script>', attachments: new Collection(), embeds: [] });
+    let older = true;
+    const channel = { id: uid, type: ChannelType.GuildText, name: 'investigation', messages: { fetch: async options => {
+      if (!options.before) return new Collection([['2', message('2')], ['1', message('1')]]);
+      return older ? new Collection([['0', message('0')]]) : new Collection();
+    } } };
+    const guild = { id: other, name: 'Fixture', channels: { fetch: async () => channel } };
+    const transcripts = load('src/modules/feedbackStudio/tickets/ticketsTranscripts.js', {
+      fs, path, '../../../config/runtimePaths': { getRuntimeRoot: () => temp }, './tickets': {},
+    });
+    const ticket = { ticketId: 'investigation-fixture', type: 'investigation', guildId: other, channelId: uid };
+    await assert.rejects(transcripts.createTranscript({ guilds: { fetch: async () => guild } }, ticket, { limit: 2, requireComplete: true }), /exceeds the transcript limit/);
+    older = false;
+    const result = await transcripts.createTranscript({ guilds: { fetch: async () => guild } }, ticket, { limit: 2, requireComplete: true });
+    const html = fs.readFileSync(result.htmlPath, 'utf8');
+    assert(html.includes('Investigation Transcript')); assert(!html.includes('<script>alert(1)</script>')); assert.equal(result.messageCount, 2);
+    assert(transcripts.buildHtmlTranscript({ ...ticket, type: 'support' }, transcripts.buildJsonTranscript(ticket, [])).includes('Ticket Transcript'));
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+}
+// Access/notification roles follow Goliath authority, with explicit mention limits.
+{
+  const f = fixture();
+  f.guild.ownerId = other;
+  f.guild.roles.cache.set('management', { id: 'management', permissions: new PermissionsBitField(), mentionable: true });
+  f.guild.roles.cache.set('unrelated', { id: 'unrelated', permissions: new PermissionsBitField([P.KickMembers]) });
+  const writes = [], sent = [];
+  const room = { id: 'room', guild: f.guild, permissionOverwrites: { edit: async id => writes.push(id) }, send: async payload => sent.push(payload) };
+  const rooms = load(base + 'investigationRooms.js', {
+    './state': f.api, './isolation': { investigationStaffOverwrite: () => ({ ViewChannel: true }) },
+    '../../../administration/mod/permissions': { canUseModAction: member => member.roles.cache.has('management') },
+  });
+  assert.deepEqual(rooms.getInvestigationStaffRoleIds(f.guild), ['management']);
+  await rooms.notifyInvestigationManagement(room, uid);
+  assert.deepEqual(writes, ['management']); assert.deepEqual(sent[0].allowedMentions.roles, ['management']);
+  assert.deepEqual(sent[0].allowedMentions.parse, []); assert.deepEqual(sent[0].allowedMentions.users, [other]);
+  assert.equal(rooms.investigationRoomControls(uid, 'room').components.length, 4);
 }
 // Management controls cannot grant outside access or restore a revoked investigator's access.
 {
@@ -3253,7 +3342,7 @@ function fixture(snapshot = {}) {
   await event(Events.GuildMemberUpdate)({}, f.member);
   assert(recoveries >= 9);
 }
-console.log('Quarantine containment audit passed: read-only legacy audit and evidence-backed adoption, effective permissions/threads, release rollback/locking, expiry policy, restart/rejoin/events and room reuse (mocked Discord; live permissions not verified).');
+console.log('Quarantine containment audit passed: read-only legacy audit and evidence-backed adoption, effective permissions/threads, release rollback/locking, expiry policy, restart/rejoin/events, room reuse and management controls/transcripts/deletion (mocked Discord; live permissions not verified).');
 
 return true;
 }

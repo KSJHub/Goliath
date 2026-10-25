@@ -53,7 +53,7 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
     await channel.setName(closedName, options.reason || 'Investigation isolation closed').catch(() => null);
     await channel.setTopic(`Closed Goliath investigation isolation • Member ${snapshot.memberId || 'unknown'}${snapshot.caseId ? ` • Case #${snapshot.caseId}` : ''}`, options.reason || 'Investigation isolation closed').catch(() => null);
     const state = getQuarantineState(guild.id);
-    state.archivedRooms = normalizeArchivedRooms([...(state.archivedRooms || []), { channelId: channel.id, memberId: snapshot.memberId || null, caseId: snapshot.caseId || null, closedAt: Date.now(), closedBy: options.restoredBy || options.closedBy || null }]);
+    state.archivedRooms = normalizeArchivedRooms([...(state.archivedRooms || []), { channelId: channel.id, memberId: snapshot.memberId || null, caseId: snapshot.caseId || null, closedAt: Date.now(), closedBy: options.restoredBy || options.closedBy || null, roomTranscript: snapshot.roomTranscript || null }]);
     saveQuarantineState(guild, state);
     return { success: true, archived: true, channelId: channel.id };
   } catch (error) { return { success: false, archived: false, channelId: channel.id, error: error.message }; }

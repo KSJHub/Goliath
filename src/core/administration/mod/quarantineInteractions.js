@@ -263,10 +263,10 @@ async function submitQuarantine(interaction, targetId, requestedMode, legacy = f
   return true;
 }
 
-function canUseInvestigationRoomControls(interaction, snapshot) {
+async function canUseInvestigationRoomControls(interaction, snapshot) {
   if (!interaction?.guild || !interaction?.user?.id || !snapshot) return false;
-  return String(interaction.guild.ownerId || '') === String(interaction.user.id)
-    || String(snapshot.quarantinedBy || '') === String(interaction.user.id);
+  const actor = await interaction.guild.members.fetch({ user: interaction.user.id, force: true }).catch(() => null);
+  return Boolean(actor && !getQuarantineState(interaction.guild.id).users?.[actor.id] && canUseModAction(actor, interaction.guild, 'quarantine'));
 }
 
 async function openInvestigationAccess(interaction, targetId) {
@@ -286,9 +286,9 @@ async function openInvestigationAccess(interaction, targetId) {
     });
   }
 
-  if (!canUseInvestigationRoomControls(interaction, snapshot)) {
+  if (!(await canUseInvestigationRoomControls(interaction, snapshot))) {
     return safeReply(interaction, {
-      content: '❌ Only the lead investigator or server owner can manage investigation channel access.',
+      content: '❌ Only authorised management can manage investigation channel access.',
       flags: 64,
     });
   }
@@ -375,7 +375,7 @@ function investigationAccessIds(customId) {
   };
 }
 
-function investigationAccessAuthorised(interaction, targetId) {
+async function investigationAccessAuthorised(interaction, targetId) {
   const snapshot = currentSnapshot(interaction, targetId);
 
   if (!snapshot) {
@@ -394,11 +394,11 @@ function investigationAccessAuthorised(interaction, targetId) {
     };
   }
 
-  if (!canUseInvestigationRoomControls(interaction, snapshot)) {
+  if (!(await canUseInvestigationRoomControls(interaction, snapshot))) {
     return {
       allowed: false,
       snapshot,
-      message: '❌ Only the lead investigator or server owner can manage investigation channel access.',
+      message: '❌ Only authorised management can manage investigation channel access.',
     };
   }
 
@@ -411,7 +411,7 @@ function investigationAccessAuthorised(interaction, targetId) {
 
 async function selectInvestigationAccessChannel(interaction) {
   const { targetId } = investigationAccessIds(interaction.customId);
-  const auth = investigationAccessAuthorised(interaction, targetId);
+  const auth = await investigationAccessAuthorised(interaction, targetId);
 
   if (!auth.allowed) {
     return safeReply(interaction, {
@@ -488,7 +488,7 @@ async function selectInvestigationAccessChannel(interaction) {
 
 async function changeInvestigationAccess(interaction, action) {
   const { targetId, channelId } = investigationAccessIds(interaction.customId);
-  const auth = investigationAccessAuthorised(interaction, targetId);
+  const auth = await investigationAccessAuthorised(interaction, targetId);
 
   if (!auth.allowed) {
     return safeReply(interaction, {
@@ -619,7 +619,7 @@ async function changeInvestigationAccess(interaction, action) {
 async function openInvestigationNoteModal(interaction, targetId) {
   const snapshot = currentSnapshot(interaction, targetId);
   if (!snapshot) return safeReply(interaction, { content: '⚠️ This investigation is no longer active.', flags: 64 });
-  if (!canUseInvestigationRoomControls(interaction, snapshot)) return safeReply(interaction, { content: '❌ Only the lead investigator or server owner can use this room control.', flags: 64 });
+  if (!(await canUseInvestigationRoomControls(interaction, snapshot))) return safeReply(interaction, { content: '❌ Only authorised management can use this room control.', flags: 64 });
   const modal = new Discord.ModalBuilder().setCustomId(`mod_invroom_note_submit:${targetId}`).setTitle('Add Investigation Note').addComponents(
     new Discord.ActionRowBuilder().addComponents(
       new Discord.TextInputBuilder().setCustomId('note').setLabel('Staff-only note').setStyle(Discord.TextInputStyle.Paragraph).setRequired(true).setMinLength(2).setMaxLength(1000).setPlaceholder('Record an observation, update, evidence lead or next step.')
@@ -632,7 +632,7 @@ async function openInvestigationNoteModal(interaction, targetId) {
 async function submitInvestigationRoomNote(interaction, targetId) {
   const snapshot = currentSnapshot(interaction, targetId);
   if (!snapshot) return safeReply(interaction, { content: '⚠️ This investigation is no longer active.', flags: 64 });
-  if (!canUseInvestigationRoomControls(interaction, snapshot)) return safeReply(interaction, { content: '❌ Only the lead investigator or server owner can add room notes.', flags: 64 });
+  if (!(await canUseInvestigationRoomControls(interaction, snapshot))) return safeReply(interaction, { content: '❌ Only authorised management can add room notes.', flags: 64 });
   const note = fieldValue(interaction, 'note').slice(0, 1000);
   if (!note) return safeReply(interaction, { content: '❌ The note cannot be empty.', flags: 64 });
   if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
@@ -732,11 +732,120 @@ async function removeQuarantine(interaction, targetId) {
   return true;
 }
 
+const roomOperations = new Set();
+const managementNotifications = new Map();
+
+async function investigationRoomContext(interaction, targetId, channelId, action = 'quarantine') {
+  if (!interaction.guild || interaction.channelId !== channelId) throw Error('Use this control inside its investigation room.');
+  const actor = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
+  const state = getQuarantineState(interaction.guild.id);
+  if (state.users?.[actor.id] || actor.id === targetId || !canUseModAction(actor, interaction.guild, action)) throw Error('You do not have permission to manage this investigation room.');
+  const active = state.users?.[targetId];
+  const archived = (state.archivedRooms || []).find(room => room.channelId === channelId && room.memberId === targetId);
+  if (!(active?.interviewChannelId === channelId && getQuarantineMode(active) === QUARANTINE_MODES.INVESTIGATION) && !archived) throw Error('This room is no longer linked to this investigation.');
+  const channel = await interaction.guild.channels.fetch(channelId, { force: true });
+  if (!channel || !channel.permissionsFor(actor)?.has([Discord.PermissionFlagsBits.ViewChannel, Discord.PermissionFlagsBits.ReadMessageHistory])) throw Error('You no longer have access to this room.');
+  return { actor, channel, active: active?.interviewChannelId === channelId ? active : null, archived };
+}
+
+async function exportInvestigationTranscript(interaction, context, targetId) {
+  const transcripts = require('../../../modules/feedbackStudio/tickets/ticketsTranscripts');
+  const transcript = await transcripts.createTranscript(interaction.client || interaction.guild.client, {
+    guildId: interaction.guild.id, channelId: context.channel.id, ticketId: `investigation-${context.channel.id}`,
+    displayId: `investigation-${context.channel.id}`, type: 'investigation', status: context.active ? 'open' : 'closed',
+    creatorId: targetId, createdAt: context.active?.quarantinedAt ? new Date(context.active.quarantinedAt).toISOString() : null,
+  }, { generatedBy: interaction.user.id, limit: 10000, requireComplete: true });
+  const fs = require('node:fs');
+  const maxBytes = interaction.guild.maximumFileSize || 8_000_000;
+  if ([transcript.htmlPath, transcript.jsonPath].some(file => fs.statSync(file).size > maxBytes)) throw Error('The transcript was saved, but is too large to send here. This room has been kept for management review.');
+  const engine = require('../../security/protection/quarantine');
+  const latest = engine.getQuarantineState(interaction.guild.id);
+  const record = latest.users?.[targetId]?.interviewChannelId === context.channel.id
+    ? latest.users[targetId] : (latest.archivedRooms || []).find(room => room.channelId === context.channel.id && room.memberId === targetId);
+  if (!record) throw Error('Investigation changed during the export; no room was removed.');
+  record.roomTranscript = transcript;
+  engine.saveQuarantineState(interaction.guild, latest);
+  recordModerationSystemEvent({ interaction, event: 'moderation.investigation.transcript_saved', targetId, metadata: { channelId: context.channel.id, messageCount: transcript.messageCount } });
+  return { transcript, files: [new Discord.AttachmentBuilder(transcript.htmlPath, { name: transcript.htmlFileName }), new Discord.AttachmentBuilder(transcript.jsonPath, { name: transcript.jsonFileName })] };
+}
+
+async function handleInvestigationRoomControl(interaction) {
+  const [prefix, targetId, channelId] = String(interaction.customId).split(':');
+  const action = prefix.replace('mod_invroom_', '');
+  if (!['transcript', 'notify', 'close', 'close_confirm', 'delete', 'delete_confirm'].includes(action)) return false;
+  const key = `${interaction.guildId || interaction.guild?.id}:${channelId}`;
+  if (roomOperations.has(key)) return safeReply(interaction, { content: '⏳ Another room action is in progress. Please try again shortly.', flags: 64 });
+  roomOperations.add(key);
+  try {
+    await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+    const deleting = action.startsWith('delete');
+    const permission = deleting ? 'manage_evidence' : action.startsWith('close') ? 'remove_quarantine' : 'quarantine';
+    const context = await investigationRoomContext(interaction, targetId, channelId, permission);
+    interaction.member = context.actor;
+    if (deleting && !context.actor.permissions.has(Discord.PermissionFlagsBits.ManageChannels)) throw Error('Deleting a closed room requires Manage Channels.');
+    if (action === 'close' || action === 'delete') {
+      if (action === 'close' && !context.active) throw Error('This investigation is already closed.');
+      if (deleting && context.active) throw Error('Close the investigation before deleting its room.');
+      return safeEditReply(interaction, {
+        content: deleting
+          ? '🗑️ **Delete this closed room?** A fresh transcript will be saved and sent to you before deletion. This permanently removes the Discord conversation.'
+          : '🔓 **Close this investigation?** A transcript will be saved, the member will be released through Mod Hub, and this room will be archived.',
+        components: [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder()
+          .setCustomId(`mod_invroom_${action}_confirm:${targetId}:${channelId}`).setLabel(deleting ? 'Save Transcript & Delete Room' : 'Save Transcript & Close Investigation').setStyle(Discord.ButtonStyle.Danger))], flags: 64,
+      });
+    }
+    if (action === 'notify') {
+      if (!context.active) throw Error('This investigation is already closed.');
+      const last = managementNotifications.get(key) || 0;
+      if (Date.now() - last < 60000) throw Error('Management was notified recently. Please wait a minute before sending another reminder.');
+      for (const [id, at] of managementNotifications) if (Date.now() - at >= 60000) managementNotifications.delete(id);
+      managementNotifications.set(key, Date.now());
+      await require('../../security/protection/quarantine/investigationRooms').notifyInvestigationManagement(context.channel, targetId, context.active.quarantinedBy);
+      recordModerationSystemEvent({ interaction, event: 'moderation.investigation.management_notified', targetId, metadata: { channelId } });
+      return safeEditReply(interaction, { content: '🔔 Management has been notified and authorised management roles have access to this room.', flags: 64 });
+    }
+    if (action === 'close_confirm' && !context.active) throw Error('This investigation is already closed.');
+    if (action === 'delete_confirm') {
+      const state = getQuarantineState(interaction.guild.id);
+      if (Object.values(state.users || {}).some(snapshot => [snapshot.interviewChannelId, snapshot.previousInterviewChannelId].includes(channelId))) throw Error('An active investigation still uses this room. It cannot be deleted.');
+      const sessions = require('../../../modules/securityStudio/verificationStore').getVerificationSection(interaction.guild.id).sessions || {};
+      if (Object.values(sessions).some(session => ['quarantined', 'review'].includes(session.state) && session.quarantineChannelId === channelId)) throw Error('An active Verification case still uses this room. It cannot be deleted.');
+    }
+    const exported = await exportInvestigationTranscript(interaction, context, targetId);
+    await interaction.editReply({ content: `📄 **Investigation transcript saved** • ${exported.transcript.messageCount} messages. Attachment links are recorded; the original attachment files are not copied.`, files: exported.files, components: [], flags: 64 });
+    if (action === 'close_confirm') {
+      // The normal release path rechecks authority, hierarchy and original-role restoration.
+      const fresh = await investigationRoomContext(interaction, targetId, channelId, 'remove_quarantine');
+      interaction.member = fresh.actor;
+      return removeQuarantine(interaction, targetId);
+    }
+    if (action === 'delete_confirm') {
+      await investigationRoomContext(interaction, targetId, channelId, 'manage_evidence');
+      const engine = require('../../security/protection/quarantine');
+      if (Object.values(engine.getQuarantineState(interaction.guild.id).users || {}).some(snapshot => [snapshot.interviewChannelId, snapshot.previousInterviewChannelId].includes(channelId))) throw Error('An active investigation now uses this room. It was not deleted.');
+      const latestMessages = await context.channel.messages.fetch({ limit: 1 });
+      if ((latestMessages.first()?.id || null) !== exported.transcript.lastMessageId) throw Error('New messages arrived after the transcript was saved. Please export again before deleting this room.');
+      await context.channel.delete(`Closed investigation room deleted by ${interaction.user.id}; transcript saved`);
+      const latest = engine.getQuarantineState(interaction.guild.id);
+      // Retain the archive/transcript record as evidence even after Discord deletion.
+      const record = latest.archivedRooms?.find(room => room.channelId === channelId);
+      if (record) record.deletedAt = Date.now();
+      engine.saveQuarantineState(interaction.guild, latest);
+      recordModerationSystemEvent({ interaction, event: 'moderation.investigation.closed_room_deleted', targetId, metadata: { channelId, transcriptSaved: true } });
+    }
+    return true;
+  } catch (error) {
+    await safeEditReply(interaction, { content: `⚠️ ${error.message}`, components: [], flags: 64 });
+    return true;
+  } finally { roomOperations.delete(key); }
+}
+
 async function handleQuarantineInteraction(interaction) {
   const id = String(interaction?.customId || '');
   if (!id) return false;
 
   if (interaction.isButton?.()) {
+    if (/^mod_invroom_(transcript|notify|close|close_confirm|delete|delete_confirm):/.test(id)) return handleInvestigationRoomControl(interaction);
     if (id.startsWith('mod_open_quarantine:')) return openQuarantine(interaction, targetIdFrom(id));
     if (id.startsWith('mod_quarantine_investigation:')) return openInvestigationModal(interaction, targetIdFrom(id));
     if (id.startsWith('mod_quarantine_security:')) return securityMovedToAdmin(interaction, targetIdFrom(id), false);
