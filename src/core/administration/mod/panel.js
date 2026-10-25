@@ -192,7 +192,7 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
       .setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${returnId}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   } else {
-    finalButtons.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:actions`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
+    finalButtons.push(new ButtonBuilder().setCustomId(active === 'appeals' ? 'mod_dashboard:back:appeals' : `mod_dashboard:${id}:actions`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   }
   rows.push(new ActionRowBuilder().addComponents(finalButtons));
@@ -519,6 +519,7 @@ async function refreshCasesDashboard(interaction, target) {
 async function handleDashboardNavigation(interaction) {
   const id = String(interaction.customId || '');
   if (id === 'mod:overview') return renderDashboard(interaction, 'none', 'actions');
+  if (id === 'mod_dashboard:back:appeals') return renderDashboard(interaction, 'none', 'actions');
   if (id.startsWith('mod_cases_filter:')) { const [, targetId, filter] = id.split(':'); return renderDashboard(interaction, targetId, 'cases', { actionFilter: filter }); }
   if (id.startsWith('mod_cases_page:')) { const [, targetId, filter, page] = id.split(':'); return renderDashboard(interaction, targetId, 'cases', { actionFilter: filter, page: Number(page) || 0 }); }
   if (id.startsWith('mod_appeals_filter:')) {
