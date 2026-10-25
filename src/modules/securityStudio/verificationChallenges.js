@@ -40,6 +40,12 @@ function publicChallenge(challenge) {
   return safe;
 }
 
+function hasAnswerVerifier(challenge) {
+  if (challenge?.method === 'staff_approval') return true;
+  return typeof challenge?.answerSalt === 'string' && challenge.answerSalt.length > 0
+    && typeof challenge?.answerHash === 'string' && /^[a-f0-9]{64}$/.test(challenge.answerHash);
+}
+
 function active(guildId, userId) {
   const challenge = getSession(guildId, userId)?.activeChallenge || null;
   return publicChallenge(challenge);
@@ -253,6 +259,7 @@ function answer(guildId, userId, challengeId, suppliedAnswer) {
   if (challenge.method === 'staff_approval') return { ok: false, reason: 'staff_action_required' };
   if (challenge.status !== 'pending') return { ok: false, reason: 'challenge_closed' };
   if (isExpired(challenge)) return expire(guildId, userId, challengeId);
+  if (!hasAnswerVerifier(challenge)) return { ok: false, reason: 'challenge_unavailable', complete: false };
   const attempts = Number(challenge.attempts || 0) + 1;
   const correct = hash(`${challenge.answerSalt}:${normalizeAnswer(suppliedAnswer)}`) === challenge.answerHash;
 
@@ -334,6 +341,7 @@ module.exports = {
   TERMINAL_STATES,
   normalizeAnswer,
   publicChallenge,
+  hasAnswerVerifier,
   active,
   isExpired,
   start,

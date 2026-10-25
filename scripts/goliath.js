@@ -733,7 +733,111 @@ function internalVersionNamingAudit() {
   
 }
 
-function verificationLifecycleAudit() {
+async function verificationAnswerAudit() {
+  const assert = require('node:assert/strict');
+  const crypto = require('node:crypto');
+  const { createRequire } = require('node:module');
+  const clone = value => JSON.parse(JSON.stringify(value));
+  function load(file, mocks) {
+    const filename = absolute(file), localRequire = createRequire(filename), module = { exports: {} };
+    new Function('require', 'module', 'exports', fs.readFileSync(filename, 'utf8'))(id => {
+      if (Object.hasOwn(mocks, id)) return mocks[id];
+      if (id === 'crypto' || id === 'discord.js') return localRequire(id);
+      throw new Error(`Unmocked Verification answer audit dependency: ${id}`);
+    }, module, module.exports);
+    return module.exports;
+  }
+  let data = null, numbers = [];
+  const store = load('src/modules/securityStudio/verificationStore.js', {
+    '../../core/guild/moduleSectionManager': {
+      getModuleSection: (guild, name, fallback) => clone(data || fallback),
+      saveModuleSection: (guild, name, value) => { data = clone(value); return clone(data); },
+      updateModuleSection: (guild, name, update, fallback) => { data = clone(update(clone(data || fallback))); return clone(data); },
+    }, '../../core/guild/guildManager': {},
+  });
+  const challenges = load('src/modules/securityStudio/verificationChallenges.js', { './verificationStore': store, crypto: { ...crypto, randomInt: (min, max) => numbers.length ? numbers.shift() : crypto.randomInt(min, max) } });
+  const runtime = () => load('src/modules/securityStudio/verificationChallengeRuntime.js', { './verificationChallenges': challenges, './verificationStore': store });
+  const guild = '1515201360386068642', user = '815257293347880961';
+  const reset = () => { data = store.defaultVerificationSection(); store.upsertSession(guild, user, { state: 'verifying', securityConfigRevision: data.configRevision }); };
+  reset(); numbers = [42, 30, 0];
+  const started = runtime().startStep(guild, user, 'captcha', { security: { captchaConfig: { maxChallengeAttempts: 3 } } });
+  assert.equal(started.challenge.prompt, 'Security check: what is 42 + 30?');
+  assert.equal(runtime().submitAnswer(guild, user, user, started.challenge.challengeId, '72').ok, true, 'Correct answer to persisted 42 + 30 CAPTCHA must pass through the real runtime and store');
+  assert.equal(data.sessions[user].completedSecurity.includes('captcha'), true);
+  const settings = { security: { captchaConfig: { maxChallengeAttempts: 3 } } };
+  const startMath = () => { reset(); numbers = [42, 30, 0]; return runtime().startStep(guild, user, 'captcha', settings).challenge; };
+  let challenge = startMath();
+  const saved = clone(store.getSession(guild, user).activeChallenge);
+  assert.equal(typeof saved.answerSalt, 'string');
+  assert.match(saved.answerHash, /^[a-f0-9]{64}$/);
+  assert.equal(challenge.answerSalt, undefined);
+  assert.equal(challenge.answerHash, undefined);
+  assert.equal(runtime().startStep(guild, user, 'captcha', settings).reused, true);
+  assert.equal(store.getSession(guild, user).activeChallenge.answerHash, saved.answerHash);
+  const wrong = runtime().submitAnswer(guild, user, user, challenge.challengeId, '73');
+  assert.equal(wrong.reason, 'incorrect');
+  assert.equal(wrong.attempts, 1);
+  assert.equal(runtime().submitAnswer(guild, user, user, challenge.challengeId, ' 72 ').ok, true);
+
+  for (const difficulty of ['easy', 'normal', 'hard']) {
+    for (let index = 0; index < 15; index++) {
+      reset();
+      const c = runtime().startStep(guild, user, 'captcha', { security: { captchaConfig: { difficulty, maxChallengeAttempts: 3 } } }).challenge;
+      const match = c.prompt.match(/what is (\d+) ([+×-]) (\d+)\?/);
+      assert(match, 'Math prompt must have an unambiguous numeric answer');
+      const a = Number(match[1]), b = Number(match[3]);
+      const answer = match[2] === '+' ? a + b : match[2] === '-' ? a - b : a * b;
+      assert.equal(runtime().submitAnswer(guild, user, user, c.challengeId, String(answer)).ok, true, c.prompt);
+    }
+  }
+  reset();
+  challenge = runtime().startStep(guild, user, 'one_time_challenge', {}).challenge;
+  assert.equal(runtime().submitAnswer(guild, user, user, challenge.challengeId, challenge.prompt.match(/\d{6}/)[0]).ok, true);
+  reset();
+  challenge = runtime().startStep(guild, user, 'minigame', { security: { minigameConfig: { gameType: 'sequence', random: false, rounds: 2, maxChallengeAttempts: 3 } } }).challenge;
+  const sequenceAnswer = c => c.prompt.split(':')[1].replace(/[^0-9]/g, '');
+  const first = runtime().submitAnswer(guild, user, user, challenge.challengeId, sequenceAnswer(challenge));
+  assert.equal(first.reason, 'next_round');
+  assert.equal(first.complete, false);
+  assert.equal(runtime().submitAnswer(guild, user, user, first.challenge.challengeId, sequenceAnswer(first.challenge)).ok, true);
+
+  // Existing broken challenges fail without a strike and are replaced on an explicit restart.
+  challenge = startMath();
+  store.upsertSession(guild, user, { activeChallenge: { ...store.getSession(guild, user).activeChallenge, answerSalt: undefined, answerHash: undefined } });
+  const historyBefore = clone(data.securityHistory[user]);
+  const broken = runtime().submitAnswer(guild, user, user, challenge.challengeId, '72');
+  assert.equal(broken.reason, 'challenge_unavailable');
+  assert.equal(broken.recordFailure, undefined);
+  assert.equal(data.sessions[user].activeChallenge.attempts, 0);
+  assert.deepEqual(data.securityHistory[user], historyBefore);
+  const replies = [];
+  let failureCalls = 0;
+  const interactions = load('src/modules/securityStudio/verificationChallengeInteractions.js', { '../../core/guild/guildManager': { isModuleEnabled: () => true }, './verificationChallengeRuntime': runtime(), './verificationStore': store });
+  await interactions.handleVerificationChallengeInteraction({
+    customId: `verify:answer:${user}:${challenge.challengeId}`, guildId: guild, user: { id: user },
+    isModalSubmit: () => true, fields: { getTextInputValue: () => '72' }, reply: async payload => replies.push(payload),
+  }, { recordVerificationFailure: async () => { failureCalls++; } });
+  assert.equal(failureCalls, 0);
+  assert(replies[0].content.includes('has not counted as a wrong answer'));
+  const repaired = runtime().startStep(guild, user, 'captcha', settings);
+  assert.notEqual(repaired.challenge.challengeId, challenge.challengeId);
+  assert.equal(challenges.hasAnswerVerifier(data.sessions[user].activeChallenge), true);
+  assert.equal(data.sessions[user].activeChallenge.attempts, 0);
+  assert.equal(data.securityHistory[user].some(event => event.type === 'challenge_cleared' && event.reason === 'missing_answer_verifier'), true);
+  const historyAfter = clone(data.securityHistory[user]);
+  assert.equal(runtime().submitAnswer(guild, user, user, challenge.challengeId, '72').reason, 'stale_challenge');
+  assert.deepEqual(data.securityHistory[user], historyAfter);
+  store.upsertSession(guild, user, { state: 'quarantined' });
+  assert.equal(runtime().startStep(guild, user, 'captcha', settings).reason, 'terminal_session');
+  assert.equal(data.sessions[user].state, 'quarantined');
+  reset();
+  challenge = runtime().startStep(guild, user, 'staff_approval', {}).challenge;
+  assert.equal(runtime().startStep(guild, user, 'staff_approval', {}).reused, true);
+  assert.equal(challenge.method, 'staff_approval');
+  console.log('✅ Verification answers: displayed arithmetic, persisted private verifiers, restarts/retries, one-time codes, multi-round games and broken-challenge recovery without failure penalties.');
+}
+
+async function verificationLifecycleAudit() {
   section('Verification lifecycle');
   try {
     const assert = require('node:assert/strict');
@@ -1072,6 +1176,7 @@ function verificationLifecycleAudit() {
     const forbiddenGenerationPattern = new RegExp('\\b' + 'v' + '[23]' + '\\b', 'i');
     assert(!forbiddenGenerationPattern.test([flow, quarantine, lifecycle, risk, store, manager, panel].join('\n')), 'Verification source contains forbidden numbered-generation naming.');
     
+    await verificationAnswerAudit();
     console.log('Verification lifecycle and admin-surface contract audit passed.');
     
     return true;
