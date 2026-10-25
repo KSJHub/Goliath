@@ -46,6 +46,34 @@ const caseProceeding = require('./caseProceeding');
 const verificationStore = require('../../../modules/securityStudio/verificationStore');
 
 const DEFAULT_VIEW = 'actions';
+const dashboardHistory = new Map();
+const DASHBOARD_HISTORY_TTL = 30 * 60 * 1000;
+function dashboardHistoryKey(interaction) {
+  return [interaction.guild?.id, interaction.user?.id, interaction.message?.id || 'initial'].join(':');
+}
+function dashboardHistoryEntry(interaction) {
+  const key = dashboardHistoryKey(interaction);
+  const entry = dashboardHistory.get(key);
+  if (entry && Date.now() - entry.updatedAt < DASHBOARD_HISTORY_TTL) return entry;
+  dashboardHistory.delete(key);
+  return null;
+}
+function rememberDashboard(interaction, state, back = false) {
+  const key = dashboardHistoryKey(interaction);
+  const existing = dashboardHistoryEntry(interaction);
+  const entry = existing || { current: null, stack: [], updatedAt: 0 };
+  if (!back && entry.current && JSON.stringify(entry.current) !== JSON.stringify(state)) {
+    entry.stack.push(entry.current);
+    if (entry.stack.length > 25) entry.stack.shift();
+  }
+  entry.current = state;
+  entry.updatedAt = Date.now();
+  dashboardHistory.set(key, entry);
+  if (dashboardHistory.size > 500) {
+    for (const [id, item] of dashboardHistory) if (Date.now() - item.updatedAt >= DASHBOARD_HISTORY_TTL) dashboardHistory.delete(id);
+  }
+}
+
 const CASES_PER_PAGE = 5;
 const VIEW_ALIASES = Object.freeze({ overview: 'actions', member: 'actions', warnings: 'cases' });
 const ALLOWED_VIEWS = new Set(['actions', 'intelligence', 'cases', 'appeals', 'analytics']);
@@ -186,14 +214,14 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
     if (canUseModAction(member, guild, 'view_analytics')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
   } else if (active === 'analytics') {
     const returnId = context.analyticsReturnTargetId || 'none';
-    finalButtons.push(new ButtonBuilder().setCustomId(`mod_dashboard:${returnId}:actions`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
+    finalButtons.push(new ButtonBuilder().setCustomId('mod_history_back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
     finalButtons.push(new ButtonBuilder()
       .setCustomId(`mod_analytics_refresh:${context.analyticsWindow || '30d'}:${context.analyticsMode || 'overview'}:${context.analyticsModeratorId || 'none'}:${returnId}`)
       .setLabel('🔄 Refresh')
       .setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${returnId}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   } else {
-    finalButtons.push(new ButtonBuilder().setCustomId(active === 'appeals' && context.appealFilter !== 'pending' ? 'mod_appeals_filter:pending:0' : active === 'appeals' ? 'mod_dashboard:back:appeals' : `mod_dashboard:${id}:actions`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
+    finalButtons.push(new ButtonBuilder().setCustomId('mod_history_back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   }
   rows.push(new ActionRowBuilder().addComponents(finalButtons));
@@ -509,7 +537,18 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
   if (safeView !== 'actions') components.push(...buildDashboardNav(targetId, safeView, interaction.member, interaction.guild, context));
   return { embeds, components: validateDashboardComponents(components, safeView) };
 }
-async function renderDashboard(interaction, targetId, view = DEFAULT_VIEW, context = {}) { const requestedView = normalizeView(view); if (!canViewDashboardSection(interaction.member, interaction.guild, requestedView)) return safeReply(interaction, ephemeralError('That moderation workspace is not available to your authority profile.')); if (!interaction.deferred && !interaction.replied && interaction.isMessageComponent?.()) await interaction.deferUpdate(); const target = targetId && targetId !== 'none' ? await fetchTarget(interaction.guild, targetId) : null; if (targetId && targetId !== 'none' && !target) return safeReply(interaction, ephemeralError('Could not find the selected member.')); await interaction.update(await buildDashboardPayload(Discord, interaction, target, requestedView, context)); return true; }
+async function renderDashboard(interaction, targetId, view = DEFAULT_VIEW, context = {}, back = false) {
+  const requestedView = normalizeView(view);
+  if (!canViewDashboardSection(interaction.member, interaction.guild, requestedView)) return safeReply(interaction, ephemeralError('That moderation workspace is not available to your authority profile.'));
+  const target = targetId && targetId !== 'none' ? await fetchTarget(interaction.guild, targetId) : null;
+  if (targetId && targetId !== 'none' && !target) return safeReply(interaction, ephemeralError('Could not find the selected member.'));
+  const state = { targetId: targetId || 'none', view: requestedView, context: normalizeDashboardContext({ ...context, view: requestedView }) };
+  const payload = await buildDashboardPayload(Discord, interaction, target, requestedView, context);
+  if (!interaction.deferred && !interaction.replied && interaction.isMessageComponent?.()) await interaction.deferUpdate();
+  const result = await interaction.update(payload);
+  rememberDashboard(interaction, state, back);
+  return result;
+}
 async function refreshDashboard(discord, interaction, target, context = {}) { const safeContext = normalizeDashboardContext(context); const payload = await buildDashboardPayload(discord, interaction, target, safeContext.view, safeContext); try { if (interaction.message) { await interaction.message.edit(payload); return true; } if (interaction.replied || interaction.deferred) { await interaction.editReply(payload); return true; } await interaction.reply({ ...payload, flags: 64 }); return true; } catch (error) { console.error('❌ Failed to refresh moderation dashboard message:', error); return false; } }
 async function refreshCasesDashboard(interaction, target) {
   if (!target) return false;
@@ -519,6 +558,13 @@ async function refreshCasesDashboard(interaction, target) {
 }
 async function handleDashboardNavigation(interaction) {
   const id = String(interaction.customId || '');
+  if (id === 'mod_history_back' || id === 'mod_dashboard:back:appeals') {
+    const entry = dashboardHistoryEntry(interaction);
+    const previous = entry?.stack?.length ? entry.stack[entry.stack.length - 1] : { targetId: 'none', view: 'actions', context: {} };
+    const result = await renderDashboard(interaction, previous.targetId, previous.view, previous.context, true);
+    if (entry?.stack?.length) entry.stack.pop();
+    return result;
+  }
   if (id === 'mod:overview') return renderDashboard(interaction, 'none', 'actions');
   if (id === 'mod_dashboard:back:appeals') return renderDashboard(interaction, 'none', 'actions');
   if (id.startsWith('mod_cases_filter:')) { const [, targetId, filter] = id.split(':'); return renderDashboard(interaction, targetId, 'cases', { actionFilter: filter }); }
