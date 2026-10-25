@@ -157,6 +157,7 @@ async function repairInvestigationRoom(guild, member, role, options = {}) {
     catch (error) { if (Number(error?.code) !== 10003) throw error; }
   }
   if (!channel) {
+    if (options.existingRoomOnly) throw new Error('Existing case room is unavailable; reconciliation cannot create a replacement.');
     channel = await createInvestigationRoom(guild, member, role, { ...options, reason: snapshot?.reason || options.reason });
     const state = getQuarantineState(guild.id);
     if (state.users?.[member.id]) {

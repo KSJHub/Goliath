@@ -2866,7 +2866,7 @@ required(read('src/core/security/protection/quarantine/state.js'), 'legacy_witho
 required(read('src/core/security/protection/quarantine/state.js'), 'missing_original_roles', 'Missing original roles must be flagged');
 // Load the real modules with explicit boundaries; fixtures never touch guild files or Discord.
 const { createRequire } = require('node:module');
-function load(file, mocks) {
+function load(file, mocks, testExport = '') {
   const filename = path.join(root, file);
   const localRequire = createRequire(filename);
   const loaded = { exports: {} };
@@ -2875,7 +2875,7 @@ function load(file, mocks) {
     if (id === 'discord.js' || id.startsWith('node:')) return localRequire(id);
     throw new Error(`Unmocked quarantine audit dependency: ${file} -> ${id}`);
   };
-  new Function('require', 'module', 'exports', '__filename', '__dirname', read(file))(fixtureRequire, loaded, loaded.exports, filename, path.dirname(filename));
+  new Function('require', 'module', 'exports', '__filename', '__dirname', read(file) + testExport)(fixtureRequire, loaded, loaded.exports, filename, path.dirname(filename));
   return loaded.exports;
 }
 const base = 'src/core/security/protection/quarantine/';
@@ -2928,6 +2928,97 @@ function fixture(snapshot = {}) {
   assert.equal((await verificationApi.escalateToModHub(f.guild, f.member, 'staff')).needsReview, true);
   assert.equal(verificationApi.auditLegacyQuarantineSessions(f.guild.id).needsReview, 1);
   assert.equal(f.mutations.length, 0);
+}
+// Evidence-backed legacy adoption: persist originals, reuse room, never grant them.
+{
+  const priorMode = process.env.BOT_MODE;
+  process.env.BOT_MODE = 'DEV';
+  try {
+    const qid = '444444444444444444', roomId = '555555555555555555';
+    const input = { userId: uid, roomId, addEventId: 'add', stripEventId: 'strip' };
+    const roleList = ids => ids.map(id => ({ id }));
+    const history = [
+      { guildId: 'guild', eventId: 'add', type: 'member.roles.update', timestamp: '2026-10-23T23:04:38.450Z', before: { roles: roleList([originalRole]) }, after: { roles: roleList([originalRole, qid]) } },
+      { guildId: 'guild', eventId: 'strip', type: 'member.roles.update', timestamp: '2026-10-23T23:04:38.784Z', before: { roles: roleList([originalRole, qid]) }, after: { roles: roleList([qid]) } },
+    ];
+    async function run(change = () => {}, containmentSuccess = true) {
+      const f = fixture();
+      delete f.state.users[uid]; f.state.roleId = qid;
+      f.role.id = qid; f.role.name = 'Goliath Quarantine'; f.role.permissions = new PermissionsBitField();
+      f.guild.roles.cache.delete('quarantine'); f.guild.roles.cache.set(qid, f.role);
+      f.member.roles.cache = new Collection([[qid, f.role]]);
+      const room = { id: roomId, guild: f.guild, type: ChannelType.GuildText, permissionOverwrites: { cache: new Collection([[f.guild.id, { deny: new PermissionsBitField([P.ViewChannel]) }]]) } };
+      f.guild.channels.fetch = async () => room;
+      const section = { settings: { roles: { quarantine: [qid] } }, sessions: { [uid]: { state: 'quarantined', quarantineChannelId: roomId, quarantinedAt: '2026-10-23T23:04:39.062Z' } } };
+      const evidence = structuredClone(history);
+      let locked = false, enforcement = 0, saves = 0;
+      change({ f, section, evidence, room });
+      const engine = { ...f.api, tryBeginQuarantineOperation: () => { if (locked) return false; locked = true; return true; }, endQuarantineOperation: () => { locked = false; },
+        saveQuarantineState: (g, state) => { saves++; f.api.saveQuarantineState(g, state); },
+        enforceQuarantineOnMember: async (member, options) => {
+          enforcement++; assert.equal(locked, false); assert.equal(member.id, uid); assert.equal(options.existingRoomOnly, true);
+          assert.deepEqual(f.state.users[uid].roles, [originalRole]);
+          assert.equal(f.state.users[uid].interviewChannelId, roomId); assert.equal(f.state.users[uid].autoRelease, false);
+          assert.equal(f.state.users[uid].expiresAt, null);
+          return { success: containmentSuccess, verification: { success: containmentSuccess } };
+        } };
+      const api = load('src/modules/securityStudio/verificationQuarantine.js', {
+        './verificationStore': { getVerificationSection: () => section, getSession: () => section.sessions[uid], normalizeSettings: s => s,
+          upsertSession: (g, u, patch) => Object.assign(section.sessions[u], patch), addSecurityHistory: () => {} },
+        '../../core/guild/guildManager': {}, '../../core/security/protection/quarantine/state': stateApi,
+        '../../core/security/protection/quarantine': engine,
+        '../../owner/auditIntelligence/auditStore': { getUser: () => ({ roleHistory: evidence }) },
+      });
+      const result = await api.reconcileLegacyQuarantine(f.guild, input);
+      assert.equal(locked, false); assert.equal(f.mutations.length, 0, 'Adoption must not grant or remove roles');
+      return { result, f, saves, enforcement, section, api };
+    }
+    const success = await run(); assert.equal(success.result.ok, true); assert.equal(success.saves, 1); assert.equal(success.enforcement, 1);
+    assert.equal(success.section.sessions[uid].moderationIsolationMode, 'investigation');
+    assert.equal(success.section.sessions[uid].state, 'quarantined');
+    const saved = JSON.stringify(success.f.state);
+    assert.equal((await success.api.reconcileLegacyQuarantine(success.f.guild, input)).ok, false);
+    assert.equal(JSON.stringify(success.f.state), saved, 'Retries must never overwrite originals');
+    for (const change of [
+      ({ evidence }) => { evidence.pop(); },
+      ({ evidence }) => { evidence[0].guildId = 'other'; },
+      ({ evidence }) => { evidence[0].before.roles = null; },
+      ({ evidence }) => { evidence[1].before.roles = roleList([qid]); },
+      ({ evidence }) => { evidence[1].timestamp = '2026-10-22T00:00:00Z'; },
+      ({ section }) => { section.sessions[uid].state = 'verified'; },
+      ({ section }) => { section.sessions[other] = { quarantineChannelId: roomId }; },
+      ({ section }) => { section.settings.roles.quarantine = [qid, originalRole]; },
+      ({ f }) => { f.state.users[other] = { interviewChannelId: roomId }; },
+      ({ f }) => { f.member.roles.cache.set(originalRole, { id: originalRole }); },
+      ({ f }) => { f.guild.channels.fetch = async () => { throw Error('network unavailable'); }; },
+      ({ room }) => { room.permissionOverwrites.cache.clear(); },
+    ]) {
+      const rejected = await run(change); assert.equal(rejected.result.ok, false); assert.equal(rejected.saves, 0); assert.equal(rejected.enforcement, 0);
+    }
+    const failed = await run(() => {}, false); assert.equal(failed.result.ok, false); assert.equal(failed.result.adopted, true);
+    assert.deepEqual(failed.f.state.users[uid].roles, [originalRole], 'Containment failure must retain the evidence-backed snapshot');
+    process.env.BOT_MODE = 'BETA';
+    assert.equal((await success.api.reconcileLegacyQuarantine(success.f.guild, input)).ok, false);
+  } finally { if (priorMode === undefined) delete process.env.BOT_MODE; else process.env.BOT_MODE = priorMode; }
+}
+// Maintenance is consumed only by the DEV collector from a local DEV request.
+{
+  for (const [mode, targetMode, requestedFrom, requestedBy, allowed] of [
+    ['DEV', 'DEV', 'DEV', 'local-dev-maintenance', true],
+    ['BETA', 'BETA', 'DEV', 'local-dev-maintenance', false],
+    ['DEV', 'DEV', 'PRODUCTION', 'local-dev-maintenance', false],
+    ['DEV', 'DEV', 'DEV', uid, false],
+  ]) {
+    let calls = 0, outcome;
+    const command = { id: 'test', action: 'legacy-quarantine-reconcile', guildId: 'guild', targetMode, requestedFrom, requestedBy, payload: { userId: uid } };
+    const controls = load('src/events/client/sentinelControlCenter.js', {
+      '../../owner/auditIntelligence/auditStore': { runtimeMode: () => mode, getPendingRemoteCommands: () => [command], claimRemoteCommand: () => command, finishRemoteCommand: (id, result) => { outcome = result; } },
+      '../../owner/sentinel/eventPipeline': {}, '../../core/security/protection/core': {},
+      '../../modules/securityStudio/verificationQuarantine': { reconcileLegacyQuarantine: async (guild, payload) => { calls++; assert.equal(payload.userId, uid); return { ok: true }; } },
+    }, '\nmodule.exports.processRemote = processRemote;');
+    await controls.processRemote({ guilds: { cache: new Collection([['guild', { id: 'guild' }]]) } });
+    assert.equal(calls, allowed ? 1 : 0); assert.equal(outcome.ok, allowed);
+  }
 }
 // Effective permission checks include threads, fresh roles and the authorised room.
 {
@@ -3090,6 +3181,9 @@ function fixture(snapshot = {}) {
   await rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale);
   assert.equal(creates, 1);
   f.guild.channels.cache.clear();
+  f.guild.channels.fetch = async () => { throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
+  await assert.rejects(rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale, { existingRoomOnly: true }), /cannot create a replacement/);
+  assert.equal(creates, 1, 'Legacy adoption must never create a replacement room');
   f.guild.channels.fetch = async () => { throw Error('Discord unavailable'); };
   await assert.rejects(rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), /Discord unavailable/);
   assert.equal(creates, 1);
@@ -3159,7 +3253,7 @@ function fixture(snapshot = {}) {
   await event(Events.GuildMemberUpdate)({}, f.member);
   assert(recoveries >= 9);
 }
-console.log('Quarantine containment audit passed: read-only legacy reconciliation, effective permissions/threads, release rollback/locking, expiry policy, restart/rejoin/events and room reuse (mocked Discord; live permissions not verified).');
+console.log('Quarantine containment audit passed: read-only legacy audit and evidence-backed adoption, effective permissions/threads, release rollback/locking, expiry policy, restart/rejoin/events and room reuse (mocked Discord; live permissions not verified).');
 
 return true;
 }
@@ -3179,6 +3273,32 @@ function legacyQuarantineAudit() {
   console.log(JSON.stringify({ readOnly: true, mode: 'dev', guilds: reports.length, needsReview: reports.reduce((sum, report) => sum + report.needsReview, 0), reports }, null, 2));
   if (!reports.length) { console.error('No DEV guild configurations found; live cases were not audited.'); return false; }
   return reports.every(report => report.needsReview === 0);
+}
+
+async function legacyQuarantineReconcileCommand() {
+  if (String(process.env.BOT_MODE || '').toUpperCase() !== 'DEV') throw Error('Set BOT_MODE=dev; this command is restricted to DEV.');
+  const [guildId, userId, roomId, addEventId, stripEventId] = process.argv.slice(3);
+  if (![guildId, userId, roomId].every(id => /^\d{15,25}$/.test(id || '')) || !addEventId || !stripEventId || process.argv.length !== 8) {
+    throw Error('Usage: BOT_MODE=dev node scripts/goliath.js legacy-quarantine-reconcile <guildId> <userId> <roomId> <addEventId> <stripEventId>');
+  }
+  require('../src/config/envLoader').loadEnvironment('dev');
+  const { getRuntimePaths } = require('../src/config/runtimePaths');
+  if (!fs.existsSync(path.join(getRuntimePaths('dev').guilds, `${guildId}.json`))) throw Error('DEV guild data is unavailable; no maintenance request created.');
+  const store = require('../src/owner/auditIntelligence/auditStore');
+  const pending = (store.getConfig().control?.remoteCommands || []).find(c => ['pending', 'claimed'].includes(c.status) && c.targetMode === 'DEV' && Date.parse(c.expiresAt) > Date.now() && c.action === 'legacy-quarantine-reconcile' && c.guildId === guildId && c.payload?.userId === userId);
+  const request = pending || store.createRemoteCommand(guildId, 'DEV', 'legacy-quarantine-reconcile', { userId, roomId, addEventId, stripEventId }, 'local-dev-maintenance');
+  if (!request) throw Error('Could not create DEV maintenance request.');
+  console.log(`DEV reconciliation request ${request.id}; waiting for the running bot (no roles restored).`);
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const current = (store.getConfig().control?.remoteCommands || []).find(c => c.id === request.id);
+    if (['completed', 'failed', 'expired'].includes(current?.status)) {
+      console.log(JSON.stringify(current, null, 2));
+      return current.status === 'completed' && current.result?.ok === true;
+    }
+  }
+  console.error(`Request ${request.id} has not completed. It may still run; do not assume the case is repaired. Check the DEV bot logs and rerun the read-only legacy-quarantine audit.`);
+  return false;
 }
 
 async function dependencyRuntimeAudit() {
@@ -3609,6 +3729,7 @@ const commands = {
   'free-games': freeGamesAudit,
   'quarantine-containment': quarantineContainmentAudit,
   'legacy-quarantine': legacyQuarantineAudit,
+  'legacy-quarantine-reconcile': legacyQuarantineReconcileCommand,
   'dependency-runtime': dependencyRuntimeAudit,
   summary: developmentSummaryCommand,
   doctor: () => doctor(process.argv[3]), audit: auditCommand, 'dashboard-imports': dashboardImportAudit, 'backend-imports': backendRelativeImportAudit, 'runtime-contracts': runtimeContractsAudit, 'guild-variable-source': guildVariableSourceAudit, 'internal-version-naming': internalVersionNamingAudit, 'verification-lifecycle': verificationLifecycleAudit, 'embed-studio-preview': embedStudioPreviewAudit, 'embed-media-alignment': embedMediaAlignmentAudit, 'embed-session-persistence': embedSessionPersistenceAudit, 'embed-state-persistence-boundary': embedStatePersistenceBoundaryAudit, 'admin-module-routing': adminModuleRoutingAudit, 'embed-graphic-headers': embedGraphicHeadersAudit, 'embed-template-binding-lifecycle': embedTemplateBindingLifecycleAudit, 'social-live-presentation': socialLivePresentationAudit, 'social-studio-lifecycle': socialStudioLifecycleAudit, 'universal-member-notices': universalMemberNoticesAudit, 'welcome-embed-delivery': welcomeEmbedDeliveryAudit, 'role-pagination': rolePaginationAudit,
