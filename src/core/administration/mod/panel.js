@@ -543,6 +543,12 @@ async function renderDashboard(interaction, targetId, view = DEFAULT_VIEW, conte
   const target = targetId && targetId !== 'none' ? await fetchTarget(interaction.guild, targetId) : null;
   if (targetId && targetId !== 'none' && !target) return safeReply(interaction, ephemeralError('Could not find the selected member.'));
   const state = { targetId: targetId || 'none', view: requestedView, context: normalizeDashboardContext({ ...context, view: requestedView }) };
+  if (!back && !dashboardHistoryEntry(interaction) && interaction.message) {
+    const title = String(interaction.message.embeds?.[0]?.title || '');
+    const inferredView = title.includes('Appeals') ? 'appeals' : title.includes('Analytics') ? 'analytics' : title.includes('Intelligence') ? 'intelligence' : title.includes('Cases') || title.includes('Warnings') ? 'cases' : 'actions';
+    const inferredTarget = inferredView === 'actions' ? (interaction.message.components?.[0]?.components?.[0]?.data?.default_values?.[0]?.id || 'none') : 'none';
+    rememberDashboard(interaction, { targetId: inferredTarget, view: inferredView, context: normalizeDashboardContext({ view: inferredView }) });
+  }
   const payload = await buildDashboardPayload(Discord, interaction, target, requestedView, context);
   if (!interaction.deferred && !interaction.replied && interaction.isMessageComponent?.()) await interaction.deferUpdate();
   const result = await interaction.update(payload);
