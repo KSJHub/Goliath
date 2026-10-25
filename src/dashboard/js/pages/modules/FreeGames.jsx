@@ -28,7 +28,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     const current = generation.current;
     setBusy(true); setError(''); setNotice('');
     try {
-      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
+      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'featuredMode', 'featuredOfferId', 'featuredArtwork', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
       const payload = await api.request(`/api/free-games/${guildId}${refresh ? '/refresh' : ''}`, refresh ? { method: 'POST' } : { method: 'PATCH', body: JSON.stringify(settings) });
       if (generation.current !== current) return;
       setData((old) => ({ ...old, config: payload.config })); setDraft(payload.config);
@@ -40,7 +40,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     const current = generation.current;
     setBusy(true); setError('');
     try {
-      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
+      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'featuredMode', 'featuredOfferId', 'featuredArtwork', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
       const result = await api.request(`/api/free-games/${guildId}/preview`, { method: 'POST', body: JSON.stringify(settings) });
       if (current === generation.current) setPreview(result);
     } catch (err) { if (current === generation.current) setError(err.message); }
@@ -68,9 +68,18 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
         const accent = `#${section.color.toString(16).padStart(6, '0')}`;
         return offers.length ? <section key={section.title} style={{ border: `1px solid ${theme.cardBorder}`, borderLeft: `4px solid ${accent}`, borderRadius: 12, padding: 16, minWidth: 0 }}>
           <h3 style={{ margin: '0 0 16px' }}>{section.title}{draft.showOfferCount !== false ? ` · ${offers.length}` : ''}</h3>
+          {section.types.includes('game') && preview.featured ? <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, padding: '18px 0 22px', marginBottom: 18, borderBottom: '1px solid ' + theme.cardBorder }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ color: theme.primary, margin: '0 0 8px', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Featured game</p>
+              <a href={preview.featured.url} target="_blank" rel="noreferrer" style={{ color: theme.cardText, fontSize: 'clamp(20px, 3vw, 26px)', fontWeight: 700, textDecoration: 'none', overflowWrap: 'anywhere' }}>{preview.featured.displayTitle}</a>
+              <p style={{ margin: '10px 0', fontSize: 14 }}>{preview.featured.stores.filter(store => draft.stores.includes(store)).map(store => data.stores[store]).join(' · ')}{preview.featured.priceText ? <> · <s>{preview.featured.priceText}</s></> : null} <strong style={{ color: theme.success }}>FREE</strong></p>
+              {preview.featured.description ? <p style={{ color: theme.mutedText, lineHeight: 1.6, fontSize: 14, marginBottom: 0 }}>{preview.featured.description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').slice(0, 220)}</p> : null}
+            </div>
+            {draft.featuredArtwork !== 'hidden' ? <img src={preview.featured.image} alt={preview.featured.displayTitle} onError={event => { event.currentTarget.style.display = 'none'; }} style={{ width: 'clamp(64px, 16vw, 112px)', aspectRatio: '1', objectFit: 'cover', borderRadius: 12, flexShrink: 0 }} /> : null}
+          </div> : null}
           <div style={{ display: 'grid', gridTemplateColumns: draft.layout === 'list' ? '1fr' : 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 16 }}>
             {Object.entries(data.stores).map(([key, label]) => {
-              const group = offers.filter((offer) => offer.stores.find((store) => draft.stores.includes(store)) === key);
+              const group = offers.filter((offer) => offer.id !== preview.featured?.id && offer.stores.find((store) => draft.stores.includes(store)) === key);
               if (!group.length) return null;
               const platform = preview.platforms[key];
               return <div key={key} style={{ background: theme.softBg, border: `1px solid ${theme.cardBorder}`, borderRadius: 10, padding: 12, minWidth: 0 }}>
@@ -108,6 +117,15 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
         {[['showTimestamps', 'Footer timestamps'], ['showPlatforms', 'Additional platforms'], ['showNew', 'NEW markers'], ['showOfferCount', 'Offer counts']].map(([key, label]) => <label key={key} style={selectionStyle(draft[key] !== false)}><input type="checkbox" style={{ accentColor: theme.primary, width: 16, height: 16 }} disabled={busy} checked={draft[key] !== false} onChange={(event) => patch({ [key]: event.target.checked })} />{label}</label>)}
       </div>
       <p style={{ color: theme.mutedText }}>The public listing keeps a compact provider credit. Footer timestamps reflect the source feed update; Discord displays them in each viewer’s local time. You can also manage these settings through /admin → Modules → Utility → Free Games.</p>
+    </SectionCard>
+
+    <SectionCard themed theme={theme} title="Featured main game" subtitle="One standout full game above the list, all in the same Discord embed.">
+      <div style={grid}>
+        {select('featuredMode', 'Featured selection', [['auto', 'Automatic main game'], ['manual', 'Selected main game'], ['off', 'No featured game']])}
+        {select('featuredArtwork', 'Featured artwork', [['thumbnail', 'Top-right artwork thumbnail'], ['hidden', 'Hide artwork']])}
+      </div>
+      <DiscordResourceSelect searchable theme={theme} label="Choose the featured main game" disabled={busy} value={draft.featuredOfferId || ''} placeholder="Automatic selection" resources={(() => { const choices = preview?.featuredChoices || data.featuredChoices || []; return draft.featuredOfferId && !choices.some(choice => choice.id === draft.featuredOfferId) ? [{ id: draft.featuredOfferId, name: 'Previously selected game (currently unavailable)' }, ...choices] : choices; })()} onChange={featuredOfferId => patch({ featuredOfferId: featuredOfferId || null, featuredMode: featuredOfferId ? 'manual' : 'auto' })} />
+      <p style={{ color: theme.mutedText, lineHeight: 1.6, fontSize: 14, margin: 0 }}>Automatic selection uses GamerPower’s popularity order for full games on your selected Steam, Epic, GOG and console stores. DLC, loot, demos and trials never take this spot. If your chosen game is no longer available, an eligible replacement is selected automatically. Artwork stays on the featured title; the list below remains compact.</p>
     </SectionCard>
     <SectionCard themed theme={theme} title="Stores and platforms">{checks('stores', data.stores)}</SectionCard>
     <SectionCard themed theme={theme} title="Offer types">{checks('types', data.types)}<p style={{ color: theme.mutedText }}>Games to keep is the default. DLC and loot may require a base game. Beta access, demos and free weekends are temporary and labelled separately. Availability depends on the provider feed.</p></SectionCard>

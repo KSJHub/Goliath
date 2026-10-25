@@ -3,7 +3,7 @@ const guildManager = require('../../../core/guild/guildManager');
 const { getModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const { STORES, TYPES, CURRENCIES } = require('./freeGamesProviders');
 const MODULE_KEY = 'freeGames';
-const DEFAULTS = { enabled: false, currency: 'GBP', priceMode: 'converted', locale: 'en-GB', timeZone: 'Europe/London', region: 'GB', layout: 'columns', showTimestamps: true, showExpiry: false, showPlatforms: true, showNew: true, showOfferCount: true, channelId: null, stores: Object.keys(STORES), types: ['game'], alerts: false, roleId: null, state: { firstSeen: {}, newSince: {}, observed: {}, deliveries: [], retired: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, offerCount: 0, pricing: null, warning: null } };
+const DEFAULTS = { enabled: false, currency: 'GBP', priceMode: 'converted', locale: 'en-GB', timeZone: 'Europe/London', region: 'GB', layout: 'columns', featuredMode: 'auto', featuredOfferId: null, featuredArtwork: 'thumbnail', showTimestamps: true, showExpiry: false, showPlatforms: true, showNew: true, showOfferCount: true, channelId: null, stores: Object.keys(STORES), types: ['game'], alerts: false, roleId: null, state: { firstSeen: {}, newSince: {}, observed: {}, deliveries: [], retired: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, offerCount: 0, pricing: null, warning: null } };
 function getConfig(guildId) {
   const section = getModuleSection(guildId, MODULE_KEY, DEFAULTS);
   return { ...DEFAULTS, ...section, state: { ...structuredClone(DEFAULTS.state), ...section.state }, enabled: guildManager.isModuleEnabled(guildId, MODULE_KEY) };
@@ -21,6 +21,18 @@ function validateSettings(input, previous) {
     const id = input[key];
     if (id !== null && id !== '' && (typeof id !== 'string' || !/^\d{16,20}$/.test(id))) throw new Error(`Invalid ${key}.`);
     result[key] = id || null;
+  }
+  if (Object.hasOwn(input, 'featuredMode')) {
+    if (!['auto', 'manual', 'off'].includes(input.featuredMode)) throw new Error('Choose automatic, selected game or no featured game.');
+    result.featuredMode = input.featuredMode;
+  }
+  if (Object.hasOwn(input, 'featuredArtwork')) {
+    if (!['thumbnail', 'hidden'].includes(input.featuredArtwork)) throw new Error('Choose thumbnail or hidden featured artwork.');
+    result.featuredArtwork = input.featuredArtwork;
+  }
+  if (Object.hasOwn(input, 'featuredOfferId')) {
+    if (input.featuredOfferId !== null && !/^gamerpower:\d+$/.test(input.featuredOfferId)) throw new Error('Invalid featured game.');
+    result.featuredOfferId = input.featuredOfferId;
   }
   if (Object.hasOwn(input, 'layout')) {
     if (!['columns', 'list'].includes(input.layout)) throw new Error('Choose platform columns or stacked lists.');
@@ -127,6 +139,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
     embed.title += ' · Display';
     embed.description += '\nChoose the public listing presentation. Provider credit is retained; currency explanations stay in management settings.';
     controls = [
+      componentRow(panelButton('featured:0', '⭐ Featured main game')),
       choiceMenu('layout', 'Platform layout', [['columns', 'Platform columns'], ['list', 'Stacked platform lists']], [c.layout]),
       choiceMenu('displayOptions', 'Visible details (clear to hide all)', Object.entries(DISPLAY_OPTIONS),
         Object.keys(DISPLAY_OPTIONS).filter(key => c[key] !== false), true),
@@ -152,6 +165,33 @@ function regionalModal(guild, c = getConfig(guild.id)) {
       ['timeZone', 'Timezone (Europe/London)', 80], ['region', 'Region code (GB)', 2]].map(([key, label, max_length]) =>
       componentRow({ type: 4, custom_id: key, label, style: 1, required: true, max_length, value: c[key] })) };
 }
+
+async function buildFeaturedPanel(guild, requestedPage = 0, notice = '') {
+  const c = getConfig(guild.id);
+  const { getOffers } = require('./freeGamesProviders');
+  const { featuredCandidates, selectFeaturedOffer, shortTitle, escape } = require('./freeGamesEmbeds');
+  const feed = await getOffers();
+  const offers = filterOffers(feed.offers, c);
+  const candidates = featuredCandidates(offers, c);
+  const selected = selectFeaturedOffer(offers, c);
+  const totalPages = Math.max(1, Math.ceil(candidates.length / 25));
+  const page = Math.min(Math.max(0, requestedPage), totalPages - 1);
+  const payload = buildAdminPanel(guild, 'display', notice, c);
+  payload.embeds[0].title = '🎁 Free Games · Featured main game';
+  payload.embeds[0].description = [notice && escape(notice),
+    'One main game above the compact list, in the same embed. Automatic selection follows GamerPower’s popularity order among full games on the selected major stores. DLC, loot, demos and trials are excluded.',
+    selected ? '**Current feature:** ' + escape(shortTitle(selected.title)) : 'No eligible main game is available.',
+    'If a selected title expires or is filtered out, another eligible game is featured automatically.'].filter(Boolean).join('\n\n');
+  const rows = [choiceMenu('featuredMode', 'Featured game selection', [['auto', 'Automatic main game'], ['manual', 'Selected main game'], ['off', 'No featured game']], [c.featuredMode])];
+  if (candidates.length) rows.push(choiceMenu('featuredOfferId', 'Choose a main game · ' + (page + 1) + '/' + totalPages,
+    candidates.slice(page * 25, page * 25 + 25).map(offer => [offer.id, shortTitle(offer.title).slice(0, 100)]), [c.featuredOfferId]));
+  rows.push(choiceMenu('featuredArtwork', 'Featured artwork', [['thumbnail', 'Top-right artwork thumbnail'], ['hidden', 'Hide artwork']], [c.featuredArtwork]));
+  if (totalPages > 1) rows.push(componentRow(panelButton('featured:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0),
+    panelButton('featured:' + (page + 1), 'Next ▶', 2, page === totalPages - 1)));
+  rows.push(componentRow(panelButton('display', '⬅ Back')));
+  return { ...payload, components: rows };
+}
+
 async function applySettings(guild, patch) {
   const monitor = require('./freeGamesMonitor');
   return monitor.withGuildLock(guild.id, async () => {
@@ -186,6 +226,7 @@ async function handleAdminInteraction(interaction) {
     }
     if (modalOpen) { await interaction.showModal(regionalModal(guild)); return true; }
     if (action === 'studio') { await reply(require('../../../core/administration/admin/modules').buildStudioPanel('utilityStudio', member?.displayName || interaction.user.username)); return true; }
+    if (/^featured:\d+$/.test(action)) { await reply(await buildFeaturedPanel(guild, Number(action.split(':')[1]))); return true; }
     if (['home', 'delivery', 'filters', 'pricing', 'display'].includes(action)) { await reply(buildAdminPanel(guild, action)); return true; }
     if (/^preview:\d+$/.test(action)) {
       const { getOffers, getPricing } = require('./freeGamesProviders');
@@ -217,7 +258,7 @@ async function handleAdminInteraction(interaction) {
         const role = await guild.roles.fetch(patch.roleId);
         if (!role || role.id === guild.id || role.managed) throw new Error('Choose a regular notification role.');
       }
-    } else if (['stores', 'types', 'layout', 'priceMode', 'displayOptions'].includes(action) && interaction.isStringSelectMenu?.()) {
+    } else if (['stores', 'types', 'layout', 'priceMode', 'displayOptions', 'featuredMode', 'featuredOfferId', 'featuredArtwork'].includes(action) && interaction.isStringSelectMenu?.()) {
       if (action === 'displayOptions') {
         if ((interaction.values || []).some(key => !Object.hasOwn(DISPLAY_OPTIONS, key))) throw new Error('Invalid display option.');
         patch = Object.fromEntries(Object.keys(DISPLAY_OPTIONS).map(key => [key, interaction.values.includes(key)]));
@@ -233,7 +274,9 @@ async function handleAdminInteraction(interaction) {
       });
       await reply(buildAdminPanel(guild, action === 'alerts' ? 'delivery' : 'home', 'Settings saved.')); return true;
     } else throw new Error('This control is unavailable. Reopen Free Games from Utility Studio.');
+    if (action === 'featuredOfferId') patch.featuredMode = 'manual';
     await applySettings(guild, patch);
+    if (action.startsWith('featured')) { await reply(await buildFeaturedPanel(guild, 0, 'Settings saved.')); return true; }
     await reply(buildAdminPanel(guild, page, 'Settings saved. The listing updates within five minutes.'));
   } catch (error) {
     const { escape } = require('./freeGamesEmbeds');
@@ -244,4 +287,4 @@ async function handleAdminInteraction(interaction) {
   return true;
 }
 module.exports = { MODULE_KEY, DEFAULTS, DISPLAY_OPTIONS, PRICE_MODES, getConfig, update, filterOffers, validateSettings, saveSettings,
-  applySettings, buildAdminPanel, regionalModal, handleAdminInteraction };
+  applySettings, buildAdminPanel, buildFeaturedPanel, regionalModal, handleAdminInteraction };

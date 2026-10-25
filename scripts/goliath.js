@@ -3181,6 +3181,7 @@ async function freeGamesAudit() {
   {
     const fs = require('node:fs'), vm = require('node:vm');
     let memory = structuredClone(config), writes = 0, sends = 0, permitted = true;
+    let panelOffers = [offer];
     const mod = { exports: {} };
     const injectedRequire = name => {
       if (name.endsWith('/guildManager')) return { isModuleEnabled: () => memory.enabled };
@@ -3188,7 +3189,7 @@ async function freeGamesAudit() {
         getModuleSection: () => structuredClone(memory),
         updateModuleSection: (_id, _key, fn) => { memory = fn(structuredClone(memory)); writes++; return memory; },
       };
-      if (name === './freeGamesProviders') return { ...providers, getOffers: async () => ({ offers: [offer], fetchedAt: now }), getPricing: async () => config.pricing };
+      if (name === './freeGamesProviders') return { ...providers, getOffers: async () => ({ offers: panelOffers, fetchedAt: now }), getPricing: async () => config.pricing };
       if (name === './freeGamesEmbeds') return embeds;
       if (name === './freeGamesMonitor') return { withGuildLock: async (_id, task) => task(), validateDestination: async () => { sends++; } };
       if (name.endsWith('/security/protection/core')) return { isBotOwner: () => false };
@@ -3218,12 +3219,63 @@ async function freeGamesAudit() {
     const preview = interaction('preview:0'); await handler(preview);
     assert.equal(JSON.stringify(memory), before); assert.equal(writes, 1); assert.equal(sends, 0);
     assert.match(last.content, /Preview only/);
+    const featurePanel = await mod.exports.buildFeaturedPanel(guildFixture);
+    assert(featurePanel.components.length <= 5); assert.equal(writes, 1);
+    panelOffers = Array.from({ length: 80 }, (_, index) => ({ ...offer, id: 'gamerpower:' + (8000 + index), title: 'Main ' + index, image: 'https://www.gamerpower.com/game.jpg', popularityRank: index }));
+    const paginatedFeature = await mod.exports.buildFeaturedPanel(guildFixture, 2);
+    assert.equal(paginatedFeature.components.length, 5);
+    assert.equal(paginatedFeature.components[1].components[0].options.length, 25);
+    assert(paginatedFeature.components[1].components[0].options[0].value.startsWith('gamerpower:'));
+    panelOffers = [offer];
     settings.fields.getTextInputValue = key => key === 'currency' ? 'ZZZ' : ({ locale: 'en-GB', timeZone: 'Europe/London', region: 'GB' })[key];
     await handler(settings);
     assert.equal(writes, 1); assert.equal(memory.currency, 'EUR');
     const display = interaction('displayOptions');
     display.isStringSelectMenu = () => true; display.values = ['showTimestamps']; await handler(display);
     assert.equal(memory.showTimestamps, true); assert.equal(memory.showExpiry, false); assert.equal(memory.showPlatforms, false);
+  }
+
+  // One main title is featured once, above the list, without promoting DLC/mobile/indie-only offers.
+  const mainA = { ...offer, id: 'gamerpower:7001', title: 'Main game A', image: 'https://www.gamerpower.com/a.jpg', popularityRank: 9, description: 'A main game.' };
+  const mainB = { ...mainA, id: 'gamerpower:7002', title: 'Main game B', stores: ['epic'], popularityRank: 1 };
+  const notMain = [{ ...mainA, id: 'loot', type: 'loot', popularityRank: 0 }, { ...mainA, id: 'indie', stores: ['itchio'], popularityRank: 0 },
+    { ...mainA, id: 'trial', type: 'weekend', popularityRank: 0 }];
+  assert.equal(embeds.selectFeaturedOffer([mainA, mainB, ...notMain], config).id, mainB.id);
+  assert.equal(embeds.selectFeaturedOffer([mainA, mainB], { ...config, featuredMode: 'manual', featuredOfferId: mainA.id }).id, mainA.id);
+  assert.equal(embeds.selectFeaturedOffer([mainA, mainB], { ...config, featuredMode: 'manual', featuredOfferId: 'gamerpower:999999' }).id, mainB.id);
+  assert.equal(embeds.selectFeaturedOffer([mainA, mainB], { ...config, stores: ['steam'] }).id, mainA.id);
+  assert.equal(embeds.selectFeaturedOffer([mainA], { ...config, featuredMode: 'off' }), null);
+  assert.equal(embeds.selectFeaturedOffer(notMain, config), null);
+  const featuredPages = embeds.buildListing([mainA, mainB, ...notMain], config, now, icons);
+  assert.equal(featuredPages[0].embeds[0].thumbnail.url, mainB.image);
+  assert(featuredPages[0].embeds[0].description.includes('Main game B'));
+  assert.equal(featuredPages.filter(page => page.embeds[0].thumbnail).length, 1);
+  const featuredText = featuredPages.map(page => [page.embeds[0].description, ...page.embeds[0].fields.map(field => field.value)].join('\n')).join('\n');
+  // These fixture games share a URL, so distinguish the highlighted title from the remaining list.
+  assert.equal(featuredText.split('[Main game B]').length - 1, 1);
+  assert(!featuredPages[0].embeds[0].fields.some(field => field.value.includes('[Main game B]')));
+  assert.equal(featuredPages[0].components[0].components[0].url, mainB.url);
+  assert.equal(embeds.buildListing([mainA], { ...config, featuredArtwork: 'hidden' }, now)[0].embeds[0].thumbnail, undefined);
+  assert.equal(embeds.buildListing([mainA], config, now)[0].embeds[0].fields.length, 0);
+  assert.throws(() => store.validateSettings({ featuredMode: 'fake' }, config));
+  assert.throws(() => store.validateSettings({ featuredOfferId: 'https://example.com' }, config));
+  assert.throws(() => store.validateSettings({ featuredArtwork: 'fake' }, config));
+  assert.equal(store.validateSettings({ featuredMode: 'manual', featuredOfferId: mainA.id }, config).featuredOfferId, mainA.id);
+
+  // A fresh provider module must request and retain the provider's popularity ordering.
+  {
+    const fs = require('node:fs'), vm = require('node:vm'), moduleFixture = { exports: {} };
+    const originalFetch = global.fetch;
+    try {
+      global.fetch = async url => {
+        assert(String(url).includes('sort-by=popularity'));
+        return { status: 200, json: async () => [12, 11].map(id => ({ id, title: 'Main ' + id, type: 'Game', status: 'Active', platforms: 'Steam', gamerpower_url: 'https://www.gamerpower.com/offer/' + id, image: 'https://www.gamerpower.com/game.jpg', worth: '$10.00' })) };
+      };
+      const source = fs.readFileSync(root + '/src/modules/utilityStudio/freeGames/freeGamesProviders.js', 'utf8');
+      vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(require, moduleFixture, moduleFixture.exports);
+      const ranked = await moduleFixture.exports.getOffers();
+      assert.deepEqual(ranked.offers.map(item => [item.id, item.popularityRank]), [['gamerpower:12', 0], ['gamerpower:11', 1]]);
+    } finally { global.fetch = originalFetch; }
   }
   const savedFetch = global.fetch;
   let calls = 0;
@@ -3329,7 +3381,7 @@ async function freeGamesAudit() {
     store.getConfig = priorConfig; providers.getOffers = priorOffers; providers.getPricing = priorPricing;
     delete require.cache[routePath]; if (priorRoute) require.cache[routePath] = priorRoute;
   }
-  console.log('✅ Free Games: guild category/channel ordering, cold-cache core emoji resolution, footer-only timestamps, Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
+  console.log('✅ Free Games: single featured main title/popularity/manual/fallback/thumbnail, guild category/channel ordering, cold-cache core emoji resolution, footer-only timestamps, Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
   return true;
 }
 

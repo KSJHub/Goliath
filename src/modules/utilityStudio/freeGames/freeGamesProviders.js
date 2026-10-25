@@ -78,11 +78,11 @@ async function getOffers() {
   if (inFlight) return inFlight;
   if (Date.now() < retryAfter) throw new Error('GamerPower is temporarily unavailable; automatic retry is scheduled. Existing listing retained.');
   inFlight = (async () => {
-    const response = await fetch('https://www.gamerpower.com/api/giveaways', { signal: AbortSignal.timeout(15_000), headers: { Accept: 'application/json' } });
+    const response = await fetch('https://www.gamerpower.com/api/giveaways?sort-by=popularity', { signal: AbortSignal.timeout(15_000), headers: { Accept: 'application/json' } });
     if (![200, 201].includes(response.status)) throw new Error(`GamerPower returned HTTP ${response.status}. Existing listing retained.`);
     const rows = await response.json();
     if (response.status !== 201 && !Array.isArray(rows)) throw new Error('Invalid GamerPower feed. Existing listing retained.');
-    const offers = (Array.isArray(rows) ? rows : []).map((row) => normalize(row)).filter(Boolean);
+    const offers = (Array.isArray(rows) ? rows : []).map((row, popularityRank) => { const offer = normalize(row); return offer ? { ...offer, popularityRank } : null; }).filter(Boolean);
     if (Array.isArray(rows) && rows.length && !rows.some((row) => row && /^\d+$/.test(String(row.id)) && typeof row.title === 'string' && typeof row.type === 'string' && typeof row.platforms === 'string')) throw new Error('GamerPower feed could not be recognised. Existing listing retained.');
     cached = { offers: [...new Map(offers.map((offer) => [offer.id, offer])).values()], fetchedAt: Date.now() };
     return cached;

@@ -1,5 +1,5 @@
 'use strict';
-const { STORES, TYPES } = require('./freeGamesProviders');
+const { STORES, TYPES, safeUrl } = require('./freeGamesProviders');
 const NEW_MS = 24 * 3600_000;
 const ENDING_MS = 48 * 3600_000;
 const SECTIONS = [
@@ -60,16 +60,39 @@ async function loadPlatformPresentation(client, guildId) {
     return platformPresentation(client);
   }
 }
+
+const MAIN_STORES = Object.freeze(['steam', 'epic', 'gog', 'xbox', 'playstation', 'switch']);
+function featuredCandidates(offers, config) {
+  return [...new Map(offers.filter(offer => offer.type === 'game' && safeUrl(offer.image) &&
+    offer.stores.some(store => MAIN_STORES.includes(store) && config.stores.includes(store))).map(offer => [offer.id, offer])).values()]
+    .sort((a, b) => (Number.isSafeInteger(a.popularityRank) ? a.popularityRank : Infinity) -
+      (Number.isSafeInteger(b.popularityRank) ? b.popularityRank : Infinity) || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+}
+function selectFeaturedOffer(offers, config) {
+  if (config.featuredMode === 'off') return null;
+  const candidates = featuredCandidates(offers, config);
+  return (config.featuredMode === 'manual' && candidates.find(offer => offer.id === config.featuredOfferId)) || candidates[0] || null;
+}
+function featuredDescription(offer, config, platforms) {
+  const store = offer.stores.find(key => MAIN_STORES.includes(key) && config.stores.includes(key));
+  const platform = platforms[store];
+  const summary = escape(String(offer.description || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 220));
+  return '**Featured game**\n**[' + escape(shortTitle(offer.title).slice(0, 100)) + '](' + offer.url + ')**\n' +
+    (platform?.emoji || PLATFORM_STYLE[store]?.emoji || '🎮') + ' **' + STORES[store] + '** · ' + price(offer, config).trim() + ' **FREE**' +
+    (summary ? '\n' + summary : '') + '\n\n';
+}
+
 function buildListing(offers, config, now = Date.now(), platforms = platformPresentation()) {
   const pages = [];
   const unique = orderedOffers(offers, now);
+  const featured = selectFeaturedOffer(unique, config);
   const attribution = '\n[Offers provided by GamerPower](https://www.gamerpower.com/)';
   for (const section of SECTIONS) {
     const items = unique.filter((offer) => section.types.includes(offer.type));
     if (!items.length) continue;
     const fields = [];
     for (const [key, label] of Object.entries(STORES)) {
-      const group = items.filter((offer) => offer.stores.find((store) => config.stores.includes(store)) === key);
+      const group = items.filter((offer) => offer.id !== featured?.id && offer.stores.find((store) => config.stores.includes(store)) === key);
       if (!group.length) continue;
       let value = '';
       let part = 1;
@@ -83,9 +106,10 @@ function buildListing(offers, config, now = Date.now(), platforms = platformPres
       }
       if (value) fields.push({ name: name(), value: value.trim(), inline: config.layout !== 'list' });
     }
+    const spotlight = section.types.includes('game') ? featured : null;
     const description = (config.showOfferCount === false ? '' : `**${items.length} offer${items.length === 1 ? '' : 's'} available**`) + attribution;
-    let page = { ...section, description, fields: [] };
-    let size = section.title.length + description.length + 80;
+    let page = { ...section, description: (spotlight ? featuredDescription(spotlight, config, platforms) : '') + description, featured: spotlight, fields: [] };
+    let size = section.title.length + page.description.length + 80;
     for (const field of fields) {
       const length = field.name.length + field.value.length;
       if (page.fields.length && (page.fields.length >= 6 || size + length > 5700)) {
@@ -93,10 +117,10 @@ function buildListing(offers, config, now = Date.now(), platforms = platformPres
       }
       page.fields.push(field); size += length;
     }
-    if (page.fields.length) pages.push(page);
+    if (page.fields.length || page.featured) pages.push(page);
   }
   if (!pages.length) pages.push({ ...SECTIONS[0], description: 'No matching free offers are currently listed.' + attribution, fields: [] });
-  return pages.map((page, index) => ({ embeds: [{ title: page.title, color: page.color, description: page.description, fields: page.fields, footer: { text: `Goliath Free Games · ${index + 1}/${pages.length}${config.showTimestamps === false ? '' : ' · Updated'}` }, ...(config.showTimestamps === false ? {} : { timestamp: new Date(config.listingUpdatedAt || now).toISOString() }) }], allowedMentions: { parse: [] } }));
+  return pages.map((page, index) => ({ embeds: [{ title: page.title, color: page.color, description: page.description, fields: page.fields, ...(page.featured && config.featuredArtwork !== 'hidden' ? { thumbnail: { url: safeUrl(page.featured.image) } } : {}), footer: { text: `Goliath Free Games · ${index + 1}/${pages.length}${config.showTimestamps === false ? '' : ' · Updated'}` }, ...(config.showTimestamps === false ? {} : { timestamp: new Date(config.listingUpdatedAt || now).toISOString() }) }], allowedMentions: { parse: [] }, ...(page.featured ? { components: [{ type: 1, components: [{ type: 2, style: 5, label: 'View featured game & claim', url: page.featured.url }] }] } : {}) }));
 }
 
-module.exports = { NEW_MS, ENDING_MS, SECTIONS, PLATFORM_STYLE, platformPresentation, loadPlatformPresentation, escape, line, price, shortTitle, orderedOffers, buildListing };
+module.exports = { NEW_MS, ENDING_MS, SECTIONS, PLATFORM_STYLE, platformPresentation, loadPlatformPresentation, MAIN_STORES, featuredCandidates, selectFeaturedOffer, featuredDescription, escape, line, price, shortTitle, orderedOffers, buildListing };
