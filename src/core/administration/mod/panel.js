@@ -76,6 +76,7 @@ function normalizeDashboardContext(context = {}) {
     analyticsModeratorId: context.analyticsModeratorId ? String(context.analyticsModeratorId) : null,
     analyticsReturnTargetId: context.analyticsReturnTargetId ? String(context.analyticsReturnTargetId) : null,
     analyticsStaffPage: Math.max(0, Number(context.analyticsStaffPage) || 0),
+    appealFilter: ['pending', 'resolved', 'all'].includes(context.appealFilter) ? context.appealFilter : 'pending',
   };
 }
 function getEmoji(key, fallback) { return EMOJIS?.[key] || fallback; }
@@ -192,7 +193,7 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
       .setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${returnId}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   } else {
-    finalButtons.push(new ButtonBuilder().setCustomId(active === 'appeals' ? 'mod_dashboard:back:appeals' : `mod_dashboard:${id}:actions`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
+    finalButtons.push(new ButtonBuilder().setCustomId(active === 'appeals' && context.appealFilter !== 'pending' ? 'mod_appeals_filter:pending:0' : active === 'appeals' ? 'mod_dashboard:back:appeals' : `mod_dashboard:${id}:actions`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   }
   rows.push(new ActionRowBuilder().addComponents(finalButtons));
