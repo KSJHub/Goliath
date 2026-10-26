@@ -855,6 +855,12 @@ async function routeButtonsAndSelects(i) {
     if (scan) return scan;
     return handleUserSelectMenu(i);
   }
+  if (i.isStringSelectMenu?.() && i.customId === 'mod_appeals_select_filter') {
+    if (!canUseModAction(i.member, i.guild, 'view_appeals')) return safeReply(i, { content: 'You cannot view moderation appeals.', flags: 64 });
+    const filter = String(i.values?.[0] || '');
+    if (!['pending', 'resolved', 'all'].includes(filter)) return safeReply(i, { content: 'Invalid appeal filter.', flags: 64 });
+    return renderDashboard(i, 'none', 'appeals', { appealFilter: filter, appealPage: 0 });
+  }
   if (i.isStringSelectMenu?.() && i.customId === 'mod_cases_open_record') {
     if (!canUseModAction(i.member, i.guild, 'view_cases')) return safeReply(i, { content: 'You cannot view moderation cases.', flags: 64 });
     const value = String(i.values?.[0] || '');
