@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../services/apiClient';
+import MemberCommunityProfile from './MemberCommunityProfile.jsx';
 
 const MAX_GROUNDS = 1500;
 const MAX_RESOLUTION = 500;
@@ -373,6 +374,7 @@ export default function Appeals() {
                 <p style={{ ...muted, margin: '8px 0 0', fontSize: 14 }}>Sign out above, then sign in with the account you want to use.</p>
               </div>
             </div>
+            <MemberCommunityProfile />
           </section>
         ) : null}
 
