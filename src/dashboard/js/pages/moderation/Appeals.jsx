@@ -61,6 +61,8 @@ export default function Appeals() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState('');
   const [deepLinkNotice, setDeepLinkNotice] = useState('');
+  const [caseFilter, setCaseFilter] = useState('all');
+  const [expandedCases, setExpandedCases] = useState({});
   const appealFormRef = useRef(null);
 
   async function load({ preserveSuccess = true } = {}) {
@@ -118,6 +120,13 @@ export default function Appeals() {
     [cases]
   );
 
+  const resolvedCount = useMemo(() => cases.reduce((sum, item) => sum + item.appeals.filter(a => a.status === 'approved' || a.status === 'denied').length, 0), [cases]);
+  const visibleCases = useMemo(() => cases.filter(item => {
+    if (caseFilter === 'eligible') return item.eligible;
+    if (caseFilter === 'pending') return item.appeals.some(a => a.status === 'pending');
+    if (caseFilter === 'resolved') return item.appeals.some(a => a.status === 'approved' || a.status === 'denied');
+    return true;
+  }), [cases, caseFilter]);
   const appealableCount = useMemo(() => cases.filter((item) => item.eligible).length, [cases]);
 
   async function submitAppeal(event) {
@@ -240,7 +249,7 @@ export default function Appeals() {
       <main style={{ ...page, display: 'grid', placeItems: 'center' }}>
         <section style={{ ...card, width: 'min(560px, 100%)', textAlign: 'center', padding: '30px 24px' }}>
           <div style={{ fontSize: 44 }}>⚖️</div>
-          <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.14em', textTransform: 'uppercase', marginTop: 10 }}>Goliath Member Portal</div>
+          <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.14em', textTransform: 'uppercase', marginTop: 10 }}>Member Portal</div>
           <h1 style={{ margin: '8px 0 10px', fontSize: 'clamp(30px, 8vw, 46px)' }}>Appeal a moderation decision</h1>
           <p style={{ ...muted, margin: '0 auto 22px', maxWidth: 470 }}>Sign in with Discord to see decisions linked to your account, submit an appeal when one is available, and check the outcome of appeals you have already sent.</p>
           <button style={button} onClick={() => { window.location.href = `/api/auth/login?next=${encodeURIComponent(currentReturnPath())}`; }}>Continue with Discord</button>
@@ -257,8 +266,8 @@ export default function Appeals() {
       <div style={{ width: 'min(1040px, 100%)', margin: '0 auto', display: 'grid', gap: 18 }}>
         <header style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.13em', textTransform: 'uppercase' }}>Goliath Member Portal</div>
-            <h1 style={{ margin: '6px 0 4px', fontSize: 'clamp(30px, 7vw, 44px)', lineHeight: 1.05 }}>⚖️ Appeals</h1>
+            <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.13em', textTransform: 'uppercase' }}>Member Portal</div>
+            <h1 style={{ margin: '6px 0 4px', fontSize: 'clamp(30px, 7vw, 44px)', lineHeight: 1.05 }}>⚖️ Appeals Portal</h1>
             <p style={{ ...muted, margin: 0 }}>Signed in as <strong style={{ color: '#e5edf8' }}>{displayName}</strong></p>
           </div>
           <div style={{ display: 'flex', gap: 9, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -267,26 +276,16 @@ export default function Appeals() {
           </div>
         </header>
 
-        <section style={{ ...card, borderColor: 'rgba(59,130,246,.38)', background: 'linear-gradient(135deg, rgba(24,49,95,.9), rgba(7,18,35,.96))' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 10 }}>
-            <div style={{ color: '#93c5fd', fontWeight: 900, fontSize: 13, letterSpacing: '.08em', textTransform: 'uppercase' }}>Fair review. Clear outcome.</div>
-            <h2 style={{ margin: 0, fontSize: 'clamp(24px, 5vw, 34px)' }}>Welcome to Goliath Appeals</h2>
-            <p style={{ ...muted, margin: 0, maxWidth: 760 }}>If a moderation decision affected your account and is eligible for appeal, you can ask for it to be reviewed here. Explain what you believe should be reconsidered, send your appeal, then return here to follow its progress.</p>
+        <section style={{ ...card, borderColor: 'rgba(59,130,246,.38)' }}>
+          <h2 style={{ margin: '0 0 5px', fontSize: 'clamp(22px, 4vw, 30px)' }}>Welcome back, {displayName}</h2>
+          <p style={{ ...muted, margin: '0 0 18px' }}>Review your moderation history, submit eligible appeals and track decisions.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            {[['📁 Cases', cases.length], ['⏳ Under Review', pendingCount], ['✅ Resolved Appeals', resolvedCount]].map(([label, count]) => (
+              <div key={label} style={{ padding: 14, borderRadius: 13, background: 'rgba(2,6,23,.35)', border: '1px solid rgba(148,163,184,.15)' }}>
+                <div style={{ ...muted, fontSize: 13 }}>{label}</div><strong style={{ fontSize: 25 }}>{count}</strong>
+              </div>
+            ))}
           </div>
-        </section>
-
-        <section aria-label="How appeals work" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
-          {[
-            ['1', 'Check your cases', 'We show decisions linked to this Discord account and clearly mark the ones you can appeal.'],
-            ['2', 'Tell us your side', 'Choose an eligible case and explain, in your own words, why you believe the decision should be reviewed.'],
-            ['3', 'Track the result', 'Once submitted, your appeal stays on this page so you can see when it is under review and when a decision is made.'],
-          ].map(([number, title, copy]) => (
-            <div key={number} style={{ ...card, padding: 18 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, display: 'grid', placeItems: 'center', background: '#1d4ed8', fontWeight: 900, marginBottom: 12 }}>{number}</div>
-              <strong style={{ fontSize: 17 }}>{title}</strong>
-              <p style={{ ...muted, margin: '7px 0 0', fontSize: 14 }}>{copy}</p>
-            </div>
-          ))}
         </section>
 
         {error ? <div role="alert" style={{ ...card, borderColor: 'rgba(239,68,68,.5)', color: '#fecaca' }}>⚠️ {error}</div> : null}
@@ -315,7 +314,7 @@ export default function Appeals() {
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 12, marginTop: 18 }}>
-              {cases.map((item) => (
+              {visibleCases.map((item) => (
                 <article key={`${item.guildId}:${item.caseId}`} style={{ border: selected?.guildId === item.guildId && selected?.caseId === item.caseId ? '1px solid rgba(96,165,250,.8)' : '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 17, background: 'rgba(2,6,23,.42)', overflowWrap: 'anywhere' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'start' }}>
                     <div>
@@ -326,6 +325,15 @@ export default function Appeals() {
                     <span style={{ ...pill, background: item.eligible ? 'rgba(34,197,94,.1)' : 'rgba(148,163,184,.08)', borderColor: item.eligible ? 'rgba(34,197,94,.25)' : 'rgba(148,163,184,.18)', color: item.eligible ? '#bbf7d0' : '#cbd5e1' }}>{item.eligible ? '✓ Appeal available' : 'Appeal unavailable'}</span>
                   </div>
 
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                    {item.status ? <span style={pill}>Case: {String(item.status).replace(/_/g, ' ')}</span> : null}
+                    {item.appeals.some(a => a.status === 'approved') ? <span style={{ ...pill, color: '#bbf7d0' }}>✅ Appeal Approved</span> : null}
+                    {item.appeals.some(a => a.status === 'pending') ? <span style={{ ...pill, color: '#fde68a' }}>⏳ Under Review</span> : null}
+                  </div>
+                  <button type="button" style={{ ...secondaryButton, marginTop: 12 }} aria-expanded={Boolean(expandedCases[`${item.guildId}:${item.caseId}`])} onClick={() => setExpandedCases(prev => ({ ...prev, [`${item.guildId}:${item.caseId}`]: !prev[`${item.guildId}:${item.caseId}`] }))}>
+                    {expandedCases[`${item.guildId}:${item.caseId}`] ? 'Hide Details ▲' : 'View Case Details ▼'}
+                  </button>
+                  {expandedCases[`${item.guildId}:${item.caseId}`] ? (<>
                   <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: 'rgba(15,23,42,.65)' }}>
                     <div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em' }}>What this case is about</div>
                     <p style={{ lineHeight: 1.6, margin: '6px 0 0' }}>{item.publicSummary || 'No additional public summary is available for this case.'}</p>
@@ -348,6 +356,7 @@ export default function Appeals() {
                     </div>
                   ) : null}
 
+                  </>) : null}
                   {item.eligible ? <button style={{ ...button, marginTop: 15 }} onClick={() => chooseCase(item)} disabled={submitting}>Start appeal</button> : null}
                 </article>
               ))}
@@ -391,7 +400,7 @@ export default function Appeals() {
 
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
           <div style={card}>
-            <h3 style={{ marginTop: 0 }}>Common questions</h3>
+            <h3 style={{ marginTop: 0 }}>❓ Appeals Help</h3>
             <details style={{ marginBottom: 10 }}>
               <summary style={{ cursor: 'pointer', fontWeight: 800 }}>What can I appeal?</summary>
               <p style={{ ...muted, fontSize: 14 }}>Any case available for appeal will be clearly marked above. Some decisions may need to reach a particular stage before an appeal can be submitted.</p>
@@ -407,7 +416,7 @@ export default function Appeals() {
           </div>
 
           <div style={card}>
-            <h3 style={{ marginTop: 0 }}>Your privacy</h3>
+            <h3 style={{ marginTop: 0 }}>🔒 Privacy & Security</h3>
             <p style={{ ...muted, marginBottom: 0 }}>This page only shows information that is appropriate for you to see about your own cases and appeals. Private moderator notes and internal review material remain private.</p>
             <div style={{ marginTop: 16, padding: 13, borderRadius: 12, background: 'rgba(34,197,94,.07)', border: '1px solid rgba(34,197,94,.14)', color: '#d1fae5', fontSize: 14, lineHeight: 1.55 }}>🔒 Your appeal is tied to the Discord account you are currently signed in with.</div>
           </div>
