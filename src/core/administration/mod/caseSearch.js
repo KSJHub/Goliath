@@ -38,7 +38,7 @@ const MAX_EVIDENCE_HISTORY = 100;
 
 function buildCaseSearchModal() {
   return new ModalBuilder().setCustomId('mod_submit_case_search').setTitle('Search Moderation Cases').addComponents(
-    ...[['case_id', 'Case ID', 'Optional — e.g. 123', 12], ['user_id', 'User ID', 'Optional Discord user ID', 30], ['moderator_id', 'Moderator ID', 'Optional Discord moderator ID', 30], ['action', 'Action', 'warn, timeout, kick, ban...', 30], ['status', 'Status', 'active, reversed, expired', 20]].map(([id, label, placeholder, max]) => new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(TextInputStyle.Short).setPlaceholder(placeholder).setRequired(false).setMaxLength(max)))
+    ...[['case_id', 'Case ID', 'Optional — e.g. 123', 12], ['user_id', 'User ID', 'Optional Discord user ID', 30], ['moderator_id', 'Moderator ID', 'Optional Discord moderator ID', 30], ['action', 'Action', 'warn, timeout, kick, ban...', 30], ['status', 'Status', 'active, closed, expired', 20]].map(([id, label, placeholder, max]) => new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(TextInputStyle.Short).setPlaceholder(placeholder).setRequired(false).setMaxLength(max)))
   );
 }
 
@@ -373,8 +373,8 @@ function caseDetailButtons(c, token, audit) {
   const activeEvidence = evidence.filter((entry) => !entry.removedAt);
   const rows = [new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`mod_case_search_back:${token}`).setLabel('← Back to Search').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_case_reverse_warning:${c.caseId}`).setLabel('↩️ Reverse Warning').setStyle(ButtonStyle.Secondary).setDisabled(c.action !== 'warn' || closed),
-    new ButtonBuilder().setCustomId(`mod_case_reverse_timeout:${c.caseId}`).setLabel('⏪ Reverse Timeout').setStyle(ButtonStyle.Secondary).setDisabled(c.action !== 'timeout' || closed),
+    new ButtonBuilder().setCustomId(`mod_case_reverse_warning:${c.caseId}`).setLabel('↩️ Remove Warning').setStyle(ButtonStyle.Secondary).setDisabled(c.action !== 'warn' || closed),
+    new ButtonBuilder().setCustomId(`mod_case_reverse_timeout:${c.caseId}`).setLabel('⏪ Clear Timeout').setStyle(ButtonStyle.Secondary).setDisabled(c.action !== 'timeout' || closed),
     new ButtonBuilder().setCustomId(`mod_case_note:${c.caseId}`).setLabel('📝 Add/Edit Note').setStyle(ButtonStyle.Primary).setDisabled(readOnly),
     new ButtonBuilder().setCustomId(`mod_case_lock:${token}:${c.caseId}`).setLabel(locked ? '🔓 Unlock Case' : '🔒 Lock Case').setStyle(locked ? ButtonStyle.Success : ButtonStyle.Danger).setDisabled(mergedSource)
   )];
