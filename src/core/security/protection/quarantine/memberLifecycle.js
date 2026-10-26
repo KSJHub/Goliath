@@ -101,6 +101,20 @@ async function quarantineMember(guild, member, options = {}) {
   if (existing) {
     const existingMode = getQuarantineMode(existing);
     if (existingMode === QUARANTINE_MODES.INVESTIGATION && mode === QUARANTINE_MODES.SECURITY) return escalateInvestigationToSecurity(guild, member, existing, options);
+    // A repeated request can safely repair an orphaned case link after a prior
+    // persistence failure, without applying roles or creating another room.
+    if (!existing.caseId && existing.interviewChannelId) {
+      try {
+        const { getCasesForUser } = require('../../../administration/mod/storage');
+        const matching = (getCasesForUser(guild.id, member.id) || []).find(record =>
+          String(record.action) === 'quarantine' &&
+          String(record.status) === 'active' &&
+          String(record.metadata?.interviewChannelId || '') === String(existing.interviewChannelId));
+        if (matching) attachQuarantineCase(guild, member.id, matching.caseId);
+      } catch (error) {
+        console.warn('[QuarantineSystem] Could not reconcile existing investigation case:', error);
+      }
+    }
     return { success: false, alreadyQuarantined: true, mode: existingMode, reason: 'Member is already quarantined.' };
   }
 
