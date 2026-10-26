@@ -88,9 +88,9 @@ function updateCaseMetadata(guildId, caseId, metadata) {
 }
 function getAppealEligibility(modCase, appellantId, nowMs = Date.now()) {
   if (!modCase) return { ok: false, error: 'Case not found.' };
-  const normalizedAppellant = String(appellantId || '').trim();
-  if (!/^\d{16,20}$/.test(normalizedAppellant)) return { ok: false, error: 'Appellant ID must be a valid Discord user ID.' };
-  if (String(modCase.userId) !== normalizedAppellant) return { ok: false, error: 'Only the user affected by this moderation case can appeal it.' };
+  const normalizedMember = String(appellantId || '').trim();
+  if (!/^\d{16,20}$/.test(normalizedMember)) return { ok: false, error: 'Member ID must be a valid Discord user ID.' };
+  if (String(modCase.userId) !== normalizedMember) return { ok: false, error: 'Only the user affected by this moderation case can appeal it.' };
   if (!APPEALABLE_ACTIONS.has(String(modCase.action || '').toLowerCase())) return { ok: false, error: 'This case type is not appealable.' };
   if (String(modCase.action || '').toLowerCase() === 'case') {
     const proceeding = modCase.metadata?.proceeding;
@@ -114,8 +114,8 @@ function getAppealEligibility(modCase, appellantId, nowMs = Date.now()) {
 function submitAppeal(guildId, caseId, { appellantId, grounds, requestedResolution, source = 'staff' }, actorId = null) {
   const modCase = getCaseById(guildId, caseId);
   if (!modCase) return { ok: false, error: 'Case not found.' };
-  const normalizedAppellant = String(appellantId || modCase.userId || '').trim();
-  const eligibility = getAppealEligibility(modCase, normalizedAppellant);
+  const normalizedMember = String(appellantId || modCase.userId || '').trim();
+  const eligibility = getAppealEligibility(modCase, normalizedMember);
   if (!eligibility.ok) return eligibility;
   const normalizedGrounds = String(grounds || '').trim().slice(0, 1500);
   if (!normalizedGrounds) return { ok: false, error: 'Appeal grounds are required.' };
@@ -123,7 +123,7 @@ function submitAppeal(guildId, caseId, { appellantId, grounds, requestedResoluti
   const appeal = {
     id: `ap_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
     status: 'pending',
-    appellantId: normalizedAppellant,
+    appellantId: normalizedMember,
     grounds: normalizedGrounds,
     requestedResolution: String(requestedResolution || '').trim().slice(0, 500) || null,
     source: String(source || 'staff').slice(0, 32),
@@ -610,7 +610,7 @@ function buildCaseNoteModal(customId, existingNote = '') {
 }
 function buildAppealSubmitModal(modCase) {
   return new ModalBuilder().setCustomId(`mod_submit_case_appeal:${modCase.caseId}`).setTitle(`Record Appeal • Case #${modCase.caseId}`).addComponents(
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('appellant_id').setLabel('Appellant User ID').setStyle(TextInputStyle.Short).setPlaceholder(modCase.userId).setRequired(false).setMaxLength(20)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('appellant_id').setLabel('Member User ID').setStyle(TextInputStyle.Short).setPlaceholder(modCase.userId).setRequired(false).setMaxLength(20)),
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('grounds').setLabel('Appeal Grounds').setStyle(TextInputStyle.Paragraph).setPlaceholder('Why this moderation action should be reviewed').setRequired(true).setMaxLength(1500)),
     new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('requested_resolution').setLabel('Requested Resolution').setStyle(TextInputStyle.Paragraph).setPlaceholder('Optional requested outcome').setRequired(false).setMaxLength(500))
   );
@@ -701,23 +701,23 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
     .setTitle(`⚖️ Appeal History • Case #${modCase.caseId}`)
-    .setDescription(`**Original Action:** ${String(modCase.action || 'case').toUpperCase()}\n**Appeals:** ${appeals.length} Total • ${counts.pending} Pending • ${counts.approved} Approved • ${counts.denied} Denied`)
+    .setDescription(`**Original Action:** ${String(modCase.action || 'case').toUpperCase()}\n**Total:** ${appeals.length}  •  **⏳ Pending:** ${counts.pending}  •  **✅ Approved:** ${counts.approved}  •  **❌ Denied:** ${counts.denied}`)
     .setFooter({ text: `Appeal history • Page ${page + 1}/${totalPages}` });
   if (!entries.length) embed.addFields({ name: '📭 No Appeals', value: 'No appeals have been recorded for this case.', inline: false });
   for (const appeal of entries) {
     const status = appeal.status === 'approved' ? '✅ Approved' : appeal.status === 'denied' ? '❌ Denied' : '⏳ Pending Review';
     const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:R>` : 'Unknown';
     const lines = [
-      `**Appellant:** <@${appeal.appellantId}> • **Submitted:** ${submitted}`,
+      `**Member:** <@${appeal.appellantId}>  •  **Submitted:** ${submitted}`,
       `**Source:** ${String(appeal.source || 'Unknown').slice(0, 50)}`,
-      `**Appeal Grounds:** ${String(appeal.grounds || 'No grounds recorded').replace(/\s+/g, ' ').slice(0, 190)}`,
+      `\n**📝 Appeal Grounds**\n${String(appeal.grounds || 'No grounds recorded').replace(/\s+/g, ' ').slice(0, 190)}`,
     ];
     if (appeal.requestedResolution) lines.push(`**Requested Outcome:** ${String(appeal.requestedResolution).replace(/\s+/g, ' ').slice(0, 120)}`);
     if (appeal.reviewedBy) lines.push(`**Reviewed By:** <@${appeal.reviewedBy}>${appeal.reviewedAt ? ` • <t:${getCaseTimestamp(appeal.reviewedAt)}:R>` : ''}`);
-    if (appeal.reviewNote) lines.push(`**Review Decision:** ${String(appeal.reviewNote).replace(/\s+/g, ' ').slice(0, 150)}`);
-    if (appeal.remedy) lines.push(`**Sanction Reversal:** ${appeal.remedy.ok ? '✅ Completed' : '⚠️ Requires attention'} • ${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').replace(/\s+/g, ' ').slice(0, 150)}`);
-    if (appeal.notification) lines.push(`**Member Notification:** ${appeal.notification.sent ? '✅ Sent' : '⚠️ Not delivered'}`);
-    embed.addFields({ name: `📁 Appeal ${status}`, value: lines.join('\n').slice(0, 1024), inline: false });
+    if (appeal.reviewNote) lines.push(`\n**📋 Review Rationale**\n${String(appeal.reviewNote).replace(/\s+/g, ' ').slice(0, 150)}`);
+    if (appeal.remedy) lines.push(`\n**🔄 Sanction Reversal:** ${appeal.remedy.ok ? '✅ Completed' : '⚠️ Requires attention'}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').replace(/\s+/g, ' ').slice(0, 150)}`);
+    if (appeal.notification) lines.push(`**📨 Member Notification:** ${appeal.notification.sent ? '✅ Sent' : '⚠️ Not delivered'}`);
+    embed.addFields({ name: `⚖️ Appeal • ${status}`, value: lines.join('\n').slice(0, 1024), inline: false });
   }
   const components = [];
   if (totalPages > 1) components.push(new ActionRowBuilder().addComponents(
@@ -745,7 +745,7 @@ function buildAppealDetailPayload(modCase, appeal) {
     .setTitle(`⚖️ Appeal Review • Case #${modCase.caseId}`)
     .setDescription(`**Original Action:** ${originalAction}\n**Appeal Status:** ${status}`)
     .addFields(
-      { name: '👤 Appeal Information', value: `**Appellant:** <@${appeal.appellantId}>\n**Submitted:** ${submitted}\n**Source:** ${String(appeal.source || 'Unknown').slice(0, 80)}`, inline: false },
+      { name: '👤 Appeal Information', value: `**Member:** <@${appeal.appellantId}>\n**Submitted:** ${submitted}\n**Source:** ${String(appeal.source || 'Unknown').slice(0, 80)}`, inline: false },
       { name: '📝 Appeal & Decision', value: [
         `**Appeal Grounds:**\n${String(appeal.grounds || 'No grounds recorded').slice(0, 650)}`,
         appeal.requestedResolution ? `**Requested Outcome:**\n${String(appeal.requestedResolution).slice(0, 300)}` : null,
