@@ -799,39 +799,34 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
         const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:f>` : 'Unknown';
         return [`**Case #${modCase.caseId} • ${String(modCase.action || 'case').toUpperCase()} Appeal**`, `Member: <@${appeal.appellantId}>`, `Moderator: <@${modCase.moderatorId}>`, `Submitted: ${submitted}`, `Status: **${String(appeal.status || 'pending').toUpperCase()}**`, `Appeal: ${String(appeal.grounds || 'No grounds recorded').replace(/\s+/g, ' ').slice(0, 220)}`].join('\n');
       })].join('\n\n')
-    : ['Review and manage appeals submitted against moderation cases.', '', emptyText].join('\n');
+    : [emptyText].join('\n');
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
     .setTitle('⚖️ Moderation Appeals')
-    .setDescription(description)
-    .addFields(
-      { name: '⏳ Pending', value: `**${counts.pending}**`, inline: true },
-      { name: '✅ Approved', value: `**${counts.approved}**`, inline: true },
-      { name: '❌ Denied', value: `**${counts.denied}**`, inline: true },
-    );
+    .setDescription(['**Review submitted appeals and manage decisions.**', '', `**📥 Pending:** ${counts.pending}   •   **✅ Approved:** ${counts.approved}   •   **❌ Denied:** ${counts.denied}`, `**Viewing:** ${normalizedStatus === 'all' ? 'All Appeals' : normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)}`, '', description].join('\n'))
+    ;
   if (extraFilters.length) embed.addFields({ name: '🔎 Additional Filters', value: extraFilters.join(' • '), inline: false });
-  embed.setFooter({ text: `${results.length} matching appeal${results.length === 1 ? '' : 's'} • Page ${page + 1}/${totalPages}` }).setTimestamp();
+  embed.setFooter({ text: `${results.length} matching appeal${results.length === 1 ? '' : 's'} • Page ${page + 1}/${totalPages}` });
   const statusRow = new ActionRowBuilder().addComponents(
-    ...['pending', 'approved', 'denied'].map((status) => new ButtonBuilder()
+    ...['pending', 'approved', 'denied', 'all'].map(status => new ButtonBuilder()
       .setCustomId(`mod_case_appeal_queue_status:${activeToken}:${status}`)
-      .setLabel(status === 'pending' ? 'Pending' : status === 'approved' ? 'Approved' : 'Denied')
+      .setLabel(status === 'all' ? '📋 All' : status === 'pending' ? '📥 Pending' : status === 'approved' ? '✅ Approved' : '❌ Denied')
       .setStyle(normalizedStatus === status ? ButtonStyle.Primary : ButtonStyle.Secondary))
   );
-  const pageRow = new ActionRowBuilder().addComponents(
+  const rows = [statusRow];
+  if (slice.length) rows.push(new ActionRowBuilder().addComponents(...slice.map(({ case: modCase, appeal }) =>
+    new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`)
+      .setLabel(`${appeal.status === 'pending' ? '⚖️ Review' : '📁 View'} #${modCase.caseId}`).setStyle(ButtonStyle.Primary)
+  )));
+  if (totalPages > 1) rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`mod_case_appeal_queue:${activeToken}:${Math.max(0, page - 1)}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(page <= 0),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_status:${activeToken}:all`).setLabel('All').setStyle(normalizedStatus === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_case_appeal_queue:${activeToken}:${Math.min(totalPages - 1, page + 1)}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1)
-  );
-  const rows = [statusRow, pageRow];
-  if (slice.length) rows.push(new ActionRowBuilder().addComponents(...slice.map(({ case: modCase, appeal }) => new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`).setLabel(`#${modCase.caseId}`).setStyle(ButtonStyle.Primary))));
+  ));
   rows.push(new ActionRowBuilder().addComponents(
-  new ButtonBuilder().setCustomId(`mod_case_appeal_queue_refresh:${activeToken}:${page}`).setLabel('🔄 Refresh').setStyle(ButtonStyle.Secondary),
-  new ButtonBuilder().setCustomId(`mod_case_appeal_queue_filter:${activeToken}`).setLabel('🔎 Filter').setStyle(ButtonStyle.Secondary)
-));
-rows.push(new ActionRowBuilder().addComponents(
-  new ButtonBuilder().setCustomId('mod_dashboard:none:analytics').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)
-));
-
+    new ButtonBuilder().setCustomId('mod_dashboard:none:analytics').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_refresh:${activeToken}:${page}`).setLabel('🔄 Refresh').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_filter:${activeToken}`).setLabel('🔎 Advanced Filter').setStyle(ButtonStyle.Secondary)
+  ));
   return { embeds: [embed], components: rows };
 }
 
