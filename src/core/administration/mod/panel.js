@@ -522,8 +522,14 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     const data = getAppealsPage(interaction.guild.id, filter, options.appealPage);
     embeds.push(buildAppealsOverviewEmbed(interaction.guild, filter, data.currentPage));
     components.push(new ActionRowBuilder().addComponents(
-      ...['pending', 'resolved', 'all'].map((value) => new ButtonBuilder().setCustomId(`mod_appeals_filter:${value}:0`).setLabel(value === 'pending' ? '📥 Pending' : value === 'all' ? '📋 All' : '✅ Resolved').setStyle(filter === value ? ButtonStyle.Primary : ButtonStyle.Secondary)),
-      new ButtonBuilder().setCustomId(`mod_appeals_filter:${filter}:${data.currentPage}`).setLabel('🔄 Refresh').setStyle(ButtonStyle.Secondary)
+      new StringSelectMenuBuilder()
+        .setCustomId('mod_appeals_select_filter')
+        .setPlaceholder('⚖️ Filter appeals')
+        .addOptions(
+          { label: 'Pending Review', value: 'pending', description: 'Appeals awaiting a decision', emoji: '📥', default: filter === 'pending' },
+          { label: 'Resolved', value: 'resolved', description: 'Approved and denied appeals', emoji: '✅', default: filter === 'resolved' },
+          { label: 'All Appeals', value: 'all', description: 'Every submitted appeal', emoji: '📋', default: filter === 'all' }
+        )
     ));
     if (data.entries.length) components.push(new ActionRowBuilder().addComponents(data.entries.map(({ case: modCase, appeal }) =>
       new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`).setLabel(`${appeal.status === 'pending' ? '⚖️ Review' : '📁 View'} #${modCase.caseId}`).setStyle(appeal.status === 'pending' ? ButtonStyle.Success : ButtonStyle.Secondary)
