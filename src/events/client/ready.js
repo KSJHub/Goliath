@@ -711,6 +711,24 @@ async function runControlledRecovery(client) {
     }
 
     await runRecoveryStage(
+      'Quarantine case-link reconciliation',
+      async () => {
+        const { reconcileQuarantineCaseLinks } = require('../../core/security/protection/quarantine/memberLifecycle');
+        const summary = { checked: 0, repaired: 0, unresolved: 0 };
+        for (const guild of client.guilds.cache.values()) {
+          try {
+            const result = reconcileQuarantineCaseLinks(guild);
+            for (const key of Object.keys(summary)) summary[key] += result[key] || 0;
+          } catch (error) {
+            terminal.warn(`Quarantine case reconciliation failed in guild ${guild.id}: ${error.message}`);
+          }
+        }
+        terminal.info(`Quarantine case links: ${summary.checked} checked, ${summary.repaired} repaired, ${summary.unresolved} need review.`);
+        return summary;
+      }
+    );
+
+    await runRecoveryStage(
       'Translation recovery',
       () => startupTranslation(client)
     );
