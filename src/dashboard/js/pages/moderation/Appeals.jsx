@@ -70,6 +70,8 @@ export default function Appeals() {
   const [authenticated, setAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [cases, setCases] = useState([]);
+  const [restrictions, setRestrictions] = useState([]);
+  const [portalTab, setPortalTab] = useState('overview');
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
   const [grounds, setGrounds] = useState('');
@@ -90,7 +92,8 @@ export default function Appeals() {
       if (!auth?.authenticated || !auth?.user) throw Object.assign(new Error('Authentication required.'), { status: 401 });
       setAuthenticated(true);
       setUser(auth.user);
-      const payload = await api.request('/api/cases/appeals/me');
+      const payload = await api.request('/api/cases/member/me');
+      setRestrictions(Array.isArray(payload?.restrictions) ? payload.restrictions : []);
       const nextCases = Array.isArray(payload?.cases) ? payload.cases : [];
       setCases(nextCases);
 
@@ -113,6 +116,7 @@ export default function Appeals() {
         setAuthenticated(false);
         setUser(null);
         setCases([]);
+        setRestrictions([]);
       } else {
         setError(loadError?.message || 'We could not load your appeals right now. Please try again.');
       }
@@ -130,6 +134,14 @@ export default function Appeals() {
       if (textarea) window.setTimeout(() => textarea.focus(), 250);
     }
   }, [selected?.guildId, selected?.caseId]);
+
+  const timeline = useMemo(() => [...cases.flatMap(item => [
+    ...(item.createdAt ? [{ date: item.createdAt, label: `${item.actionLabel} recorded`, guild: item.guildName, key: `case-${item.guildId}-${item.caseId}` }] : []),
+    ...item.appeals.flatMap(appeal => [
+      ...(appeal.submittedAt ? [{ date: appeal.submittedAt, label: 'Appeal submitted', guild: item.guildName, key: `submitted-${appeal.id}` }] : []),
+      ...(appeal.reviewedAt ? [{ date: appeal.reviewedAt, label: `Appeal ${appeal.status}`, guild: item.guildName, key: `reviewed-${appeal.id}` }] : []),
+    ]),
+  ]), ...restrictions.filter(item => item.startedAt).map(item => ({ date: item.startedAt, label: 'Account restriction applied', guild: item.guildName, key: `restriction-${item.guildId}` }))].sort((a, b) => (new Date(b.date).getTime() || 0) - (new Date(a.date).getTime() || 0)), [cases, restrictions]);
 
   const pendingCount = useMemo(
     () => cases.reduce((total, item) => total + item.appeals.filter((appeal) => appeal.status === 'pending').length, 0),
@@ -284,8 +296,8 @@ export default function Appeals() {
         <header style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.13em', textTransform: 'uppercase' }}>Member Portal</div>
-            <h1 style={{ margin: '6px 0 4px', fontSize: 'clamp(30px, 7vw, 44px)', lineHeight: 1.05 }}>⚖️ Appeals Portal</h1>
-            <p style={{ ...muted, margin: 0 }}>Your moderation cases, appeals and decisions.</p>
+            <h1 style={{ margin: '6px 0 4px', fontSize: 'clamp(30px, 7vw, 44px)', lineHeight: 1.05 }}>💎 Member Portal</h1>
+            <p style={{ ...muted, margin: 0 }}>Your account, community history and appeals.</p>
           </div>
           <div style={{ display: 'flex', gap: 9, alignItems: 'center', flexWrap: 'wrap' }}>
             {avatarUrl ? <img src={avatarUrl} alt="" width="36" height="36" style={{ borderRadius: '50%' }} referrerPolicy="no-referrer" /> : null}
@@ -296,9 +308,9 @@ export default function Appeals() {
 
         <section style={{ ...card, borderColor: 'rgba(59,130,246,.38)' }}>
           <h2 style={{ margin: '0 0 5px', fontSize: 'clamp(22px, 4vw, 30px)' }}>Welcome back, {displayName}</h2>
-          <p style={{ ...muted, margin: '0 0 18px' }}>Review your moderation history, submit eligible appeals and track decisions.</p>
+          <p style={{ ...muted, margin: '0 0 18px' }}>Your personal space for community activity, account restrictions, case history and appeals.</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-            {[['📁 Cases', cases.length], ['⏳ Under Review', pendingCount], ['✅ Resolved Appeals', resolvedCount]].map(([label, count]) => (
+            {[['📁 Cases', cases.length], ['🔒 Active Restrictions', restrictions.length], ['⏳ Under Review', pendingCount], ['✅ Resolved Appeals', resolvedCount]].map(([label, count]) => (
               <div key={label} style={{ padding: 14, borderRadius: 13, background: 'rgba(2,6,23,.35)', border: '1px solid rgba(148,163,184,.15)' }}>
                 <div style={{ ...muted, fontSize: 13 }}>{label}</div><strong style={{ fontSize: 25 }}>{count}</strong>
               </div>
@@ -306,11 +318,42 @@ export default function Appeals() {
           </div>
         </section>
 
+        <nav aria-label="Member portal sections" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {[['overview', '🏠 Overview'], ['timeline', '📅 Timeline'], ['cases', '⚖️ Cases & Appeals'], ['restrictions', '🔒 Restrictions'], ['profile', '👤 Profile']].map(([id, label]) => (
+            <button key={id} type="button" aria-current={portalTab === id ? 'page' : undefined} style={{ ...secondaryButton, background: portalTab === id ? '#2563eb' : '#18273c' }} onClick={() => setPortalTab(id)}>{label}</button>
+          ))}
+        </nav>
+        {(portalTab === 'overview' || portalTab === 'restrictions') ? (
+          <section style={card}>
+            <h2 style={{ marginTop: 0 }}>🔒 Account Restrictions</h2>
+            {restrictions.length ? restrictions.map(item => (
+              <div key={item.guildId} style={{ border: '1px solid rgba(245,158,11,.3)', borderRadius: 12, padding: 14, marginTop: 10 }}>
+                <strong>{item.guildName} · {item.mode === 'investigation' ? 'Investigation hold' : 'Security restriction'}</strong>
+                <p style={{ ...muted, margin: '6px 0' }}>Status: Active{item.caseId ? ` · Case #${item.caseId}` : ''}</p>
+                <small style={muted}>Started: {formatDate(item.startedAt)}. Contact the community's management team for further information.</small>
+              </div>
+            )) : <p style={muted}>No active restrictions are currently recorded for your account.</p>}
+          </section>
+        ) : null}
+        {(portalTab === 'overview' || portalTab === 'timeline') ? (
+          <section style={card}>
+            <h2 style={{ marginTop: 0 }}>📅 Personal Timeline</h2>
+            {timeline.length ? <ol style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 10 }}>
+              {timeline.slice(0, portalTab === 'overview' ? 6 : 100).map(item => (
+                <li key={item.key} style={{ borderLeft: '3px solid #60a5fa', padding: '4px 0 4px 13px' }}>
+                  <strong>{item.label}</strong><div style={muted}>{item.guild || 'Community'} · {formatDate(item.date)}</div>
+                </li>
+              ))}
+            </ol> : <p style={muted}>No activity is available to display yet.</p>}
+          </section>
+        ) : null}
+        {portalTab === 'profile' ? <section style={card}><h2>👤 My Profile</h2><p style={muted}>Discord account: {displayName}</p><p style={muted}>This portal shows information linked to your signed-in Discord account.</p></section> : null}
+
         {error ? <div role="alert" style={{ ...card, borderColor: 'rgba(239,68,68,.5)', color: '#fecaca' }}>⚠️ {error}</div> : null}
         {success ? <div role="status" style={{ ...card, borderColor: 'rgba(34,197,94,.48)', color: '#bbf7d0' }}>✓ {success}</div> : null}
         {deepLinkNotice ? <div role="status" style={{ ...card, borderColor: 'rgba(245,158,11,.45)', color: '#fde68a' }}>ℹ️ {deepLinkNotice}</div> : null}
 
-        <section style={card}>
+        {(portalTab === 'overview' || portalTab === 'cases') ? <section style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'start', flexWrap: 'wrap' }}>
             <div>
               <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase' }}>Your account</div>
@@ -392,7 +435,7 @@ export default function Appeals() {
               ))}
             </div>
           )}
-        </section>
+        </section> : null}
 
         {selected ? (
           <section ref={appealFormRef} style={{ ...card, borderColor: 'rgba(59,130,246,.4)' }}>
