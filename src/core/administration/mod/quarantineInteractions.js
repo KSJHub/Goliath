@@ -643,9 +643,9 @@ async function submitInvestigationRoomNote(interaction, targetId) {
   return safeEditReply(interaction, { content: `✅ Note added${snapshot.caseId ? ` to **Case #${snapshot.caseId}**` : ''}.`, flags: 64 });
 }
 
-function investigationNotice(interaction, title, description, color, fields = []) {
+function investigationNotice(interaction, title, description, color, fields = [], emoji = '📁') {
   const { buildMemberNotice } = require('../../../core/ui/memberNotice');
-  const payload = buildMemberNotice(interaction.guild, { module: 'Moderation', emoji: '', moduleEmoji: '📁',
+  const payload = buildMemberNotice(interaction.guild, { module: 'Moderation', moduleEmoji: emoji,
     title, description, color, fields, compactModerationLayout: true });
   payload.embeds[0].setFooter({ text: 'Private Moderation Review' });
   return { ...payload, content: null, flags: Discord.MessageFlags.Ephemeral };
@@ -843,13 +843,13 @@ async function handleInvestigationRoomControl(interaction) {
       if (action === 'close' && !context.active) throw Error('This investigation is already closed.');
       if (deleting && context.active) throw Error('Close the investigation before deleting its room.');
       return safeEditReply(interaction, {
-        ...investigationNotice(interaction, deleting ? 'Delete Closed Room?' : 'Close Investigation?',
-          deleting ? 'This permanently removes the room and its Discord conversation. This action cannot be undone.'
+        ...investigationNotice(interaction, deleting ? 'Delete This Room?' : 'Close Investigation?',
+          deleting ? 'This investigation is closed. Deleting the room will permanently remove its messages from Discord.\n\n**This cannot be undone.**'
             : 'The member’s quarantine restrictions will be lifted and this room will be archived.',
           deleting ? 0xED4245 : 0xFEE75C,
           [{ name: '📄 Final transcript', value: deleting
-            ? 'The saved copy is retained. An updated copy is created only if the conversation has changed.'
-            : 'Saved automatically and sent to the member by DM.' }]),
+            ? 'The investigation transcript will remain saved. If the member hasn’t received their copy, we’ll try to send it by DM before deleting the room.'
+            : 'Saved automatically and sent to the member by DM.' }], deleting ? '🗑️' : '🔓'),
         components: [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder()
           .setCustomId(`mod_invroom_${action}_confirm:${targetId}:${channelId}`).setLabel(deleting ? 'Confirm Delete' : 'Confirm Close').setStyle(Discord.ButtonStyle.Danger))], flags: 64,
       });

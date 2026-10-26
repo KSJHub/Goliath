@@ -3275,7 +3275,7 @@ function fixture(snapshot = {}) {
     await click('delete'); assert.equal(replies.at(-1).components[0].components[0].data.label, 'Confirm Delete');
     assert.equal(dmSends.length, dmCount, 'An unchanged transcript must not be DMed twice');
     const confirmation = replies.at(-1);
-    assert.equal(confirmation.embeds[0].data.title, '📁 Delete Closed Room?');
+    assert.equal(confirmation.embeds[0].data.title, '🗑️ Delete This Room?');
     assert.equal(confirmation.content, null); assert.deepEqual(confirmation.allowedMentions, { parse: [] });
     assert(!JSON.stringify(confirmation.embeds[0].data).includes('Goliath'));
     delete f.state.archivedRooms[0].transcriptDelivery;
