@@ -4,7 +4,7 @@ const guildManager = require('../../../guild/guildManager');
 const { emitGuildUpdate } = require('../../../../server/sockets/socketHub');
 
 const DEFAULT_QUARANTINE_ROLE_NAME = 'Goliath Quarantine';
-const DEFAULT_INVESTIGATION_CATEGORY_NAME = 'Goliath Investigations';
+const DEFAULT_INVESTIGATION_CATEGORY_NAME = 'Investigations';
 const MAX_ARCHIVED_INVESTIGATION_ROOMS = 50;
 const MAX_PENDING_INVESTIGATION_ROOM_CLEANUPS = 50;
 const QUARANTINE_MODES = Object.freeze({

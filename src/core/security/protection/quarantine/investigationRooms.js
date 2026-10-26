@@ -23,7 +23,7 @@ const {
 
 function cleanCategoryName(value) {
   const name = String(value || '').trim().slice(0, 100);
-  return name || DEFAULT_INVESTIGATION_CATEGORY_NAME;
+  return name === 'Goliath Investigations' ? DEFAULT_INVESTIGATION_CATEGORY_NAME : name || DEFAULT_INVESTIGATION_CATEGORY_NAME;
 }
 
 function cleanChannelName(value) {
@@ -56,7 +56,7 @@ async function ensureInvestigationCategory(guild, options = {}) {
   if (!botMember) throw new Error('Goliath guild member is unavailable.');
   let category = state.investigationCategoryId ? guild.channels.cache.get(String(state.investigationCategoryId)) : null;
   if (!category || category.type !== ChannelType.GuildCategory) {
-    category = guild.channels.cache.find((channel) => channel.type === ChannelType.GuildCategory && channel.name === categoryName) || null;
+    category = guild.channels.cache.find((channel) => channel.type === ChannelType.GuildCategory && (channel.name === categoryName || (categoryName === DEFAULT_INVESTIGATION_CATEGORY_NAME && channel.name === 'Goliath Investigations'))) || null;
   }
   if (!category) {
     category = await guild.channels.create({
@@ -69,9 +69,10 @@ async function ensureInvestigationCategory(guild, options = {}) {
       reason: 'Goliath investigation isolation category',
     });
   }
+  if (category.name === 'Goliath Investigations' && categoryName === DEFAULT_INVESTIGATION_CATEGORY_NAME) await category.setName(categoryName, 'Use generic investigation category name');
   await category.permissionOverwrites.edit(botMember.id, { ViewChannel: true }, { reason: 'Ensure Goliath access to investigation category' });
   if (state.investigationCategoryId !== category.id || state.investigationCategoryName !== category.name) {
-    saveQuarantineState(guild, { ...state, investigationCategoryId: category.id, investigationCategoryName: category.name });
+    saveQuarantineState(guild, { ...getQuarantineState(guild.id), investigationCategoryId: category.id, investigationCategoryName: category.name });
   }
   return category;
 }
@@ -129,7 +130,7 @@ async function createInvestigationRoom(guild, member, quarantineRole, options = 
     name: `investigation-${subjectName}-${suffix}`.slice(0, 100),
     type: ChannelType.GuildText,
     parent: category.id,
-    topic: `Goliath investigation isolation • Member ${member.id} • ${String(options.reason || 'No reason provided').slice(0, 700)}`,
+    topic: `Private investigation • Member ${member.id} • ${String(options.reason || 'No reason provided').slice(0, 700)}`,
     permissionOverwrites: await buildInvestigationRoomOverwrites(guild, member, quarantineRole, options),
     reason: `Goliath investigation isolation for ${member.user?.tag || member.id}`,
   });
@@ -137,25 +138,60 @@ async function createInvestigationRoom(guild, member, quarantineRole, options = 
   const intro = new EmbedBuilder()
     .setColor(0x5865F2)
     .setTitle('🔎 Private Investigation Room')
-    .setDescription([`Hi ${member}. This private room has been opened while the moderation team reviews a concern involving your account.`, '', '**This is not a final decision or punishment.** You can continue speaking with the investigating staff here while the review is active.'].join('\n'))
+    .setDescription([`Hi ${member}. This private room has been opened while the moderation team reviews a concern involving your account.`, '', '**This is not a final decision or punishment.** You can continue speaking with the management team here while the review is active.'].join('\n'))
     .addFields(
       { name: '📋 Why this room was opened', value: String(options.reason || 'No reason provided').slice(0, 1024), inline: false },
-      { name: '🧭 What happens next', value: '• Staff will review the available information.\n• You may provide context or ask questions in this room.\n• You will be told when the investigation is concluded or moved to the next stage.', inline: false },
+      { name: '🧭 What happens next', value: '• Management will review the available information.\n• You may provide context or ask questions in this room.\n• You will be told when the investigation is concluded or moved to the next stage.', inline: false },
       { name: '👤 Lead investigator', value: leadId ? `<@${leadId}>` : 'An authorised member of the moderation team', inline: true },
       { name: '💬 Your access', value: 'You can read and reply in this room while the investigation is active.', inline: true },
     )
-    .setFooter({ text: 'Goliath • Private moderation review' })
+    .setFooter({ text: 'Private Moderation Review' })
     .setTimestamp();
   const controls = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`mod_dashboard:${member.id}:cases`).setLabel('Case File').setEmoji('📁').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`mod_dashboard:${member.id}:intelligence`).setLabel('Intelligence').setEmoji('🧠').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_invroom_note:${member.id}`).setLabel('Add Staff Note').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_invroom_note:${member.id}`).setLabel('Add Note').setEmoji('📝').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_invroom_access:${member.id}`).setLabel('Channel Access').setEmoji('🔐').setStyle(ButtonStyle.Secondary),
   );
   await channel.send({ content: `${member}`, embeds: [intro], components: [controls, investigationRoomControls(member.id, channel.id)], allowedMentions: { users: [member.id], roles: [], repliedUser: false } })
     .catch((error) => console.warn(`[QuarantineSystem] Failed to send investigation room intro in ${guild.id}:`, error.message));
   await notifyInvestigationManagement(channel, member.id, options.quarantinedBy).catch(error => console.warn(`[QuarantineSystem] Management notification failed in ${guild.id}:`, error.message));
   return channel;
+}
+
+const presentationChecks = new Set();
+async function refreshInvestigationPresentation(guild, channel, memberId) {
+  const state = getQuarantineState(guild.id);
+  const parent = channel.parent || guild.channels.cache.get(channel.parentId);
+  if (parent?.id === state.investigationCategoryId && parent?.name === 'Goliath Investigations') {
+    await parent.setName(DEFAULT_INVESTIGATION_CATEGORY_NAME, 'Use generic investigation category name');
+    const latest = getQuarantineState(guild.id);
+    if (latest.investigationCategoryId === parent.id && ['Goliath Investigations', DEFAULT_INVESTIGATION_CATEGORY_NAME].includes(latest.investigationCategoryName)) {
+      latest.investigationCategoryName = DEFAULT_INVESTIGATION_CATEGORY_NAME;
+      saveQuarantineState(guild, latest);
+    }
+  }
+  if (channel.topic?.startsWith('Goliath investigation isolation • Member ')) {
+    await channel.setTopic(channel.topic.replace('Goliath investigation isolation • Member ', 'Private investigation • Member '), 'Use generic investigation room topic');
+  }
+  const key = `${guild.id}:${channel.id}`;
+  if (presentationChecks.has(key) || !channel.messages?.fetch || !guild.client?.user?.id) return;
+  const messages = await channel.messages.fetch({ limit: 50 });
+  const panel = messages.find(message => message.author?.id === guild.client.user.id
+    && message.embeds?.[0]?.title === '🔎 Private Investigation Room'
+    && message.components?.some(row => row.components.some(component => component.customId === `mod_invroom_transcript:${memberId}:${channel.id}`)));
+  if (panel && (panel.embeds[0].footer?.text?.includes('Goliath') || panel.components.some(row => row.components.some(component => component.label === 'Add Staff Note')))) {
+    const embed = EmbedBuilder.from(panel.embeds[0]).setFooter({ text: 'Private Moderation Review' });
+    if (embed.data.description) embed.setDescription(embed.data.description.replace('investigating staff here', 'management team here'));
+    if (embed.data.fields) embed.setFields(embed.data.fields.map(field => ({ ...field, value: field.value.replace('• Staff will review', '• Management will review') })));
+    const components = panel.components.map(row => {
+      const updated = ActionRowBuilder.from(row);
+      for (const component of updated.components) if (component.data.label === 'Add Staff Note') component.setLabel('Add Note');
+      return updated;
+    });
+    await panel.edit({ embeds: [embed], components });
+  }
+  presentationChecks.add(key);
 }
 
 const roomRecoveries = new Map();
@@ -187,12 +223,14 @@ async function repairInvestigationRoom(guild, member, role, options = {}) {
   } else {
     await channel.permissionOverwrites.edit(role.id, quarantineDenyOverwrite(), { reason: 'Reasserting investigation quarantine role isolation' });
     await channel.permissionOverwrites.edit(member.id, investigationMemberOverwrite(), { reason: 'Restoring investigation interview access' });
+    await refreshInvestigationPresentation(guild, channel, member.id).catch(error => console.warn('[QuarantineSystem] Room presentation refresh failed:', error.message));
   }
   return channel;
 }
 
 module.exports = {
   cleanCategoryName,
+  refreshInvestigationPresentation,
   cleanChannelName,
   getInvestigationStaffRoleIds,
   ensureInvestigationCategory,

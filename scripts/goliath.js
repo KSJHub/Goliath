@@ -3297,6 +3297,33 @@ function fixture(snapshot = {}) {
   assert.deepEqual(sent[0].allowedMentions.parse, []); assert.deepEqual(sent[0].allowedMentions.users, [other]);
   assert.equal(rooms.investigationRoomControls(uid, 'room').components.length, 4);
 }
+// Generic room presentation migrates the known old category/panel without touching custom names or history.
+{
+  const f = fixture(); f.state.investigationCategoryId = 'category';
+  const renames = [], edits = [];
+  const parent = { id: 'category', name: 'Goliath Investigations', setName: async name => { renames.push(name); parent.name = name; } };
+  f.guild.client = { user: { id: 'bot' } };
+  const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+  const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`mod_invroom_transcript:${uid}:room`).setLabel('Add Staff Note').setStyle(ButtonStyle.Secondary));
+  const panel = {
+    author: { id: 'bot' }, embeds: [{ title: '🔎 Private Investigation Room', description: 'Speak with investigating staff here.', footer: { text: 'Goliath • Private moderation review' }, fields: [{ name: 'Reason', value: 'Original case reason' }] }],
+    components: [{ components: [{ customId: `mod_invroom_transcript:${uid}:room`, label: 'Add Staff Note' }], toJSON: () => row.toJSON() }],
+    edit: async payload => edits.push(payload),
+  };
+  const channel = { id: 'room', parent, messages: { fetch: async () => new Collection([['other', { ...panel, author: { id: 'unrelated-bot' } }], ['panel', panel]]) } };
+  const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': {} });
+  assert.equal(rooms.cleanCategoryName('Goliath Investigations'), 'Investigations');
+  assert.equal(rooms.cleanCategoryName('Custom Review Rooms'), 'Custom Review Rooms');
+  await rooms.refreshInvestigationPresentation(f.guild, channel, uid);
+  assert.deepEqual(renames, ['Investigations']); assert.equal(edits.length, 1);
+  assert.equal(edits[0].embeds[0].data.footer.text, 'Private Moderation Review');
+  assert.equal(edits[0].embeds[0].data.fields[0].value, 'Original case reason');
+  assert.equal(edits[0].components[0].components[0].data.label, 'Add Note');
+  assert.equal(f.state.users[uid].interviewChannelId, 'room');
+  await rooms.refreshInvestigationPresentation(f.guild, channel, uid); assert.equal(edits.length, 1, 'Refresh must not repeatedly edit the room panel');
+  channel.id = 'custom-room'; parent.name = 'Custom Review Rooms'; channel.messages.fetch = async () => new Collection();
+  await rooms.refreshInvestigationPresentation(f.guild, channel, uid); assert.deepEqual(renames, ['Investigations']);
+}
 // Management controls cannot grant outside access or restore a revoked investigator's access.
 {
   const f = fixture({ allowedChannelIds: ['one', 'two'] });

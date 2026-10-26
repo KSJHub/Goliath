@@ -51,7 +51,7 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
     if (snapshot.memberId && channel.permissionOverwrites?.edit) await channel.permissionOverwrites.edit(String(snapshot.memberId), { ViewChannel: false }, { reason: options.reason || 'Investigation isolation closed' });
     const closedName = `closed-investigation-${String(snapshot.memberId || 'member').slice(-6)}-${Math.floor(Date.now() / 1000).toString(36)}`.slice(0, 100);
     await channel.setName(closedName, options.reason || 'Investigation isolation closed').catch(() => null);
-    await channel.setTopic(`Closed Goliath investigation isolation • Member ${snapshot.memberId || 'unknown'}${snapshot.caseId ? ` • Case #${snapshot.caseId}` : ''}`, options.reason || 'Investigation isolation closed').catch(() => null);
+    await channel.setTopic(`Closed investigation • Member ${snapshot.memberId || 'unknown'}${snapshot.caseId ? ` • Case #${snapshot.caseId}` : ''}`, options.reason || 'Investigation isolation closed').catch(() => null);
     const state = getQuarantineState(guild.id);
     state.archivedRooms = normalizeArchivedRooms([...(state.archivedRooms || []), { channelId: channel.id, memberId: snapshot.memberId || null, caseId: snapshot.caseId || null, closedAt: Date.now(), closedBy: options.restoredBy || options.closedBy || null, roomTranscript: snapshot.roomTranscript || null }]);
     saveQuarantineState(guild, state);

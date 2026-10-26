@@ -327,7 +327,7 @@ async function openInvestigationAccess(interaction, targetId) {
       'Use **Room Only** to remove all additional channel access.',
     ].join('\n'))
     .setFooter({
-      text: 'Goliath • Investigation Isolation',
+      text: 'Private Investigation',
     })
     .setTimestamp();
 
@@ -564,7 +564,7 @@ async function changeInvestigationAccess(interaction, action) {
         'Select another normal server channel below to continue managing access.',
       ].join('\n'))
       .setFooter({
-        text: 'Goliath • Investigation Isolation',
+        text: 'Private Investigation',
       })
       .setTimestamp();
 
@@ -622,7 +622,7 @@ async function openInvestigationNoteModal(interaction, targetId) {
   if (!(await canUseInvestigationRoomControls(interaction, snapshot))) return safeReply(interaction, { content: '❌ Only authorised management can use this room control.', flags: 64 });
   const modal = new Discord.ModalBuilder().setCustomId(`mod_invroom_note_submit:${targetId}`).setTitle('Add Investigation Note').addComponents(
     new Discord.ActionRowBuilder().addComponents(
-      new Discord.TextInputBuilder().setCustomId('note').setLabel('Staff-only note').setStyle(Discord.TextInputStyle.Paragraph).setRequired(true).setMinLength(2).setMaxLength(1000).setPlaceholder('Record an observation, update, evidence lead or next step.')
+      new Discord.TextInputBuilder().setCustomId('note').setLabel('Management note').setStyle(Discord.TextInputStyle.Paragraph).setRequired(true).setMinLength(2).setMaxLength(1000).setPlaceholder('Record an observation, update, evidence lead or next step.')
     )
   );
   await interaction.showModal(modal);
@@ -640,7 +640,7 @@ async function submitInvestigationRoomNote(interaction, targetId) {
     recordCaseAudit({ guildId: interaction.guild.id, caseId: snapshot.caseId, actorId: interaction.user.id, event: 'case.investigation.room_note_added', before: null, after: { note }, metadata: { targetId: String(targetId), interviewChannelId: snapshot.interviewChannelId || null, staffOnly: true } });
   }
   recordModerationSystemEvent({ interaction, event: 'moderation.investigation.room_note_added', action: 'investigation_note', targetId: String(targetId), after: { note }, metadata: { caseId: snapshot.caseId || null, interviewChannelId: snapshot.interviewChannelId || null } });
-  return safeEditReply(interaction, { content: `✅ Staff note added${snapshot.caseId ? ` to **Case #${snapshot.caseId}**` : ''}.`, flags: 64 });
+  return safeEditReply(interaction, { content: `✅ Note added${snapshot.caseId ? ` to **Case #${snapshot.caseId}**` : ''}.`, flags: 64 });
 }
 
 async function removeQuarantine(interaction, targetId) {
