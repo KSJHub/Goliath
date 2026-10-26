@@ -2,7 +2,9 @@
 const guildManager = require('../../../core/guild/guildManager');
 const { getModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
 const { STORES, TYPES, CURRENCIES } = require('./freeGamesProviders');
+// Keep the established section key so the Games rename preserves all guild data and authority bindings.
 const MODULE_KEY = 'freeGames';
+const MODULE_NAME = 'Games';
 const DEFAULTS = { enabled: false, currency: 'GBP', priceMode: 'converted', locale: 'en-GB', timeZone: 'Europe/London', region: 'GB', layout: 'columns', featuredMode: 'auto', featuredOfferId: null, featuredArtwork: 'thumbnail', showTimestamps: true, showExpiry: false, showPlatforms: true, showNew: true, showOfferCount: true, channelId: null, stores: Object.keys(STORES), types: ['game'], alerts: false, roleId: null, state: { firstSeen: {}, newSince: {}, observed: {}, deliveries: [], retired: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, offerCount: 0, pricing: null, warning: null } };
 function getConfig(guildId) {
   const section = getModuleSection(guildId, MODULE_KEY, DEFAULTS);
@@ -97,9 +99,9 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
   const back = componentRow(panelButton(page === 'home' ? 'studio' : 'home', '⬅ Back'));
   const nav = componentRow(panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'),
     panelButton('pricing', '💱 Currency'), panelButton('display', '🎨 Display'));
-  const embed = { title: '🎁 Free Games', color: SECTIONS[0].color,
+  const embed = { title: '🎮 Games · Free Games', color: SECTIONS[0].color,
     description: [notice && escape(notice), c.enabled ? '🟢 Enabled' : '⏸ Paused'].filter(Boolean).join('\n\n'),
-    fields: [], footer: { text: 'Goliath Free Games · Management' }, timestamp: new Date().toISOString() };
+    fields: [], footer: { text: 'Goliath Games · Management' }, timestamp: new Date().toISOString() };
   let controls = [];
   if (page === 'delivery') {
     embed.title += ' · Delivery';
@@ -286,5 +288,5 @@ async function handleAdminInteraction(interaction) {
   }
   return true;
 }
-module.exports = { MODULE_KEY, DEFAULTS, DISPLAY_OPTIONS, PRICE_MODES, getConfig, update, filterOffers, validateSettings, saveSettings,
+module.exports = { MODULE_KEY, MODULE_NAME, DEFAULTS, DISPLAY_OPTIONS, PRICE_MODES, getConfig, update, filterOffers, validateSettings, saveSettings,
   applySettings, buildAdminPanel, buildFeaturedPanel, regionalModal, handleAdminInteraction };

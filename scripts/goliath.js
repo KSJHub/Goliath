@@ -3525,9 +3525,19 @@ return true;
 
 async function freeGamesAudit() {
   const assert = require('node:assert/strict');
-  const providers = require('../src/modules/utilityStudio/freeGames/freeGamesProviders');
-  const embeds = require('../src/modules/utilityStudio/freeGames/freeGamesEmbeds');
-  const store = require('../src/modules/utilityStudio/freeGames/freeGames');
+  const providers = require('../src/modules/utilityStudio/games/freeGamesProviders');
+  const embeds = require('../src/modules/utilityStudio/games/freeGamesEmbeds');
+  const store = require('../src/modules/utilityStudio/games/freeGames');
+
+  const fs = require('node:fs');
+  assert(fs.existsSync(root + '/src/modules/utilityStudio/games'), 'Canonical Games folder must exist.');
+  const oldTracked = require('node:child_process').spawnSync('git', ['ls-files', '--', 'src/modules/utilityStudio/' + 'freeGames'], { cwd: root, encoding: 'utf8' });
+  if (oldTracked.status === 0) assert.equal(oldTracked.stdout.trim(), '', 'The previous folder must be moved, not duplicated in Git.');
+  assert.equal(store.MODULE_KEY, 'freeGames', 'Renaming must preserve the established guild storage and authority key.');
+  assert.equal(store.MODULE_NAME, 'Games');
+  const serverSource = fs.readFileSync(root + '/server.js', 'utf8');
+  assert(serverSource.includes("['/api/games', freeGamesRoutes]"));
+  assert(serverSource.includes("['/api/free-games', freeGamesRoutes]"), 'Existing API clients remain compatible.');
   const now = Date.now();
   const config = { ...structuredClone(store.DEFAULTS), enabled: false, stores: Object.keys(providers.STORES), types: Object.keys(providers.TYPES), pricing: { mode: 'converted', currency: 'GBP', rate: 0.8, date: new Date(now).toISOString().slice(0, 10) } };
   const offer = { id: 'gamerpower:1', title: 'A Game (Steam) Key Giveaway', type: 'game', stores: ['steam', 'xbox', 'playstation'], url: 'https://www.gamerpower.com/offer/1', worth: '$10.00', endsAt: now + 3600000, endDateText: null };
@@ -3563,7 +3573,7 @@ async function freeGamesAudit() {
         return new Map([['steam', { name: 'goliath_steam', id: emojiId }], ['epic', { name: 'goliath_epic', id: '123456789012345682' }]]);
       },
     };
-    const source = fs.readFileSync(root + '/src/modules/utilityStudio/freeGames/freeGamesEmbeds.js', 'utf8');
+    const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/freeGamesEmbeds.js', 'utf8');
     vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(
       name => name === './freeGamesProviders' ? providers : emojiService, moduleFixture, moduleFixture.exports);
     const coldClient = { application: { emojis: { fetch: async () => { throw Error('Use the shared module'); }, cache: new Map() } } };
@@ -3643,7 +3653,7 @@ async function freeGamesAudit() {
       if (name === 'discord.js') return require('discord.js');
       throw new Error('Unexpected Free Games panel dependency: ' + name);
     };
-    const source = fs.readFileSync(root + '/src/modules/utilityStudio/freeGames/freeGames.js', 'utf8');
+    const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/freeGames.js', 'utf8');
     vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(injectedRequire, mod, mod.exports);
     const handler = mod.exports.handleAdminInteraction;
     const guildFixture = { id: 'fixture', client: {}, members: { fetch: async () => ({ permissions: { has: () => permitted } }) } };
@@ -3718,7 +3728,7 @@ async function freeGamesAudit() {
         assert(String(url).includes('sort-by=popularity'));
         return { status: 200, json: async () => [12, 11].map(id => ({ id, title: 'Main ' + id, type: 'Game', status: 'Active', platforms: 'Steam', gamerpower_url: 'https://www.gamerpower.com/offer/' + id, image: 'https://www.gamerpower.com/game.jpg', worth: '$10.00' })) };
       };
-      const source = fs.readFileSync(root + '/src/modules/utilityStudio/freeGames/freeGamesProviders.js', 'utf8');
+      const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/freeGamesProviders.js', 'utf8');
       vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(require, moduleFixture, moduleFixture.exports);
       const ranked = await moduleFixture.exports.getOffers();
       assert.deepEqual(ranked.offers.map(item => [item.id, item.popularityRank]), [['gamerpower:12', 0], ['gamerpower:11', 1]]);
@@ -3735,7 +3745,7 @@ async function freeGamesAudit() {
     assert.equal(failed.mode, 'unavailable'); assert(failed.warning);
     assert.equal((await providers.getPricing({ ...config, priceMode: 'hidden' })).mode, 'hidden');
   } finally { global.fetch = savedFetch; }
-  const monitor = require('../src/modules/utilityStudio/freeGames/freeGamesMonitor');
+  const monitor = require('../src/modules/utilityStudio/games/freeGamesMonitor');
   const originals = { getConfig: store.getConfig, update: store.update, getOffers: providers.getOffers, getPricing: providers.getPricing };
   let state = { ...structuredClone(config), enabled: true, channelId: '123456789012345678', alerts: true, roleId: null };
   let feedOffers = [offer];
@@ -3828,11 +3838,12 @@ async function freeGamesAudit() {
     store.getConfig = priorConfig; providers.getOffers = priorOffers; providers.getPricing = priorPricing;
     delete require.cache[routePath]; if (priorRoute) require.cache[routePath] = priorRoute;
   }
-  console.log('✅ Free Games: single featured main title/popularity/manual/fallback/thumbnail, guild category/channel ordering, cold-cache core emoji resolution, footer-only timestamps, Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
+  console.log('✅ Games: folder rename/storage compatibility, single featured main title/popularity/manual/fallback/thumbnail, guild category/channel ordering, cold-cache core emoji resolution, footer-only timestamps, Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
   return true;
 }
 
 const commands = {
+  games: freeGamesAudit,
   'free-games': freeGamesAudit,
   'quarantine-containment': quarantineContainmentAudit,
   'legacy-quarantine': legacyQuarantineAudit,

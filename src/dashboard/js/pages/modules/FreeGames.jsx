@@ -18,7 +18,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     const current = ++generation.current;
     setData(null); setDraft(null); setPreview(null); setError(''); setNotice(''); setBusy(false);
     if (!guildId) return;
-    api.request(`/api/free-games/${guildId}`).then((payload) => {
+    api.request(`/api/games/${guildId}`).then((payload) => {
       if (generation.current !== current) return;
       setData(payload); setDraft(payload.config);
     }).catch((err) => { if (generation.current === current) setError(err.message); });
@@ -29,7 +29,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     setBusy(true); setError(''); setNotice('');
     try {
       const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'featuredMode', 'featuredOfferId', 'featuredArtwork', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
-      const payload = await api.request(`/api/free-games/${guildId}${refresh ? '/refresh' : ''}`, refresh ? { method: 'POST' } : { method: 'PATCH', body: JSON.stringify(settings) });
+      const payload = await api.request(`/api/games/${guildId}${refresh ? '/refresh' : ''}`, refresh ? { method: 'POST' } : { method: 'PATCH', body: JSON.stringify(settings) });
       if (generation.current !== current) return;
       setData((old) => ({ ...old, config: payload.config })); setDraft(payload.config);
       setNotice(refresh ? (payload.result?.skipped ? 'Free Games is disabled.' : 'Discord listing refreshed.') : 'Settings saved. The listing updates automatically within five minutes.');
@@ -41,7 +41,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     setBusy(true); setError('');
     try {
       const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'featuredMode', 'featuredOfferId', 'featuredArtwork', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
-      const result = await api.request(`/api/free-games/${guildId}/preview`, { method: 'POST', body: JSON.stringify(settings) });
+      const result = await api.request(`/api/games/${guildId}/preview`, { method: 'POST', body: JSON.stringify(settings) });
       if (current === generation.current) setPreview(result);
     } catch (err) { if (current === generation.current) setError(err.message); }
     finally { if (current === generation.current) setBusy(false); }
@@ -116,7 +116,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
         {select('layout', 'Platform layout', [['columns', 'Platform columns'], ['list', 'Stacked platform lists']])}
         {[['showTimestamps', 'Footer timestamps'], ['showPlatforms', 'Additional platforms'], ['showNew', 'NEW markers'], ['showOfferCount', 'Offer counts']].map(([key, label]) => <label key={key} style={selectionStyle(draft[key] !== false)}><input type="checkbox" style={{ accentColor: theme.primary, width: 16, height: 16 }} disabled={busy} checked={draft[key] !== false} onChange={(event) => patch({ [key]: event.target.checked })} />{label}</label>)}
       </div>
-      <p style={{ color: theme.mutedText }}>The public listing keeps a compact provider credit. Footer timestamps reflect the source feed update; Discord displays them in each viewer’s local time. You can also manage these settings through /admin → Modules → Utility → Free Games.</p>
+      <p style={{ color: theme.mutedText }}>The public listing keeps a compact provider credit. Footer timestamps reflect the source feed update; Discord displays them in each viewer’s local time. You can also manage these settings through /admin → Modules → Utility → Games.</p>
     </SectionCard>
 
     <SectionCard themed theme={theme} title="Featured main game" subtitle="One standout full game above the list, all in the same Discord embed.">
@@ -149,5 +149,5 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     <p style={{ color: theme.mutedText }}>Checks run every five minutes; the shared offer feed refreshes every 15 minutes. NEW marks offers discovered after the initial baseline and lasts 24 hours. Individual offers keep their dates hidden; the footer shows the source feed update time. Expiry data still filters out ended offers.</p>
     <a href="https://www.gamerpower.com/" target="_blank" rel="noreferrer">Offers provided by GamerPower</a>
   </div></SectionCard>{previewCard}</>;
-  return <ModuleShell key={guildId} theme={theme} title="Free Games" subtitle="Automatically share free games from your selected stores." guild={selectedGuildData} status={data.config.enabled ? ((data.config.state.error || data.config.state.warning) ? 'Warning' : !data.config.channelId ? 'Needs setup' : !data.config.state.lastSuccess ? 'Pending' : 'Enabled') : 'Disabled'} updatedAt={stamp(data.config.state.lastSuccess, data.config)} templateCount={3} deploymentCount={data.config.state.deliveries.length} notice={error || notice} noticeTone={error ? 'danger' : 'info'} tabs={[{ key: 'overview', label: 'Overview' }, { key: 'configuration', label: 'Configuration' }]}>{{ overview, configuration }}</ModuleShell>;
+  return <ModuleShell key={guildId} theme={theme} title="Games" subtitle="Manage your free-game catalogue and game notifications." guild={selectedGuildData} status={data.config.enabled ? ((data.config.state.error || data.config.state.warning) ? 'Warning' : !data.config.channelId ? 'Needs setup' : !data.config.state.lastSuccess ? 'Pending' : 'Enabled') : 'Disabled'} updatedAt={stamp(data.config.state.lastSuccess, data.config)} templateCount={3} deploymentCount={data.config.state.deliveries.length} notice={error || notice} noticeTone={error ? 'danger' : 'info'} tabs={[{ key: 'overview', label: 'Overview' }, { key: 'configuration', label: 'Configuration' }]}>{{ overview, configuration }}</ModuleShell>;
 }

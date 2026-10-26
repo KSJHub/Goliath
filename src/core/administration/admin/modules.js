@@ -60,7 +60,7 @@ const MODULE_CATALOG = [
   { key: 'social', studio: 'socialStudio', route: 'admin:social', label: '📣 Social Alerts', title: '📣 Social Alerts', summary: 'Creator alerts for Twitch, YouTube, TikTok, Kick and more.' },
 
   // Utility Studio
-  { key: 'freeGames', studio: 'utilityStudio', route: 'admin:module:freeGames:home', label: '🎁 Free Games', title: '🎁 Free Games', summary: 'Free offers, platform listings, currencies and notifications.' },
+  { key: 'freeGames', studio: 'utilityStudio', route: 'admin:module:freeGames:home', label: '🎮 Games', title: '🎮 Games', summary: 'Free offers, platform listings, currencies and notifications.' },
   { key: 'emojis', studio: 'utilityStudio', route: 'admin:module:emojis:panel', label: '😀 Emoji Studio', title: '😀 Emoji Studio', summary: 'Discord-hosted application emojis from Emoji.gg with up to 100 selected per server.' },
   { key: 'privateRooms', studio: 'utilityStudio', route: 'admin:privateRooms', label: '🔒 Private Rooms', title: '🔒 Private Rooms', summary: 'Temporary private conversation rooms, requests, approvals and transcripts.' },
   { key: 'schedule', studio: 'utilityStudio', route: 'admin:schedule', label: '📅 Schedule', title: '📅 Schedule', summary: 'Scheduled messages, recurring tasks and timezone-aware automation.' },
@@ -279,7 +279,7 @@ async function handleModuleAdminInteraction(interaction) {
     return safeUpdate(interaction, buildStudioPanel(studio[1], name));
   }
   if (id.startsWith('admin:module:freeGames:')) {
-    return require('../../../modules/utilityStudio/freeGames/freeGames').handleAdminInteraction(interaction);
+    return require('../../../modules/utilityStudio/games/freeGames').handleAdminInteraction(interaction);
   }
   if (id.startsWith('admin:module:emojis:')) {
     const emojiPanel = require('../../../modules/utilityStudio/emojis/emojisPanel');

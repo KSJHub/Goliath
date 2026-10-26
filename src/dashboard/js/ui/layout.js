@@ -114,7 +114,7 @@ export const ROUTES = [
   { key: 'forms', label: 'Forms', icon: 'modules', path: '/forms', component: Forms, hidden: true },
   { key: 'giveaways', label: 'Giveaways', icon: 'modules', path: '/giveaways', component: Giveaways, hidden: true },
   { key: 'polls', label: 'Polls', icon: 'modules', path: '/polls', component: Polls, hidden: true },
-  { key: 'freeGames', label: 'Free Games', icon: 'modules', path: '/free-games', component: FreeGames, hidden: true },
+  { key: 'freeGames', label: 'Games', icon: 'modules', path: '/games', component: FreeGames, hidden: true },
   { key: 'stats', label: 'Stats', icon: 'overview', path: '/stats', component: Stats, hidden: true },
   { key: 'social', label: 'Social Studio', icon: 'modules', path: '/social', component: Social, hidden: true },
   { key: 'schedule', label: 'Schedule', icon: 'modules', path: '/schedule', component: Schedule, hidden: true },

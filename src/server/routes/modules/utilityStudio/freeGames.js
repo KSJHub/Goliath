@@ -2,9 +2,9 @@
 const express = require('express');
 const { PermissionFlagsBits } = require('discord.js');
 const security = require('../../../../core/security/protection/core');
-const freeGames = require('../../../../modules/utilityStudio/freeGames/freeGames');
-const monitor = require('../../../../modules/utilityStudio/freeGames/freeGamesMonitor');
-const { STORES, TYPES, CURRENCIES, getOffers, getPricing } = require('../../../../modules/utilityStudio/freeGames/freeGamesProviders');
+const freeGames = require('../../../../modules/utilityStudio/games/freeGames');
+const monitor = require('../../../../modules/utilityStudio/games/freeGamesMonitor');
+const { STORES, TYPES, CURRENCIES, getOffers, getPricing } = require('../../../../modules/utilityStudio/games/freeGamesProviders');
 const router = express.Router();
 
 function orderListingChannels(guild) {
@@ -42,7 +42,7 @@ router.get('/:guildId', async (req, res) => {
     const guild = req.freeGamesGuild;
     await Promise.all([guild.channels.fetch(), guild.roles.fetch()]);
     const config = freeGames.getConfig(guild.id);
-    const { featuredCandidates, shortTitle } = require('../../../../modules/utilityStudio/freeGames/freeGamesEmbeds');
+    const { featuredCandidates, shortTitle } = require('../../../../modules/utilityStudio/games/freeGamesEmbeds');
     const featuredChoices = await getOffers().then(feed => featuredCandidates(freeGames.filterOffers(feed.offers, config), config).map(offer => ({ id: offer.id, name: shortTitle(offer.title) }))).catch(() => []);
     return res.json({ success: true, config, featuredChoices, stores: STORES, types: TYPES, currencies: CURRENCIES, timeZones: Intl.supportedValuesOf('timeZone'), channels: orderListingChannels(guild), roles: [...guild.roles.cache.values()].filter((role) => role.id !== guild.id && !role.managed).sort((a, b) => b.position - a.position).map(({ id, name }) => ({ id, name })) });
   } catch (error) { res.status(400).json({ success: false, error: error.message }); }
@@ -54,7 +54,7 @@ router.post('/:guildId/preview', async (req, res) => {
     const feed = await getOffers();
     const pricing = await getPricing(config);
     const offers = freeGames.filterOffers(feed.offers, config);
-    const { buildListing, SECTIONS, shortTitle, price, loadPlatformPresentation, featuredCandidates, selectFeaturedOffer } = require('../../../../modules/utilityStudio/freeGames/freeGamesEmbeds');
+    const { buildListing, SECTIONS, shortTitle, price, loadPlatformPresentation, featuredCandidates, selectFeaturedOffer } = require('../../../../modules/utilityStudio/games/freeGamesEmbeds');
     const platforms = await loadPlatformPresentation(req.freeGamesGuild.client, req.freeGamesGuild.id);
     const featured = selectFeaturedOffer(offers, config);
     return res.json({ success: true, platforms, featured: featured ? { ...featured, displayTitle: shortTitle(featured.title), priceText: price(featured, { ...config, pricing }).replace(/[~\\\\]/g, '').trim() } : null, featuredChoices: featuredCandidates(offers, config).map(offer => ({ id: offer.id, name: shortTitle(offer.title) })), offers: offers.map((offer) => ({ ...offer, displayTitle: shortTitle(offer.title), priceText: price(offer, { ...config, pricing }).replace(/[~\\]/g, '').trim() })), sections: SECTIONS.map(({ title, types, color }) => ({ title, types, color })), pricing, fetchedAt: feed.fetchedAt, pages: buildListing(offers, { ...config, pricing, listingUpdatedAt: feed.fetchedAt }, Date.now(), platforms) });
