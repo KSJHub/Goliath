@@ -3277,6 +3277,22 @@ function fixture(snapshot = {}) {
     const html = fs.readFileSync(result.htmlPath, 'utf8');
     assert(html.includes('Investigation Transcript')); assert(!html.includes('<script>alert(1)</script>')); assert.equal(result.messageCount, 2);
     assert(transcripts.buildHtmlTranscript({ ...ticket, type: 'support' }, transcripts.buildJsonTranscript(ticket, [])).includes('Ticket Transcript'));
+    const human = message('1'), bot = message('2');
+    human.content = `**Evidence**\nHello <@${uid}> and <@&${other}> in <#${originalRole}>\n<script>alert(1)</script>\n[Unsafe](javascript:alert(1))`;
+    human.attachments = new Collection([['file', { id: 'file', name: 'evidence.png', url: 'https://example.com/evidence.png', contentType: 'image/png', size: 2048 }]]);
+    bot.author.bot = true; bot.embeds = [{ title: 'Review', description: '**Important**', fields: [{ name: 'Next steps', value: '• First\n• Second' }] }];
+    const json = transcripts.buildJsonTranscript(ticket, [human, bot], { guildName: 'Example Server', channelName: 'private-review', mentionNames: { users: { [uid]: 'Test Member' }, roles: { [other]: 'Management' }, channels: { [originalRole]: 'rules' } } });
+    assert.equal(json.analytics.userMessages, 1); assert.equal(json.analytics.botMessages, 1); assert.equal(json.analytics.attachments, 1); assert.equal(json.analytics.embeds, 1);
+    assert.equal(json.messages[0].content, human.content, 'Raw conversation content must remain unchanged');
+    const improved = transcripts.buildHtmlTranscript(ticket, json);
+    assert(!improved.includes('Goliath')); assert(!improved.includes('NaN'));
+    assert(improved.includes('<strong>Evidence</strong>')); assert(improved.includes('@Test Member')); assert(improved.includes('@Management')); assert(improved.includes('#rules'));
+    assert(improved.includes('• First\n• Second')); assert(improved.includes('1 Jan 1970') && improved.includes('UTC')); assert(improved.includes('width=device-width')); assert(improved.includes('@media print'));
+    assert(!improved.includes('<script>alert(1)</script>')); assert(!improved.includes('href="javascript:'));
+    assert(improved.includes('id="search"')); assert(improved.includes('Include bot messages')); assert(improved.includes('Server')); assert(improved.includes('Case reference'));
+    const old = structuredClone(json); old.analytics.attachments = null; old.analytics.botMessages = 0;
+    assert(!transcripts.buildHtmlTranscript(ticket, old).includes('NaN'), 'Legacy counter values must not break a rendered transcript');
+
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 }
 // Access/notification roles follow Goliath authority, with explicit mention limits.

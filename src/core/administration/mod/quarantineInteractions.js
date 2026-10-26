@@ -753,7 +753,7 @@ async function exportInvestigationTranscript(interaction, context, targetId) {
   const transcript = await transcripts.createTranscript(interaction.client || interaction.guild.client, {
     guildId: interaction.guild.id, channelId: context.channel.id, ticketId: `investigation-${context.channel.id}`,
     displayId: `investigation-${context.channel.id}`, type: 'investigation', status: context.active ? 'open' : 'closed',
-    creatorId: targetId, createdAt: context.active?.quarantinedAt ? new Date(context.active.quarantinedAt).toISOString() : null,
+    creatorId: targetId, metadata: { caseId: context.active?.caseId || context.archived?.caseId || null }, createdAt: context.active?.quarantinedAt ? new Date(context.active.quarantinedAt).toISOString() : null,
   }, { generatedBy: interaction.user.id, limit: 10000, requireComplete: true });
   const fs = require('node:fs');
   const maxBytes = interaction.guild.maximumFileSize || 8_000_000;
