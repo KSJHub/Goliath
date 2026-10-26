@@ -211,7 +211,18 @@ router.get('/member/me', requireAppealSession, (req, res) => {
       const guildName = getGuildName(req, guildId);
       for (const record of getCasesForUser(guildId, userId) || []) {
         const safe = safeAppealCase(req, record, userId);
-        if (safe) cases.push(safe);
+        if (safe) {
+          cases.push(safe);
+        } else if (String(record.action || '').toLowerCase() === 'quarantine') {
+          // Quarantine details are intentionally generic: security triggers and internal evidence stay private.
+          cases.push({
+            guildId, guildName, guildIconUrl: guild?.iconURL?.({ size: 128 }) || null,
+            caseId: Number(record.caseId), action: 'quarantine', actionLabel: 'Account Restriction',
+            status: String(record.status || 'active'), createdAt: record.createdAt || null,
+            decisionAt: record.createdAt || null, publicSummary: 'An account restriction was recorded for management review.',
+            eligible: false, eligibilityMessage: null, appeals: [],
+          });
+        }
       }
       const snapshot = getQuarantineState(guildId).users?.[userId];
       if (snapshot) restrictions.push({
