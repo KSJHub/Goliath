@@ -3383,13 +3383,23 @@ function fixture(snapshot = {}) {
 {
   const f = fixture();
   const rooms = load(base + 'investigationRooms.js', { './state': f.api, './isolation': {} });
-  const lifecycle = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './isolation': {}, './memberLifecycle': {}, './investigationRooms': rooms });
-  const names = [];
-  const channel = { id: 'room', name: `investigation-undecided4237-${uid.slice(-4)}`, send: async () => {}, permissionOverwrites: { edit: async () => {} }, setName: async name => { names.push(name); channel.name = name; }, setTopic: async () => {} };
+  const lifecycle = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './isolation': {}, './memberLifecycle': {}, './investigationRooms': rooms, '../../../ui/memberNotice': require(root + '/src/core/ui/memberNotice') });
+  const names = [], notices = [];
+  f.state.users[uid].caseId = 2;
+  const channel = { id: 'room', name: `investigation-undecided4237-${uid.slice(-4)}`, send: async payload => notices.push(payload), permissionOverwrites: { edit: async () => {} }, setName: async name => { names.push(name); channel.name = name; }, setTopic: async () => {} };
   f.guild.channels.cache.set('room', channel);
   const originals = [...f.state.users[uid].roles];
   assert.equal((await lifecycle.archiveInvestigationRoom(f.guild, f.state.users[uid])).archived, true);
   assert.deepEqual(names, ['closed-undecided4237']);
+  const closure = notices[0].embeds[0].toJSON();
+  assert.equal(closure.title, '🔓 Investigation Closed');
+  assert.equal(closure.color, 0x57F287);
+  assert.equal(closure.footer.text, 'Private Moderation Review');
+  assert.equal(closure.fields[0].value, '#2');
+  assert(closure.timestamp);
+  assert(!JSON.stringify(closure).includes('Goliath'), 'Room closure must use generic wording');
+  assert.deepEqual(notices[0].allowedMentions, { parse: [] });
+
   assert.deepEqual(f.state.users[uid].roles, originals);
   assert.equal(f.state.archivedRooms[0].channelId, 'room');
 }

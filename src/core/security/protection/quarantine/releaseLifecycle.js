@@ -47,7 +47,15 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
   }
   if (!channel) return { success: true, archived: false, missing: true, channelId: String(channelId) };
   try {
-    await channel.send({ content: `🔓 **Investigation Closed**\n\nYour investigation has ended, and your quarantine restrictions have been lifted.\n\nIf you need any further help, please contact server management.${snapshot.caseId ? `\n\n**Case reference:** #${snapshot.caseId}` : ''}`, allowedMentions: { parse: [] } }).catch(() => null);
+    const { buildMemberNotice, COLORS } = require('../../../ui/memberNotice');
+    const notice = buildMemberNotice(guild, {
+      module: 'Moderation', emoji: '🔓', title: 'Investigation Closed', color: COLORS.success,
+      description: 'Your investigation has ended, and your quarantine restrictions have been lifted.\n\nIf you need any further help, please contact server management.',
+      fields: snapshot.caseId ? [{ name: '📁 Case reference', value: `#${snapshot.caseId}`, inline: true }] : [],
+      compactModerationLayout: true,
+    });
+    notice.embeds[0].setFooter({ text: 'Private Moderation Review' });
+    await channel.send(notice).catch(() => null);
     if (snapshot.memberId && channel.permissionOverwrites?.edit) await channel.permissionOverwrites.edit(String(snapshot.memberId), { ViewChannel: false }, { reason: options.reason || 'Investigation isolation closed' });
     const { cleanChannelName } = require('./investigationRooms');
     const legacySuffix = `-${String(snapshot.memberId || '').slice(-4)}`;
