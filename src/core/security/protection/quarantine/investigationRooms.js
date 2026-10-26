@@ -27,6 +27,26 @@ function cleanCategoryName(value) {
   return name === 'Goliath Investigations' ? DEFAULT_INVESTIGATION_CATEGORY_NAME : name || DEFAULT_INVESTIGATION_CATEGORY_NAME;
 }
 
+function matchInvestigationCategoryStyle(channels) {
+  const categories = [...channels.values()].filter(channel => channel.type === ChannelType.GuildCategory
+    && !/^(?:Goliath )?Investigations$/i.test(channel.name || ''));
+  const styles = new Map();
+  for (const category of categories) {
+    // A decorative prefix followed by a separator and a name, e.g. "🛡️ | Security".
+    // Copy only separator/spacing; never copy another category's title or emoji.
+    const match = String(category.name || '').match(/^([^\p{L}\p{N}]*?)([ \t]*[|:·•┃│︱｜][ \t]*)(?=[\p{L}\p{N}])/u);
+    if (!match) continue;
+    const hasIcon = /\p{Extended_Pictographic}/u.test(match[1]);
+    const key = JSON.stringify([match[2], hasIcon]);
+    styles.set(key, (styles.get(key) || 0) + 1);
+  }
+  const ranked = [...styles].sort((a, b) => b[1] - a[1]);
+  // Require repeated evidence and a majority; mixed/empty guilds keep the plain default.
+  if (!ranked.length || ranked[0][1] < 2 || ranked[0][1] <= categories.length / 2) return DEFAULT_INVESTIGATION_CATEGORY_NAME;
+  const [separator, hasIcon] = JSON.parse(ranked[0][0]);
+  return `${hasIcon ? '🔎' : ''}${separator}${DEFAULT_INVESTIGATION_CATEGORY_NAME}`;
+}
+
 function cleanChannelName(value) {
   const safe = String(value || 'member')
     .toLowerCase()
@@ -54,12 +74,29 @@ function getInvestigationStaffRoleIds(guild, options = {}) {
 async function ensureInvestigationCategory(guild, options = {}) {
   if (!guild) throw new Error('Missing guild.');
   const state = getQuarantineState(guild.id);
-  const categoryName = cleanCategoryName(options.categoryName || state.investigationCategoryName);
+  let categoryName = cleanCategoryName(options.categoryName || state.investigationCategoryName);
   const botMember = guild.members?.me || await guild.members.fetchMe().catch(() => null);
   if (!botMember) throw new Error('Goliath guild member is unavailable.');
   let category = state.investigationCategoryId ? guild.channels.cache.get(String(state.investigationCategoryId)) : null;
   if (!category || category.type !== ChannelType.GuildCategory) {
     category = guild.channels.cache.find((channel) => channel.type === ChannelType.GuildCategory && (channel.name === categoryName || (categoryName === DEFAULT_INVESTIGATION_CATEGORY_NAME && channel.name === 'Goliath Investigations'))) || null;
+  }
+  if (!category) {
+    // Fetch the guild's category inventory before choosing a style or creating anything.
+    // Failed scans must not result in duplicate categories.
+    await guild.channels.fetch();
+    const latest = getQuarantineState(guild.id);
+    category = guild.channels.cache.get(String(latest.investigationCategoryId || ''));
+    if (category?.type !== ChannelType.GuildCategory) category = null;
+    category ||= guild.channels.cache.find(channel => channel.type === ChannelType.GuildCategory
+      && (channel.name === categoryName || (categoryName === DEFAULT_INVESTIGATION_CATEGORY_NAME && channel.name === 'Goliath Investigations')));
+    if (!category && categoryName === DEFAULT_INVESTIGATION_CATEGORY_NAME && !options.categoryName
+      && cleanCategoryName(latest.investigationCategoryName) === DEFAULT_INVESTIGATION_CATEGORY_NAME) {
+      categoryName = matchInvestigationCategoryStyle(guild.channels.cache);
+    }
+    category ||= guild.channels.cache.find(channel => channel.type === ChannelType.GuildCategory
+      && [categoryName, DEFAULT_INVESTIGATION_CATEGORY_NAME, 'Goliath Investigations'].includes(channel.name)
+      && (categoryName === DEFAULT_INVESTIGATION_CATEGORY_NAME || channel.name === categoryName));
   }
   if (!category) {
     category = await guild.channels.create({
@@ -294,6 +331,7 @@ async function repairInvestigationRoom(guild, member, role, options = {}) {
 
 module.exports = {
   cleanCategoryName,
+  matchInvestigationCategoryStyle,
   refreshInvestigationPresentation,
   privateInvestigationNavigation,
   buildInvestigationRoomPanel,

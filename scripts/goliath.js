@@ -3189,7 +3189,7 @@ function fixture(snapshot = {}) {
   let creates = 0;
   const channel = { id: 'replacement', guild: f.guild, type: ChannelType.GuildText, permissionOverwrites: { edit: async () => {} }, send: async () => {} };
   f.guild.channels.create = async options => { if (options.type === ChannelType.GuildText) { creates++; await Promise.resolve(); } return { ...channel, id: options.type === ChannelType.GuildCategory ? 'category' : channel.id, name: options.name }; };
-  f.guild.channels.fetch = async () => { throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
+  f.guild.channels.fetch = async id => { if (!id) return f.guild.channels.cache; throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
   const rooms = load(base + 'investigationRooms.js', { '../../../administration/mod/permissions': { canUseModAction: () => false }, './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': { quarantineDenyOverwrite: () => ({ ViewChannel: false }), investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true }) } });
   const stale = structuredClone(f.state.users[uid]);
   const repaired = await Promise.all([rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale)]);
@@ -3199,7 +3199,7 @@ function fixture(snapshot = {}) {
   await rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale);
   assert.equal(creates, 1);
   f.guild.channels.cache.clear();
-  f.guild.channels.fetch = async () => { throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
+  f.guild.channels.fetch = async id => { if (!id) return f.guild.channels.cache; throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
   await assert.rejects(rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale, { existingRoomOnly: true }), /cannot create a replacement/);
   assert.equal(creates, 1, 'Legacy adoption must never create a replacement room');
   f.guild.channels.fetch = async () => { throw Error('Discord unavailable'); };
@@ -3312,6 +3312,36 @@ function fixture(snapshot = {}) {
   assert.deepEqual(writes, ['management']); assert.deepEqual(sent[0].allowedMentions.roles, ['management']);
   assert.deepEqual(sent[0].allowedMentions.parse, []); assert.deepEqual(sent[0].allowedMentions.users, [other]);
   assert.equal(rooms.investigationRoomControls(uid, 'room').components.length, 4);
+}
+// Fresh category creation scans guild naming styles; saved/custom names stay authoritative.
+{
+  const f = fixture();
+  const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': {} });
+  const categories = names => new Collection(names.map((name, index) => [String(index), { id: String(index), name, type: ChannelType.GuildCategory }]));
+  for (const separator of [' | ', ' : ', ' · ', '|', '┃']) {
+    assert.equal(rooms.matchInvestigationCategoryStyle(categories([`🛡️${separator}Security`, `💎${separator}Vault`, `🎮${separator}Games`])), `🔎${separator}Investigations`);
+  }
+  assert.equal(rooms.matchInvestigationCategoryStyle(categories(['🛡️ | Security', '💎 : Vault'])), 'Investigations');
+  assert.equal(rooms.matchInvestigationCategoryStyle(categories(['Security', 'Vault'])), 'Investigations');
+  assert.equal(rooms.matchInvestigationCategoryStyle(categories(['🛡️ | Security'])), 'Investigations');
+  assert.equal(rooms.matchInvestigationCategoryStyle(categories(['🛡️ | Security', '💎 | Vault', 'Games'])), '🔎 | Investigations');
+  assert.equal(rooms.matchInvestigationCategoryStyle(categories(['🛡️ | Security', '💎 | Vault', 'Games', 'Chat'])), 'Investigations');
+  let scans = 0, creates = 0;
+  f.guild.channels.fetch = async () => { scans++; f.guild.channels.cache = categories(['🛡️ · Security', '💎 · Vault']); };
+  f.guild.channels.create = async options => { creates++; return { ...options, id: 'created-category', permissionOverwrites: { edit: async () => {} } }; };
+  const savedRoles = [...f.state.users[uid].roles];
+  const created = await rooms.ensureInvestigationCategory(f.guild);
+  assert.equal(created.name, '🔎 · Investigations'); assert.equal(scans, 1); assert.equal(creates, 1);
+  assert.equal(f.state.investigationCategoryName, created.name);
+  assert.deepEqual(f.state.users[uid].roles, savedRoles);
+  created.name = 'Custom Management Rooms'; f.guild.channels.cache.set(created.id, created);
+  await rooms.ensureInvestigationCategory(f.guild);
+  assert.equal(scans, 1, 'Saved categories must not be rescanned/renamed');
+  assert.equal(f.state.investigationCategoryName, 'Custom Management Rooms');
+  f.guild.channels.cache.clear();
+  f.guild.channels.fetch = async () => { throw Error('Guild scan unavailable'); };
+  await assert.rejects(rooms.ensureInvestigationCategory(f.guild), /Guild scan unavailable/);
+  assert.equal(creates, 1, 'Failed scans must never create a duplicate category');
 }
 // Generic room presentation migrates the known old category/panel without touching custom names or history.
 {
