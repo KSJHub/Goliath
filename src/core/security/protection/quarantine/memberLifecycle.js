@@ -139,7 +139,7 @@ async function quarantineMember(guild, member, options = {}) {
       } else {
         const record = createCase({
           guildId: guild.id, userId: member.id,
-          moderatorId: /^\\d{16,20}$/.test(String(options.quarantinedBy || '')) ? String(options.quarantinedBy) : guild.client.user.id,
+          moderatorId: /^\d{16,20}$/.test(String(options.quarantinedBy || '')) ? String(options.quarantinedBy) : guild.client.user.id,
           action: 'quarantine', reason: String(options.reason || 'Account restriction applied').slice(0, 1500),
           metadata: { source: 'quarantine', mode, interviewChannelId: interviewRoom?.id || null },
           status: 'active',
