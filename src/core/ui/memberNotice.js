@@ -158,4 +158,25 @@ function moderationNotice(guild, modCase, options = {}) {
   });
 }
 
-module.exports = { COLORS, buildMemberNotice, moderationNotice, guildIcon, validUrl };
+function quarantineReleaseNotice(guild, snapshot = {}, result = {}, options = {}) {
+  const fields = [field('🏠 Server', guild?.name || 'Discord Server', true)];
+  if (snapshot?.caseId) fields.push(field('🆔 Case Reference', `#${snapshot.caseId}`, true));
+  if (options.reviewedBy) fields.push(field('👤 Reviewed By', options.reviewedBy));
+  let nextSteps = 'If you need any help with your access, please contact server management.';
+  if (result.verification?.ok === false) {
+    nextSteps = 'Please contact server management for help completing verification and checking your access.';
+  } else if (result.verification?.reconciled === true) {
+    nextSteps = 'Please complete the server’s verification process to finish restoring your access. Contact server management if you need help.';
+  } else if (result.skippedRoles?.length) {
+    nextSteps = 'Some of your previous roles are no longer available. Please contact server management to check your access.';
+  }
+  return buildMemberNotice(guild, {
+    module: 'Goliath Moderation', emoji: '🔓', title: 'Quarantine Lifted', color: COLORS.success,
+    description: options.automatic
+      ? 'Your quarantine period has ended, and this restriction has been lifted.'
+      : 'Server management has completed your review and lifted your quarantine restrictions.',
+    fields, nextSteps, compactModerationLayout: true,
+  });
+}
+
+module.exports = { COLORS, buildMemberNotice, moderationNotice, quarantineReleaseNotice, guildIcon, validUrl };

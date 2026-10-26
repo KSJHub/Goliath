@@ -7,7 +7,7 @@
  * migrated natively.
  */
 const Module = require('module');
-const { buildMemberNotice, moderationNotice, COLORS } = require('../core/ui/memberNotice');
+const { buildMemberNotice, moderationNotice, quarantineReleaseNotice, COLORS } = require('../core/ui/memberNotice');
 
 const KEY = Symbol.for('goliath.unified-member-notice-guard-v1');
 if (!globalThis[KEY]) {
@@ -103,12 +103,8 @@ if (!globalThis[KEY]) {
         try { snapshot = require('../core/security/protection/quarantine/state').getQuarantineState(guild.id)?.users?.[member.id] || null; } catch {}
         const result = await original.apply(this, arguments);
         if (result?.success && member?.user) {
-          const payload = moderationNotice(guild, { action: 'unquarantine', caseId: snapshot?.caseId || null, reason: options.reason || 'Quarantine review completed', status: 'Resolved', metadata: {} }, {
-            reference: snapshot?.caseId ? `Case #${snapshot.caseId}` : 'Security Review', status: '🟢 Restriction Released',
-            issuedBy: actor(guild, options.restoredBy || options.closedBy),
-            extraFields: [{ name: '♻️ Access Restoration', value: `${result.restoredRoles || 0} manageable role(s) restored`, inline: true }],
-            meaning: 'Your Goliath quarantine restriction has been removed and your manageable pre-quarantine access has been restored.',
-            nextSteps: result.cleanupPending ? 'Your access is restored. Goliath is still completing background investigation-room cleanup.' : 'You may use the server normally again. Any separate moderation restrictions remain in effect.',
+          const payload = quarantineReleaseNotice(guild, snapshot, result, {
+            reviewedBy: actor(guild, options.restoredBy || options.closedBy), automatic: options.system === true,
           });
           result.memberNotice = await safeSend(member.user, payload);
         }

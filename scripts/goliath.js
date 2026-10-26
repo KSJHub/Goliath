@@ -2279,6 +2279,24 @@ function universalMemberNoticesAudit() {
     
     const guild = fakeGuild();
     const user = fakeUser();
+
+    {
+      const { quarantineReleaseNotice } = require(root + '/src/core/ui/memberNotice');
+      const notice = embedJson(quarantineReleaseNotice(guild, { caseId: 12 }, { restoredRoles: 1, cleanupPending: true }, { reviewedBy: '<@123456789012345678>' }));
+      assert.equal(notice.title, '🔓 Quarantine Lifted');
+      assert(notice.fields.some(item => item.name === '🆔 Case Reference' && item.value === '#12'));
+      assert(notice.fields.some(item => item.name === '👤 Reviewed By'));
+      assert(!/manageable|background|recorded moderation case|Security Review/.test(JSON.stringify(notice)));
+      assert.equal(notice.footer.text, 'Goliath • Moderation');
+      const pending = embedJson(quarantineReleaseNotice(guild, {}, { verification: { reconciled: true } }));
+      assert(pending.fields.some(item => item.value.includes('complete the server’s verification process')));
+      assert(!pending.fields.some(item => /Reference|Status|Action/.test(item.name)));
+      const failed = embedJson(quarantineReleaseNotice(guild, {}, { verification: { ok: false } }));
+      assert(failed.fields.some(item => item.value.includes('contact server management')));
+      const skipped = embedJson(quarantineReleaseNotice(guild, {}, { skippedRoles: [{ id: 'missing', reason: 'missing_role' }] }));
+      assert(skipped.fields.some(item => item.value.includes('previous roles are no longer available')));
+      assert.deepEqual(quarantineReleaseNotice(guild).allowedMentions, { parse: [] });
+    }
     
     {
       const embed = embedJson(buildScheduleReminderNotice({
