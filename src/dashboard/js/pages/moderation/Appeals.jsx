@@ -11,6 +11,22 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 }
 
+function caseStatus(status) {
+  const value = String(status || 'active').toLowerCase();
+  if (value === 'reversed') return { label: '🔄 Case Reversed', color: '#67e8f9' };
+  if (value === 'expired') return { label: '⌛ Case Expired', color: '#cbd5e1' };
+  if (value === 'active') return { label: '⚠️ Case Active', color: '#fbbf24' };
+  return { label: '📁 ' + value.replace(/[_-]/g, ' '), color: '#bfdbfe' };
+}
+
+function discordAvatar(user) {
+  const id = String(user?.id || '');
+  const hash = String(user?.avatar || '');
+  return /^\d{16,20}$/.test(id) && /^[a-zA-Z0-9_]+$/.test(hash)
+    ? `https://cdn.discordapp.com/avatars/${id}/${hash}.png?size=128`
+    : null;
+}
+
 function statusTone(status) {
   if (status === 'approved') return '#22c55e';
   if (status === 'denied') return '#ef4444';
@@ -260,6 +276,7 @@ export default function Appeals() {
   }
 
   const displayName = user?.global_name || user?.globalName || user?.username || 'Discord user';
+  const avatarUrl = discordAvatar(user);
 
   return (
     <main style={page}>
@@ -268,10 +285,11 @@ export default function Appeals() {
           <div style={{ minWidth: 0 }}>
             <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.13em', textTransform: 'uppercase' }}>Member Portal</div>
             <h1 style={{ margin: '6px 0 4px', fontSize: 'clamp(30px, 7vw, 44px)', lineHeight: 1.05 }}>⚖️ Appeals Portal</h1>
-            <p style={{ ...muted, margin: 0 }}>Signed in as <strong style={{ color: '#e5edf8' }}>{displayName}</strong></p>
+            <p style={{ ...muted, margin: 0 }}>Your moderation cases, appeals and decisions.</p>
           </div>
           <div style={{ display: 'flex', gap: 9, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={pill}>{pendingCount ? `⏳ ${pendingCount} under review` : '✓ No appeals under review'}</span>
+            {avatarUrl ? <img src={avatarUrl} alt="" width="36" height="36" style={{ borderRadius: '50%' }} referrerPolicy="no-referrer" /> : null}
+            <strong style={{ fontSize: 14 }}>{displayName}</strong>
             <button style={secondaryButton} onClick={async () => { await api.logout().catch(() => null); window.location.reload(); }}>Sign out</button>
           </div>
         </header>
@@ -300,6 +318,12 @@ export default function Appeals() {
               <p style={{ ...muted, margin: 0 }}>Only cases connected to this Discord account appear here.</p>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select aria-label="Filter cases" value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} style={{ ...input, width: 'auto', maxWidth: '100%', padding: '10px 12px' }}>
+                <option value="all">All Cases</option>
+                <option value="eligible">Eligible for Appeal</option>
+                <option value="pending">Under Review</option>
+                <option value="resolved">Resolved</option>
+              </select>
               <span style={pill}>{appealableCount} available to appeal</span>
               <button style={secondaryButton} onClick={() => load({ preserveSuccess: true })}>Refresh</button>
             </div>
@@ -314,21 +338,26 @@ export default function Appeals() {
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 12, marginTop: 18 }}>
+              {!visibleCases.length ? <p role="status" style={muted}>No cases match this filter.</p> : null}
               {visibleCases.map((item) => (
                 <article key={`${item.guildId}:${item.caseId}`} style={{ border: selected?.guildId === item.guildId && selected?.caseId === item.caseId ? '1px solid rgba(96,165,250,.8)' : '1px solid rgba(148,163,184,.18)', borderRadius: 16, padding: 17, background: 'rgba(2,6,23,.42)', overflowWrap: 'anywhere' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'start' }}>
                     <div>
-                      <div style={{ color: '#93c5fd', fontSize: 13, fontWeight: 800 }}>{item.guildName || 'Discord Server'}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#93c5fd', fontSize: 13, fontWeight: 800 }}>
+                        {item.guildIconUrl ? <img src={item.guildIconUrl} alt="" width="28" height="28" style={{ borderRadius: 9 }} loading="lazy" /> : null}
+                        <span>{item.guildName || 'Discord Server'}</span>
+                      </div>
                       <strong style={{ display: 'block', marginTop: 3, fontSize: 18 }}>Case #{item.caseId} · {item.actionLabel}</strong>
                       <div style={{ marginTop: 5, color: '#94a3b8', fontSize: 13 }}>Decision recorded {formatDate(item.decisionAt || item.createdAt)}</div>
                     </div>
-                    <span style={{ ...pill, background: item.eligible ? 'rgba(34,197,94,.1)' : 'rgba(148,163,184,.08)', borderColor: item.eligible ? 'rgba(34,197,94,.25)' : 'rgba(148,163,184,.18)', color: item.eligible ? '#bbf7d0' : '#cbd5e1' }}>{item.eligible ? '✓ Appeal available' : 'Appeal unavailable'}</span>
+                    {item.eligible ? <span style={{ ...pill, color: '#bbf7d0' }}>✓ Eligible to Appeal</span> : null}
                   </div>
 
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                    {item.status ? <span style={pill}>Case: {String(item.status).replace(/_/g, ' ')}</span> : null}
+                    <span style={{ ...pill, color: caseStatus(item.status).color }}>{caseStatus(item.status).label}</span>
                     {item.appeals.some(a => a.status === 'approved') ? <span style={{ ...pill, color: '#bbf7d0' }}>✅ Appeal Approved</span> : null}
                     {item.appeals.some(a => a.status === 'pending') ? <span style={{ ...pill, color: '#fde68a' }}>⏳ Under Review</span> : null}
+                    {item.appeals.some(a => a.status === 'denied') ? <span style={{ ...pill, color: '#fca5a5' }}>❌ Appeal Denied</span> : null}
                   </div>
                   <button type="button" style={{ ...secondaryButton, marginTop: 12 }} aria-expanded={Boolean(expandedCases[`${item.guildId}:${item.caseId}`])} onClick={() => setExpandedCases(prev => ({ ...prev, [`${item.guildId}:${item.caseId}`]: !prev[`${item.guildId}:${item.caseId}`] }))}>
                     {expandedCases[`${item.guildId}:${item.caseId}`] ? 'Hide Details ▲' : 'View Case Details ▼'}
@@ -339,7 +368,7 @@ export default function Appeals() {
                     <p style={{ lineHeight: 1.6, margin: '6px 0 0' }}>{item.publicSummary || 'No additional public summary is available for this case.'}</p>
                   </div>
 
-                  {!item.eligible && item.eligibilityMessage ? <p style={{ color: '#a7b4c8', fontSize: 13, lineHeight: 1.55, margin: '12px 0 0' }}>{cleanEligibilityMessage(item.eligibilityMessage)}</p> : null}
+                  {!item.eligible && !item.appeals.length && item.eligibilityMessage ? <p style={{ color: '#a7b4c8', fontSize: 13, lineHeight: 1.55, margin: '12px 0 0' }}>{cleanEligibilityMessage(item.eligibilityMessage)}</p> : null}
 
                   {item.appeals.length ? (
                     <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
@@ -347,8 +376,9 @@ export default function Appeals() {
                       {item.appeals.map((appeal) => (
                         <div key={appeal.id} style={{ borderLeft: `3px solid ${statusTone(appeal.status)}`, padding: '5px 0 5px 11px', lineHeight: 1.5 }}>
                           <strong style={{ color: statusTone(appeal.status) }}>{statusLabel(appeal.status)}</strong>
-                          <div style={{ color: '#a7b4c8', fontSize: 13 }}>Submitted {formatDate(appeal.submittedAt)}</div>
-                          {appeal.reviewedAt ? <div style={{ color: '#a7b4c8', fontSize: 13 }}>Reviewed {formatDate(appeal.reviewedAt)}</div> : null}
+                          <div style={{ color: '#a7b4c8', fontSize: 13, marginTop: 5 }}>📝 Submitted: {formatDate(appeal.submittedAt)}</div>
+
+                          {appeal.reviewedAt ? <div style={{ color: '#a7b4c8', fontSize: 13 }}>{appeal.status === 'approved' ? '✅' : appeal.status === 'denied' ? '❌' : '📋'} Reviewed: {formatDate(appeal.reviewedAt)}</div> : null}
                           {appeal.reviewNote ? <div style={{ color: '#d7e0ec', marginTop: 5 }}><strong>Review note:</strong> {appeal.reviewNote}</div> : null}
                           {appeal.remedyDetail ? <div style={{ color: '#d7e0ec', marginTop: 4 }}><strong>Outcome:</strong> {appeal.remedyDetail}</div> : null}
                         </div>
