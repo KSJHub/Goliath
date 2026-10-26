@@ -697,34 +697,45 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
   const appeals = [...getCaseAppeals(modCase)].sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')));
   const totalPages = Math.max(1, Math.ceil(appeals.length / APPEAL_PAGE_SIZE));
   const page = Math.max(0, Math.min(Math.trunc(Number(requestedPage) || 0), totalPages - 1));
-  const slice = appeals.slice(page * APPEAL_PAGE_SIZE, (page + 1) * APPEAL_PAGE_SIZE);
-  const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`⚖️ Case #${modCase.caseId} Appeals`).setFooter({ text: `Appeal history page ${page + 1}/${totalPages}` }).setTimestamp();
-  if (!slice.length) embed.setDescription('No appeals recorded for this case.');
-  for (const appeal of slice) {
-    const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:R>` : 'unknown time';
-    const reviewed = appeal.reviewedAt ? `<t:${getCaseTimestamp(appeal.reviewedAt)}:R>` : null;
+  const entries = appeals.slice(page * APPEAL_PAGE_SIZE, (page + 1) * APPEAL_PAGE_SIZE);
+  const counts = {
+    pending: appeals.filter(a => a.status === 'pending').length,
+    approved: appeals.filter(a => a.status === 'approved').length,
+    denied: appeals.filter(a => a.status === 'denied').length,
+  };
+  const embed = new EmbedBuilder()
+    .setColor(COLORS.PRIMARY)
+    .setTitle(`⚖️ Appeal History • Case #${modCase.caseId}`)
+    .setDescription(`**Original Action:** ${String(modCase.action || 'case').toUpperCase()}\n**Appeals:** ${appeals.length} Total • ${counts.pending} Pending • ${counts.approved} Approved • ${counts.denied} Denied`)
+    .setFooter({ text: `Appeal history • Page ${page + 1}/${totalPages}` });
+  if (!entries.length) embed.addFields({ name: '📭 No Appeals', value: 'No appeals have been recorded for this case.', inline: false });
+  for (const appeal of entries) {
+    const status = appeal.status === 'approved' ? '✅ Approved' : appeal.status === 'denied' ? '❌ Denied' : '⏳ Pending Review';
+    const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:R>` : 'Unknown';
     const lines = [
-      `Status: **${String(appeal.status || 'pending').toUpperCase()}** • Appellant <@${appeal.appellantId}> • ${submitted}`,
-      `Source: **${appeal.source || 'legacy'}**`,
-      `Grounds: ${String(appeal.grounds || 'No grounds recorded').slice(0, 450)}`,
+      `**Appellant:** <@${appeal.appellantId}> • **Submitted:** ${submitted}`,
+      `**Source:** ${String(appeal.source || 'Unknown').slice(0, 50)}`,
+      `**Appeal Grounds:** ${String(appeal.grounds || 'No grounds recorded').replace(/\s+/g, ' ').slice(0, 190)}`,
     ];
-    if (appeal.requestedResolution) lines.push(`Requested: ${String(appeal.requestedResolution).slice(0, 250)}`);
-    if (appeal.reviewedBy) lines.push(`Reviewed by <@${appeal.reviewedBy}>${reviewed ? ` • ${reviewed}` : ''}`);
-    if (appeal.reviewNote) lines.push(`Decision note: ${String(appeal.reviewNote).slice(0, 300)}`);
-    if (appeal.remedy) lines.push(`Remedy: ${appeal.remedy.ok ? '✅' : '⚠️'} ${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').slice(0, 250)}`);
-    if (appeal.notification) lines.push(`Outcome DM: ${appeal.notification.sent ? '✅ sent' : `❌ failed${appeal.notification.error ? ` • ${String(appeal.notification.error).slice(0, 180)}` : ''}`}`);
-    embed.addFields({ name: appeal.id, value: lines.join('\n').slice(0, 1024), inline: false });
+    if (appeal.requestedResolution) lines.push(`**Requested Outcome:** ${String(appeal.requestedResolution).replace(/\s+/g, ' ').slice(0, 120)}`);
+    if (appeal.reviewedBy) lines.push(`**Reviewed By:** <@${appeal.reviewedBy}>${appeal.reviewedAt ? ` • <t:${getCaseTimestamp(appeal.reviewedAt)}:R>` : ''}`);
+    if (appeal.reviewNote) lines.push(`**Review Decision:** ${String(appeal.reviewNote).replace(/\s+/g, ' ').slice(0, 150)}`);
+    if (appeal.remedy) lines.push(`**Sanction Reversal:** ${appeal.remedy.ok ? '✅ Completed' : '⚠️ Requires attention'} • ${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').replace(/\s+/g, ' ').slice(0, 150)}`);
+    if (appeal.notification) lines.push(`**Member Notification:** ${appeal.notification.sent ? '✅ Sent' : '⚠️ Not delivered'}`);
+    embed.addFields({ name: `📁 Appeal ${status}`, value: lines.join('\n').slice(0, 1024), inline: false });
   }
-  const pending = getPendingAppeal(modCase);
-  const components = [
-  new ActionRowBuilder().addComponents(
+  const components = [];
+  if (totalPages > 1) components.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:${Math.max(0, page - 1)}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(page <= 0),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:${Math.min(totalPages - 1, page + 1)}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${pending?.id || 'none'}`).setLabel('Open Pending').setStyle(ButtonStyle.Primary).setDisabled(!pending)
-  ),
-  new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)),
-];
-
+    new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:${Math.min(totalPages - 1, page + 1)}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1)
+  ));
+  const pendingAppeal = getPendingAppeal(modCase);
+  if (pendingAppeal) components.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${pendingAppeal.id}`).setLabel('⚖️ Review Pending Appeal').setStyle(ButtonStyle.Primary)
+  ));
+  components.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('⬅️ Back to Case').setStyle(ButtonStyle.Secondary)
+  ));
   return { embeds: [embed], components };
 }
 function buildAppealDetailPayload(modCase, appeal) {
