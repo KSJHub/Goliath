@@ -321,7 +321,7 @@ export default function Appeals() {
         </section>
 
         <nav aria-label="Member portal sections" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {[['overview', '🏠 Overview'], ['timeline', '📅 Timeline'], ['cases', '⚖️ Cases & Appeals'], ['restrictions', '🔒 Restrictions'], ['profile', '👤 Profile']].map(([id, label]) => (
+          {[['overview', '🏠 Overview'], ['cases', '⚖️ Cases & Appeals'], ['restrictions', '🔒 Restrictions'], ['timeline', '📅 Timeline'], ['profile', '👤 Profile']].map(([id, label]) => (
             <button key={id} type="button" aria-current={portalTab === id ? 'page' : undefined} style={{ ...secondaryButton, background: portalTab === id ? '#2563eb' : '#18273c' }} onClick={() => { if (id === 'cases') { window.location.assign('/appeals'); return; } if (window.location.pathname === '/appeals') window.history.replaceState({}, '', '/portal'); setPortalTab(id); }}>{label}</button>
           ))}
         </nav>
