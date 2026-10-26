@@ -197,6 +197,40 @@ router.get('/:guildId/warnings', requireModerationGuildAccess, (req, res) => {
   }
 });
 
+// Member-only summary: never return staff notes, evidence, role snapshots or internal security metadata.
+router.get('/member/me', requireAppealSession, (req, res) => {
+  try {
+    const userId = req.appealUserId;
+    const guildIds = new Set(db.prepare('SELECT DISTINCT guild_id FROM cases WHERE user_id = ?').all(userId).map(row => String(row.guild_id)));
+    const { getQuarantineState } = require('../../security/protection/quarantine/state');
+    for (const guild of req.client?.guilds?.cache?.values?.() || []) guildIds.add(String(guild.id));
+    const cases = [];
+    const restrictions = [];
+    for (const guildId of guildIds) {
+      const guild = req.client?.guilds?.cache?.get?.(guildId);
+      const guildName = getGuildName(req, guildId);
+      for (const record of getCasesForUser(guildId, userId) || []) {
+        const safe = safeAppealCase(req, record, userId);
+        if (safe) cases.push(safe);
+      }
+      const snapshot = getQuarantineState(guildId).users?.[userId];
+      if (snapshot) restrictions.push({
+        guildId, guildName, guildIconUrl: guild?.iconURL?.({ size: 128 }) || null,
+        mode: snapshot.mode === 'investigation' ? 'investigation' : 'security',
+        status: 'active', caseId: Number(snapshot.caseId) || null,
+        startedAt: snapshot.quarantinedAt || null,
+        // Internal detection details and investigator identities are intentionally excluded.
+      });
+    }
+    cases.sort((a, b) => (Date.parse(b.decisionAt || b.createdAt) || 0) - (Date.parse(a.decisionAt || a.createdAt) || 0));
+    res.set('Cache-Control', 'private, no-store');
+    return res.json({ ok: true, cases, restrictions });
+  } catch (error) {
+    console.error('[Member Portal] Unable to load member summary:', error);
+    return res.status(500).json({ error: 'Could not load your member portal.' });
+  }
+});
+
 router.get('/appeals/me', requireAppealSession, (req, res) => {
   try {
     const userId = req.appealUserId;
