@@ -728,7 +728,7 @@ function identityEmbed(target, context) {
 function behaviorEmbed(target, context) {
   const b = context.behavior; const lines = [];
   for (const [label, window] of [['7 Days', b.windows.d7], ['30 Days', b.windows.d30], ['90 Days', b.windows.d90], ['All Time', b.windows.all]]) {
-    lines.push(`**${label}** • ${window.total} case(s)\nWarn ${window.counts.warn} • Timeout ${window.counts.timeout} • Kick ${window.counts.kick} • Ban ${window.counts.ban} • Moderators ${window.uniqueModerators} • Reversed ${window.reversed} • Appeals ${window.appeals}`);
+    lines.push(`**${label}** • ${window.total} case(s)\nWarn ${window.counts.warn} • Timeout ${window.counts.timeout} • Kick ${window.counts.kick} • Ban ${window.counts.ban} • Moderators ${window.uniqueModerators} • Closed ${window.reversed} • Appeals ${window.appeals}`);
   }
   lines.push(`**Activity Trend:** ${String(b.trend).toUpperCase()} • last 30d ${b.windows.d30.total} vs previous 30d ${b.prior30}`);
   return new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`📊 Moderation Behaviour • ${target.user.tag}`).setDescription(lines.join('\n\n').slice(0, 4000)).setTimestamp();
