@@ -713,28 +713,38 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
   return { embeds: [embed], components };
 }
 function buildAppealDetailPayload(modCase, appeal) {
-  const embed = new EmbedBuilder().setColor(appeal.status === 'pending' ? COLORS.PRIMARY : appeal.status === 'approved' ? COLORS.SUCCESS : COLORS.ERROR).setTitle(`⚖️ Appeal ${appeal.id}`).setDescription(`Linked Case **#${modCase.caseId}** • ${String(modCase.action).toUpperCase()} • ${String(appeal.status).toUpperCase()}`).addFields(
-    { name: 'Appellant', value: `<@${appeal.appellantId}>`, inline: true },
-    { name: 'Source', value: String(appeal.source || 'legacy'), inline: true },
-    { name: 'Submitted', value: appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:F>` : 'Unknown', inline: true },
-    { name: 'Appeal Grounds', value: String(appeal.grounds || 'No grounds recorded').slice(0, 1024), inline: false }
-  ).setTimestamp();
-  if (appeal.requestedResolution) embed.addFields({ name: 'Requested Resolution', value: String(appeal.requestedResolution).slice(0, 1024), inline: false });
-  if (appeal.reviewNote) embed.addFields({ name: 'Review Decision', value: String(appeal.reviewNote).slice(0, 1024), inline: false });
-  if (appeal.remedy) embed.addFields({ name: 'Remedy', value: `${appeal.remedy.ok ? '✅' : '⚠️'} ${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').slice(0, 1000)}`, inline: false });
-  if (appeal.notification) embed.addFields({ name: 'Outcome Notification', value: appeal.notification.sent ? `DM sent ✅${appeal.notification.invite?.url ? ' • rejoin invite created' : ''}` : `DM failed ❌${appeal.notification.error ? ` • ${appeal.notification.error}` : ''}`.slice(0, 1024), inline: false });
+  const pending = appeal.status === 'pending';
+  const status = pending ? '⏳ Awaiting Review' : appeal.status === 'approved' ? '✅ Approved' : '❌ Denied';
+  const embed = new EmbedBuilder()
+    .setColor(pending ? COLORS.PRIMARY : appeal.status === 'approved' ? COLORS.SUCCESS : COLORS.ERROR)
+    .setTitle(`⚖️ Appeal Review • Case #${modCase.caseId}`)
+    .setDescription(`**${String(modCase.action || 'case').toUpperCase()}**  •  ${status}`)
+    .addFields(
+      { name: '👤 Appellant', value: `<@${appeal.appellantId}>`, inline: true },
+      { name: '📨 Submitted Via', value: String(appeal.source || 'Unknown'), inline: true },
+      { name: '📅 Submitted', value: appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:f>` : 'Unknown', inline: false },
+      { name: '📝 Appeal Grounds', value: String(appeal.grounds || 'No grounds recorded').slice(0, 1024), inline: false }
+    );
+  if (appeal.requestedResolution) embed.addFields({ name: '🎯 Requested Outcome', value: String(appeal.requestedResolution).slice(0, 1024), inline: false });
+  if (appeal.reviewNote) embed.addFields({ name: '📋 Review Decision', value: String(appeal.reviewNote).slice(0, 1024), inline: false });
+  if (appeal.remedy) embed.addFields({ name: '🔄 Sanction Reversal', value: `${appeal.remedy.ok ? '✅ Completed' : '⚠️ Requires attention'} • ${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').slice(0, 950)}`, inline: false });
+  if (appeal.notification) embed.addFields({ name: '📨 Decision Notification', value: appeal.notification.sent ? '✅ Sent to member' : `⚠️ Not delivered${appeal.notification.error ? ` • ${String(appeal.notification.error).slice(0, 180)}` : ''}`, inline: false });
   const proceedingExecution = modCase.action === 'case' ? modCase.metadata?.proceeding?.sanctionExecution : null;
   const canRetryRemedy = appeal.status === 'approved' && appeal.remedy?.ok === false && (proceedingExecution?.status === 'reversal_failed' || (proceedingExecution?.status === 'reversing' && appealRemedyIsStale(proceedingExecution)));
   const components = [
-  new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`).setLabel('✅ Approve').setStyle(ButtonStyle.Success).setDisabled(appeal.status !== 'pending'),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`).setLabel('❌ Deny').setStyle(ButtonStyle.Danger).setDisabled(appeal.status !== 'pending'),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`).setLabel(proceedingExecution?.status === 'reversing' && !appealRemedyIsStale(proceedingExecution) ? '⏳ Remedy Running' : '🔁 Retry Remedy').setStyle(ButtonStyle.Primary).setDisabled(!canRetryRemedy)
-  ),
-  new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('Case Detail').setStyle(ButtonStyle.Secondary)),
-  new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)),
-];
-
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`).setLabel('✅ Approve Appeal').setStyle(ButtonStyle.Success).setDisabled(!pending),
+      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`).setLabel('❌ Deny Appeal').setStyle(ButtonStyle.Danger).setDisabled(!pending)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('📁 View Case').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel('⬅️ Back to Appeals').setStyle(ButtonStyle.Secondary)
+    ),
+  ];
+  if (canRetryRemedy) components.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`).setLabel('🔄 Retry Sanction Reversal').setStyle(ButtonStyle.Primary)
+  ));
+  embed.setFooter({ text: `Appeal reference: ${String(appeal.id).slice(0, 70)}` });
   return { embeds: [embed], components };
 }
 function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status: 'pending' }, token = null) {
