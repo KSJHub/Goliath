@@ -582,22 +582,19 @@ async function resolveAppeal(interaction, caseId, appealId, decision, reviewNote
 function buildCaseDetailButtons(modCase) {
   const isWarning = modCase.action === 'warn';
   const isTimeout = modCase.action === 'timeout';
-  const reversedOrExpired = modCase.status === 'reversed' || modCase.status === 'expired';
+  const inactive = modCase.status === 'reversed' || modCase.status === 'expired';
   const hasNote = Boolean(modCase.note && String(modCase.note).trim());
   const appeals = getCaseAppeals(modCase);
-  const pending = appeals.some((appeal) => appeal.status === 'pending');
-  return [
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`mod_case_reverse_warning:${modCase.caseId}`).setLabel(`${EMOJIS.REVERSED} Reverse Warning`).setStyle(ButtonStyle.Secondary).setDisabled(!isWarning || reversedOrExpired),
-      new ButtonBuilder().setCustomId(`mod_case_reverse_timeout:${modCase.caseId}`).setLabel('⏪ Reverse Timeout').setStyle(ButtonStyle.Secondary).setDisabled(!isTimeout || reversedOrExpired),
-      new ButtonBuilder().setCustomId(`mod_case_note:${modCase.caseId}`).setLabel(hasNote ? `${EMOJIS.EDIT} Edit Note` : `${EMOJIS.NOTE} Add Note`).setStyle(ButtonStyle.Primary)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`mod_case_appeal_submit:${modCase.caseId}`).setLabel(pending ? '⏳ Appeal Pending' : '📨 Record Appeal').setStyle(ButtonStyle.Primary).setDisabled(pending || appeals.length >= MAX_APPEALS_PER_CASE || reversedOrExpired || !APPEALABLE_ACTIONS.has(modCase.action)),
-      new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel(`⚖️ Appeals (${appeals.length})`).setStyle(ButtonStyle.Secondary).setDisabled(!appeals.length),
-      new ButtonBuilder().setCustomId('mod_case_appeal_queue:0').setLabel('📥 Appeal Queue').setStyle(ButtonStyle.Secondary)
-    ),
-  ];
+  const pending = appeals.some(appeal => appeal.status === 'pending');
+  const management = [];
+  if (!inactive && isWarning) management.push(new ButtonBuilder().setCustomId(`mod_case_reverse_warning:${modCase.caseId}`).setLabel(`${EMOJIS.REVERSED} Reverse Warning`).setStyle(ButtonStyle.Secondary));
+  if (!inactive && isTimeout) management.push(new ButtonBuilder().setCustomId(`mod_case_reverse_timeout:${modCase.caseId}`).setLabel('⏪ Reverse Timeout').setStyle(ButtonStyle.Secondary));
+  management.push(new ButtonBuilder().setCustomId(`mod_case_note:${modCase.caseId}`).setLabel(hasNote ? `${EMOJIS.EDIT} Edit Note` : `${EMOJIS.NOTE} Add Note`).setStyle(ButtonStyle.Primary));
+  const appealButtons = [];
+  if (!pending && appeals.length < MAX_APPEALS_PER_CASE && !inactive && APPEALABLE_ACTIONS.has(modCase.action)) appealButtons.push(new ButtonBuilder().setCustomId(`mod_case_appeal_submit:${modCase.caseId}`).setLabel('📨 Record Appeal').setStyle(ButtonStyle.Primary));
+  if (appeals.length) appealButtons.push(new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel(`⚖️ Appeals (${appeals.length})`).setStyle(ButtonStyle.Secondary));
+  appealButtons.push(new ButtonBuilder().setCustomId('mod_case_appeal_queue:0').setLabel('📥 Appeal Queue').setStyle(ButtonStyle.Secondary));
+  return [new ActionRowBuilder().addComponents(management), new ActionRowBuilder().addComponents(appealButtons)];
 }
 function buildCaseIdModal(customId, title, label = 'Case ID') {
   return new ModalBuilder().setCustomId(customId).setTitle(title).addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('case_id').setLabel(label).setStyle(TextInputStyle.Short).setPlaceholder('1').setRequired(true).setMaxLength(10)));
