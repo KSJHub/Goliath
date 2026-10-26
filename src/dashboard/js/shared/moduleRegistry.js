@@ -6,7 +6,7 @@ export const MODULE_STATUS_META = {
 };
 
 export const moduleRegistry = [
-  { key: 'freeGames', name: 'Games', icon: '🎮', route: '/games', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: false, summary: 'Manage free-game offers, featured titles and game notification settings.' },
+  { key: 'freeGames', name: 'Games', icon: '🎮', route: '/games', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: false, summary: 'Game updates, publisher announcements, free offers and configurable notifications.' },
   { key: 'autoRoles', name: 'Auto Roles', icon: 'AR', route: '/autoroles', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: false, summary: 'Assign roles automatically when members join or meet conditions.' },
   { key: 'automation', name: 'Automation', icon: 'AU', route: '/automation', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: false, summary: 'Rules, triggers and execution history for server workflows.' },
   { key: 'birthdays', name: 'Birthdays', icon: 'BD', route: '/birthdays', category: MODULE_CATEGORIES.feature, status: MODULE_STATUSES.backendReady, enabled: false, summary: 'Birthday announcements, optional birthday roles, upcoming dates and member preferences.' },

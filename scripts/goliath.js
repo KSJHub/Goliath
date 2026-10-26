@@ -3856,6 +3856,11 @@ async function freeGamesAudit() {
     const url = `http://127.0.0.1:${server.address().port}/api/free-games/${guild.id}/preview`;
     assert.equal((await savedFetch(url, { method: 'POST' })).status, 401);
     assert.equal((await savedFetch(url, { method: 'POST', headers: { 'x-fixture-user': 'member' } })).status, 403);
+    for (const [suffix, method] of [['settings', 'PATCH'], ['subscriptions', 'POST'], ['subscriptions/730', 'DELETE'], ['730/preview', 'POST'], ['730/send-latest', 'POST'], ['730/retry', 'POST'], ['check', 'POST']]) {
+      const endpoint = url.replace('/preview', '/updates/' + suffix);
+      assert.equal((await savedFetch(endpoint, { method })).status, 401);
+      assert.equal((await savedFetch(endpoint, { method, headers: { 'x-fixture-user': 'member' } })).status, 403);
+    }
     const response = await savedFetch(url, { method: 'POST', headers: { 'x-fixture-user': 'manager', 'content-type': 'application/json' }, body: JSON.stringify({ currency: 'GBP' }) });
     assert.equal(response.status, 200);
     const payload = await response.json(); assert.equal(payload.offers.length, 1); assert(payload.pages.length);
@@ -3865,11 +3870,123 @@ async function freeGamesAudit() {
     store.getConfig = priorConfig; providers.getOffers = priorOffers; providers.getPricing = priorPricing;
     delete require.cache[routePath]; if (priorRoute) require.cache[routePath] = priorRoute;
   }
+  await gameUpdatesAudit();
   console.log('✅ Games: folder rename/storage compatibility, single featured main title/popularity/manual/fallback/thumbnail, guild category/channel ordering, cold-cache core emoji resolution, footer-only timestamps, Discord management authority/shared settings/preview, configurable presentation/timestamps, unique offers, section order, embed limits, GBP/source/hidden pricing, NEW baseline, expiry safety, settings validation, rate cache/failure and delivery baseline/recovery/shrink/locking');
   return true;
 }
 
+async function gameUpdatesAudit() {
+  const assert = require('node:assert/strict'), fs = require('node:fs');
+  // Isolated in-memory guild state: this audit never writes a server's configuration.
+  const directory = root + '/src/modules/utilityStudio/games/';
+  const modules = {}, memory = { enabled: false, currency: 'GBP', state: { deliveries: [{ messageId: 'preserve' }] } };
+  const permissions = new Proxy({}, { get: (_, key) => key });
+  const section = { getModuleSection: () => memory, updateModuleSection: (_id, _key, fn) => { const next = fn(memory); for (const key of Object.keys(memory)) delete memory[key]; Object.assign(memory, next); return memory; } };
+  function load(name) {
+    if (modules[name]) return modules[name].exports;
+    const module = { exports: {} }; modules[name] = module;
+    const localRequire = id => {
+      if (id.startsWith('./freeGames')) return load(id.slice(2));
+      if (id.includes('moduleSectionManager')) return section;
+      if (id.includes('guildManager')) return { isModuleEnabled: () => memory.enabled };
+      if (id === 'discord.js') return { PermissionFlagsBits: permissions };
+      if (id.includes('security/protection/core')) return { isBotOwner: () => false };
+      return require(id);
+    };
+    new Function('require', 'module', 'exports', fs.readFileSync(directory + name + '.js', 'utf8'))(localRequire, module, module.exports);
+    return module.exports;
+  }
+  const providers = load('freeGamesProviders'), store = load('freeGames'), embeds = load('freeGamesEmbeds');
+  let monitor = load('freeGamesMonitor');
+  assert.equal(providers.steamAppId('https://store.steampowered.com/app/730/Counter_Strike_2/'), '730');
+  for (const value of ['0', '-1', '4294967296', 'https://example.com/app/730', 'http://store.steampowered.com/app/730/', 'https://user@store.steampowered.com/app/730/']) assert.throws(() => providers.steamAppId(value));
+  const raw = { gid: '100', title: 'Patch update', contents: '<script>bad()</script>[b]Fixed[/b] &amp; improved', date: Math.floor(Date.now() / 1000), feedname: 'steam_community_announcements', url: 'https://store.steampowered.com/news/app/730/view/100' };
+  const item = providers.normalizeNews(raw);
+  assert.equal(item.kind, 'patches'); assert.equal(item.description, 'Fixed & improved');
+  assert.equal(providers.normalizeNews({ ...raw, feedname: 'pcgamer' }), null);
+  assert.equal(providers.normalizeNews({ ...raw, url: 'https://example.com/news' }), null);
+  assert.equal(providers.normalizeNews({ ...raw, date: 'invalid' }), null);
+  assert.throws(() => store.validateUpdateSettings({ enabled: 'true' }, store.UPDATE_DEFAULTS));
+  assert.throws(() => store.validateUpdateSettings({ quietStart: '25:00', quietEnd: '06:00' }, store.UPDATE_DEFAULTS));
+  assert.throws(() => store.validateUpdateSettings({ quietStart: '22:00' }, store.UPDATE_DEFAULTS));
+  assert(monitor.updatesQuietNow({ quietStart: '22:00', quietEnd: '06:00' }, 'UTC', Date.parse('2026-01-01T23:00:00Z')));
+  assert(!monitor.updatesQuietNow({ quietStart: '22:00', quietEnd: '06:00' }, 'UTC', Date.parse('2026-01-01T12:00:00Z')));
+  const originalFetch = global.fetch;
+  try {
+    let calls = 0;
+    global.fetch = async (url, options) => { calls++; assert(url.startsWith('https://api.steampowered.com/ISteamNews/')); assert.equal(options.redirect, 'error'); return { ok: true, json: async () => ({ appnews: { appid: 730, newsitems: [raw, raw] } }) }; };
+    const [first, second] = await Promise.all([providers.getGameNews('730'), providers.getGameNews('730')]);
+    assert.equal(calls, 1); assert.equal(first.items.length, 1); assert.equal(first, second);
+    global.fetch = async () => ({ ok: true, json: async () => ({ appnews: { appid: 999, newsitems: [] } }) });
+    await assert.rejects(providers.getGameNews('570'), /invalid announcement feed/);
+  } finally { global.fetch = originalFetch; }
+  let feed = [item], sourceFailed = false, sendError = null, allowed = true, messages = [], sent = [];
+  providers.getGameNews = async () => { if (sourceFailed) throw new Error('Source unavailable'); return { items: feed }; };
+  const channelId = '222222222222222222', roleId = '333333333333333333';
+  const channel = { id: channelId, type: 0, permissionsFor: () => ({ has: () => allowed }), messages: { fetch: async () => ({ find: fn => messages.find(fn) }) }, send: async payload => { if (sendError) throw sendError; sent.push(payload); messages.push({ author: { id: 'bot' }, embeds: payload.embeds }); return { id: String(sent.length) }; } };
+  const guild = { id: '111111111111111111', client: { user: { id: 'bot' } }, channels: { fetch: async () => channel }, members: { me: {} }, roles: { fetch: async () => ({ id: roleId, managed: false, mentionable: true }) } };
+  await monitor.saveGameSubscription(guild, { appId: '730', name: 'Counter-Strike 2', channelId, roleId, enabled: true });
+  await monitor.configureGameUpdates(guild, { enabled: true });
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 0, 'A new subscription quietly baselines existing news.');
+  const makeItem = id => ({ ...item, id: String(id), url: 'https://store.steampowered.com/news/app/730/view/' + id });
+  feed = [makeItem(101), ...feed];
+  await Promise.all([monitor.processGameUpdates(guild), monitor.processGameUpdates(guild)]);
+  assert.equal(sent.length, 1); assert.deepEqual(sent[0].allowedMentions.roles, [roleId]); assert.equal(memory.enabled, false, 'Game Updates works independently of free-offer delivery.');
+  delete modules.freeGamesMonitor; monitor = load('freeGamesMonitor');
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 1, 'Persistent state prevents reposting after restart.');
+  const beforePreview = JSON.stringify(memory); await monitor.previewGameUpdate(guild, '730'); assert.equal(JSON.stringify(memory), beforePreview);
+  assert((await monitor.sendLatestGameUpdate(guild, '730')).alreadyDelivered); assert.equal(sent.length, 1);
+  feed = [makeItem(102), ...feed];
+  await monitor.sendLatestGameUpdate(guild, '730'); assert.equal(sent.length, 2); assert.deepEqual(sent[1].allowedMentions.roles, []);
+  sourceFailed = true; await monitor.processGameUpdates(guild); assert.match(store.getGameUpdates(guild.id).subscriptions['730'].error, /Source unavailable/); assert.equal(sent.length, 2); sourceFailed = false;
+  feed = [makeItem(103), ...feed]; allowed = false;
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 2); assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 1);
+  allowed = true; await monitor.processGameUpdates(guild); assert.equal(sent.length, 3);
+  feed = [makeItem(104), ...feed]; sendError = new Error('Connection lost');
+  await monitor.processGameUpdates(guild); sendError = null;
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 3, 'Uncertain delivery is not blindly retried.');
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', channelId: '444444444444444444' }), /Resolve held deliveries/);
+  await monitor.retryHeldGameUpdates(guild, '730'); assert.equal(sent.length, 4); assert.deepEqual(sent[3].allowedMentions.roles, []);
+  // Simulate a crash after Discord accepted a send but before local confirmation persisted.
+  const recovered = makeItem(105); feed = [recovered, ...feed];
+  store.updateGameUpdates(guild.id, state => { const sub = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...sub, seenIds: [recovered.id, ...sub.seenIds], pending: [{ item: recovered, status: 'dispatching' }] } } }; });
+  messages.push({ author: { id: 'bot' }, embeds: embeds.buildGameUpdate(store.getGameUpdates(guild.id).subscriptions['730'], recovered).embeds });
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 4); assert.equal(store.getGameUpdates(guild.id).history[0].status, 'recovered');
+  const sub = store.getGameUpdates(guild.id).subscriptions['730'];
+  memory.timeZone = 'UTC';
+  const clock = new Date(), clockText = date => date.toISOString().slice(11, 16);
+  await monitor.configureGameUpdates(guild, { quietStart: clockText(clock), quietEnd: clockText(new Date(clock.getTime() + 60000)) });
+  feed = [makeItem(107), makeItem(106), ...feed];
+  await monitor.processGameUpdates(guild); assert.equal(sent.length, 4); assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 2);
+  await monitor.sendLatestGameUpdate(guild, '730'); assert.equal(sent.length, 5); assert.deepEqual(sent[4].allowedMentions.roles, []);
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 1, 'Manual send must not flush another queued announcement.');
+  await monitor.retryHeldGameUpdates(guild, '730'); assert.equal(sent.length, 5, 'Retry held must not flush unrelated queued announcements.');
+  await monitor.configureGameUpdates(guild, { quietStart: null, quietEnd: null }); await monitor.processGameUpdates(guild); assert.equal(sent.length, 6);
+  let canManage = false, lastReply;
+  guild.members.fetch = async () => ({ permissions: { has: () => canManage } });
+  const interaction = action => ({ customId: 'admin:module:freeGames:updates:' + action, guild, user: { id: 'manager' }, deferred: true, isButton: () => true, editReply: async payload => { lastReply = payload; } });
+  const beforeDenied = JSON.stringify(memory); await store.handleAdminInteraction(interaction('toggle')); assert.match(lastReply.content, /Manage Server/); assert.equal(JSON.stringify(memory), beforeDenied);
+  canManage = true; await store.handleAdminInteraction(interaction('home:0')); assert.match(lastReply.embeds[0].title, /Game Updates/);
+  sourceFailed = true; await store.handleAdminInteraction(interaction('preview:730')); assert.match(lastReply.embeds[0].description, /Unable to apply change/); sourceFailed = false;
+  assert.equal(store.matchesGameUpdate(item, { ...sub, includeWords: ['fixed'], excludeWords: [] }), true);
+  assert.equal(store.matchesGameUpdate(item, { ...sub, includeWords: [], excludeWords: ['fixed'] }), false);
+  const detailed = embeds.buildGameUpdate({ ...sub, detail: 'detailed', artwork: 'hidden' }, { ...item, description: '*'.repeat(3500) }, { suppressMention: true });
+  assert(detailed.embeds[0].description.length < 4096); assert(!detailed.embeds[0].image); assert.deepEqual(detailed.allowedMentions.roles, []);
+  for (const panel of [store.buildUpdatesPanel(guild), store.buildUpdateSubscriptionPanel(guild, '730'), store.buildUpdateSubscriptionPanel(guild, '730', '', true)]) {
+    assert(panel.components.length <= 5); for (const row of panel.components) assert(row.components.length <= 5);
+    assert.deepEqual(panel.allowedMentions, { parse: [] });
+  }
+  await monitor.removeGameSubscription(guild, '730');
+  assert.equal(Object.keys(store.getGameUpdates(guild.id).subscriptions).length, 0);
+  assert(store.getGameUpdates(guild.id).history.length > 0); assert.equal(memory.currency, 'GBP'); assert.equal(memory.state.deliveries[0].messageId, 'preserve');
+  console.log('✅ Game Updates: isolated state, official Steam source/cache, validation, independent enablement, quiet baseline, concurrent/restart dedupe, private preview, role-safe manual sends, permission recovery, uncertain-send review, crash recovery, filters, embed/component limits and legacy data preservation');
+  return true;
+}
+
+
 const commands = {
+  'game-updates': gameUpdatesAudit,
   games: freeGamesAudit,
   'free-games': freeGamesAudit,
   'quarantine-containment': quarantineContainmentAudit,

@@ -111,6 +111,7 @@ function startup(client) {
     running = true;
     try {
       for (const guild of client.guilds.cache.values()) {
+        if (store.getGameUpdates(guild.id).enabled) await processGameUpdates(guild).catch(error => console.warn('[Games] Updates:', error.message));
         if (!store.getConfig(guild.id).enabled) continue;
         await processGuild(guild).catch((error) => console.warn(`[Free Games] ${guild.id}: ${error.message}`));
       }
@@ -123,3 +124,157 @@ function startup(client) {
 }
 function shutdown(client) { clearInterval(timers.get(client)); timers.delete(client); }
 module.exports = { TICK_MS, withGuildLock, validateDestination, processGuild, startup, shutdown };
+
+
+function updateSubscriptionState(guildId, appId, fn) {
+  return store.updateGameUpdates(guildId, current => {
+    const subscription = current.subscriptions[appId];
+    if (!subscription) throw new Error('Game subscription no longer exists.');
+    return { ...current, subscriptions: { ...current.subscriptions, [appId]: fn(structuredClone(subscription)) } };
+  });
+}
+function recordUpdateDelivery(guildId, appId, item, status, detail = '') {
+  store.updateGameUpdates(guildId, current => ({ ...current, history: [{ appId, itemId: item.id, title: item.title, url: item.url, status, detail: String(detail).slice(0, 300), at: Date.now() }, ...current.history].slice(0, 100) }));
+}
+async function saveGameSubscription(guild, patch) {
+  return withGuildLock(guild.id, async () => {
+    const appId = providers.steamAppId(patch.appId), config = store.getGameUpdates(guild.id), previous = config.subscriptions[appId];
+    if (!previous && Object.keys(config.subscriptions).length >= 50) throw new Error('A server can follow up to 50 games.');
+    const next = store.normalizeUpdateSubscription({ ...patch, appId }, previous);
+    if (previous && next.channelId !== previous.channelId && previous.pending.some(entry => entry.status !== 'pending')) throw new Error('Resolve held deliveries before changing the destination channel.');
+    if (next.channelId) await validateDestination(guild, { ...next, alerts: Boolean(next.roleId) });
+    if (next.roleId) {
+      const role = await guild.roles.fetch(next.roleId);
+      if (!role || role.id === guild.id || role.managed) throw new Error('Choose a regular notification role.');
+    }
+    const rebaseline = !previous || !previous.initialized || ['channelId', 'filter', 'includeWords', 'excludeWords'].some(key => JSON.stringify(next[key]) !== JSON.stringify(previous[key])) || (next.enabled && !previous.enabled);
+    if (rebaseline) {
+      const feed = await providers.getGameNews(appId);
+      next.seenIds = feed.items.map(item => item.id);
+      next.initialized = true; next.lastCheck = Date.now();
+      // Configuration changes start from the next announcement. Preserve uncertain deliveries for review.
+      next.pending = (previous?.pending || []).filter(entry => entry.status !== 'pending');
+    }
+    next.error = null;
+    store.updateGameUpdates(guild.id, current => ({ ...current, subscriptions: { ...current.subscriptions, [appId]: next } }));
+    return store.getGameUpdates(guild.id);
+  });
+}
+async function configureGameUpdates(guild, patch) {
+  return withGuildLock(guild.id, async () => store.updateGameUpdates(guild.id, current => store.validateUpdateSettings(patch, current)));
+}
+async function removeGameSubscription(guild, appId) {
+  return withGuildLock(guild.id, async () => {
+    appId = providers.steamAppId(appId);
+    return store.updateGameUpdates(guild.id, current => { const subscriptions = { ...current.subscriptions }; delete subscriptions[appId]; return { ...current, subscriptions }; });
+  });
+}
+function updatesQuietNow(config, timeZone, now = Date.now()) {
+  if (!config.quietStart || !config.quietEnd) return false;
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+  const time = parts.find(part => part.type === 'hour').value + ':' + parts.find(part => part.type === 'minute').value;
+  return config.quietStart < config.quietEnd ? time >= config.quietStart && time < config.quietEnd : time >= config.quietStart || time < config.quietEnd;
+}
+async function flushGameUpdates(guild, appId, manual = false, onlyIds = null) {
+  let delivered = 0;
+  const config = store.getGameUpdates(guild.id);
+  if (!manual && updatesQuietNow(config, store.getConfig(guild.id).timeZone)) return { delivered, held: true };
+  for (const entry of [...(config.subscriptions[appId]?.pending || [])].filter(entry => entry.status !== 'ambiguous' && (!onlyIds || onlyIds.has(entry.item.id))).slice(0, 5)) {
+    if (entry.status === 'ambiguous') continue;
+    const subscription = store.getGameUpdates(guild.id).subscriptions[appId];
+    if (!subscription) break;
+    const channel = await validateDestination(guild, { ...subscription, alerts: Boolean(subscription.roleId) && !entry.suppressMention });
+    if (entry.status === 'dispatching') {
+      const recent = await channel.messages.fetch({ limit: 100 });
+      const recovered = recent.find(message => message.author?.id === guild.client.user.id && message.embeds?.some(embed => embed.url === entry.item.url && embed.footer?.text === 'Game Updates · Steam'));
+      if (recovered) {
+        updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.filter(record => record.item.id !== entry.item.id), lastSuccess: Date.now() }));
+        recordUpdateDelivery(guild.id, appId, entry.item, 'recovered'); continue;
+      }
+      updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: 'ambiguous' } : record), error: 'A delivery needs review. Inspect the channel before retrying held updates.' }));
+      recordUpdateDelivery(guild.id, appId, entry.item, 'needs_review'); continue;
+    }
+    updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: 'dispatching' } : record) }));
+    try {
+      const payload = require('./freeGamesEmbeds').buildGameUpdate(subscription, entry.item, { suppressMention: entry.suppressMention });
+      await channel.send({ ...payload, nonce: hash(['game-update', guild.id, appId, entry.item.id]).slice(0, 24), enforceNonce: true });
+      updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.filter(record => record.item.id !== entry.item.id), lastSuccess: Date.now(),
+        error: current.pending.some(record => record.status === 'ambiguous') ? 'Some deliveries need review.' : null }));
+      recordUpdateDelivery(guild.id, appId, entry.item, 'delivered'); delivered++;
+    } catch (error) {
+      const rejected = (error.status >= 400 && error.status < 500 && error.status !== 408) || [50013, 50001, 10003].includes(error.code);
+      updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: rejected ? 'pending' : 'ambiguous' } : record),
+        error: rejected ? 'Delivery was refused. Check channel and role permissions.' : 'Delivery could not be confirmed. Inspect the channel before retrying held updates.' }));
+      recordUpdateDelivery(guild.id, appId, entry.item, rejected ? 'failed' : 'needs_review', error.message);
+      break;
+    }
+  }
+  return { delivered };
+}
+async function processGameUpdatesUnlocked(guild) {
+  const config = store.getGameUpdates(guild.id);
+  if (!config.enabled) return { skipped: true, delivered: 0 };
+  let delivered = 0;
+  for (const appId of Object.keys(config.subscriptions)) {
+    const subscription = store.getGameUpdates(guild.id).subscriptions[appId];
+    if (!subscription?.enabled) continue;
+    try {
+      const feed = await providers.getGameNews(appId);
+      const seen = new Set(subscription.seenIds || []);
+      const fresh = subscription.initialized ? feed.items.filter(item => !seen.has(item.id) && store.matchesGameUpdate(item, subscription)).reverse() : [];
+      const pending = [...subscription.pending];
+      for (const item of fresh) if (!pending.some(entry => entry.item.id === item.id)) pending.push({ item, status: 'pending', suppressMention: false });
+      if (pending.length > 100) throw new Error('Too many queued updates. Review the pending deliveries.');
+      updateSubscriptionState(guild.id, appId, current => ({ ...current, initialized: true, pending,
+        seenIds: [...new Set([...feed.items.map(item => item.id), ...current.seenIds])].slice(0, 500), lastCheck: Date.now() }));
+      delivered += (await flushGameUpdates(guild, appId)).delivered;
+    } catch (error) {
+      updateSubscriptionState(guild.id, appId, current => ({ ...current, lastCheck: Date.now(), error: String(error.message).slice(0, 300) }));
+    }
+  }
+  return { delivered };
+}
+function processGameUpdates(guild) { return withGuildLock(guild.id, () => processGameUpdatesUnlocked(guild)); }
+async function previewGameUpdate(guild, appId) {
+  appId = providers.steamAppId(appId);
+  const subscription = store.getGameUpdates(guild.id).subscriptions[appId];
+  if (!subscription) throw new Error('Choose a saved game subscription.');
+  const feed = await providers.getGameNews(appId);
+  const item = feed.items.find(item => store.matchesGameUpdate(item, subscription));
+  if (!item) throw new Error('No matching publisher announcement is currently available.');
+  return { item, payload: require('./freeGamesEmbeds').buildGameUpdate(subscription, item, { suppressMention: true }) };
+}
+async function sendLatestGameUpdate(guild, appId) {
+  return withGuildLock(guild.id, async () => {
+    const { item } = await previewGameUpdate(guild, appId);
+    appId = providers.steamAppId(appId);
+    const current = store.getGameUpdates(guild.id);
+    if (current.history.some(record => record.appId === appId && record.itemId === item.id && ['delivered', 'recovered'].includes(record.status))) return { alreadyDelivered: true };
+    if (current.subscriptions[appId].pending.some(entry => entry.item.id === item.id && entry.status !== 'pending')) throw new Error('This update has an unresolved delivery. Inspect the channel and use Retry held.');
+    updateSubscriptionState(guild.id, appId, subscription => ({ ...subscription, pending: [{ item, status: 'pending', suppressMention: true }, ...subscription.pending.filter(entry => entry.item.id !== item.id)],
+      seenIds: [...new Set([item.id, ...subscription.seenIds])].slice(0, 500) }));
+    return flushGameUpdates(guild, appId, true, new Set([item.id]));
+  });
+}
+async function retryHeldGameUpdates(guild, appId) {
+  return withGuildLock(guild.id, async () => {
+    appId = providers.steamAppId(appId);
+    updateSubscriptionState(guild.id, appId, subscription => ({ ...subscription, pending: subscription.pending.map(entry => entry.status === 'ambiguous' ? { ...entry, status: 'dispatching', suppressMention: true, retryRequested: true } : entry) }));
+    // Recheck uncertain sends before an explicit retry; never repeat role pings.
+    const subscription = store.getGameUpdates(guild.id).subscriptions[appId];
+    if (!subscription) throw new Error('Game subscription no longer exists.');
+    const retryIds = new Set(subscription.pending.filter(entry => entry.retryRequested).map(entry => entry.item.id));
+    const channel = await validateDestination(guild, { ...subscription, alerts: false });
+    const recent = await channel.messages.fetch({ limit: 100 });
+    for (const entry of subscription.pending.filter(entry => entry.retryRequested)) {
+      const found = recent.find(message => message.author?.id === guild.client.user.id && message.embeds?.some(embed => embed.url === entry.item.url && embed.footer?.text === 'Game Updates · Steam'));
+      if (found) {
+        updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.filter(record => record.item.id !== entry.item.id), lastSuccess: Date.now() }));
+        recordUpdateDelivery(guild.id, appId, entry.item, 'recovered');
+      } else updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: 'pending', suppressMention: true, retryRequested: false } : record) }));
+    }
+    return flushGameUpdates(guild, appId, true, retryIds);
+  });
+}
+Object.assign(module.exports, { saveGameSubscription, configureGameUpdates, removeGameSubscription, updatesQuietNow,
+  processGameUpdates, previewGameUpdate, sendLatestGameUpdate, retryHeldGameUpdates });

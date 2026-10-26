@@ -55,7 +55,7 @@ function assertSupportedEmbedBinding(moduleKey, slot) {
 }
 
 const MODULE_CATALOG = Object.freeze({
-  freeGames: { key: 'freeGames', name: 'Games', icon: '🎮', category: 'Utilities', summary: 'Maintained free-game offers and optional new-offer alerts.', apiBase: '/api/games', dashboardPath: '/games', maturity: 'in_progress', configurable: true },
+  freeGames: { key: 'freeGames', name: 'Games', icon: '🎮', category: 'Utilities', summary: 'Game updates, publisher announcements, free offers and configurable notifications.', apiBase: '/api/games', dashboardPath: '/games', maturity: 'in_progress', configurable: true },
   verification: {
     key: 'verification', name: 'Verification', icon: '\u2705', category: 'Security',
     summary: 'Verify members, assign roles and deploy a custom verification panel.',

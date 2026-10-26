@@ -99,8 +99,8 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
   const back = componentRow(panelButton(page === 'home' ? 'studio' : 'home', '⬅ Back'));
   const nav = componentRow(panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'),
     panelButton('pricing', '💱 Currency'), panelButton('display', '🎨 Display'));
-  const embed = { title: '🎮 Games · Free Games', color: SECTIONS[0].color,
-    description: [notice && escape(notice), c.enabled ? '🟢 Enabled' : '⏸ Paused'].filter(Boolean).join('\n\n'),
+  const embed = { title: page === 'home' ? '🎮 Games' : '🎮 Games · Free Games', color: SECTIONS[0].color,
+    description: [notice && escape(notice), page === 'home' ? 'Free Games: ' + (c.enabled ? 'enabled' : 'paused') + ' · Game Updates: ' + (c.gameUpdates?.enabled ? 'enabled' : 'paused') : c.enabled ? '🟢 Enabled' : '⏸ Paused'].filter(Boolean).join('\n\n'),
     fields: [], footer: { text: 'Goliath Games · Management' }, timestamp: new Date().toISOString() };
   let controls = [];
   if (page === 'delivery') {
@@ -155,7 +155,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
       { name: '🕒 Updates', value: 'Last check: ' + statusTime(c.state.lastCheck) + '\nLast success: ' + statusTime(c.state.lastSuccess), inline: false },
     ];
     if (c.state.error || c.state.warning) embed.fields.push({ name: '⚠ Attention', value: escape(c.state.error || c.state.warning).slice(0, 1024), inline: false });
-    controls = [nav, componentRow(panelButton('preview:0', '👁 Preview'), panelButton('refresh', '🔄 Refresh listing', 1, !c.enabled),
+    controls = [componentRow(panelButton('updates:home:0', '📰 Game Updates')), nav, componentRow(panelButton('preview:0', '👁 Preview'), panelButton('refresh', '🔄 Refresh listing', 1, !c.enabled),
       panelButton('enabled', c.enabled ? 'Pause updates' : 'Enable updates', c.enabled ? 2 : 3),
       panelButton('home', 'Status'))];
   }
@@ -208,7 +208,7 @@ async function handleAdminInteraction(interaction) {
   if (!id.startsWith(PANEL_PREFIX)) return false;
   const action = id.slice(PANEL_PREFIX.length);
   const guild = interaction.guild;
-  const modalOpen = action === 'regional';
+  const modalOpen = action === 'regional' || ['updates:add', 'updates:choose', 'updates:quiet'].includes(action) || /^updates:keywords:\d+$/.test(action);
   if (!modalOpen && !interaction.deferred && !interaction.replied) {
     if (interaction.isModalSubmit?.() && !interaction.isFromMessage?.()) await interaction.deferReply({ flags: 64 });
     else await interaction.deferUpdate();
@@ -226,7 +226,8 @@ async function handleAdminInteraction(interaction) {
       if (modalOpen) await interaction.reply({ ...denied, flags: 64 }); else await reply(denied);
       return true;
     }
-    if (modalOpen) { await interaction.showModal(regionalModal(guild)); return true; }
+    if (action === 'regional') { await interaction.showModal(regionalModal(guild)); return true; }
+    if (action.startsWith('updates:')) return await handleGameUpdatesInteraction(interaction, action.slice(8), reply);
     if (action === 'studio') { await reply(require('../../../core/administration/admin/modules').buildStudioPanel('utilityStudio', member?.displayName || interaction.user.username)); return true; }
     if (/^featured:\d+$/.test(action)) { await reply(await buildFeaturedPanel(guild, Number(action.split(':')[1]))); return true; }
     if (['home', 'delivery', 'filters', 'pricing', 'display'].includes(action)) { await reply(buildAdminPanel(guild, action)); return true; }
@@ -290,3 +291,196 @@ async function handleAdminInteraction(interaction) {
 }
 module.exports = { MODULE_KEY, MODULE_NAME, DEFAULTS, DISPLAY_OPTIONS, PRICE_MODES, getConfig, update, filterOffers, validateSettings, saveSettings,
   applySettings, buildAdminPanel, buildFeaturedPanel, regionalModal, handleAdminInteraction };
+
+
+const UPDATE_DEFAULTS = Object.freeze({ enabled: false, quietStart: null, quietEnd: null, subscriptions: {}, history: [] });
+function getGameUpdates(guildId) {
+  const raw = getModuleSection(guildId, MODULE_KEY, DEFAULTS).gameUpdates || {};
+  return { ...structuredClone(UPDATE_DEFAULTS), ...raw, subscriptions: { ...(raw.subscriptions || {}) }, history: Array.isArray(raw.history) ? raw.history : [] };
+}
+function updateGameUpdates(guildId, fn) {
+  let result;
+  update(guildId, current => {
+    result = fn(getGameUpdates(guildId));
+    return { ...current, gameUpdates: result };
+  });
+  return result;
+}
+function validateUpdateSettings(input, current) {
+  const next = { ...current };
+  if (Object.hasOwn(input, 'enabled')) {
+    if (typeof input.enabled !== 'boolean') throw new Error('Updates enabled must be true or false.');
+    next.enabled = input.enabled;
+  }
+  for (const key of ['quietStart', 'quietEnd']) if (Object.hasOwn(input, key)) {
+    if (input[key] !== null && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(input[key])) throw new Error('Use 24-hour quiet-hour times, such as 22:00.');
+    next[key] = input[key];
+  }
+  if (Boolean(next.quietStart) !== Boolean(next.quietEnd) || (next.quietStart && next.quietStart === next.quietEnd)) throw new Error('Choose different start and end times, or clear both.');
+  return next;
+}
+function keywordList(value) {
+  if (typeof value === 'string') { if (value.length > 500) throw new Error('Keyword list is too long.'); value = value.split(','); }
+  if (!Array.isArray(value) || value.length > 10 || value.some(word => typeof word !== 'string' || word.length > 50)) throw new Error('Use up to ten keywords, separated by commas.');
+  return [...new Set(value.map(word => word.trim().toLowerCase()).filter(Boolean))];
+}
+function normalizeUpdateSubscription(input, previous = {}) {
+  const { steamAppId, UPDATE_CATALOG } = require('./freeGamesProviders');
+  const appId = steamAppId(input.appId || previous.appId);
+  const next = { appId, name: UPDATE_CATALOG.find(game => game.appId === appId)?.name || 'Steam game ' + appId,
+    channelId: null, roleId: null, enabled: false, filter: 'patches', artwork: 'banner', detail: 'compact', includeWords: [], excludeWords: [],
+    seenIds: [], pending: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, ...previous, appId };
+  if (Object.hasOwn(input, 'name')) {
+    if (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 100) throw new Error('Use a game name between 1 and 100 characters.');
+    next.name = input.name.trim();
+  }
+  for (const key of ['channelId', 'roleId']) if (Object.hasOwn(input, key)) {
+    if (input[key] !== null && (typeof input[key] !== 'string' || !/^\d{16,20}$/.test(input[key]))) throw new Error('Choose a valid channel or role.');
+    next[key] = input[key];
+  }
+  if (Object.hasOwn(input, 'enabled')) {
+    if (typeof input.enabled !== 'boolean') throw new Error('Subscription enabled must be true or false.');
+    next.enabled = input.enabled;
+  }
+  for (const [key, values] of Object.entries({ filter: ['all', 'patches', 'announcements'], artwork: ['banner', 'thumbnail', 'hidden'], detail: ['compact', 'detailed'] })) {
+    if (Object.hasOwn(input, key)) { if (!values.includes(input[key])) throw new Error('Invalid ' + key + ' selection.'); next[key] = input[key]; }
+  }
+  for (const key of ['includeWords', 'excludeWords']) if (Object.hasOwn(input, key)) next[key] = keywordList(input[key]);
+  if (next.enabled && !next.channelId) throw new Error('Choose a destination channel before enabling this subscription.');
+  return next;
+}
+function matchesGameUpdate(item, subscription) {
+  if (subscription.filter !== 'all' && item.kind !== subscription.filter) return false;
+  const text = (item.title + ' ' + item.description).toLowerCase();
+  return (!subscription.includeWords.length || subscription.includeWords.some(word => text.includes(word))) &&
+    !subscription.excludeWords.some(word => text.includes(word));
+}
+Object.assign(module.exports, { UPDATE_DEFAULTS, getGameUpdates, updateGameUpdates, validateUpdateSettings, normalizeUpdateSubscription, matchesGameUpdate });
+
+
+function buildUpdatesPanel(guild, page = 0, notice = '') {
+  const config = getGameUpdates(guild.id), { escape, SECTIONS } = require('./freeGamesEmbeds');
+  const subscriptions = Object.values(config.subscriptions).sort((a, b) => a.name.localeCompare(b.name));
+  const pages = Math.max(1, Math.ceil(subscriptions.length / 25)); page = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const embed = { title: '📰 Games · Game Updates', color: SECTIONS[2].color,
+    description: [notice && escape(notice), config.enabled ? '🟢 Automatic updates enabled' : '⏸ Automatic updates paused',
+      'Follow Steam publisher announcements. Choose a game, its destination and the updates you want. New subscriptions start with the next announcement.'].filter(Boolean).join('\n\n'),
+    fields: [{ name: 'Subscriptions', value: subscriptions.length + ' games · ' + subscriptions.filter(sub => sub.enabled).length + ' active', inline: true },
+      { name: 'Quiet hours', value: config.quietStart ? config.quietStart + '–' + config.quietEnd + ' · ' + getConfig(guild.id).timeZone : 'Off', inline: true }],
+    footer: { text: 'Games · Game Updates · ' + (page + 1) + '/' + pages }, timestamp: new Date().toISOString() };
+  const rows = [componentRow(panelButton('updates:toggle', config.enabled ? 'Pause updates' : 'Enable updates', config.enabled ? 2 : 3),
+    panelButton('updates:check', 'Check now'), panelButton('updates:quiet', 'Quiet hours'))];
+  if (subscriptions.length) rows.push(choiceMenu('updates:select', 'Choose a subscribed game', subscriptions.slice(page * 25, page * 25 + 25).map(sub => [sub.appId, (sub.enabled ? '▶ ' : '⏸ ') + sub.name])));
+  rows.push(componentRow(panelButton('updates:catalog', 'Browse games'), panelButton('updates:add', 'Add Steam game')));
+  if (pages > 1) rows.push(componentRow(panelButton('updates:home:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0), panelButton('updates:home:' + (page + 1), 'Next ▶', 2, page === pages - 1)));
+  rows.push(componentRow(panelButton('home', '⬅ Back to Games')));
+  return { content: null, embeds: [embed], components: rows, allowedMentions: { parse: [] } };
+}
+function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
+  const sub = getGameUpdates(guild.id).subscriptions[appId];
+  if (!sub) return buildUpdatesPanel(guild, 0, 'Game subscription no longer exists.');
+  const { escape, SECTIONS } = require('./freeGamesEmbeds');
+  const embed = { title: '📰 ' + sub.name, color: SECTIONS[2].color,
+    description: [notice && escape(notice), sub.enabled ? '▶ Subscription enabled' : '⏸ Subscription paused',
+      sub.error && '⚠ ' + escape(sub.error)].filter(Boolean).join('\n\n'),
+    fields: [{ name: 'Destination', value: sub.channelId ? '<#' + sub.channelId + '>' : 'Choose a channel', inline: true },
+      { name: 'Notification role', value: sub.roleId ? '<@&' + sub.roleId + '>' : 'No role ping', inline: true },
+      { name: 'Updates', value: 'Filter: ' + sub.filter + '\nLast check: ' + statusTime(sub.lastCheck) + '\nLast delivery: ' + statusTime(sub.lastSuccess) + '\nQueued: ' + sub.pending.length, inline: false }],
+    footer: { text: 'Games · Steam publisher announcements' }, timestamp: new Date().toISOString() };
+  const back = componentRow(panelButton('updates:home:0', '⬅ Back'), panelButton('updates:preview:' + appId, 'Preview'),
+    panelButton('updates:send:' + appId, 'Send latest'), panelButton('updates:' + (more ? 'game:' : 'more:') + appId, more ? 'Delivery' : 'Display & filters'));
+  const rows = more ? [
+    choiceMenu('updates:artwork:' + appId, 'Artwork', [['banner', 'Large artwork'], ['thumbnail', 'Thumbnail'], ['hidden', 'No artwork']], [sub.artwork]),
+    choiceMenu('updates:detail:' + appId, 'Text length', [['compact', 'Compact summary'], ['detailed', 'Detailed summary']], [sub.detail]),
+    componentRow(panelButton('updates:keywords:' + appId, 'Keyword filters'), panelButton('updates:retry-view:' + appId, 'Retry held')),
+    back,
+  ] : [
+    componentRow(panelButton('updates:enabled:' + appId, sub.enabled ? 'Pause' : 'Enable', sub.enabled ? 2 : 3), panelButton('updates:remove-view:' + appId, 'Unsubscribe', 4)),
+    componentRow({ type: 8, custom_id: PANEL_PREFIX + 'updates:channel:' + appId, placeholder: 'Destination channel', channel_types: [0, 5], min_values: 0, max_values: 1, ...(sub.channelId ? { default_values: [{ id: sub.channelId, type: 'channel' }] } : {}) }),
+    componentRow({ type: 6, custom_id: PANEL_PREFIX + 'updates:role:' + appId, placeholder: 'Optional notification role', min_values: 0, max_values: 1, ...(sub.roleId ? { default_values: [{ id: sub.roleId, type: 'role' }] } : {}) }),
+    choiceMenu('updates:filter:' + appId, 'Announcement filter', [['patches', 'Patch / update titles'], ['all', 'All publisher announcements'], ['announcements', 'Other announcements']], [sub.filter]),
+    back,
+  ];
+  return { content: null, embeds: [embed], components: rows, allowedMentions: { parse: [] } };
+}
+async function handleGameUpdatesInteraction(i, action, reply) {
+  const guild = i.guild, monitor = require('./freeGamesMonitor'), providers = require('./freeGamesProviders');
+  const [kind, argument] = action.split(':');
+  if (kind === 'home') { await reply(buildUpdatesPanel(guild, Number(argument || 0))); return true; }
+  if (kind === 'game' || kind === 'more') { await reply(buildUpdateSubscriptionPanel(guild, providers.steamAppId(argument), '', kind === 'more')); return true; }
+  if (kind === 'select') { await reply(buildUpdateSubscriptionPanel(guild, providers.steamAppId(i.values[0]))); return true; }
+  if (kind === 'catalog') {
+    const payload = buildUpdatesPanel(guild);
+    payload.embeds[0].description = 'Choose a game, or use Add Steam game for another App ID. Sources are Steam publisher announcements; titles outside Steam need another verified source.';
+    payload.components = [choiceMenu('updates:choose', 'Starter game catalogue', providers.UPDATE_CATALOG.map(game => [game.appId, game.name])),
+      componentRow(panelButton('updates:add', 'Add Steam game'), panelButton('updates:home:0', '⬅ Back'))];
+    await reply(payload); return true;
+  }
+  if (kind === 'add' || kind === 'choose') {
+    const selected = providers.UPDATE_CATALOG.find(game => game.appId === i.values?.[0]);
+    await i.showModal({ custom_id: PANEL_PREFIX + 'updates:add-submit', title: 'Follow a Steam game', components: [
+      componentRow({ type: 4, custom_id: 'appId', label: 'Steam App ID or Steam store URL', style: 1, required: true, max_length: 180, ...(selected ? { value: selected.appId } : {}) }),
+      componentRow({ type: 4, custom_id: 'name', label: 'Game name', style: 1, required: true, max_length: 100, ...(selected ? { value: selected.name } : {}) }),
+    ] }); return true;
+  }
+  if (kind === 'add-submit') {
+    const appId = providers.steamAppId(i.fields.getTextInputValue('appId'));
+    if (getGameUpdates(guild.id).subscriptions[appId]) { await reply(buildUpdateSubscriptionPanel(guild, appId, 'This game is already followed.')); return true; }
+    await monitor.saveGameSubscription(guild, { appId, name: i.fields.getTextInputValue('name'), enabled: false });
+    await reply(buildUpdateSubscriptionPanel(guild, appId, 'Game added. Choose a channel, then enable the subscription.')); return true;
+  }
+  if (kind === 'toggle') {
+    await monitor.configureGameUpdates(guild, { enabled: !getGameUpdates(guild.id).enabled }); await reply(buildUpdatesPanel(guild)); return true;
+  }
+  if (kind === 'check') {
+    const result = await monitor.processGameUpdates(guild);
+    await reply(buildUpdatesPanel(guild, 0, result.skipped ? 'Automatic updates are paused.' : 'Check complete. Delivered ' + result.delivered + ' updates.')); return true;
+  }
+  if (kind === 'quiet') {
+    const c = getGameUpdates(guild.id);
+    await i.showModal({ custom_id: PANEL_PREFIX + 'updates:quiet-submit', title: 'Quiet hours', components: [
+      componentRow({ type: 4, custom_id: 'start', label: 'Start (HH:mm); clear both to disable', style: 1, required: false, max_length: 5, ...(c.quietStart ? { value: c.quietStart } : {}) }),
+      componentRow({ type: 4, custom_id: 'end', label: 'End (HH:mm), using server timezone', style: 1, required: false, max_length: 5, ...(c.quietEnd ? { value: c.quietEnd } : {}) }),
+    ] }); return true;
+  }
+  if (kind === 'quiet-submit') {
+    await monitor.configureGameUpdates(guild, { quietStart: i.fields.getTextInputValue('start').trim() || null, quietEnd: i.fields.getTextInputValue('end').trim() || null });
+    await reply(buildUpdatesPanel(guild, 0, 'Quiet hours saved.')); return true;
+  }
+  const appId = providers.steamAppId(argument), sub = getGameUpdates(guild.id).subscriptions[appId];
+  if (!sub) throw new Error('Choose a current game subscription.');
+  if (kind === 'preview') {
+    const { payload } = await monitor.previewGameUpdate(guild, appId);
+    await reply({ ...payload, content: 'Preview only · no announcement or role notification posted',
+      components: [...payload.components, componentRow(panelButton('updates:game:' + appId, '⬅ Back'))] }); return true;
+  }
+  if (kind === 'send') {
+    const result = await monitor.sendLatestGameUpdate(guild, appId);
+    await reply(buildUpdateSubscriptionPanel(guild, appId, result.alreadyDelivered ? 'The latest matching update was already delivered.' : 'Latest update processed without a role ping.')); return true;
+  }
+  if (kind === 'remove-view' || kind === 'retry-view') {
+    const payload = buildUpdateSubscriptionPanel(guild, appId);
+    payload.embeds[0].description = kind === 'remove-view' ? 'Unsubscribe from this game? Existing messages and delivery history will be kept.' :
+      'Inspect the destination channel first. Retry held checks for an existing message, then retries unresolved deliveries without a role ping.';
+    payload.components = [componentRow(panelButton('updates:' + (kind === 'remove-view' ? 'remove:' : 'retry:') + appId, kind === 'remove-view' ? 'Confirm unsubscribe' : 'Retry held', 4),
+      panelButton('updates:game:' + appId, 'Cancel'))]; await reply(payload); return true;
+  }
+  if (kind === 'remove') { await monitor.removeGameSubscription(guild, appId); await reply(buildUpdatesPanel(guild, 0, 'Game unsubscribed.')); return true; }
+  if (kind === 'retry') { await monitor.retryHeldGameUpdates(guild, appId); await reply(buildUpdateSubscriptionPanel(guild, appId, 'Held deliveries reviewed.')); return true; }
+  if (kind === 'keywords') {
+    await i.showModal({ custom_id: PANEL_PREFIX + 'updates:keywords-submit:' + appId, title: 'Announcement keyword filters', components: [
+      componentRow({ type: 4, custom_id: 'include', label: 'Include any of these (comma-separated)', style: 2, required: false, max_length: 500, ...(sub.includeWords.length ? { value: sub.includeWords.join(', ') } : {}) }),
+      componentRow({ type: 4, custom_id: 'exclude', label: 'Exclude any of these (comma-separated)', style: 2, required: false, max_length: 500, ...(sub.excludeWords.length ? { value: sub.excludeWords.join(', ') } : {}) }),
+    ] }); return true;
+  }
+  let patch = { appId };
+  if (kind === 'keywords-submit') { patch.includeWords = i.fields.getTextInputValue('include'); patch.excludeWords = i.fields.getTextInputValue('exclude'); }
+  else if (kind === 'enabled') patch.enabled = !sub.enabled;
+  else if (kind === 'channel') patch.channelId = i.values?.[0] || null;
+  else if (kind === 'role') patch.roleId = i.values?.[0] || null;
+  else if (['filter', 'artwork', 'detail'].includes(kind)) patch[kind] = i.values[0];
+  else throw new Error('Unknown Game Updates control.');
+  await monitor.saveGameSubscription(guild, patch);
+  await reply(buildUpdateSubscriptionPanel(guild, appId, 'Settings saved.', ['keywords-submit', 'artwork', 'detail'].includes(kind))); return true;
+}
+Object.assign(module.exports, { buildUpdatesPanel, buildUpdateSubscriptionPanel });

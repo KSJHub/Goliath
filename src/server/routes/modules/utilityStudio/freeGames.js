@@ -44,7 +44,7 @@ router.get('/:guildId', async (req, res) => {
     const config = freeGames.getConfig(guild.id);
     const { featuredCandidates, shortTitle } = require('../../../../modules/utilityStudio/games/freeGamesEmbeds');
     const featuredChoices = await getOffers().then(feed => featuredCandidates(freeGames.filterOffers(feed.offers, config), config).map(offer => ({ id: offer.id, name: shortTitle(offer.title) }))).catch(() => []);
-    return res.json({ success: true, config, featuredChoices, stores: STORES, types: TYPES, currencies: CURRENCIES, timeZones: Intl.supportedValuesOf('timeZone'), channels: orderListingChannels(guild), roles: [...guild.roles.cache.values()].filter((role) => role.id !== guild.id && !role.managed).sort((a, b) => b.position - a.position).map(({ id, name }) => ({ id, name })) });
+    return res.json({ success: true, config, updates: freeGames.getGameUpdates(guild.id), updateCatalog: require('../../../../modules/utilityStudio/games/freeGamesProviders').UPDATE_CATALOG, featuredChoices, stores: STORES, types: TYPES, currencies: CURRENCIES, timeZones: Intl.supportedValuesOf('timeZone'), channels: orderListingChannels(guild), roles: [...guild.roles.cache.values()].filter((role) => role.id !== guild.id && !role.managed).sort((a, b) => b.position - a.position).map(({ id, name }) => ({ id, name })) });
   } catch (error) { res.status(400).json({ success: false, error: error.message }); }
 });
 router.post('/:guildId/preview', async (req, res) => {
@@ -71,5 +71,35 @@ router.post('/:guildId/refresh', async (req, res) => {
   try { return res.json({ success: true, result: await monitor.processGuild(req.freeGamesGuild), config: freeGames.getConfig(req.freeGamesGuild.id) }); }
   catch (error) { res.status(400).json({ success: false, error: error.message }); }
 });
+
+router.patch('/:guildId/updates/settings', async (req, res) => {
+  try { res.json({ success: true, updates: await monitor.configureGameUpdates(req.freeGamesGuild, req.body || {}) }); }
+  catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
+router.post('/:guildId/updates/subscriptions', async (req, res) => {
+  try { res.json({ success: true, updates: await monitor.saveGameSubscription(req.freeGamesGuild, req.body || {}) }); }
+  catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
+router.delete('/:guildId/updates/subscriptions/:appId', async (req, res) => {
+  try { res.json({ success: true, updates: await monitor.removeGameSubscription(req.freeGamesGuild, req.params.appId) }); }
+  catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
+router.post('/:guildId/updates/:appId/preview', async (req, res) => {
+  try { res.json({ success: true, ...(await monitor.previewGameUpdate(req.freeGamesGuild, req.params.appId)) }); }
+  catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
+router.post('/:guildId/updates/:appId/send-latest', async (req, res) => {
+  try { res.json({ success: true, result: await monitor.sendLatestGameUpdate(req.freeGamesGuild, req.params.appId), updates: freeGames.getGameUpdates(req.freeGamesGuild.id) }); }
+  catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
+router.post('/:guildId/updates/:appId/retry', async (req, res) => {
+  try { res.json({ success: true, result: await monitor.retryHeldGameUpdates(req.freeGamesGuild, req.params.appId), updates: freeGames.getGameUpdates(req.freeGamesGuild.id) }); }
+  catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
+router.post('/:guildId/updates/check', async (req, res) => {
+  try { res.json({ success: true, result: await monitor.processGameUpdates(req.freeGamesGuild), updates: freeGames.getGameUpdates(req.freeGamesGuild.id) }); }
+  catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
+
 router.orderListingChannels = orderListingChannels;
 module.exports = router;

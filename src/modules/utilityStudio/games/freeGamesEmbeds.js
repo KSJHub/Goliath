@@ -124,3 +124,22 @@ function buildListing(offers, config, now = Date.now(), platforms = platformPres
 }
 
 module.exports = { NEW_MS, ENDING_MS, SECTIONS, PLATFORM_STYLE, platformPresentation, loadPlatformPresentation, MAIN_STORES, featuredCandidates, selectFeaturedOffer, featuredDescription, escape, line, price, shortTitle, orderedOffers, buildListing };
+
+
+function buildGameUpdate(subscription, item, options = {}) {
+  const { steamArtwork } = require('./freeGamesProviders');
+  const summary = escape(item.description).slice(0, subscription.detail === 'detailed' ? 3000 : 650);
+  const embed = { author: { name: subscription.name.slice(0, 100), url: 'https://store.steampowered.com/app/' + subscription.appId + '/' },
+    title: item.title.slice(0, 200), url: item.url, color: SECTIONS[2].color,
+    description: (summary || 'Read the publisher’s announcement for the full details.') + '\n\n[Read full update](' + item.url + ')',
+    fields: [{ name: 'Source', value: 'Steam publisher announcement', inline: true },
+      { name: 'Feed', value: item.kind === 'patches' ? 'Patch / update title' : 'Announcement', inline: true }],
+    footer: { text: 'Game Updates · Steam' }, timestamp: new Date(item.publishedAt).toISOString() };
+  if (subscription.artwork === 'banner') embed.image = { url: item.image || steamArtwork(subscription.appId) };
+  if (subscription.artwork === 'thumbnail') embed.thumbnail = { url: item.image || steamArtwork(subscription.appId) };
+  const mention = !options.suppressMention && subscription.roleId;
+  return { content: mention ? '<@&' + subscription.roleId + '>' : null, embeds: [embed],
+    components: [{ type: 1, components: [{ type: 2, style: 5, label: 'Read full update', url: item.url }] }],
+    allowedMentions: { parse: [], roles: mention ? [subscription.roleId] : [] } };
+}
+Object.assign(module.exports, { buildGameUpdate });

@@ -90,3 +90,74 @@ async function getOffers() {
   return inFlight;
 }
 module.exports = { CURRENCIES, getPricing, STORES, TYPES, CACHE_MS, safeUrl, normalize, classify, getOffers };
+
+
+// Game Updates uses publisher announcements, independent of the giveaway feed.
+const UPDATE_CATALOG = Object.freeze([
+  ['730', 'Counter-Strike 2'], ['570', 'Dota 2'], ['252490', 'Rust'], ['440', 'Team Fortress 2'],
+  ['892970', 'Valheim'], ['553850', 'HELLDIVERS 2'], ['1086940', "Baldur's Gate 3"],
+  ['1144200', 'Ready or Not'], ['1172470', 'Apex Legends'], ['945360', 'Among Us'],
+  ['1245620', 'ELDEN RING'], ['346110', 'ARK: Survival Evolved'], ['271590', 'Grand Theft Auto V Legacy'],
+  ['990080', 'Hogwarts Legacy'], ['1623730', 'Palworld'], ['1966720', 'Lethal Company'],
+].map(([appId, name]) => Object.freeze({ appId, name, image: steamArtwork(appId) })));
+const newsCache = new Map(), newsFlights = new Map();
+function steamAppId(value) {
+  const raw = String(value || '').trim();
+  let id = raw;
+  if (!/^\d+$/.test(raw)) {
+    let url; try { url = new URL(raw); } catch { throw new Error('Enter a Steam App ID or Steam store game URL.'); }
+    if (url.protocol !== 'https:' || url.hostname !== 'store.steampowered.com' || url.username || url.password) throw new Error('Use an official HTTPS Steam store URL.');
+    id = url.pathname.match(/^\/app\/(\d+)(?:\/|$)/)?.[1] || '';
+  }
+  if (!/^[1-9]\d{0,9}$/.test(id) || Number(id) > 4294967295) throw new Error('Invalid Steam App ID.');
+  return String(Number(id));
+}
+function steamArtwork(appId) { return 'https://cdn.akamai.steamstatic.com/steam/apps/' + steamAppId(appId) + '/header.jpg'; }
+function plainNews(value) {
+  return String(value || '').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/\[url=[^\]]+\]([\s\S]*?)\[\/url\]/gi, '$1').replace(/\[img\][\s\S]*?\[\/img\]/gi, '')
+    .replace(/\[(?:\/?[a-z0-9*]+)(?:=[^\]]*)?\]/gi, ' ').replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ').trim();
+}
+function normalizeNews(row) {
+  if (!row || !/^\d{1,30}$/.test(String(row.gid)) || row.feedname !== 'steam_community_announcements') return null;
+  const url = safeUrl(row.url);
+  if (!url || !['store.steampowered.com', 'steamcommunity.com'].includes(new URL(url).hostname)) return null;
+  const publishedAt = Number(row.date) * 1000;
+  if (!Number.isFinite(publishedAt) || publishedAt < 0 || publishedAt > Date.now() + 86400000) return null;
+  const contents = String(row.contents || '').slice(0, 20000);
+  const sourceImage = contents.match(/\[img\]([\s\S]*?)\[\/img\]/i)?.[1] || contents.match(/<img\b[^>]*src=["']([^"']+)/i)?.[1];
+  const title = plainNews(row.title).slice(0, 200) || 'Game announcement';
+  return { id: String(row.gid), title, url, publishedAt, description: plainNews(contents).slice(0, 3500),
+    image: safeUrl(sourceImage?.replace('{STEAM_CLAN_IMAGE}', 'https://clan.akamai.steamstatic.com/images')),
+    kind: /\b(patch|hotfix|fixes|bugfix|update|changelog)\b/i.test(title) ? 'patches' : 'announcements' };
+}
+async function getGameNews(value) {
+  const appId = steamAppId(value), previous = newsCache.get(appId);
+  if (previous && Date.now() < previous.retryAt) {
+    if (previous.error) throw new Error(previous.error);
+    return previous.value;
+  }
+  if (newsFlights.has(appId)) return newsFlights.get(appId);
+  const task = (async () => {
+    try {
+      const url = 'https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=' + appId + '&count=50&maxlength=5000&feeds=steam_community_announcements';
+      const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Accept: 'application/json' } });
+      if (!response.ok) throw new Error('Steam announcements unavailable (HTTP ' + response.status + ').');
+      const data = await response.json();
+      if (String(data.appnews?.appid) !== appId || !Array.isArray(data.appnews.newsitems)) throw new Error('Steam returned an invalid announcement feed.');
+      const items = [...new Map(data.appnews.newsitems.map(normalizeNews).filter(Boolean).map(item => [item.id, item])).values()]
+        .sort((a, b) => b.publishedAt - a.publishedAt || a.id.localeCompare(b.id));
+      const value = { appId, items, fetchedAt: Date.now() };
+      newsCache.set(appId, { value, retryAt: Date.now() + 5 * 60000 }); return value;
+    } catch (error) {
+      newsCache.set(appId, { error: String(error.message).slice(0, 300), retryAt: Date.now() + 30000 }); throw error;
+    }
+  })().finally(() => newsFlights.delete(appId));
+  newsFlights.set(appId, task);
+  // Cache is shared across guilds, but bounded for servers following different games.
+  if (newsCache.size > 500) newsCache.delete(newsCache.keys().next().value);
+  return task;
+}
+Object.assign(module.exports, { UPDATE_CATALOG, steamAppId, steamArtwork, plainNews, normalizeNews, getGameNews });
