@@ -516,7 +516,7 @@ export default function Appeals() {
 
         <footer aria-label="Portal information" style={{ borderTop: '1px solid rgba(148,163,184,.18)', padding: '22px 4px 4px', color: '#94a3b8', fontSize: 13, lineHeight: 1.6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
-            <div><strong style={{ color: '#cbd5e1' }}>💎 Goliath Member Portal</strong><div>Your account and community information, in one place.</div></div>
+            <div><strong style={{ color: '#cbd5e1' }}>💎 Member Portal</strong><div>Your account and community information, in one place.</div></div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
               <details style={{ maxWidth: 330 }}>
                 <summary style={{ cursor: 'pointer', color: '#cbd5e1', fontWeight: 700 }}>Privacy &amp; security</summary>
