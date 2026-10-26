@@ -516,7 +516,6 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     components.push(new ActionRowBuilder().addComponents(...[['all','All'],['warn','Warnings'],['timeout','Timeouts'],['appeal','Appeals'],['quarantine','Quarantines']].map(([key,label]) =>
       new ButtonBuilder().setCustomId(`mod_cases_filter:${targetId || 'none'}:${key}`).setLabel(label).setStyle(filter === key ? ButtonStyle.Primary : ButtonStyle.Secondary))));
     const controls = [];
-    if (target && canUseModAction(interaction.member, interaction.guild, 'view_cases')) controls.push(new ButtonBuilder().setCustomId(`mod_proceeding_new:${target.id}`).setLabel('➕ New Case').setStyle(ButtonStyle.Secondary));
     if (pages > 1) controls.push(
       new ButtonBuilder().setCustomId(`mod_cases_page:${targetId || 'none'}:${filter}:${page - 1}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
       new ButtonBuilder().setCustomId(`mod_cases_page:${targetId || 'none'}:${filter}:${page + 1}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page === pages - 1));
