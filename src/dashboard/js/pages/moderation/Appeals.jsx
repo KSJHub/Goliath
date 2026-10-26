@@ -364,16 +364,6 @@ export default function Appeals() {
               </div>
               <span style={{ ...pill, marginLeft: 'auto', color: '#bbf7d0' }}>✓ Connected</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 12, marginTop: 16 }}>
-              <div style={{ padding: 16, borderRadius: 14, background: 'rgba(15,23,42,.5)', border: '1px solid rgba(148,163,184,.12)' }}>
-                <strong>🔒 Your privacy</strong>
-                <p style={{ ...muted, margin: '8px 0 0', fontSize: 14 }}>Your portal shows information linked to this account. Private staff notes and internal reviews remain private.</p>
-              </div>
-              <div style={{ padding: 16, borderRadius: 14, background: 'rgba(15,23,42,.5)', border: '1px solid rgba(148,163,184,.12)' }}>
-                <strong>🔄 Need a different account?</strong>
-                <p style={{ ...muted, margin: '8px 0 0', fontSize: 14 }}>Sign out above, then sign in with the account you want to use.</p>
-              </div>
-            </div>
             <MemberCommunityProfile />
           </section>
         ) : null}
@@ -523,6 +513,23 @@ export default function Appeals() {
             <div style={{ marginTop: 16, padding: 13, borderRadius: 12, background: 'rgba(34,197,94,.07)', border: '1px solid rgba(34,197,94,.14)', color: '#d1fae5', fontSize: 14, lineHeight: 1.55 }}>🔒 Your appeal is tied to the Discord account you are currently signed in with.</div>
           </div>
         </section> : null}
+
+        <footer aria-label="Portal information" style={{ borderTop: '1px solid rgba(148,163,184,.18)', padding: '22px 4px 4px', color: '#94a3b8', fontSize: 13, lineHeight: 1.6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+            <div><strong style={{ color: '#cbd5e1' }}>💎 Goliath Member Portal</strong><div>Your account and community information, in one place.</div></div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
+              <details style={{ maxWidth: 330 }}>
+                <summary style={{ cursor: 'pointer', color: '#cbd5e1', fontWeight: 700 }}>Privacy &amp; security</summary>
+                <p style={{ margin: '8px 0 0' }}>Your portal shows information linked to your account. Private staff notes and internal reviews remain private.</p>
+              </details>
+              <details style={{ maxWidth: 330 }}>
+                <summary style={{ cursor: 'pointer', color: '#cbd5e1', fontWeight: 700 }}>Switch account</summary>
+                <p style={{ margin: '8px 0 0' }}>Sign out, then sign in with the account you want to use.</p>
+                <button type="button" style={{ ...secondaryButton, marginTop: 10 }} onClick={async () => { await api.logout().catch(() => null); window.location.reload(); }}>Sign out</button>
+              </details>
+            </div>
+          </div>
+        </footer>
       </div>
     </main>
   );
