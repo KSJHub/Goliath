@@ -848,7 +848,7 @@ async function handleInvestigationRoomControl(interaction) {
             : 'The member’s quarantine restrictions will be lifted and this room will be archived.',
           deleting ? 0xED4245 : 0xFEE75C,
           [{ name: '📄 Final transcript', value: deleting
-            ? 'The investigation transcript will remain saved. If the member hasn’t received their copy, we’ll try to send it by DM before deleting the room.'
+            ? '**Case record:** The transcript remains saved.\n**Member copy:** Sent by DM where possible.'
             : 'Saved automatically and sent to the member by DM.' }], deleting ? '🗑️' : '🔓'),
         components: [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder()
           .setCustomId(`mod_invroom_${action}_confirm:${targetId}:${channelId}`).setLabel(deleting ? 'Confirm Delete' : 'Confirm Close').setStyle(Discord.ButtonStyle.Danger))], flags: 64,
