@@ -3218,14 +3218,19 @@ function fixture(snapshot = {}) {
     f.guild.channels.fetch = async () => room;
     const actor = { id: other, permissions: new PermissionsBitField([P.ManageChannels]) };
     f.guild.members.fetch = async () => actor;
+    let dmFailure = false, dmSends = [];
     let authorised = true, exportFailure = false, deliveryFailure = false, reuseSaved = false, changedAfterExport = false, checks = 0, events = [], replies = [], restores = 0;
     const htmlPath = path.join(temp, 'room.html'), jsonPath = path.join(temp, 'room.json');
-    fs.writeFileSync(htmlPath, '<html>record</html>'); fs.writeFileSync(jsonPath, '{}');
+    fs.writeFileSync(htmlPath, '<html>record</html>'); fs.writeFileSync(jsonPath, JSON.stringify({ ticket: { guildId: f.guild.id, discordChannelId: 'room', creatorId: uid } }));
     const controls = load('src/core/administration/mod/quarantineInteractions.js', {
       '../../../core/ui/interactionResponse': { safeReply: async (i, p) => { replies.push(p); return true; }, safeEditReply: async (i, p) => { replies.push(p); return true; } },
       './permissions': { canUseModAction: () => authorised, recordModerationSystemEvent: () => {}, requireModeratableTarget: async () => f.member },
+      '../../../core/ui/memberNotice': require(root + '/src/core/ui/memberNotice'),
       './storage': {}, './panel': { refreshDashboard: async () => {} }, './investigationAccess': {},
-      '../../security/protection/quarantine': { ...f.api, restoreQuarantinedMember: async () => { restores++; return { success: true }; } },
+      '../../security/protection/quarantine': { ...f.api, restoreQuarantinedMember: async () => { restores++;
+        f.state.archivedRooms = [{ channelId: 'room', memberId: uid, roomTranscript: f.state.users[uid].roomTranscript }];
+        delete f.state.users[uid];
+        return { success: true, archive: { archived: true, channelId: 'room' } }; } },
       '../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: {} }) },
       '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { checkTranscriptCurrent: async (channel, transcript) => ({ current: ++checks === 1 ? reuseSaved && Boolean(transcript) : !changedAfterExport }), createTranscript: async (client, ticket, options) => {
         events.push('export'); if (exportFailure) throw Error('export unavailable');
@@ -3235,7 +3240,7 @@ function fixture(snapshot = {}) {
     });
     const click = async (action, channelId = 'room') => {
       checks = 0;
-      const i = { customId: `mod_invroom_${action}:${uid}:room`, channelId, guild: f.guild, client: {}, user: { id: other },
+      const i = { customId: `mod_invroom_${action}:${uid}:room`, channelId, guild: f.guild, client: { users: { fetch: async id => { assert.equal(id, uid, 'Transcript DM must target the investigated member'); return { send: async payload => { if (dmFailure) throw Object.assign(Error('DM blocked'), { code: 50007 }); dmSends.push(payload); } }; } } }, user: { id: other },
         isButton: () => true, deferReply: async () => { i.deferred = true; },
         editReply: async p => { events.push('deliver'); if (deliveryFailure) throw Error('attachment delivery failed'); replies.push(p); return p; } };
       await controls.handleQuarantineInteraction(i);
@@ -3245,23 +3250,45 @@ function fixture(snapshot = {}) {
     authorised = false; await click('transcript'); assert.deepEqual(events, []);
     authorised = true; await click('transcript'); assert.deepEqual(events, ['export', 'deliver']); assert.equal(replies.at(-1).flags, 64); assert.equal(replies.at(-1).files.length, 2);
     events = []; await click('close_confirm'); assert.equal(restores, 1); assert.deepEqual(events, ['export', 'deliver']);
+    assert.equal(dmSends.length, 1, 'Closing must DM the saved transcript to the member');
+    assert.equal(dmSends[0].files.length, 1, 'Member receives the readable HTML copy');
+    assert.equal(dmSends[0].embeds[0].data.title, '📁 Your Investigation Transcript');
+    assert(!JSON.stringify(dmSends[0].embeds[0].data).includes('Goliath'));
+    assert.equal(f.state.archivedRooms[0].transcriptDelivery.sent, true);
     // Only an archived room may be deleted, and the transcript must be delivered first.
     delete f.state.users[uid]; f.state.archivedRooms = [{ channelId: 'room', memberId: uid }];
     events = []; exportFailure = true; await click('delete_confirm'); assert.deepEqual(events, ['export']);
     events = []; exportFailure = false; deliveryFailure = true; await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver']);
     events = []; deliveryFailure = false; changedAfterExport = true;
-    await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver'], 'New messages after export must block deletion');
+    await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver', 'deliver'], 'New messages after export must block deletion');
     changedAfterExport = false;
-    events = []; await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver', 'delete']); assert(f.state.archivedRooms[0].deletedAt);
+    events = []; await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver', 'deliver', 'delete']); assert(f.state.archivedRooms[0].deletedAt);
     assert(f.state.archivedRooms[0].roomTranscript, 'Deletion must retain its transcript record');
     delete f.state.archivedRooms[0].deletedAt;
     reuseSaved = true; events = [];
     await click('delete_confirm');
     assert.deepEqual(events, ['deliver', 'delete'], 'Unchanged closed rooms must reuse the saved transcript without exporting again');
     assert(!replies.at(-1).files, 'Reused transcripts must not be sent a second time');
+    const dmCount = dmSends.length;
     changedAfterExport = true; events = []; await click('delete_confirm');
     assert.deepEqual(events, ['deliver'], 'A change during reused-transcript deletion must keep the room');
     await click('delete'); assert.equal(replies.at(-1).components[0].components[0].data.label, 'Confirm Delete');
+    assert.equal(dmSends.length, dmCount, 'An unchanged transcript must not be DMed twice');
+    const confirmation = replies.at(-1);
+    assert.equal(confirmation.embeds[0].data.title, '📁 Delete Closed Room?');
+    assert.equal(confirmation.content, null); assert.deepEqual(confirmation.allowedMentions, { parse: [] });
+    assert(!JSON.stringify(confirmation.embeds[0].data).includes('Goliath'));
+    delete f.state.archivedRooms[0].transcriptDelivery;
+    dmFailure = true; changedAfterExport = false; events = []; await click('delete_confirm');
+    assert(events.includes('delete'), 'Blocked DMs must not remove the saved transcript or prevent an authorised deletion');
+    assert.equal(f.state.archivedRooms[0].transcriptDelivery.sent, false);
+    assert(replies.at(-1).embeds[0].data.fields[0].value.includes('could not be delivered'));
+    assert(f.state.archivedRooms[0].roomTranscript);
+    dmFailure = false; delete f.state.archivedRooms[0].transcriptDelivery;
+    fs.writeFileSync(jsonPath, JSON.stringify({ ticket: { guildId: 'different-guild', discordChannelId: 'room', creatorId: other } }));
+    await click('delete_confirm'); assert.equal(dmSends.length, dmCount, 'Mismatched transcript ownership must block DM delivery');
+    assert.equal(f.state.archivedRooms[0].transcriptDelivery.sent, false);
+
 
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 }

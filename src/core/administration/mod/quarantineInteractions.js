@@ -643,7 +643,56 @@ async function submitInvestigationRoomNote(interaction, targetId) {
   return safeEditReply(interaction, { content: `✅ Note added${snapshot.caseId ? ` to **Case #${snapshot.caseId}**` : ''}.`, flags: 64 });
 }
 
-async function removeQuarantine(interaction, targetId) {
+function investigationNotice(interaction, title, description, color, fields = []) {
+  const { buildMemberNotice } = require('../../../core/ui/memberNotice');
+  const payload = buildMemberNotice(interaction.guild, { module: 'Moderation', emoji: '', moduleEmoji: '📁',
+    title, description, color, fields, compactModerationLayout: true });
+  payload.embeds[0].setFooter({ text: 'Private Moderation Review' });
+  return { ...payload, content: null, flags: Discord.MessageFlags.Ephemeral };
+}
+
+async function deliverFinalInvestigationTranscript(interaction, targetId, channelId, transcript) {
+  const engine = require('../../security/protection/quarantine');
+  const state = engine.getQuarantineState(interaction.guild.id);
+  const record = (state.archivedRooms || []).find(room => room.channelId === channelId && room.memberId === targetId);
+  if (!record || !transcript) return { sent: false, reason: 'No saved transcript is available for delivery.' };
+  const previous = record.transcriptDelivery;
+  if (previous?.sent && previous.recipientId === targetId && previous.jsonPath === transcript.jsonPath) return { ...previous, reused: true };
+  let delivery;
+  try {
+    const fs = require('node:fs');
+    const saved = JSON.parse(fs.readFileSync(transcript.jsonPath, 'utf8'));
+    if (String(saved.ticket?.guildId) !== String(interaction.guild.id)
+      || String(saved.ticket?.discordChannelId) !== String(channelId)
+      || String(saved.ticket?.creatorId) !== String(targetId)) throw Error('Transcript ownership could not be verified.');
+    if (fs.statSync(transcript.htmlPath).size > 8_000_000) throw Error('The transcript is too large to send by DM.');
+    const user = await (interaction.client || interaction.guild.client).users.fetch(targetId);
+    const payload = investigationNotice(interaction, 'Your Investigation Transcript',
+      'Your investigation has closed. A copy of the conversation from your investigation room is attached.\n\nIf you have any questions, please contact server management.', 0x5865F2,
+      [{ name: '🏠 Server', value: interaction.guild.name || 'Discord Server', inline: true },
+        ...(record.caseId ? [{ name: '📁 Case reference', value: `#${record.caseId}`, inline: true }] : [])]);
+    delete payload.flags; delete payload.content;
+    payload.files = [new Discord.AttachmentBuilder(transcript.htmlPath, { name: transcript.htmlFileName })];
+    await user.send(payload);
+    delivery = { sent: true, sentAt: Date.now(), recipientId: targetId, jsonPath: transcript.jsonPath };
+  } catch (error) {
+    delivery = { sent: false, attemptedAt: Date.now(), recipientId: targetId, jsonPath: transcript.jsonPath,
+      reason: Number(error.code) === 50007 ? 'The member’s DMs are unavailable.' : String(error.message || error).slice(0, 200) };
+  }
+  const latest = engine.getQuarantineState(interaction.guild.id);
+  const current = latest.archivedRooms?.find(room => room.channelId === channelId && room.memberId === targetId);
+  if (current) { current.transcriptDelivery = delivery; engine.saveQuarantineState(interaction.guild, latest); }
+  recordModerationSystemEvent({ interaction, event: 'moderation.investigation.transcript_dm', targetId,
+    metadata: { channelId, sent: delivery.sent, reason: delivery.reason || null } });
+  return delivery;
+}
+
+function transcriptDeliveryText(delivery) {
+  return delivery?.sent ? 'The final transcript was sent to the member by DM.'
+    : 'The transcript could not be delivered by DM. The saved copy is retained for management.';
+}
+
+async function removeQuarantine(interaction, targetId, options = {}) {
   if (!interaction.deferred && !interaction.replied) {
     await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
   }
@@ -721,6 +770,13 @@ async function removeQuarantine(interaction, targetId) {
     }
   }
 
+  const delivery = snapshot.roomTranscript && result.archive?.archived
+    ? await deliverFinalInvestigationTranscript(interaction, targetId, result.archive.channelId, snapshot.roomTranscript) : null;
+  if (options.roomControl) {
+    return safeEditReply(interaction, { ...investigationNotice(interaction, 'Investigation Closed',
+      'The member has been released and the room has been archived.', 0x57F287,
+      [{ name: '📄 Final transcript', value: delivery ? transcriptDeliveryText(delivery) : 'The saved transcript is retained for management.' }]), components: [] });
+  }
   const archiveText = result.archive?.archived && result.archive?.channelId
     ? ` • Interview room archived: <#${result.archive.channelId}>`
     : '';
@@ -787,9 +843,13 @@ async function handleInvestigationRoomControl(interaction) {
       if (action === 'close' && !context.active) throw Error('This investigation is already closed.');
       if (deleting && context.active) throw Error('Close the investigation before deleting its room.');
       return safeEditReply(interaction, {
-        content: deleting
-          ? '🗑️ **Delete this closed room?** This permanently removes the Discord conversation. The transcript saved at closure will be kept. A new copy is saved automatically only if the conversation has changed.'
-          : '🔓 **Close this investigation?** The member will be released and this room will be archived. A transcript is saved automatically.',
+        ...investigationNotice(interaction, deleting ? 'Delete Closed Room?' : 'Close Investigation?',
+          deleting ? 'This permanently removes the room and its Discord conversation. This action cannot be undone.'
+            : 'The member’s quarantine restrictions will be lifted and this room will be archived.',
+          deleting ? 0xED4245 : 0xFEE75C,
+          [{ name: '📄 Final transcript', value: deleting
+            ? 'The saved copy is retained. An updated copy is created only if the conversation has changed.'
+            : 'Saved automatically and sent to the member by DM.' }]),
         components: [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder()
           .setCustomId(`mod_invroom_${action}_confirm:${targetId}:${channelId}`).setLabel(deleting ? 'Confirm Delete' : 'Confirm Close').setStyle(Discord.ButtonStyle.Danger))], flags: 64,
       });
@@ -818,21 +878,23 @@ async function handleInvestigationRoomControl(interaction) {
     const existing = action === 'delete_confirm'
       ? await transcripts.checkTranscriptCurrent(context.channel, saved, transcriptCheck) : { current: false };
     const exported = existing.current ? { transcript: saved } : await exportInvestigationTranscript(interaction, context, targetId);
-    if (existing.current) {
-      await interaction.editReply({ content: '🗑️ Deleting the closed room. Its saved transcript will be retained.', components: [], flags: 64 });
-    } else {
+    if (!existing.current) {
       await interaction.editReply({ content: `📄 **Investigation transcript saved** • ${exported.transcript.messageCount} messages. Attachment links are recorded; the original attachment files are not copied.`, files: exported.files, components: [], flags: 64 });
     }
     if (action === 'close_confirm') {
       // The normal release path rechecks authority, hierarchy and original-role restoration.
       const fresh = await investigationRoomContext(interaction, targetId, channelId, 'remove_quarantine');
       interaction.member = fresh.actor;
-      return removeQuarantine(interaction, targetId);
+      return removeQuarantine(interaction, targetId, { roomControl: true });
     }
     if (action === 'delete_confirm') {
       await investigationRoomContext(interaction, targetId, channelId, 'manage_evidence');
       const engine = require('../../security/protection/quarantine');
       if (Object.values(engine.getQuarantineState(interaction.guild.id).users || {}).some(snapshot => [snapshot.interviewChannelId, snapshot.previousInterviewChannelId].includes(channelId))) throw Error('An active investigation now uses this room. It was not deleted.');
+      const delivery = await deliverFinalInvestigationTranscript(interaction, targetId, channelId, exported.transcript);
+      await interaction.editReply({ ...investigationNotice(interaction, 'Deleting Closed Room',
+        'The room will be removed. Its saved transcript will remain in the case record.', 0xED4245,
+        [{ name: '📄 Member copy', value: transcriptDeliveryText(delivery) }]), components: [] });
       const checked = await transcripts.checkTranscriptCurrent(context.channel, exported.transcript, transcriptCheck);
       if (!checked.current) throw Error('The conversation changed while deletion was being prepared. The room has been kept. Please try deleting it again.');
       await context.channel.delete(`Closed investigation room deleted by ${interaction.user.id}; transcript saved`);
