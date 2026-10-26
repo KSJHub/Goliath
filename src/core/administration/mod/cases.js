@@ -729,38 +729,48 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
 }
 function buildAppealDetailPayload(modCase, appeal) {
   const pending = appeal.status === 'pending';
-  const status = pending ? '⏳ Awaiting Review' : appeal.status === 'approved' ? '✅ Approved' : '❌ Denied';
+  const status = pending ? '⏳ Pending Review' : appeal.status === 'approved' ? '✅ Approved' : '❌ Denied';
+  const originalAction = String(modCase.action || 'case').toUpperCase();
+  const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:f>` : 'Unknown';
+  const reviewed = appeal.reviewedAt ? `<t:${getCaseTimestamp(appeal.reviewedAt)}:f>` : 'Not reviewed';
+  const reviewer = /^\d{15,22}$/.test(String(appeal.reviewedBy || '')) ? `<@${appeal.reviewedBy}>` : 'Not recorded';
   const embed = new EmbedBuilder()
     .setColor(pending ? COLORS.PRIMARY : appeal.status === 'approved' ? COLORS.SUCCESS : COLORS.ERROR)
     .setTitle(`⚖️ Appeal Review • Case #${modCase.caseId}`)
-    .setDescription(`**${String(modCase.action || 'case').toUpperCase()}**  •  ${status}`)
+    .setDescription(`**Original Action:** ${originalAction}\n**Appeal Status:** ${status}`)
     .addFields(
-      { name: '👤 Appellant', value: `<@${appeal.appellantId}>`, inline: true },
-      { name: '📨 Submitted Via', value: String(appeal.source || 'Unknown'), inline: true },
-      { name: '📅 Submitted', value: appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:f>` : 'Unknown', inline: false },
-      { name: '📝 Appeal Grounds', value: String(appeal.grounds || 'No grounds recorded').slice(0, 1024), inline: false }
+      { name: '👤 Appeal Information', value: `**Appellant:** <@${appeal.appellantId}>\n**Submitted:** ${submitted}\n**Source:** ${String(appeal.source || 'Unknown').slice(0, 80)}`, inline: false },
+      { name: '📝 Appeal & Decision', value: [
+        `**Appeal Grounds:**\n${String(appeal.grounds || 'No grounds recorded').slice(0, 650)}`,
+        appeal.requestedResolution ? `**Requested Outcome:**\n${String(appeal.requestedResolution).slice(0, 300)}` : null,
+        !pending ? `**Decision:** ${status}\n**Reviewed By:** ${reviewer}\n**Reviewed On:** ${reviewed}` : null,
+        appeal.reviewNote ? `**Review Rationale:**\n${String(appeal.reviewNote).slice(0, 650)}` : null,
+      ].filter(Boolean).join('\n\n').slice(0, 1024), inline: false }
     );
-  if (appeal.requestedResolution) embed.addFields({ name: '🎯 Requested Outcome', value: String(appeal.requestedResolution).slice(0, 1024), inline: false });
-  if (appeal.reviewNote) embed.addFields({ name: '📋 Review Decision', value: String(appeal.reviewNote).slice(0, 1024), inline: false });
-  if (appeal.remedy) embed.addFields({ name: '🔄 Sanction Reversal', value: `${appeal.remedy.ok ? '✅ Completed' : '⚠️ Requires attention'} • ${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').slice(0, 950)}`, inline: false });
-  if (appeal.notification) embed.addFields({ name: '📨 Decision Notification', value: appeal.notification.sent ? '✅ Sent to member' : `⚠️ Not delivered${appeal.notification.error ? ` • ${String(appeal.notification.error).slice(0, 180)}` : ''}`, inline: false });
+  if (appeal.remedy || appeal.notification) {
+    const details = [];
+    if (appeal.remedy) details.push(`**Sanction Reversal:** ${appeal.remedy.ok ? '✅ Completed' : '⚠️ Requires attention'}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').slice(0, 450)}`);
+    if (appeal.notification) details.push(`**Member Notification:** ${appeal.notification.sent ? '✅ Sent' : '⚠️ Not delivered'}${!appeal.notification.sent && appeal.notification.error ? `\n${String(appeal.notification.error).slice(0, 150)}` : ''}`);
+    embed.addFields({ name: '🔄 Resolution & Notification', value: details.join('\n\n').slice(0, 1024), inline: false });
+  }
   const proceedingExecution = modCase.action === 'case' ? modCase.metadata?.proceeding?.sanctionExecution : null;
   const canRetryRemedy = appeal.status === 'approved' && appeal.remedy?.ok === false && (proceedingExecution?.status === 'reversal_failed' || (proceedingExecution?.status === 'reversing' && appealRemedyIsStale(proceedingExecution)));
-  const decisionButtons = [
-    new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`).setLabel('✅ Approve Appeal').setStyle(ButtonStyle.Success).setDisabled(!pending),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`).setLabel('❌ Deny Appeal').setStyle(ButtonStyle.Danger).setDisabled(!pending),
-  ];
-  if (canRetryRemedy) decisionButtons.push(
-    new ButtonBuilder().setCustomId(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`).setLabel('🔄 Retry Sanction Reversal').setStyle(ButtonStyle.Primary)
-  );
-  const components = [
-    new ActionRowBuilder().addComponents(decisionButtons),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('📁 View Case').setStyle(ButtonStyle.Secondary)
-    ),
-  ];
-  embed.setFooter({ text: `Appeal reference: ${String(appeal.id).slice(0, 70)}` });
+  const components = [];
+  if (pending || canRetryRemedy) {
+    const actions = [];
+    if (pending) actions.push(
+      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`).setLabel('✅ Approve Appeal').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`).setLabel('❌ Deny Appeal').setStyle(ButtonStyle.Danger)
+    );
+    if (canRetryRemedy) actions.push(new ButtonBuilder().setCustomId(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`).setLabel('🔄 Retry Sanction Reversal').setStyle(ButtonStyle.Primary));
+    components.push(new ActionRowBuilder().addComponents(actions));
+  }
+  components.push(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('📁 View Case').setStyle(ButtonStyle.Secondary)
+  ));
+  const footer = `Case #${modCase.caseId} • Appeal ${pending ? 'Pending' : appeal.status === 'approved' ? 'Approved' : 'Denied'}`;
+  embed.setFooter({ text: footer });
   return { embeds: [embed], components };
 }
 function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status: 'pending' }, token = null) {
