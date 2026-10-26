@@ -530,9 +530,9 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
         .setCustomId('mod_appeals_select_filter')
         .setPlaceholder('⚖️ Filter appeals')
         .addOptions(
+          { label: 'All Appeals', value: 'all', description: 'Every submitted appeal', emoji: '📋', default: filter === 'all' },
           { label: 'Pending Review', value: 'pending', description: 'Appeals awaiting a decision', emoji: '📥', default: filter === 'pending' },
-          { label: 'Resolved', value: 'resolved', description: 'Approved and denied appeals', emoji: '✅', default: filter === 'resolved' },
-          { label: 'All Appeals', value: 'all', description: 'Every submitted appeal', emoji: '📋', default: filter === 'all' }
+          { label: 'Resolved', value: 'resolved', description: 'Approved and denied appeals', emoji: '✅', default: filter === 'resolved' }
         )
     ));
     if (data.entries.length) components.push(new ActionRowBuilder().addComponents(data.entries.map(({ case: modCase, appeal }) =>
