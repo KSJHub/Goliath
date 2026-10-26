@@ -287,20 +287,25 @@ function buildActionsEmbed(interaction, target, stats, staffDisplay) {
 
   const highestRole = target.roles?.highest && target.roles.highest.id !== interaction.guild.id ? `${target.roles.highest}` : 'No assigned role';
   const timeout = targetHasActiveTimeout(target) ? `Until ${timestamp(target.communicationDisabledUntilTimestamp, 'f')}` : 'None';
+  const latest = stats?.latestCase;
+  const latestLabel = latest
+    ? `**#${latest.caseId}** • ${String(latest.action || 'Unknown').replace(/-/g, ' ')} • ${getStatusLabel(latest)}\n<t:${Math.floor(new Date(latest.createdAt || Date.now()).getTime() / 1000)}:R>`
+    : 'No cases recorded';
   const embed = baseEmbed(interaction.client, COLORS.PRIMARY)
     .setTitle('🛡️ Moderation Hub')
     .setDescription([
-      `**Member:** ${target.user}  •  \`${target.id}\``,
+      `**Member:** ${target.user}`,
+      `**User ID:** \`${target.id}\``,
       `**Your Role:** ${staffDisplay}`,
       '',
-      'Select a moderation action below, or review this member’s cases and intelligence.',
+      'Choose an action below or review this member’s history.',
     ].join('\n'))
     .addFields(
-      { name: '👤 Member Profile', value: `**Joined:** ${timestamp(target.joinedTimestamp)}\n**Account Age:** ${timestamp(target.user?.createdTimestamp)}\n**Highest Role:** ${highestRole}`, inline: false },
-      { name: '🛡️ Current Status', value: `**Warnings:** ${stats?.warningCount ?? 0}\n**Timeout:** ${timeout}`, inline: true },
-      { name: '📁 Case Records', value: `**Total:** ${stats?.caseCount ?? 0}\n**Latest:** ${stats?.lastCaseSummary || 'None'}`, inline: true },
+      { name: '👤 Member Profile', value: `**Joined:** ${timestamp(target.joinedTimestamp)}\n**Account Created:** ${timestamp(target.user?.createdTimestamp)}\n**Highest Role:** ${highestRole}`, inline: false },
+      { name: '🛡️ Moderation Status', value: `**Warnings:** ${stats?.warningCount ?? 0}  •  **Timeout:** ${timeout}`, inline: false },
+      { name: '📁 Case History', value: `**Total Cases:** ${stats?.caseCount ?? 0}\n**Most Recent:** ${latestLabel}`, inline: false },
     )
-    .setFooter({ text: 'Permissions, hierarchy and confirmation are checked before every action.' });
+    .setFooter({ text: 'All actions require permission and hierarchy checks.' });
   const avatar = target.user?.displayAvatarURL?.({ size: 256 });
   if (avatar) embed.setThumbnail(avatar);
   return embed;
@@ -461,7 +466,7 @@ function buildAnalyticsRows(guild, windowKey, mode = 'overview', moderatorId = n
   rows.push(new ActionRowBuilder().addComponents(windowButtons));
   return rows;
 }
-function buildTargetStats(guildId, target) { if (!target) return { warningCount: undefined, caseCount: undefined, lastCaseSummary: null }; const cases = getCasesForUser(guildId, target.id) || []; return { warningCount: getWarningCountForUser(guildId, target.id), caseCount: getCaseCountForUser(guildId, target.id), lastCaseSummary: cases[0] ? formatCaseSummary(cases[0]) : null }; }
+function buildTargetStats(guildId, target) { if (!target) return { warningCount: undefined, caseCount: undefined, lastCaseSummary: null }; const cases = getCasesForUser(guildId, target.id) || []; return { warningCount: getWarningCountForUser(guildId, target.id), caseCount: getCaseCountForUser(guildId, target.id), lastCaseSummary: cases[0] ? formatCaseSummary(cases[0]) : null, latestCase: cases[0] || null }; }
 function getCasesPageData(guildId, targetId, options = {}) { const actionFilter = options.actionFilter || 'all'; const statusFilter = options.statusFilter || 'all'; const filters = {}; if (actionFilter !== 'all') filters.action = actionFilter; if (statusFilter !== 'all') filters.status = statusFilter; const allCases = getFilteredCases(guildId, targetId, filters) || []; const totalPages = Math.max(1, Math.ceil(allCases.length / CASES_PER_PAGE)); const page = Math.max(0, Math.min(Number(options.page) || 0, totalPages - 1)); return { actionFilter, statusFilter, page, totalPages, pageCases: allCases.slice(page * CASES_PER_PAGE, (page + 1) * CASES_PER_PAGE) }; }
 
 async function buildDashboardPayload(discord, interaction, target, view = DEFAULT_VIEW, options = {}) {
