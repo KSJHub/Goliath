@@ -366,7 +366,7 @@ export default function Cases({ selectedGuild, theme }) {
           <StatGrid min="min(200px, 100%)">
             <SummaryStat theme={theme} label="Total Cases" value={stats.total} accent="#3b82f6" description="Stored moderation records" />
             <SummaryStat theme={theme} label="Active" value={stats.active} accent="#f59e0b" description="Active case records" />
-            <SummaryStat theme={theme} label="Reversed" value={stats.reversed} accent="#22c55e" description="Reversed case records" />
+            <SummaryStat theme={theme} label="Closed" value={stats.reversed} accent="#22c55e" description="Closed case records" />
             <SummaryStat theme={theme} label="Expired" value={stats.expired} accent="#94a3b8" description="Expired case records" />
             <SummaryStat theme={theme} label="Results" value={filteredCases.length} description="Current filtered list" />
           </StatGrid>
