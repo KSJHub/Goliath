@@ -278,7 +278,7 @@ async function runBulkWarn(interaction, member, options) {
 async function runBulkRemoveWarning(interaction, caseIdRaw, options) {
   const caseId = Number(caseIdRaw); const sourceCase = getCaseById(interaction.guild.id, caseId);
   if (!sourceCase || sourceCase.action !== 'warn') throw new Error('Warning case not found.');
-  if (!removeWarningByCaseId(interaction.guild.id, caseId, interaction.user.id)) throw new Error('Warning is already absent or reversed.');
+  if (!removeWarningByCaseId(interaction.guild.id, caseId, interaction.user.id)) throw new Error('Warning has already been removed.');
   const reason = options.reason || `Bulk removed warning from case #${caseId}`;
   const unwindCase = createModerationCase(interaction, sourceCase.userId, 'unwarn', reason, { bulk: true, bulkBatchId: options.bulkBatchId, sourceWarningCaseId: caseId }, { relatedCaseId: caseId, status: 'reversed' });
   const target = await fetchTarget(interaction.guild, sourceCase.userId);
