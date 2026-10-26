@@ -349,7 +349,32 @@ export default function Appeals() {
             </ol> : <p style={muted}>No activity is available to display yet.</p>}
           </section>
         ) : null}
-        {portalTab === 'profile' ? <section style={card}><h2>👤 My Profile</h2><p style={muted}>Discord account: {displayName}</p><p style={muted}>This portal shows information linked to your signed-in Discord account.</p></section> : null}
+        {portalTab === 'profile' ? (
+          <section style={{ ...card, padding: 'clamp(20px, 4vw, 32px)' }}>
+            <div style={{ color: '#60a5fa', fontSize: 12, fontWeight: 900, letterSpacing: '.1em', textTransform: 'uppercase' }}>Your account</div>
+            <h2 style={{ margin: '8px 0 6px', fontSize: 'clamp(24px, 4vw, 30px)' }}>👤 My Profile</h2>
+            <p style={{ ...muted, margin: '0 0 22px' }}>The account connected to your member portal.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: 20, borderRadius: 16, background: 'rgba(2,6,23,.36)', border: '1px solid rgba(148,163,184,.16)' }}>
+              {avatarUrl ? <img src={avatarUrl} alt="" width="64" height="64" style={{ borderRadius: '50%', border: '2px solid rgba(96,165,250,.4)' }} referrerPolicy="no-referrer" /> : <div aria-hidden="true" style={{ width: 64, height: 64, display: 'grid', placeItems: 'center', borderRadius: '50%', background: '#18273c', fontSize: 28 }}>👤</div>}
+              <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                <div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em' }}>Signed in as</div>
+                <strong style={{ display: 'block', marginTop: 4, fontSize: 20 }}>{displayName}</strong>
+                {user?.username && user.username !== displayName ? <div style={{ ...muted, fontSize: 14 }}>@{user.username}</div> : null}
+              </div>
+              <span style={{ ...pill, marginLeft: 'auto', color: '#bbf7d0' }}>✓ Connected</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 12, marginTop: 16 }}>
+              <div style={{ padding: 16, borderRadius: 14, background: 'rgba(15,23,42,.5)', border: '1px solid rgba(148,163,184,.12)' }}>
+                <strong>🔒 Your privacy</strong>
+                <p style={{ ...muted, margin: '8px 0 0', fontSize: 14 }}>Your portal shows information linked to this account. Private staff notes and internal reviews remain private.</p>
+              </div>
+              <div style={{ padding: 16, borderRadius: 14, background: 'rgba(15,23,42,.5)', border: '1px solid rgba(148,163,184,.12)' }}>
+                <strong>🔄 Need a different account?</strong>
+                <p style={{ ...muted, margin: '8px 0 0', fontSize: 14 }}>Sign out above, then sign in with the account you want to use.</p>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         {error ? <div role="alert" style={{ ...card, borderColor: 'rgba(239,68,68,.5)', color: '#fecaca' }}>⚠️ {error}</div> : null}
         {success ? <div role="status" style={{ ...card, borderColor: 'rgba(34,197,94,.48)', color: '#bbf7d0' }}>✓ {success}</div> : null}
@@ -473,7 +498,7 @@ export default function Appeals() {
           </section>
         ) : null}
 
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+        {portalTab !== 'profile' ? <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 12 }}>
           <div style={card}>
             <h3 style={{ marginTop: 0 }}>❓ Appeals Help</h3>
             <details style={{ marginBottom: 10 }}>
@@ -495,7 +520,7 @@ export default function Appeals() {
             <p style={{ ...muted, marginBottom: 0 }}>This page only shows information that is appropriate for you to see about your own cases and appeals. Private moderator notes and internal review material remain private.</p>
             <div style={{ marginTop: 16, padding: 13, borderRadius: 12, background: 'rgba(34,197,94,.07)', border: '1px solid rgba(34,197,94,.14)', color: '#d1fae5', fontSize: 14, lineHeight: 1.55 }}>🔒 Your appeal is tied to the Discord account you are currently signed in with.</div>
           </div>
-        </section>
+        </section> : null}
       </div>
     </main>
   );
