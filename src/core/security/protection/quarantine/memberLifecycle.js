@@ -187,4 +187,29 @@ function attachQuarantineCase(guild, memberId, caseId) {
   return true;
 }
 
-module.exports = { resolveRequestedMode, isAutomatedSecurityRequest, canManuallyUseSecurityIsolation, createQuarantineDryRunResult, getRestorableRoleIds, escalateInvestigationToSecurity, quarantineMember, attachQuarantineCase };
+function reconcileQuarantineCaseLinks(guild) {
+  if (!guild?.id) return { checked: 0, repaired: 0, unresolved: 0 };
+  const { getCaseById, getCasesForUser } = require('../../../administration/mod/storage');
+  const users = getQuarantineState(guild.id).users || {};
+  const result = { checked: 0, repaired: 0, unresolved: 0 };
+  for (const [memberId, snapshot] of Object.entries(users)) {
+    result.checked++;
+    try {
+      const linked = snapshot.caseId ? getCaseById(guild.id, snapshot.caseId) : null;
+      if (linked && String(linked.userId) === String(memberId)) continue;
+      const match = (getCasesForUser(guild.id, memberId) || []).find(record =>
+        String(record.action) === 'quarantine' &&
+        String(record.status) === 'active' &&
+        snapshot.interviewChannelId &&
+        String(record.metadata?.interviewChannelId || '') === String(snapshot.interviewChannelId));
+      if (match && attachQuarantineCase(guild, memberId, match.caseId)) result.repaired++;
+      else result.unresolved++;
+    } catch (error) {
+      result.unresolved++;
+      console.warn('[QuarantineSystem] Case reconciliation failed:', guild.id, memberId, error);
+    }
+  }
+  return result;
+}
+
+module.exports = { resolveRequestedMode, isAutomatedSecurityRequest, canManuallyUseSecurityIsolation, createQuarantineDryRunResult, getRestorableRoleIds, escalateInvestigationToSecurity, quarantineMember, attachQuarantineCase, reconcileQuarantineCaseLinks };
