@@ -828,7 +828,7 @@ async function handleVerificationCases(i) {
  const row=(...buttons)=>new Discord.ActionRowBuilder().addComponents(...buttons);
  const button=(customId,label,style=Discord.ButtonStyle.Secondary)=>new Discord.ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
  const show=async payload=>{if(i.isMessageComponent?.())return i.update(payload);return i.reply({...payload,flags:64});};
- if(id==='mod_verification_cases') return panel.renderDashboard(i, 'none', 'cases', { actionFilter: 'quarantine' });
+ if(id==='mod_verification_cases') return renderDashboard(i, 'none', 'cases', { actionFilter: 'quarantine' });
 
  const parts=id.split(':'),uid=parts[1],action=parts[2],confirm=parts[3];
  if(!/^\\d{15,22}$/.test(uid)||sessions[uid]?.state!=='quarantined')return safeReply(i,{content:'This Verification case is no longer active.',flags:64});
