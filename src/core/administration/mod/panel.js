@@ -483,8 +483,8 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     const sessions = verificationStore.getVerificationSection(guildId)?.sessions || {};
     const quarantines = Object.entries(sessions).filter(([id, session]) => session?.state === 'quarantined' && (!target || id === target.id));
     const appeals = listAppeals(guildId, { status: 'all' }).filter(({ case: entry }) => !target || String(entry?.userId || entry?.user_id || '') === target.id);
-    const records = rawCases.map(entry => ({ type: String(entry.action || 'case').toLowerCase(), userId: String(entry.userId || entry.user_id || ''), reason: String(entry.reason || 'No reason provided'), caseId: entry.caseId, status: String(entry.status || 'active') }))
-      .concat(quarantines.map(([userId, session]) => ({ type: 'quarantine', userId, reason: 'Verification failed · ' + Number(session.failedAttempts || 0) + ' checks', status: 'active', channelId: session.quarantineChannelId })));
+    const records = rawCases.map(entry => ({ type: String(entry.action || 'case').toLowerCase(), userId: String(entry.userId || entry.user_id || ''), reason: String(entry.reason || 'No reason provided'), caseId: entry.caseId, status: String(entry.status || 'active'), source: 'case' }))
+      .concat(quarantines.map(([userId, session]) => ({ type: 'quarantine', userId, reason: 'Verification failed · ' + Number(session.failedAttempts || 0) + ' checks', status: 'active', channelId: session.quarantineChannelId, source: 'verification' })));
     const pendingAppeals = appeals.filter(({ appeal }) => (appeal?.status || 'pending') === 'pending').map(({ case: entry, appeal }) => ({ type: 'appeal', userId: String(entry?.userId || entry?.user_id || ''), caseId: entry?.caseId, reason: String(entry?.reason || 'Moderation appeal awaiting review'), status: 'pending' }));
     records.push(...pendingAppeals);
     const matches = records.filter(entry => filter === 'all' || (filter === 'warn' ? ['warn','warning'].includes(entry.type) : entry.type === filter));
@@ -511,7 +511,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
       .addOptions(shown.length ? shown.map(e => ({
         label: `${e.type.toUpperCase()} · ${e.userId.slice(-6)} · ${e.status}`.slice(0, 100),
         description: e.reason.slice(0, 100),
-        value: e.type === 'quarantine' ? `q:${e.userId}` : `c:${e.caseId}`
+        value: e.source === 'verification' ? `q:${e.userId}` : `c:${e.caseId}`
       })) : [{ label: 'No matching records', value: 'none' }])));
     components.push(new ActionRowBuilder().addComponents(...[['all','All'],['warn','Warnings'],['timeout','Timeouts'],['appeal','Appeals'],['quarantine','Quarantines']].map(([key,label]) =>
       new ButtonBuilder().setCustomId(`mod_cases_filter:${targetId || 'none'}:${key}`).setLabel(label).setStyle(filter === key ? ButtonStyle.Primary : ButtonStyle.Secondary))));
