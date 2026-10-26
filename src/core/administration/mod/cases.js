@@ -649,14 +649,6 @@ function buildAppealDecisionModal(modCase, appeal, decision) {
       )
     );
 }
-function buildAppealQueueFilterModal(token) {
-  return new ModalBuilder().setCustomId(`mod_submit_case_appeal_queue_filter:${token}`).setTitle('Filter Appeals').addComponents(
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('status').setLabel('Status').setStyle(TextInputStyle.Short).setPlaceholder('pending, approved, denied, all').setRequired(false).setMaxLength(10)),
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('user_id').setLabel('User ID').setStyle(TextInputStyle.Short).setPlaceholder('Optional appellant/user ID').setRequired(false).setMaxLength(20)),
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('case_id').setLabel('Case ID').setStyle(TextInputStyle.Short).setPlaceholder('Optional case ID').setRequired(false).setMaxLength(12)),
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('moderator_id').setLabel('Case Moderator ID').setStyle(TextInputStyle.Short).setPlaceholder('Optional moderator ID').setRequired(false).setMaxLength(20))
-  );
-}
 function buildCaseDetailEmbed(modCase) {
   const action = String(modCase.action || 'Case').toUpperCase();
   const status = getStatusLabel(modCase);
@@ -824,8 +816,7 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
   ));
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('mod_dashboard:none:analytics').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_refresh:${activeToken}:${page}`).setLabel('🔄 Refresh').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_filter:${activeToken}`).setLabel('🔎 Advanced Filter').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_refresh:${activeToken}:${page}`).setLabel('🔄 Refresh').setStyle(ButtonStyle.Secondary)
   ));
   return { embeds: [embed], components: rows };
 }
@@ -941,14 +932,6 @@ async function handleCaseAction(interaction, { fetchTarget, createConfirmation }
     state.createdAt = Date.now();
     return interaction.update(buildAppealQueuePayload(interaction.guild.id, pageRaw, state.filters, token));
   }
-  if (id.startsWith('mod_case_appeal_queue_filter:')) {
-    if (!canUseModAction(interaction.member, interaction.guild, 'view_cases')) return safeReply(interaction, ephemeralError('No permission to filter appeals.'));
-    const [, token] = id.split(':');
-    const state = getAppealQueueState(token, interaction.guild.id);
-    if (!state) return safeReply(interaction, ephemeralError('This appeal queue session expired. Open the queue again.'));
-    await interaction.showModal(buildAppealQueueFilterModal(token));
-    return true;
-  }
   if (id.startsWith('mod_case_appeal_queue:')) {
     if (!canUseModAction(interaction.member, interaction.guild, 'view_cases')) return safeReply(interaction, ephemeralError('No permission to view the appeal queue.'));
     const parts = id.split(':');
@@ -1019,30 +1002,8 @@ async function handleCaseAction(interaction, { fetchTarget, createConfirmation }
   return false;
 }
 
-function parseAppealQueueFilters(interaction) {
-  const status = String(interaction.fields.getTextInputValue('status') || 'pending').trim().toLowerCase() || 'pending';
-  const userId = String(interaction.fields.getTextInputValue('user_id') || '').trim();
-  const caseRaw = String(interaction.fields.getTextInputValue('case_id') || '').trim();
-  const moderatorId = String(interaction.fields.getTextInputValue('moderator_id') || '').trim();
-  if (!['pending', 'approved', 'denied', 'all'].includes(status)) return { error: 'Status must be pending, approved, denied, or all.' };
-  if (userId && !/^\d{16,20}$/.test(userId)) return { error: 'User ID is invalid.' };
-  if (moderatorId && !/^\d{16,20}$/.test(moderatorId)) return { error: 'Moderator ID is invalid.' };
-  if (caseRaw && !/^\d{1,12}$/.test(caseRaw)) return { error: 'Case ID is invalid.' };
-  return { filters: { status, userId: userId || undefined, moderatorId: moderatorId || undefined, caseId: caseRaw ? Number(caseRaw) : undefined } };
-}
 async function submitCaseModal(interaction, { fetchTarget, refreshCasesDashboard } = {}) {
   const id = String(interaction.customId || '');
-  if (id.startsWith('mod_submit_case_appeal_queue_filter:')) {
-    if (!canUseModAction(interaction.member, interaction.guild, 'view_cases')) return safeReply(interaction, ephemeralError('No permission to filter appeals.'));
-    const [, token] = id.split(':');
-    const state = getAppealQueueState(token, interaction.guild.id);
-    if (!state) return safeReply(interaction, ephemeralError('This appeal queue session expired. Open the queue again.'));
-    const parsed = parseAppealQueueFilters(interaction);
-    if (parsed.error) return safeReply(interaction, ephemeralError(parsed.error));
-    state.filters = parsed.filters;
-    state.createdAt = Date.now();
-    return safeReply(interaction, { ...buildAppealQueuePayload(interaction.guild.id, 0, state.filters, token), flags: 64 });
-  }
   if (id.startsWith('mod_submit_case_appeal_decision:')) {
     if (!canUseModAction(interaction.member, interaction.guild, 'edit_case')) return safeReply(interaction, ephemeralError('No permission to decide appeals.'));
     const [, caseIdRaw, appealId, decision] = id.split(':');
