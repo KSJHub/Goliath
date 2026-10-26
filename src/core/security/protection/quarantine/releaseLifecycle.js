@@ -134,6 +134,17 @@ async function restoreQuarantinedMember(guild, member, options = {}) {
     const latest = getQuarantineState(guild.id);
     delete latest.users[member.id];
     saveQuarantineState(guild, latest);
+    if (snapshot.caseId) {
+      try {
+        const { getCaseById, updateCaseStatus } = require('../../../administration/mod/storage');
+        const record = getCaseById(guild.id, snapshot.caseId);
+        if (record && String(record.userId) === String(member.id) && String(record.action) === 'quarantine' && String(record.status) === 'active') {
+          updateCaseStatus(guild.id, snapshot.caseId, 'closed', options.restoredBy || options.closedBy || guild.client?.user?.id || null);
+        }
+      } catch (caseError) {
+        console.error('[QuarantineSystem] Failed to close linked restriction case:', caseError);
+      }
+    }
     const verification = await reconcileVerificationRelease(guild, member, options);
     emitCurrentQuarantineState(guild, 'member_restored', { memberId: member.id, mode, restoredRoles: roles.restored.length, skippedRoles: roles.skipped, archive, cleanupPending: archive?.success === false, restoredMemberChannelAllows: memberAccess.restored.length, verificationReconciled: verification?.reconciled === true });
     return { success: true, mode, restoredRoles: roles.restored.length, restoredRoleIds: roles.restored, skippedRoles: roles.skipped, memberAccess, archive, cleanupPending: archive?.success === false, verification };
