@@ -12,7 +12,7 @@ const {
 const { ensureQuarantineRole } = require('./roleManager');
 const { syncQuarantineIsolation, verifyMemberContainment } = require('./isolation');
 const { ensureInvestigationRoomForSnapshot } = require('./investigationRooms');
-const { restoreQuarantinedMember, clearExpiredAbsentMember, retryPendingInvestigationRoomCleanups, tryBeginQuarantineOperation, endQuarantineOperation } = require('./releaseLifecycle');
+const { restoreQuarantinedMember, clearExpiredAbsentMember, retryPendingInvestigationRoomCleanups, tryBeginQuarantineOperation, endQuarantineOperation, cleanupReleasedInvitationDenies } = require('./releaseLifecycle');
 
 async function fetchQuarantineMember(guild, userId) {
   try { return await guild.members.fetch(userId); }
@@ -173,6 +173,8 @@ async function recoverGuildQuarantine(guild) {
       metadata: { phase: 'startup', mode: getQuarantineMode(snapshot), interviewChannelId: operation.interviewChannelId || null },
     });
   }
+  const inviteCleanup = typeof cleanupReleasedInvitationDenies === 'function' ? await cleanupReleasedInvitationDenies(guild) : { cleaned: 0, failed: 0 };
+  if (inviteCleanup.failed) console.warn(`[QuarantineSystem] ${inviteCleanup.failed} temporary room access cleanup(s) require retry.`);
   return { success: failed === 0, active: entries.length, reapplied, restored, cleanupChecked: cleanup.checked, cleanupArchived: cleanup.archived, cleanupFailed: cleanup.failed, failed };
 }
 

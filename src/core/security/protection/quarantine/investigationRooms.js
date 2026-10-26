@@ -117,6 +117,12 @@ async function ensureInvestigationCategory(guild, options = {}) {
   return category;
 }
 
+function getOtherIsolatedMemberIds(guildId, memberId) {
+  const sessions = require('../../../../modules/securityStudio/verificationStore').getVerificationSection(guildId)?.sessions || {};
+  const isolated = id => sessions[id]?.state === 'quarantined' || (sessions[id]?.state === 'review' && Boolean(sessions[id]?.quarantineChannelId));
+  return [...new Set([...Object.keys(getQuarantineState(guildId).users || {}), ...Object.keys(sessions).filter(isolated)])].filter(id => id !== memberId);
+}
+
 async function buildInvestigationRoomOverwrites(guild, member, quarantineRole, options = {}) {
   const botMember = guild.members?.me || await guild.members.fetchMe().catch(() => null);
   if (!botMember) throw new Error('Goliath guild member is unavailable.');
@@ -130,6 +136,55 @@ async function buildInvestigationRoomOverwrites(guild, member, quarantineRole, o
   ];
   if (guild.ownerId && guild.ownerId !== member.id && guild.ownerId !== botMember.id) {
     overwrites.push({ id: guild.ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
+  }
+  if (options.invitationSelection === true) {
+    const sessions = require('../../../../modules/securityStudio/verificationStore').getVerificationSection(guild.id)?.sessions || {};
+    const hasIsolatedVerification = id => sessions[id]?.state === 'quarantined'
+      || (sessions[id]?.state === 'review' && Boolean(sessions[id]?.quarantineChannelId));
+    const selectedUsers = [...new Set((options.invitedUserIds || []).map(String))].filter(id => id !== member.id && id !== botMember.id && id !== guild.ownerId);
+    const selectedRoles = [...new Set((options.invitedRoleIds || []).map(String))];
+    if (selectedUsers.length > 5 || selectedRoles.length > 5) throw new Error('Select up to five members and five roles.');
+    if (selectedRoles.some(id => id === guild.id || id === quarantineRole.id)) throw new Error('The everyone and quarantine roles cannot be invited.');
+    await guild.roles.fetch();
+    for (const id of selectedRoles) {
+      if (!guild.roles.cache.has(id)) throw new Error('A selected role is no longer available. Please choose it again.');
+      overwrites.push({ id, allow: staffAllow });
+    }
+    for (const id of selectedUsers) {
+      if (getQuarantineState(guild.id).users?.[id] || hasIsolatedVerification(id)) throw new Error('A selected member is already quarantined in another case. Their current isolation must be resolved before they can join.');
+      const selected = await guild.members.fetch({ user: id, force: true });
+      if (!selected?.roles?.cache || selected.roles.cache.has(quarantineRole.id) || getQuarantineState(guild.id).users?.[id] || hasIsolatedVerification(id)) throw new Error('A selected member is unavailable or already quarantined.');
+      overwrites.push({ id, allow: memberAllow });
+    }
+    // A role allow overrides the quarantine-role deny in Discord. Explicit member
+    // denies keep every other active case contained, even if roles changed.
+    if (selectedRoles.length) {
+      const otherCases = getOtherIsolatedMemberIds(guild.id, member.id);
+      // Do not assume that every old quarantine has a shared snapshot. A full
+      // member inventory catches unlinked quarantine-role holders before a role
+      // overwrite could bypass their quarantine-role deny.
+      const members = await guild.members.fetch({ force: true });
+      if (!members?.values || !Number.isFinite(members.size)
+        || (Number.isInteger(guild.memberCount) && members.size < guild.memberCount)) throw new Error('The member list could not be fully checked. Invite individual members instead.');
+      for (const current of members.values()) {
+        if (!current.roles?.cache) throw new Error('A member’s roles could not be checked. Invite individual members instead.');
+        if (current.id !== member.id && current.roles.cache.has(quarantineRole.id) && !otherCases.includes(current.id))
+          throw new Error('An isolated member has no linked case. Reconcile that isolation before inviting roles.');
+      }
+      if (!Array.isArray(options.protectedCaseIds) || otherCases.some(id => !options.protectedCaseIds.includes(id)))
+        throw new Error('Another investigation changed while the room was being prepared. Please try again.');
+      for (const id of otherCases) {
+        const other = await guild.members.fetch({ user: id, force: true }).catch(error => {
+          if (Number(error?.code) === 10007) return null;
+          throw error;
+        });
+        if (!other || typeof other.permissions?.has !== 'function') throw new Error('Another isolated member could not be checked. Invite individual members or resolve the isolation first.');
+        if (other.permissions.has(PermissionFlagsBits.Administrator)) throw new Error('Another isolated member has administrator access. Resolve that containment issue before inviting roles.');
+        overwrites.push({ id, deny: [PermissionFlagsBits.ViewChannel] });
+      }
+    }
+    if (overwrites.length > 95) throw new Error('Too many active investigations to safely invite these roles. Invite individual members instead.');
+    return overwrites;
   }
   for (const roleId of getInvestigationStaffRoleIds(guild, options)) {
     if (roleId === quarantineRole.id) continue;
@@ -147,16 +202,21 @@ function investigationRoomControls(memberId, channelId) {
   );
 }
 
-async function notifyInvestigationManagement(channel, memberId, leadId = null) {
+async function notifyInvestigationManagement(channel, memberId, leadId = null, options = {}) {
   const guild = channel.guild;
   await guild.roles.fetch();
-  const roleIds = getInvestigationStaffRoleIds(guild);
-  for (const id of roleIds) await channel.permissionOverwrites.edit(id, investigationStaffOverwrite(), { reason: 'Authorised management investigation access' });
-  const users = [...new Set([guild.ownerId, leadId].filter(id => /^\d{15,25}$/.test(String(id || '')) && id !== memberId))];
+  const roleIds = options.invitationSelection === true
+    ? [...new Set(options.invitedRoleIds || [])].filter(id => guild.roles.cache.has(id)) : getInvestigationStaffRoleIds(guild);
+  if (options.invitationSelection !== true) for (const id of roleIds) await channel.permissionOverwrites.edit(id, investigationStaffOverwrite(), { reason: 'Authorised management investigation access' });
+  const requestedUsers = options.invitationSelection === true ? [leadId, ...(options.invitedUserIds || [])] : [guild.ownerId, leadId];
+  const state = getQuarantineState(guild.id);
+  const users = [...new Set(requestedUsers.filter(id => /^\d{15,25}$/.test(String(id || '')) && id !== memberId && !state.users?.[id]))];
   const bot = guild.members.me || await guild.members.fetchMe();
   const pingRoles = roleIds.filter(id => guild.roles.cache.get(id)?.mentionable || (channel.permissionsFor?.(bot) || bot.permissions).has(PermissionFlagsBits.MentionEveryone));
   await channel.send({
-    content: `🔔 **Management review requested**\n${[...roleIds.map(id => `<@&${id}>`), ...users.map(id => `<@${id}>`)].join(' ')}\nPlease join this room to review the investigation for <@${memberId}>.${pingRoles.length < roleIds.length ? '\nSome management roles cannot be pinged with my current Discord permissions.' : ''}`,
+    content: options.invitationSelection === true
+      ? `🔔 **Investigation room invitation**\n${[...roleIds.map(id => `<@&${id}>`), ...users.map(id => `<@${id}>`)].join(' ')}\nPlease join the investigation room for <@${memberId}>.${pingRoles.length < roleIds.length ? '\nSome selected roles cannot be pinged with my current permissions.' : ''}`
+      : `🔔 **Management review requested**\n${[...roleIds.map(id => `<@&${id}>`), ...users.map(id => `<@${id}>`)].join(' ')}\nPlease join this room to review the investigation for <@${memberId}>.${pingRoles.length < roleIds.length ? '\nSome management roles cannot be pinged with my current Discord permissions.' : ''}`,
     allowedMentions: { parse: [], roles: pingRoles, users },
   });
   return { roleIds, pingedRoleIds: pingRoles, userIds: users };
@@ -165,17 +225,19 @@ async function notifyInvestigationManagement(channel, memberId, leadId = null) {
 async function createInvestigationRoom(guild, member, quarantineRole, options = {}) {
   const category = await ensureInvestigationCategory(guild, options);
   const subjectName = cleanChannelName(member.displayName || member.user?.globalName || member.user?.username || 'member');
+  const overwrites = await buildInvestigationRoomOverwrites(guild, member, quarantineRole, options);
   const channel = await guild.channels.create({
     name: subjectName,
     type: ChannelType.GuildText,
     parent: category.id,
     topic: `Private investigation • Member ${member.id} • ${String(options.reason || 'No reason provided').slice(0, 700)}`,
-    permissionOverwrites: await buildInvestigationRoomOverwrites(guild, member, quarantineRole, options),
+    permissionOverwrites: overwrites,
     reason: `Goliath investigation isolation for ${member.user?.tag || member.id}`,
   });
+  channel.__protectedInvestigationMembers = overwrites.filter(entry => entry.id !== guild.id && entry.id !== quarantineRole.id && entry.deny?.includes(PermissionFlagsBits.ViewChannel)).map(entry => entry.id);
   await channel.send({ ...buildInvestigationRoomPanel(member, channel.id, options), allowedMentions: { parse: [], users: [member.id] } })
     .catch((error) => console.warn(`[QuarantineSystem] Failed to send investigation room intro in ${guild.id}:`, error.message));
-  await notifyInvestigationManagement(channel, member.id, options.quarantinedBy).catch(error => console.warn(`[QuarantineSystem] Management notification failed in ${guild.id}:`, error.message));
+  await notifyInvestigationManagement(channel, member.id, options.quarantinedBy, options).catch(error => console.warn(`[QuarantineSystem] Management notification failed in ${guild.id}:`, error.message));
   return channel;
 }
 
@@ -315,12 +377,25 @@ async function repairInvestigationRoom(guild, member, role, options = {}) {
   }
   if (!channel) {
     if (options.existingRoomOnly) throw new Error('Existing case room is unavailable; reconciliation cannot create a replacement.');
-    channel = await createInvestigationRoom(guild, member, role, { ...options, reason: snapshot?.reason || options.reason });
-    const state = getQuarantineState(guild.id);
-    if (state.users?.[member.id]) {
-      state.users[member.id].interviewChannelId = channel.id;
-      saveQuarantineState(guild, state);
-    }
+    const locks = [];
+    const lifecycle = snapshot.invitationSelection ? require('./releaseLifecycle') : null;
+    try {
+      if (snapshot.invitationSelection) {
+        const others = snapshot.invitedRoleIds?.length ? getOtherIsolatedMemberIds(guild.id, member.id) : [];
+        const ids = [...new Set([...(snapshot.invitedUserIds || []), ...others])].filter(id => id !== member.id);
+        for (const id of ids) {
+          if (!lifecycle.tryBeginQuarantineOperation(guild.id, id)) throw new Error('A selected member or investigation is being updated; room recovery will retry.');
+          locks.push(id);
+        }
+      }
+      channel = await createInvestigationRoom(guild, member, role, { ...options, reason: snapshot?.reason || options.reason, invitationSelection: snapshot.invitationSelection === true, invitedUserIds: snapshot.invitedUserIds || [], invitedRoleIds: snapshot.invitedRoleIds || [], protectedCaseIds: locks });
+      const state = getQuarantineState(guild.id);
+      if (state.users?.[member.id]) {
+        state.users[member.id].interviewChannelId = channel.id;
+        state.users[member.id].protectedInvitationMembers = channel.__protectedInvestigationMembers || [];
+        saveQuarantineState(guild, state);
+      }
+    } finally { for (const id of locks) lifecycle.endQuarantineOperation(guild.id, id); }
   } else {
     await channel.permissionOverwrites.edit(role.id, quarantineDenyOverwrite(), { reason: 'Reasserting investigation quarantine role isolation' });
     await channel.permissionOverwrites.edit(member.id, investigationMemberOverwrite(), { reason: 'Restoring investigation interview access' });
@@ -339,6 +414,7 @@ module.exports = {
   getInvestigationStaffRoleIds,
   ensureInvestigationCategory,
   buildInvestigationRoomOverwrites,
+  getOtherIsolatedMemberIds,
   createInvestigationRoom,
   investigationRoomControls,
   notifyInvestigationManagement,

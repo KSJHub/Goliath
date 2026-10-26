@@ -166,7 +166,79 @@ function createQuarantineCase(interaction, target, mode, reason, result) {
   return created;
 }
 
-async function submitQuarantine(interaction, targetId, requestedMode, legacy = false) {
+const investigationDrafts = new Map();
+const INVESTIGATION_DRAFT_TTL = 15 * 60 * 1000;
+
+function investigationInvitePayload(draft) {
+  const users = new Discord.UserSelectMenuBuilder().setCustomId(`mod_invroom_invite_users:${draft.token}`)
+    .setPlaceholder('Choose individual members (optional)').setMinValues(0).setMaxValues(5);
+  const roles = new Discord.RoleSelectMenuBuilder().setCustomId(`mod_invroom_invite_roles:${draft.token}`)
+    .setPlaceholder('Choose roles (optional)').setMinValues(0).setMaxValues(5);
+  if (draft.userIds.length) users.setDefaultUsers(...draft.userIds);
+  if (draft.roleIds.length) roles.setDefaultRoles(...draft.roleIds);
+  return {
+    content: `🔒 **Who would you like to bring into this investigation?**\nChoose members or roles, or continue without inviting anyone.\n\n**Members:** ${draft.userIds.length} selected • **Roles:** ${draft.roleIds.length} selected`,
+    components: [new Discord.ActionRowBuilder().addComponents(users), new Discord.ActionRowBuilder().addComponents(roles),
+      new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder().setCustomId(`mod_invroom_invite_start:${draft.token}`)
+        .setLabel('Open Investigation').setStyle(Discord.ButtonStyle.Primary),
+      new Discord.ButtonBuilder().setCustomId(`mod_invroom_invite_cancel:${draft.token}`).setLabel('Cancel').setStyle(Discord.ButtonStyle.Secondary))],
+    flags: Discord.MessageFlags.Ephemeral, allowedMentions: { parse: [] },
+  };
+}
+
+async function prepareInvestigationInvites(interaction, targetId, legacy) {
+  // Always create a private reply: modal replies with components may otherwise
+  // be converted into updates of the originating moderation message.
+  if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+  const target = await resolveTarget(interaction, targetId, 'quarantine');
+  if (!target) return safeEditReply(interaction, { content: 'Unable to open this investigation. Check your access and the selected member.', components: [], flags: 64 });
+  const reason = fieldValue(interaction, 'reason');
+  if (!reason) return safeEditReply(interaction, { content: '❌ An investigation reason is required.', flags: 64 });
+  for (const [token, draft] of investigationDrafts) if (draft.expiresAt <= Date.now()) investigationDrafts.delete(token);
+  const token = require('node:crypto').randomBytes(8).toString('hex');
+  const draft = { token, guildId: interaction.guild.id, actorId: interaction.user.id, targetId: target.id,
+    reason, legacy, userIds: [], roleIds: [], expiresAt: Date.now() + INVESTIGATION_DRAFT_TTL };
+  investigationDrafts.set(token, draft);
+  return safeEditReply(interaction, investigationInvitePayload(draft));
+}
+
+async function handleInvestigationInvites(interaction) {
+  const [action, token] = String(interaction.__goliathLegacyRoleBase || interaction.customId || '').split(':');
+  const draft = investigationDrafts.get(token);
+  if (!draft || draft.expiresAt <= Date.now() || draft.guildId !== interaction.guild?.id || draft.actorId !== interaction.user?.id) {
+    if (draft?.expiresAt <= Date.now()) investigationDrafts.delete(token);
+    return safeReply(interaction, { content: 'This investigation setup has expired or belongs to another moderator. Start it again from the member’s moderation panel.', flags: 64 });
+  }
+  await interaction.deferUpdate();
+  const actor = await interaction.guild.members.fetch({ user: interaction.user.id, force: true }).catch(() => null);
+  if (!actor || getQuarantineState(interaction.guild.id).users?.[actor.id] || !canUseModAction(actor, interaction.guild, 'quarantine')) {
+    investigationDrafts.delete(token);
+    return safeEditReply(interaction, { content: 'You no longer have permission to open this investigation.', components: [], flags: 64 });
+  }
+  interaction.member = actor;
+  if (action === 'mod_invroom_invite_cancel') {
+    investigationDrafts.delete(token);
+    return interaction.editReply({ content: 'Investigation setup cancelled.', components: [], allowedMentions: { parse: [] } });
+  }
+  if (action === 'mod_invroom_invite_users' || action === 'mod_invroom_invite_roles') {
+    const key = action.endsWith('_users') ? 'userIds' : 'roleIds';
+    draft[key] = [...new Set((interaction.values || []).map(String))].slice(0, 5);
+    const payload = investigationInvitePayload(draft); delete payload.flags;
+    return interaction.editReply(payload);
+  }
+  if (action !== 'mod_invroom_invite_start') return false;
+  // Consume first to prevent duplicate rooms on repeated clicks.
+  investigationDrafts.delete(token);
+  await interaction.editReply({ content: 'Opening the investigation…', components: [], allowedMentions: { parse: [] } });
+  try {
+    await submitQuarantine(interaction, draft.targetId, QUARANTINE_MODES.INVESTIGATION, draft.legacy, draft);
+  } catch (error) {
+    await safeEditReply(interaction, { content: `⚠️ ${error.message}`, components: [], flags: 64 });
+  }
+  return true;
+}
+
+async function submitQuarantine(interaction, targetId, requestedMode, legacy = false, draft = null) {
   if (requestedMode === QUARANTINE_MODES.SECURITY) {
     return securityMovedToAdmin(interaction, targetId, true);
   }
@@ -174,7 +246,7 @@ async function submitQuarantine(interaction, targetId, requestedMode, legacy = f
   const mode = QUARANTINE_MODES.INVESTIGATION;
   const target = await resolveTarget(interaction, targetId, 'quarantine');
   if (!target) return true;
-  const reason = fieldValue(interaction, 'reason');
+  const reason = draft?.reason || fieldValue(interaction, 'reason');
   if (!reason) return safeReply(interaction, { content: '❌ An investigation reason is required.', flags: 64 });
 
   // Acknowledge first: isolation performs several Discord API writes and may outlive the modal deadline.
@@ -187,6 +259,7 @@ async function submitQuarantine(interaction, targetId, requestedMode, legacy = f
     quarantinedBy: interaction.user.id,
     source: 'moderation',
     mode,
+    ...(draft ? { invitationSelection: true, invitedUserIds: draft.userIds, invitedRoleIds: draft.roleIds } : {}),
   });
 
   if (!result?.success) {
@@ -889,9 +962,11 @@ async function handleInvestigationRoomControl(interaction) {
       if (Date.now() - last < 60000) throw Error('Management was notified recently. Please wait a minute before sending another reminder.');
       for (const [id, at] of managementNotifications) if (Date.now() - at >= 60000) managementNotifications.delete(id);
       managementNotifications.set(key, Date.now());
-      await require('../../security/protection/quarantine/investigationRooms').notifyInvestigationManagement(context.channel, targetId, context.active.quarantinedBy);
+      await require('../../security/protection/quarantine/investigationRooms').notifyInvestigationManagement(context.channel, targetId, context.active.quarantinedBy, context.active);
       recordModerationSystemEvent({ interaction, event: 'moderation.investigation.management_notified', targetId, metadata: { channelId } });
-      return safeEditReply(interaction, { content: '🔔 Management has been notified and authorised management roles have access to this room.', flags: 64 });
+      return safeEditReply(interaction, { content: context.active.invitationSelection === true
+        ? '🔔 The selected room participants have been notified where possible.'
+        : '🔔 Management has been notified and authorised management roles have access to this room.', flags: 64 });
     }
     if (action === 'close_confirm' && !context.active) throw Error('This investigation is already closed.');
     if (action === 'delete_confirm') {
@@ -942,10 +1017,11 @@ async function handleInvestigationRoomControl(interaction) {
 }
 
 async function handleQuarantineInteraction(interaction) {
-  const id = String(interaction?.customId || '');
+  const id = String(interaction?.__goliathLegacyRoleBase || interaction?.customId || '');
   if (!id) return false;
 
   if (interaction.isButton?.()) {
+    if (/^mod_invroom_invite_(start|cancel):/.test(id)) return handleInvestigationInvites(interaction);
     if (/^mod_invroom_(transcript|notify|close|close_confirm|delete|delete_confirm):/.test(id)) return handleInvestigationRoomControl(interaction);
     if (id.startsWith('mod_open_quarantine:')) return openQuarantine(interaction, targetIdFrom(id));
     if (id.startsWith('mod_quarantine_investigation:')) return openInvestigationModal(interaction, targetIdFrom(id));
@@ -959,6 +1035,9 @@ async function handleQuarantineInteraction(interaction) {
     return false;
   }
 
+  if ((interaction.isUserSelectMenu?.() && id.startsWith('mod_invroom_invite_users:'))
+    || (interaction.isRoleSelectMenu?.() && id.startsWith('mod_invroom_invite_roles:'))) return handleInvestigationInvites(interaction);
+
   if (interaction.isChannelSelectMenu?.()) {
     if (id.startsWith('mod_invroom_access_channel:')) {
       return selectInvestigationAccessChannel(interaction);
@@ -968,14 +1047,14 @@ async function handleQuarantineInteraction(interaction) {
   if (interaction.isModalSubmit?.()) {
     if (id.startsWith('mod_invroom_note_submit:')) return submitInvestigationRoomNote(interaction, targetIdFrom(id));
     if (id.startsWith('mod_submit_quarantine_investigation:')) {
-      return submitQuarantine(interaction, targetIdFrom(id), QUARANTINE_MODES.INVESTIGATION, false);
+      return prepareInvestigationInvites(interaction, targetIdFrom(id), false);
     }
     if (id.startsWith('mod_submit_quarantine_security:')) {
       return securityMovedToAdmin(interaction, targetIdFrom(id), true);
     }
     // Legacy quarantine modal submissions are deliberately downgraded to Investigation Isolation.
     if (id.startsWith('mod_submit_quarantine:')) {
-      return submitQuarantine(interaction, targetIdFrom(id), QUARANTINE_MODES.INVESTIGATION, true);
+      return prepareInvestigationInvites(interaction, targetIdFrom(id), true);
     }
   }
 

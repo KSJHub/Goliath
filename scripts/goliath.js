@@ -3180,6 +3180,159 @@ function fixture(snapshot = {}) {
   assert.deepEqual(f.state.users[uid].roles, [originalRole]);
   assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, uid), false);
 }
+// Failed room creation occurs before roles change; original roles must not be rewritten.
+{
+  const f = fixture(); delete f.state.users[uid];
+  f.member.roles.cache = new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]);
+  const locks = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {} });
+  const lifecycle = load(base + 'memberLifecycle.js', { './state': f.api,
+    '../../../../owner/dev/DevOverrideManager': { shouldBlockOwnerDestructiveAction: () => false }, '../core': { canManageTargetMember: () => ({ allowed: true }) },
+    './roleManager': { ensureQuarantineRole: async () => f.role },
+    './isolation': { syncQuarantineIsolation: async () => ({ success: true, memberViewAllowRestores: [] }), verifyMemberContainment: async () => ({ success: true }) },
+    './investigationRooms': { createInvestigationRoom: async () => { throw Error('Selected member is already quarantined'); } }, './releaseLifecycle': locks,
+  });
+  const result = await lifecycle.quarantineMember(f.guild, f.member, { quarantinedBy: 'staff', invitationSelection: true });
+  assert.equal(result.success, false); assert.match(result.error, /already quarantined/);
+  assert.equal(f.mutations.length, 0, 'A failed invitation must never rewrite original roles');
+  assert.equal(f.state.users[uid], undefined);
+}
+// The moderator chooses individual members and roles before quarantine begins.
+{
+  const f = fixture(); delete f.state.users[uid];
+  const invitee = '444444444444444444', roleId = '555555555555555555';
+  const actor = { id: other }; f.guild.members.fetch = async () => actor;
+  const replies = [], locks = [], calls = [];
+  const controls = load('src/core/administration/mod/quarantineInteractions.js', {
+    '../../../core/ui/interactionResponse': { safeReply: async (i, p) => { replies.push(p); return true; }, safeEditReply: async (i, p) => { replies.push(p); return true; } },
+    './permissions': { canUseModAction: () => true, requireModeratableTarget: async () => f.member, recordModerationSystemEvent: () => {} },
+    './storage': {}, './panel': {}, './investigationAccess': {},
+    '../../security/protection/quarantine': { ...f.api, tryBeginQuarantineOperation: (g, id) => { locks.push(['begin', id]); return true; }, endQuarantineOperation: (g, id) => locks.push(['end', id]), quarantineMember: async (g, member, options) => { calls.push(options); return { success: false, reason: 'fixture stop' }; } },
+  });
+  const baseInteraction = { guild: f.guild, user: { id: other }, isModalSubmit: () => true, deferReply: async function (options) { assert.equal(options.flags, 64); this.deferred = true; }, fields: { getTextInputValue: () => 'Review request' }, customId: `mod_submit_quarantine_investigation:${uid}` };
+  await controls.handleQuarantineInteraction(baseInteraction);
+  assert.equal(calls.length, 0, 'A reason submission must not create an investigation yet');
+  assert.equal(baseInteraction.deferred, true, 'The setup must use a private reply rather than update the shared panel');
+  const prompt = replies.at(-1); assert.equal(prompt.flags, 64); assert.equal(prompt.components.length, 3);
+  const token = prompt.components[2].components[0].data.custom_id.split(':')[1];
+  const createInteraction = (action, extras = {}) => ({ customId: `mod_invroom_invite_${action}:${token}`, guild: f.guild, user: { id: other },
+    isButton: () => ['start', 'cancel'].includes(action), isUserSelectMenu: () => action === 'users', isRoleSelectMenu: () => action === 'roles',
+    deferUpdate: async function () { this.deferred = true; }, editReply: async p => { replies.push(p); }, ...extras });
+  await controls.handleQuarantineInteraction(createInteraction('start', { user: { id: invitee } }));
+  assert.equal(calls.length, 0, 'Other users cannot use this moderator’s setup');
+  await controls.handleQuarantineInteraction(createInteraction('users', { values: [invitee] }));
+  await controls.handleQuarantineInteraction(createInteraction('roles', { values: [roleId],
+    customId: `mod_invroom_invite_roles:${token}|grole|select|0`, __goliathLegacyRoleBase: `mod_invroom_invite_roles:${token}` }));
+  const selection = replies.at(-1); selection.components.forEach(row => row.toJSON());
+  assert(selection.content.includes('1 selected'));
+  await controls.handleQuarantineInteraction(createInteraction('start'));
+  assert.equal(calls.length, 1); assert.equal(calls[0].reason, 'Review request');
+  assert.deepEqual(calls[0].invitedUserIds, [invitee]); assert.deepEqual(calls[0].invitedRoleIds, [roleId]); assert.equal(calls[0].invitationSelection, true);
+  assert.deepEqual(locks, [], 'Invitation setup delegates locking to the shared quarantine engine');
+  await controls.handleQuarantineInteraction(createInteraction('start')); assert.equal(calls.length, 1, 'Setup cannot be reused to create another room');
+  await controls.handleQuarantineInteraction({ ...baseInteraction, deferred: false });
+  const secondToken = replies.at(-1).components[2].components[0].data.custom_id.split(':')[1];
+  const emptyStart = createInteraction('start', { customId: `mod_invroom_invite_start:${secondToken}` });
+  await controls.handleQuarantineInteraction(emptyStart);
+  assert.equal(calls.length, 2); assert.deepEqual(calls[1].invitedUserIds, []); assert.deepEqual(calls[1].invitedRoleIds, []);
+  await controls.handleQuarantineInteraction({ ...baseInteraction, deferred: false });
+  const cancelToken = replies.at(-1).components[2].components[0].data.custom_id.split(':')[1];
+  await controls.handleQuarantineInteraction(createInteraction('cancel', { customId: `mod_invroom_invite_cancel:${cancelToken}` }));
+  assert.equal(calls.length, 2, 'Cancelling must not open an investigation');
+
+}
+// Selected roles never give another quarantined member access to this room.
+{
+  const f = fixture(), invitee = '444444444444444444', roleId = '555555555555555555';
+  f.state.users[other] = { memberId: other, roles: [originalRole], interviewChannelId: 'other-room' };
+  f.guild.roles.cache.set(roleId, { id: roleId, permissions: new PermissionsBitField(), mentionable: true });
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }) : new Collection();
+  const verificationSessions = {};
+  const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' },
+    '../../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: verificationSessions }) },
+    './isolation': { investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }) } });
+  const options = { invitationSelection: true, invitedUserIds: [invitee], invitedRoleIds: [roleId], protectedCaseIds: [other] };
+  const overwrites = await rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options);
+  assert(overwrites.find(entry => entry.id === invitee).allow.includes(P.ViewChannel));
+  assert(overwrites.find(entry => entry.id === roleId).allow.includes(P.ViewChannel));
+  assert(overwrites.find(entry => entry.id === other).deny.includes(P.ViewChannel));
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, { ...options, invitedUserIds: [other] }), /already quarantined/);
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, { ...options, invitedRoleIds: [f.guild.id] }), /everyone/);
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, { ...options, invitedRoleIds: [f.role.id] }), /quarantine/);
+  f.guild.members.fetch = async ({ user }) => { if (!user) return new Collection(); if (user === other) throw Error('Member lookup unavailable'); return { id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }; };
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /lookup unavailable/);
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField(user === other ? [P.Administrator] : []) }) : new Collection();
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /administrator access/);
+  f.guild.members.fetch = async ({ user }) => { if (!user) return new Collection(); if (user === other) throw Object.assign(Error('Unknown Member'), { code: 10007 }); return { id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }; };
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /could not be checked/);
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, ...(user === other ? {} : { permissions: new PermissionsBitField() }) }) : new Collection();
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /could not be checked/);
+
+  assert.deepEqual(f.state.users[other].roles, [originalRole]);
+  verificationSessions[invitee] = { state: 'quarantined', quarantineChannelId: 'legacy-room' };
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /already quarantined/, 'Legacy verification isolation must also block invitations');
+  delete verificationSessions[invitee];
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection(user === invitee ? [[f.role.id, f.role]] : []) }, permissions: new PermissionsBitField() }) : new Collection();
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options), /already quarantined/, 'A quarantine role must never be bypassed when the shared snapshot is missing');
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }) : new Collection();
+  verificationSessions['666666666666666666'] = { state: 'quarantined', quarantineChannelId: 'legacy-room' };
+  const legacyProtected = await rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, { ...options, invitedUserIds: [], protectedCaseIds: [other, '666666666666666666'] });
+  assert(legacyProtected.find(entry => entry.id === '666666666666666666').deny.includes(P.ViewChannel), 'Legacy verification cases must also be contained against invited roles');
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }) : new Collection([['orphan', { id: '777777777777777777', roles: { cache: new Collection([[f.role.id, f.role]]) } }]]);
+  await assert.rejects(rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, { ...options, invitedUserIds: [], protectedCaseIds: [other, '666666666666666666'] }), /no linked case/);
+  f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }) : new Collection();
+  const pings = [], writes = [];
+  f.guild.members.me.permissions = new PermissionsBitField();
+  const channel = { guild: f.guild, permissionsFor: () => new PermissionsBitField(), send: async p => pings.push(p), permissionOverwrites: { edit: async id => writes.push(id) } };
+  await rooms.notifyInvestigationManagement(channel, uid, null, options);
+  assert.deepEqual(writes, [], 'Selected role invitations must not grant additional unselected roles');
+  assert.deepEqual(pings[0].allowedMentions.roles, [roleId]); assert.deepEqual(pings[0].allowedMentions.users, [invitee]);
+  assert(pings[0].content.includes('Investigation room invitation'));
+}
+// Temporary denies are tracked while cases are locked and removed only after release.
+{
+  const f = fixture(); delete f.state.users[uid];
+  f.state.users[other] = { memberId: other, mode: 'investigation', roles: [originalRole], interviewChannelId: 'other-room' };
+  f.member.roles.cache = new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]);
+  const locks = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {} });
+  let protectedDuringCreation = false;
+  const selectedInvitee = '777777777777777777';
+  const lifecycle = load(base + 'memberLifecycle.js', { './state': f.api,
+    '../../../../owner/dev/DevOverrideManager': { shouldBlockOwnerDestructiveAction: () => false }, '../core': { canManageTargetMember: () => ({ allowed: true }) },
+    './roleManager': { ensureQuarantineRole: async () => f.role },
+    './isolation': { syncQuarantineIsolation: async () => ({ success: true, memberViewAllowRestores: [] }), verifyMemberContainment: async () => ({ success: true }) },
+    './investigationRooms': { getOtherIsolatedMemberIds: () => [other], createInvestigationRoom: async (g, m, role, opts) => {
+      protectedDuringCreation = locks.isQuarantineReleaseInProgress(g.id, other) && locks.isQuarantineReleaseInProgress(g.id, selectedInvitee);
+      assert.deepEqual(opts.protectedCaseIds, [selectedInvitee, other]); return { id: 'room', __protectedInvestigationMembers: [other] };
+    } }, './releaseLifecycle': locks,
+  });
+  assert.equal(locks.tryBeginQuarantineOperation(f.guild.id, other), true);
+  const busy = await lifecycle.quarantineMember(f.guild, f.member, { invitationSelection: true, invitedRoleIds: [originalRole], invitedUserIds: [selectedInvitee] });
+  assert.equal(busy.success, false); assert.match(busy.error, /being updated/); assert.equal(f.mutations.length, 0);
+  assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, selectedInvitee), false, 'Partial locks must be released after a failure');
+  locks.endQuarantineOperation(f.guild.id, other);
+  assert.equal((await lifecycle.quarantineMember(f.guild, f.member, { invitationSelection: true, invitedRoleIds: [originalRole], invitedUserIds: [selectedInvitee] })).success, true);
+  assert(protectedDuringCreation); assert.deepEqual(f.state.users[uid].protectedInvitationMembers, [other]);
+  assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, other), false);
+  const deleted = [];
+  const channel = { id: 'room', permissionOverwrites: { cache: new Collection([[other, { allow: { bitfield: 0n }, deny: { bitfield: P.ViewChannel } }]]), delete: async id => deleted.push(id) } };
+  f.guild.channels.cache.set('room', channel);
+  f.guild.channels.fetch = async () => channel;
+  const cleanup = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {},
+    '../../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: {} }) } });
+  assert.equal((await cleanup.cleanupReleasedInvitationDenies(f.guild, other)).cleaned, 0, 'An active case retains the isolation deny');
+  delete f.state.users[other];
+  assert.equal((await cleanup.cleanupReleasedInvitationDenies(f.guild, other)).cleaned, 1);
+  assert.deepEqual(deleted, [other]); assert.deepEqual(f.state.users[uid].protectedInvitationMembers, []);
+  f.state.users[uid].protectedInvitationMembers = [other];
+  channel.permissionOverwrites.cache.set(other, { allow: { bitfield: P.SendMessages }, deny: { bitfield: P.ViewChannel } });
+  await cleanup.cleanupReleasedInvitationDenies(f.guild, other);
+  assert.deepEqual(deleted, [other], 'Manually changed overwrites must never be deleted');
+  f.state.users[uid].protectedInvitationMembers = [other];
+  channel.permissionOverwrites.cache.set(other, { allow: { bitfield: 0n }, deny: { bitfield: P.ViewChannel } });
+  channel.permissionOverwrites.delete = async () => { throw Error('temporary failure'); };
+  assert.equal((await cleanup.cleanupReleasedInvitationDenies(f.guild, other)).failed, 1);
+  assert.deepEqual(f.state.users[uid].protectedInvitationMembers, [other], 'Failed cleanups must remain available for restart recovery');
+}
 // Concurrent recovery and stale event snapshots must reuse the canonical room.
 {
   const f = fixture();

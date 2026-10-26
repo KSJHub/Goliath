@@ -19,6 +19,49 @@ const {
 } = require('./isolation');
 const { getRestorableRoleIds } = require('./memberLifecycle');
 
+// Remove only the exact member deny that this system added to another active
+// investigation room. Other manually configured overwrites remain untouched.
+async function cleanupReleasedInvitationDenies(guild, onlyMemberId = null, options = {}) {
+  const state = getQuarantineState(guild.id);
+  const targets = new Set();
+  for (const snapshot of Object.values(state.users || {})) for (const id of snapshot.protectedInvitationMembers || []) if (!onlyMemberId || id === onlyMemberId) targets.add(id);
+  if (!targets.size) return { cleaned: 0, failed: 0 };
+  let sessions;
+  try { sessions = require('../../../../modules/securityStudio/verificationStore').getVerificationSection(guild.id)?.sessions || {}; }
+  catch (error) { return { cleaned: 0, failed: targets.size }; }
+  let cleaned = 0, failed = 0;
+  for (const memberId of targets) {
+    const acquired = options.operationHeld === true || tryBeginQuarantineOperation(guild.id, memberId);
+    if (!acquired) continue;
+    try {
+    if (getQuarantineState(guild.id).users?.[memberId] || sessions[memberId]?.state === 'quarantined'
+      || (sessions[memberId]?.state === 'review' && sessions[memberId]?.quarantineChannelId)) continue;
+    for (const [ownerId, snapshot] of Object.entries(getQuarantineState(guild.id).users || {})) {
+      if (!snapshot.protectedInvitationMembers?.includes(memberId) || !snapshot.interviewChannelId) continue;
+      try {
+        let channel;
+        try { channel = await guild.channels.fetch(snapshot.interviewChannelId, { force: true }); }
+        catch (error) { if (Number(error?.code) !== 10003) throw error; }
+        if (channel && !channel.permissionOverwrites?.cache) throw Error('Room permission overwrites are unavailable.');
+        const overwrite = channel?.permissionOverwrites?.cache?.get(memberId);
+        if (overwrite && (overwrite.allow?.bitfield == null || overwrite.deny?.bitfield == null)) throw Error('Room permission overwrite could not be verified.');
+        if (overwrite && BigInt(overwrite.allow?.bitfield ?? -1) === 0n && BigInt(overwrite.deny?.bitfield ?? -1) === require('discord.js').PermissionFlagsBits.ViewChannel) {
+          await channel.permissionOverwrites.delete(memberId, 'Remove temporary isolation deny after authorised release');
+        }
+        const latest = getQuarantineState(guild.id);
+        const owner = latest.users?.[ownerId];
+        if (owner?.interviewChannelId === snapshot.interviewChannelId) {
+          owner.protectedInvitationMembers = (owner.protectedInvitationMembers || []).filter(id => id !== memberId);
+          saveQuarantineState(guild, latest);
+        }
+        cleaned++;
+      } catch (error) { failed++; console.warn('[QuarantineSystem] Could not remove temporary investigation deny:', error.message); }
+    }
+    } finally { if (!options.operationHeld) endQuarantineOperation(guild.id, memberId); }
+  }
+  return { cleaned, failed };
+}
+
 async function reconcileVerificationRelease(guild, member, options = {}) {
   try {
     const verificationQuarantine = require('../../../../modules/securityStudio/verificationQuarantine');
@@ -158,8 +201,9 @@ async function restoreQuarantinedMember(guild, member, options = {}) {
       }
     }
     const verification = await reconcileVerificationRelease(guild, member, options);
-    emitCurrentQuarantineState(guild, 'member_restored', { memberId: member.id, mode, restoredRoles: roles.restored.length, skippedRoles: roles.skipped, archive, cleanupPending: archive?.success === false, restoredMemberChannelAllows: memberAccess.restored.length, verificationReconciled: verification?.reconciled === true });
-    return { success: true, mode, restoredRoles: roles.restored.length, restoredRoleIds: roles.restored, skippedRoles: roles.skipped, memberAccess, archive, cleanupPending: archive?.success === false, verification };
+    const invitationCleanup = await cleanupReleasedInvitationDenies(guild, member.id, { operationHeld: true });
+    emitCurrentQuarantineState(guild, 'member_restored', { memberId: member.id, mode, restoredRoles: roles.restored.length, skippedRoles: roles.skipped, archive, cleanupPending: archive?.success === false, restoredMemberChannelAllows: memberAccess.restored.length, invitationCleanup, verificationReconciled: verification?.reconciled === true });
+    return { success: true, mode, restoredRoles: roles.restored.length, restoredRoleIds: roles.restored, skippedRoles: roles.skipped, memberAccess, archive, cleanupPending: archive?.success === false, invitationCleanup, verification };
   } catch (error) { return { success: false, mode, error: error.message }; }
   finally { releasesInProgress.delete(releaseKey); }
 }
@@ -180,4 +224,4 @@ async function clearExpiredAbsentMember(guild, userId, state) {
   return { success: true, cleared: true, memberAccess, archive };
 }
 
-module.exports = { tryBeginQuarantineOperation, endQuarantineOperation, isQuarantineReleaseInProgress, archiveInvestigationRoom, retryPendingInvestigationRoomCleanups, restoreQuarantinedMember, clearExpiredAbsentMember };
+module.exports = { cleanupReleasedInvitationDenies, tryBeginQuarantineOperation, endQuarantineOperation, isQuarantineReleaseInProgress, archiveInvestigationRoom, retryPendingInvestigationRoomCleanups, restoreQuarantinedMember, clearExpiredAbsentMember };

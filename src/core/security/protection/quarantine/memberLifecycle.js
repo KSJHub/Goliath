@@ -120,20 +120,32 @@ async function quarantineMember(guild, member, options = {}) {
 
   const { tryBeginQuarantineOperation, endQuarantineOperation } = require('./releaseLifecycle');
   if (!tryBeginQuarantineOperation(guild.id, member.id)) return { success: false, busy: true, reason: 'Quarantine operation already in progress.' };
-  let interviewRoom = null; let snapshotRoles = []; let snapshotCaptured = false; let isolation = null; let quarantineRole = null;
+  let interviewRoom = null; let snapshotRoles = []; let snapshotCaptured = false; let rolesAttempted = false; let isolation = null; let quarantineRole = null;
+  const protectedLocks = [];
   try {
+    if (mode === QUARANTINE_MODES.INVESTIGATION && options.invitationSelection === true) {
+      const { getOtherIsolatedMemberIds } = require('./investigationRooms');
+      const otherCases = options.invitedRoleIds?.length ? getOtherIsolatedMemberIds(guild.id, member.id) : [];
+      const ids = [...new Set([...(options.invitedUserIds || []), ...otherCases])].filter(id => id !== member.id);
+      for (const id of ids) {
+        if (!tryBeginQuarantineOperation(guild.id, id)) throw new Error('A selected member or another investigation is being updated. Please try again shortly.');
+        protectedLocks.push(id);
+      }
+      options = { ...options, protectedCaseIds: protectedLocks };
+    }
     quarantineRole = await ensureQuarantineRole(guild, options);
     isolation = await syncQuarantineIsolation(guild, { ...options, role: quarantineRole, targetMemberId: member.id });
     if (!isolation.success) return { success: false, mode, reason: `Quarantine isolation could not be guaranteed: ${isolation.reason || `${isolation.failed} channel(s) failed`}`, isolation };
     snapshotRoles = member.roles.cache.filter((entry) => entry.id !== guild.id && entry.id !== quarantineRole.id).map((entry) => entry.id);
     snapshotCaptured = true;
     if (mode === QUARANTINE_MODES.INVESTIGATION) interviewRoom = await createInvestigationRoom(guild, member, quarantineRole, options).catch((error) => { throw new Error(`Investigation room could not be created: ${error.message}`); });
+    rolesAttempted = true;
     await member.roles.set([quarantineRole.id], options.reason || 'Goliath quarantine applied.');
     const verification = await verifyMemberContainment(guild, member, mode === QUARANTINE_MODES.INVESTIGATION && interviewRoom ? [interviewRoom.id] : []);
     if (!verification.success) throw new Error(`Containment verification failed: ${verification.leaks.length} channel(s) remain visible (${verification.leaks.slice(0, 3).map((entry) => entry.channelName || entry.channelId).join(', ')}).`);
     const state = getQuarantineState(guild.id);
     state.roleId = quarantineRole.id; state.roleName = quarantineRole.name;
-    state.users[member.id] = { memberId: member.id, memberTag: member.user?.tag || null, mode, quarantinedAt: Date.now(), reason: options.reason || 'No reason provided', roles: snapshotRoles, memberViewAllowRestores: isolation.memberViewAllowRestores || [], quarantinedBy: options.quarantinedBy || null, source: options.source || (options.quarantinedBy === 'anti_nuke' ? 'anti_nuke' : 'moderation'), caseId: options.caseId || null, interviewChannelId: interviewRoom?.id || null, autoRelease: options.autoRelease === true && isAutomatedSecurityRequest(options), expiresAt: options.durationMs && Number(options.durationMs) > 0 ? Date.now() + Number(options.durationMs) : null };
+    state.users[member.id] = { memberId: member.id, memberTag: member.user?.tag || null, mode, quarantinedAt: Date.now(), reason: options.reason || 'No reason provided', roles: snapshotRoles, memberViewAllowRestores: isolation.memberViewAllowRestores || [], quarantinedBy: options.quarantinedBy || null, source: options.source || (options.quarantinedBy === 'anti_nuke' ? 'anti_nuke' : 'moderation'), caseId: options.caseId || null, interviewChannelId: interviewRoom?.id || null, ...(options.invitationSelection === true ? { invitationSelection: true, invitedUserIds: [...new Set(options.invitedUserIds || [])], invitedRoleIds: [...new Set(options.invitedRoleIds || [])], protectedInvitationMembers: interviewRoom?.__protectedInvestigationMembers || [] } : {}), autoRelease: options.autoRelease === true && isAutomatedSecurityRequest(options), expiresAt: options.durationMs && Number(options.durationMs) > 0 ? Date.now() + Number(options.durationMs) : null };
     saveQuarantineState(guild, state);
     // Link to an existing case before creating another. A room ID identifies the
     // investigation across retries; a member can have unrelated historical cases.
@@ -167,14 +179,14 @@ async function quarantineMember(guild, member, options = {}) {
     return { success: true, mode, roleId: quarantineRole.id, interviewChannelId: interviewRoom?.id || null, snapshotRoles, isolation, verification };
   } catch (error) {
     const rollback = { roles: null, memberAccess: null, roomDeleted: false };
-    if (snapshotCaptured && quarantineRole) {
+    if (snapshotCaptured && rolesAttempted && quarantineRole) {
       const manageable = await getRestorableRoleIds(guild, snapshotRoles, quarantineRole.id);
       rollback.roles = await member.roles.set(manageable.restored, 'Rolling back failed quarantine transaction').then(() => ({ success: true, restored: manageable.restored, skipped: manageable.skipped })).catch((roleError) => ({ success: false, error: String(roleError?.message || roleError), skipped: manageable.skipped }));
     }
     if (interviewRoom) rollback.roomDeleted = await interviewRoom.delete('Rolling back failed investigation isolation').then(() => true).catch(() => false);
     if (isolation?.memberViewAllowRestores?.length) rollback.memberAccess = await restoreMemberViewAllows(guild, member.id, isolation.memberViewAllowRestores, { reason: 'Rolling back failed quarantine transaction' });
     return { success: false, mode, error: error.message, rollback };
-  } finally { endQuarantineOperation(guild.id, member.id); }
+  } finally { for (const id of protectedLocks) endQuarantineOperation(guild.id, id); endQuarantineOperation(guild.id, member.id); }
 }
 
 function attachQuarantineCase(guild, memberId, caseId) {
