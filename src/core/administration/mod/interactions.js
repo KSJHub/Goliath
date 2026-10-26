@@ -866,13 +866,13 @@ async function routeButtonsAndSelects(i) {
     const value = String(i.values?.[0] || '');
     const row = (...buttons) => new Discord.ActionRowBuilder().addComponents(...buttons);
     const button = (id, label) => new Discord.ButtonBuilder().setCustomId(id).setLabel(label).setStyle(Discord.ButtonStyle.Secondary);
-    if (/^q:\\d{15,22}$/.test(value)) {
+    if (/^q:\d{15,22}$/.test(value)) {
       const userId = value.slice(2), session = verificationStore.getVerificationSection(i.guild.id)?.sessions?.[userId];
       if (session?.state !== 'quarantined') return safeReply(i, { content: 'This quarantine is no longer active.', flags: 64 });
       return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0xfee75c).setTitle('🔒 Quarantine Case')
         .setDescription(`**Member:** <@${userId}>\\n**Reason:** Verification security challenge failed\\n**Failed checks:** ${Number(session.failedAttempts || 0)}\\n**Private channel:** ${session.quarantineChannelId ? `<#${session.quarantineChannelId}>` : 'Unavailable'}`)], components: [row(button(`mod_verification_case:${userId}`, 'Review / Decide'), button('mod_dashboard:none:cases', 'Back to Cases'))] });
     }
-    if (/^c:\\d+$/.test(value)) {
+    if (/^c:\d+$/.test(value)) {
       const caseId = Number(value.slice(2)), record = getCaseById(i.guild.id, caseId);
       if (!record) return safeReply(i, { content: 'Case not found.', flags: 64 });
       if (await caseProceeding.handleProceedingInteraction(i)) return true;
