@@ -633,9 +633,24 @@ function buildExternalAppealLookupModal() {
   );
 }
 function buildAppealDecisionModal(modCase, appeal, decision) {
-  return new ModalBuilder().setCustomId(`mod_submit_case_appeal_decision:${modCase.caseId}:${appeal.id}:${decision}`).setTitle(`${decision === 'approved' ? 'Approve' : 'Deny'} Appeal • Case #${modCase.caseId}`).addComponents(
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('review_note').setLabel('Review Rationale').setStyle(TextInputStyle.Paragraph).setPlaceholder('Record why this appeal is being approved or denied').setRequired(true).setMaxLength(1000))
-  );
+  const approving = decision === 'approved';
+  return new ModalBuilder()
+    .setCustomId(`mod_submit_case_appeal_decision:${modCase.caseId}:${appeal.id}:${decision}`)
+    .setTitle(`${approving ? 'Approve' : 'Deny'} Appeal • Case #${modCase.caseId}`)
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('review_note')
+          .setLabel(approving ? 'Reason for Approval' : 'Reason for Denial')
+          .setStyle(TextInputStyle.Paragraph)
+          .setPlaceholder(approving
+            ? 'Explain why the appeal is accepted and what should change.'
+            : 'Explain why the original moderation decision is being upheld.')
+          .setRequired(true)
+          .setMinLength(10)
+          .setMaxLength(1000)
+      )
+    );
 }
 function buildAppealQueueFilterModal(token) {
   return new ModalBuilder().setCustomId(`mod_submit_case_appeal_queue_filter:${token}`).setTitle('Filter Appeals').addComponents(
