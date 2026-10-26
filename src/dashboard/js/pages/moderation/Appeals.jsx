@@ -191,6 +191,7 @@ export default function Appeals() {
 
   function chooseCase(item) {
     if (!item?.eligible || submitting) return;
+    setPortalTab('cases');
     setSelected(item);
     setGrounds('');
     setResolution('');
@@ -375,8 +376,8 @@ export default function Appeals() {
           {!cases.length ? (
             <div style={{ marginTop: 20, border: '1px dashed rgba(148,163,184,.25)', borderRadius: 16, padding: '34px 20px', textAlign: 'center', background: 'rgba(2,6,23,.28)' }}>
               <div style={{ fontSize: 38, marginBottom: 8 }}>📄</div>
-              <h3 style={{ margin: '0 0 8px', fontSize: 20 }}>Nothing to appeal right now</h3>
-              <p style={{ ...muted, maxWidth: 590, margin: '0 auto' }}>There are no decisions currently available to appeal on this Discord account, and you do not have any previous appeals to show.</p>
+              <h3 style={{ margin: '0 0 8px', fontSize: 20 }}>No cases to display</h3>
+              <p style={{ ...muted, maxWidth: 590, margin: '0 auto' }}>There are no member-visible cases or previous appeals to show for this Discord account.</p>
               <p style={{ ...muted, maxWidth: 590, margin: '10px auto 0', fontSize: 14 }}>If you expected to see a case here, check that you signed in with the same Discord account that received the moderation action.</p>
             </div>
           ) : (
