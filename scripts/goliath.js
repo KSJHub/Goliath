@@ -3218,7 +3218,7 @@ function fixture(snapshot = {}) {
     f.guild.channels.fetch = async () => room;
     const actor = { id: other, permissions: new PermissionsBitField([P.ManageChannels]) };
     f.guild.members.fetch = async () => actor;
-    let authorised = true, exportFailure = false, deliveryFailure = false, events = [], replies = [], restores = 0;
+    let authorised = true, exportFailure = false, deliveryFailure = false, reuseSaved = false, changedAfterExport = false, checks = 0, events = [], replies = [], restores = 0;
     const htmlPath = path.join(temp, 'room.html'), jsonPath = path.join(temp, 'room.json');
     fs.writeFileSync(htmlPath, '<html>record</html>'); fs.writeFileSync(jsonPath, '{}');
     const controls = load('src/core/administration/mod/quarantineInteractions.js', {
@@ -3227,13 +3227,14 @@ function fixture(snapshot = {}) {
       './storage': {}, './panel': { refreshDashboard: async () => {} }, './investigationAccess': {},
       '../../security/protection/quarantine': { ...f.api, restoreQuarantinedMember: async () => { restores++; return { success: true }; } },
       '../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: {} }) },
-      '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { createTranscript: async (client, ticket, options) => {
+      '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { checkTranscriptCurrent: async (channel, transcript) => ({ current: ++checks === 1 ? reuseSaved && Boolean(transcript) : !changedAfterExport }), createTranscript: async (client, ticket, options) => {
         events.push('export'); if (exportFailure) throw Error('export unavailable');
         assert.equal(ticket.type, 'investigation'); assert.equal(options.requireComplete, true);
         return { htmlPath, jsonPath, htmlFileName: 'room.html', jsonFileName: 'room.json', messageCount: 2, lastMessageId: null };
       } },
     });
     const click = async (action, channelId = 'room') => {
+      checks = 0;
       const i = { customId: `mod_invroom_${action}:${uid}:room`, channelId, guild: f.guild, client: {}, user: { id: other },
         isButton: () => true, deferReply: async () => { i.deferred = true; },
         editReply: async p => { events.push('deliver'); if (deliveryFailure) throw Error('attachment delivery failed'); replies.push(p); return p; } };
@@ -3248,11 +3249,20 @@ function fixture(snapshot = {}) {
     delete f.state.users[uid]; f.state.archivedRooms = [{ channelId: 'room', memberId: uid }];
     events = []; exportFailure = true; await click('delete_confirm'); assert.deepEqual(events, ['export']);
     events = []; exportFailure = false; deliveryFailure = true; await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver']);
-    events = []; deliveryFailure = false; room.messages.fetch = async () => new Collection([['new', { id: 'new' }]]);
+    events = []; deliveryFailure = false; changedAfterExport = true;
     await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver'], 'New messages after export must block deletion');
-    room.messages.fetch = async () => new Collection();
+    changedAfterExport = false;
     events = []; await click('delete_confirm'); assert.deepEqual(events, ['export', 'deliver', 'delete']); assert(f.state.archivedRooms[0].deletedAt);
     assert(f.state.archivedRooms[0].roomTranscript, 'Deletion must retain its transcript record');
+    delete f.state.archivedRooms[0].deletedAt;
+    reuseSaved = true; events = [];
+    await click('delete_confirm');
+    assert.deepEqual(events, ['deliver', 'delete'], 'Unchanged closed rooms must reuse the saved transcript without exporting again');
+    assert(!replies.at(-1).files, 'Reused transcripts must not be sent a second time');
+    changedAfterExport = true; events = []; await click('delete_confirm');
+    assert.deepEqual(events, ['deliver'], 'A change during reused-transcript deletion must keep the room');
+    await click('delete'); assert.equal(replies.at(-1).components[0].components[0].data.label, 'Confirm Delete');
+
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 }
 // Shared transcript exporter refuses a truncated history and retains normal ticket output.
@@ -3277,6 +3287,25 @@ function fixture(snapshot = {}) {
     const html = fs.readFileSync(result.htmlPath, 'utf8');
     assert(html.includes('Investigation Transcript')); assert(!html.includes('<script>alert(1)</script>')); assert.equal(result.messageCount, 2);
     assert(transcripts.buildHtmlTranscript({ ...ticket, type: 'support' }, transcripts.buildJsonTranscript(ticket, [])).includes('Ticket Transcript'));
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result)).current, true);
+    const closure = message('3');
+    channel.messages.fetch = async () => new Collection([['3', closure], ['2', message('2')], ['1', message('1')]]);
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result)).current, false, 'Added messages require a fresh transcript');
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result, { ignoredMessageIds: ['3'] })).current, true, 'The recorded closure notice alone must not trigger a second export');
+    channel.guild = { client: { user: { id: 'bot' } } };
+    const legacyNotice = { ...message('3'), author: { id: 'bot' }, createdTimestamp: Date.now() + 1000,
+      content: '🔓 **Investigation Closed**\n\nYour investigation has ended, and your quarantine restrictions have been lifted.\n\nIf you need any further help, please contact server management.' };
+    channel.messages.fetch = async () => new Collection([['3', legacyNotice], ['2', message('2')], ['1', message('1')]]);
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result, { allowLegacyClosureNotice: true })).current, true, 'Existing closed rooms should reuse their transcript despite the known closure notice');
+    legacyNotice.author = { id: 'other' };
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result, { allowLegacyClosureNotice: true })).current, false, 'Another author cannot impersonate the bot closure notice');
+    channel.messages.fetch = async () => new Collection([['2', { ...message('2'), content: 'edited evidence' }], ['1', message('1')]]);
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result)).current, false, 'Edited messages must be detected');
+    channel.messages.fetch = async () => new Collection([['1', message('1')]]);
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, result)).current, false, 'Deleted messages must be detected');
+    assert.equal((await transcripts.checkTranscriptCurrent(channel, { ...result, htmlPath: path.join(temp, 'missing.html') })).current, false);
+    channel.messages.fetch = async () => { throw Error('History unavailable'); };
+    await assert.rejects(transcripts.checkTranscriptCurrent(channel, result), /History unavailable/);
     const human = message('1'), bot = message('2');
     human.content = `**Evidence**\nHello <@${uid}> and <@&${other}> in <#${originalRole}>\n<script>alert(1)</script>\n[Unsafe](javascript:alert(1))`;
     human.attachments = new Collection([['file', { id: 'file', name: 'evidence.png', url: 'https://example.com/evidence.png', contentType: 'image/png', size: 2048 }]]);
@@ -3386,7 +3415,7 @@ function fixture(snapshot = {}) {
   const lifecycle = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './isolation': {}, './memberLifecycle': {}, './investigationRooms': rooms, '../../../ui/memberNotice': require(root + '/src/core/ui/memberNotice') });
   const names = [], notices = [];
   f.state.users[uid].caseId = 2;
-  const channel = { id: 'room', name: `investigation-undecided4237-${uid.slice(-4)}`, send: async payload => notices.push(payload), permissionOverwrites: { edit: async () => {} }, setName: async name => { names.push(name); channel.name = name; }, setTopic: async () => {} };
+  const channel = { id: 'room', name: `investigation-undecided4237-${uid.slice(-4)}`, send: async payload => { notices.push(payload); return { id: 'closure-notice' }; }, permissionOverwrites: { edit: async () => {} }, setName: async name => { names.push(name); channel.name = name; }, setTopic: async () => {} };
   f.guild.channels.cache.set('room', channel);
   const originals = [...f.state.users[uid].roles];
   assert.equal((await lifecycle.archiveInvestigationRoom(f.guild, f.state.users[uid])).archived, true);
@@ -3402,6 +3431,7 @@ function fixture(snapshot = {}) {
 
   assert.deepEqual(f.state.users[uid].roles, originals);
   assert.equal(f.state.archivedRooms[0].channelId, 'room');
+  assert.equal(f.state.archivedRooms[0].closureMessageId, 'closure-notice');
 }
 // Back/Close navigation from a shared room opens an independent ephemeral workspace.
 {

@@ -788,10 +788,10 @@ async function handleInvestigationRoomControl(interaction) {
       if (deleting && context.active) throw Error('Close the investigation before deleting its room.');
       return safeEditReply(interaction, {
         content: deleting
-          ? '🗑️ **Delete this closed room?** A fresh transcript will be saved and sent to you before deletion. This permanently removes the Discord conversation.'
-          : '🔓 **Close this investigation?** A transcript will be saved, the member will be released through Mod Hub, and this room will be archived.',
+          ? '🗑️ **Delete this closed room?** This permanently removes the Discord conversation. The transcript saved at closure will be kept. A new copy is saved automatically only if the conversation has changed.'
+          : '🔓 **Close this investigation?** The member will be released and this room will be archived. A transcript is saved automatically.',
         components: [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder()
-          .setCustomId(`mod_invroom_${action}_confirm:${targetId}:${channelId}`).setLabel(deleting ? 'Save Transcript & Delete Room' : 'Save Transcript & Close Investigation').setStyle(Discord.ButtonStyle.Danger))], flags: 64,
+          .setCustomId(`mod_invroom_${action}_confirm:${targetId}:${channelId}`).setLabel(deleting ? 'Confirm Delete' : 'Confirm Close').setStyle(Discord.ButtonStyle.Danger))], flags: 64,
       });
     }
     if (action === 'notify') {
@@ -811,8 +811,18 @@ async function handleInvestigationRoomControl(interaction) {
       const sessions = require('../../../modules/securityStudio/verificationStore').getVerificationSection(interaction.guild.id).sessions || {};
       if (Object.values(sessions).some(session => ['quarantined', 'review'].includes(session.state) && session.quarantineChannelId === channelId)) throw Error('An active Verification case still uses this room. It cannot be deleted.');
     }
-    const exported = await exportInvestigationTranscript(interaction, context, targetId);
-    await interaction.editReply({ content: `📄 **Investigation transcript saved** • ${exported.transcript.messageCount} messages. Attachment links are recorded; the original attachment files are not copied.`, files: exported.files, components: [], flags: 64 });
+    const transcripts = require('../../../modules/feedbackStudio/tickets/ticketsTranscripts');
+    const saved = context.archived?.roomTranscript;
+    const ignoredMessageIds = [context.archived?.closureMessageId].filter(Boolean);
+    const transcriptCheck = { ignoredMessageIds, allowLegacyClosureNotice: true, caseId: context.archived?.caseId };
+    const existing = action === 'delete_confirm'
+      ? await transcripts.checkTranscriptCurrent(context.channel, saved, transcriptCheck) : { current: false };
+    const exported = existing.current ? { transcript: saved } : await exportInvestigationTranscript(interaction, context, targetId);
+    if (existing.current) {
+      await interaction.editReply({ content: '🗑️ Deleting the closed room. Its saved transcript will be retained.', components: [], flags: 64 });
+    } else {
+      await interaction.editReply({ content: `📄 **Investigation transcript saved** • ${exported.transcript.messageCount} messages. Attachment links are recorded; the original attachment files are not copied.`, files: exported.files, components: [], flags: 64 });
+    }
     if (action === 'close_confirm') {
       // The normal release path rechecks authority, hierarchy and original-role restoration.
       const fresh = await investigationRoomContext(interaction, targetId, channelId, 'remove_quarantine');
@@ -823,8 +833,8 @@ async function handleInvestigationRoomControl(interaction) {
       await investigationRoomContext(interaction, targetId, channelId, 'manage_evidence');
       const engine = require('../../security/protection/quarantine');
       if (Object.values(engine.getQuarantineState(interaction.guild.id).users || {}).some(snapshot => [snapshot.interviewChannelId, snapshot.previousInterviewChannelId].includes(channelId))) throw Error('An active investigation now uses this room. It was not deleted.');
-      const latestMessages = await context.channel.messages.fetch({ limit: 1 });
-      if ((latestMessages.first()?.id || null) !== exported.transcript.lastMessageId) throw Error('New messages arrived after the transcript was saved. Please export again before deleting this room.');
+      const checked = await transcripts.checkTranscriptCurrent(context.channel, exported.transcript, transcriptCheck);
+      if (!checked.current) throw Error('The conversation changed while deletion was being prepared. The room has been kept. Please try deleting it again.');
       await context.channel.delete(`Closed investigation room deleted by ${interaction.user.id}; transcript saved`);
       const latest = engine.getQuarantineState(interaction.guild.id);
       // Retain the archive/transcript record as evidence even after Discord deletion.

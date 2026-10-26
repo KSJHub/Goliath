@@ -100,6 +100,39 @@ let ticketTranscriptManagerApi;
     };
   }
 
+  async function checkTranscriptCurrent(channel, transcript, options = {}) {
+    if (!transcript?.htmlPath || !transcript?.jsonPath || !fs.existsSync(transcript.htmlPath) || !fs.existsSync(transcript.jsonPath)) return { current: false };
+    let saved;
+    try { saved = JSON.parse(fs.readFileSync(transcript.jsonPath, 'utf8')); } catch { return { current: false }; }
+    if (String(saved.ticket?.discordChannelId) !== String(channel.id) || !Array.isArray(saved.messages)) return { current: false };
+    const messages = await fetchAllMessages(channel, 10001);
+    if (messages.length > 10000) return { current: false };
+    const savedIds = new Set(saved.messages.map(message => message.id));
+    const ignored = new Set((options.ignoredMessageIds || []).filter(id => id && !savedIds.has(id)));
+    // Older archives did not store the closure message ID. Recognise only the exact
+    // notice sent by this bot after export; other room messages remain evidence.
+    if (options.allowLegacyClosureNotice && !ignored.size) {
+      const description = 'Your investigation has ended, and your quarantine restrictions have been lifted.\n\nIf you need any further help, please contact server management.';
+      const plain = `🔓 **Investigation Closed**\n\n${description}${options.caseId ? `\n\n**Case reference:** #${options.caseId}` : ''}`;
+      const botId = channel.guild?.client?.user?.id;
+      const notices = messages.filter(message => !savedIds.has(message.id) && botId && message.author?.id === botId
+        && message.createdTimestamp >= Date.parse(transcript.generatedAt || saved.generatedAt)
+        && ((message.content === plain && !message.embeds.length)
+          || (!message.content && message.embeds.length === 1 && message.embeds[0].title === '🔓 Investigation Closed'
+            && message.embeds[0].description === description && message.embeds[0].footer?.text === 'Private Moderation Review'
+            && JSON.stringify(message.embeds[0].fields || []) === JSON.stringify(options.caseId ? [{ name: '📁 Case reference', value: `#${options.caseId}`, inline: true }] : [])))
+        && !message.attachments.size && !message.components?.length);
+      if (notices.length === 1) ignored.add(notices[0].id);
+    }
+    // Names/avatars and signed attachment URLs can change without the conversation changing.
+    const evidence = message => ({ id: message.id, authorId: message.authorId, content: message.content,
+      createdAt: message.createdAt, editedAt: message.editedAt, system: message.system,
+      attachments: message.attachments?.map(({ id, name, contentType, size }) => ({ id, name, contentType, size })),
+      embeds: message.embeds, components: message.components });
+    const current = messages.filter(message => !ignored.has(message.id)).map(message => evidence(serializeMessage(message)));
+    return { current: JSON.stringify(current) === JSON.stringify(saved.messages.map(evidence)), lastMessageId: messages.at(-1)?.id || null };
+  }
+
   function buildJsonTranscript(ticket, messages, meta = {}) {
     const entries = messages.map(serializeMessage);
     return {
@@ -389,6 +422,7 @@ const search=document.getElementById('search'),bots=document.getElementById('bot
     buildJsonTranscript,
     buildHtmlTranscript,
     fetchAllMessages,
+    checkTranscriptCurrent,
     getTicketId,
     getChannelId,
     getTranscriptDir,

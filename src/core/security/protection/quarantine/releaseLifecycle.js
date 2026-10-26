@@ -55,7 +55,7 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
       compactModerationLayout: true,
     });
     notice.embeds[0].setFooter({ text: 'Private Moderation Review' });
-    await channel.send(notice).catch(() => null);
+    const closureMessage = await channel.send(notice).catch(() => null);
     if (snapshot.memberId && channel.permissionOverwrites?.edit) await channel.permissionOverwrites.edit(String(snapshot.memberId), { ViewChannel: false }, { reason: options.reason || 'Investigation isolation closed' });
     const { cleanChannelName } = require('./investigationRooms');
     const legacySuffix = `-${String(snapshot.memberId || '').slice(-4)}`;
@@ -65,7 +65,7 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
     await channel.setName(closedName, options.reason || 'Investigation isolation closed').catch(() => null);
     await channel.setTopic(`Closed investigation • Member ${snapshot.memberId || 'unknown'}${snapshot.caseId ? ` • Case #${snapshot.caseId}` : ''}`, options.reason || 'Investigation isolation closed').catch(() => null);
     const state = getQuarantineState(guild.id);
-    state.archivedRooms = normalizeArchivedRooms([...(state.archivedRooms || []), { channelId: channel.id, memberId: snapshot.memberId || null, caseId: snapshot.caseId || null, closedAt: Date.now(), closedBy: options.restoredBy || options.closedBy || null, roomTranscript: snapshot.roomTranscript || null }]);
+    state.archivedRooms = normalizeArchivedRooms([...(state.archivedRooms || []), { channelId: channel.id, memberId: snapshot.memberId || null, caseId: snapshot.caseId || null, closureMessageId: closureMessage?.id || null, closedAt: Date.now(), closedBy: options.restoredBy || options.closedBy || null, roomTranscript: snapshot.roomTranscript || null }]);
     saveQuarantineState(guild, state);
     return { success: true, archived: true, channelId: channel.id };
   } catch (error) { return { success: false, archived: false, channelId: channel.id, error: error.message }; }
