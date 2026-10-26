@@ -844,7 +844,7 @@ async function handleInvestigationRoomControl(interaction) {
       if (deleting && context.active) throw Error('Close the investigation before deleting its room.');
       return safeEditReply(interaction, {
         ...investigationNotice(interaction, deleting ? 'Delete This Room?' : 'Close Investigation?',
-          deleting ? 'This investigation is closed. Deleting the room will permanently remove its messages from Discord.\n\n**This cannot be undone.**'
+          deleting ? 'This investigation is closed. Deleting the room will permanently remove its messages.\n\n**This cannot be undone.**'
             : 'The member’s quarantine restrictions will be lifted and this room will be archived.',
           deleting ? 0xED4245 : 0xFEE75C,
           [{ name: '📄 Final transcript', value: deleting
