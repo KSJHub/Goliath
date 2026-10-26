@@ -139,7 +139,8 @@ const client = new Client({
 client.commands = new Collection();
 const app = express();
 const server = http.createServer(app);
-const io = initSocketHub(server) || null;
+const { requireDashboardAccess, resolveGuildAccess } = require('./src/server/middleware/dashboardAccess');
+const io = initSocketHub(server, { client, getSession: () => dashboardSession, resolveGuildAccess }) || null;
 app.set('trust proxy', 1);
 app.set('goliath.client', client);
 app.set('goliath.io', io);
@@ -149,7 +150,8 @@ const allowedOrigins = new Set(['https://goliath.ksjdigital.co.uk', 'https://dev
 app.use(cors({ origin(origin, callback) { if (!origin || allowedOrigins.has(origin)) return callback(null, true); return callback(null, false); }, credentials: true }));
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(session({ store: sessionStore, secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: isProduction, httpOnly: true, sameSite: isProduction ? 'none' : 'lax', maxAge: 604800000 } }));
+const dashboardSession = session({ store: sessionStore, secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: isProduction, httpOnly: true, sameSite: isProduction ? 'none' : 'lax', maxAge: 604800000 } });
+app.use(dashboardSession);
 app.use((req, _res, next) => { req.client = client; req.io = io; next(); });
 
 function cleanDiscordId(value) {
@@ -188,7 +190,10 @@ app.use('/api/emojis/:guildId', requireEmojiGuildAccess);
 const mounts = [
   ['/auth', authRoutes], ['/api/auth', authRoutes], ['/api/discord', discordRoutes], ['/api/discord', discordRoleEditorRoutes], ['/api/discord', discordResourceRoutes], ['/api/status', statusRoutes], ['/api/public/community', publicCommunityRoutes], ['/api/owner', ownerRoutes], ['/api/owner/diagnostics', ownerDiagnosticsRoutes], ['/api/owner/translation', ownerTranslationRoutes], ['/api/owner/variables', ownerVariablesRoutes], ['/api/config/automod', automodRoutes], ['/api/config/general', generalSettingsRoutes], ['/api/config/logs', logsRoutes], ['/api/config/messages', messagesRoutes], ['/api/billing', billingRoutes], ['/api/moderation', moderationRoutes], ['/api/cases', moderationRoutes], ['/api/restore', serverRestoreRoutes], ['/api/security', securityRoutes], ['/api/tickets', ticketRoutes], ['/api/forms', formsRoutes], ['/api/transcripts', transcriptRoutes], ['/api/suggestions', suggestionsRoutes], ['/api/translation', translationRoutes], ['/api/permissions', permissionHealthRoutes], ['/api/social', socialRoutes], ['/api/schedule', scheduleRoutes], ['/api/invites', invitesRoutes], ['/api/birthdays', birthdaysRoutes], ['/api/private-rooms', privateRoomsRoutes], ['/api/emojis', emojisRoutes], ['/api/verification', verificationRoutes], ['/api/auto-roles', autoRolesRoutes], ['/api/welcome', welcomeRoutes], ['/api/goodbye', goodbyeRoutes], ['/api/reaction-roles', reactionRolesRoutes], ['/api/timed-roles', timedRolesRoutes], ['/api/temporary-roles', temporaryRolesRoutes], ['/api/role-selector', roleSelectorRoutes], ['/api/colour-roles', roleSelectorRoutes], ['/api/modules', modulesRoutes], ['/api/automation', automationRoutes], ['/api/notifications', notificationRoutes], ['/api/activity', activityRoutes], ['/api/polls', pollsRoutes], ['/api/games', freeGamesRoutes], ['/api/free-games', freeGamesRoutes], ['/api/stats', statsRoutes], ['/api/temp-voice', tempVoiceRoutes], ['/api/starboard', starboardRoutes], ['/api/media', mediaRoutes], ['/api/owner/deployments', ownerDeploymentRoutes], ['/api/resources', discordResourceRoutes],
 ];
-for (const [base, router] of mounts) app.use(base, router);
+for (const [base, router] of mounts) {
+  const publicRoute = ['/auth', '/api/auth', '/api/public/community'].includes(base);
+  app.use(base, ...(publicRoute ? [] : [requireDashboardAccess(base)]), router);
+}
 
 const dashboardDist = path.join(process.cwd(), 'dist');
 if (fs.existsSync(dashboardDist)) {

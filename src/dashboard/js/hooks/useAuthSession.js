@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '../services/apiClient.js';
+import { removeStorage } from '../storage.js';
 
 function normalizeUser(payload) {
   return payload?.user || payload?.me || payload?.data?.user || payload?.data || null;
@@ -91,13 +92,13 @@ export function useAuthSession({
         });
       }
 
-        if (loadGuilds) {
-      loadGuilds();
-    }
-
-    if (loadBotStatus) {
-      loadBotStatus();
-    }
+      if (authResponse.user?.isOwner !== true) removeStorage('owner_managed_guild');
+      if (authResponse.user?.dashboardAllowed !== true && authResponse.user?.isOwner !== true) {
+        clearGuilds?.();
+        return;
+      }
+      if (loadGuilds) await loadGuilds();
+      if (loadBotStatus) await loadBotStatus();
     } catch (error) {
       console.error('Session check failed:', error);
       clearAuthState();
@@ -113,6 +114,14 @@ export function useAuthSession({
     sessionLoadedRef.current = true;
     loadSession();
   }, [loadSession]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    const refresh = () => loadSession();
+    window.addEventListener('focus', refresh);
+    const timer = window.setInterval(refresh, 60000);
+    return () => { window.removeEventListener('focus', refresh); window.clearInterval(timer); };
+  }, [isAuthenticated, loadSession]);
 
   const handleLogin = useCallback(() => {
     setLoginPending(true);
@@ -144,3 +153,4 @@ export function useAuthSession({
     clearAuthState,
   };
 }
+

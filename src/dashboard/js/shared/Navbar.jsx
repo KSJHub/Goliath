@@ -355,6 +355,7 @@ function Navbar({
   isAuthenticated = true,
   authLoading = false,
   navItems = [],
+  allowedPaths = null,
   botAvatar,
   botName,
   botData,
@@ -369,7 +370,7 @@ function Navbar({
   const mobileExpanded = isMobile ? true : expanded;
 
   const safeNavItems = Array.isArray(navItems) ? navItems : [];
-  const safeBottomItems = Array.isArray(NAV_BOTTOM) ? NAV_BOTTOM : [];
+  const safeBottomItems = useMemo(() => (Array.isArray(NAV_BOTTOM) ? NAV_BOTTOM : []).filter((item) => !allowedPaths || allowedPaths.includes(item.path)), [allowedPaths]);
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState({});
@@ -714,3 +715,4 @@ function Navbar({
 }
 
 export default memo(Navbar);
+

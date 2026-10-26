@@ -3,6 +3,7 @@ const express = require('express');
 const security = require('../../core/security/protection/core');
 
 const router = express.Router();
+const { MEMBER_PORTAL, listDashboardGuilds } = require('../middleware/dashboardAccess');
 // Hands an authenticated Appeals login directly back to the validated route
 // using a no-cache HTML handoff instead of relying on SPA/hash redirect recovery.
 const AUTH_FLOW_REVISION = 'appeals-state';
@@ -211,15 +212,22 @@ router.get('/login', (req, res) => {
 
 /* ---------------- CHECK AUTH ---------------- */
 
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   if (!req.session?.user) {
     return res.status(401).json({ authenticated: false, user: null });
   }
+  res.set('Cache-Control', 'no-store');
+  let dashboardGuilds;
+  try { dashboardGuilds = await listDashboardGuilds(req.client, req.session.user.id); }
+  catch { return res.status(503).json({ error: 'Unable to verify server access.' }); }
   return res.json({
     authenticated: true,
+    dashboardAllowed: security.isBotOwner(req.session.user.id) || dashboardGuilds.length > 0,
+    memberPortal: MEMBER_PORTAL,
     user: {
       ...req.session.user,
       isOwner: security.isBotOwner(req.session.user.id),
+      dashboardAllowed: security.isBotOwner(req.session.user.id) || dashboardGuilds.length > 0,
     },
   });
 });
@@ -318,6 +326,8 @@ router.get('/callback', async (req, res) => {
 
     if (isDebug()) console.log('[AUTH] User logged in:', req.session.user.username);
 
+    const dashboardGuilds = stateReturnPath.startsWith('/appeals') ? [] : await listDashboardGuilds(req.client, userData.id);
+    const dashboardAllowed = security.isBotOwner(userData.id) || dashboardGuilds.length > 0;
     req.session.save((saveError) => {
       if (saveError) {
         console.error('❌ Session save failed', saveError);
@@ -331,7 +341,7 @@ router.get('/callback', async (req, res) => {
 
       // Always return to the configured frontend origin; the OAuth callback
       // may run on a separate API hostname that cannot serve dashboard routes.
-      return res.redirect(buildPostOAuthTarget(clientUrl, stateReturnPath));
+      return res.redirect(dashboardAllowed ? buildPostOAuthTarget(clientUrl, stateReturnPath) : safeRedirectUrl(clientUrl) + MEMBER_PORTAL);
     });
   } catch (error) {
     console.error('❌ Auth error', error);
@@ -340,3 +350,4 @@ router.get('/callback', async (req, res) => {
 });
 
 module.exports = router;
+

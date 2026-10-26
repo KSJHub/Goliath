@@ -26,14 +26,37 @@ function initSocketHub(server, options = {}) {
     },
   });
 
+  io.engine.use((req, res, next) => {
+    const middleware = options.getSession?.();
+    if (!middleware) return next(new Error('Session unavailable'));
+    return middleware(req, res, next);
+  });
+  io.use(async (socket, next) => {
+    try {
+      const userId = socket.request.session?.user?.id;
+      if (!userId) return next(new Error('Authentication required'));
+      const { listDashboardGuilds } = require('../middleware/dashboardAccess');
+      const security = require('../../core/security/protection/core');
+      if (!security.isBotOwner(userId) && !(await listDashboardGuilds(options.client, userId)).length) return next(new Error('Staff access required'));
+      return next();
+    } catch { return next(new Error('Unable to verify access')); }
+  });
+
   io.on('connection', (socket) => {
     console.log(`🟢 Dashboard connected: ${socket.id}`);
-    socket.join('goliath:tickets');
+    const security = require('../../core/security/protection/core');
+    if (security.isBotOwner(socket.request.session?.user?.id)) socket.join('goliath:tickets');
 
-    function joinGuildRoom(guildId) {
+    async function joinGuildRoom(guildId) {
       const id = normaliseGuildId(guildId);
       if (!id) return;
 
+      try {
+        await new Promise((resolve, reject) => socket.request.session.reload((error) => error ? reject(error) : resolve()));
+        const access = await options.resolveGuildAccess(options.client, socket.request.session?.user?.id, id);
+        if (!access.allowed) return;
+      } catch { return; }
+      for (const current of socket.rooms) if (current.startsWith('guild:')) socket.leave(current);
       const room = getRoomName(id);
       socket.join(room);
 
@@ -42,7 +65,22 @@ function initSocketHub(server, options = {}) {
 
     socket.on('joinGuild', joinGuildRoom);
 
+    const accessTimer = setInterval(async () => {
+      try {
+        await new Promise((resolve, reject) => socket.request.session.reload((error) => error ? reject(error) : resolve()));
+        const userId = socket.request.session?.user?.id;
+        if (!userId) return socket.disconnect(true);
+        if (!security.isBotOwner(userId)) socket.leave('goliath:tickets');
+        for (const room of socket.rooms) {
+          if (!room.startsWith('guild:')) continue;
+          const access = await options.resolveGuildAccess(options.client, userId, room.slice(6));
+          if (!access.allowed) socket.leave(room);
+        }
+      } catch { socket.disconnect(true); }
+    }, 15000);
+    accessTimer.unref?.();
     socket.on('disconnect', () => {
+      clearInterval(accessTimer);
       console.log(`🔴 Dashboard disconnected: ${socket.id}`);
     });
   });
@@ -112,3 +150,4 @@ module.exports = {
   emitSyncEvent,
   emitRoomEvent,
 };
+
