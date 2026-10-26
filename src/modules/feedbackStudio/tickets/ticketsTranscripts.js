@@ -100,6 +100,35 @@ let ticketTranscriptManagerApi;
     };
   }
 
+  function buildTranscriptArchive(transcript, expected) {
+    const saved = JSON.parse(fs.readFileSync(transcript.jsonPath, 'utf8'));
+    if (String(saved.ticket?.guildId) !== String(expected.guildId)
+      || String(saved.ticket?.discordChannelId) !== String(expected.channelId)
+      || String(saved.ticket?.creatorId) !== String(expected.memberId)) throw Error('Transcript ownership could not be verified.');
+    if (fs.statSync(transcript.htmlPath).size > 8_000_000) throw Error('The transcript is too large to download here.');
+    const data = fs.readFileSync(transcript.htmlPath);
+    const { deflateRawSync, crc32 } = require('node:zlib');
+    const compressed = deflateRawSync(data);
+    const name = Buffer.from('Investigation-Transcript.html');
+    // Single-entry ZIP, UTF-8 filename, fixed DOS date (1 January 1980).
+    // Keep the download in memory; no duplicate transcript files are stored.
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(0x800, 6);
+    local.writeUInt16LE(8, 8); local.writeUInt16LE(33, 12); local.writeUInt32LE(crc32(data), 14);
+    local.writeUInt32LE(compressed.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(name.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x800, 8); central.writeUInt16LE(8, 10); central.writeUInt16LE(33, 14);
+    central.writeUInt32LE(crc32(data), 16); central.writeUInt32LE(compressed.length, 20);
+    central.writeUInt32LE(data.length, 24); central.writeUInt16LE(name.length, 28);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10);
+    end.writeUInt32LE(central.length + name.length, 12); end.writeUInt32LE(local.length + name.length + compressed.length, 16);
+    const archive = Buffer.concat([local, name, compressed, central, name, end]);
+    if (archive.length > 8_000_000) throw Error('The transcript is too large to download here.');
+    return archive;
+  }
+
   async function checkTranscriptCurrent(channel, transcript, options = {}) {
     if (!transcript?.htmlPath || !transcript?.jsonPath || !fs.existsSync(transcript.htmlPath) || !fs.existsSync(transcript.jsonPath)) return { current: false };
     let saved;
@@ -423,6 +452,7 @@ const search=document.getElementById('search'),bots=document.getElementById('bot
     buildHtmlTranscript,
     fetchAllMessages,
     checkTranscriptCurrent,
+    buildTranscriptArchive,
     getTicketId,
     getChannelId,
     getTranscriptDir,

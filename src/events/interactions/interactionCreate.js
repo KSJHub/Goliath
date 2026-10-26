@@ -243,6 +243,10 @@ module.exports={
         return;
       }
       if(customId.startsWith('permstudio:')||customId.startsWith('permedit:')||customId.startsWith('permbulk:')||customId.startsWith('permpreset:')||customId.startsWith('permsync:')||customId.startsWith('permaccess:')||customId.startsWith('permfinder:')||customId.startsWith('permaudit:')||customId.startsWith('permrestore:')){await permissionsStudioInteractions.execute(interaction,client);return;}
+      if (customId.startsWith('inv_transcript_download:')) {
+        await require('../../core/administration/mod/quarantineInteractions').handleInvestigationTranscriptDownload(interaction);
+        return;
+      }
       if(customId.startsWith('mod_')||customId.startsWith('mod:')){if(!await callHandler(modInteractions,'handleModInteraction',interaction))throw new Error(`Mod did not handle ${customId}.`);return;}
       if(isVerificationMemberInteraction(interaction)){await handleVerificationMemberInteraction(interaction);return;}
       if(customId.startsWith('verify:challenge:')||customId.startsWith('verify:staff:')||customId.startsWith('verify:answer:')){

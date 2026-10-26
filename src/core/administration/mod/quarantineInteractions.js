@@ -660,21 +660,20 @@ async function deliverFinalInvestigationTranscript(interaction, targetId, channe
   if (previous?.sent && previous.recipientId === targetId && previous.jsonPath === transcript.jsonPath) return { ...previous, reused: true };
   let delivery;
   try {
-    const fs = require('node:fs');
-    const saved = JSON.parse(fs.readFileSync(transcript.jsonPath, 'utf8'));
-    if (String(saved.ticket?.guildId) !== String(interaction.guild.id)
-      || String(saved.ticket?.discordChannelId) !== String(channelId)
-      || String(saved.ticket?.creatorId) !== String(targetId)) throw Error('Transcript ownership could not be verified.');
-    if (fs.statSync(transcript.htmlPath).size > 8_000_000) throw Error('The transcript is too large to send by DM.');
+    require('../../../modules/feedbackStudio/tickets/ticketsTranscripts').buildTranscriptArchive(transcript,
+      { guildId: interaction.guild.id, channelId, memberId: targetId });
     const user = await (interaction.client || interaction.guild.client).users.fetch(targetId);
     const payload = investigationNotice(interaction, 'Your Investigation Transcript',
-      'Your investigation has closed. A copy of the conversation from your investigation room is attached.\n\nIf you have any questions, please contact server management.', 0x5865F2,
+      'Your investigation has closed. Use **Download Transcript** below to get your copy of the conversation.\n\nExtract the ZIP file and open **Investigation-Transcript.html** to read it. If you have any questions, please contact server management.', 0x5865F2,
       [{ name: '🏠 Server', value: interaction.guild.name || 'Discord Server', inline: true },
         ...(record.caseId ? [{ name: '📁 Case reference', value: `#${record.caseId}`, inline: true }] : [])]);
     delete payload.flags; delete payload.content;
-    payload.files = [new Discord.AttachmentBuilder(transcript.htmlPath, { name: transcript.htmlFileName })];
-    await user.send(payload);
-    delivery = { sent: true, sentAt: Date.now(), recipientId: targetId, jsonPath: transcript.jsonPath };
+    payload.components = [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder()
+      .setCustomId(`inv_transcript_download:${interaction.guild.id}:${channelId}:${targetId}`)
+      .setLabel('Download Transcript').setEmoji('📥').setStyle(Discord.ButtonStyle.Primary))];
+    const message = await user.send(payload);
+    delivery = { sent: true, sentAt: Date.now(), recipientId: targetId, jsonPath: transcript.jsonPath,
+      messageId: message.id, channelId: message.channelId, format: 'download-button-v1' };
   } catch (error) {
     delivery = { sent: false, attemptedAt: Date.now(), recipientId: targetId, jsonPath: transcript.jsonPath,
       reason: Number(error.code) === 50007 ? 'The member’s DMs are unavailable.' : String(error.message || error).slice(0, 200) };
@@ -685,6 +684,36 @@ async function deliverFinalInvestigationTranscript(interaction, targetId, channe
   recordModerationSystemEvent({ interaction, event: 'moderation.investigation.transcript_dm', targetId,
     metadata: { channelId, sent: delivery.sent, reason: delivery.reason || null } });
   return delivery;
+}
+
+async function handleInvestigationTranscriptDownload(interaction) {
+  if (!String(interaction.customId || '').startsWith('inv_transcript_download:')) return false;
+  const client = interaction.client;
+  const parts = String(interaction.customId).split(':');
+  const [, guildId, channelId, memberId] = parts;
+  if (!interaction.isButton?.() || interaction.guildId || parts.length !== 4
+    || ![guildId, channelId, memberId].every(id => /^\d{15,25}$/.test(id || ''))
+    || interaction.user?.id !== memberId || interaction.message?.author?.id !== client?.user?.id) {
+    await interaction.reply({ content: 'This transcript download is only available to its recipient in their private message.', flags: Discord.MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+    return true;
+  }
+  await interaction.deferReply({ flags: Discord.MessageFlags.Ephemeral });
+  try {
+    const engine = require('../../security/protection/quarantine');
+    const record = engine.getQuarantineState(guildId).archivedRooms?.find(room => room.channelId === channelId && room.memberId === memberId);
+    if (!record?.roomTranscript || !record.transcriptDelivery?.sent || record.transcriptDelivery.messageId !== interaction.message.id
+      || record.transcriptDelivery.recipientId !== memberId || record.transcriptDelivery.jsonPath !== record.roomTranscript.jsonPath) {
+      throw Error('This copy is no longer available. Please use your latest transcript message or contact server management.');
+    }
+    const archive = require('../../../modules/feedbackStudio/tickets/ticketsTranscripts').buildTranscriptArchive(record.roomTranscript,
+      { guildId, channelId, memberId });
+    await interaction.editReply({ content: '📥 Download the ZIP below, extract it and open **Investigation-Transcript.html**.',
+      files: [new Discord.AttachmentBuilder(archive, { name: 'Investigation-Transcript.zip' })], allowedMentions: { parse: [] } });
+  } catch (error) {
+    console.warn('[InvestigationTranscript] Download unavailable:', error.message);
+    await interaction.editReply({ content: 'Your transcript could not be downloaded. Please try your latest transcript message or contact server management.', files: [], allowedMentions: { parse: [] } });
+  }
+  return true;
 }
 
 function transcriptDeliveryText(delivery) {
@@ -955,6 +984,7 @@ async function handleQuarantineInteraction(interaction) {
 
 module.exports = {
   handleQuarantineInteraction,
+  handleInvestigationTranscriptDownload,
   ensureInitiatorInterviewAccess,
   isGuildOwner,
 };

@@ -3232,7 +3232,11 @@ function fixture(snapshot = {}) {
         delete f.state.users[uid];
         return { success: true, archive: { archived: true, channelId: 'room' } }; } },
       '../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: {} }) },
-      '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { checkTranscriptCurrent: async (channel, transcript) => ({ current: ++checks === 1 ? reuseSaved && Boolean(transcript) : !changedAfterExport }), createTranscript: async (client, ticket, options) => {
+      '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { buildTranscriptArchive: (transcript, expected) => {
+        const saved = JSON.parse(fs.readFileSync(transcript.jsonPath));
+        assert.equal(saved.ticket.guildId, expected.guildId); assert.equal(saved.ticket.discordChannelId, expected.channelId); assert.equal(saved.ticket.creatorId, expected.memberId);
+        return Buffer.from('archive');
+      }, checkTranscriptCurrent: async (channel, transcript) => ({ current: ++checks === 1 ? reuseSaved && Boolean(transcript) : !changedAfterExport }), createTranscript: async (client, ticket, options) => {
         events.push('export'); if (exportFailure) throw Error('export unavailable');
         assert.equal(ticket.type, 'investigation'); assert.equal(options.requireComplete, true);
         return { htmlPath, jsonPath, htmlFileName: 'room.html', jsonFileName: 'room.json', messageCount: 2, lastMessageId: null };
@@ -3240,7 +3244,7 @@ function fixture(snapshot = {}) {
     });
     const click = async (action, channelId = 'room') => {
       checks = 0;
-      const i = { customId: `mod_invroom_${action}:${uid}:room`, channelId, guild: f.guild, client: { users: { fetch: async id => { assert.equal(id, uid, 'Transcript DM must target the investigated member'); return { send: async payload => { if (dmFailure) throw Object.assign(Error('DM blocked'), { code: 50007 }); dmSends.push(payload); } }; } } }, user: { id: other },
+      const i = { customId: `mod_invroom_${action}:${uid}:room`, channelId, guild: f.guild, client: { users: { fetch: async id => { assert.equal(id, uid, 'Transcript DM must target the investigated member'); return { send: async payload => { if (dmFailure) throw Object.assign(Error('DM blocked'), { code: 50007 }); dmSends.push(payload); return { id: `dm-${dmSends.length}`, channelId: 'dm-channel' }; } }; } } }, user: { id: other },
         isButton: () => true, deferReply: async () => { i.deferred = true; },
         editReply: async p => { events.push('deliver'); if (deliveryFailure) throw Error('attachment delivery failed'); replies.push(p); return p; } };
       await controls.handleQuarantineInteraction(i);
@@ -3251,7 +3255,9 @@ function fixture(snapshot = {}) {
     authorised = true; await click('transcript'); assert.deepEqual(events, ['export', 'deliver']); assert.equal(replies.at(-1).flags, 64); assert.equal(replies.at(-1).files.length, 2);
     events = []; await click('close_confirm'); assert.equal(restores, 1); assert.deepEqual(events, ['export', 'deliver']);
     assert.equal(dmSends.length, 1, 'Closing must DM the saved transcript to the member');
-    assert.equal(dmSends[0].files.length, 1, 'Member receives the readable HTML copy');
+    assert.equal(dmSends[0].files, undefined, 'The initial DM must not expose an HTML source preview');
+    assert.equal(dmSends[0].components[0].components[0].data.label, 'Download Transcript');
+    assert.equal(f.state.archivedRooms[0].transcriptDelivery.messageId, 'dm-1');
     assert.equal(dmSends[0].embeds[0].data.title, '📁 Your Investigation Transcript');
     assert(!JSON.stringify(dmSends[0].embeds[0].data).includes('Goliath'));
     assert.equal(f.state.archivedRooms[0].transcriptDelivery.sent, true);
@@ -3292,6 +3298,34 @@ function fixture(snapshot = {}) {
 
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 }
+// Recipient-only DM downloads remain available after room deletion, without any dashboard authority.
+{
+  const pathId = '/saved/transcript.json';
+  const record = { channelId: originalRole, memberId: uid, deletedAt: Date.now(), roomTranscript: { jsonPath: pathId },
+    transcriptDelivery: { sent: true, recipientId: uid, messageId: 'dm-message', jsonPath: pathId } };
+  let reads = 0, archives = 0;
+  const downloads = load('src/core/administration/mod/quarantineInteractions.js', {
+    '../../../core/ui/interactionResponse': {}, './permissions': {}, './storage': {}, './panel': {}, './investigationAccess': {},
+    '../../security/protection/quarantine': { getQuarantineState: guildId => { reads++; assert.equal(guildId, other); return { archivedRooms: [record] }; } },
+    '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { buildTranscriptArchive: (saved, expected) => { archives++; assert.deepEqual(expected, { guildId: other, channelId: originalRole, memberId: uid }); return Buffer.from('PK ZIP'); } },
+  });
+  const click = async changes => {
+    const replies = [];
+    const interaction = { customId: `inv_transcript_download:${other}:${originalRole}:${uid}`, client: { user: { id: 'bot' } }, user: { id: uid },
+      message: { id: 'dm-message', author: { id: 'bot' } }, isButton: () => true,
+      deferReply: async () => {}, reply: async payload => replies.push(payload), editReply: async payload => replies.push(payload), ...changes };
+    await downloads.handleInvestigationTranscriptDownload(interaction); return replies.at(-1);
+  };
+  assert.equal((await click({ user: { id: other } })).files, undefined); assert.equal(reads, 0);
+  await click({ guildId: other }); assert.equal(reads, 0, 'Guild copies of the control must be denied before reading state');
+  await click({ message: { id: 'dm-message', author: { id: 'impostor' } } }); assert.equal(reads, 0);
+  const payload = await click({}); assert.equal(archives, 1);
+  assert.equal(payload.files[0].name, 'Investigation-Transcript.zip'); assert.deepEqual(payload.allowedMentions, { parse: [] });
+  await click({ message: { id: 'stale-message', author: { id: 'bot' } } }); assert.equal(archives, 1, 'An old/foreign message must not retrieve a transcript');
+  record.transcriptDelivery.jsonPath = '/different/transcript.json'; await click({}); assert.equal(archives, 1);
+  const route = read('src/events/interactions/interactionCreate.js');
+  assert(route.indexOf("customId.startsWith('inv_transcript_download:')") < route.indexOf("customId.startsWith('mod_')"), 'Recipient downloads need their own narrow DM route, not a management dashboard');
+}
 // Shared transcript exporter refuses a truncated history and retains normal ticket output.
 {
   const os = require('node:os');
@@ -3307,7 +3341,7 @@ function fixture(snapshot = {}) {
     const transcripts = load('src/modules/feedbackStudio/tickets/ticketsTranscripts.js', {
       fs, path, '../../../config/runtimePaths': { getRuntimeRoot: () => temp }, './tickets': {},
     });
-    const ticket = { ticketId: 'investigation-fixture', type: 'investigation', guildId: other, channelId: uid };
+    const ticket = { ticketId: 'investigation-fixture', type: 'investigation', guildId: other, channelId: uid, creatorId: uid };
     await assert.rejects(transcripts.createTranscript({ guilds: { fetch: async () => guild } }, ticket, { limit: 2, requireComplete: true }), /exceeds the transcript limit/);
     older = false;
     const result = await transcripts.createTranscript({ guilds: { fetch: async () => guild } }, ticket, { limit: 2, requireComplete: true });
@@ -3315,6 +3349,16 @@ function fixture(snapshot = {}) {
     assert(html.includes('Investigation Transcript')); assert(!html.includes('<script>alert(1)</script>')); assert.equal(result.messageCount, 2);
     assert(transcripts.buildHtmlTranscript({ ...ticket, type: 'support' }, transcripts.buildJsonTranscript(ticket, [])).includes('Ticket Transcript'));
     assert.equal((await transcripts.checkTranscriptCurrent(channel, result)).current, true);
+    const zip = transcripts.buildTranscriptArchive(result, { guildId: other, channelId: uid, memberId: uid });
+    assert.equal(zip.readUInt32LE(0), 0x04034b50);
+    const fileNameLength = zip.readUInt16LE(26), compressedSize = zip.readUInt32LE(18);
+    assert.equal(zip.subarray(30, 30 + fileNameLength).toString(), 'Investigation-Transcript.html');
+    const original = require('node:zlib').inflateRawSync(zip.subarray(30 + fileNameLength, 30 + fileNameLength + compressedSize));
+    assert.equal(original.toString(), html, 'Downloaded HTML must preserve the original transcript exactly');
+    assert.equal(require('node:zlib').crc32(original), zip.readUInt32LE(14));
+    assert.equal(zip.readUInt32LE(zip.length - 22), 0x06054b50);
+    assert.throws(() => transcripts.buildTranscriptArchive(result, { guildId: other, channelId: uid, memberId: other }), /ownership/);
+
     const closure = message('3');
     channel.messages.fetch = async () => new Collection([['3', closure], ['2', message('2')], ['1', message('1')]]);
     assert.equal((await transcripts.checkTranscriptCurrent(channel, result)).current, false, 'Added messages require a fresh transcript');
