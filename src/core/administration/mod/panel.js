@@ -574,6 +574,11 @@ async function refreshCasesDashboard(interaction, target) {
 }
 async function handleDashboardNavigation(interaction) {
   const id = String(interaction.customId || '');
+  // Case filters and pagination are controls within one workspace, not pages in Back history.
+  if (id === 'mod_history_back' && dashboardHistoryEntry(interaction)?.current?.view === 'cases') {
+    const entry = dashboardHistoryEntry(interaction);
+    while (entry?.stack?.length && entry.stack[entry.stack.length - 1].view === 'cases') entry.stack.pop();
+  }
   if (id === 'mod_history_back' || id === 'mod_dashboard:back:appeals') {
     const entry = dashboardHistoryEntry(interaction);
     const previous = entry?.stack?.length ? entry.stack[entry.stack.length - 1] : { targetId: 'none', view: 'actions', context: {} };
