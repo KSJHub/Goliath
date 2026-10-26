@@ -3324,6 +3324,61 @@ function fixture(snapshot = {}) {
   channel.id = 'custom-room'; parent.name = 'Custom Review Rooms'; channel.messages.fetch = async () => new Collection();
   await rooms.refreshInvestigationPresentation(f.guild, channel, uid); assert.deepEqual(renames, ['Investigations']);
 }
+// Back/Close navigation from a shared room opens an independent ephemeral workspace.
+{
+  const f = fixture(); f.guild.client = { user: { id: 'bot' } };
+  const rooms = load(base + 'investigationRooms.js', { './state': f.api, './isolation': {} });
+  let sharedEdits = 0, sharedDeletes = 0, privateEdits = 0, privateDeletes = 0;
+  const publicMessage = { author: { id: 'bot' }, flags: { has: () => false }, edit: async () => { sharedEdits++; } };
+  const makeInteraction = id => {
+    const privateMessage = { id, flags: { has: () => true }, edit: async () => { privateEdits++; } };
+    const i = { customId: `mod_dashboard:${uid}:cases`, channelId: 'room', guild: f.guild, message: publicMessage,
+      deferReply: async options => { assert.equal(options.flags, 64); i.deferred = true; }, fetchReply: async () => privateMessage,
+      editReply: async () => { privateEdits++; }, update: async () => { sharedEdits++; },
+      deleteReply: async () => { if (i.deferred) privateDeletes++; else sharedDeletes++; },
+    };
+    return i;
+  };
+  const original = makeInteraction('moderator-one');
+  const first = await rooms.privateInvestigationNavigation(original);
+  for (let back = 0; back < 5; back++) await first.update({ content: 'Back' });
+  await first.message.edit({ content: 'Refreshed workspace' });
+  await first.deferUpdate(); await first.deleteReply();
+  const second = await rooms.privateInvestigationNavigation(makeInteraction('moderator-two'));
+  assert.notEqual(first.message.id, second.message.id, 'Moderators must never share their private workspace');
+  assert.equal(sharedEdits, 0); assert.equal(sharedDeletes, 0); assert.equal(privateEdits, 6); assert.equal(privateDeletes, 1);
+  const ephemeral = { ...makeInteraction('ephemeral'), message: { flags: { has: () => true } } };
+  assert.equal(await rooms.privateInvestigationNavigation(ephemeral), ephemeral);
+  const outside = { ...makeInteraction('outside'), channelId: 'other-channel' };
+  assert.equal(await rooms.privateInvestigationNavigation(outside), outside);
+  const modal = { ...makeInteraction('note'), customId: `mod_invroom_note:${uid}` };
+  assert.equal(await rooms.privateInvestigationNavigation(modal), modal, 'Room modal controls must keep their normal acknowledgement flow');
+  assert(read('src/core/administration/mod/interactions.js').includes('.privateInvestigationNavigation(i)'), 'Moderation routing must use the private room navigation boundary');
+}
+// Recover an erased room panel in place and reuse its saved message after restart.
+{
+  const f = fixture(); f.guild.client = { user: { id: 'bot' } };
+  let posts = 0, restored;
+  const channel = { id: 'room', messages: { fetch: async query => {
+    if (typeof query === 'string') return restored;
+    return new Collection();
+  } }, send: async payload => {
+    posts++; assert.deepEqual(payload.allowedMentions, { parse: [] });
+    restored = { id: 'restored-panel', author: { id: 'bot' }, embeds: payload.embeds.map(embed => embed.toJSON()),
+      components: payload.components.map(row => ({ components: row.components.map(component => ({ ...component.data, customId: component.data.custom_id })) })) };
+    return restored;
+  } };
+  const mock = { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': {} };
+  const originalRoles = [...f.state.users[uid].roles];
+  await load(base + 'investigationRooms.js', mock).refreshInvestigationPresentation(f.guild, channel, uid);
+  assert.equal(posts, 1); assert.equal(f.state.users[uid].controlMessageId, 'restored-panel');
+  assert.equal(f.state.users[uid].interviewChannelId, 'room'); assert.deepEqual(f.state.users[uid].roles, originalRoles);
+  await load(base + 'investigationRooms.js', mock).refreshInvestigationPresentation(f.guild, channel, uid);
+  assert.equal(posts, 1, 'Restart recovery must reuse the stored control message');
+  channel.messages.fetch = async () => { throw Error('Discord unavailable'); };
+  await assert.rejects(load(base + 'investigationRooms.js', mock).refreshInvestigationPresentation(f.guild, channel, uid), /Discord unavailable/);
+  assert.equal(posts, 1, 'An uncertain message fetch must never create another panel');
+}
 // Management controls cannot grant outside access or restore a revoked investigator's access.
 {
   const f = fixture({ allowedChannelIds: ['one', 'two'] });

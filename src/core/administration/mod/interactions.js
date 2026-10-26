@@ -915,6 +915,7 @@ async function handleModInteraction(i) {
   if (!i?.customId || !isModCustomId(i.customId)) return false;
   if (i.customId.startsWith('nav|')) return false;
   try {
+    i = await require('../../security/protection/quarantine/investigationRooms').privateInvestigationNavigation(i);
     const quarantineId = String(i.customId || '');
     if (
       quarantineId.startsWith('mod_open_quarantine:')

@@ -7,6 +7,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  MessageFlags,
 } = require('discord.js');
 const {
   DEFAULT_INVESTIGATION_CATEGORY_NAME,
@@ -134,6 +135,13 @@ async function createInvestigationRoom(guild, member, quarantineRole, options = 
     permissionOverwrites: await buildInvestigationRoomOverwrites(guild, member, quarantineRole, options),
     reason: `Goliath investigation isolation for ${member.user?.tag || member.id}`,
   });
+  await channel.send({ ...buildInvestigationRoomPanel(member, channel.id, options), allowedMentions: { parse: [], users: [member.id] } })
+    .catch((error) => console.warn(`[QuarantineSystem] Failed to send investigation room intro in ${guild.id}:`, error.message));
+  await notifyInvestigationManagement(channel, member.id, options.quarantinedBy).catch(error => console.warn(`[QuarantineSystem] Management notification failed in ${guild.id}:`, error.message));
+  return channel;
+}
+
+function buildInvestigationRoomPanel(member, channelId, options = {}) {
   const leadId = options.quarantinedBy && /^\d+$/.test(String(options.quarantinedBy)) ? String(options.quarantinedBy) : null;
   const intro = new EmbedBuilder()
     .setColor(0x5865F2)
@@ -153,10 +161,29 @@ async function createInvestigationRoom(guild, member, quarantineRole, options = 
     new ButtonBuilder().setCustomId(`mod_invroom_note:${member.id}`).setLabel('Add Note').setEmoji('📝').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_invroom_access:${member.id}`).setLabel('Channel Access').setEmoji('🔐').setStyle(ButtonStyle.Secondary),
   );
-  await channel.send({ content: `${member}`, embeds: [intro], components: [controls, investigationRoomControls(member.id, channel.id)], allowedMentions: { users: [member.id], roles: [], repliedUser: false } })
-    .catch((error) => console.warn(`[QuarantineSystem] Failed to send investigation room intro in ${guild.id}:`, error.message));
-  await notifyInvestigationManagement(channel, member.id, options.quarantinedBy).catch(error => console.warn(`[QuarantineSystem] Management notification failed in ${guild.id}:`, error.message));
-  return channel;
+  return { content: `<@${member.id}>`, embeds: [intro], components: [controls, investigationRoomControls(member.id, channelId)], allowedMentions: { parse: [] } };
+}
+
+async function privateInvestigationNavigation(interaction) {
+  if (!/^(mod_dashboard:|mod_refresh:|mod_history_back$|mod:close$)/.test(String(interaction.customId || ''))) return interaction;
+  const message = interaction.message;
+  if (!message || message.flags?.has?.(MessageFlags.Ephemeral) || !interaction.guild
+    || message.author?.id !== interaction.guild.client?.user?.id) return interaction;
+  const state = getQuarantineState(interaction.guild.id);
+  const isRoom = Object.values(state.users || {}).some(snapshot => snapshot.interviewChannelId === interaction.channelId)
+    || (state.archivedRooms || []).some(room => room.channelId === interaction.channelId);
+  if (!isRoom) return interaction;
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const privateMessage = await interaction.fetchReply();
+  // All existing workspace routes keep working, but can edit/delete only the
+  // moderator's private response. The shared room panel is never their source.
+  return new Proxy(interaction, { get(target, key) {
+    if (key === 'message') return privateMessage;
+    if (key === 'update' || key === 'reply') return payload => target.editReply(payload);
+    if (key === 'deferUpdate') return async () => {};
+    const value = Reflect.get(target, key, target);
+    return typeof value === 'function' ? value.bind(target) : value;
+  } });
 }
 
 const presentationChecks = new Set();
@@ -176,10 +203,39 @@ async function refreshInvestigationPresentation(guild, channel, memberId) {
   }
   const key = `${guild.id}:${channel.id}`;
   if (presentationChecks.has(key) || !channel.messages?.fetch || !guild.client?.user?.id) return;
-  const messages = await channel.messages.fetch({ limit: 50 });
-  const panel = messages.find(message => message.author?.id === guild.client.user.id
+  const ownsPanel = message => message?.author?.id === guild.client.user.id
     && message.embeds?.[0]?.title === '🔎 Private Investigation Room'
-    && message.components?.some(row => row.components.some(component => component.customId === `mod_invroom_transcript:${memberId}:${channel.id}`)));
+    && message.components?.some(row => row.components.some(component => component.customId === `mod_invroom_transcript:${memberId}:${channel.id}`));
+  let panel = null;
+  const snapshot = state.users?.[memberId];
+  if (snapshot?.controlMessageId) {
+    try { const candidate = await channel.messages.fetch(snapshot.controlMessageId); if (ownsPanel(candidate)) panel = candidate; }
+    catch (error) { if (Number(error?.code) !== 10008) throw error; }
+  }
+  if (!panel) {
+    let before;
+    for (let page = 0; page < 50; page += 1) {
+      const messages = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+      panel = messages.find(ownsPanel);
+      if (panel || messages.size < 100) break;
+      if (page === 49) throw new Error('Room history is too large to safely confirm whether its controls are missing.');
+      before = messages.last().id;
+    }
+  }
+  if (!panel && snapshot?.interviewChannelId === channel.id) {
+    // Recovery changes only the missing message, never the case/room/roles.
+    const member = await guild.members.fetch({ user: memberId, force: true });
+    const latest = getQuarantineState(guild.id).users?.[memberId];
+    if (latest?.interviewChannelId !== channel.id) return;
+    panel = await channel.send(buildInvestigationRoomPanel(member, channel.id, latest));
+  }
+  if (panel?.id) {
+    const latest = getQuarantineState(guild.id);
+    if (latest.users?.[memberId]?.interviewChannelId === channel.id && latest.users[memberId].controlMessageId !== panel.id) {
+      latest.users[memberId].controlMessageId = panel.id;
+      saveQuarantineState(guild, latest);
+    }
+  }
   if (panel && (panel.embeds[0].footer?.text?.includes('Goliath') || panel.components.some(row => row.components.some(component => component.label === 'Add Staff Note')))) {
     const embed = EmbedBuilder.from(panel.embeds[0]).setFooter({ text: 'Private Moderation Review' });
     if (embed.data.description) embed.setDescription(embed.data.description.replace('investigating staff here', 'management team here'));
@@ -231,6 +287,8 @@ async function repairInvestigationRoom(guild, member, role, options = {}) {
 module.exports = {
   cleanCategoryName,
   refreshInvestigationPresentation,
+  privateInvestigationNavigation,
+  buildInvestigationRoomPanel,
   cleanChannelName,
   getInvestigationStaffRoleIds,
   ensureInvestigationCategory,
