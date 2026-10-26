@@ -3330,15 +3330,38 @@ function fixture(snapshot = {}) {
   const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './isolation': {} });
   assert.equal(rooms.cleanCategoryName('Goliath Investigations'), 'Investigations');
   assert.equal(rooms.cleanCategoryName('Custom Review Rooms'), 'Custom Review Rooms');
+  assert.equal(rooms.cleanChannelName('  Example___Member---  '), 'example-member');
+  assert.equal(rooms.cleanChannelName('💎'), 'member');
+  const roomRenames = [];
+  channel.name = `investigation-undecided4237-${uid.slice(-4)}`;
+  channel.setName = async name => { roomRenames.push(name); channel.name = name; };
+
   await rooms.refreshInvestigationPresentation(f.guild, channel, uid);
   assert.deepEqual(renames, ['Investigations']); assert.equal(edits.length, 1);
+  assert.deepEqual(roomRenames, ['undecided4237']);
   assert.equal(edits[0].embeds[0].data.footer.text, 'Private Moderation Review');
   assert.equal(edits[0].embeds[0].data.fields[0].value, 'Original case reason');
   assert.equal(edits[0].components[0].components[0].data.label, 'Add Note');
   assert.equal(f.state.users[uid].interviewChannelId, 'room');
   await rooms.refreshInvestigationPresentation(f.guild, channel, uid); assert.equal(edits.length, 1, 'Refresh must not repeatedly edit the room panel');
+  channel.name = 'custom-review-name';
   channel.id = 'custom-room'; parent.name = 'Custom Review Rooms'; channel.messages.fetch = async () => new Collection();
   await rooms.refreshInvestigationPresentation(f.guild, channel, uid); assert.deepEqual(renames, ['Investigations']);
+  assert.deepEqual(roomRenames, ['undecided4237'], 'Custom room names must remain unchanged');
+}
+// Closed room names remain readable and archival preserves the same room and original-role snapshot.
+{
+  const f = fixture();
+  const rooms = load(base + 'investigationRooms.js', { './state': f.api, './isolation': {} });
+  const lifecycle = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './isolation': {}, './memberLifecycle': {}, './investigationRooms': rooms });
+  const names = [];
+  const channel = { id: 'room', name: `investigation-undecided4237-${uid.slice(-4)}`, send: async () => {}, permissionOverwrites: { edit: async () => {} }, setName: async name => { names.push(name); channel.name = name; }, setTopic: async () => {} };
+  f.guild.channels.cache.set('room', channel);
+  const originals = [...f.state.users[uid].roles];
+  assert.equal((await lifecycle.archiveInvestigationRoom(f.guild, f.state.users[uid])).archived, true);
+  assert.deepEqual(names, ['closed-undecided4237']);
+  assert.deepEqual(f.state.users[uid].roles, originals);
+  assert.equal(f.state.archivedRooms[0].channelId, 'room');
 }
 // Back/Close navigation from a shared room opens an independent ephemeral workspace.
 {

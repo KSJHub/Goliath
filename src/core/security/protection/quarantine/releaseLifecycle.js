@@ -49,7 +49,11 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
   try {
     await channel.send({ content: `🔓 **Investigation Closed**\n\nYour investigation has ended, and your quarantine restrictions have been lifted.\n\nIf you need any further help, please contact server management.${snapshot.caseId ? `\n\n**Case reference:** #${snapshot.caseId}` : ''}`, allowedMentions: { parse: [] } }).catch(() => null);
     if (snapshot.memberId && channel.permissionOverwrites?.edit) await channel.permissionOverwrites.edit(String(snapshot.memberId), { ViewChannel: false }, { reason: options.reason || 'Investigation isolation closed' });
-    const closedName = `closed-investigation-${String(snapshot.memberId || 'member').slice(-6)}-${Math.floor(Date.now() / 1000).toString(36)}`.slice(0, 100);
+    const { cleanChannelName } = require('./investigationRooms');
+    const legacySuffix = `-${String(snapshot.memberId || '').slice(-4)}`;
+    const roomName = /^investigation-[a-z0-9-]+$/.test(channel.name || '') && channel.name.endsWith(legacySuffix)
+      ? channel.name.slice('investigation-'.length, -legacySuffix.length) : channel.name;
+    const closedName = `closed-${cleanChannelName(roomName || snapshot.memberTag || 'member').replace(/^closed-/, '')}`;
     await channel.setName(closedName, options.reason || 'Investigation isolation closed').catch(() => null);
     await channel.setTopic(`Closed investigation • Member ${snapshot.memberId || 'unknown'}${snapshot.caseId ? ` • Case #${snapshot.caseId}` : ''}`, options.reason || 'Investigation isolation closed').catch(() => null);
     const state = getQuarantineState(guild.id);

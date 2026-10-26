@@ -31,8 +31,10 @@ function cleanChannelName(value) {
   const safe = String(value || 'member')
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 56);
+    .slice(0, 56)
+    .replace(/-+$/g, '');
   return safe || 'member';
 }
 
@@ -125,10 +127,9 @@ async function notifyInvestigationManagement(channel, memberId, leadId = null) {
 
 async function createInvestigationRoom(guild, member, quarantineRole, options = {}) {
   const category = await ensureInvestigationCategory(guild, options);
-  const suffix = String(member.id).slice(-4);
   const subjectName = cleanChannelName(member.displayName || member.user?.globalName || member.user?.username || 'member');
   const channel = await guild.channels.create({
-    name: `investigation-${subjectName}-${suffix}`.slice(0, 100),
+    name: subjectName,
     type: ChannelType.GuildText,
     parent: category.id,
     topic: `Private investigation • Member ${member.id} • ${String(options.reason || 'No reason provided').slice(0, 700)}`,
@@ -189,6 +190,13 @@ async function privateInvestigationNavigation(interaction) {
 const presentationChecks = new Set();
 async function refreshInvestigationPresentation(guild, channel, memberId) {
   const state = getQuarantineState(guild.id);
+  // Only migrate this member's known generated legacy name. Keep custom names intact.
+  const suffix = `-${String(memberId).slice(-4)}`;
+  if (state.users?.[memberId]?.interviewChannelId === channel.id
+    && /^investigation-[a-z0-9-]+$/.test(channel.name || '') && channel.name.endsWith(suffix)) {
+    const name = channel.name.slice('investigation-'.length, -suffix.length);
+    if (name) await channel.setName(cleanChannelName(name), 'Simplify investigation room name');
+  }
   const parent = channel.parent || guild.channels.cache.get(channel.parentId);
   if (parent?.id === state.investigationCategoryId && parent?.name === 'Goliath Investigations') {
     await parent.setName(DEFAULT_INVESTIGATION_CATEGORY_NAME, 'Use generic investigation category name');
