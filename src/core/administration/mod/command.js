@@ -103,6 +103,7 @@ function safeAppealCase(req, modCase, userId) {
   return {
     guildId: String(modCase.guildId),
     guildName: getGuildName(req, modCase.guildId),
+    guildIconUrl: req.client?.guilds?.cache?.get?.(String(modCase.guildId))?.iconURL?.({ size: 128 }) || null,
     caseId: Number(modCase.caseId),
     action: effectiveAction,
     actionLabel: effectiveAction.replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
