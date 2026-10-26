@@ -121,6 +121,25 @@ async function quarantineMember(guild, member, options = {}) {
     state.roleId = quarantineRole.id; state.roleName = quarantineRole.name;
     state.users[member.id] = { memberId: member.id, memberTag: member.user?.tag || null, mode, quarantinedAt: Date.now(), reason: options.reason || 'No reason provided', roles: snapshotRoles, memberViewAllowRestores: isolation.memberViewAllowRestores || [], quarantinedBy: options.quarantinedBy || null, source: options.source || (options.quarantinedBy === 'anti_nuke' ? 'anti_nuke' : 'moderation'), caseId: options.caseId || null, interviewChannelId: interviewRoom?.id || null, autoRelease: options.autoRelease === true && isAutomatedSecurityRequest(options), expiresAt: options.durationMs && Number(options.durationMs) > 0 ? Date.now() + Number(options.durationMs) : null };
     saveQuarantineState(guild, state);
+    // Persist a single linked moderation case after containment has succeeded.
+    // Do not undo an active security restriction if case persistence fails.
+    try {
+      const { createCase, getCaseById } = require('../../../administration/mod/storage');
+      const snapshot = state.users[member.id];
+      const linked = snapshot.caseId ? getCaseById(guild.id, snapshot.caseId) : null;
+      if (!linked || String(linked.userId) !== String(member.id)) {
+        const record = createCase({
+          guildId: guild.id, userId: member.id,
+          moderatorId: /^\d{16,20}$/.test(String(options.quarantinedBy || '')) ? String(options.quarantinedBy) : guild.client.user.id,
+          action: 'quarantine', reason: String(options.reason || 'Account restriction applied').slice(0, 1500),
+          metadata: { source: 'quarantine', mode, interviewChannelId: interviewRoom?.id || null },
+          status: 'active',
+        });
+        if (record?.caseId) attachQuarantineCase(guild, member.id, record.caseId);
+      }
+    } catch (caseError) {
+      console.error('[QuarantineSystem] Failed to link moderation case:', caseError);
+    }
     emitCurrentQuarantineState(guild, 'member_quarantined', { memberId: member.id, mode, interviewChannelId: interviewRoom?.id || null });
     return { success: true, mode, roleId: quarantineRole.id, interviewChannelId: interviewRoom?.id || null, snapshotRoles, isolation, verification };
   } catch (error) {
