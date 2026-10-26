@@ -367,7 +367,7 @@ function buildAnalyticsOverviewEmbed(guild, analytics) {
     { name: '🧾 Audit Events', value: `**${analytics.auditActions}**\nrecorded`, inline: true },
     { name: '⚡ Moderation Actions', value: `Warnings **${Number(analytics.actionCounts.warn || 0)}**  •  Timeouts **${Number(analytics.actionCounts.timeout || 0)}**  •  Kicks **${Number(analytics.actionCounts.kick || 0)}**  •  Bans **${Number(analytics.actionCounts.ban || 0)}**`, inline: false },
     { name: '⚖️ Appeals', value: `Pending **${appeal.pending}**  •  Approved **${appeal.approved}**  •  Denied **${appeal.denied}**`, inline: false },
-    { name: '↩️ Case Outcomes', value: `Reversed **${analytics.reversedCases}**  •  Expired **${analytics.expiredCases}**  •  Reversal rate **${analytics.reversalRate}**`, inline: false },
+    { name: '↩️ Case Outcomes', value: `Closed **${analytics.reversedCases}**  •  Expired **${analytics.expiredCases}**  •  Closure rate **${analytics.reversalRate}**`, inline: false },
     { name: '📈 Recent Activity · Last 7 Days', value: trend.slice(0, 1024), inline: false }
   ];
   if (topModerators || topUsers) {
@@ -397,7 +397,7 @@ function buildModeratorAnalyticsEmbed(guild, analytics) {
     fields.push(
       { name: '📁 Cases Handled', value: `**${analytics.moderatorCases}**`, inline: true },
       { name: '👥 Members Moderated', value: `**${analytics.affectedUsers}**`, inline: true },
-      { name: '↩️ Reversed', value: `**${statuses.reversed || 0}**`, inline: true },
+      { name: '✅ Closed', value: `**${statuses.reversed || 0}**`, inline: true },
       { name: '⚡ Actions Taken', value: `Warnings **${Number(analytics.moderatorActionCounts.warn || 0)}** • Timeouts **${Number(analytics.moderatorActionCounts.timeout || 0)}**\nKicks **${Number(analytics.moderatorActionCounts.kick || 0)}** • Bans **${Number(analytics.moderatorActionCounts.ban || 0)}**`, inline: false }
     );
     const recent = analytics.recentCases.slice(0, 5).map((entry) => {
