@@ -92,7 +92,8 @@ function safeReturnPath(value) {
   if (!raw) return '/';
   try {
     const parsed = new URL(raw, 'https://goliath.local');
-    if (parsed.origin !== 'https://goliath.local' || parsed.pathname !== '/appeals') return '/';
+    if (parsed.origin !== 'https://goliath.local' || !['/appeals', '/portal'].includes(parsed.pathname)) return '/';
+    if (parsed.pathname === '/portal') return '/portal';
     const params = new URLSearchParams();
     const guild = String(parsed.searchParams.get('guild') || '').trim();
     const caseId = String(parsed.searchParams.get('case') || '').trim();
@@ -146,7 +147,7 @@ function buildPostOAuthTarget(origin, returnPath) {
 
 function renderAppealsHandoff(returnPath, clientUrl) {
   const safePath = safeReturnPath(returnPath);
-  const target = buildPostOAuthTarget(clientUrl, safePath.startsWith('/appeals') ? safePath : '/appeals');
+  const target = buildPostOAuthTarget(clientUrl, (safePath.startsWith('/appeals') || safePath === '/portal') ? safePath : '/appeals');
   const escapedTarget = target.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   return `<!doctype html>
 <html lang="en">
@@ -334,7 +335,7 @@ router.get('/callback', async (req, res) => {
         return res.status(500).send('Session error.');
       }
 
-      if (stateReturnPath.startsWith('/appeals')) {
+      if (stateReturnPath.startsWith('/appeals') || stateReturnPath === '/portal') {
         res.clearCookie('goliath_oauth_return', { path: '/', sameSite: isProduction() ? 'none' : 'lax', secure: isProduction() });
         return res.status(200).type('html').send(renderAppealsHandoff(stateReturnPath, clientUrl));
       }

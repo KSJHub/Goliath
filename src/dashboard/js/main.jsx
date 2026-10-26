@@ -77,7 +77,7 @@ if ((isAppealsPath || isRecoveredAppealPath) && pathname !== '/appeals') {
   pathname = '/appeals';
 }
 
-const RootComponent = pathname === '/appeals' ? Appeals : App;
+const RootComponent = (pathname === '/appeals' || pathname === '/portal') ? Appeals : App;
 
 root.render(
   <React.StrictMode>

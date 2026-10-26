@@ -57,6 +57,7 @@ function getDeepLink() {
 }
 
 function currentReturnPath() {
+  if (window.location.pathname === '/portal') return '/portal';
   const deepLink = getDeepLink();
   const params = new URLSearchParams();
   if (deepLink.guildId) params.set('guild', deepLink.guildId);
@@ -71,7 +72,7 @@ export default function Appeals() {
   const [user, setUser] = useState(null);
   const [cases, setCases] = useState([]);
   const [restrictions, setRestrictions] = useState([]);
-  const [portalTab, setPortalTab] = useState('overview');
+  const [portalTab, setPortalTab] = useState(window.location.pathname === '/appeals' ? 'cases' : 'overview');
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
   const [grounds, setGrounds] = useState('');
@@ -321,7 +322,7 @@ export default function Appeals() {
 
         <nav aria-label="Member portal sections" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {[['overview', '🏠 Overview'], ['timeline', '📅 Timeline'], ['cases', '⚖️ Cases & Appeals'], ['restrictions', '🔒 Restrictions'], ['profile', '👤 Profile']].map(([id, label]) => (
-            <button key={id} type="button" aria-current={portalTab === id ? 'page' : undefined} style={{ ...secondaryButton, background: portalTab === id ? '#2563eb' : '#18273c' }} onClick={() => setPortalTab(id)}>{label}</button>
+            <button key={id} type="button" aria-current={portalTab === id ? 'page' : undefined} style={{ ...secondaryButton, background: portalTab === id ? '#2563eb' : '#18273c' }} onClick={() => { if (id === 'cases') { window.location.assign('/appeals'); return; } if (window.location.pathname === '/appeals') window.history.replaceState({}, '', '/portal'); setPortalTab(id); }}>{label}</button>
           ))}
         </nav>
         {(portalTab === 'overview' || portalTab === 'restrictions') ? (

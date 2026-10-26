@@ -3,7 +3,7 @@
 const { PermissionFlagsBits } = require('discord.js');
 const security = require('../../core/security/protection/core');
 
-const MEMBER_PORTAL = '/appeals';
+const MEMBER_PORTAL = '/portal';
 const ID = /^\d{16,20}$/;
 
 async function resolveGuildAccess(client, userId, guildId) {
