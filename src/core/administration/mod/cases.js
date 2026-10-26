@@ -662,25 +662,23 @@ function buildCaseDetailEmbed(modCase) {
   const status = getStatusLabel(modCase);
   const member = /^\d{15,22}$/.test(String(modCase.userId || '')) ? `<@${modCase.userId}>` : 'Unknown member';
   const moderator = /^\d{15,22}$/.test(String(modCase.moderatorId || '')) ? `<@${modCase.moderatorId}>` : 'Unknown moderator';
+  const strikeWeight = modCase.action === 'warn' && Number.isFinite(Number(modCase.metadata?.strikeWeight))
+    ? `\n**Strike Weight:** ${modCase.metadata.strikeWeight}` : '';
   const embed = new EmbedBuilder()
     .setColor(modCase.status === 'expired' ? '#FEE75C' : modCase.status === 'reversed' ? '#57F287' : '#5865F2')
     .setTitle(`🧾 Moderation Case #${modCase.caseId}`)
-    .setDescription(`**${action}**  •  ${status}\n\n**Reason**\n${String(modCase.reason || 'No reason provided').slice(0, 1500)}`)
+    .setDescription(`**Original Action:** ${action}  •  **Status:** ${status}`)
     .addFields(
-      { name: '👤 Member', value: `${member}\n${modCase.userId || 'Unknown ID'}`, inline: true },
-      { name: '🛡️ Moderator', value: `${moderator}\n${modCase.moderatorId || 'Unknown ID'}`, inline: true },
+      { name: '👤 Case Information', value: `**Member:** ${member}\n**Moderator:** ${moderator}\n**Reason:**\n${String(modCase.reason || 'No reason provided').slice(0, 750)}${strikeWeight}`, inline: false },
       { name: '📅 Timeline', value: `**Created:** <t:${getCaseTimestamp(modCase.createdAt)}:f>\n**Updated:** ${modCase.updatedAt ? `<t:${getCaseTimestamp(modCase.updatedAt)}:f>` : 'Never'}`, inline: false }
     );
-  if (modCase.relatedCaseId) embed.addFields({ name: '🔗 Related Case', value: `#${modCase.relatedCaseId}`, inline: true });
-  if (modCase.action === 'warn' && Number.isFinite(Number(modCase.metadata?.strikeWeight))) {
-    embed.addFields({ name: '⚠️ Strike Weight', value: String(modCase.metadata.strikeWeight), inline: true });
-  }
+  if (modCase.relatedCaseId) embed.addFields({ name: '🔗 Related Case', value: `#${modCase.relatedCaseId}`, inline: false });
   const appeals = getCaseAppeals(modCase);
   if (appeals.length) {
     const pending = appeals.filter(appeal => appeal.status === 'pending').length;
     const approved = appeals.filter(appeal => appeal.status === 'approved').length;
     const denied = appeals.filter(appeal => appeal.status === 'denied').length;
-    embed.addFields({ name: '⚖️ Appeals', value: `**Pending:** ${pending}  •  **Approved:** ${approved}  •  **Denied:** ${denied}\n**Total submitted:** ${appeals.length}`, inline: false });
+    embed.addFields({ name: '⚖️ Appeals', value: `**Total:** ${appeals.length}  •  **Pending:** ${pending}  •  **Approved:** ${approved}  •  **Denied:** ${denied}`, inline: false });
   }
   if (modCase.metadata?.appealNotice) {
     const notice = modCase.metadata.appealNotice;
