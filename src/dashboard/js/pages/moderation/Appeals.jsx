@@ -13,7 +13,7 @@ function formatDate(value) {
 
 function caseStatus(status) {
   const value = String(status || 'active').toLowerCase();
-  if (value === 'reversed') return { label: '🔄 Case Reversed', color: '#67e8f9' };
+  if (value === 'reversed') return { label: '✅ Case Resolved', color: '#67e8f9' };
   if (value === 'expired') return { label: '⌛ Case Expired', color: '#cbd5e1' };
   if (value === 'active') return { label: '⚠️ Case Active', color: '#fbbf24' };
   return { label: '📁 ' + value.replace(/[_-]/g, ' '), color: '#bfdbfe' };
