@@ -731,19 +731,20 @@ function buildAppealDetailPayload(modCase, appeal) {
   if (appeal.notification) embed.addFields({ name: '📨 Decision Notification', value: appeal.notification.sent ? '✅ Sent to member' : `⚠️ Not delivered${appeal.notification.error ? ` • ${String(appeal.notification.error).slice(0, 180)}` : ''}`, inline: false });
   const proceedingExecution = modCase.action === 'case' ? modCase.metadata?.proceeding?.sanctionExecution : null;
   const canRetryRemedy = appeal.status === 'approved' && appeal.remedy?.ok === false && (proceedingExecution?.status === 'reversal_failed' || (proceedingExecution?.status === 'reversing' && appealRemedyIsStale(proceedingExecution)));
+  const decisionButtons = [
+    new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`).setLabel('✅ Approve Appeal').setStyle(ButtonStyle.Success).setDisabled(!pending),
+    new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`).setLabel('❌ Deny Appeal').setStyle(ButtonStyle.Danger).setDisabled(!pending),
+  ];
+  if (canRetryRemedy) decisionButtons.push(
+    new ButtonBuilder().setCustomId(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`).setLabel('🔄 Retry Sanction Reversal').setStyle(ButtonStyle.Primary)
+  );
   const components = [
+    new ActionRowBuilder().addComponents(decisionButtons),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`).setLabel('✅ Approve Appeal').setStyle(ButtonStyle.Success).setDisabled(!pending),
-      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`).setLabel('❌ Deny Appeal').setStyle(ButtonStyle.Danger).setDisabled(!pending)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('📁 View Case').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel('⬅️ Back to Appeals').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('📁 View Case').setStyle(ButtonStyle.Secondary)
     ),
   ];
-  if (canRetryRemedy) components.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`).setLabel('🔄 Retry Sanction Reversal').setStyle(ButtonStyle.Primary)
-  ));
   embed.setFooter({ text: `Appeal reference: ${String(appeal.id).slice(0, 70)}` });
   return { embeds: [embed], components };
 }
