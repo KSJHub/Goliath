@@ -877,7 +877,12 @@ async function routeButtonsAndSelects(i) {
       if (!record) return safeReply(i, { content: 'Case not found.', flags: 64 });
       if (await caseProceeding.handleProceedingInteraction(i)) return true;
       return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865f2).setTitle(`📁 Moderation Case #${caseId}`)
-        .setDescription(`**Member:** <@${record.userId || record.user_id}>\\n**Type:** ${String(record.action || 'Unknown')}\\n**Status:** ${String(record.status || 'Active')}\\n**Reason:** ${String(record.reason || 'No reason recorded').slice(0, 1200)}`)], components: [row(button('mod_dashboard:none:cases', 'Back to Cases'))] });
+        .addFields(
+          { name: '👤 Member', value: `<@${record.userId || record.user_id}>`, inline: false },
+          { name: '📋 Action', value: String(record.action || 'Unknown'), inline: true },
+          { name: '🛡️ Status', value: String(record.status === 'reversed' ? 'Closed' : record.status || 'Active'), inline: true },
+          { name: '📝 Reason', value: String(record.reason || 'No reason recorded').slice(0, 1024), inline: false }
+        )], components: [row(button('mod_dashboard:none:cases', 'Back to Cases'))] });
     }
     return safeReply(i, { content: 'Invalid case selection.', flags: 64 });
   }
