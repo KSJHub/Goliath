@@ -3159,6 +3159,8 @@ function fixture(snapshot = {}) {
 // Simultaneous initial quarantine requests cannot snapshot stripped roles or create two rooms.
 {
   const f = fixture();
+  f.guild.client = { user: { id: 'bot' } };
+  const cases = [];
   delete f.state.users[uid];
   f.member.roles.cache = new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]);
   let unblock, entered, created = 0;
@@ -3170,6 +3172,7 @@ function fixture(snapshot = {}) {
     './roleManager': { ensureQuarantineRole: async () => { entered(); await gate; return f.role; } },
     './isolation': { syncQuarantineIsolation: async () => ({ success: true, memberViewAllowRestores: [] }), verifyMemberContainment: async () => ({ success: true }) },
     './investigationRooms': { createInvestigationRoom: async () => { created++; return { id: 'room' }; } }, './releaseLifecycle': locks,
+    '../../../administration/mod/storage': { getCaseById: () => null, getCasesForUser: () => cases, createCase: input => { const record = { ...input, caseId: 42 }; cases.push(record); return record; } },
   });
   const pending = lifecycle.quarantineMember(f.guild, f.member, { quarantinedBy: 'staff' });
   await started;
@@ -3178,6 +3181,8 @@ function fixture(snapshot = {}) {
   assert.equal((await pending).success, true);
   assert.equal(created, 1);
   assert.deepEqual(f.state.users[uid].roles, [originalRole]);
+  assert.equal(cases.length, 1); assert.equal(cases[0].metadata.interviewChannelId, 'room');
+  assert.equal(f.state.users[uid].caseId, 42, 'A new quarantine must be linked to its moderation case');
   assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, uid), false);
 }
 // Failed room creation occurs before roles change; original roles must not be rewritten.
@@ -3295,6 +3300,7 @@ function fixture(snapshot = {}) {
   f.member.roles.cache = new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]);
   const locks = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {} });
   let protectedDuringCreation = false;
+  f.guild.client = { user: { id: 'bot' } };
   const selectedInvitee = '777777777777777777';
   const lifecycle = load(base + 'memberLifecycle.js', { './state': f.api,
     '../../../../owner/dev/DevOverrideManager': { shouldBlockOwnerDestructiveAction: () => false }, '../core': { canManageTargetMember: () => ({ allowed: true }) },
@@ -3304,6 +3310,7 @@ function fixture(snapshot = {}) {
       protectedDuringCreation = locks.isQuarantineReleaseInProgress(g.id, other) && locks.isQuarantineReleaseInProgress(g.id, selectedInvitee);
       assert.deepEqual(opts.protectedCaseIds, [selectedInvitee, other]); return { id: 'room', __protectedInvestigationMembers: [other] };
     } }, './releaseLifecycle': locks,
+    '../../../administration/mod/storage': { getCaseById: () => null, getCasesForUser: () => [], createCase: () => ({ caseId: 43 }) },
   });
   assert.equal(locks.tryBeginQuarantineOperation(f.guild.id, other), true);
   const busy = await lifecycle.quarantineMember(f.guild, f.member, { invitationSelection: true, invitedRoleIds: [originalRole], invitedUserIds: [selectedInvitee] });
@@ -3312,6 +3319,7 @@ function fixture(snapshot = {}) {
   locks.endQuarantineOperation(f.guild.id, other);
   assert.equal((await lifecycle.quarantineMember(f.guild, f.member, { invitationSelection: true, invitedRoleIds: [originalRole], invitedUserIds: [selectedInvitee] })).success, true);
   assert(protectedDuringCreation); assert.deepEqual(f.state.users[uid].protectedInvitationMembers, [other]);
+  assert.equal(f.state.users[uid].caseId, 43, 'Invited investigations must be linked to their moderation case');
   assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, other), false);
   const deleted = [];
   const channel = { id: 'room', permissionOverwrites: { cache: new Collection([[other, { allow: { bitfield: 0n }, deny: { bitfield: P.ViewChannel } }]]), delete: async id => deleted.push(id) } };
