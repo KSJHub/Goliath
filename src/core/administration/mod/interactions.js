@@ -862,7 +862,7 @@ function ownerCaseRows(i, page = 0) {
   if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_management:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
   nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('⬅️ Back to Cases').setStyle(Discord.ButtonStyle.Secondary));
   components.push(nav);
-  return { embeds: [new Discord.EmbedBuilder().setColor(0x5865f2).setTitle('⚙️ Case Management · Guild Owner').setDescription(`Select a case to review for **permanent deletion**. This removes the case and its linked warning and audit records. This cannot be undone through the interface.\n\n**Cases:** ${rows.length} · **Page:** ${current + 1}/${pages}`)], components };
+  return { embeds: [new Discord.EmbedBuilder().setColor(0x5865f2).setTitle('⚙️ Case Management').setDescription(`Select a case to review for **permanent deletion**. This removes the case and its linked warning and audit records. This cannot be undone through the interface.\n\n**Cases:** ${rows.length} · **Page:** ${current + 1}/${pages}`)], components };
 }
 async function handleOwnerCaseManagement(i) {
   const id = String(i.customId || '');
