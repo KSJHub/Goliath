@@ -168,28 +168,37 @@ function buildEmbed(account, event, template, creator, settings = {}) { const va
       if (tags) embed.addFields({ name: '\u200B', value: `**🏷️** ${tags}`, inline: false });
       if (notes) embed.addFields({ name: '\u200B', value: `💬 *${notes.replace(/([*_~\\])/g, '\\$1')}*`, inline: false });
     } if(event.vod?.url) embed.addFields({name:'📼 VOD',value:`[Watch the recording](${event.vod.url})`,inline:false}); } else { embed.setTitle((render(template.title,vars)||`${platform.icon} ${platform.label}`).slice(0,256)); const description=stripTrailingDivider(render(template.description,vars)||vars.title), actionLabel=clean(template.buttonLabel||'View Post',80), actions=vars.url?[`▶️ **[${actionLabel}](${vars.url})**`]:[]; embed.setDescription(`${description}${embedActionBlock(actions)}`.slice(0,4096)); } const liveImage=liveStatus==='LIVE'||liveStatus==='PAUSED', thumbnail=liveImage?(platformKey==='tiktok'?clean(event.thumbnail,1000):cacheBustedImageUrl(event.thumbnail)):clean(event.thumbnail,1000); if(thumbnail&&/^https?:\/\//i.test(thumbnail)) embed.setImage(thumbnail); if(!liveStatus&&vars.url&&/^https?:\/\//i.test(vars.url)) embed.setURL(vars.url); embed.setFooter({text:`Goliath Social Studio • ${platform.label} • ${liveStatus || event.type.toUpperCase()}`}); embed.setTimestamp(new Date(event.endedAt||event.publishedAt||event.startedAt||Date.now())); return embed; }
-async function tiktokMediaPayload(account,event,embed) {
-  if (String(account?.platform||'').toLowerCase() !== 'tiktok' || !['live','ended'].includes(event?.type)) return {embed,files:[]};
-  const url=clean(event?.thumbnail,1000);
-  if(!/^https:\/\//i.test(url)) return {embed,files:[]};
-  try {
-    const controller=new AbortController();
-    const timeout=setTimeout(()=>controller.abort(),8000);
-    let response;
-    try { response=await fetch(url,{signal:controller.signal}); } finally {clearTimeout(timeout);}
-    if(!response.ok) throw new Error('TikTok image fetch failed');
-    const length=Number(response.headers.get('content-length')||0);
-    if(length>8*1024*1024) throw new Error('TikTok image too large');
-    const bytes=Buffer.from(await response.arrayBuffer());
-    if(bytes.length>8*1024*1024) throw new Error('TikTok image too large');
-    const image=await sharp(bytes).rotate().resize(960,540,{fit:'contain',background:{r:17,g:18,b:22,alpha:1}}).jpeg({quality:85}).toBuffer();
-    const filename='goliath-tiktok-wide.jpg';
-    embed.setImage('attachment://'+filename);
-    return {embed,files:[new AttachmentBuilder(image,{name:filename})]};
-  } catch(error) {
-    console.warn('[Social Studio] TikTok wide media fallback:',error?.message||error);
-    return {embed,files:[]};
+async function tiktokMediaPayload(account,event,embed,previousMessage=null) {
+  if (String(account?.platform||'').toLowerCase() !== 'tiktok' || !['live','ended'].includes(event?.type)) return {embed,files:[],keepAttachments:false};
+  const urls=[
+    event?.thumbnail,
+    account?.state?.lastLiveEvent?.thumbnail,
+    previousMessage?.embeds?.[0]?.image?.url,
+    previousMessage?.attachments?.first?.()?.url,
+  ].map((value)=>clean(value,1500)).filter((value)=>/^https:\/\//i.test(value));
+  for (const url of [...new Set(urls)]) {
+    try {
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),10000);
+      let response;
+      try { response=await fetch(url,{signal:controller.signal,headers:{'User-Agent':'Mozilla/5.0 Goliath/1.0'}}); } finally {clearTimeout(timeout);}
+      if(!response.ok) throw new Error('HTTP '+response.status);
+      const length=Number(response.headers.get('content-length')||0);
+      if(length>8*1024*1024) throw new Error('Image exceeds size limit');
+      const bytes=Buffer.from(await response.arrayBuffer());
+      if(bytes.length>8*1024*1024) throw new Error('Image exceeds size limit');
+      const image=await sharp(bytes).rotate().resize(960,540,{fit:'contain',background:{r:17,g:18,b:22,alpha:1}}).jpeg({quality:85}).toBuffer();
+      const filename='goliath-tiktok-wide.jpg';
+      embed.setImage('attachment://'+filename);
+      return {embed,files:[new AttachmentBuilder(image,{name:filename})],keepAttachments:false};
+    } catch(error) {
+      console.warn('[Social Studio] TikTok media source unavailable:',error?.message||error);
+    }
   }
+  // A failed image fetch must not erase the original media on a tracked message.
+  console.warn('[Social Studio] TikTok wide media unavailable; preserving existing media.');
+  if(previousMessage?.embeds?.[0]?.image?.url) embed.setImage(previousMessage.embeds[0].image.url);
+  return {embed,files:[],keepAttachments:true};
 }
 async function sendAlert(client,guildId,config,account,event,options={}) {
   const channelId = alertChannelId(config,account,event.type);
@@ -224,8 +233,8 @@ async function sendAlert(client,guildId,config,account,event,options={}) {
   return {channelId,messageId:message.id};
 }
 async function trackedMessage(client,guildId,previous) { const channelId=previous.lastLiveMessageChannelId||previous.lastAlertChannelId, messageId=previous.lastLiveMessageId||previous.lastAlertMessageId; if(!channelId||!messageId)return null; const guild=client.guilds.cache.get(guildId)||await client.guilds.fetch(guildId).catch(()=>null); if(!guild)return null; const channel=guild.channels.cache.get(channelId)||await guild.channels.fetch(channelId).catch(()=>null); if(!channel?.isTextBased?.())return null; const message=await channel.messages.fetch(messageId).catch(()=>null); return message?{channelId,messageId,message}:null; }
-async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await tiktokMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings)); await tracked.message.edit({embeds:[media.embed],files:media.files,attachments:[]}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
-async function updateEndedAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await tiktokMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'ended'),creatorFor(config,account.accountId),config.settings)); await tracked.message.edit({content:null,embeds:[media.embed],files:media.files,attachments:[]}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
+async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await tiktokMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
+async function updateEndedAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await tiktokMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'ended'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({content:null,embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
 function livePostInWindow(config,creator,windowMs=2*60*60*1000) { const ids=new Set(creator?.accountIds||[]), cutoff=Date.now()-windowMs; return [...(config.history||[])].reverse().find((item)=>ids.has(item.accountId)&&['alert_sent','alert_updated','alert_recovered'].includes(item.status)&&item.alertType==='live'&&new Date(item.createdAt||0).getTime()>=cutoff)||null; }
 function accountLivePostInWindow(config,account,windowMs=2*60*60*1000) {
   if (!account?.accountId) return null;
