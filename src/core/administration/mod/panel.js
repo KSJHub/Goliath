@@ -254,7 +254,7 @@ function buildActionRows(target, stats, member, guild, context = {}) {
   const tools = [
     new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
   ];
-  if (canViewDashboardSection(member, guild, 'intelligence')) tools.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:intelligence`).setLabel('🧠 Intelligence').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
+  if (canViewDashboardSection(member, guild, 'intelligence')) management.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:intelligence`).setLabel('🧠 Intelligence').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
   if (canViewDashboardSection(member, guild, 'analytics')) tools.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
   if (canUseModAction(member, guild, 'export_cases')) tools.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   return [buttonRow(actions),buttonRow(reversals),buttonRow(management),buttonRow(tools)].filter(Boolean);
