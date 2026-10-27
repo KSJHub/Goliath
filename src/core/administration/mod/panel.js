@@ -223,6 +223,7 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${returnId}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   } else {
     finalButtons.push(new ButtonBuilder().setCustomId('mod_history_back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
+    if (active === 'cases' && String(member?.id) === String(guild?.ownerId)) finalButtons.push(new ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('⚙️ Management').setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   }
   rows.push(new ActionRowBuilder().addComponents(finalButtons));
