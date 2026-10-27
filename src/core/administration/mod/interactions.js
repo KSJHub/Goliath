@@ -868,22 +868,24 @@ async function handleOwnerCaseManagement(i) {
   const id = String(i.customId || '');
   if (!id.startsWith('mod_owner_')) return false;
   if (!isGuildOwner(i)) return safeReply(i, { content: '❌ Only the server owner can manage permanent case deletion.', flags: 64 });
-  if (id.startsWith('mod_owner_management:')) return i.update(ownerCaseRows(i, id.split(':')[1]));
+  if (id.startsWith('mod_owner_management:')) { await i.update(ownerCaseRows(i, id.split(':')[1])); return true; }
   if (id === 'mod_owner_case_select') {
     const caseId = Number(i.values?.[0]);
     const record = Number.isSafeInteger(caseId) && caseId > 0 ? getCaseById(i.guildId, caseId) : null;
     if (!record) return safeReply(i, { content: 'Case not found.', flags: 64 });
     const warningCount = db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
     const auditCount = db.prepare('SELECT COUNT(*) AS n FROM case_audit WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
-    return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0xed4245).setTitle(`🗑️ Permanently Delete Case #${caseId}?`).setDescription(`**Member:** <@${record.userId}>\n**Action:** ${record.action}\n**Status:** ${record.status}\n**Reason:** ${String(record.reason || 'None').slice(0, 700)}\n\n**Linked warnings:** ${warningCount}\n**Audit entries:** ${auditCount}\n\nThis operation permanently deletes these database records. It does **not** undo a Discord punishment and cannot be recovered through the interface.`)], components: [new Discord.ActionRowBuilder().addComponents(
+    await i.update({ embeds: [new Discord.EmbedBuilder().setColor(0xed4245).setTitle(`🗑️ Permanently Delete Case #${caseId}?`).setDescription(`**Member:** <@${record.userId}>\n**Action:** ${record.action}\n**Status:** ${record.status === 'reversed' ? 'Closed' : record.status}\n**Reason:** ${String(record.reason || 'None').slice(0, 700)}\n\n**Linked warnings:** ${warningCount}\n**Audit entries:** ${auditCount}\n\nThis operation permanently deletes these database records. It does **not** undo a Discord punishment and cannot be recovered through the interface.`)], components: [new Discord.ActionRowBuilder().addComponents(
       new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('Continue to Confirmation').setStyle(Discord.ButtonStyle.Danger),
       new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Cancel').setStyle(Discord.ButtonStyle.Secondary))] });
+    return true;
   }
   if (id.startsWith('mod_owner_delete_prompt:')) {
     const caseId = Number(id.split(':')[1]);
     if (!Number.isSafeInteger(caseId) || !getCaseById(i.guildId, caseId)) return safeReply(i, { content: 'Case not found.', flags: 64 });
     const input = new Discord.TextInputBuilder().setCustomId('confirmation').setLabel(`Type DELETE ${caseId} to confirm`).setStyle(Discord.TextInputStyle.Short).setRequired(true).setMaxLength(40);
-    return i.showModal(new Discord.ModalBuilder().setCustomId(`mod_owner_delete_submit:${caseId}`).setTitle(`Permanently Delete Case #${caseId}`).addComponents(new Discord.ActionRowBuilder().addComponents(input)));
+    await i.showModal(new Discord.ModalBuilder().setCustomId(`mod_owner_delete_submit:${caseId}`).setTitle(`Permanently Delete Case #${caseId}`).addComponents(new Discord.ActionRowBuilder().addComponents(input)));
+    return true;
   }
   if (id.startsWith('mod_owner_delete_submit:')) {
     const caseId = Number(id.split(':')[1]);
@@ -899,7 +901,8 @@ async function handleOwnerCaseManagement(i) {
       recordCaseAudit({ guildId, caseId, actorId: i.user.id, event: 'case.owner.permanently_deleted', before: record, after: null, metadata: { warningsRemoved: warnings, auditEntriesRemoved: audits, permanent: true } });
       return { warnings, audits };
     })();
-    return i.reply({ content: result ? `✅ Case #${caseId} permanently deleted. Removed ${result.warnings} linked warning(s) and ${result.audits} prior audit entry/entries. A deletion audit marker was retained.` : 'Case not found. Nothing was deleted.', flags: 64 });
+    await i.reply({ content: result ? `✅ Case #${caseId} permanently deleted. Removed ${result.warnings} linked warning(s) and ${result.audits} prior audit entry/entries. A deletion audit marker was retained.` : 'Case not found. Nothing was deleted.', flags: 64 });
+    return true;
   }
   return false;
 }
