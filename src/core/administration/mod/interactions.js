@@ -847,8 +847,65 @@ async function handleVerificationCases(i) {
  recordModerationSystemEvent({interaction:i,event:'moderation.verification_case_resolved',action,targetId:uid,reason:'Mod Hub Verification review'});
  return i.editReply({content:'✅ '+String(result.message||'Verification case updated.'),embeds:[],components:[row(button('mod_dashboard:none:cases','⬅️ Back to Cases'))]});
 }
+function isGuildOwner(i) { return Boolean(i.guild?.ownerId && String(i.user?.id) === String(i.guild.ownerId)); }
+function ownerCaseRows(i, page = 0) {
+  const rows = db.prepare('SELECT case_id, user_id, action, status FROM cases WHERE guild_id = ? ORDER BY case_id DESC').all(String(i.guildId));
+  const pages = Math.max(1, Math.ceil(rows.length / 25));
+  const current = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const selection = rows.slice(current * 25, (current + 1) * 25);
+  const components = [];
+  if (selection.length) components.push(new Discord.ActionRowBuilder().addComponents(new Discord.StringSelectMenuBuilder()
+    .setCustomId('mod_owner_case_select').setPlaceholder('Select a case to review for deletion')
+    .addOptions(selection.map(entry => ({ label: `Case #${entry.case_id} · ${entry.action}`.slice(0, 100), description: `Member ${entry.user_id} · ${entry.status}`.slice(0, 100), value: String(entry.case_id) })))));
+  const nav = new Discord.ActionRowBuilder();
+  if (current > 0) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_management:${current - 1}`).setLabel('Previous').setStyle(Discord.ButtonStyle.Secondary));
+  if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_management:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
+  nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('⬅️ Back to Cases').setStyle(Discord.ButtonStyle.Secondary));
+  components.push(nav);
+  return { embeds: [new Discord.EmbedBuilder().setColor(0x5865f2).setTitle('⚙️ Case Management · Guild Owner').setDescription(`Select a case to review for **permanent deletion**. This removes the case and its linked warning and audit records. This cannot be undone through the interface.\n\n**Cases:** ${rows.length} · **Page:** ${current + 1}/${pages}`)], components };
+}
+async function handleOwnerCaseManagement(i) {
+  const id = String(i.customId || '');
+  if (!id.startsWith('mod_owner_')) return false;
+  if (!isGuildOwner(i)) return safeReply(i, { content: '❌ Only the server owner can manage permanent case deletion.', flags: 64 });
+  if (id.startsWith('mod_owner_management:')) return i.update(ownerCaseRows(i, id.split(':')[1]));
+  if (id === 'mod_owner_case_select') {
+    const caseId = Number(i.values?.[0]);
+    const record = Number.isSafeInteger(caseId) && caseId > 0 ? getCaseById(i.guildId, caseId) : null;
+    if (!record) return safeReply(i, { content: 'Case not found.', flags: 64 });
+    const warningCount = db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
+    const auditCount = db.prepare('SELECT COUNT(*) AS n FROM case_audit WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
+    return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0xed4245).setTitle(`🗑️ Permanently Delete Case #${caseId}?`).setDescription(`**Member:** <@${record.userId}>\n**Action:** ${record.action}\n**Status:** ${record.status}\n**Reason:** ${String(record.reason || 'None').slice(0, 700)}\n\n**Linked warnings:** ${warningCount}\n**Audit entries:** ${auditCount}\n\nThis operation permanently deletes these database records. It does **not** undo a Discord punishment and cannot be recovered through the interface.`)], components: [new Discord.ActionRowBuilder().addComponents(
+      new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('Continue to Confirmation').setStyle(Discord.ButtonStyle.Danger),
+      new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Cancel').setStyle(Discord.ButtonStyle.Secondary))] });
+  }
+  if (id.startsWith('mod_owner_delete_prompt:')) {
+    const caseId = Number(id.split(':')[1]);
+    if (!Number.isSafeInteger(caseId) || !getCaseById(i.guildId, caseId)) return safeReply(i, { content: 'Case not found.', flags: 64 });
+    const input = new Discord.TextInputBuilder().setCustomId('confirmation').setLabel(`Type DELETE ${caseId} to confirm`).setStyle(Discord.TextInputStyle.Short).setRequired(true).setMaxLength(40);
+    return i.showModal(new Discord.ModalBuilder().setCustomId(`mod_owner_delete_submit:${caseId}`).setTitle(`Permanently Delete Case #${caseId}`).addComponents(new Discord.ActionRowBuilder().addComponents(input)));
+  }
+  if (id.startsWith('mod_owner_delete_submit:')) {
+    const caseId = Number(id.split(':')[1]);
+    if (!Number.isSafeInteger(caseId) || caseId <= 0 || i.fields?.getTextInputValue('confirmation')?.trim() !== `DELETE ${caseId}`) return safeReply(i, { content: '❌ Confirmation did not match. Nothing was deleted.', flags: 64 });
+    const result = db.transaction(() => {
+      const record = getCaseById(i.guildId, caseId);
+      if (!record) return null;
+      const guildId = String(i.guildId);
+      const warnings = db.prepare('DELETE FROM warnings WHERE guild_id = ? AND case_id = ?').run(guildId, caseId).changes;
+      const audits = db.prepare('DELETE FROM case_audit WHERE guild_id = ? AND case_id = ?').run(guildId, caseId).changes;
+      const deleted = db.prepare('DELETE FROM cases WHERE guild_id = ? AND case_id = ?').run(guildId, caseId).changes;
+      if (deleted !== 1) throw new Error('Case deletion did not affect exactly one row');
+      recordCaseAudit({ guildId, caseId, actorId: i.user.id, event: 'case.owner.permanently_deleted', before: record, after: null, metadata: { warningsRemoved: warnings, auditEntriesRemoved: audits, permanent: true } });
+      return { warnings, audits };
+    })();
+    return i.reply({ content: result ? `✅ Case #${caseId} permanently deleted. Removed ${result.warnings} linked warning(s) and ${result.audits} prior audit entry/entries. A deletion audit marker was retained.` : 'Case not found. Nothing was deleted.', flags: 64 });
+  }
+  return false;
+}
 async function routeButtonsAndSelects(i) {
   const denied = ensurePanelAccess(i); if (denied) return denied;
+  if (String(i.customId || '').startsWith('mod_owner_')) return handleOwnerCaseManagement(i);
   if (i.isButton?.() && (i.customId==='mod_verification_cases'||String(i.customId).startsWith('mod_verification_case:'))) return handleVerificationCases(i);
   if (i.isUserSelectMenu?.()) {
     const scan = await handleMemberScanSelect(i);
@@ -894,6 +951,7 @@ async function routeButtonsAndSelects(i) {
 async function routeModModal(i) {
   if (!i?.customId?.startsWith('mod_')) return false;
   const denied = ensurePanelAccess(i); if (denied) return denied;
+  if (String(i.customId || '').startsWith('mod_owner_')) return handleOwnerCaseManagement(i);
   await syncExpiredWarningsToCases(i.guild.id);
   const proceedingResult = await caseProceeding.handleProceedingModal(i);
   if (proceedingResult) return proceedingResult;
