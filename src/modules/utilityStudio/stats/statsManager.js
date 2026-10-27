@@ -250,7 +250,7 @@ async function repair(guild) {
   for (const issue of before.issues) {
     if (issue.code === 'counter_channel_missing' && issue.counterId) {
       const counter = statsCounters.listCounters(guild.id).find((item) => item.id === issue.counterId);
-      if (!counter?.enabled) continue;
+      if (!counter || counter.enabled === false) continue;
       const category = counter.categoryId ? await resolveChannel(guild, counter.categoryId) : null;
       const replacement = await statsCounters.createDock(guild, { ...counter, channelId: null, categoryId: category?.id || null, categoryName: statsStore.getStats(guild.id).settings?.categoryName }, guild);
       repaired.push({ type: 'counter-channel', counterId: replacement.id, channelId: replacement.channelId });
