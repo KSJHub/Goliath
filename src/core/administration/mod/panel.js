@@ -488,16 +488,19 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     const pendingAppeals = appeals.filter(({ appeal }) => (appeal?.status || 'pending') === 'pending').map(({ case: entry, appeal }) => ({ type: 'appeal', userId: String(entry?.userId || entry?.user_id || ''), caseId: entry?.caseId, reason: String(entry?.reason || 'Moderation appeal awaiting review'), status: 'pending' }));
     records.push(...pendingAppeals);
     const matches = records.filter(entry => filter === 'all' || (filter === 'warn' ? ['warn','warning'].includes(entry.type) : entry.type === filter));
-    const active = filter === 'warn' || filter === 'timeout'
-      ? matches
-      : matches.filter(entry => ['active','pending','quarantined'].includes(entry.status));
+    // Warnings and timeouts show history; appeals and quarantines show currently actionable records.
+    const active = filter === 'warn' || filter === 'timeout' ? matches : matches.filter(entry => ['active','pending','quarantined'].includes(entry.status));
+    const warningHistoryCount = records.filter(e => ['warn','warning'].includes(e.type)).length;
+    const timeoutHistoryCount = records.filter(e => e.type === 'timeout').length;
+    const pendingAppealCount = pendingAppeals.length;
+    const activeQuarantineCount = records.filter(e => e.type === 'quarantine' && ['active','pending','quarantined'].includes(e.status)).length;
     const pages = Math.max(1, Math.ceil(active.length / 8)), page = Math.max(0, Math.min(context.page, pages - 1));
     const shown = active.slice(page * 8, (page + 1) * 8);
     const title = filter === 'warn' ? '⚠️ Warnings · Review Centre' : filter === 'timeout' ? '⌛ Timeouts · Review Centre' : filter === 'appeal' ? '⚖️ Appeals · Review Centre' : filter === 'quarantine' ? '🚨 Quarantines · Review Centre' : '📂 Cases · Review Centre';
     const embed = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(title)
       .setDescription(target ? `👤 <@${target.id}> · Member records` : 'Review active cases, appeals and quarantines.')
       .addFields(
-        { name: '📊 Overview', value: `⚠️ Warnings **${records.filter(e => ['warn','warning'].includes(e.type)).length}** · ⌛ Timeouts **${records.filter(e => e.type === 'timeout').length}** · ⚖️ Appeals **${appeals.length}** · 🚨 Quarantines **${quarantines.length}**`, inline: false },
+        { name: '📊 Overview', value: `⚠️ Warning records **${warningHistoryCount}** · ⌛ Timeout records **${timeoutHistoryCount}** · ⚖️ Pending appeals **${pendingAppealCount}** · 🚨 Active quarantines **${activeQuarantineCount}**`, inline: false },
         { name: `📋 ${filter === 'warn' || filter === 'timeout' ? 'History' : 'Active'} · ${filter === 'all' ? 'All types' : filter} · ${active.length} record(s)`, value: shown.length ? shown.map(e => `**${e.type.toUpperCase()}** · <@${e.userId}>${e.caseId ? ` · #${e.caseId}` : ''}\n${e.reason.slice(0, 110)}${e.channelId ? ` · <#${e.channelId}>` : ''}`).join('\n\n').slice(0, 1024) : (filter === 'warn' || filter === 'timeout' ? 'No matching records in this history.' : 'No matching active records.'), inline: false })
       .setFooter({ text: 'Staff only · Select a record to review' });
     embeds.push(embed);
