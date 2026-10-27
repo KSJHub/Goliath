@@ -88,7 +88,7 @@ function valuesText(guild, item) {
   return (item.segments || []).map((segment, index) => `**${index + 1}.** ${(TYPES[segment.type] || ['📊', segment.type]).join(' ')}`).join('\n') || 'None';
 }
 function updateConfig(guild, patch) {
-  return stats.store.updateStats(guild.id, (current) => ({ ...current, ...patch, settings: patch.settings ? { ...(current.settings || {}), ...patch.settings } : current.settings }), guild);
+  return stats.applyRuntimeConfig(guild, patch, guild);
 }
 
 function mainPanel(guild, who = 'Management') {
