@@ -157,6 +157,12 @@ function isQuarantineReleaseInProgress(guildId, memberId) {
   return releasesInProgress.has(`${guildId}:${memberId}`);
 }
 
+function hasOtherActiveRoomOwner(guild, memberId, snapshot) {
+  const roomIds = new Set([snapshot.interviewChannelId, snapshot.previousInterviewChannelId].filter(Boolean).map(String));
+  return roomIds.size > 0 && Object.entries(getQuarantineState(guild.id).users || {}).some(([userId, active]) =>
+    String(userId) !== String(memberId) && [active?.interviewChannelId, active?.previousInterviewChannelId].some(id => id && roomIds.has(String(id))));
+}
+
 async function restoreQuarantinedMember(guild, member, options = {}) {
   if (!guild || !member) return { success: false, reason: 'Missing guild/member' };
   const state = getQuarantineState(guild.id);
@@ -169,6 +175,11 @@ async function restoreQuarantinedMember(guild, member, options = {}) {
   const releaseKey = `${guild.id}:${member.id}`;
   if (!tryBeginQuarantineOperation(guild.id, member.id)) return { success: false, busy: true, reason: 'Quarantine operation already in progress.' };
   try {
+    // A shared room is not yet supported by the release/archival transaction.
+    // Refuse before restoring roles or channel access, keeping both snapshots.
+    if (hasOtherActiveRoomOwner(guild, member.id, snapshot)) {
+      return { success: false, needsReview: true, reason: 'Another active case uses this investigation room; manual review is required before release.' };
+    }
     const quarantineRoleId = state.roleId || null;
     const roles = await getRestorableRoleIds(guild, snapshot.roles, quarantineRoleId);
     const blockedRoles = roles.skipped.filter(entry => entry.reason === 'missing_manage_roles' || entry.reason === 'role_hierarchy');
@@ -212,6 +223,7 @@ async function clearExpiredAbsentMember(guild, userId, state) {
   const snapshot = state.users?.[userId];
   if (!snapshot) return { success: true, cleared: false, reason: 'No quarantine snapshot.' };
   if (!isAutomaticQuarantineReleaseDue(snapshot) || !hasOriginalQuarantineRoles(snapshot) || snapshot.allowedChannelIds?.length) return { success: false, cleared: false, reason: 'Automatic release is not authorised or original roles are missing; snapshot retained.' };
+  if (hasOtherActiveRoomOwner(guild, userId, snapshot)) return { success: false, cleared: false, needsReview: true, reason: 'Another active case uses this investigation room; manual review is required before release.' };
   const memberAccess = await restoreMemberViewAllows(guild, userId, snapshot.memberViewAllowRestores, { reason: 'Restoring pre-quarantine channel access for expired absent member', system: true });
   if (memberAccess.failed.length) return { success: false, cleared: false, reason: 'Could not restore all persistent member channel overwrites; snapshot retained for retry.', memberAccess };
   const shouldArchive = Boolean(snapshot.interviewChannelId || snapshot.previousInterviewChannelId);
