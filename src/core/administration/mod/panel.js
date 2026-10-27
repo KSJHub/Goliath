@@ -248,7 +248,6 @@ function buildActionRows(target, stats, member, guild, context = {}) {
   const management = [];
   if (canViewDashboardSection(member, guild, 'cases')) {
     management.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:cases`).setLabel('📁 Cases').setStyle(ButtonStyle.Secondary));
-    management.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:warnings`).setLabel('⚠️ Warnings').setStyle(ButtonStyle.Secondary));
   }
   if (canViewDashboardSection(member, guild, 'appeals')) management.push(new ButtonBuilder().setCustomId('mod_dashboard:none:appeals').setLabel('⚖️ Appeals').setStyle(ButtonStyle.Secondary));
   if (canUseModAction(member, guild, 'view_cases')) management.push(new ButtonBuilder().setCustomId('mod_verification_cases').setLabel('🚨 Quarantines').setStyle(ButtonStyle.Secondary));
