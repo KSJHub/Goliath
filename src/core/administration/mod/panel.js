@@ -148,7 +148,8 @@ function workspaceStats(guildId) {
   for (const modCase of cases) for (const appeal of getCaseAppeals(modCase) || []) if ((appeal.status || 'pending') === 'pending') pendingAppeals += 1;
   const verificationSessions = verificationStore.getVerificationSection(guildId)?.sessions || {};
   const activeVerificationCases = Object.values(verificationSessions).filter(session => session?.state === 'quarantined').length;
-  return { totalCases: cases.length, activeCases, activeVerificationCases, activeWarnings, pendingAppeals };
+  const countActions = (actions) => cases.filter(entry => actions.includes(String(entry.action || '').toLowerCase())).length;
+  return { totalCases: cases.length, activeCases, activeVerificationCases, activeWarnings, pendingAppeals, timeouts: countActions(['timeout']), kicks: countActions(['kick']), bans: countActions(['ban']) };
 }
 
 function analyticsBounds(windowKey, nowMs = Date.now()) {
@@ -281,8 +282,7 @@ function buildActionsEmbed(interaction, target, stats, staffDisplay) {
       '',
       `**Your Role:** ${staffDisplay}`,
       '',
-      `**Active Cases:** ${overall.activeCases}  •  **Warnings:** ${overall.activeWarnings}`,
-      `**Pending Appeals:** ${overall.pendingAppeals}  •  **Quarantines:** ${overall.activeVerificationCases}`,
+      `**Cases:** ${overall.activeCases} › **Warns:** ${overall.activeWarnings} › **Timeouts:** ${overall.timeouts} › **Kicks:** ${overall.kicks} › **Bans:** ${overall.bans} › **Appeals:** ${overall.pendingAppeals} › **Quarantines:** ${overall.activeVerificationCases}`,
     ].join('\n'));
 
   const highestRole = target.roles?.highest && target.roles.highest.id !== interaction.guild.id ? `${target.roles.highest}` : 'No assigned role';
