@@ -171,17 +171,13 @@ function buildEmbed(account, event, template, creator, settings = {}) { const va
 async function socialWideMediaPayload(account,event,embed,previousMessage=null) {
   if(!['live','ended','vod'].includes(String(event?.type||'').toLowerCase())) return {embed,files:[],keepAttachments:false};
 
-  // Once Discord has a wide attachment, retain that exact asset on every edit.
-  // Replacing it with a portrait URL is what causes previously fixed cards to shrink.
+  // Re-upload the actual landscape attachment on every edit. Discord may discard
+  // attachment URL references when the message is edited, leaving a narrow card.
+  // The existing wide attachment is the first source, not an embed URL to reuse.
   const retained=[...(previousMessage?.attachments?.values?.()||[])].find((file)=>
-    file.name==='goliath-social-wide.jpg' && (!file.width || Number(file.width)>=900) && (!file.height || Number(file.height)>=500)
+    ['goliath-social-wide.jpg','goliath-tiktok-wide.jpg'].includes(file.name)
   );
-  if(retained) {
-    embed.setImage(retained.url);
-    return {embed,files:[],keepAttachments:true};
-  }
-
-  const urls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,
+  const urls=[retained?.url,retained?.proxyURL,event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,
     previousMessage?.embeds?.[0]?.image?.proxyURL,previousMessage?.embeds?.[0]?.image?.url,
     previousMessage?.attachments?.first?.()?.proxyURL,previousMessage?.attachments?.first?.()?.url,embed?.data?.image?.url]
     .map((value)=>clean(value,1500)).filter((value)=>/^https:\/\//i.test(value));
