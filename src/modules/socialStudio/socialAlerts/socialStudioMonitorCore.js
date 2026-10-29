@@ -169,12 +169,25 @@ function buildEmbed(account, event, template, creator, settings = {}) { const va
       if (notes) embed.addFields({ name: '\u200B', value: `💬 *${notes.replace(/([*_~\\])/g, '\\$1')}*`, inline: false });
     } if(event.vod?.url) embed.addFields({name:'📼 VOD',value:`[Watch the recording](${event.vod.url})`,inline:false}); } else { embed.setTitle((render(template.title,vars)||`${platform.icon} ${platform.label}`).slice(0,256)); const description=stripTrailingDivider(render(template.description,vars)||vars.title), actionLabel=clean(template.buttonLabel||'View Post',80), actions=vars.url?[`▶️ **[${actionLabel}](${vars.url})**`]:[]; embed.setDescription(`${description}${embedActionBlock(actions)}`.slice(0,4096)); } const liveImage=liveStatus==='LIVE'||liveStatus==='PAUSED', thumbnail=liveImage?(platformKey==='tiktok'?clean(event.thumbnail,1000):cacheBustedImageUrl(event.thumbnail)):clean(event.thumbnail,1000); if(thumbnail&&/^https?:\/\//i.test(thumbnail)) embed.setImage(thumbnail); if(!liveStatus&&vars.url&&/^https?:\/\//i.test(vars.url)) embed.setURL(vars.url); embed.setFooter({text:`Goliath Social Studio • ${platform.label} • ${liveStatus || event.type.toUpperCase()}`}); embed.setTimestamp(new Date(event.endedAt||event.publishedAt||event.startedAt||Date.now())); return embed; }
 async function tiktokMediaPayload(account,event,embed,previousMessage=null) {
-  if (String(account?.platform||'').toLowerCase() !== 'tiktok' || !['live','ended'].includes(event?.type)) return {embed,files:[],keepAttachments:false};
-  const urls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,previousMessage?.embeds?.[0]?.image?.proxyURL,previousMessage?.embeds?.[0]?.image?.url,previousMessage?.attachments?.first?.()?.proxyURL,previousMessage?.attachments?.first?.()?.url]
+  if(String(account?.platform||'').toLowerCase()!=='tiktok'||!['live','ended'].includes(event?.type)) return {embed,files:[],keepAttachments:false};
+
+  // Once Discord has a wide attachment, retain that exact asset on every edit.
+  // Replacing it with a portrait URL is what causes previously fixed cards to shrink.
+  const retained=[...(previousMessage?.attachments?.values?.()||[])].find((file)=>
+    file.name==='goliath-tiktok-wide.jpg' && Number(file.width)>=900 && Number(file.height)>=500
+  );
+  if(retained) {
+    embed.setImage(retained.url);
+    return {embed,files:[],keepAttachments:true};
+  }
+
+  const urls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,
+    previousMessage?.embeds?.[0]?.image?.proxyURL,previousMessage?.embeds?.[0]?.image?.url,
+    previousMessage?.attachments?.first?.()?.proxyURL,previousMessage?.attachments?.first?.()?.url]
     .map((value)=>clean(value,1500)).filter((value)=>/^https:\/\//i.test(value));
   for(const url of [...new Set(urls)]) {
     try {
-      const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),10000);
+      const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
       let response;
       try {response=await fetch(url,{signal:controller.signal});} finally {clearTimeout(timeout);}
       if(!response.ok) throw new Error('HTTP '+response.status);
@@ -186,23 +199,16 @@ async function tiktokMediaPayload(account,event,embed,previousMessage=null) {
       const filename='goliath-tiktok-wide.jpg';
       embed.setImage('attachment://'+filename);
       return {embed,files:[new AttachmentBuilder(image,{name:filename})],keepAttachments:false};
-    } catch(error) { console.warn('[Social Studio] TikTok media source unavailable:',error?.message||error); }
+    } catch(error) {console.warn('[Social Studio] TikTok image fetch:',error?.message||error);}
   }
-  // If remote TikTok artwork is inaccessible, generate a real landscape attachment
-  // rather than reverting to the portrait image that shrinks the Discord embed.
-  // Preserve the existing portrait as the thumbnail in this fallback.
-  try {
-    const filename='goliath-tiktok-wide.jpg';
-    const fallback=await sharp({create:{width:960,height:540,channels:3,background:'#111216'}}).jpeg({quality:80}).toBuffer();
-    const original=urls.find((url)=>!url.includes('goliath-tiktok-wide'));
-    if(original) embed.setThumbnail(original);
-    embed.setImage('attachment://'+filename);
-    console.warn('[Social Studio] TikTok artwork inaccessible; sent wide fallback canvas.');
-    return {embed,files:[new AttachmentBuilder(fallback,{name:filename})],keepAttachments:false};
-  } catch(error) {
-    console.warn('[Social Studio] TikTok canvas creation failed:',error?.message||error);
-    return {embed,files:[],keepAttachments:true};
-  }
+
+  // Always send an actual wide image, even if TikTok blocks the source image.
+  // Never silently fall back to a portrait embed on a subsequent refresh.
+  const filename='goliath-tiktok-wide.jpg';
+  const fallback=await sharp({create:{width:960,height:540,channels:3,background:'#111216'}}).jpeg({quality:80}).toBuffer();
+  console.warn('[Social Studio] TikTok portrait unavailable; using wide fallback.');
+  embed.setImage('attachment://'+filename);
+  return {embed,files:[new AttachmentBuilder(fallback,{name:filename})],keepAttachments:false};
 }
 async function sendAlert(client,guildId,config,account,event,options={}) {
   const channelId = alertChannelId(config,account,event.type);
