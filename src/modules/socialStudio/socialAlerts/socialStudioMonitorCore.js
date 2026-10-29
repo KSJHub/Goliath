@@ -169,7 +169,7 @@ function buildEmbed(account, event, template, creator, settings = {}) { const va
       if (notes) embed.addFields({ name: '\u200B', value: `💬 *${notes.replace(/([*_~\\])/g, '\\$1')}*`, inline: false });
     } if(event.vod?.url) embed.addFields({name:'📼 VOD',value:`[Watch the recording](${event.vod.url})`,inline:false}); } else { embed.setTitle((render(template.title,vars)||`${platform.icon} ${platform.label}`).slice(0,256)); const description=stripTrailingDivider(render(template.description,vars)||vars.title), actionLabel=clean(template.buttonLabel||'View Post',80), actions=vars.url?[`▶️ **[${actionLabel}](${vars.url})**`]:[]; embed.setDescription(`${description}${embedActionBlock(actions)}`.slice(0,4096)); } const liveImage=liveStatus==='LIVE'||liveStatus==='PAUSED', thumbnail=liveImage?(platformKey==='tiktok'?clean(event.thumbnail,1000):cacheBustedImageUrl(event.thumbnail)):clean(event.thumbnail,1000); if(thumbnail&&/^https?:\/\//i.test(thumbnail)) embed.setImage(thumbnail); if(!liveStatus&&vars.url&&/^https?:\/\//i.test(vars.url)) embed.setURL(vars.url); embed.setFooter({text:`Goliath Social Studio • ${platform.label} • ${liveStatus || event.type.toUpperCase()}`}); embed.setTimestamp(new Date(event.endedAt||event.publishedAt||event.startedAt||Date.now())); return embed; }
 async function socialWideMediaPayload(account,event,embed,previousMessage=null) {
-  if(!['live','ended','vod'].includes(String(event?.type||'').toLowerCase())) return {embed,files:[],keepAttachments:false};
+  if(String(account?.platform||'').toLowerCase()!=='tiktok' || !['live','ended'].includes(String(event?.type||'').toLowerCase())) return {embed,files:[],keepAttachments:false};
 
   // Re-upload the actual landscape attachment on every edit. Discord may discard
   // attachment URL references when the message is edited, leaving a narrow card.
@@ -177,9 +177,9 @@ async function socialWideMediaPayload(account,event,embed,previousMessage=null) 
   const retained=[...(previousMessage?.attachments?.values?.()||[])].find((file)=>
     ['goliath-social-wide.jpg','goliath-tiktok-wide.jpg'].includes(file.name)
   );
-  const urls=[retained?.url,retained?.proxyURL,event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,
+  const urls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,retained?.url,retained?.proxyURL,
     previousMessage?.embeds?.[0]?.image?.proxyURL,previousMessage?.embeds?.[0]?.image?.url,
-    previousMessage?.attachments?.first?.()?.proxyURL,previousMessage?.attachments?.first?.()?.url,embed?.data?.image?.url]
+    previousMessage?.attachments?.first?.()?.proxyURL,previousMessage?.attachments?.first?.()?.url,embed?.data?.image?.url,account?.avatar,account?.avatarUrl,event?.avatar,event?.avatarUrl]
     .map((value)=>clean(value,1500)).filter((value)=>/^https:\/\//i.test(value));
   for(const url of [...new Set(urls)]) {
     try {
@@ -201,10 +201,24 @@ async function socialWideMediaPayload(account,event,embed,previousMessage=null) 
   // Always send an actual wide image, even if a provider blocks its artwork.
   // Never silently fall back to a portrait embed on a subsequent refresh.
   const filename='goliath-social-wide.jpg';
-  const fallback=await sharp({create:{width:960,height:540,channels:3,background:'#111216'}}).jpeg({quality:80}).toBuffer();
-  console.warn('[Social Studio] Social artwork unavailable; using wide fallback.');
+  const fallback=await sharp({create:{width:960,height:540,channels:3,background:'#111216'}}).png().toBuffer();
+  console.warn('[Social Studio] TikTok artwork unavailable; using wide fallback.');
   embed.setImage('attachment://'+filename);
   return {embed,files:[new AttachmentBuilder(fallback,{name:filename})],keepAttachments:false};
+}
+// Check the delivered message rather than assuming Discord retained the image.
+async function verifyTikTokWideImage(message,account,event) {
+  if(String(account?.platform||'').toLowerCase()!=='tiktok'||!['live','ended'].includes(event?.type)) return;
+  const latest=await message.channel.messages.fetch(message.id,{force:true});
+  const image=latest.embeds?.[0]?.image;
+  const hasWideImage=Boolean(image && Number(image.width)>=800 && Number(image.height)>=400);
+  if(hasWideImage) return;
+  console.warn('[Social Studio] TikTok wide artwork missing after delivery; repairing message',message.id);
+  const embed=EmbedBuilder.from(latest.embeds[0]);
+  const media=await socialWideMediaPayload(account,event,embed,latest);
+  await latest.edit({embeds:[media.embed],files:media.files,attachments:[]});
+  const verified=await latest.channel.messages.fetch(latest.id,{force:true});
+  if(!verified.embeds?.[0]?.image?.url) console.error('[Social Studio] TikTok wide artwork still missing after repair',latest.id);
 }
 async function sendAlert(client,guildId,config,account,event,options={}) {
   const channelId = alertChannelId(config,account,event.type);
@@ -236,11 +250,12 @@ async function sendAlert(client,guildId,config,account,event,options={}) {
   });
 
   if (!message?.id) throw new Error('Discord did not return a message id for the alert.');
+  await verifyTikTokWideImage(message,account,event).catch((error)=>console.warn('[Social Studio] TikTok delivery verification:',error?.message||error));
   return {channelId,messageId:message.id};
 }
 async function trackedMessage(client,guildId,previous) { const channelId=previous.lastLiveMessageChannelId||previous.lastAlertChannelId, messageId=previous.lastLiveMessageId||previous.lastAlertMessageId; if(!channelId||!messageId)return null; const guild=client.guilds.cache.get(guildId)||await client.guilds.fetch(guildId).catch(()=>null); if(!guild)return null; const channel=guild.channels.cache.get(channelId)||await guild.channels.fetch(channelId).catch(()=>null); if(!channel?.isTextBased?.())return null; const message=await channel.messages.fetch(messageId).catch(()=>null); return message?{channelId,messageId,message}:null; }
-async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
-async function updateEndedAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'ended'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({content:null,embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
+async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); await verifyTikTokWideImage(tracked.message,account,event).catch((error)=>console.warn('[Social Studio] TikTok refresh verification:',error?.message||error)); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
+async function updateEndedAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'ended'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({content:null,embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); await verifyTikTokWideImage(tracked.message,account,event).catch((error)=>console.warn('[Social Studio] TikTok ended verification:',error?.message||error)); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
 function livePostInWindow(config,creator,windowMs=2*60*60*1000) { const ids=new Set(creator?.accountIds||[]), cutoff=Date.now()-windowMs; return [...(config.history||[])].reverse().find((item)=>ids.has(item.accountId)&&['alert_sent','alert_updated','alert_recovered'].includes(item.status)&&item.alertType==='live'&&new Date(item.createdAt||0).getTime()>=cutoff)||null; }
 function accountLivePostInWindow(config,account,windowMs=2*60*60*1000) {
   if (!account?.accountId) return null;
