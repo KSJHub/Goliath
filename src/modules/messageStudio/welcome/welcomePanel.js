@@ -172,18 +172,18 @@ async function buildInstantPanel(guild,memberDisplayName='Unknown User',userId='
     row(sourceMenu(config,userId,guild.id,'public'))
   ];
   if(source==='embedStudio')components.push(row(templateMenu(guild,template?.templateId||config.templateId,userId,'public')));
-  components.push(row(button('admin:welcome:applySource','💾 Save Message',ButtonStyle.Primary,source==='embedStudio'&&!state.templateId),button('admin:welcome:test','👁 Preview'),button('admin:welcome:send','📨 Send Test')));
+  components.push(row(button('admin:welcome:applySource','💾 Save Message',ButtonStyle.Primary,source==='embedStudio'&&!state.templateId),button('admin:welcome:test','👁 Preview',ButtonStyle.Secondary),button('admin:welcome:send','📨 Send Test',ButtonStyle.Secondary)));
   components.push(row(button('admin:welcome','⬅ Back'),button('admin:welcome:instantSettings','⚙️ Settings')));
   const issues=health.warnings||[];
   const next=!config.channelId?'📍 Select a public welcome channel.':issues.length?'⚠️ Open Settings to review delivery warnings.':'✅ Preview or send a test welcome to confirm the message.';
   return {embeds:[new EmbedBuilder().setColor(!enabled?0x747f8d:issues.length?0xfaa61a:0x57f287)
     .setTitle('⚡ Welcome · Instant')
     .setDescription(['Configure and test the public greeting sent when a member joins.','',
-      '### 🗂️ Workspace',`**Destination**　${config.channelId?`<#${config.channelId}>`:'⚪ Choose below'}`,`**Source**　${sourceLabel(config.messageSource)}`,`**Message**　${template?.name||'Not selected'}`,
-      ...(source!==config.messageSource||pendingTemplate?[`**Pending**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`]:[]),'',
+      '### 🗂️ Workspace',`**Destination**　${config.channelId?`<#${config.channelId}>`:'⚪ Choose below'}`,`**Source**　${sourceLabel(config.messageSource)}`,`**Saved message**　${template?.name||'Not selected'}`,
+      ...(source!==config.messageSource||pendingTemplate?[`**Selected for preview**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`]:[]),'',
       '### 🧩 Delivery',`**Member pings**　${config.allowUserPing?'🟢 On':'⚪ Off'}　•　**Role pings**　${config.allowRolePings?'🟢 On':'⚪ Off'}`,`**Bots**　${config.ignoreBots?'Excluded':'Included'}　•　**DM**　${config.dmEnabled?'On':'Off'}`,`**Sent**　${config.analytics?.publicSent||0}　•　**Failed**　${config.analytics?.publicFailed||0}`,'',
       '### 🚦 Status',`**Readiness**　${enabled&&config.channelId?'🟢 Configured':'🟠 Setup required'}`,`**Health**　${health.healthy?'✅ Healthy':'⚠️ Needs attention'}`,'',
-      '### ➜ Next Step',next].join('\\n').slice(0,4096))
+      '### ➜ Next Step',next].join('\n').slice(0,4096))
     .setFooter({text:`Welcome Studio • ${memberDisplayName}`}).setTimestamp()],components};
 }
 
@@ -205,7 +205,7 @@ async function buildDmPanel(guild,memberDisplayName='Unknown User',userId='panel
       ...(source!==config.dmMessageSource||pendingTemplate?[`**Pending**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`]:[]),'',
       '### 🧩 Delivery',`**Direct messages**　${config.dmEnabled?'🟢 Enabled':'⚪ Disabled'}`,`**Sent**　${config.analytics?.dmSent||0}　•　**Failed**　${config.analytics?.dmFailed||0}`,'',
       '### 🚦 Status',`**Readiness**　${config.dmEnabled?'🟢 Active':'⚪ Paused'}`,`**Message sync**　${config.dmMessageSource==='inherit'?'Follows Public Welcome':'Independent template'}`,'',
-      '### ➜ Next Step',!config.dmEnabled?'⚙️ Open Settings to enable DM delivery.':source==='custom'?'💾 Save Message to edit your custom DM.':'👁 Preview or send yourself a test DM.'].join('\\n'))
+      '### ➜ Next Step',!config.dmEnabled?'⚙️ Open Settings to enable DM delivery.':source==='custom'?'💾 Save Message to edit your custom DM.':'👁 Preview or send yourself a test DM.'].join('\n'))
     .setFooter({text:`Welcome Studio • ${memberDisplayName}`}).setTimestamp()],components};
 }
 
@@ -219,7 +219,7 @@ function buildMentionSettingsPanel(guild,memberDisplayName='Unknown User'){
       '### 🗂️ Workspace',`**Selected roles**　${roles}`,'',
       '### 🧩 Delivery',`**Member mentions**　${config.allowUserPing?'🟢 On':'⚪ Off'}`,`**Role mentions**　${config.allowRolePings?'🟢 On':'⚪ Off'}`,'',
       '### 🚦 Status','Only explicitly permitted members and roles can be pinged.','',
-      '### ➜ Next Step','Choose notification roles below, then enable the notifications you want.'].join('\\n'))
+      '### ➜ Next Step','Choose notification roles below, then enable the notifications you want.'].join('\n'))
     .setFooter({text:`Welcome Studio • ${memberDisplayName}`}).setTimestamp()],components:[
       row(new RoleSelectMenuBuilder().setCustomId('admin:welcome:roles').setPlaceholder('🔔 Choose roles to notify').setMinValues(0).setMaxValues(10)),
       row(button('admin:welcome:togglePing',config.allowUserPing?'🔔 Member Pings: On':'🔕 Member Pings: Off',config.allowUserPing?ButtonStyle.Success:ButtonStyle.Secondary),button('admin:welcome:toggleRolePings',config.allowRolePings?'📣 Role Pings: On':'📣 Role Pings: Off',config.allowRolePings?ButtonStyle.Success:ButtonStyle.Secondary)),
@@ -246,7 +246,7 @@ async function buildWelcomeDeliverySettingsPanel(guild,scope,memberDisplayName='
   return {embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle(`⚙️ Welcome · ${instant?'Instant':dm?'DM':'Scheduled'} Settings`)
     .setDescription(['### 🗂️ Workspace',`**Area**　${instant?'Public Welcome':dm?'Direct Message':'Scheduled Queue'}`,'',
       '### 🧩 Delivery',instant?'Configure bot exclusions, mentions and public delivery health.':dm?'Enable or disable private welcome messages.':'Configure member pings, queue cleanup, bot exclusions and schedule availability.','',
-      '### ➜ Next Step','Change the settings below, then return to your Welcome workspace.'].join('\\n'))
+      '### ➜ Next Step','Change the settings below, then return to your Welcome workspace.'].join('\n'))
     .setFooter({text:`Welcome Studio • ${memberDisplayName}`}).setTimestamp()],components:controls};
 }
 
