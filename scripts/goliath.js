@@ -2188,7 +2188,8 @@ function socialStudioLifecycleAudit() {
         && compactTikTok.includes("returnunavailable('tiktok',"),
       'TikTok ambiguous LIVE page must remain unavailable',
     );
-    assert(compactTikTok.includes("providerSource:ended?'public_page_ended':'public_page_redirect'"), 'TikTok proven OFFLINE paths missing');
+    assert(compactTikTok.includes('constconfirmedEnded=ended&&onOwnLiveUrl&&creatorMarker') && compactTikTok.includes("providerSource:'public_page_ended'"), 'TikTok verified creator-page ENDED path missing');
+    assert(!compactTikTok.includes("providerSource:ended?'public_page_ended':'public_page_redirect'"), 'TikTok redirects must not trigger false ENDED notifications');
     assert(compactTikTok.includes("liveStatus:isPaused?'PAUSED':'LIVE'"), 'TikTok PAUSED state contract missing');
     
     // Locked Social Studio lifecycle model:
