@@ -128,17 +128,36 @@ async function buildWelcomeSettingsPanel(guild,memberDisplayName='Unknown User')
   const enabled=guildManager.isModuleEnabled(guild.id,'welcome');
   const instant=await welcome.buildHealthReport(guild);
   const scheduled=await scheduledWelcomeHealth.buildHealth(guild);
-  return {embeds:[new EmbedBuilder().setColor(!enabled?0x747f8d:instant.healthy&&scheduled.healthy?0x57f287:0xfaa61a)
+  const issues=[...(instant.healthy?[]:['Instant Welcome needs attention.']),...(scheduled.healthy?[]:['Scheduled Welcome needs attention.'])];
+  const description=[
+    'Manage notifications, troubleshoot delivery and control your Welcome configuration.',
+    '',
+    '### 🗂️ Workspace',
+    `**Module**　${enabled?'🟢 Enabled':'⚪ Disabled'}`,
+    '**Configuration**　Instant · Direct Message · Scheduled',
+    '',
+    '### 🔔 Notifications',
+    'Choose who receives welcome mentions and role alerts.',
+    '',
+    '### 🚦 Status',
+    `**Instant**　${instant.healthy?'🟢 Healthy':'🟠 Needs attention'}　•　**Scheduled**　${scheduled.healthy?'🟢 Healthy':'🟠 Needs attention'}`,
+    `**Diagnostics**　${issues.length?`${issues.length} area${issues.length===1?'':'s'} to review`:'No reported issues'}`,
+    '',
+    '### ⚙️ Management',
+    'Export your settings, enable or pause Welcome, or reset the configuration.',
+    '',
+    '### ➜ Next Step',
+    issues.length?'🩺 Run Diagnostics & Repair to investigate the reported issues.':'✅ Settings are ready. Choose an option below.'
+  ].join('\n');
+  return {embeds:[new EmbedBuilder()
+    .setColor(!enabled?0x747f8d:issues.length?0xfaa61a:0x57f287)
     .setTitle('⚙️ Welcome · Settings')
-    .setDescription(['Manage Welcome notifications, diagnostics and configuration.','',
-      '### 🔔 Notifications','Configure member mentions and role notifications.','',
-      '### 🩺 Diagnostics',`**Instant**　${instant.healthy?'✅ Healthy':'⚠️ Needs attention'}　•　**Scheduled**　${scheduled.healthy?'✅ Healthy':'⚠️ Needs attention'}`,'',
-      '### 🗂️ Configuration',`**Module**　${enabled?'🟢 Enabled':'🔴 Disabled'}`,'Export a backup of your Welcome settings or change module availability.','',
-      '### ⚠️ Reset','Reset clears Welcome configuration after a separate confirmation. Saved Embed Studio templates remain available.'].join('\\n'))
-    .setFooter({text:`Welcome Studio • ${memberDisplayName}`}).setTimestamp()],components:[
-      row(button('admin:welcome:mentions','🔔 Mentions'),button('admin:welcome:repairAll','🩺 Diagnostics & Repair'),button('admin:welcome:export','📤 Export')),
-      row(button(enabled?'admin:welcome:disable':'admin:welcome:enable',enabled?'⏸ Disable Welcome':'▶ Enable Welcome',enabled?ButtonStyle.Secondary:ButtonStyle.Success),button('admin:welcome:reset','🗑 Reset Settings',ButtonStyle.Danger)),
-      row(button('admin:welcome','⬅ Welcome Home'))
+    .setDescription(description)
+    .setFooter({text:`Welcome Studio • ${memberDisplayName}`})
+    .setTimestamp()],components:[
+      row(button('admin:welcome:mentions','🔔 Mentions',ButtonStyle.Primary),button('admin:welcome:repairAll','🩺 Diagnostics',ButtonStyle.Secondary),button('admin:welcome:export','📤 Export',ButtonStyle.Secondary)),
+      row(button(enabled?'admin:welcome:disable':'admin:welcome:enable',enabled?'⏸ Disable Welcome':'▶ Enable Welcome',enabled?ButtonStyle.Secondary:ButtonStyle.Success)),
+      row(button('admin:welcome','⬅ Back',ButtonStyle.Secondary),button('admin:welcome:reset','🗑 Reset',ButtonStyle.Danger))
     ]};
 }
 
