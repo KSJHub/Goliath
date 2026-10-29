@@ -72,8 +72,37 @@ function saveCustomWelcome(interaction,scope){
 }
 
 async function buildWelcomePanel(guild,memberDisplayName='Unknown User'){
-  const moduleEnabled=guildManager.isModuleEnabled(guild.id,'welcome');const instant=welcome.getWelcomeSection(guild.id);const scheduled=scheduledWelcome.getScheduledConfig(guild.id);const instantHealth=await welcome.buildHealthReport(guild);const scheduledHealth=await scheduledWelcomeHealth.buildHealth(guild);const instantConfigured=Boolean(instant.channelId||instant.dmEnabled);
-  return {embeds:[new EmbedBuilder().setColor(!moduleEnabled?0xed4245:(instantHealth.healthy&&scheduledHealth.healthy)?0x57f287:0xfaa61a).setTitle('👋 Welcome').setDescription(['Manage member greetings, delivery methods, and diagnostics from one place.','',`**Module:** ${moduleEnabled?'🟢 Enabled':'🔴 Disabled'}`,'','**⚡ Instant Welcome**',`Status: ${instantConfigured?'Configured ✅':'Not configured'}`,`Channel: ${instant.channelId?`<#${instant.channelId}>`:'`Not set`'} · DM: ${instant.dmEnabled?'On':'Off'}`,`Message: ${sourceLabel(instant.messageSource)}`,`Sent: \`${instant.analytics?.publicSent||0}\` public · \`${instant.analytics?.dmSent||0}\` DM`,'','**📅 Scheduled Welcome**',`Status: ${scheduled.enabled?'Enabled ✅':'Disabled'}`,`Queue: ${scheduled.queueRoleId?`<@&${scheduled.queueRoleId}>`:'`Not set`'} · Waiting: \`${scheduledHealth.waitingMembers||0}\``,`Delivery: ${scheduled.time} · ${scheduled.timezone}`,`Welcomed: \`${scheduled.analytics?.membersWelcomed||0}\``,'',`**Health:** Instant ${instantHealth.healthy?'✅':'⚠️'} · Scheduled ${scheduledHealth.healthy?'✅':'⚠️'}`].join('\n')).setFooter({text:`Requested by ${memberDisplayName}`}).setTimestamp()],components:[row(button('admin:welcome:instant','⚡ Instant Welcome',ButtonStyle.Primary),button('admin:welcome:dm','📨 DM Welcome',ButtonStyle.Primary),button('admin:welcome:scheduled','📅 Scheduled Welcome',ButtonStyle.Primary)),row(button('admin:welcome:mentions','🔔 Mentions'),button(moduleEnabled?'admin:welcome:disable':'admin:welcome:enable',moduleEnabled?'⏸ Disable Welcome':'▶ Enable Welcome',moduleEnabled?ButtonStyle.Secondary:ButtonStyle.Success),button('admin:welcome:repairAll','🩺 Repair All'),button('admin:welcome:export','📤 Export'),button('admin:welcome:reset','♻ Reset',ButtonStyle.Danger)),row(button('admin:modules','⬅ Modules'))]};
+  const moduleEnabled=guildManager.isModuleEnabled(guild.id,'welcome');
+  const instant=welcome.getWelcomeSection(guild.id);
+  const scheduled=scheduledWelcome.getScheduledConfig(guild.id);
+  const instantHealth=await welcome.buildHealthReport(guild);
+  const scheduledHealth=await scheduledWelcomeHealth.buildHealth(guild);
+  const instantConfigured=Boolean(instant.channelId||instant.dmEnabled);
+  const instantStatus=!moduleEnabled?'⏸ Paused':!instantConfigured?'⚠️ Setup required':instantHealth.healthy?'✅ Ready':'⚠️ Needs attention';
+  const scheduledStatus=!scheduled.enabled?'⏸ Disabled':scheduledHealth.healthy?'✅ Ready':'⚠️ Needs attention';
+  const failed=(instant.analytics?.publicFailed||0)+(instant.analytics?.dmFailed||0);
+  const embed=new EmbedBuilder()
+    .setColor(!moduleEnabled?0x747f8d:(instantHealth.healthy&&scheduledHealth.healthy)?0x57f287:0xfaa61a)
+    .setTitle('👋 Welcome Centre')
+    .setDescription('Configure how new members are greeted, manage delivery and check module health.')
+    .addFields(
+      {name:'🔌 Module',value:moduleEnabled?'🟢 **Enabled**':'🔴 **Disabled**',inline:true},
+      {name:'🩺 Health',value:`Instant ${instantHealth.healthy?'✅':'⚠️'}  ·  Scheduled ${scheduledHealth.healthy?'✅':'⚠️'}`,inline:true},
+      {name:'⚡ Instant Welcome',value:[`**Status:** ${instantStatus}`,`**Channel:** ${instant.channelId?`<#${instant.channelId}>`:'Not selected'}`,`**Message:** ${sourceLabel(instant.messageSource)}`,`**Delivered:** ${instant.analytics?.publicSent||0}  ·  **Failed:** ${instant.analytics?.publicFailed||0}`].join('\n'),inline:false},
+      {name:'📨 Direct Message',value:[`**Status:** ${!moduleEnabled?'⏸ Paused':instant.dmEnabled?'✅ Enabled':'⏸ Disabled'}`,`**Message:** ${sourceLabel(instant.dmMessageSource)}`,`**Delivered:** ${instant.analytics?.dmSent||0}  ·  **Failed:** ${instant.analytics?.dmFailed||0}`].join('\n'),inline:false},
+      {name:'📅 Scheduled Welcome',value:[`**Status:** ${scheduledStatus}`,`**Queue role:** ${scheduled.queueRoleId?`<@&${scheduled.queueRoleId}>`:'Not selected'}`,`**Waiting:** ${scheduledHealth.waitingMembers||0}  ·  **Welcomed:** ${scheduled.analytics?.membersWelcomed||0}`,`**Delivery:** ${scheduled.time} · ${scheduled.timezone}`].join('\n'),inline:false}
+    )
+    .setFooter({text:`Requested by ${memberDisplayName} · ${failed?'Review failed deliveries in Instant Welcome':'Configure a section below'}`})
+    .setTimestamp();
+  return {
+    embeds:[embed],
+    components:[
+      row(button('admin:welcome:instant','⚡ Instant Welcome',ButtonStyle.Primary),button('admin:welcome:dm','📨 DM Welcome',ButtonStyle.Primary),button('admin:welcome:scheduled','📅 Scheduled Welcome',ButtonStyle.Primary)),
+      row(button('admin:welcome:mentions','🔔 Mentions'),button('admin:welcome:repairAll','🩺 Diagnostics & Repair'),button('admin:welcome:export','📤 Export')),
+      row(button(moduleEnabled?'admin:welcome:disable':'admin:welcome:enable',moduleEnabled?'⏸ Disable Module':'▶ Enable Module',moduleEnabled?ButtonStyle.Secondary:ButtonStyle.Success),button('admin:welcome:reset','🗑 Reset Settings',ButtonStyle.Danger)),
+      row(button('admin:modules','⬅ Back to Modules'))
+    ]
+  };
 }
 
 async function buildInstantPanel(guild,memberDisplayName='Unknown User',userId='panel'){
