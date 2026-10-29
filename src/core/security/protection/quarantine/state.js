@@ -40,11 +40,14 @@ function normalizePendingRoomCleanups(value) {
   for (const entry of value) {
     const channelId = String(entry?.channelId || entry?.interviewChannelId || entry?.previousInterviewChannelId || '').trim();
     if (!channelId) continue;
-    byChannel.set(channelId, {
+    byChannel.set(`${channelId}:${entry?.memberId || ''}`, {
       channelId,
       interviewChannelId: channelId,
       memberId: entry?.memberId ? String(entry.memberId) : null,
       caseId: entry?.caseId ?? null,
+      investigationGroupId: entry?.investigationGroupId || null,
+      investigationMemberIds: Array.isArray(entry?.investigationMemberIds) ? entry.investigationMemberIds : null,
+      roomTranscript: entry?.roomTranscript || null,
       queuedAt: Number(entry?.queuedAt) || Date.now(),
       lastError: entry?.lastError ? String(entry.lastError).slice(0, 500) : null,
     });
@@ -105,8 +108,28 @@ function hasOriginalQuarantineRoles(snapshot = {}) {
 }
 
 function isAutomaticQuarantineReleaseDue(snapshot = {}) {
+  if (snapshot?.investigationGroupId) return false;
   const expiresAt = Number(snapshot?.expiresAt);
   return snapshot?.autoRelease === true && Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() >= expiresAt;
+}
+
+// Only explicit, reciprocal group metadata created by the new-case workflow
+// authorises shared ownership. Legacy duplicate links remain review failures.
+function isSharedInvestigationRoom(users, roomId) {
+  if (!roomId) return false;
+  const owners = Object.entries(users || {}).filter(([, snapshot]) =>
+    [snapshot.interviewChannelId, snapshot.previousInterviewChannelId].some(id => id && String(id) === String(roomId)));
+  if (!owners.length) return false;
+  const first = owners[0][1];
+  const ids = first.investigationMemberIds;
+  if (typeof first.investigationGroupId !== 'string' || !first.investigationGroupId
+    || !Array.isArray(ids) || ids.length < 2 || ids.length > 6 || new Set(ids).size !== ids.length
+    || !ids.every(id => typeof id === 'string' && /^\d{15,25}$/.test(id))) return false;
+  const signature = [...ids].sort().join(',');
+  return owners.every(([id, snapshot]) => ids.includes(id) && hasOriginalQuarantineRoles(snapshot)
+    && snapshot.investigationGroupId === first.investigationGroupId
+    && Array.isArray(snapshot.investigationMemberIds)
+    && [...snapshot.investigationMemberIds].sort().join(',') === signature);
 }
 
 // Read-only reconciliation: never infer original roles or migrate a legacy case.
@@ -140,7 +163,7 @@ function auditQuarantineSnapshots(sessions = {}, users = {}) {
       if ((snapshot.source === 'verification' && !activeSession) || (session?.moderationIsolationMode && !['quarantined', 'review'].includes(session.state))) reasons.push('verification_state_conflict');
     }
     const rooms = [activeSession && session?.quarantineChannelId, snapshot?.interviewChannelId].filter(Boolean).map(String);
-    const duplicateRoomIds = [...new Set(rooms.filter(id => roomOwners.get(id)?.size > 1))];
+    const duplicateRoomIds = [...new Set(rooms.filter(id => roomOwners.get(id)?.size > 1 && !isSharedInvestigationRoom(users, id)))];
     if (duplicateRoomIds.length) reasons.push('duplicate_room_assignment');
     if (reasons.length) cases.push({ userId, reason: reasons[0], reasons, verificationState: session?.state || null, verificationRoomId: session?.quarantineChannelId || null, sharedRoomId: snapshot?.interviewChannelId || null, duplicateRoomIds });
   }
@@ -155,6 +178,7 @@ module.exports = {
   QUARANTINE_MODES,
   emptyQuarantineState,
   auditQuarantineSnapshots,
+  isSharedInvestigationRoom,
   isAutomaticQuarantineReleaseDue,
   hasOriginalQuarantineRoles,
   normalizeUsers,

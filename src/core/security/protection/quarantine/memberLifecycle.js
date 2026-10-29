@@ -64,12 +64,16 @@ async function getRestorableRoleIds(guild, snapshotRoleIds = [], quarantineRoleI
 }
 
 async function escalateInvestigationToSecurity(guild, member, existing, options = {}) {
+  const lifecycle = existing.investigationGroupId ? require('./releaseLifecycle') : null;
+  const groupLock = existing.investigationGroupId ? `investigation-group:${existing.investigationGroupId}` : null;
+  if (groupLock && !lifecycle.tryBeginQuarantineOperation(guild.id, groupLock)) return { success: false, busy: true, reason: 'This investigation is being updated.' };
+  if (groupLock && !lifecycle.tryBeginQuarantineOperation(guild.id, member.id)) { lifecycle.endQuarantineOperation(guild.id, groupLock); return { success: false, busy: true, reason: 'This member is being updated.' }; }
   const state = getQuarantineState(guild.id);
   try {
     let interviewChannel = existing.interviewChannelId ? guild.channels.cache.get(String(existing.interviewChannelId)) : null;
     if (!interviewChannel && existing.interviewChannelId) interviewChannel = await guild.channels.fetch(String(existing.interviewChannelId)).catch(() => null);
     if (interviewChannel?.permissionOverwrites?.edit) {
-      await interviewChannel.permissionOverwrites.edit(member.id, { ViewChannel: false }, { reason: 'Investigation escalated to full Security Isolation' }).catch(() => null);
+      await interviewChannel.permissionOverwrites.edit(member.id, { ViewChannel: false }, { reason: 'Investigation escalated to full Security Isolation' });
       await interviewChannel.send({ content: '🚨 This investigation hold has been escalated to **Full Security Isolation**. Member access to this room has been revoked.', allowedMentions: { parse: [] } }).catch(() => null);
     }
     state.users[member.id] = {
@@ -87,6 +91,7 @@ async function escalateInvestigationToSecurity(guild, member, existing, options 
     emitCurrentQuarantineState(guild, 'member_quarantine_escalated', { memberId: member.id, mode: QUARANTINE_MODES.SECURITY });
     return { success: true, escalated: true, mode: QUARANTINE_MODES.SECURITY, roleId: state.roleId, interviewChannelId: null };
   } catch (error) { return { success: false, error: error.message }; }
+  finally { if (groupLock) { lifecycle.endQuarantineOperation(guild.id, member.id); lifecycle.endQuarantineOperation(guild.id, groupLock); } }
 }
 
 async function quarantineMember(guild, member, options = {}) {
@@ -189,6 +194,96 @@ async function quarantineMember(guild, member, options = {}) {
   } finally { for (const id of protectedLocks) endQuarantineOperation(guild.id, id); endQuarantineOperation(guild.id, member.id); }
 }
 
+// New investigations only: all subjects are selected explicitly, never inferred
+// from invited roles. Persist every original snapshot before the first role write.
+async function quarantineInvestigationMembers(guild, memberIds, options = {}) {
+  const ids = [...new Set(memberIds || [])];
+  if (ids.length < 2 || ids.length > 6 || !ids.every(id => /^\d{15,25}$/.test(id))) return { success: false, reason: 'Choose between two and six investigated members.' };
+  const lifecycle = require('./releaseLifecycle');
+  const rooms = require('./investigationRooms');
+  const locks = [];
+  let room = null, persisted = false;
+  const groupId = require('node:crypto').randomUUID();
+  try {
+    const actor = await guild.members.fetch({ user: options.quarantinedBy, force: true });
+    const permissions = require('../../../administration/mod/permissions');
+    if (!actor || ids.includes(actor.id) || getQuarantineState(guild.id).users?.[actor.id]
+      || !permissions.canUseModAction(actor, guild, 'quarantine')) throw Error('You no longer have permission to open this investigation.');
+    const otherIds = rooms.getOtherIsolatedMemberIds(guild.id, null);
+    for (const id of [...new Set([...ids, actor.id, ...(options.invitedUserIds || []), ...otherIds])]) {
+      if (!lifecycle.tryBeginQuarantineOperation(guild.id, id)) throw Error('A selected member or investigation is being updated. Please try again.');
+      locks.push(id);
+    }
+    const role = await ensureQuarantineRole(guild, options);
+    const members = [];
+    for (const id of ids) {
+      const member = await guild.members.fetch({ user: id, force: true });
+      const hierarchyError = permissions.checkHierarchyForBulk(actor, guild.members.me, guild.ownerId, member, actor.id);
+      if (hierarchyError) throw Error(hierarchyError);
+      if (shouldBlockOwnerDestructiveAction({ guild, member, action: 'quarantine' })) throw Error('An investigated member is protected by the development override.');
+      const manageable = canManageTargetMember(guild, member);
+      if (!manageable.allowed) throw Error(manageable.reason || 'An investigated member cannot be managed.');
+      if (otherIds.includes(id) || member.roles.cache.has(role.id)) throw Error('An investigated member is already isolated. Open new investigations only.');
+      if ((options.invitedUserIds || []).includes(id)) throw Error('An investigated member cannot also be a guest.');
+      members.push(member);
+    }
+    const isolation = await syncQuarantineIsolation(guild, { role });
+    if (!isolation.success) throw Error(isolation.reason || 'Server isolation could not be prepared.');
+    const groupOptions = { ...options, invitationSelection: true, investigatedMemberIds: ids,
+      investigationMemberIds: ids, investigationGroupId: groupId, protectedCaseIds: locks };
+    room = await createInvestigationRoom(guild, members[0], role, groupOptions);
+    const channels = await guild.channels.fetch();
+    const originals = [];
+    for (const member of members) {
+      const current = await guild.members.fetch({ user: member.id, force: true });
+      if (getQuarantineState(guild.id).users?.[member.id] || current.roles.cache.has(role.id)) throw Error('An investigated member changed while the room was being prepared.');
+      const hierarchyError = permissions.checkHierarchyForBulk(actor, guild.members.me, guild.ownerId, current, actor.id);
+      if (hierarchyError) throw Error(hierarchyError);
+      originals.push({ member: current, roles: current.roles.cache.filter(entry => entry.id !== guild.id && entry.id !== role.id).map(entry => entry.id),
+        restores: [...channels.values()].filter(channel => channel.id !== room.id && channel.permissionOverwrites?.cache?.get(member.id)?.allow?.has(PermissionFlagsBits.ViewChannel)).map(channel => channel.id) });
+    }
+    const state = getQuarantineState(guild.id);
+    state.roleId = role.id; state.roleName = role.name;
+    for (const original of originals) state.users[original.member.id] = {
+      memberId: original.member.id, memberTag: original.member.user?.tag || original.member.id,
+      mode: QUARANTINE_MODES.INVESTIGATION, quarantinedAt: Date.now(), reason: options.reason,
+      roles: original.roles, memberViewAllowRestores: original.restores, quarantinedBy: options.quarantinedBy,
+      source: 'moderation', interviewChannelId: room.id, autoRelease: false, expiresAt: null,
+      invitationSelection: true, invitedUserIds: options.invitedUserIds || [], invitedRoleIds: options.invitedRoleIds || [],
+      investigationGroupId: groupId, investigationMemberIds: ids, creationPending: true,
+      protectedInvitationMembers: room.__protectedInvestigationMembers || [],
+    };
+    saveQuarantineState(guild, state); persisted = true;
+    const saved = getQuarantineState(guild.id);
+    if (ids.some(id => saved.users?.[id]?.investigationGroupId !== groupId)) throw Error('The original role records could not be verified after saving.');
+    const storage = require('../../../administration/mod/storage');
+    for (const original of originals) {
+      const record = storage.createCase({ guildId: guild.id, userId: original.member.id, moderatorId: actor.id,
+        action: 'quarantine', reason: options.reason, status: 'active',
+        metadata: { source: 'quarantine', mode: QUARANTINE_MODES.INVESTIGATION, interviewChannelId: room.id, investigationGroupId: groupId } });
+      if (!record?.caseId) throw Error('An investigation case could not be saved.');
+      attachQuarantineCase(guild, original.member.id, record.caseId);
+    }
+    for (const original of originals) {
+      const contained = await syncQuarantineIsolation(guild, { role, targetMemberId: original.member.id, allowedChannelIds: [room.id], rollbackMemberAllowsOnFailure: false });
+      if (!contained.success) throw Error(contained.reason || 'Member isolation could not be completed.');
+      await original.member.roles.set([role.id], options.reason || 'Investigation isolation applied');
+      const verification = await verifyMemberContainment(guild, original.member, [room.id]);
+      if (!verification.success) throw Error('Effective member isolation could not be verified.');
+      const latest = getQuarantineState(guild.id); latest.users[original.member.id].creationPending = false; saveQuarantineState(guild, latest);
+    }
+    for (const member of members.slice(1)) await room.send({ ...rooms.buildInvestigationRoomPanel(member, room.id, groupOptions), allowedMentions: { parse: [], users: [member.id] } });
+    emitCurrentQuarantineState(guild, 'investigation_group_created', { investigationGroupId: groupId, memberIds: ids, interviewChannelId: room.id });
+    return { success: true, mode: QUARANTINE_MODES.INVESTIGATION, memberIds: ids, investigationGroupId: groupId, interviewChannelId: room.id };
+  } catch (error) {
+    // Once saved, keep the room and snapshots for recovery. Never automatically
+    // release a successfully isolated subject because another subject failed.
+    if (room && !persisted) await room.delete('Investigation setup did not complete').catch(() => null);
+    return { success: false, retained: persisted, needsReview: persisted, memberIds: ids,
+      interviewChannelId: persisted ? room?.id : null, reason: error.message };
+  } finally { for (const id of locks) lifecycle.endQuarantineOperation(guild.id, id); }
+}
+
 function attachQuarantineCase(guild, memberId, caseId) {
   if (!guild || !memberId || !caseId) return false;
   const state = getQuarantineState(guild.id);
@@ -224,4 +319,4 @@ function reconcileQuarantineCaseLinks(guild) {
   return result;
 }
 
-module.exports = { resolveRequestedMode, isAutomatedSecurityRequest, canManuallyUseSecurityIsolation, createQuarantineDryRunResult, getRestorableRoleIds, escalateInvestigationToSecurity, quarantineMember, attachQuarantineCase, reconcileQuarantineCaseLinks };
+module.exports = { resolveRequestedMode, isAutomatedSecurityRequest, canManuallyUseSecurityIsolation, createQuarantineDryRunResult, getRestorableRoleIds, escalateInvestigationToSecurity, quarantineMember, quarantineInvestigationMembers, attachQuarantineCase, reconcileQuarantineCaseLinks };

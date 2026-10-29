@@ -6,6 +6,7 @@ const {
   saveQuarantineState,
   emitCurrentQuarantineState,
   getQuarantineMode,
+  isSharedInvestigationRoom,
   isAutomaticQuarantineReleaseDue,
   hasOriginalQuarantineRoles,
   normalizeArchivedRooms,
@@ -81,8 +82,12 @@ async function reconcileVerificationRelease(guild, member, options = {}) {
 async function archiveInvestigationRoom(guild, snapshot, options = {}) {
   const channelId = snapshot?.interviewChannelId || snapshot?.previousInterviewChannelId || snapshot?.channelId || null;
   if (!channelId) return { success: true, archived: false, reason: 'No investigation room.' };
-  const otherOwner = Object.entries(getQuarantineState(guild.id).users || {}).some(([userId, active]) => String(userId) !== String(snapshot?.memberId || '') && String(active?.interviewChannelId || '') === String(channelId));
-  if (otherOwner) return { success: false, archived: false, channelId: String(channelId), error: 'Investigation room is still assigned to another active case; manual review required.' };
+  const otherOwner = Object.entries(getQuarantineState(guild.id).users || {}).some(([userId, active]) => String(userId) !== String(snapshot?.memberId || '') && [active?.interviewChannelId, active?.previousInterviewChannelId].some(id => id && String(id) === String(channelId)));
+  const shared = otherOwner && Boolean(snapshot.investigationGroupId)
+    && isSharedInvestigationRoom(getQuarantineState(guild.id).users, channelId)
+    && Object.values(getQuarantineState(guild.id).users).filter(active => active.interviewChannelId === channelId || active.previousInterviewChannelId === channelId)
+      .every(active => active.investigationGroupId === snapshot.investigationGroupId && active.investigationMemberIds.includes(String(snapshot.memberId)));
+  if (otherOwner && !shared) return { success: false, archived: false, channelId: String(channelId), error: 'Investigation room is still assigned to another active case; manual review required.' };
   let channel = guild.channels.cache.get(String(channelId));
   if (!channel) {
     try { channel = await guild.channels.fetch(String(channelId)); }
@@ -92,14 +97,15 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
   try {
     const { buildMemberNotice, COLORS } = require('../../../ui/memberNotice');
     const notice = buildMemberNotice(guild, {
-      module: 'Moderation', emoji: '🔓', title: 'Investigation Closed', color: COLORS.success,
-      description: 'Your investigation has ended, and your quarantine restrictions have been lifted.\n\nIf you need any further help, please contact server management.',
+      module: 'Moderation', emoji: '🔓', title: shared ? 'Member Investigation Closed' : 'Investigation Closed', color: COLORS.success,
+      description: shared ? `The investigation for <@${snapshot.memberId}> has ended. Their restrictions have been lifted. Other members’ investigations remain active in this room.` : 'Your investigation has ended, and your quarantine restrictions have been lifted.\n\nIf you need any further help, please contact server management.',
       fields: snapshot.caseId ? [{ name: '📁 Case reference', value: `#${snapshot.caseId}`, inline: true }] : [],
       compactModerationLayout: true,
     });
     notice.embeds[0].setFooter({ text: 'Private Moderation Review' });
-    const closureMessage = await channel.send(notice).catch(() => null);
+    const closureMessage = await channel.send({ ...notice, allowedMentions: { parse: [] } }).catch(() => null);
     if (snapshot.memberId && channel.permissionOverwrites?.edit) await channel.permissionOverwrites.edit(String(snapshot.memberId), { ViewChannel: false }, { reason: options.reason || 'Investigation isolation closed' });
+    if (!shared) {
     const { cleanChannelName } = require('./investigationRooms');
     const legacySuffix = `-${String(snapshot.memberId || '').slice(-4)}`;
     const roomName = /^investigation-[a-z0-9-]+$/.test(channel.name || '') && channel.name.endsWith(legacySuffix)
@@ -107,10 +113,11 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
     const closedName = `closed-${cleanChannelName(roomName || snapshot.memberTag || 'member').replace(/^closed-/, '')}`;
     await channel.setName(closedName, options.reason || 'Investigation isolation closed').catch(() => null);
     await channel.setTopic(`Closed investigation • Member ${snapshot.memberId || 'unknown'}${snapshot.caseId ? ` • Case #${snapshot.caseId}` : ''}`, options.reason || 'Investigation isolation closed').catch(() => null);
+    }
     const state = getQuarantineState(guild.id);
-    state.archivedRooms = normalizeArchivedRooms([...(state.archivedRooms || []), { channelId: channel.id, memberId: snapshot.memberId || null, caseId: snapshot.caseId || null, closureMessageId: closureMessage?.id || null, closedAt: Date.now(), closedBy: options.restoredBy || options.closedBy || null, roomTranscript: snapshot.roomTranscript || null }]);
+    state.archivedRooms = normalizeArchivedRooms([...(state.archivedRooms || []), { channelId: channel.id, memberId: snapshot.memberId || null, caseId: snapshot.caseId || null, closureMessageId: closureMessage?.id || null, closedAt: Date.now(), closedBy: options.restoredBy || options.closedBy || null, roomTranscript: snapshot.roomTranscript || null, investigationGroupId: snapshot.investigationGroupId || null, investigationMemberIds: snapshot.investigationMemberIds || null }]);
     saveQuarantineState(guild, state);
-    return { success: true, archived: true, channelId: channel.id };
+    return { success: true, archived: true, shared: Boolean(shared), channelId: channel.id };
   } catch (error) { return { success: false, archived: false, channelId: channel.id, error: error.message }; }
 }
 
@@ -118,7 +125,7 @@ function queueInvestigationRoomCleanup(guild, snapshot, archive) {
   const channelId = String(archive?.channelId || snapshot?.interviewChannelId || snapshot?.previousInterviewChannelId || '').trim();
   if (!channelId) return false;
   const latest = getQuarantineState(guild.id);
-  latest.pendingRoomCleanups = normalizePendingRoomCleanups([...(latest.pendingRoomCleanups || []), { channelId, memberId: snapshot?.memberId || null, caseId: snapshot?.caseId || null, queuedAt: Date.now(), lastError: archive?.error || 'Investigation room archival failed.' }]);
+  latest.pendingRoomCleanups = normalizePendingRoomCleanups([...(latest.pendingRoomCleanups || []), { channelId, memberId: snapshot?.memberId || null, caseId: snapshot?.caseId || null, investigationGroupId: snapshot?.investigationGroupId || null, investigationMemberIds: snapshot?.investigationMemberIds || null, roomTranscript: snapshot?.roomTranscript || null, queuedAt: Date.now(), lastError: archive?.error || 'Investigation room archival failed.' }]);
   saveQuarantineState(guild, latest);
   return true;
 }
@@ -129,16 +136,20 @@ async function retryPendingInvestigationRoomCleanups(guild, options = {}) {
   const pending = normalizePendingRoomCleanups(initial.pendingRoomCleanups);
   const result = { checked: pending.length, archived: 0, failed: 0 };
   for (const cleanup of pending) {
+    const groupLock = cleanup.investigationGroupId ? `investigation-group:${cleanup.investigationGroupId}` : null;
+    if (groupLock && !tryBeginQuarantineOperation(guild.id, groupLock)) continue;
+    try {
     const archive = await archiveInvestigationRoom(guild, cleanup, { ...options, system: true, reason: options.reason || 'Retrying investigation room cleanup' });
     const latest = getQuarantineState(guild.id);
     if (archive?.success === false) {
       result.failed += 1;
-      latest.pendingRoomCleanups = normalizePendingRoomCleanups((latest.pendingRoomCleanups || []).map((entry) => String(entry.channelId) === String(cleanup.channelId) ? { ...entry, lastError: archive.error || entry.lastError } : entry));
+      latest.pendingRoomCleanups = normalizePendingRoomCleanups((latest.pendingRoomCleanups || []).map((entry) => String(entry.channelId) === String(cleanup.channelId) && entry.memberId === cleanup.memberId ? { ...entry, lastError: archive.error || entry.lastError } : entry));
     } else {
       result.archived += 1;
-      latest.pendingRoomCleanups = normalizePendingRoomCleanups((latest.pendingRoomCleanups || []).filter((entry) => String(entry.channelId) !== String(cleanup.channelId)));
+      latest.pendingRoomCleanups = normalizePendingRoomCleanups((latest.pendingRoomCleanups || []).filter((entry) => !(String(entry.channelId) === String(cleanup.channelId) && entry.memberId === cleanup.memberId)));
     }
     saveQuarantineState(guild, latest);
+    } finally { if (groupLock) endQuarantineOperation(guild.id, groupLock); }
   }
   if (result.checked) emitCurrentQuarantineState(guild, 'investigation_room_cleanup_retry', result);
   return result;
@@ -160,7 +171,7 @@ function isQuarantineReleaseInProgress(guildId, memberId) {
 function hasOtherActiveRoomOwner(guild, memberId, snapshot) {
   const roomIds = new Set([snapshot.interviewChannelId, snapshot.previousInterviewChannelId].filter(Boolean).map(String));
   return roomIds.size > 0 && Object.entries(getQuarantineState(guild.id).users || {}).some(([userId, active]) =>
-    String(userId) !== String(memberId) && [active?.interviewChannelId, active?.previousInterviewChannelId].some(id => id && roomIds.has(String(id))));
+    String(userId) !== String(memberId) && [active?.interviewChannelId, active?.previousInterviewChannelId].some(id => id && roomIds.has(String(id)) && !isSharedInvestigationRoom(getQuarantineState(guild.id).users, id)));
 }
 
 async function restoreQuarantinedMember(guild, member, options = {}) {
@@ -171,12 +182,15 @@ async function restoreQuarantinedMember(guild, member, options = {}) {
   if (!Array.isArray(snapshot.roles) || !hasOriginalQuarantineRoles(snapshot)) return { success: false, reason: 'Original role snapshot is missing; manual review required before release.' };
   if (snapshot.allowedChannelIds?.length) return { success: false, needsReview: true, reason: 'Legacy additional channel access must be reconciled before release.' };
   const mode = getQuarantineMode(snapshot);
+  if (snapshot.investigationGroupId && options.system === true) return { success: false, reason: 'Shared investigation members require individual authorised release.' };
   if (mode === QUARANTINE_MODES.SECURITY && options.system !== true && String(options.restoredBy || '') !== String(guild.ownerId || '')) return { success: false, mode, reason: 'Full Security Isolation can only be cleared manually by the server owner.' };
   const releaseKey = `${guild.id}:${member.id}`;
   if (!tryBeginQuarantineOperation(guild.id, member.id)) return { success: false, busy: true, reason: 'Quarantine operation already in progress.' };
+  const groupLock = snapshot.investigationGroupId ? `investigation-group:${snapshot.investigationGroupId}` : null;
+  if (groupLock && !tryBeginQuarantineOperation(guild.id, groupLock)) { endQuarantineOperation(guild.id, member.id); return { success: false, busy: true, reason: 'This investigation is being updated. Please try again.' }; }
   try {
-    // A shared room is not yet supported by the release/archival transaction.
-    // Refuse before restoring roles or channel access, keeping both snapshots.
+    // Legacy duplicate links still fail closed. Only reciprocal new-case group
+    // metadata permits individual release while the shared room remains open.
     if (hasOtherActiveRoomOwner(guild, member.id, snapshot)) {
       return { success: false, needsReview: true, reason: 'Another active case uses this investigation room; manual review is required before release.' };
     }
@@ -216,12 +230,13 @@ async function restoreQuarantinedMember(guild, member, options = {}) {
     emitCurrentQuarantineState(guild, 'member_restored', { memberId: member.id, mode, restoredRoles: roles.restored.length, skippedRoles: roles.skipped, archive, cleanupPending: archive?.success === false, restoredMemberChannelAllows: memberAccess.restored.length, invitationCleanup, verificationReconciled: verification?.reconciled === true });
     return { success: true, mode, restoredRoles: roles.restored.length, restoredRoleIds: roles.restored, skippedRoles: roles.skipped, memberAccess, archive, cleanupPending: archive?.success === false, invitationCleanup, verification };
   } catch (error) { return { success: false, mode, error: error.message }; }
-  finally { releasesInProgress.delete(releaseKey); }
+  finally { if (groupLock) endQuarantineOperation(guild.id, groupLock); releasesInProgress.delete(releaseKey); }
 }
 
 async function clearExpiredAbsentMember(guild, userId, state) {
   const snapshot = state.users?.[userId];
   if (!snapshot) return { success: true, cleared: false, reason: 'No quarantine snapshot.' };
+  if (snapshot.investigationGroupId) return { success: false, cleared: false, reason: 'Shared investigation members require individual authorised release.' };
   if (!isAutomaticQuarantineReleaseDue(snapshot) || !hasOriginalQuarantineRoles(snapshot) || snapshot.allowedChannelIds?.length) return { success: false, cleared: false, reason: 'Automatic release is not authorised or original roles are missing; snapshot retained.' };
   if (hasOtherActiveRoomOwner(guild, userId, snapshot)) return { success: false, cleared: false, needsReview: true, reason: 'Another active case uses this investigation room; manual review is required before release.' };
   const memberAccess = await restoreMemberViewAllows(guild, userId, snapshot.memberViewAllowRestores, { reason: 'Restoring pre-quarantine channel access for expired absent member', system: true });

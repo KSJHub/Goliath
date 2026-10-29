@@ -13,6 +13,7 @@ const {
   DEFAULT_INVESTIGATION_CATEGORY_NAME,
   QUARANTINE_MODES,
   getQuarantineMode,
+  isSharedInvestigationRoom,
   getQuarantineState,
   saveQuarantineState,
 } = require('./state');
@@ -143,6 +144,18 @@ async function buildInvestigationRoomOverwrites(guild, member, quarantineRole, o
       || (sessions[id]?.state === 'review' && Boolean(sessions[id]?.quarantineChannelId));
     const selectedUsers = [...new Set((options.invitedUserIds || []).map(String))].filter(id => id !== member.id && id !== botMember.id && id !== guild.ownerId);
     const selectedRoles = [...new Set((options.invitedRoleIds || []).map(String))];
+    const investigatedIds = [...new Set(options.investigatedMemberIds || [])].filter(id => id !== member.id);
+    if (investigatedIds.length > 5) throw new Error('Select up to five additional investigated members.');
+    for (const id of investigatedIds) {
+      if (selectedUsers.includes(id) || id === botMember.id || id === guild.ownerId) throw new Error('Investigated members must be separate from staff and guests.');
+      const selected = await guild.members.fetch({ user: id, force: true }).catch(error => { if (options.recoveringGroup && Number(error?.code) === 10007) return null; throw error; });
+      const snapshot = getQuarantineState(guild.id).users?.[id];
+      const recoveringGroup = options.recoveringGroup === true && snapshot?.investigationGroupId === options.investigationGroupId;
+      if (!selected && recoveringGroup) continue; // Rejoin recovery grants access only after the member returns.
+      if (!selected?.roles?.cache || (!recoveringGroup && (snapshot || hasIsolatedVerification(id) || selected.roles.cache.has(quarantineRole.id))))
+        throw new Error('An investigated member is unavailable or already isolated.');
+      overwrites.push({ id, allow: memberAllow });
+    }
     if (selectedUsers.length > 5 || selectedRoles.length > 5) throw new Error('Select up to five members and five roles.');
     if (selectedRoles.some(id => id === guild.id || id === quarantineRole.id)) throw new Error('The everyone and quarantine roles cannot be invited.');
     await guild.roles.fetch();
@@ -156,10 +169,17 @@ async function buildInvestigationRoomOverwrites(guild, member, quarantineRole, o
       if (!selected?.roles?.cache || selected.roles.cache.has(quarantineRole.id) || getQuarantineState(guild.id).users?.[id] || hasIsolatedVerification(id)) throw new Error('A selected member is unavailable or already quarantined.');
       overwrites.push({ id, allow: memberAllow });
     }
+    const leadId = String(options.quarantinedBy || '');
+    if (/^\d{15,25}$/.test(leadId) && !overwrites.some(entry => entry.id === leadId)
+      && !getQuarantineState(guild.id).users?.[leadId] && !hasIsolatedVerification(leadId)) {
+      const lead = await guild.members.fetch({ user: leadId, force: true });
+      if (lead && require('../../../administration/mod/permissions').canUseModAction(lead, guild, 'quarantine'))
+        overwrites.push({ id: leadId, allow: memberAllow });
+    }
     // A role allow overrides the quarantine-role deny in Discord. Explicit member
     // denies keep every other active case contained, even if roles changed.
     if (selectedRoles.length) {
-      const otherCases = getOtherIsolatedMemberIds(guild.id, member.id);
+      const otherCases = getOtherIsolatedMemberIds(guild.id, member.id).filter(id => !investigatedIds.includes(id));
       // Do not assume that every old quarantine has a shared snapshot. A full
       // member inventory catches unlinked quarantine-role holders before a role
       // overwrite could bypass their quarantine-role deny.
@@ -168,7 +188,7 @@ async function buildInvestigationRoomOverwrites(guild, member, quarantineRole, o
         || (Number.isInteger(guild.memberCount) && members.size < guild.memberCount)) throw new Error('The member list could not be fully checked. Invite individual members instead.');
       for (const current of members.values()) {
         if (!current.roles?.cache) throw new Error('A member’s roles could not be checked. Invite individual members instead.');
-        if (current.id !== member.id && current.roles.cache.has(quarantineRole.id) && !otherCases.includes(current.id))
+        if (current.id !== member.id && current.roles.cache.has(quarantineRole.id) && !otherCases.includes(current.id) && !investigatedIds.includes(current.id))
           throw new Error('An isolated member has no linked case. Reconcile that isolation before inviting roles.');
       }
       if (!Array.isArray(options.protectedCaseIds) || otherCases.some(id => !options.protectedCaseIds.includes(id)))
@@ -193,11 +213,11 @@ async function buildInvestigationRoomOverwrites(guild, member, quarantineRole, o
   return overwrites.slice(0, 95);
 }
 
-function investigationRoomControls(memberId, channelId) {
+function investigationRoomControls(memberId, channelId, options = {}) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`mod_invroom_transcript:${memberId}:${channelId}`).setLabel('Transcript').setEmoji('📄').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_invroom_notify:${memberId}:${channelId}`).setLabel('Notify Management').setEmoji('🔔').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_invroom_close:${memberId}:${channelId}`).setLabel('Close Investigation').setEmoji('🔓').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`mod_invroom_close:${memberId}:${channelId}`).setLabel(options.investigationGroupId ? 'Release This Member' : 'Close Investigation').setEmoji('🔓').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(`mod_invroom_delete:${memberId}:${channelId}`).setLabel('Delete Closed Room').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
   );
 }
@@ -248,6 +268,7 @@ function buildInvestigationRoomPanel(member, channelId, options = {}) {
     .setTitle('🔎 Private Investigation Room')
     .setDescription([`Hi ${member}. This private room has been opened while the moderation team reviews a concern involving your account.`, '', '**This is not a final decision or punishment.** You can continue speaking with the management team here while the review is active.'].join('\n'))
     .addFields(
+      ...(options.investigationMemberIds?.length ? [{ name: '👥 Investigation members', value: options.investigationMemberIds.map(id => `<@${id}>`).join(', '), inline: false }, { name: '👤 These controls apply to', value: `<@${member.id}> • Release affects this member only.`, inline: false }] : []),
       { name: '📋 Why this room was opened', value: String(options.reason || 'No reason provided').slice(0, 1024), inline: false },
       { name: '🧭 What happens next', value: '• Management will review the available information.\n• You may provide context or ask questions in this room.\n• You will be told when the investigation is concluded or moved to the next stage.', inline: false },
       { name: '👤 Lead investigator', value: leadId ? `<@${leadId}>` : 'An authorised member of the moderation team', inline: true },
@@ -261,7 +282,7 @@ function buildInvestigationRoomPanel(member, channelId, options = {}) {
     new ButtonBuilder().setCustomId(`mod_invroom_note:${member.id}`).setLabel('Add Note').setEmoji('📝').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_invroom_access:${member.id}`).setLabel('Channel Access').setEmoji('🔐').setStyle(ButtonStyle.Secondary),
   );
-  return { content: `<@${member.id}>`, embeds: [intro], components: [controls, investigationRoomControls(member.id, channelId)], allowedMentions: { parse: [] } };
+  return { content: `<@${member.id}>`, embeds: [intro], components: [controls, investigationRoomControls(member.id, channelId, options)], allowedMentions: { parse: [] } };
 }
 
 async function privateInvestigationNavigation(interaction) {
@@ -308,7 +329,7 @@ async function refreshInvestigationPresentation(guild, channel, memberId) {
   if (channel.topic?.startsWith('Goliath investigation isolation • Member ')) {
     await channel.setTopic(channel.topic.replace('Goliath investigation isolation • Member ', 'Private investigation • Member '), 'Use generic investigation room topic');
   }
-  const key = `${guild.id}:${channel.id}`;
+  const key = `${guild.id}:${channel.id}:${memberId}`;
   if (presentationChecks.has(key) || !channel.messages?.fetch || !guild.client?.user?.id) return;
   const ownsPanel = message => message?.author?.id === guild.client.user.id
     && message.embeds?.[0]?.title === '🔎 Private Investigation Room'
@@ -359,7 +380,7 @@ async function refreshInvestigationPresentation(guild, channel, memberId) {
 
 const roomRecoveries = new Map();
 async function ensureInvestigationRoomForSnapshot(guild, member, role, snapshot, options = {}) {
-  const key = `${guild.id}:${member.id}`;
+  const key = `${guild.id}:${snapshot?.investigationGroupId || member.id}`;
   if (roomRecoveries.has(key)) return roomRecoveries.get(key);
   const pending = repairInvestigationRoom(guild, member, role, options);
   roomRecoveries.set(key, pending);
@@ -370,6 +391,12 @@ async function repairInvestigationRoom(guild, member, role, options = {}) {
   // Event arguments may predate a replacement room or an authorised release.
   const snapshot = getQuarantineState(guild.id)?.users?.[member.id];
   if (!snapshot || getQuarantineMode(snapshot) !== QUARANTINE_MODES.INVESTIGATION) return null;
+  const group = snapshot.investigationGroupId;
+  const lifecycle = group ? require('./releaseLifecycle') : null;
+  const groupLock = group ? `investigation-group:${group}` : null;
+  if (group && !isSharedInvestigationRoom(getQuarantineState(guild.id).users, snapshot.interviewChannelId)) throw Error('Shared investigation metadata needs review.');
+  if (group && !options.groupOperationHeld && !lifecycle.tryBeginQuarantineOperation(guild.id, groupLock)) throw Error('This investigation is being updated; recovery will retry.');
+  try {
   let channel = snapshot?.interviewChannelId ? guild.channels.cache.get(String(snapshot.interviewChannelId)) : null;
   if (!channel && snapshot?.interviewChannelId) {
     try { channel = await guild.channels.fetch(String(snapshot.interviewChannelId)); }
@@ -378,22 +405,32 @@ async function repairInvestigationRoom(guild, member, role, options = {}) {
   if (!channel) {
     if (options.existingRoomOnly) throw new Error('Existing case room is unavailable; reconciliation cannot create a replacement.');
     const locks = [];
+    const peers = group ? Object.values(getQuarantineState(guild.id).users).filter(value => value.investigationGroupId === group && getQuarantineMode(value) === QUARANTINE_MODES.INVESTIGATION) : [];
+    const peerIds = peers.map(value => value.memberId);
     const lifecycle = snapshot.invitationSelection ? require('./releaseLifecycle') : null;
     try {
       if (snapshot.invitationSelection) {
         const others = snapshot.invitedRoleIds?.length ? getOtherIsolatedMemberIds(guild.id, member.id) : [];
         const ids = [...new Set([...(snapshot.invitedUserIds || []), ...others])].filter(id => id !== member.id);
-        for (const id of ids) {
+        for (const id of ids.filter(id => !peerIds.includes(id))) {
           if (!lifecycle.tryBeginQuarantineOperation(guild.id, id)) throw new Error('A selected member or investigation is being updated; room recovery will retry.');
           locks.push(id);
         }
       }
-      channel = await createInvestigationRoom(guild, member, role, { ...options, reason: snapshot?.reason || options.reason, invitationSelection: snapshot.invitationSelection === true, invitedUserIds: snapshot.invitedUserIds || [], invitedRoleIds: snapshot.invitedRoleIds || [], protectedCaseIds: locks });
+      channel = await createInvestigationRoom(guild, member, role, { ...options, quarantinedBy: snapshot.quarantinedBy, reason: snapshot?.reason || options.reason, invitationSelection: snapshot.invitationSelection === true, invitedUserIds: snapshot.invitedUserIds || [], invitedRoleIds: snapshot.invitedRoleIds || [], protectedCaseIds: locks, ...(group ? { investigationGroupId: group, investigatedMemberIds: peerIds, investigationMemberIds: snapshot.investigationMemberIds, recoveringGroup: true } : {}) });
       const state = getQuarantineState(guild.id);
       if (state.users?.[member.id]) {
-        state.users[member.id].interviewChannelId = channel.id;
-        state.users[member.id].protectedInvitationMembers = channel.__protectedInvestigationMembers || [];
+        for (const active of Object.values(state.users)) {
+          if (active.memberId !== member.id && (!group || active.investigationGroupId !== group)) continue;
+          if (getQuarantineMode(active) === QUARANTINE_MODES.INVESTIGATION) active.interviewChannelId = channel.id;
+          else if (group) active.previousInterviewChannelId = channel.id;
+          active.protectedInvitationMembers = channel.__protectedInvestigationMembers || [];
+        }
         saveQuarantineState(guild, state);
+      }
+      for (const peer of peers.filter(value => value.memberId !== member.id)) {
+        const subject = await guild.members.fetch({ user: peer.memberId, force: true }).catch(error => { if (Number(error?.code) === 10007) return null; throw error; });
+        if (subject) await channel.send(buildInvestigationRoomPanel(subject, channel.id, peer));
       }
     } finally { for (const id of locks) lifecycle.endQuarantineOperation(guild.id, id); }
   } else {
@@ -402,6 +439,7 @@ async function repairInvestigationRoom(guild, member, role, options = {}) {
     await refreshInvestigationPresentation(guild, channel, member.id).catch(error => console.warn('[QuarantineSystem] Room presentation refresh failed:', error.message));
   }
   return channel;
+  } finally { if (group && !options.groupOperationHeld) lifecycle.endQuarantineOperation(guild.id, groupLock); }
 }
 
 module.exports = {

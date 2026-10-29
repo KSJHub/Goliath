@@ -2900,7 +2900,7 @@ function load(file, mocks, testExport = '') {
 const base = 'src/core/security/protection/quarantine/';
 const { Collection, PermissionsBitField, PermissionFlagsBits: P, ChannelType, Events } = require('discord.js');
 const stateApi = load(base + 'state.js', { '../../../guild/guildManager': {}, '../../../../server/sockets/socketHub': {} });
-const { QUARANTINE_MODES, getQuarantineMode, auditQuarantineSnapshots, isAutomaticQuarantineReleaseDue, hasOriginalQuarantineRoles } = stateApi;
+const { QUARANTINE_MODES, getQuarantineMode, auditQuarantineSnapshots, isAutomaticQuarantineReleaseDue, hasOriginalQuarantineRoles, isSharedInvestigationRoom } = stateApi;
 const uid = '111111111111111111', other = '222222222222222222', originalRole = '333333333333333333';
 const sessions = { [uid]: { state: 'quarantined', quarantineChannelId: 'legacy' }, approval: { state: 'review' } };
 const snapshots = { [uid]: { mode: 'investigation', source: 'verification', interviewChannelId: 'shared' }, [other]: { mode: 'investigation', roles: [originalRole], interviewChannelId: 'shared' } };
@@ -2927,9 +2927,103 @@ function fixture(snapshot = {}) {
   const guild = { id: 'guild', ownerId: 'owner', name: 'Fixture', roles: { cache: new Collection([[role.id, role], [originalRole, { id: originalRole, position: 2 }]]), fetch: async () => guild.roles.cache }, channels: { cache: new Collection() } };
   const member = { id: uid, guild, user: { tag: 'Fixture' }, roles: { cache: new Collection([[role.id, role]]), set: async ids => { mutations.push(['roles', ...ids]); member.roles.cache = new Collection(ids.map(id => [id, guild.roles.cache.get(id) || { id }])); return member; } } };
   guild.members = { me: { id: 'bot', roles: { highest: { position: 10 } }, permissions: new PermissionsBitField([P.ManageRoles, P.ManageChannels]) }, fetch: async () => member };
-  const api = { QUARANTINE_MODES, getQuarantineMode, isAutomaticQuarantineReleaseDue, hasOriginalQuarantineRoles, auditQuarantineSnapshots, getQuarantineState: () => structuredClone(state), saveQuarantineState: (g, value) => { state = structuredClone(value); }, emitCurrentQuarantineState: () => {}, normalizeArchivedRooms: v => v, normalizePendingRoomCleanups: v => v };
+  const api = { QUARANTINE_MODES, getQuarantineMode, isAutomaticQuarantineReleaseDue, hasOriginalQuarantineRoles, isSharedInvestigationRoom, auditQuarantineSnapshots, getQuarantineState: () => structuredClone(state), saveQuarantineState: (g, value) => { state = structuredClone(value); }, emitCurrentQuarantineState: () => {}, normalizeArchivedRooms: v => v, normalizePendingRoomCleanups: v => v };
   return { guild, member, role, api, mutations, get state() { return state; } };
 }
+// Explicit new multi-member investigations use independent role snapshots and
+// cases in one room; guests are never inferred to be investigated subjects.
+{
+  async function groupFixture(failAt = null) {
+    const f = fixture(); delete f.state.users[uid];
+    const secondRole = '444444444444444444', actorId = '555555555555555555', guestId = '666666666666666666';
+    f.guild.roles.cache.set(secondRole, { id: secondRole, position: 3 });
+    f.member.roles.cache = new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]);
+    const second = { id: other, guild: f.guild, user: { tag: 'Second' }, roles: { cache: new Collection([[secondRole, f.guild.roles.cache.get(secondRole)]]), set: async ids => {
+      if (failAt === 'roles') throw Error('Second member role write failed');
+      f.mutations.push(['secondRoles', ...ids]); second.roles.cache = new Collection(ids.map(id => [id, f.guild.roles.cache.get(id)]));
+    } } };
+    const actor = { id: actorId };
+    const guest = { id: guestId, roles: { cache: new Collection([[originalRole, f.guild.roles.cache.get(originalRole)]]), set: async () => { throw Error('Guest roles must not change'); } } };
+    const members = new Map([[uid, f.member], [other, second], [actorId, actor], [guestId, guest]]);
+    f.guild.client = { user: { id: 'bot' } };
+    f.guild.members.fetch = async request => members.get(typeof request === 'string' ? request : request.user);
+    const notices = [], renamed = [], permissionWrites = [], cases = [];
+    const room = { id: 'group-room', name: 'subjects', send: async payload => { notices.push(payload); return { id: `notice-${notices.length}` }; },
+      permissionOverwrites: { edit: async (id, values) => permissionWrites.push([id, values]) },
+      setName: async name => renamed.push(name), setTopic: async () => {}, delete: async () => { throw Error('Saved group room must not be deleted on partial failure'); } };
+    f.guild.channels.cache.set(room.id, room);
+    f.guild.channels.fetch = async id => id ? room : f.guild.channels.cache;
+    const storage = { createCase: input => { const record = { ...input, caseId: cases.length + 1 }; cases.push(record); return record; },
+      getCaseById: (g, id) => cases.find(record => record.caseId === id), getCasesForUser: (g, id) => cases.filter(record => record.userId === id), updateCaseStatus: (g, id, status) => { cases.find(record => record.caseId === id).status = status; } };
+    let lifecycle;
+    const release = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': { ensureQuarantineRole: async () => f.role },
+      './memberLifecycle': { getRestorableRoleIds: (...args) => lifecycle.getRestorableRoleIds(...args) },
+      './isolation': { restoreMemberViewAllows: async () => ({ restored: [], failed: [] }) },
+      './investigationRooms': { cleanChannelName: value => value },
+      '../../../ui/memberNotice': require(root + '/src/core/ui/memberNotice'),
+      '../../../administration/mod/storage': storage,
+      '../../../../modules/securityStudio/verificationQuarantine': { reconcileModerationRelease: async () => ({ reconciled: true }) },
+    });
+    lifecycle = load(base + 'memberLifecycle.js', { './state': f.api, './releaseLifecycle': release,
+      '../../../../owner/dev/DevOverrideManager': { shouldBlockOwnerDestructiveAction: () => false },
+      '../core': { canManageTargetMember: () => ({ allowed: true }) },
+      '../../../administration/mod/permissions': { canUseModAction: () => true, checkHierarchyForBulk: () => failAt === 'hierarchy' ? 'Cannot act on selected member' : null },
+      '../../../administration/mod/storage': storage,
+      'node:crypto': require('node:crypto'), './roleManager': { ensureQuarantineRole: async () => f.role },
+      './isolation': { syncQuarantineIsolation: async (guild, options) => {
+        if (options.targetMemberId) {
+          assert.equal(Object.keys(f.state.users).length, 2, 'All originals must be saved before any member isolation write');
+          assert.deepEqual(f.state.users[uid].roles, [originalRole]); assert.deepEqual(f.state.users[other].roles, [secondRole]);
+          assert.equal(cases.length, 2, 'Each subject must have a case before isolation starts');
+          if (failAt === 'isolation') return { success: false, reason: 'Isolation write failed' };
+        }
+        return { success: true };
+      }, verifyMemberContainment: async (guild, member, allowed) => { assert.deepEqual(allowed, [room.id]); return { success: true }; } },
+      './investigationRooms': { getOtherIsolatedMemberIds: () => Object.keys(f.state.users),
+        createInvestigationRoom: async (guild, member, role, options) => { assert.deepEqual(options.investigatedMemberIds, [uid, other]); return room; },
+        buildInvestigationRoomPanel: member => ({ memberId: member.id }) },
+    });
+    const result = await lifecycle.quarantineInvestigationMembers(f.guild, [uid, other], { reason: 'Two test members', quarantinedBy: actorId, invitedUserIds: [guestId], invitedRoleIds: [] });
+    return { f, second, secondRole, guest, result, release, room, renamed, notices, permissionWrites, cases };
+  }
+  const g = await groupFixture();
+  assert.equal(g.result.success, true); assert.equal(g.cases.length, 2);
+  assert.equal(g.f.state.users[g.guest.id], undefined); assert.deepEqual([...g.guest.roles.cache.keys()], [originalRole], 'Guest invitation must not quarantine or alter guest roles');
+  assert.equal(g.f.state.users[uid].creationPending, false); assert.equal(g.f.state.users[other].creationPending, false);
+  assert.equal(isSharedInvestigationRoom(g.f.state.users, g.room.id), true);
+  assert.equal(auditQuarantineSnapshots({}, g.f.state.users).needsReview, 0, 'Reciprocal new group links are not legacy duplicates');
+  const broken = structuredClone(g.f.state.users); broken[other].investigationMemberIds = [other];
+  assert.equal(isSharedInvestigationRoom(broken, g.room.id), false);
+  assert(auditQuarantineSnapshots({}, broken).cases.every(record => record.reasons.includes('duplicate_room_assignment')));
+  g.f.state.users[uid].autoRelease = true; g.f.state.users[uid].expiresAt = 1;
+  assert.equal(isAutomaticQuarantineReleaseDue(g.f.state.users[uid]), false, 'Shared cases never auto-release');
+  assert.equal((await g.release.restoreQuarantinedMember(g.f.guild, g.f.member, { system: true })).success, false);
+  const groupLockKey = `investigation-group:${g.result.investigationGroupId}`;
+  assert.equal(g.release.tryBeginQuarantineOperation(g.f.guild.id, groupLockKey), true);
+  assert.equal((await g.release.restoreQuarantinedMember(g.f.guild, g.f.member, { restoredBy: 'staff' })).busy, true);
+  assert.equal(g.release.isQuarantineReleaseInProgress(g.f.guild.id, uid), false, 'Failed group locking must release the subject lock');
+  g.release.endQuarantineOperation(g.f.guild.id, groupLockKey);
+  const first = await g.release.restoreQuarantinedMember(g.f.guild, g.f.member, { restoredBy: 'staff' });
+  assert.equal(first.success, true); assert.equal(first.archive.shared, true); assert.deepEqual(g.renamed, []);
+  assert.equal(g.f.state.users[uid], undefined); assert.deepEqual(g.f.state.users[other].roles, [g.secondRole]);
+  assert.deepEqual([...g.f.member.roles.cache.keys()], [originalRole]); assert.deepEqual([...g.second.roles.cache.keys()], ['quarantine']);
+  assert(g.permissionWrites.some(([id, values]) => id === uid && values.ViewChannel === false));
+  assert.equal(g.f.state.archivedRooms[0].memberId, uid);
+  const last = await g.release.restoreQuarantinedMember(g.f.guild, g.second, { restoredBy: 'staff' });
+  assert.equal(last.success, true); assert.equal(last.archive.shared, false); assert.equal(g.renamed.length, 1);
+  assert.equal(Object.keys(g.f.state.users).length, 0); assert.equal(g.f.state.archivedRooms.length, 2);
+  assert.deepEqual([...g.second.roles.cache.keys()], [g.secondRole]);
+  for (const failure of ['isolation', 'roles']) {
+    const partial = await groupFixture(failure);
+    assert.equal(partial.result.success, false); assert.equal(partial.result.retained, true);
+    assert.deepEqual(partial.f.state.users[uid].roles, [originalRole]); assert.deepEqual(partial.f.state.users[other].roles, [partial.secondRole]);
+    assert.equal(partial.release.isQuarantineReleaseInProgress(partial.f.guild.id, uid), false);
+    assert.equal(partial.release.isQuarantineReleaseInProgress(partial.f.guild.id, other), false);
+  }
+  const denied = await groupFixture('hierarchy'); assert.equal(denied.result.success, false); assert.equal(denied.result.retained, false);
+  assert.equal(denied.f.mutations.length, 0); assert.equal(Object.keys(denied.f.state.users).length, 0);
+}
+
 // Legacy resolution cannot reconstruct already-removed roles or create a fresh room.
 {
   const f = fixture();
@@ -3222,19 +3316,19 @@ function fixture(snapshot = {}) {
   const f = fixture(); delete f.state.users[uid];
   const invitee = '444444444444444444', roleId = '555555555555555555';
   const actor = { id: other }; f.guild.members.fetch = async () => actor;
-  const replies = [], locks = [], calls = [];
+  const replies = [], locks = [], calls = [], groupCalls = [];
   const controls = load('src/core/administration/mod/quarantineInteractions.js', {
     '../../../core/ui/interactionResponse': { safeReply: async (i, p) => { replies.push(p); return true; }, safeEditReply: async (i, p) => { replies.push(p); return true; } },
     './permissions': { canUseModAction: () => true, requireModeratableTarget: async () => f.member, recordModerationSystemEvent: () => {} },
     './storage': {}, './panel': {}, './investigationAccess': {},
-    '../../security/protection/quarantine': { ...f.api, tryBeginQuarantineOperation: (g, id) => { locks.push(['begin', id]); return true; }, endQuarantineOperation: (g, id) => locks.push(['end', id]), quarantineMember: async (g, member, options) => { calls.push(options); return { success: false, reason: 'fixture stop' }; } },
+    '../../security/protection/quarantine': { ...f.api, quarantineInvestigationMembers: async (guild, ids, options) => { groupCalls.push({ ids, options }); return { success: false, reason: 'fixture stop' }; }, tryBeginQuarantineOperation: (g, id) => { locks.push(['begin', id]); return true; }, endQuarantineOperation: (g, id) => locks.push(['end', id]), quarantineMember: async (g, member, options) => { calls.push(options); return { success: false, reason: 'fixture stop' }; } },
   });
   const baseInteraction = { guild: f.guild, user: { id: other }, isModalSubmit: () => true, deferReply: async function (options) { assert.equal(options.flags, 64); this.deferred = true; }, fields: { getTextInputValue: () => 'Review request' }, customId: `mod_submit_quarantine_investigation:${uid}` };
   await controls.handleQuarantineInteraction(baseInteraction);
   assert.equal(calls.length, 0, 'A reason submission must not create an investigation yet');
   assert.equal(baseInteraction.deferred, true, 'The setup must use a private reply rather than update the shared panel');
-  const prompt = replies.at(-1); assert.equal(prompt.flags, 64); assert.equal(prompt.components.length, 3);
-  const token = prompt.components[2].components[0].data.custom_id.split(':')[1];
+  const prompt = replies.at(-1); assert.equal(prompt.flags, 64); assert.equal(prompt.components.length, 4);
+  const token = prompt.components[3].components[0].data.custom_id.split(':')[1];
   const createInteraction = (action, extras = {}) => ({ customId: `mod_invroom_invite_${action}:${token}`, guild: f.guild, user: { id: other },
     isButton: () => ['start', 'cancel'].includes(action), isUserSelectMenu: () => action === 'users', isRoleSelectMenu: () => action === 'roles',
     deferUpdate: async function () { this.deferred = true; }, editReply: async p => { replies.push(p); }, ...extras });
@@ -3251,14 +3345,22 @@ function fixture(snapshot = {}) {
   assert.deepEqual(locks, [], 'Invitation setup delegates locking to the shared quarantine engine');
   await controls.handleQuarantineInteraction(createInteraction('start')); assert.equal(calls.length, 1, 'Setup cannot be reused to create another room');
   await controls.handleQuarantineInteraction({ ...baseInteraction, deferred: false });
-  const secondToken = replies.at(-1).components[2].components[0].data.custom_id.split(':')[1];
+  const secondToken = replies.at(-1).components[3].components[0].data.custom_id.split(':')[1];
   const emptyStart = createInteraction('start', { customId: `mod_invroom_invite_start:${secondToken}` });
   await controls.handleQuarantineInteraction(emptyStart);
   assert.equal(calls.length, 2); assert.deepEqual(calls[1].invitedUserIds, []); assert.deepEqual(calls[1].invitedRoleIds, []);
   await controls.handleQuarantineInteraction({ ...baseInteraction, deferred: false });
-  const cancelToken = replies.at(-1).components[2].components[0].data.custom_id.split(':')[1];
+  const cancelToken = replies.at(-1).components[3].components[0].data.custom_id.split(':')[1];
   await controls.handleQuarantineInteraction(createInteraction('cancel', { customId: `mod_invroom_invite_cancel:${cancelToken}` }));
   assert.equal(calls.length, 2, 'Cancelling must not open an investigation');
+  await controls.handleQuarantineInteraction({ ...baseInteraction, deferred: false });
+  const groupToken = replies.at(-1).components[3].components[0].data.custom_id.split(':')[1];
+  await controls.handleQuarantineInteraction(createInteraction('subjects', { isUserSelectMenu: () => true, values: [roleId], customId: `mod_invroom_invite_subjects:${groupToken}` }));
+  await controls.handleQuarantineInteraction(createInteraction('users', { values: [invitee], customId: `mod_invroom_invite_users:${groupToken}` }));
+  await controls.handleQuarantineInteraction(createInteraction('start', { customId: `mod_invroom_invite_start:${groupToken}` }));
+  assert.equal(groupCalls.length, 1); assert.deepEqual(groupCalls[0].ids, [uid, roleId]);
+  assert.deepEqual(groupCalls[0].options.invitedUserIds, [invitee]); assert.equal(calls.length, 2, 'Group setup must use the multi-member engine');
+
 
 }
 // Selected roles never give another quarantined member access to this room.
@@ -3385,6 +3487,45 @@ function fixture(snapshot = {}) {
   delete f.state.users[uid];
   assert.equal(await rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, stale), null);
 }
+// A missing shared room is recreated once, updates every active subject, and
+// does not grant an absent subject access until their member rejoin is handled.
+{
+  const f = fixture(), groupId = 'new-case-group';
+  f.state.users[uid].investigationGroupId = groupId; f.state.users[uid].investigationMemberIds = [uid, other];
+  f.state.users[uid].invitationSelection = true;
+  f.state.users[other] = { ...structuredClone(f.state.users[uid]), memberId: other };
+  const second = { id: other, roles: { cache: new Collection([[f.role.id, f.role]]) }, permissions: new PermissionsBitField() };
+  let absent = false, creates = 0;
+  f.guild.members.fetch = async ({ user }) => { if (user === other && absent) throw Object.assign(Error('Unknown Member'), { code: 10007 }); return user === other ? second : f.member; };
+  const category = { id: 'category', type: ChannelType.GuildCategory, name: 'Investigations', permissionOverwrites: { edit: async () => {} } };
+  f.guild.channels.cache.set(category.id, category); f.state.investigationCategoryId = category.id;
+  f.guild.channels.fetch = async id => { if (!id) return f.guild.channels.cache; const channel = f.guild.channels.cache.get(id); if (channel) return channel; throw Object.assign(Error('Unknown Channel'), { code: 10003 }); };
+  const payloads = [], edits = [];
+  f.guild.channels.create = async options => {
+    creates++;
+    const room = { id: `replacement-${creates}`, name: 'members', guild: f.guild, permissionOverwrites: { edit: async (id, values) => edits.push([id, values]) },
+      send: async payload => { payloads.push(payload); return { id: `message-${payloads.length}` }; }, initialOverwrites: options.permissionOverwrites };
+    f.guild.channels.cache.set(room.id, room); return room;
+  };
+  const locks = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {} });
+  const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './releaseLifecycle': locks,
+    './isolation': { quarantineDenyOverwrite: () => ({ ViewChannel: false }), investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true }) },
+    '../../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: {} }) } });
+  const pair = await Promise.all([rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, f.state.users[uid]), rooms.ensureInvestigationRoomForSnapshot(f.guild, second, f.role, f.state.users[other])]);
+  assert.equal(creates, 1); assert.equal(pair[0].id, pair[1].id);
+  assert.equal(f.state.users[uid].interviewChannelId, pair[0].id); assert.equal(f.state.users[other].interviewChannelId, pair[0].id);
+  assert(pair[0].initialOverwrites.find(entry => entry.id === other).allow.includes(P.ViewChannel));
+  assert(payloads.some(payload => payload.components?.some(row => row.components.some(component => component.data.custom_id === `mod_invroom_close:${other}:${pair[0].id}`))), 'Recovered room must contain independent controls for the other subject');
+  assert.equal(locks.isQuarantineReleaseInProgress(f.guild.id, `investigation-group:${groupId}`), false);
+  f.guild.channels.cache.delete(pair[0].id); absent = true;
+  const next = await rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, f.state.users[uid]);
+  assert.equal(creates, 2); assert.equal(f.state.users[other].interviewChannelId, next.id);
+  assert(!next.initialOverwrites.some(entry => entry.id === other), 'Absent subjects do not receive a new access overwrite');
+  absent = false; await rooms.ensureInvestigationRoomForSnapshot(f.guild, second, f.role, f.state.users[other]);
+  assert(edits.some(([id, values]) => id === other && values.ViewChannel === true), 'Rejoining subject regains their one current room');
+  assert.equal(creates, 2);
+}
+
 // Room controls use fresh authority, keep transcripts private, and never delete an active room.
 {
   const os = require('node:os');
@@ -3395,7 +3536,7 @@ function fixture(snapshot = {}) {
     f.guild.channels.fetch = async () => room;
     const actor = { id: other, permissions: new PermissionsBitField([P.ManageChannels]) };
     f.guild.members.fetch = async () => actor;
-    let dmFailure = false, dmSends = [];
+    let dmFailure = false, dmSends = [], separateCopies = false, copyNumber = 0;
     let authorised = true, exportFailure = false, deliveryFailure = false, reuseSaved = false, changedAfterExport = false, checks = 0, events = [], replies = [], restores = 0;
     const htmlPath = path.join(temp, 'room.html'), jsonPath = path.join(temp, 'room.json');
     fs.writeFileSync(htmlPath, '<html>record</html>'); fs.writeFileSync(jsonPath, JSON.stringify({ ticket: { guildId: f.guild.id, discordChannelId: 'room', creatorId: uid } }));
@@ -3405,9 +3546,9 @@ function fixture(snapshot = {}) {
       '../../../core/ui/memberNotice': require(root + '/src/core/ui/memberNotice'),
       './storage': {}, './panel': { refreshDashboard: async () => {} }, './investigationAccess': {},
       '../../security/protection/quarantine': { ...f.api, restoreQuarantinedMember: async () => { restores++;
-        f.state.archivedRooms = [{ channelId: 'room', memberId: uid, roomTranscript: f.state.users[uid].roomTranscript }];
+        f.state.archivedRooms = [{ channelId: 'room', memberId: uid, investigationGroupId: f.state.users[uid].investigationGroupId, roomTranscript: f.state.users[uid].roomTranscript }];
         delete f.state.users[uid];
-        return { success: true, archive: { archived: true, channelId: 'room' } }; } },
+        return { success: true, archive: { archived: true, shared: Object.keys(f.state.users).length > 0, channelId: 'room' } }; } },
       '../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: {} }) },
       '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { buildTranscriptArchive: (transcript, expected) => {
         const saved = JSON.parse(fs.readFileSync(transcript.jsonPath));
@@ -3416,6 +3557,11 @@ function fixture(snapshot = {}) {
       }, checkTranscriptCurrent: async (channel, transcript) => ({ current: ++checks === 1 ? reuseSaved && Boolean(transcript) : !changedAfterExport }), createTranscript: async (client, ticket, options) => {
         events.push('export'); if (exportFailure) throw Error('export unavailable');
         assert.equal(ticket.type, 'investigation'); assert.equal(options.requireComplete, true);
+        if (separateCopies) {
+          const html = path.join(temp, `copy-${++copyNumber}.html`), json = path.join(temp, `copy-${copyNumber}.json`);
+          fs.copyFileSync(htmlPath, html); fs.copyFileSync(jsonPath, json);
+          return { htmlPath: html, jsonPath: json, htmlFileName: path.basename(html), jsonFileName: path.basename(json), messageCount: 2, lastMessageId: null };
+        }
         return { htmlPath, jsonPath, htmlFileName: 'room.html', jsonFileName: 'room.json', messageCount: 2, lastMessageId: null };
       } },
     });
@@ -3472,6 +3618,22 @@ function fixture(snapshot = {}) {
     await click('delete_confirm'); assert.equal(dmSends.length, dmCount, 'Mismatched transcript ownership must block DM delivery');
     assert.equal(f.state.archivedRooms[0].transcriptDelivery.sent, false);
 
+    // An early-released group member receives only their closure-time copy.
+    const peer = '666666666666666666';
+    f.state.users[uid] = { memberId: uid, mode: 'investigation', roles: [originalRole], interviewChannelId: 'room', investigationGroupId: 'group', investigationMemberIds: [uid, peer] };
+    f.state.users[peer] = { ...structuredClone(f.state.users[uid]), memberId: peer };
+    fs.writeFileSync(jsonPath, JSON.stringify({ ticket: { guildId: f.guild.id, discordChannelId: 'room', creatorId: uid } }));
+    separateCopies = true; reuseSaved = false; dmFailure = false; events = [];
+    await click('close_confirm');
+    assert(f.state.users[peer], 'Releasing one subject must leave the other investigation active');
+    const earlyCopy = structuredClone(f.state.archivedRooms[0].roomTranscript);
+    const earlyDmCount = dmSends.length;
+    events = []; await click('delete_confirm'); assert.deepEqual(events, [], 'A released subject’s panel must not delete the other subject’s active room');
+    delete f.state.users[peer]; // Last-subject release itself is exercised by the real engine fixture.
+    events = []; await click('delete_confirm');
+    assert(events.includes('delete')); assert.deepEqual(f.state.archivedRooms[0].roomTranscript, earlyCopy);
+    assert.notEqual(f.state.archivedRooms[0].finalRoomTranscript.jsonPath, earlyCopy.jsonPath);
+    assert.equal(dmSends.length, earlyDmCount, 'Later room messages must not be DMed to a member released earlier');
 
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 }

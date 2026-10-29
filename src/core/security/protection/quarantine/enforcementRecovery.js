@@ -61,6 +61,8 @@ async function enforceQuarantineOnMember(member, options = {}) {
   }
 
   if (!tryBeginQuarantineOperation(guild.id, member.id)) return { success: false, busy: true, reason: 'Quarantine operation already in progress.' };
+  const groupLock = snapshot.investigationGroupId ? `investigation-group:${snapshot.investigationGroupId}` : null;
+  if (groupLock && !tryBeginQuarantineOperation(guild.id, groupLock)) { endQuarantineOperation(guild.id, member.id); return { success: false, busy: true, reason: 'This investigation is being updated; recovery will retry.' }; }
   try {
     const role = await ensureQuarantineRole(guild, options);
     const isolation = await syncQuarantineIsolation(guild, { ...options, role, targetMemberId: member.id, allowedChannelIds: mode === QUARANTINE_MODES.INVESTIGATION && snapshot.interviewChannelId ? [snapshot.interviewChannelId] : [], rollbackMemberAllowsOnFailure: false });
@@ -74,15 +76,16 @@ async function enforceQuarantineOnMember(member, options = {}) {
     }
     if (!isolation.success) return { success: false, mode, reason: 'Quarantine isolation sync failed.', isolation };
     let interviewRoom = null;
-    if (mode === QUARANTINE_MODES.INVESTIGATION) interviewRoom = await ensureInvestigationRoomForSnapshot(guild, member, role, snapshot, options);
+    if (mode === QUARANTINE_MODES.INVESTIGATION) interviewRoom = await ensureInvestigationRoomForSnapshot(guild, member, role, snapshot, { ...options, groupOperationHeld: Boolean(groupLock) });
     await member.roles.set([role.id], `Reapplying active Goliath ${mode} quarantine`);
     const verification = await verifyMemberContainment(guild, member, mode === QUARANTINE_MODES.INVESTIGATION && interviewRoom ? [interviewRoom.id] : []);
     if (!verification.success) return { success: false, mode, reason: 'Effective containment verification failed.', isolation, verification };
+    if (snapshot.creationPending) { const latest = getQuarantineState(guild.id); if (latest.users?.[member.id]) { latest.users[member.id].creationPending = false; saveQuarantineState(guild, latest); } }
     emitCurrentQuarantineState(guild, 'member_quarantine_reapplied', { memberId: member.id, mode, interviewChannelId: interviewRoom?.id || null });
     return { success: true, mode, roleId: role.id, interviewChannelId: interviewRoom?.id || null, isolation, verification };
   } catch (error) {
     return { success: false, mode, error: error.message };
-  } finally { endQuarantineOperation(guild.id, member.id); }
+  } finally { if (groupLock) endQuarantineOperation(guild.id, groupLock); endQuarantineOperation(guild.id, member.id); }
 }
 
 async function restoreExpiredQuarantines(client) {
