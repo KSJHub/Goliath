@@ -201,7 +201,7 @@ async function socialWideMediaPayload(account,event,embed,previousMessage=null) 
   // Always send an actual wide image, even if a provider blocks its artwork.
   // Never silently fall back to a portrait embed on a subsequent refresh.
   const filename='goliath-social-wide.jpg';
-  const fallback=await sharp({create:{width:960,height:540,channels:3,background:'#111216'}}).png().toBuffer();
+  const fallback=await sharp({create:{width:960,height:540,channels:3,background:'#111216'}}).jpeg({quality:85}).toBuffer();
   console.warn('[Social Studio] TikTok artwork unavailable; using wide fallback.');
   embed.setImage('attachment://'+filename);
   return {embed,files:[new AttachmentBuilder(fallback,{name:filename})],keepAttachments:false};
@@ -211,14 +211,14 @@ async function verifyTikTokWideImage(message,account,event) {
   if(String(account?.platform||'').toLowerCase()!=='tiktok'||!['live','ended'].includes(event?.type)) return;
   const latest=await message.channel.messages.fetch(message.id,{force:true});
   const image=latest.embeds?.[0]?.image;
-  const hasWideImage=Boolean(image && Number(image.width)>=800 && Number(image.height)>=400);
+  const hasWideImage=Boolean(image && Number(image.width)>=900 && Number(image.height)>=500 && Number(image.width)/Math.max(1,Number(image.height))>=1.7);
   if(hasWideImage) return;
   console.warn('[Social Studio] TikTok wide artwork missing after delivery; repairing message',message.id);
   const embed=EmbedBuilder.from(latest.embeds[0]);
   const media=await socialWideMediaPayload(account,event,embed,latest);
   await latest.edit({embeds:[media.embed],files:media.files,attachments:[]});
   const verified=await latest.channel.messages.fetch(latest.id,{force:true});
-  if(!verified.embeds?.[0]?.image?.url) console.error('[Social Studio] TikTok wide artwork still missing after repair',latest.id);
+  const repaired=verified.embeds?.[0]?.image; if(!(repaired && Number(repaired.width)>=900 && Number(repaired.height)>=500 && Number(repaired.width)/Math.max(1,Number(repaired.height))>=1.7)) console.error('[Social Studio] TikTok landscape dimensions still incorrect after repair',latest.id,repaired?.width,repaired?.height);
 }
 async function sendAlert(client,guildId,config,account,event,options={}) {
   const channelId = alertChannelId(config,account,event.type);
