@@ -168,13 +168,13 @@ function buildEmbed(account, event, template, creator, settings = {}) { const va
       if (tags) embed.addFields({ name: '\u200B', value: `**🏷️** ${tags}`, inline: false });
       if (notes) embed.addFields({ name: '\u200B', value: `💬 *${notes.replace(/([*_~\\])/g, '\\$1')}*`, inline: false });
     } if(event.vod?.url) embed.addFields({name:'📼 VOD',value:`[Watch the recording](${event.vod.url})`,inline:false}); } else { embed.setTitle((render(template.title,vars)||`${platform.icon} ${platform.label}`).slice(0,256)); const description=stripTrailingDivider(render(template.description,vars)||vars.title), actionLabel=clean(template.buttonLabel||'View Post',80), actions=vars.url?[`▶️ **[${actionLabel}](${vars.url})**`]:[]; embed.setDescription(`${description}${embedActionBlock(actions)}`.slice(0,4096)); } const liveImage=liveStatus==='LIVE'||liveStatus==='PAUSED', thumbnail=liveImage?(platformKey==='tiktok'?clean(event.thumbnail,1000):cacheBustedImageUrl(event.thumbnail)):clean(event.thumbnail,1000); if(thumbnail&&/^https?:\/\//i.test(thumbnail)) embed.setImage(thumbnail); if(!liveStatus&&vars.url&&/^https?:\/\//i.test(vars.url)) embed.setURL(vars.url); embed.setFooter({text:`Goliath Social Studio • ${platform.label} • ${liveStatus || event.type.toUpperCase()}`}); embed.setTimestamp(new Date(event.endedAt||event.publishedAt||event.startedAt||Date.now())); return embed; }
-async function tiktokMediaPayload(account,event,embed,previousMessage=null) {
-  if(String(account?.platform||'').toLowerCase()!=='tiktok'||!['live','ended'].includes(event?.type)) return {embed,files:[],keepAttachments:false};
+async function socialWideMediaPayload(account,event,embed,previousMessage=null) {
+  if(!['live','ended','vod'].includes(String(event?.type||'').toLowerCase())) return {embed,files:[],keepAttachments:false};
 
   // Once Discord has a wide attachment, retain that exact asset on every edit.
   // Replacing it with a portrait URL is what causes previously fixed cards to shrink.
   const retained=[...(previousMessage?.attachments?.values?.()||[])].find((file)=>
-    file.name==='goliath-tiktok-wide.jpg' && (!file.width || Number(file.width)>=900) && (!file.height || Number(file.height)>=500)
+    file.name==='goliath-social-wide.jpg' && (!file.width || Number(file.width)>=900) && (!file.height || Number(file.height)>=500)
   );
   if(retained) {
     embed.setImage(retained.url);
@@ -183,7 +183,7 @@ async function tiktokMediaPayload(account,event,embed,previousMessage=null) {
 
   const urls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,
     previousMessage?.embeds?.[0]?.image?.proxyURL,previousMessage?.embeds?.[0]?.image?.url,
-    previousMessage?.attachments?.first?.()?.proxyURL,previousMessage?.attachments?.first?.()?.url]
+    previousMessage?.attachments?.first?.()?.proxyURL,previousMessage?.attachments?.first?.()?.url,embed?.data?.image?.url]
     .map((value)=>clean(value,1500)).filter((value)=>/^https:\/\//i.test(value));
   for(const url of [...new Set(urls)]) {
     try {
@@ -196,17 +196,17 @@ async function tiktokMediaPayload(account,event,embed,previousMessage=null) {
       const bytes=Buffer.from(await response.arrayBuffer());
       if(bytes.length>8*1024*1024) throw new Error('Image exceeds size limit');
       const image=await sharp(bytes).rotate().resize(960,540,{fit:'contain',background:'#111216'}).jpeg({quality:85}).toBuffer();
-      const filename='goliath-tiktok-wide.jpg';
+      const filename='goliath-social-wide.jpg';
       embed.setImage('attachment://'+filename);
       return {embed,files:[new AttachmentBuilder(image,{name:filename})],keepAttachments:false};
-    } catch(error) {console.warn('[Social Studio] TikTok image fetch:',error?.message||error);}
+    } catch(error) {console.warn('[Social Studio] Social wide image fetch:',error?.message||error);}
   }
 
-  // Always send an actual wide image, even if TikTok blocks the source image.
+  // Always send an actual wide image, even if a provider blocks its artwork.
   // Never silently fall back to a portrait embed on a subsequent refresh.
-  const filename='goliath-tiktok-wide.jpg';
+  const filename='goliath-social-wide.jpg';
   const fallback=await sharp({create:{width:960,height:540,channels:3,background:'#111216'}}).jpeg({quality:80}).toBuffer();
-  console.warn('[Social Studio] TikTok portrait unavailable; using wide fallback.');
+  console.warn('[Social Studio] Social artwork unavailable; using wide fallback.');
   embed.setImage('attachment://'+filename);
   return {embed,files:[new AttachmentBuilder(fallback,{name:filename})],keepAttachments:false};
 }
@@ -230,7 +230,7 @@ async function sendAlert(client,guildId,config,account,event,options={}) {
   if (!permissions?.has('EmbedLinks')) throw permanentDeliveryError('Goliath cannot embed links in the configured alert channel.');
 
   const embed = buildEmbed(account,event,templateFor(config,event.type),creatorFor(config,account.accountId),config.settings);
-  const media = await tiktokMediaPayload(account,event,embed);
+  const media = await socialWideMediaPayload(account,event,embed);
   const mention = await resolveMention(guild,account,config,options.suppressMention===true,event.type);
   const message = await channel.send({
     content: mention.content || null,
@@ -243,8 +243,8 @@ async function sendAlert(client,guildId,config,account,event,options={}) {
   return {channelId,messageId:message.id};
 }
 async function trackedMessage(client,guildId,previous) { const channelId=previous.lastLiveMessageChannelId||previous.lastAlertChannelId, messageId=previous.lastLiveMessageId||previous.lastAlertMessageId; if(!channelId||!messageId)return null; const guild=client.guilds.cache.get(guildId)||await client.guilds.fetch(guildId).catch(()=>null); if(!guild)return null; const channel=guild.channels.cache.get(channelId)||await guild.channels.fetch(channelId).catch(()=>null); if(!channel?.isTextBased?.())return null; const message=await channel.messages.fetch(messageId).catch(()=>null); return message?{channelId,messageId,message}:null; }
-async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await tiktokMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
-async function updateEndedAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await tiktokMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'ended'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({content:null,embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
+async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
+async function updateEndedAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'ended'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({content:null,embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
 function livePostInWindow(config,creator,windowMs=2*60*60*1000) { const ids=new Set(creator?.accountIds||[]), cutoff=Date.now()-windowMs; return [...(config.history||[])].reverse().find((item)=>ids.has(item.accountId)&&['alert_sent','alert_updated','alert_recovered'].includes(item.status)&&item.alertType==='live'&&new Date(item.createdAt||0).getTime()>=cutoff)||null; }
 function accountLivePostInWindow(config,account,windowMs=2*60*60*1000) {
   if (!account?.accountId) return null;
