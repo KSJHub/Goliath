@@ -30,6 +30,7 @@ const adminPanel = optionalRequire('admin panel', '../../core/administration/adm
 const adminCommand = optionalRequire('admin security controls', '../../core/administration/admin/command');
 const automodPanel = optionalRequire('automod panel', '../../core/administration/automod/panel');
 const modInteractions = optionalRequire('mod interactions', '../../core/administration/mod/interactions');
+const joinIntelligenceActions = optionalRequire('join intelligence actions', './joinIntelligenceActions');
 const restoreRequestManager = optionalRequire('restore requests', '../../core/security/restoreBackup/requests');
 const statsAdminPanel = optionalRequire('stats admin', '../../modules/utilityStudio/stats/statsPanel');
 const reactionRolesAdminPanel = optionalRequire('reaction roles admin', '../../modules/roleStudio/reactionRoles/reactionRolesPanel');
@@ -247,6 +248,9 @@ module.exports={
         await require('../../core/administration/mod/quarantineInteractions').handleInvestigationTranscriptDownload(interaction);
         return;
       }
+      // This event also has a legacy listener. Its handler deduplicates the
+      // interaction before any await so only one listener can acknowledge it.
+      if(customId.startsWith('joinintel:')){if(typeof joinIntelligenceActions.execute!=='function')throw new Error('Member Intelligence controls are unavailable.');await joinIntelligenceActions.execute(interaction);return;}
       if(customId.startsWith('mod_')||customId.startsWith('mod:')){if(!await callHandler(modInteractions,'handleModInteraction',interaction))throw new Error(`Mod did not handle ${customId}.`);return;}
       if(isVerificationMemberInteraction(interaction)){await handleVerificationMemberInteraction(interaction);return;}
       if(customId.startsWith('verify:challenge:')||customId.startsWith('verify:staff:')||customId.startsWith('verify:answer:')){

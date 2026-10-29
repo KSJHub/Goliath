@@ -2498,10 +2498,83 @@ function auditCommand() {
   return [projectShape, commandAudit, dashboardAudit, dashboardImportAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit]
     .map((suite) => suite()).every(Boolean);
 }
+async function memberIntelligenceRoutingAudit() {
+  const assert = require('node:assert/strict');
+  const Discord = require('discord.js');
+  const guildId = '1515201360386068642', userId = '815257293347880961';
+  const target = { id: userId, user: { tag: 'Test Member', username: 'Test', toString: () => `<@${userId}>` } };
+  let allowed = true, missing = false, fail = false, builds = 0, writes = 0, errors = 0, modCalls = 0;
+  const quiet = { ...console, error: () => { errors++; }, warn: () => {}, log: () => {} };
+  function fixtureModule(file, resolve) {
+    const module = { exports: {} };
+    new Function('require', 'module', 'exports', 'console', read(file))(resolve, module, module.exports, quiet);
+    return module.exports;
+  }
+  const handlers = fixtureModule('src/events/interactions/joinIntelligenceActions.js', id => {
+    if (id === 'discord.js') return Discord;
+    if (id.endsWith('/permissions')) return { canUseModAction: () => allowed, recordModerationSystemEvent: () => { writes++; } };
+    if (id.endsWith('/storage')) return { db: { prepare: () => ({ all: () => [] }) } };
+    if (id.endsWith('/joinIntelligence')) return { localSummary: () => ({ caseCount: 0 }), suspectedAccounts: () => [] };
+    if (id.endsWith('/intelligence')) return { buildContext: async () => { builds++; if (fail) throw Error('Report source unavailable'); return { risk: { score: 0, reasons: [] } }; } };
+    if (id.endsWith('/memberDecisioning')) return { classify: () => ({ decision: 'clear', riskScore: 0 }), DECISIONS: { clear: { color: 0x57f287, label: 'Clear', emoji: '🟢' } }, markClear: () => { writes++; return {}; } };
+    throw Error(`Unexpected intelligence audit dependency: ${id}`);
+  });
+  const router = fixtureModule('src/events/interactions/interactionCreate.js', id => {
+    if (id === 'discord.js') return Discord;
+    if (id === './joinIntelligenceActions') return handlers;
+    if (id.endsWith('/mod/interactions')) return { handleModInteraction: async () => { modCalls++; return true; } };
+    // Other optional application handlers are outside this narrow router fixture.
+    return {};
+  });
+  function interaction(action = 'view') {
+    const events = [];
+    const i = { customId: `joinintel:${action}:${guildId}:${userId}`, member: {}, user: { id: 'moderator', username: 'Moderator' },
+      client: {}, guild: { id: guildId, members: { cache: new Discord.Collection(), fetch: async () => missing ? null : target } },
+      inGuild: () => true, isButton: () => true, isMessageComponent: () => true,
+      deferReply: async payload => { assert.equal(payload.flags, 64); assert(!i.replied && !i.deferred); i.deferred = true; events.push(['defer']); },
+      reply: async payload => { assert(!i.replied && !i.deferred, 'Interaction must be acknowledged exactly once'); i.replied = true; events.push(['reply', payload]); },
+      editReply: async payload => { assert(i.deferred || i.replied); events.push(['edit', payload]); },
+      followUp: async payload => events.push(['followUp', payload]),
+    };
+    return { i, events };
+  }
+  for (const order of ['central', 'legacy', 'concurrent']) {
+    const { i, events } = interaction(); const before = builds;
+    if (order === 'central') { await router.execute(i, {}); await handlers.execute(i); }
+    else if (order === 'legacy') { await handlers.execute(i); await router.execute(i, {}); }
+    else await Promise.all([router.execute(i, {}), handlers.execute(i)]);
+    assert.equal(builds - before, 1); assert.equal(events.filter(([name]) => name === 'defer').length, 1);
+    assert.deepEqual(events.map(([name]) => name), ['defer', 'edit']);
+    const payload = events.at(-1)[1]; assert.equal(payload.embeds.length, 1);
+    assert(!JSON.stringify(events).includes('handler is missing'));
+    for (const row of payload.components) for (const component of row.components) {
+      const button = interaction().i; button.customId = component.custom_id || component.data?.custom_id;
+      await router.execute(button, {});
+    }
+  }
+  assert.equal(modCalls, 12, 'Every report control must reach the existing moderation handler');
+  for (const action of ['watch', 'clear']) {
+    const { i, events } = interaction(action); const before = writes;
+    await Promise.all([router.execute(i, {}), handlers.execute(i)]);
+    assert.equal(writes - before, 1); assert.deepEqual(events.map(([name]) => name), ['defer', 'edit']);
+  }
+  allowed = false;
+  const denied = interaction(); const before = builds; await router.execute(denied.i, {}); await handlers.execute(denied.i);
+  assert.deepEqual(denied.events.map(([name]) => name), ['reply']); assert.equal(builds, before);
+  allowed = true; missing = true;
+  const gone = interaction(); await router.execute(gone.i, {}); assert.match(gone.events.at(-1)[1].content, /no longer available/);
+  missing = false; fail = true;
+  const failed = interaction(); await Promise.all([router.execute(failed.i, {}), handlers.execute(failed.i)]);
+  assert.deepEqual(failed.events.map(([name]) => name), ['defer', 'edit']); assert.match(failed.events.at(-1)[1].content, /could not complete/);
+  assert.equal(errors, 1, 'Only the expected report-source failure is logged; the central router must not report a second failure');
+  console.log('✅ Member Intelligence routing: both listener orders and concurrent delivery, one acknowledgement/report/mutation, private defer, report controls, denied access, missing members and report failures.');
+  return true;
+}
+
 async function doctor(target = '') {
   const suites = { goodbye: goodbyeAudit, reaction: reactionRolesAudit, reactionroles: reactionRolesAudit, 'reaction-roles': reactionRolesAudit, 'role-studio': roleStudioAudit, rolestudio: roleStudioAudit, invites: inviteStudioAudit };
   if (target) return suites[target]?.() ?? false;
-  const suitesToRun = [projectShape, commandAudit, dashboardAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit, freeGamesAudit];
+  const suitesToRun = [projectShape, commandAudit, dashboardAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, memberIntelligenceRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit, freeGamesAudit];
   const results = [];
   for (const suite of suitesToRun) results.push(await suite());
   return results.every(Boolean);
@@ -4560,6 +4633,7 @@ async function gameUpdatesAudit() {
 
 
 const commands = {
+  'member-intelligence-routing': memberIntelligenceRoutingAudit,
   'game-updates': gameUpdatesAudit,
   games: freeGamesAudit,
   'free-games': freeGamesAudit,

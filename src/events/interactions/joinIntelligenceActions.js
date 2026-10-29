@@ -7,6 +7,10 @@ const joinIntelligence = require('../../core/administration/mod/joinIntelligence
 const intelligence = require('../../core/administration/mod/intelligence');
 const { db } = require('../../core/administration/mod/storage');
 
+// The central router and the legacy event loader may see the same object.
+// Claim it synchronously so listener ordering cannot produce two responses.
+const handledInteractions = new WeakSet();
+
 function parseJson(value, fallback = {}) {
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string' || !value.trim()) return fallback;
@@ -106,63 +110,70 @@ module.exports = {
     const id = String(interaction?.customId || '');
     if (!id.startsWith('joinintel:')) return;
     if (!interaction.inGuild?.() || !interaction.isButton?.()) return;
+    if (handledInteractions.has(interaction)) return;
+    handledInteractions.add(interaction);
+    try {
 
-    const [, action, guildId, userId] = id.split(':');
-    if (String(interaction.guild.id) !== String(guildId) || !userId) {
-      await interaction.reply({ content: '❌ That intelligence action is no longer valid.', flags: 64 }).catch(() => null);
-      return;
-    }
-
-    const allowed = canUseModAction(interaction.member, interaction.guild, 'scan_run', interaction)
-      || canUseModAction(interaction.member, interaction.guild, 'view_case_detail', interaction);
-    if (!allowed) {
-      await interaction.reply({ content: '❌ You do not have permission to manage Member Intelligence.', flags: 64 }).catch(() => null);
-      return;
-    }
-
-    const target = await resolveTarget(interaction, userId);
-    if (!target) {
-      await interaction.reply({ content: '❌ That member is no longer available in this server.', flags: 64 }).catch(() => null);
-      return;
-    }
-
-    if (action === 'view') {
-      const payload = await buildEphemeralIntelligence(interaction, target);
-      await interaction.reply(payload).catch(async () => {
-        if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
-      });
-      return;
-    }
-
-    if (action === 'watch') {
-      const before = currentInvestigationWatch(interaction.guild.id, userId);
-      if (!before) {
-        recordModerationSystemEvent({
-          interaction,
-          event: 'moderation.member_scan.watch_updated',
-          action: 'member_watch',
-          targetId: userId,
-          before: { enabled: false },
-          after: { enabled: true, reason: 'Enabled from persistent Member Intelligence report.' },
-          metadata: { targetId: userId, source: 'join_intelligence_report' },
-        });
+      const [, action, guildId, userId] = id.split(':');
+      if (id.split(':').length !== 4 || !['view', 'watch', 'clear'].includes(action) || String(interaction.guild.id) !== String(guildId) || !/^\d{15,25}$/.test(userId || '')) {
+        await interaction.reply({ content: '❌ That intelligence action is no longer valid.', flags: 64 }).catch(() => null);
+        return;
       }
-      await interaction.reply({
-        content: before
-          ? `👁️ ${target.user} is already on **Investigation Watch**.`
-          : `👁️ ${target.user} is now on **Investigation Watch**. The channel report has been left in place.`,
-        flags: 64,
-      }).catch(() => null);
-      return;
-    }
 
-    if (action === 'clear') {
-      const result = decisioning.markClear(interaction.guild.id, userId, interaction.user.id);
-      await interaction.reply({
-        content: `✅ ${target.user} has been reviewed and marked **CLEAR** in Goliath Member Intelligence. This does not erase moderation history or watchlist evidence.`,
-        flags: 64,
-      }).catch(() => null);
-      console.log(`[Join Intelligence] ${interaction.user.id} marked ${userId} clear in ${interaction.guild.id} (previous=${result.before?.decision || 'none'}).`);
+      const allowed = canUseModAction(interaction.member, interaction.guild, 'scan_run', interaction)
+        || canUseModAction(interaction.member, interaction.guild, 'view_case_detail', interaction);
+      if (!allowed) {
+        await interaction.reply({ content: '❌ You do not have permission to manage Member Intelligence.', flags: 64 }).catch(() => null);
+        return;
+      }
+
+      await interaction.deferReply({ flags: 64 });
+      const target = await resolveTarget(interaction, userId);
+      if (!target) {
+        await interaction.editReply({ content: '❌ That member is no longer available in this server.' }).catch(() => null);
+        return;
+      }
+
+      if (action === 'view') {
+        const payload = await buildEphemeralIntelligence(interaction, target);
+        delete payload.flags;
+        await interaction.editReply(payload);
+        return;
+      }
+
+      if (action === 'watch') {
+        const before = currentInvestigationWatch(interaction.guild.id, userId);
+        if (!before) {
+          recordModerationSystemEvent({
+            interaction,
+            event: 'moderation.member_scan.watch_updated',
+            action: 'member_watch',
+            targetId: userId,
+            before: { enabled: false },
+            after: { enabled: true, reason: 'Enabled from persistent Member Intelligence report.' },
+            metadata: { targetId: userId, source: 'join_intelligence_report' },
+          });
+        }
+        await interaction.editReply({
+          content: before
+            ? `👁️ ${target.user} is already on **Investigation Watch**.`
+            : `👁️ ${target.user} is now on **Investigation Watch**. The channel report has been left in place.`,
+        });
+        return;
+      }
+
+      if (action === 'clear') {
+        const result = decisioning.markClear(interaction.guild.id, userId, interaction.user.id);
+        await interaction.editReply({
+          content: `✅ ${target.user} has been reviewed and marked **CLEAR** in Member Intelligence. This does not erase moderation history or watchlist evidence.`,
+        });
+        console.log(`[Join Intelligence] ${interaction.user.id} marked ${userId} clear in ${interaction.guild.id} (previous=${result.before?.decision || 'none'}).`);
+      }
+    } catch (error) {
+      console.error('[Join Intelligence] Action failed:', error);
+      const payload = { content: 'Member Intelligence could not complete this action. Please try again.' };
+      if (interaction.deferred || interaction.replied) await interaction.editReply(payload).catch(() => null);
+      else await interaction.reply({ ...payload, flags: 64 }).catch(() => null);
     }
   },
 };
