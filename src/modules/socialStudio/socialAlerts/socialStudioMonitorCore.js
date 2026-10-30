@@ -152,8 +152,11 @@ function buildLiveFields({ account, event, vars, liveStatus, durationText, start
   if (platformField) fields.push(platformField);
   if (vars.viewers) fields.push({ name:'👥 Viewers', value:vars.viewers, inline:true });
   if (started) fields.push({ name:'🕐 Started', value:started, inline:true });
+  // LIVE-only: complete TikTok's three-column metadata row, matching the
+  // proven wide ENDED layout without modifying the ENDED path or its artwork.
+  if (platform === 'tiktok' && !vars.viewers) fields.push({ name:'🌐 Language', value:event?.language ? clean(String(event.language).toUpperCase(),100) : '—', inline:true });
   if (durationText) fields.push({ name:'⏱️ Live For', value:durationText, inline:true });
-  if (event?.language) fields.push({ name:'🌐 Language', value:clean(String(event.language).toUpperCase(),100), inline:true });
+  if (event?.language && !(platform === 'tiktok' && !vars.viewers)) fields.push({ name:'🌐 Language', value:clean(String(event.language).toUpperCase(),100), inline:true });
   if (event?.hasMatureContent === true) fields.push({ name:'🔞 Mature', value:'Yes', inline:true });
   return fields;
 }
