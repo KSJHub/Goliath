@@ -148,6 +148,17 @@ function buildLiveFields({ account, event, vars, liveStatus, durationText, start
     return fields;
   }
 
+  if (platform === 'tiktok') {
+    // Mirror the two complete three-column rows of the approved ENDED card.
+    // TikTok LIVE has no reliable game or viewer data, so use truthful placeholders.
+    if (platformField) fields.push(platformField);
+    fields.push({name:'🕐 Started',value:started || '—',inline:true});
+    fields.push({name:'🌐 Language',value:event?.language ? clean(String(event.language).toUpperCase(),100) : '—',inline:true});
+    fields.push({name:'👥 Viewers',value:vars.viewers || '—',inline:true});
+    fields.push({name:'⏱️ Live For',value:durationText || '—',inline:true});
+    fields.push({name:'🔴 Status',value:liveStatus==='PAUSED'?'PAUSED':'LIVE',inline:true});
+    return fields;
+  }
   if (platform !== 'tiktok' && vars.game) fields.push({ name: '🎮 Game', value: vars.game, inline: true });
   if (platformField) fields.push(platformField);
   if (vars.viewers) fields.push({ name:'👥 Viewers', value:vars.viewers, inline:true });
