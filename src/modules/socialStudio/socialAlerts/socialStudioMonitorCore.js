@@ -191,6 +191,42 @@ async function socialWideMediaPayload(account,event,embed,previousMessage=null) 
   const retained=[...(previousMessage?.attachments?.values?.()||[])].find((file)=>
     ['goliath-social-wide.jpg','goliath-tiktok-wide.jpg'].includes(file.name)
   );
+  // LIVE always uses its own freshly uploaded 16:9 artwork. Keep the approved
+  // ENDED implementation below untouched.
+  if(String(event?.type||'').toLowerCase()==='live') {
+    const liveUrls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,
+      previousMessage?.embeds?.[0]?.image?.url,previousMessage?.embeds?.[0]?.image?.proxyURL,
+      retained?.url,retained?.proxyURL,account?.avatar,account?.avatarUrl,event?.avatar,event?.avatarUrl]
+      .map(value=>clean(value,1500)).filter(value=>/^https:\/\//i.test(value));
+    let portrait=null;
+    for(const url of [...new Set(liveUrls)]) {
+      try {
+        const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);
+        let response;
+        try {response=await fetch(url,{signal:controller.signal});} finally {clearTimeout(timeout);}
+        if(!response.ok) continue;
+        const bytes=Buffer.from(await response.arrayBuffer());
+        if(bytes.length>8*1024*1024) continue;
+        await sharp(bytes).metadata();
+        portrait=bytes;
+        break;
+      } catch(error) {console.warn('[Social Studio] TikTok LIVE source:',error?.message||error);}
+    }
+    const width=960,height=540;
+    const background=portrait
+      ? await sharp(portrait).rotate().resize(width,height,{fit:'cover'}).blur(24).modulate({brightness:0.55}).toBuffer()
+      : await sharp({create:{width,height,channels:3,background:'#111216'}}).png().toBuffer();
+    const foreground=portrait
+      ? await sharp(portrait).rotate().resize(width,height,{fit:'contain',background:{r:0,g:0,b:0,alpha:0}}).png().toBuffer()
+      : null;
+    const image=await sharp(background).resize(width,height,{fit:'fill'})
+      .composite(foreground?[{input:foreground,gravity:'centre'}]:[]).jpeg({quality:87}).toBuffer();
+    const metadata=await sharp(image).metadata();
+    if(metadata.width!==width||metadata.height!==height) throw new Error('TikTok LIVE wide artwork dimensions invalid');
+    const filename='goliath-tiktok-live-wide.jpg';
+    embed.setImage('attachment://'+filename);
+    return {embed,files:[new AttachmentBuilder(image,{name:filename})],keepAttachments:false};
+  }
   const urls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,retained?.url,retained?.proxyURL,
     previousMessage?.embeds?.[0]?.image?.proxyURL,previousMessage?.embeds?.[0]?.image?.url,
     previousMessage?.attachments?.first?.()?.proxyURL,previousMessage?.attachments?.first?.()?.url,embed?.data?.image?.url,account?.avatar,account?.avatarUrl,event?.avatar,event?.avatarUrl]
