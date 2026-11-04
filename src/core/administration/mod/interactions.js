@@ -889,7 +889,9 @@ async function handleOwnerCaseManagement(i) {
   }
   if (id.startsWith('mod_owner_delete_submit:')) {
     const caseId = Number(id.split(':')[1]);
-    if (!Number.isSafeInteger(caseId) || caseId <= 0 || i.fields?.getTextInputValue('confirmation')?.trim() !== 'DELETE') return safeReply(i, { content: '❌ Confirmation did not match. Nothing was deleted.', flags: 64 });
+    const entered = String(i.fields?.getTextInputValue('confirmation') || '').trim().replace(/\\s+/g, ' ').toUpperCase();
+    if (!Number.isSafeInteger(caseId) || caseId <= 0) return safeReply(i, { content: '❌ Invalid case reference. Nothing was deleted.', flags: 64 });
+    if (entered !== 'DELETE' && entered !== `DELETE ${caseId}`) return safeReply(i, { content: `❌ Confirmation was not accepted for Case #${caseId}. Enter exactly DELETE (without quotation marks), then submit. Nothing was deleted.`, flags: 64 });
     const result = db.transaction(() => {
       const record = getCaseById(i.guildId, caseId);
       if (!record) return null;
