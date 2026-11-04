@@ -961,10 +961,13 @@ async function handleOwnerCaseManagement(i) {
         { name: '📁 Linked Records', value: `**Warnings:** ${warningCount}\n**Audit Entries:** ${auditCount}`, inline: false },
         { name: '📦 Archive Case', value: 'Securely retain the complete record for owner-only access. The owner can restore it later.', inline: false },
         { name: '🗑️ Delete Case', value: 'Permanently remove the case and linked records. Only a minimal private history marker remains. This cannot be undone.', inline: false });
-    await i.update({ embeds: [review], components: [new Discord.ActionRowBuilder().addComponents(
-      new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Back').setStyle(Discord.ButtonStyle.Secondary),
-      new Discord.ButtonBuilder().setCustomId(`mod_owner_archive_prompt:${caseId}`).setLabel('Archive Case').setStyle(Discord.ButtonStyle.Primary),
-      new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('Delete Case').setStyle(Discord.ButtonStyle.Danger))] });
+    await i.update({ embeds: [review], components: [
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId(`mod_owner_archive_prompt:${caseId}`).setLabel('Archive Case').setEmoji('📦').setStyle(Discord.ButtonStyle.Primary),
+        new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('Delete Case').setEmoji('🗑️').setStyle(Discord.ButtonStyle.Danger)),
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Back to Case Management').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary))
+    ] });
     return true;
   }
   if (id === 'mod_owner_archive_select') {
