@@ -895,8 +895,8 @@ async function handleOwnerCaseManagement(i) {
   if (id.startsWith('mod_owner_delete_prompt:')) {
     const caseId = Number(id.split(':')[1]);
     if (!Number.isSafeInteger(caseId) || !getCaseById(i.guildId, caseId)) return safeReply(i, { content: 'Case not found.', flags: 64 });
-    const input = new Discord.TextInputBuilder().setCustomId('confirmation').setLabel('Type DELETE to confirm permanent deletion').setStyle(Discord.TextInputStyle.Short).setRequired(true).setMaxLength(40);
-    await i.showModal(new Discord.ModalBuilder().setCustomId(`mod_owner_delete_submit:${caseId}`).setTitle(`Permanently Delete Case #${caseId}`).addComponents(new Discord.ActionRowBuilder().addComponents(input)));
+    const input = new Discord.TextInputBuilder().setCustomId('confirmation').setLabel('Type DELETE to confirm').setStyle(Discord.TextInputStyle.Short).setRequired(true).setMaxLength(40);
+    await i.showModal(new Discord.ModalBuilder().setCustomId(`mod_owner_delete_submit:${caseId}`).setTitle('Delete Case').addComponents(new Discord.ActionRowBuilder().addComponents(input)));
     return true;
   }
   if (id.startsWith('mod_owner_delete_submit:')) {
