@@ -883,13 +883,13 @@ async function handleOwnerCaseManagement(i) {
   if (id.startsWith('mod_owner_delete_prompt:')) {
     const caseId = Number(id.split(':')[1]);
     if (!Number.isSafeInteger(caseId) || !getCaseById(i.guildId, caseId)) return safeReply(i, { content: 'Case not found.', flags: 64 });
-    const input = new Discord.TextInputBuilder().setCustomId('confirmation').setLabel(`Type DELETE ${caseId} to confirm`).setStyle(Discord.TextInputStyle.Short).setRequired(true).setMaxLength(40);
+    const input = new Discord.TextInputBuilder().setCustomId('confirmation').setLabel('Type DELETE to confirm permanent deletion').setStyle(Discord.TextInputStyle.Short).setRequired(true).setMaxLength(40);
     await i.showModal(new Discord.ModalBuilder().setCustomId(`mod_owner_delete_submit:${caseId}`).setTitle(`Permanently Delete Case #${caseId}`).addComponents(new Discord.ActionRowBuilder().addComponents(input)));
     return true;
   }
   if (id.startsWith('mod_owner_delete_submit:')) {
     const caseId = Number(id.split(':')[1]);
-    if (!Number.isSafeInteger(caseId) || caseId <= 0 || i.fields?.getTextInputValue('confirmation')?.trim() !== `DELETE ${caseId}`) return safeReply(i, { content: '❌ Confirmation did not match. Nothing was deleted.', flags: 64 });
+    if (!Number.isSafeInteger(caseId) || caseId <= 0 || i.fields?.getTextInputValue('confirmation')?.trim() !== 'DELETE') return safeReply(i, { content: '❌ Confirmation did not match. Nothing was deleted.', flags: 64 });
     const result = db.transaction(() => {
       const record = getCaseById(i.guildId, caseId);
       if (!record) return null;
