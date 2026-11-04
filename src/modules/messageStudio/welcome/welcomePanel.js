@@ -261,6 +261,7 @@ function getPreviewTemplate(guildId,userId,scope){
     if(!selected)throw new Error('Selected Embed Studio message is unavailable.');
     return selected;
   }
+  if(source==='custom'&&state.source)throw new Error('Save your custom Welcome message before previewing it.');
   if(source==='preset'&&state.source){
     const presetId=scope==='dm'?'dm_welcome_default':'welcome_default';
     const preset=embedTemplateManager.getTemplate(guildId,presetId);
