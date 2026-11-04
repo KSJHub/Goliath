@@ -978,6 +978,29 @@ async function verificationLifecycleAudit() {
     const challengeRuntime = read('./src/modules/securityStudio/verificationChallengeRuntime.js');
     const challengeInteractions = read('./src/modules/securityStudio/verificationChallengeInteractions.js');
     
+    // Exercise the existing Mod Hub Verification review route with real snowflakes.
+    // An over-escaped digit regex previously rejected every legitimate case ID.
+    {
+      const source = read('src/core/administration/mod/interactions.js');
+      const body = source.slice(source.indexOf('async function handleVerificationCases('), source.indexOf('function isGuildOwner(i)'));
+      assert(body.includes('async function handleVerificationCases('));
+      const uid = '815257293347880961'; let allowed = true, resolved = 0;
+      const replies = [];
+      const review = new Function('Discord', 'canUseModAction', 'safeReply', 'verificationStore', 'renderDashboard', 'verificationQuarantine', 'recordModerationSystemEvent', body + '\nreturn handleVerificationCases;')(
+        require('discord.js'), () => allowed, async (i, payload) => { replies.push(payload); return true; },
+        { getVerificationSection: () => ({ sessions: { [uid]: { state: 'quarantined', failedAttempts: 1, quarantineChannelId: 'room' } } }) },
+        async () => true, { resolveQuarantineCase: async (guild, id, action) => { assert.equal(id, uid); assert.equal(action, 'release'); resolved++; return { ok: true, message: 'Released' }; } }, () => {});
+      const interaction = { customId: `mod_verification_case:${uid}`, guild: { id: 'guild' }, member: {}, user: { id: 'moderator' },
+        isMessageComponent: () => true, update: async payload => { replies.push(payload); return true; }, reply: async payload => { replies.push(payload); return true; },
+        deferUpdate: async () => {}, editReply: async payload => { replies.push(payload); return true; } };
+      await review(interaction); assert.equal(replies.at(-1).embeds?.[0]?.data?.title, 'Verification Quarantine Review', 'Valid quarantined member must open their review');
+      assert(!replies.at(-1).embeds[0].data.description.includes('\\n'), 'Review copy must render line breaks');
+      await review({ ...interaction, customId: `mod_verification_case:${uid}:release` }); assert.equal(resolved, 0, 'Release must still require confirmation');
+      await review({ ...interaction, customId: `mod_verification_case:${uid}:release:confirm` }); assert.equal(resolved, 1);
+      allowed = false; await review(interaction); assert.match(replies.at(-1).content, /cannot view/); assert.equal(resolved, 1);
+      allowed = true; await review({ ...interaction, customId: 'mod_verification_case:invalid' }); assert.match(replies.at(-1).content, /no longer active/);
+    }
+
     // Guard the security handoff and challenge recovery against regressions.
     contains(manager, 'pendingSecurity:true', 'manager delegates security checks to continuation');
     contains(manager, 'Verification starting roles could not be confirmed.', 'block security flow if starting roles fail');
@@ -2603,7 +2626,7 @@ async function memberIntelligenceRoutingAudit() {
 async function doctor(target = '') {
   const suites = { goodbye: goodbyeAudit, reaction: reactionRolesAudit, reactionroles: reactionRolesAudit, 'reaction-roles': reactionRolesAudit, 'role-studio': roleStudioAudit, rolestudio: roleStudioAudit, invites: inviteStudioAudit };
   if (target) return suites[target]?.() ?? false;
-  const suitesToRun = [projectShape, commandAudit, dashboardAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, memberIntelligenceRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit, freeGamesAudit];
+  const suitesToRun = [projectShape, commandAudit, dashboardAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, memberIntelligenceRoutingAudit, dashboardRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit, freeGamesAudit];
   const results = [];
   for (const suite of suitesToRun) results.push(await suite());
   return results.every(Boolean);

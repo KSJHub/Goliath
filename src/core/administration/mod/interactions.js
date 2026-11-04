@@ -831,16 +831,16 @@ async function handleVerificationCases(i) {
  if(id==='mod_verification_cases') return renderDashboard(i, 'none', 'cases', { actionFilter: 'quarantine' });
 
  const parts=id.split(':'),uid=parts[1],action=parts[2],confirm=parts[3];
- if(!/^\\d{15,22}$/.test(uid)||sessions[uid]?.state!=='quarantined')return safeReply(i,{content:'This Verification case is no longer active.',flags:64});
+ if(!/^\d{15,22}$/.test(uid)||sessions[uid]?.state!=='quarantined')return safeReply(i,{content:'This Verification case is no longer active.',flags:64});
  if(!action){
   const v=sessions[uid];
-  const embed=new Discord.EmbedBuilder().setColor(0xfee75c).setTitle('Verification Quarantine Review').setDescription(`Member: <@${uid}>\\nFailures: ${Number(v.failedAttempts||0)}\\nCase: ${v.quarantineChannelId?'<#'+v.quarantineChannelId+'>':'Unavailable'}\\n\\nRelease returns to Pending Verification; Reject ends entry; Escalate transfers to Mod Hub investigations.`);
+  const embed=new Discord.EmbedBuilder().setColor(0xfee75c).setTitle('Verification Quarantine Review').setDescription(`Member: <@${uid}>\nFailures: ${Number(v.failedAttempts||0)}\nCase: ${v.quarantineChannelId?'<#'+v.quarantineChannelId+'>':'Unavailable'}\n\nRelease returns to Pending Verification; Reject ends entry; Escalate transfers to Mod Hub investigations.`);
   return show({embeds:[embed],components:[row(button('mod_verification_case:'+uid+':release','Release',Discord.ButtonStyle.Success),button('mod_verification_case:'+uid+':reject','Reject',Discord.ButtonStyle.Danger),button('mod_verification_case:'+uid+':escalate','Escalate',Discord.ButtonStyle.Primary)),row(button('mod_dashboard:none:cases','⬅️ Back to Cases'))]});
  }
  if(!['release','reject','escalate'].includes(action))return false;
  const permission=action==='release'?'remove_quarantine':action==='reject'?'kick':'quarantine';
  if(!canUseModAction(i.member,i.guild,permission))return safeReply(i,{content:'You lack authority for this action.',flags:64});
- if(confirm!=='confirm')return show({embeds:[new Discord.EmbedBuilder().setColor(0xed4245).setTitle('Confirm Verification Case Action').setDescription(`Member: <@${uid}>\\nAction: **${action}**\\nThis changes member security state and roles.`)],components:[row(button('mod_verification_case:'+uid+':'+action+':confirm','Confirm '+action,Discord.ButtonStyle.Danger),button('mod_verification_case:'+uid,'Cancel'))]});
+ if(confirm!=='confirm')return show({embeds:[new Discord.EmbedBuilder().setColor(0xed4245).setTitle('Confirm Verification Case Action').setDescription(`Member: <@${uid}>\nAction: **${action}**\nThis changes member security state and roles.`)],components:[row(button('mod_verification_case:'+uid+':'+action+':confirm','Confirm '+action,Discord.ButtonStyle.Danger),button('mod_verification_case:'+uid,'Cancel'))]});
  await i.deferUpdate();
  const result=await verificationQuarantine.resolveQuarantineCase(i.guild,uid,action,i.user.id,'Mod Hub Verification review');
  if(!result?.ok)return i.editReply({content:'❌ '+String(result?.message||'Action failed'),embeds:[],components:[row(button('mod_verification_case:'+uid,'Back'))]});
