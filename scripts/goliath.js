@@ -2426,6 +2426,7 @@ function welcomeEmbedDeliveryAudit() {
     assert(welcome.includes('incrementAnalytics(member.guild.id'), 'Welcome delivery must record analytics for sends, failures and skips.');
     assert(welcome.includes('userPingEnabled = !isDm && config.allowUserPing !== false && options.suppressPing !== true') && welcome.includes('rolePingEnabled = !isDm && config.allowRolePings === true && options.suppressPing !== true') && welcome.includes('allowedMentions'), 'Welcome delivery must retain user and role mention-suppression safeguards.');
     assert(scheduled.includes('const activeRuns = new Set()'), 'Scheduled Welcome must guard against overlapping runs.');
+    assert(panel.includes('queueRoleId===previous.queueRoleId?{queueRoleId}:{queueRoleId,completedMemberIds:[]}'), 'Selecting the unchanged queue role must preserve successful-delivery checkpoints.');
 
     assert(scheduled.includes('completed.add(member.id)'), 'Scheduled Welcome must checkpoint successful member deliveries.');
     assert(scheduled.includes('scheduled_welcome_delivery_checkpoint'), 'Scheduled Welcome must persist the successful-delivery checkpoint.');
