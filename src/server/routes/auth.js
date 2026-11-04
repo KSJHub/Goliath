@@ -156,11 +156,11 @@ function renderAppealsHandoff(returnPath, clientUrl) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="refresh" content="0;url=${escapedTarget}">
-  <title>Returning to Goliath Appeals</title>
+  <title>Returning to Goliath</title>
 </head>
 <body>
-  <p>Authentication complete. Returning to Goliath Appeals…</p>
-  <p><a href="${escapedTarget}">Continue to Appeals</a></p>
+  <p>Authentication complete. Returning to Goliath…</p>
+  <p><a href="${escapedTarget}">Continue to Goliath</a></p>
 </body>
 </html>`;
 }
@@ -273,7 +273,7 @@ router.get('/callback', async (req, res) => {
     const stateReturnPath = readOAuthState(req.query.state, clientSecret);
     if (!stateReturnPath) {
       console.error('❌ OAuth callback rejected missing, invalid, or expired state.');
-      return res.status(400).send('OAuth sign-in state expired or was invalid. Return to the Appeals page and sign in again.');
+      return res.status(400).send('OAuth sign-in state expired or was invalid. Return to Goliath and sign in again.');
     }
 
     const tokenResponse = await fetch('https://discord.com/api/v10/oauth2/token', {
