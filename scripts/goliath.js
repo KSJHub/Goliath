@@ -2437,6 +2437,8 @@ function welcomeEmbedDeliveryAudit() {
     assert(welcome.includes('options.templateOverride || getAssignedTemplate'), 'Preview must support a staged template without changing live bindings.');
     assert(panel.includes("source==='embedStudio'&&state.source==='embedStudio'&&!state.templateId"), 'Unsaved Embed Studio previews must require a selected template.');
     assert(panel.includes("customId==='admin:welcome:scheduled:confirmRun'"), 'Scheduled bulk delivery must require confirmation.');
+    assert(panel.includes('scheduledWelcome.runScheduledWelcome(interaction.guild,{actorId:interaction.user.id})'), 'Manual Scheduled Welcome must respect module and schedule enablement, without force bypass.');
+    assert(panel.includes("result.skipped?'⚠️ Scheduled Welcome was not sent"), 'Manual Scheduled Welcome must explain disabled/skipped deliveries.');
     assert(panel.includes("customId==='admin:welcome:scheduled:runNow')return updatePanel"), 'Scheduled Run Now must open confirmation rather than send immediately.');
     assert(panel.includes("customId==='admin:welcome:settings'") && panel.includes("['admin:welcome:instantSettings','admin:welcome:dmSettings','admin:welcome:scheduledSettings'].includes(customId)") && panel.includes("buildWelcomeDeliverySettingsPanel(interaction.guild,scope"), 'Welcome settings navigation must remain reachable.');
     for(const section of ['buildWelcomePanel','buildWelcomeSettingsPanel','buildInstantPanel','buildDmPanel','buildMentionSettingsPanel','buildScheduledPanel','buildWelcomeDeliverySettingsPanel']){
