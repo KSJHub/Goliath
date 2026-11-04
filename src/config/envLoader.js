@@ -13,7 +13,8 @@ function normalizeClientUrlEnvironment() {
     const raw = String(process.env[key] || '').trim();
     if (!raw) continue;
     try {
-      process.env[key] = new URL(raw).origin;
+      const url = new URL(raw);
+      process.env[key] = url.origin + url.pathname.replace(/\/+$/, '') + url.hash;
     } catch {
       console.warn(`⚠️ Ignoring invalid ${key}; expected an absolute URL.`);
       delete process.env[key];
@@ -22,6 +23,7 @@ function normalizeClientUrlEnvironment() {
 }
 
 function applyModePublicClientOrigin(requestedMode) {
+  if (String(process.env.DASHBOARD_BASE_PATH || '').trim()) return;
   if (requestedMode !== 'DEV') return;
   // DEV nginx currently canonicalises unknown SPA paths to /overview.
   // Enter member-only deep links through the root hash so the static server
@@ -52,7 +54,7 @@ function loadEnvironment(mode = process.env.BOT_MODE) {
 
   // Owner identity is security-critical. PM2 can retain old environment values
   // across reloads, so the active mode file must be authoritative for these keys.
-  for (const key of ['OWNER_ID', 'OWNER_IDS', 'BOT_OWNER_ID', 'BOT_OWNER_IDS']) {
+  for (const key of ['OWNER_ID', 'OWNER_IDS', 'BOT_OWNER_ID', 'BOT_OWNER_IDS', 'DASHBOARD_BASE_PATH', 'CLIENT_URL', 'DASHBOARD_CLIENT_URL', 'DASHBOARD_URL', 'VITE_CLIENT_URL', 'DISCORD_REDIRECT_URI']) {
     if (Object.prototype.hasOwnProperty.call(result.parsed || {}, key)) {
       process.env[key] = result.parsed[key];
     }

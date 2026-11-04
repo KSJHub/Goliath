@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+import { dashboardBase } from './dashboardPath.js';
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : dashboardBase;
 
 function apiUrl(path = '') {
   return `${API_BASE}${path}`;

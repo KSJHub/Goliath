@@ -1,3 +1,4 @@
+import { goDashboard } from '../../services/dashboardPath.js';
 import React, { useCallback, useEffect, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -62,7 +63,7 @@ export default function Notifications({ theme, selectedGuild, selectedGuildData 
   }
 
   function openNotification(item) {
-    window.location.assign(buildNotificationRoute(item));
+    goDashboard(buildNotificationRoute(item));
   }
 
   if (!guildId) return <section style={card(t)}><h2>Select a server</h2><p style={{ color: t.mutedText }}>Select a server to view notifications.</p></section>;

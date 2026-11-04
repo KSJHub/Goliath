@@ -1,4 +1,5 @@
-const PREFIX = 'goliath';
+import { dashboardBase } from './services/dashboardPath.js';
+const PREFIX = 'goliath' + (dashboardBase ? ':' + dashboardBase + ':' : ':production:');
 
 function hasStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';

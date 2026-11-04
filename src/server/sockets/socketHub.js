@@ -17,10 +17,11 @@ function initSocketHub(server, options = {}) {
   }
 
   io = new Server(server, {
+    path: require('../../config/dashboardRouting').dashboardBasePath() + '/socket.io/',
     cors: {
       origin:
         options?.clientUrl ||
-        'http://localhost:5175',
+        (process.env.CLIENT_URL ? new URL(process.env.CLIENT_URL).origin : 'http://localhost:5175'),
 
       credentials: true,
     },

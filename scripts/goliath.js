@@ -4632,7 +4632,61 @@ async function gameUpdatesAudit() {
 }
 
 
+function dashboardRoutingAudit() {
+  const assert = require('node:assert/strict');
+  const fs = require('node:fs');
+  const vm = require('node:vm');
+  const routing = require('../src/config/dashboardRouting');
+  const previousBase = process.env.DASHBOARD_BASE_PATH;
+  const frontend = fs.readFileSync(require('node:path').join(__dirname, '../src/dashboard/js/services/dashboardPath.js'), 'utf8');
+  const auth = fs.readFileSync(require('node:path').join(__dirname, '../src/server/routes/auth.js'), 'utf8');
+  try {
+    for (const base of ['', '/dev', '/beta']) {
+      process.env.DASHBOARD_BASE_PATH = base;
+      assert.equal(routing.dashboardBasePath(), base);
+      assert.equal(routing.dashboardUrl('https://goliath.ksjdigital.co.uk/ignored', '/portal'), 'https://goliath.ksjdigital.co.uk' + base + '/portal');
+      const sandbox = { window: { location: { assign(value) { sandbox.destination = value; }, replace(value) { sandbox.destination = value; } } } };
+      vm.createContext(sandbox);
+      vm.runInContext(frontend.replace('import.meta.env.BASE_URL', JSON.stringify(base + '/')).replace(/export /g, '') + '\nglobalThis.helpers = { dashboardPath, localDashboardPath, goDashboard };', sandbox);
+      const h = sandbox.helpers;
+      assert.equal(h.dashboardPath('/api/auth/login'), base + '/api/auth/login');
+      assert.equal(h.dashboardPath(base + '/portal?guild=1'), base + '/portal?guild=1');
+      assert.equal(h.localDashboardPath(base + '/portal'), '/portal');
+      assert.equal(h.dashboardPath('https://discord.com/example'), 'https://discord.com/example');
+      assert.equal(h.dashboardPath('//example.com'), '//example.com');
+      h.goDashboard('/overview?guild=1');
+      assert.equal(sandbox.destination, base + '/overview?guild=1');
+      const authSandbox = { URL, URLSearchParams, Buffer, process, console, require(name) {
+        if (name === 'node:crypto') return require(name);
+        if (name === 'express') return { Router: () => ({ get() {}, post() {} }) };
+        if (name.includes('dashboardRouting')) return routing;
+        if (name.includes('dashboardAccess')) return { MEMBER_PORTAL: '/portal', listDashboardGuilds: async () => [] };
+        return {};
+      }, module: { exports: {} } };
+      vm.createContext(authSandbox);
+      vm.runInContext(auth + '\nglobalThis.helpers = { buildPostOAuthTarget, getCookieOptions, safeReturnPath, createOAuthState, readOAuthState };', authSandbox);
+      const a = authSandbox.helpers;
+      assert.equal(a.buildPostOAuthTarget('https://goliath.ksjdigital.co.uk', '/portal'), 'https://goliath.ksjdigital.co.uk' + base + '/portal');
+      assert.equal(a.getCookieOptions().path, base || '/');
+      assert.equal(a.safeReturnPath('//evil.example/portal'), '/');
+      const signed = a.createOAuthState('/appeals?guild=111111111111111111&case=2', 'test-only');
+      assert.equal(a.readOAuthState(signed, 'test-only'), '/appeals?guild=111111111111111111&case=2');
+      assert.equal(a.readOAuthState(signed, 'different-test-secret'), null);
+    }
+    process.env.DASHBOARD_BASE_PATH = '/invalid';
+    assert.throws(() => routing.dashboardBasePath());
+    process.env.DASHBOARD_BASE_PATH = '/dev'; const devName = routing.dashboardSessionName();
+    process.env.DASHBOARD_BASE_PATH = '/beta'; assert.notEqual(routing.dashboardSessionName(), devName);
+    console.log('Dashboard routing audit passed: production/dev/beta paths, redirects, cookie names and signed return targets.');
+    return true;
+  } finally {
+    if (previousBase === undefined) delete process.env.DASHBOARD_BASE_PATH;
+    else process.env.DASHBOARD_BASE_PATH = previousBase;
+  }
+}
+
 const commands = {
+  'dashboard-routing': dashboardRoutingAudit,
   'member-intelligence-routing': memberIntelligenceRoutingAudit,
   'game-updates': gameUpdatesAudit,
   games: freeGamesAudit,

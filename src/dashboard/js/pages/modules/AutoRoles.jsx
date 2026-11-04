@@ -1,3 +1,4 @@
+import { dashboardPath } from '../../services/dashboardPath.js';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -206,7 +207,7 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
             <button type="button" onClick={toggleEnabled} disabled={saving === 'enabled'} style={buttonStyle(theme, 'primary')}>{saving === 'enabled' ? 'Saving...' : moduleEnabled ? 'Disable' : 'Enable'}</button>
             <button type="button" onClick={() => runAction('repair', () => api.request(`/api/auto-roles/${guildId}/repair`, { method: 'POST' }), 'Configuration repaired.')} disabled={saving} style={buttonStyle(theme, 'primary')}>Repair</button>
             <button type="button" onClick={() => runAction('reapply', () => api.request(`/api/auto-roles/${guildId}/reapply`, { method: 'POST' }), 'Roles reapplied across the server.')} disabled={saving} style={buttonStyle(theme, 'success')}>Reapply Now</button>
-            <a href={`/api/auto-roles/${guildId}/export`} style={{ ...buttonStyle(theme), textDecoration: 'none' }}>Export JSON</a>
+            <a href={dashboardPath(`/api/auto-roles/${guildId}/export`)} style={{ ...buttonStyle(theme), textDecoration: 'none' }}>Export JSON</a>
             <button type="button" onClick={resetModule} disabled={saving} style={buttonStyle(theme, 'danger')}>Reset</button>
           </div>
         </div>

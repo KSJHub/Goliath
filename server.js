@@ -137,6 +137,7 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 client.commands = new Collection();
+const { dashboardBasePath, dashboardSessionName } = require('./src/config/dashboardRouting');
 const app = express();
 const server = http.createServer(app);
 const { requireDashboardAccess, resolveGuildAccess } = require('./src/server/middleware/dashboardAccess');
@@ -146,12 +147,17 @@ app.set('goliath.client', client);
 app.set('goliath.io', io);
 
 const allowedOrigins = new Set(['https://goliath.ksjdigital.co.uk', 'https://dev.goliath.ksjdigital.co.uk', 'https://twotonetaj.ksjdigital.co.uk', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175']);
-[process.env.CLIENT_URL, process.env.DASHBOARD_CLIENT_URL, process.env.DASHBOARD_URL, process.env.VITE_CLIENT_URL, process.env.TWOTONETAJ_CLIENT_URL].filter(Boolean).forEach((origin) => allowedOrigins.add(String(origin).trim()));
+[process.env.CLIENT_URL, process.env.DASHBOARD_CLIENT_URL, process.env.DASHBOARD_URL, process.env.VITE_CLIENT_URL, process.env.TWOTONETAJ_CLIENT_URL].filter(Boolean).forEach((origin) => allowedOrigins.add(new URL(String(origin).trim()).origin));
 app.use(cors({ origin(origin, callback) { if (!origin || allowedOrigins.has(origin)) return callback(null, true); return callback(null, false); }, credentials: true }));
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true }));
-const dashboardSession = session({ store: sessionStore, secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: isProduction, httpOnly: true, sameSite: isProduction ? 'none' : 'lax', maxAge: 604800000 } });
+const dashboardSession = session({ name: dashboardSessionName(), store: sessionStore, secret: SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { path: dashboardBasePath() || '/', secure: isProduction || Boolean(dashboardBasePath()), httpOnly: true, sameSite: isProduction ? 'none' : 'lax', maxAge: 604800000 } });
 app.use(dashboardSession);
+app.use((req, _res, next) => {
+  const base = dashboardBasePath();
+  if (base && (req.url === base || req.url.startsWith(base + '/') || req.url.startsWith(base + '?'))) req.url = req.url.slice(base.length) || '/';
+  next();
+});
 app.use((req, _res, next) => { req.client = client; req.io = io; next(); });
 
 function cleanDiscordId(value) {

@@ -1,3 +1,4 @@
+import { goDashboard } from '../services/dashboardPath.js';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../services/apiClient.js';
 import { buildNotificationRoute } from '../utils/notificationLinks.js';
@@ -107,8 +108,8 @@ function Topbar({
 
   const handleThemeToggle = useCallback(() => setDarkMode((prev) => !prev), [setDarkMode]);
   const onLogoutClick = useCallback(() => { closeMenu(); handleLogout(); }, [closeMenu, handleLogout]);
-  const goToPath = useCallback((path, { preserveOwnerQuery = false } = {}) => { closeMenu(); closeDrawer(); if (typeof window !== 'undefined') window.location.href = path + (preserveOwnerQuery ? getOwnerManagedSearch() : ''); }, [closeMenu, closeDrawer]);
-  const openNotification = useCallback((item) => { closeMenu(); closeDrawer(); if (typeof window !== 'undefined') window.location.href = buildNotificationRoute(item); }, [closeMenu, closeDrawer]);
+  const goToPath = useCallback((path, { preserveOwnerQuery = false } = {}) => { closeMenu(); closeDrawer(); if (typeof window !== 'undefined') goDashboard(path + (preserveOwnerQuery ? getOwnerManagedSearch() : '')); }, [closeMenu, closeDrawer]);
+  const openNotification = useCallback((item) => { closeMenu(); closeDrawer(); if (typeof window !== 'undefined') goDashboard(buildNotificationRoute(item)); }, [closeMenu, closeDrawer]);
 
   const rootStyle = { ...styles.root, width: '100%', maxWidth: '100%', minWidth: 0, overflow: 'visible' };
   const innerStyle = { ...styles.inner, width: '100%', maxWidth: '100%', minWidth: 0, gap: isMobile ? 10 : styles.inner?.gap, paddingLeft: isMobile ? 64 : styles.inner?.paddingLeft, paddingRight: isMobile ? 12 : styles.inner?.paddingRight };

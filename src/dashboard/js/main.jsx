@@ -1,4 +1,5 @@
 import React from 'react';
+import { dashboardBase, dashboardPath, localDashboardPath, dashboardCookieSuffix } from './services/dashboardPath.js';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 
@@ -31,10 +32,10 @@ function getAppealReference() {
 }
 
 function getOAuthAppealReturn() {
-  const match = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith('goliath_oauth_return='));
+  const match = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith('goliath_oauth_return' + dashboardCookieSuffix + '='));
   if (!match) return null;
   try {
-    const value = decodeURIComponent(match.slice('goliath_oauth_return='.length));
+    const value = decodeURIComponent(match.slice(('goliath_oauth_return' + dashboardCookieSuffix + '=').length));
     if (value !== '/appeals' && !value.startsWith('/appeals?')) return null;
     return { path: '/appeals', reference: parseAppealReference(value) };
   } catch {
@@ -47,10 +48,10 @@ const legacyAppealHash = window.location.hash.match(/^#\/appeals(?:\?([^#]*))?$/
 if (legacyAppealHash) {
   const reference = parseAppealReference(legacyAppealHash[1] || '');
   const query = reference ? new URLSearchParams({ guild: reference.guild, case: reference.caseId }).toString() : '';
-  window.history.replaceState({}, '', query ? `/appeals?${query}` : '/appeals');
+  window.history.replaceState({}, '', dashboardPath(query ? `/appeals?${query}` : '/appeals'));
 }
 
-let pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+let pathname = localDashboardPath(window.location.pathname).replace(/\/+$/, '') || '/';
 let appealReference = getAppealReference();
 let oauthAppealReturn = null;
 
@@ -72,8 +73,8 @@ if ((isAppealsPath || isRecoveredAppealPath) && pathname !== '/appeals') {
     params.set('case', appealReference.caseId);
   }
   const query = params.toString();
-  window.history.replaceState({}, '', query ? `/appeals?${query}` : '/appeals');
-  document.cookie = 'goliath_oauth_return=; Max-Age=0; Path=/; SameSite=Lax';
+  window.history.replaceState({}, '', dashboardPath(query ? `/appeals?${query}` : '/appeals'));
+  document.cookie = 'goliath_oauth_return' + dashboardCookieSuffix + '=; Max-Age=0; Path=' + (dashboardBase || '/') + '; SameSite=Lax';
   pathname = '/appeals';
 }
 
@@ -81,7 +82,7 @@ const RootComponent = (pathname === '/appeals' || pathname === '/portal') ? Appe
 
 root.render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={dashboardBase || "/"}>
       <RootComponent />
       <GoliathDialogHost />
     </BrowserRouter>

@@ -1,3 +1,4 @@
+import { goDashboard } from '../services/dashboardPath.js';
 import React from 'react';
 
 function formatPlanName(plan = {}) {
@@ -74,7 +75,7 @@ export default function PremiumLock({
 
       <button
         type="button"
-        onClick={() => { window.location.href = '/billing'; }}
+        onClick={() => { goDashboard('/billing'); }}
         style={{
           justifySelf: 'start',
           border: '1px solid rgba(250,204,21,0.45)',

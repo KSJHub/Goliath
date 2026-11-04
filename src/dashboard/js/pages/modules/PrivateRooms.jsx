@@ -1,3 +1,4 @@
+import { dashboardPath } from '../../services/dashboardPath.js';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -86,7 +87,7 @@ export default function PrivateRooms({ theme, selectedGuild, selectedGuildData }
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><h2 style={{ margin: 0 }}>Module Controls</h2><p style={{ margin: '6px 0 0', color: theme.mutedText }}>Core destinations, approval rules, audit and expiry behaviour.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button disabled={saving} style={buttonStyle(theme, 'primary')} onClick={() => action('toggle', () => api.request(`/api/private-rooms/${guildId}/enabled`, { method: 'PATCH', body: JSON.stringify({ enabled: !overview.enabled }) }), 'Module status updated.')}>{overview.enabled ? 'Disable' : 'Enable'}</button>
         <button disabled={saving} style={buttonStyle(theme, 'success')} onClick={() => action('process', () => api.request(`/api/private-rooms/${guildId}/process`, { method: 'POST' }), 'Expiry processing completed.')}>Process Expiry</button>
-        <a href={`/api/private-rooms/${guildId}/export`} style={{ ...buttonStyle(theme), textDecoration: 'none' }}>Export JSON</a>
+        <a href={dashboardPath(`/api/private-rooms/${guildId}/export`)} style={{ ...buttonStyle(theme), textDecoration: 'none' }}>Export JSON</a>
       </div></div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <label style={{ display: 'grid', gap: 7, color: theme.mutedText, fontWeight: 850 }}>Room category<select value={settings.categoryId || ''} onChange={(e) => saveSettings({ categoryId: e.target.value || null })} style={fieldStyle(theme)}><option value="">No category</option>{resources.categories.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>

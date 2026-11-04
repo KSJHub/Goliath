@@ -1,3 +1,4 @@
+import { goDashboard } from '../services/dashboardPath.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api } from '../services/apiClient.js';
@@ -125,7 +126,7 @@ export function useAuthSession({
 
   const handleLogin = useCallback(() => {
     setLoginPending(true);
-    window.location.href = api.getLoginUrl();
+    goDashboard(api.getLoginUrl());
   }, []);
 
   const handleLogout = useCallback(async () => {

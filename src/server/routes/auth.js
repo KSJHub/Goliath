@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const express = require('express');
 const security = require('../../core/security/protection/core');
 
+const { dashboardBasePath, dashboardSessionName, oauthReturnName, dashboardUrl } = require('../../config/dashboardRouting');
 const router = express.Router();
 const { MEMBER_PORTAL, listDashboardGuilds } = require('../middleware/dashboardAccess');
 // Hands an authenticated Appeals login directly back to the validated route
@@ -45,18 +46,18 @@ function getAuthConfig() {
 function getCookieOptions() {
   return {
     httpOnly: true,
-    secure: isProduction(),
+    secure: isProduction() || Boolean(dashboardBasePath()),
     sameSite: isProduction() ? 'none' : 'lax',
-    path: '/',
+    path: dashboardBasePath() || '/',
   };
 }
 
 function getOAuthReturnCookieOptions() {
   return {
     httpOnly: false,
-    secure: isProduction(),
+    secure: isProduction() || Boolean(dashboardBasePath()),
     sameSite: isProduction() ? 'none' : 'lax',
-    path: '/',
+    path: dashboardBasePath() || '/',
     maxAge: 15 * 60 * 1000,
   };
 }
@@ -142,7 +143,7 @@ function readOAuthState(value, secret) {
 function buildPostOAuthTarget(origin, returnPath) {
   const safeOrigin = safeRedirectUrl(origin);
   const safePath = safeReturnPath(returnPath);
-  return `${safeOrigin}${safePath}`;
+  return dashboardUrl(safeOrigin, safePath);
 }
 
 function renderAppealsHandoff(returnPath, clientUrl) {
@@ -187,7 +188,7 @@ router.get('/login', (req, res) => {
   const returnPath = safeReturnPath(req.query?.next);
   if (req.session) req.session.oauthReturnPath = returnPath;
   if (returnPath.startsWith('/appeals')) {
-    res.cookie('goliath_oauth_return', returnPath, getOAuthReturnCookieOptions());
+    res.cookie(oauthReturnName(), returnPath, getOAuthReturnCookieOptions());
   }
 
   const params = new URLSearchParams({
@@ -237,7 +238,7 @@ router.get('/me', async (req, res) => {
 
 router.post('/logout', (req, res) => {
   if (!req.session) {
-    res.clearCookie('goliath_dashboard_session', getCookieOptions());
+    res.clearCookie(dashboardSessionName(), getCookieOptions());
     return res.json({ success: true });
   }
 
@@ -246,7 +247,7 @@ router.post('/logout', (req, res) => {
       console.error('❌ Logout session destroy failed', error);
       return res.status(500).json({ error: 'Logout failed' });
     }
-    res.clearCookie('goliath_dashboard_session', getCookieOptions());
+    res.clearCookie(dashboardSessionName(), getCookieOptions());
     return res.json({ success: true });
   });
 });
@@ -336,13 +337,13 @@ router.get('/callback', async (req, res) => {
       }
 
       if (stateReturnPath.startsWith('/appeals') || stateReturnPath === '/portal') {
-        res.clearCookie('goliath_oauth_return', { path: '/', sameSite: isProduction() ? 'none' : 'lax', secure: isProduction() });
+        res.clearCookie(oauthReturnName(), { path: dashboardBasePath() || '/', sameSite: isProduction() ? 'none' : 'lax', secure: isProduction() || Boolean(dashboardBasePath()) });
         return res.status(200).type('html').send(renderAppealsHandoff(stateReturnPath, clientUrl));
       }
 
       // Always return to the configured frontend origin; the OAuth callback
       // may run on a separate API hostname that cannot serve dashboard routes.
-      return res.redirect(dashboardAllowed ? buildPostOAuthTarget(clientUrl, stateReturnPath) : safeRedirectUrl(clientUrl) + MEMBER_PORTAL);
+      return res.redirect(dashboardAllowed ? buildPostOAuthTarget(clientUrl, stateReturnPath) : dashboardUrl(clientUrl, MEMBER_PORTAL));
     });
   } catch (error) {
     console.error('❌ Auth error', error);

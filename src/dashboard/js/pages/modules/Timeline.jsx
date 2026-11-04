@@ -1,3 +1,4 @@
+import { goDashboard } from '../../services/dashboardPath.js';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -78,7 +79,7 @@ export default function Timeline({ theme, selectedGuild, selectedGuildData }) {
   }
 
   function clearFilters() { setModuleFilter(''); setSeverityFilter(''); setSearch(''); }
-  function openEntry(entry) { window.location.assign(entryRoute(entry)); }
+  function openEntry(entry) { goDashboard(entryRoute(entry)); }
 
   if (!guildId) return <section style={card(x)}><h2>Select a server</h2><p style={{ color: x.mutedText }}>Select a server to view the activity timeline.</p></section>;
 

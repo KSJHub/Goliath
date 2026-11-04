@@ -1,3 +1,4 @@
+import { goDashboard } from '../../services/dashboardPath.js';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient.js';
@@ -47,7 +48,7 @@ function GuildTable({ theme, guilds = [] }) {
   );
 }
 function openGuild(guild, path = '/overview') {
-  const params = new URLSearchParams(); params.set('ownerGuildId', String(guildId(guild)).split(':').pop()); params.set('ownerGuildName', guildName(guild)); params.set('ownerGuildEnvironment', environment(guild)); window.location.assign(`${path}?${params.toString()}`);
+  const params = new URLSearchParams(); params.set('ownerGuildId', String(guildId(guild)).split(':').pop()); params.set('ownerGuildName', guildName(guild)); params.set('ownerGuildEnvironment', environment(guild)); goDashboard(`${path}?${params.toString()}`);
 }
 export default function OwnerOverview({ theme, currentUser }) {
   const viewTheme = safeTheme(theme); const [ownerPayload, setOwnerPayload] = useState(null); const [runtimePayload, setRuntimePayload] = useState(null); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const isOwner = currentUser?.isOwner === true;
@@ -67,7 +68,7 @@ export default function OwnerOverview({ theme, currentUser }) {
   return <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
     <section style={card(viewTheme, { padding: 'clamp(18px, 2.4vw, 24px)', background: 'linear-gradient(135deg, rgba(59,130,246,0.18), rgba(15,23,42,0.06) 45%, rgba(168,85,247,0.12))' })}><p style={{ margin: '0 0 8px', color: '#93c5fd', fontWeight: 950, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Owner View</p><h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: '-0.04em', lineHeight: 1 }}>👑 Goliath Command Centre</h1><p style={{ margin: '10px 0 0', color: viewTheme.mutedText, lineHeight: 1.55, maxWidth: 820 }}>Platform-level operations across guilds, runtime environments, security, tickets, forms, translation, backups and deployments.</p></section>
     {error ? <section style={card(viewTheme, { padding: 16, color: '#fca5a5' })}>{error}</section> : null}{loading ? <section style={card(viewTheme, { padding: 16, color: viewTheme.mutedText })}>Loading command centre...</section> : null}
-    <OwnerCommandCentrePanel theme={viewTheme} guilds={guilds} runtime={runtimePayload || {}} realtimeEvents={[]} onOpenRoute={(route) => window.location.assign(route)} />
+    <OwnerCommandCentrePanel theme={viewTheme} guilds={guilds} runtime={runtimePayload || {}} realtimeEvents={[]} onOpenRoute={(route) => goDashboard(route)} />
     <OwnerAnalyticsPanel theme={viewTheme} guilds={guilds} runtime={runtimePayload || {}} />
     <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,170px),1fr))', gap: 12 }}><Stat theme={viewTheme} label="Total Servers" value={formatNumber(stats.guilds)} hint="registered guilds" accent="#60a5fa" /><Stat theme={viewTheme} label="Members" value={formatNumber(stats.members)} hint="visible members" accent="#34d399" /><Stat theme={viewTheme} label="Connected" value={formatNumber(stats.connected)} hint={`${stats.missing} missing`} accent="#22c55e" /><Stat theme={viewTheme} label="DEV" value={formatNumber(stats.dev)} hint="development" accent="#60a5fa" /><Stat theme={viewTheme} label="BETA" value={formatNumber(stats.beta)} hint="staging" accent="#facc15" /><Stat theme={viewTheme} label="PROD" value={formatNumber(stats.production)} hint="live" accent="#22c55e" /></section>
     <GuildTable theme={viewTheme} guilds={guilds} />
