@@ -1057,18 +1057,30 @@ async function handleOwnerCaseManagement(i) {
             { name: '📋 Case Status', value: 'Deleted', inline: true },
             { name: '📁 Removed Records', value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
           ];
-    const destination = operation === 'ARCHIVE' ? 'mod_owner_archive_list:0' : operation === 'RESTORE' ? 'mod_owner_management:0' : 'mod_owner_management:0';
+    const destination = operation === 'ARCHIVE' ? 'mod_owner_archive_list:0' : 'mod_owner_management:0';
     const destinationLabel = operation === 'ARCHIVE' ? 'View Archived Cases' : 'Back to Case Management';
-    const controls = [new Discord.ActionRowBuilder().addComponents(
-      new Discord.ButtonBuilder().setCustomId(destination).setLabel(destinationLabel).setEmoji(operation === 'ARCHIVE' ? '📦' : '⬅️').setStyle(Discord.ButtonStyle.Secondary)),
+    const controls = [
       new Discord.ActionRowBuilder().addComponents(
-        new Discord.ButtonBuilder().setCustomId('mod_owner_history:0').setLabel('Case History').setEmoji('📜').setStyle(Discord.ButtonStyle.Secondary))];
-    const response = { embeds: [new Discord.EmbedBuilder().setColor(0x248B57).setTitle(title).setDescription(description)
-      .addFields(...details).setFooter({ text: 'Goliath • Owner Case Management' }).setTimestamp()], components: controls };
-    // A modal submitted from a message component can update that original message.
-    // Replacing its components removes the now-invalid Archive/Delete actions.
-    if (i.message) await i.update(response);
-    else await i.reply({ ...response, flags: 64 });
+        new Discord.ButtonBuilder().setCustomId(destination).setLabel(destinationLabel)
+          .setEmoji(operation === 'ARCHIVE' ? '📦' : '⬅️').setStyle(Discord.ButtonStyle.Secondary)),
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId('mod_owner_history:0').setLabel('Case History')
+          .setEmoji('📜').setStyle(Discord.ButtonStyle.Secondary)),
+    ];
+    const response = { embeds: [new Discord.EmbedBuilder()
+      .setColor(operation === 'DELETE' ? 0xED4245 : 0x248B57)
+      .setTitle(title).setDescription(description).addFields(...details)
+      .setFooter({ text: 'Goliath • Owner Case Management' }).setTimestamp()], components: controls };
+    // Replace the original management message after a modal submit, not just the modal response.
+    // This prevents stale Archive/Delete controls remaining beneath completed cases.
+    if (i.isFromMessage?.() && i.message) {
+      await i.update(response);
+    } else {
+      await i.reply({ ...response, flags: 64 });
+      // Some modal interaction implementations omit isFromMessage(); edit the source
+      // message when it is still accessible so old action buttons cannot remain.
+      if (i.message?.edit) await i.message.edit(response).catch(() => null);
+    }
     return true;
   }
   return false;
