@@ -36,7 +36,8 @@ jobs:
             APP_DIR=/home/goliath/dev
             RUNTIME_DIR="$APP_DIR/src/runtime/dev"
             PM2_NAME=goliath-dev
-            DEV_HOST=dev.goliath.ksjdigital.co.uk
+            DEV_PUBLIC_URL=https://goliath.ksjdigital.co.uk/dev
+            DASHBOARD_ROOT=/var/www/goliath-paths/dev
             BACKUP_DIR=/home/goliath/.goliath-dev-runtime-sync-backup
             LOCK_FILE=/home/goliath/.goliath-dev-sync.lock
 
@@ -145,18 +146,18 @@ jobs:
 
             echo "🏗️ Build dashboard"
             rm -rf dist
-            npx vite build src/dashboard --outDir ../../dist --emptyOutDir --logLevel warn
+            npx vite build src/dashboard --base /dev/ --outDir ../../dist --emptyOutDir --logLevel warn
             mkdir -p dist/appeals && cp dist/index.html dist/appeals/index.html
             grep -q 'GOLIATH_APPEALS_ENTRY' dist/assets/*.js
+            grep -q '/dev/assets/' dist/index.html
 
             LATEST_SHA="$(remote_dev_sha)"
             [ "$EXPECTED_SHA" = "$LATEST_SHA" ] || { echo "Superseded during validation; exiting cleanly."; exit 0; }
 
-            NGINX_DUMP="$(nginx -T 2>&1)"
-            DASHBOARD_ROOT="$(printf '%s\n' "$NGINX_DUMP" | awk -v host="$DEV_HOST" '$1=="server_name"{for(i=2;i<=NF;i++){n=$i;gsub(/;/,"",n);if(n==host)found=1}next} found&&$1=="root"{r=$2;gsub(/;/,"",r);print r;exit}')"
-            case "$DASHBOARD_ROOT" in /var/www/*) ;; *) echo "Unsafe dashboard root" >&2; exit 1;; esac
-            rm -rf "$DASHBOARD_ROOT" && mkdir -p "$DASHBOARD_ROOT" && cp -a dist/. "$DASHBOARD_ROOT/"
-            nginx -t && systemctl reload nginx
+            [ "$DASHBOARD_ROOT" = /var/www/goliath-paths/dev ] || exit 1
+            nginx -t
+            mkdir -p "$DASHBOARD_ROOT"
+            cp -a dist/. "$DASHBOARD_ROOT/"
 
             BOT_MODE=dev COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
 
@@ -221,7 +222,9 @@ jobs:
             fi
 
             DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/auth/me || true)"
-            PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' https://$DEV_HOST/api/auth/me || true)"
+            PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' "$DEV_PUBLIC_URL/api/auth/me" || true)"
+            DASHBOARD_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' "$DEV_PUBLIC_URL/" || true)"
+            [ "$DASHBOARD_STATUS" = 200 ] || { echo "DEV dashboard health failed: $DASHBOARD_STATUS" >&2; exit 1; }
             case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
             case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
 
