@@ -848,108 +848,176 @@ async function handleVerificationCases(i) {
  return i.editReply({content:'✅ '+String(result.message||'Verification case updated.'),embeds:[],components:[row(button('mod_dashboard:none:cases','⬅️ Back to Cases'))]});
 }
 function isGuildOwner(i) { return Boolean(i.guild?.ownerId && String(i.user?.id) === String(i.guild.ownerId)); }
-function ownerCaseRows(i, page = 0) {
-  const rows = db.prepare('SELECT case_id, user_id, action, status FROM cases WHERE guild_id = ? ORDER BY case_id DESC').all(String(i.guildId));
+
+function ensureOwnerArchiveTables() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS owner_case_archive (
+      guild_id TEXT NOT NULL,
+      case_id INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      case_data TEXT NOT NULL,
+      warning_data TEXT NOT NULL,
+      audit_data TEXT NOT NULL,
+      archived_by TEXT NOT NULL,
+      archived_at TEXT NOT NULL,
+      PRIMARY KEY (guild_id, case_id)
+    );
+    CREATE TABLE IF NOT EXISTS owner_case_history (
+      guild_id TEXT NOT NULL,
+      case_id INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      disposition TEXT NOT NULL CHECK (disposition IN ('archived','deleted','restored')),
+      actor_id TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      PRIMARY KEY (guild_id, case_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_owner_case_history_user ON owner_case_history(guild_id, user_id);
+  `);
+}
+function ownerArchiveCount(guildId) {
+  ensureOwnerArchiveTables();
+  return db.prepare('SELECT COUNT(*) AS n FROM owner_case_archive WHERE guild_id = ?').get(String(guildId)).n;
+}
+function ownerCaseRows(i, page = 0, archived = false) {
+  ensureOwnerArchiveTables();
+  const guildId = String(i.guildId);
+  const rows = archived
+    ? db.prepare('SELECT case_id, user_id, archived_at FROM owner_case_archive WHERE guild_id = ? ORDER BY archived_at DESC').all(guildId)
+    : db.prepare('SELECT case_id, user_id, action, status FROM cases WHERE guild_id = ? ORDER BY case_id DESC').all(guildId);
   const pages = Math.max(1, Math.ceil(rows.length / 25));
   const current = Math.min(Math.max(0, Number(page) || 0), pages - 1);
   const selection = rows.slice(current * 25, (current + 1) * 25);
   const components = [];
   if (selection.length) components.push(new Discord.ActionRowBuilder().addComponents(new Discord.StringSelectMenuBuilder()
-    .setCustomId('mod_owner_case_select')
-    .setPlaceholder('Select a case to review')
+    .setCustomId(archived ? 'mod_owner_archive_select' : 'mod_owner_case_select')
+    .setPlaceholder(archived ? 'Select an archived case' : 'Select a case to manage')
     .addOptions(selection.map(entry => ({
-      label: `Case #${entry.case_id} • ${String(entry.action || 'Unknown').replace(/_/g, ' ')}`.slice(0, 100),
-      description: `Member: ${entry.user_id} • Status: ${entry.status || 'Unknown'}`.slice(0, 100),
+      label: `Case #${entry.case_id} • ${archived ? 'Archived' : String(entry.action || 'Unknown').replace(/_/g, ' ')}`.slice(0, 100),
+      description: `Member: ${entry.user_id} • ${archived ? 'Sealed' : entry.status || 'Unknown'}`.slice(0, 100),
       value: String(entry.case_id),
     })))));
   const nav = new Discord.ActionRowBuilder();
-  if (current > 0) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_management:${current - 1}`).setLabel('Previous').setStyle(Discord.ButtonStyle.Secondary));
-  if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_management:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
+  if (current > 0) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_${archived ? 'archive_list' : 'management'}:${current - 1}`).setLabel('Previous').setStyle(Discord.ButtonStyle.Secondary));
+  if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_${archived ? 'archive_list' : 'management'}:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
+  nav.addComponents(new Discord.ButtonBuilder().setCustomId(archived ? 'mod_owner_management:0' : 'mod_owner_archive_list:0').setLabel(archived ? 'Active Cases' : 'Archived Cases').setStyle(Discord.ButtonStyle.Secondary));
   nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('Back to Cases').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary));
   components.push(nav);
-
   const embed = new Discord.EmbedBuilder()
-    .setColor(0x5865F2)
-    .setTitle('🗂️ Case Management')
-    .setDescription(rows.length
-      ? 'Select a case below to review its details before deciding whether to permanently delete it. **Selecting a case does not delete anything.**'
-      : 'There are no cases available for review or deletion.')
+    .setColor(0x5865F2).setTitle(archived ? '📦 Archived Cases' : '🗂️ Case Management')
+    .setDescription(archived
+      ? 'Owner-only archived records. Select a case to review or restore it. Archived records are excluded from member profiles and active moderation.'
+      : 'Select a case to review, archive or permanently delete it. Selecting a case does not change its records.')
     .addFields(
-      { name: '📁 Available Cases', value: String(rows.length), inline: true },
+      { name: '📁 Available Cases', value: String(archived ? db.prepare('SELECT COUNT(*) AS n FROM cases WHERE guild_id = ?').get(guildId).n : rows.length), inline: true },
+      { name: '📦 Archived Cases', value: String(archived ? rows.length : ownerArchiveCount(guildId)), inline: true },
       { name: '📄 Page', value: `${current + 1} of ${pages}`, inline: true },
-      { name: '⚠️ Permanent Deletion', value: 'Deleting a case removes its stored record, linked warnings and previous case audit entries. A deletion audit record is retained. **This cannot be undone.** Existing Discord punishments are not reversed.', inline: false },
-    )
-    .setFooter({ text: 'Goliath • Case Management • Server owner only' })
-    .setTimestamp();
+      { name: '🔐 Record Management', value: 'Archive securely retains a case for owner-only access. Delete permanently removes it. Neither action reverses existing Discord punishments.', inline: false },
+    ).setFooter({ text: 'Goliath • Case Management • Server owner only' }).setTimestamp();
   return { embeds: [embed], components };
 }
 async function handleOwnerCaseManagement(i) {
   const id = String(i.customId || '');
   if (!id.startsWith('mod_owner_')) return false;
-  if (!isGuildOwner(i)) return safeReply(i, { content: '❌ Only the server owner can manage permanent case deletion.', flags: 64 });
+  if (!isGuildOwner(i)) return safeReply(i, { content: '❌ Only the server owner can manage archived or deleted cases.', flags: 64 });
+  ensureOwnerArchiveTables();
   if (id.startsWith('mod_owner_management:')) { await i.update(ownerCaseRows(i, id.split(':')[1])); return true; }
+  if (id.startsWith('mod_owner_archive_list:')) { await i.update(ownerCaseRows(i, id.split(':')[1], true)); return true; }
   if (id === 'mod_owner_case_select') {
     const caseId = Number(i.values?.[0]);
     const record = Number.isSafeInteger(caseId) && caseId > 0 ? getCaseById(i.guildId, caseId) : null;
     if (!record) return safeReply(i, { content: 'Case not found.', flags: 64 });
     const warningCount = db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
     const auditCount = db.prepare('SELECT COUNT(*) AS n FROM case_audit WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
-    const review = new Discord.EmbedBuilder()
-      .setColor(0xed4245)
-      .setTitle('🗑️ Delete Case')
-      .setDescription('Review the case below before permanently deleting its stored records.')
+    const review = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`🗂️ Manage Case #${caseId}`)
+      .setDescription('Review the case and choose whether to securely archive or permanently delete its records.')
       .addFields(
         { name: '👤 Member', value: `<@${record.userId}>`, inline: false },
         { name: '📋 Action', value: String(record.action || 'Unknown'), inline: true },
         { name: '🛡️ Status', value: String(record.status === 'reversed' ? 'Closed' : record.status || 'Unknown'), inline: true },
         { name: '📝 Reason', value: String(record.reason || 'None').slice(0, 1024), inline: false },
-        { name: '📁 Records affected', value: `Case #${caseId} · ${warningCount} linked warning(s) · ${auditCount} audit entry/entries`, inline: false },
-        { name: '⚠️ Permanent action', value: 'This deletes the stored case and its linked warning and audit records. It cannot be undone in this panel. Existing Discord punishments are not reversed.', inline: false }
-      );
+        { name: '📁 Linked Records', value: `${warningCount} warning(s) · ${auditCount} audit entry/entries`, inline: false },
+        { name: '🔐 Privacy', value: 'Archived cases are removed from active records and can only be restored by the owner. Deleted cases cannot be restored.', inline: false });
     await i.update({ embeds: [review], components: [new Discord.ActionRowBuilder().addComponents(
-      new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('⬅️ Back').setStyle(Discord.ButtonStyle.Secondary),
+      new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Back').setStyle(Discord.ButtonStyle.Secondary),
+      new Discord.ButtonBuilder().setCustomId(`mod_owner_archive_prompt:${caseId}`).setLabel('Archive Case').setStyle(Discord.ButtonStyle.Primary),
       new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('Delete Case').setStyle(Discord.ButtonStyle.Danger))] });
     return true;
   }
-  if (id.startsWith('mod_owner_delete_prompt:')) {
-    const caseId = Number(id.split(':')[1]);
-    if (!Number.isSafeInteger(caseId) || !getCaseById(i.guildId, caseId)) return safeReply(i, { content: 'Case not found.', flags: 64 });
-    const input = new Discord.TextInputBuilder().setCustomId('confirmation').setLabel('Type DELETE to confirm').setStyle(Discord.TextInputStyle.Short).setRequired(true).setMaxLength(40);
-    await i.showModal(new Discord.ModalBuilder().setCustomId(`mod_owner_delete_submit:${caseId}`).setTitle('Delete Case').addComponents(new Discord.ActionRowBuilder().addComponents(input)));
+  if (id === 'mod_owner_archive_select') {
+    const caseId = Number(i.values?.[0]);
+    const row = db.prepare('SELECT case_id, user_id, archived_at FROM owner_case_archive WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId);
+    if (!row) return safeReply(i, { content: 'Archived case not found.', flags: 64 });
+    await i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`📦 Archived Case #${caseId}`)
+      .setDescription('This record is sealed and excluded from active moderation and member profiles.')
+      .addFields({ name: 'Member', value: `<@${row.user_id}>` }, { name: 'Archived', value: row.archived_at })],
+      components: [new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId('mod_owner_archive_list:0').setLabel('Back').setStyle(Discord.ButtonStyle.Secondary),
+        new Discord.ButtonBuilder().setCustomId(`mod_owner_restore_prompt:${caseId}`).setLabel('Restore Case').setStyle(Discord.ButtonStyle.Primary))] });
     return true;
   }
-  if (id.startsWith('mod_owner_delete_submit:')) {
+  if (id.startsWith('mod_owner_archive_prompt:') || id.startsWith('mod_owner_restore_prompt:') || id.startsWith('mod_owner_delete_prompt:')) {
+    const operation = id.includes('archive_prompt') ? 'ARCHIVE' : id.includes('restore_prompt') ? 'RESTORE' : 'DELETE';
     const caseId = Number(id.split(':')[1]);
-    const entered = String(i.fields?.getTextInputValue('confirmation') || '').trim().replace(/\s+/g, ' ').toUpperCase();
-    if (!Number.isSafeInteger(caseId) || caseId <= 0) return safeReply(i, { content: '❌ Invalid case reference. Nothing was deleted.', flags: 64 });
-    if (entered !== 'DELETE') return safeReply(i, { content: `❌ Confirmation was not accepted for Case #${caseId}. Enter exactly DELETE (without quotation marks), then submit. Nothing was deleted.`, flags: 64 });
+    const exists = operation === 'RESTORE'
+      ? db.prepare('SELECT 1 FROM owner_case_archive WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId)
+      : getCaseById(i.guildId, caseId);
+    if (!Number.isSafeInteger(caseId) || caseId <= 0 || !exists) return safeReply(i, { content: 'Case not found.', flags: 64 });
+    const input = new Discord.TextInputBuilder().setCustomId('confirmation').setLabel(`Type ${operation} to confirm`).setStyle(Discord.TextInputStyle.Short).setRequired(true).setMaxLength(40);
+    await i.showModal(new Discord.ModalBuilder().setCustomId(`mod_owner_${operation.toLowerCase()}_submit:${caseId}`).setTitle(`${operation === 'DELETE' ? 'Delete' : operation === 'RESTORE' ? 'Restore' : 'Archive'} Case`).addComponents(new Discord.ActionRowBuilder().addComponents(input)));
+    return true;
+  }
+  if (/^mod_owner_(archive|restore|delete)_submit:/.test(id)) {
+    const operation = id.split('_')[2].toUpperCase();
+    const caseId = Number(id.split(':')[1]);
+    const entered = String(i.fields?.getTextInputValue('confirmation') || '').trim().toUpperCase();
+    if (!Number.isSafeInteger(caseId) || caseId <= 0 || entered !== operation) return safeReply(i, { content: `❌ Enter exactly ${operation}. No records were changed.`, flags: 64 });
+    const guildId = String(i.guildId);
     const result = db.transaction(() => {
-      const record = getCaseById(i.guildId, caseId);
+      const timestamp = new Date().toISOString();
+      if (operation === 'RESTORE') {
+        const saved = db.prepare('SELECT * FROM owner_case_archive WHERE guild_id = ? AND case_id = ?').get(guildId, caseId);
+        if (!saved) return null;
+        if (db.prepare('SELECT 1 FROM cases WHERE case_id = ?').get(caseId)) throw new Error('Case ID is already in use; restoration stopped');
+        const record = JSON.parse(saved.case_data);
+        const keys = Object.keys(record);
+        db.prepare(`INSERT INTO cases (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`).run(...keys.map(k => record[k]));
+        for (const [table, data] of [['warnings', saved.warning_data], ['case_audit', saved.audit_data]]) {
+          for (const row of JSON.parse(data)) {
+            const columns = Object.keys(row);
+            db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`).run(...columns.map(k => row[k]));
+          }
+        }
+        db.prepare('DELETE FROM owner_case_archive WHERE guild_id = ? AND case_id = ?').run(guildId, caseId);
+        db.prepare("INSERT INTO owner_case_history (guild_id,case_id,user_id,disposition,actor_id,occurred_at) VALUES (?,?,?,?,?,?) ON CONFLICT(guild_id,case_id) DO UPDATE SET disposition=excluded.disposition,actor_id=excluded.actor_id,occurred_at=excluded.occurred_at")
+          .run(guildId, caseId, saved.user_id, 'restored', i.user.id, timestamp);
+        return { warnings: JSON.parse(saved.warning_data).length, audits: JSON.parse(saved.audit_data).length };
+      }
+      const record = db.prepare('SELECT * FROM cases WHERE guild_id = ? AND case_id = ?').get(guildId, caseId);
       if (!record) return null;
-      const guildId = String(i.guildId);
-      const warnings = db.prepare('DELETE FROM warnings WHERE guild_id = ? AND case_id = ?').run(guildId, caseId).changes;
-      const audits = db.prepare('DELETE FROM case_audit WHERE guild_id = ? AND case_id = ?').run(guildId, caseId).changes;
+      const warnings = db.prepare('SELECT * FROM warnings WHERE guild_id = ? AND case_id = ?').all(guildId, caseId);
+      const audits = db.prepare('SELECT * FROM case_audit WHERE guild_id = ? AND case_id = ?').all(guildId, caseId);
+      if (operation === 'ARCHIVE') {
+        db.prepare('INSERT INTO owner_case_archive (guild_id,case_id,user_id,case_data,warning_data,audit_data,archived_by,archived_at) VALUES (?,?,?,?,?,?,?,?)')
+          .run(guildId, caseId, record.user_id, JSON.stringify(record), JSON.stringify(warnings), JSON.stringify(audits), i.user.id, timestamp);
+      }
+      db.prepare('DELETE FROM warnings WHERE guild_id = ? AND case_id = ?').run(guildId, caseId);
+      db.prepare('DELETE FROM case_audit WHERE guild_id = ? AND case_id = ?').run(guildId, caseId);
       const deleted = db.prepare('DELETE FROM cases WHERE guild_id = ? AND case_id = ?').run(guildId, caseId).changes;
-      if (deleted !== 1) throw new Error('Case deletion did not affect exactly one row');
-      recordCaseAudit({ guildId, caseId, actorId: i.user.id, event: 'case.owner.permanently_deleted', before: record, after: null, metadata: { warningsRemoved: warnings, auditEntriesRemoved: audits, permanent: true } });
-      return { warnings, audits };
+      if (deleted !== 1) throw new Error('Case record was not removed');
+      db.prepare("INSERT INTO owner_case_history (guild_id,case_id,user_id,disposition,actor_id,occurred_at) VALUES (?,?,?,?,?,?) ON CONFLICT(guild_id,case_id) DO UPDATE SET disposition=excluded.disposition,actor_id=excluded.actor_id,occurred_at=excluded.occurred_at")
+        .run(guildId, caseId, record.user_id, operation === 'ARCHIVE' ? 'archived' : 'deleted', i.user.id, timestamp);
+      // Never store the deleted case payload in the retained audit marker.
+      return { warnings: warnings.length, audits: audits.length };
     })();
-    if (!result) {
-      await i.reply({ content: 'Case not found. Nothing was deleted.', flags: 64 });
-      return true;
-    }
-    const embed = new Discord.EmbedBuilder()
-      .setColor(0x248B57)
-      .setTitle('✅ Case Permanently Deleted')
-      .setDescription(`Case **#${caseId}** has been permanently deleted. This action cannot be undone.`)
-      .addFields(
-        { name: 'Linked Warnings Removed', value: String(result.warnings), inline: true },
-        { name: 'Previous Audit Entries Removed', value: String(result.audits), inline: true },
-        { name: '🛡️ Audit Record', value: 'A deletion audit record has been retained for accountability.', inline: false },
-      )
-      .setFooter({ text: 'Goliath • Case Management' })
-      .setTimestamp();
-    await i.reply({ embeds: [embed], flags: 64 });
+    if (!result) return safeReply(i, { content: 'Case not found. Nothing changed.', flags: 64 });
+    const title = operation === 'ARCHIVE' ? '📦 Case Archived' : operation === 'RESTORE' ? '✅ Case Restored' : '✅ Case Permanently Deleted';
+    const description = operation === 'ARCHIVE'
+      ? `Case **#${caseId}** is securely archived and no longer appears in active moderation or member profiles.`
+      : operation === 'RESTORE' ? `Case **#${caseId}** has been restored to active records.`
+      : `Case **#${caseId}** has been permanently deleted. Only a restricted history marker remains.`;
+    await i.reply({ embeds: [new Discord.EmbedBuilder().setColor(0x248B57).setTitle(title).setDescription(description)
+      .addFields({ name: 'Linked Warnings', value: String(result.warnings), inline: true }, { name: 'Audit Entries', value: String(result.audits), inline: true })
+      .setFooter({ text: 'Goliath • Owner Case Management' }).setTimestamp()], flags: 64 });
     return true;
   }
   return false;
