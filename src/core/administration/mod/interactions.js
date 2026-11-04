@@ -892,8 +892,8 @@ function ownerCaseRows(i, page = 0, archived = false) {
     .setCustomId(archived ? 'mod_owner_archive_select' : 'mod_owner_case_select')
     .setPlaceholder(archived ? 'Select an archived case' : 'Select a case to manage')
     .addOptions(selection.map(entry => ({
-      label: `Case #${entry.case_id} • ${archived ? 'Archived' : String(entry.action || 'Unknown').replace(/_/g, ' ')}`.slice(0, 100),
-      description: `Member: ${entry.user_id} • ${archived ? 'Sealed' : entry.status || 'Unknown'}`.slice(0, 100),
+      label: `Case #${entry.case_id} • ${archived ? 'Archived' : String(entry.action || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase())}`.slice(0, 100),
+      description: `Member: ${entry.user_id} • Status: ${archived ? 'Archived' : entry.status === 'reversed' ? 'Closed' : String(entry.status || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase())}`.slice(0, 100),
       value: String(entry.case_id),
     })))));
   const nav = new Discord.ActionRowBuilder();
