@@ -2431,7 +2431,17 @@ function welcomeEmbedDeliveryAudit() {
     assert(scheduled.includes('scheduled_welcome_delivery_checkpoint'), 'Scheduled Welcome must persist the successful-delivery checkpoint.');
     assert(scheduled.indexOf('scheduled_welcome_delivery_checkpoint') < scheduled.indexOf('await queue.removeQueueRole(member, config.queueRoleId)'), 'Delivery checkpoint must precede queue role cleanup.');
     assert(panel.includes("customId==='admin:welcome:resetConfirm'"), 'Destructive Welcome reset must require a confirmation action.');
-    assert(panel.includes('result.publicFailed') && panel.includes('result.dmFailed'), 'Discord test feedback must expose public and DM failures.');
+    assert(panel.includes('result.publicFailed') && panel.includes('skipDm:true'), 'Public test delivery must report failures without triggering a DM.');
+    assert(panel.includes("customId==='admin:welcome:dmSend'") && panel.includes('await interaction.user.send(payload)'), 'DM test must use its separate explicit delivery control.');
+    assert(welcome.includes('options.templateOverride || getAssignedTemplate'), 'Preview must support a staged template without changing live bindings.');
+    assert(panel.includes("source==='embedStudio'&&state.source==='embedStudio'&&!state.templateId"), 'Unsaved Embed Studio previews must require a selected template.');
+    assert(panel.includes("customId==='admin:welcome:scheduled:confirmRun'"), 'Scheduled bulk delivery must require confirmation.');
+    assert(panel.includes("customId==='admin:welcome:scheduled:runNow')return updatePanel"), 'Scheduled Run Now must open confirmation rather than send immediately.');
+    assert(panel.includes("customId==='admin:welcome:settings'") && panel.includes("customId==='admin:welcome:instantSettings'") && panel.includes("customId==='admin:welcome:dmSettings'") && panel.includes("customId==='admin:welcome:scheduledSettings'"), 'Welcome settings navigation must remain reachable.');
+    for(const section of ['buildWelcomePanel','buildWelcomeSettingsPanel','buildInstantPanel','buildDmPanel','buildMentionSettingsPanel','buildScheduledPanel','buildWelcomeDeliverySettingsPanel']){
+      assert(panel.includes(`function ${section}(`), `Missing Welcome panel: ${section}`);
+    }
+    assert(!panel.includes(".join('\\\\n')"), 'Welcome panels must use real line breaks, not literal backslash-n text.');
     assert(panel.includes('result.sendFailed') && panel.includes('result.roleRemovalFailed'), 'Discord scheduled feedback must expose partial failures.');
     assert(dashboard.includes('queueLoaded'), 'Dashboard must distinguish an unloaded queue from an empty queue.');
     assert(dashboard.includes('scheduledHealth?.stuckMemberIds?.length'), 'Dashboard must expose pending role cleanup.');
