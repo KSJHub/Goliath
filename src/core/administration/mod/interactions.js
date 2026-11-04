@@ -877,7 +877,7 @@ async function handleOwnerCaseManagement(i) {
     const auditCount = db.prepare('SELECT COUNT(*) AS n FROM case_audit WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
     const review = new Discord.EmbedBuilder()
       .setColor(0xed4245)
-      .setTitle(`🗑️ Delete Case #${caseId}`)
+      .setTitle('🗑️ Delete Case')
       .setDescription('Review the case below before permanently deleting its stored records.')
       .addFields(
         { name: '👤 Member', value: `<@${record.userId}>`, inline: false },
@@ -888,8 +888,8 @@ async function handleOwnerCaseManagement(i) {
         { name: '⚠️ Permanent action', value: 'This deletes the stored case and its linked warning and audit records. It cannot be undone in this panel. Existing Discord punishments are not reversed.', inline: false }
       );
     await i.update({ embeds: [review], components: [new Discord.ActionRowBuilder().addComponents(
-      new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('🗑️ Delete Case').setStyle(Discord.ButtonStyle.Danger),
-      new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('⬅️ Back to Management').setStyle(Discord.ButtonStyle.Secondary))] });
+      new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('⬅️ Back').setStyle(Discord.ButtonStyle.Secondary),
+      new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('Delete Case').setStyle(Discord.ButtonStyle.Danger))] });
     return true;
   }
   if (id.startsWith('mod_owner_delete_prompt:')) {
