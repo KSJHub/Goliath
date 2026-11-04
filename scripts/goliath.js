@@ -2442,6 +2442,19 @@ function welcomeEmbedDeliveryAudit() {
       assert(panel.includes(`function ${section}(`), `Missing Welcome panel: ${section}`);
     }
     assert(!panel.includes(".join('\\\\n')"), 'Welcome panels must use real line breaks, not literal backslash-n text.');
+    // Each Discord message supports at most five component rows. Count the
+    // row constructors in the seven Welcome builders, including conditional rows.
+    const panelBoundaries=['async function buildWelcomePanel(', 'async function buildWelcomeSettingsPanel(', 'async function buildInstantPanel(', 'async function buildDmPanel(', 'function buildMentionSettingsPanel(', 'async function buildScheduledPanel(', 'async function buildWelcomeDeliverySettingsPanel(', 'function buildScheduledModal('];
+    const maxRows=[4,3,5,4,3,4,3];
+    for(let i=0;i<maxRows.length;i++){
+      const start=panel.indexOf(panelBoundaries[i]),end=panel.indexOf(panelBoundaries[i+1],start+1);
+      assert(start>=0&&end>start, `Missing or reordered Welcome builder: ${panelBoundaries[i]}`);
+      const body=panel.slice(start,end);
+      const count=(body.match(/\\brow\\s*\\(/g)||[]).length;
+      assert(count<=maxRows[i]&&count<=5,`Welcome builder ${panelBoundaries[i]} may exceed Discord's five-row limit (${count} rows)`);
+    }
+    assert(panel.includes("source==='custom'&&state.source)throw new Error"), 'Custom message previews must require saving before rendering.');
+
     assert(panel.includes('result.sendFailed') && panel.includes('result.roleRemovalFailed'), 'Discord scheduled feedback must expose partial failures.');
     assert(dashboard.includes('queueLoaded'), 'Dashboard must distinguish an unloaded queue from an empty queue.');
     assert(dashboard.includes('scheduledHealth?.stuckMemberIds?.length'), 'Dashboard must expose pending role cleanup.');
