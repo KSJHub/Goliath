@@ -2445,7 +2445,7 @@ function welcomeEmbedDeliveryAudit() {
     // Each Discord message supports at most five component rows. Count the
     // row constructors in the seven Welcome builders, including conditional rows.
     const panelBoundaries=['async function buildWelcomePanel(', 'async function buildWelcomeSettingsPanel(', 'async function buildInstantPanel(', 'async function buildDmPanel(', 'function buildMentionSettingsPanel(', 'async function buildScheduledPanel(', 'async function buildWelcomeDeliverySettingsPanel(', 'function buildScheduledModal('];
-    const maxRows=[4,3,5,4,3,4,3];
+    const maxRows=[4,3,5,4,3,4];
     for(let i=0;i<maxRows.length;i++){
       const start=panel.indexOf(panelBoundaries[i]),end=panel.indexOf(panelBoundaries[i+1],start+1);
       assert(start>=0&&end>start, `Missing or reordered Welcome builder: ${panelBoundaries[i]}`);
@@ -2453,6 +2453,9 @@ function welcomeEmbedDeliveryAudit() {
       const count=(body.match(/\\brow\\s*\\(/g)||[]).length;
       assert(count<=maxRows[i]&&count<=5,`Welcome builder ${panelBoundaries[i]} may exceed Discord's five-row limit (${count} rows)`);
     }
+    const deliverySettings=panel.slice(panel.indexOf('async function buildWelcomeDeliverySettingsPanel('),panel.indexOf('function buildScheduledModal('));
+    assert(deliverySettings.includes('const controls=instant?[') && deliverySettings.includes(']:dm?['), 'Welcome delivery settings must keep distinct Instant, DM and Scheduled control groups.');
+    assert((deliverySettings.match(/\\brow\\s*\\(/g)||[]).length===7, 'Welcome delivery settings row groups changed; recheck the per-branch five-row limit.');
     assert(panel.includes("source==='custom'&&state.source)throw new Error"), 'Custom message previews must require saving before rendering.');
 
     assert(panel.includes('result.sendFailed') && panel.includes('result.roleRemovalFailed'), 'Discord scheduled feedback must expose partial failures.');
