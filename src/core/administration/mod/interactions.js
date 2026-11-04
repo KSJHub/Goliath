@@ -875,9 +875,21 @@ async function handleOwnerCaseManagement(i) {
     if (!record) return safeReply(i, { content: 'Case not found.', flags: 64 });
     const warningCount = db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
     const auditCount = db.prepare('SELECT COUNT(*) AS n FROM case_audit WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
-    await i.update({ embeds: [new Discord.EmbedBuilder().setColor(0xed4245).setTitle(`🗑️ Permanently Delete Case #${caseId}?`).setDescription(`**Member:** <@${record.userId}>\n**Action:** ${record.action}\n**Status:** ${record.status === 'reversed' ? 'Closed' : record.status}\n**Reason:** ${String(record.reason || 'None').slice(0, 700)}\n\n**Linked warnings:** ${warningCount}\n**Audit entries:** ${auditCount}\n\nThis operation permanently deletes these database records. It does **not** undo a Discord punishment and cannot be recovered through the interface.`)], components: [new Discord.ActionRowBuilder().addComponents(
-      new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('Continue to Confirmation').setStyle(Discord.ButtonStyle.Danger),
-      new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Cancel').setStyle(Discord.ButtonStyle.Secondary))] });
+    const review = new Discord.EmbedBuilder()
+      .setColor(0xed4245)
+      .setTitle(`🗑️ Delete Case #${caseId}`)
+      .setDescription('Review the case below before permanently deleting its stored records.')
+      .addFields(
+        { name: '👤 Member', value: `<@${record.userId}>`, inline: false },
+        { name: '📋 Action', value: String(record.action || 'Unknown'), inline: true },
+        { name: '🛡️ Status', value: String(record.status === 'reversed' ? 'Closed' : record.status || 'Unknown'), inline: true },
+        { name: '📝 Reason', value: String(record.reason || 'None').slice(0, 1024), inline: false },
+        { name: '📁 Records affected', value: `Case #${caseId} · ${warningCount} linked warning(s) · ${auditCount} audit entry/entries`, inline: false },
+        { name: '⚠️ Permanent action', value: 'This deletes the stored case and its linked warning and audit records. It cannot be undone in this panel. Existing Discord punishments are not reversed.', inline: false }
+      );
+    await i.update({ embeds: [review], components: [new Discord.ActionRowBuilder().addComponents(
+      new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('🗑️ Delete Case').setStyle(Discord.ButtonStyle.Danger),
+      new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('⬅️ Back to Management').setStyle(Discord.ButtonStyle.Secondary))] });
     return true;
   }
   if (id.startsWith('mod_owner_delete_prompt:')) {
@@ -891,7 +903,7 @@ async function handleOwnerCaseManagement(i) {
     const caseId = Number(id.split(':')[1]);
     const entered = String(i.fields?.getTextInputValue('confirmation') || '').trim().replace(/\s+/g, ' ').toUpperCase();
     if (!Number.isSafeInteger(caseId) || caseId <= 0) return safeReply(i, { content: '❌ Invalid case reference. Nothing was deleted.', flags: 64 });
-    if (entered !== 'DELETE' && entered !== `DELETE ${caseId}`) return safeReply(i, { content: `❌ Confirmation was not accepted for Case #${caseId}. Enter exactly DELETE (without quotation marks), then submit. Nothing was deleted.`, flags: 64 });
+    if (entered !== 'DELETE') return safeReply(i, { content: `❌ Confirmation was not accepted for Case #${caseId}. Enter exactly DELETE (without quotation marks), then submit. Nothing was deleted.`, flags: 64 });
     const result = db.transaction(() => {
       const record = getCaseById(i.guildId, caseId);
       if (!record) return null;
