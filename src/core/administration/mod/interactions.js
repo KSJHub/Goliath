@@ -915,7 +915,22 @@ async function handleOwnerCaseManagement(i) {
       recordCaseAudit({ guildId, caseId, actorId: i.user.id, event: 'case.owner.permanently_deleted', before: record, after: null, metadata: { warningsRemoved: warnings, auditEntriesRemoved: audits, permanent: true } });
       return { warnings, audits };
     })();
-    await i.reply({ content: result ? `✅ Case #${caseId} permanently deleted. Removed ${result.warnings} linked warning(s) and ${result.audits} prior audit entry/entries. A deletion audit marker was retained.` : 'Case not found. Nothing was deleted.', flags: 64 });
+    if (!result) {
+      await i.reply({ content: 'Case not found. Nothing was deleted.', flags: 64 });
+      return true;
+    }
+    const embed = new Discord.EmbedBuilder()
+      .setColor(0x248B57)
+      .setTitle('✅ Case Permanently Deleted')
+      .setDescription(`Case **#${caseId}** has been permanently deleted. This action cannot be undone.`)
+      .addFields(
+        { name: 'Linked Warnings Removed', value: String(result.warnings), inline: true },
+        { name: 'Previous Audit Entries Removed', value: String(result.audits), inline: true },
+        { name: '🛡️ Audit Record', value: 'A deletion audit record has been retained for accountability.', inline: false },
+      )
+      .setFooter({ text: 'Goliath • Case Management' })
+      .setTimestamp();
+    await i.reply({ embeds: [embed], flags: 64 });
     return true;
   }
   return false;
