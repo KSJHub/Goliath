@@ -878,6 +878,11 @@ function ownerArchiveCount(guildId) {
   ensureOwnerArchiveTables();
   return db.prepare('SELECT COUNT(*) AS n FROM owner_case_archive WHERE guild_id = ?').get(String(guildId)).n;
 }
+function ownerCaseDisplay(value, fallback = 'Unknown') {
+  const raw = String(value || fallback).replace(/_/g, ' ').trim();
+  if (raw.toLowerCase() === 'reversed') return 'Closed';
+  return raw.replace(/\b\w/g, char => char.toUpperCase());
+}
 function ownerCaseRows(i, page = 0, archived = false) {
   ensureOwnerArchiveTables();
   const guildId = String(i.guildId);
@@ -892,27 +897,28 @@ function ownerCaseRows(i, page = 0, archived = false) {
     .setCustomId(archived ? 'mod_owner_archive_select' : 'mod_owner_case_select')
     .setPlaceholder(archived ? 'Select an archived case' : 'Select a case to manage')
     .addOptions(selection.map(entry => ({
-      label: `Case #${entry.case_id} • ${archived ? 'Archived' : String(entry.action || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase())}`.slice(0, 100),
-      description: `Member: ${entry.user_id} • Status: ${archived ? 'Archived' : entry.status === 'reversed' ? 'Closed' : String(entry.status || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase())}`.slice(0, 100),
+      label: `Case #${entry.case_id} • ${archived ? 'Archived' : ownerCaseDisplay(entry.action)}`.slice(0, 100),
+      description: `Member: ${entry.user_id} • Status: ${archived ? 'Archived' : ownerCaseDisplay(entry.status)}`.slice(0, 100),
       value: String(entry.case_id),
     })))));
   const nav = new Discord.ActionRowBuilder();
   if (current > 0) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_${archived ? 'archive_list' : 'management'}:${current - 1}`).setLabel('Previous').setStyle(Discord.ButtonStyle.Secondary));
   if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_${archived ? 'archive_list' : 'management'}:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
-  nav.addComponents(new Discord.ButtonBuilder().setCustomId(archived ? 'mod_owner_management:0' : 'mod_owner_archive_list:0').setLabel(archived ? 'Active Cases' : 'Archived Cases').setStyle(Discord.ButtonStyle.Secondary));
+  nav.addComponents(new Discord.ButtonBuilder().setCustomId(archived ? 'mod_owner_management:0' : 'mod_owner_archive_list:0').setLabel(archived ? 'Available Cases' : 'Archived Cases').setStyle(Discord.ButtonStyle.Secondary));
   nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_owner_history:0').setLabel('Case History').setStyle(Discord.ButtonStyle.Secondary));
-  nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('Back to Cases').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary));
   components.push(nav);
+  components.push(new Discord.ActionRowBuilder().addComponents(
+    new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('Back to Cases').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary)));
   const embed = new Discord.EmbedBuilder()
     .setColor(0x5865F2).setTitle(archived ? '📦 Archived Cases' : '🗂️ Case Management')
     .setDescription(archived
       ? 'Owner-only archived records. Select a case to review or restore it. Archived records are excluded from member profiles and active moderation.'
-      : 'Select a case to review, archive or permanently delete it. Selecting a case does not change its records.')
+      : 'Review an existing case and choose to archive or permanently delete it. Selecting a case does not change its records.')
     .addFields(
       { name: '📁 Available Cases', value: String(archived ? db.prepare('SELECT COUNT(*) AS n FROM cases WHERE guild_id = ?').get(guildId).n : rows.length), inline: true },
       { name: '📦 Archived Cases', value: String(archived ? rows.length : ownerArchiveCount(guildId)), inline: true },
       { name: '📄 Page', value: `${current + 1} of ${pages}`, inline: true },
-      { name: '🔐 Record Management', value: 'Archive securely retains a case for owner-only access. Delete permanently removes it. Neither action reverses existing Discord punishments.', inline: false },
+      { name: '🔐 Record Management', value: '**Archive:** Privately preserve the case for the owner to restore later.\n**Delete:** Permanently remove the case and its linked records.\nNeither action changes existing Discord punishments.', inline: false },
     ).setFooter({ text: 'Goliath • Case Management • Server owner only' }).setTimestamp();
   return { embeds: [embed], components };
 }
@@ -946,14 +952,15 @@ async function handleOwnerCaseManagement(i) {
     const warningCount = db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
     const auditCount = db.prepare('SELECT COUNT(*) AS n FROM case_audit WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
     const review = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`🗂️ Manage Case #${caseId}`)
-      .setDescription('Review the case and choose whether to securely archive or permanently delete its records.')
+      .setDescription('Choose how this case should be handled. Both actions remove it from normal moderation records and member profiles.')
       .addFields(
         { name: '👤 Member', value: `<@${record.userId}>`, inline: false },
-        { name: '📋 Action', value: String(record.action || 'Unknown'), inline: true },
-        { name: '🛡️ Status', value: String(record.status === 'reversed' ? 'Closed' : record.status || 'Unknown'), inline: true },
+        { name: '📋 Action', value: ownerCaseDisplay(record.action), inline: true },
+        { name: '🛡️ Status', value: ownerCaseDisplay(record.status), inline: true },
         { name: '📝 Reason', value: String(record.reason || 'None').slice(0, 1024), inline: false },
-        { name: '📁 Linked Records', value: `${warningCount} warning(s) · ${auditCount} audit entry/entries`, inline: false },
-        { name: '🔐 Privacy', value: 'Archived cases are removed from active records and can only be restored by the owner. Deleted cases cannot be restored.', inline: false });
+        { name: '📁 Linked Records', value: `**Warnings:** ${warningCount}\n**Audit Entries:** ${auditCount}`, inline: false },
+        { name: '📦 Archive Case', value: 'Securely retain the complete record for owner-only access. The owner can restore it later.', inline: false },
+        { name: '🗑️ Delete Case', value: 'Permanently remove the case and linked records. Only a minimal private history marker remains. This cannot be undone.', inline: false });
     await i.update({ embeds: [review], components: [new Discord.ActionRowBuilder().addComponents(
       new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Back').setStyle(Discord.ButtonStyle.Secondary),
       new Discord.ButtonBuilder().setCustomId(`mod_owner_archive_prompt:${caseId}`).setLabel('Archive Case').setStyle(Discord.ButtonStyle.Primary),
