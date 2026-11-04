@@ -900,6 +900,7 @@ function ownerCaseRows(i, page = 0, archived = false) {
   if (current > 0) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_${archived ? 'archive_list' : 'management'}:${current - 1}`).setLabel('Previous').setStyle(Discord.ButtonStyle.Secondary));
   if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_${archived ? 'archive_list' : 'management'}:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
   nav.addComponents(new Discord.ButtonBuilder().setCustomId(archived ? 'mod_owner_management:0' : 'mod_owner_archive_list:0').setLabel(archived ? 'Active Cases' : 'Archived Cases').setStyle(Discord.ButtonStyle.Secondary));
+  nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_owner_history:0').setLabel('Case History').setStyle(Discord.ButtonStyle.Secondary));
   nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('Back to Cases').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary));
   components.push(nav);
   const embed = new Discord.EmbedBuilder()
@@ -920,6 +921,22 @@ async function handleOwnerCaseManagement(i) {
   if (!id.startsWith('mod_owner_')) return false;
   if (!isGuildOwner(i)) return safeReply(i, { content: '❌ Only the server owner can manage archived or deleted cases.', flags: 64 });
   ensureOwnerArchiveTables();
+  if (id.startsWith('mod_owner_history:')) {
+    const guildId = String(i.guildId);
+    const page = Math.max(0, Number(id.split(':')[1]) || 0);
+    const total = db.prepare('SELECT COUNT(*) AS n FROM owner_case_history WHERE guild_id = ?').get(guildId).n;
+    const pages = Math.max(1, Math.ceil(total / 15));
+    const current = Math.min(page, pages - 1);
+    const records = db.prepare('SELECT case_id, user_id, disposition, occurred_at FROM owner_case_history WHERE guild_id = ? ORDER BY occurred_at DESC LIMIT 15 OFFSET ?').all(guildId, current * 15);
+    const description = records.length ? records.map(r => `**Case #${r.case_id}** · ${r.disposition.charAt(0).toUpperCase() + r.disposition.slice(1)} · <@${r.user_id}>\n${r.occurred_at}`).join('\n\n') : 'No archived or deleted case history.';
+    const nav = new Discord.ActionRowBuilder();
+    if (current > 0) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_history:${current - 1}`).setLabel('Previous').setStyle(Discord.ButtonStyle.Secondary));
+    if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_history:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
+    nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Back').setStyle(Discord.ButtonStyle.Secondary));
+    await i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865F2).setTitle('📜 Case History')
+      .setDescription(description.slice(0, 4000)).setFooter({ text: `Goliath • Owner only • Page ${current + 1} of ${pages}` })], components: [nav] });
+    return true;
+  }
   if (id.startsWith('mod_owner_management:')) { await i.update(ownerCaseRows(i, id.split(':')[1])); return true; }
   if (id.startsWith('mod_owner_archive_list:')) { await i.update(ownerCaseRows(i, id.split(':')[1], true)); return true; }
   if (id === 'mod_owner_case_select') {
