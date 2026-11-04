@@ -855,14 +855,33 @@ function ownerCaseRows(i, page = 0) {
   const selection = rows.slice(current * 25, (current + 1) * 25);
   const components = [];
   if (selection.length) components.push(new Discord.ActionRowBuilder().addComponents(new Discord.StringSelectMenuBuilder()
-    .setCustomId('mod_owner_case_select').setPlaceholder('Select a case to review for deletion')
-    .addOptions(selection.map(entry => ({ label: `Case #${entry.case_id} · ${entry.action}`.slice(0, 100), description: `Member ${entry.user_id} · ${entry.status}`.slice(0, 100), value: String(entry.case_id) })))));
+    .setCustomId('mod_owner_case_select')
+    .setPlaceholder('Select a case to review')
+    .addOptions(selection.map(entry => ({
+      label: `Case #${entry.case_id} • ${String(entry.action || 'Unknown').replace(/_/g, ' ')}`.slice(0, 100),
+      description: `Member: ${entry.user_id} • Status: ${entry.status || 'Unknown'}`.slice(0, 100),
+      value: String(entry.case_id),
+    })))));
   const nav = new Discord.ActionRowBuilder();
   if (current > 0) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_management:${current - 1}`).setLabel('Previous').setStyle(Discord.ButtonStyle.Secondary));
   if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_management:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
-  nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('⬅️ Back to Cases').setStyle(Discord.ButtonStyle.Secondary));
+  nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('Back to Cases').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary));
   components.push(nav);
-  return { embeds: [new Discord.EmbedBuilder().setColor(0x5865f2).setTitle('⚙️ Case Management').setDescription(`Select a case to review for **permanent deletion**. This removes the case and its linked warning and audit records. This cannot be undone through the interface.\n\n**Cases:** ${rows.length} · **Page:** ${current + 1}/${pages}`)], components };
+
+  const embed = new Discord.EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('🗂️ Case Management')
+    .setDescription(rows.length
+      ? 'Select a case below to review its details before deciding whether to permanently delete it. **Selecting a case does not delete anything.**'
+      : 'There are no cases available for review or deletion.')
+    .addFields(
+      { name: '📁 Available Cases', value: String(rows.length), inline: true },
+      { name: '📄 Page', value: `${current + 1} of ${pages}`, inline: true },
+      { name: '⚠️ Permanent Deletion', value: 'Deleting a case removes its stored record, linked warnings and previous case audit entries. A deletion audit record is retained. **This cannot be undone.** Existing Discord punishments are not reversed.', inline: false },
+    )
+    .setFooter({ text: 'Goliath • Case Management • Server owner only' })
+    .setTimestamp();
+  return { embeds: [embed], components };
 }
 async function handleOwnerCaseManagement(i) {
   const id = String(i.customId || '');
