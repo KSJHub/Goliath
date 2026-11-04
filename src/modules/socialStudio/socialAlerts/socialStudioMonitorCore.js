@@ -189,14 +189,14 @@ async function socialWideMediaPayload(account,event,embed,previousMessage=null) 
   // attachment URL references when the message is edited, leaving a narrow card.
   // The existing wide attachment is the first source, not an embed URL to reuse.
   const retained=[...(previousMessage?.attachments?.values?.()||[])].find((file)=>
-    ['goliath-social-wide.jpg','goliath-tiktok-wide.jpg'].includes(file.name)
+    ['goliath-social-wide.jpg','goliath-tiktok-wide.jpg','goliath-tiktok-live-wide.jpg'].includes(file.name)
   );
   // LIVE always uses its own freshly uploaded 16:9 artwork. Keep the approved
   // ENDED implementation below untouched.
   if(String(event?.type||'').toLowerCase()==='live') {
     const liveUrls=[event?.thumbnail,account?.state?.lastLiveEvent?.thumbnail,
-      previousMessage?.embeds?.[0]?.image?.url,previousMessage?.embeds?.[0]?.image?.proxyURL,
-      retained?.url,retained?.proxyURL,account?.avatar,account?.avatarUrl,event?.avatar,event?.avatarUrl]
+      retained?.url,retained?.proxyURL,
+      previousMessage?.embeds?.[0]?.image?.url,previousMessage?.embeds?.[0]?.image?.proxyURL,account?.avatar,account?.avatarUrl,event?.avatar,event?.avatarUrl]
       .map(value=>clean(value,1500)).filter(value=>/^https:\/\//i.test(value));
     let portrait=null;
     for(const url of [...new Set(liveUrls)]) {
@@ -262,13 +262,14 @@ async function verifyTikTokWideImage(message,account,event) {
   const latest=await message.channel.messages.fetch(message.id,{force:true});
   const image=latest.embeds?.[0]?.image;
   const hasWideImage=Boolean(image && Number(image.width)>=900 && Number(image.height)>=500 && Number(image.width)/Math.max(1,Number(image.height))>=1.7);
+  if(String(event?.type||'').toLowerCase()==='live') console.info('[Social Studio] TikTok LIVE delivery image',message.id,JSON.stringify({width:image?.width||null,height:image?.height||null,imageUrl:image?.url||null,attachments:[...(latest.attachments?.values?.()||[])].map(file=>({name:file.name,size:file.size,width:file.width||null,height:file.height||null})),wide:hasWideImage}));
   if(hasWideImage) return;
   console.warn('[Social Studio] TikTok wide artwork missing after delivery; repairing message',message.id);
   const embed=EmbedBuilder.from(latest.embeds[0]);
   const media=await socialWideMediaPayload(account,event,embed,latest);
   await latest.edit({embeds:[media.embed],files:media.files,attachments:[]});
   const verified=await latest.channel.messages.fetch(latest.id,{force:true});
-  const repaired=verified.embeds?.[0]?.image; if(!(repaired && Number(repaired.width)>=900 && Number(repaired.height)>=500 && Number(repaired.width)/Math.max(1,Number(repaired.height))>=1.7)) console.error('[Social Studio] TikTok landscape dimensions still incorrect after repair',latest.id,repaired?.width,repaired?.height);
+  const repaired=verified.embeds?.[0]?.image; if(String(event?.type||'').toLowerCase()==='live') console.info('[Social Studio] TikTok LIVE repaired image',latest.id,JSON.stringify({width:repaired?.width||null,height:repaired?.height||null,attachments:[...(verified.attachments?.values?.()||[])].map(file=>({name:file.name,size:file.size})),imageUrl:repaired?.url||null})); if(!(repaired && Number(repaired.width)>=900 && Number(repaired.height)>=500 && Number(repaired.width)/Math.max(1,Number(repaired.height))>=1.7)) console.error('[Social Studio] TikTok landscape dimensions still incorrect after repair',latest.id,repaired?.width,repaired?.height);
 }
 async function sendAlert(client,guildId,config,account,event,options={}) {
   const channelId = alertChannelId(config,account,event.type);
