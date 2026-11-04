@@ -1037,14 +1037,38 @@ async function handleOwnerCaseManagement(i) {
       return { warnings: warnings.length, audits: audits.length };
     })();
     if (!result) return safeReply(i, { content: 'Case not found. Nothing changed.', flags: 64 });
-    const title = operation === 'ARCHIVE' ? '📦 Case Archived' : operation === 'RESTORE' ? '✅ Case Restored' : '✅ Case Permanently Deleted';
+    const title = operation === 'ARCHIVE' ? '📦 Case Archived' : operation === 'RESTORE' ? '✅ Case Restored' : '🗑️ Case Permanently Deleted';
     const description = operation === 'ARCHIVE'
-      ? `Case **#${caseId}** is securely archived and no longer appears in active moderation or member profiles.`
-      : operation === 'RESTORE' ? `Case **#${caseId}** has been restored to active records.`
-      : `Case **#${caseId}** has been permanently deleted. Only a restricted history marker remains.`;
-    await i.reply({ embeds: [new Discord.EmbedBuilder().setColor(0x248B57).setTitle(title).setDescription(description)
-      .addFields({ name: 'Linked Warnings', value: String(result.warnings), inline: true }, { name: 'Audit Entries', value: String(result.audits), inline: true })
-      .setFooter({ text: 'Goliath • Owner Case Management' }).setTimestamp()], flags: 64 });
+      ? `Case **#${caseId}** has been archived successfully. It is no longer visible in active moderation records or member profiles. Only the server owner can restore it.`
+      : operation === 'RESTORE' ? `Case **#${caseId}** has been restored to case management.`
+      : `Case **#${caseId}** has been permanently deleted. Only a restricted owner-only history marker remains.`;
+    const details = operation === 'ARCHIVE'
+      ? [
+          { name: '📋 Case Status', value: 'Archived', inline: true },
+          { name: '🔐 Access', value: 'Server Owner Only', inline: true },
+          { name: '📁 Preserved Records', value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
+        ]
+      : operation === 'RESTORE'
+        ? [
+            { name: '📋 Case Status', value: 'Restored', inline: true },
+            { name: '📁 Restored Records', value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
+          ]
+        : [
+            { name: '📋 Case Status', value: 'Deleted', inline: true },
+            { name: '📁 Removed Records', value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
+          ];
+    const destination = operation === 'ARCHIVE' ? 'mod_owner_archive_list:0' : operation === 'RESTORE' ? 'mod_owner_management:0' : 'mod_owner_management:0';
+    const destinationLabel = operation === 'ARCHIVE' ? 'View Archived Cases' : 'Back to Case Management';
+    const controls = [new Discord.ActionRowBuilder().addComponents(
+      new Discord.ButtonBuilder().setCustomId(destination).setLabel(destinationLabel).setEmoji(operation === 'ARCHIVE' ? '📦' : '⬅️').setStyle(Discord.ButtonStyle.Secondary)),
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId('mod_owner_history:0').setLabel('Case History').setEmoji('📜').setStyle(Discord.ButtonStyle.Secondary))];
+    const response = { embeds: [new Discord.EmbedBuilder().setColor(0x248B57).setTitle(title).setDescription(description)
+      .addFields(...details).setFooter({ text: 'Goliath • Owner Case Management' }).setTimestamp()], components: controls };
+    // A modal submitted from a message component can update that original message.
+    // Replacing its components removes the now-invalid Archive/Delete actions.
+    if (i.message) await i.update(response);
+    else await i.reply({ ...response, flags: 64 });
     return true;
   }
   return false;
