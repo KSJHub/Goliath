@@ -57,7 +57,7 @@ function nav(back = 'admin:roleSelector', settingsDisabled = false) {
 
 function rootNav() {
   return row(
-    button('admin:studio:roleStudio', '⬅️ Back to Role Studio'),
+    button('admin:studio:roleStudio', emojiLabel('BACK', 'Back to Role Studio')),
     button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings')),
   );
 }
@@ -309,7 +309,7 @@ async function buildSettingsPanel(guild) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(!enabled ? 0x747F8D : health.healthy ? 0x57F287 : 0xFAA61A)
-      .setTitle('⚙️ Role Selector · Settings')
+      .setTitle(emojiLabel('SETTINGS', 'Role Selector · Settings'))
       .setDescription([
         '**Module Status**',
         enabled ? 'Enabled ✅' : 'Disabled ❌',
@@ -328,7 +328,7 @@ async function buildSettingsPanel(guild) {
         button('admin:roleSelector:scanStyle', '🔎 Scan Guild Style', ButtonStyle.Primary),
       ),
       row(
-        button('admin:roleSelector:applyStyle', '✅ Apply Suggested Style', hasSuggestion ? ButtonStyle.Success : ButtonStyle.Secondary, !hasSuggestion),
+        button('admin:roleSelector:applyStyle', emojiLabel('SUCCESS', 'Apply Suggested Style'), hasSuggestion ? ButtonStyle.Success : ButtonStyle.Secondary, !hasSuggestion),
         button(enabled ? 'admin:roleSelector:disable' : 'admin:roleSelector:enable', enabled ? '⏸ Disable Role Selector' : '▶ Enable Role Selector', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
       ),
       nav('admin:roleSelector', true),
@@ -494,7 +494,7 @@ async function buildDeploymentsPanel(i, selectedId = null) {
       row(channelMenu),
       row(
         button(customId('admin:roleSelector:deploymentContent', selected.id), '🏷️ Groups & Roles', ButtonStyle.Primary),
-        button(customId('admin:roleSelector:deploy', selected.id), message ? '🔄 Update Panel' : '📨 Deploy Panel', ButtonStyle.Success, !selected.channelId || !selected.groupIds.length),
+        button(customId('admin:roleSelector:deploy', selected.id), message ? emojiLabel('REFRESH', 'Update Panel') : '📨 Deploy Panel', ButtonStyle.Success, !selected.channelId || !selected.groupIds.length),
         jump ? linkButton('↗️ Jump to Panel', jump) : null,
       ),
       row(
@@ -554,7 +554,7 @@ async function buildDeploymentContentPanel(i, deploymentId, groupId = null) {
       groupMenu(i.guildId, null, customId('admin:roleSelector:deploymentGroups', deployment.id), true, deployment.groupIds),
       deploymentGroupFilterMenu(i.guildId, deployment, groupId),
       groupId ? deploymentOptionMenu(i.guildId, deployment, groupId) : row(button('admin:roleSelector:deploymentContentHint', 'Select a group above to limit its roles', ButtonStyle.Secondary, true)),
-      row(button(customId('admin:roleSelector:deploymentOptionsAll', deployment.id, groupId || 'none'), '♻️ Use All Roles for Group', ButtonStyle.Secondary, !groupId)),
+      row(button(customId('admin:roleSelector:deploymentOptionsAll', deployment.id, groupId || 'none'), emojiLabel('UPDATE', 'Use All Roles for Group'), ButtonStyle.Secondary, !groupId)),
       row(button(customId('admin:roleSelector:deploymentOpen', deployment.id), emojiLabel('BACK', 'Back')), button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings'))),
     ],
   };
@@ -649,7 +649,7 @@ async function buildStatsDeploymentPanel(i) {
       `**Message:** ${message ? 'Deployed ✅' : 'Not deployed'}`, '',
       'Deploy a user-visible community leaderboard. Counts update in place; member names remain admin-only.',
     ].join('\n'))],
-    components: [row(menu), row(button('admin:roleSelector:statsDeploy', message ? '🔄 Update Stats Panel' : '📨 Deploy Stats Panel', ButtonStyle.Success, !deployment.channelId), jump ? linkButton('↗️ Jump to Panel', jump) : null), nav('admin:roleSelector:deployment', true)],
+    components: [row(menu), row(button('admin:roleSelector:statsDeploy', message ? emojiLabel('REFRESH', 'Update Stats Panel') : '📨 Deploy Stats Panel', ButtonStyle.Success, !deployment.channelId), jump ? linkButton('↗️ Jump to Panel', jump) : null), nav('admin:roleSelector:deployment', true)],
   };
 }
 
