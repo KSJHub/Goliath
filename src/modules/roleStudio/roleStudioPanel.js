@@ -2,11 +2,11 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
 } = require('discord.js');
 
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 const guildManager = require('../../core/guild/guildManager');
 const autoroles = require('./autoRoles/autoRoles');
 const timedRoles = require('./timedRoles/timedRoles');
@@ -18,11 +18,7 @@ const roleSelector = require('./roleSelector/roleSelector');
 const roleSelectorHealth = require('./roleSelector/roleSelectorHealth');
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components.filter(Boolean));
-const button = (customId, label, style = ButtonStyle.Primary, disabled = false) => new ButtonBuilder()
-  .setCustomId(customId)
-  .setLabel(label)
-  .setStyle(style)
-  .setDisabled(Boolean(disabled));
+const button = (customId, label, style = ButtonStyle.Primary, disabled = false) => navigationButton(customId, label, style, disabled);
 
 const statusLabel = (enabled) => enabled ? 'Enabled' : 'Disabled';
 const statusIcon = (enabled) => enabled ? '🟢' : '⏸️';
