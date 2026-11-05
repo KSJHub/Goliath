@@ -2469,6 +2469,21 @@ function welcomeEmbedDeliveryAudit() {
       assert(panel.includes(`function ${section}(`), `Missing Welcome panel: ${section}`);
     }
     assert(!panel.includes(".join('\\\\n')"), 'Welcome panels must use real line breaks, not literal backslash-n text.');
+    // Guard against missing Welcome emoji keys and hardcoded section icons.
+    const emojiRegistry = read('src/core/ui/emojis.js');
+    const registeredEmojiKeys = new Set([...emojiRegistry.matchAll(/^\s+([A-Z][A-Z_]+):\s*['"]/gm)].map(match => match[1]));
+    const welcomeEmojiKeys = [
+      ...panel.matchAll(/emojiLabel\(\s*['"]([A-Z][A-Z_]+)['"]/g),
+      ...panel.matchAll(/EMOJIS\.([A-Z][A-Z_]+)/g),
+    ].map(match => match[1]);
+    assert(panel.includes("require('../../../core/ui/emojis')"), 'Welcome panel must import the shared emoji registry.');
+    for (const key of welcomeEmojiKeys) {
+      assert(registeredEmojiKeys.has(key), 'Unknown Welcome emoji key: ' + key);
+    }
+    for (const heading of ['### 🗂️ Workspace', '### 🧩 Delivery', '### 🚦 Status', '### ➜ Next Step']) {
+      assert(!panel.includes(heading), 'Hardcoded Welcome section icon: ' + heading);
+    }
+
     // Each Discord message supports at most five component rows. Count the
     // row constructors in the seven Welcome builders, including conditional rows.
     const panelBoundaries=['async function buildWelcomePanel(', 'async function buildWelcomeSettingsPanel(', 'async function buildInstantPanel(', 'async function buildDmPanel(', 'function buildMentionSettingsPanel(', 'async function buildScheduledPanel(', 'async function buildWelcomeDeliverySettingsPanel(', 'function buildScheduledModal('];
