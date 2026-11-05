@@ -125,7 +125,7 @@ function buildLevelingEligibilityPanel(guild, memberDisplayName = 'Unknown User'
       .setTimestamp()],
     components: [
       row(
-        button('admin:giveaways:levelingEligibility:configure', '⚙️ Configure', ButtonStyle.Primary),
+        button('admin:giveaways:levelingEligibility:configure', emojiLabel('SETTINGS', 'Configure'), ButtonStyle.Primary),
         button('admin:giveaways:levelingEligibility:toggle', config.enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
         button('admin:giveaways:levelingEligibility:toggleActive', config.activeOnly ? '👤 Active Only' : '👥 Include Paused', ButtonStyle.Secondary),
       ),
