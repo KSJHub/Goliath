@@ -66,6 +66,16 @@ const EMOJIS = Object.freeze({
   INACTIVE: '⚪',
   SETUP_REQUIRED: '🟠',
   HEALTHY: '✅',
+  WELCOME_MENTIONS: '🔔',
+  WELCOME_CHANNEL: '📢',
+  WELCOME_PRESET: '📦',
+  WELCOME_CUSTOM: '🛠️',
+  WELCOME_EMBED: '💎',
+  WELCOME_INHERIT: '↩️',
+  WELCOME_PREVIEW: '👁️',
+  WELCOME_DIAGNOSTICS: '🩺',
+  WELCOME_EXPORT: '📤',
+  WELCOME_DISABLED: '🔴',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
