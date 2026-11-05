@@ -129,7 +129,14 @@ const MODULE_BY_KEY = Object.fromEntries((moduleAdminPanels.MODULE_CATALOG || []
 const STUDIO_BY_KEY = Object.fromEntries((moduleAdminPanels.STUDIO_CATALOG || []).map((entry) => [entry.key, entry]));
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (id, label, style = ButtonStyle.Primary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (id, label, style = ButtonStyle.Primary, disabled = false) => {
+  const component = new ButtonBuilder().setCustomId(id).setStyle(style).setDisabled(disabled);
+  const backPrefix = `${EMOJIS.BACK} `;
+  if (typeof label === 'string' && label.startsWith(backPrefix)) {
+    return component.setEmoji(EMOJIS.BACK).setLabel(label.slice(backPrefix.length));
+  }
+  return component.setLabel(label);
+};
 const getMemberDisplayName = (interaction) => interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
 const getGuildSection = (guildId, section, fallback) => guildManager.getGuildSection(guildId, section, fallback);
 const replaceGuildSection = (guildId, section, data) => guildManager.replaceGuildSection(guildId, section, data);
