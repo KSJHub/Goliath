@@ -844,7 +844,7 @@ async function handleVerificationCases(i) {
  if(confirm!=='confirm')return show({embeds:[new Discord.EmbedBuilder().setColor(0xed4245).setTitle('Confirm Verification Case Action').setDescription(`Member: <@${uid}>\nAction: **${action}**\nThis changes member security state and roles.`)],components:[row(button('mod_verification_case:'+uid+':'+action+':confirm','Confirm '+action,Discord.ButtonStyle.Danger),button('mod_verification_case:'+uid,'Cancel'))]});
  await i.deferUpdate();
  const result=await verificationQuarantine.resolveQuarantineCase(i.guild,uid,action,i.user.id,'Mod Hub Verification review');
- if(!result?.ok)return i.editReply({content:emojiLabel('ERROR', "")+String(result?.message||'Action failed'),embeds:[],components:[row(button('mod_verification_case:'+uid,'Back'))]});
+ if(!result?.ok)return i.editReply({content:EMOJIS.ERROR + ' ' + String(result?.message || 'Action failed'),embeds:[],components:[row(button('mod_verification_case:'+uid,'Back'))]});
  recordModerationSystemEvent({interaction:i,event:'moderation.verification_case_resolved',action,targetId:uid,reason:'Mod Hub Verification review'});
  return i.editReply({content:EMOJIS.SUCCESS+' '+String(result.message||'Verification case updated.'),embeds:[],components:[row(button('mod_dashboard:none:cases',emojiLabel('BACK', 'Back to Cases')))]});
 }
