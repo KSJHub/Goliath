@@ -297,7 +297,7 @@ async function buildSettingsPage(guild, memberDisplayName = 'Unknown User', noti
   return {
     embeds: [new EmbedBuilder()
       .setColor(!enabled ? 0x747f8d : health.healthy ? 0x57f287 : 0xfaa61a)
-      .setTitle('⚙️ Reaction Roles · Settings')
+      .setTitle(emojiLabel('SETTINGS', 'Reaction Roles · Settings'))
       .setDescription([
         noticeLine(notice), notice ? '' : null,
         `**Module:** ${enabled ? '🟢 Enabled' : '🔴 Disabled'}`,
@@ -311,7 +311,7 @@ async function buildSettingsPage(guild, memberDisplayName = 'Unknown User', noti
         button(enabled ? 'admin:reactionRoles:disable:confirm' : 'admin:reactionRoles:enable', enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
         button('admin:reactionRoles:repair', '🩺 Repair All', ButtonStyle.Secondary, !panels.length || !enabled),
       ),
-      row(button('admin:reactionRoles', '⬅️ Back to Reaction Roles')),
+      row(button('admin:reactionRoles', emojiLabel('BACK', 'Back to Reaction Roles'))),
     ],
   };
 }
@@ -320,7 +320,7 @@ function buildDisableConfirmation(guild) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(0xed4245)
-      .setTitle('⚠️ Disable Reaction Roles?')
+      .setTitle(emojiLabel('WARNING', 'Disable Reaction Roles?'))
       .setDescription(`Saved panels: \`${reactionRoles.listPanels(guild.id).length}\`\n\nAssignments stop, but panels, mappings and messages remain saved.`)],
     components: [row(
       button('admin:reactionRoles:disable:execute', 'Disable Reaction Roles', ButtonStyle.Danger),
@@ -378,7 +378,7 @@ function buildExistingMessageStep(guild, userId, notice = '') {
         .setMaxValues(1)),
       row(normalMessageSelect(draft)),
       row(
-        button('admin:reactionRoles:source:link', draft?.messageId ? '🔄 Paste Different Link' : '🔗 Paste Message Link', ButtonStyle.Primary),
+        button('admin:reactionRoles:source:link', draft?.messageId ? emojiLabel('REFRESH', 'Paste Different Link') : '🔗 Paste Message Link', ButtonStyle.Primary),
         button('admin:reactionRoles:source:continue', '🗺️ Mapping Builder', ButtonStyle.Success, !draft?.messageId),
       ),
       row(
@@ -424,7 +424,7 @@ function buildWizard(guild, userId, showRemove = false, notice = '', rolePage = 
         .setMaxValues(1)
     ));
   } else {
-    components.push(row(button('admin:reactionRoles:source', '🔄 Change Source Message')));
+    components.push(row(button('admin:reactionRoles:source', emojiLabel('REFRESH', 'Change Source Message'))));
   }
 
   const rolePicker = buildRolePicker(guild, {
@@ -448,7 +448,7 @@ function buildWizard(guild, userId, showRemove = false, notice = '', rolePage = 
     ),
     row(
       button(existing ? 'admin:reactionRoles:existing' : 'admin:reactionRoles', emojiLabel('BACK', 'Back')),
-      pageCount > 1 ? button(rolePickerCustomId('admin:reactionRoles:wizard:rolePage', 'page', Math.max(0, safePage - 1)), '⬅️ Roles', ButtonStyle.Secondary, safePage <= 0) : null,
+      pageCount > 1 ? button(rolePickerCustomId('admin:reactionRoles:wizard:rolePage', 'page', Math.max(0, safePage - 1)), emojiLabel('BACK', 'Roles'), ButtonStyle.Secondary, safePage <= 0) : null,
       pageCount > 1 ? button(`admin:reactionRoles:wizard:rolePageInfo:${safePage}`, `Page ${safePage + 1}/${pageCount}`, ButtonStyle.Secondary, true) : null,
       pageCount > 1 ? button(rolePickerCustomId('admin:reactionRoles:wizard:rolePage', 'page', Math.min(pageCount - 1, safePage + 1)), 'Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
       button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
@@ -503,7 +503,7 @@ async function buildManagedPanel(guild, panelId, notice = '') {
     components: [
       row(
         button(`admin:reactionRoles:manage:edit:${panelId}`, '✏️ Edit Mappings', ButtonStyle.Primary),
-        button(`admin:reactionRoles:manage:repair:${panelId}`, '🔄 Sync & Repair', ButtonStyle.Secondary, panel.enabled === false),
+        button(`admin:reactionRoles:manage:repair:${panelId}`, emojiLabel('REFRESH', 'Sync & Repair'), ButtonStyle.Secondary, panel.enabled === false),
         button(`admin:reactionRoles:manage:${panel.enabled === false ? 'enable' : 'disable'}:${panelId}`, panel.enabled === false ? '▶️ Enable Panel' : '⏸️ Disable Panel', panel.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary),
       ),
       row(
@@ -523,7 +523,7 @@ function buildDeleteConfirmation(guild, panelId) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(0xed4245)
-      .setTitle('⚠️ Remove Reaction-Role Panel?')
+      .setTitle(emojiLabel('WARNING', 'Remove Reaction-Role Panel?'))
       .setDescription([
         `**Panel:** ${panel.name}`,
         `**Channel:** <#${panel.channelId}>`,
