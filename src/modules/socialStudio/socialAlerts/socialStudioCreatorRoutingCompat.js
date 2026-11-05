@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -288,7 +289,7 @@ function creatorPlatformChannelsPayload(interaction) {
     platformSelect(selectedPlatform, `${P}channel:creator:platform:select`, 'Route this creator’s'),
     channelSelect(`${P}channel:creator:platform:route`, selectedChannel, `Choose ${creator.displayName || 'creator'} ${PLATFORM_LABEL[selectedPlatform]} channel`),
     row(button(`${P}channel:creator:platform:clear`, '↩️ Use Creator / Server Routing', ButtonStyle.Secondary, !selectedChannel)),
-    row(button(`${P}channel:creator:back`, '⬅️ Back')),
+    row(button(`${P}channel:creator:back`, emojiLabel('BACK', 'Back'))),
   ];
   return { embeds: [embed(config, '👤📱 Creator Platform Overrides', description, interaction)], components };
 }
