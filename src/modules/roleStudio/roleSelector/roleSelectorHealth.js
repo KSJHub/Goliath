@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -488,8 +489,8 @@ function statsGroupsMenu(guildId, deployment) {
 
 function statsNav(back = 'admin:roleSelector:deployment') {
   return statsRow(
-    statsButton(back, '⬅️ Back'),
-    statsButton('admin:roleSelector:settings', '⚙️ Settings'),
+    statsButton(back, emojiLabel('BACK', 'Back')),
+    statsButton('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings')),
   );
 }
 
