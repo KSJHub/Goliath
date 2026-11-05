@@ -5,40 +5,61 @@ const {
 } = require('discord.js');
 
 /**
- * GOLIATH UNIVERSAL NAVIGATION
- *
- * Every standard Goliath module page ends with:
- *
- *   ⬅️ Back | ⚙️ Settings
- *
- * Destinations remain module-specific.
+ * GOLIATH UNIVERSAL NAVIGATION & ACTION LABELS
+ * Discord owns native rendering; these definitions standardise emoji,
+ * labels and styles without changing existing interaction custom IDs.
+ * Keep destination IDs supplied by each module.
  */
-function navigationButton(customId, label) {
+const UI_ACTIONS = Object.freeze({
+  back: Object.freeze({ label: '⬅️ Back', style: ButtonStyle.Secondary }),
+  settings: Object.freeze({ label: '⚙️ Settings', style: ButtonStyle.Secondary }),
+  builder: Object.freeze({ label: '🛠️ Builder', style: ButtonStyle.Primary }),
+  panels: Object.freeze({ label: '🧩 Panels', style: ButtonStyle.Primary }),
+  presets: Object.freeze({ label: '💾 Presets', style: ButtonStyle.Primary }),
+  media: Object.freeze({ label: '🖼️ Media', style: ButtonStyle.Primary }),
+  testSend: Object.freeze({ label: '🧪 Test Send', style: ButtonStyle.Secondary }),
+  deploy: Object.freeze({ label: '🚀 Deploy', style: ButtonStyle.Success }),
+  update: Object.freeze({ label: '🧩 Update', style: ButtonStyle.Success }),
+  review: Object.freeze({ label: '📋 Review', style: ButtonStyle.Secondary }),
+});
+
+function navigationButton(customId, label, style = ButtonStyle.Secondary, disabled = false) {
   return new ButtonBuilder()
     .setCustomId(customId)
     .setLabel(label)
-    .setStyle(ButtonStyle.Secondary);
+    .setStyle(style)
+    .setDisabled(Boolean(disabled));
+}
+
+function actionButton(customId, action, options = {}) {
+  const definition = UI_ACTIONS[action];
+  if (!definition) throw new Error(`Unknown Goliath UI action: ${action}`);
+  const suffix = options.suffix == null ? '' : String(options.suffix);
+  return navigationButton(customId, `${definition.label}${suffix}`, definition.style, options.disabled);
+}
+
+function paginationButtons(kind, previousId, nextId, options = {}) {
+  const noun = kind === 'channel' ? 'Chan' : kind === 'role' ? 'Roles' : null;
+  if (!noun) throw new Error('Pagination kind must be channel or role');
+  return [
+    navigationButton(previousId, `◀ ${noun}`, ButtonStyle.Secondary, options.previousDisabled),
+    navigationButton(nextId, `${noun} ▶`, ButtonStyle.Secondary, options.nextDisabled),
+  ];
 }
 
 function goliathNavigation(backId, settingsId) {
-  if (!backId) {
-    throw new Error(
-      'goliathNavigation requires a Back destination.',
-    );
-  }
-
-  if (!settingsId) {
-    throw new Error(
-      'goliathNavigation requires a Settings destination.',
-    );
-  }
-
+  if (!backId) throw new Error('goliathNavigation requires a Back destination.');
+  if (!settingsId) throw new Error('goliathNavigation requires a Settings destination.');
   return new ActionRowBuilder().addComponents(
-    navigationButton(backId, '⬅️ Back'),
-    navigationButton(settingsId, '⚙️ Settings'),
+    actionButton(backId, 'back'),
+    actionButton(settingsId, 'settings'),
   );
 }
 
 module.exports = {
+  UI_ACTIONS,
+  navigationButton,
+  actionButton,
+  paginationButtons,
   goliathNavigation,
 };
