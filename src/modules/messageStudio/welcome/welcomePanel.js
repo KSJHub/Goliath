@@ -78,6 +78,11 @@ function saveCustomWelcome(interaction,scope){
   const field=id=>interaction.fields.getTextInputValue(id).trim();
   const content=field('content'),title=field('title'),description=field('description'),footer=field('footer'),color=field('color')||'#5865F2';
   if(!content&&!title&&!description)throw new Error('Add message text, an embed title, or an embed description.');
+  if(content.length>1800)throw new Error('Message text must be 1800 characters or fewer.');
+  if(title.length>256)throw new Error('Embed title must be 256 characters or fewer.');
+  if(description.length>3500)throw new Error('Embed description must be 3500 characters or fewer.');
+  if(footer.length>200)throw new Error('Embed footer must be 200 characters or fewer.');
+  if(title.length+description.length+footer.length>6000)throw new Error('Combined embed text exceeds Discord’s 6000-character limit.');
   if(!/^#[0-9a-fA-F]{6}$/.test(color))throw new Error('Embed colour must be a six-digit hex value such as #5865F2.');
   const guildId=interaction.guild.id,slot=scope==='dm'?'dm_welcome':'welcome',templateId=customTemplateId(scope);
   const existing=embedTemplateManager.getTemplate(guildId,templateId);
