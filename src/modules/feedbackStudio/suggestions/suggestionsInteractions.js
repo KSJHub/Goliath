@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -164,11 +165,11 @@ function buildOverviewPanel(guild, memberName) {
       ),
       row(
         button('admin:suggestions:destinations', '📬 Outcomes & Logs', ButtonStyle.Primary),
-        button('admin:suggestions:settings', '⚙️ Settings', ButtonStyle.Secondary),
+        button('admin:suggestions:settings', emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
       ),
       row(
         publishButton,
-        button('admin:modules', '⬅️ Back', ButtonStyle.Secondary),
+        button('admin:modules', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
       ),
     ],
   };
