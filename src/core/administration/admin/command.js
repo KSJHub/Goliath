@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS, emojiLabel } = require('../../ui/emojis');
 
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, ModalBuilder,
@@ -67,9 +68,9 @@ function lockdownSlowmode(state) {
   return ({ critical: '6 hours', high: '1 hour', medium: '10 minutes', low: '1 minute' })[severity] || 'Lockdown managed';
 }
 function navRow(backId, refreshId = null, settingsId = SETTINGS_ID) {
-  const buttons = [new ButtonBuilder().setCustomId(backId).setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary)];
+  const buttons = [new ButtonBuilder().setCustomId(backId).setLabel('Back').setEmoji(EMOJIS.BACK).setStyle(ButtonStyle.Secondary)];
   buttons.push(new ButtonBuilder().setCustomId(settingsId).setLabel('Settings').setEmoji('🔧').setStyle(ButtonStyle.Secondary));
-  if (refreshId) buttons.push(new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary));
+  if (refreshId) buttons.push(new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji(EMOJIS.REFRESH).setStyle(ButtonStyle.Secondary));
   return new ActionRowBuilder().addComponents(buttons);
 }
 
@@ -99,9 +100,9 @@ function buildSettingsPanel(interaction, backId = SETTINGS_BACK_ID) {
   const authority = adminPanel.getAuthorityConfig(interaction.guild.id);
   const configuredLogs = Object.values(adminPanel.LOG_TYPES || {}).filter((entry) => adminPanel.getLogChannelId(interaction.guild.id, entry.key)).length;
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ Goliath Settings').setDescription('General server-level Goliath configuration and administration defaults.')
-    .addFields({ name: 'Server', value: `${interaction.guild.name}\n\`${interaction.guild.id}\``, inline: true }, { name: 'Authority', value: authority.configured ? 'Configured ✅' : 'Legacy fallback ⚠️', inline: true }, { name: 'Log Channels', value: `${configuredLogs}/5 configured`, inline: true })
+    .addFields({ name: 'Server', value: `${interaction.guild.name}\n\`${interaction.guild.id}\``, inline: true }, { name: 'Authority', value: authority.configured ? `Configured ${EMOJIS.SUCCESS}` : `Legacy fallback ${EMOJIS.WARNING}`, inline: true }, { name: 'Log Channels', value: `${configuredLogs}/5 configured`, inline: true })
     .setFooter({ text: `Requested by ${memberDisplayName(interaction)}` }).setTimestamp();
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(backId).setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary))] };
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(backId).setLabel('Back').setEmoji(EMOJIS.BACK).setStyle(ButtonStyle.Secondary))] };
 }
 
 function buildSecurityHub(interaction) {
@@ -147,8 +148,8 @@ function buildSecurityReleasePanel(interaction, target, snapshot) { const embed 
 function buildSecurityReleaseModal(target) { return new ModalBuilder().setCustomId(`admin:security-isolation:release-submit:${target.id}`).setTitle('Clear Full Security Isolation').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Release reason').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(2).setMaxLength(500)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirmation').setLabel('Type RELEASE SECURITY to confirm').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(16).setMaxLength(16))); }
 function fieldValue(interaction, key) { try { return String(interaction.fields?.getTextInputValue?.(key) || '').trim(); } catch { return ''; } }
 function rootAdminPanel(interaction) { return addAdminControls(adminPanel.buildAdminPanel(interaction.guild, memberDisplayName(interaction), interaction), interaction); }
-async function denyOwnerSecurity(interaction) { const payload = { content: '❌ Full Security Isolation is restricted to the Discord server owner.', flags: 64 }; if (interaction.replied || interaction.deferred) await interaction.editReply(payload).catch(() => null); else await interaction.reply(payload).catch(() => null); return true; }
-async function denyServerSecurity(interaction) { const payload = { content: '❌ You do not have permission to use the Security Hub.', flags: 64 }; if (interaction.replied || interaction.deferred) await interaction.editReply(payload).catch(() => null); else await interaction.reply(payload).catch(() => null); return true; }
+async function denyOwnerSecurity(interaction) { const payload = { content: emojiLabel('ERROR', 'Full Security Isolation is restricted to the Discord server owner.'), flags: 64 }; if (interaction.replied || interaction.deferred) await interaction.editReply(payload).catch(() => null); else await interaction.reply(payload).catch(() => null); return true; }
+async function denyServerSecurity(interaction) { const payload = { content: emojiLabel('ERROR', 'You do not have permission to use the Security Hub.'), flags: 64 }; if (interaction.replied || interaction.deferred) await interaction.editReply(payload).catch(() => null); else await interaction.reply(payload).catch(() => null); return true; }
 async function fetchSecurityTarget(interaction, targetId) { if (!targetId) return null; return interaction.guild.members.cache.get(String(targetId)) || interaction.guild.members.fetch(String(targetId)).catch(() => null); }
 
 async function handleSettingsInteraction(interaction) {
@@ -161,7 +162,7 @@ async function handleSettingsInteraction(interaction) {
   };
   if (!Object.hasOwn(origins, id) && ![SETTINGS_BACK_ID, SECURITY_SETTINGS_BACK_ID, RESTRICTIONS_SETTINGS_BACK_ID, ISOLATION_SETTINGS_BACK_ID].includes(id)) return false;
   if (!canUseSettings(interaction)) {
-    await interaction.reply({ content: '❌ You do not have permission to open Goliath Settings.', flags: 64 }).catch(() => null);
+    await interaction.reply({ content: emojiLabel('ERROR', 'You do not have permission to open Goliath Settings.'), flags: 64 }).catch(() => null);
     return true;
   }
   if (Object.hasOwn(origins, id)) {
