@@ -2,9 +2,10 @@
 const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
+  ActionRowBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
   EmbedBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const counting = require('./counting');
 const countingHealth = require('./countingHealth');
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
@@ -12,7 +13,7 @@ const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guild
 const PREFIX = 'admin:module:counting';
 const PANEL_COLOR = 0x2f80ed;
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Primary, disabled = false) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (customId, label, style = ButtonStyle.Primary, disabled = false) => navigationButton(customId, label, style, disabled);
 const displayName = (interaction) => interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
 
 function formatTurnLimit(value) {
