@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   EmbedBuilder,
@@ -28,9 +28,9 @@ const formatChannel = (id) => id ? `<#${id}>` : '*Not set*';
 const formatRoles = (ids = []) => Array.isArray(ids) && ids.filter(Boolean).length ? ids.filter(Boolean).map((id) => `<@&${id}>`).join(', ') : '*None selected*';
 
 function statusEmoji(status) {
-  if (status === 'approved') return '✅';
+  if (status === 'approved') return EMOJIS.SUCCESS;
   if (status === 'implemented') return '🚀';
-  if (status === 'denied') return '❌';
+  if (status === 'denied') return EMOJIS.ERROR;
   if (status === 'discussing') return '💬';
   return '💡';
 }
@@ -289,8 +289,8 @@ function buildMySuggestionsPayload(guildId, userId, page = 0) {
   return {
     embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 My Suggestions').setDescription([
       'Follow the progress of ideas you have shared.', '',
-      `💡 Open: **${counts.pending}** · 💬 Discussing: **${counts.discussing}** · ✅ Approved: **${counts.approved}**`,
-      `🚀 Implemented: **${counts.implemented}** · ❌ Declined: **${counts.denied}**`, '', ...lines, '',
+      `💡 Open: **${counts.pending}** · 💬 Discussing: **${counts.discussing}** · ${EMOJIS.SUCCESS} Approved: **${counts.approved}**`,
+      `🚀 Implemented: **${counts.implemented}** · ${EMOJIS.ERROR} Declined: **${counts.denied}**`, '', ...lines, '',
       `Page **${safePage + 1} of ${totalPages}** · **${records.length}** total`,
     ].join('\n')).setFooter({ text: 'Only you can see this.' }).setTimestamp()],
     components, flags: MessageFlags.Ephemeral,
@@ -345,10 +345,10 @@ function buildReviewModal(suggestionId, action) {
 function overviewDescription(section, enabled) {
   return [
     'Manage how ideas are submitted, discussed, decided and logged.', '',
-    `**Suggestions:** ${enabled ? 'On ✅' : 'Off ❌'}`, '',
+    `**Suggestions:** ${enabled ? `On ${EMOJIS.SUCCESS}` : `Off ${EMOJIS.ERROR}`}`, '',
     '**Channels**', `• Public suggestions: ${formatChannel(section.submitChannelId)}`, `• Team discussion: ${formatChannel(section.reviewChannelId)}`, `• Audit log: ${formatChannel(section.logChannelId)}`, '',
     '**Management team**', `• ${formatRoles(section.reviewerRoleIds)}`, '',
-    '**Member options**', `• Community voting: ${section.voting !== false ? 'On ✅' : 'Off ❌'}`, `• Management review: ${section.requireReview !== false ? 'On ✅' : 'Off ❌'}`, `• Hide member names publicly: ${section.anonymous === true ? 'On ✅' : 'Off ❌'}`, '',
+    '**Member options**', `• Community voting: ${section.voting !== false ? `On ${EMOJIS.SUCCESS}` : `Off ${EMOJIS.ERROR}`}`, `• Management review: ${section.requireReview !== false ? `On ${EMOJIS.SUCCESS}` : `Off ${EMOJIS.ERROR}`}`, `• Hide member names publicly: ${section.anonymous === true ? `On ${EMOJIS.SUCCESS}` : `Off ${EMOJIS.ERROR}`}`, '',
     '**Activity**', `• ${section.analytics.submitted} submitted · ${section.analytics.discussing} discussing · ${section.analytics.approved} approved`, `• ${section.analytics.implemented} implemented · ${section.analytics.denied} declined`,
   ].join('\n');
 }
