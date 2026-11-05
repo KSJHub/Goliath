@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -764,7 +765,7 @@ function buildAppealDetailPayload(modCase, appeal) {
     components.push(new ActionRowBuilder().addComponents(actions));
   }
   components.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('📁 View Case').setStyle(ButtonStyle.Secondary)
   ));
   const footer = `Case #${modCase.caseId} • Appeal ${pending ? 'Pending' : appeal.status === 'approved' ? 'Approved' : 'Denied'}`;
@@ -815,7 +816,7 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
     new ButtonBuilder().setCustomId(`mod_case_appeal_queue:${activeToken}:${Math.min(totalPages - 1, page + 1)}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1)
   ));
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('mod_dashboard:none:analytics').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('mod_dashboard:none:analytics').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`mod_case_appeal_queue_refresh:${activeToken}:${page}`).setLabel('🔄 Refresh').setStyle(ButtonStyle.Secondary)
   ));
   return { embeds: [embed], components: rows };
