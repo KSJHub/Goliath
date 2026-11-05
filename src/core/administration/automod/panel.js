@@ -57,7 +57,14 @@ const DEFAULT_DM_MESSAGES = {
 };
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (id, label, style = ButtonStyle.Primary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (id, label, style = ButtonStyle.Primary, disabled = false) => {
+  const component = new ButtonBuilder().setCustomId(id).setStyle(style).setDisabled(disabled);
+  const backPrefix = `${EMOJIS.BACK} `;
+  if (typeof label === 'string' && label.startsWith(backPrefix)) {
+    return component.setEmoji(EMOJIS.BACK).setLabel(label.slice(backPrefix.length));
+  }
+  return component.setLabel(label);
+};
 const getMemberDisplayName = (interaction) => interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
 const status = (value) => value ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`;
 const canUseAutoMod = (interaction) => Boolean(
