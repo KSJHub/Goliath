@@ -283,7 +283,11 @@ function getPreviewTemplate(guildId,userId,scope){
   const config=welcome.getWelcomeSection(guildId);
   const state=getSelection(guildId,userId,scope);
   const source=state.source||(scope==='dm'?config.dmMessageSource:config.messageSource);
-  if(source==='embedStudio'&&state.source==='embedStudio'&&!state.templateId)throw new Error('Choose an Embed Studio message before previewing.');
+  if(source==='embedStudio'&&state.source==='embedStudio'&&!state.templateId){
+    const savedSource=scope==='dm'?config.dmMessageSource:config.messageSource;
+    const savedTemplateId=scope==='dm'?config.dmTemplateId:config.templateId;
+    if(savedSource!=='embedStudio'||!savedTemplateId)throw new Error('Choose an Embed Studio message before previewing.');
+  }
   if(source==='embedStudio'&&state.templateId){
     const selected=embedTemplateManager.getTemplate(guildId,state.templateId);
     if(!selected)throw new Error('Selected Embed Studio message is unavailable.');
