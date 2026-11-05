@@ -3286,7 +3286,7 @@ function buildMediaManagerPanel(
     new ActionRowBuilder().addComponents(
       mediaButton(
         "embed:builder",
-        "⬅️ Back"
+        emojiLabel("BACK", "Back")
       ),
     )
   );
