@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -962,16 +963,16 @@ function buildEditorPanel(i, who = "Unknown User") {
           .setEmoji("⬅️")
           .setStyle(ButtonStyle.Secondary),
 
-        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+        new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
 
         new ButtonBuilder()
           .setCustomId("embed:channel-prev")
-          .setLabel("◀ Chan")
+          .setLabel(emojiLabel('CHANNEL_PREVIOUS', 'Chan'))
           .setStyle(ButtonStyle.Secondary),
 
         new ButtonBuilder()
           .setCustomId("embed:channel-next")
-          .setLabel("Chan ▶")
+          .setLabel(emojiLabel('CHANNEL_NEXT', 'Chan', { position: 'after' }))
           .setStyle(ButtonStyle.Secondary)
       ),
     ],
@@ -1431,9 +1432,9 @@ function buildPanelsPanel(i, who) {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("embed:builder")
-          .setLabel("⬅️ Back")
+          .setLabel(emojiLabel('BACK', 'Back'))
           .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+        new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
         new ButtonBuilder()
           .setCustomId("embed:helpers")
           .setLabel("📖 Variables")
@@ -1471,9 +1472,9 @@ function buildFieldsPanel(i, who) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("embed:builder")
-        .setLabel("⬅️ Back")
+        .setLabel(emojiLabel('BACK', 'Back'))
         .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+      new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
         .setLabel("📖 Variables")
@@ -1605,9 +1606,9 @@ function buildFieldsManagerPanel(interaction) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("embed:builder")
-        .setLabel("⬅️ Back")
+        .setLabel(emojiLabel('BACK', 'Back'))
         .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+      new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
         .setLabel("📖 Variables")
@@ -1646,9 +1647,9 @@ function buildButtonsPanel(i, who) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("embed:builder")
-        .setLabel("⬅️ Back")
+        .setLabel(emojiLabel('BACK', 'Back'))
         .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+      new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
         .setLabel("📖 Variables")
@@ -1758,9 +1759,9 @@ function buildButtonsManagerPanel(interaction) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("embed:builder")
-        .setLabel("⬅️ Back")
+        .setLabel(emojiLabel('BACK', 'Back'))
         .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+      new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
       new ButtonBuilder()
         .setCustomId("embed:helpers")
         .setLabel("📖 Variables")
@@ -1848,7 +1849,7 @@ function buildButtonOptionsPanel(interaction) {
     ));
   }
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:button-options-back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("embed:button-options-back").setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
   ));
 
   // Back navigation is structural and must never be removed by
@@ -2185,7 +2186,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("embed:back")
-        .setLabel("⬅️ Back")
+        .setLabel(emojiLabel('BACK', 'Back'))
         .setStyle(ButtonStyle.Secondary)
     )
   );
@@ -2417,9 +2418,9 @@ function buildHelpersPanel(i) {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("embed:builder")
-          .setLabel("⬅️ Back")
+          .setLabel(emojiLabel('BACK', 'Back'))
           .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+        new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
       )
     ],
   };
@@ -2724,10 +2725,10 @@ function buildContentManagerPanel(interaction) {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("embed:builder")
-          .setLabel("⬅️ Back")
+          .setLabel(emojiLabel('BACK', 'Back'))
           .setStyle(ButtonStyle.Secondary),
 
-        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+        new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
 
         new ButtonBuilder()
           .setCustomId("embed:helpers")
@@ -2766,9 +2767,9 @@ function buildAppearancePanel(interaction) {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("embed:builder")
-          .setLabel("⬅️ Back")
+          .setLabel(emojiLabel('BACK', 'Back'))
           .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:settings").setLabel("⚙️ Settings").setStyle(ButtonStyle.Secondary).setDisabled(false),
+        new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
         new ButtonBuilder()
           .setCustomId("embed:helpers")
           .setLabel("📖 Variables")
@@ -2800,7 +2801,7 @@ function buildAppearanceIconPanel(interaction, kind) {
         new ButtonBuilder().setCustomId(`embed:appearance-icon-clear:${kind}`).setLabel("🗑️ Clear").setStyle(ButtonStyle.Danger).setDisabled(!raw),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:content-back").setLabel("⬅️ Back").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId("embed:content-back").setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId("embed:helpers").setLabel("📖 Variables").setStyle(ButtonStyle.Secondary),
       ),
     ],
@@ -3536,7 +3537,7 @@ function buildThumbnailOptionsPanel(
               .setCustomId(
                 "embed:thumbnail-back"
               )
-              .setLabel("⬅️ Back")
+              .setLabel(emojiLabel('BACK', 'Back'))
               .setStyle(
                 ButtonStyle.Secondary
               )
@@ -3864,7 +3865,7 @@ function buildMediaAlignmentPanel(ctx) {
           .setCustomId(
             "embed:media-alignments-back"
           )
-          .setLabel("⬅️ Back")
+          .setLabel(emojiLabel('BACK', 'Back'))
           .setStyle(
             ButtonStyle.Secondary
           )
