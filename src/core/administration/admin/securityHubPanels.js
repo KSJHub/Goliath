@@ -243,8 +243,8 @@ function buildRecoveryPanel(interaction) {
       { name: 'Recovery Actions', value: 'Restriction Recovery can end lockdown, restore invites, restore roles, or run confirmed Restore All. Member Recovery remains owner-only and preserves containment separation.', inline: false },
     );
   return { embeds: [embed], components: [managementRow([
-    { customId: 'admin:server-security', label: 'Restriction Recovery', emoji: '🧰' },
-    { customId: 'admin:security-isolation', label: 'Member Recovery', emoji: '👤', style: ButtonStyle.Secondary, disabled: interaction.guild?.ownerId !== interaction.user?.id },
+    { customId: 'admin:server-security', label: 'Restriction Recovery', emoji: EMOJIS.TOOLS },
+    { customId: 'admin:security-isolation', label: 'Member Recovery', emoji: EMOJIS.USER, style: ButtonStyle.Secondary, disabled: interaction.guild?.ownerId !== interaction.user?.id },
   ]), nav(REFRESH.recovery)] };
 }
 
