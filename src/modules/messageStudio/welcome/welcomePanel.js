@@ -14,7 +14,14 @@ const embedTemplateManager = require('../embed/embedTemplates');
 
 const selections = new Map();
 function row(...components){return new ActionRowBuilder().addComponents(...components.filter(Boolean));}
-function button(customId,label,style=ButtonStyle.Secondary,disabled=false){return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style).setDisabled(Boolean(disabled));}
+function button(customId,label,style=ButtonStyle.Secondary,disabled=false){
+  const component = new ButtonBuilder().setCustomId(customId).setStyle(style).setDisabled(Boolean(disabled));
+  const backPrefix = `${EMOJIS.BACK} `;
+  if (typeof label === 'string' && label.startsWith(backPrefix)) {
+    return component.setEmoji(EMOJIS.BACK).setLabel(label.slice(backPrefix.length));
+  }
+  return component.setLabel(label);
+}
 function displayName(interaction){return interaction.member?.displayName||interaction.user?.username||'Unknown User';}
 function selectionKey(guildId,userId,scope='public'){return `${guildId}:${userId}:${scope}`;}
 function getSelection(guildId,userId,scope='public'){return selections.get(selectionKey(guildId,userId,scope))||{};}
