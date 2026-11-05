@@ -53,6 +53,8 @@ const EMOJIS = Object.freeze({
   ISOLATION: '🚨',
   AUTOMOD: '🤖',
   VERIFICATION: '🛂',
+  SECURITY: '🛡️',
+  RISK: '🎯',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
