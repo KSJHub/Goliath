@@ -698,7 +698,7 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
     .setFooter({ text: `Appeal history • Page ${page + 1}/${totalPages}` });
   if (!entries.length) embed.addFields({ name: '📭 No Appeals', value: 'No appeals have been recorded for this case.', inline: false });
   for (const appeal of entries) {
-    const status = appeal.status === 'approved' ? '✅ Approved' : appeal.status === 'denied' ? '❌ Denied' : '⏳ Pending Review';
+    const status = appeal.status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : appeal.status === 'denied' ? emojiLabel('ERROR', 'Denied') : '⏳ Pending Review';
     const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:R>` : 'Unknown';
     const lines = [
       `**Member:** <@${appeal.appellantId}>  •  **Submitted:** ${submitted}`,
@@ -708,8 +708,8 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
     if (appeal.requestedResolution) lines.push(`**Requested Outcome:** ${String(appeal.requestedResolution).replace(/\s+/g, ' ').slice(0, 120)}`);
     if (appeal.reviewedBy) lines.push(`**Reviewed By:** <@${appeal.reviewedBy}>${appeal.reviewedAt ? ` • <t:${getCaseTimestamp(appeal.reviewedAt)}:R>` : ''}`);
     if (appeal.reviewNote) lines.push(`\n**📋 Review Rationale**\n${String(appeal.reviewNote).replace(/\s+/g, ' ').slice(0, 150)}`);
-    if (appeal.remedy) lines.push(`\n**🔄 Appeal Remedy:** ${appeal.remedy.ok ? '✅ Completed' : '⚠️ Requires attention'}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').replace(/\s+/g, ' ').slice(0, 150)}`);
-    if (appeal.notification) lines.push(`**📨 Member Notification:** ${appeal.notification.sent ? '✅ Sent' : '⚠️ Not delivered'}`);
+    if (appeal.remedy) lines.push(`\n**🔄 Appeal Remedy:** ${appeal.remedy.ok ? emojiLabel('SUCCESS', 'Completed') : emojiLabel('WARNING', 'Requires attention')}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').replace(/\s+/g, ' ').slice(0, 150)}`);
+    if (appeal.notification) lines.push(`**📨 Member Notification:** ${appeal.notification.sent ? emojiLabel('SUCCESS', 'Sent') : emojiLabel('WARNING', 'Not delivered')}`);
     embed.addFields({ name: `⚖️ Appeal • ${status}`, value: lines.join('\n').slice(0, 1024), inline: false });
   }
   const components = [];
@@ -728,7 +728,7 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
 }
 function buildAppealDetailPayload(modCase, appeal) {
   const pending = appeal.status === 'pending';
-  const status = pending ? '⏳ Pending Review' : appeal.status === 'approved' ? '✅ Approved' : '❌ Denied';
+  const status = pending ? '⏳ Pending Review' : appeal.status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : emojiLabel('ERROR', 'Denied');
   const originalAction = String(modCase.action || 'case').toUpperCase();
   const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:f>` : 'Unknown';
   const reviewed = appeal.reviewedAt ? `<t:${getCaseTimestamp(appeal.reviewedAt)}:f>` : 'Not reviewed';
@@ -748,8 +748,8 @@ function buildAppealDetailPayload(modCase, appeal) {
     );
   if (appeal.remedy || appeal.notification) {
     const details = [];
-    if (appeal.remedy) details.push(`**Appeal Remedy:** ${appeal.remedy.ok ? '✅ Completed' : '⚠️ Requires attention'}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').slice(0, 450)}`);
-    if (appeal.notification) details.push(`**Member Notification:** ${appeal.notification.sent ? '✅ Sent' : '⚠️ Not delivered'}${!appeal.notification.sent && appeal.notification.error ? `\n${String(appeal.notification.error).slice(0, 150)}` : ''}`);
+    if (appeal.remedy) details.push(`**Appeal Remedy:** ${appeal.remedy.ok ? emojiLabel('SUCCESS', 'Completed') : emojiLabel('WARNING', 'Requires attention')}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').slice(0, 450)}`);
+    if (appeal.notification) details.push(`**Member Notification:** ${appeal.notification.sent ? emojiLabel('SUCCESS', 'Sent') : emojiLabel('WARNING', 'Not delivered')}${!appeal.notification.sent && appeal.notification.error ? `\n${String(appeal.notification.error).slice(0, 150)}` : ''}`);
     embed.addFields({ name: '🔄 Resolution & Notification', value: details.join('\n\n').slice(0, 1024), inline: false });
   }
   const proceedingExecution = modCase.action === 'case' ? modCase.metadata?.proceeding?.sanctionExecution : null;
@@ -761,7 +761,7 @@ function buildAppealDetailPayload(modCase, appeal) {
       new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`).setLabel(emojiLabel('SUCCESS', 'Approve Appeal')).setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`).setLabel(emojiLabel('ERROR', 'Deny Appeal')).setStyle(ButtonStyle.Danger)
     );
-    if (canRetryRemedy) actions.push(new ButtonBuilder().setCustomId(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`).setLabel('🔄 Retry Appeal Remedy').setStyle(ButtonStyle.Primary));
+    if (canRetryRemedy) actions.push(new ButtonBuilder().setCustomId(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`).setLabel(emojiLabel('REFRESH', 'Retry Appeal Remedy')).setStyle(ButtonStyle.Primary));
     components.push(new ActionRowBuilder().addComponents(actions));
   }
   components.push(new ActionRowBuilder().addComponents(
@@ -803,7 +803,7 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
   const statusRow = new ActionRowBuilder().addComponents(
     ...['pending', 'approved', 'denied', 'all'].map(status => new ButtonBuilder()
       .setCustomId(`mod_case_appeal_queue_status:${activeToken}:${status}`)
-      .setLabel(status === 'all' ? '📋 All' : status === 'pending' ? '📥 Pending' : status === 'approved' ? '✅ Approved' : '❌ Denied')
+      .setLabel(status === 'all' ? '📋 All' : status === 'pending' ? '📥 Pending' : status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : emojiLabel('ERROR', 'Denied'))
       .setStyle(normalizedStatus === status ? ButtonStyle.Primary : ButtonStyle.Secondary))
   );
   const rows = [statusRow];
