@@ -1,5 +1,5 @@
-const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
 const starboardStore = require('./starboardStore');
