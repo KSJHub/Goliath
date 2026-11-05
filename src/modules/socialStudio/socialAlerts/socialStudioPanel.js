@@ -681,9 +681,9 @@ function buildCreatorPanel(i, config, creators) {
 
 function buildAccountEditPanel(i, config, creator, account) {
   const supported = supportedAlerts(account.platform), alerts = Array.isArray(account.alertTypes) ? account.alertTypes : supported, s = account.state || {}, components = [];
-  const actions = [btn(`${P}account:check:${account.accountId}`, '🔄 Check Now', ButtonStyle.Secondary), btn(`${P}account:change`, '📝 Edit'), btn(`${P}account:move`, '↪️ Move Account')]; if (account.profileUrl && /^https?:\/\//i.test(account.profileUrl)) actions.push(linkBtn(account.profileUrl, '🔗 Open Profile')); components.push(row(...actions.slice(0, 5))); components.push(row(btn(`${P}account:toggle`, account.enabled === false ? '▶️ Resume' : '⏸️ Pause', account.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}account:delete`, '🗑️ Delete', ButtonStyle.Danger)));
+  const actions = [btn(`${P}account:check:${account.accountId}`, emojiLabel('REFRESH', 'Check Now'), ButtonStyle.Secondary), btn(`${P}account:change`, '📝 Edit'), btn(`${P}account:move`, '↪️ Move Account')]; if (account.profileUrl && /^https?:\/\//i.test(account.profileUrl)) actions.push(linkBtn(account.profileUrl, '🔗 Open Profile')); components.push(row(...actions.slice(0, 5))); components.push(row(btn(`${P}account:toggle`, account.enabled === false ? '▶️ Resume' : '⏸️ Pause', account.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}account:delete`, '🗑️ Delete', ButtonStyle.Danger)));
   components.push(row(
-    btn(`${P}accounts`, '⬅️ Accounts'),
+    btn(`${P}accounts`, emojiLabel('BACK', 'Accounts')),
     btn(`${P}creators`, '👥 Creators'),
     btn(`${P}settings`, emojiLabel('SETTINGS', 'Settings')),
   ));
@@ -708,7 +708,7 @@ function buildProfileManagePanel(i, config, creator) {
   const d = [`👤 **${creator.displayName}**`, '', '**Profile**', `Status: ${creator.enabled === false ? '⏸️ Paused' : '🟢 Monitoring'}`, `Group / Team: ${creator.group || 'Not set'}`, `Tags: ${creator.tags?.length ? creator.tags.join(', ') : 'None'}`, `Profile Notes: ${creator.notes || 'None'}`,
     `\u{1F512} Admin Notes: ${creator.adminNotes || 'None'}`].join('\n');
   const components = [
-    row(btn(`${P}creator:edit`, '📝 Edit Profile'), btn(`${P}creator:clear`, '🔄 Clear'), btn(`${P}creator:profile:toggle`, creator.enabled === false ? '▶️ Resume' : '⏸️ Pause', creator.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}creator:delete`, '🗑️ Delete', ButtonStyle.Danger)),
+    row(btn(`${P}creator:edit`, '📝 Edit Profile'), btn(`${P}creator:clear`, emojiLabel('REFRESH', 'Clear')), btn(`${P}creator:profile:toggle`, creator.enabled === false ? '▶️ Resume' : '⏸️ Pause', creator.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}creator:delete`, '🗑️ Delete', ButtonStyle.Danger)),
     goliathNavigation(
       `${P}creators`,
       `${P}settings`,
@@ -725,7 +725,7 @@ function buildAccountManagePanel(i, config, creator) {
   components.push(row(
     btn(`${P}account:new`, '➕ Add Account', ButtonStyle.Success),
     btn(`${P}account:change`, '📝 Edit Account', ButtonStyle.Secondary, !active),
-    btn(`${P}account:reset`, '🔄 Clear', ButtonStyle.Secondary, !active),
+    btn(`${P}account:reset`, emojiLabel('REFRESH', 'Clear'), ButtonStyle.Secondary, !active),
     btn(`${P}account:delete`, '🗑️ Delete', ButtonStyle.Danger, !active),
   ));
   components.push(goliathNavigation(
@@ -788,7 +788,7 @@ function buildTemplatePanel(i, config, type) {
   return {
     embeds: [embed(config, `${ALERT_EMOJI[type] || '🔔'} ${ALERT_LABEL[type] || type} Template`, d, who(i))],
     components: [
-      row(btn(`${P}template:edit:${type}`, '📝 Edit Template', ButtonStyle.Primary), btn(`${P}template:reset:${type}`, '🔄 Reset to Default', ButtonStyle.Secondary, !changed)),
+      row(btn(`${P}template:edit:${type}`, '📝 Edit Template', ButtonStyle.Primary), btn(`${P}template:reset:${type}`, emojiLabel('REFRESH', 'Reset to Default'), ButtonStyle.Secondary, !changed)),
       goliathNavigation(
       `${P}templates`,
       `${P}settings`,
@@ -832,11 +832,11 @@ if (name === 'templates') {
     const c = [row(...templateButtons.slice(0, 5)), row(...templateButtons.slice(5)), row(
       btn(`${P}main`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
       btn(`${P}settings`, emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
-      btn(`${P}variables`, '🧩 Variables', ButtonStyle.Secondary),
+      btn(`${P}variables`, emojiLabel('PANELS', 'Variables'), ButtonStyle.Secondary),
     )];
     return { embeds: [embed(config, '🎨 Alert Templates', 'Edit the headline and main message for each Social Studio post. The bot keeps the layout consistent with channel links, status, metadata, thumbnails, media previews, platform colours and footer details.\n\nUse **🧩 Variables** for the complete helper list.', who(i))], components: c };
   }
-  if (name === 'variables') return { embeds: [embed(config, '🧩 Template Variables', variablesDescription(), who(i))], components: [
+  if (name === 'variables') return { embeds: [embed(config, emojiLabel('PANELS', 'Template Variables'), variablesDescription(), who(i))], components: [
       row(
         btn(
           `${P}templates`,
@@ -898,7 +898,7 @@ if (name === 'templates') {
           ),
           btn(
             `${P}monitoring`,
-            '⚙️ Automation',
+            emojiLabel('SETTINGS', 'Automation'),
             ButtonStyle.Primary,
           ),
         ),
@@ -954,7 +954,7 @@ if (name === 'templates') {
   }
 
   if (name === 'settings') return {
-    embeds: [embed(config, '⚙️ Social Studio Settings', [
+    embeds: [embed(config, emojiLabel('SETTINGS', 'Social Studio Settings'), [
       'Configure the parts of Social Studio that server managers actually need.',
       '',
       '🎭 **Roles & Access** — management access, creator access, temporary LIVE role and the LIVE notification target.',
