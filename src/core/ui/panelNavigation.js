@@ -8,6 +8,8 @@ const {
   StringSelectMenuBuilder,
 } = require('discord.js');
 
+const { EMOJIS } = require('./emojis');
+
 const ROLE_PAGE_SIZE = 25;
 
 const ROUTE_TO_TOKEN = Object.freeze({
@@ -247,14 +249,14 @@ function buildRolePickerPagination(customId, page = 0, pageCount = 1) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(rolePickerCustomId(customId, 'page', Math.max(0, safePage - 1)))
-      .setLabel('Previous')
-      .setEmoji('⬅️')
+      .setLabel('Roles')
+      .setEmoji(EMOJIS.ROLE_PREVIOUS)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safePage <= 0),
     new ButtonBuilder()
       .setCustomId(rolePickerCustomId(customId, 'page', Math.min(safeCount - 1, safePage + 1)))
-      .setLabel('Next')
-      .setEmoji('➡️')
+      .setLabel('Roles')
+      .setEmoji(EMOJIS.ROLE_NEXT)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(safePage >= safeCount - 1),
   );
