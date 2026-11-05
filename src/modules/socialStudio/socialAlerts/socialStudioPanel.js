@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 const { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const crypto = require('crypto');
@@ -203,12 +204,12 @@ function navigation(active = 'main') {
   return row(
     btn(
       backId,
-      '⬅️ Back',
+      emojiLabel('BACK', 'Back'),
       ButtonStyle.Secondary,
     ),
     btn(
       `${P}settings`,
-      '⚙️ Settings',
+      emojiLabel('SETTINGS', 'Settings'),
       ButtonStyle.Secondary,
       active === 'settings',
     ),
@@ -658,7 +659,7 @@ function buildCreatorPanel(i, config, creators) {
     row(
       btn(
         `${P}main`,
-        '⬅️ Back',
+        emojiLabel('BACK', 'Back'),
         ButtonStyle.Secondary,
       ),
     ),
@@ -684,7 +685,7 @@ function buildAccountEditPanel(i, config, creator, account) {
   components.push(row(
     btn(`${P}accounts`, '⬅️ Accounts'),
     btn(`${P}creators`, '👥 Creators'),
-    btn(`${P}settings`, '⚙️ Settings'),
+    btn(`${P}settings`, emojiLabel('SETTINGS', 'Settings')),
   ));
   const routes = Object.entries(account.alertChannels || {}).filter(([, channelId]) => channelId).map(([type, channelId]) => `${ALERT_LABEL[type] || type}: <#${channelId}>`).join(' • ');
   const deliveryError = s.lastDeliveryError && /notification channel is configured/i.test(String(s.lastDeliveryError)) ? 'LIVE posts need a channel route. Set this in Social Studio > Channels.' : String(s.lastDeliveryError || '').slice(0, 400);
@@ -695,13 +696,13 @@ function buildAccountMovePanel(i, config, creator, account) {
   const d = [`Move **${LABEL[account.platform] || account.platform} — ${account.username || account.externalId || 'Resolving…'}** from **${creator.displayName}** to another creator profile.`, '', creators.length ? 'Choose an existing profile below, or create a new profile for this account.' : 'No other creator profiles exist yet. Create a new profile to move this account.'].join('\n');
   const components = [];
   if (creators.length) components.push(row(new StringSelectMenuBuilder().setCustomId(`${P}account:move:creator`).setPlaceholder('Move to existing creator profile').setMinValues(1).setMaxValues(1).addOptions(creators.slice(0, 25).map((item) => ({ label: String(item.displayName || 'Unnamed creator').slice(0, 100), value: item.creatorId, description: `${(item.accountIds || []).length} linked account(s)`.slice(0, 100) })))));
-  components.push(row(btn(`${P}account:move:new`, '➕ New Profile', ButtonStyle.Success), btn(`${P}account:edit`, '⬅️ Back')));
+  components.push(row(btn(`${P}account:move:new`, '➕ New Profile', ButtonStyle.Success), btn(`${P}account:edit`, emojiLabel('BACK', 'Back'))));
   return { embeds: [embed(config, '↪️ Move Social Account', d, who(i), platformColor(account.platform))], components };
 }
 function buildAccountAddPanel(i, config, creator) {
   const selected = getAccountSession(i).platforms || [];
   const d = [`Add one or more social accounts to **${creator.displayName}**.`, '', 'Select up to 5 platforms, then continue. The next form will ask for a username, channel ID or URL for each selected platform.', '', `**Selected:** ${selected.length ? selected.map((p) => LABEL[p] || p).join(', ') : 'None'}`].join('\n');
-  return { embeds: [embed(config, '➕ Add Accounts', d, who(i), creatorAccent((creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean)))], components: [platformSelect(selected), row(btn(`${P}creators`, '⬅️ Back'), btn(`${P}account:continue`, '➡️ Continue', ButtonStyle.Success, !selected.length))] };
+  return { embeds: [embed(config, '➕ Add Accounts', d, who(i), creatorAccent((creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean)))], components: [platformSelect(selected), row(btn(`${P}creators`, emojiLabel('BACK', 'Back')), btn(`${P}account:continue`, '➡️ Continue', ButtonStyle.Success, !selected.length))] };
 }
 function buildProfileManagePanel(i, config, creator) {
   const d = [`👤 **${creator.displayName}**`, '', '**Profile**', `Status: ${creator.enabled === false ? '⏸️ Paused' : '🟢 Monitoring'}`, `Group / Team: ${creator.group || 'Not set'}`, `Tags: ${creator.tags?.length ? creator.tags.join(', ') : 'None'}`, `Profile Notes: ${creator.notes || 'None'}`,
@@ -829,8 +830,8 @@ function buildSectionPanel(i, name) {
 if (name === 'templates') {
     const templateButtons = ALERT_TYPES.map((t) => btn(`${P}template:${t}`, `${ALERT_EMOJI[t] || '🔔'} ${ALERT_LABEL[t]}`, ButtonStyle.Primary));
     const c = [row(...templateButtons.slice(0, 5)), row(...templateButtons.slice(5)), row(
-      btn(`${P}main`, '⬅️ Back', ButtonStyle.Secondary),
-      btn(`${P}settings`, '⚙️ Settings', ButtonStyle.Secondary),
+      btn(`${P}main`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+      btn(`${P}settings`, emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
       btn(`${P}variables`, '🧩 Variables', ButtonStyle.Secondary),
     )];
     return { embeds: [embed(config, '🎨 Alert Templates', 'Edit the headline and main message for each Social Studio post. The bot keeps the layout consistent with channel links, status, metadata, thumbnails, media previews, platform colours and footer details.\n\nUse **🧩 Variables** for the complete helper list.', who(i))], components: c };
@@ -839,12 +840,12 @@ if (name === 'templates') {
       row(
         btn(
           `${P}templates`,
-          '⬅️ Back',
+          emojiLabel('BACK', 'Back'),
           ButtonStyle.Secondary,
         ),
         btn(
           `${P}settings`,
-          '⚙️ Settings',
+          emojiLabel('SETTINGS', 'Settings'),
           ButtonStyle.Secondary,
         ),
       ),
@@ -916,7 +917,7 @@ if (name === 'templates') {
         row(
           btn(
             `${P}main`,
-            '⬅️ Back',
+            emojiLabel('BACK', 'Back'),
           ),
         ),
       ],
@@ -947,7 +948,7 @@ if (name === 'templates') {
         routeTypeSelect(`${P}feed:type`, type),
         channelSelect(`${P}feed:route`, selected, `Choose destination for ${type === 'default' ? 'default alerts' : ALERT_LABEL[type] || type}`),
         row(btn('social:userroute:open', '👥 User Routing', ButtonStyle.Secondary)),
-        row(btn(`${P}monitoring`, '⬅️ Back', ButtonStyle.Secondary)),
+        row(btn(`${P}monitoring`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
       ],
     };
   }
@@ -967,7 +968,7 @@ if (name === 'templates') {
         btn(`${P}liveMessages`, '🔴 LIVE Messages', ButtonStyle.Primary),
         btn(`${P}monitoring`, '⚙️ Setup & Diagnostics', ButtonStyle.Primary),
       ),
-      row(btn(`${P}main`, '⬅️ Back', ButtonStyle.Secondary), btn(`${P}data`, '📦 Data & Export', ButtonStyle.Secondary)),
+      row(btn(`${P}main`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary), btn(`${P}data`, '📦 Data & Export', ButtonStyle.Secondary)),
     ],
   };
 
@@ -995,7 +996,7 @@ if (name === 'templates') {
         pagedRoleSelect(i, `${P}liveRole:select`, 'Temporary LIVE Creator Role', config.liveRoleId ? [config.liveRoleId] : [], page, true),
         pagedNotificationSelect(i, config, page),
         row(
-          btn(`${P}settings`, '⬅️ Back', ButtonStyle.Secondary),
+          btn(`${P}settings`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
           btn(`${P}roles:page:prev`, '◀️', ButtonStyle.Secondary, page <= 0),
           btn(`${P}roles:page:info`, `📄 Roles ${page + 1}/${count}`, ButtonStyle.Secondary, true),
           btn(`${P}roles:page:next`, '▶️', ButtonStyle.Secondary, page >= count - 1),
@@ -1115,7 +1116,7 @@ if (name === 'templates') {
           btn(`${P}testing:diagnostics`, '🩺 Provider Details', ButtonStyle.Secondary),
           btn(`${P}testing:last`, '📄 Last Response', ButtonStyle.Secondary),
         ),
-        row(btn(`${P}settings`, '⬅️ Back', ButtonStyle.Secondary), btn(`${P}data:refresh`, '🔄 Refresh', ButtonStyle.Secondary)),
+        row(btn(`${P}settings`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary), btn(`${P}data:refresh`, '🔄 Refresh', ButtonStyle.Secondary)),
       ],
     };
   }
@@ -1145,7 +1146,7 @@ if (name === 'templates') {
           btn(`${P}automation:duration`, settings.includeLiveDuration === false ? '⏱️ Duration: OFF' : '⏱️ Duration: ON', settings.includeLiveDuration === false ? ButtonStyle.Secondary : ButtonStyle.Success),
           btn(`${P}automation:liverefreshrate`, `🔄 Refresh: ${refreshLabel}`, refreshEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
         ),
-        row(btn(`${P}settings`, '⬅️ Back', ButtonStyle.Secondary)),
+        row(btn(`${P}settings`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
       ],
     };
   }
@@ -1719,7 +1720,7 @@ async function handleAccountInteraction(i, context) {
       ],
       components: [
         row(
-          btn(`${P}account:delete:cancel`, '⬅️ Back'),
+          btn(`${P}account:delete:cancel`, emojiLabel('BACK', 'Back')),
           btn(
             `${P}account:delete:confirm`,
             '🗑️ Delete Account',
@@ -2473,7 +2474,7 @@ function buildUserAddAccounts(
       row(
         btn(
           'user:social:open',
-          '⬅️ Back',
+          emojiLabel('BACK', 'Back'),
           ButtonStyle.Secondary,
         ),
         btn(
@@ -2488,11 +2489,11 @@ function buildUserAddAccounts(
 }
 
 function userNavigation(backId = 'user:category:social') {
-  return row(btn(backId, '⬅️ Back', ButtonStyle.Secondary));
+  return row(btn(backId, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
 }
 
 function userSectionNavigation(backId = 'user:social:open') {
-  return row(btn(backId, '⬅️ Back', ButtonStyle.Secondary));
+  return row(btn(backId, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
 }
 
 function userAccountLabel(account) {
