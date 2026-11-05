@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../core/ui/emojis');
 
 const Module = require('module');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
@@ -50,7 +51,7 @@ if (!globalThis[PATCH_KEY]) {
           const back = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId('mod_dashboard:none:actions')
-              .setLabel('⬅️ Back to Moderation')
+              .setLabel(emojiLabel('BACK', 'Back to Moderation'))
               .setStyle(ButtonStyle.Secondary),
           );
           await interaction.editReply({ components: [back] });
