@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   EmbedBuilder,
@@ -55,7 +55,7 @@ const MODULE_CATALOG = [
   { key: 'timedRoles', studio: 'roleStudio', route: 'admin:timedRoles', label: '🕒 Timed Roles', title: '🕒 Timed Roles', summary: 'Progress members through role milestones over time.' },
 
   // Security Studio
-  { key: 'verification', studio: 'securityStudio', route: 'admin:verification', label: '✅ Verification', title: '✅ Verification', summary: 'Member verification and onboarding protection.' },
+  { key: 'verification', studio: 'securityStudio', route: 'admin:verification', label: emojiLabel('SUCCESS', 'Verification'), title: emojiLabel('SUCCESS', 'Verification'), summary: 'Member verification and onboarding protection.' },
 
   // Social Studio
   { key: 'social', studio: 'socialStudio', route: 'admin:social', label: '📣 Social Alerts', title: '📣 Social Alerts', summary: 'Creator alerts for Twitch, YouTube, TikTok, Kick and more.' },
@@ -105,10 +105,10 @@ const SERVER_MODULES = MODULE_CATALOG.map((module) => [module.route, module.labe
 const CHANNEL_FIELDS = {
   alertsChannel: { prop: 'alertsChannelId', label: '📣 Alerts Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
   announcementChannel: { prop: 'announcementChannelId', label: '🎉 Announcement Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  approvedChannel: { prop: 'approvedChannelId', label: '✅ Approved Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  approvedChannel: { prop: 'approvedChannelId', label: emojiLabel('SUCCESS', 'Approved Channel'), max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
   channels: { prop: 'channels', label: '💬 Sticky Channels', max: 10, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
   defaultChannel: { prop: 'defaultChannelId', label: '📊 Default Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  deniedChannel: { prop: 'deniedChannelId', label: '❌ Denied Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  deniedChannel: { prop: 'deniedChannelId', label: emojiLabel('ERROR', 'Denied Channel'), max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
   logChannel: { prop: 'logChannelId', label: '📋 Log Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
   announceChannel: { prop: 'announceChannelId', label: '📣 Announce Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
   resultsChannel: { prop: 'resultsChannelId', label: '📈 Results Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
@@ -156,7 +156,7 @@ function saveModuleConfig(guild, moduleKey, updater) {
 
 function formatValue(value) {
   if (Array.isArray(value)) return value.length ? value.map((item) => `<@&${item}>`).join(', ') : '`None`';
-  if (typeof value === 'boolean') return value ? 'Enabled ✅' : 'Disabled ❌';
+  if (typeof value === 'boolean') return value ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`;
   if (value === null || value === undefined || value === '') return '`Not set`';
   return `\`${String(value)}\``;
 }
@@ -230,7 +230,7 @@ function buildModuleMainPanel(guild, moduleKey, memberDisplayName = 'Unknown Use
   const totalPages = Math.max(1, Math.ceil(allControls.length / CONTROLS_PER_PAGE));
   const page = Math.min(Math.max(Number(controlPage) || 0, 0), totalPages - 1);
   const controls = allControls.slice(page * CONTROLS_PER_PAGE, (page + 1) * CONTROLS_PER_PAGE);
-  const embed = new EmbedBuilder().setColor(enabled ? 0x57f287 : PANEL_COLOR).setTitle(module.title).setDescription([module.summary, '', `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`, `**Controls Page:** ${page + 1}/${totalPages}`].join('\n')).addFields({ name: 'Module Controls', value: buildFieldList(module, config, 'main'), inline: false }).setFooter({ text: `Requested by ${memberDisplayName}` }).setTimestamp();
+  const embed = new EmbedBuilder().setColor(enabled ? 0x57f287 : PANEL_COLOR).setTitle(module.title).setDescription([module.summary, '', `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`, `**Controls Page:** ${page + 1}/${totalPages}`].join('\n')).addFields({ name: 'Module Controls', value: buildFieldList(module, config, 'main'), inline: false }).setFooter({ text: `Requested by ${memberDisplayName}` }).setTimestamp();
   const pager = buildPager(`admin:module:${moduleKey}:main:${page - 1}`, `admin:module:${moduleKey}:main:${page + 1}`, page, totalPages);
   const components = [
     ...controls,
@@ -250,7 +250,7 @@ function buildModuleConfigurePanel(guild, moduleKey, memberDisplayName = 'Unknow
   const totalPages = Math.max(1, Math.ceil(allControls.length / CONTROLS_PER_PAGE));
   const page = Math.min(Math.max(Number(controlPage) || 0, 0), totalPages - 1);
   const controls = allControls.slice(page * CONTROLS_PER_PAGE, (page + 1) * CONTROLS_PER_PAGE);
-  const embed = new EmbedBuilder().setColor(enabled ? 0x57f287 : PANEL_COLOR).setTitle(`${module.title} · Configure`).setDescription([module.summary, '', `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`, `**Module Key:** \`${moduleKey}\``, `**Configure Page:** ${page + 1}/${totalPages}`, '', 'Administrative settings and maintenance controls.'].join('\n')).addFields({ name: 'Administration', value: buildFieldList(module, config, 'configure'), inline: false }).setFooter({ text: `Requested by ${memberDisplayName}` }).setTimestamp();
+  const embed = new EmbedBuilder().setColor(enabled ? 0x57f287 : PANEL_COLOR).setTitle(`${module.title} · Configure`).setDescription([module.summary, '', `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`, `**Module Key:** \`${moduleKey}\``, `**Configure Page:** ${page + 1}/${totalPages}`, '', 'Administrative settings and maintenance controls.'].join('\n')).addFields({ name: 'Administration', value: buildFieldList(module, config, 'configure'), inline: false }).setFooter({ text: `Requested by ${memberDisplayName}` }).setTimestamp();
   const actions = row(
     button(`admin:module:${moduleKey}:${enabled ? 'disable' : 'enable'}`, enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
     button(`admin:module:${moduleKey}:health`, '🩺 Health', ButtonStyle.Secondary),
