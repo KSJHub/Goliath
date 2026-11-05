@@ -1,4 +1,4 @@
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -218,9 +218,9 @@ async function showLevelingLeaderboard(interaction, sortBy = 'xp', pageIndex = 0
       new ButtonBuilder().setCustomId(`user:leveling:leaderboard:voice:0`).setLabel('Voice').setStyle(safeSort === 'voice' ? ButtonStyle.Primary : ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:${safeSort}:${Math.max(0, safePage - 1)}`).setLabel('Previous').setEmoji('⬅️').setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
+      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:${safeSort}:${Math.max(0, safePage - 1)}`).setLabel('Previous').setEmoji(EMOJIS.BACK).setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
       new ButtonBuilder().setCustomId(`user:leveling:leaderboard:${safeSort}:${Math.min(totalPages - 1, safePage + 1)}`).setLabel('Next').setEmoji('➡️').setStyle(ButtonStyle.Primary).setDisabled(safePage >= totalPages - 1),
-      new ButtonBuilder().setCustomId('user:module:leveling').setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('user:module:leveling').setLabel('Back').setEmoji(EMOJIS.BACK).setStyle(ButtonStyle.Secondary),
     ),
   ];
 
@@ -300,7 +300,7 @@ async function handleUserManageProfileSubmit(interaction) {
     notes: interaction.fields.getTextInputValue('notes'),
   });
   if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-  await interaction.followUp({ content: '✅ Creator profile updated.', flags: 64 }).catch(() => null);
+  await interaction.followUp({ content: emojiLabel('SUCCESS', 'Creator profile updated.'), flags: 64 }).catch(() => null);
   return updatePanel(interaction, socialStudio.user.buildProfile(interaction, result.creator, socialStudio.getAccountsForCreator(interaction.guildId, result.creator)));
 }
 
@@ -508,7 +508,7 @@ async function handleUserManageAccountEditSubmit(interaction) {
   };
   saveUserSocialSection(interaction, section);
   if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
-  await interaction.followUp({ content: '✅ Social account updated.', flags: 64 }).catch(() => null);
+  await interaction.followUp({ content: emojiLabel('SUCCESS', 'Social account updated.'), flags: 64 }).catch(() => null);
   const refreshed = getOwnedCreatorAndAccounts(interaction);
   return updatePanel(interaction, buildUserManageAccountPanel(interaction, refreshed.creator, refreshed.accounts, context.account.accountId));
 }
@@ -607,9 +607,9 @@ async function handleUserManageAccountDelete(interaction) {
     return true;
   }
   return updatePanel(interaction, {
-    embeds: [new EmbedBuilder().setColor(0xED4245).setTitle('⚠️ Delete Social Account').setDescription(`Delete **${accountDisplayName(context.account)}** from your Creator Profile?\n\nThis removes its monitoring and notification settings.`).setFooter({ text: `Requested by ${getMemberDisplayName(interaction)}` }).setTimestamp()],
+    embeds: [new EmbedBuilder().setColor(0xED4245).setTitle(emojiLabel('WARNING', 'Delete Social Account')).setDescription(`Delete **${accountDisplayName(context.account)}** from your Creator Profile?\n\nThis removes its monitoring and notification settings.`).setFooter({ text: `Requested by ${getMemberDisplayName(interaction)}` }).setTimestamp()],
     components: [new ActionRowBuilder().addComponents(
-      userAccountButton('user:social:manage-account:delete:cancel', '⬅️ Cancel', ButtonStyle.Secondary),
+      userAccountButton('user:social:manage-account:delete:cancel', emojiLabel('BACK', 'Cancel'), ButtonStyle.Secondary),
       userAccountButton('user:social:manage-account:delete:confirm', '🗑️ Delete Account', ButtonStyle.Danger),
     )],
   });
@@ -765,7 +765,7 @@ async function handleUserManualPostLive(interaction) {
     });
   } catch (error) {
     await reportUserLivePostFailure(interaction, creator, accounts, error?.message || error, { phase: 'provider_check' });
-    await interaction.editReply({ content: '❌ We couldn’t verify your LIVE status right now. The issue has been reported to the Goliath development logs.' });
+    await interaction.editReply({ content: emojiLabel('ERROR', 'We couldn’t verify your LIVE status right now. The issue has been reported to the Goliath development logs.') });
     return true;
   }
 
@@ -781,7 +781,7 @@ async function handleUserManualPostLive(interaction) {
       phase: 'provider_check',
       providerStatuses: (check?.results || []).map((result) => ({ accountId: result.accountId, platform: result.platform, status: result.status })),
     });
-    await interaction.editReply({ content: '❌ We couldn’t verify your LIVE status right now. The issue has been reported to the Goliath development logs.' });
+    await interaction.editReply({ content: emojiLabel('ERROR', 'We couldn’t verify your LIVE status right now. The issue has been reported to the Goliath development logs.') });
     return true;
   }
 
@@ -809,16 +809,16 @@ async function handleUserManualPostLive(interaction) {
     if (!sent.length || failed.length) {
       const reason = failed.map((item) => item?.error || item?.reason).filter(Boolean).join(' | ') || 'LIVE delivery returned no successful posts.';
       await reportUserLivePostFailure(interaction, creator, accounts, reason, { phase: 'delivery', sent: sent.length, failed: failed.length });
-      await interaction.editReply({ content: '❌ Your LIVE status was confirmed, but Goliath couldn’t complete the LIVE post. The issue has been reported to the Goliath development logs.' });
+      await interaction.editReply({ content: emojiLabel('ERROR', 'Your LIVE status was confirmed, but Goliath couldn’t complete the LIVE post. The issue has been reported to the Goliath development logs.') });
       return true;
     }
     const channels = [...new Set(sent.map((item) => item.channelId).filter(Boolean))];
     const channelText = channels.length === 1 ? ` in <#${channels[0]}>` : channels.length > 1 ? ` across ${channels.length} channels` : '';
-    await interaction.editReply({ content: `✅ **LIVE confirmed — your LIVE post has been sent${channelText}.**` });
+    await interaction.editReply({ content: `${EMOJIS.SUCCESS} **LIVE confirmed — your LIVE post has been sent${channelText}.**` });
     return updatePanel(interaction, socialStudio.user.buildProfile(interaction, creator, socialStudio.getAccountsForCreator(interaction.guildId, creator)));
   } catch (error) {
     await reportUserLivePostFailure(interaction, creator, accounts, error?.message || error, { phase: 'delivery' });
-    await interaction.editReply({ content: '❌ Your LIVE status was confirmed, but Goliath couldn’t complete the LIVE post. The issue has been reported to the Goliath development logs.' });
+    await interaction.editReply({ content: emojiLabel('ERROR', 'Your LIVE status was confirmed, but Goliath couldn’t complete the LIVE post. The issue has been reported to the Goliath development logs.') });
     return true;
   }
 }
@@ -923,7 +923,7 @@ async function handleUserPanelInteraction(interaction) {
     const placeholders = {
       'role-history': ['📜 Role History — Development', 'Role history access will be designed and connected in a later stage.'],
       'security-notifications': ['🔔 Security Notifications — Development', 'Member security notifications will be designed and connected in a later stage.'],
-      verification: ['✅ Verification — Development', 'Member verification status will be designed and connected in a later stage.'],
+      verification: [emojiLabel('SUCCESS', 'Verification — Development'), 'Member verification status will be designed and connected in a later stage.'],
     };
     if (placeholders[moduleKey]) return updatePanel(interaction, profileDevelopmentPage.buildSimpleDevelopmentPanel(interaction, placeholders[moduleKey][0], placeholders[moduleKey][1]));
     return updatePanel(interaction, buildModulePanel(moduleKey, memberDisplayName));
