@@ -78,6 +78,10 @@ const EMOJIS = Object.freeze({
   WELCOME_DISABLED: '🔴',
   WELCOME_MUTED: '🔕',
   WELCOME_LOCATION: '📍',
+  WELCOME_ROLE_PINGS: '📣',
+  WELCOME_CLEANUP: '🧹',
+  WELCOME_QUEUE: '👥',
+  WELCOME_RUN: '▶',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
