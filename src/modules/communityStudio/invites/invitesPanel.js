@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -39,7 +40,7 @@ function overview(interaction) {
       )],
     components: [
       row(button('invites:official-settings', 'Invite Management', ButtonStyle.Primary), button('invites:public-config', 'Public Panel & Leaderboard', ButtonStyle.Primary)),
-      row(button('admin:modules', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
+      row(button('admin:modules', emojiLabel('BACK', 'Back')), button('invites:admin-config', emojiLabel('SETTINGS', 'Settings'))),
     ],
   };
 }
@@ -95,9 +96,9 @@ function officialView(interaction) {
       row(button('invites:official-create', !configured ? '📢 Create Invite' : updateArmed ? '⚠️ Confirm Replacement' : needsUpdate ? '🔄 Update Invite' : '💾 Save Invite Settings', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId),
         button('invites:official-verify', '🔍 Verify Link', ButtonStyle.Secondary),
         button('invites:invite-manager', '👥 Member Invites', ButtonStyle.Secondary)),
-      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings'),
-        button('invites:official-role-prev', '◀ Roles', ButtonStyle.Secondary, info.page === 0),
-        button('invites:official-role-next', 'Roles ▶', ButtonStyle.Secondary, info.page >= info.pages - 1)),
+      row(button('invites:home', emojiLabel('BACK', 'Back')), button('invites:admin-config', emojiLabel('SETTINGS', 'Settings')),
+        button('invites:official-role-prev', emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary, info.page === 0),
+        button('invites:official-role-next', emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary, info.page >= info.pages - 1)),
     ],
   };
 }
@@ -133,7 +134,7 @@ function publicView(interaction) {
         button('invites:panel-embed-modal', '✏️ Edit Panel', ButtonStyle.Secondary),
         button('invites:panel-preview', '👁️ Preview Panel', ButtonStyle.Secondary, !official.code),
         ),
-      row(button('invites:home', '⬅️ Back'), button('invites:admin-config', '⚙️ Settings')),
+      row(button('invites:home', emojiLabel('BACK', 'Back')), button('invites:admin-config', emojiLabel('SETTINGS', 'Settings'))),
     ],
   };
 }
@@ -175,7 +176,7 @@ function adminView(interaction) {
       button('invites:settings-panel', '📢 Public Panel'),
     ));
     // Keep the original Back and module toggle row unchanged.
-    components.push(row(button('invites:home', '⬅️ Back'),
+    components.push(row(button('invites:home', emojiLabel('BACK', 'Back')),
       button('invites:toggle', enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success)));
   } else {
     if (page === 'health') components.push(row(
@@ -219,7 +220,7 @@ function adminView(interaction) {
       ));
       if (panelResetArmed) embed.addFields({ name: '⚠️ Confirm Panel Reset', value: 'Confirm within 30 seconds to restore default panel text. Channel, deployed message and invite DM are preserved.', inline: false });
     }
-    components.push(row(button('invites:settings-home', '⬅️ Back'), ...(page === 'panel' ? [button('invites:settings-panel-delete', panelDeleteArmed ? '⚠️ Confirm Delete Panel' : '🗑️ Delete Deployed Panel', ButtonStyle.Danger, !section.settings.publicPanel.messageId)] : [])));
+    components.push(row(button('invites:settings-home', emojiLabel('BACK', 'Back')), ...(page === 'panel' ? [button('invites:settings-panel-delete', panelDeleteArmed ? '⚠️ Confirm Delete Panel' : '🗑️ Delete Deployed Panel', ButtonStyle.Danger, !section.settings.publicPanel.messageId)] : [])));
     if (page === 'panel' && panelDeleteArmed) embed.addFields({ name: '⚠️ Confirm Deletion', value: 'Confirm within 30 seconds to delete the deployed Discord message and clear its saved deployment IDs. Referral scores and panel design remain intact.', inline: false });
   }
   return { embeds: [embed], components };
@@ -267,7 +268,7 @@ function managerView(interaction) {
       button('invites:manager-reset-member', memberConfirm?.action === 'reset' ? '⚠️ Confirm Score Reset' : '🏆 Reset Member Score'),
     ));
   }
-  components.push(row(button('invites:official-settings', '⬅️ Back')));
+  components.push(row(button('invites:official-settings', emojiLabel('BACK', 'Back'))));
   return { embeds: [embed], components };
 }
 
