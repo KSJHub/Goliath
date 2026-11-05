@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS: SHARED_EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
@@ -33,7 +33,7 @@ const { restoreQuarantinedMember } = require('../../security/protection/quaranti
 
 const STATUS_LABELS = Object.freeze({
   active: '🟢 Active',
-  reversed: '✅ Closed',
+  reversed: emojiLabel('SUCCESS', 'Closed'),
   expired: '⌛ Expired',
 });
 const APPEALABLE_ACTIONS = new Set(['warn', 'timeout', 'kick', 'ban', 'case']);
@@ -434,7 +434,7 @@ async function notifyAppealOutcome(interaction, modCase, appeal) {
   const client = interaction.client || interaction.guild?.client;
   let invite = null;
   if (appeal.status === 'approved' && ['ban', 'kick'].includes(effectiveAppealAction(modCase)) && appeal.remedy?.ok === true) invite = await createRejoinInvite(interaction.guild, modCase.caseId);
-  const decision = appeal.status === 'approved' ? 'approved ✅' : 'denied ❌';
+  const decision = appeal.status === 'approved' ? `approved ${SHARED_EMOJIS.SUCCESS}` : `denied ${SHARED_EMOJIS.ERROR}`;
   const lines = [
     `Your appeal for **${interaction.guild.name}** • Case **#${modCase.caseId}** has been **${decision}**.`,
     `Review: ${appeal.reviewNote}`,
@@ -675,7 +675,7 @@ function buildCaseDetailEmbed(modCase) {
   }
   if (modCase.metadata?.appealNotice) {
     const notice = modCase.metadata.appealNotice;
-    embed.addFields({ name: '📨 Member Notification', value: notice.sent ? `✅ Delivered${notice.sentAt ? ` • <t:${getCaseTimestamp(notice.sentAt)}:R>` : ''}` : `⚠️ Not delivered${notice.error ? ` • ${String(notice.error).slice(0, 180)}` : ''}`, inline: false });
+    embed.addFields({ name: '📨 Member Notification', value: notice.sent ? `${SHARED_EMOJIS.SUCCESS} Delivered${notice.sentAt ? ` • <t:${getCaseTimestamp(notice.sentAt)}:R>` : ''}` : `${SHARED_EMOJIS.WARNING} Not delivered${notice.error ? ` • ${String(notice.error).slice(0, 180)}` : ''}`, inline: false });
   }
   if (modCase.note && String(modCase.note).trim()) embed.addFields({ name: '📝 Management Note', value: String(modCase.note).slice(0, 1024), inline: false });
   embed.setFooter({ text: 'Moderation case record • Management workspace' });
@@ -694,7 +694,7 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
     .setTitle(`⚖️ Appeal History • Case #${modCase.caseId}`)
-    .setDescription(`**Original Action:** ${String(modCase.action || 'case').toUpperCase()}\n**Total:** ${appeals.length}  •  **⏳ Pending:** ${counts.pending}  •  **✅ Approved:** ${counts.approved}  •  **❌ Denied:** ${counts.denied}`)
+    .setDescription(`**Original Action:** ${String(modCase.action || 'case').toUpperCase()}\n**Total:** ${appeals.length}  •  **⏳ Pending:** ${counts.pending}  •  **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}  •  **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`)
     .setFooter({ text: `Appeal history • Page ${page + 1}/${totalPages}` });
   if (!entries.length) embed.addFields({ name: '📭 No Appeals', value: 'No appeals have been recorded for this case.', inline: false });
   for (const appeal of entries) {
@@ -708,7 +708,7 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
     if (appeal.requestedResolution) lines.push(`**Requested Outcome:** ${String(appeal.requestedResolution).replace(/\s+/g, ' ').slice(0, 120)}`);
     if (appeal.reviewedBy) lines.push(`**Reviewed By:** <@${appeal.reviewedBy}>${appeal.reviewedAt ? ` • <t:${getCaseTimestamp(appeal.reviewedAt)}:R>` : ''}`);
     if (appeal.reviewNote) lines.push(`\n**📋 Review Rationale**\n${String(appeal.reviewNote).replace(/\s+/g, ' ').slice(0, 150)}`);
-    if (appeal.remedy) lines.push(`\n**🔄 Appeal Remedy:** ${appeal.remedy.ok ? emojiLabel('SUCCESS', 'Completed') : emojiLabel('WARNING', 'Requires attention')}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').replace(/\s+/g, ' ').slice(0, 150)}`);
+    if (appeal.remedy) lines.push(`\n**${SHARED_EMOJIS.REFRESH} Appeal Remedy:** ${appeal.remedy.ok ? emojiLabel('SUCCESS', 'Completed') : emojiLabel('WARNING', 'Requires attention')}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').replace(/\s+/g, ' ').slice(0, 150)}`);
     if (appeal.notification) lines.push(`**📨 Member Notification:** ${appeal.notification.sent ? emojiLabel('SUCCESS', 'Sent') : emojiLabel('WARNING', 'Not delivered')}`);
     embed.addFields({ name: `⚖️ Appeal • ${status}`, value: lines.join('\n').slice(0, 1024), inline: false });
   }
@@ -750,7 +750,7 @@ function buildAppealDetailPayload(modCase, appeal) {
     const details = [];
     if (appeal.remedy) details.push(`**Appeal Remedy:** ${appeal.remedy.ok ? emojiLabel('SUCCESS', 'Completed') : emojiLabel('WARNING', 'Requires attention')}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').slice(0, 450)}`);
     if (appeal.notification) details.push(`**Member Notification:** ${appeal.notification.sent ? emojiLabel('SUCCESS', 'Sent') : emojiLabel('WARNING', 'Not delivered')}${!appeal.notification.sent && appeal.notification.error ? `\n${String(appeal.notification.error).slice(0, 150)}` : ''}`);
-    embed.addFields({ name: '🔄 Resolution & Notification', value: details.join('\n\n').slice(0, 1024), inline: false });
+    embed.addFields({ name: emojiLabel('REFRESH', 'Resolution & Notification'), value: details.join('\n\n').slice(0, 1024), inline: false });
   }
   const proceedingExecution = modCase.action === 'case' ? modCase.metadata?.proceeding?.sanctionExecution : null;
   const canRetryRemedy = appeal.status === 'approved' && appeal.remedy?.ok === false && (proceedingExecution?.status === 'reversal_failed' || (proceedingExecution?.status === 'reversing' && appealRemedyIsStale(proceedingExecution)));
@@ -796,7 +796,7 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
     .setTitle('⚖️ Moderation Appeals')
-    .setDescription(['**Review submitted appeals and manage decisions.**', '', `**📥 Pending:** ${counts.pending}   •   **✅ Approved:** ${counts.approved}   •   **❌ Denied:** ${counts.denied}`, `**Viewing:** ${normalizedStatus === 'all' ? 'All Appeals' : normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)}`, '', description].join('\n'))
+    .setDescription(['**Review submitted appeals and manage decisions.**', '', `**📥 Pending:** ${counts.pending}   •   **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}   •   **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`, `**Viewing:** ${normalizedStatus === 'all' ? 'All Appeals' : normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)}`, '', description].join('\n'))
     ;
   if (extraFilters.length) embed.addFields({ name: '🔎 Additional Filters', value: extraFilters.join(' • '), inline: false });
   embed.setFooter({ text: `${results.length} matching appeal${results.length === 1 ? '' : 's'} • Page ${page + 1}/${totalPages}` });
@@ -833,22 +833,22 @@ function getTargetIdFromCustomId(customId) { const [, targetId] = String(customI
 async function openExternalAppealFromCommand(interaction, rawReference) {
   const raw = String(rawReference || '').trim();
   const match = raw.match(/^(\d{16,20})\s*[:/#-]\s*(\d{1,12})$/);
-  if (!match) return safeReply(interaction, { content: '❌ Use `SERVER_ID:CASE_ID`, for example `123456789012345678:42`.' });
+  if (!match) return safeReply(interaction, { content: `${SHARED_EMOJIS.ERROR} Use \`SERVER_ID:CASE_ID\`, for example \`123456789012345678:42\`.` });
   const guildId = match[1];
   const caseId = Number(match[2]);
   const modCase = getCaseById(guildId, caseId);
   const eligibility = getAppealEligibility(modCase, interaction.user?.id);
-  if (!eligibility.ok) return safeReply(interaction, { content: `❌ ${eligibility.error}` });
+  if (!eligibility.ok) return safeReply(interaction, { content: `${SHARED_EMOJIS.ERROR} ${eligibility.error}` });
   await interaction.showModal(buildExternalAppealModal(guildId, modCase));
   return true;
 }
 async function submitExternalAppeal(interaction, guildId, caseId, grounds, requestedResolution, source) {
   const modCase = getCaseById(guildId, caseId);
   const eligibility = getAppealEligibility(modCase, interaction.user?.id);
-  if (!eligibility.ok) return safeReply(interaction, { content: `❌ ${eligibility.error}` });
+  if (!eligibility.ok) return safeReply(interaction, { content: `${SHARED_EMOJIS.ERROR} ${eligibility.error}` });
   const result = submitAppeal(guildId, caseId, { appellantId: interaction.user.id, grounds, requestedResolution, source }, interaction.user.id);
-  if (!result.ok) return safeReply(interaction, { content: `❌ ${result.error || 'Failed to submit appeal.'}` });
-  return safeReply(interaction, { content: `✅ Appeal **${result.appeal.id}** submitted for Case **#${caseId}**.\nManagement can now review it. You will receive the outcome by DM when a decision is recorded.` });
+  if (!result.ok) return safeReply(interaction, { content: `${SHARED_EMOJIS.ERROR} ${result.error || 'Failed to submit appeal.'}` });
+  return safeReply(interaction, { content: `${SHARED_EMOJIS.SUCCESS} Appeal **${result.appeal.id}** submitted for Case **#${caseId}**.\nManagement can now review it. You will receive the outcome by DM when a decision is recorded.` });
 }
 async function handleExternalAppealInteraction(interaction) {
   const id = String(interaction.customId || '');
@@ -861,7 +861,7 @@ async function handleExternalAppealInteraction(interaction) {
     const [, guildId, caseIdRaw] = id.split(':');
     const modCase = getCaseById(guildId, Number(caseIdRaw));
     const eligibility = getAppealEligibility(modCase, interaction.user?.id);
-    if (!eligibility.ok) return safeReply(interaction, { content: `❌ ${eligibility.error}` });
+    if (!eligibility.ok) return safeReply(interaction, { content: `${SHARED_EMOJIS.ERROR} ${eligibility.error}` });
     await interaction.showModal(buildExternalAppealModal(guildId, modCase));
     return true;
   }
@@ -872,7 +872,7 @@ async function handleExternalAppealInteraction(interaction) {
   if (id === 'mod_appeal_lookup_submit') {
     const guildId = String(interaction.fields.getTextInputValue('guild_id') || '').trim();
     const caseRaw = String(interaction.fields.getTextInputValue('case_id') || '').trim();
-    if (!/^\d{16,20}$/.test(guildId) || !/^\d{1,12}$/.test(caseRaw)) return safeReply(interaction, { content: '❌ Server ID or Case ID is invalid.' });
+    if (!/^\d{16,20}$/.test(guildId) || !/^\d{1,12}$/.test(caseRaw)) return safeReply(interaction, { content: `${SHARED_EMOJIS.ERROR} Server ID or Case ID is invalid.` });
     return submitExternalAppeal(interaction, guildId, Number(caseRaw), interaction.fields.getTextInputValue('grounds'), interaction.fields.getTextInputValue('requested_resolution'), interaction.guildId ? 'server-lookup' : 'dm-lookup');
   }
   return false;
@@ -998,7 +998,7 @@ async function handleCaseAction(interaction, { fetchTarget, createConfirmation }
     if (typeof fetchTarget !== 'function' || typeof createConfirmation !== 'function') return false;
     const target = await fetchTarget(interaction.guild, modCase.userId);
     if (!target) return safeReply(interaction, ephemeralError('User not found for that case.'));
-    return createConfirmation(interaction, target.id, isWarning ? 'remove-warning' : 'remove-timeout', isWarning ? { caseId: modCase.caseId } : { sourceCaseId: modCase.caseId }, isWarning ? `⚠️ Remove warning from **Case #${modCase.caseId}**?` : `⏳ Clear timeout from **Case #${modCase.caseId}**?`);
+    return createConfirmation(interaction, target.id, isWarning ? 'remove-warning' : 'remove-timeout', isWarning ? { caseId: modCase.caseId } : { sourceCaseId: modCase.caseId }, isWarning ? `${SHARED_EMOJIS.WARNING} Remove warning from **Case #${modCase.caseId}**?` : `⏳ Clear timeout from **Case #${modCase.caseId}**?`);
   }
   return false;
 }
