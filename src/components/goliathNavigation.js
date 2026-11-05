@@ -1,3 +1,5 @@
+const { emojiLabel } = require('../core/ui/emojis');
+
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -11,16 +13,16 @@ const {
  * Keep destination IDs supplied by each module.
  */
 const UI_ACTIONS = Object.freeze({
-  back: Object.freeze({ label: '⬅️ Back', style: ButtonStyle.Secondary }),
-  settings: Object.freeze({ label: '⚙️ Settings', style: ButtonStyle.Secondary }),
-  builder: Object.freeze({ label: '🛠️ Builder', style: ButtonStyle.Primary }),
-  panels: Object.freeze({ label: '🧩 Panels', style: ButtonStyle.Primary }),
-  presets: Object.freeze({ label: '💾 Presets', style: ButtonStyle.Primary }),
-  media: Object.freeze({ label: '🖼️ Media', style: ButtonStyle.Primary }),
-  testSend: Object.freeze({ label: '🧪 Test Send', style: ButtonStyle.Secondary }),
-  deploy: Object.freeze({ label: '🚀 Deploy', style: ButtonStyle.Success }),
-  update: Object.freeze({ label: '🧩 Update', style: ButtonStyle.Success }),
-  review: Object.freeze({ label: '📋 Review', style: ButtonStyle.Secondary }),
+  back: Object.freeze({ label: emojiLabel('BACK', 'Back'), style: ButtonStyle.Secondary }),
+  settings: Object.freeze({ label: emojiLabel('SETTINGS', 'Settings'), style: ButtonStyle.Secondary }),
+  builder: Object.freeze({ label: emojiLabel('BUILDER', 'Builder'), style: ButtonStyle.Primary }),
+  panels: Object.freeze({ label: emojiLabel('PANELS', 'Panels'), style: ButtonStyle.Primary }),
+  presets: Object.freeze({ label: emojiLabel('PRESETS', 'Presets'), style: ButtonStyle.Primary }),
+  media: Object.freeze({ label: emojiLabel('MEDIA', 'Media'), style: ButtonStyle.Primary }),
+  testSend: Object.freeze({ label: emojiLabel('TEST_SEND', 'Test Send'), style: ButtonStyle.Secondary }),
+  deploy: Object.freeze({ label: emojiLabel('DEPLOY', 'Deploy'), style: ButtonStyle.Success }),
+  update: Object.freeze({ label: emojiLabel('UPDATE', 'Update'), style: ButtonStyle.Success }),
+  review: Object.freeze({ label: emojiLabel('REVIEW', 'Review'), style: ButtonStyle.Secondary }),
 });
 
 function navigationButton(customId, label, style = ButtonStyle.Secondary, disabled = false) {
@@ -42,8 +44,8 @@ function paginationButtons(kind, previousId, nextId, options = {}) {
   const noun = kind === 'channel' ? 'Chan' : kind === 'role' ? 'Roles' : null;
   if (!noun) throw new Error('Pagination kind must be channel or role');
   return [
-    navigationButton(previousId, `◀ ${noun}`, ButtonStyle.Secondary, options.previousDisabled),
-    navigationButton(nextId, `${noun} ▶`, ButtonStyle.Secondary, options.nextDisabled),
+    navigationButton(previousId, emojiLabel(kind === 'channel' ? 'CHANNEL_PREVIOUS' : 'ROLE_PREVIOUS', noun), ButtonStyle.Secondary, options.previousDisabled),
+    navigationButton(nextId, emojiLabel(kind === 'channel' ? 'CHANNEL_NEXT' : 'ROLE_NEXT', noun, { position: 'after' }), ButtonStyle.Secondary, options.nextDisabled),
   ];
 }
 
