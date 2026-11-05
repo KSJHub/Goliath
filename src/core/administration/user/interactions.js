@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -362,7 +363,7 @@ function buildUserManageAccountPanel(interaction, creator, accounts, selectedId 
     ));
   }
   components.push(new ActionRowBuilder().addComponents(
-    userAccountButton('user:social:open', '⬅️ Back', ButtonStyle.Secondary),
+    userAccountButton('user:social:open', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
   ));
 
   const description = selected
