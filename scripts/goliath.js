@@ -2470,7 +2470,7 @@ function welcomeEmbedDeliveryAudit() {
     }
     assert(!panel.includes(".join('\\\\n')"), 'Welcome panels must use real line breaks, not literal backslash-n text.');
     // Guard against missing Welcome emoji keys and hardcoded section icons.
-    const emojiRegistry = read('src/core/ui/emojis.js');
+    const emojiRegistry = read('src/core/guild/goliathNavigation.js');
     const registeredEmojiKeys = new Set([...emojiRegistry.matchAll(/^\s+([A-Z][A-Z_]+):\s*['"]/gm)].map(match => match[1]));
     const welcomeEmojiKeys = [
       ...panel.matchAll(/emojiLabel\(\s*['"]([A-Z][A-Z_]+)['"]/g),
