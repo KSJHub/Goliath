@@ -3,7 +3,7 @@ const { emojiLabel } = require('../../../core/ui/emojis');
 const { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const crypto = require('crypto');
 const security = require('../../../core/security/protection/core');
-const { goliathNavigation } = require('../../../components/goliathNavigation');
+const { goliathNavigation, navigationButton: btn } = require('../../../core/guild/goliathNavigation');
 const { variablesForModule } = require('../../../core/guild/guildVariables');
 const store = require('./socialStudioStore');
 const { normalizeAccountInput, migrateAccount } = require('./accountNormalizer');
@@ -62,7 +62,7 @@ const creatorSessions = new Map();
 const feedSessions = new Map();
 const roleSessions = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const btn = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+
 const linkBtn = (url, label) => new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(label);
 const sessionKey = (i) => `${i.guildId}:${i.user?.id || 'unknown'}`;
 const who = (i) => i.member?.displayName || i.user?.displayName || i.user?.username || 'Unknown User';
