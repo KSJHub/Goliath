@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const Discord = require('discord.js');
 const { safeReply, safeUpdate } = require('../../../core/ui/interactionResponse');
@@ -80,7 +80,7 @@ function investigationAuditRows(guildId, targetId, limit = 200) {
     const rows = db.prepare("SELECT audit_id, actor_id, event, after_value, metadata, created_at FROM case_audit WHERE guild_id = ? AND event IN ('moderation.member_scan.note_added','moderation.member_scan.watch_updated') ORDER BY created_at DESC LIMIT ?").all(String(guildId), Math.max(1, Math.min(500, Number(limit) || 200)));
     return rows.filter((row) => String(parseJson(row.metadata, {}).targetId || '') === String(targetId));
   } catch (error) {
-    console.error('❌ Member investigation state query failed:', error);
+    console.error(emojiLabel('ERROR', 'Member investigation state query failed:'), error);
     return [];
   }
 }
@@ -125,7 +125,7 @@ function scanAuditRows(guildId, targetId, limit = 25) {
     const rows = db.prepare("SELECT audit_id, actor_id, after_value, metadata, created_at FROM case_audit WHERE guild_id = ? AND event = 'moderation.member_scan.completed' ORDER BY created_at DESC LIMIT ?").all(String(guildId), Math.max(1, Math.min(100, Number(limit) || 25)));
     return rows.filter((row) => String(parseJson(row.metadata, {}).targetId || '') === String(targetId));
   } catch (error) {
-    console.error('❌ Member scan history query failed:', error);
+    console.error(emojiLabel('ERROR', 'Member scan history query failed:'), error);
     return [];
   }
 }
@@ -154,7 +154,7 @@ function getCrossGuildModeration(userId, currentGuildId) {
       rows: outside.slice(0, 5),
     };
   } catch (error) {
-    console.error('❌ Cross-guild moderation intelligence query failed:', error);
+    console.error(emojiLabel('ERROR', 'Cross-guild moderation intelligence query failed:'), error);
     return { guildCount: 0, caseCount: 0, rows: [] };
   }
 }
@@ -318,7 +318,7 @@ function buildMemberScanPayload(i, target) {
     .setTimestamp();
 
   const primaryButtons = [
-    new Discord.ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji('🔄').setStyle(Discord.ButtonStyle.Primary),
+    new Discord.ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji(EMOJIS.REFRESH).setStyle(Discord.ButtonStyle.Primary),
   ];
   if (access.history) primaryButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji('🕘').setStyle(Discord.ButtonStyle.Secondary));
   const components = [new Discord.ActionRowBuilder().addComponents(...primaryButtons)];
@@ -606,7 +606,7 @@ async function submitInvestigationNote(i) {
   if (!target) return safeReply(i, { content: '❌ Could not find that member in this server.', flags: 64 });
   recordModerationSystemEvent({ interaction: i, event: 'moderation.member_scan.note_added', action: 'member_scan_note', targetId: target.id, after: { note } });
   if (canScanCapability(i, 'scan_run')) return runMemberScan(i, target.id, { record: false });
-  return safeReply(i, { content: `✅ Investigation note added for ${target.user}.`, flags: 64 });
+  return safeReply(i, { content: `${EMOJIS.SUCCESS} Investigation note added for ${target.user}.`, flags: 64 });
 }
 async function handleMemberScanSelect(i) {
   if (i.customId === 'mod_scan_user_select') {
@@ -751,12 +751,12 @@ async function handleCancelButton(i) {
   }
   recordModerationSystemEvent({ interaction: i, event: 'moderation.action.cancelled', targetId: targetId === 'none' ? null : targetId, metadata: { pendingActionsRemoved: removed, scopedToToken: Boolean(token), returnView: context.view } });
   if (i.message && typeof i.update === 'function') {
-    await i.update({ content: '❌ Cancelled — no moderation action was applied.', embeds: [], components: [] });
+    await i.update({ content: emojiLabel('ERROR', 'Cancelled — no moderation action was applied.'), embeds: [], components: [] });
     const target = targetId !== 'none' ? await fetchTarget(i.guild, targetId) : null;
     await refreshDashboard(Discord, i, target, target ? context : { view: 'member', actionFilter: 'all', statusFilter: 'all', page: 0 });
     return true;
   }
-  return safeReply(i, { content: '❌ Cancelled — no moderation action was applied.', flags: 64 });
+  return safeReply(i, { content: emojiLabel('ERROR', 'Cancelled — no moderation action was applied.'), flags: 64 });
 }
 async function handleBulkModal(i) {
   if (!String(i.customId || '').startsWith('mod_submit_bulk_')) return false;
@@ -836,7 +836,7 @@ async function handleVerificationCases(i) {
  if(!action){
   const v=sessions[uid];
   const embed=new Discord.EmbedBuilder().setColor(0xfee75c).setTitle('Verification Quarantine Review').setDescription(`Member: <@${uid}>\nFailures: ${Number(v.failedAttempts||0)}\nCase: ${v.quarantineChannelId?'<#'+v.quarantineChannelId+'>':'Unavailable'}\n\nRelease returns to Pending Verification; Reject ends entry; Escalate transfers to Mod Hub investigations.`);
-  return show({embeds:[embed],components:[row(button('mod_verification_case:'+uid+':release','Release',Discord.ButtonStyle.Success),button('mod_verification_case:'+uid+':reject','Reject',Discord.ButtonStyle.Danger),button('mod_verification_case:'+uid+':escalate','Escalate',Discord.ButtonStyle.Primary)),row(button('mod_dashboard:none:cases','⬅️ Back to Cases'))]});
+  return show({embeds:[embed],components:[row(button('mod_verification_case:'+uid+':release','Release',Discord.ButtonStyle.Success),button('mod_verification_case:'+uid+':reject','Reject',Discord.ButtonStyle.Danger),button('mod_verification_case:'+uid+':escalate','Escalate',Discord.ButtonStyle.Primary)),row(button('mod_dashboard:none:cases',emojiLabel('BACK', 'Back to Cases')))]});
  }
  if(!['release','reject','escalate'].includes(action))return false;
  const permission=action==='release'?'remove_quarantine':action==='reject'?'kick':'quarantine';
@@ -846,7 +846,7 @@ async function handleVerificationCases(i) {
  const result=await verificationQuarantine.resolveQuarantineCase(i.guild,uid,action,i.user.id,'Mod Hub Verification review');
  if(!result?.ok)return i.editReply({content:'❌ '+String(result?.message||'Action failed'),embeds:[],components:[row(button('mod_verification_case:'+uid,'Back'))]});
  recordModerationSystemEvent({interaction:i,event:'moderation.verification_case_resolved',action,targetId:uid,reason:'Mod Hub Verification review'});
- return i.editReply({content:'✅ '+String(result.message||'Verification case updated.'),embeds:[],components:[row(button('mod_dashboard:none:cases','⬅️ Back to Cases'))]});
+ return i.editReply({content:'✅ '+String(result.message||'Verification case updated.'),embeds:[],components:[row(button('mod_dashboard:none:cases',emojiLabel('BACK', 'Back to Cases')))]});
 }
 function isGuildOwner(i) { return Boolean(i.guild?.ownerId && String(i.user?.id) === String(i.guild.ownerId)); }
 
@@ -1189,9 +1189,9 @@ async function handleModInteraction(i) {
     if (!handled) recordModerationSystemEvent({ interaction: i, event: 'moderation.interaction.unhandled', metadata: { interactionType: i.componentType || null } });
     return handled;
   } catch (error) {
-    console.error('❌ Moderation interaction failed:', error);
+    console.error(emojiLabel('ERROR', 'Moderation interaction failed:'), error);
     auditFailure(i, 'moderation.interaction.failed', null, getTargetIdFromCustomId(i.customId), error?.message || error, { stack: String(error?.stack || '').slice(0, 1500) });
-    await safeReply(i, { content: '❌ That moderation action failed safely. No further action was taken.', flags: 64 }).catch(() => null);
+    await safeReply(i, { content: emojiLabel('ERROR', 'That moderation action failed safely. No further action was taken.'), flags: 64 }).catch(() => null);
     return true;
   }
 }
