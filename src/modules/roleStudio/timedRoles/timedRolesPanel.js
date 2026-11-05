@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -104,7 +105,7 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
       row(
         button(`${PREFIX}:scan`, '🔎 Scan Now', ButtonStyle.Success),
         button(`${PREFIX}:simulate`, '🧪 Simulate', ButtonStyle.Primary),
-        button(`${PREFIX}:settings`, '⚙️ Settings'),
+        button(`${PREFIX}:settings`, emojiLabel('SETTINGS', 'Settings')),
         button(`${PREFIX}:repair`, '🩺 Repair'),
       ),
       row(
@@ -149,7 +150,7 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
         button(`${PREFIX}:duplicate:${rule.ruleId}`, '📋 Duplicate'),
         button(`${PREFIX}:toggle:${rule.ruleId}`, rule.enabled ? '⏸️ Disable' : '▶️ Enable', rule.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
         button(`${PREFIX}:delete:${rule.ruleId}`, '🗑️ Delete', ButtonStyle.Danger),
-        button(PREFIX, '⬅️ Back'),
+        button(PREFIX, emojiLabel('BACK', 'Back')),
       ),
     ],
   };
@@ -189,7 +190,7 @@ function buildSettingsPanel(guildId) {
       row(
         button(`${PREFIX}:interval`, '🕒 Scan Interval'),
         button(`${PREFIX}:message`, '💬 Promotion Message'),
-        button(PREFIX, '⬅️ Back'),
+        button(PREFIX, emojiLabel('BACK', 'Back')),
       ),
     ],
   };
@@ -237,7 +238,7 @@ async function buildPreviewPanel(guild, memberId) {
       ].join('\n'))],
     components: [row(
       button(`${PREFIX}:applyMember:${member.id}`, '✅ Apply Correct Roles', ButtonStyle.Success),
-      button(PREFIX, '⬅️ Back'),
+      button(PREFIX, emojiLabel('BACK', 'Back')),
     )],
   };
 }
@@ -261,7 +262,7 @@ function buildSimulationPanel(result) {
       ].filter(Boolean).join('\n'))],
     components: [row(
       button(`${PREFIX}:scan`, '🚀 Apply Changes', ButtonStyle.Success, !result.changes.length),
-      button(PREFIX, '⬅️ Back'),
+      button(PREFIX, emojiLabel('BACK', 'Back')),
     )],
   };
 }
