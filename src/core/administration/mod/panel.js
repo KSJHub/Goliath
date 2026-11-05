@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const Discord = require('discord.js');
@@ -210,19 +211,19 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
   const rows = [];
   const finalButtons = [];
   if (active === 'actions') {
-    finalButtons.push(new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
+    finalButtons.push(new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'view_analytics')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
   } else if (active === 'analytics') {
     const returnId = context.analyticsReturnTargetId || 'none';
-    finalButtons.push(new ButtonBuilder().setCustomId('mod_history_back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
+    finalButtons.push(new ButtonBuilder().setCustomId('mod_history_back').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary));
     finalButtons.push(new ButtonBuilder()
       .setCustomId(`mod_analytics_refresh:${context.analyticsWindow || '30d'}:${context.analyticsMode || 'overview'}:${context.analyticsModeratorId || 'none'}:${returnId}`)
       .setLabel('🔄 Refresh')
       .setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${returnId}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   } else {
-    finalButtons.push(new ButtonBuilder().setCustomId('mod_history_back').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary));
+    finalButtons.push(new ButtonBuilder().setCustomId('mod_history_back').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary));
     if (active === 'cases' && String(member?.id) === String(guild?.ownerId)) finalButtons.push(new ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('⚙️ Management').setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   }
@@ -253,7 +254,7 @@ function buildActionRows(target, stats, member, guild, context = {}) {
   if (canViewDashboardSection(member, guild, 'appeals')) management.push(new ButtonBuilder().setCustomId('mod_dashboard:none:appeals').setLabel('⚖️ Appeals').setStyle(ButtonStyle.Secondary));
   if (canUseModAction(member, guild, 'view_cases')) management.push(new ButtonBuilder().setCustomId('mod_verification_cases').setLabel('🚨 Quarantines').setStyle(ButtonStyle.Secondary));
   const tools = [
-    new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
   ];
   if (canViewDashboardSection(member, guild, 'intelligence')) management.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:intelligence`).setLabel('🧠 Intelligence').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
   if (canViewDashboardSection(member, guild, 'analytics')) tools.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
