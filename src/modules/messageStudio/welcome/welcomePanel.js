@@ -29,7 +29,25 @@ function setSelection(guildId,userId,scope,patch){const key=selectionKey(guildId
 function clearSelection(guildId,userId,scope){if(scope)return selections.delete(selectionKey(guildId,userId,scope));selections.delete(selectionKey(guildId,userId,'public'));selections.delete(selectionKey(guildId,userId,'dm'));}
 function templateTypeLabel(template={}){const type=String(template.templateType||template.module||'global');return type==='global'?'General':type.replace(/([a-z])([A-Z])/g,'$1 $2');}
 function sourceLabel(source){return source==='preset'?emojiLabel('WELCOME_PRESET','Welcome Preset'):source==='custom'?emojiLabel('WELCOME_CUSTOM','Custom Welcome'):source==='inherit'?emojiLabel('WELCOME_INHERIT','Same as Public'):emojiLabel('WELCOME_EMBED','Embed Studio');}
-function getTemplateOptions(guildId){return Object.values(embedTemplateManager.listTemplates(guildId)).filter(Boolean).sort((a,b)=>{const aw=a.templateType==='welcome'||a.module==='welcome'?0:1;const bw=b.templateType==='welcome'||b.module==='welcome'?0:1;return aw-bw||String(a.name||a.templateId).localeCompare(String(b.name||b.templateId));}).slice(0,25).map(template=>({label:String(template.name||template.templateId).slice(0,100),description:`${templateTypeLabel(template)} · ${template.embed?.title||template.panels?.[0]?.title||'Embed Studio message'}`.slice(0,100),value:String(template.templateId)}));}
+function getTemplateOptions(guildId,scope='public'){
+  const templates=Object.values(embedTemplateManager.listTemplates(guildId)).filter(Boolean);
+  const relevant=templates.filter(template=>{
+    const type=String(template.templateType||'');
+    const module=String(template.module||'');
+    if(['goodbye','leave','ticketPanel','formSubmission'].includes(type))return false;
+    if(module&&!['welcome','global'].includes(module))return false;
+    if(scope==='public'&&type==='dmWelcome')return false;
+    return !type||['welcome','dmWelcome','global'].includes(type);
+  });
+  return relevant.sort((a,b)=>{
+    const priority=template=>template.templateType===(scope==='dm'?'dmWelcome':'welcome')?0:template.templateType==='welcome'?1:template.module==='welcome'?2:3;
+    return priority(a)-priority(b)||String(a.name||a.templateId).localeCompare(String(b.name||b.templateId));
+  }).slice(0,25).map(template=>({
+    label:String(template.name||template.templateId).slice(0,100),
+    description:`${templateTypeLabel(template)} · ${template.embed?.title||template.panels?.[0]?.title||'Embed Studio message'}`.slice(0,100),
+    value:String(template.templateId),
+  }));
+}
 function sourceMenu(config,userId,guildId,scope='public'){
   const isDm=scope==='dm';const state=getSelection(guildId,userId,scope);const selected=state.source||(isDm?config.dmMessageSource:config.messageSource)||(isDm?'inherit':'preset');
   const options=[];
@@ -42,7 +60,7 @@ function sourceMenu(config,userId,guildId,scope='public'){
   return new StringSelectMenuBuilder().setCustomId(isDm?'admin:welcome:dmSource':'admin:welcome:source').setPlaceholder(isDm?'Choose DM message source':'Choose message source').addOptions(options);
 }
 function templateMenu(guild,activeTemplateId,userId,scope='public'){
-  const options=getTemplateOptions(guild.id);const staged=getSelection(guild.id,userId,scope);const selected=staged.source==='embedStudio'?(staged.templateId||null):(staged.templateId||activeTemplateId||null);
+  const options=getTemplateOptions(guild.id,scope);const staged=getSelection(guild.id,userId,scope);const selected=staged.source==='embedStudio'?(staged.templateId||null):(staged.templateId||activeTemplateId||null);
   const menu=new StringSelectMenuBuilder().setCustomId(scope==='dm'?'admin:welcome:dmTemplate':'admin:welcome:template').setPlaceholder(options.length?'Choose an Embed Studio message':'No messages available').setMinValues(1).setMaxValues(1).setDisabled(options.length===0);
   if(options.length)menu.addOptions(options.map(option=>({...option,default:option.value===selected})));else menu.addOptions({label:'No messages found',value:'none'});return menu;
 }
