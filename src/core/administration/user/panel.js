@@ -1,3 +1,4 @@
+const { EMOJIS } = require('../../ui/emojis');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -17,13 +18,13 @@ const CATEGORY_CATALOG = [
   { key: 'feedback', label: 'Feedback', emoji: '💬', summary: 'Forms, suggestions and tickets.' },
   { key: 'messages', label: 'Messages', emoji: '✉️', summary: 'Member-visible message tools when approved.' },
   { key: 'roles', label: 'Roles', emoji: '🎭', summary: 'Self-assignable roles, role history and requests.' },
-  { key: 'security', label: 'Security', emoji: '🛡️', summary: 'Verification status and member security tools.' },
+  { key: 'security', label: 'Security', emoji: EMOJIS.SECURITY, summary: 'Verification status and member security tools.' },
   { key: 'social', label: 'Social', emoji: '📣', summary: 'Open your own Social Studio Creator Profile.' },
   { key: 'utility', label: 'Utility', emoji: '🧰', summary: 'Help, ping, server info, translate and future utility tools.' },
 ];
 
 const MODULE_CATALOG = [
-  { key: 'warnings', category: 'account', label: 'Warnings', emoji: '⚠️', summary: 'Planned personal warning view.', status: 'planned' },
+  { key: 'warnings', category: 'account', label: 'Warnings', emoji: EMOJIS.WARNING, summary: 'Planned personal warning view.', status: 'planned' },
   { key: 'cases', category: 'account', label: 'Cases', emoji: '📁', summary: 'View official case records published to you by staff.', status: 'live' },
   { key: 'infractions', category: 'account', label: 'Infractions', emoji: '📋', summary: 'Planned personal infraction history.', status: 'planned' },
   { key: 'appeals', category: 'account', label: 'Appeals', emoji: '📝', summary: 'Review eligible cases and submit or track your own appeals.', status: 'live' },
@@ -37,7 +38,7 @@ const MODULE_CATALOG = [
   { key: 'tickets', category: 'feedback', label: 'Tickets', emoji: '🎫', summary: 'Planned member ticket access.', status: 'planned' },
   { key: 'starboard', category: 'messages', label: 'Starboard', emoji: '⭐', summary: 'Planned member starboard view.', status: 'planned' },
   { key: 'roles', category: 'roles', label: 'Roles', emoji: '🎭', summary: 'Planned self-assignable roles, history and requests.', status: 'planned' },
-  { key: 'security', category: 'security', label: 'Security', emoji: '🛡️', summary: 'Planned verification status and security notifications.', status: 'planned' },
+  { key: 'security', category: 'security', label: 'Security', emoji: EMOJIS.SECURITY, summary: 'Planned verification status and security notifications.', status: 'planned' },
   { key: 'social', category: 'social', label: 'Social Studio', emoji: '📣', summary: 'Open or create your own Creator Profile.', status: 'live' },
   { key: 'ping', category: 'utility', label: 'Ping', emoji: '🏓', summary: 'Existing /ping command.', status: 'approved' },
   { key: 'serverinfo', category: 'utility', label: 'Server Info', emoji: '🏰', summary: 'Existing /serverinfo command.', status: 'approved' },
@@ -187,7 +188,7 @@ function progressDetails(levelingProfile = {}) {
 
 function navigationRow({ backId = null, home = true, nextId = null } = {}) {
   const components = [];
-  if (backId) components.push(button(backId, 'Back', ButtonStyle.Secondary, false, '⬅️'));
+  if (backId) components.push(button(backId, 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK));
   if (home) components.push(button('user:home', 'User Panel', ButtonStyle.Secondary, false, '🏠'));
   if (nextId) components.push(button(nextId, 'Next', ButtonStyle.Primary, false, '➡️'));
   return row(...components);
@@ -302,8 +303,8 @@ function buildProfilePanel(interaction, profile = {}, options = {}) {
       row(...actionButtons),
       ...buildCategoryButtons(),
       row(
-        button('user:close', 'Back', ButtonStyle.Secondary, false, '⬅️'),
-        button('user:profile:refresh', 'Refresh', ButtonStyle.Success, false, '🔄'),
+        button('user:close', 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK),
+        button('user:profile:refresh', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
         button('user:in-progress:0', 'In Progress', ButtonStyle.Secondary, false, '🚧'),
       ),
     ],
@@ -341,7 +342,7 @@ function formatXpSource(id, source) {
     : id === 'voice'
       ? ` · every ${source.intervalMinutes} minutes`
       : '';
-  return `${source.enabled ? '✅' : '❌'} **${source.label}** — ${amount}${timing}\n${source.description}`;
+  return `${source.enabled ? EMOJIS.SUCCESS : EMOJIS.ERROR} **${source.label}** — ${amount}${timing}\n${source.description}`;
 }
 
 function buildRewardProgressLines(section, currentLevel = 0) {
@@ -351,7 +352,7 @@ function buildRewardProgressLines(section, currentLevel = 0) {
   const nextReward = rewards.find((reward) => Number(reward.level) > level) || null;
   const lines = rewards.slice(0, 15).map((reward) => {
     const unlocked = level >= Number(reward.level);
-    return `${unlocked ? '✅' : '⬜'} Level **${reward.level}** → <@&${reward.roleId}>`;
+    return `${unlocked ? EMOJIS.SUCCESS : '⬜'} Level **${reward.level}** → <@&${reward.roleId}>`;
   });
   if (nextReward) {
     lines.push('', `**Next Reward:** Level ${nextReward.level} → <@&${nextReward.roleId}>`);
@@ -443,12 +444,12 @@ function buildLevelingUserPanel(interaction, section, user, rank, participating,
     ].join('\n'), memberDisplayName, participating ? PANEL_COLOR : DEV_COLOR))],
     components: [
       row(
-        button('user:module:leveling', 'Refresh', ButtonStyle.Success, false, '🔄'),
+        button('user:module:leveling', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
         button('user:leveling:leaderboard:xp:0', 'Leaderboard', ButtonStyle.Primary, false, '🏆'),
         button('user:leveling:history', 'XP History', ButtonStyle.Primary, false, '📈'),
         button('user:leveling:toggle', participating ? 'Disable Leveling' : 'Enable Leveling', participating ? ButtonStyle.Secondary : ButtonStyle.Success, false, participating ? '⏸️' : '▶️'),
       ),
-      row(button('user:preferences', 'Preferences', ButtonStyle.Secondary, false, '⚙️')),
+      row(button('user:preferences', 'Preferences', ButtonStyle.Secondary, false, EMOJIS.SETTINGS)),
       navigationRow({ backId: 'user:category:community' }),
     ],
   };
@@ -465,8 +466,8 @@ function buildLevelingHistoryPanel(interaction, user = {}) {
     ].join('\n'), memberDisplayName))],
     components: [
       row(
-        button('user:leveling:history', 'Refresh', ButtonStyle.Success, false, '🔄'),
-        button('user:module:leveling', 'Back', ButtonStyle.Secondary, false, '⬅️'),
+        button('user:leveling:history', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
+        button('user:module:leveling', 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK),
       ),
     ],
   };
@@ -486,11 +487,11 @@ function buildInProgressPanel(interactionOrName = 'Unknown User', pageIndex = 0)
   ].join('\n');
 
   const controls = [
-    button('user:home', 'Back', ButtonStyle.Secondary, false, '⬅️'),
-    button(`user:in-progress:${safeIndex}`, 'Refresh', ButtonStyle.Success, false, '🔄'),
+    button('user:home', 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK),
+    button(`user:in-progress:${safeIndex}`, 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
   ];
   if (safeIndex < IN_PROGRESS_PAGES.length - 1) controls.push(button(`user:in-progress:${safeIndex + 1}`, 'Next', ButtonStyle.Primary, false, '➡️'));
-  if (safeIndex > 0) controls.unshift(button(`user:in-progress:${safeIndex - 1}`, 'Previous', ButtonStyle.Secondary, false, '⬅️'));
+  if (safeIndex > 0) controls.unshift(button(`user:in-progress:${safeIndex - 1}`, 'Previous', ButtonStyle.Secondary, false, EMOJIS.BACK));
 
   return {
     embeds: [createEmbed(`🚧 User Panel Development — ${page.title}`, description, memberDisplayName, DEV_COLOR)],
@@ -542,7 +543,7 @@ function buildProgressPanel(interaction, levelingProfile = {}) {
   return {
     embeds: [markLiveEmbed(createEmbed('🏆 Your Progress', lines.join('\n'), memberDisplayName))],
     components: [
-      row(button('user:profile:progress', 'Refresh', ButtonStyle.Success, false, '🔄')),
+      row(button('user:profile:progress', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH)),
       navigationRow({ backId: 'user:home', home: false }),
     ],
   };
@@ -565,7 +566,7 @@ function buildRolesPanel(interaction, options = {}) {
   return {
     embeds: [markLiveEmbed(createEmbed('🎭 Your Roles', description || 'Role visibility is disabled for this server.', memberDisplayName))],
     components: [
-      row(button('user:profile:roles', 'Refresh', ButtonStyle.Success, false, '🔄')),
+      row(button('user:profile:roles', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH)),
       navigationRow({ backId: 'user:home', home: false }),
     ],
   };
