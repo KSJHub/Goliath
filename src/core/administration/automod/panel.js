@@ -169,7 +169,7 @@ function buildAutomodPanel(guild, name = 'Unknown User') {
       description: (config[key].enabled ? 'Enabled' : 'Disabled') + ' • Risk ' + Number(config[key].risk || 0),
     })));
   return {
-    embeds: [createEmbed('🤖 AutoMod Protection', [
+    embeds: [createEmbed(emojiLabel('AUTOMOD', 'AutoMod Protection'), [
       '**System:** ' + status(config.enabled),
       '**Protections:** ' + enabledRules + '/' + AUTOMOD_RULE_KEYS.length + ' enabled',
       '**Case policy:** ' + String(config.caseMode || 'punishments'),
@@ -207,7 +207,7 @@ function buildAutomodConfigurePanel(guild, name = 'Unknown User') {
         button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Primary)
       ),
       row(button('admin:automod:shadow', config.shadowMode ? 'Disable Simulation' : 'Enable Simulation', ButtonStyle.Secondary)),
-      row(button('admin:setautomodlog', '🤖 AutoMod Log', ButtonStyle.Secondary), button('admin:automod:exemptions', emojiLabel('PANELS', 'Exemptions'), ButtonStyle.Secondary), button('admin:automod:reset', emojiLabel('UPDATE', 'Reset'), ButtonStyle.Danger)),
+      row(button('admin:setautomodlog', emojiLabel('AUTOMOD', 'AutoMod Log'), ButtonStyle.Secondary), button('admin:automod:exemptions', emojiLabel('PANELS', 'Exemptions'), ButtonStyle.Secondary), button('admin:automod:reset', emojiLabel('UPDATE', 'Reset'), ButtonStyle.Danger)),
       navRow('admin:automod:configure', 'admin:automod:rule:antiSpam'),
     ],
   };
@@ -342,7 +342,7 @@ function buildDmMessagesModal(config) {
 
 function buildLogChannelPanel() {
   return {
-    embeds: [createEmbed('🤖 Set AutoMod Log Channel', 'Select the text channel where AutoMod logs should be sent.')],
+    embeds: [createEmbed(emojiLabel('AUTOMOD', 'Set AutoMod Log Channel'), 'Select the text channel where AutoMod logs should be sent.')],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('admin:selectautomodlog').setPlaceholder('Choose a text channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       row(backButton('admin:channel:automodlog')),
