@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../ui/emojis');
 
 const {
   EmbedBuilder,
@@ -40,7 +40,7 @@ const LOG_TYPES = {
 
 const AUTHORITY_TIERS = {
   administrator: { label: 'Administrator', emoji: '👑', rank: 300, description: 'Guild administrators who can manage the Goliath systems explicitly granted below.' },
-  moderator: { label: 'Moderator', emoji: '🛡️', rank: 200, description: 'Moderators with configurable moderation and limited administration access.' },
+  moderator: { label: 'Moderator', emoji: EMOJIS.SECURITY, rank: 200, description: 'Moderators with configurable moderation and limited administration access.' },
   juniorModerator: { label: 'Junior Moderator', emoji: '🔰', rank: 100, description: 'Restricted or trial moderators with only explicitly granted capabilities.' },
 };
 const AUTHORITY_TIER_ORDER = Object.keys(AUTHORITY_TIERS).sort((a, b) => AUTHORITY_TIERS[b].rank - AUTHORITY_TIERS[a].rank);
@@ -243,7 +243,7 @@ function buildAdminPanel(guild, name = 'Unknown User', interaction = null) {
     sections.push({ title: '📋 Logs & Audit', description: `Activity records • ${configured}/5 log channels`, id: 'admin:logs', label: '📋 Logs', style: ButtonStyle.Secondary });
   }
   if (can('admin.security.manage')) {
-    sections.push({ title: '🛡️ Security Hub', description: 'Protection, AutoMod and recovery', id: 'admin:security-hub', label: '🛡️ Security Hub', style: ButtonStyle.Secondary });
+    sections.push({ title: emojiLabel('SECURITY', 'Security Hub'), description: 'Protection, AutoMod and recovery', id: 'admin:security-hub', label: emojiLabel('SECURITY', 'Security Hub'), style: ButtonStyle.Secondary });
   }
   if (!interaction || canManageGuildAuthority(interaction)) {
     sections.push({ title: '👥 Staff & Permissions', description: 'Roles and authority control', id: 'admin:adminpanel', label: '👥 Permissions', style: ButtonStyle.Secondary });
