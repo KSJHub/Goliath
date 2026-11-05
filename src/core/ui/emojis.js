@@ -48,6 +48,11 @@ const EMOJIS = Object.freeze({
   REFRESH: '🔄',
   BULK: '📦',
   FIRE: '🔥',
+  INVESTIGATE: '🔎',
+  RESTRICTIONS: '🔒',
+  ISOLATION: '🚨',
+  AUTOMOD: '🤖',
+  VERIFICATION: '🛂',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
