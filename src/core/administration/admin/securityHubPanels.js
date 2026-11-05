@@ -112,8 +112,8 @@ function buildThreatPanel(interaction) {
       { name: 'Response', value: 'Investigate a suspected actor through Goliath member intelligence, or open Restrictions for guild-wide emergency response.', inline: false },
     );
   return { embeds: [embed], components: [managementRow([
-    { customId: 'mod_scan_user', label: 'Investigate Member', emoji: '🔎' },
-    { customId: 'admin:server-security', label: 'Restrictions', emoji: '🔒', style: ButtonStyle.Secondary },
+    { customId: 'mod_scan_user', label: 'Investigate Member', emoji: EMOJIS.INVESTIGATE },
+    { customId: 'admin:server-security', label: 'Restrictions', emoji: EMOJIS.RESTRICTIONS, style: ButtonStyle.Secondary },
   ]), nav(REFRESH.threat)] };
 }
 
@@ -134,8 +134,8 @@ function buildAntiNukePanel(interaction) {
       { name: 'Response Controls', value: 'Restrictions manages live lockdown/invite/role recovery. Full Isolation remains owner-only. Anti-Nuke continues to use the persisted automatic policy shown above.', inline: false },
     );
   return { embeds: [embed], components: [managementRow([
-    { customId: 'admin:server-security', label: 'Restrictions', emoji: '🔒' },
-    { customId: 'admin:security-isolation', label: 'Full Isolation', emoji: '🚨', style: ButtonStyle.Danger, disabled: interaction.guild?.ownerId !== interaction.user?.id },
+    { customId: 'admin:server-security', label: 'Restrictions', emoji: EMOJIS.RESTRICTIONS },
+    { customId: 'admin:security-isolation', label: 'Full Isolation', emoji: EMOJIS.ISOLATION, style: ButtonStyle.Danger, disabled: interaction.guild?.ownerId !== interaction.user?.id },
   ]), nav(REFRESH.antinuke)] };
 }
 
@@ -145,7 +145,7 @@ function buildAutoModPanel(interaction) {
   const keys = Object.keys(rules);
   const enabled = keys.filter((key) => config[key]?.enabled).length;
   const actions = [...new Set(keys.filter((key) => config[key]?.enabled).flatMap((key) => Array.isArray(config[key]?.actions) ? config[key].actions : []))];
-  const embed = base(interaction, '🤖 AutoMod', '**Live automated message and member protection status.**', config.enabled ? 0x57F287 : 0xED4245)
+  const embed = base(interaction, `${EMOJIS.AUTOMOD} AutoMod`, '**Live automated message and member protection status.**', config.enabled ? 0x57F287 : 0xED4245)
     .addFields(
       { name: 'System', value: bool(config.enabled), inline: true },
       { name: 'Protection Rules', value: `**${enabled}/${keys.length}** enabled`, inline: true },
@@ -155,7 +155,7 @@ function buildAutoModPanel(interaction) {
       { name: 'Exceptions', value: `Ignored roles: **${(config.ignoredRoles || []).length}**\nIgnored channels: **${(config.ignoredChannels || []).length}**`, inline: true },
       { name: 'Management', value: 'Open the existing AutoMod administration panel to edit rules, actions, thresholds, domains, messages and logging.', inline: false },
     );
-  return { embeds: [embed], components: [managementButton('admin:automod', 'Manage AutoMod', '🤖'), nav(REFRESH.automod)] };
+  return { embeds: [embed], components: [managementButton('admin:automod', 'Manage AutoMod', EMOJIS.AUTOMOD), nav(REFRESH.automod)] };
 }
 
 function buildMemberPanel(interaction) {
@@ -170,8 +170,8 @@ function buildMemberPanel(interaction) {
       { name: 'Management', value: 'Investigate members through the existing intelligence workflow. Full Security Isolation remains a separate owner-only emergency action.', inline: false },
     );
   return { embeds: [embed], components: [managementRow([
-    { customId: 'mod_scan_user', label: 'Investigate Member', emoji: '🔎' },
-    { customId: 'admin:security-isolation', label: 'Full Isolation', emoji: '🚨', style: ButtonStyle.Danger, disabled: interaction.guild?.ownerId !== interaction.user?.id },
+    { customId: 'mod_scan_user', label: 'Investigate Member', emoji: EMOJIS.INVESTIGATE },
+    { customId: 'admin:security-isolation', label: 'Full Isolation', emoji: EMOJIS.ISOLATION, style: ButtonStyle.Danger, disabled: interaction.guild?.ownerId !== interaction.user?.id },
   ]), nav(REFRESH.member)] };
 }
 
@@ -219,9 +219,9 @@ function buildHealthPanel(interaction) {
       { name: 'Containment', value: `Investigations: **${modes.investigations}**\nFull isolation: **${modes.isolation}**`, inline: true },
     );
   return { embeds: [embed], components: [managementRow([
-    { customId: 'admin:server-security', label: 'Restrictions', emoji: '🔒' },
-    { customId: 'admin:automod', label: 'AutoMod', emoji: '🤖', style: ButtonStyle.Secondary },
-    { customId: 'admin:verification', label: 'Verification', emoji: '🛂', style: ButtonStyle.Secondary },
+    { customId: 'admin:server-security', label: 'Restrictions', emoji: EMOJIS.RESTRICTIONS },
+    { customId: 'admin:automod', label: 'AutoMod', emoji: EMOJIS.AUTOMOD, style: ButtonStyle.Secondary },
+    { customId: 'admin:verification', label: 'Verification', emoji: EMOJIS.VERIFICATION, style: ButtonStyle.Secondary },
   ]), nav(REFRESH.health)] };
 }
 
