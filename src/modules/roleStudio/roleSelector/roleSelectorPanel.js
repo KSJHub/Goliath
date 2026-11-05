@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -49,15 +50,15 @@ async function respond(i, payload) {
 
 function nav(back = 'admin:roleSelector', settingsDisabled = false) {
   return row(
-    button(back, '⬅️ Back'),
-    button('admin:roleSelector:settings', '⚙️ Settings', ButtonStyle.Secondary, settingsDisabled),
+    button(back, emojiLabel('BACK', 'Back')),
+    button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary, settingsDisabled),
   );
 }
 
 function rootNav() {
   return row(
     button('admin:studio:roleStudio', '⬅️ Back to Role Studio'),
-    button('admin:roleSelector:settings', '⚙️ Settings'),
+    button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings')),
   );
 }
 
@@ -362,9 +363,9 @@ function buildGroupsPanel(guildId, selectedId = null) {
         button(customId('admin:roleSelector:toggleRemove', selected.id), selected.allowRemove ? '🧹 Allow Clear: Yes' : '🧹 Allow Clear: No'),
       ),
       row(
-        button('admin:roleSelector:groups', '⬅️ Back'),
+        button('admin:roleSelector:groups', emojiLabel('BACK', 'Back')),
         button(customId('admin:roleSelector:deleteGroup', selected.id), '🗑️ Delete Group', ButtonStyle.Danger),
-        button('admin:roleSelector:settings', '⚙️ Settings'),
+        button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings')),
       ),
     ],
   };
@@ -497,9 +498,9 @@ async function buildDeploymentsPanel(i, selectedId = null) {
         jump ? linkButton('↗️ Jump to Panel', jump) : null,
       ),
       row(
-        button('admin:roleSelector:deployment', '⬅️ Back'),
+        button('admin:roleSelector:deployment', emojiLabel('BACK', 'Back')),
         button(customId('admin:roleSelector:deploymentDelete', selected.id), '🗑️ Delete', ButtonStyle.Danger),
-        button('admin:roleSelector:settings', '⚙️ Settings'),
+        button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings')),
       ),
     ],
   };
@@ -554,7 +555,7 @@ async function buildDeploymentContentPanel(i, deploymentId, groupId = null) {
       deploymentGroupFilterMenu(i.guildId, deployment, groupId),
       groupId ? deploymentOptionMenu(i.guildId, deployment, groupId) : row(button('admin:roleSelector:deploymentContentHint', 'Select a group above to limit its roles', ButtonStyle.Secondary, true)),
       row(button(customId('admin:roleSelector:deploymentOptionsAll', deployment.id, groupId || 'none'), '♻️ Use All Roles for Group', ButtonStyle.Secondary, !groupId)),
-      row(button(customId('admin:roleSelector:deploymentOpen', deployment.id), '⬅️ Back'), button('admin:roleSelector:settings', '⚙️ Settings')),
+      row(button(customId('admin:roleSelector:deploymentOpen', deployment.id), emojiLabel('BACK', 'Back')), button('admin:roleSelector:settings', emojiLabel('SETTINGS', 'Settings'))),
     ],
   };
 }
@@ -930,7 +931,7 @@ async function handleRoleSelectorInteraction(i) {
           embeds: [new EmbedBuilder().setColor(0xFAA61A).setTitle('📍 Move this Role Selector panel?').setDescription(`Current: <#${deployment.channelId}>\nNew: <#${target}>\n\nChoose what to do with the old Goliath-owned panel.`)],
           components: [
             row(button(customId('admin:roleSelector:moveRemove', deploymentId, target), '🗑️ Remove Old Panel & Move', ButtonStyle.Danger), button(customId('admin:roleSelector:moveRetire', deploymentId, target), '📦 Retire Old Panel & Move', ButtonStyle.Primary)),
-            row(button(customId('admin:roleSelector:deploymentOpen', deploymentId), '⬅️ Back')),
+            row(button(customId('admin:roleSelector:deploymentOpen', deploymentId), emojiLabel('BACK', 'Back'))),
           ],
         });
       }
