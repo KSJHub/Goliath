@@ -55,6 +55,17 @@ const EMOJIS = Object.freeze({
   VERIFICATION: '🛂',
   SECURITY: '🛡️',
   RISK: '🎯',
+  WELCOME: '👋',
+  WELCOME_INSTANT: '⚡',
+  WELCOME_DM: '💌',
+  WELCOME_SCHEDULED: '🗓️',
+  WORKSPACE: '🗂️',
+  DELIVERY: '🧩',
+  STATUS: '🚦',
+  NEXT_STEP: '➡️',
+  INACTIVE: '⚪',
+  SETUP_REQUIRED: '🟠',
+  HEALTHY: '✅',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
