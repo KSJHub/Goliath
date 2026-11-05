@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -89,9 +90,9 @@ function buildGiveawaysAdminPanel(guild, memberDisplayName = 'Unknown User', rol
     row(new ChannelSelectMenuBuilder().setCustomId('admin:giveaways:logChannel').setPlaceholder('Log channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:giveaways:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
     row(button('admin:giveaways:deployTest', '🚀 Deploy Test Giveaway', ButtonStyle.Success), button(enabled ? 'admin:giveaways:disable' : 'admin:giveaways:enable', enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary), button('admin:giveaways:toggleMultiple', '🎟️ Multiple', ButtonStyle.Secondary), button('admin:giveaways:toggleRequireRole', '🔒 Role Req', ButtonStyle.Secondary), button('admin:giveaways:togglePing', '📣 Ping', ButtonStyle.Secondary)),
-    row(button('admin:giveaways:levelingEligibility', '🏆 XP Eligibility', ButtonStyle.Primary), button('admin:studio:communityStudio', '⬅️ Back', ButtonStyle.Secondary),
-      button(`admin:giveaways:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, '◀ Roles', ButtonStyle.Secondary, roleInfo.page === 0),
-      button(`admin:giveaways:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, 'Roles ▶', ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1)),
+    row(button('admin:giveaways:levelingEligibility', '🏆 XP Eligibility', ButtonStyle.Primary), button('admin:studio:communityStudio', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+      button(`admin:giveaways:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary, roleInfo.page === 0),
+      button(`admin:giveaways:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1)),
   ] };
 }
 
@@ -128,7 +129,7 @@ function buildLevelingEligibilityPanel(guild, memberDisplayName = 'Unknown User'
         button('admin:giveaways:levelingEligibility:toggle', config.enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
         button('admin:giveaways:levelingEligibility:toggleActive', config.activeOnly ? '👤 Active Only' : '👥 Include Paused', ButtonStyle.Secondary),
       ),
-      row(button('admin:giveaways', '⬅️ Back', ButtonStyle.Secondary)),
+      row(button('admin:giveaways', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
     ],
   };
 }
