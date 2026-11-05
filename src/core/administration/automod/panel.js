@@ -183,7 +183,7 @@ function buildAutomodPanel(guild, name = 'Unknown User') {
     ].join('\n'), name, config.enabled ? ENABLED_COLOR : DISABLED_COLOR)],
     components: [
       row(selector),
-      row(button('admin:automod:configure', '⚙️ System Settings'), button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Secondary)),
+      row(button('admin:automod:configure', emojiLabel('SETTINGS', 'System Settings')), button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Secondary)),
       navRow('admin:automod', 'admin:adminpanel'),
     ],
   };
@@ -192,7 +192,7 @@ function buildAutomodPanel(guild, name = 'Unknown User') {
 function buildAutomodConfigurePanel(guild, name = 'Unknown User') {
   const config = getAutomodConfig(guild.id);
   return {
-    embeds: [createEmbed('⚙️ AutoMod Settings', [
+    embeds: [createEmbed(emojiLabel('SETTINGS', 'AutoMod Settings'), [
       `**AutoMod:** ${status(config.enabled)}`,
       `**DM users:** ${status(config.dmUser !== false)}`,
       `**Simulation:** ${config.shadowMode ? 'ON — log only' : 'OFF — enforcement active'}`,
@@ -207,7 +207,7 @@ function buildAutomodConfigurePanel(guild, name = 'Unknown User') {
         button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Primary)
       ),
       row(button('admin:automod:shadow', config.shadowMode ? 'Disable Simulation' : 'Enable Simulation', ButtonStyle.Secondary)),
-      row(button('admin:setautomodlog', '🤖 AutoMod Log', ButtonStyle.Secondary), button('admin:automod:exemptions', '🧩 Exemptions', ButtonStyle.Secondary), button('admin:automod:reset', '♻️ Reset', ButtonStyle.Danger)),
+      row(button('admin:setautomodlog', '🤖 AutoMod Log', ButtonStyle.Secondary), button('admin:automod:exemptions', emojiLabel('PANELS', 'Exemptions'), ButtonStyle.Secondary), button('admin:automod:reset', emojiLabel('UPDATE', 'Reset'), ButtonStyle.Danger)),
       navRow('admin:automod:configure', 'admin:automod:rule:antiSpam'),
     ],
   };
@@ -227,7 +227,7 @@ function buildRiskPanel(guild, name = 'Unknown User') {
       'Risk combines every protection triggered by the same message. Repeat incidents increase risk without silently changing the configured punishment actions.',
     ].join('\n'), name, PANEL_COLOR)],
     components: [
-      row(button('admin:automod:risk:edit', '⚙️ Configure Risk & Cases'), button('admin:automod', '🛡️ Protections', ButtonStyle.Secondary)),
+      row(button('admin:automod:risk:edit', emojiLabel('SETTINGS', 'Configure Risk & Cases')), button('admin:automod', '🛡️ Protections', ButtonStyle.Secondary)),
       row(backButton('admin:automod:configure')),
     ],
   };
@@ -258,7 +258,7 @@ function buildExemptionsPanel(guild, name='Unknown User', page=0) {
   if(config.ignoredChannels?.length) channels.setDefaultChannels(config.ignoredChannels.slice(0,25));
   if(config.ignoredCategories?.length) categories.setDefaultChannels(config.ignoredCategories.slice(0,25));
   if(config.ignoredUsers?.length) users.setDefaultUsers(config.ignoredUsers.slice(0,25));
-  return {embeds:[createEmbed('🧩 AutoMod Exemptions',['**Roles:** '+(config.ignoredRoles?.length||0),`**Role Selection · Page ${info.page+1}/${info.pages}**`,'**Channels:** '+(config.ignoredChannels?.length||0),'**Categories:** '+(config.ignoredCategories?.length||0),'**Members:** '+(config.ignoredUsers?.length||0),'','Selected resources bypass all Goliath AutoMod message protections. Rule-specific allow lists remain configured inside each protection.'].join('\n'),name)],components:[...(roles?[row(roles)]:[]),row(channels),row(categories),row(users),row(backButton('admin:automod:configure'),button(`admin:automod:exemptions:page:${Math.max(0,info.page-1)}`,emojiLabel('ROLE_PREVIOUS', 'Roles'),ButtonStyle.Secondary,info.page===0),button(`admin:automod:exemptions:page:${Math.min(info.pages-1,info.page+1)}`,emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }),ButtonStyle.Secondary,info.page>=info.pages-1))]};
+  return {embeds:[createEmbed(emojiLabel('PANELS', 'AutoMod Exemptions'),['**Roles:** '+(config.ignoredRoles?.length||0),`**Role Selection · Page ${info.page+1}/${info.pages}**`,'**Channels:** '+(config.ignoredChannels?.length||0),'**Categories:** '+(config.ignoredCategories?.length||0),'**Members:** '+(config.ignoredUsers?.length||0),'','Selected resources bypass all Goliath AutoMod message protections. Rule-specific allow lists remain configured inside each protection.'].join('\n'),name)],components:[...(roles?[row(roles)]:[]),row(channels),row(categories),row(users),row(backButton('admin:automod:configure'),button(`admin:automod:exemptions:page:${Math.max(0,info.page-1)}`,emojiLabel('ROLE_PREVIOUS', 'Roles'),ButtonStyle.Secondary,info.page===0),button(`admin:automod:exemptions:page:${Math.min(info.pages-1,info.page+1)}`,emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }),ButtonStyle.Secondary,info.page>=info.pages-1))]};
 }
 
 function ruleSummary(key, rule) {
