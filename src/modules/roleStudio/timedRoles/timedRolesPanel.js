@@ -109,10 +109,10 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
         button(`${PREFIX}:repair`, '🩺 Repair'),
       ),
       row(
-        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.max(0, safePage - 1)), '⬅️ Roles', ButtonStyle.Secondary, safePage <= 0) : null,
+        pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.max(0, safePage - 1)), emojiLabel('BACK', 'Roles'), ButtonStyle.Secondary, safePage <= 0) : null,
         button(enabled ? `${PREFIX}:disable` : `${PREFIX}:enable`, enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
         button(`${PREFIX}:export`, '📤 Export'),
-        button('admin:reactionRoles', '⬅️ Role Studio'),
+        button('admin:reactionRoles', emojiLabel('BACK', 'Role Studio')),
         pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.min(pageCount - 1, safePage + 1)), 'Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
       ),
     ],
@@ -162,7 +162,7 @@ function buildSettingsPanel(guildId) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('⚙️ Timed Roles Settings')
+      .setTitle(emojiLabel('SETTINGS', 'Timed Roles Settings'))
       .setDescription([
         `**Progression mode:** ${highestOnly ? 'Highest milestone only' : 'Keep all earned milestones'}`,
         `**Include bots:** ${section.settings.includeBots ? 'Yes' : 'No'}`,
@@ -237,7 +237,7 @@ async function buildPreviewPanel(guild, memberId) {
         '> Preview does not change any roles.',
       ].join('\n'))],
     components: [row(
-      button(`${PREFIX}:applyMember:${member.id}`, '✅ Apply Correct Roles', ButtonStyle.Success),
+      button(`${PREFIX}:applyMember:${member.id}`, emojiLabel('SUCCESS', 'Apply Correct Roles'), ButtonStyle.Success),
       button(PREFIX, emojiLabel('BACK', 'Back')),
     )],
   };
