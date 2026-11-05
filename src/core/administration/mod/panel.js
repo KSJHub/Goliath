@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS: SHARED_EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const Discord = require('discord.js');
 const {
@@ -91,7 +91,7 @@ const MAX_EXPORT_FILE_BYTES = 7 * 1024 * 1024;
 const MAX_EXPORT_ATTACHMENTS = 10;
 
 function canOpenModPanel(interaction) { return Boolean(interaction?.guild && interaction?.member && hasModPermission(interaction.member, interaction.guild)); }
-function noAccessPayload() { return { content: '❌ You do not have permission to use the moderation panel.', flags: 64 }; }
+function noAccessPayload() { return { content: emojiLabel('ERROR', 'You do not have permission to use the moderation panel.'), flags: 64 }; }
 function normalizeAnalyticsWindow(value) { return Object.prototype.hasOwnProperty.call(ANALYTICS_WINDOWS, value) ? value : '30d'; }
 function normalizeView(value) { const aliased = VIEW_ALIASES[value] || value; return ALLOWED_VIEWS.has(aliased) ? aliased : DEFAULT_VIEW; }
 function normalizeDashboardContext(context = {}) {
@@ -162,7 +162,7 @@ function analyticsBounds(windowKey, nowMs = Date.now()) {
 function inBounds(value, start, end) { return value > 0 && (start === null || value >= start) && value <= end; }
 function getAuditRows(guildId, bounds) {
   try { return db.prepare('SELECT actor_id, event, created_at FROM case_audit WHERE guild_id = ? ORDER BY created_at DESC').all(String(guildId)).filter((row) => inBounds(getAuditTime(row), bounds.start, bounds.end)); }
-  catch (error) { console.error('❌ Moderation analytics audit query failed:', error); return []; }
+  catch (error) { console.error(emojiLabel('ERROR', 'Moderation analytics audit query failed:'), error); return []; }
 }
 function flattenAppeals(cases) { const result = []; for (const modCase of cases) for (const appeal of getCaseAppeals(modCase) || []) result.push({ modCase, appeal }); return result; }
 function getModerationAnalytics(guildId, windowKey = '30d') {
@@ -219,7 +219,7 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
     finalButtons.push(new ButtonBuilder().setCustomId('mod_history_back').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary));
     finalButtons.push(new ButtonBuilder()
       .setCustomId(`mod_analytics_refresh:${context.analyticsWindow || '30d'}:${context.analyticsMode || 'overview'}:${context.analyticsModeratorId || 'none'}:${returnId}`)
-      .setLabel('🔄 Refresh')
+      .setLabel(emojiLabel('REFRESH', 'Refresh'))
       .setStyle(ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${returnId}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
   } else {
@@ -238,13 +238,13 @@ function buildActionRows(target, stats, member, guild, context = {}) {
   const disabled = !target;
   const quarantined = targetIsQuarantined(guild, target);
   const actions = [];
-  if (p.warn) actions.push(createSecondaryButton(`mod_open_warn:${id}`, 'Warn', '⚠️').setDisabled(disabled));
+  if (p.warn) actions.push(createSecondaryButton(`mod_open_warn:${id}`, 'Warn', SHARED_EMOJIS.WARNING).setDisabled(disabled));
   if (p.timeout) actions.push(createSecondaryButton(`mod_open_timeout:${id}`, 'Timeout', '⌛').setDisabled(disabled));
   if (p.quarantine) actions.push(createDangerButton(`mod_open_quarantine:${id}`, 'Investigate', '☢️').setDisabled(disabled || quarantined));
   if (p.kick) actions.push(createDangerButton(`mod_open_kick:${id}`, 'Kick', '🥾').setDisabled(disabled));
   if (p.ban) actions.push(createDangerButton(`mod_open_ban:${id}`, 'Ban', '🔨').setDisabled(disabled));
   const reversals = [];
-  if (p.removeWarning) reversals.push(createSecondaryButton(`mod_remove_warning:${id}`, 'Clear Warn', '⚠️').setDisabled(disabled || Number(stats?.warningCount || 0) <= 0));
+  if (p.removeWarning) reversals.push(createSecondaryButton(`mod_remove_warning:${id}`, 'Clear Warn', SHARED_EMOJIS.WARNING).setDisabled(disabled || Number(stats?.warningCount || 0) <= 0));
   if (p.removeTimeout) reversals.push(createSecondaryButton(`mod_remove_timeout:${id}`, 'Clear Timeout', '⌛').setDisabled(disabled || !targetHasActiveTimeout(target)));
   if (p.removeQuarantine) reversals.push(createSecondaryButton(`mod_remove_quarantine:${id}`, 'Clear Investigation', '🟠').setDisabled(disabled || !quarantined));
   const management = [];
@@ -331,7 +331,7 @@ function buildAppealsOverviewEmbed(guild, filter = 'pending', page = 0) {
     description: [
       'Review submitted appeals, inspect their grounds and record a decision.',
       '',
-      `**📥 Pending:** ${data.pending.length}   •   **✅ Resolved:** ${data.resolved.length}   •   **📋 Total:** ${data.all.length}`,
+      `**📥 Pending:** ${data.pending.length}   •   **${SHARED_EMOJIS.SUCCESS} Resolved:** ${data.resolved.length}   •   **📋 Total:** ${data.all.length}`,
       `**Viewing:** ${viewLabel}`,
     ].join('\n'),
     color: COLORS.PRIMARY,
@@ -341,7 +341,7 @@ function buildAppealsOverviewEmbed(guild, filter = 'pending', page = 0) {
     embed.addFields({ name: '📭 Nothing to Review', value: data.all.length ? 'No appeals match this filter.' : 'No appeals have been submitted yet.', inline: false });
   } else {
     for (const { case: modCase, appeal } of data.entries) {
-      const status = appeal.status === 'approved' ? '✅ Approved' : appeal.status === 'denied' ? '❌ Denied' : '⏳ Pending';
+      const status = appeal.status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : appeal.status === 'denied' ? emojiLabel('ERROR', 'Denied') : '⏳ Pending';
       const rawTime = new Date(appeal.submittedAt || 0).getTime();
       const submitted = Number.isFinite(rawTime) && rawTime > 0 ? `<t:${Math.floor(rawTime / 1000)}:R>` : 'Unknown';
       const grounds = String(appeal.grounds || appeal.reason || appeal.message || 'No appeal grounds recorded').replace(/\s+/g, ' ').slice(0, 220);
@@ -403,7 +403,7 @@ function buildModeratorAnalyticsEmbed(guild, analytics) {
     fields.push(
       { name: '📁 Cases Handled', value: `**${analytics.moderatorCases}**`, inline: true },
       { name: '👥 Members Moderated', value: `**${analytics.affectedUsers}**`, inline: true },
-      { name: '✅ Closed', value: `**${statuses.reversed || 0}**`, inline: true },
+      { name: emojiLabel('SUCCESS', 'Closed'), value: `**${statuses.reversed || 0}**`, inline: true },
       { name: '⚡ Actions Taken', value: `Warnings **${Number(analytics.moderatorActionCounts.warn || 0)}** • Timeouts **${Number(analytics.moderatorActionCounts.timeout || 0)}**\nKicks **${Number(analytics.moderatorActionCounts.kick || 0)}** • Bans **${Number(analytics.moderatorActionCounts.ban || 0)}**`, inline: false }
     );
     const recent = analytics.recentCases.slice(0, 5).map((entry) => {
@@ -497,11 +497,11 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     const activeQuarantineCount = records.filter(e => e.type === 'quarantine' && ['active','pending','quarantined'].includes(e.status)).length;
     const pages = Math.max(1, Math.ceil(active.length / 8)), page = Math.max(0, Math.min(context.page, pages - 1));
     const shown = active.slice(page * 8, (page + 1) * 8);
-    const title = filter === 'warn' ? '⚠️ Warnings · Review Centre' : filter === 'timeout' ? '⌛ Timeouts · Review Centre' : filter === 'appeal' ? '⚖️ Appeals · Review Centre' : filter === 'quarantine' ? '🚨 Quarantines · Review Centre' : '📂 Cases · Review Centre';
+    const title = filter === 'warn' ? emojiLabel('WARNING', 'Warnings · Review Centre') : filter === 'timeout' ? '⌛ Timeouts · Review Centre' : filter === 'appeal' ? '⚖️ Appeals · Review Centre' : filter === 'quarantine' ? '🚨 Quarantines · Review Centre' : '📂 Cases · Review Centre';
     const embed = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(title)
       .setDescription(target ? `👤 <@${target.id}> · Member records` : 'Review active cases, appeals and quarantines.')
       .addFields(
-        { name: '📊 Overview', value: `⚠️ Warning records **${warningHistoryCount}** · ⌛ Timeout records **${timeoutHistoryCount}** · ⚖️ Pending appeals **${pendingAppealCount}** · 🚨 Active quarantines **${activeQuarantineCount}**`, inline: false },
+        { name: '📊 Overview', value: `${SHARED_EMOJIS.WARNING} Warning records **${warningHistoryCount}** · ⌛ Timeout records **${timeoutHistoryCount}** · ⚖️ Pending appeals **${pendingAppealCount}** · 🚨 Active quarantines **${activeQuarantineCount}**`, inline: false },
         { name: `📋 ${filter === 'warn' || filter === 'timeout' ? 'History' : 'Active'} · ${filter === 'all' ? 'All types' : filter} · ${active.length} record(s)`, value: shown.length ? shown.map(e => `**${e.type.toUpperCase()}** · <@${e.userId}>${e.caseId ? ` · #${e.caseId}` : ''}\n${e.reason.slice(0, 110)}${e.channelId ? ` · <#${e.channelId}>` : ''}`).join('\n\n').slice(0, 1024) : (filter === 'warn' || filter === 'timeout' ? 'No matching records in this history.' : 'No matching active records.'), inline: false })
       .setFooter({ text: 'Staff only · Select a record to review' });
     embeds.push(embed);
@@ -536,7 +536,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
         .addOptions(
           { label: 'All Appeals', value: 'all', description: 'Every submitted appeal', emoji: '📋', default: filter === 'all' },
           { label: 'Pending Review', value: 'pending', description: 'Appeals awaiting a decision', emoji: '📥', default: filter === 'pending' },
-          { label: 'Resolved', value: 'resolved', description: 'Approved and denied appeals', emoji: '✅', default: filter === 'resolved' }
+          { label: 'Resolved', value: 'resolved', description: 'Approved and denied appeals', emoji: SHARED_EMOJIS.SUCCESS, default: filter === 'resolved' }
         )
     ));
     if (data.entries.length) components.push(new ActionRowBuilder().addComponents(data.entries.map(({ case: modCase, appeal }) =>
