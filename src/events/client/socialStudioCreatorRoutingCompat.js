@@ -90,9 +90,9 @@ function rolePayload(interaction) {
   ].join('\n');
   const navigation = [
     button(`${P}settings`, '⬅️ Back'),
-    button(`${P}roles:page:prev`, '◀️', safePage <= 0),
+    button(`${P}roles:page:prev`, '◀ Roles', safePage <= 0),
     button(`${P}roles:page:info`, `📄 Roles ${safePage + 1}/${pageCount}`, true),
-    button(`${P}roles:page:next`, '▶️', safePage >= pageCount - 1),
+    button(`${P}roles:page:next`, 'Roles ▶', safePage >= pageCount - 1),
   ];
   return { embeds: [new EmbedBuilder().setColor(config.enabled ? 0x5865F2 : 0x747F8D).setTitle('🎭 Roles & Access').setDescription(description).setFooter({ text: `Requested by ${who(interaction)}` }).setTimestamp()], components: [manager.row, user.row, live, notificationSelect(interaction, config, safePage), row(...navigation)] };
 }
