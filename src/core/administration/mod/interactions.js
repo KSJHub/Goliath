@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const Discord = require('discord.js');
@@ -326,7 +327,7 @@ function buildMemberScanPayload(i, target) {
   if (access.notes) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_note:${target.id}`).setLabel('Notes').setEmoji('📝').setStyle(Discord.ButtonStyle.Secondary));
   if (access.watch) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_watch:${target.id}`).setLabel(investigation.watched ? 'Remove Watch' : 'Watch Status').setEmoji('👁️').setStyle(investigation.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Secondary));
   if (intelligenceButtons.length) components.push(new Discord.ActionRowBuilder().addComponents(...intelligenceButtons));
-  const navButtons = [new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel('⬅️ Back').setStyle(Discord.ButtonStyle.Secondary)];
+  const navButtons = [new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel(emojiLabel('BACK', 'Back')).setStyle(Discord.ButtonStyle.Secondary)];
   if (access.cases) navButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_export_cases:${target.id}`).setLabel('📤 Export').setStyle(Discord.ButtonStyle.Secondary));
   components.push(new Discord.ActionRowBuilder().addComponents(...navButtons));
   return { scanId, cases, suspects, history, crossGuild, investigation, persistentLinks, risk, access, embed, components };
@@ -636,7 +637,7 @@ async function handleMemberScanButton(i) {
       const allowed = await ensureScanCapability(i, 'scan_run', '❌ You do not have permission to run a member intelligence scan.');
       if (!allowed) return true;
       const select = new Discord.UserSelectMenuBuilder().setCustomId('mod_scan_user_select').setPlaceholder('👤 Select a member to investigate').setMinValues(1).setMaxValues(1);
-      const back = new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:actions').setLabel('⬅️ Back').setStyle(Discord.ButtonStyle.Secondary);
+      const back = new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:actions').setLabel(emojiLabel('BACK', 'Back')).setStyle(Discord.ButtonStyle.Secondary);
       return safeUpdate(i, { content: '🧠 **Member Intelligence** — select a server member to open the unified intelligence workspace.', embeds: [], components: [new Discord.ActionRowBuilder().addComponents(select), new Discord.ActionRowBuilder().addComponents(back)] });
     }
   }
