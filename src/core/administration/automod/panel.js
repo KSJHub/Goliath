@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   EmbedBuilder,
@@ -59,7 +59,7 @@ const DEFAULT_DM_MESSAGES = {
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const button = (id, label, style = ButtonStyle.Primary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
 const getMemberDisplayName = (interaction) => interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
-const status = (value) => value ? 'Enabled ✅' : 'Disabled ❌';
+const status = (value) => value ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`;
 const canUseAutoMod = (interaction) => Boolean(
   security.hasPermission(interaction, 'admin')
   || security.isBotOwner(interaction.user?.id)
@@ -373,7 +373,7 @@ async function handleAutomodModal(interaction) {
     const account=interaction.fields.getTextInputValue('accountRisk').split(',').map((v)=>v.trim());
     config.accountRisk={enabled:['on','true','enabled','yes'].includes(String(account[0]).toLowerCase()),newAccountDays:parsePositive(account[1],7,0,365),newMemberHours:parsePositive(account[2],24,0,720),riskBoost:parsePositive(account[3],15,0,100)};
     saveAutomodConfig(interaction.guild.id,config);
-    await interaction.reply({content:'✅ AutoMod risk, case and evidence policy saved.',flags:64});
+    await interaction.reply({content:emojiLabel('SUCCESS', 'AutoMod risk, case and evidence policy saved.'),flags:64});
     return true;
   }
   const dmMatch=interaction.customId.match(/^admin:automod:rule:([^:]+):dm:modal$/);
@@ -381,7 +381,7 @@ async function handleAutomodModal(interaction) {
     const key=dmMatch[1],config=getAutomodConfig(interaction.guild.id),dmMessages={...config.dmMessages};
     dmMessages[key]=interaction.fields.getTextInputValue('message').trim()||DEFAULT_DM_MESSAGES[key];
     saveAutomodConfig(interaction.guild.id,{...config,dmMessages});
-    await interaction.reply({content:'✅ Member notice saved.',flags:64});
+    await interaction.reply({content:emojiLabel('SUCCESS', 'Member notice saved.'),flags:64});
     return true;
   }
   if (interaction.customId === 'admin:automod:dmmessage:modal') {
@@ -392,7 +392,7 @@ async function handleAutomodModal(interaction) {
       dmMessages[key] = value || DEFAULT_DM_MESSAGES[key];
     }
     saveAutomodConfig(interaction.guild.id, { ...config, dmMessages });
-    await interaction.reply({ content: '✅ AutoMod DM messages saved.', flags: 64 });
+    await interaction.reply({ content: emojiLabel('SUCCESS', 'AutoMod DM messages saved.'), flags: 64 });
     return true;
   }
 
@@ -434,7 +434,7 @@ async function handleAutomodModal(interaction) {
   if (key === 'badWords') rule.matchMode=(optionalField('matchMode')||'boundary').trim().toLowerCase()==='contains'?'contains':'boundary';
   if (key === 'scamPatterns') rule.phrases=parseList(interaction.fields.getTextInputValue('phrases'));
   saveAutomodConfig(interaction.guild.id, { ...config, [key]: rule });
-  await interaction.reply({ content: `✅ ${AUTOMOD_RULES[key].title} settings saved.`, flags: 64 });
+  await interaction.reply({ content: `${EMOJIS.SUCCESS} ${AUTOMOD_RULES[key].title} settings saved.`, flags: 64 });
   return true;
 }
 
@@ -442,7 +442,7 @@ async function handleAutomodInteraction(interaction) {
   const id = String(interaction.customId || '');
   if (!(id.startsWith('admin:automod') || id === 'admin:setautomodlog' || id === 'admin:selectautomodlog' || id === 'admin:channel:automodlog')) return false;
   if (!interaction.guild || !canUseAutoMod(interaction)) {
-    await interaction.reply({ content: '❌ You do not have permission to manage AutoMod.', flags: 64 });
+    await interaction.reply({ content: emojiLabel('ERROR', 'You do not have permission to manage AutoMod.'), flags: 64 });
     return true;
   }
 
