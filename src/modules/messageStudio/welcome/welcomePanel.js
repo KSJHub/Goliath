@@ -5,6 +5,7 @@ const {
   RoleSelectMenuBuilder, StringSelectMenuBuilder, ChannelType, AttachmentBuilder,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
+const { emojiLabel } = require('../../../core/ui/emojis');
 const guildManager = require('../../../core/guild/guildManager');
 const welcome = require('./welcome');
 const scheduledWelcome = require('./scheduledWelcome');
@@ -120,7 +121,7 @@ async function buildWelcomePanel(guild,memberDisplayName='Unknown User'){
     )),
     row(new ChannelSelectMenuBuilder().setCustomId('admin:welcome:homeChannel').setPlaceholder(instant.channelId?'📢 Change Welcome Channel':'📢 Select Welcome Channel').setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     row(button('admin:welcome:instant','⚡ Instant Welcome',ButtonStyle.Primary),button('admin:welcome:dm','💌 DM Welcome',ButtonStyle.Primary),button('admin:welcome:scheduled','📅 Scheduled Welcome',ButtonStyle.Primary)),
-    row(button('admin:modules','⬅️ Back'),button('admin:welcome:settings','⚙️ Settings'))
+    row(button('admin:modules',emojiLabel('BACK','Back')),button('admin:welcome:settings',emojiLabel('SETTINGS','Settings')))
   ]};
 }
 
@@ -157,7 +158,7 @@ async function buildWelcomeSettingsPanel(guild,memberDisplayName='Unknown User')
     .setTimestamp()],components:[
       row(button('admin:welcome:mentions','🔔 Mentions',ButtonStyle.Primary),button('admin:welcome:repairAll','🩺 Diagnostics',ButtonStyle.Secondary),button('admin:welcome:export','📤 Export',ButtonStyle.Secondary)),
       row(button(enabled?'admin:welcome:disable':'admin:welcome:enable',enabled?'⏸ Disable Welcome':'▶ Enable Welcome',enabled?ButtonStyle.Secondary:ButtonStyle.Success)),
-      row(button('admin:welcome','⬅️ Back',ButtonStyle.Secondary),button('admin:welcome:reset','🗑 Reset',ButtonStyle.Danger))
+      row(button('admin:welcome',emojiLabel('BACK','Back'),ButtonStyle.Secondary),button('admin:welcome:reset','🗑 Reset',ButtonStyle.Danger))
     ]};
 }
 
@@ -172,8 +173,8 @@ async function buildInstantPanel(guild,memberDisplayName='Unknown User',userId='
     row(sourceMenu(config,userId,guild.id,'public'))
   ];
   if(source==='embedStudio')components.push(row(templateMenu(guild,template?.templateId||config.templateId,userId,'public')));
-  components.push(row(button('admin:welcome:applySource','💾 Save Message',ButtonStyle.Primary,source==='embedStudio'&&!state.templateId),button('admin:welcome:test','👁️ Preview',ButtonStyle.Secondary),button('admin:welcome:send','🧪 Send Test',ButtonStyle.Success)));
-  components.push(row(button('admin:welcome','⬅️ Back'),button('admin:welcome:instantSettings','⚙️ Settings')));
+  components.push(row(button('admin:welcome:applySource','💾 Save Message',ButtonStyle.Primary,source==='embedStudio'&&!state.templateId),button('admin:welcome:test','👁️ Preview',ButtonStyle.Secondary),button('admin:welcome:send',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
+  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:instantSettings',emojiLabel('SETTINGS','Settings'))));
   const issues=health.warnings||[];
   const next=!enabled?'⚙️ Enable the Welcome module in Settings before live delivery.':!config.channelId?'📍 Select a public welcome channel.':issues.length?'⚠️ Open Settings to review delivery warnings.':'✅ Preview or send a test welcome to confirm the message.';
   return {embeds:[new EmbedBuilder().setColor(!enabled?0x747f8d:issues.length?0xfaa61a:0x57f287)
@@ -195,8 +196,8 @@ async function buildDmPanel(guild,memberDisplayName='Unknown User',userId='panel
   const pendingTemplate=state.templateId?embedTemplateManager.getTemplate(guild.id,state.templateId):null;
   const components=[row(sourceMenu(config,userId,guild.id,'dm'))];
   if(source==='embedStudio')components.push(row(templateMenu(guild,dmTemplate?.templateId||config.dmTemplateId,userId,'dm')));
-  components.push(row(button('admin:welcome:dmApply','💾 Save Message',ButtonStyle.Primary,source==='embedStudio'&&!state.templateId),button('admin:welcome:dmPreview','👁️ Preview'),button('admin:welcome:dmSend','🧪 Send Test',ButtonStyle.Success)));
-  components.push(row(button('admin:welcome','⬅️ Back'),button('admin:welcome:dmSettings','⚙️ Settings')));
+  components.push(row(button('admin:welcome:dmApply','💾 Save Message',ButtonStyle.Primary,source==='embedStudio'&&!state.templateId),button('admin:welcome:dmPreview','👁️ Preview'),button('admin:welcome:dmSend',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
+  components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:dmSettings',emojiLabel('SETTINGS','Settings'))));
   const message=config.dmMessageSource==='inherit'?publicTemplate?.name||'Same as Public':dmTemplate?.name||'Not selected';
   return {embeds:[new EmbedBuilder().setColor(config.dmEnabled?0x57f287:0x747f8d)
     .setTitle('💌 Welcome · Direct Message')
@@ -223,12 +224,12 @@ function buildMentionSettingsPanel(guild,memberDisplayName='Unknown User'){
     .setFooter({text:`Welcome Studio • ${memberDisplayName}`}).setTimestamp()],components:[
       row(new RoleSelectMenuBuilder().setCustomId('admin:welcome:roles').setPlaceholder('🔔 Choose roles to notify').setMinValues(0).setMaxValues(10)),
       row(button('admin:welcome:togglePing',config.allowUserPing?'🔔 Member Pings: On':'🔕 Member Pings: Off',config.allowUserPing?ButtonStyle.Success:ButtonStyle.Secondary),button('admin:welcome:toggleRolePings',config.allowRolePings?'📣 Role Pings: On':'📣 Role Pings: Off',config.allowRolePings?ButtonStyle.Success:ButtonStyle.Secondary)),
-      row(button('admin:welcome','⬅️ Back'),button('admin:welcome:settings','⚙️ Settings'))
+      row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:settings',emojiLabel('SETTINGS','Settings')))
     ]};
 }
 
 
-async function buildScheduledPanel(guild,memberDisplayName='Unknown User'){const config=scheduledWelcome.getScheduledConfig(guild.id);const health=await scheduledWelcomeHealth.buildHealth(guild);const analytics=config.analytics||{};const lastRun=analytics.lastRunAt?`<t:${Math.floor(new Date(analytics.lastRunAt).getTime()/1000)}:R>`:'Never';return {embeds:[new EmbedBuilder().setColor(!config.enabled?0x747f8d:health.healthy?0x57f287:0xfaa61a).setTitle('📅 Welcome · Scheduled').setDescription(['Manage the queued welcome delivered at your chosen local time.','','### 🗂️ Workspace',`**Status:** ${config.enabled?'Enabled ✅':'Disabled'}`,`**Queue role:** ${config.queueRoleId?`<@&${config.queueRoleId}>`:'`Not set`'}`,`**Channel:** ${config.channelId?`<#${config.channelId}>`:'`Not set`'}`,`**Time:** \`${config.time}\``,`**Timezone:** \`${config.timezone}\``,`**Waiting now:** \`${health.waitingMembers||0}\``,`**Already welcomed / cleanup pending:** \`${health.stuckMemberIds?.length||0}\``,`**Ping members:** ${config.pingMembers?'Yes':'No'}`,`**Remove queue role:** ${config.removeQueueRole?'Yes ✅':'No'}`,`**Bots:** ${config.ignoreBots?'Excluded':'Included'}`,'',`**Message:**\n${String(config.message||'').slice(0,700)||'`Not set`'}`,'','### 🚦 Status',`Runs: \`${analytics.runs||0}\` · Welcomed: \`${analytics.membersWelcomed||0}\` · Failed sends: \`${analytics.sendFailed||0}\``,`Last run: ${lastRun}`,analytics.lastError?`**Last delivery error:** ${String(analytics.lastError).slice(0,300)}`:null,health.issues.length?`\n**Issues**\n${health.issues.map(issue=>`• ${issue}`).join('\n')}`:'',health.warnings.length?`\n**Warnings**\n${health.warnings.map(warning=>`• ${warning}`).join('\n')}`:''].filter(Boolean).join('\n').slice(0,4096)).setFooter({text:`Requested by ${memberDisplayName}`}).setTimestamp()],components:[row(new RoleSelectMenuBuilder().setCustomId('admin:welcome:scheduled:role').setPlaceholder('Select the Welcome Queue role').setMinValues(0).setMaxValues(1)),row(new ChannelSelectMenuBuilder().setCustomId('admin:welcome:scheduled:channel').setPlaceholder('Select scheduled welcome channel').setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),row(button('admin:welcome:scheduled:configure','⚙️ Schedule & Message',ButtonStyle.Primary),button('admin:welcome:scheduled:previewQueue','👥 View Queue'),button('admin:welcome:scheduled:runNow','▶ Run Now')),row(button('admin:welcome','⬅️ Back'),button('admin:welcome:scheduledSettings','⚙️ Settings'))]};}
+async function buildScheduledPanel(guild,memberDisplayName='Unknown User'){const config=scheduledWelcome.getScheduledConfig(guild.id);const health=await scheduledWelcomeHealth.buildHealth(guild);const analytics=config.analytics||{};const lastRun=analytics.lastRunAt?`<t:${Math.floor(new Date(analytics.lastRunAt).getTime()/1000)}:R>`:'Never';return {embeds:[new EmbedBuilder().setColor(!config.enabled?0x747f8d:health.healthy?0x57f287:0xfaa61a).setTitle('📅 Welcome · Scheduled').setDescription(['Manage the queued welcome delivered at your chosen local time.','','### 🗂️ Workspace',`**Status:** ${config.enabled?'Enabled ✅':'Disabled'}`,`**Queue role:** ${config.queueRoleId?`<@&${config.queueRoleId}>`:'`Not set`'}`,`**Channel:** ${config.channelId?`<#${config.channelId}>`:'`Not set`'}`,`**Time:** \`${config.time}\``,`**Timezone:** \`${config.timezone}\``,`**Waiting now:** \`${health.waitingMembers||0}\``,`**Already welcomed / cleanup pending:** \`${health.stuckMemberIds?.length||0}\``,`**Ping members:** ${config.pingMembers?'Yes':'No'}`,`**Remove queue role:** ${config.removeQueueRole?'Yes ✅':'No'}`,`**Bots:** ${config.ignoreBots?'Excluded':'Included'}`,'',`**Message:**\n${String(config.message||'').slice(0,700)||'`Not set`'}`,'','### 🚦 Status',`Runs: \`${analytics.runs||0}\` · Welcomed: \`${analytics.membersWelcomed||0}\` · Failed sends: \`${analytics.sendFailed||0}\``,`Last run: ${lastRun}`,analytics.lastError?`**Last delivery error:** ${String(analytics.lastError).slice(0,300)}`:null,health.issues.length?`\n**Issues**\n${health.issues.map(issue=>`• ${issue}`).join('\n')}`:'',health.warnings.length?`\n**Warnings**\n${health.warnings.map(warning=>`• ${warning}`).join('\n')}`:''].filter(Boolean).join('\n').slice(0,4096)).setFooter({text:`Requested by ${memberDisplayName}`}).setTimestamp()],components:[row(new RoleSelectMenuBuilder().setCustomId('admin:welcome:scheduled:role').setPlaceholder('Select the Welcome Queue role').setMinValues(0).setMaxValues(1)),row(new ChannelSelectMenuBuilder().setCustomId('admin:welcome:scheduled:channel').setPlaceholder('Select scheduled welcome channel').setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),row(button('admin:welcome:scheduled:configure','⚙️ Schedule & Message',ButtonStyle.Primary),button('admin:welcome:scheduled:previewQueue','👥 View Queue'),button('admin:welcome:scheduled:runNow','▶ Run Now')),row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:scheduledSettings',emojiLabel('SETTINGS','Settings')))]};}
 async function buildWelcomeDeliverySettingsPanel(guild,scope,memberDisplayName='Unknown User'){
   const config=welcome.getWelcomeSection(guild.id),scheduled=scheduledWelcome.getScheduledConfig(guild.id);
   const instant=scope==='instant',dm=scope==='dm';
