@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   EmbedBuilder,
@@ -361,7 +362,7 @@ function buildReviewerRolesPanel(guild, memberDisplayName = 'Unknown User', page
     `**Selected roles:** ${formatRoles(section.reviewerRoleIds)}`, '',
     'Members with **Manage Server** or **Administrator** can always manage suggestions.',
   ].join('\n')).setFooter({ text: `Opened by ${memberDisplayName}` }).setTimestamp();
-  return { embeds: [embed], components: [...picker.rows, row(button('admin:suggestions:overview', '⬅️ Back to Suggestions', ButtonStyle.Secondary))] };
+  return { embeds: [embed], components: [...picker.rows, row(button('admin:suggestions:overview', emojiLabel('BACK', 'Back to Suggestions'), ButtonStyle.Secondary))] };
 }
 
 function buildSuggestionsAdminPanel(guild, memberDisplayName = 'Unknown User', page = 'overview') {
@@ -380,7 +381,7 @@ function buildSuggestionsAdminPanel(guild, memberDisplayName = 'Unknown User', p
       row(new ChannelSelectMenuBuilder().setCustomId('admin:suggestions:approvedChannel').setPlaceholder('Approved suggestions channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
       row(new ChannelSelectMenuBuilder().setCustomId('admin:suggestions:deniedChannel').setPlaceholder('Declined suggestions channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
       row(new ChannelSelectMenuBuilder().setCustomId('admin:suggestions:logChannel').setPlaceholder('Suggestions audit log channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
-      row(button('admin:suggestions:overview', '⬅️ Back to Suggestions', ButtonStyle.Secondary)),
+      row(button('admin:suggestions:overview', emojiLabel('BACK', 'Back to Suggestions'), ButtonStyle.Secondary)),
     ] };
   }
   const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 Suggestions').setDescription(overviewDescription(section, enabled)).setFooter({ text: `Opened by ${memberDisplayName}` }).setTimestamp();
@@ -395,7 +396,7 @@ function buildSuggestionsAdminPanel(guild, memberDisplayName = 'Unknown User', p
       button('admin:suggestions:toggleReview', section.requireReview !== false ? '🔎 Review On' : '🔎 Review Off', ButtonStyle.Secondary),
       button('admin:suggestions:toggleAnonymous', section.anonymous === true ? '👤 Public Anonymous' : '👤 Public Named', ButtonStyle.Secondary),
     ),
-    row(button('admin:modules', '⬅️ Back to Modules', ButtonStyle.Secondary)),
+    row(button('admin:modules', emojiLabel('BACK', 'Back to Modules'), ButtonStyle.Secondary)),
   ] };
 }
 
