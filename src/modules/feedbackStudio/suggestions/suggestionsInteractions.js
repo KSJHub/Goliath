@@ -142,7 +142,7 @@ function buildOverviewPanel(guild, memberName) {
 
   const publishButton = button(
     'admin:suggestions:deploy',
-    deployed ? '🔄 Update Public Panel' : '🚀 Publish Public Panel',
+    deployed ? emojiLabel('REFRESH', 'Update Public Panel') : '🚀 Publish Public Panel',
     ButtonStyle.Success,
   ).setDisabled(!readiness.ready);
 
@@ -193,7 +193,7 @@ function buildSettingsPanel(guild, memberName) {
     row(button(enabled ? 'admin:suggestions:disable' : 'admin:suggestions:enable', enabled ? '⏸️ Disable Suggestions' : '▶️ Enable Suggestions', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
     row(button('admin:suggestions:toggleVoting', voting ? '⏸️ Disable Voting' : '▶️ Enable Voting', voting ? ButtonStyle.Secondary : ButtonStyle.Success), button('admin:suggestions:toggleReview', review ? '⏸️ Disable Review' : '▶️ Enable Review', review ? ButtonStyle.Secondary : ButtonStyle.Success)),
     row(button('admin:suggestions:toggleAnonymous', anonymous ? '👤 Show Member Names Publicly' : '🔒 Make Public Suggestions Anonymous', ButtonStyle.Secondary)),
-    row(button('admin:suggestions:overview', '⬅️ Back to Control Centre', ButtonStyle.Secondary)),
+    row(button('admin:suggestions:overview', emojiLabel('BACK', 'Back to Control Centre'), ButtonStyle.Secondary)),
   ] };
 }
 
@@ -209,7 +209,7 @@ function buildManagementTeamPanel(guild, memberName, page = 0) {
       { name: 'Role list', value: `Roles are ordered **highest → lowest** in the server hierarchy. Page **${safePage + 1} of ${pageCount}**.${pageCount > 1 ? ' Use Previous / Next to view every role.' : ''}`, inline: false },
       { name: 'Built-in access', value: 'Members with **Administrator** or **Manage Server** can always manage suggestions, even if no role is selected here.', inline: false },
     ).setFooter({ text: `Management access · Opened by ${memberName}` }).setTimestamp();
-  return { embeds: [embed], components: [...picker.rows, row(button('admin:suggestions:overview', '⬅️ Back to Control Centre', ButtonStyle.Secondary))] };
+  return { embeds: [embed], components: [...picker.rows, row(button('admin:suggestions:overview', emojiLabel('BACK', 'Back to Control Centre'), ButtonStyle.Secondary))] };
 }
 
 function buildDestinationsPanel(guild, memberName) {
@@ -225,7 +225,7 @@ function buildDestinationsPanel(guild, memberName) {
     row(new ChannelSelectMenuBuilder().setCustomId('admin:suggestions:approvedChannel').setPlaceholder('Approved suggestions channel · optional').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     row(new ChannelSelectMenuBuilder().setCustomId('admin:suggestions:deniedChannel').setPlaceholder('Declined suggestions channel · optional').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     row(new ChannelSelectMenuBuilder().setCustomId('admin:suggestions:logChannel').setPlaceholder('Suggestions audit log channel · recommended').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
-    row(button('admin:suggestions:overview', '⬅️ Back to Control Centre', ButtonStyle.Secondary)),
+    row(button('admin:suggestions:overview', emojiLabel('BACK', 'Back to Control Centre'), ButtonStyle.Secondary)),
   ] };
 }
 
@@ -247,8 +247,8 @@ function buildSuggestionRecordsPanel(guild, memberName, page = 0) {
     .setFooter({ text: `Page ${safePage + 1} of ${totalPages} · Opened by ${memberName}` }).setTimestamp();
   const components = [];
   if (visible.length) components.push(row(new StringSelectMenuBuilder().setCustomId(`admin:suggestions:records:select:${safePage}`).setPlaceholder('Choose a stored suggestion').setMinValues(1).setMaxValues(1).addOptions(visible.map((item) => ({ label: `${panel.statusEmoji(item.status)} ${item.reference} · ${item.title}`.slice(0, 100), description: `${panel.statusLabel(item.status, section)} · ${shortRecordDate(item.createdAt)}`.slice(0, 100), value: item.suggestionId })))));
-  if (totalPages > 1) components.push(row(button(`admin:suggestions:records:page:${Math.max(0, safePage - 1)}`, '⬅️ Previous', ButtonStyle.Secondary).setDisabled(safePage === 0), button(`admin:suggestions:records:page:${Math.min(totalPages - 1, safePage + 1)}`, 'Next ➡️', ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1)));
-  components.push(row(button('admin:suggestions:overview', '⬅️ Back to Control Centre', ButtonStyle.Secondary)));
+  if (totalPages > 1) components.push(row(button(`admin:suggestions:records:page:${Math.max(0, safePage - 1)}`, emojiLabel('BACK', 'Previous'), ButtonStyle.Secondary).setDisabled(safePage === 0), button(`admin:suggestions:records:page:${Math.min(totalPages - 1, safePage + 1)}`, 'Next ➡️', ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1)));
+  components.push(row(button('admin:suggestions:overview', emojiLabel('BACK', 'Back to Control Centre'), ButtonStyle.Secondary)));
   return { embeds: [embed], components };
 }
 
