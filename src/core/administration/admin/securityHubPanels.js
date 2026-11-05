@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../ui/emojis');
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../guild/guildManager');
@@ -32,8 +33,8 @@ function countModes(guildId) {
 }
 function nav(refreshId) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(HUB_ID).setLabel('Back').setEmoji('⬅️').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(HUB_ID).setLabel('Back').setEmoji(EMOJIS.BACK).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji(EMOJIS.REFRESH).setStyle(ButtonStyle.Secondary),
   );
 }
 function managementButton(customId, label, emoji, style = ButtonStyle.Primary) {
