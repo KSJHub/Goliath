@@ -31,6 +31,10 @@ function PageShell({
         style={{
           position: 'relative',
           overflow: 'hidden',
+          height: 'auto',
+          minHeight: 'clamp(140px, 12vw, 180px)',
+          boxSizing: 'border-box',
+          flexShrink: 0,
           background:
             'linear-gradient(135deg, rgba(17,24,39,0.98) 0%, rgba(9,18,40,0.98) 45%, rgba(15,23,42,0.98) 100%)',
           border: `1px solid ${theme.cardBorder}`,
