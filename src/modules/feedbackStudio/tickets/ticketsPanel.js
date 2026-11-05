@@ -1,5 +1,5 @@
-const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 /**
  * Canonical Tickets panel layer.
