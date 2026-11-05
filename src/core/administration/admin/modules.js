@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -235,7 +236,7 @@ function buildModuleMainPanel(guild, moduleKey, memberDisplayName = 'Unknown Use
     ...controls,
     row(button(`admin:module:${moduleKey}:configure:0`, '⚙️ Configure')),
     ...(pager ? [pager] : []),
-    navigationRow(`admin:studio:${catalogModule.studio}`, '⬅️ Back'),
+    navigationRow(`admin:studio:${catalogModule.studio}`, emojiLabel('BACK', 'Back')),
   ];
   return { embeds: [embed], components: components.slice(0, 5) };
 }
@@ -257,7 +258,7 @@ function buildModuleConfigurePanel(guild, moduleKey, memberDisplayName = 'Unknow
     button(`admin:module:${moduleKey}:reset`, '♻️ Reset', ButtonStyle.Danger),
   );
   const pager = buildPager(`admin:module:${moduleKey}:configure:${page - 1}`, `admin:module:${moduleKey}:configure:${page + 1}`, page, totalPages);
-  const components = [actions, ...controls, ...(pager ? [pager] : []), navigationRow(`admin:module:${moduleKey}:main:0`, '⬅️ Back')];
+  const components = [actions, ...controls, ...(pager ? [pager] : []), navigationRow(`admin:module:${moduleKey}:main:0`, emojiLabel('BACK', 'Back'))];
   return { embeds: [embed], components: components.slice(0, 5) };
 }
 
