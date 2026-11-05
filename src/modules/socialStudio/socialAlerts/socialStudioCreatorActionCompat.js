@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -112,7 +113,7 @@ function creatorsPayload(interaction, message) {
         '👥 Creators',
         ButtonStyle.Primary,
       ),
-      button(`${P}settings`, '⚙️ Settings'),
+      button(`${P}settings`, emojiLabel('SETTINGS', 'Settings')),
     )],
   };
 }
