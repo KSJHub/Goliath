@@ -758,8 +758,8 @@ function buildAppealDetailPayload(modCase, appeal) {
   if (pending || canRetryRemedy) {
     const actions = [];
     if (pending) actions.push(
-      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`).setLabel('✅ Approve Appeal').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`).setLabel('❌ Deny Appeal').setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`).setLabel(emojiLabel('SUCCESS', 'Approve Appeal')).setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`).setLabel(emojiLabel('ERROR', 'Deny Appeal')).setStyle(ButtonStyle.Danger)
     );
     if (canRetryRemedy) actions.push(new ButtonBuilder().setCustomId(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`).setLabel('🔄 Retry Appeal Remedy').setStyle(ButtonStyle.Primary));
     components.push(new ActionRowBuilder().addComponents(actions));
@@ -817,7 +817,7 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
   ));
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('mod_dashboard:none:analytics').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_refresh:${activeToken}:${page}`).setLabel('🔄 Refresh').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_refresh:${activeToken}:${page}`).setLabel(emojiLabel('REFRESH', 'Refresh')).setStyle(ButtonStyle.Secondary)
   ));
   return { embeds: [embed], components: rows };
 }
