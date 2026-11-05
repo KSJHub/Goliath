@@ -986,10 +986,11 @@ async function verificationLifecycleAudit() {
       assert(body.includes('async function handleVerificationCases('));
       const uid = '815257293347880961'; let allowed = true, resolved = 0;
       const replies = [];
-      const review = new Function('Discord', 'canUseModAction', 'safeReply', 'verificationStore', 'renderDashboard', 'verificationQuarantine', 'recordModerationSystemEvent', body + '\nreturn handleVerificationCases;')(
+      const { EMOJIS, emojiLabel } = require('../src/core/ui/emojis');
+      const review = new Function('Discord', 'canUseModAction', 'safeReply', 'verificationStore', 'renderDashboard', 'verificationQuarantine', 'recordModerationSystemEvent', 'EMOJIS', 'emojiLabel', body + '\nreturn handleVerificationCases;')(
         require('discord.js'), () => allowed, async (i, payload) => { replies.push(payload); return true; },
         { getVerificationSection: () => ({ sessions: { [uid]: { state: 'quarantined', failedAttempts: 1, quarantineChannelId: 'room' } } }) },
-        async () => true, { resolveQuarantineCase: async (guild, id, action) => { assert.equal(id, uid); assert.equal(action, 'release'); resolved++; return { ok: true, message: 'Released' }; } }, () => {});
+        async () => true, { resolveQuarantineCase: async (guild, id, action) => { assert.equal(id, uid); assert.equal(action, 'release'); resolved++; return { ok: true, message: 'Released' }; } }, () => {}, EMOJIS, emojiLabel);
       const interaction = { customId: `mod_verification_case:${uid}`, guild: { id: 'guild' }, member: {}, user: { id: 'moderator' },
         isMessageComponent: () => true, update: async payload => { replies.push(payload); return true; }, reply: async payload => { replies.push(payload); return true; },
         deferUpdate: async () => {}, editReply: async payload => { replies.push(payload); return true; } };
