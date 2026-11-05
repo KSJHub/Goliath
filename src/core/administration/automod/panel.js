@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -153,8 +154,8 @@ function canonicalState(route = 'admin:automod') {
   return { history: ['admin:home', 'admin:automod'] };
 }
 
-const backButton = (route) => button(panelNav.buildCustomId(canonicalState(route), 'back'), '⬅️ Back', ButtonStyle.Secondary);
-const navRow = (route, nextId, settingsId = null) => row(backButton(route), ...(settingsId ? [button(settingsId, '⚙️ Settings', ButtonStyle.Secondary)] : []), button(nextId, 'Next ➡️', ButtonStyle.Secondary));
+const backButton = (route) => button(panelNav.buildCustomId(canonicalState(route), 'back'), emojiLabel('BACK', 'Back'), ButtonStyle.Secondary);
+const navRow = (route, nextId, settingsId = null) => row(backButton(route), ...(settingsId ? [button(settingsId, emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary)] : []), button(nextId, 'Next ➡️', ButtonStyle.Secondary));
 
 function buildAutomodPanel(guild, name = 'Unknown User') {
   const config = getAutomodConfig(guild.id);
@@ -257,7 +258,7 @@ function buildExemptionsPanel(guild, name='Unknown User', page=0) {
   if(config.ignoredChannels?.length) channels.setDefaultChannels(config.ignoredChannels.slice(0,25));
   if(config.ignoredCategories?.length) categories.setDefaultChannels(config.ignoredCategories.slice(0,25));
   if(config.ignoredUsers?.length) users.setDefaultUsers(config.ignoredUsers.slice(0,25));
-  return {embeds:[createEmbed('🧩 AutoMod Exemptions',['**Roles:** '+(config.ignoredRoles?.length||0),`**Role Selection · Page ${info.page+1}/${info.pages}**`,'**Channels:** '+(config.ignoredChannels?.length||0),'**Categories:** '+(config.ignoredCategories?.length||0),'**Members:** '+(config.ignoredUsers?.length||0),'','Selected resources bypass all Goliath AutoMod message protections. Rule-specific allow lists remain configured inside each protection.'].join('\n'),name)],components:[...(roles?[row(roles)]:[]),row(channels),row(categories),row(users),row(backButton('admin:automod:configure'),button(`admin:automod:exemptions:page:${Math.max(0,info.page-1)}`,'◀ Roles',ButtonStyle.Secondary,info.page===0),button(`admin:automod:exemptions:page:${Math.min(info.pages-1,info.page+1)}`,'Roles ▶',ButtonStyle.Secondary,info.page>=info.pages-1))]};
+  return {embeds:[createEmbed('🧩 AutoMod Exemptions',['**Roles:** '+(config.ignoredRoles?.length||0),`**Role Selection · Page ${info.page+1}/${info.pages}**`,'**Channels:** '+(config.ignoredChannels?.length||0),'**Categories:** '+(config.ignoredCategories?.length||0),'**Members:** '+(config.ignoredUsers?.length||0),'','Selected resources bypass all Goliath AutoMod message protections. Rule-specific allow lists remain configured inside each protection.'].join('\n'),name)],components:[...(roles?[row(roles)]:[]),row(channels),row(categories),row(users),row(backButton('admin:automod:configure'),button(`admin:automod:exemptions:page:${Math.max(0,info.page-1)}`,emojiLabel('ROLE_PREVIOUS', 'Roles'),ButtonStyle.Secondary,info.page===0),button(`admin:automod:exemptions:page:${Math.min(info.pages-1,info.page+1)}`,emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }),ButtonStyle.Secondary,info.page>=info.pages-1))]};
 }
 
 function ruleSummary(key, rule) {
