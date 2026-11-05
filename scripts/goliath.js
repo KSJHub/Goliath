@@ -2476,7 +2476,7 @@ function welcomeEmbedDeliveryAudit() {
       ...panel.matchAll(/emojiLabel\(\s*['"]([A-Z][A-Z_]+)['"]/g),
       ...panel.matchAll(/EMOJIS\.([A-Z][A-Z_]+)/g),
     ].map(match => match[1]);
-    assert(panel.includes("require('../../../core/ui/emojis')"), 'Welcome panel must import the shared emoji registry.');
+    assert(panel.includes("../../../core/ui/emojis") && panel.includes('emojiLabel'), 'Welcome panel must import the shared emoji registry.');
     for (const key of welcomeEmojiKeys) {
       assert(registeredEmojiKeys.has(key), 'Unknown Welcome emoji key: ' + key);
     }
