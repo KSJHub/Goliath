@@ -4,7 +4,6 @@ const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
   ChannelType,
@@ -12,6 +11,7 @@ const {
   StringSelectMenuBuilder,
 } = require('discord.js');
 
+const { navigationButton } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const { saveModuleSection } = require('../../guild/moduleSectionManager');
 
@@ -124,14 +124,7 @@ const ROLE_FIELDS = {
 };
 
 function row(...components) { return new ActionRowBuilder().addComponents(...components); }
-function button(customId, label, style = ButtonStyle.Primary) {
-  const component = new ButtonBuilder().setCustomId(customId).setStyle(style);
-  const backPrefix = `${EMOJIS.BACK} `;
-  if (typeof label === 'string' && label.startsWith(backPrefix)) {
-    return component.setEmoji(EMOJIS.BACK).setLabel(label.slice(backPrefix.length));
-  }
-  return component.setLabel(label);
-}
+const button = (customId, label, style = ButtonStyle.Primary) => navigationButton(customId, label, style);
 function chunkArray(items, size) { const chunks = []; for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size)); return chunks; }
 function getMemberDisplayName(interaction) { return interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User'; }
 function fieldKey(field) { return Array.isArray(field) ? field[0] : field; }
