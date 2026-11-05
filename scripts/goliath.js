@@ -2498,7 +2498,7 @@ function welcomeEmbedDeliveryAudit() {
     const deliverySettings=panel.slice(panel.indexOf('async function buildWelcomeDeliverySettingsPanel('),panel.indexOf('function buildScheduledModal('));
     assert(deliverySettings.includes('const controls=instant?[') && deliverySettings.includes(']:dm?['), 'Welcome delivery settings must keep distinct Instant, DM and Scheduled control groups.');
     assert((deliverySettings.match(/\brow\s*\(/g)||[]).length===7, 'Welcome delivery settings row groups changed; recheck the per-branch five-row limit.');
-    assert(panel.includes("source==='custom'&&state.source)throw new Error"), 'Custom message previews must require saving before rendering.');
+    assert(/if\s*\(\s*source\s*===\s*['"]custom['"]\s*&&\s*state\.source\s*\)\s*throw\s+new\s+Error\s*\(/.test(panel), 'Custom message previews must require saving before rendering.');
 
     assert(panel.includes('result.sendFailed') && panel.includes('result.roleRemovalFailed'), 'Discord scheduled feedback must expose partial failures.');
     assert(dashboard.includes('queueLoaded'), 'Dashboard must distinguish an unloaded queue from an empty queue.');
