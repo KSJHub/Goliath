@@ -124,7 +124,14 @@ const ROLE_FIELDS = {
 };
 
 function row(...components) { return new ActionRowBuilder().addComponents(...components); }
-function button(customId, label, style = ButtonStyle.Primary) { return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style); }
+function button(customId, label, style = ButtonStyle.Primary) {
+  const component = new ButtonBuilder().setCustomId(customId).setStyle(style);
+  const backPrefix = `${EMOJIS.BACK} `;
+  if (typeof label === 'string' && label.startsWith(backPrefix)) {
+    return component.setEmoji(EMOJIS.BACK).setLabel(label.slice(backPrefix.length));
+  }
+  return component.setLabel(label);
+}
 function chunkArray(items, size) { const chunks = []; for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size)); return chunks; }
 function getMemberDisplayName(interaction) { return interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User'; }
 function fieldKey(field) { return Array.isArray(field) ? field[0] : field; }
