@@ -193,7 +193,6 @@ async function buildInstantPanel(guild,memberDisplayName='Unknown User',userId='
   const template=welcome.getAssignedTemplate(guild.id,'welcome',config);
   const state=getSelection(guild.id,userId,'public'),source=state.source||config.messageSource||'preset';
   const pendingTemplate=state.templateId?embedTemplateManager.getTemplate(guild.id,state.templateId):null;
-  const hasUnsavedSelection=Boolean(state.source&&(state.source!==config.dmMessageSource||(state.source==='embedStudio'&&state.templateId&&state.templateId!==config.dmTemplateId)));
   const hasUnsavedSelection=Boolean(state.source&&(state.source!==config.messageSource||(state.source==='embedStudio'&&state.templateId&&state.templateId!==config.templateId)));
   const components=[
     row(new ChannelSelectMenuBuilder().setCustomId('admin:welcome:channel').setPlaceholder(emojiLabel('WELCOME_CHANNEL','Select Welcome Channel')).setChannelTypes(ChannelType.GuildText,ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
@@ -221,6 +220,7 @@ async function buildDmPanel(guild,memberDisplayName='Unknown User',userId='panel
   const publicTemplate=welcome.getAssignedTemplate(guild.id,'welcome',config),dmTemplate=welcome.getAssignedTemplate(guild.id,'dmWelcome',config);
   const state=getSelection(guild.id,userId,'dm'),source=state.source||config.dmMessageSource||'inherit';
   const pendingTemplate=state.templateId?embedTemplateManager.getTemplate(guild.id,state.templateId):null;
+  const hasUnsavedSelection=Boolean(state.source&&(state.source!==config.dmMessageSource||(state.source==='embedStudio'&&state.templateId&&state.templateId!==config.dmTemplateId)));
   const components=[row(sourceMenu(config,userId,guild.id,'dm'))];
   if(source==='embedStudio')components.push(row(templateMenu(guild,dmTemplate?.templateId||config.dmTemplateId,userId,'dm')));
   components.push(row(button('admin:welcome:dmApply',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!state.templateId),button('admin:welcome:dmPreview',emojiLabel('WELCOME_PREVIEW','Preview')),button('admin:welcome:dmSend',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
