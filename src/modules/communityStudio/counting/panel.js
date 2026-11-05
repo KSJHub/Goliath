@@ -129,7 +129,7 @@ function buildSettingsScreen(guild) {
   const enabled = isModuleEnabled(guild.id, counting.MODULE_KEY);
   const embed = footer(new EmbedBuilder()
     .setColor(PANEL_COLOR)
-    .setTitle('⚙️ Counting Settings')
+    .setTitle(emojiLabel('SETTINGS', 'Counting Settings'))
     .setDescription([
       '**Module Controls**',
       'Manage the Counting module without changing the current game from the main panel.',
@@ -148,7 +148,7 @@ function buildSettingsScreen(guild) {
   return { content: null, embeds: [embed], components: [
     row(
       button(PREFIX + ':toggle:enabled', enabled ? '⏸️ Disable Counting' : '▶️ Enable Counting', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-      button(PREFIX + ':defaults', '🔄 Defaults', ButtonStyle.Secondary),
+      button(PREFIX + ':defaults', emojiLabel('REFRESH', 'Defaults'), ButtonStyle.Secondary),
       button(PREFIX + ':health', '🩺 Health', ButtonStyle.Secondary),
     ),
     row(button(PREFIX + ':main:0', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
@@ -159,7 +159,7 @@ function buildDefaultsConfirmation() {
     content: null,
     embeds: [footer(new EmbedBuilder()
       .setColor(PANEL_COLOR)
-      .setTitle('🔄 Restore Counting Defaults?')
+      .setTitle(emojiLabel('REFRESH', 'Restore Counting Defaults?'))
       .setDescription([
         'This will restore Goliath\'s recommended Counting rules:',
         '',
@@ -176,7 +176,7 @@ function buildDefaultsConfirmation() {
       ].join('\n')))],
     components: [
       row(
-        button(PREFIX + ':defaults:confirm', '🔄 Restore Defaults', ButtonStyle.Danger),
+        button(PREFIX + ':defaults:confirm', emojiLabel('REFRESH', 'Restore Defaults'), ButtonStyle.Danger),
         button(PREFIX + ':settings', 'Cancel', ButtonStyle.Secondary),
       ),
     ],
