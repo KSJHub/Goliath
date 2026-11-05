@@ -181,7 +181,7 @@ function buildVerificationPanel(interaction) {
   const roleId = verification.roleId || verification.verifiedRoleId || null;
   const pendingRoleId = pending.roleId || verification.pendingRoleId || null;
   const problems = missingConfiguredResources(interaction.guild, verification, pending);
-  const embed = base(interaction, '🛂 Verification', '**Admission, pending-member and verification security status.**', problems.length ? 0xFEE75C : 0x5865F2)
+  const embed = base(interaction, `${EMOJIS.VERIFICATION} Verification`, '**Admission, pending-member and verification security status.**', problems.length ? 0xFEE75C : 0x5865F2)
     .addFields(
       { name: 'Verification', value: bool(verification.enabled !== false), inline: true },
       { name: 'Verified Role', value: roleId ? `<@&${roleId}>` : 'Not configured', inline: true },
@@ -189,7 +189,7 @@ function buildVerificationPanel(interaction) {
       { name: 'Resource Health', value: problems.length ? problems.map((problem) => `🔴 ${problem}`).join('\n') : '🟢 Configured resources resolve correctly', inline: false },
       { name: 'Management', value: 'Open the existing Verification Studio to manage workflow, assignment timing, roles/channels, requirements, messages, panels, settings and health.', inline: false },
     );
-  return { embeds: [embed], components: [managementButton('admin:verification', 'Manage Verification', '🛂'), nav(REFRESH.verification)] };
+  return { embeds: [embed], components: [managementButton('admin:verification', 'Manage Verification', EMOJIS.VERIFICATION), nav(REFRESH.verification)] };
 }
 
 function buildHealthPanel(interaction) {
