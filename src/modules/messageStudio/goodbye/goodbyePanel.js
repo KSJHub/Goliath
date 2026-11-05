@@ -3,13 +3,13 @@
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
   StringSelectMenuBuilder,
   ChannelType,
   AttachmentBuilder,
 } = require('discord.js');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const guildManager = require('../../../core/guild/guildManager');
 const goodbye = require('./goodbye');
 const departureDm = require('./goodbyeDeparture');
@@ -17,10 +17,7 @@ const embedTemplateManager = require('../embed/embedTemplates');
 
 const buildGoodbyeDmPanel = (() => {
   const row = (...components) => new ActionRowBuilder().addComponents(...components);
-  const button = (customId, label, style = ButtonStyle.Secondary) => new ButtonBuilder()
-    .setCustomId(customId)
-    .setLabel(label)
-    .setStyle(style);
+  const button = (customId, label, style = ButtonStyle.Secondary) => navigationButton(customId, label, style);
 
   function state(value) {
     return value ? 'On ✅' : 'Off ❌';
@@ -93,7 +90,7 @@ const buildGoodbyeDmPanel = (() => {
 
 const selections = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Secondary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+const button = (customId, label, style = ButtonStyle.Secondary) => navigationButton(customId, label, style);
 const canonicalConfig = (guildId) => ({
   ...goodbye.getGoodbyeSection(guildId),
   enabled: guildManager.isModuleEnabled(guildId, 'goodbye'),
