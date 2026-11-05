@@ -85,7 +85,7 @@ async function buildWelcomePanel(guild,memberDisplayName='Unknown User'){
     ...(enabled&&configured&&!instantHealth.healthy?['Review Instant Welcome diagnostics.']:[]),
     ...(scheduled.enabled&&!scheduledHealth.healthy?['Review Scheduled Welcome diagnostics.']:[])
   ];
-  const nextStep=issues.length?`⚠️ ${issues[0]}`:'✅ Welcome is ready. Preview or send a test from Instant Welcome.';
+  const nextStep=issues.length?`${EMOJIS.WARNING} ${issues[0]}`:emojiLabel('SUCCESS','Welcome is ready. Preview or send a test from Instant Welcome.');
   const embed=new EmbedBuilder()
     .setColor(!enabled?0x747f8d:issues.length?0xfaa61a:0x57f287)
     .setTitle(emojiLabel('WELCOME', 'Welcome'))
@@ -103,8 +103,8 @@ async function buildWelcomePanel(guild,memberDisplayName='Unknown User'){
       `**Sent**　${instant.analytics?.publicSent||0} public　•　${instant.analytics?.dmSent||0} DM　•　${scheduled.analytics?.membersWelcomed||0} scheduled`,
       '',
       '### ' + emojiLabel('STATUS', 'Status'),
-      `**Readiness**　${issues.length?`🟠 ${issues.length} item${issues.length===1?'':'s'} to review`:emojiLabel('ACTIVE', 'Ready')}`,
-      `**Health**　Instant ${instantHealth.healthy?'✅':'⚠️'}　•　Scheduled ${scheduledHealth.healthy?'✅':'⚠️'}`,
+      `**Readiness**　${issues.length?`${EMOJIS.SETUP_REQUIRED} ${issues.length} item${issues.length===1?'':'s'} to review`:emojiLabel('ACTIVE', 'Ready')}`,
+      `**Health**　Instant ${instantHealth.healthy?EMOJIS.HEALTHY:EMOJIS.WARNING}　•　Scheduled ${scheduledHealth.healthy?EMOJIS.HEALTHY:EMOJIS.WARNING}`,
       `**Delivery**　Member ping ${instant.allowUserPing?'On':'Off'}　•　Role pings ${instant.allowRolePings?'On':'Off'}`,
       '',
       '### ' + emojiLabel('NEXT_STEP', 'Next Step'),
@@ -137,18 +137,18 @@ async function buildWelcomeSettingsPanel(guild,memberDisplayName='Unknown User')
     `**Module**　${enabled?emojiLabel('ACTIVE', 'Enabled'):emojiLabel('INACTIVE','Disabled')}`,
     '**Configuration**　Instant · Direct Message · Scheduled',
     '',
-    '### 🔔 Notifications',
+    '### ' + emojiLabel('WELCOME_MENTIONS','Notifications'),
     'Choose who receives welcome mentions and role alerts.',
     '',
     '### ' + emojiLabel('STATUS', 'Status'),
     `**Instant**　${instant.healthy?emojiLabel('ACTIVE','Healthy'):emojiLabel('SETUP_REQUIRED','Needs attention')}　•　**Scheduled**　${scheduled.healthy?emojiLabel('ACTIVE','Healthy'):emojiLabel('SETUP_REQUIRED','Needs attention')}`,
     `**Diagnostics**　${issues.length?`${issues.length} area${issues.length===1?'':'s'} to review`:'No reported issues'}`,
     '',
-    '### ⚙️ Management',
+    '### ' + emojiLabel('SETTINGS','Management'),
     'Export your settings, enable or pause Welcome, or reset the configuration.',
     '',
     '### ' + emojiLabel('NEXT_STEP', 'Next Step'),
-    issues.length?'🩺 Run Diagnostics & Repair to investigate the reported issues.':'✅ Settings are ready. Choose an option below.'
+    issues.length?emojiLabel('WELCOME_DIAGNOSTICS','Run Diagnostics & Repair to investigate the reported issues.'):emojiLabel('SUCCESS','Settings are ready. Choose an option below.')
   ].join('\n');
   return {embeds:[new EmbedBuilder()
     .setColor(!enabled?0x747f8d:issues.length?0xfaa61a:0x57f287)
@@ -176,7 +176,7 @@ async function buildInstantPanel(guild,memberDisplayName='Unknown User',userId='
   components.push(row(button('admin:welcome:applySource',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!state.templateId),button('admin:welcome:test',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary),button('admin:welcome:send',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
   components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:instantSettings',emojiLabel('SETTINGS','Settings'))));
   const issues=health.warnings||[];
-  const next=!enabled?'⚙️ Enable the Welcome module in Settings before live delivery.':!config.channelId?'📍 Select a public welcome channel.':issues.length?'⚠️ Open Settings to review delivery warnings.':'✅ Preview or send a test welcome to confirm the message.';
+  const next=!enabled?emojiLabel('SETTINGS','Enable the Welcome module in Settings before live delivery.'):!config.channelId?emojiLabel('WELCOME_LOCATION','Select a public welcome channel.'):issues.length?emojiLabel('WARNING','Open Settings to review delivery warnings.'):emojiLabel('SUCCESS','Preview or send a test welcome to confirm the message.');
   return {embeds:[new EmbedBuilder().setColor(!enabled?0x747f8d:issues.length?0xfaa61a:0x57f287)
     .setTitle(emojiLabel('WELCOME_INSTANT','Welcome · Instant'))
     .setDescription(['Configure and test the public greeting sent when a member joins.','',
@@ -206,7 +206,7 @@ async function buildDmPanel(guild,memberDisplayName='Unknown User',userId='panel
       ...(source!==config.dmMessageSource||pendingTemplate?[`**Pending**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`]:[]),'',
       '### ' + emojiLabel('DELIVERY', 'Delivery'),`**Direct messages**　${config.dmEnabled?emojiLabel('ACTIVE', 'Enabled'):emojiLabel('INACTIVE','Disabled')}`,`**Sent**　${config.analytics?.dmSent||0}　•　**Failed**　${config.analytics?.dmFailed||0}`,'',
       '### ' + emojiLabel('STATUS', 'Status'),`**Readiness**　${config.dmEnabled?emojiLabel('ACTIVE','Active'):emojiLabel('INACTIVE','Paused')}`,`**Message sync**　${config.dmMessageSource==='inherit'?'Follows Public Welcome':'Independent template'}`,'',
-      '### ' + emojiLabel('NEXT_STEP', 'Next Step'),!config.dmEnabled?'⚙️ Open Settings to enable DM delivery.':source==='custom'?'💾 Save Message to edit your custom DM.':'👁️ Preview or send yourself a test DM.'].join('\n'))
+      '### ' + emojiLabel('NEXT_STEP', 'Next Step'),!config.dmEnabled?emojiLabel('SETTINGS','Open Settings to enable DM delivery.'):source==='custom'?emojiLabel('PRESETS','Save Message to edit your custom DM.'):emojiLabel('WELCOME_PREVIEW','Preview or send yourself a test DM.')].join('\n'))
     .setFooter({text:`Welcome Studio • ${memberDisplayName}`}).setTimestamp()],components};
 }
 
