@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -224,8 +225,8 @@ async function buildReactionRolesAdminPanel(guild, memberDisplayName = 'Unknown 
         button('admin:reactionRoles:manage', '📋 Manage', ButtonStyle.Primary, !panels.length),
       ),
       row(
-        button('admin:studio:roleStudio', '⬅️ Back'),
-        button('admin:reactionRoles:settings', '⚙️ Settings'),
+        button('admin:studio:roleStudio', emojiLabel('BACK', 'Back')),
+        button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
       ),
     ],
   };
@@ -246,7 +247,7 @@ function buildExistingPicker(guild) {
         button('admin:reactionRoles:new:existing', '🔗 Existing Message', ButtonStyle.Primary),
         button('admin:reactionRoles:existing:embed', '📚 Existing Panel', ButtonStyle.Primary),
       ),
-      row(button('admin:reactionRoles', '⬅️ Back'), button('admin:reactionRoles:settings', '⚙️ Settings')),
+      row(button('admin:reactionRoles', emojiLabel('BACK', 'Back')), button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings'))),
     ],
   };
 }
@@ -282,8 +283,8 @@ function buildEmbedStudioPicker(guild, userId, notice = '') {
         .setMaxValues(1)),
       row(embedDeploymentSelect(guild.id, channelId)),
       row(
-        button('admin:reactionRoles:existing', '⬅️ Back'),
-        button('admin:reactionRoles:settings', '⚙️ Settings'),
+        button('admin:reactionRoles:existing', emojiLabel('BACK', 'Back')),
+        button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
       ),
     ],
   };
@@ -340,7 +341,7 @@ function buildManagePicker(guild, notice = '') {
       ].filter((line) => line !== null).join('\n'))],
     components: [
       ...(panels.length ? [row(deploymentSelect(guild.id))] : [row(button('admin:reactionRoles:create', '➕ Create First Panel', ButtonStyle.Success))]),
-      row(button('admin:reactionRoles', '⬅️ Back'), button('admin:reactionRoles:settings', '⚙️ Settings')),
+      row(button('admin:reactionRoles', emojiLabel('BACK', 'Back')), button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings'))),
     ],
   };
 }
@@ -381,8 +382,8 @@ function buildExistingMessageStep(guild, userId, notice = '') {
         button('admin:reactionRoles:source:continue', '🗺️ Mapping Builder', ButtonStyle.Success, !draft?.messageId),
       ),
       row(
-        button('admin:reactionRoles:existing', '⬅️ Back'),
-        button('admin:reactionRoles:settings', '⚙️ Settings'),
+        button('admin:reactionRoles:existing', emojiLabel('BACK', 'Back')),
+        button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
       ),
     ],
   };
@@ -446,11 +447,11 @@ function buildWizard(guild, userId, showRemove = false, notice = '', rolePage = 
       button('admin:reactionRoles:wizard:remove', '🗑️ Remove', ButtonStyle.Secondary, !draft.mappings.length),
     ),
     row(
-      button(existing ? 'admin:reactionRoles:existing' : 'admin:reactionRoles', '⬅️ Back'),
+      button(existing ? 'admin:reactionRoles:existing' : 'admin:reactionRoles', emojiLabel('BACK', 'Back')),
       pageCount > 1 ? button(rolePickerCustomId('admin:reactionRoles:wizard:rolePage', 'page', Math.max(0, safePage - 1)), '⬅️ Roles', ButtonStyle.Secondary, safePage <= 0) : null,
       pageCount > 1 ? button(`admin:reactionRoles:wizard:rolePageInfo:${safePage}`, `Page ${safePage + 1}/${pageCount}`, ButtonStyle.Secondary, true) : null,
       pageCount > 1 ? button(rolePickerCustomId('admin:reactionRoles:wizard:rolePage', 'page', Math.min(pageCount - 1, safePage + 1)), 'Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
-      button('admin:reactionRoles:settings', '⚙️ Settings'),
+      button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
     ),
   );
 
@@ -509,8 +510,8 @@ async function buildManagedPanel(guild, panelId, notice = '') {
         button(`admin:reactionRoles:manage:remove:confirm:${panelId}`, '🗑️ Delete Panel', ButtonStyle.Danger),
       ),
       row(
-        button('admin:reactionRoles:manage', '⬅️ Back'),
-        button('admin:reactionRoles:settings', '⚙️ Settings'),
+        button('admin:reactionRoles:manage', emojiLabel('BACK', 'Back')),
+        button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
       ),
     ],
   };
