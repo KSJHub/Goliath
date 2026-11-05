@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 /**
  * Canonical Tickets panel layer.
@@ -1583,7 +1583,7 @@ let ticketSetupPanelApi;
         .setCustomId('ticket_setup:refresh')
         .setLabel('Refresh')
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji('🔄')
+        .setEmoji(EMOJIS.REFRESH)
     );
   }
 
@@ -1756,7 +1756,7 @@ let ticketSetupPanelApi;
         .setCustomId(`ticket_setup:redeploy:${panelId}`)
         .setLabel('Redeploy')
         .setStyle(ButtonStyle.Primary)
-        .setEmoji('🔄'),
+        .setEmoji(EMOJIS.REFRESH),
 
       new ButtonBuilder()
         .setCustomId(`ticket_setup:undeploy:${panelId}`)
@@ -1772,7 +1772,7 @@ let ticketSetupPanelApi;
         .setCustomId(`ticket_setup:management:${panelId}`)
         .setLabel('Manage Ticket')
         .setStyle(ButtonStyle.Primary)
-        .setEmoji('⚙️'),
+        .setEmoji(EMOJIS.SETTINGS),
 
       new ButtonBuilder()
         .setCustomId(`ticket_setup:refresh_deployed:${panelId}`)
@@ -1794,7 +1794,7 @@ let ticketSetupPanelApi;
         .setCustomId('ticket_setup:back')
         .setLabel('Back')
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji('⬅️')
+        .setEmoji(EMOJIS.BACK)
     );
   }
 
@@ -1878,7 +1878,7 @@ let ticketSetupPanelApi;
           .setCustomId(`ticket_setup:back_panel:${panel.panelId}`)
           .setLabel('Back')
           .setStyle(ButtonStyle.Secondary)
-          .setEmoji('⬅️')
+          .setEmoji(EMOJIS.BACK)
       ),
     ];
   }
@@ -1967,7 +1967,7 @@ let ticketSetupPanelApi;
           .setCustomId(`ticket_setup:management:${panel.panelId}`)
           .setLabel('Back To Manage Ticket')
           .setStyle(ButtonStyle.Secondary)
-          .setEmoji('⬅️')
+          .setEmoji(EMOJIS.BACK)
       ),
     ];
   }
