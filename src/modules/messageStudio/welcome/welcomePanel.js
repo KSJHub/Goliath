@@ -260,7 +260,7 @@ async function buildWelcomeDeliverySettingsPanel(guild,scope,memberDisplayName='
   const instant=scope==='instant',dm=scope==='dm';
   const controls=instant?[
     row(button('admin:welcome:mentions',emojiLabel('WELCOME_MENTIONS','Mention Settings')),button('admin:welcome:toggleBots',config.ignoreBots?emojiLabel('AUTOMOD','Exclude Bots: On'):emojiLabel('AUTOMOD','Exclude Bots: Off'),config.ignoreBots?ButtonStyle.Success:ButtonStyle.Secondary),button('admin:welcome:repairInstant',emojiLabel('WELCOME_DIAGNOSTICS','Diagnostics'))),
-    row(button('admin:welcome:instant',emojiLabel('BACK', 'Instant Welcome')))
+    row(button('admin:welcome:instant',emojiLabel('BACK', 'Back')))
   ]:dm?[
     row(button('admin:welcome:toggleDm',config.dmEnabled?'⏸ Disable DM':'▶ Enable DM',config.dmEnabled?ButtonStyle.Secondary:ButtonStyle.Success)),
     row(button('admin:welcome:dm',emojiLabel('BACK','DM Welcome')))
