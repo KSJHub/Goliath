@@ -183,7 +183,7 @@ function buildAutomodPanel(guild, name = 'Unknown User') {
     ].join('\n'), name, config.enabled ? ENABLED_COLOR : DISABLED_COLOR)],
     components: [
       row(selector),
-      row(button('admin:automod:configure', emojiLabel('SETTINGS', 'System Settings')), button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Secondary)),
+      row(button('admin:automod:configure', emojiLabel('SETTINGS', 'System Settings')), button('admin:automod:risk', emojiLabel('RISK', 'Risk & Cases'), ButtonStyle.Secondary)),
       navRow('admin:automod', 'admin:adminpanel'),
     ],
   };
@@ -204,7 +204,7 @@ function buildAutomodConfigurePanel(guild, name = 'Unknown User') {
       row(
         button('admin:automod:toggle', config.enabled ? 'Disable AutoMod' : 'Enable AutoMod', config.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
         button('admin:automod:dm', config.dmUser !== false ? 'Disable DMs' : 'Enable DMs', config.dmUser !== false ? ButtonStyle.Danger : ButtonStyle.Success),
-        button('admin:automod:risk', '🎯 Risk & Cases', ButtonStyle.Primary)
+        button('admin:automod:risk', emojiLabel('RISK', 'Risk & Cases'), ButtonStyle.Primary)
       ),
       row(button('admin:automod:shadow', config.shadowMode ? 'Disable Simulation' : 'Enable Simulation', ButtonStyle.Secondary)),
       row(button('admin:setautomodlog', emojiLabel('AUTOMOD', 'AutoMod Log'), ButtonStyle.Secondary), button('admin:automod:exemptions', emojiLabel('PANELS', 'Exemptions'), ButtonStyle.Secondary), button('admin:automod:reset', emojiLabel('UPDATE', 'Reset'), ButtonStyle.Danger)),
@@ -217,7 +217,7 @@ function buildRiskPanel(guild, name = 'Unknown User') {
   const config = getAutomodConfig(guild.id);
   const risk = config.risk || {};
   return {
-    embeds: [createEmbed('🎯 AutoMod Risk, Cases & Evidence', [
+    embeds: [createEmbed(emojiLabel('RISK', 'AutoMod Risk, Cases & Evidence'), [
       '**Risk engine:** ' + status(risk.enabled !== false),
       '**Thresholds:** Low ' + (risk.low || 25) + ' • Medium ' + (risk.medium || 50) + ' • High ' + (risk.high || 75) + ' • Critical ' + (risk.critical || 100),
       '**Repeat window:** ' + (risk.repeatWindowHours || 24) + 'h • +' + (risk.repeatWeight || 10) + ' risk per recent incident',
@@ -227,7 +227,7 @@ function buildRiskPanel(guild, name = 'Unknown User') {
       'Risk combines every protection triggered by the same message. Repeat incidents increase risk without silently changing the configured punishment actions.',
     ].join('\n'), name, PANEL_COLOR)],
     components: [
-      row(button('admin:automod:risk:edit', emojiLabel('SETTINGS', 'Configure Risk & Cases')), button('admin:automod', '🛡️ Protections', ButtonStyle.Secondary)),
+      row(button('admin:automod:risk:edit', emojiLabel('SETTINGS', 'Configure Risk & Cases')), button('admin:automod', emojiLabel('SECURITY', 'Protections'), ButtonStyle.Secondary)),
       row(backButton('admin:automod:configure')),
     ],
   };
