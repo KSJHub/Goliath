@@ -71,7 +71,14 @@ function initSocketHub(server, options = {}) {
         await new Promise((resolve, reject) => socket.request.session.reload((error) => error ? reject(error) : resolve()));
         const userId = socket.request.session?.user?.id;
         if (!userId) return socket.disconnect(true);
-        if (!security.isBotOwner(userId)) socket.leave('goliath:tickets');
+        if (!security.isBotOwner(userId)) {
+          socket.leave('goliath:tickets');
+          const { listDashboardGuilds } = require('../middleware/dashboardAccess');
+          if (!(await listDashboardGuilds(options.client, userId)).length) {
+            socket.disconnect(true);
+            return;
+          }
+        }
         for (const room of socket.rooms) {
           if (!room.startsWith('guild:')) continue;
           const access = await options.resolveGuildAccess(options.client, userId, room.slice(6));
