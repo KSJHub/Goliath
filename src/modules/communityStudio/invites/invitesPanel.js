@@ -82,9 +82,9 @@ function officialView(interaction) {
         { name: '🎭 Join Roles', value: roleList(config.roleIds), inline: true },
         { name: '👥 MEMBER INVITES', value: `${member.enabled ? '🟢 Enabled' : '🔴 Disabled'} · **${memberLinks}** personal links\nMembers share individual links to earn tracked referrals.`, inline: false },
         { name: 'Shared Settings', value: 'Same destination and join roles as the official invite · Never expires · Unlimited uses', inline: false },
-        ...(!config.channelId ? [{ name: '⚠️ Setup Required', value: 'Select an official destination channel before creating the invite.', inline: false }] : []),
+        ...(!config.channelId ? [{ name: emojiLabel('WARNING', 'Setup Required'), value: 'Select an official destination channel before creating the invite.', inline: false }] : []),
 
-        ...(updateArmed ? [{ name: '⚠️ Confirm Replacement', value: 'Updating replaces the existing official link. Confirm within 30 seconds.', inline: false }] : []),
+        ...(updateArmed ? [{ name: emojiLabel('WARNING', 'Confirm Replacement'), value: 'Updating replaces the existing official link. Confirm within 30 seconds.', inline: false }] : []),
         ...(info.pages > 1 ? [{ name: 'Official Role Page', value: `${info.page + 1}/${info.pages}`, inline: true }] : []),
 
       )],
@@ -93,7 +93,7 @@ function officialView(interaction) {
       row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Official invite destination').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Official join roles (optional)', info))] : []),
 
-      row(button('invites:official-create', !configured ? '📢 Create Invite' : updateArmed ? '⚠️ Confirm Replacement' : needsUpdate ? '🔄 Update Invite' : '💾 Save Invite Settings', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId),
+      row(button('invites:official-create', !configured ? '📢 Create Invite' : updateArmed ? emojiLabel('WARNING', 'Confirm Replacement') : needsUpdate ? emojiLabel('REFRESH', 'Update Invite') : '💾 Save Invite Settings', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId),
         button('invites:official-verify', '🔍 Verify Link', ButtonStyle.Secondary),
         button('invites:invite-manager', '👥 Member Invites', ButtonStyle.Secondary)),
       row(button('invites:home', emojiLabel('BACK', 'Back')), button('invites:admin-config', emojiLabel('SETTINGS', 'Settings')),
@@ -121,7 +121,7 @@ function publicView(interaction) {
         { name: 'Leaderboard', value: `Top ${config.leaderboardLimit}`, inline: true },
         { name: 'Member Invites', value: member.enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
         { name: 'Official Invite', value: official.code ? '🟢 Configured' : '⚠️ Not configured', inline: true },
-        ...(!ready ? [{ name: '⚠️ Setup Required', value: [
+        ...(!ready ? [{ name: emojiLabel('WARNING', 'Setup Required'), value: [
           !config.channelId ? 'Select a panel channel.' : null,
           !official.code ? 'Create the official invite.' : null,
         ].filter(Boolean).join(' '), inline: false }] : []),
@@ -130,7 +130,7 @@ function publicView(interaction) {
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('invites:panel-channel').setPlaceholder('📍 Select panel channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       row(new StringSelectMenuBuilder().setCustomId('invites:panel-limit').setPlaceholder(`🏆 Leaderboard: Top ${config.leaderboardLimit}`).addOptions([5, 10, 15, 20, 25].map((value) => ({ label: `Top ${value}`, value: String(value) })))),
-      row(button('invites:panel-deploy', deployed ? '🔄 Update Panel' : '📢 Publish Panel', ButtonStyle.Success, !ready),
+      row(button('invites:panel-deploy', deployed ? emojiLabel('REFRESH', 'Update Panel') : '📢 Publish Panel', ButtonStyle.Success, !ready),
         button('invites:panel-embed-modal', '✏️ Edit Panel', ButtonStyle.Secondary),
         button('invites:panel-preview', '👁️ Preview Panel', ButtonStyle.Secondary, !official.code),
         ),
@@ -153,7 +153,7 @@ function adminView(interaction) {
   const regenerateArmed = state.officialConfirm?.action === 'regenerate' && state.officialConfirm.until > Date.now();
   const deleteArmed = state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now();
   const pages = {
-    home: ['⚙️ Invite Studio Settings', 'Choose an area to manage invites, referrals, diagnostics or the public panel.'],
+    home: [emojiLabel('SETTINGS', 'Invite Studio Settings'), 'Choose an area to manage invites, referrals, diagnostics or the public panel.'],
     health: ['🩺 System Health', 'Run diagnostics and repair supported problems without deliberately replacing permanent links.'],
     members: ['👥 Member Invites', 'Manage member referral access, invite DMs and individual links or scores.'],
     official: ['🔗 Official Invite', 'Advanced official invitation maintenance. Destination, roles and vanity preference are configured in Invite Management.'],
@@ -188,17 +188,17 @@ function adminView(interaction) {
         button('invites:member-enabled', memberEnabled ? '👥 Member Invites: On' : '👥 Member Invites: Off'),
         button('invites:member-dm-modal', '✏️ Edit Invite DM'),
         button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm',
-          resetArmed ? '⚠️ Confirm Leaderboard Reset' : '🏆 Reset Leaderboard'),
+          resetArmed ? emojiLabel('WARNING', 'Confirm Leaderboard Reset') : '🏆 Reset Leaderboard'),
       ));
-      if (resetArmed) embed.addFields({ name: '⚠️ Confirm Score Reset', value: 'Confirm within 30 seconds to clear leaderboard scores. Personal invite links remain.', inline: false });
+      if (resetArmed) embed.addFields({ name: emojiLabel('WARNING', 'Confirm Score Reset'), value: 'Confirm within 30 seconds to clear leaderboard scores. Personal invite links remain.', inline: false });
     }
     if (page === 'official') {
       components.push(row(
-        button('invites:official-regenerate', regenerateArmed ? '⚠️ Confirm Replace' : '🔄 Replace Official Invite', ButtonStyle.Secondary, !configured),
-        button('invites:official-delete', deleteArmed ? '⚠️ Confirm Delete' : '🗑️ Delete Official Invite', ButtonStyle.Secondary, !configured),
+        button('invites:official-regenerate', regenerateArmed ? emojiLabel('WARNING', 'Confirm Replace') : emojiLabel('REFRESH', 'Replace Official Invite'), ButtonStyle.Secondary, !configured),
+        button('invites:official-delete', deleteArmed ? emojiLabel('WARNING', 'Confirm Delete') : '🗑️ Delete Official Invite', ButtonStyle.Secondary, !configured),
       ));
-      if (regenerateArmed) embed.addFields({ name: '⚠️ Confirm Invite Replacement', value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false });
-      if (deleteArmed) embed.addFields({ name: '⚠️ Confirm Invite Deletion', value: 'Confirm within 30 seconds to delete the official invite.', inline: false });
+      if (regenerateArmed) embed.addFields({ name: emojiLabel('WARNING', 'Confirm Invite Replacement'), value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false });
+      if (deleteArmed) embed.addFields({ name: emojiLabel('WARNING', 'Confirm Invite Deletion'), value: 'Confirm within 30 seconds to delete the official invite.', inline: false });
     }
     if (page === 'panel') {
       const config = section.settings.publicPanel;
@@ -216,9 +216,9 @@ function adminView(interaction) {
       components.push(row(
         button('invites:panel-embed-modal', '✏️ Edit Panel'),
         button('invites:panel-preview', '👁️ Preview Panel', ButtonStyle.Secondary, !configured),
-        button('invites:default-panel', panelResetArmed ? '⚠️ Confirm Panel Reset' : '🧹 Reset Public Panel'),
+        button('invites:default-panel', panelResetArmed ? emojiLabel('WARNING', 'Confirm Panel Reset') : '🧹 Reset Public Panel'),
       ));
-      if (panelResetArmed) embed.addFields({ name: '⚠️ Confirm Panel Reset', value: 'Confirm within 30 seconds to restore default panel text. Channel, deployed message and invite DM are preserved.', inline: false });
+      if (panelResetArmed) embed.addFields({ name: emojiLabel('WARNING', 'Confirm Panel Reset'), value: 'Confirm within 30 seconds to restore default panel text. Channel, deployed message and invite DM are preserved.', inline: false });
     }
     components.push(row(button('invites:settings-home', emojiLabel('BACK', 'Back')), ...(page === 'panel' ? [button('invites:settings-panel-delete', panelDeleteArmed ? '⚠️ Confirm Delete Panel' : '🗑️ Delete Deployed Panel', ButtonStyle.Danger, !section.settings.publicPanel.messageId)] : [])));
     if (page === 'panel' && panelDeleteArmed) embed.addFields({ name: '⚠️ Confirm Deletion', value: 'Confirm within 30 seconds to delete the deployed Discord message and clear its saved deployment IDs. Referral scores and panel design remain intact.', inline: false });
@@ -265,7 +265,7 @@ function managerView(interaction) {
       button('invites:manager-verify', '🔍 Verify Link'),
       button('invites:manager-resend', '📩 Send Invite DM'),
       button('invites:manager-delete', memberConfirm?.action === 'delete' ? '⚠️ Confirm Removal' : '🗑️ Remove Member Link'),
-      button('invites:manager-reset-member', memberConfirm?.action === 'reset' ? '⚠️ Confirm Score Reset' : '🏆 Reset Member Score'),
+      button('invites:manager-reset-member', memberConfirm?.action === 'reset' ? emojiLabel('WARNING', 'Confirm Score Reset') : '🏆 Reset Member Score'),
     ));
   }
   components.push(row(button('invites:official-settings', emojiLabel('BACK', 'Back'))));
