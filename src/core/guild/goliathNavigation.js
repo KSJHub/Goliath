@@ -139,9 +139,13 @@ function actionButton(customId, action, options = {}) {
 function paginationButtons(kind, previousId, nextId, options = {}) {
   const noun = kind === 'channel' ? 'Chan' : kind === 'role' ? 'Roles' : null;
   if (!noun) throw new Error('Pagination kind must be channel or role');
+  const previousEmoji = EMOJIS[kind === 'channel' ? 'CHANNEL_PREVIOUS' : 'ROLE_PREVIOUS'];
+  const nextEmoji = EMOJIS[kind === 'channel' ? 'CHANNEL_NEXT' : 'ROLE_NEXT'];
   return [
-    navigationButton(previousId, emojiLabel(kind === 'channel' ? 'CHANNEL_PREVIOUS' : 'ROLE_PREVIOUS', noun), ButtonStyle.Secondary, options.previousDisabled),
-    navigationButton(nextId, emojiLabel(kind === 'channel' ? 'CHANNEL_NEXT' : 'ROLE_NEXT', noun, { position: 'after' }), ButtonStyle.Secondary, options.nextDisabled),
+    new ButtonBuilder().setCustomId(previousId).setLabel(noun).setEmoji(previousEmoji)
+      .setStyle(ButtonStyle.Secondary).setDisabled(Boolean(options.previousDisabled)),
+    new ButtonBuilder().setCustomId(nextId).setLabel(noun).setEmoji(nextEmoji)
+      .setStyle(ButtonStyle.Secondary).setDisabled(Boolean(options.nextDisabled)),
   ];
 }
 
