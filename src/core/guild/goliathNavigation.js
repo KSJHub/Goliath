@@ -96,16 +96,16 @@ function emojiLabel(key, label, { position = 'before' } = {}) {
 
 // 2. Shared action definitions and button/navigation builders
 const UI_ACTIONS = Object.freeze({
-  back: Object.freeze({ label: emojiLabel('BACK', 'Back'), style: ButtonStyle.Secondary }),
-  settings: Object.freeze({ label: emojiLabel('SETTINGS', 'Settings'), style: ButtonStyle.Secondary }),
-  builder: Object.freeze({ label: emojiLabel('BUILDER', 'Builder'), style: ButtonStyle.Primary }),
-  panels: Object.freeze({ label: emojiLabel('PANELS', 'Panels'), style: ButtonStyle.Primary }),
-  presets: Object.freeze({ label: emojiLabel('PRESETS', 'Presets'), style: ButtonStyle.Primary }),
-  media: Object.freeze({ label: emojiLabel('MEDIA', 'Media'), style: ButtonStyle.Primary }),
-  testSend: Object.freeze({ label: emojiLabel('TEST_SEND', 'Test Send'), style: ButtonStyle.Secondary }),
-  deploy: Object.freeze({ label: emojiLabel('DEPLOY', 'Deploy'), style: ButtonStyle.Success }),
-  update: Object.freeze({ label: emojiLabel('UPDATE', 'Update'), style: ButtonStyle.Success }),
-  review: Object.freeze({ label: emojiLabel('REVIEW', 'Review'), style: ButtonStyle.Secondary }),
+  back: Object.freeze({ label: 'Back', emoji: EMOJIS.BACK, style: ButtonStyle.Secondary }),
+  settings: Object.freeze({ label: 'Settings', emoji: EMOJIS.SETTINGS, style: ButtonStyle.Secondary }),
+  builder: Object.freeze({ label: 'Builder', emoji: EMOJIS.BUILDER, style: ButtonStyle.Primary }),
+  panels: Object.freeze({ label: 'Panels', emoji: EMOJIS.PANELS, style: ButtonStyle.Primary }),
+  presets: Object.freeze({ label: 'Presets', emoji: EMOJIS.PRESETS, style: ButtonStyle.Primary }),
+  media: Object.freeze({ label: 'Media', emoji: EMOJIS.MEDIA, style: ButtonStyle.Primary }),
+  testSend: Object.freeze({ label: 'Test Send', emoji: EMOJIS.TEST_SEND, style: ButtonStyle.Secondary }),
+  deploy: Object.freeze({ label: 'Deploy', emoji: EMOJIS.DEPLOY, style: ButtonStyle.Success }),
+  update: Object.freeze({ label: 'Update', emoji: EMOJIS.UPDATE, style: ButtonStyle.Success }),
+  review: Object.freeze({ label: 'Review', emoji: EMOJIS.REVIEW, style: ButtonStyle.Secondary }),
 });
 
 function navigationButton(customId, label, style = ButtonStyle.Secondary, disabled = false) {
@@ -113,9 +113,13 @@ function navigationButton(customId, label, style = ButtonStyle.Secondary, disabl
     .setCustomId(customId)
     .setStyle(style)
     .setDisabled(Boolean(disabled));
-  const backPrefix = `${EMOJIS.BACK} `;
-  if (typeof label === 'string' && label.startsWith(backPrefix)) {
-    return component.setEmoji(EMOJIS.BACK).setLabel(label.slice(backPrefix.length));
+  // Legacy callers supply emoji-prefixed text; preserve their visible appearance
+  // while rendering the emoji in Discord's native component emoji field.
+  if (typeof label === 'string') {
+    const match = Object.values(EMOJIS)
+      .filter((emoji) => label.startsWith(`${emoji} `))
+      .sort((a, b) => b.length - a.length)[0];
+    if (match) return component.setEmoji(match).setLabel(label.slice(match.length + 1));
   }
   return component.setLabel(label);
 }
@@ -124,7 +128,12 @@ function actionButton(customId, action, options = {}) {
   const definition = UI_ACTIONS[action];
   if (!definition) throw new Error(`Unknown Goliath UI action: ${action}`);
   const suffix = options.suffix == null ? '' : String(options.suffix);
-  return navigationButton(customId, `${definition.label}${suffix}`, definition.style, options.disabled);
+  return new ButtonBuilder()
+    .setCustomId(customId)
+    .setLabel(`${definition.label}${suffix}`)
+    .setEmoji(definition.emoji)
+    .setStyle(definition.style)
+    .setDisabled(Boolean(options.disabled));
 }
 
 function paginationButtons(kind, previousId, nextId, options = {}) {
