@@ -47,7 +47,7 @@ function buildPollsAdminPanel(guild, memberDisplayName = 'Unknown User') {
   return { embeds: [embed], components: [
     row(button('admin:polls:create', '➕ Create Poll', ButtonStyle.Success), button('admin:polls:manage', '🗂️ Manage Polls'), button(enabled ? 'admin:polls:disable' : 'admin:polls:enable', enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary)),
     row(button('admin:polls:settings', '⚙️ Settings', ButtonStyle.Secondary), button('admin:polls:health', '🩺 Health', ButtonStyle.Secondary), button('admin:polls:repair', '🛠️ Repair'), button('admin:polls:export', '📤 Export', ButtonStyle.Secondary), button('admin:polls:reset', '🗑️ Reset', ButtonStyle.Danger)),
-    row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary)),
+    row(button('admin:modules', '⬅️ Back', ButtonStyle.Secondary)),
   ] };
 }
 function buildSettingsPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
