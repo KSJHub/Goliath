@@ -1,5 +1,5 @@
-const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 const { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const crypto = require('crypto');
 const security = require('../../../core/security/protection/core');
