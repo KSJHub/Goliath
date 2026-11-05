@@ -205,9 +205,9 @@ async function buildInstantPanel(guild,memberDisplayName='Unknown User',userId='
   const next=!enabled?emojiLabel('SETTINGS','Enable the Welcome module in Settings before live delivery.'):!config.channelId?emojiLabel('WELCOME_LOCATION','Select a public welcome channel.'):issues.length?emojiLabel('WARNING','Open Settings to review delivery warnings.'):emojiLabel('SUCCESS','Preview or send a test welcome to confirm the message.');
   return {embeds:[new EmbedBuilder().setColor(!enabled?0x747f8d:issues.length?0xfaa61a:0x57f287)
     .setTitle(emojiLabel('WELCOME_INSTANT','Welcome · Instant'))
-    .setDescription(['Configure and test the public greeting sent when a member joins.','',
+    .setDescription(['Configure the public greeting. Preview checks your selection; Send Test delivers the saved message.','',
       '### ' + emojiLabel('WORKSPACE', 'Workspace'),`**Destination**　${config.channelId?`<#${config.channelId}>`:emojiLabel('INACTIVE','Choose below')}`,`**Source**　${sourceLabel(config.messageSource)}`,`**Saved message**　${template?.name||'Not selected'}`,
-      ...(hasUnsavedSelection?[`**Selected for preview**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`, '**Not live yet** — Preview to inspect this selection, then choose Save Message to activate it.']:[]),'',
+      ...(hasUnsavedSelection?[`**Selected for preview**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`, '**Not live yet** — Preview shows this selection. Send Test uses the saved live message until you choose Save Message.']:[]),'',
       '### ' + emojiLabel('DELIVERY', 'Delivery'),`**Member pings**　${config.allowUserPing?emojiLabel('ACTIVE','On'):emojiLabel('INACTIVE', 'Off')}　•　**Role pings**　${config.allowRolePings?emojiLabel('ACTIVE','On'):emojiLabel('INACTIVE', 'Off')}`,`**Bots**　${config.ignoreBots?'Excluded':'Included'}　•　**DM**　${config.dmEnabled?'On':'Off'}`,`**Sent**　${config.analytics?.publicSent||0}　•　**Failed**　${config.analytics?.publicFailed||0}`,'',
       '### ' + emojiLabel('STATUS', 'Status'),`**Readiness**　${enabled&&config.channelId?emojiLabel('ACTIVE', 'Configured'):emojiLabel('SETUP_REQUIRED', 'Setup required')}`,`**Health**　${health.healthy?emojiLabel('HEALTHY', 'Healthy'):emojiLabel('WARNING', 'Needs attention')}`,'',
       '### ' + emojiLabel('NEXT_STEP', 'Next Step'),next].join('\n').slice(0,4096))
@@ -228,9 +228,9 @@ async function buildDmPanel(guild,memberDisplayName='Unknown User',userId='panel
   const message=config.dmMessageSource==='inherit'?publicTemplate?.name||'Same as Public':dmTemplate?.name||'Not selected';
   return {embeds:[new EmbedBuilder().setColor(config.dmEnabled?0x57f287:0x747f8d)
     .setTitle(emojiLabel('WELCOME_DM','Welcome · Direct Message'))
-    .setDescription(['Build and test the private greeting delivered to new members.','',
+    .setDescription(['Configure private greetings. Preview checks your selection; Send Test delivers the saved DM message.','',
       '### ' + emojiLabel('WORKSPACE', 'Workspace'),`**Source**　${sourceLabel(config.dmMessageSource)}`,`**Message**　${message}`,
-      ...(hasUnsavedSelection?[`**Selected for preview**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`, '**Not live yet** — Preview to inspect this selection, then choose Save Message to activate it.']:[]),'',
+      ...(hasUnsavedSelection?[`**Selected for preview**　${sourceLabel(source)}${pendingTemplate?` · ${pendingTemplate.name||pendingTemplate.templateId}`:''}`, '**Not live yet** — Preview shows this selection. Send Test uses the saved live message until you choose Save Message.']:[]),'',
       '### ' + emojiLabel('DELIVERY', 'Delivery'),`**Direct messages**　${config.dmEnabled?emojiLabel('ACTIVE', 'Enabled'):emojiLabel('INACTIVE','Disabled')}`,`**Sent**　${config.analytics?.dmSent||0}　•　**Failed**　${config.analytics?.dmFailed||0}`,'',
       '### ' + emojiLabel('STATUS', 'Status'),`**Readiness**　${config.dmEnabled?emojiLabel('ACTIVE','Active'):emojiLabel('INACTIVE','Paused')}`,`**Message sync**　${config.dmMessageSource==='inherit'?'Follows Public Welcome':'Independent template'}`,'',
       '### ' + emojiLabel('NEXT_STEP', 'Next Step'),!config.dmEnabled?emojiLabel('SETTINGS','Open Settings to enable DM delivery.'):source==='custom'?emojiLabel('PRESETS','Save Message to edit your custom DM.'):emojiLabel('WELCOME_PREVIEW','Preview or send yourself a test DM.')].join('\n'))
