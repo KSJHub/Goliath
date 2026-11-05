@@ -1,4 +1,4 @@
-const { emojiLabel } = require('../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../core/ui/emojis');
 
 const {
   ActionRowBuilder,
@@ -26,11 +26,15 @@ const UI_ACTIONS = Object.freeze({
 });
 
 function navigationButton(customId, label, style = ButtonStyle.Secondary, disabled = false) {
-  return new ButtonBuilder()
+  const component = new ButtonBuilder()
     .setCustomId(customId)
-    .setLabel(label)
     .setStyle(style)
     .setDisabled(Boolean(disabled));
+  const backPrefix = `${EMOJIS.BACK} `;
+  if (typeof label === 'string' && label.startsWith(backPrefix)) {
+    return component.setEmoji(EMOJIS.BACK).setLabel(label.slice(backPrefix.length));
+  }
+  return component.setLabel(label);
 }
 
 function actionButton(customId, action, options = {}) {
