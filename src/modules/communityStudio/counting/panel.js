@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -86,8 +87,8 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
       button(PREFIX + ':reset', '♻️ Reset Game', ButtonStyle.Danger),
     ),
     row(
-      button('admin:studio:communityStudio', '⬅️ Back', ButtonStyle.Secondary),
-      button(PREFIX + ':settings', '⚙️ Settings', ButtonStyle.Secondary),
+      button('admin:studio:communityStudio', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+      button(PREFIX + ':settings', emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
     ),
   ] };
 }
@@ -120,7 +121,7 @@ function buildRulesScreen(guild) {
       button(PREFIX + ':rules:toggle:banter', '😂 Banter: ' + (section.funnyResponses ? 'On' : 'Off'), ButtonStyle.Secondary),
       button(PREFIX + ':rules:cycle:timing', '⏱️ Reply Timing: ' + (section.responseCleanupSeconds === null ? 'Keep' : section.responseCleanupSeconds + 's'), ButtonStyle.Secondary),
     ),
-    row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
+    row(button(PREFIX + ':main:0', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
   ] };
 }
 function buildSettingsScreen(guild) {
@@ -150,7 +151,7 @@ function buildSettingsScreen(guild) {
       button(PREFIX + ':defaults', '🔄 Defaults', ButtonStyle.Secondary),
       button(PREFIX + ':health', '🩺 Health', ButtonStyle.Secondary),
     ),
-    row(button(PREFIX + ':main:0', '⬅️ Back', ButtonStyle.Secondary)),
+    row(button(PREFIX + ':main:0', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
   ] };
 }
 function buildDefaultsConfirmation() {
