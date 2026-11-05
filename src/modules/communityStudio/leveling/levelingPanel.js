@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 const {
@@ -261,8 +262,8 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User', rolePage 
         button('admin:leveling:maintenance', '🧰 Maintenance', ButtonStyle.Primary),
         button('admin:leveling:trackingRules', '🚫 XP Exclusions', ButtonStyle.Secondary),
         button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary),
-        button(`admin:leveling:managerPage:${Math.max(0, roleInfo.page - 1)}`, '◀ Roles', ButtonStyle.Secondary, roleInfo.page === 0),
-        button(`admin:leveling:managerPage:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, 'Roles ▶', ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1),
+        button(`admin:leveling:managerPage:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary, roleInfo.page === 0),
+        button(`admin:leveling:managerPage:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1),
       ),
     ],
   };
@@ -297,7 +298,7 @@ function buildXpManagerPanel(guild, memberDisplayName = 'Unknown User') {
       row(
         button('admin:leveling:xpmanage:audit', '📜 Audit Log', ButtonStyle.Secondary),
         button('admin:leveling:maintenance', '🧰 Maintenance', ButtonStyle.Secondary),
-        button('admin:leveling', '⬅️ Back', ButtonStyle.Secondary),
+        button('admin:leveling', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
       ),
     ],
   };
@@ -341,7 +342,7 @@ function buildXpMemberPanel(guild, userId, memberDisplayName = 'Unknown User') {
         button(`admin:leveling:xpmanage:reset:${userId}`, '🗑️ Reset Member', ButtonStyle.Danger),
         button('admin:leveling:xpmanage:audit', '📜 Audit Log', ButtonStyle.Secondary),
       ),
-      row(button('admin:leveling:xpmanage', '⬅️ Back', ButtonStyle.Secondary)),
+      row(button('admin:leveling:xpmanage', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
     ],
   };
 }
@@ -400,7 +401,7 @@ function buildXpAuditPanel(guild, memberDisplayName = 'Unknown User') {
       .setTimestamp()],
     components: [row(
       button('admin:leveling:xpmanage:audit', '🔄 Refresh', ButtonStyle.Secondary),
-      button('admin:leveling:xpmanage', '⬅️ Back', ButtonStyle.Secondary),
+      button('admin:leveling:xpmanage', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
     )],
   };
 }
@@ -451,7 +452,7 @@ function buildMaintenancePanel(guild, memberDisplayName = 'Unknown User', report
       ),
       row(
         button('admin:leveling:maintenance:log', '📜 Maintenance Log', ButtonStyle.Secondary),
-        button('admin:leveling', '⬅️ Back', ButtonStyle.Secondary),
+        button('admin:leveling', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
       ),
     ],
   };
@@ -484,7 +485,7 @@ function buildIntegrityPreviewPanel(guild, memberDisplayName = 'Unknown User', r
     components: [row(
       button('admin:leveling:maintenance:repair', '🩹 Apply Auto Fix', ButtonStyle.Danger, Number(report.issueCount || 0) === 0),
       button('admin:leveling:maintenance:scan', '🔄 Rescan', ButtonStyle.Secondary),
-      button('admin:leveling:maintenance', '⬅️ Back', ButtonStyle.Secondary),
+      button('admin:leveling:maintenance', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
     )],
   };
 }
@@ -500,7 +501,7 @@ function buildMaintenanceLogPanel(guild, memberDisplayName = 'Unknown User') {
       .setTimestamp()],
     components: [row(
       button('admin:leveling:maintenance:log', '🔄 Refresh', ButtonStyle.Secondary),
-      button('admin:leveling:maintenance', '⬅️ Back', ButtonStyle.Secondary),
+      button('admin:leveling:maintenance', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
     )],
   };
 }
@@ -533,9 +534,9 @@ function buildTrackingRulesPanel(guild, memberDisplayName = 'Unknown User', role
         .setMaxValues(25)
         .setDefaultChannels(...ignoredChannels.slice(0, 25))),
       ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:leveling:ignoredRoles:${roleInfo.page}`, 'Choose roles that must not earn XP', roleInfo))] : []),
-      row(button('admin:leveling', '⬅️ Back', ButtonStyle.Secondary),
-        button(`admin:leveling:ignoredPage:${Math.max(0, roleInfo.page - 1)}`, '◀ Roles', ButtonStyle.Secondary, roleInfo.page === 0),
-        button(`admin:leveling:ignoredPage:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, 'Roles ▶', ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1)),
+      row(button('admin:leveling', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+        button(`admin:leveling:ignoredPage:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary, roleInfo.page === 0),
+        button(`admin:leveling:ignoredPage:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1)),
     ],
   };
 }
@@ -578,7 +579,7 @@ function buildRankRewardsPanel(guild, memberDisplayName = 'Unknown User') {
         button('admin:leveling:ranks:behaviour', section.rewardBehaviour === leveling.REWARD_BEHAVIOURS.HIGHEST_ONLY ? '🎭 Highest Only' : '🎭 Stack Rewards', ButtonStyle.Secondary),
         button('admin:leveling:ranks:repair', '🩹 Repair Missing', ButtonStyle.Danger, missing.length === 0),
       ),
-      row(button('admin:leveling', '⬅️ Back', ButtonStyle.Secondary)),
+      row(button('admin:leveling', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
     ],
   };
 }
@@ -603,7 +604,7 @@ function buildAddRewardsPanel(guild, memberDisplayName = 'Unknown User') {
         .setPlaceholder('Select reward roles')
         .setMinValues(1)
         .setMaxValues(10)),
-      row(button('admin:leveling:ranks', '⬅️ Back', ButtonStyle.Secondary)),
+      row(button('admin:leveling:ranks', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
     ],
   };
 }
@@ -649,7 +650,7 @@ function buildManageRewardsPanel(guild, memberDisplayName = 'Unknown User') {
       .setTimestamp()],
     components: [
       row(select),
-      row(button('admin:leveling:ranks', '⬅️ Back', ButtonStyle.Secondary)),
+      row(button('admin:leveling:ranks', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
     ],
   };
 }
@@ -675,7 +676,7 @@ function buildRewardDetailPanel(guild, level, memberDisplayName = 'Unknown User'
         button(`admin:leveling:ranks:edit:${reward.level}`, '✏️ Edit', ButtonStyle.Primary),
         button(`admin:leveling:ranks:delete:${reward.level}`, '🗑️ Delete', ButtonStyle.Danger),
       ),
-      row(button('admin:leveling:ranks:manage', '⬅️ Back', ButtonStyle.Secondary)),
+      row(button('admin:leveling:ranks:manage', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
     ],
   };
 }
@@ -731,7 +732,7 @@ function buildRewardsPreviewPanel(guild, memberDisplayName = 'Unknown User') {
       ].join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
-    components: [row(button('admin:leveling:ranks', '⬅️ Back', ButtonStyle.Secondary))],
+    components: [row(button('admin:leveling:ranks', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary))],
   };
 }
 
@@ -800,7 +801,7 @@ function buildMultiplierManagerPanel(guild, memberDisplayName = 'Unknown User') 
         button('admin:leveling:configureMultiplier', activeOrScheduled ? '✏️ Edit Event' : '➕ Create Event', activeOrScheduled ? ButtonStyle.Primary : ButtonStyle.Success),
         button('admin:leveling:stopMultiplier', state === 'scheduled' ? '✖️ Cancel Event' : '⏹️ Stop Event', ButtonStyle.Danger, !activeOrScheduled),
       ),
-      row(button('admin:leveling', '⬅️ Back', ButtonStyle.Secondary)),
+      row(button('admin:leveling', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
     ],
   };
 }
@@ -886,7 +887,7 @@ function buildLeaderboardPanel(guild, memberDisplayName = 'Unknown User', page =
         button(`admin:leveling:leaderboard:${board.sortBy}:${board.page}`, '🔄 Refresh', ButtonStyle.Secondary),
         button(`admin:leveling:leaderboard:${board.sortBy}:${nextPage}`, 'Next ➡️', ButtonStyle.Secondary, board.page >= board.totalPages - 1),
       ),
-      row(button('admin:leveling', '⬅️ Back', ButtonStyle.Secondary)),
+      row(button('admin:leveling', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
     ],
   };
 }
