@@ -3,12 +3,10 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   StringSelectMenuBuilder,
 } = require('discord.js');
 
-const { EMOJIS } = require('./emojis');
+const { paginationButtons } = require('../guild/goliathNavigation');
 
 const ROLE_PAGE_SIZE = 25;
 
@@ -247,18 +245,12 @@ function buildRolePickerPagination(customId, page = 0, pageCount = 1) {
   const safeCount = Math.max(1, Number(pageCount) || 1);
   const safePage = Math.min(Math.max(0, Number(page) || 0), safeCount - 1);
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(rolePickerCustomId(customId, 'page', Math.max(0, safePage - 1)))
-      .setLabel('Roles')
-      .setEmoji(EMOJIS.ROLE_PREVIOUS)
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(safePage <= 0),
-    new ButtonBuilder()
-      .setCustomId(rolePickerCustomId(customId, 'page', Math.min(safeCount - 1, safePage + 1)))
-      .setLabel('Roles')
-      .setEmoji(EMOJIS.ROLE_NEXT)
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(safePage >= safeCount - 1),
+    ...paginationButtons(
+      'role',
+      rolePickerCustomId(customId, 'page', Math.max(0, safePage - 1)),
+      rolePickerCustomId(customId, 'page', Math.min(safeCount - 1, safePage + 1)),
+      { previousDisabled: safePage <= 0, nextDisabled: safePage >= safeCount - 1 },
+    ),
   );
 }
 
