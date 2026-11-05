@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../core/ui/emojis');
 'use strict';
 
 const {
@@ -338,7 +339,7 @@ function serverToolsPayload(interaction, explicitGuildId = null) {
   );
 
   const navigation = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(contextualOwnerId('home', guildId)).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(contextualOwnerId('home', guildId)).setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary)
   );
 
   return { embeds: [embed], components: [primaryTools, secondaryTools, navigation] };
@@ -405,7 +406,7 @@ function maintenancePayload(interaction, explicitGuildId = null, notice = null) 
   );
 
   const navigation = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(contextualOwnerId('home', guildId)).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(contextualOwnerId('home', guildId)).setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(contextualOwnerId('maintenance', guildId)).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary)
   );
 
