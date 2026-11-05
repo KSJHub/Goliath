@@ -141,7 +141,7 @@ async function buildRoleStudioPanel(guild, memberDisplayName = 'Unknown User') {
       ),
       row(
         button('admin:studio:roleStudio', '🔄 Refresh Status', ButtonStyle.Secondary),
-        button('admin:modules', '⬅️ Back to Modules', ButtonStyle.Secondary),
+        button('admin:modules', '⬅️ Back', ButtonStyle.Secondary),
       ),
     ],
   };
