@@ -1105,7 +1105,13 @@ async function routeButtonsAndSelects(i) {
     if (!canUseModAction(i.member, i.guild, 'view_cases')) return safeReply(i, { content: 'You cannot view moderation cases.', flags: 64 });
     const value = String(i.values?.[0] || '');
     const row = (...buttons) => new Discord.ActionRowBuilder().addComponents(...buttons);
-    const button = (id, label) => new Discord.ButtonBuilder().setCustomId(id).setLabel(label).setStyle(Discord.ButtonStyle.Secondary);
+    const button = (id, label) => {
+      const component = new Discord.ButtonBuilder().setCustomId(id).setStyle(Discord.ButtonStyle.Secondary);
+      if (id === 'mod_dashboard:none:cases' && label === 'Back to Cases') {
+        return component.setEmoji(EMOJIS.BACK).setLabel('Back');
+      }
+      return component.setLabel(label);
+    };
     if (/^q:\d{15,22}$/.test(value)) {
       const userId = value.slice(2), session = verificationStore.getVerificationSection(i.guild.id)?.sessions?.[userId];
       if (session?.state !== 'quarantined') return safeReply(i, { content: 'This quarantine is no longer active.', flags: 64 });
