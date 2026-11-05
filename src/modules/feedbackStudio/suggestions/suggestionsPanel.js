@@ -206,13 +206,13 @@ function buildManagementPayload(guild, suggestion, section) {
   const components = [];
   if (suggestion.status === 'pending') components.push(row(
     button(`suggestions:manage:${suggestion.suggestionId}:discuss`, '💬 Start Discussion', ButtonStyle.Primary),
-    button(`suggestions:manage:${suggestion.suggestionId}:approve`, '✅ Approve', ButtonStyle.Success),
-    button(`suggestions:manage:${suggestion.suggestionId}:deny`, '❌ Decline', ButtonStyle.Danger),
+    button(`suggestions:manage:${suggestion.suggestionId}:approve`, emojiLabel('SUCCESS', 'Approve'), ButtonStyle.Success),
+    button(`suggestions:manage:${suggestion.suggestionId}:deny`, emojiLabel('ERROR', 'Decline'), ButtonStyle.Danger),
   ));
   else if (suggestion.status === 'discussing') components.push(row(
     button(`suggestions:manage:${suggestion.suggestionId}:resume`, '▶️ Resume Voting', ButtonStyle.Secondary),
-    button(`suggestions:manage:${suggestion.suggestionId}:approve`, '✅ Approve', ButtonStyle.Success),
-    button(`suggestions:manage:${suggestion.suggestionId}:deny`, '❌ Decline', ButtonStyle.Danger),
+    button(`suggestions:manage:${suggestion.suggestionId}:approve`, emojiLabel('SUCCESS', 'Approve'), ButtonStyle.Success),
+    button(`suggestions:manage:${suggestion.suggestionId}:deny`, emojiLabel('ERROR', 'Decline'), ButtonStyle.Danger),
   ));
   else if (suggestion.status === 'approved') components.push(row(button(`suggestions:manage:${suggestion.suggestionId}:implemented`, '🚀 Mark Implemented', ButtonStyle.Success)));
   return { embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(`💡 ${suggestion.reference} · ${suggestion.title}`).setDescription(suggestion.content || '_No suggestion details were provided._').addFields(fields).setFooter({ text: 'Management view · actions here are logged' }).setTimestamp(new Date(suggestion.updatedAt || suggestion.createdAt || Date.now()))], components };
