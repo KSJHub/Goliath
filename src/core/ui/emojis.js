@@ -58,7 +58,7 @@ const EMOJIS = Object.freeze({
   WELCOME: '👋',
   WELCOME_INSTANT: '⚡',
   WELCOME_DM: '💌',
-  WELCOME_SCHEDULED: '🗓️',
+  WELCOME_SCHEDULED: '📅',
   WORKSPACE: '🗂️',
   DELIVERY: '🧩',
   STATUS: '🚦',
