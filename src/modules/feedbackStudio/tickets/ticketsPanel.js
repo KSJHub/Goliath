@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 'use strict';
 
 /**
@@ -1896,9 +1897,9 @@ let ticketSetupPanelApi;
         return select ? new ActionRowBuilder().addComponents(select) : null;
       }).filter(Boolean);
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`ticket_setup:management:${panel.panelId}`).setLabel('⬅️ Back').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`ticket_setup:role_prev:${panel.panelId}`).setLabel('◀ Roles').setStyle(ButtonStyle.Secondary).setDisabled(info.page === 0),
-      new ButtonBuilder().setCustomId(`ticket_setup:role_next:${panel.panelId}`).setLabel('Roles ▶').setStyle(ButtonStyle.Secondary).setDisabled(info.page >= info.pages - 1)
+      new ButtonBuilder().setCustomId(`ticket_setup:management:${panel.panelId}`).setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`ticket_setup:role_prev:${panel.panelId}`).setLabel(emojiLabel('ROLE_PREVIOUS', 'Roles')).setStyle(ButtonStyle.Secondary).setDisabled(info.page === 0),
+      new ButtonBuilder().setCustomId(`ticket_setup:role_next:${panel.panelId}`).setLabel(emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' })).setStyle(ButtonStyle.Secondary).setDisabled(info.page >= info.pages - 1)
     ));
     return rows;
   }
