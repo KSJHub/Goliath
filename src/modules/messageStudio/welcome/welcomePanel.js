@@ -60,7 +60,7 @@ function sourceMenu(config,userId,guildId,scope='public'){
   return new StringSelectMenuBuilder().setCustomId(isDm?'admin:welcome:dmSource':'admin:welcome:source').setPlaceholder(isDm?'Choose DM message source':'Choose message source').addOptions(options);
 }
 function templateMenu(guild,activeTemplateId,userId,scope='public'){
-  const options=getTemplateOptions(guild.id,scope);const staged=getSelection(guild.id,userId,scope);const selected=staged.source==='embedStudio'?(staged.templateId||null):(staged.templateId||activeTemplateId||null);
+  const options=getTemplateOptions(guild.id,scope);const staged=getSelection(guild.id,userId,scope);const selected=staged.templateId||activeTemplateId||null;
   const menu=new StringSelectMenuBuilder().setCustomId(scope==='dm'?'admin:welcome:dmTemplate':'admin:welcome:template').setPlaceholder(options.length?'Choose an Embed Studio message':'No messages available').setMinValues(1).setMaxValues(1).setDisabled(options.length===0);
   if(options.length)menu.addOptions(options.map(option=>({...option,default:option.value===selected})));else menu.addOptions({label:'No messages found',value:'none'});return menu;
 }
@@ -199,7 +199,7 @@ async function buildInstantPanel(guild,memberDisplayName='Unknown User',userId='
     row(sourceMenu(config,userId,guild.id,'public'))
   ];
   if(source==='embedStudio')components.push(row(templateMenu(guild,template?.templateId||config.templateId,userId,'public')));
-  components.push(row(button('admin:welcome:applySource',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!state.templateId),button('admin:welcome:test',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary),button('admin:welcome:send',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
+  components.push(row(button('admin:welcome:applySource',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!(state.templateId||(config.messageSource==='embedStudio'&&config.templateId))),button('admin:welcome:test',emojiLabel('WELCOME_PREVIEW','Preview'),ButtonStyle.Secondary),button('admin:welcome:send',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
   components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:instantSettings',emojiLabel('SETTINGS','Settings'))));
   const issues=health.warnings||[];
   const next=!enabled?emojiLabel('SETTINGS','Enable the Welcome module in Settings before live delivery.'):!config.channelId?emojiLabel('WELCOME_LOCATION','Select a public welcome channel.'):issues.length?emojiLabel('WARNING','Open Settings to review delivery warnings.'):emojiLabel('SUCCESS','Preview or send a test welcome to confirm the message.');
@@ -223,7 +223,7 @@ async function buildDmPanel(guild,memberDisplayName='Unknown User',userId='panel
   const hasUnsavedSelection=Boolean(state.source&&(state.source!==config.dmMessageSource||(state.source==='embedStudio'&&state.templateId&&state.templateId!==config.dmTemplateId)));
   const components=[row(sourceMenu(config,userId,guild.id,'dm'))];
   if(source==='embedStudio')components.push(row(templateMenu(guild,dmTemplate?.templateId||config.dmTemplateId,userId,'dm')));
-  components.push(row(button('admin:welcome:dmApply',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!state.templateId),button('admin:welcome:dmPreview',emojiLabel('WELCOME_PREVIEW','Preview')),button('admin:welcome:dmSend',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
+  components.push(row(button('admin:welcome:dmApply',emojiLabel('PRESETS','Save Message'),ButtonStyle.Primary,source==='embedStudio'&&!(state.templateId||(config.dmMessageSource==='embedStudio'&&config.dmTemplateId))),button('admin:welcome:dmPreview',emojiLabel('WELCOME_PREVIEW','Preview')),button('admin:welcome:dmSend',emojiLabel('TEST_SEND','Send Test'),ButtonStyle.Success)));
   components.push(row(button('admin:welcome',emojiLabel('BACK','Back')),button('admin:welcome:dmSettings',emojiLabel('SETTINGS','Settings'))));
   const message=config.dmMessageSource==='inherit'?publicTemplate?.name||'Same as Public':dmTemplate?.name||'Not selected';
   return {embeds:[new EmbedBuilder().setColor(config.dmEnabled?0x57f287:0x747f8d)
