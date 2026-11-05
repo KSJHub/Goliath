@@ -261,7 +261,7 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User', rolePage 
         button('admin:leveling:xpmanage', '🛠️ XP Manager', ButtonStyle.Primary),
         button('admin:leveling:maintenance', '🧰 Maintenance', ButtonStyle.Primary),
         button('admin:leveling:trackingRules', '🚫 XP Exclusions', ButtonStyle.Secondary),
-        button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary),
+        button('admin:modules', emojiLabel('BACK', 'Modules'), ButtonStyle.Secondary),
         button(`admin:leveling:managerPage:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary, roleInfo.page === 0),
         button(`admin:leveling:managerPage:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1),
       ),
@@ -334,7 +334,7 @@ function buildXpMemberPanel(guild, userId, memberDisplayName = 'Unknown User') {
       row(
         button(`admin:leveling:xpmanage:add:${userId}`, '➕ Add XP', ButtonStyle.Success),
         button(`admin:leveling:xpmanage:remove:${userId}`, '➖ Remove XP', ButtonStyle.Secondary),
-        button(`admin:leveling:xpmanage:setxp:${userId}`, '🎯 Set XP', ButtonStyle.Primary),
+        button(`admin:leveling:xpmanage:setxp:${userId}`, emojiLabel('RISK', 'Set XP'), ButtonStyle.Primary),
         button(`admin:leveling:xpmanage:setlevel:${userId}`, '🏆 Set Level', ButtonStyle.Primary),
       ),
       row(
@@ -362,8 +362,8 @@ function buildMemberXpHistoryPanel(guild, userId, memberDisplayName = 'Unknown U
       .setFooter({ text: `Requested by ${memberDisplayName} · Last 15 XP changes` })
       .setTimestamp()],
     components: [row(
-      button(`admin:leveling:xpmanage:history:${userId}`, '🔄 Refresh', ButtonStyle.Secondary),
-      button(`admin:leveling:xpmanage:member:${userId}`, '⬅️ Member', ButtonStyle.Secondary),
+      button(`admin:leveling:xpmanage:history:${userId}`, emojiLabel('REFRESH', 'Refresh'), ButtonStyle.Secondary),
+      button(`admin:leveling:xpmanage:member:${userId}`, emojiLabel('BACK', 'Member'), ButtonStyle.Secondary),
     )],
   };
 }
@@ -400,7 +400,7 @@ function buildXpAuditPanel(guild, memberDisplayName = 'Unknown User') {
       .setFooter({ text: `Requested by ${memberDisplayName} · Last 12 changes` })
       .setTimestamp()],
     components: [row(
-      button('admin:leveling:xpmanage:audit', '🔄 Refresh', ButtonStyle.Secondary),
+      button('admin:leveling:xpmanage:audit', emojiLabel('REFRESH', 'Refresh'), ButtonStyle.Secondary),
       button('admin:leveling:xpmanage', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
     )],
   };
@@ -446,7 +446,7 @@ function buildMaintenancePanel(guild, memberDisplayName = 'Unknown User', report
         button('admin:leveling:maintenance:repair', '🩹 Auto Fix', ButtonStyle.Danger, !report || issueCount === 0),
       ),
       row(
-        button('admin:leveling:maintenance:recalculate', '🔄 Recalculate Levels', ButtonStyle.Primary),
+        button('admin:leveling:maintenance:recalculate', emojiLabel('REFRESH', 'Recalculate Levels'), ButtonStyle.Primary),
         button('admin:leveling:maintenance:rewards', '🏅 Rebuild Reward Roles', ButtonStyle.Primary),
         button('admin:leveling:maintenance:leaderboard', '📊 Rebuild Leaderboard', ButtonStyle.Secondary),
       ),
@@ -484,7 +484,7 @@ function buildIntegrityPreviewPanel(guild, memberDisplayName = 'Unknown User', r
       .setTimestamp()],
     components: [row(
       button('admin:leveling:maintenance:repair', '🩹 Apply Auto Fix', ButtonStyle.Danger, Number(report.issueCount || 0) === 0),
-      button('admin:leveling:maintenance:scan', '🔄 Rescan', ButtonStyle.Secondary),
+      button('admin:leveling:maintenance:scan', emojiLabel('REFRESH', 'Rescan'), ButtonStyle.Secondary),
       button('admin:leveling:maintenance', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
     )],
   };
@@ -500,7 +500,7 @@ function buildMaintenanceLogPanel(guild, memberDisplayName = 'Unknown User') {
       .setFooter({ text: `Requested by ${memberDisplayName} · Last 12 maintenance tasks` })
       .setTimestamp()],
     components: [row(
-      button('admin:leveling:maintenance:log', '🔄 Refresh', ButtonStyle.Secondary),
+      button('admin:leveling:maintenance:log', emojiLabel('REFRESH', 'Refresh'), ButtonStyle.Secondary),
       button('admin:leveling:maintenance', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
     )],
   };
@@ -698,7 +698,7 @@ function buildDeleteRewardConfirmPanel(guild, level, memberDisplayName = 'Unknow
   return {
     embeds: [new EmbedBuilder()
       .setColor(0xED4245)
-      .setTitle('⚠️ Delete Level Reward')
+      .setTitle(emojiLabel('WARNING', 'Delete Level Reward'))
       .setDescription(`Delete the **Level ${reward.level}** reward for <@&${reward.roleId}>?\n\nThis removes the reward mapping only. It does not delete the Discord role.`)
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
@@ -883,8 +883,8 @@ function buildLeaderboardPanel(guild, memberDisplayName = 'Unknown User', page =
         button('admin:leveling:leaderboard:voice:0', 'Voice', board.sortBy === 'voice' ? ButtonStyle.Success : ButtonStyle.Secondary),
       ),
       row(
-        button(`admin:leveling:leaderboard:${board.sortBy}:${previousPage}`, '⬅️ Previous', ButtonStyle.Secondary, board.page <= 0),
-        button(`admin:leveling:leaderboard:${board.sortBy}:${board.page}`, '🔄 Refresh', ButtonStyle.Secondary),
+        button(`admin:leveling:leaderboard:${board.sortBy}:${previousPage}`, emojiLabel('BACK', 'Previous'), ButtonStyle.Secondary, board.page <= 0),
+        button(`admin:leveling:leaderboard:${board.sortBy}:${board.page}`, emojiLabel('REFRESH', 'Refresh'), ButtonStyle.Secondary),
         button(`admin:leveling:leaderboard:${board.sortBy}:${nextPage}`, 'Next ➡️', ButtonStyle.Secondary, board.page >= board.totalPages - 1),
       ),
       row(button('admin:leveling', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
