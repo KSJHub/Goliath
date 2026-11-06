@@ -332,9 +332,12 @@ async function inspectSteamGameIdentity(value) {
     }
     const storeName = record.data.name.trim().slice(0, 200);
     const normalize = name => name.normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    const status = !expectedName ? 'unlisted' :
+    const storeType = String(record.data.type || '').trim().toLowerCase().slice(0, 40);
+    // Only a confirmed Steam "game" type qualifies for catalogue identity matching.
+    // Unknown types are flagged for review rather than treated as confirmed games.
+    const status = storeType !== 'game' ? 'non-game' : !expectedName ? 'unlisted' :
       normalize(expectedName) === normalize(storeName) ? 'match' : 'name-mismatch';
-    return { status, expectedName, storeName, storeType: String(record.data.type || '').slice(0, 40) };
+    return { status, expectedName, storeName, storeType };
   } catch (error) {
     return { status: 'unavailable', expectedName, storeName: null, storeType: null,
       error: String(error.message).slice(0, 200) };
