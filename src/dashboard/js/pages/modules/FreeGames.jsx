@@ -216,6 +216,18 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
       <p style={{ color: theme.mutedText, fontSize: 13, margin: 0 }}>Timezone: {data.config.timeZone}. Quiet hours hold updates for later delivery. Clear both times to disable them.</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><button style={button} disabled={busy} onClick={() => updateAction('settings', { quietStart: quiet.quietStart || null, quietEnd: quiet.quietEnd || null }, 'PATCH')}>Save quiet hours</button><button style={button} disabled={busy || !updateConfig.enabled} onClick={() => updateAction('check')}>Check for updates</button></div>
     </SectionCard>
+    <SectionCard themed theme={theme} title="Publisher game catalogue" subtitle="Discovery only — publisher feeds must be integrated and verified before subscriptions become available.">
+      <p style={{ color: theme.mutedText, marginTop: 0 }}>These titles are not Steam subscriptions. They cannot send automatic notifications yet.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 10 }}>
+        {(data.publisherUpdateCatalog || []).map(game => (
+          <div key={game.id} style={{ border: '1px solid ' + (theme.border || '#555'), borderRadius: 10, padding: 12 }}>
+            <strong>{game.name}</strong>
+            <p style={{ color: theme.mutedText, margin: '6px 0' }}>{game.publisher} · Integration pending</p>
+            <a href={game.newsUrl} target="_blank" rel="noopener noreferrer">Publisher news</a>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
     <SectionCard themed theme={theme} title={updateConfig.subscriptions[gameForm.appId] ? 'Edit game subscription' : 'Follow a game'} subtitle="Use the starter catalogue or enter a Steam store URL / App ID.">
       <DiscordResourceSelect searchable theme={theme} label="Game catalogue" disabled={busy} value={gameForm.appId} placeholder="Choose a game or enter one below" resources={(data.updateCatalog || []).map(game => ({ id: game.appId, name: game.name }))} onChange={appId => { const game = data.updateCatalog.find(game => game.appId === appId); const current = updateConfig.subscriptions[appId]; current ? editGame(current) : setGameForm({ ...blankUpdate(), appId, name: game?.name || '' }); }} />
       <div style={grid}>
