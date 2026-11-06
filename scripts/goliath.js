@@ -4599,7 +4599,7 @@ async function gameCatalogueIdentityAudit() {
     throw new Error('Limit must be a positive integer no greater than the Steam catalogue size.');
   }
   const games = UPDATE_CATALOG.slice(0, requested ? Number(requested) : undefined);
-  const totals = { match: 0, 'name-mismatch': 0, 'not-found': 0, unavailable: 0, unlisted: 0 };
+  const totals = { match: 0, 'name-mismatch': 0, 'not-found': 0, unavailable: 0, unlisted: 0, 'non-game': 0 };
   const issues = [];
   for (let index = 0; index < games.length; index += 4) {
     const batch = games.slice(index, index + 4);
@@ -4695,6 +4695,12 @@ async function gameUpdatesAudit() {
     identity = await providers.inspectSteamGameIdentity('730');
     assert.equal(identity.status, 'name-mismatch');
     assert.equal(identity.storeName, 'Different Game');
+    global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'Counter-Strike 2', type: 'software' } } }) });
+    identity = await providers.inspectSteamGameIdentity('730');
+    assert.equal(identity.status, 'non-game');
+    assert.equal(identity.storeType, 'software');
+    global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'Counter-Strike 2' } } }) });
+    assert.equal((await providers.inspectSteamGameIdentity('730')).status, 'non-game');
     global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: false } }) });
     assert.equal((await providers.inspectSteamGameIdentity('730')).status, 'not-found');
     global.fetch = async () => { throw new Error('Network unavailable'); };
