@@ -1,6 +1,6 @@
 'use strict';
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
-const { navigationButton, paginationButtons } = require('../../../core/guild/goliathNavigation');
+const { navigationButton, paginationButtons, emojiButton } = require('../../../core/guild/goliathNavigation');
 
 /**
  * Canonical Tickets panel layer.
@@ -105,25 +105,8 @@ let ticketSetupPanelApi;
     );
   }
 
-  function button(
-    id,
-    label,
-    emoji,
-    style = ButtonStyle.Secondary,
-    disabled = false
-  ) {
-    const builder = new ButtonBuilder()
-      .setCustomId(id)
-      .setLabel(label)
-      .setStyle(style)
-      .setDisabled(Boolean(disabled));
-
-    if (emoji) {
-      builder.setEmoji(emoji);
-    }
-
-    return builder;
-  }
+  const button = (id, label, emoji, style = ButtonStyle.Secondary, disabled = false) =>
+    emojiButton(id, label, emoji, style, disabled);
 
   function chunkButtons(buttons = [], max = 5) {
     const rows = [];
