@@ -15,7 +15,7 @@ function birthdayRouter(canExport) {
   const express = { Router: () => ({
     get: (route, handler) => routes.set('GET ' + route, handler),
     put: (route, handler) => routes.set('PUT ' + route, handler),
-    patch: () => {}, post: () => {}, delete: () => {}
+    patch: () => {}, post: () => {}, delete: (route, handler) => routes.set('DELETE ' + route, handler)
   }) };
   const birthday = { userId: MEMBER, month: 7, day: 14, year: 1991, listPublic: true, announce: true, showAge: false };
   const section = { members: { [MEMBER]: birthday }, analytics: {}, settings: {} };
@@ -27,6 +27,7 @@ function birthdayRouter(canExport) {
       listUpcoming: () => [{ member: birthday, daysUntil: 5, next: '2027-07-14' }],
       buildHealth: async () => ({}),
       setBirthday: () => birthday,
+      removeBirthday: () => birthday,
       exportData: () => ({ birthdays: section })
     },
     '../../../../core/security/protection/permissions': {
@@ -97,4 +98,16 @@ test('birthday export allows users with the export permission', async () => {
   const response = await call(birthdayRouter(true), 'GET', '/:guildId/export');
   assert.equal(response.code, 200);
   assert.equal(JSON.parse(response.body).birthdays.members[MEMBER].year, 1991);
+});
+
+test('birthday deletion redacts the removed record for ordinary dashboard staff', async () => {
+  const response = await call(birthdayRouter(false), 'DELETE', '/:guildId/members/:userId');
+  assert.equal(response.code, 200);
+  assert.equal(response.body.removed.year, null);
+});
+
+test('birthday deletion preserves year for export-authorised staff', async () => {
+  const response = await call(birthdayRouter(true), 'DELETE', '/:guildId/members/:userId');
+  assert.equal(response.code, 200);
+  assert.equal(response.body.removed.year, 1991);
 });
