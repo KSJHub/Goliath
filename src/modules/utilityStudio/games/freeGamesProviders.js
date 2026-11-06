@@ -223,15 +223,15 @@ async function getGameNews(value) {
 async function verifyGameUpdateSource(value) {
   const appId = steamAppId(value);
   const game = UPDATE_CATALOG.find(entry => entry.appId === appId);
-  if (!game) throw new Error('Choose a game from the supported Steam catalogue.');
+  // Custom Steam App IDs are supported by subscriptions too; validate their feed on demand.
   try {
     const feed = await getGameNews(appId);
     const latest = feed.items[0] || null;
-    return { appId, name: game.name, status: latest ? 'verified' : 'no-announcements',
+    return { appId, name: game?.name || 'Steam App ' + appId, status: latest ? 'verified' : 'no-announcements',
       checkedAt: Date.now(), announcementCount: feed.items.length,
       latestAnnouncementAt: latest?.publishedAt || null, latestAnnouncementUrl: latest?.url || null };
   } catch (error) {
-    return { appId, name: game.name, status: 'unavailable', checkedAt: Date.now(),
+    return { appId, name: game?.name || 'Steam App ' + appId, status: 'unavailable', checkedAt: Date.now(),
       announcementCount: 0, latestAnnouncementAt: null, latestAnnouncementUrl: null,
       error: String(error.message).slice(0, 200) };
   }
