@@ -1864,11 +1864,7 @@ let ticketSetupPanelApi;
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`ticket_setup:management:${panel.panelId}`)
-          .setLabel('Back To Manage Ticket')
-          .setStyle(ButtonStyle.Secondary)
-          .setEmoji(EMOJIS.BACK)
+        emojiButton(`ticket_setup:management:${panel.panelId}`, 'Back To Manage Ticket', EMOJIS.BACK)
       ),
     ];
   }
