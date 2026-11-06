@@ -410,10 +410,21 @@ async function handleGameUpdatesInteraction(i, action, reply) {
   if (kind === 'game' || kind === 'more') { await reply(buildUpdateSubscriptionPanel(guild, providers.steamAppId(argument), '', kind === 'more')); return true; }
   if (kind === 'select') { await reply(buildUpdateSubscriptionPanel(guild, providers.steamAppId(i.values[0]))); return true; }
   if (kind === 'catalog') {
+    const catalogue = [...providers.UPDATE_CATALOG].sort((a, b) => a.name.localeCompare(b.name));
+    const pageCount = Math.max(1, Math.ceil(catalogue.length / 25));
+    const requestedPage = Number(argument);
+    const page = Number.isSafeInteger(requestedPage) ? Math.max(0, Math.min(requestedPage, pageCount - 1)) : 0;
     const payload = buildUpdatesPanel(guild);
     payload.embeds[0].description = 'Choose a game, or use Add Steam game for another App ID. Sources are Steam publisher announcements; titles outside Steam need another verified source.';
-    payload.components = [choiceMenu('updates:choose', 'Starter game catalogue', providers.UPDATE_CATALOG.map(game => [game.appId, game.name])),
-      componentRow(panelButton('updates:add', 'Add Steam game'), panelButton('updates:home:0', '⬅ Back'))];
+    payload.embeds[0].footer = { text: 'Games · Catalogue · ' + (page + 1) + '/' + pageCount };
+    payload.components = [
+      choiceMenu('updates:choose', 'Game catalogue · page ' + (page + 1), catalogue.slice(page * 25, page * 25 + 25).map(game => [game.appId, game.name])),
+      ...(pageCount > 1 ? [componentRow(
+        panelButton('updates:catalog:' + (page - 1), '◀ Previous', 2, page === 0),
+        panelButton('updates:catalog:' + (page + 1), 'Next ▶', 2, page === pageCount - 1)
+      )] : []),
+      componentRow(panelButton('updates:add', 'Add Steam game'), panelButton('updates:home:0', '⬅ Back'))
+    ];
     await reply(payload); return true;
   }
   if (kind === 'add' || kind === 'choose') {
