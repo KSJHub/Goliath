@@ -71,8 +71,8 @@ test('birthday dashboard needs dashboard access; export has an additional route-
   assert.equal((await request(['admin.dashboard.view'], '/api/modules')).nextCalled, true);
   assert.equal((await request(['mod.panel.view'], '/api/modules')).status, 403);
   const birthdays = fs.readFileSync(path.join(__dirname, '..', 'src/server/routes/modules/communityStudio/birthdays.js'), 'utf8');
-  assert.match(birthdays, /admin\\.birthdays\\.export/);
-  assert.match(birthdays, /year: canViewYear \\? item\\.member\\.year : null/);
-  assert.match(birthdays, /members: Object\\.fromEntries/);
+  assert.match(birthdays, /admin\.birthdays\.export/);
+  assert.match(birthdays, /year: canViewYear \? item\.member\.year : null/);
+  assert.match(birthdays, /members: Object\.fromEntries/);
   assert.match(birthdays, /saved: visibleSaved/);
 });
