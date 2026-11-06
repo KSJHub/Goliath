@@ -1757,54 +1757,27 @@ let ticketSetupPanelApi;
   function buildManagementControls(panel) {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`ticket_setup:appearance:${panel.panelId}`)
-          .setLabel('Appearance')
-          .setStyle(ButtonStyle.Primary)
-          .setEmoji('🎨'),
-
-        new ButtonBuilder()
-          .setCustomId(`ticket_setup:roles:${panel.panelId}`)
-          .setLabel('Manage Roles')
-          .setStyle(ButtonStyle.Primary)
-          .setEmoji('👥'),
-
-        new ButtonBuilder()
-          .setCustomId(`ticket_setup:set_limit:${panel.panelId}`)
-          .setLabel('Ticket Limit')
-          .setStyle(ButtonStyle.Primary)
-          .setEmoji('🎟️')
+        emojiButton(`ticket_setup:appearance:${panel.panelId}`, 'Appearance', '🎨', ButtonStyle.Primary),
+        emojiButton(`ticket_setup:roles:${panel.panelId}`, 'Manage Roles', '👥', ButtonStyle.Primary),
+        emojiButton(`ticket_setup:set_limit:${panel.panelId}`, 'Ticket Limit', '🎟️', ButtonStyle.Primary),
       ),
-
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`ticket_setup:toggle_one_active:${panel.panelId}`)
-          .setLabel(panel.oneActivePerType === false ? 'One Active: Off' : 'One Active: On')
-          .setStyle(panel.oneActivePerType === false ? ButtonStyle.Secondary : ButtonStyle.Success)
-          .setEmoji('🔒'),
-
-        new ButtonBuilder()
-          .setCustomId(`ticket_setup:set_cooldown:${panel.panelId}`)
-          .setLabel('Cooldown')
-          .setStyle(ButtonStyle.Secondary)
-          .setEmoji('⏱️'),
-
+        emojiButton(
+          `ticket_setup:toggle_one_active:${panel.panelId}`,
+          panel.oneActivePerType === false ? 'One Active: Off' : 'One Active: On',
+          '🔒',
+          panel.oneActivePerType === false ? ButtonStyle.Secondary : ButtonStyle.Success,
+        ),
+        emojiButton(`ticket_setup:set_cooldown:${panel.panelId}`, 'Cooldown', '⏱️'),
+        emojiButton(`ticket_setup:back_panel:${panel.panelId}`, 'Back', EMOJIS.BACK),
+      ),
+      new ActionRowBuilder().addComponents(
         new ChannelSelectMenuBuilder()
           .setCustomId(`ticket_setup:set_logs:${panel.panelId}`)
-          .setPlaceholder(
-            panel.logsChannelId
-              ? '📜 Logs Channel • Set'
-              : '📜 Logs Channel'
-          )
+          .setPlaceholder(panel.logsChannelId ? '📜 Logs Channel • Set' : '📜 Logs Channel')
           .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
           .setMinValues(1)
           .setMaxValues(1),
-
-        new ButtonBuilder()
-          .setCustomId(`ticket_setup:back_panel:${panel.panelId}`)
-          .setLabel('Back')
-          .setStyle(ButtonStyle.Secondary)
-          .setEmoji(EMOJIS.BACK)
       ),
     ];
   }
