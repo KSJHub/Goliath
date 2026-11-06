@@ -358,6 +358,12 @@ function matchesGameUpdate(item, subscription) {
 Object.assign(module.exports, { UPDATE_DEFAULTS, getGameUpdates, updateGameUpdates, validateUpdateSettings, normalizeUpdateSubscription, matchesGameUpdate });
 
 
+// Pure catalogue selector shared by Discord and the offline regression audit.
+function visibleSteamUpdateCatalog(catalogue, subscriptions = {}) {
+  const subscribedIds = new Set(Object.keys(subscriptions));
+  return catalogue.filter(game => !game.catalogueType || game.catalogueType === 'game' || subscribedIds.has(game.appId))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 function buildUpdatesPanel(guild, page = 0, notice = '') {
   const config = getGameUpdates(guild.id), { escape, SECTIONS } = require('./freeGamesEmbeds');
   const subscriptions = Object.values(config.subscriptions).sort((a, b) => a.name.localeCompare(b.name));
@@ -410,10 +416,7 @@ async function handleGameUpdatesInteraction(i, action, reply) {
   if (kind === 'game' || kind === 'more') { await reply(buildUpdateSubscriptionPanel(guild, providers.steamAppId(argument), '', kind === 'more')); return true; }
   if (kind === 'select') { await reply(buildUpdateSubscriptionPanel(guild, providers.steamAppId(i.values[0]))); return true; }
   if (kind === 'catalog') {
-    const subscribedIds = new Set(Object.keys(getGameUpdates(guild.id).subscriptions));
-    const catalogue = providers.UPDATE_CATALOG
-      .filter(game => !game.catalogueType || game.catalogueType === 'game' || subscribedIds.has(game.appId))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const catalogue = visibleSteamUpdateCatalog(providers.UPDATE_CATALOG, getGameUpdates(guild.id).subscriptions);
     const pageCount = Math.max(1, Math.ceil(catalogue.length / 25));
     const requestedPage = Number(argument);
     const page = Number.isSafeInteger(requestedPage) ? Math.max(0, Math.min(requestedPage, pageCount - 1)) : 0;
@@ -523,4 +526,4 @@ async function handleGameUpdatesInteraction(i, action, reply) {
   await monitor.saveGameSubscription(guild, patch);
   await reply(buildUpdateSubscriptionPanel(guild, appId, 'Settings saved.', ['keywords-submit', 'artwork', 'detail'].includes(kind))); return true;
 }
-Object.assign(module.exports, { buildUpdatesPanel, buildUpdateSubscriptionPanel });
+Object.assign(module.exports, { buildUpdatesPanel, buildUpdateSubscriptionPanel, visibleSteamUpdateCatalog });
