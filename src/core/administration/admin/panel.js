@@ -50,6 +50,7 @@ const CORE_GUILD_PERMISSIONS = [
   { key: 'admin.security.manage', label: 'Manage Guild Security & Recovery', group: 'Administration' },
   { key: 'admin.automod.manage', label: 'Manage AutoMod', group: 'Administration' },
   { key: 'admin.modules.manage', label: 'Manage All Studios & Modules', group: 'Administration' },
+  { key: 'admin.birthdays.export', label: 'Export Member Birthday Data', group: 'Administration' },
   { key: 'admin.logs.manage', label: 'Manage Log Channels', group: 'Administration' },
   { key: 'admin.backups.view', label: 'View Backups', group: 'Administration' },
   { key: 'admin.backups.create', label: 'Create Backups', group: 'Administration' },
