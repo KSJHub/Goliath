@@ -5,6 +5,8 @@ const guildManager = require('../../../../core/guild/guildManager');
 const birthdays = require('../../../../modules/communityStudio/birthdays/birthdays');
 const { validateRoleSelection, isGoliathPermissionError } = require('../../../../core/security/protection/permissions');
 
+const { resolveGuildAccess } = require('../../../middleware/dashboardAccess');
+
 const router = express.Router();
 const ok = (res, payload = {}) => res.json({ success: true, ...payload });
 
@@ -144,9 +146,16 @@ router.post('/:guildId/reset', async (req, res) => {
   } catch (error) { return fail(res, error); }
 });
 
-router.get('/:guildId/export', (req, res) => {
+router.get('/:guildId/export', async (req, res) => {
   try {
     const id = guildId(req);
+    const actorId = String(req.session?.user?.id || '').trim();
+    if (!actorId) return res.status(401).json({ success: false, error: 'Sign in required.' });
+    const access = await resolveGuildAccess(client(req), actorId, id);
+    if (!access.allowed || !access.permissions.some((permission) => permission === '*' || permission === 'admin.birthdays.export')) {
+      return res.status(403).json({ success: false, error: 'Birthday data export permission required.' });
+    }
+    res.set('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="goliath-birthdays-${id}.json"`);
     return res.send(JSON.stringify(birthdays.exportData(id), null, 2));
