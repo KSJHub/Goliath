@@ -4595,7 +4595,7 @@ async function freeGamesAudit() {
 async function gameCatalogueIdentityAudit() {
   const { UPDATE_CATALOG, inspectSteamGameIdentity } = require('../src/modules/utilityStudio/games/freeGamesProviders');
   const requested = process.argv[3];
-  if (requested !== undefined && (!/^[1-9]\\d*$/.test(requested) || Number(requested) > UPDATE_CATALOG.length)) {
+  if (requested !== undefined && (!/^[1-9]\d*$/.test(requested) || Number(requested) > UPDATE_CATALOG.length)) {
     throw new Error('Limit must be a positive integer no greater than the Steam catalogue size.');
   }
   const games = UPDATE_CATALOG.slice(0, requested ? Number(requested) : undefined);
@@ -4613,13 +4613,23 @@ async function gameCatalogueIdentityAudit() {
       if (result.status !== 'match') {
         const issue = { appId: game.appId, expectedName: game.name, storeName: result.storeName || null,
           storeType: result.storeType || null, status: result.status, error: result.error || null };
+        // Suggested display-name changes are advisory only. Never rewrite App IDs:
+        // guild subscriptions persist those IDs and must not be migrated implicitly.
+        if (result.status === 'name-mismatch' && result.storeType === 'game' && result.storeName) {
+          issue.suggestedAction = 'review-display-name';
+          issue.suggestedName = result.storeName;
+        } else if (result.status === 'non-game') {
+          issue.suggestedAction = 'review-app-type';
+        } else {
+          issue.suggestedAction = 'investigate';
+        }
         issues.push(issue);
         console.log(JSON.stringify(issue));
       }
     });
     console.log('Catalogue identity progress: ' + Math.min(index + batch.length, games.length) + '/' + games.length);
   }
-  console.log(JSON.stringify({ checked: games.length, totals, issues: issues.length }));
+  console.log(JSON.stringify({ checked: games.length, totals, issues: issues.length,\n    suggestedRenames: issues.filter(issue => issue.suggestedAction === 'review-display-name').length,\n    note: 'Suggestions only; no catalogue or guild subscription changes were made.' }));
   // Unreachable metadata is not silently treated as a verified match.
   return issues.length === 0;
 }
