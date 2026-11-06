@@ -76,3 +76,23 @@ test('birthday dashboard needs dashboard access; export has an additional route-
   assert.match(birthdays, /members: Object\.fromEntries/);
   assert.match(birthdays, /saved: visibleSaved/);
 });
+
+test('rejects conflicting guild IDs supplied in query and path', async () => {
+  const { requireDashboardAccess, client } = loadMiddleware(['mod.panel.view', 'mod.cases.view']);
+  const req = { client, session: { user: { id: USER } }, method: 'GET', path: '/' + GUILD, query: { guildId: OTHER }, body: {} };
+  const res = { statusCode: 200, set() { return this; }, status(code) { this.statusCode = code; return this; }, json() { return this; } };
+  let passed = false;
+  await requireDashboardAccess('/api/cases')(req, res, () => { passed = true; });
+  assert.equal(passed, false);
+  assert.equal(res.statusCode, 403);
+});
+
+test('unscoped case endpoints fail closed', async () => {
+  const { requireDashboardAccess, client } = loadMiddleware(['mod.panel.view', 'mod.cases.view']);
+  const req = { client, session: { user: { id: USER } }, method: 'GET', path: '/unknown', query: {}, body: {} };
+  const res = { statusCode: 200, set() { return this; }, status(code) { this.statusCode = code; return this; }, json() { return this; } };
+  let passed = false;
+  await requireDashboardAccess('/api/cases')(req, res, () => { passed = true; });
+  assert.equal(passed, false);
+  assert.equal(res.statusCode, 403);
+});
