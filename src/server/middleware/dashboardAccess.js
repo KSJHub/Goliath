@@ -48,7 +48,8 @@ function requiredPermission(base) {
   if (base === '/api/config/automod') return 'admin.automod.manage';
   if (base === '/api/config/logs') return 'admin.logs.manage';
   if (['/api/security', '/api/restore'].includes(base)) return 'admin.security.manage';
-  if (['/api/cases', '/api/moderation'].includes(base)) return 'mod.panel.view';
+  if (base === '/api/cases') return 'mod.cases.view';
+  if (base === '/api/moderation') return 'mod.panel.view';
   if (['/api/notifications', '/api/activity', '/api/discord', '/api/resources', '/api/status'].includes(base)) return null;
   return 'admin.dashboard.view';
 }
