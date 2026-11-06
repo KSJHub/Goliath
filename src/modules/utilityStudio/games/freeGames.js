@@ -423,8 +423,34 @@ async function handleGameUpdatesInteraction(i, action, reply) {
         panelButton('updates:catalog:' + (page - 1), '◀ Previous', 2, page === 0),
         panelButton('updates:catalog:' + (page + 1), 'Next ▶', 2, page === pageCount - 1)
       )] : []),
-      componentRow(panelButton('updates:add', 'Add Steam game'), panelButton('updates:home:0', '⬅ Back'))
+      componentRow(panelButton('updates:publishers:0', 'Publisher games'), panelButton('updates:add', 'Add Steam game'), panelButton('updates:home:0', '⬅ Back'))
     ];
+    await reply(payload); return true;
+  }
+  if (kind === 'publishers') {
+    const catalogue = [...providers.PUBLISHER_UPDATE_CATALOG].sort((a, b) => a.name.localeCompare(b.name));
+    const pageCount = Math.max(1, Math.ceil(catalogue.length / 25));
+    const requestedPage = Number(argument);
+    const page = Number.isSafeInteger(requestedPage) ? Math.max(0, Math.min(requestedPage, pageCount - 1)) : 0;
+    const payload = buildUpdatesPanel(guild);
+    payload.embeds[0].description = 'Publisher games are listed for discovery only. Automatic updates and subscriptions are not available until their publisher feeds have been integrated and verified.';
+    payload.embeds[0].footer = { text: 'Games · Publisher catalogue · ' + (page + 1) + '/' + pageCount };
+    payload.components = [
+      choiceMenu('updates:publisher-info', 'Publisher games · page ' + (page + 1), catalogue.slice(page * 25, page * 25 + 25).map(game => [game.id, game.name])),
+      ...(pageCount > 1 ? [componentRow(
+        panelButton('updates:publishers:' + (page - 1), '◀ Previous', 2, page === 0),
+        panelButton('updates:publishers:' + (page + 1), 'Next ▶', 2, page === pageCount - 1)
+      )] : []),
+      componentRow(panelButton('updates:catalog:0', 'Steam games'), panelButton('updates:home:0', '⬅ Back'))
+    ];
+    await reply(payload); return true;
+  }
+  if (kind === 'publisher-info') {
+    const game = providers.PUBLISHER_UPDATE_CATALOG.find(entry => entry.id === i.values?.[0]);
+    if (!game) { await reply(buildUpdatesPanel(guild, 0, 'Publisher game not found.')); return true; }
+    const payload = buildUpdatesPanel(guild);
+    payload.embeds[0].description = '**' + game.name + '** · ' + game.publisher + '\\n\\nSource integration pending. This game cannot be subscribed to yet.\\n\\nPublisher news: ' + game.newsUrl;
+    payload.components = [componentRow(panelButton('updates:publishers:0', '⬅ Publisher games'), panelButton('updates:home:0', 'Home'))];
     await reply(payload); return true;
   }
   if (kind === 'add' || kind === 'choose') {
