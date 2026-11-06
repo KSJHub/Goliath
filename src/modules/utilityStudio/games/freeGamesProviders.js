@@ -119,6 +119,18 @@ const UPDATE_CATALOG = Object.freeze([
   ['289070', 'Sid Meier’s Civilization VI'], ['1293830', 'Forza Horizon 4'],
   ['1551360', 'Forza Horizon 5'], ['1248130', 'Farming Simulator 22'],
   ['227300', 'Euro Truck Simulator 2'], ['270880', 'American Truck Simulator'],
+  ['620', 'Portal 2'], ['400', 'Portal'], ['550', 'Left 4 Dead 2'],
+  ['500', 'Left 4 Dead'], ['220', 'Half-Life 2'], ['70', 'Half-Life'],
+  ['10', 'Counter-Strike'], ['240', 'Counter-Strike: Source'],
+  ['4000', "Garry's Mod"], ['431960', 'Wallpaper Engine'],
+  ['322330', "Don't Starve Together"], ['219740', "Don't Starve"],
+  ['250900', 'The Binding of Isaac: Rebirth'], ['367520', 'Hollow Knight'],
+  ['1145360', 'Hades'], ['2379780', 'Balatro'],
+  ['292030', 'The Witcher 3: Wild Hunt'], ['814380', 'Sekiro: Shadows Die Twice'],
+  ['374320', 'DARK SOULS III'], ['570940', 'DARK SOULS: REMASTERED'],
+  ['1172380', 'STAR WARS Jedi: Fallen Order'], ['1774580', 'STAR WARS Jedi: Survivor'],
+  ['275850', "No Man's Sky"], ['264710', 'Subnautica'],
+  ['848450', 'Subnautica: Below Zero'],
 ].map(([appId, name]) => Object.freeze({ appId, name, image: steamArtwork(appId), source: Object.freeze({ type: 'steam', provider: 'Steam publisher announcements', appId, url: 'https://store.steampowered.com/app/' + appId + '/', status: 'configured', verified: false }) })));
 // Discovery-only publisher catalogue. These are NOT Steam App IDs and cannot be
 // subscribed to until a publisher-specific adapter and feed validation exist.
