@@ -49,10 +49,10 @@ function birthdayRouter(canExport) {
   return routes;
 }
 
-async function call(routes, method, route) {
+async function call(routes, method, route, options = {}) {
   const req = {
     params: { guildId: GUILD, userId: MEMBER },
-    session: { user: { id: USER } },
+    session: options.anonymous ? {} : { user: { id: USER } },
     client: { guilds: { cache: new Map() } },
     body: { birthday: { month: 7, day: 14, year: 1991 } }
   };
@@ -110,4 +110,16 @@ test('birthday deletion preserves year for export-authorised staff', async () =>
   const response = await call(birthdayRouter(true), 'DELETE', '/:guildId/members/:userId');
   assert.equal(response.code, 200);
   assert.equal(response.body.removed.year, 1991);
+});
+
+test('birthday export requires a signed-in user even when the permission resolver grants access', async () => {
+  const response = await call(birthdayRouter(true), 'GET', '/:guildId/export', { anonymous: true });
+  assert.equal(response.code, 401);
+});
+
+test('authorised birthday exports disable response caching', async () => {
+  const response = await call(birthdayRouter(true), 'GET', '/:guildId/export');
+  assert.equal(response.code, 200);
+  assert.equal(response.headers['Cache-Control'], 'no-store');
+  assert.match(response.headers['Content-Disposition'], /attachment/);
 });
