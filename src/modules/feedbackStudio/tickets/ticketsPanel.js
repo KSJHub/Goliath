@@ -1704,55 +1704,23 @@ let ticketSetupPanelApi;
 
   function buildDeploymentRow(panelId) {
     return new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`ticket_setup:deploy:${panelId}`)
-        .setLabel('Deploy')
-        .setStyle(ButtonStyle.Success)
-        .setEmoji('🚀'),
-
-      new ButtonBuilder()
-        .setCustomId(`ticket_setup:redeploy:${panelId}`)
-        .setLabel('Redeploy')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji(EMOJIS.REFRESH),
-
-      new ButtonBuilder()
-        .setCustomId(`ticket_setup:undeploy:${panelId}`)
-        .setLabel('Undeploy')
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji('📦')
+      emojiButton(`ticket_setup:deploy:${panelId}`, 'Deploy', '🚀', ButtonStyle.Success),
+      emojiButton(`ticket_setup:redeploy:${panelId}`, 'Redeploy', EMOJIS.REFRESH, ButtonStyle.Primary),
+      emojiButton(`ticket_setup:undeploy:${panelId}`, 'Undeploy', '📦'),
     );
   }
 
   function buildManagementRow(panelId) {
     return new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`ticket_setup:management:${panelId}`)
-        .setLabel('Manage Ticket')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji(EMOJIS.SETTINGS),
-
-      new ButtonBuilder()
-        .setCustomId(`ticket_setup:refresh_deployed:${panelId}`)
-        .setLabel('Refresh Panel')
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji('♻️')
+      emojiButton(`ticket_setup:management:${panelId}`, 'Manage Ticket', EMOJIS.SETTINGS, ButtonStyle.Primary),
+      emojiButton(`ticket_setup:refresh_deployed:${panelId}`, 'Refresh Panel', '♻️'),
     );
   }
 
   function buildDangerBackRow(panelId) {
     return new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`ticket_setup:delete:${panelId}`)
-        .setLabel('Delete')
-        .setStyle(ButtonStyle.Danger)
-        .setEmoji('🗑️'),
-
-      new ButtonBuilder()
-        .setCustomId('ticket_setup:back')
-        .setLabel('Back')
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji(EMOJIS.BACK)
+      emojiButton(`ticket_setup:delete:${panelId}`, 'Delete', '🗑️', ButtonStyle.Danger),
+      emojiButton('ticket_setup:back', 'Back', EMOJIS.BACK),
     );
   }
 
