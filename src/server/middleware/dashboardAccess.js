@@ -65,7 +65,13 @@ function requireDashboardAccess(base) {
     try {
       // Guild discovery itself is filtered below; it never grants API access.
       if (base === '/api/discord' && req.method === 'GET' && req.path === '/guilds') return next();
-      const pathGuild = req.path.split('/').find((part) => ID.test(part));
+      // These routers declare the guild as their first path parameter.
+      // Never mistake a nested role, user, or case ID for the guild ID.
+      const guildFirstRouters = new Set(['/api/discord', '/api/resources', '/api/cases', '/api/moderation']);
+      const pathParts = req.path.split('/').filter(Boolean);
+      const pathGuild = guildFirstRouters.has(base)
+        ? (ID.test(pathParts[0] || '') ? pathParts[0] : null)
+        : pathParts.find((part) => ID.test(part));
       const explicitGuilds = [req.query?.guildId, req.query?.guild, req.body?.guildId, req.body?.guild].filter((value) => value !== undefined);
       if (explicitGuilds.some((value) => !ID.test(String(value)))) return res.status(400).json({ error: 'Invalid guild ID.' });
       const guildIds = [...new Set([pathGuild, ...explicitGuilds].filter(Boolean).map(String))];
