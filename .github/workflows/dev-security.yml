@@ -20,6 +20,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Check test files and security route syntax
+        run: |
+          node --check tests/dashboard-access-security.test.js
+          node --check tests/birthday-route-security.test.js
+          node --check src/server/middleware/dashboardAccess.js
+          node --check src/server/routes/modules/communityStudio/birthdays.js
       - name: Run isolated security tests
         run: npm run test:security
 
