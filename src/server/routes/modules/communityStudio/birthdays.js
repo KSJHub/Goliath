@@ -131,7 +131,10 @@ router.delete('/:guildId/members/:userId', async (req, res) => {
     const id = guildId(req); const uid = userId(req);
     const removed = birthdays.removeBirthday(id, uid, { actorId: actor(req), action: 'birthdays_dashboard_remove_member' });
     if (!removed) return fail(res, new Error('Birthday record not found.'), 404);
-    return ok(res, { removed, ...(await overview(req, id)) });
+    const view = await overview(req, id);
+    const access = await resolveGuildAccess(client(req), String(req.session?.user?.id || ''), id);
+    const canViewYear = access.allowed && access.permissions.some((permission) => permission === '*' || permission === 'admin.birthdays.export');
+    return ok(res, { removed: canViewYear ? removed : (typeof removed === 'object' ? { ...removed, year: null } : removed), ...view });
   } catch (error) { return fail(res, error); }
 });
 
