@@ -3,8 +3,8 @@
 // Moderation panel layout contract: feature rows first; the final row is navigation,
 // with Back first and Export immediately after it when export is available.
 const express = require('express');
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const security = require('../../security/protection/core');
+const { SlashCommandBuilder } = require('discord.js');
+const { resolveGuildAccess } = require('../../../server/middleware/dashboardAccess');
 const { enforceCommandAccess } = require('../../commands/commandAccess');
 const { errorEmbed } = require('../../ui/embeds');
 const { safeEditReply } = require('../../ui/interactionResponse');
@@ -121,33 +121,13 @@ function safeAppealCase(req, modCase, userId) {
 async function requireModerationGuildAccess(req, res, next) {
   try {
     const userId = String(req.session?.user?.id || '').trim();
-    if (!/^\d{16,20}$/.test(userId)) {
-      return res.status(401).json({ error: 'Authentication required.' });
-    }
-
+    if (!/^\d{16,20}$/.test(userId)) return res.status(401).json({ error: 'Authentication required.' });
     const guildId = String(req.params.guildId || '').trim();
-    if (!/^\d{16,20}$/.test(guildId)) {
-      return res.status(400).json({ error: 'Invalid guild ID.' });
+    if (!/^\d{16,20}$/.test(guildId)) return res.status(400).json({ error: 'Invalid guild ID.' });
+    const access = await resolveGuildAccess(req.client, userId, guildId);
+    if (!access.allowed || !access.permissions.some((permission) => permission === '*' || permission === 'mod.cases.view')) {
+      return res.status(403).json({ error: 'Case viewing permission required.' });
     }
-
-    if (security.isBotOwner(userId)) return next();
-
-    const client = req.client;
-    const guild = client?.guilds?.cache?.get(guildId)
-      || await client?.guilds?.fetch(guildId).catch(() => null);
-
-    if (!guild) return res.status(403).json({ error: 'Guild unavailable.' });
-
-    const member = guild.members.cache.get(userId)
-      || await guild.members.fetch(userId).catch(() => null);
-
-    const permitted = Boolean(
-      member?.permissions?.has(PermissionFlagsBits.Administrator)
-      || member?.permissions?.has(PermissionFlagsBits.ManageGuild)
-    );
-
-    if (!permitted) return res.status(403).json({ error: 'Manage Server permission required.' });
-
     return next();
   } catch (error) {
     console.error('[Moderation dashboard access]', error);
