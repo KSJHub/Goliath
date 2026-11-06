@@ -39,12 +39,15 @@ async function guild(req, id) {
 async function overview(req, id) {
   const enabled = guildManager.isModuleEnabled(id, 'birthdays');
   const config = birthdays.getSection(id);
+  const access = await resolveGuildAccess(client(req), String(req.session?.user?.id || ''), id);
+  const canViewYear = access.allowed && access.permissions.some((key) => key === '*' || key === 'admin.birthdays.export');
+  const safeMember = (member) => canViewYear ? member : { ...member, year: null };
   const target = await guild(req, id);
   const upcoming = birthdays.listUpcoming(id, 100, 60).map((item) => ({
     userId: item.member.userId,
     month: item.member.month,
     day: item.member.day,
-    year: item.member.year,
+    year: canViewYear ? item.member.year : null,
     listPublic: item.member.listPublic,
     announce: item.member.announce,
     showAge: item.member.showAge,
@@ -53,12 +56,12 @@ async function overview(req, id) {
     displayName: target?.members?.cache?.get(item.member.userId)?.displayName || null,
   }));
   const members = Object.values(config.members || {}).map((item) => ({
-    ...item,
+    ...safeMember(item),
     displayName: target?.members?.cache?.get(item.userId)?.displayName || null,
   })).sort((a, b) => `${String(a.month).padStart(2, '0')}-${String(a.day).padStart(2, '0')}`.localeCompare(`${String(b.month).padStart(2, '0')}-${String(b.day).padStart(2, '0')}`));
   return {
     guildId: id,
-    config: { ...config, enabled },
+    config: { ...config, members: Object.fromEntries(Object.entries(config.members || {}).map(([key, member]) => [key, safeMember(member)])), enabled },
     overview: {
       enabled,
       memberCount: members.length,
