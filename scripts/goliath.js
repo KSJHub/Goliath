@@ -4679,6 +4679,29 @@ async function gameUpdatesAudit() {
   assert.throws(() => store.validateUpdateSettings({ quietStart: '22:00' }, store.UPDATE_DEFAULTS));
   assert(monitor.updatesQuietNow({ quietStart: '22:00', quietEnd: '06:00' }, 'UTC', Date.parse('2026-01-01T23:00:00Z')));
   assert(!monitor.updatesQuietNow({ quietStart: '22:00', quietEnd: '06:00' }, 'UTC', Date.parse('2026-01-01T12:00:00Z')));
+  // Steam identity regression tests use mocked store responses, never live requests.
+  assert.equal(typeof providers.inspectSteamGameIdentity, 'function');
+  const identityFetch = global.fetch;
+  try {
+    global.fetch = async (url, options) => {
+      assert.match(url, /^https:\/\/store\.steampowered\.com\/api\/appdetails\?appids=730&filters=basic$/);
+      assert.equal(options.redirect, 'error');
+      return { ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'Counter-Strike 2', type: 'game' } } }) };
+    };
+    let identity = await providers.inspectSteamGameIdentity('730');
+    assert.equal(identity.status, 'match');
+    assert.equal(identity.storeType, 'game');
+    global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'Different Game', type: 'game' } } }) });
+    identity = await providers.inspectSteamGameIdentity('730');
+    assert.equal(identity.status, 'name-mismatch');
+    assert.equal(identity.storeName, 'Different Game');
+    global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: false } }) });
+    assert.equal((await providers.inspectSteamGameIdentity('730')).status, 'not-found');
+    global.fetch = async () => { throw new Error('Network unavailable'); };
+    identity = await providers.inspectSteamGameIdentity('730');
+    assert.equal(identity.status, 'unavailable');
+    assert.match(identity.error, /Network unavailable/);
+  } finally { global.fetch = identityFetch; }
   const originalFetch = global.fetch;
   try {
     let calls = 0;
