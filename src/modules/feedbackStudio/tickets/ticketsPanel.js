@@ -1,5 +1,6 @@
 'use strict';
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton, paginationButtons } = require('../../../core/guild/goliathNavigation');
 
 /**
  * Canonical Tickets panel layer.
@@ -1897,9 +1898,11 @@ let ticketSetupPanelApi;
         return select ? new ActionRowBuilder().addComponents(select) : null;
       }).filter(Boolean);
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`ticket_setup:management:${panel.panelId}`).setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`ticket_setup:role_prev:${panel.panelId}`).setLabel(emojiLabel('ROLE_PREVIOUS', 'Roles')).setStyle(ButtonStyle.Secondary).setDisabled(info.page === 0),
-      new ButtonBuilder().setCustomId(`ticket_setup:role_next:${panel.panelId}`).setLabel(emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' })).setStyle(ButtonStyle.Secondary).setDisabled(info.page >= info.pages - 1)
+      navigationButton(`ticket_setup:management:${panel.panelId}`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+      ...paginationButtons('role', `ticket_setup:role_prev:${panel.panelId}`, `ticket_setup:role_next:${panel.panelId}`, {
+        previousDisabled: info.page === 0,
+        nextDisabled: info.page >= info.pages - 1,
+      }),
     ));
     return rows;
   }
