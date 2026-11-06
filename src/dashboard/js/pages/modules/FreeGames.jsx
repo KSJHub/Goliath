@@ -246,7 +246,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
       <div style={{ margin: '10px 0', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
         <button style={button} disabled={busy || !gameForm.appId.trim()} onClick={() => verifySource(gameForm.appId)}>Verify announcement source</button>
         {sourceCheck && sourceCheck.appId === gameForm.appId && <span style={{ color: theme.mutedText }}>
-          {sourceCheck.status === 'announcements-found' ? 'Feed returned ' + sourceCheck.announcementCount + ' announcements (game identity not independently verified)' : sourceCheck.status === 'no-announcements' ? 'Feed reachable, no valid announcements' : 'Feed unavailable'}
+          {sourceCheck.status === 'announcements-found' ? 'Feed returned ' + sourceCheck.announcementCount + ' announcements (identity checked separately below)' : sourceCheck.status === 'no-announcements' ? 'Feed reachable, no valid announcements' : 'Feed unavailable'}
           {' · Checked ' + stamp(sourceCheck.checkedAt)}
           {sourceCheck.error ? ' · ' + sourceCheck.error : ''}
           {sourceCheck.identity && <> · Store identity: {sourceCheck.identity.status === 'match' ? 'Name matches Steam' : sourceCheck.identity.status === 'name-mismatch' ? 'Name mismatch — review catalogue entry' : sourceCheck.identity.status === 'non-game' ? 'Not confirmed as a game — review store type' : sourceCheck.identity.status === 'unlisted' ? 'Custom Steam App ID' : sourceCheck.identity.status === 'not-found' ? 'Steam store entry not found' : 'Store metadata unavailable'}
