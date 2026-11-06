@@ -588,15 +588,13 @@ let ticketSetupPanelApi;
       ? appearance.buttonEmoji
       : buttonEmojiOverride;
 
-    const button = new ButtonBuilder()
-      .setCustomId(`ticket_open:${panel.panelId}`)
-      .setLabel(appearance.buttonLabel || 'Open Ticket')
-      .setStyle(resolveButtonStyle(panel.buttonStyle))
-      .setDisabled(panel.enabled === false);
-
-    if (buttonEmoji) {
-      button.setEmoji(buttonEmoji);
-    }
+    const button = emojiButton(
+      `ticket_open:${panel.panelId}`,
+      appearance.buttonLabel || 'Open Ticket',
+      buttonEmoji,
+      resolveButtonStyle(panel.buttonStyle),
+      panel.enabled === false,
+    );
 
     return [
       new ActionRowBuilder().addComponents(button),
