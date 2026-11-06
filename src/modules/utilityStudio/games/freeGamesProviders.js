@@ -131,6 +131,19 @@ const UPDATE_CATALOG = Object.freeze([
   ['1172380', 'STAR WARS Jedi: Fallen Order'], ['1774580', 'STAR WARS Jedi: Survivor'],
   ['275850', "No Man's Sky"], ['264710', 'Subnautica'],
   ['848450', 'Subnautica: Below Zero'],
+  ['739630', 'Phasmophobia'], ['242760', 'The Forest'],
+  ['1326470', 'Sons Of The Forest'], ['582010', 'Monster Hunter: World'],
+  ['1446780', 'Monster Hunter Rise'], ['2246340', 'Monster Hunter Wilds'],
+  ['2050650', 'Resident Evil 4'], ['883710', 'Resident Evil 2'],
+  ['952060', 'Resident Evil 3'], ['1196590', 'Resident Evil Village'],
+  ['418370', 'Resident Evil 7 Biohazard'], ['1716740', 'Starfield'],
+  ['1151340', 'Fallout 76'], ['22380', 'Fallout: New Vegas'],
+  ['306130', 'The Elder Scrolls Online'], ['1142710', 'Total War: WARHAMMER III'],
+  ['594570', 'Total War: WARHAMMER II'], ['1222670', 'The Sims 4'],
+  ['1593500', 'God of War'], ['2322010', 'God of War Ragnarök'],
+  ['2215430', "Ghost of Tsushima DIRECTOR'S CUT"],
+  ['1888930', 'The Last of Us Part I'], ['2531310', 'The Last of Us Part II Remastered'],
+  ['1328670', 'Mass Effect Legendary Edition'], ['1092790', 'Inscryption'],
 ].map(([appId, name]) => Object.freeze({ appId, name, image: steamArtwork(appId), source: Object.freeze({ type: 'steam', provider: 'Steam publisher announcements', appId, url: 'https://store.steampowered.com/app/' + appId + '/', status: 'configured', verified: false }) })));
 // Discovery-only publisher catalogue. These are NOT Steam App IDs and cannot be
 // subscribed to until a publisher-specific adapter and feed validation exist.
