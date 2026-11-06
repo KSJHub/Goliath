@@ -4613,6 +4613,25 @@ async function gameUpdatesAudit() {
   }
   const providers = load('freeGamesProviders'), store = load('freeGames'), embeds = load('freeGamesEmbeds');
   let monitor = load('freeGamesMonitor');
+  // Catalogue regression: IDs are unique, publisher entries remain discovery-only,
+  // and source checks cannot silently turn into subscriptions.
+  assert(providers.UPDATE_CATALOG.length >= 81, 'Steam catalogue unexpectedly shrank');
+  assert(providers.PUBLISHER_UPDATE_CATALOG.length >= 16, 'Publisher catalogue unexpectedly shrank');
+  assert.equal(new Set(providers.UPDATE_CATALOG.map(game => game.appId)).size, providers.UPDATE_CATALOG.length);
+  assert.equal(new Set(providers.PUBLISHER_UPDATE_CATALOG.map(game => game.id)).size, providers.PUBLISHER_UPDATE_CATALOG.length);
+  for (const game of providers.UPDATE_CATALOG) {
+    assert.equal(providers.steamAppId(game.appId), game.appId);
+    assert.equal(game.source.type, 'steam');
+    assert.equal(game.source.verified, false);
+  }
+  for (const game of providers.PUBLISHER_UPDATE_CATALOG) {
+    assert.equal(game.subscribable, false);
+    assert.equal(game.source.status, 'pending-adapter');
+    assert.equal(game.source.verified, false);
+    assert(game.newsUrl.startsWith('https://'));
+  }
+  assert.equal(typeof providers.verifyGameUpdateSource, 'function');
+
   assert.equal(providers.steamAppId('https://store.steampowered.com/app/730/Counter_Strike_2/'), '730');
   for (const value of ['0', '-1', '4294967296', 'https://example.com/app/730', 'http://store.steampowered.com/app/730/', 'https://user@store.steampowered.com/app/730/']) assert.throws(() => providers.steamAppId(value));
   const raw = { gid: '100', title: 'Patch update', contents: '<script>bad()</script>[b]Fixed[/b] &amp; improved', date: Math.floor(Date.now() / 1000), feedname: 'steam_community_announcements', url: 'https://store.steampowered.com/news/app/730/view/100' };
