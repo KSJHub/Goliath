@@ -244,7 +244,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     <SectionCard themed theme={theme} title={updateConfig.subscriptions[gameForm.appId] ? 'Edit game subscription' : 'Follow a game'} subtitle="Use the starter catalogue or enter a Steam store URL / App ID.">
       <DiscordResourceSelect searchable theme={theme} label="Game catalogue" disabled={busy} value={gameForm.appId} placeholder="Choose a game or enter one below" resources={(data.updateCatalog || []).map(game => ({ id: game.appId, name: game.name }))} onChange={appId => { const game = data.updateCatalog.find(game => game.appId === appId); const current = updateConfig.subscriptions[appId]; current ? editGame(current) : setGameForm({ ...blankUpdate(), appId, name: game?.name || '' }); }} />
       <div style={{ margin: '10px 0', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-        <button style={button} disabled={busy || !/^[1-9]\\d{0,9}$/.test(gameForm.appId) || Number(gameForm.appId) > 4294967295} onClick={() => verifySource(gameForm.appId)}>Verify announcement source</button>
+        <button style={button} disabled={busy || !gameForm.appId.trim()} onClick={() => verifySource(gameForm.appId)}>Verify announcement source</button>
         {sourceCheck && sourceCheck.appId === gameForm.appId && <span style={{ color: theme.mutedText }}>
           {sourceCheck.status === 'verified' ? 'Verified: ' + sourceCheck.announcementCount + ' announcements' : sourceCheck.status === 'no-announcements' ? 'Feed reachable, no valid announcements' : 'Feed unavailable'}
           {' · Checked ' + stamp(sourceCheck.checkedAt)}
