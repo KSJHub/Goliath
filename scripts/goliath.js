@@ -4707,6 +4707,12 @@ async function gameUpdatesAudit() {
     identity = await providers.inspectSteamGameIdentity('730');
     assert.equal(identity.status, 'name-mismatch');
     assert.equal(identity.storeName, 'Different Game');
+    // A punctuation/case-only difference should not generate a false correction.
+    global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'COUNTER STRIKE 2', type: 'game' } } }) });
+    assert.equal((await providers.inspectSteamGameIdentity('730')).status, 'match');
+    // A valid store game outside the curated catalogue is informational, not a mismatch.
+    global.fetch = async () => ({ ok: true, json: async () => ({ 999999999: { success: true, data: { steam_appid: 999999999, name: 'Unlisted Test Game', type: 'game' } } }) });
+    assert.equal((await providers.inspectSteamGameIdentity('999999999')).status, 'unlisted');
     global.fetch = async () => ({ ok: true, json: async () => ({ 730: { success: true, data: { steam_appid: 730, name: 'Counter-Strike 2', type: 'software' } } }) });
     identity = await providers.inspectSteamGameIdentity('730');
     assert.equal(identity.status, 'non-game');
