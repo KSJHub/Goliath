@@ -4629,7 +4629,9 @@ async function gameCatalogueIdentityAudit() {
     });
     console.log('Catalogue identity progress: ' + Math.min(index + batch.length, games.length) + '/' + games.length);
   }
-  console.log(JSON.stringify({ checked: games.length, totals, issues: issues.length,\n    suggestedRenames: issues.filter(issue => issue.suggestedAction === 'review-display-name').length,\n    note: 'Suggestions only; no catalogue or guild subscription changes were made.' }));
+  console.log(JSON.stringify({ checked: games.length, totals, issues: issues.length,
+    suggestedRenames: issues.filter(issue => issue.suggestedAction === 'review-display-name').length,
+    note: 'Suggestions only; no catalogue or guild subscription changes were made.' }));
   // Unreachable metadata is not silently treated as a verified match.
   return issues.length === 0;
 }
