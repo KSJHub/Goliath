@@ -1537,35 +1537,11 @@ let ticketSetupPanelApi;
 
   function buildSetupButtons() {
     return new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('ticket_setup:create_support')
-        .setLabel('Create Support')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji('🎟️'),
-
-      new ButtonBuilder()
-        .setCustomId('ticket_setup:create_appeal')
-        .setLabel('Create Appeal')
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji('⚖️'),
-
-      new ButtonBuilder()
-        .setCustomId('ticket_setup:create_report')
-        .setLabel('Create Report')
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji('🚨'),
-
-      new ButtonBuilder()
-        .setCustomId('ticket_setup:create_application')
-        .setLabel('Create Application')
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji('📝'),
-
-      new ButtonBuilder()
-        .setCustomId('ticket_setup:refresh')
-        .setLabel('Refresh')
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji(EMOJIS.REFRESH)
+      emojiButton('ticket_setup:create_support', 'Create Support', '🎟️', ButtonStyle.Primary),
+      emojiButton('ticket_setup:create_appeal', 'Create Appeal', '⚖️'),
+      emojiButton('ticket_setup:create_report', 'Create Report', '🚨'),
+      emojiButton('ticket_setup:create_application', 'Create Application', '📝'),
+      emojiButton('ticket_setup:refresh', 'Refresh', EMOJIS.REFRESH),
     );
   }
 
