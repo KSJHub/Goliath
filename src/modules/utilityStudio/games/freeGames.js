@@ -449,7 +449,7 @@ async function handleGameUpdatesInteraction(i, action, reply) {
     const game = providers.PUBLISHER_UPDATE_CATALOG.find(entry => entry.id === i.values?.[0]);
     if (!game) { await reply(buildUpdatesPanel(guild, 0, 'Publisher game not found.')); return true; }
     const payload = buildUpdatesPanel(guild);
-    payload.embeds[0].description = '**' + game.name + '** · ' + game.publisher + '\\n\\nSource integration pending. This game cannot be subscribed to yet.\\n\\nPublisher news: ' + game.newsUrl;
+    payload.embeds[0].description = '**' + game.name + '** · ' + game.publisher + '\n\nSource integration pending. This game cannot be subscribed to yet.\n\nPublisher news: ' + game.newsUrl;
     payload.components = [componentRow(panelButton('updates:publishers:0', '⬅ Publisher games'), panelButton('updates:home:0', 'Home'))];
     await reply(payload); return true;
   }
