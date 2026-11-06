@@ -37,7 +37,7 @@
     "audit": "node scripts/goliath.js audit",
     "audit:dependency-runtime": "node --throw-deprecation scripts/goliath.js dependency-runtime",
     "test:security": "node --test tests/dashboard-access-security.test.js tests/birthday-route-security.test.js",
-    "audit:game-updates": "node -e \"Promise.resolve(require('./scripts/goliath.js')).then(() => process.exit(process.exitCode || 0))\" game-updates"
+    "audit:game-updates": "node -e \"process.argv[2]='game-updates';Promise.resolve(require('./scripts/goliath.js')).then(() => process.exit(process.exitCode || 0))\""
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
