@@ -44,7 +44,7 @@ router.get('/:guildId', async (req, res) => {
     const config = freeGames.getConfig(guild.id);
     const { featuredCandidates, shortTitle } = require('../../../../modules/utilityStudio/games/freeGamesEmbeds');
     const featuredChoices = await getOffers().then(feed => featuredCandidates(freeGames.filterOffers(feed.offers, config), config).map(offer => ({ id: offer.id, name: shortTitle(offer.title) }))).catch(() => []);
-    return res.json({ success: true, config, updates: freeGames.getGameUpdates(guild.id), updateCatalog: require('../../../../modules/utilityStudio/games/freeGamesProviders').UPDATE_CATALOG, featuredChoices, stores: STORES, types: TYPES, currencies: CURRENCIES, timeZones: Intl.supportedValuesOf('timeZone'), channels: orderListingChannels(guild), roles: [...guild.roles.cache.values()].filter((role) => role.id !== guild.id && !role.managed).sort((a, b) => b.position - a.position).map(({ id, name }) => ({ id, name })) });
+    return res.json({ success: true, config, updates: freeGames.getGameUpdates(guild.id), updateCatalog: require('../../../../modules/utilityStudio/games/freeGamesProviders').UPDATE_CATALOG, publisherUpdateCatalog: require('../../../../modules/utilityStudio/games/freeGamesProviders').PUBLISHER_UPDATE_CATALOG, featuredChoices, stores: STORES, types: TYPES, currencies: CURRENCIES, timeZones: Intl.supportedValuesOf('timeZone'), channels: orderListingChannels(guild), roles: [...guild.roles.cache.values()].filter((role) => role.id !== guild.id && !role.managed).sort((a, b) => b.position - a.position).map(({ id, name }) => ({ id, name })) });
   } catch (error) { res.status(400).json({ success: false, error: error.message }); }
 });
 router.post('/:guildId/preview', async (req, res) => {
