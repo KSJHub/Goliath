@@ -313,6 +313,33 @@ async function getGameNews(value) {
   if (newsCache.size > 500) newsCache.delete(newsCache.keys().next().value);
   return task;
 }
+// Independently inspect Steam's public store metadata; a news feed alone cannot
+// establish whether a catalogue label points to the intended game.
+async function inspectSteamGameIdentity(value) {
+  const appId = steamAppId(value);
+  const game = UPDATE_CATALOG.find(entry => entry.appId === appId);
+  const expectedName = game?.name || null;
+  try {
+    const response = await fetch('https://store.steampowered.com/api/appdetails?appids=' + appId + '&filters=basic', {
+      redirect: 'error', signal: AbortSignal.timeout(10000), headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error('Steam store metadata unavailable (HTTP ' + response.status + ').');
+    const payload = await response.json();
+    const record = payload?.[appId];
+    if (!record?.success || !record.data || record.data.steam_appid !== Number(appId) ||
+        typeof record.data.name !== 'string' || !record.data.name.trim()) {
+      return { status: 'not-found', expectedName, storeName: null, storeType: null };
+    }
+    const storeName = record.data.name.trim().slice(0, 200);
+    const normalize = name => name.normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const status = !expectedName ? 'unlisted' :
+      normalize(expectedName) === normalize(storeName) ? 'match' : 'name-mismatch';
+    return { status, expectedName, storeName, storeType: String(record.data.type || '').slice(0, 40) };
+  } catch (error) {
+    return { status: 'unavailable', expectedName, storeName: null, storeType: null,
+      error: String(error.message).slice(0, 200) };
+  }
+}
 // On-demand feed probe. Announcements found do not establish the game's identity or future delivery reliability.
 // This reports live evidence without changing subscriptions
 // or claiming that an empty/failed publisher feed is verified.
@@ -320,16 +347,17 @@ async function verifyGameUpdateSource(value) {
   const appId = steamAppId(value);
   const game = UPDATE_CATALOG.find(entry => entry.appId === appId);
   // Custom Steam App IDs are supported by subscriptions too; validate their feed on demand.
+  const identity = await inspectSteamGameIdentity(appId);
   try {
     const feed = await getGameNews(appId);
     const latest = feed.items[0] || null;
-    return { appId, name: game?.name || 'Steam App ' + appId, status: latest ? 'announcements-found' : 'no-announcements',
+    return { appId, identity, name: game?.name || 'Steam App ' + appId, status: latest ? 'announcements-found' : 'no-announcements',
       checkedAt: Date.now(), announcementCount: feed.items.length,
       latestAnnouncementAt: latest?.publishedAt || null, latestAnnouncementUrl: latest?.url || null };
   } catch (error) {
-    return { appId, name: game?.name || 'Steam App ' + appId, status: 'unavailable', checkedAt: Date.now(),
+    return { appId, identity, name: game?.name || 'Steam App ' + appId, status: 'unavailable', checkedAt: Date.now(),
       announcementCount: 0, latestAnnouncementAt: null, latestAnnouncementUrl: null,
       error: String(error.message).slice(0, 200) };
   }
 }
-Object.assign(module.exports, { UPDATE_CATALOG, PUBLISHER_UPDATE_CATALOG, gameUpdateSourceStatus, verifyGameUpdateSource, steamAppId, steamArtwork, plainNews, normalizeNews, getGameNews });
+Object.assign(module.exports, { UPDATE_CATALOG, PUBLISHER_UPDATE_CATALOG, gameUpdateSourceStatus, verifyGameUpdateSource, inspectSteamGameIdentity, steamAppId, steamArtwork, plainNews, normalizeNews, getGameNews });
