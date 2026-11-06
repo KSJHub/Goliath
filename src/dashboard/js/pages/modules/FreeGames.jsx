@@ -17,13 +17,14 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
   const [notice, setNotice] = useState('');
   const [gameForm, setGameForm] = useState(blankUpdate);
   const [updateSearch, setUpdateSearch] = useState('');
+  const [sourceCheck, setSourceCheck] = useState(null);
   const [updateView, setUpdateView] = useState('games');
   const [updatePreview, setUpdatePreview] = useState(null);
   const [quiet, setQuiet] = useState({ quietStart: '', quietEnd: '' });
   const [confirmRemove, setConfirmRemove] = useState(null);
   useEffect(() => {
     const current = ++generation.current;
-    setGameForm(blankUpdate()); setUpdatePreview(null); setConfirmRemove(null); setUpdateSearch('');
+    setGameForm(blankUpdate()); setSourceCheck(null); setUpdatePreview(null); setConfirmRemove(null); setUpdateSearch('');
     setData(null); setDraft(null); setPreview(null); setError(''); setNotice(''); setBusy(false);
     if (!guildId) return;
     api.request(`/api/games/${guildId}`).then((payload) => {
@@ -55,6 +56,18 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     finally { if (current === generation.current) setBusy(false); }
   }
 
+  async function verifySource(appId) {
+    if (!appId) { setError('Choose a Steam catalogue game before verifying its source.'); return; }
+    const current = generation.current;
+    setBusy(true); setError(''); setSourceCheck(null);
+    try {
+      const payload = await api.request('/api/games/' + guildId + '/updates/verify-source', {
+        method: 'POST', body: JSON.stringify({ appId })
+      });
+      if (current === generation.current) setSourceCheck(payload.result);
+    } catch (err) { if (current === generation.current) setError(err.message); }
+    finally { if (current === generation.current) setBusy(false); }
+  }
   async function updateAction(action, body = null, method = 'POST') {
     const current = generation.current;
     setBusy(true); setError(''); setNotice('');
@@ -230,6 +243,15 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     </SectionCard>
     <SectionCard themed theme={theme} title={updateConfig.subscriptions[gameForm.appId] ? 'Edit game subscription' : 'Follow a game'} subtitle="Use the starter catalogue or enter a Steam store URL / App ID.">
       <DiscordResourceSelect searchable theme={theme} label="Game catalogue" disabled={busy} value={gameForm.appId} placeholder="Choose a game or enter one below" resources={(data.updateCatalog || []).map(game => ({ id: game.appId, name: game.name }))} onChange={appId => { const game = data.updateCatalog.find(game => game.appId === appId); const current = updateConfig.subscriptions[appId]; current ? editGame(current) : setGameForm({ ...blankUpdate(), appId, name: game?.name || '' }); }} />
+      <div style={{ margin: '10px 0', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+        <button style={button} disabled={busy || !(data.updateCatalog || []).some(game => game.appId === gameForm.appId)} onClick={() => verifySource(gameForm.appId)}>Verify announcement source</button>
+        {sourceCheck && sourceCheck.appId === gameForm.appId && <span style={{ color: theme.mutedText }}>
+          {sourceCheck.status === 'verified' ? 'Verified: ' + sourceCheck.announcementCount + ' announcements' : sourceCheck.status === 'no-announcements' ? 'Feed reachable, no valid announcements' : 'Feed unavailable'}
+          {' · Checked ' + stamp(sourceCheck.checkedAt)}
+          {sourceCheck.error ? ' · ' + sourceCheck.error : ''}
+          {sourceCheck.latestAnnouncementUrl && <> · <a href={sourceCheck.latestAnnouncementUrl} target="_blank" rel="noopener noreferrer">Latest announcement</a></>}
+        </span>}
+      </div>
       <div style={grid}>
         <label>Steam App ID or store URL<input style={inputStyle} disabled={busy} value={gameForm.appId} onChange={event => formPatch({ appId: event.target.value })} placeholder="https://store.steampowered.com/app/…" /></label>
         <label>Game name<input style={inputStyle} disabled={busy} maxLength={100} value={gameForm.name} onChange={event => formPatch({ name: event.target.value })} /></label>
