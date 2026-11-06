@@ -313,7 +313,8 @@ async function getGameNews(value) {
   if (newsCache.size > 500) newsCache.delete(newsCache.keys().next().value);
   return task;
 }
-// On-demand feed probe. This reports live evidence without changing subscriptions
+// On-demand feed probe. Announcements found do not establish the game's identity or future delivery reliability.
+// This reports live evidence without changing subscriptions
 // or claiming that an empty/failed publisher feed is verified.
 async function verifyGameUpdateSource(value) {
   const appId = steamAppId(value);
@@ -322,7 +323,7 @@ async function verifyGameUpdateSource(value) {
   try {
     const feed = await getGameNews(appId);
     const latest = feed.items[0] || null;
-    return { appId, name: game?.name || 'Steam App ' + appId, status: latest ? 'verified' : 'no-announcements',
+    return { appId, name: game?.name || 'Steam App ' + appId, status: latest ? 'announcements-found' : 'no-announcements',
       checkedAt: Date.now(), announcementCount: feed.items.length,
       latestAnnouncementAt: latest?.publishedAt || null, latestAnnouncementUrl: latest?.url || null };
   } catch (error) {
