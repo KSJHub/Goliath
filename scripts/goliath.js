@@ -4590,6 +4590,40 @@ async function freeGamesAudit() {
   return true;
 }
 
+// Read-only, on-demand Steam catalogue identity audit. No guild data is touched.
+// Usage: BOT_MODE=dev node scripts/goliath.js game-catalogue-identity [limit]
+async function gameCatalogueIdentityAudit() {
+  const { UPDATE_CATALOG, inspectSteamGameIdentity } = require('../src/modules/utilityStudio/games/freeGamesProviders');
+  const requested = process.argv[3];
+  if (requested !== undefined && (!/^[1-9]\\d*$/.test(requested) || Number(requested) > UPDATE_CATALOG.length)) {
+    throw new Error('Limit must be a positive integer no greater than the Steam catalogue size.');
+  }
+  const games = UPDATE_CATALOG.slice(0, requested ? Number(requested) : undefined);
+  const totals = { match: 0, 'name-mismatch': 0, 'not-found': 0, unavailable: 0, unlisted: 0 };
+  const issues = [];
+  for (let index = 0; index < games.length; index += 4) {
+    const batch = games.slice(index, index + 4);
+    const results = await Promise.all(batch.map(async game => {
+      try { return await inspectSteamGameIdentity(game.appId); }
+      catch (error) { return { status: 'unavailable', error: String(error.message).slice(0, 200) }; }
+    }));
+    results.forEach((result, offset) => {
+      const game = batch[offset];
+      totals[result.status] = (totals[result.status] || 0) + 1;
+      if (result.status !== 'match') {
+        const issue = { appId: game.appId, expectedName: game.name, storeName: result.storeName || null,
+          storeType: result.storeType || null, status: result.status, error: result.error || null };
+        issues.push(issue);
+        console.log(JSON.stringify(issue));
+      }
+    });
+    console.log('Catalogue identity progress: ' + Math.min(index + batch.length, games.length) + '/' + games.length);
+  }
+  console.log(JSON.stringify({ checked: games.length, totals, issues: issues.length }));
+  // Unreachable metadata is not silently treated as a verified match.
+  return issues.length === 0;
+}
+
 async function gameUpdatesAudit() {
   const assert = require('node:assert/strict'), fs = require('node:fs');
   // Isolated in-memory guild state: this audit never writes a server's configuration.
@@ -4776,6 +4810,7 @@ const commands = {
   'dashboard-routing': dashboardRoutingAudit,
   'member-intelligence-routing': memberIntelligenceRoutingAudit,
   'game-updates': gameUpdatesAudit,
+  'game-catalogue-identity': gameCatalogueIdentityAudit,
   games: freeGamesAudit,
   'free-games': freeGamesAudit,
   'quarantine-containment': quarantineContainmentAudit,
