@@ -120,6 +120,30 @@ const UPDATE_CATALOG = Object.freeze([
   ['1551360', 'Forza Horizon 5'], ['1248130', 'Farming Simulator 22'],
   ['227300', 'Euro Truck Simulator 2'], ['270880', 'American Truck Simulator'],
 ].map(([appId, name]) => Object.freeze({ appId, name, image: steamArtwork(appId), source: Object.freeze({ type: 'steam', provider: 'Steam publisher announcements', appId, url: 'https://store.steampowered.com/app/' + appId + '/', status: 'configured', verified: false }) })));
+// Discovery-only publisher catalogue. These are NOT Steam App IDs and cannot be
+// subscribed to until a publisher-specific adapter and feed validation exist.
+const PUBLISHER_UPDATE_CATALOG = Object.freeze([
+  ['fortnite', 'Fortnite', 'Epic Games', 'https://www.fortnite.com/news'],
+  ['valorant', 'VALORANT', 'Riot Games', 'https://playvalorant.com/en-gb/news/'],
+  ['league-of-legends', 'League of Legends', 'Riot Games', 'https://www.leagueoflegends.com/en-gb/news/'],
+  ['teamfight-tactics', 'Teamfight Tactics', 'Riot Games', 'https://teamfighttactics.leagueoflegends.com/en-gb/news/'],
+  ['minecraft', 'Minecraft', 'Mojang Studios', 'https://www.minecraft.net/en-us/articles'],
+  ['world-of-warcraft', 'World of Warcraft', 'Blizzard Entertainment', 'https://worldofwarcraft.blizzard.com/en-us/news'],
+  ['diablo-iv', 'Diablo IV', 'Blizzard Entertainment', 'https://news.blizzard.com/en-us/diablo4'],
+  ['hearthstone', 'Hearthstone', 'Blizzard Entertainment', 'https://hearthstone.blizzard.com/en-us/news'],
+  ['starcraft-ii', 'StarCraft II', 'Blizzard Entertainment', 'https://news.blizzard.com/en-us/starcraft2'],
+  ['final-fantasy-xiv', 'FINAL FANTASY XIV', 'Square Enix', 'https://na.finalfantasyxiv.com/lodestone/topics/'],
+  ['genshin-impact', 'Genshin Impact', 'HoYoverse', 'https://genshin.hoyoverse.com/en/news'],
+  ['honkai-star-rail', 'Honkai: Star Rail', 'HoYoverse', 'https://hsr.hoyoverse.com/en-us/news'],
+  ['rocket-league', 'Rocket League', 'Psyonix', 'https://www.rocketleague.com/en/news'],
+  ['roblox', 'Roblox', 'Roblox Corporation', 'https://corp.roblox.com/newsroom/'],
+  ['clash-of-clans', 'Clash of Clans', 'Supercell', 'https://supercell.com/en/games/clashofclans/blog/'],
+  ['clash-royale', 'Clash Royale', 'Supercell', 'https://supercell.com/en/games/clashroyale/blog/'],
+].map(([id, name, publisher, newsUrl]) => Object.freeze({
+  id: 'publisher:' + id, name, publisher, newsUrl,
+  source: Object.freeze({ type: 'publisher-web', status: 'pending-adapter', verified: false }),
+  subscribable: false,
+})));
 // Configured official endpoints are not considered verified until their live feeds are checked.
 function gameUpdateSourceStatus(game) { return game?.source?.verified === true ? 'verified' : 'unverified'; }
 const newsCache = new Map(), newsFlights = new Map();
@@ -182,4 +206,4 @@ async function getGameNews(value) {
   if (newsCache.size > 500) newsCache.delete(newsCache.keys().next().value);
   return task;
 }
-Object.assign(module.exports, { UPDATE_CATALOG, gameUpdateSourceStatus, steamAppId, steamArtwork, plainNews, normalizeNews, getGameNews });
+Object.assign(module.exports, { UPDATE_CATALOG, PUBLISHER_UPDATE_CATALOG, gameUpdateSourceStatus, steamAppId, steamArtwork, plainNews, normalizeNews, getGameNews });
