@@ -4661,7 +4661,7 @@ async function gameUpdatesAudit() {
   let monitor = load('freeGamesMonitor');
   // Catalogue regression: IDs are unique, publisher entries remain discovery-only,
   // and source checks cannot silently turn into subscriptions.
-  assert(providers.UPDATE_CATALOG.length >= 81, 'Steam catalogue unexpectedly shrank');
+  assert(providers.UPDATE_CATALOG.length >= 189, 'Steam catalogue unexpectedly shrank below validated baseline');
   assert(providers.PUBLISHER_UPDATE_CATALOG.length >= 16, 'Publisher catalogue unexpectedly shrank');
   assert.equal(new Set(providers.UPDATE_CATALOG.map(game => game.appId)).size, providers.UPDATE_CATALOG.length);
   assert.equal(new Set(providers.PUBLISHER_UPDATE_CATALOG.map(game => game.id)).size, providers.PUBLISHER_UPDATE_CATALOG.length);
@@ -4676,6 +4676,11 @@ async function gameUpdatesAudit() {
     assert.equal(game.source.verified, false);
     assert(game.newsUrl.startsWith('https://'));
   }
+  // Confirmed identity corrections: preserve App IDs so guild subscriptions remain stable.
+  const catalogueName = appId => providers.UPDATE_CATALOG.find(game => game.appId === appId)?.name;
+  assert.equal(catalogueName('1811260'), 'EA SPORTS FIFA 23');
+  assert.equal(catalogueName('2195250'), 'EA SPORTS FC 24');
+  assert.equal(catalogueName('2519060'), 'Call of Duty: Modern Warfare III - Campaign');
   assert.equal(typeof providers.verifyGameUpdateSource, 'function');
 
   assert.equal(providers.steamAppId('https://store.steampowered.com/app/730/Counter_Strike_2/'), '730');
