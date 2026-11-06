@@ -226,7 +226,11 @@ const UPDATE_CATALOG = Object.freeze([
   ['1693980', "Dead Space"],
   ['214490', "Alien: Isolation"],
   ['200510', "XCOM: Enemy Unknown"],
-].map(([appId, name]) => Object.freeze({ appId, name, image: steamArtwork(appId), source: Object.freeze({ type: 'steam', provider: 'Steam publisher announcements', appId, url: 'https://store.steampowered.com/app/' + appId + '/', status: 'configured', verified: false }) })));
+].map(([appId, name]) => Object.freeze({ appId, name,
+  // Preserve historical App IDs for existing guild subscriptions, but flag known
+  // non-game Steam entries rather than misrepresenting them as games.
+  catalogueType: appId === '431960' ? 'software' : appId === '2519060' ? 'dlc' : 'game',
+  image: steamArtwork(appId), source: Object.freeze({ type: 'steam', provider: 'Steam publisher announcements', appId, url: 'https://store.steampowered.com/app/' + appId + '/', status: 'configured', verified: false }) })));
 // Discovery-only publisher catalogue. These are NOT Steam App IDs and cannot be
 // subscribed to until a publisher-specific adapter and feed validation exist.
 const PUBLISHER_UPDATE_CATALOG = Object.freeze([
