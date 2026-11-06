@@ -218,4 +218,22 @@ async function getGameNews(value) {
   if (newsCache.size > 500) newsCache.delete(newsCache.keys().next().value);
   return task;
 }
-Object.assign(module.exports, { UPDATE_CATALOG, PUBLISHER_UPDATE_CATALOG, gameUpdateSourceStatus, steamAppId, steamArtwork, plainNews, normalizeNews, getGameNews });
+// On-demand feed probe. This reports live evidence without changing subscriptions
+// or claiming that an empty/failed publisher feed is verified.
+async function verifyGameUpdateSource(value) {
+  const appId = steamAppId(value);
+  const game = UPDATE_CATALOG.find(entry => entry.appId === appId);
+  if (!game) throw new Error('Choose a game from the supported Steam catalogue.');
+  try {
+    const feed = await getGameNews(appId);
+    const latest = feed.items[0] || null;
+    return { appId, name: game.name, status: latest ? 'verified' : 'no-announcements',
+      checkedAt: Date.now(), announcementCount: feed.items.length,
+      latestAnnouncementAt: latest?.publishedAt || null, latestAnnouncementUrl: latest?.url || null };
+  } catch (error) {
+    return { appId, name: game.name, status: 'unavailable', checkedAt: Date.now(),
+      announcementCount: 0, latestAnnouncementAt: null, latestAnnouncementUrl: null,
+      error: String(error.message).slice(0, 200) };
+  }
+}
+Object.assign(module.exports, { UPDATE_CATALOG, PUBLISHER_UPDATE_CATALOG, gameUpdateSourceStatus, verifyGameUpdateSource, steamAppId, steamArtwork, plainNews, normalizeNews, getGameNews });
