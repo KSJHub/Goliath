@@ -99,7 +99,9 @@ const UPDATE_CATALOG = Object.freeze([
   ['1144200', 'Ready or Not'], ['1172470', 'Apex Legends'], ['945360', 'Among Us'],
   ['1245620', 'ELDEN RING'], ['346110', 'ARK: Survival Evolved'], ['271590', 'Grand Theft Auto V Legacy'],
   ['990080', 'Hogwarts Legacy'], ['1623730', 'Palworld'], ['1966720', 'Lethal Company'],
-].map(([appId, name]) => Object.freeze({ appId, name, image: steamArtwork(appId) })));
+].map(([appId, name]) => Object.freeze({ appId, name, image: steamArtwork(appId), source: Object.freeze({ type: 'steam', provider: 'Steam publisher announcements', appId, url: 'https://store.steampowered.com/app/' + appId + '/', status: 'configured', verified: false }) })));
+// Configured official endpoints are not considered verified until their live feeds are checked.
+function gameUpdateSourceStatus(game) { return game?.source?.verified === true ? 'verified' : 'unverified'; }
 const newsCache = new Map(), newsFlights = new Map();
 function steamAppId(value) {
   const raw = String(value || '').trim();
@@ -160,4 +162,4 @@ async function getGameNews(value) {
   if (newsCache.size > 500) newsCache.delete(newsCache.keys().next().value);
   return task;
 }
-Object.assign(module.exports, { UPDATE_CATALOG, steamAppId, steamArtwork, plainNews, normalizeNews, getGameNews });
+Object.assign(module.exports, { UPDATE_CATALOG, gameUpdateSourceStatus, steamAppId, steamArtwork, plainNews, normalizeNews, getGameNews });
