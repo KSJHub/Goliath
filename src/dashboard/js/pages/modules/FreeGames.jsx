@@ -249,6 +249,9 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
           {sourceCheck.status === 'announcements-found' ? 'Feed returned ' + sourceCheck.announcementCount + ' announcements (game identity not independently verified)' : sourceCheck.status === 'no-announcements' ? 'Feed reachable, no valid announcements' : 'Feed unavailable'}
           {' · Checked ' + stamp(sourceCheck.checkedAt)}
           {sourceCheck.error ? ' · ' + sourceCheck.error : ''}
+          {sourceCheck.identity && <> · Store identity: {sourceCheck.identity.status === 'match' ? 'Name matches Steam' : sourceCheck.identity.status === 'name-mismatch' ? 'Name mismatch — review catalogue entry' : sourceCheck.identity.status === 'unlisted' ? 'Custom Steam App ID' : sourceCheck.identity.status === 'not-found' ? 'Steam store entry not found' : 'Store metadata unavailable'}
+            {sourceCheck.identity.storeName ? ' (' + sourceCheck.identity.storeName + ')' : ''}
+          </>}
           {sourceCheck.latestAnnouncementUrl && <> · <a href={sourceCheck.latestAnnouncementUrl} target="_blank" rel="noopener noreferrer">Latest announcement</a></>}
         </span>}
       </div>
