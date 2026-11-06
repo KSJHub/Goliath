@@ -103,6 +103,22 @@ const UPDATE_CATALOG = Object.freeze([
   ['230410', 'Warframe'], ['236390', 'War Thunder'], ['444090', 'Paladins'],
   ['304930', 'Unturned'], ['251570', '7 Days to Die'],
   ['359550', "Tom Clancy's Rainbow Six Siege"], ['1085660', 'Destiny 2'],
+  ['1091500', 'Cyberpunk 2077'], ['1174180', 'Red Dead Redemption 2'],
+  ['413150', 'Stardew Valley'], ['105600', 'Terraria'],
+  ['108600', 'Project Zomboid'], ['294100', 'RimWorld'],
+  ['255710', 'Cities: Skylines'], ['949230', 'Cities: Skylines II'],
+  ['427520', 'Factorio'], ['526870', 'Satisfactory'],
+  ['548430', 'Deep Rock Galactic'], ['632360', 'Risk of Rain 2'],
+  ['1097150', 'Fall Guys'], ['1938090', 'Call of Duty'],
+  ['2357570', 'Overwatch 2'], ['1172620', 'Sea of Thieves'],
+  ['1811260', 'EA SPORTS FC 24'], ['2669320', 'EA SPORTS FC 25'],
+  ['1238840', 'Battlefield 1'], ['1238810', 'Battlefield V'],
+  ['1517290', 'Battlefield 2042'], ['377160', 'Fallout 4'],
+  ['489830', 'The Elder Scrolls V: Skyrim Special Edition'],
+  ['221100', 'DayZ'], ['394360', 'Hearts of Iron IV'],
+  ['289070', 'Sid Meier’s Civilization VI'], ['1293830', 'Forza Horizon 4'],
+  ['1551360', 'Forza Horizon 5'], ['1248130', 'Farming Simulator 22'],
+  ['227300', 'Euro Truck Simulator 2'], ['270880', 'American Truck Simulator'],
 ].map(([appId, name]) => Object.freeze({ appId, name, image: steamArtwork(appId), source: Object.freeze({ type: 'steam', provider: 'Steam publisher announcements', appId, url: 'https://store.steampowered.com/app/' + appId + '/', status: 'configured', verified: false }) })));
 // Configured official endpoints are not considered verified until their live feeds are checked.
 function gameUpdateSourceStatus(game) { return game?.source?.verified === true ? 'verified' : 'unverified'; }
