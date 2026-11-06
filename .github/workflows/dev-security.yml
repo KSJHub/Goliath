@@ -1,4 +1,4 @@
-name: Goliath DEV security checks
+name: Goliath DEV security and build checks
 
 on:
   push:
@@ -22,3 +22,20 @@ jobs:
           node-version: '22'
       - name: Run isolated security tests
         run: npm run test:security
+
+  build:
+    name: Full doctor and dashboard build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out DEV
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run full validation and dashboard build
+        run: npm run build
