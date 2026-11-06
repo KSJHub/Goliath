@@ -76,6 +76,13 @@ router.patch('/:guildId/updates/settings', async (req, res) => {
   try { res.json({ success: true, updates: await monitor.configureGameUpdates(req.freeGamesGuild, req.body || {}) }); }
   catch (error) { res.status(400).json({ success: false, error: error.message }); }
 });
+router.post('/:guildId/updates/verify-source', async (req, res) => {
+  try {
+    const { verifyGameUpdateSource } = require('../../../../modules/utilityStudio/games/freeGamesProviders');
+    const result = await verifyGameUpdateSource(req.body?.appId);
+    res.json({ success: true, result });
+  } catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
 router.post('/:guildId/updates/subscriptions', async (req, res) => {
   try { res.json({ success: true, updates: await monitor.saveGameSubscription(req.freeGamesGuild, req.body || {}) }); }
   catch (error) { res.status(400).json({ success: false, error: error.message }); }
