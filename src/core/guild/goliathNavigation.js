@@ -124,6 +124,16 @@ function navigationButton(customId, label, style = ButtonStyle.Secondary, disabl
   return component.setLabel(label);
 }
 
+function emojiButton(customId, label, emoji, style = ButtonStyle.Secondary, disabled = false) {
+  const component = new ButtonBuilder()
+    .setCustomId(customId)
+    .setLabel(label)
+    .setStyle(style)
+    .setDisabled(Boolean(disabled));
+  if (emoji) component.setEmoji(emoji);
+  return component;
+}
+
 function actionButton(customId, action, options = {}) {
   const definition = UI_ACTIONS[action];
   if (!definition) throw new Error(`Unknown Goliath UI action: ${action}`);
@@ -175,6 +185,6 @@ function componentRow(...components) {
 }
 
 module.exports = {
-  EMOJIS, emojiLabel, UI_ACTIONS, navigationButton, actionButton,
+  EMOJIS, emojiLabel, UI_ACTIONS, navigationButton, emojiButton, actionButton,
   paginationButtons, goliathNavigation, selectMenu, componentRow,
 };
