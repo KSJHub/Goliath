@@ -4683,6 +4683,18 @@ async function gameUpdatesAudit() {
   assert.equal(catalogueName('2519060'), 'Call of Duty: Modern Warfare III - Campaign');
   assert.equal(providers.UPDATE_CATALOG.find(game => game.appId === '431960')?.catalogueType, 'software');
   assert.equal(providers.UPDATE_CATALOG.find(game => game.appId === '2519060')?.catalogueType, 'dlc');
+  // Discord catalogue discovery excludes non-games without hiding existing subscriptions.
+  const starter = store.visibleSteamUpdateCatalog(providers.UPDATE_CATALOG);
+  assert.equal(starter.length, providers.UPDATE_CATALOG.filter(game => game.catalogueType === 'game').length);
+  assert(!starter.some(game => game.appId === '431960' || game.appId === '2519060'));
+  const withLegacy = store.visibleSteamUpdateCatalog(providers.UPDATE_CATALOG, {
+    '431960': { appId: '431960' }, '2519060': { appId: '2519060' }
+  });
+  assert(withLegacy.some(game => game.appId === '431960'));
+  assert(withLegacy.some(game => game.appId === '2519060'));
+  assert.equal(withLegacy.length, starter.length + 2);
+  assert.equal(new Set(withLegacy.map(game => game.appId)).size, withLegacy.length);
+  assert.deepEqual(withLegacy.map(game => game.name), [...withLegacy.map(game => game.name)].sort((a, b) => a.localeCompare(b)));
   assert.equal(typeof providers.verifyGameUpdateSource, 'function');
 
   assert.equal(providers.steamAppId('https://store.steampowered.com/app/730/Counter_Strike_2/'), '730');
