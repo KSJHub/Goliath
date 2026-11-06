@@ -120,7 +120,9 @@ router.put('/:guildId/members/:userId', async (req, res) => {
     const id = guildId(req); const uid = userId(req);
     const input = req.body?.birthday || req.body || {};
     const saved = birthdays.setBirthday(id, uid, input, { actorId: actor(req), action: 'birthdays_dashboard_set_member' });
-    return ok(res, { saved, ...(await overview(req, id)) });
+    const view = await overview(req, id);
+    const visibleSaved = view.config.members?.[uid] || { ...saved, year: null };
+    return ok(res, { saved: visibleSaved, ...view });
   } catch (error) { return fail(res, error); }
 });
 
