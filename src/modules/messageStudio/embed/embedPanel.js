@@ -1,4 +1,5 @@
 const { emojiLabel } = require('../../../core/ui/emojis');
+const { actionButton } = require('../../../core/guild/goliathNavigation');
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -893,29 +894,10 @@ function buildEditorPanel(i, who = "Unknown User") {
        * BUILD WORKFLOW
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("Builder")
-          .setEmoji("🛠️")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:panels")
-          .setLabel(`Panels (${panels.length})`)
-          .setEmoji("🧩")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:presets")
-          .setLabel("Presets")
-          .setEmoji("💾")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:edit-images")
-          .setLabel("Media")
-          .setEmoji("🖼️")
-          .setStyle(ButtonStyle.Primary)
+        actionButton("embed:builder", "builder"),
+        actionButton("embed:panels", "panels", { suffix: ` (${panels.length})` }),
+        actionButton("embed:presets", "presets"),
+        actionButton("embed:edit-images", "media"),
       ),
 
       /*
