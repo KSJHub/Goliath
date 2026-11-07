@@ -159,7 +159,7 @@ function actionButton(customId, action, options = {}) {
 }
 
 function paginationButtons(kind, previousId, nextId, options = {}) {
-  const noun = kind === 'channel' ? 'Chan' : kind === 'role' ? 'Roles' : null;
+  const noun = kind === 'channel' ? 'Channel' : kind === 'role' ? 'Role' : null;
   if (!noun) throw new Error('Pagination kind must be channel or role');
   const previousEmoji = EMOJIS[kind === 'channel' ? 'CHANNEL_PREVIOUS' : 'ROLE_PREVIOUS'];
   const nextEmoji = EMOJIS[kind === 'channel' ? 'CHANNEL_NEXT' : 'ROLE_NEXT'];
