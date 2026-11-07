@@ -4392,6 +4392,7 @@ async function freeGamesAudit() {
       if (name === './freeGamesEmbeds') return embeds;
       if (name === './freeGamesMonitor') return { withGuildLock: async (_id, task) => task(), validateDestination: async () => { sends++; } };
       if (name.endsWith('/security/protection/core')) return { isBotOwner: () => false };
+      if (name.endsWith('/core/guild/goliathNavigation')) return require('../src/core/guild/goliathNavigation');
       if (name === 'discord.js') return require('discord.js');
       throw new Error('Unexpected Free Games panel dependency: ' + name);
     };
