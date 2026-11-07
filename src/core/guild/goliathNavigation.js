@@ -108,18 +108,33 @@ const UI_ACTIONS = Object.freeze({
   review: Object.freeze({ label: 'Review', emoji: EMOJIS.REVIEW, style: ButtonStyle.Secondary }),
 });
 
+// Render standard Unicode emojis as label text rather than Discord's native
+// button emoji field. Discord clients can render native symbols (notably ⚙️)
+// as monochrome icons. Custom guild emojis still require the native field.
+function applyButtonEmoji(component, label, emoji) {
+  const text = String(label);
+  if (!emoji) return component.setLabel(text);
+  if (typeof emoji !== 'string' || /^<a?:[^:]+:\\d+>$/.test(emoji) || /^\\d{17,20}$/.test(emoji)) {
+    return component.setLabel(text).setEmoji(emoji);
+  }
+  const visible = `${emoji} ${text}`;
+  // Discord limits button labels to 80 characters; retain the native emoji
+  // field rather than truncating module-owned or dynamic labels.
+  return Array.from(visible).length <= 80
+    ? component.setLabel(visible)
+    : component.setLabel(text).setEmoji(emoji);
+}
+
 function navigationButton(customId, label, style = ButtonStyle.Secondary, disabled = false) {
   const component = new ButtonBuilder()
     .setCustomId(customId)
     .setStyle(style)
     .setDisabled(Boolean(disabled));
-  // Legacy callers supply emoji-prefixed text; preserve their visible appearance
-  // while rendering the emoji in Discord's native component emoji field.
   if (typeof label === 'string') {
     const match = Object.values(EMOJIS)
       .filter((emoji) => label.startsWith(`${emoji} `))
       .sort((a, b) => b.length - a.length)[0];
-    if (match) return component.setEmoji(match).setLabel(label.slice(match.length + 1));
+    if (match) return applyButtonEmoji(component, label.slice(match.length + 1), match);
   }
   return component.setLabel(label);
 }
@@ -127,23 +142,20 @@ function navigationButton(customId, label, style = ButtonStyle.Secondary, disabl
 function emojiButton(customId, label, emoji, style = ButtonStyle.Secondary, disabled = false) {
   const component = new ButtonBuilder()
     .setCustomId(customId)
-    .setLabel(label)
     .setStyle(style)
     .setDisabled(Boolean(disabled));
-  if (emoji) component.setEmoji(emoji);
-  return component;
+  return applyButtonEmoji(component, label, emoji);
 }
 
 function actionButton(customId, action, options = {}) {
   const definition = UI_ACTIONS[action];
   if (!definition) throw new Error(`Unknown Goliath UI action: ${action}`);
   const suffix = options.suffix == null ? '' : String(options.suffix);
-  return new ButtonBuilder()
+  const component = new ButtonBuilder()
     .setCustomId(customId)
-    .setLabel(`${definition.label}${suffix}`)
-    .setEmoji(definition.emoji)
     .setStyle(definition.style)
     .setDisabled(Boolean(options.disabled));
+  return applyButtonEmoji(component, `${definition.label}${suffix}`, definition.emoji);
 }
 
 function paginationButtons(kind, previousId, nextId, options = {}) {
@@ -152,10 +164,10 @@ function paginationButtons(kind, previousId, nextId, options = {}) {
   const previousEmoji = EMOJIS[kind === 'channel' ? 'CHANNEL_PREVIOUS' : 'ROLE_PREVIOUS'];
   const nextEmoji = EMOJIS[kind === 'channel' ? 'CHANNEL_NEXT' : 'ROLE_NEXT'];
   return [
-    new ButtonBuilder().setCustomId(previousId).setLabel(noun).setEmoji(previousEmoji)
-      .setStyle(ButtonStyle.Secondary).setDisabled(Boolean(options.previousDisabled)),
-    new ButtonBuilder().setCustomId(nextId).setLabel(noun).setEmoji(nextEmoji)
-      .setStyle(ButtonStyle.Secondary).setDisabled(Boolean(options.nextDisabled)),
+    applyButtonEmoji(new ButtonBuilder().setCustomId(previousId)
+      .setStyle(ButtonStyle.Secondary).setDisabled(Boolean(options.previousDisabled)), noun, previousEmoji),
+    applyButtonEmoji(new ButtonBuilder().setCustomId(nextId)
+      .setStyle(ButtonStyle.Secondary).setDisabled(Boolean(options.nextDisabled)), noun, nextEmoji),
   ];
 }
 
