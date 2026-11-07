@@ -4600,7 +4600,8 @@ async function gameCatalogueIdentityAudit() {
   }
   const games = UPDATE_CATALOG.slice(0, requested ? Number(requested) : undefined);
   const totals = { match: 0, 'name-mismatch': 0, 'not-found': 0, unavailable: 0, unlisted: 0, 'non-game': 0 };
-  const issues = [];
+  const issues = [], expectedLegacy = [];
+  let confirmedGames = 0;
   for (let index = 0; index < games.length; index += 4) {
     const batch = games.slice(index, index + 4);
     const results = await Promise.all(batch.map(async game => {
@@ -4610,9 +4611,21 @@ async function gameCatalogueIdentityAudit() {
     results.forEach((result, offset) => {
       const game = batch[offset];
       totals[result.status] = (totals[result.status] || 0) + 1;
-      if (result.status !== 'match') {
-        const issue = { appId: game.appId, expectedName: game.name, storeName: result.storeName || null,
-          storeType: result.storeType || null, status: result.status, error: result.error || null };
+      const declaredType = game.catalogueType || 'game';
+      const expectedNonGame = declaredType !== 'game' &&
+        result.status === 'non-game' && result.storeType === declaredType;
+      if (expectedNonGame) {
+        expectedLegacy.push({ appId: game.appId, catalogueType: declaredType, storeName: result.storeName });
+        return;
+      }
+      if (result.status === 'match' && declaredType === 'game') {
+        confirmedGames++;
+        return;
+      }
+      {
+        const issue = { appId: game.appId, expectedName: game.name, catalogueType: declaredType,
+          storeName: result.storeName || null, storeType: result.storeType || null,
+          status: result.status, error: result.error || null };
         // Suggested display-name changes are advisory only. Never rewrite App IDs:
         // guild subscriptions persist those IDs and must not be migrated implicitly.
         if (result.status === 'name-mismatch' && result.storeType === 'game' && result.storeName) {
@@ -4630,8 +4643,10 @@ async function gameCatalogueIdentityAudit() {
     console.log('Catalogue identity progress: ' + Math.min(index + batch.length, games.length) + '/' + games.length);
   }
   console.log(JSON.stringify({ checked: games.length, totals, issues: issues.length,
+    confirmedGames, expectedLegacy: expectedLegacy.length,
     suggestedRenames: issues.filter(issue => issue.suggestedAction === 'review-display-name').length,
     note: 'Suggestions only; no catalogue or guild subscription changes were made.' }));
+  if (expectedLegacy.length) console.log(JSON.stringify({ expectedLegacy }));
   // Unreachable metadata is not silently treated as a verified match.
   return issues.length === 0;
 }
