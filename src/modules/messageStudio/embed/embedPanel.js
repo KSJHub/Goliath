@@ -2504,10 +2504,7 @@ function buildAppearancePanel(interaction) {
       new ActionRowBuilder().addComponents(
         actionButton("embed:builder", "back"),
         actionButton("embed:settings", "settings"),
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("📖 Variables")
-          .setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:helpers", "📖 Variables"),
       ),
     ],
   };
