@@ -1,10 +1,10 @@
 'use strict';
 const { emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
@@ -27,11 +27,8 @@ const reactionRoles = require('./reactionRoles');
 const reactionRolesHealth = require('./reactionRolesHealth');
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components.filter(Boolean));
-const button = (customId, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder()
-  .setCustomId(customId)
-  .setLabel(label)
-  .setStyle(style)
-  .setDisabled(Boolean(disabled));
+const button = (customId, label, style = ButtonStyle.Secondary, disabled = false) =>
+  navigationButton(customId, label, style, disabled);
 const displayName = (interaction) => interaction.member?.displayName || interaction.user?.username || 'Unknown User';
 const noticeLine = (notice) => notice ? `> ${notice}` : null;
 
