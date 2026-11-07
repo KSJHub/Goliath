@@ -109,10 +109,10 @@ function buildListing(offers, config, now = Date.now(), platforms = platformPres
         let entry = line({ ...offer, title: shortTitle(offer.title).slice(0, 70) }, config.state?.newSince, now, { ...config, omitDlcLabel: true }) + '\n\n';
         // Retain the link for extreme provider URLs/titles without cutting Markdown mid-link.
         if (entry.length > 1000) entry = `› [${escapeOfferTitle(shortTitle(offer.title).slice(0, 60))}](${offer.url})${price(offer, config) ? `\n  ${price(offer, config).trim()}` : ''}\n\n`;
-        if (value && value.length + entry.length > 1000) { fields.push({ name: name(), value: value.trim(), inline: config.layout !== 'list' }); value = ''; part++; }
+        if (value && value.length + entry.length > 1000) { fields.push({ name: name(), value: value.trim(), inline: config.layout !== 'list' && value.length < 280 && !value.split('\n').some(line => line.length > 55) }); value = ''; part++; }
         value += entry;
       }
-      if (value) fields.push({ name: name(), value: value.trim(), inline: config.layout !== 'list' });
+      if (value) fields.push({ name: name(), value: value.trim(), inline: config.layout !== 'list' && value.length < 280 && !value.split('\n').some(line => line.length > 55) });
     }
     const spotlight = section.types.includes('game') ? featured : null;
     const description = (config.showOfferCount === false ? '' : `**${items.length} offer${items.length === 1 ? '' : 's'} available**`) + attribution;
