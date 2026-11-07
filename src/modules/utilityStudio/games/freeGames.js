@@ -87,7 +87,7 @@ const PRICE_MODES = Object.freeze({ converted: 'Server currency', source: 'Sourc
 function componentRow(...components) { return { type: 1, components }; }
 function panelButton(action, label, style = 2, disabled = false) {
   // Discord renders component emojis separately from button labels.
-  const icons = ['📨', '🎮', '💱', '🎨', '⭐', '📰', '👁', '🔄', '⬅', '◀'];
+  const icons = ['📨', '🎮', '💱', '🎨', '⭐', '📰', '👁', '🔄', '⬅', '◀', '⏸', '▶'];
   const leading = icons.find(icon => label.startsWith(icon + ' '));
   const trailing = label.endsWith(' ▶') ? '▶' : null;
   const emoji = leading || trailing;
@@ -154,17 +154,22 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
         Object.keys(DISPLAY_OPTIONS).filter(key => c[key] !== false), true),
     ];
   } else {
-    embed.description += '\nManage the server’s maintained free-offer catalogue. All settings are shared with the dashboard.';
+    embed.description = [notice && escape(notice),
+      '**Free Games:** ' + (c.enabled ? '🟢 Enabled' : '⏸ Paused') + '   •   **Game Updates:** ' + (c.gameUpdates?.enabled ? '🟢 Enabled' : '⏸ Paused'),
+      'Manage free offers and game announcements independently. Settings sync with the dashboard.'].filter(Boolean).join('\n');
     embed.fields = [
-      { name: '📨 Delivery', value: (c.channelId ? '<#' + c.channelId + '>' : 'Choose a channel') + '\n' + (c.alerts ? 'New-offer alerts enabled' : 'Alerts off'), inline: true },
+      { name: '📨 Delivery', value: (c.channelId ? '<#' + c.channelId + '>' : 'Not configured') + '\nAlerts: ' + (c.alerts ? 'On' : 'Off'), inline: true },
       { name: '💱 Currency', value: c.currency + ' · ' + PRICE_MODES[c.priceMode], inline: true },
-      { name: '🎮 Catalogue', value: c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' messages\n' + c.stores.length + ' platforms · ' + c.types.length + ' types', inline: false },
-      { name: '🕒 Updates', value: 'Last check: ' + statusTime(c.state.lastCheck) + '\nLast success: ' + statusTime(c.state.lastSuccess), inline: false },
+      { name: '🎮 Free-offer catalogue', value: c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' messages\n' + c.stores.length + ' platforms · ' + c.types.length + ' offer types', inline: false },
+      { name: '🕒 Free Games sync', value: 'Checked: ' + statusTime(c.state.lastCheck) + '\nSuccessful: ' + statusTime(c.state.lastSuccess), inline: false },
     ];
     if (c.state.error || c.state.warning) embed.fields.push({ name: '⚠ Attention', value: escape(c.state.error || c.state.warning).slice(0, 1024), inline: false });
-    controls = [componentRow(panelButton('updates:home:0', '📰 Game Updates')), nav, componentRow(panelButton('preview:0', '👁 Preview'), panelButton('refresh', '🔄 Refresh listing', 1, !c.enabled),
-      panelButton('enabled', c.enabled ? 'Pause updates' : 'Enable updates', c.enabled ? 2 : 3),
-      panelButton('home', 'Status'))];
+    controls = [
+      componentRow(panelButton('updates:home:0', '📰 Game Updates', 1), panelButton('preview:0', '👁 Preview')),
+      nav,
+      componentRow(panelButton('refresh', '🔄 Refresh listing', 2, !c.enabled),
+        panelButton('enabled', c.enabled ? '⏸ Pause Free Games' : '▶ Enable Free Games', c.enabled ? 2 : 3)),
+    ];
   }
   return { content: null, embeds: [embed], components: [...controls, back], allowedMentions: { parse: [] } };
 }
