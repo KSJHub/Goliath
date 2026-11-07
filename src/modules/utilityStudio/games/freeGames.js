@@ -154,25 +154,23 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
         Object.keys(DISPLAY_OPTIONS).filter(key => c[key] !== false), true),
     ];
   } else {
-    embed.description = [notice && escape(notice),
-      'Manage free offers and game announcements. Changes sync with the dashboard.'].filter(Boolean).join('\n\n');
-    embed.fields = [
-      { name: '🎁 Free Games', value: c.enabled ? '🟢 Running' : '⏸ Paused', inline: true },
-      { name: '📰 Game Updates', value: c.gameUpdates?.enabled ? '🟢 Running' : '⏸ Paused', inline: true },
-      { name: '📨 Delivery', value: (c.channelId ? '<#' + c.channelId + '>' : 'Not configured') + '\nNew-offer alerts: ' + (c.alerts ? 'On' : 'Off'), inline: true },
-      { name: '💱 Pricing', value: c.currency + ' · ' + PRICE_MODES[c.priceMode], inline: true },
-      { name: '🎮 Catalogue', value: '**' + c.state.offerCount + '** offers · **' + c.state.deliveries.length + '** messages\n' + c.stores.length + ' platforms · ' + c.types.length + ' types', inline: false },
-      { name: '🕒 Last successful sync', value: statusTime(c.state.lastSuccess) + (c.state.lastCheck && c.state.lastCheck !== c.state.lastSuccess ? '\nLast checked: ' + statusTime(c.state.lastCheck) : ''), inline: false },
-    ];
+    embed.description = [
+      notice && escape(notice),
+      '**🎁 Free Games** ' + (c.enabled ? '🟢 On' : '⏸ Off') + '   ·   **📰 Game Updates** ' + (c.gameUpdates?.enabled ? '🟢 On' : '⏸ Off'),
+      '**📨 Delivery** ' + (c.channelId ? '<#' + c.channelId + '>' : 'Not set') + ' · Alerts ' + (c.alerts ? 'on' : 'off') + '   ·   **💱 ' + c.currency + '**',
+      '**🎮 Catalogue** ' + c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' messages · ' + c.stores.length + ' platforms · ' + c.types.length + ' types',
+      '**🕒 Synced** ' + statusTime(c.state.lastSuccess) + (c.state.lastCheck && c.state.lastCheck !== c.state.lastSuccess ? ' · Checked ' + statusTime(c.state.lastCheck) : ''),
+    ].filter(Boolean).join('\\n');
+    embed.fields = [];
     if (c.state.error || c.state.warning) embed.fields.push({ name: '⚠ Attention', value: escape(c.state.error || c.state.warning).slice(0, 1024), inline: false });
     controls = [
-      componentRow(panelButton('updates:home:0', '📰 Game Updates', 1), panelButton('preview:0', '👁 Preview')),
-      nav,
-      componentRow(panelButton('refresh', '🔄 Refresh', 2, !c.enabled),
-        panelButton('enabled', c.enabled ? '⏸ Pause Free Games' : '▶ Resume Free Games', c.enabled ? 2 : 3)),
+      componentRow(panelButton('updates:home:0', '📰 Updates', 1), panelButton('preview:0', '👁 Preview'),
+        panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'), panelButton('pricing', '💱 Currency')),
+      componentRow(panelButton('display', '🎨 Display'), panelButton('refresh', '🔄 Refresh', 2, !c.enabled),
+        panelButton('enabled', c.enabled ? '⏸ Pause' : '▶ Resume', c.enabled ? 2 : 3), panelButton('studio', '⬅ Back')),
     ];
   }
-  return { content: null, embeds: [embed], components: [...controls, back], allowedMentions: { parse: [] } };
+  return { content: null, embeds: [embed], components: page === 'home' ? controls : [...controls, back], allowedMentions: { parse: [] } };
 }
 function regionalModal(guild, c = getConfig(guild.id)) {
   return { custom_id: PANEL_PREFIX + 'regionalSubmit', title: 'Free Games · Currency & Region',
