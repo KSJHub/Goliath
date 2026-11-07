@@ -1023,10 +1023,29 @@ async function handleOwnerCaseManagement(i) {
         if (!saved) return null;
         if (db.prepare('SELECT 1 FROM cases WHERE case_id = ?').get(caseId)) throw new Error('Case ID is already in use; restoration stopped');
         const record = JSON.parse(saved.case_data);
+        const warningRows = JSON.parse(saved.warning_data);
+        const auditRows = JSON.parse(saved.audit_data);
+        if (!record || String(record.guild_id) !== guildId || Number(record.case_id) !== caseId || String(record.user_id) !== String(saved.user_id) ||
+            !Array.isArray(warningRows) || !Array.isArray(auditRows)) {
+          throw new Error('Archived case integrity validation failed; restoration stopped');
+        }
+        // Reject conflicting primary keys before attempting any restore writes.
+        for (const [table, rows, idColumn] of [['warnings', warningRows, 'id'], ['case_audit', auditRows, 'audit_id']]) {
+          const seen = new Set();
+          for (const row of rows) {
+            const id = Number(row?.[idColumn]);
+            if (!row || String(row.guild_id) !== guildId || Number(row.case_id) !== caseId ||
+                !Number.isSafeInteger(id) || id <= 0 || seen.has(id) ||
+                db.prepare(`SELECT 1 FROM ${table} WHERE ${idColumn} = ?`).get(id)) {
+              throw new Error(`Archived ${table} record conflict; restoration stopped`);
+            }
+            seen.add(id);
+          }
+        }
         const keys = Object.keys(record);
         db.prepare(`INSERT INTO cases (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`).run(...keys.map(k => record[k]));
-        for (const [table, data] of [['warnings', saved.warning_data], ['case_audit', saved.audit_data]]) {
-          for (const row of JSON.parse(data)) {
+        for (const [table, rows] of [['warnings', warningRows], ['case_audit', auditRows]]) {
+          for (const row of rows) {
             const columns = Object.keys(row);
             db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`).run(...columns.map(k => row[k]));
           }
