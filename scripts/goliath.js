@@ -4291,7 +4291,7 @@ async function freeGamesAudit() {
     const embed = page.embeds[0];
     assert(embed.description.length <= 4096);
     assert(embed.fields.length <= 25);
-    for (const field of embed.fields) { assert(field.inline); assert(field.name.length <= 256); assert(field.value.length <= 1024); }
+    for (const field of embed.fields) { assert.equal(typeof field.inline, 'boolean'); if (field.value.length >= 280 || field.value.split('\n').some(line => line.length > 55)) assert.equal(field.inline, false, 'Long offer groups must use full-width fields'); assert(field.name.length <= 256); assert(field.value.length <= 1024); }
     assert(embed.title.length + embed.description.length + embed.footer.text.length + embed.fields.reduce((sum, field) => sum + field.name.length + field.value.length, 0) < 6000);
     assert.deepEqual(page.allowedMentions, { parse: [] });
   }
