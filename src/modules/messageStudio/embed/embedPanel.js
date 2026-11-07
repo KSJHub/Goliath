@@ -2515,16 +2515,13 @@ function buildAppearancePanel(interaction) {
     embeds,
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:appearance-details").setLabel("✏️ Edit Details").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId("embed:appearance-author-icon").setLabel("👤 Author Icon").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:appearance-footer-icon").setLabel("🏷️ Footer Icon").setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:appearance-details", "✏️ Edit Details", ButtonStyle.Primary),
+        navigationButton("embed:appearance-author-icon", "👤 Author Icon"),
+        navigationButton("embed:appearance-footer-icon", "🏷️ Footer Icon"),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel(emojiLabel('BACK', 'Back'))
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
+        actionButton("embed:builder", "back"),
+        actionButton("embed:settings", "settings"),
         new ButtonBuilder()
           .setCustomId("embed:helpers")
           .setLabel("📖 Variables")
@@ -2551,13 +2548,13 @@ function buildAppearanceIconPanel(interaction, kind) {
     embeds: [embed],
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`embed:appearance-icon-url:${kind}`).setLabel("✏️ Edit URL").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`embed:appearance-icon-upload:${kind}`).setLabel("📤 Upload").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`embed:appearance-icon-clear:${kind}`).setLabel("🗑️ Clear").setStyle(ButtonStyle.Danger).setDisabled(!raw),
+        navigationButton(`embed:appearance-icon-url:${kind}`, "✏️ Edit URL", ButtonStyle.Primary),
+        navigationButton(`embed:appearance-icon-upload:${kind}`, "📤 Upload", ButtonStyle.Success),
+        navigationButton(`embed:appearance-icon-clear:${kind}`, "🗑️ Clear", ButtonStyle.Danger, !raw),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:content-back").setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:helpers").setLabel("📖 Variables").setStyle(ButtonStyle.Secondary),
+        actionButton("embed:content-back", "back"),
+        navigationButton("embed:helpers", "📖 Variables"),
       ),
     ],
   };
