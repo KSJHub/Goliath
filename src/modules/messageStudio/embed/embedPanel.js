@@ -3220,51 +3220,14 @@ function buildThumbnailOptionsPanel(
       enforceMediaUiLimits([
         new ActionRowBuilder()
           .addComponents(
-            new ButtonBuilder()
-              .setCustomId(
-                "embed:thumbnail-edit"
-              )
-              .setLabel(
-                "✏️ Edit URL / Alt"
-              )
-              .setStyle(
-                ButtonStyle.Primary
-              ),
-
-            new ButtonBuilder()
-              .setCustomId(
-                "embed:thumbnail-upload"
-              )
-              .setLabel(
-                "📤 Upload Thumbnail"
-              )
-              .setStyle(
-                ButtonStyle.Success
-              ),
-
-            new ButtonBuilder()
-              .setCustomId(
-                "embed:thumbnail-clear"
-              )
-              .setLabel("🗑️ Clear")
-              .setStyle(
-                ButtonStyle.Danger
-              )
-              .setDisabled(
-                !thumbnail.source
-              )
+            navigationButton("embed:thumbnail-edit", "✏️ Edit URL / Alt", ButtonStyle.Primary),
+            navigationButton("embed:thumbnail-upload", "📤 Upload Thumbnail", ButtonStyle.Success),
+            navigationButton("embed:thumbnail-clear", "🗑️ Clear", ButtonStyle.Danger, !thumbnail.source)
           ),
 
         new ActionRowBuilder()
           .addComponents(
-            new ButtonBuilder()
-              .setCustomId(
-                "embed:thumbnail-back"
-              )
-              .setLabel(emojiLabel('BACK', 'Back'))
-              .setStyle(
-                ButtonStyle.Secondary
-              )
+            actionButton("embed:thumbnail-back", "back")
           ),
       ]),
   };
