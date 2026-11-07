@@ -1196,50 +1196,18 @@ function buildBuilderPanel(i, who = "Unknown User") {
        * DESIGN / OPTIONS
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:panel-colour")
-          .setLabel("Panel Colour")
-          .setEmoji("🎨")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:toggle-timestamp")
-          .setLabel("Timestamp")
-          .setEmoji("🕒")
-          .setStyle(
-            s.showTimestamp
-              ? ButtonStyle.Success
-              : ButtonStyle.Secondary
-          ),
-
-        new ButtonBuilder()
-          .setCustomId("embed:buttons")
-          .setLabel(`Buttons (${buttons.length})`)
-          .setEmoji("🔘")
-          .setStyle(ButtonStyle.Secondary)
+        emojiButton("embed:panel-colour", "Panel Colour", "🎨"),
+        emojiButton("embed:toggle-timestamp", "Timestamp", "🕒", s.showTimestamp ? ButtonStyle.Success : ButtonStyle.Secondary),
+        emojiButton("embed:buttons", `Buttons (${buttons.length})`, "🔘"),
       ),
 
       /*
        * NAVIGATION / HELP
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:back")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("Variables")
-          .setEmoji("📖")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:reset")
-          .setLabel("Reset")
-          .setEmoji("♻️")
-          .setStyle(ButtonStyle.Danger)
+        actionButton("embed:back", "back"),
+        emojiButton("embed:helpers", "Variables", "📖"),
+        emojiButton("embed:reset", "Reset", "♻️", ButtonStyle.Danger),
       ),
     ],
   };
