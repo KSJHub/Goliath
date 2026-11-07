@@ -1,8 +1,9 @@
 'use strict';
 const { emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
+  ActionRowBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
   EmbedBuilder, MessageFlags, ModalBuilder, RoleSelectMenuBuilder, StringSelectMenuBuilder,
   TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } = require('discord.js');
@@ -14,7 +15,7 @@ const { replaceVars } = require('../../../core/guild/guildVariables');
 const sessions = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const button = (id, label, style = ButtonStyle.Secondary, disabled = false) =>
-  new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(Boolean(disabled));
+  navigationButton(id, label, style, disabled);
 const sessionFor = (interaction) => {
   const key = `${interaction.guildId}:${interaction.user.id}`;
   if (!sessions.has(key)) sessions.set(key, { page: 'overview', selectedUserId: null, displayLimit: 5, resetConfirmUntil: 0 });
