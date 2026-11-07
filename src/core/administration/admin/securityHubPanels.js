@@ -1,7 +1,8 @@
 'use strict';
 const { EMOJIS } = require('../../ui/emojis');
+const { emojiButton } = require('../../guild/goliathNavigation');
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../guild/guildManager');
 const antiNuke = require('../../security/protection/antiNuke');
 const securitySystem = require('../../security/protection/system');
@@ -33,16 +34,16 @@ function countModes(guildId) {
 }
 function nav(refreshId) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(HUB_ID).setLabel('Back').setEmoji(EMOJIS.BACK).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji(EMOJIS.REFRESH).setStyle(ButtonStyle.Secondary),
+    emojiButton(HUB_ID, 'Back', EMOJIS.BACK, ButtonStyle.Secondary),
+    emojiButton(refreshId, 'Refresh', EMOJIS.REFRESH, ButtonStyle.Secondary),
   );
 }
 function managementButton(customId, label, emoji, style = ButtonStyle.Primary) {
-  return new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(customId).setLabel(label).setEmoji(emoji).setStyle(style));
+  return new ActionRowBuilder().addComponents(emojiButton(customId, label, emoji, style));
 }
 function managementRow(buttons) {
   return new ActionRowBuilder().addComponents(...buttons.map(({ customId, label, emoji, style = ButtonStyle.Primary, disabled = false }) =>
-    new ButtonBuilder().setCustomId(customId).setLabel(label).setEmoji(emoji).setStyle(style).setDisabled(disabled)));
+    emojiButton(customId, label, emoji, style, disabled)));
 }
 function base(interaction, title, description, color = 0x5865F2) {
   return new EmbedBuilder().setColor(color).setTitle(title).setDescription(description)
