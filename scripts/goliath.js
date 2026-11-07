@@ -4611,18 +4611,21 @@ function classifySteamCatalogueIdentity(game, result) {
   return { kind: 'issue', issue };
 }
 
-async function gameCatalogueIdentityAudit() {
-  const { UPDATE_CATALOG, inspectSteamGameIdentity } = require('../src/modules/utilityStudio/games/freeGamesProviders');
-  const requested = process.argv[3], offsetArg = process.argv[4];
+function selectSteamCatalogueAuditBatch(catalogue, requested, offsetArg) {
   const offset = offsetArg === undefined ? 0 : Number(offsetArg);
-  if (offsetArg !== undefined && (!/^(0|[1-9]\d*)$/.test(offsetArg) || !Number.isSafeInteger(offset) || offset >= UPDATE_CATALOG.length)) {
+  if (offsetArg !== undefined && (!/^(0|[1-9]\d*)$/.test(offsetArg) || !Number.isSafeInteger(offset) || offset >= catalogue.length)) {
     throw new Error('Offset must be a non-negative integer below the Steam catalogue size.');
   }
-  const remaining = UPDATE_CATALOG.length - offset;
+  const remaining = catalogue.length - offset;
   if (requested !== undefined && (!/^[1-9]\d*$/.test(requested) || !Number.isSafeInteger(Number(requested)) || Number(requested) > remaining)) {
     throw new Error('Limit must be a positive integer no greater than the remaining Steam catalogue size.');
   }
-  const games = UPDATE_CATALOG.slice(offset, requested ? offset + Number(requested) : undefined);
+  return { offset, games: catalogue.slice(offset, requested ? offset + Number(requested) : undefined) };
+}
+
+async function gameCatalogueIdentityAudit() {
+  const { UPDATE_CATALOG, inspectSteamGameIdentity } = require('../src/modules/utilityStudio/games/freeGamesProviders');
+  const { offset, games } = selectSteamCatalogueAuditBatch(UPDATE_CATALOG, process.argv[3], process.argv[4]);
   const totals = { match: 0, 'name-mismatch': 0, 'not-found': 0, unavailable: 0, unlisted: 0, 'non-game': 0 };
   const issues = [], expectedLegacy = [];
   let confirmedGames = 0;
@@ -4715,6 +4718,25 @@ async function gameUpdatesAudit() {
   assert.equal(withLegacy.length, starter.length + 2);
   assert.equal(new Set(withLegacy.map(game => game.appId)).size, withLegacy.length);
   assert.deepEqual(withLegacy.map(game => game.name), [...withLegacy.map(game => game.name)].sort((a, b) => a.localeCompare(b)));
+  // Audit batching must cover the entire catalogue without duplicates or skipped IDs.
+  const firstBatch = selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG, '25');
+  assert.equal(firstBatch.offset, 0);
+  assert.equal(firstBatch.games.length, 25);
+  const secondBatch = selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG, '25', '25');
+  assert.deepEqual(secondBatch.games, providers.UPDATE_CATALOG.slice(25, 50));
+  const lastBatch = selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG, '1', String(providers.UPDATE_CATALOG.length - 1));
+  assert.deepEqual(lastBatch.games, providers.UPDATE_CATALOG.slice(-1));
+  assert.deepEqual(selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG).games, providers.UPDATE_CATALOG);
+  const stitched = [];
+  for (let offset = 0; offset < providers.UPDATE_CATALOG.length; offset += 25) {
+    const size = Math.min(25, providers.UPDATE_CATALOG.length - offset);
+    stitched.push(...selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG, String(size), String(offset)).games);
+  }
+  assert.deepEqual(stitched.map(game => game.appId), providers.UPDATE_CATALOG.map(game => game.appId));
+  for (const [limit, offset] of [['0', undefined], ['-1', undefined], ['1.5', undefined],
+    ['999999', undefined], ['1', '-1'], ['1', '1.5'], ['1', '999999'], ['2', String(providers.UPDATE_CATALOG.length - 1)]]) {
+    assert.throws(() => selectSteamCatalogueAuditBatch(providers.UPDATE_CATALOG, limit, offset));
+  }
   // Offline identity-audit classification: expected legacy types are not failures.
   const gameIdentity = { appId: '730', name: 'Counter-Strike 2', catalogueType: 'game' };
   const softwareIdentity = { appId: '431960', name: 'Wallpaper Engine', catalogueType: 'software' };
