@@ -161,9 +161,19 @@ function saveConfig(guildId, input = {}, meta = {}) {
   const settingsInput = input.settings && typeof input.settings === 'object'
     ? input.settings
     : input;
+  // Role arrays are canonical. Updating only legacy role aliases would otherwise
+  // be ignored because normalizeSettings prefers existing settings.roles entries.
+  const roles = { ...(current.settings.roles || {}), ...(settingsInput.roles || {}) };
+  if (Object.prototype.hasOwnProperty.call(settingsInput, 'verifiedRoleIds')) {
+    roles.verified = settingsInput.verifiedRoleIds;
+  }
+  if (Object.prototype.hasOwnProperty.call(settingsInput, 'pendingRoleIds')) {
+    roles.pending = settingsInput.pendingRoleIds;
+  }
   const settings = verificationStore.normalizeSettings({
     ...current.settings,
     ...settingsInput,
+    roles,
   });
 
   if (input.enabled !== undefined) {
