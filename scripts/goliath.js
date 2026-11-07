@@ -4701,8 +4701,8 @@ async function gameUpdatesAudit() {
   }
   // Confirmed identity corrections: preserve App IDs so guild subscriptions remain stable.
   const catalogueName = appId => providers.UPDATE_CATALOG.find(game => game.appId === appId)?.name;
-  assert.equal(catalogueName('1811260'), 'EA SPORTS FIFA 23');
-  assert.equal(catalogueName('2195250'), 'EA SPORTS FC 24');
+  assert.equal(catalogueName('1811260'), 'EA SPORTS™ FIFA 23');
+  assert.equal(catalogueName('2195250'), 'EA SPORTS FC™ 24');
   assert.equal(catalogueName('2519060'), 'Call of Duty: Modern Warfare III - Campaign');
   assert.equal(providers.UPDATE_CATALOG.find(game => game.appId === '431960')?.catalogueType, 'software');
   assert.equal(providers.UPDATE_CATALOG.find(game => game.appId === '2519060')?.catalogueType, 'dlc');
