@@ -221,7 +221,7 @@ const UPDATE_CATALOG = Object.freeze([
   ['1366540', "Dyson Sphere Program"],
   ['1240440', "Halo Infinite"],
   ['976730', "Halo: The Master Chief Collection"],
-  ['1080110', "F1 2020"],
+  ['1080110', "F1® 2020"],
   ['2108330', "F1 23"],
   ['2488620', "F1 24"],
   ['1693980', "Dead Space"],
