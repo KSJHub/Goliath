@@ -117,6 +117,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }), [theme]);
 
   const moduleConfig = data?.moduleConfig || {};
+  const status = data?.status || {};
   const adminConfig = data?.adminConfig || {};
   const settings = moduleConfig.settings || {};
   const panels = useMemo(
@@ -144,13 +145,22 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         api.getGuildRoles(guildId),
         api.getGuildChannels(guildId),
       ]);
-      setData(overview);
+      // The Verification API returns flat config/panels/analytics fields.
+      // Adapt them for this dashboard without modifying the server's response contract.
+      const config = overview?.config || {};
+      const adapted = {
+        ...overview,
+        status: { enabled: config.enabled === true, panels: overview?.panels || [], analytics: overview?.analytics || {} },
+        moduleConfig: { settings: config, panelTemplate: overview?.panelTemplate || {}, panels: overview?.panels || [], analytics: overview?.analytics || {} },
+        adminConfig: config,
+      };
+      setData(adapted);
       setRoles(list(rolePayload, 'roles'));
       setChannels(list(channelPayload, 'channels'));
-      const currentPanels = overview?.status?.panels || [];
+      const currentPanels = Array.isArray(overview?.panels) ? overview.panels : [];
       const current = currentPanels.find((panel) => String(panel.panelId) === String(selectedPanelId)) || currentPanels[0] || null;
       if (current && !selectedPanelId) setSelectedPanelId(current.panelId || current.id || '');
-      setDraft(panelDraft(current, overview?.moduleConfig || {}, overview?.adminConfig || {}));
+      setDraft(panelDraft(current, adapted.moduleConfig, adapted.adminConfig));
     } catch (loadError) {
       setError(loadError.message || 'Failed to load verification.');
     } finally {
@@ -182,8 +192,8 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       enabled: patch.enabled ?? adminConfig.enabled,
       verificationChannelId: patch.verificationChannelId ?? adminConfig.verificationChannelId,
       logChannelId: patch.logChannelId ?? adminConfig.logChannelId,
-      verifiedRoleIds: patch.verifiedRoleIds ?? adminConfig.verifiedRoleIds ?? (settings.verifiedRoleId ? [settings.verifiedRoleId] : []),
-      pendingRoleIds: patch.pendingRoleIds ?? adminConfig.pendingRoleIds ?? (settings.unverifiedRoleId ? [settings.unverifiedRoleId] : []),
+      verifiedRoleIds: patch.verifiedRoleIds ?? adminConfig.verifiedRoleIds ?? [],
+      pendingRoleIds: patch.pendingRoleIds ?? adminConfig.pendingRoleIds ?? [],
       dmOnVerify: patch.dmOnVerify ?? adminConfig.dmOnVerify,
       removePendingRole: patch.removePendingRole ?? adminConfig.removePendingRole,
     }), 'Verification configuration saved.');
