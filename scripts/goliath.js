@@ -4674,6 +4674,7 @@ async function gameUpdatesAudit() {
       if (id.startsWith('./freeGames')) return load(id.slice(2));
       if (id.includes('moduleSectionManager')) return section;
       if (id.includes('guildManager')) return { isModuleEnabled: () => memory.enabled };
+      if (id.endsWith('/core/guild/goliathNavigation')) return require('../src/core/guild/goliathNavigation');
       if (id === 'discord.js') return { PermissionFlagsBits: permissions };
       if (id.includes('security/protection/core')) return { isBotOwner: () => false };
       return require(id);
