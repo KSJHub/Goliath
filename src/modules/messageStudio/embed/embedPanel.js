@@ -1186,29 +1186,10 @@ function buildBuilderPanel(i, who = "Unknown User") {
        * CONTENT / MEDIA
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:edit-content")
-          .setLabel("Content")
-          .setEmoji("✏️")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:edit-images")
-          .setLabel("Media")
-          .setEmoji("🖼️")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:panels")
-          .setLabel(`Panels (${panels.length})`)
-          .setEmoji("🧩")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:fields")
-          .setLabel(`Fields (${fields.length})`)
-          .setEmoji("📋")
-          .setStyle(ButtonStyle.Primary)
+        emojiButton("embed:edit-content", "Content", "✏️", ButtonStyle.Primary),
+        actionButton("embed:edit-images", "media"),
+        actionButton("embed:panels", "panels", { suffix: ` (${panels.length})` }),
+        emojiButton("embed:fields", `Fields (${fields.length})`, "📋", ButtonStyle.Primary),
       ),
 
       /*
