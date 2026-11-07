@@ -65,13 +65,13 @@ function customEditorModal(guildId,scope){
   const template=embedTemplateManager.getTemplate(guildId,customTemplateId(scope));
   const embed=template?.embed||{};
   const colour=typeof embed.color==='number'&&Number.isInteger(embed.color)&&embed.color>=0&&embed.color<=0xffffff?`#${embed.color.toString(16).padStart(6,'0')}`:typeof embed.color==='string'&&/^#[0-9a-fA-F]{6}$/.test(embed.color)?embed.color:'#5865F2';
-  const input=(id,label,value,maxLength,style=TextInputStyle.Short,required=false)=>{const field=new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required).setMaxLength(maxLength);const initial=String(value||'').replace(/^\u200b$/,'').slice(0,maxLength);if(initial)field.setValue(initial);return field;};
+  const input=(id,label,value,maxLength,style=TextInputStyle.Short,required=false,placeholder=null)=>{const field=new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required).setMaxLength(maxLength);if(placeholder)field.setPlaceholder(placeholder);const initial=String(value||'').replace(/^\u200b$/,'').slice(0,maxLength);if(initial)field.setValue(initial);return field;};
   return new ModalBuilder().setCustomId(scope==='dm'?'admin:welcome:customDmSubmit':'admin:welcome:customPublicSubmit').setTitle(scope==='dm'?'Edit DM Welcome':'Edit Public Welcome').addComponents(
-    row(input('content','Message text',template?.content,1800,TextInputStyle.Paragraph)),
-    row(input('title','Embed title',embed.title,256)),
-    row(input('description','Embed description',embed.description,3500,TextInputStyle.Paragraph)),
-    row(input('footer','Embed footer',embed.footer?.text,200)),
-    row(input('color','Embed colour (hex)',colour,7))
+    row(input('content','Message text',template?.content,1800,TextInputStyle.Paragraph,false,'Optional text above the embed')),
+    row(input('title','Embed title',embed.title,256,TextInputStyle.Short,false,'Optional heading for your welcome')),
+    row(input('description','Embed description',embed.description,3500,TextInputStyle.Paragraph,false,'Write your welcome message here')),
+    row(input('footer','Embed footer',embed.footer?.text,200,TextInputStyle.Short,false,'Optional footer text')),
+    row(input('color','Embed colour (hex)',colour,7,TextInputStyle.Short,false,'Example: #5865F2'))
   );
 }
 function saveCustomWelcome(interaction,scope){
