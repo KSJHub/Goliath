@@ -1,5 +1,5 @@
 const { emojiLabel } = require('../../../core/ui/emojis');
-const { actionButton, paginationButtons } = require('../../../core/guild/goliathNavigation');
+const { actionButton, paginationButtons, emojiButton } = require('../../../core/guild/goliathNavigation');
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -980,11 +980,7 @@ function buildResetConfirmationPanel(i, who = "Unknown User") {
        * DESTRUCTIVE ACTION
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:reset-confirm")
-          .setLabel("Confirm Reset")
-          .setEmoji("🗑️")
-          .setStyle(ButtonStyle.Danger)
+        emojiButton("embed:reset-confirm", "Confirm Reset", "🗑️", ButtonStyle.Danger)
       ),
 
       /*
@@ -992,11 +988,7 @@ function buildResetConfirmationPanel(i, who = "Unknown User") {
        * Persistent rule: Back is always alone on the final row.
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("embed:builder", "back")
       ),
     ],
   };
