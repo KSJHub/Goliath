@@ -3,10 +3,10 @@
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   AttachmentBuilder,
 } = require('discord.js');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const security = require('../../../core/security/protection/core');
 const { validateRoleSelection } = require('../../../core/security/protection/permissions');
 const {
@@ -23,7 +23,7 @@ function row(...components) {
 }
 
 function button(customId, label, style = ButtonStyle.Secondary) {
-  return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+  return navigationButton(customId, label, style);
 }
 
 function formatRoles(ids = []) {
