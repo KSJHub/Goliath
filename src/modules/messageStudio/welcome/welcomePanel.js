@@ -76,7 +76,9 @@ function customEditorModal(guildId,scope){
 }
 function saveCustomWelcome(interaction,scope){
   const field=id=>interaction.fields.getTextInputValue(id).trim();
-  const content=field('content'),title=field('title'),description=field('description'),footer=field('footer'),color=field('color')||'#5865F2';
+  const content=field('content'),title=field('title'),description=field('description'),footer=field('footer');
+  const enteredColor=field('color')||'#5865F2';
+  const color=/^[0-9a-fA-F]{6}$/.test(enteredColor)?`#${enteredColor}`:enteredColor;
   if(!content&&!title&&!description)throw new Error('Add message text, an embed title, or an embed description.');
   if(content.length>1800)throw new Error('Message text must be 1800 characters or fewer.');
   if(title.length>256)throw new Error('Embed title must be 256 characters or fewer.');
