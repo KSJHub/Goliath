@@ -11,10 +11,10 @@ function escape(value) { return String(value).replace(/[\\`*_{}\[\]()<>~|]/g, '\
 // Link labels need escaping for brackets and formatting, not literal parentheses.
 // Provider-supplied backslashes before punctuation are display artifacts.
 function offerTitle(value) {
-  return String(value).replace(/\\\\(?=[()[\\]{}])/g, '').replace(/\\\\/g, '');
+  return String(value).replace(/\\(?=[()[\]{}])/g, '').replace(/\\/g, '');
 }
 function escapeOfferTitle(value) {
-  return offerTitle(value).replace(/([\\\\\`*_\\[\\]<>~|])/g, '\\\\$1').replace(/@/g, '@\\u200b').replace(/[\\r\\n]/g, ' ');
+  return offerTitle(value).replace(/([\\`*_\[\]<>~|])/g, '\\$1').replace(/@/g, '@\u200b').replace(/[\r\n]/g, ' ');
 }
 function shortTitle(value) {
   return offerTitle(value).replace(/\s*\((?:Steam|Epic Games|itch\.io)\)\s*/gi, ' ').replace(/\s+(?:Steam\s+)?(?:Key\s+)?Giveaway\s*$/i, '').replace(/\s+/g, ' ').trim().slice(0, 110);
