@@ -1660,25 +1660,19 @@ function buildButtonsManagerPanel(interaction) {
   }
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:button-manager-add").setLabel("➕ Add").setStyle(ButtonStyle.Success).setDisabled(buttons.length >= MAX_BUTTONS),
-      new ButtonBuilder().setCustomId("embed:button-manager-edit").setLabel("✏️ Edit").setStyle(ButtonStyle.Primary).setDisabled(index == null),
-      new ButtonBuilder().setCustomId("embed:button-manager-options").setLabel("⚙️ Options").setStyle(ButtonStyle.Secondary).setDisabled(index == null),
-      new ButtonBuilder().setCustomId("embed:button-manager-remove").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(index == null),
+      navigationButton("embed:button-manager-add", "➕ Add", ButtonStyle.Success, buttons.length >= MAX_BUTTONS),
+      navigationButton("embed:button-manager-edit", "✏️ Edit", ButtonStyle.Primary, index == null),
+      navigationButton("embed:button-manager-options", "⚙️ Options", ButtonStyle.Secondary, index == null),
+      navigationButton("embed:button-manager-remove", "🗑️ Remove", ButtonStyle.Danger, index == null),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:button-manager-up").setLabel("⬆️ Up").setStyle(ButtonStyle.Secondary).setDisabled(index == null || index <= 0),
-      new ButtonBuilder().setCustomId("embed:button-manager-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(index == null || index >= buttons.length - 1),
+      navigationButton("embed:button-manager-up", "⬆️ Up", ButtonStyle.Secondary, index == null || index <= 0),
+      navigationButton("embed:button-manager-down", "⬇️ Down", ButtonStyle.Secondary, index == null || index >= buttons.length - 1),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:builder")
-        .setLabel(emojiLabel('BACK', 'Back'))
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
-      new ButtonBuilder()
-        .setCustomId("embed:helpers")
-        .setLabel("📖 Variables")
-        .setStyle(ButtonStyle.Secondary),
+      actionButton("embed:builder", "back"),
+      actionButton("embed:settings", "settings"),
+      navigationButton("embed:helpers", "📖 Variables"),
     ),
   );
   // Reserve Discord's final action row for navigation.
