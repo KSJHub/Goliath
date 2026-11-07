@@ -2163,43 +2163,15 @@ function buildSettingsPanel(interaction) {
     ],
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:settings-import")
-          .setLabel("Upload File")
-          .setEmoji("📥")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:settings-export")
-          .setLabel("Export File")
-          .setEmoji("📤")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:settings-paste")
-          .setLabel("Paste JSON")
-          .setEmoji("📋")
-          .setStyle(ButtonStyle.Primary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:settings-export-code")
-          .setLabel("Export JSON")
-          .setEmoji("📋")
-          .setStyle(ButtonStyle.Secondary)
+        emojiButton("embed:settings-import", "Upload File", "📥", ButtonStyle.Primary),
+        emojiButton("embed:settings-export", "Export File", "📤"),
+        emojiButton("embed:settings-paste", "Paste JSON", "📋", ButtonStyle.Primary),
+        emojiButton("embed:settings-export-code", "Export JSON", "📋"),
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:settings-back")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("Variables")
-          .setEmoji("📖")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("embed:settings-back", "back"),
+        emojiButton("embed:helpers", "Variables", "📖"),
       )
     ]
   };
@@ -2219,11 +2191,8 @@ function buildHelpersPanel(i) {
     ],
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel(emojiLabel('BACK', 'Back'))
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
+        actionButton("embed:builder", "back"),
+        actionButton("embed:settings", "settings"),
       )
     ],
   };
