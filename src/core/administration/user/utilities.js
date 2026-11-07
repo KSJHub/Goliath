@@ -2,7 +2,6 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelType,
   EmbedBuilder,
@@ -10,6 +9,8 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
+const { emojiButton } = require('../../guild/goliathNavigation');
+const { EMOJIS } = require('../../ui/emojis');
 const translationStore = require('../../../modules/utilityStudio/translation/translationStore');
 const translation = require('../../../modules/utilityStudio/translation/translation');
 const guildManager = require('../../guild/guildManager');
@@ -21,11 +22,7 @@ const HIDDEN_HELP_COMMANDS = new Set(['owner', 'commandcenter']);
 
 function backRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('user:home')
-      .setLabel('Back to User Panel')
-      .setEmoji('⬅️')
-      .setStyle(ButtonStyle.Secondary),
+    emojiButton('user:home', 'Back to User Panel', EMOJIS.BACK, ButtonStyle.Secondary),
   );
 }
 
