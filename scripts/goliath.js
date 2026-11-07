@@ -4703,6 +4703,10 @@ async function gameUpdatesAudit() {
   const catalogueName = appId => providers.UPDATE_CATALOG.find(game => game.appId === appId)?.name;
   assert.equal(catalogueName('1811260'), 'EA SPORTS™ FIFA 23');
   assert.equal(catalogueName('2195250'), 'EA SPORTS FC™ 24');
+  assert.equal(catalogueName('1966900'), '20 Minutes Till Dawn');
+  assert.equal(catalogueName('2144740'), 'Ghostrunner 2');
+  assert.equal(catalogueName('524220'), 'NieR:Automata™');
+  assert.equal(catalogueName('1113560'), 'NieR Replicant™ ver.1.22474487139...');
   assert.equal(catalogueName('2519060'), 'Call of Duty: Modern Warfare III - Campaign');
   assert.equal(providers.UPDATE_CATALOG.find(game => game.appId === '431960')?.catalogueType, 'software');
   assert.equal(providers.UPDATE_CATALOG.find(game => game.appId === '2519060')?.catalogueType, 'dlc');
