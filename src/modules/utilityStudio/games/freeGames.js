@@ -87,7 +87,7 @@ const PRICE_MODES = Object.freeze({ converted: 'Server currency', source: 'Sourc
 function componentRow(...components) { return { type: 1, components }; }
 function panelButton(action, label, style = 2, disabled = false) {
   // Discord renders component emojis separately from button labels.
-  const icons = ['📨', '🎮', '💱', '🎨', '⭐', '📰', '👁', '🔄', '⬅', '◀', '⏸', '▶'];
+  const icons = ['📨', '🎮', '💱', '🎨', '⭐', '📰', '👁', '🔄', '⬅', '◀', '⏸', '▶', '🩺'];
   const leading = icons.find(icon => label.startsWith(icon + ' '));
   const trailing = label.endsWith(' ▶') ? '▶' : null;
   const emoji = leading || trailing;
@@ -108,14 +108,44 @@ function choiceMenu(action, placeholder, choices, selected = [], multi = false) 
 function statusTime(value) { return value ? '<t:' + Math.floor(value / 1000) + ':f>' : 'Never'; }
 function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.id)) {
   const { escape, SECTIONS } = require('./freeGamesEmbeds');
-  const back = gamesNavigation(page === 'home' ? 'studio' : 'home', 'display');
+  const back = gamesNavigation(page === 'home' ? 'studio' : page === 'settings' ? 'home' : 'settings', 'settings');
   const nav = componentRow(panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'),
     panelButton('pricing', '💱 Currency'), panelButton('display', '🎨 Display'));
   const embed = { title: page === 'home' ? '🎮 Games' : '🎮 Games · Free Games', color: SECTIONS[0].color,
     description: [notice && escape(notice), page === 'home' ? 'Free Games: ' + (c.enabled ? 'enabled' : 'paused') + ' · Game Updates: ' + (c.gameUpdates?.enabled ? 'enabled' : 'paused') : c.enabled ? '🟢 Enabled' : '⏸ Paused'].filter(Boolean).join('\n\n'),
     fields: [], footer: { text: 'Goliath Games · Management' }, timestamp: new Date().toISOString() };
   let controls = [];
-  if (page === 'delivery') {
+  if (page === 'settings') {
+    embed.title = '⚙️ Games · Settings';
+    embed.description = [notice && escape(notice), 'Manage module availability, delivery and diagnostics. Changes sync with the dashboard.'].filter(Boolean).join('\n\n');
+    const updates = getGameUpdates(guild.id);
+    embed.fields = [
+      { name: '🎁 Free Games', value: c.enabled ? '🟢 Enabled' : '⏸ Disabled', inline: true },
+      { name: '📰 Game Updates', value: updates.enabled ? '🟢 Enabled' : '⏸ Disabled', inline: true },
+      { name: '🩺 Health', value: [
+        'Delivery: ' + (c.channelId ? '<#' + c.channelId + '>' : '⚠️ Channel not set'),
+        'Last success: ' + statusTime(c.state.lastSuccess),
+        'Last check: ' + statusTime(c.state.lastCheck),
+        'Offers: ' + c.state.offerCount + ' · Published messages: ' + c.state.deliveries.length,
+        c.state.error ? '❌ Error: ' + escape(String(c.state.error)).slice(0, 400) : c.state.warning ? '⚠️ Warning: ' + escape(String(c.state.warning)).slice(0, 400) : 'No reported provider error',
+      ].join('\n'), inline: false },
+    ];
+    controls = [
+      componentRow(panelButton('enabled', c.enabled ? '⏸ Disable Free Games' : '▶ Enable Free Games', c.enabled ? 2 : 3),
+        panelButton('updates:home:0', '📰 Game Updates'), panelButton('delivery', '📨 Delivery')),
+      componentRow(panelButton('health', '🩺 Health'), panelButton('refresh', '🔄 Refresh', 2, !c.enabled)),
+    ];
+  } else if (page === 'health') {
+    embed.title = '🩺 Games · Health';
+    const updates = getGameUpdates(guild.id);
+    embed.description = [notice && escape(notice), '**Free Games:** ' + (c.enabled ? 'Enabled' : 'Disabled'), '**Game Updates:** ' + (updates.enabled ? 'Enabled' : 'Disabled')].filter(Boolean).join('\n');
+    embed.fields = [
+      { name: 'Free Games delivery', value: (c.channelId ? '<#' + c.channelId + '>' : 'No channel configured') + '\nAlerts: ' + (c.alerts ? 'Enabled' : 'Disabled') + '\nLast check: ' + statusTime(c.state.lastCheck) + '\nLast success: ' + statusTime(c.state.lastSuccess), inline: false },
+      { name: 'Catalogue', value: c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' published messages', inline: false },
+      { name: 'Provider status', value: escape(String(c.state.error || c.state.warning || 'No reported error')).slice(0, 1024), inline: false },
+    ];
+    controls = [];
+  } else if (page === 'delivery') {
     embed.title += ' · Delivery';
     embed.description += '\nChanges save immediately. Pausing keeps existing listing messages.';
     embed.fields = [
@@ -128,8 +158,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
         placeholder: 'Choose listing channel', ...(c.channelId ? { default_values: [{ id: c.channelId, type: 'channel' }] } : {}) }),
       componentRow({ type: 6, custom_id: PANEL_PREFIX + 'role', min_values: 0, max_values: 1,
         placeholder: 'Notification role (clear for no ping)', ...(c.roleId ? { default_values: [{ id: c.roleId, type: 'role' }] } : {}) }),
-      componentRow(panelButton('enabled', c.enabled ? 'Pause updates' : 'Enable updates', c.enabled ? 2 : 3),
-        panelButton('alerts', c.alerts ? 'Alerts: on' : 'Alerts: off')),
+      componentRow(panelButton('alerts', c.alerts ? 'Alerts: on' : 'Alerts: off')),
     ];
   } else if (page === 'filters') {
     embed.title += ' · Offers';
@@ -171,9 +200,8 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
     controls = [
       componentRow(panelButton('updates:home:0', '📰 Updates', 1), panelButton('preview:0', '👁 Preview'),
         panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'), panelButton('pricing', '💱 Currency')),
-      componentRow(panelButton('display', '🎨 Display'), panelButton('refresh', '🔄 Refresh', 2, !c.enabled),
-        panelButton('enabled', c.enabled ? '⏸ Pause' : '▶ Resume', c.enabled ? 2 : 3)),
-      gamesNavigation('studio', 'display'),
+      componentRow(panelButton('display', '🎨 Display'), panelButton('refresh', '🔄 Refresh', 2, !c.enabled)),
+      gamesNavigation('studio', 'settings'),
     ];
   }
   return { content: null, embeds: [embed], components: page === 'home' ? controls : [...controls, back], allowedMentions: { parse: [] } };
@@ -247,7 +275,7 @@ async function handleAdminInteraction(interaction) {
     if (action.startsWith('updates:')) return await handleGameUpdatesInteraction(interaction, action.slice(8), reply);
     if (action === 'studio') { await reply(require('../../../core/administration/admin/modules').buildStudioPanel('utilityStudio', member?.displayName || interaction.user.username)); return true; }
     if (/^featured:\d+$/.test(action)) { await reply(await buildFeaturedPanel(guild, Number(action.split(':')[1]))); return true; }
-    if (['home', 'delivery', 'filters', 'pricing', 'display'].includes(action)) { await reply(buildAdminPanel(guild, action)); return true; }
+    if (['home', 'settings', 'health', 'delivery', 'filters', 'pricing', 'display'].includes(action)) { await reply(buildAdminPanel(guild, action)); return true; }
     if (/^preview:\d+$/.test(action)) {
       const { getOffers, getPricing } = require('./freeGamesProviders');
       const { buildListing, loadPlatformPresentation } = require('./freeGamesEmbeds');
@@ -292,7 +320,7 @@ async function handleAdminInteraction(interaction) {
         if ({ ...current, ...changes }.enabled) await monitor.validateDestination(guild, { ...current, ...changes });
         saveSettings(guild.id, changes);
       });
-      await reply(buildAdminPanel(guild, action === 'alerts' ? 'delivery' : 'home', 'Settings saved.')); return true;
+      await reply(buildAdminPanel(guild, action === 'alerts' ? 'delivery' : 'settings', 'Settings saved.')); return true;
     } else throw new Error('This control is unavailable. Reopen Free Games from Utility Studio.');
     if (action === 'featuredOfferId') patch.featuredMode = 'manual';
     await applySettings(guild, patch);
