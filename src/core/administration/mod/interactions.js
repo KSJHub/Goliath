@@ -973,14 +973,30 @@ async function handleOwnerCaseManagement(i) {
   }
   if (id === 'mod_owner_archive_select') {
     const caseId = Number(i.values?.[0]);
-    const row = db.prepare('SELECT case_id, user_id, archived_at FROM owner_case_archive WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId);
+    const row = Number.isSafeInteger(caseId) && caseId > 0
+      ? db.prepare('SELECT * FROM owner_case_archive WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId)
+      : null;
     if (!row) return safeReply(i, { content: 'Archived case not found.', flags: 64 });
-    await i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`📦 Archived Case #${caseId}`)
-      .setDescription('This record is sealed and excluded from active moderation and member profiles.')
-      .addFields({ name: 'Member', value: `<@${row.user_id}>` }, { name: 'Archived', value: row.archived_at })],
-      components: [new Discord.ActionRowBuilder().addComponents(
-        new Discord.ButtonBuilder().setCustomId('mod_owner_archive_list:0').setLabel('Back').setStyle(Discord.ButtonStyle.Secondary),
-        new Discord.ButtonBuilder().setCustomId(`mod_owner_restore_prompt:${caseId}`).setLabel('Restore Case').setStyle(Discord.ButtonStyle.Primary))] });
+    const original = JSON.parse(row.case_data);
+    const warnings = JSON.parse(row.warning_data);
+    const audits = JSON.parse(row.audit_data);
+    const embed = new Discord.EmbedBuilder().setColor(0x5865F2)
+      .setTitle(`📦 Archived Case #${caseId}`)
+      .setDescription('This case is archived. Its details are restricted to the server owner and excluded from active moderation and member profiles.')
+      .addFields(
+        { name: '👤 Member', value: `<@${row.user_id}>`, inline: false },
+        { name: '📋 Action', value: ownerCaseDisplay(original.action), inline: true },
+        { name: '🛡️ Previous Status', value: ownerCaseDisplay(original.status), inline: true },
+        { name: '📝 Reason', value: String(original.reason || 'None').slice(0, 1024), inline: false },
+        { name: '📁 Preserved Records', value: `Warnings: ${warnings.length} · Audit Entries: ${audits.length}`, inline: false },
+        { name: '📅 Archived At', value: row.archived_at, inline: false })
+      .setFooter({ text: 'Goliath • Owner Case Management' }).setTimestamp();
+    await i.update({ embeds: [embed], components: [
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId(`mod_owner_restore_prompt:${caseId}`).setLabel('Restore Case').setEmoji('♻️').setStyle(Discord.ButtonStyle.Primary)),
+      new Discord.ActionRowBuilder().addComponents(
+        new Discord.ButtonBuilder().setCustomId('mod_owner_archive_list:0').setLabel('Back to Archived Cases').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary))
+    ] });
     return true;
   }
   if (id.startsWith('mod_owner_archive_prompt:') || id.startsWith('mod_owner_restore_prompt:') || id.startsWith('mod_owner_delete_prompt:')) {
