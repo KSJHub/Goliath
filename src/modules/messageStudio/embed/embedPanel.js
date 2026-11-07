@@ -1,5 +1,5 @@
 const { emojiLabel } = require('../../../core/ui/emojis');
-const { actionButton } = require('../../../core/guild/goliathNavigation');
+const { actionButton, paginationButtons } = require('../../../core/guild/goliathNavigation');
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -916,23 +916,9 @@ function buildEditorPanel(i, who = "Unknown User") {
        * NAVIGATION
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("admin:modules")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
-
-        new ButtonBuilder()
-          .setCustomId("embed:channel-prev")
-          .setLabel(emojiLabel('CHANNEL_PREVIOUS', 'Chan'))
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:channel-next")
-          .setLabel(emojiLabel('CHANNEL_NEXT', 'Chan', { position: 'after' }))
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("admin:modules", "back"),
+        actionButton("embed:settings", "settings"),
+        ...paginationButtons("channel", "embed:channel-prev", "embed:channel-next"),
       ),
     ],
   };
