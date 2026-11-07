@@ -1718,10 +1718,10 @@ function buildButtonOptionsPanel(interaction) {
 
   const rows = [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:button-style:primary").setLabel("🔵 Primary").setStyle(style === "primary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:button-style:secondary").setLabel("⚪ Secondary").setStyle(style === "secondary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:button-style:success").setLabel("🟢 Success").setStyle(style === "success" ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:button-style:danger").setLabel("🔴 Danger").setStyle(style === "danger" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:primary", "🔵 Primary", style === "primary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:secondary", "⚪ Secondary", style === "secondary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:success", "🟢 Success", style === "success" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:danger", "🔴 Danger", style === "danger" ? ButtonStyle.Primary : ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId("embed:button-action-select").setPlaceholder("Choose button action").setMinValues(1).setMaxValues(1).addOptions([
@@ -1752,11 +1752,11 @@ function buildButtonOptionsPanel(interaction) {
     ));
   } else if (action === "reply") {
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("embed:button-reply-edit").setLabel("✏️ Reply Text").setStyle(ButtonStyle.Primary),
+      navigationButton("embed:button-reply-edit", "✏️ Reply Text", ButtonStyle.Primary),
     ));
   }
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:button-options-back").setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
+    actionButton("embed:button-options-back", "back"),
   ));
 
   // Back navigation is structural and must never be removed by
