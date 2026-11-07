@@ -1,4 +1,6 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { navigationButton, emojiButton } = require('../../../core/guild/goliathNavigation');
+const { EMOJIS } = require('../../../core/ui/emojis');
 const stickyStore = require('./stickyStore');
 
 function buildStickyStatusEmbed(guildId, channelId) {
@@ -43,14 +45,14 @@ function buildStickyStatusEmbed(guildId, channelId) {
 function buildStickyMenuRows(channelId) {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`sticky:setup:${channelId}`).setLabel('Set Sticky').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`sticky:repost:${channelId}`).setLabel('Repost Now').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`sticky:pause:${channelId}`).setLabel('Pause').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`sticky:resume:${channelId}`).setLabel('Resume').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`sticky:delete:${channelId}`).setLabel('Delete').setStyle(ButtonStyle.Danger),
+      navigationButton(`sticky:setup:${channelId}`, 'Set Sticky', ButtonStyle.Primary),
+      navigationButton(`sticky:repost:${channelId}`, 'Repost Now', ButtonStyle.Secondary),
+      navigationButton(`sticky:pause:${channelId}`, 'Pause', ButtonStyle.Secondary),
+      navigationButton(`sticky:resume:${channelId}`, 'Resume', ButtonStyle.Success),
+      navigationButton(`sticky:delete:${channelId}`, 'Delete', ButtonStyle.Danger),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('admin:back').setLabel('Back').setStyle(ButtonStyle.Secondary),
+      emojiButton('admin:back', 'Back', EMOJIS.BACK, ButtonStyle.Secondary),
     ),
   ];
 }
