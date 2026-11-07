@@ -160,7 +160,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
       '**📨 Delivery** ' + (c.channelId ? '<#' + c.channelId + '>' : 'Not set') + ' · Alerts ' + (c.alerts ? 'on' : 'off') + '   ·   **💱 ' + c.currency + '**',
       '**🎮 Catalogue** ' + c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' messages · ' + c.stores.length + ' platforms · ' + c.types.length + ' types',
       '**🕒 Synced** ' + statusTime(c.state.lastSuccess) + (c.state.lastCheck && c.state.lastCheck !== c.state.lastSuccess ? ' · Checked ' + statusTime(c.state.lastCheck) : ''),
-    ].filter(Boolean).join('\\n');
+    ].filter(Boolean).join('\n');
     embed.fields = [];
     if (c.state.error || c.state.warning) embed.fields.push({ name: '⚠ Attention', value: escape(c.state.error || c.state.warning).slice(0, 1024), inline: false });
     controls = [
