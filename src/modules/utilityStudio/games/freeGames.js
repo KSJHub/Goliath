@@ -86,7 +86,14 @@ const DISPLAY_OPTIONS = Object.freeze({
 const PRICE_MODES = Object.freeze({ converted: 'Server currency', source: 'Source USD', hidden: 'Hide original prices' });
 function componentRow(...components) { return { type: 1, components }; }
 function panelButton(action, label, style = 2, disabled = false) {
-  return { type: 2, custom_id: PANEL_PREFIX + action, label, style, disabled };
+  // Discord renders component emojis separately from button labels.
+  const icons = ['📨', '🎮', '💱', '🎨', '⭐', '📰', '👁', '🔄', '⬅', '◀'];
+  const leading = icons.find(icon => label.startsWith(icon + ' '));
+  const trailing = label.endsWith(' ▶') ? '▶' : null;
+  const emoji = leading || trailing;
+  return { type: 2, custom_id: PANEL_PREFIX + action,
+    label: emoji ? (leading ? label.slice(leading.length).trim() : label.slice(0, -2).trim()) : label,
+    ...(emoji ? { emoji: { name: emoji } } : {}), style, disabled };
 }
 function choiceMenu(action, placeholder, choices, selected = [], multi = false) {
   return componentRow({ type: 3, custom_id: PANEL_PREFIX + action, placeholder, min_values: multi ? 0 : 1,
