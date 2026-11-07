@@ -1393,23 +1393,17 @@ function buildFieldsPanel(i, who) {
     }))),
   ));
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("embed:field-add").setLabel("➕ Add").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("embed:field-edit").setLabel("✏️ Edit").setStyle(ButtonStyle.Primary).setDisabled(!Number.isInteger(s.selectedFieldIndex)),
-    new ButtonBuilder().setCustomId("embed:field-remove-selected").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(!Number.isInteger(s.selectedFieldIndex)),
+    navigationButton("embed:field-add", "➕ Add", ButtonStyle.Success),
+    navigationButton("embed:field-edit", "✏️ Edit", ButtonStyle.Primary, !Number.isInteger(s.selectedFieldIndex)),
+    navigationButton("embed:field-remove-selected", "🗑️ Remove", ButtonStyle.Danger, !Number.isInteger(s.selectedFieldIndex)),
   ));
 
   // Persistent navigation row.
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:builder")
-        .setLabel(emojiLabel('BACK', 'Back'))
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
-      new ButtonBuilder()
-        .setCustomId("embed:helpers")
-        .setLabel("📖 Variables")
-        .setStyle(ButtonStyle.Secondary),
+      actionButton("embed:builder", "back"),
+      actionButton("embed:settings", "settings"),
+      navigationButton("embed:helpers", "📖 Variables"),
     )
   );
   return {
