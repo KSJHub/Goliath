@@ -1969,25 +1969,9 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
    */
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:preset-load")
-        .setLabel("📂 Load into Editor")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(!selectedName),
-
-      new ButtonBuilder()
-        .setCustomId("embed:preset-save")
-        .setLabel(
-          selectedName
-            ? "💾 Update / Save"
-            : "💾 Save Current"
-        )
-        .setStyle(ButtonStyle.Success),
-
-      new ButtonBuilder()
-        .setCustomId("embed:preset-new")
-        .setLabel("➕ New Embed")
-        .setStyle(ButtonStyle.Secondary)
+      navigationButton("embed:preset-load", "📂 Load into Editor", ButtonStyle.Primary, !selectedName),
+      navigationButton("embed:preset-save", selectedName ? "💾 Update / Save" : "💾 Save Current", ButtonStyle.Success),
+      navigationButton("embed:preset-new", "➕ New Embed"),
     )
   );
 
@@ -1996,52 +1980,19 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
    */
   rows.push(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:preset-rename")
-        .setLabel("✏️ Rename")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(!selectedName),
-
-      new ButtonBuilder()
-        .setCustomId("embed:preset-duplicate")
-        .setLabel("📄 Duplicate")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(!selectedName),
-
-      new ButtonBuilder()
-        .setCustomId("embed:preset-delete")
-        .setLabel("🗑️ Delete")
-        .setStyle(ButtonStyle.Danger)
-        .setDisabled(!selectedName),
-
-      new ButtonBuilder()
-        .setCustomId(
-          isDefault
-            ? "embed:preset-clear-default"
-            : "embed:preset-default"
-        )
-        .setLabel(
-          isDefault
-            ? "☆ Clear Default"
-            : "⭐ Set Default"
-        )
-        .setStyle(
-          isDefault
-            ? ButtonStyle.Success
-            : ButtonStyle.Secondary
-        )
-        .setDisabled(!selectedName)
+      navigationButton("embed:preset-rename", "✏️ Rename", ButtonStyle.Secondary, !selectedName),
+      navigationButton("embed:preset-duplicate", "📄 Duplicate", ButtonStyle.Secondary, !selectedName),
+      navigationButton("embed:preset-delete", "🗑️ Delete", ButtonStyle.Danger, !selectedName),
+      navigationButton(
+        isDefault ? "embed:preset-clear-default" : "embed:preset-default",
+        isDefault ? "☆ Clear Default" : "⭐ Set Default",
+        isDefault ? ButtonStyle.Success : ButtonStyle.Secondary,
+        !selectedName,
+      ),
     )
   );
 
-  rows.push(
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("embed:back")
-        .setLabel(emojiLabel('BACK', 'Back'))
-        .setStyle(ButtonStyle.Secondary)
-    )
-  );
+  rows.push(new ActionRowBuilder().addComponents(actionButton("embed:back", "back")));
 
   /*
    * Build real management information.
