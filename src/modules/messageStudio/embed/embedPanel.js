@@ -3454,108 +3454,29 @@ function buildMediaAlignmentPanel(ctx) {
 
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-placement:above"
-          )
-          .setLabel("⬆️ Above Content")
-          .setStyle(
-            placement === "above"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          ),
+        navigationButton("embed:media-placement:above", "⬆️ Above Content", placement === "above" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-placement:below"
-          )
-          .setLabel("⬇️ Below Content")
-          .setStyle(
-            placement === "below"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          )
+        navigationButton("embed:media-placement:below", "⬇️ Below Content", placement === "below" ? ButtonStyle.Primary : ButtonStyle.Secondary)
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-align:left"
-          )
-          .setLabel("⬅️ Left")
-          .setStyle(
-            ctx.alignment === "left"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          ),
+        navigationButton("embed:media-align:left", "⬅️ Left", ctx.alignment === "left" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-align:center"
-          )
-          .setLabel("↔️ Centre")
-          .setStyle(
-            ctx.alignment === "center"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          ),
+        navigationButton("embed:media-align:center", "↔️ Centre", ctx.alignment === "center" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-align:right"
-          )
-          .setLabel("➡️ Right")
-          .setStyle(
-            ctx.alignment === "right"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          )
+        navigationButton("embed:media-align:right", "➡️ Right", ctx.alignment === "right" ? ButtonStyle.Primary : ButtonStyle.Secondary)
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-size:small"
-          )
-          .setLabel("🔹 Small")
-          .setStyle(
-            size === "small"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          ),
+        navigationButton("embed:media-size:small", "🔹 Small", size === "small" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-size:medium"
-          )
-          .setLabel("🔷 Medium")
-          .setStyle(
-            size === "medium"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          ),
+        navigationButton("embed:media-size:medium", "🔷 Medium", size === "medium" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-size:large"
-          )
-          .setLabel("🔶 Large")
-          .setStyle(
-            size === "large"
-              ? ButtonStyle.Primary
-              : ButtonStyle.Secondary
-          )
+        navigationButton("embed:media-size:large", "🔶 Large", size === "large" ? ButtonStyle.Primary : ButtonStyle.Secondary)
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(
-            "embed:media-alignments-back"
-          )
-          .setLabel(emojiLabel('BACK', 'Back'))
-          .setStyle(
-            ButtonStyle.Secondary
-          )
+        actionButton("embed:media-alignments-back", "back")
       ),
     ],
   };
