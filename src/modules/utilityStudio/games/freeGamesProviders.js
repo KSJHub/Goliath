@@ -126,7 +126,7 @@ const UPDATE_CATALOG = Object.freeze([
   ['322330', "Don't Starve Together"], ['219740', "Don't Starve"],
   ['250900', 'The Binding of Isaac: Rebirth'], ['367520', 'Hollow Knight'],
   ['1145360', 'Hades'], ['2379780', 'Balatro'],
-  ['292030', 'The Witcher 3: Wild Hunt'], ['814380', 'Sekiro: Shadows Die Twice'],
+  ['292030', 'The Witcher 3: Wild Hunt — Remastered'], ['814380', 'Sekiro™: Shadows Die Twice - GOTY Edition'],
   ['374320', 'DARK SOULS III'], ['570940', 'DARK SOULS: REMASTERED'],
   ['1172380', 'STAR WARS Jedi: Fallen Order'], ['1774580', 'STAR WARS Jedi: Survivor'],
   ['275850', "No Man's Sky"], ['264710', 'Subnautica'],
