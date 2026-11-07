@@ -8,8 +8,16 @@ const SECTIONS = [
   { title: '🎮 Loot, Betas & Other Offers', types: ['loot', 'beta', 'demo', 'weekend'], color: 0x38bdf8 },
 ];
 function escape(value) { return String(value).replace(/[\\`*_{}\[\]()<>~|]/g, '\\$&').replace(/@/g, '@\u200b').replace(/[\r\n]/g, ' '); }
+// Link labels need escaping for brackets and formatting, not literal parentheses.
+// Provider-supplied backslashes before punctuation are display artifacts.
+function offerTitle(value) {
+  return String(value).replace(/\\\\(?=[()[\\]{}])/g, '').replace(/\\\\/g, '');
+}
+function escapeOfferTitle(value) {
+  return offerTitle(value).replace(/([\\\\\`*_\\[\\]<>~|])/g, '\\\\$1').replace(/@/g, '@\\u200b').replace(/[\\r\\n]/g, ' ');
+}
 function shortTitle(value) {
-  return String(value).replace(/\s*\((?:Steam|Epic Games|itch\.io)\)\s*/gi, ' ').replace(/\s+(?:Steam\s+)?(?:Key\s+)?Giveaway\s*$/i, '').replace(/\s+/g, ' ').trim().slice(0, 110);
+  return offerTitle(value).replace(/\s*\((?:Steam|Epic Games|itch\.io)\)\s*/gi, ' ').replace(/\s+(?:Steam\s+)?(?:Key\s+)?Giveaway\s*$/i, '').replace(/\s+/g, ' ').trim().slice(0, 110);
 }
 function price(offer, config) {
   const pricing = config.pricing || config.state?.pricing;
@@ -25,7 +33,7 @@ function line(offer, newSince = {}, now = Date.now(), config = {}) {
   const fresh = config.showNew !== false && newSince[offer.id] && now >= newSince[offer.id] && now - newSince[offer.id] < NEW_MS;
   const selectedStores = offer.stores.filter((key) => config.stores?.includes(key));
   const platforms = config.showPlatforms !== false && selectedStores.length > 1 ? selectedStores.map((key) => STORES[key]).join(', ') : '';
-  return `› ${fresh ? '🆕 ' : ''}[${escape(shortTitle(offer.title))}](${offer.url})${price(offer, config)}${(offer.type !== 'game' && !(offer.type === 'dlc' && config.omitDlcLabel)) ? ` · ${TYPES[offer.type]}` : ''}${platforms ? `\n  ${platforms}` : ''}`;
+  return `› ${fresh ? '🆕 ' : ''}[${escapeOfferTitle(shortTitle(offer.title))}](${offer.url})${price(offer, config) ? `\n  ${price(offer, config).trim()}` : ''}${(offer.type !== 'game' && !(offer.type === 'dlc' && config.omitDlcLabel)) ? ` · ${TYPES[offer.type]}` : ''}${platforms ? `\n  ${platforms}` : ''}`;
 }
 function orderedOffers(offers, now) {
   return [...new Map(offers.map((offer) => [offer.id, offer])).values()].sort((a, b) => {
@@ -77,8 +85,8 @@ function featuredDescription(offer, config, platforms) {
   const store = offer.stores.find(key => MAIN_STORES.includes(key) && config.stores.includes(key));
   const platform = platforms[store];
   const summary = escape(String(offer.description || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 220));
-  return '**Featured game**\n**[' + escape(shortTitle(offer.title).slice(0, 100)) + '](' + offer.url + ')**\n' +
-    (platform?.emoji || PLATFORM_STYLE[store]?.emoji || '🎮') + ' **' + STORES[store] + '** · ' + price(offer, config).trim() + ' **FREE**' +
+  return '**Featured game**\n**[' + escapeOfferTitle(shortTitle(offer.title).slice(0, 100)) + '](' + offer.url + ')**\n' +
+    (platform?.emoji || PLATFORM_STYLE[store]?.emoji || '🎮') + ' **' + STORES[store] + '** · ' + price(offer, config).trim() + '\n**FREE**' +
     (summary ? '\n' + summary : '') + '\n\n';
 }
 
@@ -100,7 +108,7 @@ function buildListing(offers, config, now = Date.now(), platforms = platformPres
       for (const offer of group) {
         let entry = line({ ...offer, title: shortTitle(offer.title).slice(0, 70) }, config.state?.newSince, now, { ...config, omitDlcLabel: true }) + '\n\n';
         // Retain the link for extreme provider URLs/titles without cutting Markdown mid-link.
-        if (entry.length > 1000) entry = `› [${escape(shortTitle(offer.title).slice(0, 60))}](${offer.url})${price(offer, config)}\n\n`;
+        if (entry.length > 1000) entry = `› [${escapeOfferTitle(shortTitle(offer.title).slice(0, 60))}](${offer.url})${price(offer, config) ? `\n  ${price(offer, config).trim()}` : ''}\n\n`;
         if (value && value.length + entry.length > 1000) { fields.push({ name: name(), value: value.trim(), inline: config.layout !== 'list' }); value = ''; part++; }
         value += entry;
       }
