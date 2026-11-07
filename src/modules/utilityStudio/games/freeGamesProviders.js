@@ -95,8 +95,8 @@ module.exports = { CURRENCIES, getPricing, STORES, TYPES, CACHE_MS, safeUrl, nor
 // Game Updates uses publisher announcements, independent of the giveaway feed.
 const UPDATE_CATALOG = Object.freeze([
   ['730', 'Counter-Strike 2'], ['570', 'Dota 2'], ['252490', 'Rust'], ['440', 'Team Fortress 2'],
-  ['892970', 'Valheim'], ['553850', 'HELLDIVERS 2'], ['1086940', "Baldur's Gate 3"],
-  ['1144200', 'Ready or Not'], ['1172470', 'Apex Legends'], ['945360', 'Among Us'],
+  ['892970', 'Valheim'], ['553850', 'HELLDIVERS™ 2'], ['1086940', "Baldur's Gate 3"],
+  ['1144200', 'Ready or Not'], ['1172470', 'Apex Legends™'], ['945360', 'Among Us'],
   ['1245620', 'ELDEN RING'], ['346110', 'ARK: Survival Evolved'], ['271590', 'Grand Theft Auto V Legacy'],
   ['990080', 'Hogwarts Legacy'], ['1623730', 'Palworld'], ['1966720', 'Lethal Company'],
   ['578080', 'PUBG: BATTLEGROUNDS'], ['381210', 'Dead by Daylight'],
