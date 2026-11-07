@@ -95,6 +95,11 @@ function panelButton(action, label, style = 2, disabled = false) {
     label: emoji ? (leading ? label.slice(leading.length).trim() : label.slice(0, -2).trim()) : label,
     ...(emoji ? { emoji: { name: emoji } } : {}), style, disabled };
 }
+// Shared Back / Settings row is always the final row of Games panels.
+function gamesNavigation(backAction, settingsAction = 'display') {
+  const { goliathNavigation } = require('../../../core/guild/goliathNavigation');
+  return goliathNavigation(PANEL_PREFIX + backAction, PANEL_PREFIX + settingsAction).toJSON();
+}
 function choiceMenu(action, placeholder, choices, selected = [], multi = false) {
   return componentRow({ type: 3, custom_id: PANEL_PREFIX + action, placeholder, min_values: multi ? 0 : 1,
     max_values: multi ? choices.length : 1,
@@ -103,7 +108,7 @@ function choiceMenu(action, placeholder, choices, selected = [], multi = false) 
 function statusTime(value) { return value ? '<t:' + Math.floor(value / 1000) + ':f>' : 'Never'; }
 function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.id)) {
   const { escape, SECTIONS } = require('./freeGamesEmbeds');
-  const back = componentRow(panelButton(page === 'home' ? 'studio' : 'home', '⬅ Back'));
+  const back = gamesNavigation(page === 'home' ? 'studio' : 'home', 'display');
   const nav = componentRow(panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'),
     panelButton('pricing', '💱 Currency'), panelButton('display', '🎨 Display'));
   const embed = { title: page === 'home' ? '🎮 Games' : '🎮 Games · Free Games', color: SECTIONS[0].color,
@@ -167,7 +172,8 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
       componentRow(panelButton('updates:home:0', '📰 Updates', 1), panelButton('preview:0', '👁 Preview'),
         panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'), panelButton('pricing', '💱 Currency')),
       componentRow(panelButton('display', '🎨 Display'), panelButton('refresh', '🔄 Refresh', 2, !c.enabled),
-        panelButton('enabled', c.enabled ? '⏸ Pause' : '▶ Resume', c.enabled ? 2 : 3), panelButton('studio', '⬅ Back')),
+        panelButton('enabled', c.enabled ? '⏸ Pause' : '▶ Resume', c.enabled ? 2 : 3)),
+      gamesNavigation('studio', 'display'),
     ];
   }
   return { content: null, embeds: [embed], components: page === 'home' ? controls : [...controls, back], allowedMentions: { parse: [] } };
@@ -201,7 +207,7 @@ async function buildFeaturedPanel(guild, requestedPage = 0, notice = '') {
   rows.push(choiceMenu('featuredArtwork', 'Featured artwork', [['thumbnail', 'Top-right artwork thumbnail'], ['hidden', 'Hide artwork']], [c.featuredArtwork]));
   if (totalPages > 1) rows.push(componentRow(panelButton('featured:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0),
     panelButton('featured:' + (page + 1), 'Next ▶', 2, page === totalPages - 1)));
-  rows.push(componentRow(panelButton('display', '⬅ Back')));
+  rows.push(gamesNavigation('display', 'display'));
   return { ...payload, components: rows };
 }
 
@@ -390,7 +396,7 @@ function buildUpdatesPanel(guild, page = 0, notice = '') {
   if (subscriptions.length) rows.push(choiceMenu('updates:select', 'Choose a subscribed game', subscriptions.slice(page * 25, page * 25 + 25).map(sub => [sub.appId, (sub.enabled ? '▶ ' : '⏸ ') + sub.name])));
   rows.push(componentRow(panelButton('updates:catalog', 'Browse games'), panelButton('updates:add', 'Add Steam game')));
   if (pages > 1) rows.push(componentRow(panelButton('updates:home:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0), panelButton('updates:home:' + (page + 1), 'Next ▶', 2, page === pages - 1)));
-  rows.push(componentRow(panelButton('home', '⬅ Back to Games')));
+  rows.push(gamesNavigation('home', 'home'));
   return { content: null, embeds: [embed], components: rows, allowedMentions: { parse: [] } };
 }
 function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
@@ -404,12 +410,14 @@ function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
       { name: 'Notification role', value: sub.roleId ? '<@&' + sub.roleId + '>' : 'No role ping', inline: true },
       { name: 'Updates', value: 'Filter: ' + sub.filter + '\nLast check: ' + statusTime(sub.lastCheck) + '\nLast delivery: ' + statusTime(sub.lastSuccess) + '\nQueued: ' + sub.pending.length, inline: false }],
     footer: { text: 'Games · Steam publisher announcements' }, timestamp: new Date().toISOString() };
-  const back = componentRow(panelButton('updates:home:0', '⬅ Back'), panelButton('updates:preview:' + appId, 'Preview'),
-    panelButton('updates:send:' + appId, 'Send latest'), panelButton('updates:' + (more ? 'game:' : 'more:') + appId, more ? 'Delivery' : 'Display & filters'));
+  const actions = componentRow(panelButton('updates:preview:' + appId, 'Preview'),
+    panelButton('updates:send:' + appId, 'Send latest'));
+  const back = gamesNavigation('updates:home:0', 'updates:' + (more ? 'game:' : 'more:') + appId);
   const rows = more ? [
     choiceMenu('updates:artwork:' + appId, 'Artwork', [['banner', 'Large artwork'], ['thumbnail', 'Thumbnail'], ['hidden', 'No artwork']], [sub.artwork]),
     choiceMenu('updates:detail:' + appId, 'Text length', [['compact', 'Compact summary'], ['detailed', 'Detailed summary']], [sub.detail]),
     componentRow(panelButton('updates:keywords:' + appId, 'Keyword filters'), panelButton('updates:retry-view:' + appId, 'Retry held')),
+    actions,
     back,
   ] : [
     componentRow(panelButton('updates:enabled:' + appId, sub.enabled ? 'Pause' : 'Enable', sub.enabled ? 2 : 3), panelButton('updates:remove-view:' + appId, 'Unsubscribe', 4)),
