@@ -205,7 +205,13 @@ router.get('/member/me', requireAppealSession, (req, res) => {
         }
       }
       const snapshot = getQuarantineState(guildId).users?.[userId];
-      if (snapshot) restrictions.push({
+      // A restriction snapshot may outlive its moderation case. Never expose a
+      // deleted or archived case through the member portal's restriction feed.
+      const snapshotCaseId = Number(snapshot?.caseId);
+      const snapshotCaseVisible = Number.isSafeInteger(snapshotCaseId) && snapshotCaseId > 0
+        ? Boolean(getCaseById(guildId, snapshotCaseId))
+        : true;
+      if (snapshot && snapshotCaseVisible) restrictions.push({
         guildId, guildName, guildIconUrl: guild?.iconURL?.({ size: 128 }) || null,
         mode: snapshot.mode === 'investigation' ? 'investigation' : 'security',
         status: 'active', caseId: Number(snapshot.caseId) || null,
