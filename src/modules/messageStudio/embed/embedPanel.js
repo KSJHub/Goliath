@@ -2454,41 +2454,23 @@ function buildContentManagerPanel(interaction) {
 
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:content-edit-text")
-          .setLabel("✏️ Edit Text")
-          .setStyle(ButtonStyle.Primary),
+        navigationButton("embed:content-edit-text", "✏️ Edit Text", ButtonStyle.Primary),
 
-        new ButtonBuilder()
-          .setCustomId("embed:content-details")
-          .setLabel("👤 Author & Footer")
-          .setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:content-details", "👤 Author & Footer"),
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:content-author-icon")
-          .setLabel("👤 Author Icon")
-          .setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:content-author-icon", "👤 Author Icon"),
 
-        new ButtonBuilder()
-          .setCustomId("embed:content-footer-icon")
-          .setLabel("🏷️ Footer Icon")
-          .setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:content-footer-icon", "🏷️ Footer Icon"),
       ),
 
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel(emojiLabel('BACK', 'Back'))
-          .setStyle(ButtonStyle.Secondary),
+        actionButton("embed:builder", "back"),
 
-        new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
+        actionButton("embed:settings", "settings"),
 
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("📖 Variables")
-          .setStyle(ButtonStyle.Secondary),
+        navigationButton("embed:helpers", "📖 Variables"),
       ),
     ],
   };
