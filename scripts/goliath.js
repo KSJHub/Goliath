@@ -4592,6 +4592,25 @@ async function freeGamesAudit() {
 
 // Read-only, on-demand Steam catalogue identity audit. No guild data is touched.
 // Usage: BOT_MODE=dev node scripts/goliath.js game-catalogue-identity [limit]
+function classifySteamCatalogueIdentity(game, result) {
+  const declaredType = game.catalogueType || 'game';
+  if (declaredType !== 'game' && result.status === 'non-game' && result.storeType === declaredType) {
+    return { kind: 'expected-legacy', appId: game.appId, catalogueType: declaredType, storeName: result.storeName || null };
+  }
+  if (declaredType === 'game' && result.status === 'match' && result.storeType === 'game') {
+    return { kind: 'confirmed-game' };
+  }
+  const issue = { appId: game.appId, expectedName: game.name, catalogueType: declaredType,
+    storeName: result.storeName || null, storeType: result.storeType || null,
+    status: result.status, error: result.error || null };
+  if (result.status === 'name-mismatch' && result.storeType === 'game' && result.storeName) {
+    issue.suggestedAction = 'review-display-name';
+    issue.suggestedName = result.storeName;
+  } else if (result.status === 'non-game') issue.suggestedAction = 'review-app-type';
+  else issue.suggestedAction = 'investigate';
+  return { kind: 'issue', issue };
+}
+
 async function gameCatalogueIdentityAudit() {
   const { UPDATE_CATALOG, inspectSteamGameIdentity } = require('../src/modules/utilityStudio/games/freeGamesProviders');
   const requested = process.argv[3];
@@ -4611,33 +4630,14 @@ async function gameCatalogueIdentityAudit() {
     results.forEach((result, offset) => {
       const game = batch[offset];
       totals[result.status] = (totals[result.status] || 0) + 1;
-      const declaredType = game.catalogueType || 'game';
-      const expectedNonGame = declaredType !== 'game' &&
-        result.status === 'non-game' && result.storeType === declaredType;
-      if (expectedNonGame) {
-        expectedLegacy.push({ appId: game.appId, catalogueType: declaredType, storeName: result.storeName });
-        return;
-      }
-      if (result.status === 'match' && declaredType === 'game') {
+      const classification = classifySteamCatalogueIdentity(game, result);
+      if (classification.kind === 'expected-legacy') {
+        expectedLegacy.push({ appId: classification.appId, catalogueType: classification.catalogueType, storeName: classification.storeName });
+      } else if (classification.kind === 'confirmed-game') {
         confirmedGames++;
-        return;
-      }
-      {
-        const issue = { appId: game.appId, expectedName: game.name, catalogueType: declaredType,
-          storeName: result.storeName || null, storeType: result.storeType || null,
-          status: result.status, error: result.error || null };
-        // Suggested display-name changes are advisory only. Never rewrite App IDs:
-        // guild subscriptions persist those IDs and must not be migrated implicitly.
-        if (result.status === 'name-mismatch' && result.storeType === 'game' && result.storeName) {
-          issue.suggestedAction = 'review-display-name';
-          issue.suggestedName = result.storeName;
-        } else if (result.status === 'non-game') {
-          issue.suggestedAction = 'review-app-type';
-        } else {
-          issue.suggestedAction = 'investigate';
-        }
-        issues.push(issue);
-        console.log(JSON.stringify(issue));
+      } else {
+        issues.push(classification.issue);
+        console.log(JSON.stringify(classification.issue));
       }
     });
     console.log('Catalogue identity progress: ' + Math.min(index + batch.length, games.length) + '/' + games.length);
@@ -4710,6 +4710,20 @@ async function gameUpdatesAudit() {
   assert.equal(withLegacy.length, starter.length + 2);
   assert.equal(new Set(withLegacy.map(game => game.appId)).size, withLegacy.length);
   assert.deepEqual(withLegacy.map(game => game.name), [...withLegacy.map(game => game.name)].sort((a, b) => a.localeCompare(b)));
+  // Offline identity-audit classification: expected legacy types are not failures.
+  const gameIdentity = { appId: '730', name: 'Counter-Strike 2', catalogueType: 'game' };
+  const softwareIdentity = { appId: '431960', name: 'Wallpaper Engine', catalogueType: 'software' };
+  const dlcIdentity = { appId: '2519060', name: 'Modern Warfare III Campaign', catalogueType: 'dlc' };
+  assert.equal(classifySteamCatalogueIdentity(gameIdentity, { status: 'match', storeType: 'game' }).kind, 'confirmed-game');
+  assert.equal(classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'software' }).kind, 'expected-legacy');
+  assert.equal(classifySteamCatalogueIdentity(dlcIdentity, { status: 'non-game', storeType: 'dlc' }).kind, 'expected-legacy');
+  assert.equal(classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'dlc' }).issue.suggestedAction, 'review-app-type');
+  assert.equal(classifySteamCatalogueIdentity(gameIdentity, { status: 'non-game', storeType: 'software' }).kind, 'issue');
+  assert.equal(classifySteamCatalogueIdentity(dlcIdentity, { status: 'unavailable' }).kind, 'issue');
+  assert.equal(classifySteamCatalogueIdentity(gameIdentity, { status: 'not-found' }).kind, 'issue');
+  const mismatch = classifySteamCatalogueIdentity(gameIdentity, { status: 'name-mismatch', storeType: 'game', storeName: 'Different name' });
+  assert.equal(mismatch.issue.suggestedAction, 'review-display-name');
+  assert.equal(mismatch.issue.suggestedName, 'Different name');
   assert.equal(typeof providers.verifyGameUpdateSource, 'function');
 
   assert.equal(providers.steamAppId('https://store.steampowered.com/app/730/Counter_Strike_2/'), '730');
