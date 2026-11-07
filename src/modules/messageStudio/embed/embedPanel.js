@@ -2271,17 +2271,9 @@ function buildReadinessPanel(interaction, options = {}) {
       : "Resolve the highlighted requirement, then recheck readiness.",
   ].join("\n").slice(0, 4096);
 
-  const primary =
-    report.ready
-      ? new ButtonBuilder()
-          .setCustomId("embed:readiness-refresh")
-          .setLabel("Recheck")
-          .setEmoji("🔄")
-          .setStyle(ButtonStyle.Secondary)
-      : new ButtonBuilder()
-          .setCustomId("embed:readiness-fix")
-          .setLabel(fix.label)
-          .setStyle(ButtonStyle.Primary);
+  const primary = report.ready
+    ? emojiButton("embed:readiness-refresh", "Recheck", "🔄")
+    : navigationButton("embed:readiness-fix", fix.label, ButtonStyle.Primary);
 
   return {
     embeds: [
@@ -2306,21 +2298,12 @@ function buildReadinessPanel(interaction, options = {}) {
     components: [
       new ActionRowBuilder().addComponents(
         primary,
-
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("Builder")
-          .setEmoji("🛠️")
-          .setStyle(ButtonStyle.Secondary)
+        emojiButton("embed:builder", "Builder", "🛠️"),
       ),
 
       // Navigation is always isolated on the final row.
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:back")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("embed:back", "back"),
       ),
     ],
   };
