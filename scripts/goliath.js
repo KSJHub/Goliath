@@ -4613,11 +4613,16 @@ function classifySteamCatalogueIdentity(game, result) {
 
 async function gameCatalogueIdentityAudit() {
   const { UPDATE_CATALOG, inspectSteamGameIdentity } = require('../src/modules/utilityStudio/games/freeGamesProviders');
-  const requested = process.argv[3];
-  if (requested !== undefined && (!/^[1-9]\d*$/.test(requested) || Number(requested) > UPDATE_CATALOG.length)) {
-    throw new Error('Limit must be a positive integer no greater than the Steam catalogue size.');
+  const requested = process.argv[3], offsetArg = process.argv[4];
+  const offset = offsetArg === undefined ? 0 : Number(offsetArg);
+  if (offsetArg !== undefined && (!/^(0|[1-9]\d*)$/.test(offsetArg) || !Number.isSafeInteger(offset) || offset >= UPDATE_CATALOG.length)) {
+    throw new Error('Offset must be a non-negative integer below the Steam catalogue size.');
   }
-  const games = UPDATE_CATALOG.slice(0, requested ? Number(requested) : undefined);
+  const remaining = UPDATE_CATALOG.length - offset;
+  if (requested !== undefined && (!/^[1-9]\d*$/.test(requested) || !Number.isSafeInteger(Number(requested)) || Number(requested) > remaining)) {
+    throw new Error('Limit must be a positive integer no greater than the remaining Steam catalogue size.');
+  }
+  const games = UPDATE_CATALOG.slice(offset, requested ? offset + Number(requested) : undefined);
   const totals = { match: 0, 'name-mismatch': 0, 'not-found': 0, unavailable: 0, unlisted: 0, 'non-game': 0 };
   const issues = [], expectedLegacy = [];
   let confirmedGames = 0;
@@ -4640,9 +4645,9 @@ async function gameCatalogueIdentityAudit() {
         console.log(JSON.stringify(classification.issue));
       }
     });
-    console.log('Catalogue identity progress: ' + Math.min(index + batch.length, games.length) + '/' + games.length);
+    console.log('Catalogue identity progress: ' + (offset + Math.min(index + batch.length, games.length)) + '/' + UPDATE_CATALOG.length);
   }
-  console.log(JSON.stringify({ checked: games.length, totals, issues: issues.length,
+  console.log(JSON.stringify({ offset, checked: games.length, totalCatalogue: UPDATE_CATALOG.length, totals, issues: issues.length,
     confirmedGames, expectedLegacy: expectedLegacy.length,
     suggestedRenames: issues.filter(issue => issue.suggestedAction === 'review-display-name').length,
     note: 'Suggestions only; no catalogue or guild subscription changes were made.' }));
