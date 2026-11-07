@@ -1334,11 +1334,7 @@ function buildPanelColourPanel(i, who = "Unknown User") {
        * Persistent navigation row.
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel("Back")
-          .setEmoji("⬅️")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("embed:builder", "back")
       ),
     ],
   };
