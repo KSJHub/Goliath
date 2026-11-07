@@ -1,5 +1,5 @@
 const { emojiLabel } = require('../../../core/ui/emojis');
-const { actionButton, paginationButtons, emojiButton } = require('../../../core/guild/goliathNavigation');
+const { actionButton, paginationButtons, emojiButton, navigationButton } = require('../../../core/guild/goliathNavigation');
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -1358,24 +1358,18 @@ function buildPanelsPanel(i, who) {
         }))),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:panel-add").setLabel("➕ Add").setStyle(ButtonStyle.Success).setDisabled(s.panels.length >= MAX_PANELS),
-        new ButtonBuilder().setCustomId("embed:panel-duplicate").setLabel("📋 Duplicate").setStyle(ButtonStyle.Secondary).setDisabled(s.panels.length >= MAX_PANELS),
-        new ButtonBuilder().setCustomId("embed:panel-remove").setLabel("🗑️ Remove").setStyle(ButtonStyle.Danger).setDisabled(s.panels.length <= 1),
+        navigationButton("embed:panel-add", "➕ Add", ButtonStyle.Success, s.panels.length >= MAX_PANELS),
+        navigationButton("embed:panel-duplicate", "📋 Duplicate", ButtonStyle.Secondary, s.panels.length >= MAX_PANELS),
+        navigationButton("embed:panel-remove", "🗑️ Remove", ButtonStyle.Danger, s.panels.length <= 1),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("embed:panel-up").setLabel("⬆️ Up").setStyle(ButtonStyle.Secondary).setDisabled(s.selectedPanelIndex <= 0),
-        new ButtonBuilder().setCustomId("embed:panel-down").setLabel("⬇️ Down").setStyle(ButtonStyle.Secondary).setDisabled(s.selectedPanelIndex >= s.panels.length - 1),
+        navigationButton("embed:panel-up", "⬆️ Up", ButtonStyle.Secondary, s.selectedPanelIndex <= 0),
+        navigationButton("embed:panel-down", "⬇️ Down", ButtonStyle.Secondary, s.selectedPanelIndex >= s.panels.length - 1),
       ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:builder")
-          .setLabel(emojiLabel('BACK', 'Back'))
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId("embed:settings").setLabel(emojiLabel('SETTINGS', 'Settings')).setStyle(ButtonStyle.Secondary).setDisabled(false),
-        new ButtonBuilder()
-          .setCustomId("embed:helpers")
-          .setLabel("📖 Variables")
-          .setStyle(ButtonStyle.Secondary),
+        actionButton("embed:builder", "back"),
+        actionButton("embed:settings", "settings"),
+        navigationButton("embed:helpers", "📖 Variables"),
       ),
     ],
   };
