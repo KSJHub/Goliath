@@ -2857,17 +2857,7 @@ function buildMediaManagerPanel(
         ? "➡️ Right"
         : "⬅️ Left";
 
-  const mediaButton = (
-    id,
-    label,
-    style = ButtonStyle.Secondary,
-    disabled = false
-  ) =>
-    new ButtonBuilder()
-      .setCustomId(id)
-      .setLabel(label)
-      .setStyle(style)
-      .setDisabled(Boolean(disabled));
+  const mediaButton = navigationButton;
 
   const rows = [];
 
