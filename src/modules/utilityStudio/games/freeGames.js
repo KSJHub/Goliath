@@ -259,7 +259,7 @@ async function handleAdminInteraction(interaction) {
       await reply({ ...pages[page], content: 'Preview only · saved server settings · no listing or notifications posted',
         components: [componentRow(panelButton('preview:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0),
           panelButton('preview:' + (page + 1), 'Next ▶', 2, page === pages.length - 1)),
-          componentRow(panelButton('home', '⬅ Back'))] });
+          gamesNavigation('home', 'display')] });
       return true;
     }
     if (action === 'refresh') {
@@ -396,7 +396,7 @@ function buildUpdatesPanel(guild, page = 0, notice = '') {
   if (subscriptions.length) rows.push(choiceMenu('updates:select', 'Choose a subscribed game', subscriptions.slice(page * 25, page * 25 + 25).map(sub => [sub.appId, (sub.enabled ? '▶ ' : '⏸ ') + sub.name])));
   rows.push(componentRow(panelButton('updates:catalog', 'Browse games'), panelButton('updates:add', 'Add Steam game')));
   if (pages > 1) rows.push(componentRow(panelButton('updates:home:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0), panelButton('updates:home:' + (page + 1), 'Next ▶', 2, page === pages - 1)));
-  rows.push(gamesNavigation('home', 'home'));
+  rows.push(gamesNavigation('home', 'display'));
   return { content: null, embeds: [embed], components: rows, allowedMentions: { parse: [] } };
 }
 function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
@@ -448,7 +448,8 @@ async function handleGameUpdatesInteraction(i, action, reply) {
         panelButton('updates:catalog:' + (page - 1), '◀ Previous', 2, page === 0),
         panelButton('updates:catalog:' + (page + 1), 'Next ▶', 2, page === pageCount - 1)
       )] : []),
-      componentRow(panelButton('updates:publishers:0', 'Publisher games'), panelButton('updates:add', 'Add Steam game'), panelButton('updates:home:0', '⬅ Back'))
+      componentRow(panelButton('updates:publishers:0', 'Publisher games'), panelButton('updates:add', 'Add Steam game')),
+      gamesNavigation('updates:home:0', 'home')
     ];
     await reply(payload); return true;
   }
@@ -466,7 +467,8 @@ async function handleGameUpdatesInteraction(i, action, reply) {
         panelButton('updates:publishers:' + (page - 1), '◀ Previous', 2, page === 0),
         panelButton('updates:publishers:' + (page + 1), 'Next ▶', 2, page === pageCount - 1)
       )] : []),
-      componentRow(panelButton('updates:catalog:0', 'Steam games'), panelButton('updates:home:0', '⬅ Back'))
+      componentRow(panelButton('updates:catalog:0', 'Steam games')),
+      gamesNavigation('updates:home:0', 'home')
     ];
     await reply(payload); return true;
   }
@@ -475,7 +477,7 @@ async function handleGameUpdatesInteraction(i, action, reply) {
     if (!game) { await reply(buildUpdatesPanel(guild, 0, 'Publisher game not found.')); return true; }
     const payload = buildUpdatesPanel(guild);
     payload.embeds[0].description = '**' + game.name + '** · ' + game.publisher + '\n\nSource integration pending. This game cannot be subscribed to yet.\n\nPublisher news: ' + game.newsUrl;
-    payload.components = [componentRow(panelButton('updates:publishers:0', '⬅ Publisher games'), panelButton('updates:home:0', 'Home'))];
+    payload.components = [gamesNavigation('updates:publishers:0', 'home')];
     await reply(payload); return true;
   }
   if (kind === 'add' || kind === 'choose') {
@@ -514,7 +516,7 @@ async function handleGameUpdatesInteraction(i, action, reply) {
   if (kind === 'preview') {
     const { payload } = await monitor.previewGameUpdate(guild, appId);
     await reply({ ...payload, content: 'Preview only · no announcement or role notification posted',
-      components: [...payload.components, componentRow(panelButton('updates:game:' + appId, '⬅ Back'))] }); return true;
+      components: [...payload.components, gamesNavigation('updates:game:' + appId, 'updates:more:' + appId)] }); return true;
   }
   if (kind === 'send') {
     const result = await monitor.sendLatestGameUpdate(guild, appId);
