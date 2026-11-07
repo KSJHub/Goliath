@@ -904,35 +904,12 @@ function buildEditorPanel(i, who = "Unknown User") {
        * CHECK / PUBLISH WORKFLOW
        */
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("embed:test-send")
-          .setLabel("Test Send")
-          .setEmoji("🧪")
-          .setStyle(ButtonStyle.Secondary),
-
-        new ButtonBuilder()
-          .setCustomId("embed:use")
-          .setLabel("Deploy")
-          .setEmoji("🚀")
-          .setStyle(ButtonStyle.Success)
-          .setDisabled(!canDeploy),
-
+        actionButton("embed:test-send", "testSend"),
+        actionButton("embed:use", "deploy", { disabled: !canDeploy }),
         ...(deployment
-          ? [
-              new ButtonBuilder()
-                .setCustomId("embed:update-existing")
-                .setLabel("Update")
-                .setEmoji("♻️")
-                .setStyle(ButtonStyle.Success)
-                .setDisabled(!canDeploy),
-            ]
+          ? [actionButton("embed:update-existing", "update", { disabled: !canDeploy })]
           : []),
-
-        new ButtonBuilder()
-          .setCustomId("embed:readiness")
-          .setLabel("Review")
-          .setEmoji("📋")
-          .setStyle(ButtonStyle.Secondary)
+        actionButton("embed:readiness", "review"),
       ),
 
       /*
