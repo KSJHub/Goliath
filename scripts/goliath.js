@@ -4705,6 +4705,7 @@ async function gameUpdatesAudit() {
   assert.equal(catalogueName('2195250'), 'EA SPORTS FC™ 24');
   assert.equal(catalogueName('1966900'), '20 Minutes Till Dawn');
   assert.equal(catalogueName('2144740'), 'Ghostrunner 2');
+  assert.equal(catalogueName('1080110'), 'F1® 2020');
   assert.equal(catalogueName('524220'), 'NieR:Automata™');
   assert.equal(catalogueName('1113560'), 'NieR Replicant™ ver.1.22474487139...');
   assert.equal(catalogueName('2519060'), 'Call of Duty: Modern Warfare III - Campaign');
