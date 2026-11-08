@@ -1,7 +1,6 @@
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   ModalBuilder,
@@ -9,6 +8,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
+const { navigationButton } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const leveling = require('../../../modules/communityStudio/leveling/leveling');
 const levelingTracking = require('../../../modules/communityStudio/leveling/levelingTracking');
@@ -212,15 +212,15 @@ async function showLevelingLeaderboard(interaction, sortBy = 'xp', pageIndex = 0
 
   const components = [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:xp:0`).setLabel('XP').setStyle(safeSort === 'xp' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:level:0`).setLabel('Level').setStyle(safeSort === 'level' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:messages:0`).setLabel('Messages').setStyle(safeSort === 'messages' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:voice:0`).setLabel('Voice').setStyle(safeSort === 'voice' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton(`user:leveling:leaderboard:xp:0`, 'XP', safeSort === 'xp' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton(`user:leveling:leaderboard:level:0`, 'Level', safeSort === 'level' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton(`user:leveling:leaderboard:messages:0`, 'Messages', safeSort === 'messages' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton(`user:leveling:leaderboard:voice:0`, 'Voice', safeSort === 'voice' ? ButtonStyle.Primary : ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:${safeSort}:${Math.max(0, safePage - 1)}`).setLabel('Previous').setEmoji(EMOJIS.BACK).setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
-      new ButtonBuilder().setCustomId(`user:leveling:leaderboard:${safeSort}:${Math.min(totalPages - 1, safePage + 1)}`).setLabel('Next').setEmoji('➡️').setStyle(ButtonStyle.Primary).setDisabled(safePage >= totalPages - 1),
-      new ButtonBuilder().setCustomId('user:module:leveling').setLabel('Back').setEmoji(EMOJIS.BACK).setStyle(ButtonStyle.Secondary),
+      navigationButton(`user:leveling:leaderboard:${safeSort}:${Math.max(0, safePage - 1)}`, 'Previous', ButtonStyle.Secondary, safePage === 0).setEmoji(EMOJIS.BACK),
+      navigationButton(`user:leveling:leaderboard:${safeSort}:${Math.min(totalPages - 1, safePage + 1)}`, 'Next', ButtonStyle.Primary, safePage >= totalPages - 1).setEmoji('➡️'),
+      navigationButton('user:module:leveling', 'Back', ButtonStyle.Secondary).setEmoji(EMOJIS.BACK),
     ),
   ];
 
@@ -327,7 +327,7 @@ function getOwnedCreatorAndAccounts(interaction) {
 }
 
 function userAccountButton(customId, label, style = ButtonStyle.Secondary, disabled = false) {
-  return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style).setDisabled(disabled);
+  return navigationButton(customId, label, style, disabled);
 }
 
 function accountDisplayName(account) {
