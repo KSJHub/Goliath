@@ -3,11 +3,11 @@ const { emojiLabel } = require('../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   StringSelectMenuBuilder,
 } = require('discord.js');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 const store = require('../../modules/socialStudio/socialAlerts/socialStudioStore');
 const liveRole = require('../../modules/socialStudio/socialAlerts/socialStudioLiveRole');
 const { buildSectionPanel } = require('../../modules/socialStudio/socialAlerts/socialStudioPanel');
@@ -22,7 +22,7 @@ function sessionKey(interaction) { return `${interaction.guildId}:${interaction.
 function getRoleSession(interaction) { return roleSessions.get(sessionKey(interaction)) || { rolePage: 0 }; }
 function setRoleSession(interaction, patch) { const next = { ...getRoleSession(interaction), ...patch }; roleSessions.set(sessionKey(interaction), next); return next; }
 function row(...components) { return new ActionRowBuilder().addComponents(...components); }
-function button(id, label, disabled = false) { return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(ButtonStyle.Secondary).setDisabled(disabled); }
+function button(id, label, disabled = false) { return navigationButton(id, label, ButtonStyle.Secondary, disabled); }
 function who(interaction) { return interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User'; }
 function sortedRoles(interaction) {
   return [...(interaction.guild?.roles?.cache?.values?.() || [])]
