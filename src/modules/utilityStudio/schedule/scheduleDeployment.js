@@ -2,7 +2,6 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   ModalBuilder,
@@ -12,6 +11,7 @@ const {
   GuildScheduledEventPrivacyLevel,
   PermissionFlagsBits,
 } = require('discord.js');
+const { navigationButton, linkButton: sharedLinkButton } = require('../../../core/guild/goliathNavigation');
 const guildManager = require('../../../core/guild/guildManager');
 const { replaceVars } = require('../../../core/guild/guildVariables');
 const emojiPayload = require('../emojis/emojiPayload');
@@ -24,12 +24,13 @@ const STYLE = Object.freeze({ primary: ButtonStyle.Primary, secondary: ButtonSty
 function unix(value) { return Math.floor(new Date(value).getTime() / 1000); }
 function row(...components) { return new ActionRowBuilder().addComponents(...components.filter(Boolean)); }
 function button(id, label, style = ButtonStyle.Secondary, disabled = false, emoji = null) {
-  const item = new ButtonBuilder().setCustomId(id).setLabel(String(label).slice(0, 80)).setStyle(style).setDisabled(disabled);
+  const text = String(label).slice(0, 80);
+  const item = navigationButton(id, text, style, disabled).setLabel(text);
   if (emoji) item.setEmoji(emoji);
   return item;
 }
 function linkButton(label, url, emoji = null) {
-  const item = new ButtonBuilder().setLabel(label).setStyle(ButtonStyle.Link).setURL(url);
+  const item = sharedLinkButton(label, url).setLabel(label);
   if (emoji) item.setEmoji(emoji);
   return item;
 }
