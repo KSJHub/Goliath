@@ -456,12 +456,38 @@ function keywordList(value) {
   if (!Array.isArray(value) || value.length > 10 || value.some(word => typeof word !== 'string' || word.length > 50)) throw new Error('Use up to ten keywords, separated by commas.');
   return [...new Set(value.map(word => word.trim().toLowerCase()).filter(Boolean))];
 }
+// A subscription may target multiple channels. Legacy channelId remains the
+// delivery source until the per-destination dispatcher is enabled.
+function normalizeUpdateDestinations(value) {
+  if (!Array.isArray(value) || value.length > 10) throw new Error('Choose up to ten update destinations.');
+  const seen = new Set();
+  return value.map(entry => {
+    if (!entry || typeof entry !== 'object' || !/^\\d{16,20}$/.test(entry.channelId || '') || seen.has(entry.channelId)) {
+      throw new Error('Choose unique valid update destination channels.');
+    }
+    seen.add(entry.channelId);
+    if (entry.roleId != null && !/^\\d{16,20}$/.test(entry.roleId)) throw new Error('Choose a valid update notification role.');
+    if (entry.enabled !== undefined && typeof entry.enabled !== 'boolean') throw new Error('Update destination enabled must be true or false.');
+    return { channelId: entry.channelId, roleId: entry.roleId || null, enabled: entry.enabled !== false };
+  });
+}
+function effectiveUpdateDestinations(subscription) {
+  return subscription.destinationsConfigured
+    ? (subscription.destinations || [])
+    : subscription.channelId
+      ? [{ channelId: subscription.channelId, roleId: subscription.roleId || null, enabled: true }]
+      : [];
+}
 function normalizeUpdateSubscription(input, previous = {}) {
   const { steamAppId, UPDATE_CATALOG } = require('./freeGamesProviders');
   const appId = steamAppId(input.appId || previous.appId);
   const next = { appId, name: UPDATE_CATALOG.find(game => game.appId === appId)?.name || 'Steam game ' + appId,
     channelId: null, roleId: null, enabled: false, filter: 'patches', artwork: 'banner', detail: 'compact', includeWords: [], excludeWords: [],
     seenIds: [], pending: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, ...previous, appId };
+  if (Object.hasOwn(input, 'destinations')) {
+    next.destinations = normalizeUpdateDestinations(input.destinations);
+    next.destinationsConfigured = true;
+  }
   if (Object.hasOwn(input, 'name')) {
     if (typeof input.name !== 'string' || !input.name.trim() || input.name.length > 100) throw new Error('Use a game name between 1 and 100 characters.');
     next.name = input.name.trim();
@@ -478,7 +504,7 @@ function normalizeUpdateSubscription(input, previous = {}) {
     if (Object.hasOwn(input, key)) { if (!values.includes(input[key])) throw new Error('Invalid ' + key + ' selection.'); next[key] = input[key]; }
   }
   for (const key of ['includeWords', 'excludeWords']) if (Object.hasOwn(input, key)) next[key] = keywordList(input[key]);
-  if (next.enabled && !next.channelId) throw new Error('Choose a destination channel before enabling this subscription.');
+  if (next.enabled && !effectiveUpdateDestinations(next).some(route => route.enabled)) throw new Error('Choose an enabled destination channel before enabling this subscription.');
   return next;
 }
 function matchesGameUpdate(item, subscription) {
@@ -487,7 +513,7 @@ function matchesGameUpdate(item, subscription) {
   return (!subscription.includeWords.length || subscription.includeWords.some(word => text.includes(word))) &&
     !subscription.excludeWords.some(word => text.includes(word));
 }
-Object.assign(module.exports, { UPDATE_DEFAULTS, getGameUpdates, updateGameUpdates, validateUpdateSettings, normalizeUpdateSubscription, matchesGameUpdate });
+Object.assign(module.exports, { UPDATE_DEFAULTS, getGameUpdates, updateGameUpdates, validateUpdateSettings, normalizeUpdateSubscription, normalizeUpdateDestinations, effectiveUpdateDestinations, matchesGameUpdate });
 
 
 // Pure catalogue selector shared by Discord and the offline regression audit.
