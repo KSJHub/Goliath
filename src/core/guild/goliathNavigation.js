@@ -151,11 +151,12 @@ function actionButton(customId, action, options = {}) {
   const definition = UI_ACTIONS[action];
   if (!definition) throw new Error(`Unknown Goliath UI action: ${action}`);
   const suffix = options.suffix == null ? '' : String(options.suffix);
+  const label = options.label == null ? definition.label + suffix : String(options.label);
   const component = new ButtonBuilder()
     .setCustomId(customId)
     .setStyle(definition.style)
     .setDisabled(Boolean(options.disabled));
-  return applyButtonEmoji(component, `${definition.label}${suffix}`, definition.emoji);
+  return applyButtonEmoji(component, label, definition.emoji);
 }
 
 function paginationButtons(kind, previousId, nextId, options = {}) {

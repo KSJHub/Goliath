@@ -11,7 +11,7 @@ const {
   StringSelectMenuBuilder,
 } = require('discord.js');
 
-const { navigationButton } = require('../../guild/goliathNavigation');
+const { navigationButton, actionButton } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const { saveModuleSection } = require('../../guild/moduleSectionManager');
 
@@ -130,7 +130,10 @@ function getMemberDisplayName(interaction) { return interaction.member?.displayN
 function fieldKey(field) { return Array.isArray(field) ? field[0] : field; }
 function fieldsForScope(module, scope) { return (module.fields || []).filter((field) => (scope === 'configure') === ADMIN_FIELD_KEYS.has(fieldKey(field))); }
 function selectMenusForScope(module, scope) { return (module.selectMenus || []).filter((key) => (scope === 'configure') === ADMIN_FIELD_KEYS.has(key)); }
-function navigationRow(customId, label) { return row(button(customId, label, ButtonStyle.Secondary)); }
+function navigationRow(customId, label = 'Back') {
+  const text = String(label).replace(/^⬅️\s*/, '');
+  return row(actionButton(customId, 'back', { label: text }));
+}
 
 function getModuleConfig(guildId, moduleKey) {
   const module = MODULE_PANEL_REGISTRY[moduleKey];
@@ -182,7 +185,7 @@ function buildModuleListPanel(memberDisplayName = 'Unknown User') {
     .setFooter({ text: `Requested by ${memberDisplayName}` })
     .setTimestamp();
   const studioRows = chunkArray(STUDIO_CATALOG.map((studio) => button(`admin:studio:${studio.key}`, studio.label)), ITEMS_PER_ROW).map((items) => row(...items));
-  return { embeds: [embed], components: [...studioRows, navigationRow('admin:home', '⬅️ Back to Admin Home')].slice(0, 5) };
+  return { embeds: [embed], components: [...studioRows, navigationRow('admin:home', 'Back to Admin Home')].slice(0, 5) };
 }
 
 function buildStudioPanel(studioKey, memberDisplayName = 'Unknown User') {
@@ -191,7 +194,7 @@ function buildStudioPanel(studioKey, memberDisplayName = 'Unknown User') {
   const modules = MODULE_CATALOG.filter((module) => module.studio === studioKey);
   const embed = new EmbedBuilder().setColor(PANEL_COLOR).setTitle(studio.title).setDescription([studio.summary, '', 'Select a module.'].join('\n')).setFooter({ text: `Requested by ${memberDisplayName}` }).setTimestamp();
   const moduleRows = chunkArray(modules.map((module) => button(CUSTOM_PANEL_KEYS.has(module.key) ? module.route : `admin:module:${module.key}:main:0`, module.label)), ITEMS_PER_ROW).map((items) => row(...items));
-  return { embeds: [embed], components: [...moduleRows, navigationRow('admin:modules', '⬅️ Back to Modules')].slice(0, 5) };
+  return { embeds: [embed], components: [...moduleRows, navigationRow('admin:modules', 'Back to Modules')].slice(0, 5) };
 }
 
 function buildControlRows(moduleKey, scope) {
