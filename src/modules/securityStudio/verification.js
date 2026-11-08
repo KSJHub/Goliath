@@ -52,6 +52,16 @@ async function checkGuild(guild) {
   if (!enabled) return buildSkippedResult(guild);
 
   try {
+    // Recover expired challenges inside the running bot process so the guild
+    // cache and on-disk state remain consistent. This is intentionally scoped
+    // to challenge sessions; panel recovery remains separately guarded below.
+    const challengeRecovery = verificationHealth.repairChallengeSessions(guild.id);
+    if (challengeRecovery.expired || challengeRecovery.clearedMarkers) {
+      console.log(
+        `[Verification] ${guild.name || guild.id}: expired ${challengeRecovery.expired} stale challenge(s) and cleared ${challengeRecovery.clearedMarkers} closed-challenge marker(s).`
+      );
+    }
+
     let report = await verificationHealth.buildHealthReport(guild);
 
     if (hasMissingPanelMessage(report)) {
