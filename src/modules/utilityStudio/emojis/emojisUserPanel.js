@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
@@ -35,7 +36,7 @@ const CORE_SEARCH_TERMS = Object.freeze({
 
 const row = (...items) => new ActionRowBuilder().addComponents(...items);
 const button = (id, label, style = ButtonStyle.Secondary, emoji = null) => {
-  const item = new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
+  const item = navigationButton(id, label, style);
   if (emoji) item.setEmoji(emoji);
   return item;
 };

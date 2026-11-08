@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
@@ -26,7 +27,7 @@ const DANGER_COLOR = 0xED4245;
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const button = (id, label, style = ButtonStyle.Secondary, emoji = null, disabled = false) => {
-  const item = new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+  const item = navigationButton(id, label, style, disabled);
   if (emoji) item.setEmoji(emoji);
   return item;
 };

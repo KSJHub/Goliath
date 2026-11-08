@@ -1,9 +1,10 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
 function button(customId, label, style = ButtonStyle.Secondary, emoji = null) {
-  const component = new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+  const component = navigationButton(customId, label, style);
   if (emoji) component.setEmoji(emoji);
   return component;
 }
