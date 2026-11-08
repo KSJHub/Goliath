@@ -14,6 +14,7 @@ const {
   TextInputStyle,
 } = require('discord.js');
 
+const { navigationButton, linkButton } = require('../core/guild/goliathNavigation');
 const { normalizeBotMode } = require('../config/botModes');
 const security = require('../core/security/protection/core');
 const devOverride = require('./dev/DevOverrideManager');
@@ -240,56 +241,27 @@ function ownerHomePayload(interaction, notice = null) {
     .setTimestamp();
 
   const primaryComponents = [
-    new ButtonBuilder()
-      .setCustomId(`${OWNER_PREFIX}dev-toggle`)
-      .setLabel(devState.enabled ? 'Disable DEV Override' : 'Enable DEV Override')
-      .setEmoji('🧪')
-      .setStyle(devState.enabled ? ButtonStyle.Danger : ButtonStyle.Success)
-      .setDisabled(!isDev),
-    new ButtonBuilder()
-      .setCustomId(contextualOwnerId('security', guildId))
-      .setLabel('Security Tests')
-      .setEmoji('🛡️')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(contextualOwnerId('server-tools', interaction))
-      .setLabel('Server Tools')
-      .setEmoji('🧰')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(contextualOwnerId('maintenance', guildId))
-      .setLabel('Maintenance')
-      .setEmoji('🚨')
-      .setStyle(ButtonStyle.Secondary),
+    navigationButton(`${OWNER_PREFIX}dev-toggle`, devState.enabled ? 'Disable DEV Override' : 'Enable DEV Override', devState.enabled ? ButtonStyle.Danger : ButtonStyle.Success, !isDev).setEmoji('🧪'),
+    navigationButton(contextualOwnerId('security', guildId), 'Security Tests', ButtonStyle.Secondary).setEmoji('🛡️'),
+    navigationButton(contextualOwnerId('server-tools', interaction), 'Server Tools', ButtonStyle.Secondary).setEmoji('🧰'),
+    navigationButton(contextualOwnerId('maintenance', guildId), 'Maintenance', ButtonStyle.Secondary).setEmoji('🚨'),
   ];
 
   if (showCommandCenter) {
     primaryComponents.push(
-      new ButtonBuilder()
-        .setCustomId(contextualOwnerId('commandcenter', guildId))
-        .setLabel('Command Center')
-        .setEmoji('📡')
-        .setStyle(ButtonStyle.Secondary)
+      navigationButton(contextualOwnerId('commandcenter', guildId), 'Command Center', ButtonStyle.Secondary).setEmoji('📡')
     );
   }
 
   const primary = new ActionRowBuilder().addComponents(...primaryComponents);
 
   const navigationComponents = [
-    new ButtonBuilder()
-      .setCustomId(contextualOwnerId('refresh', interaction))
-      .setLabel('Refresh')
-      .setEmoji('🔄')
-      .setStyle(ButtonStyle.Secondary),
+    navigationButton(contextualOwnerId('refresh', interaction), 'Refresh', ButtonStyle.Secondary).setEmoji('🔄'),
   ];
 
   if (isDev) {
     navigationComponents.push(
-      new ButtonBuilder()
-        .setLabel('Sync DEV Now')
-        .setEmoji('🚀')
-        .setStyle(ButtonStyle.Link)
-        .setURL('https://github.com/KSJHub/Goliath/actions/workflows/sync-dev-now.yml')
+      linkButton('Sync DEV Now', 'https://github.com/KSJHub/Goliath/actions/workflows/sync-dev-now.yml', { emoji: '🚀' })
     );
   }
 
