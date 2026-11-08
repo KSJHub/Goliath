@@ -1,4 +1,3 @@
-const { emojiLabel } = require('../../../core/ui/emojis');
 const { actionButton, paginationButtons, emojiButton, navigationButton } = require('../../../core/guild/goliathNavigation');
 const {
   EmbedBuilder,
@@ -3005,10 +3004,7 @@ function buildMediaManagerPanel(
 
   rows.push(
     new ActionRowBuilder().addComponents(
-      mediaButton(
-        "embed:builder",
-        emojiLabel("BACK", "Back")
-      ),
+      actionButton("embed:builder", "back"),
     )
   );
 
