@@ -3173,6 +3173,7 @@ function fixture(snapshot = {}) {
   const noMutation = () => { throw Error('Legacy audit attempted a mutation'); };
   const verificationApi = load('src/modules/securityStudio/verificationQuarantine.js', {
     './verificationStore': { getSession: () => session, getVerificationSection: () => ({ sessions: { [uid]: session } }), normalizeSettings: () => ({ roles: {} }), upsertSession: noMutation, addSecurityHistory: noMutation },
+    '../../core/guild/goliathNavigation': { navigationButton: (...args) => require(root + '/src/core/guild/goliathNavigation').navigationButton(...args) },
     '../../core/guild/guildManager': { isModuleEnabled: () => true },
     '../../core/security/protection/quarantine/state': stateApi,
     '../../core/security/protection/quarantine': { ...f.api, quarantineMember: noMutation },
@@ -3219,7 +3220,8 @@ function fixture(snapshot = {}) {
       const api = load('src/modules/securityStudio/verificationQuarantine.js', {
         './verificationStore': { getVerificationSection: () => section, getSession: () => section.sessions[uid], normalizeSettings: s => s,
           upsertSession: (g, u, patch) => Object.assign(section.sessions[u], patch), addSecurityHistory: () => {} },
-        '../../core/guild/guildManager': {}, '../../core/security/protection/quarantine/state': stateApi,
+        '../../core/guild/goliathNavigation': { navigationButton: (...args) => require(root + '/src/core/guild/goliathNavigation').navigationButton(...args) },
+    '../../core/guild/guildManager': {}, '../../core/security/protection/quarantine/state': stateApi,
         '../../core/security/protection/quarantine': engine,
         '../../owner/auditIntelligence/auditStore': { getUser: () => ({ roleHistory: evidence }) },
       });
