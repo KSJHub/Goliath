@@ -6,6 +6,7 @@ const {
   SlashCommandBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } = require('discord.js');
 
+const { navigationButton } = require('../../guild/goliathNavigation');
 const adminPanel = require('./panel');
 const securityHubPanels = require('./securityHubPanels');
 const socialStudioPanel = require('../../../modules/socialStudio/socialAlerts/socialStudioPanel');
@@ -68,9 +69,9 @@ function lockdownSlowmode(state) {
   return ({ critical: '6 hours', high: '1 hour', medium: '10 minutes', low: '1 minute' })[severity] || 'Lockdown managed';
 }
 function navRow(backId, refreshId = null, settingsId = SETTINGS_ID) {
-  const buttons = [new ButtonBuilder().setCustomId(backId).setLabel('Back').setEmoji(EMOJIS.BACK).setStyle(ButtonStyle.Secondary)];
-  buttons.push(new ButtonBuilder().setCustomId(settingsId).setLabel('Settings').setEmoji('🔧').setStyle(ButtonStyle.Secondary));
-  if (refreshId) buttons.push(new ButtonBuilder().setCustomId(refreshId).setLabel('Refresh').setEmoji(EMOJIS.REFRESH).setStyle(ButtonStyle.Secondary));
+  const buttons = [navigationButton(backId, 'Back', ButtonStyle.Secondary).setEmoji(EMOJIS.BACK)];
+  buttons.push(navigationButton(settingsId, 'Settings', ButtonStyle.Secondary).setEmoji('🔧'));
+  if (refreshId) buttons.push(navigationButton(refreshId, 'Refresh', ButtonStyle.Secondary).setEmoji(EMOJIS.REFRESH));
   return new ActionRowBuilder().addComponents(buttons);
 }
 
@@ -85,7 +86,7 @@ function addAdminControls(panel, interaction) {
     });
   }
   const components = [...(panel.components || [])];
-  const settingsButton = new ButtonBuilder().setCustomId(SETTINGS_ID).setLabel('Settings').setEmoji('🔧').setStyle(ButtonStyle.Secondary);
+  const settingsButton = navigationButton(SETTINGS_ID, 'Settings', ButtonStyle.Secondary).setEmoji('🔧');
   const lastRow = components[components.length - 1];
   const rowButtons = lastRow?.components || [];
   if (rowButtons.length && rowButtons.length < 5 && rowButtons.every((component) => component?.data?.type === 2)) {
@@ -102,7 +103,7 @@ function buildSettingsPanel(interaction, backId = SETTINGS_BACK_ID) {
   const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('⚙️ Goliath Settings').setDescription('General server-level Goliath configuration and administration defaults.')
     .addFields({ name: 'Server', value: `${interaction.guild.name}\n\`${interaction.guild.id}\``, inline: true }, { name: 'Authority', value: authority.configured ? `Configured ${EMOJIS.SUCCESS}` : `Legacy fallback ${EMOJIS.WARNING}`, inline: true }, { name: 'Log Channels', value: `${configuredLogs}/5 configured`, inline: true })
     .setFooter({ text: `Requested by ${memberDisplayName(interaction)}` }).setTimestamp();
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(backId).setLabel('Back').setEmoji(EMOJIS.BACK).setStyle(ButtonStyle.Secondary))] };
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(navigationButton(backId, 'Back', ButtonStyle.Secondary).setEmoji(EMOJIS.BACK))] };
 }
 
 function buildSecurityHub(interaction) {
