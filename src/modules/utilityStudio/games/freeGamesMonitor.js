@@ -236,7 +236,7 @@ async function saveGameSubscription(guild, patch) {
         if (!routeRole || routeRole.id === guild.id || routeRole.managed) throw new Error('Choose a regular notification role for each destination.');
       }
     }
-    if (next.channelId && !store.effectiveUpdateDestinations(next).some(route => route.channelId === next.channelId)) {
+    if (next.channelId) {
       await validateDestination(guild, { ...next, alerts: Boolean(next.roleId) });
     }
     if (next.roleId) {
