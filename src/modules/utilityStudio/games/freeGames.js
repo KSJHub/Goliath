@@ -5,7 +5,7 @@ const { STORES, TYPES, CURRENCIES } = require('./freeGamesProviders');
 // Keep the established section key so the Games rename preserves all guild data and authority bindings.
 const MODULE_KEY = 'freeGames';
 const MODULE_NAME = 'Games';
-const DEFAULTS = { enabled: false, currency: 'GBP', priceMode: 'converted', locale: 'en-GB', timeZone: 'Europe/London', region: 'GB', layout: 'columns', featuredMode: 'auto', featuredOfferId: null, featuredArtwork: 'thumbnail', showTimestamps: true, showExpiry: false, showPlatforms: true, showNew: true, showOfferCount: true, channelId: null, destinations: [], stores: Object.keys(STORES), types: ['game'], alerts: false, roleId: null, state: { firstSeen: {}, newSince: {}, observed: {}, deliveries: [], retired: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, offerCount: 0, pricing: null, warning: null } };
+const DEFAULTS = { enabled: false, currency: 'GBP', priceMode: 'converted', locale: 'en-GB', timeZone: 'Europe/London', region: 'GB', layout: 'columns', featuredMode: 'auto', featuredOfferId: null, featuredArtwork: 'thumbnail', showTimestamps: true, showExpiry: false, showPlatforms: true, showNew: true, showOfferCount: true, channelId: null, destinations: [], destinationsConfigured: false, stores: Object.keys(STORES), types: ['game'], alerts: false, roleId: null, state: { firstSeen: {}, newSince: {}, observed: {}, deliveries: [], retired: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, offerCount: 0, pricing: null, warning: null } };
 function getConfig(guildId) {
   const section = getModuleSection(guildId, MODULE_KEY, DEFAULTS);
   return { ...DEFAULTS, ...section, state: { ...structuredClone(DEFAULTS.state), ...section.state }, enabled: guildManager.isModuleEnabled(guildId, MODULE_KEY) };
@@ -31,7 +31,7 @@ function normalizeDestinations(value) {
   });
 }
 function effectiveDestinations(config) {
-  return config.destinations?.length ? config.destinations : config.channelId ? [{ channelId: config.channelId, enabled: true, alerts: config.alerts, roleId: config.roleId, stores: null, types: null }] : [];
+  return config.destinationsConfigured ? (config.destinations || []) : config.channelId ? [{ channelId: config.channelId, enabled: true, alerts: config.alerts, roleId: config.roleId, stores: null, types: null }] : [];
 }
 function validateSettings(input, previous) {
   const result = {};
@@ -40,7 +40,7 @@ function validateSettings(input, previous) {
     if (!Array.isArray(input[key]) || input[key].length > Object.keys(known).length || input[key].some((value) => !Object.hasOwn(known, value))) throw new Error(`Invalid ${key} selection.`);
     result[key] = [...new Set(input[key])];
   }
-  if (Object.hasOwn(input, 'destinations')) result.destinations = normalizeDestinations(input.destinations);
+  if (Object.hasOwn(input, 'destinations')) { result.destinations = normalizeDestinations(input.destinations); result.destinationsConfigured = true; }
   for (const key of ['channelId', 'roleId']) if (Object.hasOwn(input, key)) {
     const id = input[key];
     if (id !== null && id !== '' && (typeof id !== 'string' || !/^\d{16,20}$/.test(id))) throw new Error(`Invalid ${key}.`);
@@ -179,13 +179,38 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
       { name: 'Notifications', value: c.alerts ? 'New offers' : 'Off', inline: true },
       { name: 'Notification role', value: c.roleId ? '<@&' + c.roleId + '>' : 'No role ping', inline: true },
     ];
+    const routes = effectiveDestinations(c);
     controls = [
+      ...(routes.length ? [componentRow({ type: 3, custom_id: PANEL_PREFIX + 'routeSelect', min_values: 1, max_values: 1,
+        placeholder: 'Configure one destination',
+        options: routes.map(route => ({ label: guild.channels.cache.get(route.channelId)?.name?.slice(0, 95) || route.channelId,
+          value: route.channelId, description: (route.enabled ? 'Enabled' : 'Paused') + ' · ' + (route.alerts ? 'Alerts on' : 'Alerts off') })) })] : []),
       componentRow({ type: 8, custom_id: PANEL_PREFIX + 'destinations', channel_types: [0, 5], min_values: 0, max_values: 10,
         placeholder: 'Choose up to 10 listing channels',
         ...(effectiveDestinations(c).length ? { default_values: effectiveDestinations(c).map(route => ({ id: route.channelId, type: 'channel' })) } : {}) }),
       componentRow({ type: 6, custom_id: PANEL_PREFIX + 'role', min_values: 0, max_values: 1,
         placeholder: 'Notification role (clear for no ping)', ...(c.roleId ? { default_values: [{ id: c.roleId, type: 'role' }] } : {}) }),
       componentRow(panelButton('alerts', c.alerts ? 'Alerts: on' : 'Alerts: off')),
+    ];
+  } else if (page.startsWith('route:')) {
+    const id = page.slice(6);
+    const route = effectiveDestinations(c).find(item => item.channelId === id);
+    if (!route) throw new Error('Destination not found.');
+    embed.title = '📨 Free Games · Channel Rules';
+    embed.description = '<#' + id + '> · Configure this destination independently.';
+    embed.fields = [
+      { name: 'Status', value: route.enabled ? 'Enabled' : 'Paused', inline: true },
+      { name: 'Notifications', value: route.alerts ? 'Enabled' : 'Off', inline: true },
+      { name: 'Role', value: route.roleId ? '<@&' + route.roleId + '>' : 'No ping', inline: true },
+    ];
+    controls = [
+      choiceMenu('routeStores:' + id, 'Platforms for this channel', Object.entries(STORES), route.stores ?? c.stores, true),
+      choiceMenu('routeTypes:' + id, 'Offer types for this channel', Object.entries(TYPES), route.types ?? c.types, true),
+      componentRow({ type: 6, custom_id: PANEL_PREFIX + 'routeRole:' + id, min_values: 0, max_values: 1,
+        placeholder: 'Notification role for this channel',
+        ...(route.roleId ? { default_values: [{ id: route.roleId, type: 'role' }] } : {}) }),
+      componentRow(panelButton('routeToggle:' + id, route.enabled ? '⏸ Pause channel' : '▶ Enable channel'),
+        panelButton('routeAlerts:' + id, route.alerts ? '🔕 Disable alerts' : '🔔 Enable alerts')),
     ];
   } else if (page === 'filters') {
     embed.title += ' · Offers';
@@ -305,7 +330,7 @@ async function handleAdminInteraction(interaction) {
     if (action.startsWith('updates:')) return await handleGameUpdatesInteraction(interaction, action.slice(8), reply);
     if (action === 'studio') { await reply(require('../../../core/administration/admin/modules').buildStudioPanel('utilityStudio', member?.displayName || interaction.user.username)); return true; }
     if (/^featured:\d+$/.test(action)) { await reply(await buildFeaturedPanel(guild, Number(action.split(':')[1]))); return true; }
-    if (['home', 'settings', 'health', 'delivery', 'filters', 'pricing', 'display'].includes(action)) { await reply(buildAdminPanel(guild, action)); return true; }
+    if (['home', 'settings', 'health', 'delivery', 'filters', 'pricing', 'display'].includes(action) || /^route:\\d{16,20}$/.test(action)) { await reply(buildAdminPanel(guild, action)); return true; }
     if (/^preview:\d+$/.test(action)) {
       const { getOffers, getPricing } = require('./freeGamesProviders');
       const { buildListing, loadPlatformPresentation } = require('./freeGamesEmbeds');
@@ -327,7 +352,29 @@ async function handleAdminInteraction(interaction) {
     }
     const c = getConfig(guild.id);
     let patch, page = 'home';
-    if (action === 'regionalSubmit' && interaction.isModalSubmit?.()) {
+    if (action === 'routeSelect' && interaction.isStringSelectMenu?.()) {
+      const channelId = interaction.values?.[0];
+      if (!effectiveDestinations(c).some(route => route.channelId === channelId)) throw new Error('Unknown destination.');
+      await reply(buildAdminPanel(guild, 'route:' + channelId)); return true;
+    } else if (/^route(?:Stores|Types|Role|Toggle|Alerts):\\d{16,20}$/.test(action)) {
+      const [kind, channelId] = action.split(':');
+      const routes = effectiveDestinations(c).map(route => ({ ...route }));
+      const route = routes.find(item => item.channelId === channelId);
+      if (!route) throw new Error('Unknown destination.');
+      if (kind === 'routeStores' || kind === 'routeTypes') {
+        if (!interaction.isStringSelectMenu?.()) throw new Error('Choose a valid filter.');
+        route[kind === 'routeStores' ? 'stores' : 'types'] = interaction.values;
+      } else if (kind === 'routeRole') {
+        if (!interaction.isRoleSelectMenu?.()) throw new Error('Choose a role.');
+        route.roleId = interaction.values?.[0] || null;
+      } else {
+        if (!interaction.isButton?.()) throw new Error('Use the channel controls.');
+        if (kind === 'routeToggle') route.enabled = !route.enabled;
+        else route.alerts = !route.alerts;
+      }
+      await applySettings(guild, { destinations: routes });
+      await reply(buildAdminPanel(guild, 'route:' + channelId, 'Channel settings saved.')); return true;
+    } else if (action === 'regionalSubmit' && interaction.isModalSubmit?.()) {
       patch = Object.fromEntries(['currency', 'locale', 'timeZone', 'region'].map(key => [key, interaction.fields.getTextInputValue(key).trim()]));
       patch.currency = patch.currency.toUpperCase(); patch.region = patch.region.toUpperCase(); page = 'pricing';
     } else if (action === 'destinations' && interaction.isChannelSelectMenu?.()) {
