@@ -2,12 +2,12 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   MessageFlags,
 } = require('discord.js');
 
+const { navigationButton } = require('../../guild/goliathNavigation');
 const {
   createServerBackup,
   listServerBackups,
@@ -26,7 +26,7 @@ const displayName = (interaction) => interaction.member?.displayName
   || 'Unknown User';
 
 function button(id, label, style = ButtonStyle.Secondary, disabled = false) {
-  return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+  return navigationButton(id, label, style, disabled);
 }
 
 function row(...components) {
