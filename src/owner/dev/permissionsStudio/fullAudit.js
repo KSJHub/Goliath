@@ -1,6 +1,7 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } = require('discord.js');
 const detector = require('./auditDetector');
 
 const PREFIX = 'permaudit:';
@@ -50,8 +51,8 @@ function payload(guild, report) {
     components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(cid('open', guild.id)).setPlaceholder('Inspect a finding…').addOptions(options)));
   }
   components.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(cid('rescan', guild.id)).setLabel('Rescan').setEmoji('🔄').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(studioId('audit', guild.id)).setLabel('Back to Audit').setEmoji('⬅️').setStyle(ButtonStyle.Secondary),
+    navigationButton(cid('rescan', guild.id), 'Rescan', ButtonStyle.Primary).setEmoji('🔄'),
+    navigationButton(studioId('audit', guild.id), 'Back to Audit', ButtonStyle.Secondary).setEmoji('⬅️'),
   ));
   return { embeds: [embed], components };
 }
