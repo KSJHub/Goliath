@@ -1,6 +1,7 @@
 'use strict';
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 const verificationStore = require('./verificationStore');
 const guildManager = require('../../core/guild/guildManager');
 const guildVariables = require('../../core/guild/guildVariables');
@@ -27,7 +28,7 @@ function parseVerifyCustomId(v=''){const [p,a,id]=String(v).split(':');return p=
 function renderTemplate(t,m=null,g=null,v={}){return guildVariables.renderVerificationTemplate(t,m,g,v);}
 function renderMessage(t,m,v={}){return renderTemplate(t,m,m?.guild||null,v);}
 function buildVerificationEmbed(p={},g=null,m=null,v={}){const e=new EmbedBuilder().setColor(renderTemplate(p.color||'#57f287',m,g,v)).setTitle(renderTemplate(p.title||'Member Verification',m,g,v)).setDescription(renderTemplate(p.description||'Press the button below to begin verification.',m,g,v)).setFooter({text:renderTemplate(p.footer||'Goliath Verification',m,g,v)}).setTimestamp();const th=renderTemplate(p.thumbnailUrl||'',m,g,v),im=renderTemplate(p.imageUrl||'',m,g,v);if(/^https?:\/\//i.test(th))e.setThumbnail(th);if(/^https?:\/\//i.test(im))e.setImage(im);return e;}
-function buildVerificationRows(p={},g=null,m=null,v={}){const b=new ButtonBuilder().setCustomId(buildVerifyCustomId(p.panelId||p.id)).setLabel(renderTemplate(p.buttonLabel||'Verify',m,g,v).slice(0,80)).setStyle(BUTTON_STYLES[p.buttonStyle]||ButtonStyle.Success);const emoji=renderTemplate(p.buttonEmoji||'',m,g,v).trim();if(emoji)b.setEmoji(emoji);return [new ActionRowBuilder().addComponents(b)];}
+function buildVerificationRows(p={},g=null,m=null,v={}){const b=navigationButton(buildVerifyCustomId(p.panelId||p.id), renderTemplate(p.buttonLabel||'Verify',m,g,v).slice(0,80), BUTTON_STYLES[p.buttonStyle]||ButtonStyle.Success);const emoji=renderTemplate(p.buttonEmoji||'',m,g,v).trim();if(emoji)b.setEmoji(emoji);return [new ActionRowBuilder().addComponents(b)];}
 async function resolvePayload(g,p){return g?.client?emojiPayload.resolveMessagePayload(g.client,g.id,p,'verification'):p;}
 function getEffectiveVerificationSection(id){const s=verificationStore.getVerificationSection(id);return {...s,enabled:guildManager.isModuleEnabled(id,MODULE),settings:verificationStore.normalizeSettings(s.settings||{})};}
 function getVerificationStatus(id){return getEffectiveVerificationSection(id);}
