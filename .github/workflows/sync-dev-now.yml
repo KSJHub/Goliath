@@ -112,8 +112,13 @@ jobs:
             git reset --hard "$EXPECTED_SHA"
             test -d "$RUNTIME_DIR"
 
+            # Do not replace a live Node.js module tree: running workers can
+            # resolve lazy imports while npm removes/recreates individual files.
+            # Keep this downtime bounded to the locked install and validation.
+            echo "🛑 Stop DEV before replacing node_modules"
+            pm2 stop "$PM2_NAME" || true
+
             echo "📦 Clean locked dependency install"
-            rm -rf node_modules
             npm ci --no-audit --no-fund
 
             echo "🔧 Verify native/runtime dependencies"
@@ -159,6 +164,8 @@ jobs:
             mkdir -p "$DASHBOARD_ROOT"
             cp -a dist/. "$DASHBOARD_ROOT/"
 
+            # Fail before command registration if dependency files are unavailable.
+            node -e "require('discord.js'); require('./src/core/commands/syncCommands'); console.log('✅ Command sync dependencies ready')"
             BOT_MODE=dev COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
 
             LATEST_SHA="$(remote_dev_sha)"
