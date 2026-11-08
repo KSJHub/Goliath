@@ -2,7 +2,6 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
   ChannelType,
@@ -16,6 +15,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 const audit = require('./auditIntelligence');
 const auditRouter = require('./auditRouter');
 const auditStore = require('./auditStore');
@@ -206,10 +206,10 @@ function buildRoutingPanel(client, interaction) {
     rows.push(new ActionRowBuilder().addComponents(routeSelect));
     const channelSelect = new ChannelSelectMenuBuilder().setCustomId('owner:commandcenter:routing:channel').setPlaceholder(`3. Choose destination for ${ROUTE_LABELS[session.routeKey] || 'route'}`).setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1);
     rows.push(new ActionRowBuilder().addComponents(channelSelect));
-    const provisionButton = new ButtonBuilder().setCustomId('owner:commandcenter:routing:provision').setLabel('Create / Repair Report Channels').setEmoji('🛠️').setStyle(ButtonStyle.Success);
-    const testButton = new ButtonBuilder().setCustomId('owner:commandcenter:routing:test').setLabel('Send Test Report').setEmoji('🧪').setStyle(ButtonStyle.Primary);
-    const resetButton = new ButtonBuilder().setCustomId('owner:commandcenter:routing:reset').setLabel('Reset This Route').setStyle(ButtonStyle.Secondary);
-    const backButton = new ButtonBuilder().setCustomId('owner:commandcenter:refresh').setLabel('Back / Refresh Home').setStyle(ButtonStyle.Secondary);
+    const provisionButton = navigationButton('owner:commandcenter:routing:provision', 'Create / Repair Report Channels', ButtonStyle.Success).setEmoji('🛠️');
+    const testButton = navigationButton('owner:commandcenter:routing:test', 'Send Test Report', ButtonStyle.Primary).setEmoji('🧪');
+    const resetButton = navigationButton('owner:commandcenter:routing:reset', 'Reset This Route', ButtonStyle.Secondary);
+    const backButton = navigationButton('owner:commandcenter:refresh', 'Back / Refresh Home', ButtonStyle.Secondary);
     rows.push(new ActionRowBuilder().addComponents(provisionButton, testButton, resetButton, backButton));
   }
   return { embeds: [embed], components: rows, allowedMentions: { parse: [] } };
@@ -238,10 +238,10 @@ function buildMonitoringPanel(client, interaction) {
   if (selectedGuild) {
     const familySelect = new StringSelectMenuBuilder().setCustomId('owner:commandcenter:monitoring:family').setPlaceholder('2. Select monitoring family').setMinValues(1).setMaxValues(1).addOptions(Object.entries(MONITOR_LABELS).map(([value, label]) => ({ label, value, default: value === session.family })));
     rows.push(new ActionRowBuilder().addComponents(familySelect));
-    const toggleFamily = new ButtonBuilder().setCustomId('owner:commandcenter:monitoring:toggle').setLabel(selectedEnabled ? 'Disable Selected' : 'Enable Selected').setStyle(selectedEnabled ? ButtonStyle.Danger : ButtonStyle.Success);
-    const toggleGuild = new ButtonBuilder().setCustomId('owner:commandcenter:monitoring:guild-toggle').setLabel(guildConfig.enabled === false ? 'Resume Guild' : 'Pause Guild').setStyle(guildConfig.enabled === false ? ButtonStyle.Success : ButtonStyle.Danger);
-    const enableAll = new ButtonBuilder().setCustomId('owner:commandcenter:monitoring:all-on').setLabel('Enable All').setStyle(ButtonStyle.Secondary);
-    const backButton = new ButtonBuilder().setCustomId('owner:commandcenter:refresh').setLabel('Back / Refresh Home').setStyle(ButtonStyle.Secondary);
+    const toggleFamily = navigationButton('owner:commandcenter:monitoring:toggle', selectedEnabled ? 'Disable Selected' : 'Enable Selected', selectedEnabled ? ButtonStyle.Danger : ButtonStyle.Success);
+    const toggleGuild = navigationButton('owner:commandcenter:monitoring:guild-toggle', guildConfig.enabled === false ? 'Resume Guild' : 'Pause Guild', guildConfig.enabled === false ? ButtonStyle.Success : ButtonStyle.Danger);
+    const enableAll = navigationButton('owner:commandcenter:monitoring:all-on', 'Enable All', ButtonStyle.Secondary);
+    const backButton = navigationButton('owner:commandcenter:refresh', 'Back / Refresh Home', ButtonStyle.Secondary);
     rows.push(new ActionRowBuilder().addComponents(toggleFamily, toggleGuild, enableAll, backButton));
   }
   return { embeds: [embed], components: rows, allowedMentions: { parse: [] } };
@@ -290,9 +290,9 @@ async function buildStructurePanel(client, interaction) {
   const rows = [];
   if (sourceGuilds.length) rows.push(new ActionRowBuilder().addComponents(sourceGuildSelect('owner:commandcenter:structure:guild', '1. Select source guild', sourceGuilds, session.sourceGuildId)));
   if (selectedGuild) {
-    const repairButton = new ButtonBuilder().setCustomId('owner:commandcenter:structure:repair').setLabel(report?.systemChannel ? 'Repair Structure' : 'Provision Structure').setStyle(report?.healthy ? ButtonStyle.Secondary : ButtonStyle.Primary);
-    const rescanButton = new ButtonBuilder().setCustomId('owner:commandcenter:structure:rescan').setLabel('Rescan').setStyle(ButtonStyle.Secondary);
-    const backButton = new ButtonBuilder().setCustomId('owner:commandcenter:refresh').setLabel('Back / Refresh Home').setStyle(ButtonStyle.Secondary);
+    const repairButton = navigationButton('owner:commandcenter:structure:repair', report?.systemChannel ? 'Repair Structure' : 'Provision Structure', report?.healthy ? ButtonStyle.Secondary : ButtonStyle.Primary);
+    const rescanButton = navigationButton('owner:commandcenter:structure:rescan', 'Rescan', ButtonStyle.Secondary);
+    const backButton = navigationButton('owner:commandcenter:refresh', 'Back / Refresh Home', ButtonStyle.Secondary);
     rows.push(new ActionRowBuilder().addComponents(repairButton, rescanButton, backButton));
   }
   return { embeds: [embed], components: rows, allowedMentions: { parse: [] } };
@@ -347,9 +347,9 @@ async function buildIntelligencePanel(client, interaction) {
   const rows = [];
   if (sourceGuilds.length) rows.push(new ActionRowBuilder().addComponents(sourceGuildSelect('owner:commandcenter:intelligence:guild', '1. Select source guild', sourceGuilds, session.sourceGuildId)));
   if (sourceGuild) {
-    const searchButton = new ButtonBuilder().setCustomId('owner:commandcenter:intelligence:search').setLabel('Search User').setEmoji('🔎').setStyle(ButtonStyle.Primary);
-    const resetButton = new ButtonBuilder().setCustomId('owner:commandcenter:intelligence:reset').setLabel('Reset User').setStyle(ButtonStyle.Secondary).setDisabled(!session.userId && !session.matches?.length);
-    const backButton = new ButtonBuilder().setCustomId('owner:commandcenter:refresh').setLabel('Back / Refresh Home').setStyle(ButtonStyle.Secondary);
+    const searchButton = navigationButton('owner:commandcenter:intelligence:search', 'Search User', ButtonStyle.Primary).setEmoji('🔎');
+    const resetButton = navigationButton('owner:commandcenter:intelligence:reset', 'Reset User', ButtonStyle.Secondary, !session.userId && !session.matches?.length);
+    const backButton = navigationButton('owner:commandcenter:refresh', 'Back / Refresh Home', ButtonStyle.Secondary);
     rows.push(new ActionRowBuilder().addComponents(searchButton, resetButton, backButton));
   }
   if (sourceGuild && session.matches?.length > 1) {
@@ -367,7 +367,7 @@ async function buildIntelligencePanel(client, interaction) {
     rows.push(new ActionRowBuilder().addComponents(resultSelect));
   }
   if (sourceGuild && session.userId) {
-    const channelButton = new ButtonBuilder().setCustomId('owner:commandcenter:intelligence:channel').setLabel('Create / Open Intelligence Channel').setEmoji('📂').setStyle(ButtonStyle.Success);
+    const channelButton = navigationButton('owner:commandcenter:intelligence:channel', 'Create / Open Intelligence Channel', ButtonStyle.Success).setEmoji('📂');
     rows.push(new ActionRowBuilder().addComponents(channelButton));
   }
   return { embeds: report ? [embed, buildUserIntelligenceEmbed(report, sourceGuild)] : [embed], components: rows, allowedMentions: { parse: [] } };
@@ -463,9 +463,9 @@ async function buildHealthPanel(client, repairResult = null) {
       ...(repairSummary ? [{ name: 'Last Health Repair', value: repairSummary, inline: false }] : []),
     )
     .setFooter({ text: `Goliath Command Center • Health • Owner only • Checked ${report.checkedAt || 'now'}` });
-  const repairButton = new ButtonBuilder().setCustomId('owner:commandcenter:health:repair').setLabel('Repair Health').setEmoji('🛠️').setStyle(report.healthy ? ButtonStyle.Secondary : ButtonStyle.Success).setDisabled(report.healthy);
-  const rescanButton = new ButtonBuilder().setCustomId('owner:commandcenter:health:rescan').setLabel('Rescan Health').setStyle(ButtonStyle.Primary);
-  const backButton = new ButtonBuilder().setCustomId('owner:commandcenter:refresh').setLabel('Back / Refresh Home').setStyle(ButtonStyle.Secondary);
+  const repairButton = navigationButton('owner:commandcenter:health:repair', 'Repair Health', report.healthy ? ButtonStyle.Secondary : ButtonStyle.Success, report.healthy).setEmoji('🛠️');
+  const rescanButton = navigationButton('owner:commandcenter:health:rescan', 'Rescan Health', ButtonStyle.Primary);
+  const backButton = navigationButton('owner:commandcenter:refresh', 'Back / Refresh Home', ButtonStyle.Secondary);
   return { embeds: [embed], components: [new ActionRowBuilder().addComponents(repairButton, rescanButton, backButton)], allowedMentions: { parse: [] } };
 }
 
