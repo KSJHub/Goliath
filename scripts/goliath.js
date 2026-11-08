@@ -3032,6 +3032,7 @@ function load(file, mocks, testExport = '') {
   const loaded = { exports: {} };
   const fixtureRequire = id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
+    if (file === base + 'investigationRooms.js' && id === '../../../guild/goliathNavigation') return localRequire(id);
     if (id === 'discord.js' || id.startsWith('node:')) return localRequire(id);
     throw new Error(`Unmocked quarantine audit dependency: ${file} -> ${id}`);
   };
