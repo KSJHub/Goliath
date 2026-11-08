@@ -5,7 +5,7 @@ const {
   ActionRowBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
   EmbedBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
-const { navigationButton } = require('../../../core/guild/goliathNavigation');
+const { navigationButton, actionButton } = require('../../../core/guild/goliathNavigation');
 const counting = require('./counting');
 const countingHealth = require('./countingHealth');
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
@@ -88,8 +88,8 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
       button(PREFIX + ':reset', '♻️ Reset Game', ButtonStyle.Danger),
     ),
     row(
-      button('admin:studio:communityStudio', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
-      button(PREFIX + ':settings', emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
+      actionButton('admin:studio:communityStudio', 'back'),
+      actionButton(PREFIX + ':settings', 'settings'),
     ),
   ] };
 }
@@ -122,7 +122,7 @@ function buildRulesScreen(guild) {
       button(PREFIX + ':rules:toggle:banter', '😂 Banter: ' + (section.funnyResponses ? 'On' : 'Off'), ButtonStyle.Secondary),
       button(PREFIX + ':rules:cycle:timing', '⏱️ Reply Timing: ' + (section.responseCleanupSeconds === null ? 'Keep' : section.responseCleanupSeconds + 's'), ButtonStyle.Secondary),
     ),
-    row(button(PREFIX + ':main:0', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
+    row(actionButton(PREFIX + ':main:0', 'back')),
   ] };
 }
 function buildSettingsScreen(guild) {
@@ -152,7 +152,7 @@ function buildSettingsScreen(guild) {
       button(PREFIX + ':defaults', emojiLabel('REFRESH', 'Defaults'), ButtonStyle.Secondary),
       button(PREFIX + ':health', '🩺 Health', ButtonStyle.Secondary),
     ),
-    row(button(PREFIX + ':main:0', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
+    row(actionButton(PREFIX + ':main:0', 'back')),
   ] };
 }
 function buildDefaultsConfirmation() {
