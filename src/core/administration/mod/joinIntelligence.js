@@ -1,6 +1,7 @@
 'use strict';
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { navigationButton } = require('../../guild/goliathNavigation');
 const intelligence = require('./intelligence');
 const decisioning = require('./memberDecisioning');
 const { db } = require('./storage');
@@ -95,10 +96,10 @@ function suspectedAccounts(member) {
 function buildActionRows(member) {
   if (member.user.bot) return [];
   return [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`joinintel:view:${member.guild.id}:${member.id}`).setLabel('Open Intelligence').setEmoji('🧠').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`mod_open_quarantine:${member.id}`).setLabel('Investigate').setEmoji('🔎').setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(`joinintel:watch:${member.guild.id}:${member.id}`).setLabel('Watch Member').setEmoji('👁️').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`joinintel:clear:${member.guild.id}:${member.id}`).setLabel('Mark Clear').setEmoji('✅').setStyle(ButtonStyle.Success),
+    navigationButton(`joinintel:view:${member.guild.id}:${member.id}`, 'Open Intelligence', ButtonStyle.Primary).setEmoji('🧠'),
+    navigationButton(`mod_open_quarantine:${member.id}`, 'Investigate', ButtonStyle.Danger).setEmoji('🔎'),
+    navigationButton(`joinintel:watch:${member.guild.id}:${member.id}`, 'Watch Member', ButtonStyle.Secondary).setEmoji('👁️'),
+    navigationButton(`joinintel:clear:${member.guild.id}:${member.id}`, 'Mark Clear', ButtonStyle.Success).setEmoji('✅'),
   )];
 }
 
