@@ -4767,8 +4767,13 @@ async function gameUpdatesAudit() {
   const softwareIdentity = { appId: '431960', name: 'Wallpaper Engine', catalogueType: 'software' };
   const dlcIdentity = { appId: '2519060', name: 'Modern Warfare III Campaign', catalogueType: 'dlc' };
   assert.equal(classifySteamCatalogueIdentity(gameIdentity, { status: 'match', storeType: 'game' }).kind, 'confirmed-game');
-  assert.equal(classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'software' }).kind, 'expected-legacy');
-  assert.equal(classifySteamCatalogueIdentity(dlcIdentity, { status: 'non-game', storeType: 'dlc' }).kind, 'expected-legacy');
+  assert.equal(classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'software', storeName: 'Wallpaper Engine' }).kind, 'expected-legacy');
+  assert.equal(classifySteamCatalogueIdentity(dlcIdentity, { status: 'non-game', storeType: 'dlc', storeName: 'Modern Warfare III Campaign' }).kind, 'expected-legacy');
+  assert.equal(classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'software' }).kind, 'issue');
+  const legacyMismatch = classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'software', storeName: 'Another Software Product' });
+  assert.equal(legacyMismatch.kind, 'issue');
+  assert.equal(legacyMismatch.issue.suggestedAction, 'review-display-name');
+  assert.equal(legacyMismatch.issue.suggestedName, 'Another Software Product');
   assert.equal(classifySteamCatalogueIdentity(softwareIdentity, { status: 'non-game', storeType: 'dlc' }).issue.suggestedAction, 'review-app-type');
   assert.equal(classifySteamCatalogueIdentity(gameIdentity, { status: 'non-game', storeType: 'software' }).kind, 'issue');
   assert.equal(classifySteamCatalogueIdentity(dlcIdentity, { status: 'unavailable' }).kind, 'issue');
