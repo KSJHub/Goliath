@@ -5,10 +5,11 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const dotenv = require('dotenv');
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, EmbedBuilder,
+  ActionRowBuilder, ButtonStyle, MessageFlags, EmbedBuilder,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
 const security = require('../../core/security/protection/core');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 
 const ROOT = '/home/goliath';
 const PREFIX = 'ownerpanel:guildaccess:';
@@ -82,18 +83,10 @@ function appendBetaGuild(id, remove = false) {
 
 function buildRow() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`${PREFIX}list`)
-      .setLabel('Connected Guilds').setEmoji('🌐')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`${PREFIX}add`)
-      .setLabel('Approve BETA Guild').setEmoji('➕')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`${PREFIX}remove`)
-      .setLabel('Remove BETA Guild').setEmoji('➖')
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(`${PREFIX}invite`)
-      .setLabel('Invite BETA Bot').setEmoji('🔗')
-      .setStyle(ButtonStyle.Secondary)
+    navigationButton(`${PREFIX}list`, 'Connected Guilds', ButtonStyle.Secondary).setEmoji('🌐'),
+    navigationButton(`${PREFIX}add`, 'Approve BETA Guild', ButtonStyle.Primary).setEmoji('➕'),
+    navigationButton(`${PREFIX}remove`, 'Remove BETA Guild', ButtonStyle.Danger).setEmoji('➖'),
+    navigationButton(`${PREFIX}invite`, 'Invite BETA Bot', ButtonStyle.Secondary).setEmoji('🔗')
   );
 }
 
@@ -187,9 +180,7 @@ async function handle(interaction) {
         content: `${result.added ? '✅ Saved' : 'ℹ️ Already approved'}: **${guildId}**.\n` +
           'Restart BETA to load the saved list, then invite the beta bot. Approval does not invite it automatically.',
         components: [new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('ownerpanel:restart:ask:beta')
-            .setLabel('Restart BETA').setEmoji('🔄')
-            .setStyle(ButtonStyle.Primary)
+          navigationButton('ownerpanel:restart:ask:beta', 'Restart BETA', ButtonStyle.Primary).setEmoji('🔄')
         )],
         allowedMentions: { parse: [] },
       });
