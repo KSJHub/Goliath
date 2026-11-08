@@ -9,7 +9,7 @@ const {
   ChannelType,
   AttachmentBuilder,
 } = require('discord.js');
-const { navigationButton } = require('../../../core/guild/goliathNavigation');
+const { navigationButton, emojiLabel } = require('../../../core/guild/goliathNavigation');
 const guildManager = require('../../../core/guild/guildManager');
 const goodbye = require('./goodbye');
 const departureDm = require('./goodbyeDeparture');
@@ -79,7 +79,7 @@ const buildGoodbyeDmPanel = (() => {
         ),
         row(
           button('admin:goodbye:dm:reset', 'Reset DM', ButtonStyle.Danger),
-          button('admin:goodbye', 'Back to Goodbye'),
+          button('admin:goodbye', emojiLabel('BACK', 'Back to Goodbye')),
         ),
       ],
     };
