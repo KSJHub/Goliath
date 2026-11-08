@@ -4989,7 +4989,7 @@ else {
       if (!result) process.exitCode = 1;
     })
     .catch((error) => {
-      console.error('Goliath command failed:', error.message);
+      console.error('Goliath command failed:', error.stack || error.message);
       process.exitCode = 1;
     });
 }
