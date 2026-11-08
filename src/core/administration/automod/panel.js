@@ -4,7 +4,6 @@ const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
   RoleSelectMenuBuilder,
@@ -56,9 +55,11 @@ const DEFAULT_DM_MESSAGES = {
   scamPatterns: `${EMOJIS.WARNING} **{server} AutoMod**\nSuspicious Content Protection triggered: {reason}`,
 };
 
+const { navigationButton } = require('../../guild/goliathNavigation');
+
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const button = (id, label, style = ButtonStyle.Primary, disabled = false) => {
-  const component = new ButtonBuilder().setCustomId(id).setStyle(style).setDisabled(disabled);
+  const component = navigationButton(id, label, style, disabled);
   const backPrefix = `${EMOJIS.BACK} `;
   if (typeof label === 'string' && label.startsWith(backPrefix)) {
     return component.setEmoji(EMOJIS.BACK).setLabel(label.slice(backPrefix.length));
