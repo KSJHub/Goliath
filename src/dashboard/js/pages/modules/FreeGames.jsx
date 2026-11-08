@@ -37,7 +37,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     const current = generation.current;
     setBusy(true); setError(''); setNotice('');
     try {
-      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'featuredMode', 'featuredOfferId', 'featuredArtwork', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
+      const settings = Object.fromEntries(['enabled', 'channelId', 'destinations', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'featuredMode', 'featuredOfferId', 'featuredArtwork', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
       const payload = await api.request(`/api/games/${guildId}${refresh ? '/refresh' : ''}`, refresh ? { method: 'POST' } : { method: 'PATCH', body: JSON.stringify(settings) });
       if (generation.current !== current) return;
       setData((old) => ({ ...old, config: payload.config })); setDraft(payload.config);
@@ -49,7 +49,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     const current = generation.current;
     setBusy(true); setError('');
     try {
-      const settings = Object.fromEntries(['enabled', 'channelId', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'featuredMode', 'featuredOfferId', 'featuredArtwork', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
+      const settings = Object.fromEntries(['enabled', 'channelId', 'destinations', 'stores', 'types', 'alerts', 'roleId', 'currency', 'priceMode', 'locale', 'timeZone', 'region', 'layout', 'featuredMode', 'featuredOfferId', 'featuredArtwork', 'showTimestamps', 'showPlatforms', 'showNew', 'showOfferCount'].map((key) => [key, draft[key]]));
       const result = await api.request(`/api/games/${guildId}/preview`, { method: 'POST', body: JSON.stringify(settings) });
       if (current === generation.current) setPreview(result);
     } catch (err) { if (current === generation.current) setError(err.message); }
@@ -94,6 +94,10 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
   if (!guildId) return <p>Select a server to configure Games.</p>;
   if (!draft) return <p role={error ? 'alert' : 'status'}>{error || 'Loading Games…'}</p>;
   const patch = (value) => { setPreview(null); setDraft((old) => ({ ...old, ...value })); };
+  const destinations = draft.destinationsConfigured ? (draft.destinations || []) :
+    draft.channelId ? [{ channelId: draft.channelId, enabled: true, alerts: draft.alerts, roleId: draft.roleId, stores: null, types: null }] : [];
+  const editDestinations = (next) => patch({ destinations: next, destinationsConfigured: true });
+  const editDestination = (id, changes) => editDestinations(destinations.map(route => route.channelId === id ? { ...route, ...changes } : route));
   const toggle = (key, value, checked) => patch({ [key]: checked ? [...draft[key], value] : draft[key].filter((item) => item !== value) });
   const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))', gap: 14 };
   const selectionStyle = (checked) => ({ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, padding: '13px 14px', borderRadius: 12, border: '1px solid ' + (checked ? theme.primaryBorder || theme.primary : theme.cardBorder), background: checked ? theme.primarySoft || theme.softBg : theme.softBg, color: theme.cardText, cursor: busy ? 'wait' : 'pointer', fontSize: 14, fontWeight: 500, lineHeight: 1.4 });
@@ -141,7 +145,35 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
     <SectionCard themed theme={theme} title="Delivery">
       <fieldset disabled={busy} style={{ border: 0, padding: 0, display: 'grid', gap: 18 }}>
         <label style={{ ...selectionStyle(draft.enabled), justifyContent: 'space-between' }}><span><strong style={{ display: 'block', fontWeight: 600 }}>Automatic listings</strong><span style={{ color: theme.mutedText, fontSize: 13 }}>Keep your server’s free offers up to date.</span></span><input type="checkbox" role="switch" aria-label="Enable Free Games" checked={draft.enabled} style={{ accentColor: theme.primary, width: 20, height: 20, flexShrink: 0 }} onChange={(event) => patch({ enabled: event.target.checked })} /></label>
-        <ChannelSelect searchable disabled={busy} theme={theme} resources={data.channels} value={draft.channelId || ''} onChange={(channelId) => patch({ channelId: channelId || null })} label="Free Games channel" />
+        <div style={{ display: 'grid', gap: 12 }}>
+          <strong>Delivery destinations ({destinations.length}/10)</strong>
+          <ChannelSelect searchable disabled={busy || destinations.length >= 10} theme={theme}
+            resources={data.channels.filter(channel => !destinations.some(route => route.channelId === String(channel.id)))}
+            value="" onChange={channelId => {
+              if (channelId && !destinations.some(route => route.channelId === channelId))
+                editDestinations([...destinations, { channelId, enabled: true, alerts: false, roleId: null, stores: null, types: null }]);
+            }} label="Add a delivery channel" />
+          {destinations.map(route => <div key={route.channelId} style={{ border: '1px solid ' + theme.cardBorder, borderRadius: 12, padding: 14, display: 'grid', gap: 12 }}>
+            <strong>{data.channels.find(channel => String(channel.id) === route.channelId)?.name || route.channelId}</strong>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              <label><input type="checkbox" disabled={busy} checked={route.enabled !== false} onChange={e => editDestination(route.channelId, { enabled: e.target.checked })} /> Enabled</label>
+              <label><input type="checkbox" disabled={busy} checked={route.alerts === true} onChange={e => editDestination(route.channelId, { alerts: e.target.checked })} /> New offer alerts</label>
+            </div>
+            <RoleSelect searchable disabled={busy} theme={theme} resources={data.roles} value={route.roleId || ''}
+              onChange={roleId => editDestination(route.channelId, { roleId: roleId || null })} label="Notification role" />
+            <strong>Platforms</strong>
+            <div style={grid}>{Object.entries(data.stores).map(([key, name]) => <label key={key}>
+              <input type="checkbox" disabled={busy} checked={(route.stores ?? draft.stores).includes(key)}
+                onChange={e => { const next = e.target.checked ? [...(route.stores ?? draft.stores), key] : (route.stores ?? draft.stores).filter(v => v !== key); editDestination(route.channelId, { stores: next }); }} /> {name}
+            </label>)}</div>
+            <strong>Offer types</strong>
+            <div style={grid}>{Object.entries(data.types).map(([key, name]) => <label key={key}>
+              <input type="checkbox" disabled={busy} checked={(route.types ?? draft.types).includes(key)}
+                onChange={e => { const next = e.target.checked ? [...(route.types ?? draft.types), key] : (route.types ?? draft.types).filter(v => v !== key); editDestination(route.channelId, { types: next }); }} /> {name}
+            </label>)}</div>
+            <button style={button} disabled={busy} onClick={() => editDestinations(destinations.filter(item => item.channelId !== route.channelId))}>Remove destination</button>
+          </div>)}
+        </div>
         <p style={{ color: theme.mutedText, margin: 0 }}>Channels follow your server’s category order. Choose where the maintained catalogue is posted; pausing keeps existing messages.</p>
       </fieldset>
     </SectionCard>
@@ -186,7 +218,7 @@ export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
   const overview = <><SectionCard themed theme={theme} title="Free Games status"><div style={{ display: 'grid', gap: 12 }}>
     <p>{data.config.state.offerCount} matching offers · {data.config.state.deliveries.length} listing messages</p>
     <p>Last check: {stamp(data.config.state.lastCheck, data.config)}<br />Last successful update: {stamp(data.config.state.lastSuccess, data.config)}</p>
-    <p>{!data.config.enabled ? 'Updates are paused.' : !data.config.channelId ? 'Needs setup: choose a destination channel.' : data.config.state.error ? 'Update failed. The last successful listing is retained.' : !data.config.state.lastSuccess ? 'Waiting for the first successful listing update.' : 'The last listing update succeeded.'}</p>
+    <p>{!data.config.enabled ? 'Updates are paused.' : !(data.config.destinationsConfigured ? data.config.destinations?.some(route => route.enabled) : data.config.channelId) ? 'Needs setup: choose a destination channel.' : data.config.state.error ? 'Update failed. The last successful listing is retained.' : !data.config.state.lastSuccess ? 'Waiting for the first successful listing update.' : 'The last listing update succeeded.'}</p>
     {data.config.state.warning ? <p role="status">{data.config.state.warning}</p> : null}
     {data.config.state.error ? <p role="alert" style={{ color: '#fca5a5' }}>{data.config.state.error}</p> : null}
     <button style={button} disabled={busy || !data.config.enabled} onClick={() => act(true)}>Refresh saved listing now</button>
