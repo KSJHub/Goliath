@@ -14,6 +14,7 @@ const {
   UserSelectMenuBuilder,
 } = Discord;
 
+const { navigationButton } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const { safeReply, ephemeralError } = require('../../../core/ui/interactionResponse');
 const {
@@ -212,20 +213,20 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
   const finalButtons = [];
   if (active === 'actions') {
     finalButtons.push(new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary));
-    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
-    if (canUseModAction(member, guild, 'view_analytics')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
+    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${id}`, '📤 Export', ButtonStyle.Secondary));
+    if (canUseModAction(member, guild, 'view_analytics')) finalButtons.push(navigationButton(`mod_dashboard:${id}:analytics`, '📊 Analytics', ButtonStyle.Secondary));
   } else if (active === 'analytics') {
     const returnId = context.analyticsReturnTargetId || 'none';
-    finalButtons.push(new ButtonBuilder().setCustomId('mod_history_back').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary));
+    finalButtons.push(navigationButton('mod_history_back', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
     finalButtons.push(new ButtonBuilder()
       .setCustomId(`mod_analytics_refresh:${context.analyticsWindow || '30d'}:${context.analyticsMode || 'overview'}:${context.analyticsModeratorId || 'none'}:${returnId}`)
       .setLabel(emojiLabel('REFRESH', 'Refresh'))
       .setStyle(ButtonStyle.Secondary));
-    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${returnId}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
+    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${returnId}`, '📤 Export', ButtonStyle.Secondary));
   } else {
-    finalButtons.push(new ButtonBuilder().setCustomId('mod_history_back').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary));
-    if (active === 'cases' && String(member?.id) === String(guild?.ownerId)) finalButtons.push(new ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('⚙️ Management').setStyle(ButtonStyle.Secondary));
-    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
+    finalButtons.push(navigationButton('mod_history_back', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
+    if (active === 'cases' && String(member?.id) === String(guild?.ownerId)) finalButtons.push(navigationButton('mod_owner_management:0', '⚙️ Management', ButtonStyle.Secondary));
+    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${id}`, '📤 Export', ButtonStyle.Secondary));
   }
   rows.push(new ActionRowBuilder().addComponents(finalButtons));
   return rows;
@@ -249,16 +250,16 @@ function buildActionRows(target, stats, member, guild, context = {}) {
   if (p.removeQuarantine) reversals.push(createSecondaryButton(`mod_remove_quarantine:${id}`, 'Clear Investigation', '🟠').setDisabled(disabled || !quarantined));
   const management = [];
   if (canViewDashboardSection(member, guild, 'cases')) {
-    management.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:cases`).setLabel('📁 Cases').setStyle(ButtonStyle.Secondary));
+    management.push(navigationButton(`mod_dashboard:${id}:cases`, '📁 Cases', ButtonStyle.Secondary));
   }
-  if (canViewDashboardSection(member, guild, 'appeals')) management.push(new ButtonBuilder().setCustomId('mod_dashboard:none:appeals').setLabel('⚖️ Appeals').setStyle(ButtonStyle.Secondary));
-  if (canUseModAction(member, guild, 'view_cases')) management.push(new ButtonBuilder().setCustomId('mod_verification_cases').setLabel('🚨 Quarantines').setStyle(ButtonStyle.Secondary));
+  if (canViewDashboardSection(member, guild, 'appeals')) management.push(navigationButton('mod_dashboard:none:appeals', '⚖️ Appeals', ButtonStyle.Secondary));
+  if (canUseModAction(member, guild, 'view_cases')) management.push(navigationButton('mod_verification_cases', '🚨 Quarantines', ButtonStyle.Secondary));
   const tools = [
     new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
   ];
-  if (canViewDashboardSection(member, guild, 'intelligence')) management.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:intelligence`).setLabel('🧠 Intelligence').setStyle(ButtonStyle.Secondary).setDisabled(disabled));
-  if (canViewDashboardSection(member, guild, 'analytics')) tools.push(new ButtonBuilder().setCustomId(`mod_dashboard:${id}:analytics`).setLabel('📊 Analytics').setStyle(ButtonStyle.Secondary));
-  if (canUseModAction(member, guild, 'export_cases')) tools.push(new ButtonBuilder().setCustomId(`mod_export_cases:${id}`).setLabel('📤 Export').setStyle(ButtonStyle.Secondary));
+  if (canViewDashboardSection(member, guild, 'intelligence')) management.push(navigationButton(`mod_dashboard:${id}:intelligence`, '🧠 Intelligence', ButtonStyle.Secondary, disabled));
+  if (canViewDashboardSection(member, guild, 'analytics')) tools.push(navigationButton(`mod_dashboard:${id}:analytics`, '📊 Analytics', ButtonStyle.Secondary));
+  if (canUseModAction(member, guild, 'export_cases')) tools.push(navigationButton(`mod_export_cases:${id}`, '📤 Export', ButtonStyle.Secondary));
   return [buttonRow(actions),buttonRow(reversals),buttonRow(management),buttonRow(tools)].filter(Boolean);
 }
 function buildIntelligenceRows(targetId, member, guild) {
@@ -460,8 +461,8 @@ function buildAnalyticsRows(guild, windowKey, mode = 'overview', moderatorId = n
       }));
     rows.push(new ActionRowBuilder().addComponents(menu));
     if (pageCount > 1) rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`mod_analytics_staff_page:${window}:${mode}:${moderatorId || 'none'}:${returnId}:${page - 1}`).setLabel('◀ Staff').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-      new ButtonBuilder().setCustomId(`mod_analytics_staff_page:${window}:${mode}:${moderatorId || 'none'}:${returnId}:${page + 1}`).setLabel('Staff ▶').setStyle(ButtonStyle.Secondary).setDisabled(page + 1 >= pageCount)
+      navigationButton(`mod_analytics_staff_page:${window}:${mode}:${moderatorId || 'none'}:${returnId}:${page - 1}`, '◀ Staff', ButtonStyle.Secondary, page === 0),
+      navigationButton(`mod_analytics_staff_page:${window}:${mode}:${moderatorId || 'none'}:${returnId}:${page + 1}`, 'Staff ▶', ButtonStyle.Secondary, page + 1 >= pageCount)
     ));
   }
   rows.push(new ActionRowBuilder().addComponents(windowButtons));
@@ -518,11 +519,11 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
         value: e.source === 'verification' ? `q:${e.userId}` : `c:${e.caseId}`
       })) : [{ label: 'No matching records', value: 'none' }])));
     components.push(new ActionRowBuilder().addComponents(...[['all','All'],['warn','Warnings'],['timeout','Timeouts'],['appeal','Appeals'],['quarantine','Quarantines']].map(([key,label]) =>
-      new ButtonBuilder().setCustomId(`mod_cases_filter:${targetId || 'none'}:${key}`).setLabel(label).setStyle(filter === key ? ButtonStyle.Primary : ButtonStyle.Secondary))));
+      navigationButton(`mod_cases_filter:${targetId || 'none'}:${key}`, label, filter === key ? ButtonStyle.Primary : ButtonStyle.Secondary))));
     const controls = [];
     if (pages > 1) controls.push(
-      new ButtonBuilder().setCustomId(`mod_cases_page:${targetId || 'none'}:${filter}:${page - 1}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
-      new ButtonBuilder().setCustomId(`mod_cases_page:${targetId || 'none'}:${filter}:${page + 1}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page === pages - 1));
+      navigationButton(`mod_cases_page:${targetId || 'none'}:${filter}:${page - 1}`, '◀ Previous', ButtonStyle.Secondary, page === 0),
+      navigationButton(`mod_cases_page:${targetId || 'none'}:${filter}:${page + 1}`, 'Next ▶', ButtonStyle.Secondary, page === pages - 1));
     if (controls.length) components.push(new ActionRowBuilder().addComponents(controls));
   }
   else if (safeView === 'appeals') {
@@ -540,11 +541,11 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
         )
     ));
     if (data.entries.length) components.push(new ActionRowBuilder().addComponents(data.entries.map(({ case: modCase, appeal }) =>
-      new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`).setLabel(`${appeal.status === 'pending' ? '⚖️ Review' : '📁 View'} #${modCase.caseId}`).setStyle(appeal.status === 'pending' ? ButtonStyle.Success : ButtonStyle.Secondary)
+      navigationButton(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`, `${appeal.status === 'pending' ? '⚖️ Review' : '📁 View'} #${modCase.caseId}`, appeal.status === 'pending' ? ButtonStyle.Success : ButtonStyle.Secondary)
     )));
     if (data.totalPages > 1) components.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`mod_appeals_filter:${filter}:${data.currentPage - 1}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(data.currentPage === 0),
-      new ButtonBuilder().setCustomId(`mod_appeals_filter:${filter}:${data.currentPage + 1}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(data.currentPage + 1 >= data.totalPages)
+      navigationButton(`mod_appeals_filter:${filter}:${data.currentPage - 1}`, '◀ Previous', ButtonStyle.Secondary, data.currentPage === 0),
+      navigationButton(`mod_appeals_filter:${filter}:${data.currentPage + 1}`, 'Next ▶', ButtonStyle.Secondary, data.currentPage + 1 >= data.totalPages)
     ));
   }
   else if (safeView === 'analytics') { const window = context.analyticsWindow; if (context.analyticsMode === 'moderator' && context.analyticsModeratorId) embeds.push(buildModeratorAnalyticsEmbed(interaction.guild, getModeratorAnalytics(interaction.guild.id, context.analyticsModeratorId, window), interaction.user?.id || null)); else embeds.push(buildAnalyticsOverviewEmbed(interaction.guild, getModerationAnalytics(interaction.guild.id, window))); components.push(...buildAnalyticsRows(interaction.guild, window, context.analyticsMode, context.analyticsModeratorId, interaction.user?.id || null, context.analyticsReturnTargetId || 'none', context.analyticsStaffPage)); }
