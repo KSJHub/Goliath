@@ -38,9 +38,94 @@ async function removeDelivery(guild, delivery) {
   const message = await fetchMessage(channel, delivery.messageId);
   if (message?.author?.id === guild.client.user.id) await message.delete();
 }
+async function processMultiDestinationGuild(guild, config) {
+  const routes = store.effectiveDestinations(config).filter(route => route.enabled);
+  if (!routes.length) return { skipped: true };
+  const channels = new Map();
+  for (const route of routes) channels.set(route.channelId, await validateDestination(guild, route));
+  const feed = await providers.getOffers();
+  const now = Date.now();
+  const pricing = await providers.getPricing(config);
+  const previous = config.state;
+  const observed = { ...previous.observed }, firstSeen = { ...previous.firstSeen }, newSince = { ...previous.newSince };
+  const freshIds = new Set(feed.offers.filter(offer => !observed[offer.id]).map(offer => offer.id));
+  for (const offer of feed.offers) {
+    firstSeen[offer.id] ||= now;
+    observed[offer.id] = now;
+    if (previous.initialized && freshIds.has(offer.id)) newSince[offer.id] = now;
+  }
+  for (const id of Object.keys(newSince)) if (now - newSince[id] >= 86400_000) delete newSince[id];
+  for (const id of Object.keys(observed)) if (now - observed[id] > 180 * 86400_000) {
+    delete observed[id]; delete firstSeen[id];
+  }
+  store.update(guild.id, current => ({ ...current, state: { ...current.state, lastCheck: now, observed, firstSeen, newSince, pricing, warning: pricing.warning || null } }));
+  config = store.getConfig(guild.id);
+  let pageCount = 0, offerCount = 0;
+  const presentation = await loadPlatformPresentation(guild.client, guild.id);
+  for (const route of routes) {
+    const channel = channels.get(route.channelId);
+    const scoped = { ...config, stores: route.stores ?? config.stores, types: route.types ?? config.types, alerts: route.alerts, roleId: route.roleId };
+    const offers = store.filterOffers(feed.offers, scoped, now);
+    offerCount += offers.length;
+    const pages = buildListing(offers, { ...scoped, listingUpdatedAt: feed.fetchedAt }, now, presentation);
+    pageCount += pages.length;
+    // Delivery records are isolated by channel, and old single-channel records are preserved.
+    const prior = (store.getConfig(guild.id).state.routeDeliveries || {})[route.channelId] || [];
+    const next = [];
+    for (let index = 0; index < pages.length; index++) {
+      const delivery = prior[index];
+      let message = await fetchMessage(channel, delivery?.messageId);
+      if (message && message.author?.id !== guild.client.user.id) throw new Error('Stored listing is not owned by this bot.');
+      if (!message) {
+        const recent = await channel.messages.fetch({ limit: 100 });
+        message = recent.find(item => item.author?.id === guild.client.user.id &&
+          SECTIONS.some(section => section.title === item.embeds?.[0]?.title) &&
+          item.embeds?.[0]?.footer?.text?.startsWith(`Goliath Free Games · ${index + 1}/`));
+      }
+      const fingerprint = hash(pages[index]);
+      if (!message) message = await channel.send({ ...pages[index], nonce: hash([guild.id, channel.id, index, Math.floor(now / 300000)]).slice(0, 24), enforceNonce: true });
+      else if (!delivery || delivery.fingerprint !== fingerprint || message.id !== delivery.messageId) await message.edit(pages[index]);
+      next.push({ channelId: channel.id, messageId: message.id, fingerprint });
+      store.update(guild.id, current => ({ ...current, state: { ...current.state,
+        routeDeliveries: { ...(current.state.routeDeliveries || {}), [channel.id]: [...next, ...prior.slice(next.length)] } } }));
+    }
+    // Never delete old messages during route migration; only retire pages owned by this route.
+    for (const delivery of prior.slice(pages.length)) await removeDelivery(guild, delivery);
+    store.update(guild.id, current => ({ ...current, state: { ...current.state,
+      routeDeliveries: { ...(current.state.routeDeliveries || {}), [channel.id]: next } } }));
+    if (previous.initialized && route.alerts) {
+      const fresh = offers.filter(offer => freshIds.has(offer.id));
+      if (fresh.length) {
+        let description = '', included = 0;
+        for (const offer of fresh) {
+          const entry = line(offer, newSince, now, scoped) + '\n';
+          if (description.length + entry.length > 3300) break;
+          description += entry; included++;
+        }
+        if (included < fresh.length) description += '\nSee the maintained listing for all offers.';
+        description += '\n[Offers provided by GamerPower](https://www.gamerpower.com/)';
+        const first = fresh[0];
+        const detail = fresh.length === 1 && first.description ? first.description.slice(0, 400).replace(/@/g, '@\\u200b') + '\n\n' : '';
+        await channel.send({ content: route.roleId ? `<@&${route.roleId}>` : '',
+          embeds: [{ title: `🎁 ${fresh.length} new free offer${fresh.length === 1 ? '' : 's'}`,
+            description: detail + description, ...(first.image ? { thumbnail: { url: first.image } } : {}),
+            color: SECTIONS[0].color, footer: { text: 'Goliath Free Games · New offers' },
+            ...(config.showTimestamps === false ? {} : { timestamp: new Date(now).toISOString() }) }],
+          allowedMentions: { parse: [], roles: route.roleId ? [route.roleId] : [] } });
+      }
+    }
+  }
+  store.update(guild.id, current => ({ ...current, state: { ...current.state, initialized: true,
+    lastSuccess: now, error: null, offerCount } }));
+  return { offerCount, pages: pageCount, destinations: routes.length };
+}
 async function processGuildUnlocked(guild) {
   let config = store.getConfig(guild.id);
   if (!config.enabled) return { skipped: true };
+  if (config.destinations?.length) {
+    try { return await processMultiDestinationGuild(guild, config); }
+    catch (error) { store.update(guild.id, current => ({ ...current, state: { ...current.state, error: String(error.message || error).slice(0, 400) } })); throw error; }
+  }
   store.update(guild.id, (current) => ({ ...current, state: { ...current.state, lastCheck: Date.now() } }));
   try {
     const feed = await providers.getOffers();
