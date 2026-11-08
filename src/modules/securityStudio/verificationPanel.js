@@ -1,5 +1,5 @@
 'use strict';
-const { navigationButton } = require('../../../core/guild/goliathNavigation');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 
 const {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
