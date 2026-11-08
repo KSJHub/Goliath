@@ -227,7 +227,18 @@ async function saveGameSubscription(guild, patch) {
     if (!previous && Object.keys(config.subscriptions).length >= 50) throw new Error('A server can follow up to 50 games.');
     const next = store.normalizeUpdateSubscription({ ...patch, appId }, previous);
     if (previous && next.channelId !== previous.channelId && previous.pending.some(entry => entry.status !== 'pending')) throw new Error('Resolve held deliveries before changing the destination channel.');
-    if (next.channelId) await validateDestination(guild, { ...next, alerts: Boolean(next.roleId) });
+    // Validate every configured destination before saving, even while the legacy
+    // single-channel dispatcher remains active.
+    for (const route of store.effectiveUpdateDestinations(next).filter(item => item.enabled)) {
+      await validateDestination(guild, { ...next, ...route, alerts: Boolean(route.roleId) });
+      if (route.roleId) {
+        const routeRole = await guild.roles.fetch(route.roleId);
+        if (!routeRole || routeRole.id === guild.id || routeRole.managed) throw new Error('Choose a regular notification role for each destination.');
+      }
+    }
+    if (next.channelId && !store.effectiveUpdateDestinations(next).some(route => route.channelId === next.channelId)) {
+      await validateDestination(guild, { ...next, alerts: Boolean(next.roleId) });
+    }
     if (next.roleId) {
       const role = await guild.roles.fetch(next.roleId);
       if (!role || role.id === guild.id || role.managed) throw new Error('Choose a regular notification role.');
