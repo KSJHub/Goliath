@@ -1,7 +1,8 @@
 'use strict';
 
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags,
+  ActionRowBuilder, ButtonStyle, EmbedBuilder, MessageFlags,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
 const guildManager = require('../../core/guild/guildManager');
@@ -42,7 +43,7 @@ function challengeEmbed(challenge, member = null) {
 function memberChallengePayload(userId, challenge) {
   if (!challenge) return { content: '❌ No active Verification challenge exists.', components: [] };
   if (challenge.method === 'staff_approval') return { embeds: [challengeEmbed(challenge)], content: '⏳ Verification is waiting for a member of staff.', components: [] };
-  const button = new ButtonBuilder().setCustomId(runtime.buildMemberActionId(userId, challenge.challengeId)).setLabel(challenge.method === 'minigame' ? 'Answer Mini-game' : 'Enter Answer').setStyle(ButtonStyle.Primary);
+  const button = navigationButton(runtime.buildMemberActionId(userId, challenge.challengeId), challenge.method === 'minigame' ? 'Answer Mini-game' : 'Enter Answer', ButtonStyle.Primary);
   return { embeds: [challengeEmbed(challenge)], components: [new ActionRowBuilder().addComponents(button)] };
 }
 
@@ -50,9 +51,9 @@ function staffChallengePayload(userId, challenge) {
   if (!challenge || challenge.method !== 'staff_approval') return null;
   const ids = Object.fromEntries((challenge.allowedActions || []).map(action => [action, runtime.buildStaffActionId(userId, challenge.challengeId, action)]));
   const buttons = [];
-  if (ids.approve) buttons.push(new ButtonBuilder().setCustomId(ids.approve).setLabel('Approve').setStyle(ButtonStyle.Success));
-  if (ids.reject) buttons.push(new ButtonBuilder().setCustomId(ids.reject).setLabel('Reject').setStyle(ButtonStyle.Danger));
-  if (ids.quarantine) buttons.push(new ButtonBuilder().setCustomId(ids.quarantine).setLabel('Quarantine').setStyle(ButtonStyle.Secondary));
+  if (ids.approve) buttons.push(navigationButton(ids.approve, 'Approve', ButtonStyle.Success));
+  if (ids.reject) buttons.push(navigationButton(ids.reject, 'Reject', ButtonStyle.Danger));
+  if (ids.quarantine) buttons.push(navigationButton(ids.quarantine, 'Quarantine', ButtonStyle.Secondary));
   return { embeds: [challengeEmbed(challenge)], components: buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [] };
 }
 
