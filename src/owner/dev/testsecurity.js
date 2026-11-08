@@ -1,7 +1,6 @@
 const {
   SlashCommandBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   MessageFlags,
 } = require('discord.js');
@@ -16,6 +15,8 @@ const {
   createServerBackup,
 } = require('../../core/security/restoreBackup/backup');
 const security = require('../../core/security/protection/core');
+
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 
 const BUTTON_PREFIX = 'testsecurity:';
 
@@ -221,57 +222,25 @@ const TESTS = {
 function buildRows() {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`${BUTTON_PREFIX}channel-delete`)
-        .setLabel(TESTS['channel-delete'].label)
-        .setEmoji(TESTS['channel-delete'].emoji)
-        .setStyle(TESTS['channel-delete'].style),
+      navigationButton(`${BUTTON_PREFIX}channel-delete`, TESTS['channel-delete'].label, TESTS['channel-delete'].style).setEmoji(TESTS['channel-delete'].emoji),
 
-      new ButtonBuilder()
-        .setCustomId(`${BUTTON_PREFIX}role-delete`)
-        .setLabel(TESTS['role-delete'].label)
-        .setEmoji(TESTS['role-delete'].emoji)
-        .setStyle(TESTS['role-delete'].style),
+      navigationButton(`${BUTTON_PREFIX}role-delete`, TESTS['role-delete'].label, TESTS['role-delete'].style).setEmoji(TESTS['role-delete'].emoji),
 
-      new ButtonBuilder()
-        .setCustomId(`${BUTTON_PREFIX}webhook-abuse`)
-        .setLabel(TESTS['webhook-abuse'].label)
-        .setEmoji(TESTS['webhook-abuse'].emoji)
-        .setStyle(TESTS['webhook-abuse'].style)
+      navigationButton(`${BUTTON_PREFIX}webhook-abuse`, TESTS['webhook-abuse'].label, TESTS['webhook-abuse'].style).setEmoji(TESTS['webhook-abuse'].emoji)
     ),
 
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`${BUTTON_PREFIX}lockdown`)
-        .setLabel(TESTS.lockdown.label)
-        .setEmoji(TESTS.lockdown.emoji)
-        .setStyle(TESTS.lockdown.style),
+      navigationButton(`${BUTTON_PREFIX}lockdown`, TESTS.lockdown.label, TESTS.lockdown.style).setEmoji(TESTS.lockdown.emoji),
 
-      new ButtonBuilder()
-        .setCustomId(`${BUTTON_PREFIX}quarantine`)
-        .setLabel(TESTS.quarantine.label)
-        .setEmoji(TESTS.quarantine.emoji)
-        .setStyle(TESTS.quarantine.style),
+      navigationButton(`${BUTTON_PREFIX}quarantine`, TESTS.quarantine.label, TESTS.quarantine.style).setEmoji(TESTS.quarantine.emoji),
 
-      new ButtonBuilder()
-        .setCustomId(`${BUTTON_PREFIX}incident-log`)
-        .setLabel(TESTS['incident-log'].label)
-        .setEmoji(TESTS['incident-log'].emoji)
-        .setStyle(TESTS['incident-log'].style)
+      navigationButton(`${BUTTON_PREFIX}incident-log`, TESTS['incident-log'].label, TESTS['incident-log'].style).setEmoji(TESTS['incident-log'].emoji)
     ),
 
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`${BUTTON_PREFIX}full-run`)
-        .setLabel('Run Full Safe Test')
-        .setEmoji('🧪')
-        .setStyle(ButtonStyle.Success),
+      navigationButton(`${BUTTON_PREFIX}full-run`, 'Run Full Safe Test', ButtonStyle.Success).setEmoji('🧪'),
 
-      new ButtonBuilder()
-        .setCustomId(`${BUTTON_PREFIX}manual-backup`)
-        .setLabel(TESTS['manual-backup'].label)
-        .setEmoji(TESTS['manual-backup'].emoji)
-        .setStyle(TESTS['manual-backup'].style)
+      navigationButton(`${BUTTON_PREFIX}manual-backup`, TESTS['manual-backup'].label, TESTS['manual-backup'].style).setEmoji(TESTS['manual-backup'].emoji)
     ),
   ];
 }
