@@ -2,11 +2,11 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   StringSelectMenuBuilder,
 } = require('discord.js');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const guildManager = require('../../../core/guild/guildManager');
 const {
   getModuleSection,
@@ -249,10 +249,7 @@ function buildPollComponents(poll) {
       })));
     return [new ActionRowBuilder().addComponents(menu)];
   }
-  const buttons = poll.options.slice(0, 10).map((option, index) => new ButtonBuilder()
-    .setCustomId(`poll_vote:${poll.id}:${option.id}`)
-    .setLabel(`${index + 1}. ${option.label}`.slice(0, 80))
-    .setStyle(ButtonStyle.Primary));
+  const buttons = poll.options.slice(0, 10).map((option, index) => navigationButton(`poll_vote:${poll.id}:${option.id}`, `${index + 1}. ${option.label}`.slice(0, 80), ButtonStyle.Primary));
   const rows = [];
   for (let index = 0; index < buttons.length; index += 5) rows.push(new ActionRowBuilder().addComponents(buttons.slice(index, index + 5)));
   return rows;
