@@ -12,6 +12,8 @@ const {
   TextInputStyle,
 } = require('discord.js');
 
+const { navigationButton } = require('../../guild/goliathNavigation');
+
 const {
   db,
   getAllCases,
@@ -65,10 +67,10 @@ function buildCasesPageButtons(targetId, page, totalPages, actionFilter = 'all',
   const actionLabel = actionFilter === 'all' ? 'All' : actionFilter[0].toUpperCase() + actionFilter.slice(1);
   const statusLabel = statusFilter === 'all' ? 'All' : (STATUS_LABELS[statusFilter] || statusFilter).replace(/^[^\w]+\s*/, '');
   return [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_case_page:${targetId}:${actionFilter}:${statusFilter}:${page - 1}`).setLabel(`${EMOJIS.BACK} Prev`).setStyle(ButtonStyle.Secondary).setDisabled(page <= 0),
-    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:${nextAction}:${statusFilter}:0`).setLabel(`Action: ${actionLabel}`).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_filter_cases:${targetId}:${actionFilter}:${nextStatus}:0`).setLabel(`Status: ${statusLabel}`).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_case_page:${targetId}:${actionFilter}:${statusFilter}:${page + 1}`).setLabel(`Next ${EMOJIS.NEXT}`).setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1)
+    navigationButton(`mod_case_page:${targetId}:${actionFilter}:${statusFilter}:${page - 1}`, `${EMOJIS.BACK} Prev`, ButtonStyle.Secondary, page <= 0),
+    navigationButton(`mod_filter_cases:${targetId}:${nextAction}:${statusFilter}:0`, `Action: ${actionLabel}`, ButtonStyle.Secondary),
+    navigationButton(`mod_filter_cases:${targetId}:${actionFilter}:${nextStatus}:0`, `Status: ${statusLabel}`, ButtonStyle.Secondary),
+    navigationButton(`mod_case_page:${targetId}:${actionFilter}:${statusFilter}:${page + 1}`, `Next ${EMOJIS.NEXT}`, ButtonStyle.Secondary, page >= totalPages - 1)
   )];
 }
 
@@ -448,7 +450,7 @@ async function notifyAppealOutcome(interaction, modCase, appeal) {
   try {
     user = await client?.users?.fetch?.(appeal.appellantId);
     if (!user?.send) throw new Error('Could not resolve appellant for DM delivery.');
-    await user.send({ content: lines.join('\n').slice(0, 1900), components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('mod_appeal_lookup').setLabel('Appeal Another Case').setStyle(ButtonStyle.Secondary))] });
+    await user.send({ content: lines.join('\n').slice(0, 1900), components: [new ActionRowBuilder().addComponents(navigationButton('mod_appeal_lookup', 'Appeal Another Case', ButtonStyle.Secondary))] });
     sent = true;
   } catch (deliveryError) {
     error = String(deliveryError?.message || deliveryError || 'DM delivery failed.').slice(0, 300);
@@ -588,13 +590,13 @@ function buildCaseDetailButtons(modCase) {
   const appeals = getCaseAppeals(modCase);
   const pending = appeals.some(appeal => appeal.status === 'pending');
   const management = [];
-  if (!inactive && isWarning) management.push(new ButtonBuilder().setCustomId(`mod_case_reverse_warning:${modCase.caseId}`).setLabel(`${EMOJIS.REVERSED} Remove Warning`).setStyle(ButtonStyle.Secondary));
-  if (!inactive && isTimeout) management.push(new ButtonBuilder().setCustomId(`mod_case_reverse_timeout:${modCase.caseId}`).setLabel('⏪ Clear Timeout').setStyle(ButtonStyle.Secondary));
-  management.push(new ButtonBuilder().setCustomId(`mod_case_note:${modCase.caseId}`).setLabel(hasNote ? `${EMOJIS.EDIT} Edit Note` : `${EMOJIS.NOTE} Add Note`).setStyle(ButtonStyle.Primary));
+  if (!inactive && isWarning) management.push(navigationButton(`mod_case_reverse_warning:${modCase.caseId}`, `${EMOJIS.REVERSED} Remove Warning`, ButtonStyle.Secondary));
+  if (!inactive && isTimeout) management.push(navigationButton(`mod_case_reverse_timeout:${modCase.caseId}`, '⏪ Clear Timeout', ButtonStyle.Secondary));
+  management.push(navigationButton(`mod_case_note:${modCase.caseId}`, hasNote ? `${EMOJIS.EDIT} Edit Note` : `${EMOJIS.NOTE} Add Note`, ButtonStyle.Primary));
   const appealButtons = [];
-  if (!pending && appeals.length < MAX_APPEALS_PER_CASE && !inactive && APPEALABLE_ACTIONS.has(modCase.action)) appealButtons.push(new ButtonBuilder().setCustomId(`mod_case_appeal_submit:${modCase.caseId}`).setLabel('📨 Record Appeal').setStyle(ButtonStyle.Primary));
-  if (appeals.length) appealButtons.push(new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel(`⚖️ Appeals (${appeals.length})`).setStyle(ButtonStyle.Secondary));
-  appealButtons.push(new ButtonBuilder().setCustomId('mod_case_appeal_queue:0').setLabel('📥 Appeal Queue').setStyle(ButtonStyle.Secondary));
+  if (!pending && appeals.length < MAX_APPEALS_PER_CASE && !inactive && APPEALABLE_ACTIONS.has(modCase.action)) appealButtons.push(navigationButton(`mod_case_appeal_submit:${modCase.caseId}`, '📨 Record Appeal', ButtonStyle.Primary));
+  if (appeals.length) appealButtons.push(navigationButton(`mod_case_appeal_history:${modCase.caseId}:0`, `⚖️ Appeals (${appeals.length})`, ButtonStyle.Secondary));
+  appealButtons.push(navigationButton('mod_case_appeal_queue:0', '📥 Appeal Queue', ButtonStyle.Secondary));
   return [new ActionRowBuilder().addComponents(management), new ActionRowBuilder().addComponents(appealButtons)];
 }
 function buildCaseIdModal(customId, title, label = 'Case ID') {
@@ -714,15 +716,15 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
   }
   const components = [];
   if (totalPages > 1) components.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:${Math.max(0, page - 1)}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(page <= 0),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:${Math.min(totalPages - 1, page + 1)}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1)
+    navigationButton(`mod_case_appeal_history:${modCase.caseId}:${Math.max(0, page - 1)}`, '◀ Previous', ButtonStyle.Secondary, page <= 0),
+    navigationButton(`mod_case_appeal_history:${modCase.caseId}:${Math.min(totalPages - 1, page + 1)}`, 'Next ▶', ButtonStyle.Secondary, page >= totalPages - 1)
   ));
   const pendingAppeal = getPendingAppeal(modCase);
   if (pendingAppeal) components.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${pendingAppeal.id}`).setLabel('⚖️ Review Pending Appeal').setStyle(ButtonStyle.Primary)
+    navigationButton(`mod_case_appeal_open:${modCase.caseId}:${pendingAppeal.id}`, '⚖️ Review Pending Appeal', ButtonStyle.Primary)
   ));
   components.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('⬅️ Back to Case').setStyle(ButtonStyle.Secondary)
+    navigationButton(`mod_search_open:${modCase.caseId}`, '⬅️ Back to Case', ButtonStyle.Secondary)
   ));
   return { embeds: [embed], components };
 }
@@ -758,15 +760,15 @@ function buildAppealDetailPayload(modCase, appeal) {
   if (pending || canRetryRemedy) {
     const actions = [];
     if (pending) actions.push(
-      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`).setLabel(emojiLabel('SUCCESS', 'Approve Appeal')).setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`).setLabel(emojiLabel('ERROR', 'Deny Appeal')).setStyle(ButtonStyle.Danger)
+      navigationButton(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:approved`, emojiLabel('SUCCESS', 'Approve Appeal'), ButtonStyle.Success),
+      navigationButton(`mod_case_appeal_decide:${modCase.caseId}:${appeal.id}:denied`, emojiLabel('ERROR', 'Deny Appeal'), ButtonStyle.Danger)
     );
-    if (canRetryRemedy) actions.push(new ButtonBuilder().setCustomId(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`).setLabel(emojiLabel('REFRESH', 'Retry Appeal Remedy')).setStyle(ButtonStyle.Primary));
+    if (canRetryRemedy) actions.push(navigationButton(`mod_case_appeal_retry_remedy:${modCase.caseId}:${appeal.id}`, emojiLabel('REFRESH', 'Retry Appeal Remedy'), ButtonStyle.Primary));
     components.push(new ActionRowBuilder().addComponents(actions));
   }
   components.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_case_appeal_history:${modCase.caseId}:0`).setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_search_open:${modCase.caseId}`).setLabel('📁 View Case').setStyle(ButtonStyle.Secondary)
+    navigationButton(`mod_case_appeal_history:${modCase.caseId}:0`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+    navigationButton(`mod_search_open:${modCase.caseId}`, '📁 View Case', ButtonStyle.Secondary)
   ));
   const footer = `Case #${modCase.caseId} • Appeal ${pending ? 'Pending' : appeal.status === 'approved' ? 'Approved' : 'Denied'}`;
   embed.setFooter({ text: footer });
@@ -812,12 +814,12 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
       .setLabel(`${appeal.status === 'pending' ? '⚖️ Review' : '📁 View'} #${modCase.caseId}`).setStyle(ButtonStyle.Primary)
   )));
   if (totalPages > 1) rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_case_appeal_queue:${activeToken}:${Math.max(0, page - 1)}`).setLabel('◀ Previous').setStyle(ButtonStyle.Secondary).setDisabled(page <= 0),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_queue:${activeToken}:${Math.min(totalPages - 1, page + 1)}`).setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1)
+    navigationButton(`mod_case_appeal_queue:${activeToken}:${Math.max(0, page - 1)}`, '◀ Previous', ButtonStyle.Secondary, page <= 0),
+    navigationButton(`mod_case_appeal_queue:${activeToken}:${Math.min(totalPages - 1, page + 1)}`, 'Next ▶', ButtonStyle.Secondary, page >= totalPages - 1)
   ));
   rows.push(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('mod_dashboard:none:analytics').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_case_appeal_queue_refresh:${activeToken}:${page}`).setLabel(emojiLabel('REFRESH', 'Refresh')).setStyle(ButtonStyle.Secondary)
+    navigationButton('mod_dashboard:none:analytics', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+    navigationButton(`mod_case_appeal_queue_refresh:${activeToken}:${page}`, emojiLabel('REFRESH', 'Refresh'), ButtonStyle.Secondary)
   ));
   return { embeds: [embed], components: rows };
 }
