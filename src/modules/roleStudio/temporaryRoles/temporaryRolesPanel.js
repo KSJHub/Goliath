@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
@@ -28,8 +29,7 @@ const SESSION_TTL_MS = 30 * 60 * 1000;
 const selections = new Map();
 const keyFor = (guildId, userId) => `${guildId}:${userId}`;
 const row = (...components) => new ActionRowBuilder().addComponents(...components.filter(Boolean));
-const button = (customId, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder()
-  .setCustomId(customId).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (customId, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(customId, label, style, disabled);
 
 function formatExpiry(value) {
   const timestamp = new Date(value || 0).getTime();

@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
@@ -17,7 +18,7 @@ const LOG_TYPES=['join','intelligence','attempt','failure','success','roles','bo
 const MESSAGE_TYPES=['start','success','failed','retry','cooldown','screeningRequired','accountTooNew','botBlocked','quarantined','timedOut','unavailable','alreadyVerified'];
 const sessions=new Map();
 const row=(...x)=>new ActionRowBuilder().addComponents(...x.filter(Boolean));
-const button=(id,label,style=ButtonStyle.Secondary,disabled=false)=>new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+const button=(id,label,style=ButtonStyle.Secondary,disabled=false)=>navigationButton(id,label,style,disabled);
 const toggle=(id,label,on)=>button(id,`${on?'🟢':'🔴'} ${label}`,on?ButtonStyle.Success:ButtonStyle.Danger);
 const title=s=>s[0].toUpperCase()+s.slice(1).replace(/([A-Z])/g,' $1');
 const who=i=>i.member?.displayName||i.user?.displayName||i.user?.username||'Unknown User';

@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
@@ -30,8 +31,7 @@ const timedRolesHealth = require('./timedRolesHealth');
 
 const PREFIX = 'admin:timedRoles';
 const row = (...components) => new ActionRowBuilder().addComponents(...components.filter(Boolean));
-const button = (customId, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder()
-  .setCustomId(customId).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (customId, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(customId, label, style, disabled);
 
 function formatDuration(rule) { return timedRoles.formatDuration(rule); }
 function formatTimestamp(value, style = 'R') {

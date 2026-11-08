@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, FileUploadBuilder, LabelBuilder,
@@ -13,7 +14,7 @@ const emojiStore = require('./emojisStore');
 
 const PANEL_COLOR = 0x5865F2;
 const row = (...items) => new ActionRowBuilder().addComponents(...items);
-const button = (id, label, style = ButtonStyle.Primary) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
+const button = (id, label, style = ButtonStyle.Primary) => navigationButton(id, label, style);
 const linkButton = (label, url) => new ButtonBuilder().setLabel(label).setStyle(ButtonStyle.Link).setURL(url);
 
 const manageFilters = new Map();
