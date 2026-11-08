@@ -1,10 +1,11 @@
+const { navigationButton } = require('../../guild/goliathNavigation');
 'use strict';
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const leveling = require('../../../modules/communityStudio/leveling/leveling');
 
 function button(customId, label, style = ButtonStyle.Secondary, emoji = null) {
-  const component = new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+  const component = navigationButton(customId, label, style);
   if (emoji) component.setEmoji(emoji);
   return component;
 }
