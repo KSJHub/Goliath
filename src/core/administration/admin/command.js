@@ -2,7 +2,7 @@
 const { EMOJIS, emojiLabel } = require('../../ui/emojis');
 
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, ModalBuilder,
+  ActionRowBuilder, ButtonStyle, EmbedBuilder, Events, ModalBuilder,
   SlashCommandBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } = require('discord.js');
 
@@ -135,7 +135,7 @@ function buildRestoreAllConfirmation(interaction) {
   const lockdown = getLockdownState(interaction.guild.id), emergency = getEmergencyControlState(interaction.guild.id);
   const active = [lockdown.active ? 'Guild Lockdown' : null, emergency.invites.active ? 'Invite Freeze' : null, emergency.roles.active ? 'Role Freeze' : null].filter(Boolean);
   const embed = new EmbedBuilder().setColor(0xED4245).setTitle('🚨 Restore All Guild Restrictions?').setDescription(['Goliath will use its saved recovery snapshots to restore the guild.','',`**Active controls:** ${active.join(', ') || 'None'}`,'','**This does not clear member Investigation Isolation or owner-only Full Security Isolation.**'].join('\n'));
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(navigationButton(SERVER_SECURITY_CONFIRM_ALL_ID, 'Confirm Restore All', ButtonStyle.Danger).setEmoji('🚨'), new ButtonBuilder().setCustomId(SERVER_SECURITY_ID).setLabel('Cancel').setStyle(ButtonStyle.Secondary))] };
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(navigationButton(SERVER_SECURITY_CONFIRM_ALL_ID, 'Confirm Restore All', ButtonStyle.Danger).setEmoji('🚨'), navigationButton(SERVER_SECURITY_ID, 'Cancel', ButtonStyle.Secondary))] };
 }
 
 function buildSecurityIsolationPanel(interaction) {
@@ -145,7 +145,7 @@ function buildSecurityIsolationPanel(interaction) {
   return { embeds: [embed], components: [new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId(SECURITY_SELECT_ID).setPlaceholder('Select member for security isolation').setMinValues(1).setMaxValues(1)), navRow(SECURITY_HUB_ID, null, ISOLATION_SETTINGS_ID)] };
 }
 function buildSecurityIsolationModal(target, escalating = false) { return new ModalBuilder().setCustomId(`admin:security-isolation:submit:${target.id}`).setTitle(escalating ? 'Escalate to Full Security' : 'Full Security Isolation').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel(escalating ? 'Reason for security escalation' : 'Security isolation reason').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(2).setMaxLength(500)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirmation').setLabel('Type FULL ISOLATION to confirm').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(14).setMaxLength(14))); }
-function buildSecurityReleasePanel(interaction, target, snapshot) { const embed = new EmbedBuilder().setColor(0xED4245).setTitle(`🚨 Security Isolation • ${target.user.tag}`).setDescription([`${target} is already in **Full Security Isolation**.`,'',`**Reason:** ${String(snapshot.reason || 'No reason recorded').slice(0,1000)}`,snapshot.caseId ? `**Case:** #${snapshot.caseId}` : '**Case:** No linked case','','Only the server owner can release this member from security containment.'].join('\n')).setTimestamp(); return { embeds: [embed], components: [new ActionRowBuilder().addComponents(navigationButton(`admin:security-isolation:release:${target.id}`, 'Clear Full Security Isolation', ButtonStyle.Danger).setEmoji('🔓'), new ButtonBuilder().setCustomId(SECURITY_ID).setLabel('Back').setStyle(ButtonStyle.Secondary))] }; }
+function buildSecurityReleasePanel(interaction, target, snapshot) { const embed = new EmbedBuilder().setColor(0xED4245).setTitle(`🚨 Security Isolation • ${target.user.tag}`).setDescription([`${target} is already in **Full Security Isolation**.`,'',`**Reason:** ${String(snapshot.reason || 'No reason recorded').slice(0,1000)}`,snapshot.caseId ? `**Case:** #${snapshot.caseId}` : '**Case:** No linked case','','Only the server owner can release this member from security containment.'].join('\n')).setTimestamp(); return { embeds: [embed], components: [new ActionRowBuilder().addComponents(navigationButton(`admin:security-isolation:release:${target.id}`, 'Clear Full Security Isolation', ButtonStyle.Danger).setEmoji('🔓'), navigationButton(SECURITY_ID, 'Back', ButtonStyle.Secondary))] }; }
 function buildSecurityReleaseModal(target) { return new ModalBuilder().setCustomId(`admin:security-isolation:release-submit:${target.id}`).setTitle('Clear Full Security Isolation').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Release reason').setStyle(TextInputStyle.Paragraph).setRequired(true).setMinLength(2).setMaxLength(500)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('confirmation').setLabel('Type RELEASE SECURITY to confirm').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(16).setMaxLength(16))); }
 function fieldValue(interaction, key) { try { return String(interaction.fields?.getTextInputValue?.(key) || '').trim(); } catch { return ''; } }
 function rootAdminPanel(interaction) { return addAdminControls(adminPanel.buildAdminPanel(interaction.guild, memberDisplayName(interaction), interaction), interaction); }
