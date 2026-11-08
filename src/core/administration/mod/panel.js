@@ -5,7 +5,6 @@ const Discord = require('discord.js');
 const {
   ActionRowBuilder,
   AttachmentBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ModalBuilder,
   StringSelectMenuBuilder,
@@ -212,16 +211,13 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
   const rows = [];
   const finalButtons = [];
   if (active === 'actions') {
-    finalButtons.push(new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary));
+    finalButtons.push(navigationButton(context.adminOrigin ? 'admin:home' : 'mod:close', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${id}`, '📤 Export', ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'view_analytics')) finalButtons.push(navigationButton(`mod_dashboard:${id}:analytics`, '📊 Analytics', ButtonStyle.Secondary));
   } else if (active === 'analytics') {
     const returnId = context.analyticsReturnTargetId || 'none';
     finalButtons.push(navigationButton('mod_history_back', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
-    finalButtons.push(new ButtonBuilder()
-      .setCustomId(`mod_analytics_refresh:${context.analyticsWindow || '30d'}:${context.analyticsMode || 'overview'}:${context.analyticsModeratorId || 'none'}:${returnId}`)
-      .setLabel(emojiLabel('REFRESH', 'Refresh'))
-      .setStyle(ButtonStyle.Secondary));
+    finalButtons.push(navigationButton(`mod_analytics_refresh:${context.analyticsWindow || '30d'}:${context.analyticsMode || 'overview'}:${context.analyticsModeratorId || 'none'}:${returnId}`, emojiLabel('REFRESH', 'Refresh'), ButtonStyle.Secondary));
     if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${returnId}`, '📤 Export', ButtonStyle.Secondary));
   } else {
     finalButtons.push(navigationButton('mod_history_back', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
@@ -255,7 +251,7 @@ function buildActionRows(target, stats, member, guild, context = {}) {
   if (canViewDashboardSection(member, guild, 'appeals')) management.push(navigationButton('mod_dashboard:none:appeals', '⚖️ Appeals', ButtonStyle.Secondary));
   if (canUseModAction(member, guild, 'view_cases')) management.push(navigationButton('mod_verification_cases', '🚨 Quarantines', ButtonStyle.Secondary));
   const tools = [
-    new ButtonBuilder().setCustomId(context.adminOrigin ? 'admin:home' : 'mod:close').setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
+    navigationButton(context.adminOrigin ? 'admin:home' : 'mod:close', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
   ];
   if (canViewDashboardSection(member, guild, 'intelligence')) management.push(navigationButton(`mod_dashboard:${id}:intelligence`, '🧠 Intelligence', ButtonStyle.Secondary, disabled));
   if (canViewDashboardSection(member, guild, 'analytics')) tools.push(navigationButton(`mod_dashboard:${id}:analytics`, '📊 Analytics', ButtonStyle.Secondary));
@@ -438,17 +434,11 @@ function buildAnalyticsRows(guild, windowKey, mode = 'overview', moderatorId = n
   const recorded = getRecordedModerators(guild.id);
   const pageCount = Math.max(1, Math.ceil(recorded.length / 25));
   const page = Math.min(Math.max(0, Number(staffPage) || 0), pageCount - 1);
-  const windowButtons = Object.keys(ANALYTICS_WINDOWS).map((key) => new ButtonBuilder()
-    .setCustomId(`mod_analytics_window:${key}:${mode}:${moderatorId || 'none'}:${returnId}`)
-    .setLabel(ANALYTICS_WINDOW_LABELS[key])
-    .setStyle(window === key ? ButtonStyle.Primary : ButtonStyle.Secondary));
+  const windowButtons = Object.keys(ANALYTICS_WINDOWS).map((key) => navigationButton(`mod_analytics_window:${key}:${mode}:${moderatorId || 'none'}:${returnId}`, ANALYTICS_WINDOW_LABELS[key], window === key ? ButtonStyle.Primary : ButtonStyle.Secondary));
   const ownHistory = mode === 'moderator' && moderatorId && currentUserId && String(moderatorId) === String(currentUserId);
-  windowButtons.push(new ButtonBuilder()
-    .setCustomId(ownHistory
+  windowButtons.push(navigationButton(ownHistory
       ? `mod_analytics_overview:${window}:${returnId}`
-      : `mod_analytics_my:${window}:${currentUserId || 'none'}:${returnId}`)
-    .setLabel(ownHistory ? '📊 Server' : '👤 History')
-    .setStyle(ButtonStyle.Secondary));
+      : `mod_analytics_my:${window}:${currentUserId || 'none'}:${returnId}`, ownHistory ? '📊 Server' : '👤 History', ButtonStyle.Secondary));
   const rows = [];
   if (recorded.length) {
     const menu = new StringSelectMenuBuilder()
