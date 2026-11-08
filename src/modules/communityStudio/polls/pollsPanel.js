@@ -1,5 +1,6 @@
 'use strict';
 const { emojiLabel } = require('../../../core/ui/emojis');
+const { actionButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
@@ -47,8 +48,8 @@ function buildPollsAdminPanel(guild, memberDisplayName = 'Unknown User') {
     .setTimestamp();
   return { embeds: [embed], components: [
     row(button('admin:polls:create', '➕ Create Poll', ButtonStyle.Success), button('admin:polls:manage', '🗂️ Manage Polls'), button(enabled ? 'admin:polls:disable' : 'admin:polls:enable', enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary)),
-    row(button('admin:polls:settings', emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary), button('admin:polls:health', '🩺 Health', ButtonStyle.Secondary), button('admin:polls:repair', '🛠️ Repair'), button('admin:polls:export', '📤 Export', ButtonStyle.Secondary), button('admin:polls:reset', '🗑️ Reset', ButtonStyle.Danger)),
-    row(button('admin:modules', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
+    row(actionButton('admin:polls:settings', 'settings'), button('admin:polls:health', '🩺 Health', ButtonStyle.Secondary), button('admin:polls:repair', '🛠️ Repair'), button('admin:polls:export', '📤 Export', ButtonStyle.Secondary), button('admin:polls:reset', '🗑️ Reset', ButtonStyle.Danger)),
+    row(actionButton('admin:modules', 'back')),
   ] };
 }
 function buildSettingsPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
@@ -65,16 +66,16 @@ function buildSettingsPanel(guild, memberDisplayName = 'Unknown User', rolePage 
     row(new ChannelSelectMenuBuilder().setCustomId('admin:polls:resultsChannel').setPlaceholder('Results channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:polls:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
     row(button('admin:polls:toggleAnonymous', '👤 Anonymous', ButtonStyle.Secondary), button('admin:polls:toggleMultiple', '☑️ Multiple', ButtonStyle.Secondary), button('admin:polls:toggleLive', '📈 Live Results', ButtonStyle.Secondary)),
-    row(button('admin:polls', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+    row(actionButton('admin:polls', 'back'),
       button(`admin:polls:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
       button(`admin:polls:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
   ] };
 }
 function buildManagePanel(guild) {
   const pollList = Object.values(polls.getSection(guild.id).polls || {}).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 25);
-  if (!pollList.length) return { content: 'No polls exist yet. Create one first.', embeds: [], components: [row(button('admin:polls:create', '➕ Create Poll', ButtonStyle.Success), button('admin:polls', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary))] };
+  if (!pollList.length) return { content: 'No polls exist yet. Create one first.', embeds: [], components: [row(button('admin:polls:create', '➕ Create Poll', ButtonStyle.Success), actionButton('admin:polls', 'back'))] };
   const selector = new StringSelectMenuBuilder().setCustomId('admin:polls:select').setPlaceholder('Select a poll to manage').addOptions(pollList.map((poll) => ({ label: String(poll.question).slice(0, 100), description: `${poll.status} · ${poll.options.length} options`.slice(0, 100), value: poll.id })));
-  return { content: 'Select a poll to deploy, close, refresh or delete.', embeds: [], components: [row(selector), row(button('admin:polls', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary))] };
+  return { content: 'Select a poll to deploy, close, refresh or delete.', embeds: [], components: [row(selector), row(actionButton('admin:polls', 'back'))] };
 }
 function buildPollDetailPanel(guild, pollId) {
   const poll = polls.getPoll(guild.id, pollId);
