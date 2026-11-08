@@ -504,6 +504,7 @@ function normalizeUpdateSubscription(input, previous = {}) {
     if (Object.hasOwn(input, key)) { if (!values.includes(input[key])) throw new Error('Invalid ' + key + ' selection.'); next[key] = input[key]; }
   }
   for (const key of ['includeWords', 'excludeWords']) if (Object.hasOwn(input, key)) next[key] = keywordList(input[key]);
+  if (next.enabled && !next.channelId) throw new Error('Choose the primary destination channel before enabling this subscription.');
   if (next.enabled && !effectiveUpdateDestinations(next).some(route => route.enabled)) throw new Error('Choose an enabled destination channel before enabling this subscription.');
   return next;
 }
