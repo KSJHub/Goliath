@@ -3,9 +3,10 @@
 const { randomBytes } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
+  ActionRowBuilder, ButtonStyle, MessageFlags,
 } = require('discord.js');
 const security = require('../../core/security/protection/core');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 
 const PREFIX = 'ownerpanel:restart:';
 const TARGETS = Object.freeze({
@@ -19,12 +20,7 @@ const cooldowns = new Map();
 function buildRow() {
   return new ActionRowBuilder().addComponents(
     ...Object.keys(TARGETS).map(target =>
-      new ButtonBuilder()
-        .setCustomId(`${PREFIX}ask:${target}`)
-        .setLabel(`Restart ${target.toUpperCase()}`)
-        .setEmoji('🔄')
-        .setStyle(target === 'production'
-          ? ButtonStyle.Danger : ButtonStyle.Secondary)
+      navigationButton(`${PREFIX}ask:${target}`, `Restart ${target.toUpperCase()}`, target === 'production' ? ButtonStyle.Danger : ButtonStyle.Secondary).setEmoji('🔄')
     )
   );
 }
@@ -68,14 +64,8 @@ async function handle(interaction) {
         'Its bot and dashboard will briefly disconnect. Confirmation expires in 60 seconds.',
       flags: MessageFlags.Ephemeral,
       components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`${PREFIX}confirm:${nonce}`)
-          .setLabel(`Confirm Restart ${value.toUpperCase()}`)
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId(`${PREFIX}cancel:${nonce}`)
-          .setLabel('Cancel')
-          .setStyle(ButtonStyle.Secondary)
+        navigationButton(`${PREFIX}confirm:${nonce}`, `Confirm Restart ${value.toUpperCase()}`, ButtonStyle.Danger),
+        navigationButton(`${PREFIX}cancel:${nonce}`, 'Cancel', ButtonStyle.Secondary)
       )],
     });
     return true;
