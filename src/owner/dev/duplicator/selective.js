@@ -12,6 +12,7 @@ const {
   StringSelectMenuBuilder,
 } = require('discord.js');
 const history = require('./history');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const PREFIX = 'dupselect';
 const SESSION_TTL = 30 * 60 * 1000;
@@ -204,7 +205,7 @@ function filteredSnapshot(snapshot, selected) {
 function emptyScanPayload(session) {
   return {
     embeds: [embed('🧭 Select Source Structure', 'No selectable categories or channels were found in the source server.')],
-    components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(componentId(session, 'back')).setLabel('Back').setStyle(ButtonStyle.Secondary))],
+    components: [new ActionRowBuilder().addComponents(navigationButton(componentId(session, 'back'), 'Back', ButtonStyle.Secondary))],
   };
 }
 function landingPayload(session) {
@@ -223,7 +224,7 @@ function landingPayload(session) {
       new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(componentId(session, 'destination')).setPlaceholder('Destination server').addOptions(guildOptions(session, session.destinationGuildId))),
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(componentId(session, 'scan')).setLabel('Scan Source').setEmoji('🔎').setStyle(ButtonStyle.Primary).setDisabled(!ready),
-        new ButtonBuilder().setCustomId(componentId(session, 'history')).setLabel('Transfer History').setEmoji('📜').setStyle(ButtonStyle.Secondary),
+        navigationButton(componentId(session, 'history'), 'Transfer History', ButtonStyle.Secondary).setEmoji('📜'),
         new ButtonBuilder().setCustomId(componentId(session, 'delete-scan')).setLabel('Bulk Delete').setEmoji('🗑️').setStyle(ButtonStyle.Danger).setDisabled(!session.destinationGuildId),
       ),
     ],
@@ -258,13 +259,13 @@ function scanPayload(session) {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(componentId(session, 'prev')).setLabel('Previous').setEmoji('⬅️').setStyle(ButtonStyle.Secondary).setDisabled(page.safePage === 0),
         new ButtonBuilder().setCustomId(componentId(session, 'next')).setLabel('Next').setEmoji('➡️').setStyle(ButtonStyle.Secondary).setDisabled(page.safePage >= page.pageCount - 1),
-        new ButtonBuilder().setCustomId(componentId(session, 'select-page')).setLabel('Select Page').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(componentId(session, 'clear-page')).setLabel('Clear Page').setStyle(ButtonStyle.Secondary),
+        navigationButton(componentId(session, 'select-page'), 'Select Page', ButtonStyle.Secondary),
+        navigationButton(componentId(session, 'clear-page'), 'Clear Page', ButtonStyle.Secondary),
       ),
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(componentId(session, 'review')).setLabel('Review Transfer').setEmoji('✅').setStyle(ButtonStyle.Success).setDisabled(session.selected.size === 0),
-        new ButtonBuilder().setCustomId(componentId(session, 'select-all')).setLabel('Select All').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(componentId(session, 'back')).setLabel('Back').setStyle(ButtonStyle.Secondary),
+        navigationButton(componentId(session, 'select-all'), 'Select All', ButtonStyle.Primary),
+        navigationButton(componentId(session, 'back'), 'Back', ButtonStyle.Secondary),
       ),
     ],
   };
@@ -287,9 +288,9 @@ function reviewPayload(session, dryRun = null) {
       '', '**Roles carried/mapped because selected permissions depend on them:**', roleNames, ...dry,
     ].join('\n'), dryRun?.errors?.length ? 0xf59e0b : 0x5865f2)],
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(componentId(session, 'dryrun')).setLabel('Run Dry-Run').setEmoji('🧪').setStyle(ButtonStyle.Secondary),
+      navigationButton(componentId(session, 'dryrun'), 'Run Dry-Run', ButtonStyle.Secondary).setEmoji('🧪'),
       new ButtonBuilder().setCustomId(componentId(session, 'confirm-view')).setLabel('Continue').setEmoji('➡️').setStyle(ButtonStyle.Success).setDisabled(blocked),
-      new ButtonBuilder().setCustomId(componentId(session, 'scan-back')).setLabel('Back to Selection').setStyle(ButtonStyle.Secondary),
+      navigationButton(componentId(session, 'scan-back'), 'Back to Selection', ButtonStyle.Secondary),
     )],
   };
 }
@@ -305,8 +306,8 @@ function confirmPayload(session) {
       'If the destination Goliath instance cannot grant a source permission bit, that bit is deferred and recorded instead of blocking the entire copy.',
     ].join('\n'), 0xf59e0b)],
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(componentId(session, 'copy-now')).setLabel('Confirm Copy').setEmoji('⚠️').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(componentId(session, 'review-back')).setLabel('Back').setStyle(ButtonStyle.Secondary),
+      navigationButton(componentId(session, 'copy-now'), 'Confirm Copy', ButtonStyle.Danger).setEmoji('⚠️'),
+      navigationButton(componentId(session, 'review-back'), 'Back', ButtonStyle.Secondary),
     )],
   };
 }
@@ -446,8 +447,8 @@ function resultPayload(session, response, manifest) {
       ...(manifest.warnings || []).slice(0, 8).map((warning) => '⚠️ ' + warning),
     ].filter(Boolean).join('\n'), color)],
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(componentId(session, 'manifest-last')).setLabel('View Transfer Manifest').setEmoji('📜').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(componentId(session, 'home')).setLabel('New Transfer').setStyle(ButtonStyle.Secondary),
+      navigationButton(componentId(session, 'manifest-last'), 'View Transfer Manifest', ButtonStyle.Primary).setEmoji('📜'),
+      navigationButton(componentId(session, 'home'), 'New Transfer', ButtonStyle.Secondary),
     )],
   };
 }
@@ -490,7 +491,7 @@ function historyPayload(session, notice = null) {
     new ButtonBuilder().setCustomId(componentId(session, 'history-clear-undone')).setLabel('Clear Undone').setStyle(ButtonStyle.Secondary).setDisabled(!entries.some((item) => inferOutcome(item) === 'undone')),
     new ButtonBuilder().setCustomId(componentId(session, 'history-clear-all-view')).setLabel('Clear All History').setStyle(ButtonStyle.Danger).setDisabled(!entries.length),
   ));
-  components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(componentId(session, 'home')).setLabel('Back').setStyle(ButtonStyle.Secondary)));
+  components.push(new ActionRowBuilder().addComponents(navigationButton(componentId(session, 'home'), 'Back', ButtonStyle.Secondary)));
   return { embeds: [embed('📜 Duplicator Transfer History', [notice ? `**${notice}**` : null, notice ? '' : null, ...(lines.length ? lines : ['No transfer manifests have been recorded yet.'])].filter(Boolean).join('\n'))], components };
 }
 function createdUndoObjects(manifest) {
@@ -527,7 +528,7 @@ function manifestPayload(session, manifest) {
       '', `Stored permission overwrites: **${(manifest.channels || []).reduce((sum, item) => sum + (item.permissionOverwrites || []).length, 0)}**`,
     ].filter(Boolean).join('\n'))],
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(componentId(session, 'history')).setLabel('Back to History').setStyle(ButtonStyle.Secondary),
+      navigationButton(componentId(session, 'history'), 'Back to History', ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(componentId(session, `undo-view:${manifest.id}`)).setLabel(legacy ? 'Undo Unavailable (Legacy)' : 'Undo Transfer').setEmoji('↩️').setStyle(ButtonStyle.Danger).setDisabled(!canUndoManifest(manifest)),
       new ButtonBuilder().setCustomId(componentId(session, `history-delete-view:${manifest.id}`)).setLabel('Delete History Record').setEmoji('🗑️').setStyle(ButtonStyle.Secondary),
     )],
@@ -541,7 +542,7 @@ function deleteHistoryConfirmPayload(session, manifest) {
     ].join('\n'), 0xed4245)],
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(componentId(session, `history-delete-now:${manifest.id}`)).setLabel('Delete Record Only').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(componentId(session, 'history')).setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+      navigationButton(componentId(session, 'history'), 'Cancel', ButtonStyle.Secondary),
     )],
   };
 }
@@ -549,8 +550,8 @@ function clearAllHistoryConfirmPayload(session) {
   return {
     embeds: [embed('🗑️ Clear All Duplicator History?', 'This removes all saved Duplicator history records for this control server.\n\n**It does not delete or change anything in Discord.**', 0xed4245)],
     components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(componentId(session, 'history-clear-all-now')).setLabel('Clear History Only').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(componentId(session, 'history')).setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+      navigationButton(componentId(session, 'history-clear-all-now'), 'Clear History Only', ButtonStyle.Danger),
+      navigationButton(componentId(session, 'history'), 'Cancel', ButtonStyle.Secondary),
     )],
   };
 }
@@ -570,7 +571,7 @@ function undoPreviewPayload(session, manifest, inspection) {
     ].join('\n'), unsafe.length ? 0xf59e0b : 0xed4245)],
     components: [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(componentId(session, `undo-now:${manifest.id}`)).setLabel('Confirm Undo').setEmoji('↩️').setStyle(ButtonStyle.Danger).setDisabled(!(inspection.counts?.present > 0)),
-      new ButtonBuilder().setCustomId(componentId(session, 'history')).setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+      navigationButton(componentId(session, 'history'), 'Cancel', ButtonStyle.Secondary),
     )],
   };
 }
@@ -607,7 +608,7 @@ async function prepareDeleteScan(interaction, session) {
   session.deletePage = 0;
 }
 function deletePayload(session) {
-  if (!session.deleteItems.length) return { embeds: [embed('🗑️ Bulk Delete Channels', 'No deletable channels were found.', 0xed4245)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(componentId(session, 'home')).setLabel('Back').setStyle(ButtonStyle.Secondary))] };
+  if (!session.deleteItems.length) return { embeds: [embed('🗑️ Bulk Delete Channels', 'No deletable channels were found.', 0xed4245)], components: [new ActionRowBuilder().addComponents(navigationButton(componentId(session, 'home'), 'Back', ButtonStyle.Secondary))] };
   const page = pageSlice(session.deleteItems, session.deletePage);
   session.deletePage = page.safePage;
   const options = page.items.map((item) => ({
@@ -624,12 +625,12 @@ function deletePayload(session) {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(componentId(session, 'delete-prev')).setLabel('Previous').setStyle(ButtonStyle.Secondary).setDisabled(page.safePage === 0),
         new ButtonBuilder().setCustomId(componentId(session, 'delete-next')).setLabel('Next').setStyle(ButtonStyle.Secondary).setDisabled(page.safePage >= page.pageCount - 1),
-        new ButtonBuilder().setCustomId(componentId(session, 'delete-select-page')).setLabel('Select Page').setStyle(ButtonStyle.Secondary),
+        navigationButton(componentId(session, 'delete-select-page'), 'Select Page', ButtonStyle.Secondary),
         ),
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(componentId(session, 'delete-clear-page')).setLabel('Clear Page').setStyle(ButtonStyle.Secondary),
+        navigationButton(componentId(session, 'delete-clear-page'), 'Clear Page', ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(componentId(session, 'delete-review')).setLabel('Review Selected').setEmoji('🗑️').setStyle(ButtonStyle.Danger).setDisabled(session.deleteSelected.size === 0),
-        new ButtonBuilder().setCustomId(componentId(session, 'home')).setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+        navigationButton(componentId(session, 'home'), 'Cancel', ButtonStyle.Secondary),
       ),
     ],
   };
@@ -928,8 +929,8 @@ async function handleInteraction(interaction) {
 'The original transfer record was updated in place; no extra delete-transfer record was created.',
         ].join('\n'), color)],
         components: [new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId(componentId(session, 'history')).setLabel('Back to History').setStyle(ButtonStyle.Secondary),
-new ButtonBuilder().setCustomId(componentId(session, 'manifest-last')).setLabel('View Updated Record').setStyle(ButtonStyle.Secondary),
+navigationButton(componentId(session, 'history'), 'Back to History', ButtonStyle.Secondary),
+navigationButton(componentId(session, 'manifest-last'), 'View Updated Record', ButtonStyle.Secondary),
         )],
       });
       session.lastManifestId = updated?.id || id;
@@ -979,7 +980,7 @@ new ButtonBuilder().setCustomId(componentId(session, 'manifest-last')).setLabel(
       const manifest = await deleteIds(interaction, session, [...session.deleteSelected]);
       await interaction.editReply({
         embeds: [embed(manifest.outcome === 'success' ? '✅ Bulk Delete Verified' : '⚠️ Bulk Delete Completed', `Outcome: **${outcomeMeta(manifest.outcome).join(' ')}**\nDeleted **${manifest.deletedCount}/${manifest.requestedCount}** requested objects.\nAlready missing: **${manifest.missing?.length || 0}**\nFailed: **${manifest.failed?.length || 0}**\nHistory record: \`${manifest.id}\``, manifest.outcome === 'success' ? 0x22c55e : manifest.outcome === 'failed' ? 0xed4245 : 0xf59e0b)],
-        components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(componentId(session, 'home')).setLabel('Back to Duplicator').setStyle(ButtonStyle.Secondary))],
+        components: [new ActionRowBuilder().addComponents(navigationButton(componentId(session, 'home'), 'Back to Duplicator', ButtonStyle.Secondary))],
       }); return true;
     }
     return false;
