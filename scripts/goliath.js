@@ -4595,8 +4595,12 @@ async function freeGamesAudit() {
 // Usage: BOT_MODE=dev node scripts/goliath.js game-catalogue-identity [limit]
 function classifySteamCatalogueIdentity(game, result) {
   const declaredType = game.catalogueType || 'game';
-  if (declaredType !== 'game' && result.status === 'non-game' && result.storeType === declaredType) {
-    return { kind: 'expected-legacy', appId: game.appId, catalogueType: declaredType, storeName: result.storeName || null };
+  // Legacy non-game subscriptions remain supported, but their store names must
+  // still agree with the catalogue. A matching type alone is not identity proof.
+  const normalizeName = value => String(value || '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (declaredType !== 'game' && result.status === 'non-game' && result.storeType === declaredType &&
+      result.storeName && normalizeName(game.name) === normalizeName(result.storeName)) {
+    return { kind: 'expected-legacy', appId: game.appId, catalogueType: declaredType, storeName: result.storeName };
   }
   if (declaredType === 'game' && result.status === 'match' && result.storeType === 'game') {
     return { kind: 'confirmed-game' };
@@ -4604,7 +4608,10 @@ function classifySteamCatalogueIdentity(game, result) {
   const issue = { appId: game.appId, expectedName: game.name, catalogueType: declaredType,
     storeName: result.storeName || null, storeType: result.storeType || null,
     status: result.status, error: result.error || null };
-  if (result.status === 'name-mismatch' && result.storeType === 'game' && result.storeName) {
+  if (result.storeName && result.storeType === declaredType && normalizeName(game.name) !== normalizeName(result.storeName)) {
+    issue.suggestedAction = 'review-display-name';
+    issue.suggestedName = result.storeName;
+  } else if (result.status === 'name-mismatch' && result.storeType === 'game' && result.storeName) {
     issue.suggestedAction = 'review-display-name';
     issue.suggestedName = result.storeName;
   } else if (result.status === 'non-game') issue.suggestedAction = 'review-app-type';
