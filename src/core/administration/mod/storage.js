@@ -2,9 +2,10 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const Database = require('better-sqlite3');
 const { resolveRuntimePath } = require('../../../config/runtimePaths');
+const { navigationButton, linkButton } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const { emitGuildUpdate } = require('../../../server/sockets/socketHub');
 
@@ -853,9 +854,9 @@ async function sendCaseAppealNotice({ guild, target = null, user = null, caseId 
     await recipient.send({
       embeds: [embed],
       components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`mod_appeal_external:${guild.id}:${modCase.caseId}`).setLabel('Appeal This Case').setEmoji('⚖️').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setLabel('Appeal Online').setEmoji('🌐').setStyle(ButtonStyle.Link).setURL(appealWebUrl),
-        new ButtonBuilder().setCustomId('mod_appeal_lookup').setLabel('Appeal Another Case').setStyle(ButtonStyle.Secondary)
+        navigationButton(`mod_appeal_external:${guild.id}:${modCase.caseId}`, 'Appeal This Case', ButtonStyle.Primary).setEmoji('⚖️'),
+        linkButton('Appeal Online', appealWebUrl, { emoji: '🌐' }),
+        navigationButton('mod_appeal_lookup', 'Appeal Another Case', ButtonStyle.Secondary)
       )],
     });
     sent = true;
