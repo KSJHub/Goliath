@@ -4635,8 +4635,16 @@ async function gameCatalogueIdentityAudit() {
     if (index > 0) await new Promise(resolve => setTimeout(resolve, 750));
     const batch = games.slice(index, index + 4);
     const results = await Promise.all(batch.map(async game => {
-      try { return await inspectSteamGameIdentity(game.appId); }
-      catch (error) { return { status: 'unavailable', error: String(error.message).slice(0, 200) }; }
+      // Transient Steam Store failures should be retried before being reported.
+      // Keep the retry bounded; this audit must never change the catalogue.
+      let result;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { result = await inspectSteamGameIdentity(game.appId); }
+        catch (error) { result = { status: 'unavailable', error: String(error.message).slice(0, 200) }; }
+        if (result.status !== 'unavailable') break;
+        if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+      return result;
     }));
     results.forEach((result, offset) => {
       const game = batch[offset];
