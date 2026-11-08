@@ -1,8 +1,7 @@
-const { actionButton, paginationButtons, emojiButton, navigationButton } = require('../../../core/guild/goliathNavigation');
+const { actionButton, paginationButtons, emojiButton, navigationButton, linkButton } = require('../../../core/guild/goliathNavigation');
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
   ChannelSelectMenuBuilder,
@@ -549,11 +548,12 @@ function buildButtonRows(state, interaction = null, preview = false) {
     for (const { button, index } of entries) {
       const label = buttonShort(buttonResolved(button?.label || "Button", interaction), 80) || "Button";
       const url = resolveButtonUrl(button?.url, interaction);
-      const builder = new ButtonBuilder().setLabel(label);
+      const builder = url
+        ? linkButton(label, url, { disabled: preview })
+        : navigationButton(buttonActionId(button, index), label, buttonStyleValue(button?.style), preview);
+      // Embed Studio stores an explicit emoji field; preserve its native
+      // Discord rendering rather than converting it into label text.
       if (button?.emoji) builder.setEmoji(button.emoji);
-      if (url) builder.setStyle(ButtonStyle.Link).setURL(url);
-      else builder.setStyle(buttonStyleValue(button?.style)).setCustomId(buttonActionId(button, index));
-      if (preview) builder.setDisabled(true);
       row.addComponents(builder);
     }
     output.push(row);
