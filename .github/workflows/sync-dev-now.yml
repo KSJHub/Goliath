@@ -86,12 +86,9 @@ jobs:
             ensure_expected_commit
 
             # DEV SAFETY CONTRACT:
-            # Never reset, clean, stash, overwrite, or otherwise modify a dirty
-            # DEV worktree. A push may arrive while local development is active.
-            # In that case deployment must stop and leave every local change intact.
-            # Some tracked audit inputs can be absent from the VPS checkout
-            # even when git status is clean (for example skip-worktree entries).
-            # Recover only missing, explicitly named files from the current HEAD.
+            # Recover only absent tracked Markdown documentation and the two
+            # known security tests. Never overwrite existing files or touch
+            # modified source, runtime data, or untracked user work.
             REQUIRED_AUDIT_FILES=(
               tests/dashboard-access-security.test.js
               tests/birthday-route-security.test.js
@@ -100,13 +97,30 @@ jobs:
             )
             restore_missing_audit_files() {
               local audit_file
+              # git ls-files --deleted reports tracked files missing from disk.
+              # Process all missing docs, not just the subset referenced by Doctor.
+              while IFS= read -r -d '' audit_file; do
+                case "$audit_file" in
+                  docs/*.md)
+                    if [ ! -e "$audit_file" ]; then
+                      echo "🩹 Restore missing tracked documentation: $audit_file"
+                      mkdir -p "$(dirname "$audit_file")"
+                      git show "HEAD:$audit_file" > "$audit_file"
+                    fi
+                    ;;
+                  *)
+                    echo "Refusing to restore unexpected missing file: $audit_file" >&2
+                    return 1
+                    ;;
+                esac
+              done < <(git ls-files --deleted -z -- docs/)
               for audit_file in "${REQUIRED_AUDIT_FILES[@]}"; do
                 if [ ! -f "$audit_file" ]; then
                   git cat-file -e "HEAD:$audit_file" || {
-                    echo "Required audit file is not present in HEAD: $audit_file" >&2
+                    echo "Required audit file absent from HEAD: $audit_file" >&2
                     return 1
                   }
-                  echo "🩹 Restore missing tracked audit input: $audit_file"
+                  echo "🩹 Restore missing required audit input: $audit_file"
                   mkdir -p "$(dirname "$audit_file")"
                   git show "HEAD:$audit_file" > "$audit_file"
                 fi
@@ -117,7 +131,7 @@ jobs:
             DIRTY_STATUS="$(git status --porcelain -- . ':!src/runtime/')"
             if [ -n "$DIRTY_STATUS" ]; then
               echo "❌ DEV sync refused: /home/goliath/dev contains local changes."
-              echo "The DEV worktree has been left completely untouched."
+              echo "Unrelated local changes have been left untouched."
               echo
               printf '%s\n' "$DIRTY_STATUS"
               echo
