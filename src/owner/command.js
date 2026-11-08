@@ -3,7 +3,6 @@ const { emojiLabel } = require('../core/ui/emojis');
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   Events,
@@ -300,18 +299,18 @@ function serverToolsPayload(interaction, explicitGuildId = null) {
     .setFooter({ text: 'Owner only • Server tooling retains owner and safety checks' });
 
   const primaryTools = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(contextualOwnerId('server-copy', guildId)).setLabel('Copy Structure').setEmoji('📋').setStyle(ButtonStyle.Primary).setDisabled(!guildContextAvailable),
-    new ButtonBuilder().setCustomId(contextualOwnerId('server-analyse', guildId)).setLabel('Analyse Servers').setEmoji('🔎').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable),
-    new ButtonBuilder().setCustomId(contextualOwnerId('server-export', guildId)).setLabel('Export Template').setEmoji('📤').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable)
+    navigationButton(contextualOwnerId('server-copy', guildId), 'Copy Structure', ButtonStyle.Primary, !guildContextAvailable).setEmoji('📋'),
+    navigationButton(contextualOwnerId('server-analyse', guildId), 'Analyse Servers', ButtonStyle.Secondary, !guildContextAvailable).setEmoji('🔎'),
+    navigationButton(contextualOwnerId('server-export', guildId), 'Export Template', ButtonStyle.Secondary, !guildContextAvailable).setEmoji('📤')
   );
 
   const secondaryTools = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(contextualOwnerId('server-build', guildId)).setLabel('Build Template').setEmoji('🏗️').setStyle(ButtonStyle.Secondary).setDisabled(!guildContextAvailable),
-    new ButtonBuilder().setCustomId(`permstudio:home:guild:${guildId}`).setLabel('Permissions Studio').setEmoji('🛡️').setStyle(ButtonStyle.Primary).setDisabled(!guildContextAvailable)
+    navigationButton(contextualOwnerId('server-build', guildId), 'Build Template', ButtonStyle.Secondary, !guildContextAvailable).setEmoji('🏗️'),
+    navigationButton(`permstudio:home:guild:${guildId}`, 'Permissions Studio', ButtonStyle.Primary, !guildContextAvailable).setEmoji('🛡️')
   );
 
   const navigation = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(contextualOwnerId('home', guildId)).setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary)
+    navigationButton(contextualOwnerId('home', guildId), emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)
   );
 
   return { embeds: [embed], components: [primaryTools, secondaryTools, navigation] };
@@ -344,42 +343,19 @@ function maintenancePayload(interaction, explicitGuildId = null, notice = null) 
     .setTimestamp();
 
   const currentGuildActions = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(contextualOwnerId('maintenance-start-guild', guildId))
-      .setLabel('Start This Server')
-      .setEmoji('🔴')
-      .setStyle(ButtonStyle.Danger)
-      .setDisabled(!guild),
-    new ButtonBuilder()
-      .setCustomId(contextualOwnerId('maintenance-complete-guild', guildId))
-      .setLabel('Restore This Server')
-      .setEmoji('🟢')
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(!guild),
-    new ButtonBuilder()
-      .setCustomId(contextualOwnerId('maintenance-clear-guild', guildId))
-      .setLabel('Delete Status Channel')
-      .setEmoji('🗑️')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!guild)
+    navigationButton(contextualOwnerId('maintenance-start-guild', guildId), 'Start This Server', ButtonStyle.Danger, !guild).setEmoji('🔴'),
+    navigationButton(contextualOwnerId('maintenance-complete-guild', guildId), 'Restore This Server', ButtonStyle.Success, !guild).setEmoji('🟢'),
+    navigationButton(contextualOwnerId('maintenance-clear-guild', guildId), 'Delete Status Channel', ButtonStyle.Secondary, !guild).setEmoji('🗑️')
   );
 
   const globalActions = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(contextualOwnerId('maintenance-start-all', guildId))
-      .setLabel('Start All Guilds')
-      .setEmoji('🚨')
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId(contextualOwnerId('maintenance-complete-all', guildId))
-      .setLabel('Restore All Guilds')
-      .setEmoji('✅')
-      .setStyle(ButtonStyle.Success)
+    navigationButton(contextualOwnerId('maintenance-start-all', guildId), 'Start All Guilds', ButtonStyle.Danger).setEmoji('🚨'),
+    navigationButton(contextualOwnerId('maintenance-complete-all', guildId), 'Restore All Guilds', ButtonStyle.Success).setEmoji('✅')
   );
 
   const navigation = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(contextualOwnerId('home', guildId)).setLabel(emojiLabel('BACK', 'Back')).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(contextualOwnerId('maintenance', guildId)).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary)
+    navigationButton(contextualOwnerId('home', guildId), emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+    navigationButton(contextualOwnerId('maintenance', guildId), 'Refresh', ButtonStyle.Secondary).setEmoji('🔄')
   );
 
   return { embeds: [embed], components: [currentGuildActions, globalActions, navigation] };
