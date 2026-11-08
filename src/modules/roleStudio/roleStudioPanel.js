@@ -6,7 +6,7 @@ const {
   EmbedBuilder,
 } = require('discord.js');
 
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { navigationButton, actionButton } = require('../../core/guild/goliathNavigation');
 const guildManager = require('../../core/guild/guildManager');
 const autoroles = require('./autoRoles/autoRoles');
 const timedRoles = require('./timedRoles/timedRoles');
@@ -137,7 +137,7 @@ async function buildRoleStudioPanel(guild, memberDisplayName = 'Unknown User') {
       ),
       row(
         button('admin:studio:roleStudio', '🔄 Refresh Status', ButtonStyle.Secondary),
-        button('admin:modules', '⬅️ Back', ButtonStyle.Secondary),
+        actionButton('admin:modules', 'back'),
       ),
     ],
   };
@@ -163,7 +163,7 @@ async function buildRoleAnalyticsPanel(guild, memberDisplayName = 'Unknown User'
       ].join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
-    components: [row(button('admin:studio:roleStudio', '⬅️ Back to Role Studio', ButtonStyle.Secondary))],
+    components: [row(actionButton('admin:studio:roleStudio', 'back', { label: 'Back to Role Studio' }))],
   };
 }
 
@@ -194,7 +194,7 @@ async function buildRoleHealthPanel(guild, memberDisplayName = 'Unknown User') {
       ].join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
-    components: [row(button('admin:studio:roleStudio', '⬅️ Back to Role Studio', ButtonStyle.Secondary))],
+    components: [row(actionButton('admin:studio:roleStudio', 'back', { label: 'Back to Role Studio' }))],
   };
 }
 
