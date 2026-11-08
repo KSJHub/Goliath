@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
@@ -21,7 +22,7 @@ const pollsTracking = require('../../communityStudio/polls/pollsTracking');
 
 const sessions = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components.filter(Boolean));
-const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(id, label, style, disabled);
 const clean = (value, max = 100) => String(value || '').trim().slice(0, max);
 const sessionKey = (interaction) => `${interaction.guildId}:${interaction.user.id}`;
 const planningId = () => `plan_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;

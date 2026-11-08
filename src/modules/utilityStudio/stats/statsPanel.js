@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   EmbedBuilder,
@@ -32,7 +33,7 @@ const TYPES = Object.freeze({
 const STATUSES = Object.freeze({ online: ['🟢', 'Online'], idle: ['🌙', 'Idle'], dnd: ['⛔', 'Do Not Disturb'], offline: ['⚫', 'Offline'] });
 
 const row = (...items) => new ActionRowBuilder().addComponents(...items.filter(Boolean));
-const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(id, label, style, disabled);
 const requester = (i) => i.member?.displayName || i.user?.displayName || i.user?.username || 'Management';
 const docks = (guildId) => stats.counters.listCounters(guildId);
 const dock = (guildId, id) => docks(guildId).find((item) => item.id === id || item.channelId === id) || null;
