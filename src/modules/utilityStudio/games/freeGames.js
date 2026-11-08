@@ -94,7 +94,7 @@ function saveSettings(guildId, patch) {
     if (Object.hasOwn(changes, 'channelId') && changes.channelId !== config.channelId && !config.destinations?.length) {
       state.retired = [...state.retired, ...state.deliveries]; state.deliveries = [];
     }
-    if (Object.hasOwn(changes, 'destinations')) state.initialized = false;
+    if (Object.hasOwn(changes, 'destinations') && JSON.stringify(changes.destinations) !== JSON.stringify(effectiveDestinations(config))) state.initialized = false;
     if (['stores', 'types', 'alerts', 'enabled'].some((key) => Object.hasOwn(changes, key) && JSON.stringify(changes[key]) !== JSON.stringify(config[key]))) state.initialized = false;
     return { ...current, ...changes, state };
   });
@@ -172,13 +172,17 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
     embed.title += ' · Delivery';
     embed.description += '\nChanges save immediately. Pausing keeps existing listing messages.';
     embed.fields = [
-      { name: 'Listing channel', value: c.channelId ? '<#' + c.channelId + '>' : 'Not configured', inline: true },
+      { name: 'Listing destinations', value: effectiveDestinations(c).length
+        ? effectiveDestinations(c).map(route => '<#' + route.channelId + '> · ' + (route.enabled ? 'On' : 'Paused') +
+          ' · ' + (route.stores?.join(', ') || 'All platforms') + ' · ' + (route.types?.join(', ') || 'All types')).join('\\n').slice(0, 1024)
+        : 'Not configured', inline: false },
       { name: 'Notifications', value: c.alerts ? 'New offers' : 'Off', inline: true },
       { name: 'Notification role', value: c.roleId ? '<@&' + c.roleId + '>' : 'No role ping', inline: true },
     ];
     controls = [
-      componentRow({ type: 8, custom_id: PANEL_PREFIX + 'channel', channel_types: [0, 5], min_values: 0, max_values: 1,
-        placeholder: 'Choose listing channel', ...(c.channelId ? { default_values: [{ id: c.channelId, type: 'channel' }] } : {}) }),
+      componentRow({ type: 8, custom_id: PANEL_PREFIX + 'destinations', channel_types: [0, 5], min_values: 0, max_values: 10,
+        placeholder: 'Choose up to 10 listing channels',
+        ...(effectiveDestinations(c).length ? { default_values: effectiveDestinations(c).map(route => ({ id: route.channelId, type: 'channel' })) } : {}) }),
       componentRow({ type: 6, custom_id: PANEL_PREFIX + 'role', min_values: 0, max_values: 1,
         placeholder: 'Notification role (clear for no ping)', ...(c.roleId ? { default_values: [{ id: c.roleId, type: 'role' }] } : {}) }),
       componentRow(panelButton('alerts', c.alerts ? 'Alerts: on' : 'Alerts: off')),
@@ -214,7 +218,7 @@ function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.
     embed.description = [
       notice && escape(notice),
       '**🎁 Free Games** ' + (c.enabled ? '🟢 On' : '⏸ Off') + '   ·   **📰 Game Updates** ' + (c.gameUpdates?.enabled ? '🟢 On' : '⏸ Off'),
-      '**📨 Delivery** ' + (c.channelId ? '<#' + c.channelId + '>' : 'Not set') + ' · Alerts ' + (c.alerts ? 'on' : 'off') + '   ·   **💱 ' + c.currency + '**',
+      '**📨 Delivery** ' + (effectiveDestinations(c).length ? effectiveDestinations(c).length + ' channel(s)' : 'Not set') + ' · Alerts ' + (c.alerts ? 'on' : 'off') + '   ·   **💱 ' + c.currency + '**',
       '**🎮 Catalogue** ' + c.state.offerCount + ' offers · ' + c.state.deliveries.length + ' messages · ' + c.stores.length + ' platforms · ' + c.types.length + ' types',
       '**🕒 Synced** ' + statusTime(c.state.lastSuccess) + (c.state.lastCheck && c.state.lastCheck !== c.state.lastSuccess ? ' · Checked ' + statusTime(c.state.lastCheck) : ''),
     ].filter(Boolean).join('\n');
@@ -267,7 +271,10 @@ async function applySettings(guild, patch) {
   return monitor.withGuildLock(guild.id, async () => {
     const previous = getConfig(guild.id);
     const changes = validateSettings(patch, previous);
-    if ({ ...previous, ...changes }.enabled) await monitor.validateDestination(guild, { ...previous, ...changes });
+    const next = { ...previous, ...changes };
+    if (next.enabled) for (const route of effectiveDestinations(next).filter(item => item.enabled)) {
+      await monitor.validateDestination(guild, { ...next, ...route });
+    }
     return saveSettings(guild.id, changes);
   });
 }
@@ -323,6 +330,13 @@ async function handleAdminInteraction(interaction) {
     if (action === 'regionalSubmit' && interaction.isModalSubmit?.()) {
       patch = Object.fromEntries(['currency', 'locale', 'timeZone', 'region'].map(key => [key, interaction.fields.getTextInputValue(key).trim()]));
       patch.currency = patch.currency.toUpperCase(); patch.region = patch.region.toUpperCase(); page = 'pricing';
+    } else if (action === 'destinations' && interaction.isChannelSelectMenu?.()) {
+      const selected = [...new Set(interaction.values || [])];
+      const existing = effectiveDestinations(c);
+      patch = { destinations: selected.map(channelId => existing.find(route => route.channelId === channelId) ||
+        { channelId, enabled: true, alerts: false, roleId: null, stores: null, types: null }) };
+      // Empty selection intentionally disables delivery destinations without deleting saved messages.
+      page = 'delivery';
     } else if (['channel', 'role'].includes(action) && (interaction.isChannelSelectMenu?.() || interaction.isRoleSelectMenu?.())) {
       patch = { [action === 'channel' ? 'channelId' : 'roleId']: interaction.values?.[0] || null }; page = 'delivery';
       if (patch.roleId) {
@@ -340,7 +354,10 @@ async function handleAdminInteraction(interaction) {
       const monitor = require('./freeGamesMonitor');
       await monitor.withGuildLock(guild.id, async () => {
         const current = getConfig(guild.id), changes = validateSettings({ [action]: !current[action] }, current);
-        if ({ ...current, ...changes }.enabled) await monitor.validateDestination(guild, { ...current, ...changes });
+        const next = { ...current, ...changes };
+        if (next.enabled) for (const route of effectiveDestinations(next).filter(item => item.enabled)) {
+          await monitor.validateDestination(guild, { ...next, ...route });
+        }
         saveSettings(guild.id, changes);
       });
       await reply(buildAdminPanel(guild, action === 'alerts' ? 'delivery' : 'settings', 'Settings saved.')); return true;
