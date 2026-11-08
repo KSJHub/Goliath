@@ -3,7 +3,6 @@ const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
   ChannelType,
@@ -11,6 +10,7 @@ const {
   PermissionFlagsBits,
   StringSelectMenuBuilder,
 } = require('discord.js');
+const { navigationButton, linkButton } = require('../../../core/guild/goliathNavigation');
 const guildManager = require('../../../core/guild/guildManager');
 const security = require('../../../core/security/protection/core');
 const roleSelector = require('./roleSelector');
@@ -281,8 +281,8 @@ module.exports = { buildAcceptanceReadiness, buildHealth, repair };
 // file so the module remains inside its current file-count boundary.
 const statsSessions = new Map();
 const statsRow = (...items) => new ActionRowBuilder().addComponents(...items.filter(Boolean));
-const statsButton = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
-const statsLinkButton = (label, url) => new ButtonBuilder().setLabel(label).setURL(url).setStyle(ButtonStyle.Link);
+const statsButton = (id, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(id, label, style, disabled);
+const statsLinkButton = (label, url) => linkButton(label, url);
 const statsSafePart = (value) => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
 const statsCustomId = (...parts) => parts.filter((part) => part !== null && part !== undefined && part !== '').join(':').slice(0, 100);
 const statsCleanId = (value) => {
