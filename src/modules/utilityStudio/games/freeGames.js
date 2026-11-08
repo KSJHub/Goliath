@@ -40,6 +40,10 @@ function validateSettings(input, previous) {
     if (!Array.isArray(input[key]) || input[key].length > Object.keys(known).length || input[key].some((value) => !Object.hasOwn(known, value))) throw new Error(`Invalid ${key} selection.`);
     result[key] = [...new Set(input[key])];
   }
+  // Delivery journal is persisted per destination and must never be supplied
+  // by dashboard/Discord clients. Retain it when editing subscription settings.
+  next.routeDeliveries = previous.routeDeliveries && typeof previous.routeDeliveries === 'object' && !Array.isArray(previous.routeDeliveries)
+    ? structuredClone(previous.routeDeliveries) : {};
   if (Object.hasOwn(input, 'destinations')) { result.destinations = normalizeDestinations(input.destinations); result.destinationsConfigured = true; }
   for (const key of ['channelId', 'roleId']) if (Object.hasOwn(input, key)) {
     const id = input[key];
@@ -483,7 +487,7 @@ function normalizeUpdateSubscription(input, previous = {}) {
   const appId = steamAppId(input.appId || previous.appId);
   const next = { appId, name: UPDATE_CATALOG.find(game => game.appId === appId)?.name || 'Steam game ' + appId,
     channelId: null, roleId: null, enabled: false, filter: 'patches', artwork: 'banner', detail: 'compact', includeWords: [], excludeWords: [],
-    seenIds: [], pending: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, ...previous, appId };
+    seenIds: [], pending: [], routeDeliveries: {}, initialized: false, lastCheck: null, lastSuccess: null, error: null, ...previous, appId };
   if (Object.hasOwn(input, 'destinations')) {
     next.destinations = normalizeUpdateDestinations(input.destinations);
     next.destinationsConfigured = true;
