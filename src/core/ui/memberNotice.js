@@ -1,6 +1,8 @@
 'use strict';
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+
+const { navigationButton, linkButton } = require('../guild/goliathNavigation');
 
 const COLORS = Object.freeze({
   info: 0x5865F2,
@@ -28,14 +30,13 @@ function field(name, value, inline = false) {
 }
 
 function button(def = {}) {
-  const item = new ButtonBuilder()
-    .setLabel(clean(def.label, 'Open', 80))
-    .setStyle(def.url ? ButtonStyle.Link : (def.style ?? ButtonStyle.Secondary));
-  if (def.url) item.setURL(def.url);
-  else if (def.customId) item.setCustomId(def.customId);
-  else return null;
+  const label = clean(def.label, 'Open', 80);
+  if (!def.url && !def.customId) return null;
+  const item = def.url
+    ? linkButton(label, def.url, { disabled: def.disabled === true })
+    : navigationButton(def.customId, label, def.style ?? ButtonStyle.Secondary, def.disabled === true);
+  item.setLabel(label);
   if (def.emoji) item.setEmoji(def.emoji);
-  if (def.disabled === true) item.setDisabled(true);
   return item;
 }
 
