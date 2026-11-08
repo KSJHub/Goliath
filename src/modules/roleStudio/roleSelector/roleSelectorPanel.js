@@ -1,5 +1,5 @@
 'use strict';
-const { navigationButton } = require('../../../core/guild/goliathNavigation');
+const { navigationButton, linkButton } = require('../../../core/guild/goliathNavigation');
 const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
@@ -26,7 +26,7 @@ const { withDeploymentLock } = require('./roleSelectorLocks');
 const sessions = new Map();
 const row = (...items) => new ActionRowBuilder().addComponents(...items.filter(Boolean));
 const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(id, label, style, disabled);
-const linkButton = (label, url) => new ButtonBuilder().setLabel(label).setURL(url).setStyle(ButtonStyle.Link);
+
 const cleanId = (value) => {
   const id = String(value || '').replace(/[^0-9]/g, '');
   return /^\d{15,25}$/.test(id) ? id : null;

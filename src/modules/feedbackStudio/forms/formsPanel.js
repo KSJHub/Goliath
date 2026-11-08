@@ -90,10 +90,7 @@ function buildFormPanelRows(panel = {}, forms = []) {
   const buttons = forms
     .filter((form) => form.enabled !== false)
     .slice(0, 25)
-    .map((form) => new ButtonBuilder()
-      .setCustomId(buildFormOpenCustomId(form.formId))
-      .setLabel(form.buttonLabel || form.name || 'Open Form')
-      .setStyle(ButtonStyle.Primary));
+    .map((form) => navigationButton(buildFormOpenCustomId(form.formId), form.buttonLabel || form.name || 'Open Form', ButtonStyle.Primary));
 
   const rows = [];
   for (let index = 0; index < buttons.length; index += 5) {

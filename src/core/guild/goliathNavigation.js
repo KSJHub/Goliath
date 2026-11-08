@@ -147,6 +147,15 @@ function emojiButton(customId, label, emoji, style = ButtonStyle.Secondary, disa
   return applyButtonEmoji(component, label, emoji);
 }
 
+// URL buttons have no custom ID and always use Discord's Link style.
+function linkButton(label, url, options = {}) {
+  const component = new ButtonBuilder()
+    .setStyle(ButtonStyle.Link)
+    .setURL(url)
+    .setDisabled(Boolean(options.disabled));
+  return options.emoji ? applyButtonEmoji(component, label, options.emoji) : component.setLabel(label);
+}
+
 function actionButton(customId, action, options = {}) {
   const definition = UI_ACTIONS[action];
   if (!definition) throw new Error(`Unknown Goliath UI action: ${action}`);
@@ -198,6 +207,6 @@ function componentRow(...components) {
 }
 
 module.exports = {
-  EMOJIS, emojiLabel, UI_ACTIONS, navigationButton, emojiButton, actionButton,
+  EMOJIS, emojiLabel, UI_ACTIONS, navigationButton, emojiButton, linkButton, actionButton,
   paginationButtons, goliathNavigation, selectMenu, componentRow,
 };
