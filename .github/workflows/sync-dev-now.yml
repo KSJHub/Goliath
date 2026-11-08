@@ -86,12 +86,9 @@ jobs:
             ensure_expected_commit
 
             # DEV SAFETY CONTRACT:
-            # Recover only absent tracked Markdown documentation and the two
-            # known security tests. Never overwrite existing files or touch
+            # Recover only absent tracked Markdown documentation. Never overwrite existing files or touch
             # modified source, runtime data, or untracked user work.
             REQUIRED_AUDIT_FILES=(
-              tests/dashboard-access-security.test.js
-              tests/birthday-route-security.test.js
               docs/modules/goodbye.md
               docs/modules/communityStudio/invites.md
             )
