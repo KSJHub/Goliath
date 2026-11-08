@@ -1,6 +1,7 @@
 'use strict';
 
-const { ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonStyle } = require('discord.js');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 const verificationStore = require('./verificationStore');
 const guildManager = require('../../core/guild/guildManager');
 const { auditQuarantineSnapshots } = require('../../core/security/protection/quarantine/state');
@@ -41,8 +42,8 @@ function caseSummary(member) {
 }
 function memberCaseButtons(userId) {
   return [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`verify:quarantine:request:${userId}`).setLabel('Request Review').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`verify:quarantine:status:${userId}`).setLabel('View Status').setStyle(ButtonStyle.Secondary)
+    navigationButton(`verify:quarantine:request:${userId}`, 'Request Review', ButtonStyle.Primary),
+    navigationButton(`verify:quarantine:status:${userId}`, 'View Status', ButtonStyle.Secondary)
   )];
 }
 
