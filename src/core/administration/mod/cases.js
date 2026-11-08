@@ -3,7 +3,6 @@ const { EMOJIS: SHARED_EMOJIS, emojiLabel } = require('../../../core/ui/emojis')
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   ModalBuilder,
@@ -803,15 +802,11 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
   if (extraFilters.length) embed.addFields({ name: '🔎 Additional Filters', value: extraFilters.join(' • '), inline: false });
   embed.setFooter({ text: `${results.length} matching appeal${results.length === 1 ? '' : 's'} • Page ${page + 1}/${totalPages}` });
   const statusRow = new ActionRowBuilder().addComponents(
-    ...['pending', 'approved', 'denied', 'all'].map(status => new ButtonBuilder()
-      .setCustomId(`mod_case_appeal_queue_status:${activeToken}:${status}`)
-      .setLabel(status === 'all' ? '📋 All' : status === 'pending' ? '📥 Pending' : status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : emojiLabel('ERROR', 'Denied'))
-      .setStyle(normalizedStatus === status ? ButtonStyle.Primary : ButtonStyle.Secondary))
+    ...['pending', 'approved', 'denied', 'all'].map(status => navigationButton(`mod_case_appeal_queue_status:${activeToken}:${status}`, status === 'all' ? '📋 All' : status === 'pending' ? '📥 Pending' : status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : emojiLabel('ERROR', 'Denied'), normalizedStatus === status ? ButtonStyle.Primary : ButtonStyle.Secondary))
   );
   const rows = [statusRow];
   if (slice.length) rows.push(new ActionRowBuilder().addComponents(...slice.map(({ case: modCase, appeal }) =>
-    new ButtonBuilder().setCustomId(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`)
-      .setLabel(`${appeal.status === 'pending' ? '⚖️ Review' : '📁 View'} #${modCase.caseId}`).setStyle(ButtonStyle.Primary)
+    navigationButton(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`, `${appeal.status === 'pending' ? '⚖️ Review' : '📁 View'} #${modCase.caseId}`, ButtonStyle.Primary)
   )));
   if (totalPages > 1) rows.push(new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_appeal_queue:${activeToken}:${Math.max(0, page - 1)}`, '◀ Previous', ButtonStyle.Secondary, page <= 0),
