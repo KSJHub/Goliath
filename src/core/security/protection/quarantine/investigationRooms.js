@@ -5,10 +5,10 @@ const {
   PermissionFlagsBits,
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   MessageFlags,
 } = require('discord.js');
+const { navigationButton } = require('../../../guild/goliathNavigation');
 const {
   DEFAULT_INVESTIGATION_CATEGORY_NAME,
   QUARANTINE_MODES,
@@ -215,10 +215,10 @@ async function buildInvestigationRoomOverwrites(guild, member, quarantineRole, o
 
 function investigationRoomControls(memberId, channelId, options = {}) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_invroom_transcript:${memberId}:${channelId}`).setLabel('Transcript').setEmoji('📄').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_invroom_notify:${memberId}:${channelId}`).setLabel('Notify Management').setEmoji('🔔').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_invroom_close:${memberId}:${channelId}`).setLabel(options.investigationGroupId ? 'Release This Member' : 'Close Investigation').setEmoji('🔓').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`mod_invroom_delete:${memberId}:${channelId}`).setLabel('Delete Closed Room').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
+    navigationButton(`mod_invroom_transcript:${memberId}:${channelId}`, 'Transcript', ButtonStyle.Secondary).setLabel('Transcript').setEmoji('📄'),
+    navigationButton(`mod_invroom_notify:${memberId}:${channelId}`, 'Notify Management', ButtonStyle.Secondary).setLabel('Notify Management').setEmoji('🔔'),
+    navigationButton(`mod_invroom_close:${memberId}:${channelId}`, options.investigationGroupId ? 'Release This Member' : 'Close Investigation', ButtonStyle.Success).setLabel(options.investigationGroupId ? 'Release This Member' : 'Close Investigation').setEmoji('🔓'),
+    navigationButton(`mod_invroom_delete:${memberId}:${channelId}`, 'Delete Closed Room', ButtonStyle.Danger).setLabel('Delete Closed Room').setEmoji('🗑️'),
   );
 }
 
@@ -277,10 +277,10 @@ function buildInvestigationRoomPanel(member, channelId, options = {}) {
     .setFooter({ text: 'Private Moderation Review' })
     .setTimestamp();
   const controls = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_dashboard:${member.id}:cases`).setLabel('Case File').setEmoji('📁').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`mod_dashboard:${member.id}:intelligence`).setLabel('Intelligence').setEmoji('🧠').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_invroom_note:${member.id}`).setLabel('Add Note').setEmoji('📝').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_invroom_access:${member.id}`).setLabel('Channel Access').setEmoji('🔐').setStyle(ButtonStyle.Secondary),
+    navigationButton(`mod_dashboard:${member.id}:cases`, 'Case File', ButtonStyle.Primary).setLabel('Case File').setEmoji('📁'),
+    navigationButton(`mod_dashboard:${member.id}:intelligence`, 'Intelligence', ButtonStyle.Secondary).setLabel('Intelligence').setEmoji('🧠'),
+    navigationButton(`mod_invroom_note:${member.id}`, 'Add Note', ButtonStyle.Secondary).setLabel('Add Note').setEmoji('📝'),
+    navigationButton(`mod_invroom_access:${member.id}`, 'Channel Access', ButtonStyle.Secondary).setLabel('Channel Access').setEmoji('🔐'),
   );
   return { content: `<@${member.id}>`, embeds: [intro], components: [controls, investigationRoomControls(member.id, channelId, options)], allowedMentions: { parse: [] } };
 }
