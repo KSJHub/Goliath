@@ -1,6 +1,6 @@
 'use strict';
 const { emojiLabel } = require('../../../core/ui/emojis');
-const { actionButton } = require('../../../core/guild/goliathNavigation');
+const { actionButton, navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
@@ -20,7 +20,7 @@ const { isModuleEnabled } = require('../../../core/guild/guildManager');
 const { rolePages, rolePageSelect } = require('../../../core/ui/rolePagination');
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Primary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+const button = (customId, label, style = ButtonStyle.Primary) => navigationButton(customId, label, style);
 const formatChannel = (id) => id ? `<#${id}>` : '`Not set`';
 const formatRoles = (ids = []) => Array.isArray(ids) && ids.length ? ids.map((id) => `<@&${id}>`).join(', ') : '`None`';
 

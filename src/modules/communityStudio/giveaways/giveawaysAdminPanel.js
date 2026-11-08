@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
@@ -19,7 +20,7 @@ const { rolePages, rolePageSelect } = require('../../../core/ui/rolePagination')
 const guildManager = require('../../../core/guild/guildManager');
 
 function row(...components) { return new ActionRowBuilder().addComponents(...components); }
-function button(customId, label, style = ButtonStyle.Primary, disabled = false) { return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style).setDisabled(disabled); }
+function button(customId, label, style = ButtonStyle.Primary, disabled = false) { return navigationButton(customId, label, style, disabled); }
 function formatChannel(id) { return id ? `<#${id}>` : '`Not set`'; }
 function formatRoles(ids = []) { const list = Array.isArray(ids) ? ids.filter(Boolean) : []; return list.length ? list.map((id) => `<@&${id}>`).join(', ') : '`None`'; }
 

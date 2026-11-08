@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
@@ -23,11 +24,7 @@ const LEADERBOARD_PAGE_SIZE = 10;
 const LEADERBOARD_SORTS = new Set(['xp', 'level', 'messages', 'voice']);
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Primary, disabled = false) => new ButtonBuilder()
-  .setCustomId(customId)
-  .setLabel(label)
-  .setStyle(style)
-  .setDisabled(disabled);
+const button = (customId, label, style = ButtonStyle.Primary, disabled = false) => navigationButton(customId, label, style, disabled);
 const formatChannel = (id) => id ? `<#${id}>` : '`Not set`';
 const formatRoles = (ids = []) => ids.length ? ids.map((id) => `<@&${id}>`).join(', ') : '`None`';
 const formatChannels = (ids = []) => ids.length ? ids.map((id) => `<#${id}>`).join(', ') : '`None`';

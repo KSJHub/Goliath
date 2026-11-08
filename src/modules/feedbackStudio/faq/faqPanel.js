@@ -1,7 +1,8 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const {ActionRowBuilder,ButtonBuilder,ButtonStyle,ChannelSelectMenuBuilder,ChannelType,EmbedBuilder,FileUploadBuilder,LabelBuilder,ModalBuilder,RoleSelectMenuBuilder,StringSelectMenuBuilder,TextInputBuilder,TextInputStyle}=require('discord.js');
 const faq=require('./faq');const {isModuleEnabled}=require('../../../core/guild/guildManager');
-const row=(...x)=>new ActionRowBuilder().addComponents(...x);const button=(id,label,style=ButtonStyle.Secondary)=>new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
+const row=(...x)=>new ActionRowBuilder().addComponents(...x);const button=(id,label,style=ButtonStyle.Secondary)=>navigationButton(id,label,style);
 const selectRow=(id,placeholder,options)=>row(new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(placeholder).addOptions(options));
 function buildNotice(title,description){return{embeds:[new EmbedBuilder().setColor(0xed4245).setTitle(title).setDescription(description)],components:[]};}
 function buildHomePanel(guildId){const cats=faq.listCategories(guildId).slice(0,25),e=new EmbedBuilder().setColor(0x5865f2).setTitle('❓ FAQ & Support Centre').setDescription(['**Frequently Asked Questions**','','The quickest place to find answers to common questions, useful information and support.','','🔎 **Find an Answer**','Browse the FAQ categories below.','','❓ **Can’t find what you need?**','Ask the team and your question can become part of the FAQ knowledge base.'].join('\n')),components=[];if(cats.length)components.push(selectRow('faq:category','Select an FAQ category',cats.map(c=>({label:c.name.slice(0,100),description:(c.description||'View questions').slice(0,100),value:c.id,emoji:c.emoji||undefined}))));components.push(row(button('faq:ask','❓ Ask a Question',ButtonStyle.Primary),button('faq:search','🔎 Search FAQs')));return{embeds:[e],components};}
