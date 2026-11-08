@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
@@ -23,7 +24,7 @@ const panelNavigation = require('../../../core/ui/panelNavigation');
 
 const SUGGESTIONS_COLOR = 0xfee75c;
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Primary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+const button = (customId, label, style = ButtonStyle.Primary) => navigationButton(customId, label, style);
 const formatChannel = (id) => id ? `<#${id}>` : '*Not set*';
 const formatRoles = (ids = []) => Array.isArray(ids) && ids.filter(Boolean).length ? ids.filter(Boolean).map((id) => `<@&${id}>`).join(', ') : '*None selected*';
 

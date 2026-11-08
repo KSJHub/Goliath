@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { emojiLabel } = require('../../../core/ui/emojis');
 
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
@@ -7,7 +8,7 @@ const { rolePages, rolePageSelect, mergePageSelection } = require('../../../core
 const { isModuleEnabled, setModuleEnabled } = require('../../../core/guild/guildManager');
 
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Primary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+const button = (customId, label, style = ButtonStyle.Primary) => navigationButton(customId, label, style);
 const displayName = (interaction) => interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
 const formatChannel = (id) => id ? `<#${id}>` : '`Not set`';
 const formatRoles = (ids = []) => Array.isArray(ids) && ids.filter(Boolean).length ? ids.filter(Boolean).map((id) => `<@&${id}>`).join(', ') : '`None`';

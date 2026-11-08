@@ -1,10 +1,11 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const stickyStore = require('./stickyStore');
 const stickyManager = require('./stickyManager');
 const guildManager = require('../../../core/guild/guildManager');
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Primary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+const button = (customId, label, style = ButtonStyle.Primary) => navigationButton(customId, label, style);
 const displayName = (i) => i.member?.displayName || i.user?.displayName || i.user?.username || 'Unknown User';
 const formatChannels = (data) => Object.keys(data.channels || {}).length ? Object.keys(data.channels || {}).map((id) => `<#${id}>`).join(', ') : '`None`';
 const formatRoles = (ids = []) => Array.isArray(ids) && ids.filter(Boolean).length ? ids.filter(Boolean).map((id) => `<@&${id}>`).join(', ') : '`None`';

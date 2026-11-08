@@ -1,4 +1,5 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { emojiLabel } = require('../../../core/ui/emojis');
 
 // src/modules/feedbackStudio/forms/formManager.js
@@ -310,7 +311,7 @@ function row(...components) {
 }
 
 function button(customId, label, style = ButtonStyle.Primary) {
-  return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+  return navigationButton(customId, label, style);
 }
 
 function getMemberDisplayName(interaction) {
