@@ -1,6 +1,6 @@
 'use strict';
 const { emojiLabel } = require('../../../core/ui/emojis');
-const { navigationButton } = require('../../../core/guild/goliathNavigation');
+const { navigationButton, actionButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   EmbedBuilder,
@@ -222,8 +222,8 @@ async function buildReactionRolesAdminPanel(guild, memberDisplayName = 'Unknown 
         button('admin:reactionRoles:manage', '📋 Manage', ButtonStyle.Primary, !panels.length),
       ),
       row(
-        button('admin:studio:roleStudio', emojiLabel('BACK', 'Back')),
-        button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
+        actionButton('admin:studio:roleStudio', 'back'),
+        actionButton('admin:reactionRoles:settings', 'settings'),
       ),
     ],
   };
@@ -244,7 +244,7 @@ function buildExistingPicker(guild) {
         button('admin:reactionRoles:new:existing', '🔗 Existing Message', ButtonStyle.Primary),
         button('admin:reactionRoles:existing:embed', '📚 Existing Panel', ButtonStyle.Primary),
       ),
-      row(button('admin:reactionRoles', emojiLabel('BACK', 'Back')), button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings'))),
+      row(actionButton('admin:reactionRoles', 'back'), actionButton('admin:reactionRoles:settings', 'settings')),
     ],
   };
 }
@@ -280,8 +280,8 @@ function buildEmbedStudioPicker(guild, userId, notice = '') {
         .setMaxValues(1)),
       row(embedDeploymentSelect(guild.id, channelId)),
       row(
-        button('admin:reactionRoles:existing', emojiLabel('BACK', 'Back')),
-        button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
+        actionButton('admin:reactionRoles:existing', 'back'),
+        actionButton('admin:reactionRoles:settings', 'settings'),
       ),
     ],
   };
@@ -308,7 +308,7 @@ async function buildSettingsPage(guild, memberDisplayName = 'Unknown User', noti
         button(enabled ? 'admin:reactionRoles:disable:confirm' : 'admin:reactionRoles:enable', enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
         button('admin:reactionRoles:repair', '🩺 Repair All', ButtonStyle.Secondary, !panels.length || !enabled),
       ),
-      row(button('admin:reactionRoles', emojiLabel('BACK', 'Back to Reaction Roles'))),
+      row(actionButton('admin:reactionRoles', 'back', { label: 'Back to Reaction Roles' })),
     ],
   };
 }
@@ -338,7 +338,7 @@ function buildManagePicker(guild, notice = '') {
       ].filter((line) => line !== null).join('\n'))],
     components: [
       ...(panels.length ? [row(deploymentSelect(guild.id))] : [row(button('admin:reactionRoles:create', '➕ Create First Panel', ButtonStyle.Success))]),
-      row(button('admin:reactionRoles', emojiLabel('BACK', 'Back')), button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings'))),
+      row(actionButton('admin:reactionRoles', 'back'), actionButton('admin:reactionRoles:settings', 'settings')),
     ],
   };
 }
@@ -379,8 +379,8 @@ function buildExistingMessageStep(guild, userId, notice = '') {
         button('admin:reactionRoles:source:continue', '🗺️ Mapping Builder', ButtonStyle.Success, !draft?.messageId),
       ),
       row(
-        button('admin:reactionRoles:existing', emojiLabel('BACK', 'Back')),
-        button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
+        actionButton('admin:reactionRoles:existing', 'back'),
+        actionButton('admin:reactionRoles:settings', 'settings'),
       ),
     ],
   };
@@ -444,11 +444,11 @@ function buildWizard(guild, userId, showRemove = false, notice = '', rolePage = 
       button('admin:reactionRoles:wizard:remove', '🗑️ Remove', ButtonStyle.Secondary, !draft.mappings.length),
     ),
     row(
-      button(existing ? 'admin:reactionRoles:existing' : 'admin:reactionRoles', emojiLabel('BACK', 'Back')),
+      actionButton(existing ? 'admin:reactionRoles:existing' : 'admin:reactionRoles', 'back'),
       pageCount > 1 ? button(rolePickerCustomId('admin:reactionRoles:wizard:rolePage', 'page', Math.max(0, safePage - 1)), emojiLabel('BACK', 'Roles'), ButtonStyle.Secondary, safePage <= 0) : null,
       pageCount > 1 ? button(`admin:reactionRoles:wizard:rolePageInfo:${safePage}`, `Page ${safePage + 1}/${pageCount}`, ButtonStyle.Secondary, true) : null,
       pageCount > 1 ? button(rolePickerCustomId('admin:reactionRoles:wizard:rolePage', 'page', Math.min(pageCount - 1, safePage + 1)), 'Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
-      button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
+      actionButton('admin:reactionRoles:settings', 'settings'),
     ),
   );
 
@@ -507,8 +507,8 @@ async function buildManagedPanel(guild, panelId, notice = '') {
         button(`admin:reactionRoles:manage:remove:confirm:${panelId}`, '🗑️ Delete Panel', ButtonStyle.Danger),
       ),
       row(
-        button('admin:reactionRoles:manage', emojiLabel('BACK', 'Back')),
-        button('admin:reactionRoles:settings', emojiLabel('SETTINGS', 'Settings')),
+        actionButton('admin:reactionRoles:manage', 'back'),
+        actionButton('admin:reactionRoles:settings', 'settings'),
       ),
     ],
   };
