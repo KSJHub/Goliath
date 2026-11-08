@@ -221,6 +221,20 @@ function updateSubscriptionState(guildId, appId, fn) {
 function recordUpdateDelivery(guildId, appId, item, status, detail = '') {
   store.updateGameUpdates(guildId, current => ({ ...current, history: [{ appId, itemId: item.id, title: item.title, url: item.url, status, detail: String(detail).slice(0, 300), at: Date.now() }, ...current.history].slice(0, 100) }));
 }
+// Persist channel-scoped delivery outcomes alongside the existing global history.
+// A bounded journal supports safe migration without rewriting legacy records.
+function journalUpdateDelivery(guildId, appId, channelId, item, status, messageId = null) {
+  if (!channelId) return;
+  updateSubscriptionState(guildId, appId, current => {
+    const journal = { ...(current.routeDeliveries || {}) };
+    const records = Array.isArray(journal[channelId]) ? journal[channelId] : [];
+    journal[channelId] = [
+      { itemId: item.id, status, messageId, at: Date.now() },
+      ...records.filter(record => record.itemId !== item.id)
+    ].slice(0, 100);
+    return { ...current, routeDeliveries: journal };
+  });
+}
 async function saveGameSubscription(guild, patch) {
   return withGuildLock(guild.id, async () => {
     const appId = providers.steamAppId(patch.appId), config = store.getGameUpdates(guild.id), previous = config.subscriptions[appId];
@@ -285,6 +299,7 @@ async function flushGameUpdates(guild, appId, manual = false, onlyIds = null) {
       const recovered = recent.find(message => message.author?.id === guild.client.user.id && message.embeds?.some(embed => embed.url === entry.item.url && embed.footer?.text === 'Game Updates · Steam'));
       if (recovered) {
         updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.filter(record => record.item.id !== entry.item.id), lastSuccess: Date.now() }));
+        journalUpdateDelivery(guild.id, appId, channel.id, entry.item, 'recovered', recovered.id);
         recordUpdateDelivery(guild.id, appId, entry.item, 'recovered'); continue;
       }
       updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: 'ambiguous' } : record), error: 'A delivery needs review. Inspect the channel before retrying held updates.' }));
@@ -293,7 +308,8 @@ async function flushGameUpdates(guild, appId, manual = false, onlyIds = null) {
     updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: 'dispatching' } : record) }));
     try {
       const payload = require('./freeGamesEmbeds').buildGameUpdate(subscription, entry.item, { suppressMention: entry.suppressMention });
-      await channel.send({ ...payload, nonce: hash(['game-update', guild.id, appId, entry.item.id]).slice(0, 24), enforceNonce: true });
+      const sent = await channel.send({ ...payload, nonce: hash(['game-update', guild.id, appId, entry.item.id]).slice(0, 24), enforceNonce: true });
+      journalUpdateDelivery(guild.id, appId, channel.id, entry.item, 'delivered', sent.id);
       updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.filter(record => record.item.id !== entry.item.id), lastSuccess: Date.now(),
         error: current.pending.some(record => record.status === 'ambiguous') ? 'Some deliveries need review.' : null }));
       recordUpdateDelivery(guild.id, appId, entry.item, 'delivered'); delivered++;
