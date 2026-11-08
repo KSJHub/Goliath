@@ -1,11 +1,11 @@
 'use strict';
 const { emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   MessageFlags,
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
   ChannelType,
@@ -23,7 +23,7 @@ const { setModuleEnabled, isModuleEnabled } = require('../../../core/guild/guild
 const SUGGESTIONS_COLOR = panel.SUGGESTIONS_COLOR || 0xfee75c;
 const ADMIN_RECORD_PAGE_SIZE = 20;
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const button = (customId, label, style = ButtonStyle.Primary) => new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+const button = (customId, label, style = ButtonStyle.Primary) => navigationButton(customId, label, style);
 const formatChannel = (id) => id ? `<#${id}>` : '⚠️ Not set';
 const formatRoles = (ids = []) => Array.isArray(ids) && ids.filter(Boolean).length
   ? ids.filter(Boolean).map((id) => `<@&${id}>`).join(', ')
