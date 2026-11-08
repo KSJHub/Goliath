@@ -122,7 +122,7 @@ async function processMultiDestinationGuild(guild, config) {
 async function processGuildUnlocked(guild) {
   let config = store.getConfig(guild.id);
   if (!config.enabled) return { skipped: true };
-  if (config.destinations?.length) {
+  if (config.destinationsConfigured) {
     try { return await processMultiDestinationGuild(guild, config); }
     catch (error) { store.update(guild.id, current => ({ ...current, state: { ...current.state, error: String(error.message || error).slice(0, 400) } })); throw error; }
   }
