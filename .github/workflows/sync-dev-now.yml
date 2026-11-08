@@ -89,6 +89,15 @@ jobs:
             # Never reset, clean, stash, overwrite, or otherwise modify a dirty
             # DEV worktree. A push may arrive while local development is active.
             # In that case deployment must stop and leave every local change intact.
+            # A previous interrupted deployment removed exactly these two
+            # tracked test files. Restore only these known files, and only when
+            # they are missing (never overwrite modified test contents).
+            for test_file in tests/dashboard-access-security.test.js tests/birthday-route-security.test.js; do
+              if [ ! -e "$test_file" ] && git ls-files --error-unmatch "$test_file" >/dev/null 2>&1; then
+                echo "🩹 Restore missing tracked security test: $test_file"
+                git restore --source=HEAD --worktree -- "$test_file"
+              fi
+            done
             DIRTY_STATUS="$(git status --porcelain -- . ':!src/runtime/')"
             if [ -n "$DIRTY_STATUS" ]; then
               echo "❌ DEV sync refused: /home/goliath/dev contains local changes."
@@ -117,6 +126,17 @@ jobs:
             # Keep this downtime bounded to the locked install and validation.
             echo "🛑 Stop DEV before replacing node_modules"
             pm2 stop "$PM2_NAME" || true
+            # If a validation/build step fails, bring back the previously
+            # configured DEV process instead of leaving the bot offline.
+            recover_dev_on_error() {
+              status=$?
+              if [ "$status" -ne 0 ]; then
+                echo "⚠️ DEV sync failed; attempting to restart DEV."
+                pm2 restart "$PM2_NAME" --update-env || true
+              fi
+              return "$status"
+            }
+            trap recover_dev_on_error ERR
 
             echo "📦 Clean locked dependency install"
             npm ci --no-audit --no-fund
@@ -133,6 +153,21 @@ jobs:
             db.close();
             console.log('✅ better-sqlite3 native binding operational');
             NODE
+
+            # A clean install must not remove tracked test fixtures. Restore
+            # only the two known missing tests; abort on any other source drift.
+            for test_file in tests/dashboard-access-security.test.js tests/birthday-route-security.test.js; do
+              if [ ! -f "$test_file" ]; then
+                echo "🩹 Restore security test after npm ci: $test_file"
+                git restore --source=HEAD --worktree -- "$test_file"
+              fi
+              test -f "$test_file"
+            done
+            [ -z "$(git status --porcelain -- . ':!src/runtime/')" ] || {
+              echo "Unexpected worktree changes after dependency install" >&2
+              git status --short -- . ':!src/runtime/'
+              exit 1
+            }
 
             echo "🔎 Validate DEV"
             BOT_MODE=dev npm run doctor
