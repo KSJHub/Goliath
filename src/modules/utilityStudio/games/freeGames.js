@@ -5,13 +5,34 @@ const { STORES, TYPES, CURRENCIES } = require('./freeGamesProviders');
 // Keep the established section key so the Games rename preserves all guild data and authority bindings.
 const MODULE_KEY = 'freeGames';
 const MODULE_NAME = 'Games';
-const DEFAULTS = { enabled: false, currency: 'GBP', priceMode: 'converted', locale: 'en-GB', timeZone: 'Europe/London', region: 'GB', layout: 'columns', featuredMode: 'auto', featuredOfferId: null, featuredArtwork: 'thumbnail', showTimestamps: true, showExpiry: false, showPlatforms: true, showNew: true, showOfferCount: true, channelId: null, stores: Object.keys(STORES), types: ['game'], alerts: false, roleId: null, state: { firstSeen: {}, newSince: {}, observed: {}, deliveries: [], retired: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, offerCount: 0, pricing: null, warning: null } };
+const DEFAULTS = { enabled: false, currency: 'GBP', priceMode: 'converted', locale: 'en-GB', timeZone: 'Europe/London', region: 'GB', layout: 'columns', featuredMode: 'auto', featuredOfferId: null, featuredArtwork: 'thumbnail', showTimestamps: true, showExpiry: false, showPlatforms: true, showNew: true, showOfferCount: true, channelId: null, destinations: [], stores: Object.keys(STORES), types: ['game'], alerts: false, roleId: null, state: { firstSeen: {}, newSince: {}, observed: {}, deliveries: [], retired: [], initialized: false, lastCheck: null, lastSuccess: null, error: null, offerCount: 0, pricing: null, warning: null } };
 function getConfig(guildId) {
   const section = getModuleSection(guildId, MODULE_KEY, DEFAULTS);
   return { ...DEFAULTS, ...section, state: { ...structuredClone(DEFAULTS.state), ...section.state }, enabled: guildManager.isModuleEnabled(guildId, MODULE_KEY) };
 }
 function update(guildId, fn) { return updateModuleSection(guildId, MODULE_KEY, fn, DEFAULTS); }
 function filterOffers(offers, config, now = Date.now()) { return offers.filter((offer) => config.types.includes(offer.type) && offer.stores.some((store) => config.stores.includes(store)) && (!offer.endsAt || offer.endsAt > now)); }
+function normalizeDestinations(value) {
+  if (!Array.isArray(value) || value.length > 10) throw new Error('Choose up to ten Free Games destinations.');
+  const seen = new Set();
+  return value.map((item) => {
+    if (!item || typeof item !== 'object' || !/^\\d{16,20}$/.test(item.channelId || '') || seen.has(item.channelId)) throw new Error('Choose unique valid destination channels.');
+    seen.add(item.channelId);
+    if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error('Destination enabled must be true or false.');
+    if (item.alerts !== undefined && typeof item.alerts !== 'boolean') throw new Error('Destination alerts must be true or false.');
+    const stores = item.stores === undefined ? null : item.stores;
+    const types = item.types === undefined ? null : item.types;
+    for (const [key, values, known] of [['stores', stores, STORES], ['types', types, TYPES]]) {
+      if (values !== null && (!Array.isArray(values) || values.length > Object.keys(known).length || values.some(v => !Object.hasOwn(known, v)))) throw new Error('Invalid destination ' + key + '.');
+    }
+    if (item.roleId != null && !/^\\d{16,20}$/.test(item.roleId)) throw new Error('Invalid destination role.');
+    return { channelId: item.channelId, enabled: item.enabled !== false, alerts: item.alerts === true, roleId: item.roleId || null,
+      stores: stores === null ? null : [...new Set(stores)], types: types === null ? null : [...new Set(types)] };
+  });
+}
+function effectiveDestinations(config) {
+  return config.destinations?.length ? config.destinations : config.channelId ? [{ channelId: config.channelId, enabled: true, alerts: config.alerts, roleId: config.roleId, stores: null, types: null }] : [];
+}
 function validateSettings(input, previous) {
   const result = {};
   for (const key of ['enabled', 'alerts', 'showTimestamps', 'showExpiry', 'showPlatforms', 'showNew', 'showOfferCount']) if (Object.hasOwn(input, key)) { if (typeof input[key] !== 'boolean') throw new Error(`${key} must be true or false.`); result[key] = input[key]; }
@@ -19,6 +40,7 @@ function validateSettings(input, previous) {
     if (!Array.isArray(input[key]) || input[key].length > Object.keys(known).length || input[key].some((value) => !Object.hasOwn(known, value))) throw new Error(`Invalid ${key} selection.`);
     result[key] = [...new Set(input[key])];
   }
+  if (Object.hasOwn(input, 'destinations')) result.destinations = normalizeDestinations(input.destinations);
   for (const key of ['channelId', 'roleId']) if (Object.hasOwn(input, key)) {
     const id = input[key];
     if (id !== null && id !== '' && (typeof id !== 'string' || !/^\d{16,20}$/.test(id))) throw new Error(`Invalid ${key}.`);
@@ -61,7 +83,7 @@ function validateSettings(input, previous) {
     result.region = input.region;
   }
   const next = { ...previous, ...result };
-  if (next.enabled && (!next.channelId || !next.stores.length || !next.types.length)) throw new Error('Choose a channel, at least one store and one offer type before enabling Free Games.');
+  if (next.enabled && (!effectiveDestinations(next).some(route => route.enabled) || !next.stores.length || !next.types.length)) throw new Error('Choose a channel, at least one store and one offer type before enabling Free Games.');
   return result;
 }
 function saveSettings(guildId, patch) {
@@ -69,9 +91,10 @@ function saveSettings(guildId, patch) {
     const config = getConfig(guildId);
     const changes = validateSettings(patch, config);
     const state = { ...config.state };
-    if (Object.hasOwn(changes, 'channelId') && changes.channelId !== config.channelId) {
+    if (Object.hasOwn(changes, 'channelId') && changes.channelId !== config.channelId && !config.destinations?.length) {
       state.retired = [...state.retired, ...state.deliveries]; state.deliveries = [];
     }
+    if (Object.hasOwn(changes, 'destinations')) state.initialized = false;
     if (['stores', 'types', 'alerts', 'enabled'].some((key) => Object.hasOwn(changes, key) && JSON.stringify(changes[key]) !== JSON.stringify(config[key]))) state.initialized = false;
     return { ...current, ...changes, state };
   });
@@ -335,7 +358,7 @@ async function handleAdminInteraction(interaction) {
   return true;
 }
 module.exports = { MODULE_KEY, MODULE_NAME, DEFAULTS, DISPLAY_OPTIONS, PRICE_MODES, getConfig, update, filterOffers, validateSettings, saveSettings,
-  applySettings, buildAdminPanel, buildFeaturedPanel, regionalModal, handleAdminInteraction };
+  applySettings, buildAdminPanel, buildFeaturedPanel, regionalModal, handleAdminInteraction, normalizeDestinations, effectiveDestinations };
 
 
 const UPDATE_DEFAULTS = Object.freeze({ enabled: false, quietStart: null, quietEnd: null, subscriptions: {}, history: [] });
