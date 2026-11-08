@@ -1,9 +1,10 @@
 'use strict';
 
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, MessageFlags,
+  ActionRowBuilder, ButtonStyle, ChannelType, EmbedBuilder, MessageFlags,
   PermissionFlagsBits, StringSelectMenuBuilder,
 } = require('discord.js');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 const auditStore = require('../auditIntelligence/auditStore');
 const observatory = require('../auditIntelligence/guildObservatory');
 const security = require('../../core/security/protection/core');
@@ -187,22 +188,22 @@ function guildControlPayload(client, interaction, notice = null) {
   if (options.length) rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`${CONTROL_PREFIX}guild`).setPlaceholder('Select any known guild').addOptions(options.map((item) => ({ label: item.name.slice(0, 100), value: item.id, description: `${item.environments.join(' • ') || 'Registry'} • ${item.id}`.slice(0, 100), default: item.id === state.guildId })))));
   if (selected) {
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}pause`).setLabel(notices.paused ? 'Resume Notices' : 'Pause Notices').setEmoji(notices.paused ? '🔔' : '🔕').setStyle(notices.paused ? ButtonStyle.Success : ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}maintenance`).setLabel('Maintenance').setStyle(notices.maintenance ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}restart`).setLabel('Restart').setStyle(notices.restart ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}recovery`).setLabel('Recovery').setStyle(notices.recovery ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}scan`).setLabel('Scan Guild').setEmoji('🔎').setStyle(ButtonStyle.Primary),
+      navigationButton(`${CONTROL_PREFIX}pause`, notices.paused ? 'Resume Notices' : 'Pause Notices', notices.paused ? ButtonStyle.Success : ButtonStyle.Danger).setEmoji(notices.paused ? '🔔' : '🔕'),
+      navigationButton(`${CONTROL_PREFIX}maintenance`, 'Maintenance', notices.maintenance ? ButtonStyle.Success : ButtonStyle.Secondary),
+      navigationButton(`${CONTROL_PREFIX}restart`, 'Restart', notices.restart ? ButtonStyle.Success : ButtonStyle.Secondary),
+      navigationButton(`${CONTROL_PREFIX}recovery`, 'Recovery', notices.recovery ? ButtonStyle.Success : ButtonStyle.Secondary),
+      navigationButton(`${CONTROL_PREFIX}scan`, 'Scan Guild', ButtonStyle.Primary).setEmoji('🔎'),
     ));
     rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`${CONTROL_PREFIX}family`).setPlaceholder('Choose Discord report family').addOptions(Object.entries(REPORT_FAMILIES).map(([value, label]) => ({ label, value, default: value === state.family })))));
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}family-toggle`).setLabel(familyEnabled ? 'Stop Selected Feed' : 'Send Selected Feed').setStyle(familyEnabled ? ButtonStyle.Danger : ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}reporting-toggle`).setLabel(reporting.enabled ? 'Pause ALL Reporting' : 'Resume ALL Reporting').setStyle(reporting.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}all-on`).setLabel('Enable All Feeds').setStyle(ButtonStyle.Secondary),
+      navigationButton(`${CONTROL_PREFIX}family-toggle`, familyEnabled ? 'Stop Selected Feed' : 'Send Selected Feed', familyEnabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      navigationButton(`${CONTROL_PREFIX}reporting-toggle`, reporting.enabled ? 'Pause ALL Reporting' : 'Resume ALL Reporting', reporting.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      navigationButton(`${CONTROL_PREFIX}all-on`, 'Enable All Feeds', ButtonStyle.Secondary),
     ));
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}start`).setLabel('Send Maintenance Now').setEmoji('🚨').setStyle(ButtonStyle.Danger).setDisabled(!liveGuild),
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}restore`).setLabel('Restore / Clear').setEmoji('✅').setStyle(ButtonStyle.Success).setDisabled(!liveGuild),
-      new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}refresh`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+      navigationButton(`${CONTROL_PREFIX}start`, 'Send Maintenance Now', ButtonStyle.Danger, !liveGuild).setEmoji('🚨'),
+      navigationButton(`${CONTROL_PREFIX}restore`, 'Restore / Clear', ButtonStyle.Success, !liveGuild).setEmoji('✅'),
+      navigationButton(`${CONTROL_PREFIX}refresh`, 'Refresh', ButtonStyle.Secondary).setEmoji('🔄'),
     ));
   }
   return { embeds: [embed], components: rows, allowedMentions: { parse: [] } };
@@ -240,7 +241,7 @@ async function ensureCommandCenterControls(client) {
   const messages = await channel.messages.fetch({ limit: 20 }).catch(() => null); if (!messages) return false;
   const message = messages.find((item) => item.author?.id === client.user?.id && item.embeds?.some((embed) => String(embed.title || '').includes('GOLIATH COMMAND CENTER'))); if (!message) return false;
   const rows = message.components.map((row) => ActionRowBuilder.from(row)); const exists = message.components.some((row) => row.components.some((component) => component.customId === `${CONTROL_PREFIX}open`)); if (exists) return true;
-  const button = new ButtonBuilder().setCustomId(`${CONTROL_PREFIX}open`).setLabel('Guild Controls').setEmoji('🎛️').setStyle(ButtonStyle.Primary); const last = rows[rows.length - 1];
+  const button = navigationButton(`${CONTROL_PREFIX}open`, 'Guild Controls', ButtonStyle.Primary).setEmoji('🎛️'); const last = rows[rows.length - 1];
   if (last && last.components.length < 5) last.addComponents(button); else if (rows.length < 5) rows.push(new ActionRowBuilder().addComponents(button)); else return false;
   await message.edit({ components: rows }); return true;
 }
