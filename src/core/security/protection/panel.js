@@ -2,12 +2,12 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   MessageFlags,
 } = require('discord.js');
 
+const { navigationButton } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const lockdown = require('./lockdown');
 const quarantine = require('./quarantine');
@@ -20,7 +20,7 @@ function row(...components) {
 }
 
 function button(id, label, style = ButtonStyle.Secondary) {
-  return new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
+  return navigationButton(id, label, style);
 }
 
 function displayName(interaction) {
