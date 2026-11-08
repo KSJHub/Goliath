@@ -85,7 +85,7 @@ function saveCustomWelcome(interaction,scope){
   if(description.length>3500)throw new Error('Embed description must be 3500 characters or fewer.');
   if(footer.length>200)throw new Error('Embed footer must be 200 characters or fewer.');
   if(title.length+description.length+footer.length>6000)throw new Error('Combined embed text exceeds Discord’s 6000-character limit.');
-  if(!/^#[0-9a-fA-F]{6}$/.test(color))throw new Error('Embed colour must be a six-digit hex value such as #5865F2.');
+  if(!/^#[0-9a-fA-F]{6}$/.test(color))throw new Error('Embed colour must contain exactly six hexadecimal digits (for example, 5865F2 or #5865F2).');
   const guildId=interaction.guild.id,slot=scope==='dm'?'dm_welcome':'welcome',templateId=customTemplateId(scope);
   const existing=embedTemplateManager.getTemplate(guildId,templateId);
   const saved=embedTemplateManager.saveTemplate(guildId,{
