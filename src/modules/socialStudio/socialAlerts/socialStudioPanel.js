@@ -1,9 +1,9 @@
 'use strict';
 const { emojiLabel } = require('../../../core/ui/emojis');
-const { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { ActionRowBuilder, AttachmentBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const crypto = require('crypto');
 const security = require('../../../core/security/protection/core');
-const { goliathNavigation, navigationButton: btn } = require('../../../core/guild/goliathNavigation');
+const { goliathNavigation, navigationButton: btn, linkButton } = require('../../../core/guild/goliathNavigation');
 const { variablesForModule } = require('../../../core/guild/guildVariables');
 const store = require('./socialStudioStore');
 const { normalizeAccountInput, migrateAccount } = require('./accountNormalizer');
@@ -63,7 +63,7 @@ const feedSessions = new Map();
 const roleSessions = new Map();
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 
-const linkBtn = (url, label) => new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(url).setLabel(label);
+const linkBtn = (url, label) => linkButton(label, url);
 const sessionKey = (i) => `${i.guildId}:${i.user?.id || 'unknown'}`;
 const who = (i) => i.member?.displayName || i.user?.displayName || i.user?.username || 'Unknown User';
 const makeId = (prefix) => `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
