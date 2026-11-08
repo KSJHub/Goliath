@@ -1,7 +1,8 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
-const {ActionRowBuilder,ButtonBuilder,ButtonStyle,EmbedBuilder,RoleSelectMenuBuilder,StringSelectMenuBuilder,PermissionFlagsBits,ChannelType}=require('discord.js');
-const PREFIX='permfind:';const sessions=new Map();const cid=(a,g)=>`${PREFIX}${a}:guild:${g}`;const aid=id=>String(id||'').replace(/^permfind:/,'').replace(/:guild:\d{16,25}$/,'');const gid=(id,i)=>String(id||'').match(/:guild:(\d{16,25})$/)?.[1]||i.guildId;const btn=(id,l,e,s=ButtonStyle.Secondary,d=false)=>new ButtonBuilder().setCustomId(id).setLabel(l).setEmoji(e).setStyle(s).setDisabled(d);
+const {ActionRowBuilder,ButtonStyle,EmbedBuilder,RoleSelectMenuBuilder,StringSelectMenuBuilder,PermissionFlagsBits,ChannelType}=require('discord.js');
+const PREFIX='permfind:';const sessions=new Map();const cid=(a,g)=>`${PREFIX}${a}:guild:${g}`;const aid=id=>String(id||'').replace(/^permfind:/,'').replace(/:guild:\d{16,25}$/,'');const gid=(id,i)=>String(id||'').match(/:guild:(\d{16,25})$/)?.[1]||i.guildId;const btn=(id,l,e,s=ButtonStyle.Secondary,d=false)=>navigationButton(id,l,s,d).setEmoji(e);
 const PERMS=['Administrator','ManageGuild','ManageRoles','ManageChannels','ViewAuditLog','KickMembers','BanMembers','ModerateMembers','ViewChannel','SendMessages','ReadMessageHistory','AddReactions','EmbedLinks','AttachFiles','MentionEveryone','ManageMessages','ManageThreads','ManageWebhooks','Connect','Speak','Stream','MuteMembers','DeafenMembers','MoveMembers'];
 function key(i,g){return`${i.user.id}:${g.id}`;}function state(i,g){const k=key(i,g);if(!sessions.has(k))sessions.set(k,{mode:'role-channels',roleId:null,permission:'ViewChannel',page:0});return sessions.get(k);}
 function modeLabel(m){return m==='role-channels'?'Role → Channels':m==='roles-with'?'Roles With Permission':'@everyone → Channels';}
