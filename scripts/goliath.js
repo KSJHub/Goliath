@@ -4630,7 +4630,9 @@ async function gameCatalogueIdentityAudit() {
   const totals = { match: 0, 'name-mismatch': 0, 'not-found': 0, unavailable: 0, unlisted: 0, 'non-game': 0 };
   const issues = [], expectedLegacy = [];
   let confirmedGames = 0;
+  // Space out Steam Store batches to reduce burst traffic and avoid treating throttling as bad catalogue data.
   for (let index = 0; index < games.length; index += 4) {
+    if (index > 0) await new Promise(resolve => setTimeout(resolve, 750));
     const batch = games.slice(index, index + 4);
     const results = await Promise.all(batch.map(async game => {
       try { return await inspectSteamGameIdentity(game.appId); }
