@@ -1,9 +1,10 @@
 'use strict';
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const fs = require('node:fs');
 const path = require('node:path');
 const Database = require('better-sqlite3');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } = require('discord.js');
+const { ActionRowBuilder,  ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } = require('discord.js');
 const { resolveRuntimePath } = require('../../../config/runtimePaths');
 
 const PREFIX = 'permrestore:';
@@ -29,7 +30,7 @@ const remove = db.prepare('DELETE FROM permission_restore_points WHERE id=? AND 
 const cid = (a,g) => `${PREFIX}${a}:guild:${g}`;
 const aid = id => String(id||'').replace(/^permrestore:/,'').replace(/:guild:\d{16,25}$/,'');
 const gid = (id,i) => String(id||'').match(/:guild:(\d{16,25})$/)?.[1] || i.guildId;
-const button = (id,label,emoji,style=ButtonStyle.Secondary,disabled=false) => new ButtonBuilder().setCustomId(id).setLabel(label).setEmoji(emoji).setStyle(style).setDisabled(disabled);
+const button = (id,label,emoji,style=ButtonStyle.Secondary,disabled=false) => navigationButton(id,label,style,disabled).setEmoji(emoji);
 function state(i,g){const k=`${i.user.id}:${g.id}`;if(!sessions.has(k))sessions.set(k,{selected:null});return sessions.get(k);}
 function snapshot(g){return {roles:[...g.roles.cache.values()].filter(r=>!r.managed).map(r=>({id:r.id,name:r.name,permissions:r.permissions.bitfield.toString()})),channels:[...g.channels.cache.values()].map(c=>({id:c.id,name:c.name,overwrites:[...c.permissionOverwrites.cache.values()].map(o=>({id:o.id,type:o.type,allow:o.allow.bitfield.toString(),deny:o.deny.bitfield.toString()}))}))};}
 function home(g,s,i){const points=list.all(g.id,i.user.id);const chosen=points.find(x=>x.id===s.selected);const embed=new EmbedBuilder().setColor(0x5865F2).setTitle('🕘 Permission Restore Points').setDescription(['Take a complete permission snapshot before major work, then roll the server permission structure back if needed.','',`**Saved restore points:** ${points.length}`,`**Selected:** ${chosen?`**${chosen.label}** • <t:${Math.floor(chosen.created_at/1000)}:R>`:'None'}`,'','Snapshots include editable guild-role permission bitfields and every channel/category overwrite. Roles/channels that no longer exist are safely skipped during restore.'].join('\n')).setFooter({text:'Persistent • owner-only • DEV/BETA/Production storage remains isolated'});const rows=[];if(points.length){rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(cid('select',g.id)).setPlaceholder('Choose restore point…').addOptions(points.map(p=>({label:p.label.slice(0,100),value:p.id,description:new Date(p.created_at).toLocaleString().slice(0,100)})))));}rows.push(new ActionRowBuilder().addComponents(button(cid('create',g.id),'Create Restore Point','📸',ButtonStyle.Primary),button(cid('preview',g.id),'Preview Restore','🔎',ButtonStyle.Secondary,!s.selected),button(cid('delete',g.id),'Delete','🗑️',ButtonStyle.Danger,!s.selected),button(`permstudio:home:guild:${g.id}`,'Back','⬅️')));return{embeds:[embed],components:rows};}
