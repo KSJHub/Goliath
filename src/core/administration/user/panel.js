@@ -1,7 +1,7 @@
+const { navigationButton } = require('../../guild/goliathNavigation');
 const { EMOJIS } = require('../../ui/emojis');
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   StringSelectMenuBuilder,
@@ -134,7 +134,7 @@ function row(...components) {
 }
 
 function button(customId, label, style = ButtonStyle.Primary, disabled = false, emoji = null) {
-  const component = new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style).setDisabled(disabled);
+  const component = navigationButton(customId, label, style, disabled);
   if (emoji) component.setEmoji(emoji);
   return component;
 }
