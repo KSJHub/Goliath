@@ -2,7 +2,6 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
   ModalBuilder,
@@ -21,6 +20,7 @@ const {
   emitCaseUpdated,
   claimProceedingOperationAtomic,
 } = require('./storage');
+const { navigationButton } = require('../../guild/goliathNavigation');
 const { canUseModAction } = require('./permissions');
 const { executeEnginePunishment } = require('./punishments');
 const { createWarningCaseAtomic } = require('./warns');
@@ -101,7 +101,7 @@ function discordTime(value, style = 'R') {
 }
 function row(...items) { return new ActionRowBuilder().addComponents(...items); }
 function button(id, label, emoji, style = ButtonStyle.Secondary, disabled = false) {
-  const item = new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+  const item = navigationButton(id, label, style, disabled);
   if (emoji) item.setEmoji(emoji);
   return item;
 }
