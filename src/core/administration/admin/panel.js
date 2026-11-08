@@ -4,7 +4,6 @@ const { EMOJIS, emojiLabel } = require('../../ui/emojis');
 const {
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
   ChannelType,
@@ -129,9 +128,11 @@ const MODULE_BY_ROUTE = Object.fromEntries((moduleAdminPanels.MODULE_CATALOG || 
 const MODULE_BY_KEY = Object.fromEntries((moduleAdminPanels.MODULE_CATALOG || []).map((entry) => [entry.key, entry]));
 const STUDIO_BY_KEY = Object.fromEntries((moduleAdminPanels.STUDIO_CATALOG || []).map((entry) => [entry.key, entry]));
 
+const { navigationButton } = require('../../guild/goliathNavigation');
+
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const button = (id, label, style = ButtonStyle.Primary, disabled = false) => {
-  const component = new ButtonBuilder().setCustomId(id).setStyle(style).setDisabled(disabled);
+  const component = navigationButton(id, label, style, disabled);
   const backPrefix = `${EMOJIS.BACK} `;
   if (typeof label === 'string' && label.startsWith(backPrefix)) {
     return component.setEmoji(EMOJIS.BACK).setLabel(label.slice(backPrefix.length));
