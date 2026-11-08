@@ -2,14 +2,15 @@
 const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
+  ActionRowBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
   EmbedBuilder, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder,
 } = require('discord.js');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const birthdays = require('./birthdays');
 
 const PAGE_SIZE = 25;
 const row = (...items) => new ActionRowBuilder().addComponents(...items.filter(Boolean));
-const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
+const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(id, label, style, disabled);
 const clampPage = (page, total) => Math.max(0, Math.min(Math.max(0, Math.ceil(total / PAGE_SIZE) - 1), Number(page) || 0));
 const dateLabel = (record) => `${String(record.day).padStart(2, '0')}/${String(record.month).padStart(2, '0')}${record.year ? `/${record.year}` : ''}`;
 
