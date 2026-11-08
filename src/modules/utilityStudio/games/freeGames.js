@@ -40,10 +40,6 @@ function validateSettings(input, previous) {
     if (!Array.isArray(input[key]) || input[key].length > Object.keys(known).length || input[key].some((value) => !Object.hasOwn(known, value))) throw new Error(`Invalid ${key} selection.`);
     result[key] = [...new Set(input[key])];
   }
-  // Delivery journal is persisted per destination and must never be supplied
-  // by dashboard/Discord clients. Retain it when editing subscription settings.
-  next.routeDeliveries = previous.routeDeliveries && typeof previous.routeDeliveries === 'object' && !Array.isArray(previous.routeDeliveries)
-    ? structuredClone(previous.routeDeliveries) : {};
   if (Object.hasOwn(input, 'destinations')) { result.destinations = normalizeDestinations(input.destinations); result.destinationsConfigured = true; }
   for (const key of ['channelId', 'roleId']) if (Object.hasOwn(input, key)) {
     const id = input[key];
@@ -87,6 +83,10 @@ function validateSettings(input, previous) {
     result.region = input.region;
   }
   const next = { ...previous, ...result };
+  // Delivery journal is persisted per destination and must never be supplied
+  // by dashboard/Discord clients. Retain it when editing subscription settings.
+  next.routeDeliveries = previous.routeDeliveries && typeof previous.routeDeliveries === 'object' && !Array.isArray(previous.routeDeliveries)
+    ? structuredClone(previous.routeDeliveries) : {};
   if (next.enabled && (!effectiveDestinations(next).some(route => route.enabled) || !next.stores.length || !next.types.length)) throw new Error('Choose a channel, at least one store and one offer type before enabling Free Games.');
   return result;
 }
