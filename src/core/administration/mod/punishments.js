@@ -6,7 +6,6 @@ const {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
 } = require('discord.js');
 const {
@@ -17,6 +16,7 @@ const {
   recordCaseAudit,
   sendModLog,
 } = require('./storage');
+const { navigationButton } = require('../../guild/goliathNavigation');
 const { applyPunishmentEngine } = require('../automod/engine');
 const { safeReply, safeEditReply, ephemeralError } = require('../../../core/ui/interactionResponse');
 const { checkHierarchy, checkHierarchyForBulk, fetchTarget, ensureActionAccess } = require('./permissions');
@@ -111,7 +111,7 @@ function deletePendingAction(guildId, token) { return db.prepare('DELETE FROM pe
 function normalizeDashboardContext(context = {}) { return { view: context.view || 'actions', actionFilter: context.actionFilter || 'all', statusFilter: context.statusFilter || 'all', page: Math.max(0, Math.trunc(Number(context.page) || 0)) }; }
 function buildConfirmCustomId(token, context = DEFAULT_DASHBOARD_CONTEXT) { const c = normalizeDashboardContext(context); return ['mod_confirm_action', token, c.view, c.actionFilter, c.statusFilter, c.page].join(':'); }
 function buildCancelCustomId(targetId, context = DEFAULT_DASHBOARD_CONTEXT, token = null) { const c = normalizeDashboardContext(context); return ['mod_cancel_action', targetId || 'none', c.view, c.actionFilter, c.statusFilter, c.page, token || 'legacy'].join(':'); }
-function buildConfirmRow(confirmId, cancelId) { return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(confirmId).setLabel('⚠️ Confirm').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId(cancelId).setLabel('❌ Cancel').setStyle(ButtonStyle.Secondary))]; }
+function buildConfirmRow(confirmId, cancelId) { return [new ActionRowBuilder().addComponents(navigationButton(confirmId, '⚠️ Confirm', ButtonStyle.Danger), navigationButton(cancelId, '❌ Cancel', ButtonStyle.Secondary))]; }
 async function createConfirmation(interaction, targetId, type, payload, message, context = DEFAULT_DASHBOARD_CONTEXT) {
   const normalizedContext = normalizeDashboardContext(context);
   const token = createPendingAction(interaction.guild.id, { moderatorId: interaction.user.id, targetId, type, payload });
