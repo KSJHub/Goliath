@@ -474,9 +474,29 @@ async function checkGuildAccounts(client,guildId,options={}) {
           }
 
         if(!updated&&hasTrackedLiveMessage(previous)){
-          // Never turn a failed edit/fetch into a second LIVE announcement.
-          // Retain the tracked ID and retry the edit on the next monitor pass.
-          console.warn('[Social Studio] LIVE refresh skipped to avoid duplicate notification',accountId,previous.lastLiveMessageId,refreshError||'tracked message unavailable');
+          // Recover only a confirmed deleted message. A timeout, permissions
+          // error or failed edit must never generate a duplicate LIVE alert.
+          let deleted=false;
+          try {
+            const channelId=previous.lastLiveMessageChannelId||previous.lastAlertChannelId;
+            const messageId=previous.lastLiveMessageId||previous.lastAlertMessageId;
+            const channel=guild.channels.cache.get(channelId)||await guild.channels.fetch(channelId);
+            if(channel?.isTextBased?.()) {
+              try { await channel.messages.fetch(messageId); }
+              catch(error) { deleted=Number(error?.code)===10008; }
+            }
+          } catch(error) {
+            console.warn('[Social Studio] LIVE message recovery check unavailable',accountId,error?.message||error);
+          }
+          if(deleted) {
+            try {
+              updated=await sendAlert(client,guildId,config,account,checked.event,{...options,suppressMention:true});
+              recovered=Boolean(updated);
+              refreshError=null;
+            } catch(error) { refreshError=error?.message||String(error); }
+          } else {
+            console.warn('[Social Studio] LIVE refresh skipped to avoid duplicate notification',accountId,previous.lastLiveMessageId,refreshError||'tracked message unavailable');
+          }
         }
 
         if(updated){
