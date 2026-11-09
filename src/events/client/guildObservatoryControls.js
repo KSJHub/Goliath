@@ -2,7 +2,6 @@
 
 const {
   ActionRowBuilder,
-  ButtonBuilder,
   ButtonStyle,
   ChannelType,
   EmbedBuilder,
@@ -10,6 +9,7 @@ const {
   MessageFlags,
   StringSelectMenuBuilder,
 } = require('discord.js');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 const auditStore = require('../../owner/auditIntelligence/auditStore');
 const observatory = require('../../owner/auditIntelligence/guildObservatory');
 const security = require('../../core/security/protection/core');
@@ -155,15 +155,15 @@ function payload(client, interaction) {
   if (guilds.length) rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`${PREFIX}guild`).setPlaceholder('Select a monitored guild').addOptions(guilds.map((item) => ({ label: item.name.slice(0, 100), value: item.id, description: `${item.environments.join(' • ') || 'Registry'} • ${item.id}`.slice(0, 100), default: item.id === state.guildId })))));
   if (selected) {
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}scan`).setLabel('Scan Server').setEmoji('🔎').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`${PREFIX}overview`).setLabel('Intelligence').setEmoji('📊').setStyle(state.view === 'overview' ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}changes`).setLabel('Changes').setEmoji('🔄').setStyle(state.view === 'changes' ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}history`).setLabel('History').setEmoji('🕒').setStyle(state.view === 'history' ? ButtonStyle.Success : ButtonStyle.Secondary),
+      navigationButton(`${PREFIX}scan`, 'Scan Server', ButtonStyle.Primary).setLabel('Scan Server').setEmoji('🔎'),
+      navigationButton(`${PREFIX}overview`, 'Intelligence', state.view === 'overview' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Intelligence').setEmoji('📊'),
+      navigationButton(`${PREFIX}changes`, 'Changes', state.view === 'changes' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Changes').setEmoji('🔄'),
+      navigationButton(`${PREFIX}history`, 'History', state.view === 'history' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('History').setEmoji('🕒'),
     ));
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`${PREFIX}security`).setLabel('Security').setEmoji('🛡️').setStyle(state.view === 'security' ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}audit`).setLabel('Audit History').setEmoji('📜').setStyle(state.view === 'audit' ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`${PREFIX}refresh`).setLabel('Refresh').setEmoji('🔄').setStyle(ButtonStyle.Secondary),
+      navigationButton(`${PREFIX}security`, 'Security', state.view === 'security' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Security').setEmoji('🛡️'),
+      navigationButton(`${PREFIX}audit`, 'Audit History', state.view === 'audit' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Audit History').setEmoji('📜'),
+      navigationButton(`${PREFIX}refresh`, 'Refresh', ButtonStyle.Secondary).setLabel('Refresh').setEmoji('🔄'),
     ));
   }
   return { embeds: [embed], components: rows, allowedMentions: { parse: [] } };
@@ -209,7 +209,7 @@ async function ensureHomeButton(client) {
   if (!message) return false;
   if (message.components.some((row) => row.components.some((component) => component.customId === `${PREFIX}open`))) return true;
   const rows = message.components.map((row) => ActionRowBuilder.from(row));
-  const button = new ButtonBuilder().setCustomId(`${PREFIX}open`).setLabel('Observatory').setEmoji('🔭').setStyle(ButtonStyle.Primary);
+  const button = navigationButton(`${PREFIX}open`, 'Observatory', ButtonStyle.Primary).setLabel('Observatory').setEmoji('🔭');
   const target = rows.find((row) => row.components.length < 5);
   if (target) target.addComponents(button); else if (rows.length < 5) rows.push(new ActionRowBuilder().addComponents(button)); else return false;
   await message.edit({ components: rows });
