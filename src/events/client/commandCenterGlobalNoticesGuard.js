@@ -1,6 +1,7 @@
 'use strict';
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, Events } = require('discord.js');
+const { ActionRowBuilder, ButtonStyle, Events } = require('discord.js');
+const { navigationButton } = require('../../core/guild/goliathNavigation');
 const auditStore = require('../../owner/auditIntelligence/auditStore');
 const schedulerRegistry = require('../../owner/sentinel/schedulerRegistry');
 
@@ -50,11 +51,7 @@ async function ensureGlobalNoticesButton(client) {
   }));
   if (exists) return { ok: true, restored: false, messageId: message.id };
 
-  const button = new ButtonBuilder()
-    .setCustomId(OPEN_ID)
-    .setLabel('Global Notices')
-    .setEmoji('🚨')
-    .setStyle(ButtonStyle.Danger);
+  const button = navigationButton(OPEN_ID, 'Global Notices', ButtonStyle.Danger).setEmoji('🚨');
 
   const row = [...rows].reverse().find((item) => item.components.length < 5);
   if (row) row.addComponents(button);
