@@ -240,7 +240,10 @@ async function saveGameSubscription(guild, patch) {
     const appId = providers.steamAppId(patch.appId), config = store.getGameUpdates(guild.id), previous = config.subscriptions[appId];
     if (!previous && Object.keys(config.subscriptions).length >= 50) throw new Error('A server can follow up to 50 games.');
     const next = store.normalizeUpdateSubscription({ ...patch, appId }, previous);
-    if (previous && next.channelId !== previous.channelId && previous.pending.some(entry => entry.status !== 'pending')) throw new Error('Resolve held deliveries before changing the destination channel.');
+    const destinationChanged = previous && JSON.stringify(store.effectiveUpdateDestinations(next)) !== JSON.stringify(store.effectiveUpdateDestinations(previous));
+    if (previous && (next.channelId !== previous.channelId || destinationChanged) && previous.pending.some(entry => entry.status !== 'pending')) {
+      throw new Error('Resolve held deliveries before changing destination channels.');
+    }
     // Validate every configured destination before saving, even while the legacy
     // single-channel dispatcher remains active.
     for (const route of store.effectiveUpdateDestinations(next).filter(item => item.enabled)) {
@@ -257,7 +260,7 @@ async function saveGameSubscription(guild, patch) {
       const role = await guild.roles.fetch(next.roleId);
       if (!role || role.id === guild.id || role.managed) throw new Error('Choose a regular notification role.');
     }
-    const rebaseline = !previous || !previous.initialized || ['channelId', 'filter', 'includeWords', 'excludeWords'].some(key => JSON.stringify(next[key]) !== JSON.stringify(previous[key])) || (next.enabled && !previous.enabled);
+    const rebaseline = !previous || !previous.initialized || destinationChanged || ['channelId', 'filter', 'includeWords', 'excludeWords'].some(key => JSON.stringify(next[key]) !== JSON.stringify(previous[key])) || (next.enabled && !previous.enabled);
     if (rebaseline) {
       const feed = await providers.getGameNews(appId);
       next.seenIds = feed.items.map(item => item.id);
