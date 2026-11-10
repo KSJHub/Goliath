@@ -71,7 +71,7 @@ function buildGiveawaysAdminPanel(guild, memberDisplayName = 'Unknown User', rol
   const roleInfo = rolePages(guild, section.managerRoleIds || [], rolePage);
   const embed = new EmbedBuilder()
     .setColor(enabled ? 0x57f287 : 0x5865f2)
-    .setTitle('🎉 Giveaways')
+    .setTitle(emojiLabel('USER_GIVEAWAYS', 'Giveaways'))
     .setDescription([
       'Configure giveaway channels, roles and entry rules.', '',
       `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
@@ -90,8 +90,8 @@ function buildGiveawaysAdminPanel(guild, memberDisplayName = 'Unknown User', rol
     row(new ChannelSelectMenuBuilder().setCustomId('admin:giveaways:announcementChannel').setPlaceholder('Announcement channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     row(new ChannelSelectMenuBuilder().setCustomId('admin:giveaways:logChannel').setPlaceholder('Log channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:giveaways:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
-    row(button('admin:giveaways:deployTest', '🚀 Deploy Test Giveaway', ButtonStyle.Success), button(enabled ? 'admin:giveaways:disable' : 'admin:giveaways:enable', enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary), button('admin:giveaways:toggleMultiple', '🎟️ Multiple', ButtonStyle.Secondary), button('admin:giveaways:toggleRequireRole', '🔒 Role Req', ButtonStyle.Secondary), button('admin:giveaways:togglePing', '📣 Ping', ButtonStyle.Secondary)),
-    row(button('admin:giveaways:levelingEligibility', '🏆 XP Eligibility', ButtonStyle.Primary), button('admin:studio:communityStudio', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
+    row(button('admin:giveaways:deployTest', emojiLabel('DEPLOY', 'Deploy Test Giveaway'), ButtonStyle.Success), button(enabled ? 'admin:giveaways:disable' : 'admin:giveaways:enable', enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary), button('admin:giveaways:toggleMultiple', emojiLabel('GIVEAWAY_TICKET', 'Multiple'), ButtonStyle.Secondary), button('admin:giveaways:toggleRequireRole', emojiLabel('LOCKDOWN', 'Role Req'), ButtonStyle.Secondary), button('admin:giveaways:togglePing', emojiLabel('USER_SOCIAL', 'Ping'), ButtonStyle.Secondary)),
+    row(button('admin:giveaways:levelingEligibility', emojiLabel('MOD_TOP_STAFF', 'XP Eligibility'), ButtonStyle.Primary), button('admin:studio:communityStudio', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
       button(`admin:giveaways:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary, roleInfo.page === 0),
       button(`admin:giveaways:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary, roleInfo.page >= roleInfo.pages - 1)),
   ] };
@@ -120,15 +120,15 @@ function buildLevelingEligibilityPanel(guild, memberDisplayName = 'Unknown User'
   return {
     embeds: [new EmbedBuilder()
       .setColor(config.enabled && levelingEnabled ? 0x57f287 : config.enabled ? 0xFEE75C : 0x5865f2)
-      .setTitle('🏆 Giveaway XP Eligibility')
+      .setTitle(emojiLabel('MOD_TOP_STAFF', 'Giveaway XP Eligibility'))
       .setDescription(lines.join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
     components: [
       row(
         button('admin:giveaways:levelingEligibility:configure', emojiLabel('SETTINGS', 'Configure'), ButtonStyle.Primary),
-        button('admin:giveaways:levelingEligibility:toggle', config.enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
-        button('admin:giveaways:levelingEligibility:toggleActive', config.activeOnly ? '👤 Active Only' : '👥 Include Paused', ButtonStyle.Secondary),
+        button('admin:giveaways:levelingEligibility:toggle', config.enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary),
+        button('admin:giveaways:levelingEligibility:toggleActive', config.activeOnly ? emojiLabel('USER', 'Active Only') : emojiLabel('MOD_STAFF', 'Include Paused'), ButtonStyle.Secondary),
       ),
       row(button('admin:giveaways', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
     ],
