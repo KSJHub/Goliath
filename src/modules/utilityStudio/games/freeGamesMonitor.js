@@ -240,15 +240,15 @@ async function saveGameSubscription(guild, patch) {
     const appId = providers.steamAppId(patch.appId), config = store.getGameUpdates(guild.id), previous = config.subscriptions[appId];
     if (!previous && Object.keys(config.subscriptions).length >= 50) throw new Error('A server can follow up to 50 games.');
     const next = store.normalizeUpdateSubscription({ ...patch, appId }, previous);
+    const destinationChanged = previous && JSON.stringify(store.effectiveUpdateDestinations(next)) !== JSON.stringify(store.effectiveUpdateDestinations(previous));
+    if (previous && (next.channelId !== previous.channelId || destinationChanged) && previous.pending.some(entry => entry.status !== 'pending')) {
+      throw new Error('Resolve held deliveries before changing destination channels.');
+    }
     // The Steam dispatcher is currently single-channel. Refuse unsupported
     // multi-route configurations instead of silently skipping destinations.
     const activeRoutes = store.effectiveUpdateDestinations(next).filter(route => route.enabled);
     if (activeRoutes.length > 1 || (activeRoutes.length === 1 && (activeRoutes[0].channelId !== next.channelId || (activeRoutes[0].roleId || null) !== (next.roleId || null)))) {
       throw new Error('Steam game updates currently support one active destination matching the primary channel. Multi-channel delivery is not enabled yet.');
-    }
-    const destinationChanged = previous && JSON.stringify(store.effectiveUpdateDestinations(next)) !== JSON.stringify(store.effectiveUpdateDestinations(previous));
-    if (previous && (next.channelId !== previous.channelId || destinationChanged) && previous.pending.some(entry => entry.status !== 'pending')) {
-      throw new Error('Resolve held deliveries before changing destination channels.');
     }
     // Validate every configured destination before saving, even while the legacy
     // single-channel dispatcher remains active.
