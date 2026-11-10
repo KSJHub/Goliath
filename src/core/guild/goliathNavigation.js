@@ -196,6 +196,7 @@ const EMOJIS = Object.freeze({
   UTILITY_THREAD: '🧵',
   UTILITY_ALARM: '⏰',
   UTILITY_MIC: '🎙️',
+  UNLOCK: '🔓',
   FAQ_BOOKS: '📚',
   FAQ_PURPLE: '🟣',
   WRITE: '✍️',
