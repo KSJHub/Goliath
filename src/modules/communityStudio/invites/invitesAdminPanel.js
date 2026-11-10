@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const { EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { updateModuleSection } = require('../../../core/guild/moduleSectionManager');
@@ -289,14 +290,14 @@ async function handleInviteStudioInteraction(interaction) {
     const color = interaction.fields.getTextInputValue(fieldId('color')).trim();
     if (!title || !description || !footer || title.length > 256 || description.length > 1800 || footer.length > 2048 || !/^#[0-9a-fA-F]{6}$/.test(color)) {
       await interaction.reply({
-        content: '❌ Check your panel fields. Title, welcome message and footer cannot be empty; embed colour must be a 6-digit hex such as #5865F2.',
+        content: emojiLabel('ERROR', 'Check your panel fields. Title, welcome message and footer cannot be empty; embed colour must be a 6-digit hex such as #5865F2.'),
         flags: MessageFlags.Ephemeral,
       });
       return true;
     }
     nested(interaction, 'publicPanel', { title, description, footer, color: color.toUpperCase() });
     await interaction.reply({
-      content: '✅ Invite panel design saved. Use **👁️ Preview Panel** to review it, then **Publish/Update Panel** to apply it publicly.',
+      content: emojiLabel('HEALTHY', 'Invite panel design saved. Use **👁️ Preview Panel** to review it, then **Publish/Update Panel** to apply it publicly.'),
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -323,12 +324,12 @@ async function handleInviteStudioInteraction(interaction) {
     const dmTitle = interaction.fields.getTextInputValue('title').trim();
     const dmMessage = interaction.fields.getTextInputValue('message').trim();
     if (!dmTitle || !dmMessage || dmTitle.length > 256 || dmMessage.length > 3000) {
-      await interaction.reply({ content: '❌ Provide a DM title (up to 256 characters) and a welcome message (up to 3000 characters).', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('ERROR', 'Provide a DM title (up to 256 characters) and a welcome message (up to 3000 characters).'), flags: MessageFlags.Ephemeral });
       return true;
     }
     nested(interaction, 'memberInviteTemplate', { dmTitle, dmMessage });
     await interaction.reply({
-      content: '✅ Personal invite DM saved. Goliath automatically adds the referral link, scoring explanation and My Stats guidance. Available placeholders: `{user}`, `{server}`, `{invite}`.',
+      content: emojiLabel('HEALTHY', 'Personal invite DM saved. Goliath automatically adds the referral link, scoring explanation and My Stats guidance. Available placeholders: `{user}`, `{server}`, `{invite}`.'),
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -338,7 +339,7 @@ async function handleInviteStudioInteraction(interaction) {
     !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)
   ) {
     await interaction.reply({
-      content: '❌ Manage Server permission is required.',
+      content: emojiLabel('ERROR', 'Manage Server permission is required.'),
       flags: MessageFlags.Ephemeral,
     });
 
@@ -401,11 +402,11 @@ async function handleInviteStudioInteraction(interaction) {
       const result = await invites.ensureOfficialInvite(interaction.guild, meta(interaction, 'invite_official_create'));
       state.officialLive = { code: result.invite.code, exists: true, uses: Number(result.invite.uses || 0) };
       await interaction.editReply(result.created
-        ? '✅ Official standard invite created/updated: ' + result.invite.url + '. Your vanity preference is saved separately.'
-        : '✅ Invite settings saved. Your existing standard invite is unchanged. ' +
+        ? emojiLabel('HEALTHY', 'Official standard invite created/updated: ') + result.invite.url + '. Your vanity preference is saved separately.'
+        : emojiLabel('HEALTHY', 'Invite settings saved. Your existing standard invite is unchanged. ') +
           (config.linkType === 'vanity' ? 'The vanity URL will be used when Discord confirms one is available.' : 'Standard invite mode is selected.'));
     } catch (error) {
-      await interaction.editReply('❌ Invite update failed: ' + String(error.message || error).slice(0, 1700));
+      await interaction.editReply(emojiLabel('ERROR', 'Invite update failed: ') + String(error.message || error).slice(0, 1700));
     }
     return true;
   }
@@ -431,7 +432,7 @@ async function handleInviteStudioInteraction(interaction) {
       code: null,
     });
 
-    await interaction.editReply('✅ Official invite deleted.');
+    await interaction.editReply(emojiLabel('HEALTHY', 'Official invite deleted.'));
 
     return true;
   }
@@ -498,8 +499,8 @@ async function handleInviteStudioInteraction(interaction) {
       const status = (value) => value === 'healthy' ? '🟢' : value === 'issue' ? '🔴' : '🟡';
       const report = new EmbedBuilder()
         .setColor(health.issues.length ? 0xED4245 : health.warnings.length ? 0xFEE75C : 0x57F287)
-        .setTitle(id === 'invites:repair' ? '🔧 Invite Repair Report' : '🩺 Invite Studio Health')
-        .setDescription(`${health.enabled ? '🟢 Module enabled' : '🔴 Module disabled'} · ${health.issues.length} issues · ${health.warnings.length} warnings\nChecks report the current state without deleting existing invite links.`)
+        .setTitle(id === 'invites:repair' ? emojiLabel('UTILITY_WRENCH', 'Invite Repair Report') : emojiLabel('WELCOME_DIAGNOSTICS', 'Invite Studio Health'))
+        .setDescription(`${health.enabled ? emojiLabel('ENABLED', 'Module enabled') : emojiLabel('DISABLED', 'Module disabled')} · ${health.issues.length} issues · ${health.warnings.length} warnings\nChecks report the current state without deleting existing invite links.`)
         .addFields(health.checks.map((check) => ({
           name: `${status(check.status)} ${check.name}`,
           value: check.detail,
@@ -518,7 +519,7 @@ async function handleInviteStudioInteraction(interaction) {
     const config = invites.getSection(interaction.guildId).settings.publicPanel;
     if (!config.channelId || !config.messageId) {
       state.panelDeleteConfirmUntil = 0;
-      await interaction.reply({ content: 'ℹ️ No deployed public panel is recorded for this guild.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('INFO', 'No deployed public panel is recorded for this guild.'), flags: MessageFlags.Ephemeral });
       return true;
     }
     if (!(state.panelDeleteConfirmUntil > Date.now())) {
@@ -543,7 +544,7 @@ async function handleInviteStudioInteraction(interaction) {
       await interaction.editReply(panel.buildInviteStudioPayload(interaction));
     } catch (error) {
       await interaction.editReply(panel.buildInviteStudioPayload(interaction));
-      await interaction.followUp({ content: '❌ Panel deletion failed: ' + String(error.message || error).slice(0, 1400), flags: MessageFlags.Ephemeral });
+      await interaction.followUp({ content: emojiLabel('ERROR', 'Panel deletion failed: ') + String(error.message || error).slice(0, 1400), flags: MessageFlags.Ephemeral });
     }
     return true;
   }
@@ -562,7 +563,7 @@ async function handleInviteStudioInteraction(interaction) {
       { publicPanel: { ...current, title: defaults.title, description: defaults.description, footer: defaults.footer, color: defaults.color } },
       meta(interaction, 'invite_panel_defaults'),
     );
-    await interaction.reply({ content: '✅ Public panel text defaults restored. Channel, deployed message and referral DM were preserved.', flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: emojiLabel('HEALTHY', 'Public panel text defaults restored. Channel, deployed message and referral DM were preserved.'), flags: MessageFlags.Ephemeral });
     return true;
   }
 
@@ -575,7 +576,7 @@ async function handleInviteStudioInteraction(interaction) {
   if (id === 'invites:leaderboard-reset-confirm') {
     if (state.resetConfirmUntil < Date.now()) {
       await interaction.reply({
-        content: '❌ Reset confirmation expired.',
+        content: emojiLabel('ERROR', 'Reset confirmation expired.'),
         flags: MessageFlags.Ephemeral,
       });
 
@@ -590,7 +591,7 @@ async function handleInviteStudioInteraction(interaction) {
     state.resetConfirmUntil = 0;
 
     await interaction.reply({
-      content: '✅ Leaderboard reset. Personal links were kept.',
+      content: emojiLabel('HEALTHY', 'Leaderboard reset. Personal links were kept.'),
       flags: MessageFlags.Ephemeral,
     });
 
@@ -620,7 +621,7 @@ async function handleInviteStudioInteraction(interaction) {
 
   if (id.startsWith('invites:manager-') && !selected) {
     await interaction.reply({
-      content: '❌ Select a member with a personal invite first.',
+      content: emojiLabel('ERROR', 'Select a member with a personal invite first.'),
       flags: MessageFlags.Ephemeral,
     });
 
@@ -635,7 +636,7 @@ async function handleInviteStudioInteraction(interaction) {
     await interaction.reply({
       content: live
         ? `✅ Verified: ${live.url}`
-        : '❌ Link is missing.',
+        : emojiLabel('ERROR', 'Link is missing.'),
       flags: MessageFlags.Ephemeral,
     });
 
@@ -673,7 +674,7 @@ async function handleInviteStudioInteraction(interaction) {
       );
       state.selectedUserId = null;
       await interaction.reply({
-        content: '✅ Personal link removed. Referral history was not reset.',
+        content: emojiLabel('HEALTHY', 'Personal link removed. Referral history was not reset.'),
         flags: MessageFlags.Ephemeral,
       });
     } else {
@@ -683,7 +684,7 @@ async function handleInviteStudioInteraction(interaction) {
         meta(interaction, 'invite_member_reset'),
       );
       await interaction.reply({
-        content: '✅ Member score reset. Their personal link was kept.',
+        content: emojiLabel('HEALTHY', 'Member score reset. Their personal link was kept.'),
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -702,7 +703,7 @@ async function handleMemberInteraction(interaction) {
 
   if (!isModuleEnabled(interaction.guildId, 'invites')) {
     await interaction.reply({
-      content: '❌ Invite Studio is disabled.',
+      content: emojiLabel('ERROR', 'Invite Studio is disabled.'),
       flags: MessageFlags.Ephemeral,
     });
 
@@ -723,7 +724,7 @@ async function handleMemberInteraction(interaction) {
   if (id === 'invites:member-configure') {
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
       await interaction.reply({
-        content: '❌ Manage Server permission is required.',
+        content: emojiLabel('ERROR', 'Manage Server permission is required.'),
         flags: MessageFlags.Ephemeral,
       });
 
@@ -743,7 +744,7 @@ async function handleMemberInteraction(interaction) {
 
   if (id === 'invites:member-refresh') {
     await interaction.reply({
-      content: '🔄 Updating leaderboard…',
+      content: emojiLabel('REFRESH', 'Updating leaderboard…'),
       flags: MessageFlags.Ephemeral,
     });
 
@@ -756,8 +757,8 @@ async function handleMemberInteraction(interaction) {
 
     await interaction.editReply(
       ok
-        ? '✅ Leaderboard updated.'
-        : '❌ Panel not found.',
+        ? emojiLabel('HEALTHY', 'Leaderboard updated.')
+        : emojiLabel('ERROR', 'Panel not found.'),
     );
 
     return true;
@@ -795,8 +796,8 @@ async function handleMemberInteraction(interaction) {
           result,
         ),
         content: sent
-          ? '✅ Your personal link was sent to your DMs.'
-          : '⚠️ I could not DM you; your private link is shown below.',
+          ? emojiLabel('HEALTHY', 'Your personal link was sent to your DMs.')
+          : emojiLabel('WARNING', 'I could not DM you; your private link is shown below.'),
       });
     } catch (error) {
       await interaction.editReply(
