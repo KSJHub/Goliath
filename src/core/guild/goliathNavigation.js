@@ -99,6 +99,21 @@ const EMOJIS = Object.freeze({
   SEVERITY_MEDIUM: '🟡',
   SEVERITY_LOW: '🔵',
   RULE_INACTIVE: '⚫',
+  // AutoMod rule and editor symbols.
+  AUTOMOD_SPAM: '🚫',
+  AUTOMOD_LINKS: '🔗',
+  AUTOMOD_BAD_WORDS: '🤬',
+  AUTOMOD_CAPS: '🔠',
+  AUTOMOD_MENTIONS: '📣',
+  AUTOMOD_INVITES: '✉️',
+  AUTOMOD_DUPLICATES: '♻️',
+  AUTOMOD_FLOOD: '🌊',
+  AUTOMOD_EMOJI: '😀',
+  AUTOMOD_ATTACHMENTS: '📎',
+  AUTOMOD_SUSPICIOUS: '🚨',
+  AUTOMOD_LIMITS: '⏱️',
+  AUTOMOD_DOMAINS: '🌐',
+  AUTOMOD_THRESHOLDS: '📏',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
