@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
@@ -65,7 +66,7 @@ function voteSummary(suggestion) {
 }
 
 function publicSuggestionAuthor(suggestion) {
-  if (suggestion?.anonymous === true) return '🔒 Anonymous member';
+  if (suggestion?.anonymous === true) return emojiLabel('LOCKDOWN', 'Anonymous member');
   return suggestion?.authorId ? `<@${suggestion.authorId}>` : 'Community member';
 }
 
@@ -202,20 +203,20 @@ function buildManagementPayload(guild, suggestion, section) {
   ];
   if (publicLink) fields.push({ name: 'Public suggestion', value: `[Open original message](${publicLink})`, inline: true });
   if (threadLink) fields.push({ name: 'Team discussion', value: `[Open discussion thread](${threadLink})`, inline: true });
-  if (suggestion.status === 'discussing') fields.push({ name: 'Voting', value: '⏸️ Paused while the team discusses this suggestion.', inline: false });
+  if (suggestion.status === 'discussing') fields.push({ name: 'Voting', value: emojiLabel('USER_PAUSE', 'Paused while the team discusses this suggestion.'), inline: false });
   if (['approved', 'denied', 'implemented'].includes(suggestion.status)) fields.push({ name: 'Team response', value: defaultTeamResponse(suggestion), inline: false });
   const components = [];
   if (suggestion.status === 'pending') components.push(row(
-    button(`suggestions:manage:${suggestion.suggestionId}:discuss`, '💬 Start Discussion', ButtonStyle.Primary),
+    button(`suggestions:manage:${suggestion.suggestionId}:discuss`, emojiLabel('USER_FEEDBACK', 'Start Discussion'), ButtonStyle.Primary),
     button(`suggestions:manage:${suggestion.suggestionId}:approve`, emojiLabel('SUCCESS', 'Approve'), ButtonStyle.Success),
     button(`suggestions:manage:${suggestion.suggestionId}:deny`, emojiLabel('ERROR', 'Decline'), ButtonStyle.Danger),
   ));
   else if (suggestion.status === 'discussing') components.push(row(
-    button(`suggestions:manage:${suggestion.suggestionId}:resume`, '▶️ Resume Voting', ButtonStyle.Secondary),
+    button(`suggestions:manage:${suggestion.suggestionId}:resume`, emojiLabel('USER_PLAY', 'Resume Voting'), ButtonStyle.Secondary),
     button(`suggestions:manage:${suggestion.suggestionId}:approve`, emojiLabel('SUCCESS', 'Approve'), ButtonStyle.Success),
     button(`suggestions:manage:${suggestion.suggestionId}:deny`, emojiLabel('ERROR', 'Decline'), ButtonStyle.Danger),
   ));
-  else if (suggestion.status === 'approved') components.push(row(button(`suggestions:manage:${suggestion.suggestionId}:implemented`, '🚀 Mark Implemented', ButtonStyle.Success)));
+  else if (suggestion.status === 'approved') components.push(row(button(`suggestions:manage:${suggestion.suggestionId}:implemented`, emojiLabel('DEPLOY', 'Mark Implemented'), ButtonStyle.Success)));
   return { embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(`💡 ${suggestion.reference} · ${suggestion.title}`).setDescription(suggestion.content || '_No suggestion details were provided._').addFields(fields).setFooter({ text: 'Management view · actions here are logged' }).setTimestamp(new Date(suggestion.updatedAt || suggestion.createdAt || Date.now()))], components };
 }
 
@@ -246,7 +247,7 @@ function defaultSubmitPanelEmbed(section, enabled) {
   const description = enabled
     ? `Got an idea that could make the server better? Give it a short name, explain the idea, and share it with the community.\n\nYou can open **My Suggestions** at any time to follow its progress.${privacyNote}`
     : 'Suggestions are paused right now. You can still open **My Suggestions** to view ideas you have already shared.';
-  return new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 Suggestions').setDescription(description).setFooter({ text: enabled ? 'Every idea can be tracked from submission to final outcome.' : 'Please check back later.' }).setTimestamp();
+  return new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'Suggestions')).setDescription(description).setFooter({ text: enabled ? 'Every idea can be tracked from submission to final outcome.' : 'Please check back later.' }).setTimestamp();
 }
 
 function buildSubmitPanelPayload(guildOrId) {
@@ -283,12 +284,12 @@ function buildMySuggestionsPayload(guildId, userId, page = 0) {
     value: `${item.suggestionId}|${safePage}`,
   })))));
   components.push(row(
-    button(`suggestions:mine:page:${Math.max(0, safePage - 1)}`, '⬅️ Previous', ButtonStyle.Secondary).setDisabled(safePage === 0),
+    button(`suggestions:mine:page:${Math.max(0, safePage - 1)}`, emojiLabel('BACK', 'Previous'), ButtonStyle.Secondary).setDisabled(safePage === 0),
     button(`suggestions:mine:page:${Math.min(totalPages - 1, safePage + 1)}`, 'Next ➡️', ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1),
     button('suggestions:mine:close', 'Close', ButtonStyle.Secondary),
   ));
   return {
-    embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 My Suggestions').setDescription([
+    embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'My Suggestions')).setDescription([
       'Follow the progress of ideas you have shared.', '',
       `💡 Open: **${counts.pending}** · 💬 Discussing: **${counts.discussing}** · ${EMOJIS.SUCCESS} Approved: **${counts.approved}**`,
       `🚀 Implemented: **${counts.implemented}** · ${EMOJIS.ERROR} Declined: **${counts.denied}**`, '', ...lines, '',
@@ -304,7 +305,7 @@ function buildMySuggestionDetail(guildId, userId, suggestionId, page = 0) {
   if (!item || String(item.authorId || '') !== String(userId || '')) throw new Error('That suggestion could not be found in your history.');
   const fields = [
     { name: 'Status', value: `${statusEmoji(item.status)} ${statusLabel(item.status, section)}`, inline: true },
-    { name: 'Shared', value: item.anonymous === true ? '🔒 Anonymously' : 'With your name', inline: true },
+    { name: 'Shared', value: item.anonymous === true ? emojiLabel('LOCKDOWN', 'Anonymously') : 'With your name', inline: true },
     { name: 'Submitted', value: discordTimestamp(item.createdAt, 'F'), inline: false },
   ];
   if (section.voting !== false || item.upVotes.length || item.downVotes.length) fields.push({ name: 'Community feedback', value: voteSummary(item), inline: false });
@@ -314,7 +315,7 @@ function buildMySuggestionDetail(guildId, userId, suggestionId, page = 0) {
     fields.push({ name: item.status === 'implemented' ? 'Completed' : 'Decision made', value: discordTimestamp(item.implementedAt || item.reviewedAt || item.updatedAt, 'F'), inline: false });
     fields.push({ name: 'Team response', value: defaultTeamResponse(item), inline: false });
   }
-  return { embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(`${statusEmoji(item.status)} ${item.title}`).setDescription(item.content || '_No suggestion details were provided._').addFields(fields).setFooter({ text: 'Only you can see this.' }).setTimestamp(new Date(item.updatedAt || item.createdAt || Date.now()))], components: [row(button(`suggestions:mine:page:${Math.max(0, Number(page) || 0)}`, '⬅️ My Suggestions', ButtonStyle.Secondary), button('suggestions:mine:close', 'Close', ButtonStyle.Secondary))], flags: MessageFlags.Ephemeral };
+  return { embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(`${statusEmoji(item.status)} ${item.title}`).setDescription(item.content || '_No suggestion details were provided._').addFields(fields).setFooter({ text: 'Only you can see this.' }).setTimestamp(new Date(item.updatedAt || item.createdAt || Date.now()))], components: [row(button(`suggestions:mine:page:${Math.max(0, Number(page) || 0)}`, emojiLabel('BACK', 'My Suggestions'), ButtonStyle.Secondary), button('suggestions:mine:close', 'Close', ButtonStyle.Secondary))], flags: MessageFlags.Ephemeral };
 }
 
 function buildReviewerDecisionPayload(guild, suggestionId) {
@@ -357,7 +358,7 @@ function overviewDescription(section, enabled) {
 function buildReviewerRolesPanel(guild, memberDisplayName = 'Unknown User', page = 0) {
   const section = suggestions.getSection(guild.id);
   const picker = panelNavigation.buildRolePicker(guild, { customId: 'admin:suggestions:reviewerRoles', placeholder: 'Choose management roles', selectedIds: section.reviewerRoleIds, minValues: 0, maxValues: 25, page, pagination: true, showManaged: true });
-  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 Suggestions · Management Team').setDescription([
+  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'Suggestions · Management Team')).setDescription([
     'Choose which roles can discuss, approve, decline and mark suggestions as implemented.', '',
     'Roles are shown from **highest to lowest** in the server hierarchy. You can select roles across multiple pages.', '',
     `**Selected roles:** ${formatRoles(section.reviewerRoleIds)}`, '',
@@ -371,7 +372,7 @@ function buildSuggestionsAdminPanel(guild, memberDisplayName = 'Unknown User', p
   const enabled = isModuleEnabled(guild.id, 'suggestions');
   if (page === 'reviewers') return buildReviewerRolesPanel(guild, memberDisplayName, 0);
   if (page === 'destinations') {
-    const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 Suggestions · Outcome & Log Channels').setDescription([
+    const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'Suggestions · Outcome & Log Channels')).setDescription([
       'Choose where final outcomes and management audit logs are posted.', '',
       `**Approved suggestions:** ${formatChannel(section.approvedChannelId)}`,
       `**Declined suggestions:** ${formatChannel(section.deniedChannelId)}`,
@@ -385,17 +386,17 @@ function buildSuggestionsAdminPanel(guild, memberDisplayName = 'Unknown User', p
       row(button('admin:suggestions:overview', emojiLabel('BACK', 'Back to Suggestions'), ButtonStyle.Secondary)),
     ] };
   }
-  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 Suggestions').setDescription(overviewDescription(section, enabled)).setFooter({ text: `Opened by ${memberDisplayName}` }).setTimestamp();
+  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'Suggestions')).setDescription(overviewDescription(section, enabled)).setFooter({ text: `Opened by ${memberDisplayName}` }).setTimestamp();
   return { embeds: [embed], components: [
     row(new ChannelSelectMenuBuilder().setCustomId('admin:suggestions:submitChannel').setPlaceholder('Public suggestions channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     row(new ChannelSelectMenuBuilder().setCustomId('admin:suggestions:reviewChannel').setPlaceholder('Private team discussion channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
-    row(button('admin:suggestions:reviewers', '👥 Management Team', ButtonStyle.Primary), button('admin:suggestions:destinations', '📬 Outcomes & Logs', ButtonStyle.Primary)),
+    row(button('admin:suggestions:reviewers', emojiLabel('MOD_STAFF', 'Management Team'), ButtonStyle.Primary), button('admin:suggestions:destinations', emojiLabel('SUGGESTION_INBOX', 'Outcomes & Logs'), ButtonStyle.Primary)),
     row(
-      button('admin:suggestions:deploy', '🚀 Publish Panel', ButtonStyle.Success),
-      button(enabled ? 'admin:suggestions:disable' : 'admin:suggestions:enable', enabled ? '⏸️ Turn Off' : '▶️ Turn On', ButtonStyle.Secondary),
-      button('admin:suggestions:toggleVoting', section.voting !== false ? '🗳️ Voting On' : '🗳️ Voting Off', ButtonStyle.Secondary),
-      button('admin:suggestions:toggleReview', section.requireReview !== false ? '🔎 Review On' : '🔎 Review Off', ButtonStyle.Secondary),
-      button('admin:suggestions:toggleAnonymous', section.anonymous === true ? '👤 Public Anonymous' : '👤 Public Named', ButtonStyle.Secondary),
+      button('admin:suggestions:deploy', emojiLabel('DEPLOY', 'Publish Panel'), ButtonStyle.Success),
+      button(enabled ? 'admin:suggestions:disable' : 'admin:suggestions:enable', enabled ? emojiLabel('USER_PAUSE', 'Turn Off') : emojiLabel('USER_PLAY', 'Turn On'), ButtonStyle.Secondary),
+      button('admin:suggestions:toggleVoting', section.voting !== false ? emojiLabel('VOTE', 'Voting On') : emojiLabel('VOTE', 'Voting Off'), ButtonStyle.Secondary),
+      button('admin:suggestions:toggleReview', section.requireReview !== false ? emojiLabel('INVESTIGATE', 'Review On') : emojiLabel('INVESTIGATE', 'Review Off'), ButtonStyle.Secondary),
+      button('admin:suggestions:toggleAnonymous', section.anonymous === true ? emojiLabel('USER', 'Public Anonymous') : emojiLabel('USER', 'Public Named'), ButtonStyle.Secondary),
     ),
     row(button('admin:modules', emojiLabel('BACK', 'Back to Modules'), ButtonStyle.Secondary)),
   ] };
