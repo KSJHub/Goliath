@@ -45,25 +45,25 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
   const hasChannel = Boolean(section.channelId);
   const channel = hasChannel ? '<#' + section.channelId + '>' : '**Not configured**';
   const lastCounter = section.lastCounterId ? '<@' + section.lastCounterId + '>' : 'Nobody yet';
-  const status = enabled ? '🟢 Running' : '⚪ Disabled';
+  const status = enabled ? emojiLabel('ENABLED', 'Running') : emojiLabel('INACTIVE', 'Disabled');
 
   const embed = footer(new EmbedBuilder()
     .setColor(PANEL_COLOR)
-    .setTitle('🔢 Counting Management')
+    .setTitle(emojiLabel('COUNTING_NUMBERS', 'Counting Management'))
     .setDescription([
       '**' + status + '**  •  ' + channel,
       !hasChannel ? '\n⚠️ Choose a Counting channel before Counting can process messages or deploy the Player Panel.' : '',
     ].filter(Boolean).join('\n'))
     .addFields(
       {
-        name: '📊 Live Game',
+        name: emojiLabel('ANALYTICS', 'Live Game'),
         value: [
           '**Current**  \`' + section.currentCount + '\`   •   **Next**  \`' + counting.expectedNext(section) + '\`   •   **Record**  \`' + section.highestCount + '\`',
           '**Last Counter:** ' + lastCounter,
         ].join('\n'),
       },
       {
-        name: '🎮 Game Rules',
+        name: emojiLabel('COMMUNITY_GAME', 'Game Rules'),
         value: [
           '**Preset:** ' + (counting.rulesAreDefault(section) ? 'Goliath Defaults' : 'Custom'),
           '**Turns:** ' + formatTurnLimit(section.maxConsecutivePerMember),
@@ -72,7 +72,7 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
         ].join('\n'),
       },
       {
-        name: '🛡️ Channel Behaviour',
+        name: emojiLabel('SECURITY', 'Channel Behaviour'),
         value: [
           '**Numbers Only:** ' + (section.numbersOnly ? 'On' : 'Off') + '   •   **Wrong Counts:** ' + (section.deleteIncorrect ? 'Delete' : 'Keep'),
           '**Banter:** ' + (section.funnyResponses ? 'On' : 'Off') + '   •   **Reply Timing:** ' + formatCleanup(section.responseCleanupSeconds),
@@ -83,9 +83,9 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
   return { content: null, embeds: [embed], components: [
     row(channelSelector(section)),
     row(
-      button(PREFIX + ':playerPanel', '📢 Player Panel', ButtonStyle.Secondary, !hasChannel),
-      button(PREFIX + ':rules', '🎮 Game Rules', ButtonStyle.Primary),
-      button(PREFIX + ':reset', '♻️ Reset Game', ButtonStyle.Danger),
+      button(PREFIX + ':playerPanel', emojiLabel('WELCOME_CHANNEL', 'Player Panel'), ButtonStyle.Secondary, !hasChannel),
+      button(PREFIX + ':rules', emojiLabel('COMMUNITY_GAME', 'Game Rules'), ButtonStyle.Primary),
+      button(PREFIX + ':reset', emojiLabel('AUTOMOD_DUPLICATES', 'Reset Game'), ButtonStyle.Danger),
     ),
     row(
       actionButton('admin:studio:communityStudio', 'back'),
@@ -97,13 +97,13 @@ function buildRulesScreen(guild) {
   const section = counting.getSection(guild.id);
   const embed = footer(new EmbedBuilder()
     .setColor(PANEL_COLOR)
-    .setTitle('🎮 Counting Game Rules')
+    .setTitle(emojiLabel('COMMUNITY_GAME', 'Counting Game Rules'))
     .setDescription([
       'Set the game rules and choose how Goliath handles Counting messages.',
       '',
       '**🎮 Configure Game**',
-      '👤 **Turns:** ' + formatTurnLimit(section.maxConsecutivePerMember) + '   •   💀 **Game Over:** ' + formatFailureLimit(section.failureLimit),
-      '💡 **Hints:** ' + formatHintThreshold(section.answerAfterFailures) + '   •   🎯 **Milestones:** ' + (section.milestoneAnnouncements ? 'Every ' + section.milestoneInterval : 'Off'),
+      emojiLabel('USER', '**Turns:** ') + formatTurnLimit(section.maxConsecutivePerMember) + '   •   💀 **Game Over:** ' + formatFailureLimit(section.failureLimit),
+      emojiLabel('USER_SUGGESTIONS', '**Hints:** ') + formatHintThreshold(section.answerAfterFailures) + '   •   🎯 **Milestones:** ' + (section.milestoneAnnouncements ? 'Every ' + section.milestoneInterval : 'Off'),
       '',
       '**⏱️ Reply Timing:** ' + formatCleanup(section.responseCleanupSeconds),
       '',
@@ -114,13 +114,13 @@ function buildRulesScreen(guild) {
     ].join('\n')));
   return { content: null, embeds: [embed], components: [
     row(
-      button(PREFIX + ':rules:advanced', '🎮 Configure Game', ButtonStyle.Primary),
-      button(PREFIX + ':rules:toggle:numbers', '🔢 Numbers Only: ' + (section.numbersOnly ? 'On' : 'Off'), ButtonStyle.Secondary),
-      button(PREFIX + ':rules:toggle:delete', '🗑️ Wrong Counts: ' + (section.deleteIncorrect ? 'Delete' : 'Keep'), ButtonStyle.Secondary),
+      button(PREFIX + ':rules:advanced', emojiLabel('COMMUNITY_GAME', 'Configure Game'), ButtonStyle.Primary),
+      button(PREFIX + ':rules:toggle:numbers', emojiLabel('COUNTING_NUMBERS', 'Numbers Only: ') + (section.numbersOnly ? 'On' : 'Off'), ButtonStyle.Secondary),
+      button(PREFIX + ':rules:toggle:delete', emojiLabel('DELETE', 'Wrong Counts: ') + (section.deleteIncorrect ? 'Delete' : 'Keep'), ButtonStyle.Secondary),
     ),
     row(
-      button(PREFIX + ':rules:toggle:banter', '😂 Banter: ' + (section.funnyResponses ? 'On' : 'Off'), ButtonStyle.Secondary),
-      button(PREFIX + ':rules:cycle:timing', '⏱️ Reply Timing: ' + (section.responseCleanupSeconds === null ? 'Keep' : section.responseCleanupSeconds + 's'), ButtonStyle.Secondary),
+      button(PREFIX + ':rules:toggle:banter', emojiLabel('COMMUNITY_LAUGH', 'Banter: ') + (section.funnyResponses ? 'On' : 'Off'), ButtonStyle.Secondary),
+      button(PREFIX + ':rules:cycle:timing', emojiLabel('AUTOMOD_LIMITS', 'Reply Timing: ') + (section.responseCleanupSeconds === null ? 'Keep' : section.responseCleanupSeconds + 's'), ButtonStyle.Secondary),
     ),
     row(actionButton(PREFIX + ':main:0', 'back')),
   ] };
@@ -144,13 +144,13 @@ function buildSettingsScreen(guild) {
       '**🩺 Health**',
       'Checks the Counting setup, channel access and configuration for problems.',
       '',
-      '**Status:** ' + (enabled ? '🟢 Running' : '⚪ Disabled') + '   •   **Channel:** ' + (section.channelId ? '<#' + section.channelId + '>' : 'Not configured'),
+      '**Status:** ' + (enabled ? emojiLabel('ENABLED', 'Running') : emojiLabel('INACTIVE', 'Disabled')) + '   •   **Channel:** ' + (section.channelId ? '<#' + section.channelId + '>' : 'Not configured'),
     ].join('\n')));
   return { content: null, embeds: [embed], components: [
     row(
-      button(PREFIX + ':toggle:enabled', enabled ? '⏸️ Disable Counting' : '▶️ Enable Counting', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      button(PREFIX + ':toggle:enabled', enabled ? emojiLabel('USER_PAUSE', 'Disable Counting') : emojiLabel('USER_PLAY', 'Enable Counting'), enabled ? ButtonStyle.Danger : ButtonStyle.Success),
       button(PREFIX + ':defaults', emojiLabel('REFRESH', 'Defaults'), ButtonStyle.Secondary),
-      button(PREFIX + ':health', '🩺 Health', ButtonStyle.Secondary),
+      button(PREFIX + ':health', emojiLabel('WELCOME_DIAGNOSTICS', 'Health'), ButtonStyle.Secondary),
     ),
     row(actionButton(PREFIX + ':main:0', 'back')),
   ] };
@@ -164,14 +164,14 @@ function buildDefaultsConfirmation() {
       .setDescription([
         'This will restore Goliath\'s recommended Counting rules:',
         '',
-        '👤 **Turns:** 1 number per member',
-        '💀 **Game Over:** 1 wrong answer',
-        '💡 **Hints:** Off',
-        '🔢 **Numbers Only:** On',
-        '🗑️ **Wrong Counts:** Delete',
-        '😂 **Banter:** On',
-        '⏱️ **Reply Timing:** Delete after 8s',
-        '🎉 **Milestones:** Every 5 counts',
+        emojiLabel('USER', '**Turns:** 1 number per member'),
+        emojiLabel('COMMUNITY_GAME_OVER', '**Game Over:** 1 wrong answer'),
+        emojiLabel('USER_SUGGESTIONS', '**Hints:** Off'),
+        emojiLabel('COUNTING_NUMBERS', '**Numbers Only:** On'),
+        emojiLabel('DELETE', '**Wrong Counts:** Delete'),
+        emojiLabel('COMMUNITY_LAUGH', '**Banter:** On'),
+        emojiLabel('AUTOMOD_LIMITS', '**Reply Timing:** Delete after 8s'),
+        emojiLabel('USER_GIVEAWAYS', '**Milestones:** Every 5 counts'),
         '',
         '**Your current count, server record, Counting channel and Player Panel will be kept.**',
       ].join('\n')))],
@@ -203,17 +203,17 @@ function buildCleanupConfirmation(channelId, mode = 'move') {
   const mention = `<#${channelId}>`;
   const reset = mode === 'reset';
   return { content: [
-    '🧹 **Clean up the previous Counting messages?**', '',
+    emojiLabel('ADMIN_PURGE', '**Clean up the previous Counting messages?**'), '',
     reset ? `Would you like Goliath to remove the previous game messages from ${mention} before starting again?` : `Counting has moved. Would you like Goliath to remove the old Counting messages from ${mention}?`,
     '', 'This cleanup is restricted to this Counting channel only.', '**Deleted messages cannot be recovered.**',
   ].join('\n'), embeds: [], components: [row(
-    button(`${PREFIX}:cleanup:${reset ? 'reset' : 'move'}:yes:${channelId}`, reset ? '🗑️ Yes, Clear Previous Game' : '🗑️ Yes, Clean Up', ButtonStyle.Danger),
-    button(`${PREFIX}:cleanup:${reset ? 'reset' : 'move'}:no:${channelId}`, '➡️ No, Keep Messages', ButtonStyle.Secondary),
+    button(`${PREFIX}:cleanup:${reset ? 'reset' : 'move'}:yes:${channelId}`, reset ? emojiLabel('DELETE', 'Yes, Clear Previous Game') : emojiLabel('DELETE', 'Yes, Clean Up'), ButtonStyle.Danger),
+    button(`${PREFIX}:cleanup:${reset ? 'reset' : 'move'}:no:${channelId}`, emojiLabel('NEXT_STEP', 'No, Keep Messages'), ButtonStyle.Secondary),
   )] };
 }
 function buildResetConfirmation(guildId) {
   const section = counting.getSection(guildId);
-  return { content: ['⚠️ **Start the counting game again?**', '', 'This ends the current run and starts again from **1**.', '', 'Goliath will replace the current player panel with one **COUNTING: RESET** panel in the counting channel. Everything above it belongs to the previous run.', '', 'Your counting channel and configured rules stay exactly as they are.', '', '**This cannot be undone.**'].join('\n'), embeds: [], components: [row(button(`${PREFIX}:reset:confirm`, '🔄 Yes, Start Again', ButtonStyle.Danger), button(`${PREFIX}:main:0`, 'Cancel', ButtonStyle.Secondary))] };
+  return { content: [emojiLabel('WARNING', '**Start the counting game again?**'), '', 'This ends the current run and starts again from **1**.', '', 'Goliath will replace the current player panel with one **COUNTING: RESET** panel in the counting channel. Everything above it belongs to the previous run.', '', 'Your counting channel and configured rules stay exactly as they are.', '', '**This cannot be undone.**'].join('\n'), embeds: [], components: [row(button(`${PREFIX}:reset:confirm`, emojiLabel('REFRESH', 'Yes, Start Again'), ButtonStyle.Danger), button(`${PREFIX}:main:0`, 'Cancel', ButtonStyle.Secondary))] };
 }
 function sectionMilestoneFallback(section) { return Number.isSafeInteger(Number(section?.milestoneInterval)) && Number(section.milestoneInterval) > 0 ? Number(section.milestoneInterval) : counting.DEFAULTS.milestoneInterval; }
 function parseRequiredInteger(interaction, fieldId, label, min = 0) {
@@ -330,7 +330,7 @@ async function handleInteraction(interaction) {
         health.issues.length ? '**Issues**\n' + health.issues.map((item) => `• ${healthLabel(item)}`).join('\n') : '**Issues**\n• None',
         health.warnings.length ? '**Warnings**\n' + health.warnings.map((item) => `• ${healthLabel(item)}`).join('\n') : '**Warnings**\n• None',
       ];
-      await interaction.editReply({ content: lines.join('\n'), components: health.issues.length || health.warnings.length ? [row(button(`${PREFIX}:health:repair`, '🛠️ Safe Repair', ButtonStyle.Primary))] : [] });
+      await interaction.editReply({ content: lines.join('\n'), components: health.issues.length || health.warnings.length ? [row(button(`${PREFIX}:health:repair`, emojiLabel('WELCOME_CUSTOM', 'Safe Repair'), ButtonStyle.Primary))] : [] });
       return true;
     }
     if (id === `${PREFIX}:health:repair`) {
