@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
@@ -13,7 +14,7 @@ function buildPanel(interaction) {
   const memberDisplayName = interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
   const embed = new EmbedBuilder()
     .setColor('#FEE75C')
-    .setTitle('📌 Notes — Development Memo')
+    .setTitle(emojiLabel('ADMIN_PIN', 'Notes — Development Memo'))
     .setDescription([
       '**Purpose**',
       'A lightweight personal notebook built into Goliath.',
