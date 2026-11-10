@@ -276,7 +276,15 @@ async function configureGameUpdates(guild, patch) {
 async function removeGameSubscription(guild, appId) {
   return withGuildLock(guild.id, async () => {
     appId = providers.steamAppId(appId);
-    return store.updateGameUpdates(guild.id, current => { const subscriptions = { ...current.subscriptions }; delete subscriptions[appId]; return { ...current, subscriptions }; });
+    return store.updateGameUpdates(guild.id, current => {
+      const subscription = current.subscriptions[appId];
+      if (subscription?.pending?.some(entry => entry.status === 'ambiguous' || entry.status === 'dispatching')) {
+        throw new Error('Resolve held deliveries before unsubscribing from this game.');
+      }
+      const subscriptions = { ...current.subscriptions };
+      delete subscriptions[appId];
+      return { ...current, subscriptions };
+    });
   });
 }
 function updatesQuietNow(config, timeZone, now = Date.now()) {
