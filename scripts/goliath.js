@@ -4997,6 +4997,12 @@ async function gameUpdatesAudit() {
   await monitor.processGameUpdates(guild);
   assert.equal(sent.length, beforeHeldToggle, 'Polling must not automatically resend uncertain delivery.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
+  const beforeRejectedRemoval = JSON.stringify(store.getGameUpdates(guild.id));
+  await assert.rejects(monitor.removeGameSubscription(guild, '730'), /Resolve held deliveries/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id)), beforeRejectedRemoval,
+    'Rejected unsubscribe must preserve the entire subscription and delivery history.');
+  // Once the uncertain delivery is resolved, unsubscribe retains global history.
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, pending: [] } } }; });
   await monitor.removeGameSubscription(guild, '730');
   assert.equal(Object.keys(store.getGameUpdates(guild.id).subscriptions).length, 0);
   assert(store.getGameUpdates(guild.id).history.length > 0); assert.equal(memory.currency, 'GBP'); assert.equal(memory.state.deliveries[0].messageId, 'preserve');
