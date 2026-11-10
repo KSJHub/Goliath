@@ -227,7 +227,7 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
   rows.push(new ActionRowBuilder().addComponents(finalButtons));
   return rows;
 }
-function buildUserSelectRow() { return new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('mod_user_select').setPlaceholder('👤 Select a member to investigate or moderate').setMinValues(0).setMaxValues(1)); }
+function buildUserSelectRow() { return new ActionRowBuilder().addComponents(new UserSelectMenuBuilder().setCustomId('mod_user_select').setPlaceholder(emojiLabel('USER', 'Select a member to investigate or moderate')).setMinValues(0).setMaxValues(1)); }
 function actionPermissions(member, guild) { return { warn: canUseModAction(member, guild, 'warn'), timeout: canUseModAction(member, guild, 'timeout'), kick: canUseModAction(member, guild, 'kick'), quarantine: canUseModAction(member, guild, 'quarantine'), ban: canUseModAction(member, guild, 'ban'), removeWarning: canUseModAction(member, guild, 'remove_warning'), removeTimeout: canUseModAction(member, guild, 'remove_timeout'), removeQuarantine: canUseModAction(member, guild, 'remove_quarantine') }; }
 function buildActionRows(target, stats, member, guild, context = {}) {
   const id = target?.id || 'none';
@@ -274,7 +274,7 @@ function validateDashboardComponents(components, view) {
 function buildActionsEmbed(interaction, target, stats, staffDisplay) {
   const overall = workspaceStats(interaction.guild.id);
   if (!target) return baseEmbed(interaction.client, COLORS.PRIMARY)
-    .setTitle('🛡️ Moderation Hub')
+    .setTitle(emojiLabel('SECURITY', 'Moderation Hub'))
     .setDescription([
       '**Select a member** to view their profile and moderation actions.',
       '',
@@ -290,7 +290,7 @@ function buildActionsEmbed(interaction, target, stats, staffDisplay) {
     ? `**#${latest.caseId}** • ${String(latest.action || 'Unknown').replace(/-/g, ' ')} • ${getStatusLabel(latest)}\n<t:${Math.floor(new Date(latest.createdAt || Date.now()).getTime() / 1000)}:R>`
     : 'No cases recorded';
   const embed = baseEmbed(interaction.client, COLORS.PRIMARY)
-    .setTitle('🛡️ Moderation Hub')
+    .setTitle(emojiLabel('SECURITY', 'Moderation Hub'))
     .setDescription([
       `**Member:** ${target.user}`,
       `**User ID:** \`${target.id}\``,
@@ -299,9 +299,9 @@ function buildActionsEmbed(interaction, target, stats, staffDisplay) {
       'Choose an action below or review this member’s history.',
     ].join('\n'))
     .addFields(
-      { name: '👤 Member Profile', value: `**Joined:** ${timestamp(target.joinedTimestamp)}\n**Account Created:** ${timestamp(target.user?.createdTimestamp)}\n**Highest Role:** ${highestRole}`, inline: false },
-      { name: '🛡️ Moderation Status', value: `**Warnings:** ${stats?.warningCount ?? 0}  •  **Timeout:** ${timeout}`, inline: false },
-      { name: '📁 Case History', value: `**Total Cases:** ${stats?.caseCount ?? 0}\n**Most Recent:** ${latestLabel}`, inline: false },
+      { name: emojiLabel('USER', 'Member Profile'), value: `**Joined:** ${timestamp(target.joinedTimestamp)}\n**Account Created:** ${timestamp(target.user?.createdTimestamp)}\n**Highest Role:** ${highestRole}`, inline: false },
+      { name: emojiLabel('SECURITY', 'Moderation Status'), value: `**Warnings:** ${stats?.warningCount ?? 0}  •  **Timeout:** ${timeout}`, inline: false },
+      { name: emojiLabel('MOD_CASE_FOLDER', 'Case History'), value: `**Total Cases:** ${stats?.caseCount ?? 0}\n**Most Recent:** ${latestLabel}`, inline: false },
     )
     .setFooter({ text: 'All actions require permission and hierarchy checks.' });
   const avatar = target.user?.displayAvatarURL?.({ size: 256 });
@@ -309,7 +309,7 @@ function buildActionsEmbed(interaction, target, stats, staffDisplay) {
   return embed;
 }
 function buildIntelligenceEmbed(interaction, target, member, guild) { const capabilities = []; if (canUseModAction(member, guild, 'scan_suspects')) capabilities.push('Suspected-account correlation'); if (canUseModAction(member, guild, 'scan_network')) capabilities.push('Network reputation and cross-guild intelligence'); if (canUseModAction(member, guild, 'scan_links')) capabilities.push('Persistent link evidence'); if (canUseModAction(member, guild, 'scan_notes')) capabilities.push('Investigation notes'); if (canUseModAction(member, guild, 'scan_watch')) capabilities.push('Investigation watch and Watchlist state'); return baseEmbed(interaction.client, COLORS.PRIMARY).setTitle('🧠 Member Intelligence').setDescription([target ? `**Active Member:** ${target.user} • \`${target.id}\`` : '**No member selected.**', '', 'Run **Full Member Scan** to open the complete intelligence workspace. Scan History remains available separately for previous snapshots and account comparison.', '', capabilities.length ? `**Included Intelligence:**\n${capabilities.map((value) => `• ${value}`).join('\n')}` : 'Your authority profile provides basic scan access only.', '', 'Evidence controls are kept inside the scan workspace so Back always returns to the correct panel and no duplicate scan is recorded unless you explicitly choose Rescan.'].join('\n')); }
-function buildCasesEmbed(target, cases = [], page = 0, totalPages = 1, actionFilter = 'all', statusFilter = 'all') { const description = cases.length ? cases.map((entry) => `**#${entry.caseId}** • ${String(entry.action || 'unknown').toUpperCase()} • ${getStatusLabel(entry)}\n${entry.reason || 'No reason provided'}\n<t:${Math.floor(getCaseTime(entry) / 1000)}:R>`).join('\n\n') : 'No cases found for this member.'; return createEmbed({ title: target?.user?.tag ? `📁 Cases • ${target.user.tag}` : '📁 Member Cases', description, color: COLORS.PRIMARY, footer: `Action: ${actionFilter} | Status: ${statusFilter} | Page ${page + 1}/${totalPages}` }); }
+function buildCasesEmbed(target, cases = [], page = 0, totalPages = 1, actionFilter = 'all', statusFilter = 'all') { const description = cases.length ? cases.map((entry) => `**#${entry.caseId}** • ${String(entry.action || 'unknown').toUpperCase()} • ${getStatusLabel(entry)}\n${entry.reason || 'No reason provided'}\n<t:${Math.floor(getCaseTime(entry) / 1000)}:R>`).join('\n\n') : 'No cases found for this member.'; return createEmbed({ title: target?.user?.tag ? `📁 Cases • ${target.user.tag}` : emojiLabel('MOD_CASE_FOLDER', 'Member Cases'), description, color: COLORS.PRIMARY, footer: `Action: ${actionFilter} | Status: ${statusFilter} | Page ${page + 1}/${totalPages}` }); }
 function getAppealsPage(guildId, filter = 'pending', page = 0) {
   const all = listAppeals(guildId, { status: 'all' });
   const pending = all.filter(({ appeal }) => (appeal.status || 'pending') === 'pending');
@@ -324,7 +324,7 @@ function buildAppealsOverviewEmbed(guild, filter = 'pending', page = 0) {
   const totalInView = filter === 'all' ? data.all.length : filter === 'resolved' ? data.resolved.length : data.pending.length;
   const viewLabel = filter === 'all' ? 'All Appeals' : filter === 'resolved' ? 'Resolved' : 'Pending Review';
   const embed = createEmbed({
-    title: '⚖️ Moderation Appeals',
+    title: emojiLabel('ACTIONS', 'Moderation Appeals'),
     description: [
       'Review submitted appeals, inspect their grounds and record a decision.',
       '',
@@ -335,7 +335,7 @@ function buildAppealsOverviewEmbed(guild, filter = 'pending', page = 0) {
     footer: `${totalInView ? `Appeals ${data.currentPage * 5 + 1}–${data.currentPage * 5 + data.entries.length} of ${totalInView}` : 'No appeals in this view'}${data.totalPages > 1 ? ` • Page ${data.currentPage + 1}/${data.totalPages}` : ''}`,
   });
   if (!data.entries.length) {
-    embed.addFields({ name: '📭 Nothing to Review', value: data.all.length ? 'No appeals match this filter.' : 'No appeals have been submitted yet.', inline: false });
+    embed.addFields({ name: emojiLabel('MOD_APPEAL_EMPTY', 'Nothing to Review'), value: data.all.length ? 'No appeals match this filter.' : 'No appeals have been submitted yet.', inline: false });
   } else {
     for (const { case: modCase, appeal } of data.entries) {
       const status = appeal.status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : appeal.status === 'denied' ? emojiLabel('ERROR', 'Denied') : '⏳ Pending';
@@ -365,18 +365,18 @@ function buildAnalyticsOverviewEmbed(guild, analytics) {
   }).join('\n') : 'No recent activity.';
   const comparison = analytics.change === null ? '' : `\nCompared with previous period: **${analytics.change >= 0 ? '+' : ''}${analytics.change}%**`;
   const fields = [
-    { name: '📁 Total Cases', value: `**${analytics.totalCases}**\n${analytics.activeCases} active`, inline: true },
-    { name: '👥 Members', value: `**${analytics.uniqueUsers}**\n${analytics.repeatOffenders} repeat`, inline: true },
-    { name: '🧾 Audit Events', value: `**${analytics.auditActions}**\nrecorded`, inline: true },
-    { name: '⚡ Moderation Actions', value: `Warnings **${Number(analytics.actionCounts.warn || 0)}**  •  Timeouts **${Number(analytics.actionCounts.timeout || 0)}**  •  Kicks **${Number(analytics.actionCounts.kick || 0)}**  •  Bans **${Number(analytics.actionCounts.ban || 0)}**`, inline: false },
+    { name: emojiLabel('MOD_CASE_FOLDER', 'Total Cases'), value: `**${analytics.totalCases}**\n${analytics.activeCases} active`, inline: true },
+    { name: emojiLabel('MOD_STAFF', 'Members'), value: `**${analytics.uniqueUsers}**\n${analytics.repeatOffenders} repeat`, inline: true },
+    { name: emojiLabel('CASE', 'Audit Events'), value: `**${analytics.auditActions}**\nrecorded`, inline: true },
+    { name: emojiLabel('WELCOME_INSTANT', 'Moderation Actions'), value: `Warnings **${Number(analytics.actionCounts.warn || 0)}**  •  Timeouts **${Number(analytics.actionCounts.timeout || 0)}**  •  Kicks **${Number(analytics.actionCounts.kick || 0)}**  •  Bans **${Number(analytics.actionCounts.ban || 0)}**`, inline: false },
     { name: emojiLabel('ACTIONS', 'Appeals'), value: `Pending **${appeal.pending}**  •  Approved **${appeal.approved}**  •  Denied **${appeal.denied}**`, inline: false },
-    { name: '↩️ Case Outcomes', value: `Closed **${analytics.reversedCases}**  •  Expired **${analytics.expiredCases}**  •  Closure rate **${analytics.reversalRate}**`, inline: false },
-    { name: '📈 Recent Activity · Last 7 Days', value: trend.slice(0, 1024), inline: false }
+    { name: emojiLabel('ADMIN_RESTORE_TEMPLATE', 'Case Outcomes'), value: `Closed **${analytics.reversedCases}**  •  Expired **${analytics.expiredCases}**  •  Closure rate **${analytics.reversalRate}**`, inline: false },
+    { name: emojiLabel('MOD_RECENT_ACTIVITY', 'Recent Activity · Last 7 Days'), value: trend.slice(0, 1024), inline: false }
   ];
   if (topModerators || topUsers) {
     fields.push(
-      { name: '🏆 Top Moderators', value: topModerators || 'No activity', inline: true },
-      { name: '👥 Frequent Members', value: topUsers || 'No activity', inline: true }
+      { name: emojiLabel('MOD_TOP_STAFF', 'Top Moderators'), value: topModerators || 'No activity', inline: true },
+      { name: emojiLabel('MOD_STAFF', 'Frequent Members'), value: topUsers || 'No activity', inline: true }
     );
   }
   return createEmbed({
@@ -395,22 +395,22 @@ function buildModeratorAnalyticsEmbed(guild, analytics) {
   const memberLabel = moderatorName ? `**${moderatorName.replace(/([*_~`|])/g, '\\$1')}** • <@${moderatorId}>` : `<@${moderatorId}>`;
   const fields = [];
   if (analytics.moderatorCases === 0) {
-    fields.push({ name: '📁 No Activity', value: 'No moderation actions recorded for this moderator during the selected period.', inline: false });
+    fields.push({ name: emojiLabel('MOD_CASE_FOLDER', 'No Activity'), value: 'No moderation actions recorded for this moderator during the selected period.', inline: false });
   } else {
     fields.push(
-      { name: '📁 Cases Handled', value: `**${analytics.moderatorCases}**`, inline: true },
-      { name: '👥 Members Moderated', value: `**${analytics.affectedUsers}**`, inline: true },
+      { name: emojiLabel('MOD_CASE_FOLDER', 'Cases Handled'), value: `**${analytics.moderatorCases}**`, inline: true },
+      { name: emojiLabel('MOD_STAFF', 'Members Moderated'), value: `**${analytics.affectedUsers}**`, inline: true },
       { name: emojiLabel('SUCCESS', 'Closed'), value: `**${statuses.reversed || 0}**`, inline: true },
-      { name: '⚡ Actions Taken', value: `Warnings **${Number(analytics.moderatorActionCounts.warn || 0)}** • Timeouts **${Number(analytics.moderatorActionCounts.timeout || 0)}**\nKicks **${Number(analytics.moderatorActionCounts.kick || 0)}** • Bans **${Number(analytics.moderatorActionCounts.ban || 0)}**`, inline: false }
+      { name: emojiLabel('WELCOME_INSTANT', 'Actions Taken'), value: `Warnings **${Number(analytics.moderatorActionCounts.warn || 0)}** • Timeouts **${Number(analytics.moderatorActionCounts.timeout || 0)}**\nKicks **${Number(analytics.moderatorActionCounts.kick || 0)}** • Bans **${Number(analytics.moderatorActionCounts.ban || 0)}**`, inline: false }
     );
     const recent = analytics.recentCases.slice(0, 5).map((entry) => {
       const when = getCaseTime(entry);
       return `**Case #${entry.caseId} • ${String(entry.action || 'unknown').toUpperCase()}** • ${getStatusLabel(entry)}\n<@${entry.userId}> • ${timestamp(when, 'f')}`;
     }).join('\n\n');
-    fields.push({ name: '🕘 Recent Cases', value: recent.slice(0, 1024) || 'No recent cases in this period.', inline: false });
+    fields.push({ name: emojiLabel('MOD_SCAN_HISTORY', 'Recent Cases'), value: recent.slice(0, 1024) || 'No recent cases in this period.', inline: false });
   }
   return createEmbed({
-    title: '👤 Moderator History',
+    title: emojiLabel('USER', 'Moderator History'),
     description: `**Moderator:** ${memberLabel}\n**Server:** ${guild?.name || 'Server'}`,
     color: COLORS.PRIMARY,
     fields,
@@ -438,7 +438,7 @@ function buildAnalyticsRows(guild, windowKey, mode = 'overview', moderatorId = n
   const ownHistory = mode === 'moderator' && moderatorId && currentUserId && String(moderatorId) === String(currentUserId);
   windowButtons.push(navigationButton(ownHistory
       ? `mod_analytics_overview:${window}:${returnId}`
-      : `mod_analytics_my:${window}:${currentUserId || 'none'}:${returnId}`, ownHistory ? '📊 Server' : '👤 History', ButtonStyle.Secondary));
+      : `mod_analytics_my:${window}:${currentUserId || 'none'}:${returnId}`, ownHistory ? emojiLabel('ANALYTICS', 'Server') : emojiLabel('USER', 'History'), ButtonStyle.Secondary));
   const rows = [];
   if (recorded.length) {
     const menu = new StringSelectMenuBuilder()
@@ -488,17 +488,17 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     const activeQuarantineCount = records.filter(e => e.type === 'quarantine' && ['active','pending','quarantined'].includes(e.status)).length;
     const pages = Math.max(1, Math.ceil(active.length / 8)), page = Math.max(0, Math.min(context.page, pages - 1));
     const shown = active.slice(page * 8, (page + 1) * 8);
-    const title = filter === 'warn' ? emojiLabel('WARNING', 'Warnings · Review Centre') : filter === 'timeout' ? '⌛ Timeouts · Review Centre' : filter === 'appeal' ? '⚖️ Appeals · Review Centre' : filter === 'quarantine' ? '🚨 Quarantines · Review Centre' : '📂 Cases · Review Centre';
+    const title = filter === 'warn' ? emojiLabel('WARNING', 'Warnings · Review Centre') : filter === 'timeout' ? '⌛ Timeouts · Review Centre' : filter === 'appeal' ? emojiLabel('ACTIONS', 'Appeals · Review Centre') : filter === 'quarantine' ? '🚨 Quarantines · Review Centre' : '📂 Cases · Review Centre';
     const embed = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(title)
       .setDescription(target ? `👤 <@${target.id}> · Member records` : 'Review active cases, appeals and quarantines.')
       .addFields(
-        { name: '📊 Overview', value: `${SHARED_EMOJIS.WARNING} Warning records **${warningHistoryCount}** · ⌛ Timeout records **${timeoutHistoryCount}** · ⚖️ Pending appeals **${pendingAppealCount}** · 🚨 Active quarantines **${activeQuarantineCount}**`, inline: false },
+        { name: emojiLabel('ANALYTICS', 'Overview'), value: `${SHARED_EMOJIS.WARNING} Warning records **${warningHistoryCount}** · ⌛ Timeout records **${timeoutHistoryCount}** · ⚖️ Pending appeals **${pendingAppealCount}** · 🚨 Active quarantines **${activeQuarantineCount}**`, inline: false },
         { name: `📋 ${filter === 'warn' || filter === 'timeout' ? 'History' : 'Active'} · ${filter === 'all' ? 'All types' : filter} · ${active.length} record(s)`, value: shown.length ? shown.map(e => `**${e.type.toUpperCase()}** · <@${e.userId}>${e.caseId ? ` · #${e.caseId}` : ''}\n${e.reason.slice(0, 110)}${e.channelId ? ` · <#${e.channelId}>` : ''}`).join('\n\n').slice(0, 1024) : (filter === 'warn' || filter === 'timeout' ? 'No matching records in this history.' : 'No matching active records.'), inline: false })
       .setFooter({ text: 'Staff only · Select a record to review' });
     embeds.push(embed);
     components.length = 0;
     components.push(new ActionRowBuilder().addComponents(new UserSelectMenuBuilder()
-      .setCustomId('mod_cases_user_select').setPlaceholder(target ? '👤 Change member filter' : '🔎 Search cases by member')
+      .setCustomId('mod_cases_user_select').setPlaceholder(target ? emojiLabel('USER', 'Change member filter') : '🔎 Search cases by member')
       .setMinValues(1).setMaxValues(1)));
     components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
       .setCustomId('mod_cases_open_record').setPlaceholder(shown.length ? '📂 Open a case to review' : '📂 No matching records')
@@ -523,7 +523,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
     components.push(new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId('mod_appeals_select_filter')
-        .setPlaceholder('⚖️ Filter appeals')
+        .setPlaceholder(emojiLabel('ACTIONS', 'Filter appeals'))
         .addOptions(
           { label: 'All Appeals', value: 'all', description: 'Every submitted appeal', emoji: '📋', default: filter === 'all' },
           { label: 'Pending Review', value: 'pending', description: 'Appeals awaiting a decision', emoji: '📥', default: filter === 'pending' },
@@ -531,7 +531,7 @@ async function buildDashboardPayload(discord, interaction, target, view = DEFAUL
         )
     ));
     if (data.entries.length) components.push(new ActionRowBuilder().addComponents(data.entries.map(({ case: modCase, appeal }) =>
-      navigationButton(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`, `${appeal.status === 'pending' ? '⚖️ Review' : '📁 View'} #${modCase.caseId}`, appeal.status === 'pending' ? ButtonStyle.Success : ButtonStyle.Secondary)
+      navigationButton(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`, `${appeal.status === 'pending' ? emojiLabel('ACTIONS', 'Review') : emojiLabel('MOD_CASE_FOLDER', 'View')} #${modCase.caseId}`, appeal.status === 'pending' ? ButtonStyle.Success : ButtonStyle.Secondary)
     )));
     if (data.totalPages > 1) components.push(new ActionRowBuilder().addComponents(
       navigationButton(`mod_appeals_filter:${filter}:${data.currentPage - 1}`, '◀ Previous', ButtonStyle.Secondary, data.currentPage === 0),
