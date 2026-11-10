@@ -107,7 +107,7 @@ function buildThreatPanel(interaction) {
       { name: 'Incident Store', value: `**${incidents.length}** recorded\n**${packages.length}** evidence package(s)`, inline: true },
       { name: 'Highest Severity', value: `**${highest}**`, inline: true },
       { name: 'Known Actors', value: `**${actors.size}**`, inline: true },
-      { name: 'Severity Totals', value: `🔴 Critical **${severityCounts.critical}**\n🟠 High **${severityCounts.high}**\n🟡 Medium **${severityCounts.medium}**\n🔵 Low **${severityCounts.low}**`, inline: true },
+      { name: 'Severity Totals', value: `${EMOJIS.DISABLED} Critical **${severityCounts.critical}**\n${EMOJIS.SEVERITY_HIGH} High **${severityCounts.high}**\n${EMOJIS.SEVERITY_MEDIUM} Medium **${severityCounts.medium}**\n${EMOJIS.SEVERITY_LOW} Low **${severityCounts.low}**`, inline: true },
       { name: 'Correlation', value: '**60 second window**\nCross-event escalation enabled', inline: true },
       { name: 'Recent Incidents', value: recent.length ? recent.map(incidentLine).join('\n').slice(0, 1024) : 'No security incidents recorded.', inline: false },
       { name: 'Response', value: 'Investigate a suspected actor through Goliath member intelligence, or open Restrictions for guild-wide emergency response.', inline: false },
@@ -187,7 +187,7 @@ function buildVerificationPanel(interaction) {
       { name: 'Verification', value: bool(verification.enabled !== false), inline: true },
       { name: 'Verified Role', value: roleId ? `<@&${roleId}>` : 'Not configured', inline: true },
       { name: 'Pending Role', value: pendingRoleId ? `<@&${pendingRoleId}>` : 'Not configured', inline: true },
-      { name: 'Resource Health', value: problems.length ? problems.map((problem) => `🔴 ${problem}`).join('\n') : '🟢 Configured resources resolve correctly', inline: false },
+      { name: 'Resource Health', value: problems.length ? problems.map((problem) => `${EMOJIS.DISABLED} ${problem}`).join('\n') : `${EMOJIS.ENABLED} Configured resources resolve correctly`, inline: false },
       { name: 'Management', value: 'Open the existing Verification Studio to manage workflow, assignment timing, roles/channels, requirements, messages, panels, settings and health.', inline: false },
     );
   return { embeds: [embed], components: [managementButton('admin:verification', 'Manage Verification', EMOJIS.VERIFICATION), nav(REFRESH.verification)] };
@@ -215,7 +215,7 @@ function buildHealthPanel(interaction) {
       { name: 'Restore Failures', value: `**${failures}**`, inline: true },
       { name: 'Protection Engines', value: `Anti-Nuke: ${bool(antiNukeConfig.enabled !== false)}\nAutoMod: ${bool(automod.enabled !== false)}\nVerification: ${bool(verification.enabled !== false)}`, inline: true },
       { name: 'Bot Permission Health', value: botPermissionHealth(interaction.guild), inline: true },
-      { name: 'Configured Resources', value: resourceProblems.length ? resourceProblems.map((problem) => `🔴 ${problem}`).join('\n').slice(0, 1024) : '🟢 No missing verification resources detected', inline: true },
+      { name: 'Configured Resources', value: resourceProblems.length ? resourceProblems.map((problem) => `${EMOJIS.DISABLED} ${problem}`).join('\n').slice(0, 1024) : '🟢 No missing verification resources detected', inline: true },
       { name: 'Active Restrictions', value: `Lockdown: **${lockdown.active ? 'Active' : 'Standby'}**\nInvites: **${emergency.invites.active ? 'Frozen' : 'Normal'}**\nRoles: **${emergency.roles.active ? 'Frozen' : 'Normal'}**`, inline: true },
       { name: 'Containment', value: `Investigations: **${modes.investigations}**\nFull isolation: **${modes.isolation}**`, inline: true },
     );
