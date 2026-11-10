@@ -504,12 +504,12 @@ function buildHelpPanel(interactionOrName = 'Unknown User') {
   const description = [
     'Welcome to your personal Goliath User Panel.',
     '',
-    '**🧭 Navigation**',
-    '⬅️ **Back** — Return to the previous page.',
+    `**${EMOJIS.USER_HELP_NAVIGATION} Navigation**`,
+    `${EMOJIS.BACK} **Back** — Return to the previous page.`,
     `${EMOJIS.USER_HOME} **User Panel** — Return to your live profile home.`,
     `${EMOJIS.NEXT} **Next** — Open the next page when one is available.`,
     '',
-    '**📂 Categories**',
+    `**${EMOJIS.USER_HELP_CATEGORIES} Categories**`,
     ...CATEGORY_CATALOG.map((category) => `${category.emoji} **${category.label}** — ${category.summary}`),
     '',
     `**${EMOJIS.INVESTIGATE} Search**`,
@@ -522,7 +522,7 @@ function buildHelpPanel(interactionOrName = 'Unknown User') {
   ].join('\n');
 
   return {
-    embeds: [createEmbed('❓ Goliath User Panel Help', description, memberDisplayName)],
+    embeds: [createEmbed(`${EMOJIS.USER_HELP} Goliath User Panel Help`, description, memberDisplayName)],
     components: [navigationRow({ backId: 'user:home', home: false })],
   };
 }
