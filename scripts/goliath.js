@@ -4606,6 +4606,17 @@ function classifySteamCatalogueIdentity(game, result) {
       result.storeName && normalizeName(game.name) === normalizeName(result.storeName)) {
     return { kind: 'expected-legacy', appId: game.appId, catalogueType: declaredType, storeName: result.storeName };
   }
+  // Steam's basic appdetails metadata labels Wallpaper Engine as a game even
+  // though Goliath deliberately keeps this legacy subscription under software.
+  // Require the exact App ID and matching Store name; never generalize this
+  // exception to other mismatched catalogue types.
+  if (String(game.appId) === '431960' && declaredType === 'software' &&
+      result.status === 'match' && result.storeType === 'game' &&
+      normalizeName(game.name) === 'wallpaper engine' &&
+      normalizeName(result.storeName) === 'wallpaper engine') {
+    return { kind: 'expected-legacy', appId: game.appId, catalogueType: declaredType,
+      storeName: result.storeName, storeType: result.storeType, note: 'Steam reports game; legacy catalogue retains software.' };
+  }
   if (declaredType === 'game' && result.status === 'match' && result.storeType === 'game') {
     return { kind: 'confirmed-game' };
   }
@@ -4662,7 +4673,7 @@ async function gameCatalogueIdentityAudit() {
       totals[result.status] = (totals[result.status] || 0) + 1;
       const classification = classifySteamCatalogueIdentity(game, result);
       if (classification.kind === 'expected-legacy') {
-        expectedLegacy.push({ appId: classification.appId, catalogueType: classification.catalogueType, storeName: classification.storeName });
+        expectedLegacy.push({ appId: classification.appId, catalogueType: classification.catalogueType, storeName: classification.storeName, storeType: classification.storeType || classification.catalogueType, note: classification.note || null });
       } else if (classification.kind === 'confirmed-game') {
         confirmedGames++;
       } else {
