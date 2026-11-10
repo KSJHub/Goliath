@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       limit:
-        description: 'Number of Steam catalogue entries to check (1-189)'
+        description: 'Number of Steam catalogue entries to check'
         required: true
         default: '20'
         type: string
@@ -45,8 +45,8 @@ jobs:
           const offset = process.env.AUDIT_OFFSET;
           if (!/^[1-9]\d*$/.test(limit) || !/^(0|[1-9]\d*)$/.test(offset) ||
               !Number.isSafeInteger(Number(limit)) || !Number.isSafeInteger(Number(offset)) ||
-              Number(limit) > 189 || Number(offset) >= 189 || Number(limit) + Number(offset) > 189) {
-            console.error('Choose a positive limit and non-negative offset within the 189 Steam entries.');
+              Number(limit) > catalogueSize || Number(offset) >= catalogueSize || Number(limit) + Number(offset) > catalogueSize) {
+            console.error(`Choose a positive limit and non-negative offset within the ${catalogueSize} Steam entries.`);
             process.exit(1);
           }
           NODE
