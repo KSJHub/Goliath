@@ -26,17 +26,17 @@ const DISABLED_COLOR = '#ED4245';
 const MODULE = 'automod';
 
 const AUTOMOD_RULES = {
-  antiSpam: { label: '🚫 Spam', title: '🚫 Spam Protection', editLabel: '⏱️ Limits', defaults: { enabled: false, maxMessages: 5, intervalSeconds: 10, actions: ['delete'] } },
-  antiLinks: { label: '🔗 Links', title: '🔗 Link Protection', editLabel: '🌐 Domains', defaults: { enabled: false, allowStaff: true, allowedDomains: [], deniedDomains: [], actions: ['delete'] } },
-  badWords: { label: '🤬 Bad Words', title: '🤬 Bad Word Filter', editLabel: '📝 Word List', defaults: { enabled: false, words: [], actions: ['delete'] } },
-  caps: { label: '🔠 Caps', title: '🔠 Caps Protection', editLabel: '📏 Thresholds', defaults: { enabled: false, percent: 70, minLength: 12, actions: ['warn'] } },
-  mentions: { label: '📣 Mentions', title: '📣 Mention Protection', editLabel: '📣 Limits', defaults: { enabled: false, maxMentions: 5, maxUserMentions: 5, maxRoleMentions: 3, blockEveryone: true, risk: 35, timeoutMinutes: 10, actions: ['warn'] } },
-  invites: { label: '✉️ Invites', title: '✉️ Invite Protection', editLabel: '🔗 Invites', defaults: { enabled: false, allowOwnServer: true, allowedCodes: [], risk: 35, timeoutMinutes: 10, actions: ['delete'] } },
-  duplicates: { label: '♻️ Duplicates', title: '♻️ Duplicate Protection', editLabel: '⏱️ Limits', defaults: { enabled: false, maxDuplicates: 3, intervalSeconds: 30, risk: 25, timeoutMinutes: 10, actions: ['delete'] } },
-  flood: { label: '🌊 Flood', title: '🌊 Flood Protection', editLabel: '📏 Limits', defaults: { enabled: false, maxLines: 12, maxCharacters: 1800, maxRepeatedCharacters: 12, risk: 20, timeoutMinutes: 10, actions: ['delete'] } },
-  emojiSpam: { label: '😀 Emoji', title: '😀 Emoji Protection', editLabel: '😀 Limit', defaults: { enabled: false, maxEmojis: 15, risk: 15, timeoutMinutes: 10, actions: ['delete'] } },
-  attachments: { label: '📎 Attachments', title: '📎 Attachment Protection', editLabel: '📎 Limits', defaults: { enabled: false, maxAttachments: 5, blockedExtensions: [], risk: 20, timeoutMinutes: 10, actions: ['delete'] } },
-  scamPatterns: { label: '🚨 Suspicious', title: '🚨 Suspicious Content Protection', editLabel: '📝 Patterns', defaults: { enabled: false, phrases: [], risk: 45, timeoutMinutes: 30, actions: ['delete', 'timeout'] } },
+  antiSpam: { label: `${EMOJIS.AUTOMOD_SPAM} Spam`, title: `${EMOJIS.AUTOMOD_SPAM} Spam Protection`, editLabel: `${EMOJIS.AUTOMOD_LIMITS} Limits`, defaults: { enabled: false, maxMessages: 5, intervalSeconds: 10, actions: ['delete'] } },
+  antiLinks: { label: `${EMOJIS.AUTOMOD_LINKS} Links`, title: `${EMOJIS.AUTOMOD_LINKS} Link Protection`, editLabel: `${EMOJIS.AUTOMOD_DOMAINS} Domains`, defaults: { enabled: false, allowStaff: true, allowedDomains: [], deniedDomains: [], actions: ['delete'] } },
+  badWords: { label: `${EMOJIS.AUTOMOD_BAD_WORDS} Bad Words`, title: `${EMOJIS.AUTOMOD_BAD_WORDS} Bad Word Filter`, editLabel: `${EMOJIS.NOTE} Word List`, defaults: { enabled: false, words: [], actions: ['delete'] } },
+  caps: { label: `${EMOJIS.AUTOMOD_CAPS} Caps`, title: `${EMOJIS.AUTOMOD_CAPS} Caps Protection`, editLabel: `${EMOJIS.AUTOMOD_THRESHOLDS} Thresholds`, defaults: { enabled: false, percent: 70, minLength: 12, actions: ['warn'] } },
+  mentions: { label: `${EMOJIS.AUTOMOD_MENTIONS} Mentions`, title: `${EMOJIS.AUTOMOD_MENTIONS} Mention Protection`, editLabel: `${EMOJIS.AUTOMOD_MENTIONS} Limits`, defaults: { enabled: false, maxMentions: 5, maxUserMentions: 5, maxRoleMentions: 3, blockEveryone: true, risk: 35, timeoutMinutes: 10, actions: ['warn'] } },
+  invites: { label: `${EMOJIS.AUTOMOD_INVITES} Invites`, title: `${EMOJIS.AUTOMOD_INVITES} Invite Protection`, editLabel: `${EMOJIS.AUTOMOD_LINKS} Invites`, defaults: { enabled: false, allowOwnServer: true, allowedCodes: [], risk: 35, timeoutMinutes: 10, actions: ['delete'] } },
+  duplicates: { label: `${EMOJIS.AUTOMOD_DUPLICATES} Duplicates`, title: `${EMOJIS.AUTOMOD_DUPLICATES} Duplicate Protection`, editLabel: `${EMOJIS.AUTOMOD_LIMITS} Limits`, defaults: { enabled: false, maxDuplicates: 3, intervalSeconds: 30, risk: 25, timeoutMinutes: 10, actions: ['delete'] } },
+  flood: { label: `${EMOJIS.AUTOMOD_FLOOD} Flood`, title: `${EMOJIS.AUTOMOD_FLOOD} Flood Protection`, editLabel: `${EMOJIS.AUTOMOD_THRESHOLDS} Limits`, defaults: { enabled: false, maxLines: 12, maxCharacters: 1800, maxRepeatedCharacters: 12, risk: 20, timeoutMinutes: 10, actions: ['delete'] } },
+  emojiSpam: { label: `${EMOJIS.AUTOMOD_EMOJI} Emoji`, title: `${EMOJIS.AUTOMOD_EMOJI} Emoji Protection`, editLabel: `${EMOJIS.AUTOMOD_EMOJI} Limit`, defaults: { enabled: false, maxEmojis: 15, risk: 15, timeoutMinutes: 10, actions: ['delete'] } },
+  attachments: { label: `${EMOJIS.AUTOMOD_ATTACHMENTS} Attachments`, title: `${EMOJIS.AUTOMOD_ATTACHMENTS} Attachment Protection`, editLabel: `${EMOJIS.AUTOMOD_ATTACHMENTS} Limits`, defaults: { enabled: false, maxAttachments: 5, blockedExtensions: [], risk: 20, timeoutMinutes: 10, actions: ['delete'] } },
+  scamPatterns: { label: `${EMOJIS.AUTOMOD_SUSPICIOUS} Suspicious`, title: `${EMOJIS.AUTOMOD_SUSPICIOUS} Suspicious Content Protection`, editLabel: `${EMOJIS.NOTE} Patterns`, defaults: { enabled: false, phrases: [], risk: 45, timeoutMinutes: 30, actions: ['delete', 'timeout'] } },
 };
 const AUTOMOD_RULE_KEYS = Object.keys(AUTOMOD_RULES);
 const AUTOMOD_ACTIONS = ['dm', 'delete', 'warn', 'timeout', 'kick', 'ban'];
@@ -307,7 +307,7 @@ function buildAutomodRulePanel(guild, key, name = 'Unknown User') {
   return {
     embeds: [createEmbed(meta.title, [`**Status:** ${status(rule.enabled)}`, '', ruleSummary(key, rule), '', 'Choose the exact settings and select every action that should run when this rule triggers.'].join('\n'), name, rule.enabled ? ENABLED_COLOR : DISABLED_COLOR)],
     components: [
-      row(button(`${route}:toggle`, rule.enabled ? 'Disable' : 'Enable', rule.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button(`${route}:edit`, meta.editLabel), button(`${route}:dm`, '✉️ DM Notice', ButtonStyle.Secondary)),
+      row(button(`${route}:toggle`, rule.enabled ? 'Disable' : 'Enable', rule.enabled ? ButtonStyle.Danger : ButtonStyle.Success), button(`${route}:edit`, meta.editLabel), button(`${route}:dm`, `${EMOJIS.AUTOMOD_INVITES} DM Notice`, ButtonStyle.Secondary)),
       row(buildActionSelect(key, rule)),
       navRow(route, nextRuleId(key), `${route}:edit`),
     ],
