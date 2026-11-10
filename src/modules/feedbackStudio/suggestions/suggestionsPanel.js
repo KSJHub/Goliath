@@ -1,5 +1,4 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
