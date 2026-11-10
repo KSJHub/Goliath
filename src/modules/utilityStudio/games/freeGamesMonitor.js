@@ -321,7 +321,8 @@ function finishUpdate(guildId, appId, itemId, activeRoutes) {
     const pending = current.pending.filter(entry => entry.item.id !== itemId ||
       !activeRoutes.every(route => ['delivered', 'recovered'].includes(routeStatus(entry, route.channelId))));
     return { ...current, pending, lastSuccess: pending.length !== current.pending.length ? Date.now() : current.lastSuccess,
-      error: pending.some(entry => entry.status === 'ambiguous') ? 'Some deliveries need review.' : null };
+      error: pending.some(entry => entry.status === 'ambiguous') ? 'Some deliveries need review.' :
+        pending.length === current.pending.length ? current.error : null };
   });
 }
 function matchesSentUpdate(message, guild, item) {
