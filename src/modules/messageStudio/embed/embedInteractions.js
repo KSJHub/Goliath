@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
@@ -78,16 +79,16 @@ async function roleIsSafe(roleId, guild) {
 async function executeRoleAction(interaction, action, value) {
   if (!interaction.deferred && !interaction.replied) { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); interaction.__goliathEmbedRoleAction = true; }
   const roleId = String(resolved(value, interaction) || '').match(/\d{15,25}/)?.[0] || null;
-  if (!roleId) return ephemeral(interaction, '❌ This button does not have a valid role configured.');
+  if (!roleId) return ephemeral(interaction, emojiLabel('ERROR', 'This button does not have a valid role configured.'));
   const safe = await roleIsSafe(roleId, interaction.guild);
   if (!safe.ok) return ephemeral(interaction, `❌ ${safe.reason}`);
   const role = safe.role;
   const member = interaction.member?.roles?.cache ? interaction.member : await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-  if (!member) return ephemeral(interaction, '❌ Your server member record could not be loaded.');
+  if (!member) return ephemeral(interaction, emojiLabel('ERROR', 'Your server member record could not be loaded.'));
   const result = await applyEmbedRoleMutation(member, role, action, interaction.user.tag || interaction.user.id);
   if (result.outcome === 'already-has-role') return ephemeral(interaction, `ℹ️ You already have **${role.name}**.`);
   if (result.outcome === 'missing-role') return ephemeral(interaction, `ℹ️ You do not have **${role.name}**.`);
-  return ephemeral(interaction, `${result.outcome === 'removed' ? '✅ Removed' : '✅ Added'} **${role.name}**.`);
+  return ephemeral(interaction, `${result.outcome === 'removed' ? emojiLabel('HEALTHY', 'Removed') : emojiLabel('HEALTHY', 'Added')} **${role.name}**.`);
 }
 async function handleButtonAction(interaction) {
   if (!interaction?.isButton?.()) return false;
@@ -96,7 +97,7 @@ async function handleButtonAction(interaction) {
   const { button } = resolveButton(interaction);
   const action = normalizeEmbedButtonAction(button?.action || legacyEmbedButtonActionFromId(id));
   const value = button?.actionValue ?? button?.value ?? '';
-  if (!action || action === 'custom' || action === 'none') { await ephemeral(interaction, 'ℹ️ This button does not have an action configured yet.'); return true; }
+  if (!action || action === 'custom' || action === 'none') { await ephemeral(interaction, emojiLabel('INFO', 'This button does not have an action configured yet.')); return true; }
   if (action === 'reply' || action === 'message') { await ephemeral(interaction, resolved(value || 'Button pressed.', interaction).slice(0, 2000) || 'Button pressed.'); return true; }
   if (EMBED_ROLE_BUTTON_ACTIONS.has(action)) { await executeRoleAction(interaction, action, value); return true; }
   if (action === 'user-info') {
@@ -1238,12 +1239,12 @@ async function handleBuilderInteractions(i) {
     if (customId === 'embed:button-row-select') { if (buttonIndex == null) return updateButtons(i); const raw = String(i.values?.[0] || 'auto'); const row = manualRow(raw); if (raw !== 'auto' && row == null) return true; if (row != null) { const assigned = buttons.filter((button, idx) => idx !== buttonIndex && manualRow(button?.row) === row).length; if (assigned >= panel.MAX_BUTTONS_PER_ROW) { await i.reply({ content: `⚠️ Row ${row + 1} already has ${panel.MAX_BUTTONS_PER_ROW} explicitly placed buttons. Choose another row or Auto placement.`, flags: 64 }); return true; } } buttons[buttonIndex] = { ...buttons[buttonIndex], row: row == null ? null : row }; saveButtons(i, state, buttons, buttonIndex); return updateButtonOptions(i); }
   }
 
-  if (i.isRoleSelectMenu?.() && customId === 'embed:button-action-role') { if (buttonIndex == null || !roleAction(buttons[buttonIndex]?.action)) return updateButtonOptions(i); const roleId = String(i.values?.[0] || ''); if (!i.deferred && !i.replied) await i.deferUpdate(); const role = i.guild?.roles?.cache?.get?.(roleId) || (await i.guild?.roles?.fetch?.(roleId).catch(() => null)); if (!role || role.id === i.guildId || role.managed) { await i.followUp({ content: '⚠️ Select a normal server role. Managed/integration roles and @everyone cannot be used.', flags: MessageFlags.Ephemeral }); return true; } buttons[buttonIndex] = { ...buttons[buttonIndex], actionValue: role.id }; saveButtons(i, state, buttons, buttonIndex); return updateButtonOptions(i); }
+  if (i.isRoleSelectMenu?.() && customId === 'embed:button-action-role') { if (buttonIndex == null || !roleAction(buttons[buttonIndex]?.action)) return updateButtonOptions(i); const roleId = String(i.values?.[0] || ''); if (!i.deferred && !i.replied) await i.deferUpdate(); const role = i.guild?.roles?.cache?.get?.(roleId) || (await i.guild?.roles?.fetch?.(roleId).catch(() => null)); if (!role || role.id === i.guildId || role.managed) { await i.followUp({ content: emojiLabel('WARNING', 'Select a normal server role. Managed/integration roles and @everyone cannot be used.'), flags: MessageFlags.Ephemeral }); return true; } buttons[buttonIndex] = { ...buttons[buttonIndex], actionValue: role.id }; saveButtons(i, state, buttons, buttonIndex); return updateButtonOptions(i); }
 
   if (i.isModalSubmit?.() && customId.startsWith('embed:appearance-details-save:')) { saveAppearance(i, state, { authorName: i.fields.getTextInputValue('authorName'), authorUrl: i.fields.getTextInputValue('authorUrl'), footer: i.fields.getTextInputValue('footer') }); await i.reply({ ...panel.buildContentManagerPanel(i), flags: 64 }); return true; }
   if (i.isModalSubmit?.() && customId.startsWith('embed:appearance-icon-url-save:')) { const kind = customId.split(':')[3]; if (!validKind(kind)) return true; saveAppearance(i, state, { [iconField(kind)]: i.fields.getTextInputValue('source') }); await i.reply({ ...panel.buildAppearanceIconPanel(i, kind), flags: 64 }); return true; }
-  if (i.isModalSubmit?.() && customId.startsWith('embed:appearance-icon-upload-save:')) { const kind = customId.split(':').pop(); if (!validKind(kind)) return true; const uploaded = i.fields.getUploadedFiles('icon_file', true); const attachment = [...(uploaded?.values?.() || [])][0]; if (!attachment) { await i.reply({ content: 'No icon was uploaded.', flags: 64 }); return true; } const contentType = String(attachment.contentType || '').toLowerCase(); if (contentType && !contentType.startsWith('image/')) { await i.reply({ content: '⚠️ Author and footer icons must be image files.', flags: 64 }); return true; } await i.deferReply({ flags: MessageFlags.Ephemeral }); try { await media.ensureAssetCached('global', attachment.url); } catch (error) { console.warn('[Embed Media] appearance icon persistence failed:', attachment?.name || attachment?.url, error?.message || error); } saveAppearance(i, state, { [iconField(kind)]: attachment.url }); await i.editReply({ content: `✅ ${kind === 'author' ? 'Author' : 'Footer'} icon uploaded.`, ...panel.buildAppearanceIconPanel(i, kind) }); return true; }
-  if (i.isModalSubmit?.() && customId === 'embed:thumbnail-upload-save') { const uploaded = i.fields.getUploadedFiles('thumbnail_file', true); const attachment = [...(uploaded?.values?.() || [])][0]; if (!attachment) { await i.reply({ content: 'No thumbnail was uploaded.', flags: 64 }); return true; } const contentType = String(attachment.contentType || '').toLowerCase(); if (contentType && !contentType.startsWith('image/')) { await i.reply({ content: '⚠️ Thumbnails must be image files.', flags: 64 }); return true; } await i.deferReply({ flags: MessageFlags.Ephemeral }); try { await media.ensureAssetCached('global', attachment.url); } catch (error) { console.warn('[Embed Media] thumbnail persistence failed:', attachment?.name || attachment?.url, error?.message || error); } saveThumbnailState(i, state, { source: attachment.url, alt: attachment.description || attachment.name || '' }); await i.editReply({ content: '✅ Thumbnail uploaded.', ...panel.buildThumbnailOptionsPanel(i) }); return true; }
+  if (i.isModalSubmit?.() && customId.startsWith('embed:appearance-icon-upload-save:')) { const kind = customId.split(':').pop(); if (!validKind(kind)) return true; const uploaded = i.fields.getUploadedFiles('icon_file', true); const attachment = [...(uploaded?.values?.() || [])][0]; if (!attachment) { await i.reply({ content: 'No icon was uploaded.', flags: 64 }); return true; } const contentType = String(attachment.contentType || '').toLowerCase(); if (contentType && !contentType.startsWith('image/')) { await i.reply({ content: emojiLabel('WARNING', 'Author and footer icons must be image files.'), flags: 64 }); return true; } await i.deferReply({ flags: MessageFlags.Ephemeral }); try { await media.ensureAssetCached('global', attachment.url); } catch (error) { console.warn('[Embed Media] appearance icon persistence failed:', attachment?.name || attachment?.url, error?.message || error); } saveAppearance(i, state, { [iconField(kind)]: attachment.url }); await i.editReply({ content: `✅ ${kind === 'author' ? 'Author' : 'Footer'} icon uploaded.`, ...panel.buildAppearanceIconPanel(i, kind) }); return true; }
+  if (i.isModalSubmit?.() && customId === 'embed:thumbnail-upload-save') { const uploaded = i.fields.getUploadedFiles('thumbnail_file', true); const attachment = [...(uploaded?.values?.() || [])][0]; if (!attachment) { await i.reply({ content: 'No thumbnail was uploaded.', flags: 64 }); return true; } const contentType = String(attachment.contentType || '').toLowerCase(); if (contentType && !contentType.startsWith('image/')) { await i.reply({ content: emojiLabel('WARNING', 'Thumbnails must be image files.'), flags: 64 }); return true; } await i.deferReply({ flags: MessageFlags.Ephemeral }); try { await media.ensureAssetCached('global', attachment.url); } catch (error) { console.warn('[Embed Media] thumbnail persistence failed:', attachment?.name || attachment?.url, error?.message || error); } saveThumbnailState(i, state, { source: attachment.url, alt: attachment.description || attachment.name || '' }); await i.editReply({ content: emojiLabel('HEALTHY', 'Thumbnail uploaded.'), ...panel.buildThumbnailOptionsPanel(i) }); return true; }
 
   if (i.isModalSubmit?.() && (customId === 'embed:field-manager-save-new' || customId.startsWith('embed:field-manager-save:'))) { const name = String(i.fields.getTextInputValue('name') || '').trim(); const value = String(i.fields.getTextInputValue('value') || '').trim(); if (!name || !value) { await i.reply({ content: 'Field name and content are required.', flags: 64 }); return true; } const editingIndex = customId === 'embed:field-manager-save-new' ? null : Number(customId.split(':').pop()); let nextFieldIndex; if (editingIndex == null) { if (fields.length >= panel.MAX_EMBED_FIELDS) { await i.reply({ content: `Maximum of ${panel.MAX_EMBED_FIELDS} fields reached.`, flags: 64 }); return true; } fields.push({ name: name.slice(0, 256), value: value.slice(0, 1024), inline: false }); nextFieldIndex = fields.length - 1; } else { const existing = fields[editingIndex] || { inline: false }; fields[editingIndex] = { ...existing, name: name.slice(0, 256), value: value.slice(0, 1024), inline: Boolean(existing.inline) }; nextFieldIndex = editingIndex; } saveFields(i, state, fields, nextFieldIndex); return replyFields(i); }
   if (i.isModalSubmit?.() && (customId === 'embed:button-manager-save-new' || customId.startsWith('embed:button-manager-save:'))) { const label = String(i.fields.getTextInputValue('label') || '').trim().slice(0, 80); const emoji = String(i.fields.getTextInputValue('emoji') || '').trim().slice(0, 100); const url = String(i.fields.getTextInputValue('url') || '').trim(); if (!label) { await i.reply({ content: 'A button label is required.', flags: 64 }); return true; } if (!validUrlOrVariable(url)) { await i.reply({ content: 'Button links must be HTTP/HTTPS URLs or a URL-producing Embed Studio variable.', flags: 64 }); return true; } const editingIndex = customId === 'embed:button-manager-save-new' ? null : Number(customId.split(':').pop()); const existing = Number.isInteger(editingIndex) ? (buttons[editingIndex] || {}) : {}; const entry = { ...existing, label, emoji, url, ...(url ? { action: '', actionValue: '' } : {}), style: ['primary', 'secondary', 'success', 'danger'].includes(String(existing.style || '').toLowerCase()) ? String(existing.style).toLowerCase() : 'primary' }; let nextButtonIndex; if (editingIndex == null) { if (buttons.length >= panel.MAX_EMBED_BUTTONS) { await i.reply({ content: `Maximum of ${panel.MAX_EMBED_BUTTONS} buttons reached.`, flags: 64 }); return true; } buttons.push({ ...entry, action: '', actionValue: '', row: null }); nextButtonIndex = buttons.length - 1; } else { buttons[editingIndex] = entry; nextButtonIndex = editingIndex; } saveButtons(i, state, buttons, nextButtonIndex); return replyButtons(i); }
@@ -1629,7 +1630,7 @@ async function handleCoreInteraction(i) {
 
     if (!source && !attachments.length) {
       await i.reply({
-        content: '⚠️ Add a Source URL / Variable or upload at least one file.',
+        content: emojiLabel('WARNING', 'Add a Source URL / Variable or upload at least one file.'),
         flags: 64,
       });
       return true;
@@ -1710,7 +1711,7 @@ async function handleCoreInteraction(i) {
 
     if (!addedGallery && !addedFiles) {
       await i.editReply({
-        content: '⚠️ Nothing could be added because the applicable media/file limits have been reached.',
+        content: emojiLabel('WARNING', 'Nothing could be added because the applicable media/file limits have been reached.'),
         flags: 64,
       });
       return true;
@@ -1744,7 +1745,7 @@ async function handleCoreInteraction(i) {
     if (i.message?.edit) {
       try {
         await i.message.edit(mediaPanelPayload);
-        await i.editReply({ content: '✅ Media Manager updated.' });
+        await i.editReply({ content: emojiLabel('HEALTHY', 'Media Manager updated.') });
         return true;
       } catch (error) {
         console.warn('[Embed Media] Could not refresh original editor message:', error?.message || error);
@@ -1889,7 +1890,7 @@ async function handleCoreInteraction(i) {
 
         await i.editReply({
           content: rollbackSucceeded
-            ? '❌ The embed could not be fully saved by Goliath. The Discord message was rolled back and the editor remains unsaved.'
+            ? emojiLabel('ERROR', 'The embed could not be fully saved by Goliath. The Discord message was rolled back and the editor remains unsaved.')
             : `🚨 The embed could not be fully saved by Goliath, and the Discord message could not be rolled back. Message ID: ${sent.id}. The editor remains unsaved and this deployment requires reconciliation.`,
           });
       } else {
@@ -2026,7 +2027,7 @@ async function handleLegacyInteraction(i) {
     if (!/^\d{17,20}$/.test(channelId)) {
       await i.reply({
         content:
-          '❌ That is not a valid Discord channel ID.',
+          emojiLabel('ERROR', 'That is not a valid Discord channel ID.'),
         flags: MessageFlags.Ephemeral,
       });
 
@@ -2051,7 +2052,7 @@ async function handleLegacyInteraction(i) {
     ) {
       await i.editReply({
         content:
-          '❌ That channel was not found in this server, or it is not a text/announcement channel.',
+          emojiLabel('ERROR', 'That channel was not found in this server, or it is not a text/announcement channel.'),
       });
 
       return true;
