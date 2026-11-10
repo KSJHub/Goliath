@@ -31,8 +31,8 @@ function overview(interaction) {
   const memberLinks = invites.listInviteLinks(interaction.guildId).filter((link) => link.personal).length;
   const trackedJoins = Number(section.analytics?.tracked || 0);
   return {
-    embeds: [new EmbedBuilder().setColor(enabled ? 0x57F287 : 0xED4245).setTitle('📨 Invite Studio')
-      .setDescription('Manage server invitations, member referrals and invite leaderboards.\n\n' + (enabled ? '🟢 **Module Enabled**' : '🔴 **Module Disabled**'))
+    embeds: [new EmbedBuilder().setColor(enabled ? 0x57F287 : 0xED4245).setTitle(emojiLabel('USER_INVITES', 'Invite Studio'))
+      .setDescription('Manage server invitations, member referrals and invite leaderboards.\n\n' + (enabled ? emojiLabel('ENABLED', '**Module Enabled**') : emojiLabel('DISABLED', '**Module Disabled**')))
       .addFields(
         { name: 'Official Invite', value: invites.officialDisplayUrl(interaction.guildId) || 'Not configured', inline: true },
         { name: 'Public Panel', value: section.settings.publicPanel.messageId ? 'Deployed' : 'Not deployed', inline: true },
@@ -64,24 +64,24 @@ function officialView(interaction) {
     JSON.stringify([...(link.roleIds || [])].sort()) === JSON.stringify([...(config.roleIds || [])].sort());
   const needsUpdate = configured && (!matching || live?.exists === false);
   const updateArmed = state.officialConfirm?.action === 'update' && state.officialConfirm.until > Date.now();
-  const liveStatus = !configured ? '⚪ Not configured' :
-    live?.exists === false ? '🔴 Link unavailable — update required' :
-    !matching ? '🟠 Changes saved — update required' :
-    live?.exists === true ? '🟢 Verified active' : '🟡 Configured — not recently verified';
+  const liveStatus = !configured ? emojiLabel('INACTIVE', 'Not configured') :
+    live?.exists === false ? emojiLabel('DISABLED', 'Link unavailable — update required') :
+    !matching ? emojiLabel('SEVERITY_HIGH', 'Changes saved — update required') :
+    live?.exists === true ? emojiLabel('ENABLED', 'Verified active') : emojiLabel('SEVERITY_MEDIUM', 'Configured — not recently verified');
   const officialDestination = config.channelId ? `<#${config.channelId}>` : 'Not selected';
   const officialUses = configured ? (live?.exists ? `${live.uses} (Discord)` : `${link?.uses || 0} (recorded)`) : '—';
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🔗 Invite Management')
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('AUTOMOD_LINKS', 'Invite Management'))
       .setDescription('Choose the invite destination and optional join roles. Every official and member referral link is permanent, unlimited, and uses these settings.')
       .addFields(
-        { name: '🌍 OFFICIAL INVITE', value: `**${liveStatus}**\n${invites.officialDisplayUrl(interaction.guildId) || 'No invite link created'}`, inline: false },
-        { name: '⭐ Official Link Type', value: config.linkType === 'vanity' ? `Custom / Vanity${config.vanityCode ? ` · discord.gg/${config.vanityCode}` : ' · Standard fallback active'}` : 'Standard Discord Invite', inline: false },
-        { name: '✨ Vanity Availability', value: !vanity ? '🟡 Not checked' : vanity.status === 'active' ? `🟢 ${vanity.detail}` : vanity.status === 'permission' ? `🔴 ${vanity.detail}` : vanity.status === 'unavailable' ? `⚪ ${vanity.detail}` : `🟡 ${vanity.detail}`, inline: false },
-        { name: '📍 Destination', value: officialDestination, inline: true },
-        { name: '👥 Uses', value: officialUses, inline: true },
-        { name: '♾️ Link Policy', value: 'Never expires · Unlimited uses', inline: true },
-        { name: '🎭 Join Roles', value: roleList(config.roleIds), inline: true },
-        { name: '👥 MEMBER INVITES', value: `${member.enabled ? '🟢 Enabled' : '🔴 Disabled'} · **${memberLinks}** personal links\nMembers share individual links to earn tracked referrals.`, inline: false },
+        { name: emojiLabel('INVITE_GLOBE', 'OFFICIAL INVITE'), value: `**${liveStatus}**\n${invites.officialDisplayUrl(interaction.guildId) || 'No invite link created'}`, inline: false },
+        { name: emojiLabel('USER_STARBOARD', 'Official Link Type'), value: config.linkType === 'vanity' ? `Custom / Vanity${config.vanityCode ? ` · discord.gg/${config.vanityCode}` : ' · Standard fallback active'}` : 'Standard Discord Invite', inline: false },
+        { name: emojiLabel('INVITE_SPARKLES', 'Vanity Availability'), value: !vanity ? emojiLabel('SEVERITY_MEDIUM', 'Not checked') : vanity.status === 'active' ? `🟢 ${vanity.detail}` : vanity.status === 'permission' ? `🔴 ${vanity.detail}` : vanity.status === 'unavailable' ? `⚪ ${vanity.detail}` : `🟡 ${vanity.detail}`, inline: false },
+        { name: emojiLabel('WELCOME_LOCATION', 'Destination'), value: officialDestination, inline: true },
+        { name: emojiLabel('MOD_STAFF', 'Uses'), value: officialUses, inline: true },
+        { name: emojiLabel('INVITE_UNLIMITED', 'Link Policy'), value: 'Never expires · Unlimited uses', inline: true },
+        { name: emojiLabel('USER_ROLES', 'Join Roles'), value: roleList(config.roleIds), inline: true },
+        { name: emojiLabel('MOD_STAFF', 'MEMBER INVITES'), value: `${member.enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled')} · **${memberLinks}** personal links\nMembers share individual links to earn tracked referrals.`, inline: false },
         { name: 'Shared Settings', value: 'Same destination and join roles as the official invite · Never expires · Unlimited uses', inline: false },
         ...(!config.channelId ? [{ name: emojiLabel('WARNING', 'Setup Required'), value: 'Select an official destination channel before creating the invite.', inline: false }] : []),
 
@@ -90,13 +90,13 @@ function officialView(interaction) {
 
       )],
     components: [
-      row(new StringSelectMenuBuilder().setCustomId('invites:official-link-type').setPlaceholder('⭐ Official invite type').addOptions([{ label: 'Standard Discord Invite', value: 'standard', default: config.linkType !== 'vanity' }, { label: 'Custom / Vanity Invite', value: 'vanity', default: config.linkType === 'vanity', description: 'Uses vanity when available; otherwise standard fallback' }])),
-      row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder('📍 Official invite destination').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, '🎭 Official join roles (optional)', info))] : []),
+      row(new StringSelectMenuBuilder().setCustomId('invites:official-link-type').setPlaceholder(emojiLabel('USER_STARBOARD', 'Official invite type')).addOptions([{ label: 'Standard Discord Invite', value: 'standard', default: config.linkType !== 'vanity' }, { label: 'Custom / Vanity Invite', value: 'vanity', default: config.linkType === 'vanity', description: 'Uses vanity when available; otherwise standard fallback' }])),
+      row(new ChannelSelectMenuBuilder().setCustomId('invites:official-channel').setPlaceholder(emojiLabel('WELCOME_LOCATION', 'Official invite destination')).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
+      ...(info.roles.length ? [row(rolePageSelect(`invites:official-roles:${info.page}`, emojiLabel('USER_ROLES', 'Official join roles (optional)'), info))] : []),
 
-      row(button('invites:official-create', !configured ? '📢 Create Invite' : updateArmed ? emojiLabel('WARNING', 'Confirm Replacement') : needsUpdate ? emojiLabel('REFRESH', 'Update Invite') : '💾 Save Invite Settings', updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId),
-        button('invites:official-verify', '🔍 Verify Link', ButtonStyle.Secondary),
-        button('invites:invite-manager', '👥 Member Invites', ButtonStyle.Secondary)),
+      row(button('invites:official-create', !configured ? emojiLabel('WELCOME_CHANNEL', 'Create Invite') : updateArmed ? emojiLabel('WARNING', 'Confirm Replacement') : needsUpdate ? emojiLabel('REFRESH', 'Update Invite') : emojiLabel('PRESETS', 'Save Invite Settings'), updateArmed ? ButtonStyle.Danger : ButtonStyle.Success, !config.channelId),
+        button('invites:official-verify', emojiLabel('SEARCH', 'Verify Link'), ButtonStyle.Secondary),
+        button('invites:invite-manager', emojiLabel('MOD_STAFF', 'Member Invites'), ButtonStyle.Secondary)),
       row(actionButton('invites:home', 'back'), actionButton('invites:admin-config', 'settings'),
         button('invites:official-role-prev', emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary, info.page === 0),
         button('invites:official-role-next', emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary, info.page >= info.pages - 1)),
@@ -112,16 +112,16 @@ function publicView(interaction) {
   const ready = Boolean(config.channelId && official.code);
   const verified = sessionFor(interaction).panelDeployment;
   const deployed = Boolean(config.messageId && config.channelId && verified?.messageId === config.messageId && verified?.channelId === config.channelId && verified.status === 'deployed');
-  const panelStatus = !config.messageId ? '⚪ Not Deployed' : verified?.messageId === config.messageId && verified?.channelId === config.channelId ? (verified.status === 'deployed' ? '🟢 Deployed' : verified.status === 'missing' ? '⚪ Not Deployed · Message missing' : '🟡 Not Verified') : '🟡 Not Verified';
+  const panelStatus = !config.messageId ? emojiLabel('INACTIVE', 'Not Deployed') : verified?.messageId === config.messageId && verified?.channelId === config.channelId ? (verified.status === 'deployed' ? emojiLabel('ENABLED', 'Deployed') : verified.status === 'missing' ? emojiLabel('INACTIVE', 'Not Deployed · Message missing') : emojiLabel('SEVERITY_MEDIUM', 'Not Verified')) : emojiLabel('SEVERITY_MEDIUM', 'Not Verified');
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('🏆 Public Panel & Leaderboard')
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('MOD_TOP_STAFF', 'Public Panel & Leaderboard'))
       .setDescription('Configure and publish the community invite panel.')
       .addFields(
         { name: 'Panel Status', value: panelStatus, inline: true },
-        { name: 'Panel Channel', value: config.channelId ? `<#${config.channelId}>` : '⚠️ Not selected', inline: true },
+        { name: 'Panel Channel', value: config.channelId ? `<#${config.channelId}>` : emojiLabel('WARNING', 'Not selected'), inline: true },
         { name: 'Leaderboard', value: `Top ${config.leaderboardLimit}`, inline: true },
-        { name: 'Member Invites', value: member.enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-        { name: 'Official Invite', value: official.code ? '🟢 Configured' : '⚠️ Not configured', inline: true },
+        { name: 'Member Invites', value: member.enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled'), inline: true },
+        { name: 'Official Invite', value: official.code ? emojiLabel('ENABLED', 'Configured') : emojiLabel('WARNING', 'Not configured'), inline: true },
         ...(!ready ? [{ name: emojiLabel('WARNING', 'Setup Required'), value: [
           !config.channelId ? 'Select a panel channel.' : null,
           !official.code ? 'Create the official invite.' : null,
@@ -129,11 +129,11 @@ function publicView(interaction) {
       )
       .setFooter({ text: 'Goliath Invites · Public Panel' }).setTimestamp()],
     components: [
-      row(new ChannelSelectMenuBuilder().setCustomId('invites:panel-channel').setPlaceholder('📍 Select panel channel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
+      row(new ChannelSelectMenuBuilder().setCustomId('invites:panel-channel').setPlaceholder(emojiLabel('WELCOME_LOCATION', 'Select panel channel')).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
       row(new StringSelectMenuBuilder().setCustomId('invites:panel-limit').setPlaceholder(`🏆 Leaderboard: Top ${config.leaderboardLimit}`).addOptions([5, 10, 15, 20, 25].map((value) => ({ label: `Top ${value}`, value: String(value) })))),
-      row(button('invites:panel-deploy', deployed ? emojiLabel('REFRESH', 'Update Panel') : '📢 Publish Panel', ButtonStyle.Success, !ready),
-        button('invites:panel-embed-modal', '✏️ Edit Panel', ButtonStyle.Secondary),
-        button('invites:panel-preview', '👁️ Preview Panel', ButtonStyle.Secondary, !official.code),
+      row(button('invites:panel-deploy', deployed ? emojiLabel('REFRESH', 'Update Panel') : emojiLabel('WELCOME_CHANNEL', 'Publish Panel'), ButtonStyle.Success, !ready),
+        button('invites:panel-embed-modal', emojiLabel('EDIT', 'Edit Panel'), ButtonStyle.Secondary),
+        button('invites:panel-preview', emojiLabel('WELCOME_PREVIEW', 'Preview Panel'), ButtonStyle.Secondary, !official.code),
         ),
       row(actionButton('invites:home', 'back'), actionButton('invites:admin-config', 'settings')),
     ],
@@ -155,48 +155,48 @@ function adminView(interaction) {
   const deleteArmed = state.officialConfirm?.action === 'delete' && state.officialConfirm.until > Date.now();
   const pages = {
     home: [emojiLabel('SETTINGS', 'Invite Studio Settings'), 'Choose an area to manage invites, referrals, diagnostics or the public panel.'],
-    health: ['🩺 System Health', 'Run diagnostics and repair supported problems without deliberately replacing permanent links.'],
-    members: ['👥 Member Invites', 'Manage member referral access, invite DMs and individual links or scores.'],
-    official: ['🔗 Official Invite', 'Advanced official invitation maintenance. Destination, roles and vanity preference are configured in Invite Management.'],
-    panel: ['📢 Public Panel', 'Edit, preview, publish and reset the community invitation panel.'],
+    health: [emojiLabel('WELCOME_DIAGNOSTICS', 'System Health'), 'Run diagnostics and repair supported problems without deliberately replacing permanent links.'],
+    members: [emojiLabel('MOD_STAFF', 'Member Invites'), 'Manage member referral access, invite DMs and individual links or scores.'],
+    official: [emojiLabel('AUTOMOD_LINKS', 'Official Invite'), 'Advanced official invitation maintenance. Destination, roles and vanity preference are configured in Invite Management.'],
+    panel: [emojiLabel('WELCOME_CHANNEL', 'Public Panel'), 'Edit, preview, publish and reset the community invitation panel.'],
   };
   const [title, description] = pages[page] || pages.home;
   const embed = new EmbedBuilder().setColor(enabled ? 0x5865F2 : 0xED4245)
     .setTitle(title).setDescription(description)
     .addFields(
-      { name: 'Module', value: enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
-      { name: 'Member Invites', value: `${memberEnabled ? '🟢 On' : '🔴 Off'} · ${links} links`, inline: true },
-      { name: 'Official Invite', value: configured ? '🟢 Configured' : '⚪ Not set', inline: true },
+      { name: 'Module', value: enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled'), inline: true },
+      { name: 'Member Invites', value: `${memberEnabled ? emojiLabel('ENABLED', 'On') : emojiLabel('DISABLED', 'Off')} · ${links} links`, inline: true },
+      { name: 'Official Invite', value: configured ? emojiLabel('ENABLED', 'Configured') : emojiLabel('INACTIVE', 'Not set'), inline: true },
     ).setFooter({ text: 'Goliath Invites · Settings' }).setTimestamp();
   const components = [];
   if (page === 'home') {
     components.push(row(
-      button('invites:settings-health', '🩺 System Health'),
-      button('invites:settings-members', '👥 Member Invites'),
-      button('invites:settings-official', '🔗 Official Invite'),
-      button('invites:settings-panel', '📢 Public Panel'),
+      button('invites:settings-health', emojiLabel('WELCOME_DIAGNOSTICS', 'System Health')),
+      button('invites:settings-members', emojiLabel('MOD_STAFF', 'Member Invites')),
+      button('invites:settings-official', emojiLabel('AUTOMOD_LINKS', 'Official Invite')),
+      button('invites:settings-panel', emojiLabel('WELCOME_CHANNEL', 'Public Panel')),
     ));
     // Keep the original Back and module toggle row unchanged.
     components.push(row(actionButton('invites:home', 'back'),
-      button('invites:toggle', enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success)));
+      button('invites:toggle', enabled ? emojiLabel('USER_PAUSE', 'Disable Module') : emojiLabel('USER_PLAY', 'Enable Module'), enabled ? ButtonStyle.Danger : ButtonStyle.Success)));
   } else {
     if (page === 'health') components.push(row(
-      button('invites:health', '🩺 Run Health Check'),
-      button('invites:repair', '🔧 Repair Invites'),
+      button('invites:health', emojiLabel('WELCOME_DIAGNOSTICS', 'Run Health Check')),
+      button('invites:repair', emojiLabel('UTILITY_WRENCH', 'Repair Invites')),
     ));
     if (page === 'members') {
       components.push(row(
-        button('invites:member-enabled', memberEnabled ? '👥 Member Invites: On' : '👥 Member Invites: Off'),
-        button('invites:member-dm-modal', '✏️ Edit Invite DM'),
+        button('invites:member-enabled', memberEnabled ? emojiLabel('MOD_STAFF', 'Member Invites: On') : emojiLabel('MOD_STAFF', 'Member Invites: Off')),
+        button('invites:member-dm-modal', emojiLabel('EDIT', 'Edit Invite DM')),
         button(resetArmed ? 'invites:leaderboard-reset-confirm' : 'invites:leaderboard-reset-arm',
-          resetArmed ? emojiLabel('WARNING', 'Confirm Leaderboard Reset') : '🏆 Reset Leaderboard'),
+          resetArmed ? emojiLabel('WARNING', 'Confirm Leaderboard Reset') : emojiLabel('MOD_TOP_STAFF', 'Reset Leaderboard')),
       ));
       if (resetArmed) embed.addFields({ name: emojiLabel('WARNING', 'Confirm Score Reset'), value: 'Confirm within 30 seconds to clear leaderboard scores. Personal invite links remain.', inline: false });
     }
     if (page === 'official') {
       components.push(row(
         button('invites:official-regenerate', regenerateArmed ? emojiLabel('WARNING', 'Confirm Replace') : emojiLabel('REFRESH', 'Replace Official Invite'), ButtonStyle.Secondary, !configured),
-        button('invites:official-delete', deleteArmed ? emojiLabel('WARNING', 'Confirm Delete') : '🗑️ Delete Official Invite', ButtonStyle.Secondary, !configured),
+        button('invites:official-delete', deleteArmed ? emojiLabel('WARNING', 'Confirm Delete') : emojiLabel('DELETE', 'Delete Official Invite'), ButtonStyle.Secondary, !configured),
       ));
       if (regenerateArmed) embed.addFields({ name: emojiLabel('WARNING', 'Confirm Invite Replacement'), value: 'Confirm within 30 seconds. The existing official invite URL may stop working.', inline: false });
       if (deleteArmed) embed.addFields({ name: emojiLabel('WARNING', 'Confirm Invite Deletion'), value: 'Confirm within 30 seconds to delete the official invite.', inline: false });
@@ -205,9 +205,9 @@ function adminView(interaction) {
       const config = section.settings.publicPanel;
       const deployment = state.panelDeployment;
       const saved = Boolean(config.channelId && config.messageId);
-      const status = !saved ? '⚪ Not deployed' : deployment?.channelId === config.channelId && deployment?.messageId === config.messageId
-        ? deployment.status === 'deployed' ? '🟢 Deployed' : deployment.status === 'missing' ? '🔴 Message missing' : '🟡 Verification unavailable'
-        : '🟡 Saved · Not yet verified';
+      const status = !saved ? emojiLabel('INACTIVE', 'Not deployed') : deployment?.channelId === config.channelId && deployment?.messageId === config.messageId
+        ? deployment.status === 'deployed' ? emojiLabel('ENABLED', 'Deployed') : deployment.status === 'missing' ? emojiLabel('DISABLED', 'Message missing') : emojiLabel('SEVERITY_MEDIUM', 'Verification unavailable')
+        : emojiLabel('SEVERITY_MEDIUM', 'Saved · Not yet verified');
       embed.addFields({ name: 'Deployment', value: status, inline: false });
       if (saved) embed.addFields(
         { name: 'Panel Channel', value: `<#${config.channelId}>`, inline: true },
@@ -215,14 +215,14 @@ function adminView(interaction) {
         { name: 'Panel Message', value: `[View deployed panel](https://discord.com/channels/${interaction.guildId}/${config.channelId}/${config.messageId})`, inline: false },
       );
       components.push(row(
-        button('invites:panel-embed-modal', '✏️ Edit Panel'),
-        button('invites:panel-preview', '👁️ Preview Panel', ButtonStyle.Secondary, !configured),
-        button('invites:default-panel', panelResetArmed ? emojiLabel('WARNING', 'Confirm Panel Reset') : '🧹 Reset Public Panel'),
+        button('invites:panel-embed-modal', emojiLabel('EDIT', 'Edit Panel')),
+        button('invites:panel-preview', emojiLabel('WELCOME_PREVIEW', 'Preview Panel'), ButtonStyle.Secondary, !configured),
+        button('invites:default-panel', panelResetArmed ? emojiLabel('WARNING', 'Confirm Panel Reset') : emojiLabel('ADMIN_PURGE', 'Reset Public Panel')),
       ));
       if (panelResetArmed) embed.addFields({ name: emojiLabel('WARNING', 'Confirm Panel Reset'), value: 'Confirm within 30 seconds to restore default panel text. Channel, deployed message and invite DM are preserved.', inline: false });
     }
-    components.push(row(actionButton('invites:settings-home', 'back'), ...(page === 'panel' ? [button('invites:settings-panel-delete', panelDeleteArmed ? '⚠️ Confirm Delete Panel' : '🗑️ Delete Deployed Panel', ButtonStyle.Danger, !section.settings.publicPanel.messageId)] : [])));
-    if (page === 'panel' && panelDeleteArmed) embed.addFields({ name: '⚠️ Confirm Deletion', value: 'Confirm within 30 seconds to delete the deployed Discord message and clear its saved deployment IDs. Referral scores and panel design remain intact.', inline: false });
+    components.push(row(actionButton('invites:settings-home', 'back'), ...(page === 'panel' ? [button('invites:settings-panel-delete', panelDeleteArmed ? emojiLabel('WARNING', 'Confirm Delete Panel') : emojiLabel('DELETE', 'Delete Deployed Panel'), ButtonStyle.Danger, !section.settings.publicPanel.messageId)] : [])));
+    if (page === 'panel' && panelDeleteArmed) embed.addFields({ name: emojiLabel('WARNING', 'Confirm Deletion'), value: 'Confirm within 30 seconds to delete the deployed Discord message and clear its saved deployment IDs. Referral scores and panel design remain intact.', inline: false });
   }
   return { embeds: [embed], components };
 }
@@ -235,38 +235,38 @@ function managerView(interaction) {
   const selectedStats = selected ? section.inviters?.[selected.inviterId] || {} : {};
   const selectedScore = Math.max(0, Number(selectedStats.active || 0) + Number(selectedStats.bonus || 0));
   const memberConfirm = selected && state.memberConfirm?.userId === selected.inviterId && state.memberConfirm.until > Date.now() ? state.memberConfirm : null;
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('👥 Member Invite Manager')
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('MOD_STAFF', 'Member Invite Manager'))
     .setDescription('Administrator controls for members’ personal referral links and individual invite scores.')
     .addFields(
       { name: 'Personal Links', value: String(links.length), inline: true },
       { name: 'Tracked Joins', value: String(Number(section.analytics?.tracked || 0)), inline: true },
-      { name: 'Member Invites', value: section.settings.memberInviteTemplate.enabled ? '🟢 Enabled' : '🔴 Disabled', inline: true },
+      { name: 'Member Invites', value: section.settings.memberInviteTemplate.enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled'), inline: true },
     );
   if (!links.length) {
     embed.addFields(
-      { name: 'ℹ️ What is Member Invite Manager?', value: 'Administrators can manage members’ permanent personal referral links, review invite activity and control individual referral scores. Members create their links using **My Invite Link** on the public community panel; those links appear here automatically.' },
-      { name: '🛠️ Management Tools', value: '**Verify Link** — check a member’s invite with Discord.\n**Send Invite DM** — resend their invite message.\n**Remove Member Link** — remove their link without resetting referral history.\n**Reset Member Score** — clear their individual score while keeping the link.' },
-      { name: '📭 No Personal Invites Yet', value: 'No members have generated a personal invite link. Once someone creates one, their link and management options will appear here.' },
+      { name: emojiLabel('INFO', 'What is Member Invite Manager?'), value: 'Administrators can manage members’ permanent personal referral links, review invite activity and control individual referral scores. Members create their links using **My Invite Link** on the public community panel; those links appear here automatically.' },
+      { name: emojiLabel('WELCOME_CUSTOM', 'Management Tools'), value: '**Verify Link** — check a member’s invite with Discord.\n**Send Invite DM** — resend their invite message.\n**Remove Member Link** — remove their link without resetting referral history.\n**Reset Member Score** — clear their individual score while keeping the link.' },
+      { name: emojiLabel('MOD_APPEAL_EMPTY', 'No Personal Invites Yet'), value: 'No members have generated a personal invite link. Once someone creates one, their link and management options will appear here.' },
     );
   } else if (selected) {
-    embed.addFields({ name: 'ℹ️ Member Management', value: 'Verify or resend this member’s link, or use the confirmed removal and score-reset actions below.' });
+    embed.addFields({ name: emojiLabel('INFO', 'Member Management'), value: 'Verify or resend this member’s link, or use the confirmed removal and score-reset actions below.' });
     embed.addFields({ name: 'Selected Member', value: `<@${selected.inviterId}>\n[Personal Invite](${officialUrl(selected.code)}) · ${selected.uses || 0} recorded uses\n**Referral Score:** ${selectedScore}` });
   } else {
-    embed.addFields({ name: 'ℹ️ Member Management', value: 'Select a member to verify or resend their personal invite, remove their link or reset their individual score.' });
+    embed.addFields({ name: emojiLabel('INFO', 'Member Management'), value: 'Select a member to verify or resend their personal invite, remove their link or reset their individual score.' });
     const list = links.slice(0, state.displayLimit || links.length).map((link, index) => `${index + 1}. <@${link.inviterId}> — ${link.uses || 0} recorded uses`).join('\n');
     embed.addFields({ name: 'Member Links', value: list.slice(0, 1024) });
   }
-  if (memberConfirm) embed.addFields({ name: '⚠️ Confirm Member Action', value: memberConfirm.action === 'delete' ? 'Confirm within 30 seconds to remove this member’s personal link. Their referral history is not reset.' : 'Confirm within 30 seconds to reset this member’s referral score. Their personal link will be kept.' });
+  if (memberConfirm) embed.addFields({ name: emojiLabel('WARNING', 'Confirm Member Action'), value: memberConfirm.action === 'delete' ? 'Confirm within 30 seconds to remove this member’s personal link. Their referral history is not reset.' : 'Confirm within 30 seconds to reset this member’s referral score. Their personal link will be kept.' });
   embed.setFooter({ text: 'Goliath Invites · Member Management' }).setTimestamp();
   const components = [];
   if (links.length) {
-    components.push(row(new StringSelectMenuBuilder().setCustomId('invites:manager-display').setPlaceholder('👥 Members shown').addOptions([5, 10, 15, 20, 0].map((value) => ({ label: value ? `Display ${value}` : 'Display All', value: String(value) })))));
-    components.push(row(new UserSelectMenuBuilder().setCustomId('invites:manager-select-member').setPlaceholder('👤 Select a member').setMinValues(1).setMaxValues(1)));
+    components.push(row(new StringSelectMenuBuilder().setCustomId('invites:manager-display').setPlaceholder(emojiLabel('MOD_STAFF', 'Members shown')).addOptions([5, 10, 15, 20, 0].map((value) => ({ label: value ? `Display ${value}` : 'Display All', value: String(value) })))));
+    components.push(row(new UserSelectMenuBuilder().setCustomId('invites:manager-select-member').setPlaceholder(emojiLabel('USER', 'Select a member')).setMinValues(1).setMaxValues(1)));
     if (selected) components.push(row(
-      button('invites:manager-verify', '🔍 Verify Link'),
-      button('invites:manager-resend', '📩 Send Invite DM'),
-      button('invites:manager-delete', memberConfirm?.action === 'delete' ? '⚠️ Confirm Removal' : '🗑️ Remove Member Link'),
-      button('invites:manager-reset-member', memberConfirm?.action === 'reset' ? emojiLabel('WARNING', 'Confirm Score Reset') : '🏆 Reset Member Score'),
+      button('invites:manager-verify', emojiLabel('SEARCH', 'Verify Link')),
+      button('invites:manager-resend', emojiLabel('MESSAGE_INBOX', 'Send Invite DM')),
+      button('invites:manager-delete', memberConfirm?.action === 'delete' ? emojiLabel('WARNING', 'Confirm Removal') : emojiLabel('DELETE', 'Remove Member Link')),
+      button('invites:manager-reset-member', memberConfirm?.action === 'reset' ? emojiLabel('WARNING', 'Confirm Score Reset') : emojiLabel('MOD_TOP_STAFF', 'Reset Member Score')),
     ));
   }
   components.push(row(actionButton('invites:official-settings', 'back')));
@@ -289,15 +289,15 @@ function buildPublicPayload(guildId, sourceSection = null) {
     embeds: [new EmbedBuilder().setColor(panel.color).setTitle(panel.title)
       .setDescription(description)
       .addFields(
-        { name: '🔗 Official Server Invite', value: `**[Join the community](${url})** · ${url}\n​`, inline: false },
-        { name: '💎 Your Personal Invite', value: memberEnabled ? 'Select **My Invite Link** to get your own referral link, share it with friends and climb the rankings. Use **My Stats** to track your progress.\n​' : 'Personal invite creation is currently paused. Your stats and the leaderboard remain available.\n​', inline: false },
+        { name: emojiLabel('AUTOMOD_LINKS', 'Official Server Invite'), value: `**[Join the community](${url})** · ${url}\n​`, inline: false },
+        { name: emojiLabel('WELCOME_EMBED', 'Your Personal Invite'), value: memberEnabled ? 'Select **My Invite Link** to get your own referral link, share it with friends and climb the rankings. Use **My Stats** to track your progress.\n​' : 'Personal invite creation is currently paused. Your stats and the leaderboard remain available.\n​', inline: false },
         { name: `🏆 Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
       )
       .setFooter({ text: panel.footer }).setTimestamp()],
     components: [row(
-      button('invites:member-personal', '🔗 My Invite Link', ButtonStyle.Primary, !memberEnabled),
-      button('invites:member-profile', '📊 My Stats'),
-      button('invites:member-refresh', '🔄 Refresh Leaderboard'),
+      button('invites:member-personal', emojiLabel('AUTOMOD_LINKS', 'My Invite Link'), ButtonStyle.Primary, !memberEnabled),
+      button('invites:member-profile', emojiLabel('ANALYTICS', 'My Stats')),
+      button('invites:member-refresh', emojiLabel('REFRESH', 'Refresh Leaderboard')),
     )],
   };
 }
@@ -310,17 +310,17 @@ function profilePayload(guild, user) {
   const personal = invites.findPersonalInvite(guild.id, user.id);
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2)
-      .setTitle('💎 My Invite Stats')
+      .setTitle(emojiLabel('WELCOME_EMBED', 'My Invite Stats'))
       .setDescription(`Referral progress for **${user.displayName || user.username}**.`)
       .setThumbnail(user.displayAvatarURL?.() || null)
       .addFields(
-        { name: '🏆 Rank', value: rank >= 0 ? `#${rank + 1}` : 'Unranked', inline: true },
-        { name: '💎 Score', value: String(score), inline: true },
-        { name: '👥 Active Referrals', value: String(stats.active || 0), inline: true },
-        { name: '🔗 Personal Invite', value: personal ? `[Open your invite](${officialUrl(personal.code)})\nPermanent · Unlimited uses` : 'No personal link created yet.', inline: false },
+        { name: emojiLabel('MOD_TOP_STAFF', 'Rank'), value: rank >= 0 ? `#${rank + 1}` : 'Unranked', inline: true },
+        { name: emojiLabel('WELCOME_EMBED', 'Score'), value: String(score), inline: true },
+        { name: emojiLabel('MOD_STAFF', 'Active Referrals'), value: String(stats.active || 0), inline: true },
+        { name: emojiLabel('AUTOMOD_LINKS', 'Personal Invite'), value: personal ? `[Open your invite](${officialUrl(personal.code)})\nPermanent · Unlimited uses` : 'No personal link created yet.', inline: false },
       )
       .setFooter({ text: 'Goliath Invites · Member Stats' }).setTimestamp()],
-    components: [row(button('invites:member-personal', personal ? '📩 Resend My Link' : '🔗 Get My Link', ButtonStyle.Primary))],
+    components: [row(button('invites:member-personal', personal ? emojiLabel('MESSAGE_INBOX', 'Resend My Link') : emojiLabel('AUTOMOD_LINKS', 'Get My Link'), ButtonStyle.Primary))],
     flags: MessageFlags.Ephemeral,
   };
 }
@@ -337,9 +337,9 @@ function personalInvitePayload(interaction, result) {
     .setTitle(render(template.dmTitle))
     .setDescription(message || 'Your permanent personal invite is ready to share!')
     .addFields(
-      { name: '🔗 Your Referral Link', value: `**[Open and share your invite](${url})**\n${url}\nPermanent · Unlimited uses` },
-      { name: '🏆 How Referrals Work', value: 'Share your link with friends. Eligible joins contribute to your referral score and leaderboard position.' },
-      { name: '📊 Track Your Progress', value: 'Open the community invite panel and select **My Stats** to view your rank, score and active referrals.' },
+      { name: emojiLabel('AUTOMOD_LINKS', 'Your Referral Link'), value: `**[Open and share your invite](${url})**\n${url}\nPermanent · Unlimited uses` },
+      { name: emojiLabel('MOD_TOP_STAFF', 'How Referrals Work'), value: 'Share your link with friends. Eligible joins contribute to your referral score and leaderboard position.' },
+      { name: emojiLabel('ANALYTICS', 'Track Your Progress'), value: 'Open the community invite panel and select **My Stats** to view your rank, score and active referrals.' },
     )
     .setFooter({ text: result.created ? 'Goliath Invites · Personal Link Created' : 'Goliath Invites · Your Existing Link' })
     .setTimestamp()] };
@@ -367,7 +367,7 @@ function embedModal(interaction) {
 function dmModal(interaction) {
   const config = invites.getSection(interaction.guildId).settings.memberInviteTemplate;
   return new ModalBuilder().setCustomId('invites:member-dm-submit').setTitle('Edit Personal Invite DM').addComponents(
-    row(new TextInputBuilder().setCustomId('title').setLabel('DM Title').setPlaceholder('💎 Your Personal Invite for {server}').setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(config.dmTitle)),
+    row(new TextInputBuilder().setCustomId('title').setLabel('DM Title').setPlaceholder(emojiLabel('WELCOME_EMBED', 'Your Personal Invite for {server}')).setStyle(TextInputStyle.Short).setMaxLength(256).setRequired(true).setValue(config.dmTitle)),
     row(new TextInputBuilder().setCustomId('message').setLabel('Personal Welcome Message').setPlaceholder('Hi {user}! Your personal referral link is ready.').setStyle(TextInputStyle.Paragraph).setMaxLength(3000).setRequired(true).setValue(config.dmMessage)),
   );
 }
