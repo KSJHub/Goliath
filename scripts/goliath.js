@@ -4878,17 +4878,10 @@ async function gameUpdatesAudit() {
   const channel = { id: channelId, type: 0, permissionsFor: () => ({ has: () => allowed }), messages: { fetch: async () => { if (historyError) throw historyError; return { find: fn => messages.find(fn) }; } }, send: async payload => { if (sendError) throw sendError; sent.push(payload); messages.push({ author: { id: 'bot' }, embeds: payload.embeds }); return { id: String(sent.length) }; } };
   const guild = { id: '111111111111111111', client: { user: { id: 'bot' } }, channels: { fetch: async () => channel }, members: { me: {} }, roles: { fetch: async () => ({ id: roleId, managed: false, mentionable: true }) } };
   await monitor.saveGameSubscription(guild, { appId: '730', name: 'Counter-Strike 2', channelId, roleId, enabled: true });
-  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [
-    { channelId, enabled: true }, { channelId: '444444444444444444', enabled: true }
-  ] }), /one active destination/);
-  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].destinationsConfigured, undefined,
-    'Unsupported multi-route configuration must not be persisted.');
-  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [
-    { channelId: '444444444444444444', enabled: true }
-  ] }), /matching the primary channel/);
-  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [
-    { channelId, roleId: '444444444444444444', enabled: true }
-  ] }), /one active destination/);
+  // Destination validation permits up to ten unique routes. Multi-route
+  // delivery is exercised after the legacy single-channel regression cases.
+  assert.equal(store.normalizeUpdateDestinations([{ channelId }, { channelId: '444444444444444444' }]).length, 2);
+  assert.throws(() => store.normalizeUpdateDestinations([{ channelId }, { channelId }]), /unique valid/);
   await monitor.configureGameUpdates(guild, { enabled: true });
   await monitor.processGameUpdates(guild); assert.equal(sent.length, 0, 'A new subscription quietly baselines existing news.');
   const makeItem = id => ({ ...item, id: String(id), url: 'https://store.steampowered.com/news/app/730/view/' + id });
@@ -5031,13 +5024,14 @@ async function gameUpdatesAudit() {
   store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, destinationsConfigured: true, destinations: [
     { channelId, enabled: true }, { channelId: '444444444444444444', enabled: true }
   ] } } }; });
-  await assert.rejects(monitor.retryHeldGameUpdates(guild, '730'), /recovery paused/);
+  // A legacy multi-route subscription must recover safely, without discarding
+  // the original uncertain entry when a channel cannot be inspected.
+  historyError = new Error('Discord history unavailable');
   const beforeUnsafeManual = JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending);
-  await assert.rejects(monitor.sendLatestGameUpdate(guild, '730'), /manual delivery paused/);
+  await assert.rejects(monitor.retryHeldGameUpdates(guild, '730'), /Discord history unavailable/);
   assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), beforeUnsafeManual,
-    'Unsupported manual send must not replace or discard queued announcements.');
-  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous',
-    'Blocked recovery must preserve uncertain delivery state.');
+    'Failed multi-route history inspection must preserve held deliveries.');
+  historyError = null;
   store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; const { destinationsConfigured, destinations, ...rest } = current; return { ...state, subscriptions: { ...state.subscriptions, '730': rest } }; });
   await monitor.processGameUpdates(guild);
   assert.equal(sent.length, beforeHeldToggle, 'Polling must not automatically resend uncertain delivery.');
