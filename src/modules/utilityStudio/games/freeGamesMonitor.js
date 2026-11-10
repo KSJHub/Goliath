@@ -396,6 +396,7 @@ async function retryHeldGameUpdates(guild, appId) {
       const found = recent.find(message => message.author?.id === guild.client.user.id && message.embeds?.some(embed => embed.url === entry.item.url && embed.footer?.text === 'Game Updates · Steam'));
       if (found) {
         updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.filter(record => record.item.id !== entry.item.id), lastSuccess: Date.now() }));
+        journalUpdateDelivery(guild.id, appId, channel.id, entry.item, 'recovered', found.id);
         recordUpdateDelivery(guild.id, appId, entry.item, 'recovered');
         recovered++;
       } else updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: 'pending', suppressMention: true, retryRequested: false } : record) }));
