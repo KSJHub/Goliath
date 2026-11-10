@@ -4914,7 +4914,10 @@ async function gameUpdatesAudit() {
     'Failed history lookup must preserve held delivery state.');
   assert.equal(sent.length, 3, 'Failed history lookup must not send an announcement.');
   historyError = null;
-  await monitor.retryHeldGameUpdates(guild, '730'); assert.equal(sent.length, 4); assert.deepEqual(sent[3].allowedMentions.roles, []);
+  const retryOutcome = await monitor.retryHeldGameUpdates(guild, '730'); assert.equal(sent.length, 4); assert.deepEqual(sent[3].allowedMentions.roles, []);
+  assert.equal(retryOutcome.delivered, 1, 'Retry should report the announcement actually sent.');
+  assert.equal(retryOutcome.recovered, 0, 'Retry should not claim recovery of a missing message.');
+  assert.equal(retryOutcome.held, 0, 'Successful retry should clear the held count.');
   // Simulate a crash after Discord accepted a send but before local confirmation persisted.
   const recovered = makeItem(105); feed = [recovered, ...feed];
   store.updateGameUpdates(guild.id, state => { const sub = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...sub, seenIds: [recovered.id, ...sub.seenIds], pending: [{ item: recovered, status: 'dispatching' }] } } }; });
