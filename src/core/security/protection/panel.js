@@ -7,7 +7,7 @@ const {
   MessageFlags,
 } = require('discord.js');
 
-const { navigationButton } = require('../../guild/goliathNavigation');
+const { EMOJIS, navigationButton } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const lockdown = require('./lockdown');
 const quarantine = require('./quarantine');
@@ -39,15 +39,15 @@ function buildProtectionPanel(guild, name = 'Unknown User') {
 
   const embed = new EmbedBuilder()
     .setColor(PANEL_COLOR)
-    .setTitle('🛡️ Security Protection')
+    .setTitle(`${EMOJIS.SECURITY} Security Protection`)
     .setDescription('Goliath live protection, containment and incident-response status.')
     .addFields(
-      { name: '💥 Anti-Nuke', value: antiNukeEnabled ? 'Enabled ✅' : 'Disabled ❌', inline: true },
-      { name: '🔒 Lockdown', value: lockdownState.active ? 'ACTIVE 🚨' : 'Standby ✅', inline: true },
-      { name: '🚧 Quarantine', value: `${quarantined} member${quarantined === 1 ? '' : 's'}`, inline: true },
-      { name: '🧠 Security Core', value: 'Online', inline: true },
-      { name: '🔐 Permission Guard', value: 'Online', inline: true },
-      { name: '📋 Incident Audit', value: Array.isArray(config.incidents) ? `${config.incidents.length} recorded` : 'Ready', inline: true },
+      { name: `${EMOJIS.ANTI_NUKE} Anti-Nuke`, value: antiNukeEnabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`, inline: true },
+      { name: `${EMOJIS.LOCKDOWN} Lockdown`, value: lockdownState.active ? `ACTIVE ${EMOJIS.ISOLATION}` : `Standby ${EMOJIS.SUCCESS}`, inline: true },
+      { name: `${EMOJIS.QUARANTINE} Quarantine`, value: `${quarantined} member${quarantined === 1 ? '' : 's'}`, inline: true },
+      { name: `${EMOJIS.SECURITY_CORE} Security Core`, value: 'Online', inline: true },
+      { name: `${EMOJIS.PERMISSION_GUARD} Permission Guard`, value: 'Online', inline: true },
+      { name: `${EMOJIS.INCIDENT_AUDIT} Incident Audit`, value: Array.isArray(config.incidents) ? `${config.incidents.length} recorded` : 'Ready', inline: true },
     )
     .setFooter({ text: `Requested by ${name}` })
     .setTimestamp();
@@ -56,7 +56,7 @@ function buildProtectionPanel(guild, name = 'Unknown User') {
     embeds: [embed],
     components: [
       row(
-        button(`${ROOT_ID}:refresh`, '🔄 Refresh', ButtonStyle.Primary),
+        button(`${ROOT_ID}:refresh`, `${EMOJIS.REFRESH} Refresh`, ButtonStyle.Primary),
       ),
     ],
   };
@@ -66,7 +66,7 @@ async function handleProtectionInteraction(interaction) {
   const id = String(interaction?.customId || '');
   if (!id.startsWith(`${ROOT_ID}:`)) return false;
   if (!interaction.guild) {
-    await interaction.reply({ content: '❌ Security Protection can only be used inside a server.', flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: `${EMOJIS.ERROR} Security Protection can only be used inside a server.`, flags: MessageFlags.Ephemeral });
     return true;
   }
 
