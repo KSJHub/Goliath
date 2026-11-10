@@ -678,7 +678,12 @@ async function handleGameUpdatesInteraction(i, action, reply) {
       panelButton('updates:game:' + appId, 'Cancel'))]; await reply(payload); return true;
   }
   if (kind === 'remove') { await monitor.removeGameSubscription(guild, appId); await reply(buildUpdatesPanel(guild, 0, 'Game unsubscribed.')); return true; }
-  if (kind === 'retry') { await monitor.retryHeldGameUpdates(guild, appId); await reply(buildUpdateSubscriptionPanel(guild, appId, 'Held deliveries reviewed.')); return true; }
+  if (kind === 'retry') {
+    const result = await monitor.retryHeldGameUpdates(guild, appId);
+    const notice = ['Recovery check complete: ' + result.recovered + ' existing message(s) recovered, ' + result.delivered + ' announcement(s) sent without role pings.',
+      result.held ? result.held + (result.held === 1 ? ' delivery still needs review.' : ' deliveries still need review.') : 'No uncertain deliveries remain.'].join(' ');
+    await reply(buildUpdateSubscriptionPanel(guild, appId, notice)); return true;
+  }
   if (kind === 'keywords') {
     await i.showModal({ custom_id: PANEL_PREFIX + 'updates:keywords-submit:' + appId, title: 'Announcement keyword filters', components: [
       componentRow({ type: 4, custom_id: 'include', label: 'Include any of these (comma-separated)', style: 2, required: false, max_length: 500, ...(sub.includeWords.length ? { value: sub.includeWords.join(', ') } : {}) }),
