@@ -346,14 +346,14 @@ function buildGroupsPanel(guildId, selectedId = null) {
     };
   }
   if (selected.type === 'colour') return buildColourPanel(guildId, selected);
-  const lines = (selected.options || []).map((x) => `${x.enabled ? '✅' : '⬜'} ${x.emoji || '•'} **${x.label}** · Role: ${x.managed === false ? 'Existing role' : x.roleId ? 'Goliath-managed' : 'Auto-create'}`);
+  const lines = (selected.options || []).map((x) => `${x.enabled ? EMOJIS.SUCCESS : EMOJIS.USER_LOCKED} ${x.emoji || '•'} **${x.label}** · Role: ${x.managed === false ? 'Existing role' : x.roleId ? 'Goliath-managed' : 'Auto-create'}`);
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', 'Role Selector · Groups')).setDescription([
       `${selected.emoji || EMOJIS.ROLE_TAG} **${selected.name}**`,
       selected.description || '`No description`', '',
       `**Type:** ${selected.selectionMode === 'multiple' ? 'Multiple choices' : 'Single choice'}`,
       `**Options:** ${(selected.options || []).length}`,
-      `**Members can clear:** ${selected.allowRemove ? 'Yes ✅' : 'No'}`, '',
+      `**Members can clear:** ${selected.allowRemove ? `Yes ${EMOJIS.SUCCESS}` : 'No'}`, '',
       lines.join('\n') || '`No options yet`',
     ].join('\n').slice(0, 4096))],
     components: [
@@ -379,8 +379,8 @@ function buildColourPanel(guildId, group) {
   })));
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_RAINBOW', 'Role Selector · Groups · Colours')).setDescription([
-      '**Built-in group 🔒**', 'Choose preset colours and custom HEX availability.', '',
-      ...palette.map((x) => `${x.enabled ? '✅' : '⬜'} ${x.emoji} **${x.label}** · \`${x.hex}\``),
+      `**Built-in group ${EMOJIS.LOCKDOWN}**`, 'Choose preset colours and custom HEX availability.', '',
+      ...palette.map((x) => `${x.enabled ? EMOJIS.SUCCESS : EMOJIS.USER_LOCKED} ${x.emoji} **${x.label}** · \`${x.hex}\``),
     ].join('\n'))],
     components: [
       groupMenu(guildId, group.id),
@@ -414,7 +414,7 @@ function buildAppearance(guild, rolePage = 0) {
       '',
       '**Where roles are placed**',
       `${placement} ${anchor}`,
-      `Keep selector roles together: **${section.style.keepGrouped ? 'On ✅' : 'Off'}**`,
+      `Keep selector roles together: **${section.style.keepGrouped ? `On ${EMOJIS.SUCCESS}` : 'Off'}**`,
       '',
       'Choose where Role Selector roles should sit, then adjust the role style or divider if needed.',
     ].join('\n'))],
@@ -453,7 +453,7 @@ async function buildDeploymentsPanel(i, selectedId = null) {
     const lines = await Promise.all(list.map(async (d, index) => {
       const { message } = await fetchDeployment(i.guild, d);
       const names = d.groupIds.map((id) => roleSelector.getGroup(i.guildId, id)?.name).filter(Boolean);
-      return `**${index + 1}.** ${d.channelId ? `<#${d.channelId}>` : '`No channel`'} · ${d.status === 'retired' ? 'Retired 📦' : message ? 'Deployed ✅' : 'Not deployed ⚠️'}\n${names.length ? names.join(' · ') : 'No groups selected'}`;
+      return `**${index + 1}.** ${d.channelId ? `<#${d.channelId}>` : '`No channel`'} · ${d.status === 'retired' ? `Retired ${EMOJIS.BULK}` : message ? `Deployed ${EMOJIS.SUCCESS}` : `Not deployed ${EMOJIS.WARNING}`}\n${names.length ? names.join(' · ') : 'No groups selected'}`;
     }));
     return {
       content: null,
@@ -486,7 +486,7 @@ async function buildDeploymentsPanel(i, selectedId = null) {
     content: null,
     embeds: [new EmbedBuilder().setColor(selected.status === 'retired' ? 0x747F8D : 0x5865F2).setTitle(emojiLabel('WELCOME_LOCATION', 'Role Selector · Manage Deployment')).setDescription([
       `**Channel:** ${selected.channelId ? `<#${selected.channelId}>` : '`Not selected`'}`,
-      `**Message:** ${message ? 'Deployed ✅' : selected.status === 'retired' ? 'Retired 📦' : 'Not deployed'}`,
+      `**Message:** ${message ? `Deployed ${EMOJIS.SUCCESS}` : selected.status === 'retired' ? `Retired ${EMOJIS.BULK}` : 'Not deployed'}`,
       `**Groups:** ${names.length ? names.join(' · ') : '`None selected`'}`, '',
       'Choose the destination and open **Groups & Roles** to control exactly what this panel exposes.',
     ].join('\n'))],
@@ -609,7 +609,7 @@ async function buildStats(guild) {
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ANALYTICS', 'Role Selector · Stats')).setDescription([
       `**Members using selectors:** ${usage.totalUsing}/${usage.totalMembers}`,
-      `**Total selections:** ${total}`, '', '**🏆 Most Selected**',
+      `**Total selections:** ${total}`, '', `**${EMOJIS.ROLE_GOLD_MEDAL} Most Selected**`,
       rows.filter((x) => x.count).slice(0, 10).map((x, index) => `${index + 1}. ${x.groupEmoji} **${x.label}** — ${x.count} · ${x.groupName}`).join('\n') || '`No selections yet`',
     ].join('\n'))],
     components: [groupMenu(guild.id, null, 'admin:roleSelector:statsGroup'), nav('admin:roleSelector:deployment', true)],
@@ -623,9 +623,9 @@ async function buildPublicStatsPayload(guild) {
   rows.sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
   return resolvePayload(guild, {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ANALYTICS', 'Role Selector Leaderboard')).setDescription([
-      `👥 **Members using selectors:** ${usage.totalUsing}`,
-      `🎯 **Total selections:** ${rows.reduce((sum, item) => sum + Number(item.count || 0), 0)}`, '',
-      '**🏆 Top Choices**', rows.filter((x) => Number(x.count || 0) > 0).slice(0, 10).map((x, index) => `${index + 1}. ${x.groupEmoji} **${x.label}** — ${x.count}`).join('\n') || '`No selections yet`',
+      `${EMOJIS.UTILITY_GROUP} **Members using selectors:** ${usage.totalUsing}`,
+      `${EMOJIS.RISK} **Total selections:** ${rows.reduce((sum, item) => sum + Number(item.count || 0), 0)}`, '',
+      `**${EMOJIS.ROLE_GOLD_MEDAL} Top Choices**`, rows.filter((x) => Number(x.count || 0) > 0).slice(0, 10).map((x, index) => `${index + 1}. ${x.groupEmoji} **${x.label}** — ${x.count}`).join('\n') || '`No selections yet`',
     ].join('\n'))], components: [],
   });
 }
@@ -647,7 +647,7 @@ async function buildStatsDeploymentPanel(i) {
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ANALYTICS', 'Role Selector · Deploy Stats')).setDescription([
       `**Channel:** ${deployment.channelId ? `<#${deployment.channelId}>` : '`Not selected`'}`,
-      `**Message:** ${message ? 'Deployed ✅' : 'Not deployed'}`, '',
+      `**Message:** ${message ? `Deployed ${EMOJIS.SUCCESS}` : 'Not deployed'}`, '',
       'Deploy a user-visible community leaderboard. Counts update in place; member names remain admin-only.',
     ].join('\n'))],
     components: [row(menu), row(button('admin:roleSelector:statsDeploy', message ? emojiLabel('REFRESH', 'Update Stats Panel') : emojiLabel('USER_INVITES', 'Deploy Stats Panel'), ButtonStyle.Success, !deployment.channelId), jump ? linkButton(emojiLabel('ROLE_UP_RIGHT', 'Jump to Panel'), jump) : null), nav('admin:roleSelector:deployment', true)],
@@ -670,8 +670,8 @@ async function buildHealth(guild, result = null) {
   const format = (x) => typeof x === 'string' ? x : x?.detail || x?.message || x?.code || JSON.stringify(x);
   return {
     embeds: [new EmbedBuilder().setColor(health.healthy ? 0x57F287 : 0xFAA61A).setTitle(emojiLabel('WELCOME_DIAGNOSTICS', 'Role Selector · Health / Repair')).setDescription([
-      `**Overall Health:** ${health.healthy ? `Healthy ${EMOJIS.SUCCESS}` : 'Needs Attention ⚠️'}`,
-      `**Acceptance:** ${health.acceptance?.ready ? `Ready ${EMOJIS.SUCCESS}` : 'Not Ready ⚠️'}`,
+      `**Overall Health:** ${health.healthy ? `Healthy ${EMOJIS.SUCCESS}` : `Needs Attention ${EMOJIS.WARNING}`}`,
+      `**Acceptance:** ${health.acceptance?.ready ? `Ready ${EMOJIS.SUCCESS}` : `Not Ready ${EMOJIS.WARNING}`}`,
       `**Managed Roles:** ${health.managedRoleCount || 0}`, '',
       '**Issues**', (health.issues || []).length ? (health.issues || []).map((x) => `• ${format(x)}`).join('\n') : emojiLabel('HEALTHY', 'No issues'), '',
       '**Warnings**', (health.warnings || []).length ? (health.warnings || []).map((x) => `• ${format(x)}`).join('\n') : emojiLabel('HEALTHY', 'No warnings'),
@@ -768,7 +768,7 @@ async function handleRoleSelectorInteraction(i) {
         name: i.fields.getTextInputValue('name'), emoji: i.fields.getTextInputValue('emoji'), description: i.fields.getTextInputValue('description'), selectionMode: mode, allowRemove: true, options: [],
       }, { ...actor, action: 'role_selector_create_group' });
       await syncPanels(i.guild, group.id);
-      return i.reply({ content: `✅ Created **${group.name}**.`, ...buildGroupsPanel(i.guildId, group.id), flags: 64 });
+      return i.reply({ content: `${EMOJIS.SUCCESS} Created **${group.name}**.`, ...buildGroupsPanel(i.guildId, group.id), flags: 64 });
     }
     if (id.startsWith('admin:roleSelector:groupOpen:')) return respond(i, buildGroupsPanel(i.guildId, tail(id, 'admin:roleSelector:groupOpen')));
     if (id.startsWith('admin:roleSelector:options:')) {
@@ -869,7 +869,7 @@ async function handleRoleSelectorInteraction(i) {
       try { await roleSelector.setAnchorRole(i.guild, divider.id, { managed: true, meta: { ...actor, action: id } }); }
       catch (error) { await divider.delete('Unsafe Role Selector divider').catch(() => null); throw error; }
       await syncPanels(i.guild);
-      return i.reply({ content: `✅ Created divider **${divider.name}**.`, ...buildAppearance(i.guild), flags: 64 });
+      return i.reply({ content: `${EMOJIS.SUCCESS} Created divider **${divider.name}**.`, ...buildAppearance(i.guild), flags: 64 });
     }
 
     if (id === 'admin:roleSelector:deployment') return respond(i, await buildDeploymentsPanel(i));
@@ -952,11 +952,11 @@ async function handleRoleSelectorInteraction(i) {
       }
       list[index] = { ...deployment, channelId: targetChannelId, messageId: null, status: 'active' };
       saveDeployments(i.guildId, list, { ...actor, action: prefix });
-      const sent = await deploySelected(i, deploymentId); const payload = await buildDeploymentsPanel(i, deploymentId); payload.content = `✅ Panel moved to <#${sent.channel.id}>.`; return respond(i, payload);
+      const sent = await deploySelected(i, deploymentId); const payload = await buildDeploymentsPanel(i, deploymentId); payload.content = `${EMOJIS.SUCCESS} Panel moved to <#${sent.channel.id}>.`; return respond(i, payload);
     }
     if (id.startsWith('admin:roleSelector:deploy:')) {
       const deploymentId = tail(id, 'admin:roleSelector:deploy');
-      const message = await deploySelected(i, deploymentId); const payload = await buildDeploymentsPanel(i, deploymentId); payload.content = `✅ Role Selector panel deployed in <#${message.channel.id}>.`; return respond(i, payload);
+      const message = await deploySelected(i, deploymentId); const payload = await buildDeploymentsPanel(i, deploymentId); payload.content = `${EMOJIS.SUCCESS} Role Selector panel deployed in <#${message.channel.id}>.`; return respond(i, payload);
     }
     if (id.startsWith('admin:roleSelector:deploymentDelete:')) {
       const deploymentId = tail(id, 'admin:roleSelector:deploymentDelete');
@@ -966,7 +966,7 @@ async function handleRoleSelectorInteraction(i) {
     if (id === 'admin:roleSelector:stats') return respond(i, await buildStats(i.guild));
     if (id === 'admin:roleSelector:statsGroup' && i.values?.[0] !== '__none__') {
       const usage = await roleSelector.getUsage(i.guild, i.values[0]); const group = usage.groups?.[0];
-      return respond(i, { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`📊 ${group?.emoji || EMOJIS.ROLE_TAG} ${group?.name || 'Group'}`).setDescription((group?.rows || []).map((x, index) => `${index + 1}. **${x.label}** — ${x.count || 0}`).join('\n') || '`No selections yet`')], components: [nav('admin:roleSelector:deployment', true)] });
+      return respond(i, { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.ANALYTICS} ${group?.emoji || EMOJIS.ROLE_TAG} ${group?.name || 'Group'}`).setDescription((group?.rows || []).map((x, index) => `${index + 1}. **${x.label}** — ${x.count || 0}`).join('\n') || '`No selections yet`')], components: [nav('admin:roleSelector:deployment', true)] });
     }
     if (id === 'admin:roleSelector:statsPublic') return respond(i, await buildStatsDeploymentPanel(i));
     if (id === 'admin:roleSelector:statsDeploymentChannel') {
@@ -975,7 +975,7 @@ async function handleRoleSelectorInteraction(i) {
       roleSelector.updateSection(i.guildId, (section) => ({ ...section, statsDeployment: { channelId: target, messageId: current.channelId === target ? current.messageId : null } }), { ...actor, action: 'role_selector_stats_channel' });
       return respond(i, await buildStatsDeploymentPanel(i));
     }
-    if (id === 'admin:roleSelector:statsDeploy') { const message = await deployStats(i); const payload = await buildStatsDeploymentPanel(i); payload.content = `✅ Public stats panel deployed in <#${message.channel.id}>.`; return respond(i, payload); }
+    if (id === 'admin:roleSelector:statsDeploy') { const message = await deployStats(i); const payload = await buildStatsDeploymentPanel(i); payload.content = `${EMOJIS.SUCCESS} Public stats panel deployed in <#${message.channel.id}>.`; return respond(i, payload); }
     if (id === 'admin:roleSelector:health' || id === 'admin:roleSelector:healthCheck') return respond(i, await buildHealth(i.guild));
     if (id === 'admin:roleSelector:healthRepair') { const health = await healthService.repair(i.guild); await syncPanels(i.guild); return respond(i, await buildHealth(i.guild, health)); }
 
@@ -1028,7 +1028,7 @@ async function handleRoleSelectorInteraction(i) {
     return true;
   } catch (error) {
     console.error('[RoleSelectorPanel]', error);
-    const payload = { content: `❌ ${error.message || 'Role Selector failed.'}`, flags: 64 };
+    const payload = { content: `${EMOJIS.ERROR} ${error.message || 'Role Selector failed.'}`, flags: 64 };
     if (i.deferred || i.replied) await i.followUp(payload).catch(() => null); else await i.reply(payload).catch(() => null);
     return true;
   }
