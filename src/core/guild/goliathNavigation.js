@@ -155,6 +155,12 @@ const EMOJIS = Object.freeze({
   MOD_KICK_ACTION: '🥾',
   MOD_INTELLIGENCE: '🧠',
   MOD_SCAN_HISTORY: '🕘',
+  MOD_APPEAL_PENDING: '📥',
+  MOD_APPEAL_EMPTY: '📭',
+  MOD_STAFF: '👥',
+  MOD_RECENT_ACTIVITY: '📈',
+  MOD_TOP_STAFF: '🏆',
+  MOD_CASE_OPEN: '📂',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
