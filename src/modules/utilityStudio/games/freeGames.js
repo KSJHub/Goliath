@@ -16,7 +16,7 @@ function normalizeDestinations(value) {
   if (!Array.isArray(value) || value.length > 10) throw new Error('Choose up to ten Free Games destinations.');
   const seen = new Set();
   return value.map((item) => {
-    if (!item || typeof item !== 'object' || !/^\\d{16,20}$/.test(item.channelId || '') || seen.has(item.channelId)) throw new Error('Choose unique valid destination channels.');
+    if (!item || typeof item !== 'object' || !/^\d{16,20}$/.test(item.channelId || '') || seen.has(item.channelId)) throw new Error('Choose unique valid destination channels.');
     seen.add(item.channelId);
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') throw new Error('Destination enabled must be true or false.');
     if (item.alerts !== undefined && typeof item.alerts !== 'boolean') throw new Error('Destination alerts must be true or false.');
@@ -25,7 +25,7 @@ function normalizeDestinations(value) {
     for (const [key, values, known] of [['stores', stores, STORES], ['types', types, TYPES]]) {
       if (values !== null && (!Array.isArray(values) || values.length > Object.keys(known).length || values.some(v => !Object.hasOwn(known, v)))) throw new Error('Invalid destination ' + key + '.');
     }
-    if (item.roleId != null && !/^\\d{16,20}$/.test(item.roleId)) throw new Error('Invalid destination role.');
+    if (item.roleId != null && !/^\d{16,20}$/.test(item.roleId)) throw new Error('Invalid destination role.');
     return { channelId: item.channelId, enabled: item.enabled !== false, alerts: item.alerts === true, roleId: item.roleId || null,
       stores: stores === null ? null : [...new Set(stores)], types: types === null ? null : [...new Set(types)] };
   });
@@ -334,7 +334,7 @@ async function handleAdminInteraction(interaction) {
     if (action.startsWith('updates:')) return await handleGameUpdatesInteraction(interaction, action.slice(8), reply);
     if (action === 'studio') { await reply(require('../../../core/administration/admin/modules').buildStudioPanel('utilityStudio', member?.displayName || interaction.user.username)); return true; }
     if (/^featured:\d+$/.test(action)) { await reply(await buildFeaturedPanel(guild, Number(action.split(':')[1]))); return true; }
-    if (['home', 'settings', 'health', 'delivery', 'filters', 'pricing', 'display'].includes(action) || /^route:\\d{16,20}$/.test(action)) { await reply(buildAdminPanel(guild, action)); return true; }
+    if (['home', 'settings', 'health', 'delivery', 'filters', 'pricing', 'display'].includes(action) || /^route:\d{16,20}$/.test(action)) { await reply(buildAdminPanel(guild, action)); return true; }
     if (/^preview:\d+$/.test(action)) {
       const { getOffers, getPricing } = require('./freeGamesProviders');
       const { buildListing, loadPlatformPresentation } = require('./freeGamesEmbeds');
@@ -360,7 +360,7 @@ async function handleAdminInteraction(interaction) {
       const channelId = interaction.values?.[0];
       if (!effectiveDestinations(c).some(route => route.channelId === channelId)) throw new Error('Unknown destination.');
       await reply(buildAdminPanel(guild, 'route:' + channelId)); return true;
-    } else if (/^route(?:Stores|Types|Role|Toggle|Alerts):\\d{16,20}$/.test(action)) {
+    } else if (/^route(?:Stores|Types|Role|Toggle|Alerts):\d{16,20}$/.test(action)) {
       const [kind, channelId] = action.split(':');
       const routes = effectiveDestinations(c).map(route => ({ ...route }));
       const route = routes.find(item => item.channelId === channelId);
