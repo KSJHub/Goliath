@@ -673,32 +673,32 @@ function mainEmbed(s, who, dashboard = {}) {
 
   const presetLine =
     s.selectedPreset
-      ? `**Preset**　💾 ${s.selectedPreset}`
+      ? `**Preset**　${EMOJIS.PRESETS} ${s.selectedPreset}`
       : null;
 
   const destination =
     s.channelId
       ? `<#${s.channelId}>`
-      : "⚪ Choose below";
+      : `${EMOJIS.INACTIVE} Choose below`;
 
   const saveState =
     s.hasUnsavedChanges
-      ? "🟠 Unsaved changes"
+      ? `${EMOJIS.SETUP_REQUIRED} Unsaved changes`
       : s.selectedPreset
-        ? "🟢 Saved"
-        : "⚪ New workspace";
+        ? `${EMOJIS.ACTIVE} Saved`
+        : `${EMOJIS.INACTIVE} New workspace`;
 
   const readinessState =
     report.ready
       ? warnings.length
-        ? `🟡 Ready • ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
-        : "🟢 Ready"
-      : `🔴 ${errors.length || 1} issue${(errors.length || 1) === 1 ? "" : "s"} to resolve`;
+        ? `${EMOJIS.SEVERITY_MEDIUM} Ready • ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
+        : `${EMOJIS.ACTIVE} Ready`
+      : `${EMOJIS.DISABLED} ${errors.length || 1} issue${(errors.length || 1) === 1 ? "" : "s"} to resolve`;
 
   const deploymentState =
     deployment?.messageId && deployment?.channelId
-      ? `🟢 Live • <#${deployment.channelId}>`
-      : "⚪ Not deployed";
+      ? `${EMOJIS.ACTIVE} Live • <#${deployment.channelId}>`
+      : `${EMOJIS.INACTIVE} Not deployed`;
 
   const timestamp =
     s.showTimestamp !== false
@@ -722,16 +722,16 @@ function mainEmbed(s, who, dashboard = {}) {
 
   if (!s.channelId) {
     nextAction =
-      "📍 Select the channel where this embed will be published.";
+      `${EMOJIS.WELCOME_LOCATION} Select the channel where this embed will be published.`;
   } else if (!report.ready) {
     nextAction =
-      `⚠️ Open Review and resolve ${errors.length || 1} remaining issue${(errors.length || 1) === 1 ? "" : "s"}.`;
+      `${EMOJIS.WARNING} Open Review and resolve ${errors.length || 1} remaining issue${(errors.length || 1) === 1 ? "" : "s"}.`;
   } else if (deployment) {
     nextAction =
-      "🚀 Ready to deploy a new message, or ♻️ update the existing live message.";
+      `${EMOJIS.DEPLOY} Ready to deploy a new message, or ${EMOJIS.UPDATE} update the existing live message.`;
   } else {
     nextAction =
-      "🚀 Everything is ready. Test the embed or deploy it to the selected channel.";
+      `${EMOJIS.DEPLOY} Everything is ready. Test the embed or deploy it to the selected channel.`;
   }
 
   return new EmbedBuilder()
