@@ -4967,6 +4967,22 @@ async function gameUpdatesAudit() {
   assert.equal(sent.length, beforeConcurrent + 1, 'Concurrent retries and polling must send held update exactly once.');
   assert.deepEqual(sent[sent.length - 1].allowedMentions.roles, [], 'Retry must not repeat role mentions.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 0);
+  // Disabled subscriptions must not deliver new announcements; re-enabling
+  // quietly baselines news accumulated while disabled, then resumes normally.
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: false });
+  const beforeDisabled = sent.length;
+  feed = [makeItem(109), ...feed];
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeDisabled, 'Disabled subscription must not send updates.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 0);
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: true });
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeDisabled, 'Re-enabled subscription must quietly baseline disabled-period news.');
+  feed = [makeItem(110), ...feed];
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeDisabled + 1, 'New announcements after re-enable must deliver normally.');
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeDisabled + 1, 'Re-enabled subscription must not duplicate delivered news.');
   await monitor.removeGameSubscription(guild, '730');
   assert.equal(Object.keys(store.getGameUpdates(guild.id).subscriptions).length, 0);
   assert(store.getGameUpdates(guild.id).history.length > 0); assert.equal(memory.currency, 'GBP'); assert.equal(memory.state.deliveries[0].messageId, 'preserve');
