@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../ui/emojis');
 
 const {
   ActionRowBuilder,
@@ -46,12 +47,12 @@ function buildRestoreBackupPanel(guild, name = 'Unknown User') {
   const summary = getBackupSummary(guild.id);
   const embed = new EmbedBuilder()
     .setColor(PANEL_COLOR)
-    .setTitle('🛡️ Restore & Backup')
+    .setTitle(emojiLabel('SECURITY', 'Restore & Backup'))
     .setDescription('Create, inspect and recover Goliath server backups from the Security system.')
     .addFields(
-      { name: '📦 Backups', value: String(summary.count), inline: true },
-      { name: '🕘 Latest', value: summary.latestId ? `\`${summary.latestId}\`` : 'None', inline: true },
-      { name: '🔐 Restore Safety', value: 'Central approval required', inline: true },
+      { name: emojiLabel('WELCOME_PRESET', 'Backups'), value: String(summary.count), inline: true },
+      { name: emojiLabel('MOD_SCAN_HISTORY', 'Latest'), value: summary.latestId ? `\`${summary.latestId}\`` : 'None', inline: true },
+      { name: emojiLabel('PERMISSION_GUARD', 'Restore Safety'), value: 'Central approval required', inline: true },
     )
     .setFooter({ text: `Requested by ${name}` })
     .setTimestamp();
@@ -60,13 +61,13 @@ function buildRestoreBackupPanel(guild, name = 'Unknown User') {
     embeds: [embed],
     components: [
       row(
-        button(`${ROOT_ID}:create`, '⚡ Create Backup', ButtonStyle.Success),
-        button(`${ROOT_ID}:list`, '📦 View Backups', ButtonStyle.Primary),
-        button(`${ROOT_ID}:preview`, '🔍 Preview Latest'),
+        button(`${ROOT_ID}:create`, emojiLabel('THREAT', 'Create Backup'), ButtonStyle.Success),
+        button(`${ROOT_ID}:list`, emojiLabel('WELCOME_PRESET', 'View Backups'), ButtonStyle.Primary),
+        button(`${ROOT_ID}:preview`, emojiLabel('SEARCH', 'Preview Latest')),
       ),
       row(
-        button(`${ROOT_ID}:download`, '💾 Download Latest'),
-        button(`${ROOT_ID}:requestRestore`, '🚨 Request Restore', ButtonStyle.Danger),
+        button(`${ROOT_ID}:download`, emojiLabel('PRESETS', 'Download Latest')),
+        button(`${ROOT_ID}:requestRestore`, emojiLabel('AUTOMOD_SUSPICIOUS', 'Request Restore'), ButtonStyle.Danger),
       ),
     ],
   };
@@ -82,7 +83,7 @@ async function handleRestoreBackupInteraction(interaction) {
   const id = String(interaction?.customId || '');
   if (!id.startsWith(`${ROOT_ID}:`)) return false;
   if (!interaction.guild) {
-    await interaction.reply({ content: '❌ Restore & Backup can only be used inside a server.', flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: emojiLabel('ERROR', 'Restore & Backup can only be used inside a server.'), flags: MessageFlags.Ephemeral });
     return true;
   }
 
@@ -101,7 +102,7 @@ async function handleRestoreBackupInteraction(interaction) {
     await interaction.reply({
       content: backups.length
         ? `📦 **Backups:**\n${backups.slice(0, 10).map((value) => `\`${value}\``).join('\n')}`
-        : '📦 No backups found.',
+        : emojiLabel('WELCOME_PRESET', 'No backups found.'),
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -114,7 +115,7 @@ async function handleRestoreBackupInteraction(interaction) {
     await interaction.reply({
       content: backup
         ? `🔍 **Latest Backup**\nID: \`${latest}\`\nValid: ${validation?.valid ? 'YES ✅' : 'NO ❌'}`
-        : '🔍 No backups found.',
+        : emojiLabel('SEARCH', 'No backups found.'),
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -124,7 +125,7 @@ async function handleRestoreBackupInteraction(interaction) {
     const latest = normalizeBackupId(listServerBackups(interaction.guild.id)[0]);
     const backup = latest ? readServerBackup(interaction.guild.id, latest) : null;
     if (!backup) {
-      await interaction.reply({ content: '❌ No backups found.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: emojiLabel('ERROR', 'No backups found.'), flags: MessageFlags.Ephemeral });
       return true;
     }
     await interaction.reply({
@@ -142,7 +143,7 @@ async function handleRestoreBackupInteraction(interaction) {
 
   if (id === `${ROOT_ID}:restore` || id === `${ROOT_ID}:restore:real`) {
     await interaction.reply({
-      content: '❌ Direct restores are disabled. Use the centralized restore approval system.',
+      content: emojiLabel('ERROR', 'Direct restores are disabled. Use the centralized restore approval system.'),
       flags: MessageFlags.Ephemeral,
     });
     return true;
