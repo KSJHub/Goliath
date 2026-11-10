@@ -744,8 +744,10 @@ async function handleGameUpdatesInteraction(i, action, reply) {
   let patch = { appId };
   if (kind === 'keywords-submit') { patch.includeWords = i.fields.getTextInputValue('include'); patch.excludeWords = i.fields.getTextInputValue('exclude'); }
   else if (kind === 'enabled') patch.enabled = !sub.enabled;
-  else if (kind === 'channel') patch.channelId = i.values?.[0] || null;
-  else if (kind === 'role') patch.roleId = i.values?.[0] || null;
+  else if (kind === 'channel' || kind === 'role') {
+    if (sub.destinationsConfigured) throw new Error('Use Destinations to edit channels and roles for a multi-channel subscription.');
+    patch[kind === 'channel' ? 'channelId' : 'roleId'] = i.values?.[0] || null;
+  }
   else if (['filter', 'artwork', 'detail'].includes(kind)) patch[kind] = i.values[0];
   else throw new Error('Unknown Game Updates control.');
   await monitor.saveGameSubscription(guild, patch);
