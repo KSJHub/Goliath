@@ -5027,6 +5027,14 @@ async function gameUpdatesAudit() {
     'Unsupported multi-channel changes must not override held-delivery safety or clear its state.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].destinationsConfigured, undefined,
     'Rejected multi-destination change must not persist while delivery is uncertain.');
+  // Legacy multi-route data must not let Retry held inspect or resend against an unrelated primary channel.
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, destinationsConfigured: true, destinations: [
+    { channelId, enabled: true }, { channelId: '444444444444444444', enabled: true }
+  ] } } }; });
+  await assert.rejects(monitor.retryHeldGameUpdates(guild, '730'), /recovery paused/);
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous',
+    'Blocked recovery must preserve uncertain delivery state.');
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; const { destinationsConfigured, destinations, ...rest } = current; return { ...state, subscriptions: { ...state.subscriptions, '730': rest } }; });
   await monitor.processGameUpdates(guild);
   assert.equal(sent.length, beforeHeldToggle, 'Polling must not automatically resend uncertain delivery.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
