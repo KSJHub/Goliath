@@ -219,7 +219,7 @@ async function showLevelingLeaderboard(interaction, sortBy = 'xp', pageIndex = 0
     ),
     new ActionRowBuilder().addComponents(
       navigationButton(`user:leveling:leaderboard:${safeSort}:${Math.max(0, safePage - 1)}`, 'Previous', ButtonStyle.Secondary, safePage === 0).setEmoji(EMOJIS.BACK),
-      navigationButton(`user:leveling:leaderboard:${safeSort}:${Math.min(totalPages - 1, safePage + 1)}`, 'Next', ButtonStyle.Primary, safePage >= totalPages - 1).setEmoji('➡️'),
+      navigationButton(`user:leveling:leaderboard:${safeSort}:${Math.min(totalPages - 1, safePage + 1)}`, 'Next', ButtonStyle.Primary, safePage >= totalPages - 1).setEmoji(EMOJIS.NEXT),
       navigationButton('user:module:leveling', 'Back', ButtonStyle.Secondary).setEmoji(EMOJIS.BACK),
     ),
   ];
