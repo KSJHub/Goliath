@@ -388,14 +388,18 @@ async function retryHeldGameUpdates(guild, appId) {
     updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(entry => entry.status === 'ambiguous' ? { ...entry, status: 'dispatching', suppressMention: true, retryRequested: true } : entry) }));
     const updated = store.getGameUpdates(guild.id).subscriptions[appId];
     const retryIds = new Set(updated.pending.filter(entry => entry.retryRequested).map(entry => entry.item.id));
+    let recovered = 0;
     for (const entry of updated.pending.filter(entry => entry.retryRequested)) {
       const found = recent.find(message => message.author?.id === guild.client.user.id && message.embeds?.some(embed => embed.url === entry.item.url && embed.footer?.text === 'Game Updates · Steam'));
       if (found) {
         updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.filter(record => record.item.id !== entry.item.id), lastSuccess: Date.now() }));
         recordUpdateDelivery(guild.id, appId, entry.item, 'recovered');
+        recovered++;
       } else updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: 'pending', suppressMention: true, retryRequested: false } : record) }));
     }
-    return flushGameUpdates(guild, appId, true, retryIds);
+    const result = await flushGameUpdates(guild, appId, true, retryIds);
+    const held = store.getGameUpdates(guild.id).subscriptions[appId].pending.filter(entry => entry.status === 'ambiguous' || entry.status === 'dispatching').length;
+    return { ...result, recovered, held };
   });
 }
 Object.assign(module.exports, { saveGameSubscription, configureGameUpdates, removeGameSubscription, updatesQuietNow,
