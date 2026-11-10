@@ -4878,6 +4878,14 @@ async function gameUpdatesAudit() {
   const channel = { id: channelId, type: 0, permissionsFor: () => ({ has: () => allowed }), messages: { fetch: async () => { if (historyError) throw historyError; return { find: fn => messages.find(fn) }; } }, send: async payload => { if (sendError) throw sendError; sent.push(payload); messages.push({ author: { id: 'bot' }, embeds: payload.embeds }); return { id: String(sent.length) }; } };
   const guild = { id: '111111111111111111', client: { user: { id: 'bot' } }, channels: { fetch: async () => channel }, members: { me: {} }, roles: { fetch: async () => ({ id: roleId, managed: false, mentionable: true }) } };
   await monitor.saveGameSubscription(guild, { appId: '730', name: 'Counter-Strike 2', channelId, roleId, enabled: true });
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [
+    { channelId, enabled: true }, { channelId: '444444444444444444', enabled: true }
+  ] }), /one active destination/);
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].destinationsConfigured, undefined,
+    'Unsupported multi-route configuration must not be persisted.');
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [
+    { channelId: '444444444444444444', enabled: true }
+  ] }), /matching the primary channel/);
   await monitor.configureGameUpdates(guild, { enabled: true });
   await monitor.processGameUpdates(guild); assert.equal(sent.length, 0, 'A new subscription quietly baselines existing news.');
   const makeItem = id => ({ ...item, id: String(id), url: 'https://store.steampowered.com/news/app/730/view/' + id });
