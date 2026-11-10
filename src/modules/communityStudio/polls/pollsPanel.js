@@ -31,7 +31,7 @@ function buildPollsAdminPanel(guild, memberDisplayName = 'Unknown User') {
   const active = pollList.filter((poll) => poll.status === 'active').length;
   const embed = new EmbedBuilder()
     .setColor(enabled ? 0x57f287 : 0x5865f2)
-    .setTitle('📊 Polls')
+    .setTitle(emojiLabel('ANALYTICS', 'Polls'))
     .setDescription([
       'Create, deploy and manage community polls directly in Discord.', '',
       `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
@@ -47,15 +47,15 @@ function buildPollsAdminPanel(guild, memberDisplayName = 'Unknown User') {
     .setFooter({ text: `Requested by ${memberDisplayName}` })
     .setTimestamp();
   return { embeds: [embed], components: [
-    row(button('admin:polls:create', '➕ Create Poll', ButtonStyle.Success), button('admin:polls:manage', '🗂️ Manage Polls'), button(enabled ? 'admin:polls:disable' : 'admin:polls:enable', enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary)),
-    row(actionButton('admin:polls:settings', 'settings'), button('admin:polls:health', '🩺 Health', ButtonStyle.Secondary), button('admin:polls:repair', '🛠️ Repair'), button('admin:polls:export', '📤 Export', ButtonStyle.Secondary), button('admin:polls:reset', '🗑️ Reset', ButtonStyle.Danger)),
+    row(button('admin:polls:create', emojiLabel('ADD', 'Create Poll'), ButtonStyle.Success), button('admin:polls:manage', emojiLabel('WORKSPACE', 'Manage Polls')), button(enabled ? 'admin:polls:disable' : 'admin:polls:enable', enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary)),
+    row(actionButton('admin:polls:settings', 'settings'), button('admin:polls:health', emojiLabel('WELCOME_DIAGNOSTICS', 'Health'), ButtonStyle.Secondary), button('admin:polls:repair', emojiLabel('WELCOME_CUSTOM', 'Repair')), button('admin:polls:export', emojiLabel('MOD_EXPORT', 'Export'), ButtonStyle.Secondary), button('admin:polls:reset', emojiLabel('DELETE', 'Reset'), ButtonStyle.Danger)),
     row(actionButton('admin:modules', 'back')),
   ] };
 }
 function buildSettingsPanel(guild, memberDisplayName = 'Unknown User', rolePage = 0) {
   const section = polls.getSection(guild.id);
   const roleInfo = rolePages(guild, section.managerRoleIds || [], rolePage);
-  const embed = new EmbedBuilder().setColor(0x5865f2).setTitle('📊 Poll Settings').setDescription([
+  const embed = new EmbedBuilder().setColor(0x5865f2).setTitle(emojiLabel('ANALYTICS', 'Poll Settings')).setDescription([
     `**Default Channel:** ${formatChannel(section.defaultChannelId || section.settings?.defaultChannelId)}`,
     `**Results Channel:** ${formatChannel(section.resultsChannelId)}`,
     `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`, `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`, '',
@@ -65,7 +65,7 @@ function buildSettingsPanel(guild, memberDisplayName = 'Unknown User', rolePage 
     row(new ChannelSelectMenuBuilder().setCustomId('admin:polls:defaultChannel').setPlaceholder('Default poll channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     row(new ChannelSelectMenuBuilder().setCustomId('admin:polls:resultsChannel').setPlaceholder('Results channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:polls:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
-    row(button('admin:polls:toggleAnonymous', '👤 Anonymous', ButtonStyle.Secondary), button('admin:polls:toggleMultiple', '☑️ Multiple', ButtonStyle.Secondary), button('admin:polls:toggleLive', '📈 Live Results', ButtonStyle.Secondary)),
+    row(button('admin:polls:toggleAnonymous', emojiLabel('USER', 'Anonymous'), ButtonStyle.Secondary), button('admin:polls:toggleMultiple', emojiLabel('CHECKBOX', 'Multiple'), ButtonStyle.Secondary), button('admin:polls:toggleLive', emojiLabel('MOD_RECENT_ACTIVITY', 'Live Results'), ButtonStyle.Secondary)),
     row(actionButton('admin:polls', 'back'),
       button(`admin:polls:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
       button(`admin:polls:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
@@ -73,7 +73,7 @@ function buildSettingsPanel(guild, memberDisplayName = 'Unknown User', rolePage 
 }
 function buildManagePanel(guild) {
   const pollList = Object.values(polls.getSection(guild.id).polls || {}).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 25);
-  if (!pollList.length) return { content: 'No polls exist yet. Create one first.', embeds: [], components: [row(button('admin:polls:create', '➕ Create Poll', ButtonStyle.Success), actionButton('admin:polls', 'back'))] };
+  if (!pollList.length) return { content: 'No polls exist yet. Create one first.', embeds: [], components: [row(button('admin:polls:create', emojiLabel('ADD', 'Create Poll'), ButtonStyle.Success), actionButton('admin:polls', 'back'))] };
   const selector = new StringSelectMenuBuilder().setCustomId('admin:polls:select').setPlaceholder('Select a poll to manage').addOptions(pollList.map((poll) => ({ label: String(poll.question).slice(0, 100), description: `${poll.status} · ${poll.options.length} options`.slice(0, 100), value: poll.id })));
   return { content: 'Select a poll to deploy, close, refresh or delete.', embeds: [], components: [row(selector), row(actionButton('admin:polls', 'back'))] };
 }
@@ -87,9 +87,9 @@ function buildPollDetailPanel(guild, pollId) {
     { name: 'Channel', value: formatChannel(poll.channelId), inline: true }
   );
   const actions = [];
-  if (poll.status !== 'closed') actions.push(button(`admin:polls:deploy:${poll.id}`, poll.messageId ? '🔄 Refresh' : emojiLabel('DEPLOY', 'Deploy'), ButtonStyle.Success));
-  if (poll.status === 'active') actions.push(button(`admin:polls:close:${poll.id}`, '⏹️ Close', ButtonStyle.Danger));
-  actions.push(button(`admin:polls:delete:${poll.id}`, '🗑️ Delete', ButtonStyle.Danger), button('admin:polls:manage', '⬅️ Polls', ButtonStyle.Secondary));
+  if (poll.status !== 'closed') actions.push(button(`admin:polls:deploy:${poll.id}`, poll.messageId ? emojiLabel('REFRESH', 'Refresh') : emojiLabel('DEPLOY', 'Deploy'), ButtonStyle.Success));
+  if (poll.status === 'active') actions.push(button(`admin:polls:close:${poll.id}`, emojiLabel('STOP', 'Close'), ButtonStyle.Danger));
+  actions.push(button(`admin:polls:delete:${poll.id}`, emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger), button('admin:polls:manage', emojiLabel('BACK', 'Polls'), ButtonStyle.Secondary));
   return { embeds: [embed], components: [row(...actions)] };
 }
 function buildCreateModal() {
