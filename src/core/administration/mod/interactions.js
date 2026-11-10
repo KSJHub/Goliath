@@ -209,7 +209,7 @@ function calculateModerationRisk(summary, crossGuild) {
   if (timeouts) { score += timeouts; reasons.push(`${summary.timeouts} timeout case(s)`); }
   if (network) { score += network; reasons.push(`${crossGuild.caseCount} case(s) for the same Discord ID in other Goliath guilds`); }
   score = Math.min(100, score);
-  const label = score >= 70 ? '🔴 High' : score >= 40 ? '🟠 Elevated' : score >= 20 ? '🟡 Moderate' : '🟢 Low';
+  const label = score >= 70 ? emojiLabel('DISABLED', "High") : score >= 40 ? emojiLabel('SEVERITY_HIGH', "Elevated") : score >= 20 ? emojiLabel('SEVERITY_MEDIUM', "Moderate") : emojiLabel('ENABLED', "Low");
   return { score, label, reasons };
 }
 function buildInvestigationNoteModal(targetId) {
@@ -249,8 +249,8 @@ function buildMemberScanPayload(i, target) {
   const risk = calculateModerationRisk(summary, crossGuild);
   const historicalNames = [...new Set([...history.names, ...history.globals, ...history.displays])].filter((name) => name && name !== target.user.username && name !== target.user.globalName && name !== target.displayName);
   const suspectText = suspects.length
-    ? suspects.map(({ member, score, signals }) => `${score >= 70 ? '🔴 **STRONG MATCH**' : '🟠 **POSSIBLE MATCH**'} — ${member.user} • **${score}%**\n${signals.map((signal) => `• ${signal}`).join('\n')}`).join('\n\n')
-    : '⚪ **NO LINK FOUND** — No evidence-based suspected account match in the current guild cache.';
+    ? suspects.map(({ member, score, signals }) => `${score >= 70 ? emojiLabel('DISABLED', "**STRONG MATCH**") : emojiLabel('SEVERITY_HIGH', "**POSSIBLE MATCH**")} — ${member.user} • **${score}%**\n${signals.map((signal) => `• ${signal}`).join('\n')}`).join('\n\n')
+    : emojiLabel('INACTIVE', "**NO LINK FOUND** — No evidence-based suspected account match in the current guild cache.");
   const recent = cases.slice(0, 3).map((entry) => `#${entry.caseId} • ${entry.action} • ${entry.status || 'active'} • ${(entry.reason || 'No reason').slice(0, 120)}`).join('\n') || 'No recorded moderation cases.';
   const scanId = `scan_${Date.now().toString(36)}_${target.id.slice(-6)}`;
   const identityLines = [
@@ -359,7 +359,7 @@ function buildScanHistoryPayload(i, target, origin = 'scan') {
   if (canManageHistory) {
     const select = new Discord.StringSelectMenuBuilder()
       .setCustomId(`mod_scan_delete_select:${target.id}:${origin}`)
-      .setPlaceholder('🗑️ Select a scan to delete')
+      .setPlaceholder(emojiLabel('DELETE', "Select a scan to delete"))
       .setMinValues(1)
       .setMaxValues(1)
       .addOptions(rows.slice(0, 10).map((row) => {
@@ -385,7 +385,7 @@ function buildComparisonPayload(i, primary, secondary, origin = 'scan') {
   const correlation = compareIdentitySignals(primary, secondary);
   const left = moderationSummary(i.guild.id, primary.id);
   const right = moderationSummary(i.guild.id, secondary.id);
-  const label = correlation.score >= 70 ? '🔴 STRONG MATCH' : correlation.score >= 35 ? '🟠 POSSIBLE MATCH' : '⚪ LOW CORRELATION';
+  const label = correlation.score >= 70 ? emojiLabel('DISABLED', "STRONG MATCH") : correlation.score >= 35 ? emojiLabel('SEVERITY_HIGH', "POSSIBLE MATCH") : emojiLabel('INACTIVE', "LOW CORRELATION");
   const deltaCreated = Math.abs((primary.user.createdTimestamp || 0) - (secondary.user.createdTimestamp || 0));
   const deltaJoined = Math.abs((primary.joinedTimestamp || 0) - (secondary.joinedTimestamp || 0));
   const embed = new Discord.EmbedBuilder()
@@ -535,7 +535,7 @@ async function showPersistentLinkEvidence(i, targetId) {
   const evidence = aggregateSuspectedEvidence(i.guild.id, target.id);
   const text = evidence.length ? evidence.map((entry) => {
   const member = i.guild.members.cache.get(entry.userId);
-  const label = entry.maxScore >= 70 ? '🔴 Strong historical correlation' : '🟠 Possible historical correlation';
+  const label = entry.maxScore >= 70 ? emojiLabel('DISABLED', "Strong historical correlation") : emojiLabel('SEVERITY_HIGH', "Possible historical correlation");
   const firstSeen = entry.firstSeen ? scanTimestamp(new Date(entry.firstSeen).getTime()) : 'Unknown';
   const lastSeen = entry.lastSeen ? scanTimestamp(new Date(entry.lastSeen).getTime()) : 'Unknown';
   return [
@@ -571,7 +571,7 @@ async function showInvestigationWatch(i, targetId) {
     .setColor(state.watched ? 0xF0A202 : 0x5865F2)
     .setTitle(`👁️ Investigation Watch • ${target.user.tag}`)
     .setDescription([
-      `**Status:** ${state.watched ? '🟠 ON' : '⚪ OFF'}`,
+      `**Status:** ${state.watched ? emojiLabel('SEVERITY_HIGH', "ON") : emojiLabel('INACTIVE', "OFF")}`,
       state.watch?.reason ? `**Reason:** ${state.watch.reason}` : '**Reason:** No active investigation watch reason.',
       state.watch?.at ? `**Updated:** ${scanTimestamp(new Date(state.watch.at).getTime())}` : '**Updated:** Never',
       '',
@@ -636,7 +636,7 @@ async function handleMemberScanButton(i) {
       if (targetId && targetId !== 'none') return runMemberScan(i, targetId, { record: false });
       const allowed = await ensureScanCapability(i, 'scan_run', emojiLabel('ERROR', "You do not have permission to run a member intelligence scan."));
       if (!allowed) return true;
-      const select = new Discord.UserSelectMenuBuilder().setCustomId('mod_scan_user_select').setPlaceholder('👤 Select a member to investigate').setMinValues(1).setMaxValues(1);
+      const select = new Discord.UserSelectMenuBuilder().setCustomId('mod_scan_user_select').setPlaceholder(emojiLabel('USER', "Select a member to investigate")).setMinValues(1).setMaxValues(1);
       const back = new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:actions').setLabel(emojiLabel('BACK', 'Back')).setStyle(Discord.ButtonStyle.Secondary);
       return safeUpdate(i, { content: emojiLabel('MOD_INTELLIGENCE', '**Member Intelligence** — select a server member to open the unified intelligence workspace.'), embeds: [], components: [new Discord.ActionRowBuilder().addComponents(select), new Discord.ActionRowBuilder().addComponents(back)] });
     }
@@ -718,7 +718,7 @@ async function handleConfirmButton(i) {
   const lockKey = `${i.guild?.id || 'none'}:${token}`;
   if (CONFIRM_LOCKS.has(lockKey)) {
     recordModerationSystemEvent({ interaction: i, event: 'moderation.confirmation.duplicate_blocked', metadata: { tokenPresent: true } });
-    return safeReply(i, { content: '⏳ That moderation action is already being processed.', flags: 64 });
+    return safeReply(i, { content: emojiLabel('TIMEOUT', "That moderation action is already being processed."), flags: 64 });
   }
   CONFIRM_LOCKS.add(lockKey);
   try {
@@ -911,15 +911,15 @@ function ownerCaseRows(i, page = 0, archived = false) {
   components.push(new Discord.ActionRowBuilder().addComponents(
     new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('Back to Cases').setEmoji(EMOJIS.BACK).setStyle(Discord.ButtonStyle.Secondary)));
   const embed = new Discord.EmbedBuilder()
-    .setColor(0x5865F2).setTitle(archived ? '📦 Archived Cases' : '🗂️ Case Management')
+    .setColor(0x5865F2).setTitle(archived ? emojiLabel('WELCOME_PRESET', "Archived Cases") : emojiLabel('WORKSPACE', "Case Management"))
     .setDescription(archived
       ? 'Owner-only archived records. Select a case to review or restore it. Archived records are excluded from member profiles and active moderation.'
       : 'Review an existing case and choose to archive or permanently delete it. Selecting a case does not change its records.')
     .addFields(
-      { name: '📁 Available Cases', value: String(archived ? db.prepare('SELECT COUNT(*) AS n FROM cases WHERE guild_id = ?').get(guildId).n : rows.length), inline: true },
-      { name: '📦 Archived Cases', value: String(archived ? rows.length : ownerArchiveCount(guildId)), inline: true },
-      { name: '📄 Page', value: `${current + 1} of ${pages}`, inline: true },
-      { name: '🔐 Record Management', value: '**Archive:** Privately preserve the case for the owner to restore later.\n**Delete:** Permanently remove the case and its linked records.\nNeither action changes existing Discord punishments.', inline: false },
+      { name: emojiLabel('MOD_CASE_FOLDER', "Available Cases"), value: String(archived ? db.prepare('SELECT COUNT(*) AS n FROM cases WHERE guild_id = ?').get(guildId).n : rows.length), inline: true },
+      { name: emojiLabel('WELCOME_PRESET', "Archived Cases"), value: String(archived ? rows.length : ownerArchiveCount(guildId)), inline: true },
+      { name: emojiLabel('DOCUMENT', "Page"), value: `${current + 1} of ${pages}`, inline: true },
+      { name: emojiLabel('PERMISSION_GUARD', "Record Management"), value: '**Archive:** Privately preserve the case for the owner to restore later.\n**Delete:** Permanently remove the case and its linked records.\nNeither action changes existing Discord punishments.', inline: false },
     ).setFooter({ text: 'Goliath • Case Management • Server owner only' }).setTimestamp();
   return { embeds: [embed], components };
 }
@@ -940,7 +940,7 @@ async function handleOwnerCaseManagement(i) {
     if (current > 0) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_history:${current - 1}`).setLabel('Previous').setStyle(Discord.ButtonStyle.Secondary));
     if (current + 1 < pages) nav.addComponents(new Discord.ButtonBuilder().setCustomId(`mod_owner_history:${current + 1}`).setLabel('Next').setStyle(Discord.ButtonStyle.Secondary));
     nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Back').setStyle(Discord.ButtonStyle.Secondary));
-    await i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865F2).setTitle('📜 Case History')
+    await i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('CASES', "Case History"))
       .setDescription(description.slice(0, 4000)).setFooter({ text: `Goliath • Owner only • Page ${current + 1} of ${pages}` })], components: [nav] });
     return true;
   }
@@ -955,13 +955,13 @@ async function handleOwnerCaseManagement(i) {
     const review = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`🗂️ Manage Case #${caseId}`)
       .setDescription('Choose how this case should be handled. Both actions remove it from normal moderation records and member profiles.')
       .addFields(
-        { name: '👤 Member', value: `<@${record.userId}>`, inline: false },
-        { name: '📋 Action', value: ownerCaseDisplay(record.action), inline: true },
-        { name: '🛡️ Status', value: ownerCaseDisplay(record.status), inline: true },
-        { name: '📝 Reason', value: String(record.reason || 'None').slice(0, 1024), inline: false },
-        { name: '📁 Linked Records', value: `**Warnings:** ${warningCount}\n**Audit Entries:** ${auditCount}`, inline: false },
-        { name: '📦 Archive Case', value: 'Securely retain the complete record for owner-only access. The owner can restore it later.', inline: false },
-        { name: '🗑️ Delete Case', value: 'Permanently remove the case and linked records. Only a minimal private history marker remains. This cannot be undone.', inline: false });
+        { name: emojiLabel('USER', "Member"), value: `<@${record.userId}>`, inline: false },
+        { name: emojiLabel('INCIDENT_AUDIT', "Action"), value: ownerCaseDisplay(record.action), inline: true },
+        { name: emojiLabel('SECURITY', "Status"), value: ownerCaseDisplay(record.status), inline: true },
+        { name: emojiLabel('NOTE', "Reason"), value: String(record.reason || 'None').slice(0, 1024), inline: false },
+        { name: emojiLabel('MOD_CASE_FOLDER', "Linked Records"), value: `**Warnings:** ${warningCount}\n**Audit Entries:** ${auditCount}`, inline: false },
+        { name: emojiLabel('WELCOME_PRESET', "Archive Case"), value: 'Securely retain the complete record for owner-only access. The owner can restore it later.', inline: false },
+        { name: emojiLabel('DELETE', "Delete Case"), value: 'Permanently remove the case and linked records. Only a minimal private history marker remains. This cannot be undone.', inline: false });
     await i.update({ embeds: [review], components: [
       new Discord.ActionRowBuilder().addComponents(
         new Discord.ButtonBuilder().setCustomId(`mod_owner_archive_prompt:${caseId}`).setLabel('Archive Case').setEmoji(EMOJIS.BULK).setStyle(Discord.ButtonStyle.Primary),
@@ -984,12 +984,12 @@ async function handleOwnerCaseManagement(i) {
       .setTitle(`📦 Archived Case #${caseId}`)
       .setDescription('This case is archived. Its details are restricted to the server owner and excluded from active moderation and member profiles.')
       .addFields(
-        { name: '👤 Member', value: `<@${row.user_id}>`, inline: false },
-        { name: '📋 Action', value: ownerCaseDisplay(original.action), inline: true },
-        { name: '🛡️ Previous Status', value: ownerCaseDisplay(original.status), inline: true },
-        { name: '📝 Reason', value: String(original.reason || 'None').slice(0, 1024), inline: false },
-        { name: '📁 Preserved Records', value: `Warnings: ${warnings.length} · Audit Entries: ${audits.length}`, inline: false },
-        { name: '📅 Archived At', value: row.archived_at, inline: false })
+        { name: emojiLabel('USER', "Member"), value: `<@${row.user_id}>`, inline: false },
+        { name: emojiLabel('INCIDENT_AUDIT', "Action"), value: ownerCaseDisplay(original.action), inline: true },
+        { name: emojiLabel('SECURITY', "Previous Status"), value: ownerCaseDisplay(original.status), inline: true },
+        { name: emojiLabel('NOTE', "Reason"), value: String(original.reason || 'None').slice(0, 1024), inline: false },
+        { name: emojiLabel('MOD_CASE_FOLDER', "Preserved Records"), value: `Warnings: ${warnings.length} · Audit Entries: ${audits.length}`, inline: false },
+        { name: emojiLabel('WELCOME_SCHEDULED', "Archived At"), value: row.archived_at, inline: false })
       .setFooter({ text: 'Goliath • Owner Case Management' }).setTimestamp();
     await i.update({ embeds: [embed], components: [
       new Discord.ActionRowBuilder().addComponents(
@@ -1073,25 +1073,25 @@ async function handleOwnerCaseManagement(i) {
       return { warnings: warnings.length, audits: audits.length };
     })();
     if (!result) return safeReply(i, { content: 'Case not found. Nothing changed.', flags: 64 });
-    const title = operation === 'ARCHIVE' ? '📦 Case Archived' : operation === 'RESTORE' ? emojiLabel('SUCCESS', 'Case Restored') : '🗑️ Case Permanently Deleted';
+    const title = operation === 'ARCHIVE' ? emojiLabel('WELCOME_PRESET', "Case Archived") : operation === 'RESTORE' ? emojiLabel('SUCCESS', 'Case Restored') : emojiLabel('DELETE', "Case Permanently Deleted");
     const description = operation === 'ARCHIVE'
       ? `Case **#${caseId}** has been archived successfully. It is no longer visible in active moderation records or member profiles. Only the server owner can restore it.`
       : operation === 'RESTORE' ? `Case **#${caseId}** has been restored to case management.`
       : `Case **#${caseId}** has been permanently deleted. Only a restricted owner-only history marker remains.`;
     const details = operation === 'ARCHIVE'
       ? [
-          { name: '📋 Case Status', value: 'Archived', inline: true },
-          { name: '🔐 Access', value: 'Server Owner Only', inline: true },
-          { name: '📁 Preserved Records', value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
+          { name: emojiLabel('INCIDENT_AUDIT', "Case Status"), value: 'Archived', inline: true },
+          { name: emojiLabel('PERMISSION_GUARD', "Access"), value: 'Server Owner Only', inline: true },
+          { name: emojiLabel('MOD_CASE_FOLDER', "Preserved Records"), value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
         ]
       : operation === 'RESTORE'
         ? [
-            { name: '📋 Case Status', value: 'Restored', inline: true },
-            { name: '📁 Restored Records', value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
+            { name: emojiLabel('INCIDENT_AUDIT', "Case Status"), value: 'Restored', inline: true },
+            { name: emojiLabel('MOD_CASE_FOLDER', "Restored Records"), value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
           ]
         : [
-            { name: '📋 Case Status', value: 'Deleted', inline: true },
-            { name: '📁 Removed Records', value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
+            { name: emojiLabel('INCIDENT_AUDIT', "Case Status"), value: 'Deleted', inline: true },
+            { name: emojiLabel('MOD_CASE_FOLDER', "Removed Records"), value: `${result.warnings} linked warning(s) · ${result.audits} audit entry/entries`, inline: false },
           ];
     const destination = operation === 'ARCHIVE' ? 'mod_owner_archive_list:0' : 'mod_owner_management:0';
     const destinationLabel = operation === 'ARCHIVE' ? 'View Archived Cases' : 'Back to Case Management';
@@ -1150,7 +1150,7 @@ async function routeButtonsAndSelects(i) {
     if (/^q:\d{15,22}$/.test(value)) {
       const userId = value.slice(2), session = verificationStore.getVerificationSection(i.guild.id)?.sessions?.[userId];
       if (session?.state !== 'quarantined') return safeReply(i, { content: 'This quarantine is no longer active.', flags: 64 });
-      return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0xfee75c).setTitle('🔒 Quarantine Case')
+      return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0xfee75c).setTitle(emojiLabel('LOCKDOWN', "Quarantine Case"))
         .setDescription(`**Member:** <@${userId}>\\n**Reason:** Verification security challenge failed\\n**Failed checks:** ${Number(session.failedAttempts || 0)}\\n**Private channel:** ${session.quarantineChannelId ? `<#${session.quarantineChannelId}>` : 'Unavailable'}`)], components: [row(button(`mod_verification_case:${userId}`, 'Review / Decide'), button('mod_dashboard:none:cases', 'Back to Cases'))] });
     }
     if (/^c:\d+$/.test(value)) {
@@ -1159,10 +1159,10 @@ async function routeButtonsAndSelects(i) {
       if (await caseProceeding.handleProceedingInteraction(i)) return true;
       return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865f2).setTitle(`📁 Moderation Case #${caseId}`)
         .addFields(
-          { name: '👤 Member', value: `<@${record.userId || record.user_id}>`, inline: false },
-          { name: '📋 Action', value: String(record.action || 'Unknown'), inline: true },
-          { name: '🛡️ Status', value: String(record.status === 'reversed' ? 'Closed' : record.status || 'Active'), inline: true },
-          { name: '📝 Reason', value: String(record.reason || 'No reason recorded').slice(0, 1024), inline: false }
+          { name: emojiLabel('USER', "Member"), value: `<@${record.userId || record.user_id}>`, inline: false },
+          { name: emojiLabel('INCIDENT_AUDIT', "Action"), value: String(record.action || 'Unknown'), inline: true },
+          { name: emojiLabel('SECURITY', "Status"), value: String(record.status === 'reversed' ? 'Closed' : record.status || 'Active'), inline: true },
+          { name: emojiLabel('NOTE', "Reason"), value: String(record.reason || 'No reason recorded').slice(0, 1024), inline: false }
         )], components: [row(button('mod_dashboard:none:cases', 'Back to Cases'))] });
     }
     return safeReply(i, { content: 'Invalid case selection.', flags: 64 });
