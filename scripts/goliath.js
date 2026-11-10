@@ -4899,6 +4899,14 @@ async function gameUpdatesAudit() {
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
   await monitor.processGameUpdates(guild); assert.equal(sent.length, 3, 'Uncertain delivery is not blindly retried.');
   await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', channelId: '444444444444444444' }), /Resolve held deliveries/);
+  // A failed destination check must not turn an ambiguous delivery into dispatching.
+  allowed = false;
+  const heldBeforeRetry = JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending);
+  await assert.rejects(monitor.retryHeldGameUpdates(guild, '730'));
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), heldBeforeRetry,
+    'Failed retry validation must preserve held delivery state.');
+  assert.equal(sent.length, 3, 'Failed retry validation must not send a message.');
+  allowed = true;
   await monitor.retryHeldGameUpdates(guild, '730'); assert.equal(sent.length, 4); assert.deepEqual(sent[3].allowedMentions.roles, []);
   // Simulate a crash after Discord accepted a send but before local confirmation persisted.
   const recovered = makeItem(105); feed = [recovered, ...feed];
