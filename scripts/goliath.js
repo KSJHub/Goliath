@@ -4872,10 +4872,10 @@ async function gameUpdatesAudit() {
     global.fetch = async () => ({ ok: true, json: async () => ({ appnews: { appid: 999, newsitems: [] } }) });
     await assert.rejects(providers.getGameNews('570'), /invalid announcement feed/);
   } finally { global.fetch = originalFetch; }
-  let feed = [item], sourceFailed = false, sendError = null, allowed = true, messages = [], sent = [];
+  let feed = [item], sourceFailed = false, sendError = null, historyError = null, allowed = true, messages = [], sent = [];
   providers.getGameNews = async () => { if (sourceFailed) throw new Error('Source unavailable'); return { items: feed }; };
   const channelId = '222222222222222222', roleId = '333333333333333333';
-  const channel = { id: channelId, type: 0, permissionsFor: () => ({ has: () => allowed }), messages: { fetch: async () => ({ find: fn => messages.find(fn) }) }, send: async payload => { if (sendError) throw sendError; sent.push(payload); messages.push({ author: { id: 'bot' }, embeds: payload.embeds }); return { id: String(sent.length) }; } };
+  const channel = { id: channelId, type: 0, permissionsFor: () => ({ has: () => allowed }), messages: { fetch: async () => { if (historyError) throw historyError; return { find: fn => messages.find(fn) }; } }, send: async payload => { if (sendError) throw sendError; sent.push(payload); messages.push({ author: { id: 'bot' }, embeds: payload.embeds }); return { id: String(sent.length) }; } };
   const guild = { id: '111111111111111111', client: { user: { id: 'bot' } }, channels: { fetch: async () => channel }, members: { me: {} }, roles: { fetch: async () => ({ id: roleId, managed: false, mentionable: true }) } };
   await monitor.saveGameSubscription(guild, { appId: '730', name: 'Counter-Strike 2', channelId, roleId, enabled: true });
   await monitor.configureGameUpdates(guild, { enabled: true });
@@ -4907,6 +4907,13 @@ async function gameUpdatesAudit() {
     'Failed retry validation must preserve held delivery state.');
   assert.equal(sent.length, 3, 'Failed retry validation must not send a message.');
   allowed = true;
+  // Failure to read recent Discord history must not unlock an uncertain delivery.
+  historyError = new Error('Discord message history unavailable');
+  await assert.rejects(monitor.retryHeldGameUpdates(guild, '730'), /Discord message history unavailable/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), heldBeforeRetry,
+    'Failed history lookup must preserve held delivery state.');
+  assert.equal(sent.length, 3, 'Failed history lookup must not send an announcement.');
+  historyError = null;
   await monitor.retryHeldGameUpdates(guild, '730'); assert.equal(sent.length, 4); assert.deepEqual(sent[3].allowedMentions.roles, []);
   // Simulate a crash after Discord accepted a send but before local confirmation persisted.
   const recovered = makeItem(105); feed = [recovered, ...feed];
