@@ -1,6 +1,6 @@
 'use strict';
 const { navigationButton, linkButton } = require('../../../core/guild/goliathNavigation');
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
@@ -79,7 +79,7 @@ function groupMenu(guildId, selected = null, menuId = 'admin:roleSelector:groupS
     .setMaxValues(multi ? Math.max(1, list.length) : 1);
   if (!list.length) return row(menu.setDisabled(true).addOptions({ label: 'No groups available', value: '__none__' }));
   menu.addOptions(list.map((g) => ({
-    label: `${g.emoji || '🏷️'} ${g.name}`.slice(0, 100),
+    label: `${g.emoji || EMOJIS.ROLE_TAG} ${g.name}`.slice(0, 100),
     value: g.id,
     description: (g.builtIn ? 'Built-in group · protected' : `${g.selectionMode === 'multiple' ? 'Multiple choices' : 'Single choice'} · ${(g.options || []).length} options`).slice(0, 100),
     default: multi ? selectedIds.includes(g.id) : g.id === selected,
@@ -98,7 +98,7 @@ function memberCategoryMenu(guild, allowedIds = null, selected = null, menuId = 
     .setMaxValues(1);
   if (!list.length) return row(menu.setDisabled(true).addOptions({ label: 'No selectors available', value: '__none__' }));
   menu.addOptions(list.map((g) => ({
-    label: `${g.emoji || '🏷️'} ${g.name}`.slice(0, 100),
+    label: `${g.emoji || EMOJIS.ROLE_TAG} ${g.name}`.slice(0, 100),
     value: g.id,
     description: (g.description || 'Choose your roles').slice(0, 100),
   })));
@@ -186,7 +186,7 @@ function memberGroupPayload(guild, member, groupId, allowedIds = null, deploymen
   if (!group || !roleSelector.isGroupMemberUsable(group) || (Array.isArray(allowedIds) && !allowedIds.includes(group.id))) throw new Error('That selector is unavailable on this panel.');
 
   const components = [memberCategoryMenu(guild, allowedIds, group.id, deploymentId ? customId('roleSelector:switchGroup', deploymentId) : 'roleSelector:switchGroup')];
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`${group.emoji || '🏷️'} ${group.name}`).setDescription([
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`${group.emoji || EMOJIS.ROLE_TAG} ${group.name}`).setDescription([
     group.description || 'Choose your role.',
     group.selectionMode === 'multiple' ? 'Select every option that applies.' : 'Select one option.',
     group.allowRemove ? 'You may clear this category at any time.' : null,
@@ -282,12 +282,12 @@ async function buildAdminPanel(guild, requestedBy = 'Unknown User') {
       .setColor(!enabled ? 0x747F8D : health.healthy ? 0x57F287 : 0xFAA61A)
       .setTitle(emojiLabel('USER_ROLES', 'Role Selector'))
       .setDescription([
-        `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+        `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
         `**Groups:** ${groups(guild.id).length} (${customGroups(guild.id).length} custom)`,
         `**Members using selectors:** ${usage.totalUsing}/${usage.totalMembers}`,
         `**Deployments:** ${deployments.filter((d) => d.status === 'active').length} active`,
         `**Format:** \`${roleSelector.roleNameFor(section, 'Example Role')}\``,
-        `**Acceptance:** ${health.acceptance?.ready ? 'Ready ✅' : 'Not ready ⚠️'}`,
+        `**Acceptance:** ${health.acceptance?.ready ? `Ready ${EMOJIS.SUCCESS}` : `Not ready ${EMOJIS.WARNING}`}`,
       ].join('\n'))
       .setFooter({ text: `Requested by ${requestedBy}` })
       .setTimestamp()],
@@ -313,10 +313,10 @@ async function buildSettingsPanel(guild) {
       .setTitle(emojiLabel('SETTINGS', 'Role Selector · Settings'))
       .setDescription([
         '**Module Status**',
-        enabled ? 'Enabled ✅' : 'Disabled ❌',
+        enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`,
         '',
         '**System Health**',
-        health.healthy ? 'Healthy ✅' : 'Needs attention ⚠️',
+        health.healthy ? `Healthy ${EMOJIS.SUCCESS}` : `Needs attention ${EMOJIS.WARNING}`,
         '',
         '**Guild Role Style**',
         hasSuggestion ? `Detected: \`${section.style.detectedFormat}\`` : 'No guild role style has been scanned yet.',
@@ -349,7 +349,7 @@ function buildGroupsPanel(guildId, selectedId = null) {
   const lines = (selected.options || []).map((x) => `${x.enabled ? '✅' : '⬜'} ${x.emoji || '•'} **${x.label}** · Role: ${x.managed === false ? 'Existing role' : x.roleId ? 'Goliath-managed' : 'Auto-create'}`);
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', 'Role Selector · Groups')).setDescription([
-      `${selected.emoji || '🏷️'} **${selected.name}**`,
+      `${selected.emoji || EMOJIS.ROLE_TAG} **${selected.name}**`,
       selected.description || '`No description`', '',
       `**Type:** ${selected.selectionMode === 'multiple' ? 'Multiple choices' : 'Single choice'}`,
       `**Options:** ${(selected.options || []).length}`,
@@ -512,7 +512,7 @@ function deploymentGroupFilterMenu(guildId, deployment, selectedGroupId = null) 
   const menu = new StringSelectMenuBuilder().setCustomId(customId('admin:roleSelector:deploymentContentGroup', deployment.id)).setPlaceholder('Choose a group to limit roles').setMinValues(1).setMaxValues(1);
   if (!included.length) return row(menu.setDisabled(true).addOptions({ label: 'No role groups selected', value: '__none__' }));
   menu.addOptions(included.map((g) => ({
-    label: `${g.emoji || '🏷️'} ${g.name}`.slice(0, 100),
+    label: `${g.emoji || EMOJIS.ROLE_TAG} ${g.name}`.slice(0, 100),
     value: g.id,
     description: Array.isArray(deployment.optionIdsByGroup?.[g.id]) ? `${deployment.optionIdsByGroup[g.id].length} selected role(s)` : 'All roles included',
     default: g.id === selectedGroupId,
@@ -603,7 +603,7 @@ function statsDeploymentRecord(section) {
 async function buildStats(guild) {
   const usage = await roleSelector.getUsage(guild);
   const rows = [];
-  for (const group of usage.groups || []) for (const item of group.rows || []) rows.push({ ...item, groupId: group.id, groupName: group.name, groupEmoji: group.emoji || '🏷️' });
+  for (const group of usage.groups || []) for (const item of group.rows || []) rows.push({ ...item, groupId: group.id, groupName: group.name, groupEmoji: group.emoji || EMOJIS.ROLE_TAG });
   rows.sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
   const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0);
   return {
@@ -619,7 +619,7 @@ async function buildStats(guild) {
 async function buildPublicStatsPayload(guild) {
   const usage = await roleSelector.getUsage(guild);
   const rows = [];
-  for (const group of usage.groups || []) for (const item of group.rows || []) rows.push({ ...item, groupName: group.name, groupEmoji: group.emoji || '🏷️' });
+  for (const group of usage.groups || []) for (const item of group.rows || []) rows.push({ ...item, groupName: group.name, groupEmoji: group.emoji || EMOJIS.ROLE_TAG });
   rows.sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
   return resolvePayload(guild, {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ANALYTICS', 'Role Selector Leaderboard')).setDescription([
@@ -670,8 +670,8 @@ async function buildHealth(guild, result = null) {
   const format = (x) => typeof x === 'string' ? x : x?.detail || x?.message || x?.code || JSON.stringify(x);
   return {
     embeds: [new EmbedBuilder().setColor(health.healthy ? 0x57F287 : 0xFAA61A).setTitle(emojiLabel('WELCOME_DIAGNOSTICS', 'Role Selector · Health / Repair')).setDescription([
-      `**Overall Health:** ${health.healthy ? 'Healthy ✅' : 'Needs Attention ⚠️'}`,
-      `**Acceptance:** ${health.acceptance?.ready ? 'Ready ✅' : 'Not Ready ⚠️'}`,
+      `**Overall Health:** ${health.healthy ? `Healthy ${EMOJIS.SUCCESS}` : 'Needs Attention ⚠️'}`,
+      `**Acceptance:** ${health.acceptance?.ready ? `Ready ${EMOJIS.SUCCESS}` : 'Not Ready ⚠️'}`,
       `**Managed Roles:** ${health.managedRoleCount || 0}`, '',
       '**Issues**', (health.issues || []).length ? (health.issues || []).map((x) => `• ${format(x)}`).join('\n') : emojiLabel('HEALTHY', 'No issues'), '',
       '**Warnings**', (health.warnings || []).length ? (health.warnings || []).map((x) => `• ${format(x)}`).join('\n') : emojiLabel('HEALTHY', 'No warnings'),
@@ -966,7 +966,7 @@ async function handleRoleSelectorInteraction(i) {
     if (id === 'admin:roleSelector:stats') return respond(i, await buildStats(i.guild));
     if (id === 'admin:roleSelector:statsGroup' && i.values?.[0] !== '__none__') {
       const usage = await roleSelector.getUsage(i.guild, i.values[0]); const group = usage.groups?.[0];
-      return respond(i, { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`📊 ${group?.emoji || '🏷️'} ${group?.name || 'Group'}`).setDescription((group?.rows || []).map((x, index) => `${index + 1}. **${x.label}** — ${x.count || 0}`).join('\n') || '`No selections yet`')], components: [nav('admin:roleSelector:deployment', true)] });
+      return respond(i, { embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(`📊 ${group?.emoji || EMOJIS.ROLE_TAG} ${group?.name || 'Group'}`).setDescription((group?.rows || []).map((x, index) => `${index + 1}. **${x.label}** — ${x.count || 0}`).join('\n') || '`No selections yet`')], components: [nav('admin:roleSelector:deployment', true)] });
     }
     if (id === 'admin:roleSelector:statsPublic') return respond(i, await buildStatsDeploymentPanel(i));
     if (id === 'admin:roleSelector:statsDeploymentChannel') {
