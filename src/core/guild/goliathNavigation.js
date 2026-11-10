@@ -141,6 +141,11 @@ const EMOJIS = Object.freeze({
   USER_TRANSLATE: '🌐',
   USER_STATS: '📈',
   USER_TEMP_VOICE: '🔊',
+  USER_HOME: '🏠',
+  USER_LOCKED: '⬜',
+  USER_FINISH: '🏁',
+  USER_PAUSE: '⏸️',
+  USER_PLAY: '▶️',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
