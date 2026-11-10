@@ -23,7 +23,7 @@ const REFRESH = {
 };
 
 function displayName(interaction) { return interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User'; }
-function bool(value) { return value ? '🟢 Enabled' : '🔴 Disabled'; }
+function bool(value) { return value ? `${EMOJIS.ENABLED} Enabled` : `${EMOJIS.DISABLED} Disabled`; }
 function countModes(guildId) {
   const state = getQuarantineState(guildId);
   const entries = Object.values(state.users || {});
@@ -78,7 +78,7 @@ function botPermissionHealth(guild) {
     ['Kick Members', PermissionFlagsBits.KickMembers],
     ['Ban Members', PermissionFlagsBits.BanMembers],
   ];
-  return checks.map(([name, flag]) => `${me?.permissions?.has(flag) ? '🟢' : '🔴'} ${name}`).join('\n');
+  return checks.map(([name, flag]) => `${me?.permissions?.has(flag) ? EMOJIS.ENABLED : EMOJIS.DISABLED} ${name}`).join('\n');
 }
 function missingConfiguredResources(guild, verification, pending) {
   const problems = [];
@@ -102,7 +102,7 @@ function buildThreatPanel(interaction) {
   }
   const highest = severityCounts.critical ? 'Critical' : severityCounts.high ? 'High' : severityCounts.medium ? 'Medium' : severityCounts.low ? 'Low' : 'None';
   const actors = new Set(incidents.map(incidentActor).filter(Boolean));
-  const embed = base(interaction, '⚡ Threat Protection', '**Live correlated threat intelligence and incident response status.**', severityCounts.critical ? 0xED4245 : severityCounts.high ? 0xFEE75C : 0x5865F2)
+  const embed = base(interaction, `${EMOJIS.THREAT} Threat Protection`, '**Live correlated threat intelligence and incident response status.**', severityCounts.critical ? 0xED4245 : severityCounts.high ? 0xFEE75C : 0x5865F2)
     .addFields(
       { name: 'Incident Store', value: `**${incidents.length}** recorded\n**${packages.length}** evidence package(s)`, inline: true },
       { name: 'Highest Severity', value: `**${highest}**`, inline: true },
@@ -123,7 +123,7 @@ function buildAntiNukePanel(interaction) {
   const channel = config.thresholds?.channelDelete || {};
   const role = config.thresholds?.roleDelete || {};
   const responseEnabled = [config.lockdown?.enabled !== false, config.quarantine?.enabled !== false, config.emergencyControls?.disableInvites !== false, config.emergencyControls?.freezeRoles !== false].filter(Boolean).length;
-  const embed = base(interaction, '💥 Anti-Nuke', '**Live destructive-action protection configuration and response readiness.**', config.enabled === false ? 0xED4245 : 0x57F287)
+  const embed = base(interaction, `${EMOJIS.ANTI_NUKE} Anti-Nuke`, '**Live destructive-action protection configuration and response readiness.**', config.enabled === false ? 0xED4245 : 0x57F287)
     .addFields(
       { name: 'Protection', value: bool(config.enabled !== false), inline: true },
       { name: 'Response Layers', value: `**${responseEnabled}/4** enabled`, inline: true },
@@ -151,7 +151,7 @@ function buildAutoModPanel(interaction) {
       { name: 'System', value: bool(config.enabled), inline: true },
       { name: 'Protection Rules', value: `**${enabled}/${keys.length}** enabled`, inline: true },
       { name: 'Member DMs', value: bool(config.dmUser !== false), inline: true },
-      { name: 'Rules', value: keys.map((key) => `${config[key]?.enabled ? '🟢' : '⚫'} **${rules[key].title.replace(/^\S+\s*/, '')}**`).join('\n') || 'No AutoMod rules configured.', inline: false },
+      { name: 'Rules', value: keys.map((key) => `${config[key]?.enabled ? EMOJIS.ENABLED : EMOJIS.RULE_INACTIVE} **${rules[key].title.replace(/^\S+\s*/, '')}**`).join('\n') || 'No AutoMod rules configured.', inline: false },
       { name: 'Active Enforcement', value: actions.length ? actions.map((action) => `• ${action}`).join('\n') : 'No enforcement actions configured on enabled rules.', inline: true },
       { name: 'Exceptions', value: `Ignored roles: **${(config.ignoredRoles || []).length}**\nIgnored channels: **${(config.ignoredChannels || []).length}**`, inline: true },
       { name: 'Management', value: 'Open the existing AutoMod administration panel to edit rules, actions, thresholds, domains, messages and logging.', inline: false },
@@ -163,7 +163,7 @@ function buildMemberPanel(interaction) {
   const modes = countModes(interaction.guild.id);
   const state = getQuarantineState(interaction.guild.id);
   const entries = Object.entries(state.users || {}).slice(0, 10);
-  const embed = base(interaction, '👤 Member Security', '**Live member containment and investigation state.**')
+  const embed = base(interaction, `${EMOJIS.USER} Member Security`, '**Live member containment and investigation state.**')
     .addFields(
       { name: 'Investigations', value: `**${modes.investigations}** active`, inline: true },
       { name: 'Full Security', value: `**${modes.isolation}** active`, inline: true },
