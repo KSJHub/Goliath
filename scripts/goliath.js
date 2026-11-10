@@ -4983,6 +4983,20 @@ async function gameUpdatesAudit() {
   assert.equal(sent.length, beforeDisabled + 1, 'New announcements after re-enable must deliver normally.');
   await monitor.processGameUpdates(guild);
   assert.equal(sent.length, beforeDisabled + 1, 'Re-enabled subscription must not duplicate delivered news.');
+  // Uncertain deliveries must survive disable/re-enable and must prevent
+  // changing their destination until an administrator resolves them.
+  const heldAcrossToggle = makeItem(111);
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, pending: [{ item: heldAcrossToggle, status: 'ambiguous' }] } } }; });
+  const beforeHeldToggle = sent.length;
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: false });
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous', 'Disabling must retain uncertain delivery.');
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: true });
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].item.id, heldAcrossToggle.id, 'Re-enabling must retain uncertain delivery.');
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', channelId: '444444444444444444' }), /Resolve held deliveries/);
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].channelId, channelId, 'Rejected destination change must preserve original channel.');
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeHeldToggle, 'Polling must not automatically resend uncertain delivery.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
   await monitor.removeGameSubscription(guild, '730');
   assert.equal(Object.keys(store.getGameUpdates(guild.id).subscriptions).length, 0);
   assert(store.getGameUpdates(guild.id).history.length > 0); assert.equal(memory.currency, 'GBP'); assert.equal(memory.state.deliveries[0].messageId, 'preserve');
