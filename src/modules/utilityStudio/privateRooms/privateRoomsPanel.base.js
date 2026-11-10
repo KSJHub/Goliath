@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -99,7 +100,7 @@ function buildAdminPanel(guild, requester = 'Unknown User', page = 'overview') {
     return {
       embeds: [new EmbedBuilder()
         .setColor(PANEL_COLOR)
-        .setTitle('🔒 Private Rooms · Channels')
+        .setTitle(emojiLabel('LOCKDOWN', 'Private Rooms · Channels'))
         .setDescription([
           `**Room Category:** ${formatChannel(section.settings.categoryId)}`,
           `**New Room Request Channel:** ${formatChannel(section.settings.requestChannelId)}`,
@@ -124,7 +125,7 @@ function buildAdminPanel(guild, requester = 'Unknown User', page = 'overview') {
     return {
       embeds: [new EmbedBuilder()
         .setColor(PANEL_COLOR)
-        .setTitle('🔒 Private Rooms · Permissions')
+        .setTitle(emojiLabel('LOCKDOWN', 'Private Rooms · Permissions'))
         .setDescription([
           `**Managers:** ${formatRoles(section.settings.managerRoleIds)}`,
           `**Approvers:** ${formatRoles(section.settings.approverRoleIds)}`,
@@ -158,7 +159,7 @@ function buildAdminPanel(guild, requester = 'Unknown User', page = 'overview') {
 
   const embed = new EmbedBuilder()
     .setColor(enabled ? SUCCESS_COLOR : PANEL_COLOR)
-    .setTitle('🔒 Private Rooms')
+    .setTitle(emojiLabel('LOCKDOWN', 'Private Rooms'))
     .setDescription([
       'Temporary private conversation rooms for interviews, warnings, training, onboarding, mediation and informal two-way discussions.',
       '',
@@ -200,7 +201,7 @@ function buildStaffPanel(interaction) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(PANEL_COLOR)
-      .setTitle('🔒 Private Rooms · Staff')
+      .setTitle(emojiLabel('LOCKDOWN', 'Private Rooms · Staff'))
       .setDescription([
         'Create or manage temporary private rooms without using the formal Tickets workflow.',
         '',
@@ -227,7 +228,7 @@ function buildUserPanel(interaction) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(PANEL_COLOR)
-      .setTitle('🔒 My Private Rooms')
+      .setTitle(emojiLabel('LOCKDOWN', 'My Private Rooms'))
       .setDescription([
         'Request a temporary private conversation with selected server members. Management approval is used when required by this server.',
         '',
@@ -258,7 +259,7 @@ function buildWizard(interaction, mode) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(PANEL_COLOR)
-      .setTitle(isUser ? '🔒 Request Private Room' : '🔒 Create Private Room')
+      .setTitle(isUser ? emojiLabel('LOCKDOWN', 'Request Private Room') : emojiLabel('LOCKDOWN', 'Create Private Room'))
       .setDescription([
         `**Purpose:** ${purpose}`,
         `**Participants:** ${participants}`,
@@ -325,7 +326,7 @@ function buildRoomControl(room) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(room.status === 'locked' ? WARNING_COLOR : PANEL_COLOR)
-      .setTitle('🔒 Private Room')
+      .setTitle(emojiLabel('LOCKDOWN', 'Private Room'))
       .setDescription([
         `**Purpose:** ${room.purpose}`,
         `**Status:** ${room.status === 'locked' ? 'Locked 🔐' : 'Open ✅'}`,
@@ -424,10 +425,10 @@ function buildListPanel(interaction, kind, userOnly = false) {
   let title;
   if (kind === 'requests') {
     records = userOnly ? rooms.listUserRequests(guildId, interaction.user.id) : rooms.listRequests(guildId, 'pending');
-    title = userOnly ? '📨 My Private Room Requests' : '📨 Pending Private Room Requests';
+    title = userOnly ? emojiLabel('USER_INVITES', 'My Private Room Requests') : emojiLabel('USER_INVITES', 'Pending Private Room Requests');
   } else {
     records = userOnly ? rooms.listUserRooms(guildId, interaction.user.id).filter((item) => item.status !== 'closed') : rooms.listRooms(guildId).filter((item) => item.status !== 'closed');
-    title = userOnly ? '🔒 My Active Private Rooms' : '🔒 Active Private Rooms';
+    title = userOnly ? emojiLabel('LOCKDOWN', 'My Active Private Rooms') : emojiLabel('LOCKDOWN', 'Active Private Rooms');
   }
   const lines = records.slice(0, 15).map((record) => {
     if (kind === 'requests') return `• \`${record.requestId}\` — **${record.purpose}** — ${record.status}${record.roomId ? ` — room \`${record.roomId}\`` : ''}`;
@@ -475,7 +476,7 @@ async function submitWizard(interaction, mode) {
       }, { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_requested' });
       await postRequestCard(interaction.guild, request);
       clearSession(interaction, mode);
-      await ephemeral(interaction, '📨 Private Room request sent to management for approval.');
+      await ephemeral(interaction, emojiLabel('USER_INVITES', 'Private Room request sent to management for approval.'));
       return true;
     }
     const roomItem = await rooms.createRoom(interaction.guild, {
@@ -530,7 +531,7 @@ async function approveRequest(interaction, requestId) {
     await refreshRoomControl(interaction.guild, request.roomId);
   }
   await refreshRequestCard(interaction.guild, requestId);
-  return ephemeral(interaction, '✅ Request approved.');
+  return ephemeral(interaction, emojiLabel('HEALTHY', 'Request approved.'));
 }
 
 function denyRequestModal(requestId) {
@@ -674,7 +675,7 @@ async function handleInteraction(interaction) {
       : [...new Set(interaction.values || [])];
     rooms.updateRequest(interaction.guildId, requestId, { participantIds: participants }, { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_request_participants_edited' });
     await refreshRequestCard(interaction.guild, requestId);
-    return interaction.update({ content: '✅ Request participants updated.', components: [] });
+    return interaction.update({ content: emojiLabel('HEALTHY', 'Request participants updated.'), components: [] });
   }
 
   const denySubmit = id.match(/^privateRooms:request:deny-submit:([^:]+)$/);
@@ -686,7 +687,7 @@ async function handleInteraction(interaction) {
     await refreshRequestCard(interaction.guild, requestId);
     const requester = await interaction.guild.members.fetch(request.requesterId).catch(() => null);
     await requester?.user?.send(`❌ Your Private Room request in **${interaction.guild.name}** was denied.${reason ? `\nReason: ${reason}` : ''}`).catch(() => null);
-    return interaction.reply({ content: '❌ Request denied.', flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: emojiLabel('ERROR', 'Request denied.'), flags: MessageFlags.Ephemeral });
   }
 
   const roomButton = id.match(/^privateRooms:room:(add|remove|lock|note|close):([^:]+)$/);
@@ -713,7 +714,7 @@ async function handleInteraction(interaction) {
     if (action === 'lock') {
       await rooms.setRoomLocked(interaction.guild, roomId, roomItem.status !== 'locked', interaction.user.id, { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_lock_toggle' });
       await refreshRoomControl(interaction.guild, roomId);
-      return ephemeral(interaction, roomItem.status === 'locked' ? '🔓 Room unlocked.' : '🔒 Room locked.');
+      return ephemeral(interaction, roomItem.status === 'locked' ? emojiLabel('UNLOCK', 'Room unlocked.') : emojiLabel('LOCKDOWN', 'Room locked.'));
     }
     if (action === 'note') return interaction.showModal(roomNoteModal(roomId));
     if (action === 'close') return interaction.showModal(roomCloseModal(roomId));
@@ -732,7 +733,7 @@ async function handleInteraction(interaction) {
     if (manager || !section.settings.requireParticipantAddApproval) {
       await rooms.addParticipants(interaction.guild, roomId, selected, interaction.user.id, manager ? 'Added by room management' : 'Participant addition without approval requirement', { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_participants_added' });
       await refreshRoomControl(interaction.guild, roomId);
-      return interaction.update({ content: '✅ Participant(s) added.', components: [] });
+      return interaction.update({ content: emojiLabel('HEALTHY', 'Participant(s) added.'), components: [] });
     }
     const request = rooms.createRequest(interaction.guildId, {
       type: 'add_participant',
@@ -744,7 +745,7 @@ async function handleInteraction(interaction) {
     }, { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_participant_requested' });
     await rooms.appendRoomAudit(interaction.guild, roomId, { type: 'participant_add_requested', actorId: interaction.user.id, targetUserIds: selected }, { guildId: interaction.guildId, actorId: interaction.user.id });
     await postRequestCard(interaction.guild, request);
-    return interaction.update({ content: '📨 Participant request posted in this room for management approval.', components: [] });
+    return interaction.update({ content: emojiLabel('USER_INVITES', 'Participant request posted in this room for management approval.'), components: [] });
   }
 
   const removeSelect = id.match(/^privateRooms:room:remove-select:([^:]+)$/);
@@ -753,14 +754,14 @@ async function handleInteraction(interaction) {
     const roomId = removeSelect[1];
     await rooms.removeParticipants(interaction.guild, roomId, interaction.values || [], interaction.user.id, 'Removed by room management', { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_participants_removed' });
     await refreshRoomControl(interaction.guild, roomId);
-    return interaction.update({ content: '✅ Selected participant(s) removed.', components: [] });
+    return interaction.update({ content: emojiLabel('HEALTHY', 'Selected participant(s) removed.'), components: [] });
   }
 
   const noteSubmit = id.match(/^privateRooms:room:note-submit:([^:]+)$/);
   if (noteSubmit && interaction.isModalSubmit?.()) {
     if (!rooms.isManager(interaction.member, section.settings)) throw new Error('Only room management can add notes.');
     await rooms.addRoomNote(interaction.guild, noteSubmit[1], interaction.user.id, interaction.fields.getTextInputValue('note'), { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_note' });
-    return interaction.reply({ content: '📝 Note added to the room audit and transcript.', flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: emojiLabel('NOTE', 'Note added to the room audit and transcript.'), flags: MessageFlags.Ephemeral });
   }
 
   const closeSubmit = id.match(/^privateRooms:room:close-submit:([^:]+)$/);
@@ -769,7 +770,7 @@ async function handleInteraction(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const roomId = closeSubmit[1];
     await rooms.closeRoom(interaction.guild, roomId, interaction.user.id, interaction.fields.getTextInputValue('reason'), { guildId: interaction.guildId, actorId: interaction.user.id, action: 'private_room_closed' });
-    await interaction.editReply({ content: '✅ Private Room closed and transcript processed.' });
+    await interaction.editReply({ content: emojiLabel('HEALTHY', 'Private Room closed and transcript processed.') });
     return true;
   }
 
