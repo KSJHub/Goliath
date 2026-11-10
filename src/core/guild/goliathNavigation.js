@@ -85,6 +85,20 @@ const EMOJIS = Object.freeze({
   WELCOME_CLEANUP: '🧹',
   WELCOME_QUEUE: '👥',
   WELCOME_RUN: '▶',
+  // Security and protection panel symbols (shared across administration surfaces).
+  ENABLED: '🟢',
+  DISABLED: '🔴',
+  ANTI_NUKE: '💥',
+  LOCKDOWN: '🔒',
+  QUARANTINE: '🚧',
+  SECURITY_CORE: '🧠',
+  PERMISSION_GUARD: '🔐',
+  INCIDENT_AUDIT: '📋',
+  THREAT: '⚡',
+  SEVERITY_HIGH: '🟠',
+  SEVERITY_MEDIUM: '🟡',
+  SEVERITY_LOW: '🔵',
+  RULE_INACTIVE: '⚫',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
