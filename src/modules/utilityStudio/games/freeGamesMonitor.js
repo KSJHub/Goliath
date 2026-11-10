@@ -397,6 +397,11 @@ async function retryHeldGameUpdates(guild, appId) {
     // If Discord is inaccessible, the original ambiguous state must survive.
     const subscription = store.getGameUpdates(guild.id).subscriptions[appId];
     if (!subscription) throw new Error('Game subscription no longer exists.');
+    const routes = store.effectiveUpdateDestinations(subscription).filter(route => route.enabled);
+    if (routes.length !== 1 || routes[0].channelId !== subscription.channelId ||
+        (routes[0].roleId || null) !== (subscription.roleId || null)) {
+      throw new Error('Steam update recovery paused: destination configuration requires multi-channel support. No held deliveries were changed.');
+    }
     const channel = await validateDestination(guild, { ...subscription, alerts: false });
     const recent = await channel.messages.fetch({ limit: 100 });
     updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(entry => entry.status === 'ambiguous' ? { ...entry, status: 'dispatching', suppressMention: true, retryRequested: true } : entry) }));
