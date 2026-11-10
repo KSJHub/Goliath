@@ -609,7 +609,7 @@ async function buildStats(guild) {
   return {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ANALYTICS', 'Role Selector · Stats')).setDescription([
       `**Members using selectors:** ${usage.totalUsing}/${usage.totalMembers}`,
-      `**Total selections:** ${total}`, '', `**${EMOJIS.ROLE_GOLD_MEDAL} Most Selected**`,
+      `**Total selections:** ${total}`, '', `**${EMOJIS.ROLE_TROPHY} Most Selected**`,
       rows.filter((x) => x.count).slice(0, 10).map((x, index) => `${index + 1}. ${x.groupEmoji} **${x.label}** — ${x.count} · ${x.groupName}`).join('\n') || '`No selections yet`',
     ].join('\n'))],
     components: [groupMenu(guild.id, null, 'admin:roleSelector:statsGroup'), nav('admin:roleSelector:deployment', true)],
@@ -623,9 +623,9 @@ async function buildPublicStatsPayload(guild) {
   rows.sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
   return resolvePayload(guild, {
     embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ANALYTICS', 'Role Selector Leaderboard')).setDescription([
-      `${EMOJIS.UTILITY_GROUP} **Members using selectors:** ${usage.totalUsing}`,
+      `${EMOJIS.ROLE_MEMBERS} **Members using selectors:** ${usage.totalUsing}`,
       `${EMOJIS.RISK} **Total selections:** ${rows.reduce((sum, item) => sum + Number(item.count || 0), 0)}`, '',
-      `**${EMOJIS.ROLE_GOLD_MEDAL} Top Choices**`, rows.filter((x) => Number(x.count || 0) > 0).slice(0, 10).map((x, index) => `${index + 1}. ${x.groupEmoji} **${x.label}** — ${x.count}`).join('\n') || '`No selections yet`',
+      `**${EMOJIS.ROLE_TROPHY} Top Choices**`, rows.filter((x) => Number(x.count || 0) > 0).slice(0, 10).map((x, index) => `${index + 1}. ${x.groupEmoji} **${x.label}** — ${x.count}`).join('\n') || '`No selections yet`',
     ].join('\n'))], components: [],
   });
 }
