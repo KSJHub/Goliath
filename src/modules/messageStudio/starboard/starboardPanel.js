@@ -20,7 +20,7 @@ function buildStarboardAdminPanel(guild, memberDisplayName = 'Unknown User', rol
   const roleInfo = rolePages(guild, section.managerRoleIds || [], rolePage);
   const embed = new EmbedBuilder()
     .setColor(enabled ? 0x57f287 : 0x5865f2)
-    .setTitle('⭐ Starboard')
+    .setTitle(emojiLabel('USER_STARBOARD', 'Starboard'))
     .setDescription([
       'Configure highlighted messages powered by reactions.', '',
       `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
@@ -41,12 +41,12 @@ function buildStarboardAdminPanel(guild, memberDisplayName = 'Unknown User', rol
     row(new ChannelSelectMenuBuilder().setCustomId('admin:starboard:logChannel').setPlaceholder('Log channel').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
     ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:starboard:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
     row(
-      button(enabled ? 'admin:starboard:disable' : 'admin:starboard:enable', enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
-      button('admin:starboard:thresholdDown', '➖ Threshold', ButtonStyle.Secondary),
-      button('admin:starboard:thresholdUp', '➕ Threshold', ButtonStyle.Secondary),
-      button('admin:starboard:toggleSelf', '⭐ Self Star', ButtonStyle.Secondary)
+      button(enabled ? 'admin:starboard:disable' : 'admin:starboard:enable', enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary),
+      button('admin:starboard:thresholdDown', emojiLabel('REMOVE', 'Threshold'), ButtonStyle.Secondary),
+      button('admin:starboard:thresholdUp', emojiLabel('ADD', 'Threshold'), ButtonStyle.Secondary),
+      button('admin:starboard:toggleSelf', emojiLabel('USER_STARBOARD', 'Self Star'), ButtonStyle.Secondary)
     ),
-    row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary),
+    row(button('admin:modules', emojiLabel('BACK', 'Modules'), ButtonStyle.Secondary),
       button(`admin:starboard:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
       button(`admin:starboard:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
   ] };
