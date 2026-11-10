@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 // Compatibility wrapper around the Private Rooms panel.
 // Staff can create a room with no manually selected participants; when the
@@ -55,8 +56,8 @@ async function withUniversalDecisionDm(interaction, work) {
   const originalSend = requester.user.send;
   requester.user.send = async function privateRoomUniversalDm(payload) {
     const legacy = typeof payload === 'string'
-      && (payload.startsWith('✅ Your Private Room request was approved')
-        || payload.startsWith('❌ Your Private Room request in'));
+      && (payload.startsWith(emojiLabel('HEALTHY', 'Your Private Room request was approved'))
+        || payload.startsWith(emojiLabel('ERROR', 'Your Private Room request in')));
     if (!legacy) return originalSend.call(this, payload);
 
     const request = rooms.getRequest(interaction.guildId, context.requestId) || {};
