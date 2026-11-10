@@ -460,8 +460,8 @@ function keywordList(value) {
   if (!Array.isArray(value) || value.length > 10 || value.some(word => typeof word !== 'string' || word.length > 50)) throw new Error('Use up to ten keywords, separated by commas.');
   return [...new Set(value.map(word => word.trim().toLowerCase()).filter(Boolean))];
 }
-// A subscription may target multiple channels. Legacy channelId remains the
-// delivery source until the per-destination dispatcher is enabled.
+// Each subscription may deliver independently to up to ten channels.
+// Legacy channelId remains the fallback for existing subscriptions.
 function normalizeUpdateDestinations(value) {
   if (!Array.isArray(value) || value.length > 10) throw new Error('Choose up to ten update destinations.');
   const seen = new Set();
@@ -550,17 +550,18 @@ function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
   if (!sub) return buildUpdatesPanel(guild, 0, 'Game subscription no longer exists.');
   const { escape, SECTIONS } = require('./freeGamesEmbeds');
   const heldCount = sub.pending.filter(entry => entry.status === 'ambiguous' || entry.status === 'dispatching').length;
+  const updateRoutes = effectiveUpdateDestinations(sub);
   const queuedCount = sub.pending.length - heldCount;
   const embed = { title: '📰 ' + sub.name, color: SECTIONS[2].color,
     description: [notice && escape(notice), sub.enabled ? '▶ Subscription enabled' : '⏸ Subscription paused',
-      'Steam announcements currently support one destination channel per subscription.',
+      'Steam announcements can be delivered to up to ten channels, with independent role notifications.',
       sub.error && '⚠ ' + escape(sub.error), heldCount && '⚠ ' + heldCount + ' uncertain ' + (heldCount === 1 ? 'delivery' : 'deliveries') + ' require review before retrying or unsubscribing.'].filter(Boolean).join('\n\n'),
-    fields: [{ name: 'Destination', value: sub.channelId ? '<#' + sub.channelId + '>' : 'Choose a channel', inline: true },
+    fields: [{ name: 'Destinations', value: updateRoutes.length ? updateRoutes.map(route => (route.enabled ? '▶ ' : '⏸ ') + '<#' + route.channelId + '>' + (route.roleId ? ' · <@&' + route.roleId + '>' : '')).join('\n').slice(0, 1024) : 'Choose a channel', inline: false },
       { name: 'Notification role', value: sub.roleId ? '<@&' + sub.roleId + '>' : 'No role ping', inline: true },
       { name: 'Updates', value: 'Filter: ' + sub.filter + '\nLast check: ' + statusTime(sub.lastCheck) + '\nLast delivery: ' + statusTime(sub.lastSuccess) + '\nQueued: ' + queuedCount + '\nHeld for review: ' + heldCount, inline: false }],
     footer: { text: 'Games · Steam publisher announcements' }, timestamp: new Date().toISOString() };
   const actions = componentRow(panelButton('updates:preview:' + appId, 'Preview'),
-    panelButton('updates:send:' + appId, 'Send latest'));
+    panelButton('updates:send:' + appId, 'Send latest'), panelButton('updates:routes:' + appId, 'Destinations'));
   const back = gamesNavigation('updates:home:0', 'updates:' + (more ? 'game:' : 'more:') + appId);
   const rows = more ? [
     choiceMenu('updates:artwork:' + appId, 'Artwork', [['banner', 'Large artwork'], ['thumbnail', 'Thumbnail'], ['hidden', 'No artwork']], [sub.artwork]),
@@ -714,6 +715,25 @@ async function handleGameUpdatesInteraction(i, action, reply) {
     const notice = ['Recovery check complete: ' + result.recovered + ' existing message(s) recovered, ' + result.delivered + ' announcement(s) sent without role pings.',
       result.held ? result.held + (result.held === 1 ? ' delivery still needs review.' : ' deliveries still need review.') : 'No uncertain deliveries remain.'].join(' ');
     await reply(buildUpdateSubscriptionPanel(guild, appId, notice)); return true;
+  }
+  if (kind === 'routes') {
+    const rows = effectiveUpdateDestinations(sub).map(route => route.channelId + ',' + (route.roleId || '') + ',' + (route.enabled ? 'on' : 'off'));
+    await i.showModal({ custom_id: PANEL_PREFIX + 'updates:routes-submit:' + appId, title: 'Steam update destinations', components: [
+      componentRow({ type: 4, custom_id: 'routes', label: 'Channel ID, role ID, on/off (one per line)', style: 2, required: true,
+        min_length: 16, max_length: 500, value: rows.join('\\n').slice(0, 500) || '' })
+    ] }); return true;
+  }
+  if (kind === 'routes-submit') {
+    const raw = i.fields.getTextInputValue('routes');
+    const routes = raw.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean).map(line => {
+      const [channelId, roleId = '', enabled = 'on', extra] = line.split(',').map(value => value.trim());
+      if (extra !== undefined || !['on', 'off'].includes(enabled)) throw new Error('Use channel ID, optional role ID, and on/off per line.');
+      return { channelId, roleId: roleId || null, enabled: enabled === 'on' };
+    });
+    const first = routes.find(route => route.enabled);
+    if (!first) throw new Error('Choose at least one enabled destination.');
+    await monitor.saveGameSubscription(guild, { appId, destinations: routes, channelId: first.channelId, roleId: first.roleId });
+    await reply(buildUpdateSubscriptionPanel(guild, appId, 'Destinations saved. New announcements will use the selected channels.', true)); return true;
   }
   if (kind === 'keywords') {
     await i.showModal({ custom_id: PANEL_PREFIX + 'updates:keywords-submit:' + appId, title: 'Announcement keyword filters', components: [
