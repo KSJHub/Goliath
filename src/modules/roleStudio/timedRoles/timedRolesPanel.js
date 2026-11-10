@@ -67,7 +67,7 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
 
   const embed = new EmbedBuilder()
     .setColor(health.healthy ? 0x57F287 : 0xFAA61A)
-    .setTitle('⏳ Timed Roles · Member Tenure')
+    .setTitle(emojiLabel('TIMEOUT', 'Timed Roles · Member Tenure'))
     .setDescription([
       'Reward members automatically for how long they have stayed in the server.',
       '',
@@ -103,15 +103,15 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
           .setValue(rule.ruleId)))),
       row(new UserSelectMenuBuilder().setCustomId(`${PREFIX}:preview`).setPlaceholder('Preview any member’s progression').setMinValues(1).setMaxValues(1)),
       row(
-        button(`${PREFIX}:scan`, '🔎 Scan Now', ButtonStyle.Success),
-        button(`${PREFIX}:simulate`, '🧪 Simulate', ButtonStyle.Primary),
+        button(`${PREFIX}:scan`, emojiLabel('INVESTIGATE', 'Scan Now'), ButtonStyle.Success),
+        button(`${PREFIX}:simulate`, emojiLabel('TEST_SEND', 'Simulate'), ButtonStyle.Primary),
         button(`${PREFIX}:settings`, emojiLabel('SETTINGS', 'Settings')),
-        button(`${PREFIX}:repair`, '🩺 Repair'),
+        button(`${PREFIX}:repair`, emojiLabel('WELCOME_DIAGNOSTICS', 'Repair')),
       ),
       row(
         pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.max(0, safePage - 1)), emojiLabel('BACK', 'Roles'), ButtonStyle.Secondary, safePage <= 0) : null,
-        button(enabled ? `${PREFIX}:disable` : `${PREFIX}:enable`, enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button(`${PREFIX}:export`, '📤 Export'),
+        button(enabled ? `${PREFIX}:disable` : `${PREFIX}:enable`, enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
+        button(`${PREFIX}:export`, emojiLabel('MOD_EXPORT', 'Export')),
         button('admin:reactionRoles', emojiLabel('BACK', 'Role Studio')),
         pageCount > 1 ? button(rolePickerCustomId(`${PREFIX}:createRolePage`, 'page', Math.min(pageCount - 1, safePage + 1)), 'Roles ➡️', ButtonStyle.Secondary, safePage >= pageCount - 1) : null,
       ),
@@ -146,10 +146,10 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
     components: [
       ...cleanupPicker.rows,
       row(
-        button(`${PREFIX}:edit:${rule.ruleId}`, '✏️ Edit', ButtonStyle.Primary),
-        button(`${PREFIX}:duplicate:${rule.ruleId}`, '📋 Duplicate'),
-        button(`${PREFIX}:toggle:${rule.ruleId}`, rule.enabled ? '⏸️ Disable' : '▶️ Enable', rule.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button(`${PREFIX}:delete:${rule.ruleId}`, '🗑️ Delete', ButtonStyle.Danger),
+        button(`${PREFIX}:edit:${rule.ruleId}`, emojiLabel('EDIT', 'Edit'), ButtonStyle.Primary),
+        button(`${PREFIX}:duplicate:${rule.ruleId}`, emojiLabel('INCIDENT_AUDIT', 'Duplicate')),
+        button(`${PREFIX}:toggle:${rule.ruleId}`, rule.enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), rule.enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
+        button(`${PREFIX}:delete:${rule.ruleId}`, emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger),
         button(PREFIX, emojiLabel('BACK', 'Back')),
       ),
     ],
@@ -183,13 +183,13 @@ function buildSettingsPanel(guildId) {
         .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setMinValues(0).setMaxValues(1)),
       row(
-        button(`${PREFIX}:toggleMode`, highestOnly ? '🏅 Use Keep All' : '🥇 Use Highest Only', ButtonStyle.Primary),
-        button(`${PREFIX}:toggleAnnouncements`, section.settings.announcePromotions ? '🔕 Disable Announcements' : '📢 Enable Announcements'),
-        button(`${PREFIX}:toggleBots`, '🤖 Include Bots'),
+        button(`${PREFIX}:toggleMode`, highestOnly ? emojiLabel('ACHIEVEMENT', 'Use Keep All') : emojiLabel('ROLE_GOLD_MEDAL', 'Use Highest Only'), ButtonStyle.Primary),
+        button(`${PREFIX}:toggleAnnouncements`, section.settings.announcePromotions ? emojiLabel('WELCOME_MUTED', 'Disable Announcements') : emojiLabel('WELCOME_CHANNEL', 'Enable Announcements')),
+        button(`${PREFIX}:toggleBots`, emojiLabel('AUTOMOD', 'Include Bots')),
       ),
       row(
-        button(`${PREFIX}:interval`, '🕒 Scan Interval'),
-        button(`${PREFIX}:message`, '💬 Promotion Message'),
+        button(`${PREFIX}:interval`, emojiLabel('ROLE_CLOCK', 'Scan Interval')),
+        button(`${PREFIX}:message`, emojiLabel('USER_FEEDBACK', 'Promotion Message')),
         button(PREFIX, emojiLabel('BACK', 'Back')),
       ),
     ],
@@ -225,7 +225,7 @@ async function buildPreviewPanel(guild, memberId) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('🔍 Member Tenure Preview')
+      .setTitle(emojiLabel('SEARCH', 'Member Tenure Preview'))
       .setDescription([
         `**Member:** <@${member.id}>`,
         `**Joined:** ${formatTimestamp(member.joinedAt, 'F')}`,
@@ -248,7 +248,7 @@ function buildSimulationPanel(result) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(result.failed ? 0xFAA61A : 0x57F287)
-      .setTitle('🧪 Timed Roles Simulation')
+      .setTitle(emojiLabel('TEST_SEND', 'Timed Roles Simulation'))
       .setDescription([
         'No roles were changed.',
         '',
@@ -261,7 +261,7 @@ function buildSimulationPanel(result) {
         result.changes.length > 10 ? `\n…and ${result.changes.length - 10} more member changes.` : '',
       ].filter(Boolean).join('\n'))],
     components: [row(
-      button(`${PREFIX}:scan`, '🚀 Apply Changes', ButtonStyle.Success, !result.changes.length),
+      button(`${PREFIX}:scan`, emojiLabel('DEPLOY', 'Apply Changes'), ButtonStyle.Success, !result.changes.length),
       button(PREFIX, emojiLabel('BACK', 'Back')),
     )],
   };
@@ -399,7 +399,7 @@ async function handleTimedRolesInteraction(interaction) {
         enabled: guildManager.isModuleEnabled(interaction.guild.id, 'timedRoles'),
       };
       const attachment = new AttachmentBuilder(Buffer.from(JSON.stringify(exported, null, 2), 'utf8'), { name: `goliath-timed-roles-${interaction.guild.id}.json` });
-      await interaction.reply({ content: '📤 Timed Roles configuration export.', files: [attachment], ephemeral: true });
+      await interaction.reply({ content: emojiLabel('MOD_EXPORT', 'Timed Roles configuration export.'), files: [attachment], ephemeral: true });
       return true;
     }
     if (customId.startsWith(`${PREFIX}:edit:`)) {
