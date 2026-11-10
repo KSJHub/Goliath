@@ -538,7 +538,7 @@ function buildUpdatesPanel(guild, page = 0, notice = '') {
       { name: 'Quiet hours', value: config.quietStart ? config.quietStart + '–' + config.quietEnd + ' · ' + getConfig(guild.id).timeZone : 'Off', inline: true }],
     footer: { text: 'Games · Game Updates · ' + (page + 1) + '/' + pages }, timestamp: new Date().toISOString() };
   const rows = [componentRow(panelButton('updates:toggle', config.enabled ? 'Pause updates' : 'Enable updates', config.enabled ? 2 : 3),
-    panelButton('updates:check', 'Check now'), panelButton('updates:quiet', 'Quiet hours'))];
+    panelButton('updates:check', 'Check now'), panelButton('updates:quiet', 'Quiet hours'), panelButton('updates:history:0', 'Delivery history'))];
   if (subscriptions.length) rows.push(choiceMenu('updates:select', 'Choose a subscribed game', subscriptions.slice(page * 25, page * 25 + 25).map(sub => [sub.appId, (sub.enabled ? '▶ ' : '⏸ ') + sub.name])));
   rows.push(componentRow(panelButton('updates:catalog', 'Browse games'), panelButton('updates:add', 'Add Steam game')));
   if (pages > 1) rows.push(componentRow(panelButton('updates:home:' + Math.max(0, page - 1), '◀ Previous', 2, page === 0), panelButton('updates:home:' + (page + 1), 'Next ▶', 2, page === pages - 1)));
@@ -576,10 +576,40 @@ function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
   ];
   return { content: null, embeds: [embed], components: rows, allowedMentions: { parse: [] } };
 }
+function buildGameUpdateHistoryPanel(guild, page = 0, status = 'all') {
+  const config = getGameUpdates(guild.id);
+  const { escape, SECTIONS } = require('./freeGamesEmbeds');
+  const statuses = ['all', 'delivered', 'recovered', 'failed', 'needs_review'];
+  if (!statuses.includes(status)) status = 'all';
+  const records = (config.history || []).filter(record => status === 'all' || record.status === status);
+  const pages = Math.max(1, Math.ceil(records.length / 8));
+  page = Number.isSafeInteger(Number(page)) ? Math.min(Math.max(0, Number(page)), pages - 1) : 0;
+  const shown = records.slice(page * 8, (page + 1) * 8);
+  const fields = shown.map(record => ({
+    name: escape(String(record.title || 'Steam announcement').slice(0, 180)),
+    value: [escape(String(record.status || 'unknown').replace(/_/g, ' ')),
+      'App ID: ' + escape(String(record.appId || 'unknown')),
+      record.at && Number.isFinite(Number(record.at)) ? '<t:' + Math.floor(Number(record.at) / 1000) + ':R>' : null,
+      record.detail ? escape(String(record.detail).slice(0, 180)) : null].filter(Boolean).join(' · ').slice(0, 1024),
+    inline: false
+  }));
+  const embed = { title: '📰 Games · Delivery history', color: SECTIONS[2].color,
+    description: records.length ? 'Recent Steam announcement outcomes. Uncertain deliveries must be reviewed from their game subscription.' : 'No matching delivery records.',
+    fields, footer: { text: 'Games · Delivery history · ' + (page + 1) + '/' + pages + ' · ' + records.length + ' records' } };
+  const filterOptions = statuses.map(value => [value, value === 'all' ? 'All outcomes' : value.replace(/_/g, ' ')]);
+  return { content: null, embeds: [embed], allowedMentions: { parse: [] }, components: [
+    choiceMenu('updates:history-filter', 'Filter delivery outcomes', filterOptions, [status]),
+    componentRow(panelButton('updates:history:' + Math.max(0, page - 1) + ':' + status, '◀ Previous', 2, page === 0),
+      panelButton('updates:history:' + Math.min(pages - 1, page + 1) + ':' + status, 'Next ▶', 2, page === pages - 1)),
+    gamesNavigation('updates:home:0', 'home')
+  ] };
+}
 async function handleGameUpdatesInteraction(i, action, reply) {
   const guild = i.guild, monitor = require('./freeGamesMonitor'), providers = require('./freeGamesProviders');
   const [kind, argument] = action.split(':');
   if (kind === 'home') { await reply(buildUpdatesPanel(guild, Number(argument || 0))); return true; }
+  if (kind === 'history') { const [, page, status] = action.split(':'); await reply(buildGameUpdateHistoryPanel(guild, page || 0, status || 'all')); return true; }
+  if (kind === 'history-filter') { await reply(buildGameUpdateHistoryPanel(guild, 0, i.values?.[0] || 'all')); return true; }
   if (kind === 'game' || kind === 'more') { await reply(buildUpdateSubscriptionPanel(guild, providers.steamAppId(argument), '', kind === 'more')); return true; }
   if (kind === 'select') { await reply(buildUpdateSubscriptionPanel(guild, providers.steamAppId(i.values[0]))); return true; }
   if (kind === 'catalog') {
@@ -700,4 +730,4 @@ async function handleGameUpdatesInteraction(i, action, reply) {
   await monitor.saveGameSubscription(guild, patch);
   await reply(buildUpdateSubscriptionPanel(guild, appId, 'Settings saved.', ['keywords-submit', 'artwork', 'detail'].includes(kind))); return true;
 }
-Object.assign(module.exports, { buildUpdatesPanel, buildUpdateSubscriptionPanel, visibleSteamUpdateCatalog });
+Object.assign(module.exports, { buildUpdatesPanel, buildUpdateSubscriptionPanel, buildGameUpdateHistoryPanel, visibleSteamUpdateCatalog });
