@@ -289,7 +289,7 @@ function buildMemberScanPayload(i, target) {
   if (access.links) investigationLines.push('Confirmed links: ' + (persistentLinks.length ? '**' + persistentLinks.length + ' evidence record(s)**' : 'None'));
 
   const fields = [
-    { name: '🪪 Identity & History', value: identityLines.join('\n').slice(0, 1024), inline: false },
+    { name: `${EMOJIS.MOD_IDENTITY} Identity & History`, value: identityLines.join('\n').slice(0, 1024), inline: false },
     { name: emojiLabel('USER_HOME', 'Membership & Access'), value: membershipLines.join('\n').slice(0, 1024), inline: false },
     { name: emojiLabel('ACTIONS', 'Moderation & Risk'), value: moderationLines.join('\n').slice(0, 1024), inline: false },
     { name: emojiLabel('MOD_SCAN_HISTORY', 'Recent Cases'), value: recent.slice(0, 1024), inline: false },
@@ -306,7 +306,7 @@ function buildMemberScanPayload(i, target) {
 
   const embed = new Discord.EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`🔎 Member Intelligence Scan • ${target.user.tag}`)
+    .setTitle(`${EMOJIS.INVESTIGATE} Member Intelligence Scan • ${target.user.tag}`)
     .setDescription([
       `**Scan ID:** \`${scanId}\``,
       `**Target:** ${target.user} (\`${target.id}\`)`,
@@ -376,7 +376,7 @@ function buildScanHistoryPayload(i, target, origin = 'scan') {
   const buttons = [];
   if (origin === 'landing') buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel(emojiLabel('BACK', 'Back to Intelligence')).setStyle(Discord.ButtonStyle.Secondary));
   else if (canScanCapability(i, 'scan_run')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel(emojiLabel('BACK', 'Back to Scan')).setStyle(Discord.ButtonStyle.Secondary));
-  if (canScanCapability(i, 'scan_compare')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history_compare:${target.id}:${origin}`).setLabel('Compare Account').setEmoji('🧬').setStyle(Discord.ButtonStyle.Secondary));
+  if (canScanCapability(i, 'scan_compare')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history_compare:${target.id}:${origin}`).setLabel('Compare Account').setEmoji(EMOJIS.MOD_ACCOUNT_COMPARE).setStyle(Discord.ButtonStyle.Secondary));
   if (canManageHistory) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_clear_history:${target.id}:${origin}`).setLabel('Clear History').setEmoji(EMOJIS.ADMIN_PURGE).setStyle(Discord.ButtonStyle.Danger));
   if (buttons.length) components.push(new Discord.ActionRowBuilder().addComponents(...buttons));
   return { embed, components };
@@ -390,7 +390,7 @@ function buildComparisonPayload(i, primary, secondary, origin = 'scan') {
   const deltaJoined = Math.abs((primary.joinedTimestamp || 0) - (secondary.joinedTimestamp || 0));
   const embed = new Discord.EmbedBuilder()
     .setColor(correlation.score >= 70 ? 0xED4245 : correlation.score >= 35 ? 0xFEE75C : 0x5865F2)
-    .setTitle('🧬 Goliath Account Comparison')
+    .setTitle(`${EMOJIS.MOD_ACCOUNT_COMPARE} Goliath Account Comparison`)
     .setDescription([
       `${primary.user} (\`${primary.id}\`)`,
       'vs',
@@ -1098,7 +1098,7 @@ async function handleOwnerCaseManagement(i) {
     const controls = [
       new Discord.ActionRowBuilder().addComponents(
         new Discord.ButtonBuilder().setCustomId(destination).setLabel(destinationLabel)
-          .setEmoji(operation === 'ARCHIVE' ? '📦' : '⬅️').setStyle(Discord.ButtonStyle.Secondary)),
+          .setEmoji(operation === 'ARCHIVE' ? EMOJIS.BULK : EMOJIS.BACK).setStyle(Discord.ButtonStyle.Secondary)),
       new Discord.ActionRowBuilder().addComponents(
         new Discord.ButtonBuilder().setCustomId('mod_owner_history:0').setLabel('Case History')
           .setEmoji(EMOJIS.CASES).setStyle(Discord.ButtonStyle.Secondary)),
