@@ -553,7 +553,7 @@ function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
   const queuedCount = sub.pending.length - heldCount;
   const embed = { title: '📰 ' + sub.name, color: SECTIONS[2].color,
     description: [notice && escape(notice), sub.enabled ? '▶ Subscription enabled' : '⏸ Subscription paused',
-      sub.error && '⚠ ' + escape(sub.error), heldCount && '⚠ ' + heldCount + ' uncertain delivery' + (heldCount === 1 ? '' : 'ies') + ' require review before retrying or unsubscribing.'].filter(Boolean).join('\n\n'),
+      sub.error && '⚠ ' + escape(sub.error), heldCount && '⚠ ' + heldCount + ' uncertain ' + (heldCount === 1 ? 'delivery' : 'deliveries') + ' require review before retrying or unsubscribing.'].filter(Boolean).join('\n\n'),
     fields: [{ name: 'Destination', value: sub.channelId ? '<#' + sub.channelId + '>' : 'Choose a channel', inline: true },
       { name: 'Notification role', value: sub.roleId ? '<@&' + sub.roleId + '>' : 'No role ping', inline: true },
       { name: 'Updates', value: 'Filter: ' + sub.filter + '\nLast check: ' + statusTime(sub.lastCheck) + '\nLast delivery: ' + statusTime(sub.lastSuccess) + '\nQueued: ' + queuedCount + '\nHeld for review: ' + heldCount, inline: false }],
