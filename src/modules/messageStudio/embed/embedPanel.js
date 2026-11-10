@@ -3081,7 +3081,7 @@ function buildMediaManagerPanel(
     "**✏️ Edit** — Edit the selected media item.",
     "**🏷️ Type** — Choose Auto, Text, GIF or Image for the selected media.",
     "**👁️ Normal** — Show the selected media normally.",
-    `**${EMOJIS.EMBED_SPOILER} Spoiler** — Hide the selected media behind Discord’s spoiler treatment.",
+    `**${EMOJIS.EMBED_SPOILER} Spoiler** — Hide the selected media behind Discord’s spoiler treatment.`,
     "**↔️ Alignments** — Set Above/Below Content, Left/Centre/Right and Small/Medium/Large.",
     "**🖼️ Thumbnail** — Add or manage the panel thumbnail."
   );
