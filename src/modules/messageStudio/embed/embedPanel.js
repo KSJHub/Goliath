@@ -1,4 +1,4 @@
-const { actionButton, paginationButtons, emojiButton, navigationButton, linkButton } = require('../../../core/guild/goliathNavigation');
+const { actionButton, paginationButtons, emojiButton, navigationButton, linkButton, EMOJIS } = require('../../../core/guild/goliathNavigation');
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -219,15 +219,15 @@ function embedOperationError(error, channelId, operation = "send") {
   const code = discordErrorCode(error);
   const detail = discordErrorDetail(error);
   if (code === 50001 || code === 50013) {
-    return `❌ Discord denied access to <#${channelId}>. Recheck Goliath's effective channel and category permissions.`;
+    return `${EMOJIS.ERROR} Discord denied access to <#${channelId}>. Recheck Goliath's effective channel and category permissions.`;
   }
   if (code === 50035) {
-    return `❌ Discord rejected part of the embed or its buttons: ${detail}`;
+    return `${EMOJIS.ERROR} Discord rejected part of the embed or its buttons: ${detail}`;
   }
   if (code === 10008 && operation === "update") {
-    return "⚠️ The original embed message no longer exists.";
+    return `${EMOJIS.WARNING} The original embed message no longer exists.`;
   }
-  return `❌ Discord could not ${operation} the embed${code ? ` (error ${code})` : ""}: ${detail}`;
+  return `${EMOJIS.ERROR} Discord could not ${operation} the embed${code ? ` (error ${code})` : ""}: ${detail}`;
 }
 function safeUrl(v) {
   try {
