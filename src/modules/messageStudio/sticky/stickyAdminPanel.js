@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const stickyStore = require('./stickyStore');
@@ -11,7 +12,7 @@ const formatChannels = (data) => Object.keys(data.channels || {}).length ? Objec
 const formatRoles = (ids = []) => Array.isArray(ids) && ids.filter(Boolean).length ? ids.filter(Boolean).map((id) => `<@&${id}>`).join(', ') : '`None`';
 function getConfig(guildId) {
   const data = stickyStore.loadStickyData(guildId);
-  return { enabled: guildManager.isModuleEnabled(guildId, 'sticky') === true, channels: data.channels || {}, managerRoleIds: Array.isArray(data.managerRoleIds) ? data.managerRoleIds : [], defaultContent: data.defaultContent || '📌 Sticky message configured by Goliath.', repostEvery: Number(data.repostEvery || 10), cooldownSeconds: Number(data.cooldownSeconds ?? 60), cleanupPrevious: data.cleanupPrevious !== false, allowEmbeds: data.allowEmbeds !== false, mode: data.mode || 'per-channel' };
+  return { enabled: guildManager.isModuleEnabled(guildId, 'sticky') === true, channels: data.channels || {}, managerRoleIds: Array.isArray(data.managerRoleIds) ? data.managerRoleIds : [], defaultContent: data.defaultContent || emojiLabel('ADMIN_PIN', 'Sticky message configured by Goliath.'), repostEvery: Number(data.repostEvery || 10), cooldownSeconds: Number(data.cooldownSeconds ?? 60), cleanupPrevious: data.cleanupPrevious !== false, allowEmbeds: data.allowEmbeds !== false, mode: data.mode || 'per-channel' };
 }
 function saveConfig(guild, updater) {
   const current = getConfig(guild.id); const next = typeof updater === 'function' ? updater(current) : { ...current, ...(updater || {}) }; const existing = stickyStore.loadStickyData(guild.id);
@@ -20,7 +21,7 @@ function saveConfig(guild, updater) {
 }
 function buildStickyAdminPanel(guild, memberDisplayName = 'Unknown User') {
   const c = getConfig(guild.id); const active = Object.values(c.channels || {}).filter((s) => s?.enabled !== false).length;
-  const embed = new EmbedBuilder().setColor(c.enabled ? 0x57f287 : 0x5865f2).setTitle('💬 Sticky Messages').setDescription([
+  const embed = new EmbedBuilder().setColor(c.enabled ? 0x57f287 : 0x5865f2).setTitle(emojiLabel('USER_FEEDBACK', 'Sticky Messages')).setDescription([
     'Configure channels that automatically repost a sticky message after chat activity.', '',
     `**Status:** ${c.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
     `**Sticky Channels:** ${formatChannels(c)}`, `**Active Stickies:** \`${active}\``,
@@ -30,9 +31,9 @@ function buildStickyAdminPanel(guild, memberDisplayName = 'Unknown User') {
   return { embeds: [embed], components: [
     row(new ChannelSelectMenuBuilder().setCustomId('admin:sticky:channels').setPlaceholder('Sticky channels').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(10)),
     row(new RoleSelectMenuBuilder().setCustomId('admin:sticky:managerRoles').setPlaceholder('Manager roles').setMinValues(0).setMaxValues(10)),
-    row(button('admin:sticky:message', '✏️ Message', ButtonStyle.Primary), button('admin:sticky:refresh', '🔄 Refresh', ButtonStyle.Success), button(c.enabled ? 'admin:sticky:disable' : 'admin:sticky:enable', c.enabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary), button('admin:sticky:toggleEmbed', '🎨 Embed', ButtonStyle.Secondary)),
-    row(button('admin:sticky:repostDown', '➖ Repost', ButtonStyle.Secondary), button('admin:sticky:repostUp', '➕ Repost', ButtonStyle.Secondary), button('admin:sticky:cooldownDown', '➖ Cooldown', ButtonStyle.Secondary), button('admin:sticky:cooldownUp', '➕ Cooldown', ButtonStyle.Secondary)),
-    row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary)),
+    row(button('admin:sticky:message', emojiLabel('EDIT', 'Message'), ButtonStyle.Primary), button('admin:sticky:refresh', emojiLabel('REFRESH', 'Refresh'), ButtonStyle.Success), button(c.enabled ? 'admin:sticky:disable' : 'admin:sticky:enable', c.enabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary), button('admin:sticky:toggleEmbed', emojiLabel('DESIGN', 'Embed'), ButtonStyle.Secondary)),
+    row(button('admin:sticky:repostDown', emojiLabel('REMOVE', 'Repost'), ButtonStyle.Secondary), button('admin:sticky:repostUp', emojiLabel('ADD', 'Repost'), ButtonStyle.Secondary), button('admin:sticky:cooldownDown', emojiLabel('REMOVE', 'Cooldown'), ButtonStyle.Secondary), button('admin:sticky:cooldownUp', emojiLabel('ADD', 'Cooldown'), ButtonStyle.Secondary)),
+    row(button('admin:modules', emojiLabel('BACK', 'Modules'), ButtonStyle.Secondary)),
   ] };
 }
 function buildMessageModal(guildId) { const c = getConfig(guildId); return new ModalBuilder().setCustomId('admin:sticky:messageModal').setTitle('Sticky Message').addComponents(row(new TextInputBuilder().setCustomId('content').setLabel('Sticky message content').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1800).setValue(c.defaultContent.slice(0, 1800)))); }
@@ -43,7 +44,7 @@ async function handleStickyAdminInteraction(i) {
   try {
     if (id === 'admin:sticky') return safeUpdate(i, buildStickyAdminPanel(i.guild, member));
     if (id === 'admin:sticky:message') { await i.showModal(buildMessageModal(i.guild.id)); return true; }
-    if (i.isModalSubmit?.() && id === 'admin:sticky:messageModal') { const content = i.fields.getTextInputValue('content'); saveConfig(i.guild, (c) => { const channels = { ...(c.channels || {}) }; for (const channelId of Object.keys(channels)) channels[channelId] = { ...channels[channelId], content }; return { ...c, defaultContent: content, channels }; }); await i.reply({ content: '✅ Sticky message updated.', flags: 64 }).catch(() => null); return true; }
+    if (i.isModalSubmit?.() && id === 'admin:sticky:messageModal') { const content = i.fields.getTextInputValue('content'); saveConfig(i.guild, (c) => { const channels = { ...(c.channels || {}) }; for (const channelId of Object.keys(channels)) channels[channelId] = { ...channels[channelId], content }; return { ...c, defaultContent: content, channels }; }); await i.reply({ content: emojiLabel('HEALTHY', 'Sticky message updated.'), flags: 64 }).catch(() => null); return true; }
     if (i.isChannelSelectMenu?.() && id === 'admin:sticky:channels') upsertSelectedChannels(i.guild, i.values || []);
     else if (i.isRoleSelectMenu?.() && id === 'admin:sticky:managerRoles') saveConfig(i.guild, { managerRoleIds: [...new Set(i.values || [])] });
     else if (id === 'admin:sticky:enable') saveConfig(i.guild, { enabled: true });
