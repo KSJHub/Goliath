@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const leveling = require('./leveling');
 const panel = require('./levelingPanel');
@@ -799,7 +800,7 @@ async function handleLevelingInteraction(interaction) {
       await interaction.followUp({
         content: result.removed
           ? `🩹 Removed ${result.removed} missing reward mapping${result.removed === 1 ? '' : 's'}. A backup was created first.`
-          : '✅ No missing level reward roles were found.',
+          : emojiLabel('HEALTHY', 'No missing level reward roles were found.'),
         flags: 64,
       }).catch(() => null);
       return safeUpdate(interaction, panel.buildRankRewardsPanel(interaction.guild, displayName));
