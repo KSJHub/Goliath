@@ -222,6 +222,7 @@ const EMOJIS = Object.freeze({
   SOCIAL_BROADCAST: '📡',
   SOCIAL_FORWARD: '↪️',
   DOCUMENT: '📄',
+  VARIABLES: '📖',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
