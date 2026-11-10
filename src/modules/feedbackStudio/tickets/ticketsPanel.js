@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton, paginationButtons, emojiButton } = require('../../../core/guild/goliathNavigation');
 
@@ -484,9 +485,9 @@ let ticketSetupPanelApi;
 
   function buildPanelStatusText(panel) {
     if (!panel) return 'Unknown';
-    if (panel.deployed) return '🟢 Deployed';
-    if (panel.enabled === false) return '🔴 Disabled';
-    return '🟡 Draft';
+    if (panel.deployed) return emojiLabel('ENABLED', 'Deployed');
+    if (panel.enabled === false) return emojiLabel('DISABLED', 'Disabled');
+    return emojiLabel('SEVERITY_MEDIUM', 'Draft');
   }
 
   function formatLabel(value = '') {
@@ -1072,7 +1073,7 @@ let ticketSetupPanelApi;
     await interaction.editReply({
       content: channel
         ? `✅ Ticket created: <#${channel.id}>`
-        : '⚠️ Ticket created, but I could not create the Discord channel.',
+        : emojiLabel('WARNING', 'Ticket created, but I could not create the Discord channel.'),
     });
 
     return true;
@@ -1354,7 +1355,7 @@ let ticketSetupPanelApi;
             .reply(
               ephemeralPayload({
                 content:
-                  '❌ Ticket setup panel failed to update. Check VPS logs.',
+                  emojiLabel('ERROR', 'Ticket setup panel failed to update. Check VPS logs.'),
               })
             )
             .catch(() => null);
@@ -1403,9 +1404,9 @@ let ticketSetupPanelApi;
   }
 
   function getStatusText(panel) {
-    if (panel?.deployed) return '🟢 Deployed';
-    if (panel?.enabled === false) return '🔴 Disabled';
-    return '🟡 Draft';
+    if (panel?.deployed) return emojiLabel('ENABLED', 'Deployed');
+    if (panel?.enabled === false) return emojiLabel('DISABLED', 'Disabled');
+    return emojiLabel('SEVERITY_MEDIUM', 'Draft');
   }
 
   function formatLabel(value) {
@@ -1489,7 +1490,7 @@ let ticketSetupPanelApi;
     const stats = getSetupStats(guildId);
 
     return new EmbedBuilder()
-      .setTitle('🎟️ Goliath Tickets')
+      .setTitle(emojiLabel('GIVEAWAY_TICKET', 'Goliath Tickets'))
       .setDescription(
         [
           '**Realtime Platform Expansion**',
@@ -1517,7 +1518,7 @@ let ticketSetupPanelApi;
     return new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId('ticket_setup:select_panel')
-        .setPlaceholder('👥 Manage an existing ticket panel')
+        .setPlaceholder(emojiLabel('MOD_STAFF', 'Manage an existing ticket panel'))
         .addOptions(
           panels.map((panel) => {
             const ui = getPanelTypeUi(panel.ticketType);
@@ -1665,9 +1666,9 @@ let ticketSetupPanelApi;
           `👁️ Viewer Roles: ${formatRoleCount(panel.viewerRoleIds)}`,
           '',
           '**Role Access**',
-          '👥 Staff can claim, update, close, reopen and archive tickets.',
-          '🛡️ Managers can do staff actions plus delete/manage higher-level controls.',
-          '👁️ Viewers can read tickets but cannot send messages.',
+          emojiLabel('MOD_STAFF', 'Staff can claim, update, close, reopen and archive tickets.'),
+          emojiLabel('SECURITY', 'Managers can do staff actions plus delete/manage higher-level controls.'),
+          emojiLabel('WELCOME_PREVIEW', 'Viewers can read tickets but cannot send messages.'),
         ].join('\n')
       )
       .setColor('#5865F2')
@@ -1729,7 +1730,7 @@ let ticketSetupPanelApi;
       new ActionRowBuilder().addComponents(
         new ChannelSelectMenuBuilder()
           .setCustomId(`ticket_setup:set_output:${panelId}`)
-          .setPlaceholder('📁 Ticket Category')
+          .setPlaceholder(emojiLabel('MOD_CASE_FOLDER', 'Ticket Category'))
           .setChannelTypes(ChannelType.GuildCategory)
           .setMinValues(1)
           .setMaxValues(1)
@@ -1738,7 +1739,7 @@ let ticketSetupPanelApi;
       new ActionRowBuilder().addComponents(
         new ChannelSelectMenuBuilder()
           .setCustomId(`ticket_setup:set_deploy:${panelId}`)
-          .setPlaceholder('📢 Panel Channel')
+          .setPlaceholder(emojiLabel('WELCOME_CHANNEL', 'Panel Channel'))
           .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
           .setMinValues(1)
           .setMaxValues(1)
@@ -1774,7 +1775,7 @@ let ticketSetupPanelApi;
       new ActionRowBuilder().addComponents(
         new ChannelSelectMenuBuilder()
           .setCustomId(`ticket_setup:set_logs:${panel.panelId}`)
-          .setPlaceholder(panel.logsChannelId ? '📜 Logs Channel • Set' : '📜 Logs Channel')
+          .setPlaceholder(panel.logsChannelId ? emojiLabel('CASES', 'Logs Channel • Set') : emojiLabel('CASES', 'Logs Channel'))
           .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
           .setMinValues(1)
           .setMaxValues(1),
@@ -1810,7 +1811,7 @@ let ticketSetupPanelApi;
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId(`ticket_setup:appearance_select:${panel.panelId}`)
-          .setPlaceholder('🎨 Choose appearance setting to edit')
+          .setPlaceholder(emojiLabel('DESIGN', 'Choose appearance setting to edit'))
           .addOptions(
             {
               label: 'Embed Title',
@@ -1905,7 +1906,7 @@ let ticketSetupPanelApi;
 
     if (!panel) {
       return safeUpdate(interaction, {
-        content: '❌ Ticket panel not found.',
+        content: emojiLabel('ERROR', 'Ticket panel not found.'),
         embeds: [],
         components: [],
       });
@@ -1923,7 +1924,7 @@ let ticketSetupPanelApi;
 
     if (!panel) {
       return safeUpdate(interaction, {
-        content: '❌ Ticket panel not found.',
+        content: emojiLabel('ERROR', 'Ticket panel not found.'),
         embeds: [],
         components: [],
       });
@@ -1941,7 +1942,7 @@ let ticketSetupPanelApi;
 
     if (!panel) {
       return safeUpdate(interaction, {
-        content: '❌ Ticket panel not found.',
+        content: emojiLabel('ERROR', 'Ticket panel not found.'),
         embeds: [],
         components: [],
       });
@@ -1959,7 +1960,7 @@ let ticketSetupPanelApi;
 
     if (!panel) {
       return safeUpdate(interaction, {
-        content: '❌ Ticket panel not found.',
+        content: emojiLabel('ERROR', 'Ticket panel not found.'),
         embeds: [],
         components: [],
       });
@@ -2045,7 +2046,7 @@ let ticketSetupPanelApi;
     return safeReply(
       interaction,
       ephemeralPayload({
-        content: '❌ You need Manage Server permission.',
+        content: emojiLabel('ERROR', 'You need Manage Server permission.'),
       })
     );
   }
@@ -2082,7 +2083,7 @@ let ticketSetupPanelApi;
       return safeReply(
         interaction,
         ephemeralPayload({
-          content: '❌ Ticket panel not found.',
+          content: emojiLabel('ERROR', 'Ticket panel not found.'),
         })
       );
     }
@@ -2111,7 +2112,7 @@ let ticketSetupPanelApi;
       return safeReply(
         interaction,
         ephemeralPayload({
-          content: '❌ Ticket panel not found.',
+          content: emojiLabel('ERROR', 'Ticket panel not found.'),
         })
       );
     }
@@ -2143,7 +2144,7 @@ let ticketSetupPanelApi;
       return safeReply(
         interaction,
         ephemeralPayload({
-          content: '❌ Appearance setting not found.',
+          content: emojiLabel('ERROR', 'Appearance setting not found.'),
         })
       );
     }
@@ -2199,7 +2200,7 @@ let ticketSetupPanelApi;
       return safeReply(
         interaction,
         ephemeralPayload({
-          content: '❌ Invalid ticket limit. Enter 0 or a whole number above 0.',
+          content: emojiLabel('ERROR', 'Invalid ticket limit. Enter 0 or a whole number above 0.'),
         })
       );
     }
@@ -2218,7 +2219,7 @@ let ticketSetupPanelApi;
       ephemeralPayload({
         content:
           value === 0
-            ? '✅ Ticket limit updated: Unlimited.'
+            ? emojiLabel('HEALTHY', 'Ticket limit updated: Unlimited.')
             : `✅ Ticket limit updated: ${value} open ticket${value === 1 ? '' : 's'} per user.`,
       })
     );
@@ -2232,7 +2233,7 @@ let ticketSetupPanelApi;
       return safeReply(
         interaction,
         ephemeralPayload({
-          content: '❌ Invalid cooldown. Enter 0 or a whole number of seconds.',
+          content: emojiLabel('ERROR', 'Invalid cooldown. Enter 0 or a whole number of seconds.'),
         })
       );
     }
@@ -2251,7 +2252,7 @@ let ticketSetupPanelApi;
       ephemeralPayload({
         content:
           seconds === 0
-            ? '✅ Ticket cooldown disabled.'
+            ? emojiLabel('HEALTHY', 'Ticket cooldown disabled.')
             : `✅ Ticket cooldown updated: ${seconds} second${seconds === 1 ? '' : 's'}.`,
       })
     );
@@ -2264,7 +2265,7 @@ let ticketSetupPanelApi;
       return safeReply(
         interaction,
         ephemeralPayload({
-          content: '❌ Appearance setting not found.',
+          content: emojiLabel('ERROR', 'Appearance setting not found.'),
         })
       );
     }
@@ -2279,7 +2280,7 @@ let ticketSetupPanelApi;
         return safeReply(
           interaction,
           ephemeralPayload({
-            content: '❌ Invalid HEX color. Use something like `#5865F2`.',
+            content: emojiLabel('ERROR', 'Invalid HEX color. Use something like `#5865F2`.'),
           })
         );
       }
@@ -2293,7 +2294,7 @@ let ticketSetupPanelApi;
       return safeReply(
         interaction,
         ephemeralPayload({
-          content: '❌ Ticket panel not found.',
+          content: emojiLabel('ERROR', 'Ticket panel not found.'),
         })
       );
     }
@@ -2451,7 +2452,7 @@ let ticketSetupPanelApi;
         await safeReply(
           interaction,
           ephemeralPayload({
-            content: '❌ Ticket panel not found.',
+            content: emojiLabel('ERROR', 'Ticket panel not found.'),
           })
         );
         return true;
@@ -2525,7 +2526,7 @@ let ticketSetupPanelApi;
       const panel = getPanel(interaction.guild.id, panelId);
 
       if (!panel) {
-        await safeReply(interaction, ephemeralPayload({ content: '❌ Panel not found.' }));
+        await safeReply(interaction, ephemeralPayload({ content: emojiLabel('ERROR', 'Panel not found.') }));
         return true;
       }
 
@@ -2539,7 +2540,7 @@ let ticketSetupPanelApi;
           interaction,
           ephemeralPayload({
             content:
-              '❌ Please set a Panel Channel first. This is where the ticket panel message will be posted.',
+              emojiLabel('ERROR', 'Please set a Panel Channel first. This is where the ticket panel message will be posted.'),
           })
         );
         return true;
@@ -2563,7 +2564,7 @@ let ticketSetupPanelApi;
       const panel = getPanel(interaction.guild.id, panelId);
 
       if (!panel) {
-        await safeReply(interaction, ephemeralPayload({ content: '❌ Panel not found.' }));
+        await safeReply(interaction, ephemeralPayload({ content: emojiLabel('ERROR', 'Panel not found.') }));
         return true;
       }
 
@@ -2576,7 +2577,7 @@ let ticketSetupPanelApi;
         await safeReply(
           interaction,
           ephemeralPayload({
-            content: '❌ Please set a Panel Channel first before redeploying.',
+            content: emojiLabel('ERROR', 'Please set a Panel Channel first before redeploying.'),
           })
         );
         return true;
@@ -2600,7 +2601,7 @@ let ticketSetupPanelApi;
       const panel = getPanel(interaction.guild.id, panelId);
 
       if (!panel) {
-        await safeReply(interaction, ephemeralPayload({ content: '❌ Panel not found.' }));
+        await safeReply(interaction, ephemeralPayload({ content: emojiLabel('ERROR', 'Panel not found.') }));
         return true;
       }
 
@@ -2615,7 +2616,7 @@ let ticketSetupPanelApi;
       await safeEditOrReply(interaction, {
         content: success
           ? `📦 Ticket panel **${panel.name}** undeployed.`
-          : '⚠️ This panel was not deployed or the message could not be found.',
+          : emojiLabel('WARNING', 'This panel was not deployed or the message could not be found.'),
       });
 
       return true;
@@ -2625,7 +2626,7 @@ let ticketSetupPanelApi;
       const deleted = deletePanel(interaction.guild.id, panelId);
 
       await safeUpdate(interaction, {
-        content: deleted ? '🗑️ Ticket panel deleted.' : '❌ Ticket panel not found.',
+        content: deleted ? emojiLabel('DELETE', 'Ticket panel deleted.') : emojiLabel('ERROR', 'Ticket panel not found.'),
         embeds: [],
         components: [],
       });
