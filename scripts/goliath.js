@@ -4923,6 +4923,17 @@ async function gameUpdatesAudit() {
   store.updateGameUpdates(guild.id, state => { const sub = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...sub, seenIds: [recovered.id, ...sub.seenIds], pending: [{ item: recovered, status: 'dispatching' }] } } }; });
   messages.push({ author: { id: 'bot' }, embeds: embeds.buildGameUpdate(store.getGameUpdates(guild.id).subscriptions['730'], recovered).embeds });
   await monitor.processGameUpdates(guild); assert.equal(sent.length, 4); assert.equal(store.getGameUpdates(guild.id).history[0].status, 'recovered');
+  // An explicit Retry held that discovers an existing Discord message must journal
+  // that channel's recovered message ID, without sending another announcement.
+  const retryRecovered = makeItem(1052);
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, pending: [{ item: retryRecovered, status: 'ambiguous' }] } } }; });
+  messages.push({ id: 'recovered-1052', author: { id: 'bot' }, embeds: embeds.buildGameUpdate(store.getGameUpdates(guild.id).subscriptions['730'], retryRecovered).embeds });
+  const recoveredOutcome = await monitor.retryHeldGameUpdates(guild, '730');
+  assert.equal(recoveredOutcome.recovered, 1);
+  assert.equal(recoveredOutcome.delivered, 0);
+  assert.equal(sent.length, 4, 'Recovery of an existing message must not resend it.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].routeDeliveries[channelId][0].messageId, 'recovered-1052');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].routeDeliveries[channelId][0].status, 'recovered');
   // A restart with a dispatching item absent from recent channel history is uncertain,
   // not proof of non-delivery. Hold it for review rather than risk a duplicate post.
   const uncertain = makeItem(1051);
