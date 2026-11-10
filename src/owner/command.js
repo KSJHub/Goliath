@@ -42,7 +42,7 @@ function ownerAllowed(interaction) {
 
 function ownerDeniedPayload() {
   return {
-    content: '❌ This control panel is restricted to the configured Goliath owners.',
+    content: emojiLabel('ERROR', 'This control panel is restricted to the configured Goliath owners.'),
     flags: MessageFlags.Ephemeral,
   };
 }
@@ -221,7 +221,7 @@ function ownerHomePayload(interaction, notice = null) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('👑 Goliath Owner Control Panel')
+    .setTitle(emojiLabel('ADMIN_CROWN', 'Goliath Owner Control Panel'))
     .setDescription([
       'Private owner-only controls for Goliath development, security testing and server tooling.',
       '',
@@ -232,9 +232,9 @@ function ownerHomePayload(interaction, notice = null) {
       { name: 'Owner Gate', value: `**${ownersLoaded}** configured owner IDs`, inline: true },
       { name: 'Panel Visibility', value: 'Ephemeral • owner ID checked on every action', inline: true },
       { name: 'Context', value: guildContext, inline: false },
-      { name: 'DEV Override', value: isDev ? (devState.enabled ? '🟢 Enabled' : '🔴 Disabled') : '⚪ DEV only', inline: true },
-      { name: 'DEV Billing Unlock', value: isDev ? (billing.active ? `🟢 ${billing.plan || 'enabled'}` : '🔴 Disabled') : '⚪ DEV only', inline: true },
-      { name: 'Owner Tools', value: showCommandCenter ? '🟢 Server Tools • Security • Maintenance • DEV Sync • Command Center' : (isDev ? '🟢 Server Tools • Security • Maintenance • DEV Sync' : '🟢 Server Tools • Security • Maintenance'), inline: true },
+      { name: 'DEV Override', value: isDev ? (devState.enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled')) : emojiLabel('INACTIVE', 'DEV only'), inline: true },
+      { name: 'DEV Billing Unlock', value: isDev ? (billing.active ? `🟢 ${billing.plan || 'enabled'}` : emojiLabel('DISABLED', 'Disabled')) : emojiLabel('INACTIVE', 'DEV only'), inline: true },
+      { name: 'Owner Tools', value: showCommandCenter ? emojiLabel('ENABLED', 'Server Tools • Security • Maintenance • DEV Sync • Command Center') : (isDev ? emojiLabel('ENABLED', 'Server Tools • Security • Maintenance • DEV Sync') : emojiLabel('ENABLED', 'Server Tools • Security • Maintenance')), inline: true },
     )
     .setFooter({ text: 'Goliath Owner • OWNER_IDS protected' })
     .setTimestamp();
@@ -279,22 +279,22 @@ function serverToolsPayload(interaction, explicitGuildId = null) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🧰 Owner Server Tools')
+    .setTitle(emojiLabel('TOOLS', 'Owner Server Tools'))
     .setDescription([
       'Developer-only server tools. Access is restricted to configured Goliath owner IDs.',
       '',
       '**Server Duplicator**',
-      '📋 **Copy Structure** — selectively copy server structure, roles and permissions.',
-      '🔎 **Analyse Servers** — compare a source and destination before copying.',
+      emojiLabel('INCIDENT_AUDIT', '**Copy Structure** — selectively copy server structure, roles and permissions.'),
+      emojiLabel('INVESTIGATE', '**Analyse Servers** — compare a source and destination before copying.'),
       '',
       '**Templates**',
-      '📤 **Export Template** — save a server as a reusable Duplicator template.',
-      '🏗️ **Build Template** — build from a saved/default template.',
+      emojiLabel('MOD_EXPORT', '**Export Template** — save a server as a reusable Duplicator template.'),
+      emojiLabel('OWNER_BUILD', '**Build Template** — build from a saved/default template.'),
       '',
       '**Permissions Studio**',
-      '🛡️ Audit, edit, compare, copy and restore server permissions.',
+      emojiLabel('SECURITY', 'Audit, edit, compare, copy and restore server permissions.'),
       '',
-      guildContextAvailable ? null : '⚠️ **Server context required.** Open `/owner` from a server channel to use these tools.',
+      guildContextAvailable ? null : emojiLabel('WARNING', '**Server context required.** Open `/owner` from a server channel to use these tools.'),
     ].filter(Boolean).join('\n'))
     .setFooter({ text: 'Owner only • Server tooling retains owner and safety checks' });
 
@@ -324,7 +324,7 @@ function maintenancePayload(interaction, explicitGuildId = null, notice = null) 
 
   const embed = new EmbedBuilder()
     .setColor(currentChannel ? 0xED4245 : 0x5865F2)
-    .setTitle('🚨 Goliath Maintenance Control')
+    .setTitle(emojiLabel('AUTOMOD_SUSPICIOUS', 'Goliath Maintenance Control'))
     .setDescription([
       'Owner-only controls for Goliath maintenance notices and recovery.',
       '',
@@ -333,10 +333,10 @@ function maintenancePayload(interaction, explicitGuildId = null, notice = null) 
       notice ? `**Status:** ${notice}` : null,
     ].filter(Boolean).join('\n'))
     .addFields(
-      { name: 'Automatic shutdown notices', value: '🟢 Enabled', inline: true },
+      { name: 'Automatic shutdown notices', value: emojiLabel('ENABLED', 'Enabled'), inline: true },
       { name: 'Connected guilds', value: `**${connectedGuilds}**`, inline: true },
       { name: 'Current server', value: guild ? `${guild.name}\n\`${guild.id}\`` : 'No server context', inline: false },
-      { name: 'Current server notice', value: currentChannel ? `🔴 Active • <#${currentChannel.id}>` : '🟢 No temporary maintenance channel', inline: false },
+      { name: 'Current server notice', value: currentChannel ? `🔴 Active • <#${currentChannel.id}>` : emojiLabel('ENABLED', 'No temporary maintenance channel'), inline: false },
       { name: 'Private visibility', value: 'Guild owner + every role with the Discord **Administrator** permission + Goliath. `@everyone` is denied.', inline: false },
     )
     .setFooter({ text: 'Owner only • Temporary channels self-delete after recovery' })
@@ -363,7 +363,7 @@ function maintenancePayload(interaction, explicitGuildId = null, notice = null) 
 
 function serverContextRequiredPayload() {
   return {
-    content: '❌ Server Tools require a server context. Open `/owner` from the server you want to manage, then open **Server Tools** again.',
+    content: emojiLabel('ERROR', 'Server Tools require a server context. Open `/owner` from the server you want to manage, then open **Server Tools** again.'),
     flags: MessageFlags.Ephemeral,
   };
 }
@@ -372,7 +372,7 @@ function noConnectedGuildsPayload(guildId = null) {
   return {
     content: guildId
       ? `❌ Goliath can identify server \`${guildId}\`, but this bot instance cannot access it and is not connected to any other guild it can use for Server Tools.`
-      : '❌ This Goliath bot instance is not connected to any guilds available to Server Tools.',
+      : emojiLabel('ERROR', 'This Goliath bot instance is not connected to any guilds available to Server Tools.'),
     flags: MessageFlags.Ephemeral,
   };
 }
@@ -381,7 +381,7 @@ function securityUnavailablePayload(guildId = null) {
   return {
     content: guildId
       ? `❌ Goliath can identify server \`${guildId}\`, but this bot instance cannot access a connected guild for Security Tests.`
-      : '❌ This Goliath bot instance is not connected to a guild available for Security Tests.',
+      : emojiLabel('ERROR', 'This Goliath bot instance is not connected to a guild available for Security Tests.'),
     flags: MessageFlags.Ephemeral,
   };
 }
@@ -561,7 +561,7 @@ async function handleOwnerPanelInteraction(interaction) {
       interaction,
       state.blocked
         ? `❌ ${state.reason || 'Toggle blocked.'}`
-        : (state.enabled ? '🟢 DEV Override enabled.' : '🔴 DEV Override disabled.')
+        : (state.enabled ? emojiLabel('ENABLED', 'DEV Override enabled.') : emojiLabel('DISABLED', 'DEV Override disabled.'))
     ));
     return true;
   }
@@ -579,7 +579,7 @@ async function handleOwnerPanelInteraction(interaction) {
   if (id === `${OWNER_PREFIX}maintenance-start-guild`) {
     const guild = await resolveMaintenanceGuild(interaction, contextGuildId);
     if (!guild) {
-      await interaction.update(maintenancePayload(interaction, contextGuildId, '❌ Current server is unavailable.'));
+      await interaction.update(maintenancePayload(interaction, contextGuildId, emojiLabel('ERROR', 'Current server is unavailable.')));
       return true;
     }
     await maintenanceStatus.beginGuildMaintenance(guild, { reason: `Manual maintenance triggered by ${interaction.user.tag || interaction.user.id}` });
@@ -590,7 +590,7 @@ async function handleOwnerPanelInteraction(interaction) {
   if (id === `${OWNER_PREFIX}maintenance-complete-guild`) {
     const guild = await resolveMaintenanceGuild(interaction, contextGuildId);
     if (!guild) {
-      await interaction.update(maintenancePayload(interaction, contextGuildId, '❌ Current server is unavailable.'));
+      await interaction.update(maintenancePayload(interaction, contextGuildId, emojiLabel('ERROR', 'Current server is unavailable.')));
       return true;
     }
     const result = await maintenanceStatus.completeGuildMaintenance(guild);
@@ -601,7 +601,7 @@ async function handleOwnerPanelInteraction(interaction) {
   if (id === `${OWNER_PREFIX}maintenance-clear-guild`) {
     const guild = await resolveMaintenanceGuild(interaction, contextGuildId);
     if (!guild) {
-      await interaction.update(maintenancePayload(interaction, contextGuildId, '❌ Current server is unavailable.'));
+      await interaction.update(maintenancePayload(interaction, contextGuildId, emojiLabel('ERROR', 'Current server is unavailable.')));
       return true;
     }
     const result = await maintenanceStatus.deleteGuildMaintenanceChannel(guild);
@@ -691,7 +691,7 @@ function wireClient(client) {
       console.error('[OwnerPanel] Interaction failed:', error?.stack || error?.message || error);
       if (!interaction?.replied && !interaction?.deferred) {
         await interaction?.reply?.({
-          content: '❌ Owner control action failed.',
+          content: emojiLabel('ERROR', 'Owner control action failed.'),
           flags: MessageFlags.Ephemeral,
         }).catch(() => null);
       }
