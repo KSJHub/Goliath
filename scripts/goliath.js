@@ -4905,6 +4905,17 @@ async function gameUpdatesAudit() {
   store.updateGameUpdates(guild.id, state => { const sub = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...sub, seenIds: [recovered.id, ...sub.seenIds], pending: [{ item: recovered, status: 'dispatching' }] } } }; });
   messages.push({ author: { id: 'bot' }, embeds: embeds.buildGameUpdate(store.getGameUpdates(guild.id).subscriptions['730'], recovered).embeds });
   await monitor.processGameUpdates(guild); assert.equal(sent.length, 4); assert.equal(store.getGameUpdates(guild.id).history[0].status, 'recovered');
+  // A restart with a dispatching item absent from recent channel history is uncertain,
+  // not proof of non-delivery. Hold it for review rather than risk a duplicate post.
+  const uncertain = makeItem(1051);
+  store.updateGameUpdates(guild.id, state => { const sub = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...sub, seenIds: [uncertain.id, ...sub.seenIds], pending: [{ item: uncertain, status: 'dispatching' }] } } }; });
+  delete modules.freeGamesMonitor; monitor = load('freeGamesMonitor');
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, 4, 'Restart must not resend an unconfirmed dispatch absent from channel history.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, 4, 'Ambiguous dispatch remains held across subsequent polls.');
+  store.updateGameUpdates(guild.id, state => { const sub = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...sub, pending: [] } } }; });
   const sub = store.getGameUpdates(guild.id).subscriptions['730'];
   memory.timeZone = 'UTC';
   const clock = new Date(), clockText = date => date.toISOString().slice(11, 16);
