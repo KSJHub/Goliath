@@ -466,11 +466,11 @@ function normalizeUpdateDestinations(value) {
   if (!Array.isArray(value) || value.length > 10) throw new Error('Choose up to ten update destinations.');
   const seen = new Set();
   return value.map(entry => {
-    if (!entry || typeof entry !== 'object' || !/^\\d{16,20}$/.test(entry.channelId || '') || seen.has(entry.channelId)) {
+    if (!entry || typeof entry !== 'object' || !/^\d{16,20}$/.test(entry.channelId || '') || seen.has(entry.channelId)) {
       throw new Error('Choose unique valid update destination channels.');
     }
     seen.add(entry.channelId);
-    if (entry.roleId != null && !/^\\d{16,20}$/.test(entry.roleId)) throw new Error('Choose a valid update notification role.');
+    if (entry.roleId != null && !/^\d{16,20}$/.test(entry.roleId)) throw new Error('Choose a valid update notification role.');
     if (entry.enabled !== undefined && typeof entry.enabled !== 'boolean') throw new Error('Update destination enabled must be true or false.');
     return { channelId: entry.channelId, roleId: entry.roleId || null, enabled: entry.enabled !== false };
   });
