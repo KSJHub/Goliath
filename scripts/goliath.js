@@ -5017,6 +5017,17 @@ async function gameUpdatesAudit() {
   const emptyHistory = store.buildGameUpdateHistoryPanel(guild, 0, 'unknown-status');
   assert.match(emptyHistory.embeds[0].title, /Delivery history/);
   assert.equal(JSON.stringify(store.getGameUpdates(guild.id)), historyBefore, 'History browsing must not mutate delivery state.');
+  const originalHistory = store.getGameUpdates(guild.id).history;
+  store.updateGameUpdates(guild.id, state => ({ ...state, history: Array.from({ length: 20 }, (_, index) => ({
+    appId: '730', itemId: String(index), title: 'Announcement ' + index, status: index % 2 ? 'failed' : 'delivered', at: Date.now()
+  })) }));
+  const firstHistoryPage = store.buildGameUpdateHistoryPanel(guild, 0, 'all');
+  const lastHistoryPage = store.buildGameUpdateHistoryPanel(guild, 99, 'all');
+  assert.equal(firstHistoryPage.embeds[0].fields.length, 8, 'History must paginate after eight records.');
+  assert.equal(lastHistoryPage.embeds[0].fields.length, 4, 'History page must clamp to the last page.');
+  assert.match(lastHistoryPage.embeds[0].footer.text, /3\/3/);
+  assert.equal(store.buildGameUpdateHistoryPanel(guild, 0, 'failed').embeds[0].fields.length, 8);
+  store.updateGameUpdates(guild.id, state => ({ ...state, history: originalHistory }));
   const beforeRejectedRemoval = JSON.stringify(store.getGameUpdates(guild.id));
   await assert.rejects(monitor.removeGameSubscription(guild, '730'), /Resolve held deliveries/);
   assert.equal(JSON.stringify(store.getGameUpdates(guild.id)), beforeRejectedRemoval,
