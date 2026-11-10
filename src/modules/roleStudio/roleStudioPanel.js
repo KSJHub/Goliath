@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { emojiLabel } = require('../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
