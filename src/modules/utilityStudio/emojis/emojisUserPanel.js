@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -190,7 +191,7 @@ async function buildPanel(interaction, selectedPage = 'all:0') {
     content: null,
     embeds: [new EmbedBuilder()
       .setColor(PANEL_COLOR)
-      .setTitle('😀 Emoji Browser')
+      .setTitle(emojiLabel('AUTOMOD_EMOJI', 'Emoji Browser'))
       .setDescription(description)
       .setFooter({ text: `Requested by ${displayName(interaction)}` })
       .setTimestamp()],
@@ -260,7 +261,7 @@ async function buildMessageConversionPreview(interaction, message) {
     return { content: 'No available Emoji Studio shortcodes were found in that message. Try something like `:youtube:` or `:twitch:`.', components: [] };
   }
   return {
-    embeds: [new EmbedBuilder().setColor(PANEL_COLOR).setTitle('😀 Convert Emoji Shortcodes').setDescription([
+    embeds: [new EmbedBuilder().setColor(PANEL_COLOR).setTitle(emojiLabel('AUTOMOD_EMOJI', 'Convert Emoji Shortcodes')).setDescription([
       '**Preview**',
       result.resolved.slice(0, 3500),
       '',
