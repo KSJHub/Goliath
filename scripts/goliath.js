@@ -742,7 +742,7 @@ async function verificationAnswerAudit() {
     const filename = absolute(file), localRequire = createRequire(filename), module = { exports: {} };
     new Function('require', 'module', 'exports', fs.readFileSync(filename, 'utf8'))(id => {
       if (Object.hasOwn(mocks, id)) return mocks[id];
-      if (id === 'crypto' || id === 'discord.js' || id.endsWith('/core/guild/goliathNavigation')) return localRequire(id);
+      if (id === 'crypto' || id === 'discord.js' || id.endsWith('/core/guild/goliathNavigation') || id === '../../core/ui/emojis') return localRequire(id);
       throw new Error(`Unmocked Verification answer audit dependency: ${id}`);
     }, module, module.exports);
     return module.exports;
