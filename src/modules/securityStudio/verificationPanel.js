@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../core/ui/emojis');
 const { navigationButton } = require('../../core/guild/goliathNavigation');
 
 const {
@@ -20,7 +20,7 @@ const MESSAGE_TYPES=['start','success','failed','retry','cooldown','screeningReq
 const sessions=new Map();
 const row=(...x)=>new ActionRowBuilder().addComponents(...x.filter(Boolean));
 const button=(id,label,style=ButtonStyle.Secondary,disabled=false)=>navigationButton(id,label,style,disabled);
-const toggle=(id,label,on)=>button(id,`${on?'🟢':'🔴'} ${label}`,on?ButtonStyle.Success:ButtonStyle.Danger);
+const toggle=(id,label,on)=>button(id,`${on ? EMOJIS.ENABLED : EMOJIS.DISABLED} ${label}`,on?ButtonStyle.Success:ButtonStyle.Danger);
 const title=s=>s[0].toUpperCase()+s.slice(1).replace(/([A-Z])/g,' $1');
 const who=i=>i.member?.displayName||i.user?.displayName||i.user?.username||'Unknown User';
 function state(i){const k=`${i.guildId}:${i.user.id}`,v=sessions.get(k)||{roleType:'pending',logType:'join',messageType:'start',rolePage:0};sessions.set(k,v);return v;}
@@ -88,5 +88,5 @@ async function handleVerificationAdminInteraction(i){const id=String(i.customId|
  if(id==='admin:verification:test'){const r=await verificationManager.buildHealthReport(i.guild),text=[...(r.issues||[]),...(r.warnings||[])];await i.reply({content:text.length?`⚠️ Verification health:\n${text.map(x=>`• ${x}`).join('\n').slice(0,1900)}`:emojiLabel('HEALTHY', 'Verification setup looks healthy.'),flags:64});return true;}
  if(id==='admin:verification:resetMessages'){verificationManager.updateVerificationMessages(i.guildId,verificationStore.defaultMessages(),{actorId:i.user.id,action:'verification_messages_reset'});await respond(i,messagesPage(i.guild,user,st));return true;}
  return false;
-}catch(error){const p={content:`❌ Verification setup failed: ${error.message}`,flags:64};if(i.deferred||i.replied)await i.followUp(p).catch(()=>null);else await i.reply(p).catch(()=>null);return true;}}
+}catch(error){const p={content:`${EMOJIS.ERROR} Verification setup failed: ${error.message}`,flags:64};if(i.deferred||i.replied)await i.followUp(p).catch(()=>null);else await i.reply(p).catch(()=>null);return true;}}
 module.exports={buildVerificationAdminPanel,handleVerificationAdminInteraction};
