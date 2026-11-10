@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   EmbedBuilder,
@@ -57,7 +58,7 @@ async function buildAutoRolesPanel(guild, memberDisplayName = 'Unknown User', ro
 
   const embed = new EmbedBuilder()
     .setColor(health.healthy ? 0x57f287 : 0xfaa61a)
-    .setTitle('👥 Auto Roles · Setup')
+    .setTitle(emojiLabel('MOD_STAFF', 'Auto Roles · Setup'))
     .setDescription([
       `**Status:** ${moduleEnabled ? 'Enabled ✅' : 'Disabled ❌'}`,
       `**Join Roles:** ${formatRoles(config.joinRoles)}`,
@@ -80,16 +81,16 @@ async function buildAutoRolesPanel(guild, memberDisplayName = 'Unknown User', ro
       botPicker.rows[0],
       ...(pageCount > 1 ? [buildRolePickerPagination('admin:autoRoles:rolePage', safePage, pageCount)] : []),
       row(
-        button(moduleEnabled ? 'admin:autoRoles:disable' : 'admin:autoRoles:enable', moduleEnabled ? '⏸️ Disable' : '▶️ Enable', moduleEnabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-        button('admin:autoRoles:toggleBots', '🤖 Apply To Bots'),
-        button('admin:autoRoles:toggleReapply', '🔁 Reapply On Startup'),
-        button('admin:autoRoles:repair', '🩺 Repair', ButtonStyle.Primary),
-        button('admin:autoRoles:reapply', '🚀 Reapply Now', ButtonStyle.Success)
+        button(moduleEnabled ? 'admin:autoRoles:disable' : 'admin:autoRoles:enable', moduleEnabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), moduleEnabled ? ButtonStyle.Secondary : ButtonStyle.Success),
+        button('admin:autoRoles:toggleBots', emojiLabel('AUTOMOD', 'Apply To Bots')),
+        button('admin:autoRoles:toggleReapply', emojiLabel('REVERSED', 'Reapply On Startup')),
+        button('admin:autoRoles:repair', emojiLabel('WELCOME_DIAGNOSTICS', 'Repair'), ButtonStyle.Primary),
+        button('admin:autoRoles:reapply', emojiLabel('DEPLOY', 'Reapply Now'), ButtonStyle.Success)
       ),
       row(
-        button('admin:autoRoles:export', '📤 Export'),
-        button('admin:autoRoles:reset', '♻️ Reset', ButtonStyle.Danger),
-        button('admin:reactionRoles', '⬅️ Role Studio')
+        button('admin:autoRoles:export', emojiLabel('MOD_EXPORT', 'Export')),
+        button('admin:autoRoles:reset', emojiLabel('AUTOMOD_DUPLICATES', 'Reset'), ButtonStyle.Danger),
+        button('admin:reactionRoles', emojiLabel('BACK', 'Role Studio'))
       ),
     ],
   };
@@ -159,7 +160,7 @@ async function handleAutoRolesInteraction(interaction) {
         Buffer.from(JSON.stringify(autoRoles.exportConfiguration(interaction.guild.id), null, 2), 'utf8'),
         { name: `goliath-auto-roles-${interaction.guild.id}.json` }
       );
-      await interaction.reply({ content: '📤 Auto Roles configuration export.', files: [attachment], ephemeral: true });
+      await interaction.reply({ content: emojiLabel('MOD_EXPORT', 'Auto Roles configuration export.'), files: [attachment], ephemeral: true });
       return true;
     }
 
