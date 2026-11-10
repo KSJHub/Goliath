@@ -114,6 +114,15 @@ const EMOJIS = Object.freeze({
   AUTOMOD_LIMITS: '⏱️',
   AUTOMOD_DOMAINS: '🌐',
   AUTOMOD_THRESHOLDS: '📏',
+  ADMIN_CROWN: '👑',
+  ADMIN_PIN: '📌',
+  ADMIN_STAFF: '👥',
+  ADMIN_JUNIOR: '🔰',
+  ADMIN_BACKUP: '🧱',
+  ADMIN_PURGE: '🧹',
+  ADMIN_ROLE_CONTROL: '🎛️',
+  ADMIN_JOIN_ROLES: '🎭',
+  ADMIN_RESTORE_TEMPLATE: '↩️',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
