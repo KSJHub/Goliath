@@ -43,6 +43,8 @@ jobs:
           node - <<'NODE'
           const limit = process.env.AUDIT_LIMIT;
           const offset = process.env.AUDIT_OFFSET;
+          const { UPDATE_CATALOG } = require('./src/modules/utilityStudio/games/freeGamesProviders');
+          const catalogueSize = UPDATE_CATALOG.length;
           if (!/^[1-9]\d*$/.test(limit) || !/^(0|[1-9]\d*)$/.test(offset) ||
               !Number.isSafeInteger(Number(limit)) || !Number.isSafeInteger(Number(offset)) ||
               Number(limit) > catalogueSize || Number(offset) >= catalogueSize || Number(limit) + Number(offset) > catalogueSize) {
