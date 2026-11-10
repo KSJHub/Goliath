@@ -371,14 +371,16 @@ async function sendLatestGameUpdate(guild, appId) {
 async function retryHeldGameUpdates(guild, appId) {
   return withGuildLock(guild.id, async () => {
     appId = providers.steamAppId(appId);
-    updateSubscriptionState(guild.id, appId, subscription => ({ ...subscription, pending: subscription.pending.map(entry => entry.status === 'ambiguous' ? { ...entry, status: 'dispatching', suppressMention: true, retryRequested: true } : entry) }));
-    // Recheck uncertain sends before an explicit retry; never repeat role pings.
+    // Validate and inspect the destination before changing held delivery state.
+    // If Discord is inaccessible, the original ambiguous state must survive.
     const subscription = store.getGameUpdates(guild.id).subscriptions[appId];
     if (!subscription) throw new Error('Game subscription no longer exists.');
-    const retryIds = new Set(subscription.pending.filter(entry => entry.retryRequested).map(entry => entry.item.id));
     const channel = await validateDestination(guild, { ...subscription, alerts: false });
     const recent = await channel.messages.fetch({ limit: 100 });
-    for (const entry of subscription.pending.filter(entry => entry.retryRequested)) {
+    updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(entry => entry.status === 'ambiguous' ? { ...entry, status: 'dispatching', suppressMention: true, retryRequested: true } : entry) }));
+    const updated = store.getGameUpdates(guild.id).subscriptions[appId];
+    const retryIds = new Set(updated.pending.filter(entry => entry.retryRequested).map(entry => entry.item.id));
+    for (const entry of updated.pending.filter(entry => entry.retryRequested)) {
       const found = recent.find(message => message.author?.id === guild.client.user.id && message.embeds?.some(embed => embed.url === entry.item.url && embed.footer?.text === 'Game Updates · Steam'));
       if (found) {
         updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.filter(record => record.item.id !== entry.item.id), lastSuccess: Date.now() }));
