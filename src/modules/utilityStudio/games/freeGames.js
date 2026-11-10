@@ -549,12 +549,14 @@ function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
   const sub = getGameUpdates(guild.id).subscriptions[appId];
   if (!sub) return buildUpdatesPanel(guild, 0, 'Game subscription no longer exists.');
   const { escape, SECTIONS } = require('./freeGamesEmbeds');
+  const heldCount = sub.pending.filter(entry => entry.status === 'ambiguous' || entry.status === 'dispatching').length;
+  const queuedCount = sub.pending.length - heldCount;
   const embed = { title: '📰 ' + sub.name, color: SECTIONS[2].color,
     description: [notice && escape(notice), sub.enabled ? '▶ Subscription enabled' : '⏸ Subscription paused',
-      sub.error && '⚠ ' + escape(sub.error)].filter(Boolean).join('\n\n'),
+      sub.error && '⚠ ' + escape(sub.error), heldCount && '⚠ ' + heldCount + ' uncertain delivery' + (heldCount === 1 ? '' : 'ies') + ' require review before retrying or unsubscribing.'].filter(Boolean).join('\n\n'),
     fields: [{ name: 'Destination', value: sub.channelId ? '<#' + sub.channelId + '>' : 'Choose a channel', inline: true },
       { name: 'Notification role', value: sub.roleId ? '<@&' + sub.roleId + '>' : 'No role ping', inline: true },
-      { name: 'Updates', value: 'Filter: ' + sub.filter + '\nLast check: ' + statusTime(sub.lastCheck) + '\nLast delivery: ' + statusTime(sub.lastSuccess) + '\nQueued: ' + sub.pending.length, inline: false }],
+      { name: 'Updates', value: 'Filter: ' + sub.filter + '\nLast check: ' + statusTime(sub.lastCheck) + '\nLast delivery: ' + statusTime(sub.lastSuccess) + '\nQueued: ' + queuedCount + '\nHeld for review: ' + heldCount, inline: false }],
     footer: { text: 'Games · Steam publisher announcements' }, timestamp: new Date().toISOString() };
   const actions = componentRow(panelButton('updates:preview:' + appId, 'Preview'),
     panelButton('updates:send:' + appId, 'Send latest'));
@@ -562,7 +564,7 @@ function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
   const rows = more ? [
     choiceMenu('updates:artwork:' + appId, 'Artwork', [['banner', 'Large artwork'], ['thumbnail', 'Thumbnail'], ['hidden', 'No artwork']], [sub.artwork]),
     choiceMenu('updates:detail:' + appId, 'Text length', [['compact', 'Compact summary'], ['detailed', 'Detailed summary']], [sub.detail]),
-    componentRow(panelButton('updates:keywords:' + appId, 'Keyword filters'), panelButton('updates:retry-view:' + appId, 'Retry held')),
+    componentRow(panelButton('updates:keywords:' + appId, 'Keyword filters'), panelButton('updates:retry-view:' + appId, 'Retry held', 2, heldCount === 0)),
     actions,
     back,
   ] : [
