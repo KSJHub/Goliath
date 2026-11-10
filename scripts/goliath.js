@@ -5032,6 +5032,10 @@ async function gameUpdatesAudit() {
     { channelId, enabled: true }, { channelId: '444444444444444444', enabled: true }
   ] } } }; });
   await assert.rejects(monitor.retryHeldGameUpdates(guild, '730'), /recovery paused/);
+  const beforeUnsafeManual = JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending);
+  await assert.rejects(monitor.sendLatestGameUpdate(guild, '730'), /manual delivery paused/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), beforeUnsafeManual,
+    'Unsupported manual send must not replace or discard queued announcements.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous',
     'Blocked recovery must preserve uncertain delivery state.');
   store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; const { destinationsConfigured, destinations, ...rest } = current; return { ...state, subscriptions: { ...state.subscriptions, '730': rest } }; });
