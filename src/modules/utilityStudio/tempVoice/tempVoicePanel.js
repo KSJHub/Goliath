@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
@@ -30,7 +31,7 @@ function buildControlRows(channelId, tempChannel = {}) {
 
 function buildPanelContent(tempChannel = {}) {
   return [
-    '🎙️ **Temp Voice Controls**',
+    emojiLabel('UTILITY_MIC', '**Temp Voice Controls**'),
     `Owner: <@${tempChannel.ownerId}>`,
     `State: ${tempChannel.locked ? 'Locked' : 'Unlocked'} · ${tempChannel.hidden ? 'Hidden' : 'Visible'} · Limit: ${tempChannel.userLimit || 'None'}`,
     '',
