@@ -5005,6 +5005,18 @@ async function gameUpdatesAudit() {
   assert.match(heldPanel.embeds[0].description, /require review/);
   assert.equal(heldPanel.components[2].components.find(button => button.custom_id?.endsWith('retry-view:730')).disabled, false,
     'Retry held should be available when an uncertain delivery exists.');
+  // History panels must be bounded, filterable and read-only.
+  const historyBefore = JSON.stringify(store.getGameUpdates(guild.id));
+  const allHistory = store.buildGameUpdateHistoryPanel(guild);
+  assert.match(allHistory.embeds[0].title, /Delivery history/);
+  assert(allHistory.embeds[0].fields.length <= 8, 'History must fit the Discord embed field limit.');
+  assert(allHistory.components.length <= 5);
+  assert.deepEqual(allHistory.allowedMentions, { parse: [] });
+  const recoveredHistory = store.buildGameUpdateHistoryPanel(guild, 0, 'recovered');
+  assert(recoveredHistory.embeds[0].fields.every(field => /recovered/i.test(field.value)));
+  const emptyHistory = store.buildGameUpdateHistoryPanel(guild, 0, 'unknown-status');
+  assert.match(emptyHistory.embeds[0].title, /Delivery history/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id)), historyBefore, 'History browsing must not mutate delivery state.');
   const beforeRejectedRemoval = JSON.stringify(store.getGameUpdates(guild.id));
   await assert.rejects(monitor.removeGameSubscription(guild, '730'), /Resolve held deliveries/);
   assert.equal(JSON.stringify(store.getGameUpdates(guild.id)), beforeRejectedRemoval,
