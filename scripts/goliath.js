@@ -4997,6 +4997,11 @@ async function gameUpdatesAudit() {
   await monitor.processGameUpdates(guild);
   assert.equal(sent.length, beforeHeldToggle, 'Polling must not automatically resend uncertain delivery.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
+  const heldPanel = store.buildUpdateSubscriptionPanel(guild, '730', '', true);
+  assert.match(heldPanel.embeds[0].fields.find(field => field.name === 'Updates').value, /Held for review: 1/);
+  assert.match(heldPanel.embeds[0].description, /require review/);
+  assert.equal(heldPanel.components[2].components.find(button => button.custom_id?.endsWith('retry-view:730')).disabled, false,
+    'Retry held should be available when an uncertain delivery exists.');
   const beforeRejectedRemoval = JSON.stringify(store.getGameUpdates(guild.id));
   await assert.rejects(monitor.removeGameSubscription(guild, '730'), /Resolve held deliveries/);
   assert.equal(JSON.stringify(store.getGameUpdates(guild.id)), beforeRejectedRemoval,
