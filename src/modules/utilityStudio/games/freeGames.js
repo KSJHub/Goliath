@@ -553,6 +553,7 @@ function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
   const queuedCount = sub.pending.length - heldCount;
   const embed = { title: '📰 ' + sub.name, color: SECTIONS[2].color,
     description: [notice && escape(notice), sub.enabled ? '▶ Subscription enabled' : '⏸ Subscription paused',
+      'Steam announcements currently support one destination channel per subscription.',
       sub.error && '⚠ ' + escape(sub.error), heldCount && '⚠ ' + heldCount + ' uncertain ' + (heldCount === 1 ? 'delivery' : 'deliveries') + ' require review before retrying or unsubscribing.'].filter(Boolean).join('\n\n'),
     fields: [{ name: 'Destination', value: sub.channelId ? '<#' + sub.channelId + '>' : 'Choose a channel', inline: true },
       { name: 'Notification role', value: sub.roleId ? '<@&' + sub.roleId + '>' : 'No role ping', inline: true },
