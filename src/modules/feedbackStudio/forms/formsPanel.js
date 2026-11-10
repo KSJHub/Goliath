@@ -334,7 +334,7 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User', rolePag
 
   const embed = new EmbedBuilder()
     .setColor(moduleEnabled ? 0x57f287 : 0x5865f2)
-    .setTitle('📝 Forms')
+    .setTitle(emojiLabel('NOTE', 'Forms'))
     .setDescription([
       'Configure form deployment, logging and review behaviour.',
       '',
@@ -364,13 +364,13 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User', rolePag
       ),
       ...(roleInfo.roles.length ? [row(rolePageSelect(`admin:forms:managerRoles:${roleInfo.page}`, 'Manager roles', roleInfo))] : []),
       row(
-        button('admin:forms:deployDefault', '🚀 Deploy Form', ButtonStyle.Success),
-        button(moduleEnabled ? 'admin:forms:disable' : 'admin:forms:enable', moduleEnabled ? '⏸️ Disable' : '▶️ Enable', ButtonStyle.Secondary),
-        button('admin:forms:toggleReview', '🔎 Review', ButtonStyle.Secondary),
-        button('admin:forms:toggleAnonymous', '👤 Anonymous', ButtonStyle.Secondary),
-        button('admin:forms:toggleStore', '💾 Store', ButtonStyle.Secondary)
+        button('admin:forms:deployDefault', emojiLabel('DEPLOY', 'Deploy Form'), ButtonStyle.Success),
+        button(moduleEnabled ? 'admin:forms:disable' : 'admin:forms:enable', moduleEnabled ? emojiLabel('USER_PAUSE', 'Disable') : emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Secondary),
+        button('admin:forms:toggleReview', emojiLabel('INVESTIGATE', 'Review'), ButtonStyle.Secondary),
+        button('admin:forms:toggleAnonymous', emojiLabel('USER', 'Anonymous'), ButtonStyle.Secondary),
+        button('admin:forms:toggleStore', emojiLabel('PRESETS', 'Store'), ButtonStyle.Secondary)
       ),
-      row(button('admin:modules', '⬅️ Modules', ButtonStyle.Secondary),
+      row(button('admin:modules', emojiLabel('BACK', 'Modules'), ButtonStyle.Secondary),
         button(`admin:forms:roleBrowse:${Math.max(0, roleInfo.page - 1)}`, emojiLabel('ROLE_PREVIOUS', 'Roles'), ButtonStyle.Secondary).setDisabled(roleInfo.page === 0),
         button(`admin:forms:roleBrowse:${Math.min(roleInfo.pages - 1, roleInfo.page + 1)}`, emojiLabel('ROLE_NEXT', 'Roles', { position: 'after' }), ButtonStyle.Secondary).setDisabled(roleInfo.page >= roleInfo.pages - 1)),
     ],
