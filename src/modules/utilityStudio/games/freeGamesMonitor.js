@@ -244,6 +244,9 @@ async function saveGameSubscription(guild, patch) {
     if (previous && (next.channelId !== previous.channelId || destinationChanged) && previous.pending.some(entry => entry.status !== 'pending')) {
       throw new Error('Resolve held deliveries before changing destination channels.');
     }
+    if (previous && (next.channelId !== previous.channelId || destinationChanged) && previous.pending.length) {
+      throw new Error('Deliver or resolve queued updates before changing destination channels.');
+    }
     // Validate every configured destination before saving, even while the legacy
     // single-channel dispatcher remains active.
     for (const route of store.effectiveUpdateDestinations(next).filter(item => item.enabled)) {
