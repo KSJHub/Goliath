@@ -212,17 +212,17 @@ function buildDashboardNav(targetId, activeView, member, guild, context = {}) {
   const finalButtons = [];
   if (active === 'actions') {
     finalButtons.push(navigationButton(context.adminOrigin ? 'admin:home' : 'mod:close', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
-    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${id}`, '📤 Export', ButtonStyle.Secondary));
-    if (canUseModAction(member, guild, 'view_analytics')) finalButtons.push(navigationButton(`mod_dashboard:${id}:analytics`, '📊 Analytics', ButtonStyle.Secondary));
+    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${id}`, emojiLabel('MOD_EXPORT', 'Export'), ButtonStyle.Secondary));
+    if (canUseModAction(member, guild, 'view_analytics')) finalButtons.push(navigationButton(`mod_dashboard:${id}:analytics`, emojiLabel('ANALYTICS', 'Analytics'), ButtonStyle.Secondary));
   } else if (active === 'analytics') {
     const returnId = context.analyticsReturnTargetId || 'none';
     finalButtons.push(navigationButton('mod_history_back', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
     finalButtons.push(navigationButton(`mod_analytics_refresh:${context.analyticsWindow || '30d'}:${context.analyticsMode || 'overview'}:${context.analyticsModeratorId || 'none'}:${returnId}`, emojiLabel('REFRESH', 'Refresh'), ButtonStyle.Secondary));
-    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${returnId}`, '📤 Export', ButtonStyle.Secondary));
+    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${returnId}`, emojiLabel('MOD_EXPORT', 'Export'), ButtonStyle.Secondary));
   } else {
     finalButtons.push(navigationButton('mod_history_back', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary));
-    if (active === 'cases' && String(member?.id) === String(guild?.ownerId)) finalButtons.push(navigationButton('mod_owner_management:0', '⚙️ Management', ButtonStyle.Secondary));
-    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${id}`, '📤 Export', ButtonStyle.Secondary));
+    if (active === 'cases' && String(member?.id) === String(guild?.ownerId)) finalButtons.push(navigationButton('mod_owner_management:0', emojiLabel('SETTINGS', 'Management'), ButtonStyle.Secondary));
+    if (canUseModAction(member, guild, 'export_cases')) finalButtons.push(navigationButton(`mod_export_cases:${id}`, emojiLabel('MOD_EXPORT', 'Export'), ButtonStyle.Secondary));
   }
   rows.push(new ActionRowBuilder().addComponents(finalButtons));
   return rows;
@@ -236,33 +236,33 @@ function buildActionRows(target, stats, member, guild, context = {}) {
   const quarantined = targetIsQuarantined(guild, target);
   const actions = [];
   if (p.warn) actions.push(createSecondaryButton(`mod_open_warn:${id}`, 'Warn', SHARED_EMOJIS.WARNING).setDisabled(disabled));
-  if (p.timeout) actions.push(createSecondaryButton(`mod_open_timeout:${id}`, 'Timeout', '⌛').setDisabled(disabled));
-  if (p.quarantine) actions.push(createDangerButton(`mod_open_quarantine:${id}`, 'Investigate', '☢️').setDisabled(disabled || quarantined));
-  if (p.kick) actions.push(createDangerButton(`mod_open_kick:${id}`, 'Kick', '🥾').setDisabled(disabled));
-  if (p.ban) actions.push(createDangerButton(`mod_open_ban:${id}`, 'Ban', '🔨').setDisabled(disabled));
+  if (p.timeout) actions.push(createSecondaryButton(`mod_open_timeout:${id}`, 'Timeout', SHARED_EMOJIS.EXPIRED).setDisabled(disabled));
+  if (p.quarantine) actions.push(createDangerButton(`mod_open_quarantine:${id}`, 'Investigate', SHARED_EMOJIS.MOD_QUARANTINE_ACTION).setDisabled(disabled || quarantined));
+  if (p.kick) actions.push(createDangerButton(`mod_open_kick:${id}`, 'Kick', SHARED_EMOJIS.MOD_KICK_ACTION).setDisabled(disabled));
+  if (p.ban) actions.push(createDangerButton(`mod_open_ban:${id}`, 'Ban', SHARED_EMOJIS.BAN).setDisabled(disabled));
   const reversals = [];
   if (p.removeWarning) reversals.push(createSecondaryButton(`mod_remove_warning:${id}`, 'Clear Warn', SHARED_EMOJIS.WARNING).setDisabled(disabled || Number(stats?.warningCount || 0) <= 0));
-  if (p.removeTimeout) reversals.push(createSecondaryButton(`mod_remove_timeout:${id}`, 'Clear Timeout', '⌛').setDisabled(disabled || !targetHasActiveTimeout(target)));
-  if (p.removeQuarantine) reversals.push(createSecondaryButton(`mod_remove_quarantine:${id}`, 'Clear Investigation', '🟠').setDisabled(disabled || !quarantined));
+  if (p.removeTimeout) reversals.push(createSecondaryButton(`mod_remove_timeout:${id}`, 'Clear Timeout', SHARED_EMOJIS.EXPIRED).setDisabled(disabled || !targetHasActiveTimeout(target)));
+  if (p.removeQuarantine) reversals.push(createSecondaryButton(`mod_remove_quarantine:${id}`, 'Clear Investigation', SHARED_EMOJIS.SETUP_REQUIRED).setDisabled(disabled || !quarantined));
   const management = [];
   if (canViewDashboardSection(member, guild, 'cases')) {
-    management.push(navigationButton(`mod_dashboard:${id}:cases`, '📁 Cases', ButtonStyle.Secondary));
+    management.push(navigationButton(`mod_dashboard:${id}:cases`, emojiLabel('MOD_CASE_FOLDER', 'Cases'), ButtonStyle.Secondary));
   }
-  if (canViewDashboardSection(member, guild, 'appeals')) management.push(navigationButton('mod_dashboard:none:appeals', '⚖️ Appeals', ButtonStyle.Secondary));
-  if (canUseModAction(member, guild, 'view_cases')) management.push(navigationButton('mod_verification_cases', '🚨 Quarantines', ButtonStyle.Secondary));
+  if (canViewDashboardSection(member, guild, 'appeals')) management.push(navigationButton('mod_dashboard:none:appeals', emojiLabel('ACTIONS', 'Appeals'), ButtonStyle.Secondary));
+  if (canUseModAction(member, guild, 'view_cases')) management.push(navigationButton('mod_verification_cases', emojiLabel('ISOLATION', 'Quarantines'), ButtonStyle.Secondary));
   const tools = [
     navigationButton(context.adminOrigin ? 'admin:home' : 'mod:close', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
   ];
-  if (canViewDashboardSection(member, guild, 'intelligence')) management.push(navigationButton(`mod_dashboard:${id}:intelligence`, '🧠 Intelligence', ButtonStyle.Secondary, disabled));
-  if (canViewDashboardSection(member, guild, 'analytics')) tools.push(navigationButton(`mod_dashboard:${id}:analytics`, '📊 Analytics', ButtonStyle.Secondary));
-  if (canUseModAction(member, guild, 'export_cases')) tools.push(navigationButton(`mod_export_cases:${id}`, '📤 Export', ButtonStyle.Secondary));
+  if (canViewDashboardSection(member, guild, 'intelligence')) management.push(navigationButton(`mod_dashboard:${id}:intelligence`, emojiLabel('MOD_INTELLIGENCE', 'Intelligence'), ButtonStyle.Secondary, disabled));
+  if (canViewDashboardSection(member, guild, 'analytics')) tools.push(navigationButton(`mod_dashboard:${id}:analytics`, emojiLabel('ANALYTICS', 'Analytics'), ButtonStyle.Secondary));
+  if (canUseModAction(member, guild, 'export_cases')) tools.push(navigationButton(`mod_export_cases:${id}`, emojiLabel('MOD_EXPORT', 'Export'), ButtonStyle.Secondary));
   return [buttonRow(actions),buttonRow(reversals),buttonRow(management),buttonRow(tools)].filter(Boolean);
 }
 function buildIntelligenceRows(targetId, member, guild) {
   if (!targetId) return [];
   const id = targetId; const primary = [];
-  if (canUseModAction(member, guild, 'scan_run')) primary.push(createPrimaryButton(`mod_member_scan:${id}`, 'Full Member Scan', '🔎'));
-  if (canUseModAction(member, guild, 'scan_history')) primary.push(createSecondaryButton(`mod_scan_history:${id}:landing`, 'Scan History', '🕘'));
+  if (canUseModAction(member, guild, 'scan_run')) primary.push(createPrimaryButton(`mod_member_scan:${id}`, 'Full Member Scan', SHARED_EMOJIS.INVESTIGATE));
+  if (canUseModAction(member, guild, 'scan_history')) primary.push(createSecondaryButton(`mod_scan_history:${id}:landing`, 'Scan History', SHARED_EMOJIS.MOD_SCAN_HISTORY));
   return buttonRow(primary) ? [buttonRow(primary)] : [];
 }
 function validateDashboardComponents(components, view) {
@@ -369,7 +369,7 @@ function buildAnalyticsOverviewEmbed(guild, analytics) {
     { name: '👥 Members', value: `**${analytics.uniqueUsers}**\n${analytics.repeatOffenders} repeat`, inline: true },
     { name: '🧾 Audit Events', value: `**${analytics.auditActions}**\nrecorded`, inline: true },
     { name: '⚡ Moderation Actions', value: `Warnings **${Number(analytics.actionCounts.warn || 0)}**  •  Timeouts **${Number(analytics.actionCounts.timeout || 0)}**  •  Kicks **${Number(analytics.actionCounts.kick || 0)}**  •  Bans **${Number(analytics.actionCounts.ban || 0)}**`, inline: false },
-    { name: '⚖️ Appeals', value: `Pending **${appeal.pending}**  •  Approved **${appeal.approved}**  •  Denied **${appeal.denied}**`, inline: false },
+    { name: emojiLabel('ACTIONS', 'Appeals'), value: `Pending **${appeal.pending}**  •  Approved **${appeal.approved}**  •  Denied **${appeal.denied}**`, inline: false },
     { name: '↩️ Case Outcomes', value: `Closed **${analytics.reversedCases}**  •  Expired **${analytics.expiredCases}**  •  Closure rate **${analytics.reversalRate}**`, inline: false },
     { name: '📈 Recent Activity · Last 7 Days', value: trend.slice(0, 1024), inline: false }
   ];
