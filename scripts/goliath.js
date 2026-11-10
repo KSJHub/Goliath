@@ -4886,6 +4886,9 @@ async function gameUpdatesAudit() {
   await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [
     { channelId: '444444444444444444', enabled: true }
   ] }), /matching the primary channel/);
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [
+    { channelId, roleId: '444444444444444444', enabled: true }
+  ] }), /one active destination/);
   await monitor.configureGameUpdates(guild, { enabled: true });
   await monitor.processGameUpdates(guild); assert.equal(sent.length, 0, 'A new subscription quietly baselines existing news.');
   const makeItem = id => ({ ...item, id: String(id), url: 'https://store.steampowered.com/news/app/730/view/' + id });
