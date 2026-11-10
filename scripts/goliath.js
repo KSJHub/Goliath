@@ -5020,6 +5020,11 @@ async function gameUpdatesAudit() {
   await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', channelId: '444444444444444444' }), /Resolve held deliveries/);
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].channelId, channelId, 'Rejected destination change must preserve original channel.');
   await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [{ channelId, enabled: true }] }), /Resolve held deliveries/);
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [
+    { channelId, enabled: true }, { channelId: '444444444444444444', enabled: true }
+  ] }), /Resolve held deliveries/);
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous',
+    'Unsupported multi-channel changes must not override held-delivery safety or clear its state.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].destinationsConfigured, undefined,
     'Rejected multi-destination change must not persist while delivery is uncertain.');
   await monitor.processGameUpdates(guild);
