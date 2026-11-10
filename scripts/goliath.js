@@ -4997,6 +4997,9 @@ async function gameUpdatesAudit() {
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].item.id, heldAcrossToggle.id, 'Re-enabling must retain uncertain delivery.');
   await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', channelId: '444444444444444444' }), /Resolve held deliveries/);
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].channelId, channelId, 'Rejected destination change must preserve original channel.');
+  await assert.rejects(monitor.saveGameSubscription(guild, { appId: '730', destinations: [{ channelId, enabled: true }] }), /Resolve held deliveries/);
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].destinationsConfigured, undefined,
+    'Rejected multi-destination change must not persist while delivery is uncertain.');
   await monitor.processGameUpdates(guild);
   assert.equal(sent.length, beforeHeldToggle, 'Polling must not automatically resend uncertain delivery.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');
