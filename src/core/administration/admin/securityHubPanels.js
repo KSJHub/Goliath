@@ -210,12 +210,12 @@ function buildHealthPanel(interaction) {
   const degraded = antiNukeConfig.enabled === false || automod.enabled === false || failures > 0 || resourceProblems.length > 0 || permissionProblems > 0;
   const embed = base(interaction, '🩺 Security Health', '**Live security runtime, permission and configuration diagnostics.**', degraded ? 0xFEE75C : 0x57F287)
     .addFields(
-      { name: 'Overall', value: degraded ? '🟠 Attention required' : '🟢 Operational', inline: true },
+      { name: 'Overall', value: degraded ? `${EMOJIS.SEVERITY_HIGH} Attention required` : `${EMOJIS.ENABLED} Operational`, inline: true },
       { name: 'Recorded Incidents', value: `**${incidents.length}**`, inline: true },
       { name: 'Restore Failures', value: `**${failures}**`, inline: true },
       { name: 'Protection Engines', value: `Anti-Nuke: ${bool(antiNukeConfig.enabled !== false)}\nAutoMod: ${bool(automod.enabled !== false)}\nVerification: ${bool(verification.enabled !== false)}`, inline: true },
       { name: 'Bot Permission Health', value: botPermissionHealth(interaction.guild), inline: true },
-      { name: 'Configured Resources', value: resourceProblems.length ? resourceProblems.map((problem) => `${EMOJIS.DISABLED} ${problem}`).join('\n').slice(0, 1024) : '🟢 No missing verification resources detected', inline: true },
+      { name: 'Configured Resources', value: resourceProblems.length ? resourceProblems.map((problem) => `${EMOJIS.DISABLED} ${problem}`).join('\n').slice(0, 1024) : `${EMOJIS.ENABLED} No missing verification resources detected`, inline: true },
       { name: 'Active Restrictions', value: `Lockdown: **${lockdown.active ? 'Active' : 'Standby'}**\nInvites: **${emergency.invites.active ? 'Frozen' : 'Normal'}**\nRoles: **${emergency.roles.active ? 'Frozen' : 'Normal'}**`, inline: true },
       { name: 'Containment', value: `Investigations: **${modes.investigations}**\nFull isolation: **${modes.isolation}**`, inline: true },
     );
@@ -240,7 +240,7 @@ function buildRecoveryPanel(interaction) {
       { name: 'Contained Members', value: `Investigations: **${modes.investigations}**\nFull isolation: **${modes.isolation}**`, inline: true },
       { name: 'Lockdown Snapshot', value: lockdown.active ? `**${(lockdown.channels || []).length}** channel(s) tracked\nExpires: ${discordTime(lockdown.lockdownExpiresAt)}` : 'No active lockdown', inline: true },
       { name: 'Emergency Snapshots', value: `Invites: **${(emergency.invites.channelSnapshots || []).length}**\nRoles: **${(emergency.roles.roleSnapshots || []).length}**`, inline: true },
-      { name: 'Failed Restore Preview', value: failedPreview || '🟢 No failed channel restores', inline: false },
+      { name: 'Failed Restore Preview', value: failedPreview || `${EMOJIS.ENABLED} No failed channel restores`, inline: false },
       { name: 'Recovery Actions', value: 'Restriction Recovery can end lockdown, restore invites, restore roles, or run confirmed Restore All. Member Recovery remains owner-only and preserves containment separation.', inline: false },
     );
   return { embeds: [embed], components: [managementRow([
