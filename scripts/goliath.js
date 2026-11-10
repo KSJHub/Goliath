@@ -4617,6 +4617,15 @@ function classifySteamCatalogueIdentity(game, result) {
     return { kind: 'expected-legacy', appId: game.appId, catalogueType: declaredType,
       storeName: result.storeName, storeType: result.storeType, note: 'Steam reports game; legacy catalogue retains software.' };
   }
+  // A missing Steam Store listing is not proof that a historical DLC App ID
+  // is wrong. Keep it visible as unverified, without treating it as a pass.
+  if (String(game.appId) === '2519060' && declaredType === 'dlc' &&
+      result.status === 'not-found' && normalizeName(game.name) === 'call of duty modern warfare iii campaign') {
+    return { kind: 'unverified-legacy', issue: { appId: game.appId,
+      expectedName: game.name, catalogueType: declaredType, status: result.status,
+      storeName: null, storeType: null, suggestedAction: 'review-unlisted-legacy-dlc',
+      note: 'Steam Store metadata did not verify this historical DLC; preserve existing subscriptions.' } };
+  }
   if (declaredType === 'game' && result.status === 'match' && result.storeType === 'game') {
     return { kind: 'confirmed-game' };
   }
@@ -4650,7 +4659,7 @@ async function gameCatalogueIdentityAudit() {
   const { UPDATE_CATALOG, inspectSteamGameIdentity } = require('../src/modules/utilityStudio/games/freeGamesProviders');
   const { offset, games } = selectSteamCatalogueAuditBatch(UPDATE_CATALOG, process.argv[3], process.argv[4]);
   const totals = { match: 0, 'name-mismatch': 0, 'not-found': 0, unavailable: 0, unlisted: 0, 'non-game': 0 };
-  const issues = [], expectedLegacy = [];
+  const issues = [], expectedLegacy = [], unverifiedLegacy = [];
   let confirmedGames = 0;
   // Space out Steam Store batches to reduce burst traffic and avoid treating throttling as bad catalogue data.
   for (let index = 0; index < games.length; index += 4) {
@@ -4676,6 +4685,9 @@ async function gameCatalogueIdentityAudit() {
         expectedLegacy.push({ appId: classification.appId, catalogueType: classification.catalogueType, storeName: classification.storeName, storeType: classification.storeType || classification.catalogueType, note: classification.note || null });
       } else if (classification.kind === 'confirmed-game') {
         confirmedGames++;
+      } else if (classification.kind === 'unverified-legacy') {
+        unverifiedLegacy.push(classification.issue);
+        console.log(JSON.stringify(classification.issue));
       } else {
         issues.push(classification.issue);
         console.log(JSON.stringify(classification.issue));
@@ -4684,12 +4696,13 @@ async function gameCatalogueIdentityAudit() {
     console.log('Catalogue identity progress: ' + (offset + Math.min(index + batch.length, games.length)) + '/' + UPDATE_CATALOG.length);
   }
   console.log(JSON.stringify({ offset, checked: games.length, totalCatalogue: UPDATE_CATALOG.length, totals, issues: issues.length,
-    confirmedGames, expectedLegacy: expectedLegacy.length,
+    confirmedGames, expectedLegacy: expectedLegacy.length, unverifiedLegacy: unverifiedLegacy.length,
     suggestedRenames: issues.filter(issue => issue.suggestedAction === 'review-display-name').length,
     note: 'Suggestions only; no catalogue or guild subscription changes were made.' }));
   if (expectedLegacy.length) console.log(JSON.stringify({ expectedLegacy }));
-  // Unreachable metadata is not silently treated as a verified match.
-  return issues.length === 0;
+  if (unverifiedLegacy.length) console.log(JSON.stringify({ unverifiedLegacy }));
+  // Unverified legacy identities still require review; never silently pass them.
+  return issues.length === 0 && unverifiedLegacy.length === 0;
 }
 
 async function gameUpdatesAudit() {
