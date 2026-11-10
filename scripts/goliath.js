@@ -4955,6 +4955,18 @@ async function gameUpdatesAudit() {
     assert(panel.components.length <= 5); for (const row of panel.components) assert(row.components.length <= 5);
     assert.deepEqual(panel.allowedMentions, { parse: [] });
   }
+  // Concurrent held retries and polling must serialize per guild and never double-send.
+  const concurrentHeld = makeItem(108);
+  store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, seenIds: [concurrentHeld.id, ...current.seenIds], pending: [{ item: concurrentHeld, status: 'ambiguous' }] } } }; });
+  const beforeConcurrent = sent.length;
+  await Promise.all([
+    monitor.retryHeldGameUpdates(guild, '730'),
+    monitor.retryHeldGameUpdates(guild, '730'),
+    monitor.processGameUpdates(guild)
+  ]);
+  assert.equal(sent.length, beforeConcurrent + 1, 'Concurrent retries and polling must send held update exactly once.');
+  assert.deepEqual(sent[sent.length - 1].allowedMentions.roles, [], 'Retry must not repeat role mentions.');
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 0);
   await monitor.removeGameSubscription(guild, '730');
   assert.equal(Object.keys(store.getGameUpdates(guild.id).subscriptions).length, 0);
   assert(store.getGameUpdates(guild.id).history.length > 0); assert.equal(memory.currency, 'GBP'); assert.equal(memory.state.deliveries[0].messageId, 'preserve');
