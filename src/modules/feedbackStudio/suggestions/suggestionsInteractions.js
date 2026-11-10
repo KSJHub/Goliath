@@ -24,7 +24,7 @@ const SUGGESTIONS_COLOR = panel.SUGGESTIONS_COLOR || 0xfee75c;
 const ADMIN_RECORD_PAGE_SIZE = 20;
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
 const button = (customId, label, style = ButtonStyle.Primary) => navigationButton(customId, label, style);
-const formatChannel = (id) => id ? `<#${id}>` : '⚠️ Not set';
+const formatChannel = (id) => id ? `<#${id}>` : emojiLabel('WARNING', 'Not set');
 const formatRoles = (ids = []) => Array.isArray(ids) && ids.filter(Boolean).length
   ? ids.filter(Boolean).map((id) => `<@&${id}>`).join(', ')
   : 'Administrators / Manage Server only';
@@ -110,21 +110,21 @@ function buildOverviewPanel(guild, memberName) {
 
   const embed = new EmbedBuilder()
     .setColor(SUGGESTIONS_COLOR)
-    .setTitle('💡 Suggestions · Control Centre')
+    .setTitle(emojiLabel('USER_SUGGESTIONS', 'Suggestions · Control Centre'))
     .setDescription('Manage suggestions, workflow and configuration.')
     .addFields(
       {
         name: 'Status',
-        value: `${enabled ? '🟢 Enabled' : '🔴 Disabled'} · ${deployed ? `✅ Panel published in ${formatChannel(section.deployment.channelId)}` : '⚪ Panel not published'}`,
+        value: `${enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled')} · ${deployed ? `✅ Panel published in ${formatChannel(section.deployment.channelId)}` : emojiLabel('INACTIVE', 'Panel not published')}`,
         inline: false,
       },
       {
         name: 'Setup',
         value: [
           `📢 Public: ${formatChannel(section.submitChannelId)}`,
-          `💬 Team: ${readiness.reviewEnabled ? formatChannel(section.reviewChannelId) : '⏸️ Review disabled'}`,
+          `💬 Team: ${readiness.reviewEnabled ? formatChannel(section.reviewChannelId) : emojiLabel('USER_PAUSE', 'Review disabled')}`,
           `👥 Management: ${managementRoles.length ? formatRoles(managementRoles) : 'Administrators / Manage Server'}`,
-          `📬 Outcomes: ${outcomesConfigured}/2 set · ${section.logChannelId ? '🧾 Audit log set' : '⚠️ Audit log not set'}`,
+          `📬 Outcomes: ${outcomesConfigured}/2 set · ${section.logChannelId ? emojiLabel('CASE', 'Audit log set') : emojiLabel('WARNING', 'Audit log not set')}`,
         ].join('\n'),
         inline: false,
       },
@@ -142,7 +142,7 @@ function buildOverviewPanel(guild, memberName) {
 
   const publishButton = button(
     'admin:suggestions:deploy',
-    deployed ? emojiLabel('REFRESH', 'Update Public Panel') : '🚀 Publish Public Panel',
+    deployed ? emojiLabel('REFRESH', 'Update Public Panel') : emojiLabel('DEPLOY', 'Publish Public Panel'),
     ButtonStyle.Success,
   ).setDisabled(!readiness.ready);
 
@@ -151,20 +151,20 @@ function buildOverviewPanel(guild, memberName) {
     components: [
       row(new ChannelSelectMenuBuilder()
         .setCustomId('admin:suggestions:submitChannel')
-        .setPlaceholder('📢 Public suggestions channel')
+        .setPlaceholder(emojiLabel('WELCOME_CHANNEL', 'Public suggestions channel'))
         .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setMinValues(0).setMaxValues(1)),
       row(new ChannelSelectMenuBuilder()
         .setCustomId('admin:suggestions:reviewChannel')
-        .setPlaceholder(readiness.reviewEnabled ? '💬 Private team discussion channel' : '💬 Team discussion is disabled')
+        .setPlaceholder(readiness.reviewEnabled ? emojiLabel('USER_FEEDBACK', 'Private team discussion channel') : emojiLabel('USER_FEEDBACK', 'Team discussion is disabled'))
         .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setMinValues(0).setMaxValues(1).setDisabled(!readiness.reviewEnabled)),
       row(
-        button('admin:suggestions:records:page:0', '📂 Manage Suggestions', ButtonStyle.Primary),
-        button('admin:suggestions:reviewers', '👥 Management Team', ButtonStyle.Primary),
+        button('admin:suggestions:records:page:0', emojiLabel('MOD_CASE_OPEN', 'Manage Suggestions'), ButtonStyle.Primary),
+        button('admin:suggestions:reviewers', emojiLabel('MOD_STAFF', 'Management Team'), ButtonStyle.Primary),
       ),
       row(
-        button('admin:suggestions:destinations', '📬 Outcomes & Logs', ButtonStyle.Primary),
+        button('admin:suggestions:destinations', emojiLabel('SUGGESTION_INBOX', 'Outcomes & Logs'), ButtonStyle.Primary),
         button('admin:suggestions:settings', emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
       ),
       row(
@@ -181,18 +181,18 @@ function buildSettingsPanel(guild, memberName) {
   const voting = section.voting !== false;
   const review = section.requireReview !== false;
   const anonymous = section.anonymous === true;
-  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 Suggestions · Settings')
+  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'Suggestions · Settings'))
     .setDescription('These settings control how Suggestions behaves across the whole server. The buttons below describe the action they will perform.')
     .addFields(
       { name: 'Module', value: `Suggestions are currently **${enabled ? 'Enabled ✅' : 'Disabled ❌'}**.\n${enabled ? 'Members can use the published panel and active suggestion controls.' : 'New submissions and active controls are paused.'}`, inline: false },
-      { name: 'Community voting', value: voting ? '✅ Enabled · Open suggestions can receive community votes.' : '❌ Disabled · Vote controls are hidden globally.', inline: true },
-      { name: 'Management review', value: review ? '✅ Enabled · Suggestions use the managed review workflow.' : '❌ Disabled · Private review workflow is bypassed.', inline: true },
-      { name: 'Public identity', value: anonymous ? '🔒 Anonymous · Public suggestion cards hide the member name. Management can still identify the submitter.' : '👤 Named · Public suggestion cards show the submitting member.', inline: false },
+      { name: 'Community voting', value: voting ? emojiLabel('HEALTHY', 'Enabled · Open suggestions can receive community votes.') : emojiLabel('ERROR', 'Disabled · Vote controls are hidden globally.'), inline: true },
+      { name: 'Management review', value: review ? emojiLabel('HEALTHY', 'Enabled · Suggestions use the managed review workflow.') : emojiLabel('ERROR', 'Disabled · Private review workflow is bypassed.'), inline: true },
+      { name: 'Public identity', value: anonymous ? emojiLabel('LOCKDOWN', 'Anonymous · Public suggestion cards hide the member name. Management can still identify the submitter.') : emojiLabel('USER', 'Named · Public suggestion cards show the submitting member.'), inline: false },
     ).setFooter({ text: `Global Suggestions settings · Opened by ${memberName}` }).setTimestamp();
   return { embeds: [embed], components: [
-    row(button(enabled ? 'admin:suggestions:disable' : 'admin:suggestions:enable', enabled ? '⏸️ Disable Suggestions' : '▶️ Enable Suggestions', enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
-    row(button('admin:suggestions:toggleVoting', voting ? '⏸️ Disable Voting' : '▶️ Enable Voting', voting ? ButtonStyle.Secondary : ButtonStyle.Success), button('admin:suggestions:toggleReview', review ? '⏸️ Disable Review' : '▶️ Enable Review', review ? ButtonStyle.Secondary : ButtonStyle.Success)),
-    row(button('admin:suggestions:toggleAnonymous', anonymous ? '👤 Show Member Names Publicly' : '🔒 Make Public Suggestions Anonymous', ButtonStyle.Secondary)),
+    row(button(enabled ? 'admin:suggestions:disable' : 'admin:suggestions:enable', enabled ? emojiLabel('USER_PAUSE', 'Disable Suggestions') : emojiLabel('USER_PLAY', 'Enable Suggestions'), enabled ? ButtonStyle.Danger : ButtonStyle.Success)),
+    row(button('admin:suggestions:toggleVoting', voting ? emojiLabel('USER_PAUSE', 'Disable Voting') : emojiLabel('USER_PLAY', 'Enable Voting'), voting ? ButtonStyle.Secondary : ButtonStyle.Success), button('admin:suggestions:toggleReview', review ? emojiLabel('USER_PAUSE', 'Disable Review') : emojiLabel('USER_PLAY', 'Enable Review'), review ? ButtonStyle.Secondary : ButtonStyle.Success)),
+    row(button('admin:suggestions:toggleAnonymous', anonymous ? emojiLabel('USER', 'Show Member Names Publicly') : emojiLabel('LOCKDOWN', 'Make Public Suggestions Anonymous'), ButtonStyle.Secondary)),
     row(button('admin:suggestions:overview', emojiLabel('BACK', 'Back to Control Centre'), ButtonStyle.Secondary)),
   ] };
 }
@@ -202,7 +202,7 @@ function buildManagementTeamPanel(guild, memberName, page = 0) {
   const pageCount = panelNavigation.rolePickerPageCount(guild);
   const safePage = Math.min(Math.max(0, Number(page) || 0), pageCount - 1);
   const picker = panelNavigation.buildRolePicker(guild, { customId: 'admin:suggestions:reviewerRoles', placeholder: 'Choose management roles', selectedIds: section.reviewerRoleIds, minValues: 0, maxValues: 25, page: safePage, pagination: true, showManaged: true });
-  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 Suggestions · Management Team')
+  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'Suggestions · Management Team'))
     .setDescription('Choose the roles that can move suggestions through discussion, approval, decline and implementation.')
     .addFields(
       { name: 'Selected management roles', value: formatRoles(section.reviewerRoleIds), inline: false },
@@ -214,12 +214,12 @@ function buildManagementTeamPanel(guild, memberName, page = 0) {
 
 function buildDestinationsPanel(guild, memberName) {
   const section = suggestions.getSection(guild.id);
-  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 Suggestions · Outcomes & Logs')
+  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'Suggestions · Outcomes & Logs'))
     .setDescription('Choose where final results and the management audit trail are posted. The original public suggestion is always updated with its final status and team response.')
     .addFields(
-      { name: '✅ Approved suggestions', value: section.approvedChannelId ? formatChannel(section.approvedChannelId) : 'Optional · no separate approved-results channel selected', inline: false },
-      { name: '❌ Declined suggestions', value: section.deniedChannelId ? formatChannel(section.deniedChannelId) : 'Optional · no separate declined-results channel selected', inline: false },
-      { name: '🧾 Audit log', value: section.logChannelId ? `${formatChannel(section.logChannelId)} · Management actions are recorded here.` : '⚠️ Not set · recommended so management actions have a permanent channel record.', inline: false },
+      { name: emojiLabel('HEALTHY', 'Approved suggestions'), value: section.approvedChannelId ? formatChannel(section.approvedChannelId) : 'Optional · no separate approved-results channel selected', inline: false },
+      { name: emojiLabel('ERROR', 'Declined suggestions'), value: section.deniedChannelId ? formatChannel(section.deniedChannelId) : 'Optional · no separate declined-results channel selected', inline: false },
+      { name: emojiLabel('CASE', 'Audit log'), value: section.logChannelId ? `${formatChannel(section.logChannelId)} · Management actions are recorded here.` : emojiLabel('WARNING', 'Not set · recommended so management actions have a permanent channel record.'), inline: false },
     ).setFooter({ text: `Outcome routing · Opened by ${memberName}` }).setTimestamp();
   return { embeds: [embed], components: [
     row(new ChannelSelectMenuBuilder().setCustomId('admin:suggestions:approvedChannel').setPlaceholder('Approved suggestions channel · optional').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(1)),
@@ -242,7 +242,7 @@ function buildSuggestionRecordsPanel(guild, memberName, page = 0) {
   const safePage = Math.min(Math.max(0, Number(page) || 0), totalPages - 1);
   const visible = records.slice(safePage * ADMIN_RECORD_PAGE_SIZE, (safePage + 1) * ADMIN_RECORD_PAGE_SIZE);
   const section = suggestions.getSection(guild.id);
-  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle('💡 Suggestions · Manage Suggestions')
+  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'Suggestions · Manage Suggestions'))
     .setDescription(['Every submitted suggestion stored by Goliath is listed here, even if its Discord message was deleted manually.', '', `**Stored records:** ${records.length}`, `**Discussing:** ${section.analytics.discussing} · **Approved:** ${section.analytics.approved} · **Implemented:** ${section.analytics.implemented} · **Declined:** ${section.analytics.denied}`, '', records.length ? 'Choose a suggestion below to inspect its Discord messages, edit it, repair missing messages or remove stale backend data.' : 'There are no stored suggestion records.'].join('\n'))
     .setFooter({ text: `Page ${safePage + 1} of ${totalPages} · Opened by ${memberName}` }).setTimestamp();
   const components = [];
@@ -258,8 +258,8 @@ async function buildSuggestionRecordDetail(guild, memberName, suggestionId, page
   const section = suggestions.getSection(guild.id);
   const publicMessage = await fetchStoredMessage(guild, item.channelId, item.messageId);
   const reviewMessage = await fetchStoredMessage(guild, item.reviewChannelId, item.reviewMessageId);
-  const publicStatus = item.channelId && item.messageId ? (publicMessage ? `✅ Live in ${formatChannel(item.channelId)}` : `⚠️ Missing from ${formatChannel(item.channelId)}`) : '⚪ No public message linked';
-  const reviewStatus = item.reviewChannelId && item.reviewMessageId ? (reviewMessage ? `✅ Live in ${formatChannel(item.reviewChannelId)}` : `⚠️ Missing from ${formatChannel(item.reviewChannelId)}`) : (section.requireReview !== false ? '⚪ No management message linked' : '⏸️ Management review is disabled');
+  const publicStatus = item.channelId && item.messageId ? (publicMessage ? `✅ Live in ${formatChannel(item.channelId)}` : `⚠️ Missing from ${formatChannel(item.channelId)}`) : emojiLabel('INACTIVE', 'No public message linked');
+  const reviewStatus = item.reviewChannelId && item.reviewMessageId ? (reviewMessage ? `✅ Live in ${formatChannel(item.reviewChannelId)}` : `⚠️ Missing from ${formatChannel(item.reviewChannelId)}`) : (section.requireReview !== false ? emojiLabel('INACTIVE', 'No management message linked') : emojiLabel('USER_PAUSE', 'Management review is disabled'));
   const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(`💡 ${item.reference} · ${item.title}`).setDescription(item.content || '_No suggestion details were provided._')
     .addFields(
       { name: 'Status', value: `${panel.statusEmoji(item.status)} ${panel.statusLabel(item.status, section)}`, inline: true },
@@ -268,12 +268,12 @@ async function buildSuggestionRecordDetail(guild, memberName, suggestionId, page
       { name: 'Public Discord message', value: publicStatus, inline: false },
       { name: 'Management Discord message', value: reviewStatus, inline: false },
       { name: 'Stored votes', value: `👍 ${item.upVotes?.length || 0} · 👎 ${item.downVotes?.length || 0}`, inline: true },
-      { name: 'Backend record', value: '✅ Stored in Goliath', inline: true },
+      { name: 'Backend record', value: emojiLabel('HEALTHY', 'Stored in Goliath'), inline: true },
     ).setFooter({ text: `Stored suggestion management · Opened by ${memberName}` }).setTimestamp(new Date(item.updatedAt || item.createdAt || Date.now()));
   return { embeds: [embed], components: [
-    row(button(`admin:suggestions:recordEdit:${item.suggestionId}:${page}`, '📝 Edit', ButtonStyle.Primary), button(`admin:suggestions:recordRefresh:${item.suggestionId}:${page}`, '🛠️ Repair Messages', ButtonStyle.Secondary)),
-    row(button(`admin:suggestions:recordDeleteMessages:${item.suggestionId}:${page}`, '🗑️ Delete Discord Messages', ButtonStyle.Danger), button(`admin:suggestions:recordRemove:${item.suggestionId}:${page}`, '🧹 Remove Goliath Record', ButtonStyle.Danger)),
-    row(button(`admin:suggestions:records:page:${page}`, '⬅️ Back to Stored Suggestions', ButtonStyle.Secondary)),
+    row(button(`admin:suggestions:recordEdit:${item.suggestionId}:${page}`, emojiLabel('NOTE', 'Edit'), ButtonStyle.Primary), button(`admin:suggestions:recordRefresh:${item.suggestionId}:${page}`, emojiLabel('WELCOME_CUSTOM', 'Repair Messages'), ButtonStyle.Secondary)),
+    row(button(`admin:suggestions:recordDeleteMessages:${item.suggestionId}:${page}`, emojiLabel('DELETE', 'Delete Discord Messages'), ButtonStyle.Danger), button(`admin:suggestions:recordRemove:${item.suggestionId}:${page}`, emojiLabel('ADMIN_PURGE', 'Remove Goliath Record'), ButtonStyle.Danger)),
+    row(button(`admin:suggestions:records:page:${page}`, emojiLabel('BACK', 'Back to Stored Suggestions'), ButtonStyle.Secondary)),
   ] };
 }
 
@@ -281,10 +281,10 @@ function buildDeleteConfirmation(guild, memberName, suggestionId, page = 0, mode
   const item = suggestions.getSuggestion(guild.id, suggestionId);
   if (!item) return buildSuggestionRecordsPanel(guild, memberName, page);
   const removeRecord = mode === 'record';
-  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(removeRecord ? '⚠️ Remove Goliath Suggestion Record?' : '⚠️ Delete Suggestion Messages?')
+  const embed = new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(removeRecord ? emojiLabel('WARNING', 'Remove Goliath Suggestion Record?') : emojiLabel('WARNING', 'Delete Suggestion Messages?'))
     .setDescription(removeRecord ? `This permanently removes **${item.reference} · ${item.title}** from Goliath's stored Suggestions data.\n\nUse this when the Discord message was deleted manually or the record is no longer needed. The Open count will update immediately.\n\n**This does not delete any Discord messages that may still exist.**` : `This deletes the public and private management Discord messages for **${item.reference} · ${item.title}**, where Goliath can still access them.\n\nThe backend record will remain so you can edit, inspect or remove it separately.`)
     .setFooter({ text: `Confirmation · Opened by ${memberName}` }).setTimestamp();
-  return { embeds: [embed], components: [row(button(`${removeRecord ? 'admin:suggestions:recordRemoveConfirm' : 'admin:suggestions:recordDeleteMessagesConfirm'}:${item.suggestionId}:${page}`, removeRecord ? '🧹 Yes, Remove Record' : '🗑️ Yes, Delete Messages', ButtonStyle.Danger), button(`admin:suggestions:record:${item.suggestionId}:${page}`, 'Cancel', ButtonStyle.Secondary))] };
+  return { embeds: [embed], components: [row(button(`${removeRecord ? 'admin:suggestions:recordRemoveConfirm' : 'admin:suggestions:recordDeleteMessagesConfirm'}:${item.suggestionId}:${page}`, removeRecord ? emojiLabel('ADMIN_PURGE', 'Yes, Remove Record') : emojiLabel('DELETE', 'Yes, Delete Messages'), ButtonStyle.Danger), button(`admin:suggestions:record:${item.suggestionId}:${page}`, 'Cancel', ButtonStyle.Secondary))] };
 }
 
 function buildRecordEditModal(item, page = 0) {
@@ -336,7 +336,7 @@ function buildAdminPanel(guild, memberName, page = 'overview', rolePage = 0) {
 
 async function handleSuggestionsAdminInteraction(interaction) {
   const id = String(interaction?.customId || ''); if (!id.startsWith('admin:suggestions')) return false;
-  if (!interaction.guild?.id) { await safeReply(interaction, '❌ Suggestions can only be managed inside a server.'); return true; }
+  if (!interaction.guild?.id) { await safeReply(interaction, emojiLabel('ERROR', 'Suggestions can only be managed inside a server.')); return true; }
   const memberName = interaction.member?.displayName || interaction.user?.displayName || interaction.user?.username || 'Unknown User';
   const save = (updater) => suggestions.updateSection(interaction.guild.id, updater, interaction.guild);
   try {
