@@ -670,7 +670,7 @@ async function handleGameUpdatesInteraction(i, action, reply) {
   }
   if (kind === 'remove-view' || kind === 'retry-view') {
     const payload = buildUpdateSubscriptionPanel(guild, appId);
-    payload.embeds[0].description = kind === 'remove-view' ? 'Unsubscribe from this game? Existing messages and delivery history will be kept.' :
+    payload.embeds[0].description = kind === 'remove-view' ? 'Unsubscribe from this game? Existing messages and delivery history will be kept. Resolve any held or uncertain deliveries before unsubscribing.' :
       'Inspect the destination channel first. Retry held checks for an existing message, then retries unresolved deliveries without a role ping.';
     payload.components = [componentRow(panelButton('updates:' + (kind === 'remove-view' ? 'remove:' : 'retry:') + appId, kind === 'remove-view' ? 'Confirm unsubscribe' : 'Retry held', 4),
       panelButton('updates:game:' + appId, 'Cancel'))]; await reply(payload); return true;
