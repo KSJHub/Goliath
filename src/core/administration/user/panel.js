@@ -285,9 +285,9 @@ function buildProfilePanel(interaction, profile = {}, options = {}) {
   if (Number.isFinite(profile.giveawayWins)) community.push(`Giveaway Wins: **${profile.giveawayWins.toLocaleString()}**`);
 
   const sections = [identity.join('\n')];
-  if (membership.length) sections.push(`📅 **Membership**\n${membership.join('\n')}`);
-  if (progress.length) sections.push(`🏆 **Progress**\n${progress.join('\n')}`);
-  if (community.length) sections.push(`📊 **Community**\n${community.join('\n')}`);
+  if (membership.length) sections.push(`${EMOJIS.WELCOME_SCHEDULED} **Membership**\n${membership.join('\n')}`);
+  if (progress.length) sections.push(`${EMOJIS.USER_LEVELING} **Progress**\n${progress.join('\n')}`);
+  if (community.length) sections.push(`${EMOJIS.DASHBOARD} **Community**\n${community.join('\n')}`);
 
   const embed = markLiveEmbed(createEmbed(`${EMOJIS.USER} Your Profile`, sections.join('\n\n'), memberDisplayName))
     .setThumbnail(user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || null);
@@ -412,14 +412,14 @@ function buildLevelingUserPanel(interaction, section, user, rank, participating,
 
   const multiplierLines = activeMultiplier
     ? [
-      `🟢 **${activeMultiplier.name || 'Active XP Multiplier'}**`,
+      `${EMOJIS.ENABLED} **${activeMultiplier.name || 'Active XP Multiplier'}**`,
       `Multiplier: **${activeMultiplier.value}×**`,
       `Applies to: ${activeMultiplier.sourceIds?.length ? activeMultiplier.sourceIds.map((id) => `\`${id}\``).join(', ') : 'All enabled XP sources'}`,
       activeMultiplier.endsAt ? `Ends: <t:${Math.floor(new Date(activeMultiplier.endsAt).getTime() / 1000)}:R>` : 'Ends: No scheduled end',
     ]
     : scheduledMultiplier
       ? [
-        `🟡 **${configuredMultiplier.name || 'Scheduled XP Event'}**`,
+        `${EMOJIS.SEVERITY_MEDIUM} **${configuredMultiplier.name || 'Scheduled XP Event'}**`,
         `Multiplier: **${configuredMultiplier.value}×**`,
         `Applies to: ${configuredMultiplier.sourceIds?.length ? configuredMultiplier.sourceIds.map((id) => `\`${id}\``).join(', ') : 'All enabled XP sources'}`,
         `Starts: <t:${Math.floor(configuredStartsAt / 1000)}:R>`,
@@ -494,7 +494,7 @@ function buildInProgressPanel(interactionOrName = 'Unknown User', pageIndex = 0)
   if (safeIndex > 0) controls.unshift(button(`user:in-progress:${safeIndex - 1}`, 'Previous', ButtonStyle.Secondary, false, EMOJIS.BACK));
 
   return {
-    embeds: [createEmbed(`🚧 User Panel Development — ${page.title}`, description, memberDisplayName, DEV_COLOR)],
+    embeds: [createEmbed(`${EMOJIS.QUARANTINE} User Panel Development — ${page.title}`, description, memberDisplayName, DEV_COLOR)],
     components: [row(...controls)],
   };
 }
