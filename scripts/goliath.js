@@ -5072,6 +5072,47 @@ async function gameUpdatesAudit() {
   store.updateGameUpdates(guild.id, state => { const current = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...current, pending: [] } } }; });
   await monitor.removeGameSubscription(guild, '730');
   assert.equal(Object.keys(store.getGameUpdates(guild.id).subscriptions).length, 0);
+  // Multi-channel delivery: independent role mention, durable journal and
+  // no duplicate in the successful channel when the other channel fails.
+  const secondId = '444444444444444444', secondSent = [], secondMessages = [];
+  let secondFailure = false;
+  const secondChannel = { id: secondId, type: 0, permissionsFor: () => ({ has: () => true }),
+    messages: { fetch: async () => ({ find: fn => secondMessages.find(fn) }) },
+    send: async payload => {
+      if (secondFailure) throw new Error('Connection lost');
+      secondSent.push(payload);
+      const message = { id: 'second-' + secondSent.length, author: { id: 'bot' }, embeds: payload.embeds };
+      secondMessages.push(message);
+      return message;
+    } };
+  guild.channels.fetch = async id => id === secondId ? secondChannel : channel;
+  await monitor.saveGameSubscription(guild, { appId: '730', name: 'Counter-Strike 2', channelId, roleId,
+    destinations: [{ channelId, roleId, enabled: true }, { channelId: secondId, enabled: true }], enabled: true });
+  const beforeMulti = sent.length;
+  feed = [makeItem(201), ...feed];
+  secondFailure = true;
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeMulti + 1, 'Primary route must deliver even when another route fails.');
+  assert.equal(secondSent.length, 0);
+  let multi = store.getGameUpdates(guild.id).subscriptions['730'];
+  assert.equal(multi.pending.length, 1, 'Failed secondary route must retain pending delivery.');
+  assert.equal(multi.pending[0].routes[channelId].status, 'delivered');
+  assert.equal(multi.pending[0].routes[secondId].status, 'ambiguous');
+  await monitor.processGameUpdates(guild);
+  assert.equal(sent.length, beforeMulti + 1, 'A successful route must not duplicate after another route becomes uncertain.');
+  secondFailure = false;
+  const multiRetry = await monitor.retryHeldGameUpdates(guild, '730');
+  assert.equal(multiRetry.delivered, 1);
+  assert.equal(secondSent.length, 1);
+  assert.deepEqual(secondSent[0].allowedMentions.roles, [], 'Retry must suppress role mentions.');
+  assert.equal(sent.length, beforeMulti + 1, 'Retry must not resend a successful channel.');
+  multi = store.getGameUpdates(guild.id).subscriptions['730'];
+  assert.equal(multi.pending.length, 0);
+  assert.equal(multi.routeDeliveries[channelId][0].status, 'delivered');
+  assert.equal(multi.routeDeliveries[secondId][0].status, 'delivered');
+  await monitor.processGameUpdates(guild);
+  assert.equal(secondSent.length, 1, 'Restart-safe channel journal must prevent duplicate secondary delivery.');
+  await monitor.removeGameSubscription(guild, '730');
   assert(store.getGameUpdates(guild.id).history.length > 0); assert.equal(memory.currency, 'GBP'); assert.equal(memory.state.deliveries[0].messageId, 'preserve');
   console.log('✅ Game Updates: isolated state, official Steam source/cache, validation, independent enablement, quiet baseline, concurrent/restart dedupe, private preview, role-safe manual sends, permission recovery, uncertain-send review, crash recovery, filters, embed/component limits and legacy data preservation');
   return true;
