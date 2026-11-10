@@ -50,9 +50,9 @@ const MODULE_CATALOG = [
 
 const IN_PROGRESS_PAGES = [
   {
-    title: '🏘️ Community',
+    title: `\${EMOJIS.USER_COMMUNITY} Community`,
     lines: [
-      '**🎉 Giveaways — Locked**',
+      `**${EMOJIS.USER_GIVEAWAYS} Giveaways — Locked**',
       '• View active giveaways',
       '• View giveaway history',
       '• View previous winners',
@@ -62,59 +62,59 @@ const IN_PROGRESS_PAGES = [
       '• Jump to giveaway message',
       '• Notification preferences (future)',
       '',
-      '**📨 Invites — Discussion**',
+      `**${EMOJIS.USER_INVITES} Invites — Discussion**',
       '• My invite code',
       '• Total and successful invites',
       '• Left-server and fake-invite counts',
       '• Invite leaderboard, rewards and history',
       '',
-      '**📊 Polls — Discussion**',
+      `**${EMOJIS.DASHBOARD} Polls — Discussion**',
       '• Active polls, my votes, results and history',
     ],
   },
   {
-    title: '💬 Feedback & Messages',
+    title: `\${EMOJIS.USER_FEEDBACK} Feedback & Messages`,
     lines: [
-      '**📝 Forms — Discussion**',
+      `**${EMOJIS.NOTE} Forms — Discussion**',
       '• View available forms',
       '• Track my submissions and status',
       '',
-      '**💡 Suggestions — Discussion**',
+      `**${EMOJIS.USER_SUGGESTIONS} Suggestions — Discussion**',
       '• Submit and track suggestions',
       '• View voting and decision status',
       '',
-      '**🎫 Tickets — Discussion**',
+      `**${EMOJIS.USER_TICKETS} Tickets — Discussion**',
       '• Open tickets and view my ticket history',
       '• Jump to active ticket channels',
       '',
-      '**⭐ Starboard — Discussion**',
+      `**${EMOJIS.USER_STARBOARD} Starboard — Discussion**',
       '• My starred messages',
       '• Top starred posts and jump-to-message access',
     ],
   },
   {
-    title: '🎭 Roles, Security & Social',
+    title: `\${EMOJIS.USER_ROLES} Roles, Security & Social`,
     lines: [
-      '**🎭 Roles — Discussion**',
+      `**${EMOJIS.USER_ROLES} Roles — Discussion**',
       '• Self-assignable roles',
       '• Role history and role requests',
       '',
-      '**🛡️ Security — Discussion**',
+      `**${EMOJIS.SECURITY} Security — Discussion**',
       '• Verification status',
       '• Member security notifications',
       '',
-      '**📣 Social Studio**',
+      `**${EMOJIS.USER_SOCIAL} Social Studio**',
       '• Permission-controlled Creator Profile access',
       '• Open or create your own Creator Profile',
     ],
   },
   {
-    title: '👤 Account & Utility',
+    title: `\${EMOJIS.USER} Account & Utility`,
     lines: [
-      '**🗂️ Account Record — Planned**',
+      `**${EMOJIS.WORKSPACE} Account Record — Planned**',
       '• Warnings, cases, infractions and appeals (own only)',
       '',
-      '**🧰 Utility — Approved / Future**',
+      `**${EMOJIS.TOOLS} Utility — Approved / Future**',
       '• Help, ping, server info and translate',
       '• Schedule, stats and temporary voice (future)',
     ],
@@ -189,15 +189,15 @@ function progressDetails(levelingProfile = {}) {
 function navigationRow({ backId = null, home = true, nextId = null } = {}) {
   const components = [];
   if (backId) components.push(button(backId, 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK));
-  if (home) components.push(button('user:home', 'User Panel', ButtonStyle.Secondary, false, '🏠'));
-  if (nextId) components.push(button(nextId, 'Next', ButtonStyle.Primary, false, '➡️'));
+  if (home) components.push(button('user:home', 'User Panel', ButtonStyle.Secondary, false, EMOJIS.USER_HOME));
+  if (nextId) components.push(button(nextId, 'Next', ButtonStyle.Primary, false, EMOJIS.NEXT));
   return row(...components);
 }
 
 function buildSearchRow(selectedModule = null) {
   return row(new StringSelectMenuBuilder()
     .setCustomId('user:search')
-    .setPlaceholder('🔎 Search or jump to a user tool')
+    .setPlaceholder(`\${EMOJIS.INVESTIGATE} Search or jump to a user tool`)
     .setMinValues(1)
     .setMaxValues(1)
     .addOptions(MODULE_CATALOG.slice(0, 25).map((module) => ({
@@ -223,7 +223,7 @@ function buildMainPanel(interactionOrName = 'Unknown User') {
     CATEGORY_CATALOG.map((category) => `${category.emoji} **${category.label}** - ${category.summary}`).join('\n'),
   ].join('\n');
   return {
-    embeds: [createEmbed('👤 Goliath User Panel', description, memberDisplayName)],
+    embeds: [createEmbed(`\${EMOJIS.USER} Goliath User Panel`, description, memberDisplayName)],
     components: [buildSearchRow(), ...buildCategoryButtons(ButtonStyle.Primary)].slice(0, 5),
   };
 }
@@ -289,12 +289,12 @@ function buildProfilePanel(interaction, profile = {}, options = {}) {
   if (progress.length) sections.push(`🏆 **Progress**\n${progress.join('\n')}`);
   if (community.length) sections.push(`📊 **Community**\n${community.join('\n')}`);
 
-  const embed = markLiveEmbed(createEmbed('👤 Your Profile', sections.join('\n\n'), memberDisplayName))
+  const embed = markLiveEmbed(createEmbed(`\${EMOJIS.USER} Your Profile`, sections.join('\n\n'), memberDisplayName))
     .setThumbnail(user?.displayAvatarURL?.({ extension: 'png', size: 256 }) || null);
 
   const actionButtons = [];
-  if (options.rolesEnabled !== false) actionButtons.push(button('user:profile:roles', 'View Roles', ButtonStyle.Primary, false, '🎭'));
-  actionButtons.push(button('user:account:record', 'Account Record', ButtonStyle.Secondary, false, '🗂️'));
+  if (options.rolesEnabled !== false) actionButtons.push(button('user:profile:roles', 'View Roles', ButtonStyle.Primary, false, EMOJIS.USER_ROLES));
+  actionButtons.push(button('user:account:record', 'Account Record', ButtonStyle.Secondary, false, EMOJIS.WORKSPACE));
 
   return {
     embeds: [embed],
@@ -305,7 +305,7 @@ function buildProfilePanel(interaction, profile = {}, options = {}) {
       row(
         button('user:close', 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK),
         button('user:profile:refresh', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
-        button('user:in-progress:0', 'In Progress', ButtonStyle.Secondary, false, '🚧'),
+        button('user:in-progress:0', 'In Progress', ButtonStyle.Secondary, false, EMOJIS.QUARANTINE),
       ),
     ],
   };
@@ -321,7 +321,7 @@ function buildAccountRecordPanel(interactionOrName = 'Unknown User') {
   ].join('\n');
 
   return {
-    embeds: [createEmbed('🗂️ Your Account Record', description, memberDisplayName)],
+    embeds: [createEmbed(`\${EMOJIS.WORKSPACE} Your Account Record`, description, memberDisplayName)],
     components: [
       row(...modules.map((module) => button(
         `user:module:${module.key}`,
@@ -352,13 +352,13 @@ function buildRewardProgressLines(section, currentLevel = 0) {
   const nextReward = rewards.find((reward) => Number(reward.level) > level) || null;
   const lines = rewards.slice(0, 15).map((reward) => {
     const unlocked = level >= Number(reward.level);
-    return `${unlocked ? EMOJIS.SUCCESS : '⬜'} Level **${reward.level}** → <@&${reward.roleId}>`;
+    return `${unlocked ? EMOJIS.SUCCESS : EMOJIS.USER_LOCKED} Level **${reward.level}** → <@&${reward.roleId}>`;
   });
   if (nextReward) {
     lines.push('', `**Next Reward:** Level ${nextReward.level} → <@&${nextReward.roleId}>`);
     lines.push(`**Levels Remaining:** ${Math.max(0, Number(nextReward.level) - level)}`);
   } else {
-    lines.push('', '🏁 **All configured level rewards unlocked.**');
+    lines.push('', `\${EMOJIS.USER_FINISH} **All configured level rewards unlocked.**`);
   }
   return lines;
 }
@@ -429,7 +429,7 @@ function buildLevelingUserPanel(interaction, section, user, rank, participating,
       : ['No XP multiplier is currently active or scheduled.'];
 
   return {
-    embeds: [markLiveEmbed(createEmbed('🏆 Your Leveling', [
+    embeds: [markLiveEmbed(createEmbed(`\${EMOJIS.USER_LEVELING} Your Leveling`, [
       '**Your Progress**',
       ...progressLines,
       '',
@@ -445,9 +445,9 @@ function buildLevelingUserPanel(interaction, section, user, rank, participating,
     components: [
       row(
         button('user:module:leveling', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
-        button('user:leveling:leaderboard:xp:0', 'Leaderboard', ButtonStyle.Primary, false, '🏆'),
-        button('user:leveling:history', 'XP History', ButtonStyle.Primary, false, '📈'),
-        button('user:leveling:toggle', participating ? 'Disable Leveling' : 'Enable Leveling', participating ? ButtonStyle.Secondary : ButtonStyle.Success, false, participating ? '⏸️' : '▶️'),
+        button('user:leveling:leaderboard:xp:0', 'Leaderboard', ButtonStyle.Primary, false, EMOJIS.USER_LEVELING),
+        button('user:leveling:history', 'XP History', ButtonStyle.Primary, false, EMOJIS.USER_STATS),
+        button('user:leveling:toggle', participating ? 'Disable Leveling' : 'Enable Leveling', participating ? ButtonStyle.Secondary : ButtonStyle.Success, false, participating ? EMOJIS.USER_PAUSE : EMOJIS.USER_PLAY),
       ),
       row(button('user:preferences', 'Preferences', ButtonStyle.Secondary, false, EMOJIS.SETTINGS)),
       navigationRow({ backId: 'user:category:community' }),
@@ -458,7 +458,7 @@ function buildLevelingUserPanel(interaction, section, user, rank, participating,
 function buildLevelingHistoryPanel(interaction, user = {}) {
   const memberDisplayName = getMemberDisplayName(interaction);
   return {
-    embeds: [markLiveEmbed(createEmbed('📈 Your XP History', [
+    embeds: [markLiveEmbed(createEmbed(`\${EMOJIS.USER_STATS} Your XP History`, [
       `Current XP: **${Number(user.xp || 0).toLocaleString()}**`,
       `Current Level: **${Number(user.level || 0)}**`,
       '',
@@ -490,7 +490,7 @@ function buildInProgressPanel(interactionOrName = 'Unknown User', pageIndex = 0)
     button('user:home', 'Back', ButtonStyle.Secondary, false, EMOJIS.BACK),
     button(`user:in-progress:${safeIndex}`, 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH),
   ];
-  if (safeIndex < IN_PROGRESS_PAGES.length - 1) controls.push(button(`user:in-progress:${safeIndex + 1}`, 'Next', ButtonStyle.Primary, false, '➡️'));
+  if (safeIndex < IN_PROGRESS_PAGES.length - 1) controls.push(button(`user:in-progress:${safeIndex + 1}`, 'Next', ButtonStyle.Primary, false, EMOJIS.NEXT));
   if (safeIndex > 0) controls.unshift(button(`user:in-progress:${safeIndex - 1}`, 'Previous', ButtonStyle.Secondary, false, EMOJIS.BACK));
 
   return {
@@ -506,16 +506,16 @@ function buildHelpPanel(interactionOrName = 'Unknown User') {
     '',
     '**🧭 Navigation**',
     '⬅️ **Back** — Return to the previous page.',
-    '🏠 **User Panel** — Return to your live profile home.',
-    '➡️ **Next** — Open the next page when one is available.',
+    `\${EMOJIS.USER_HOME} **User Panel** — Return to your live profile home.`,
+    `\${EMOJIS.NEXT} **Next** — Open the next page when one is available.`,
     '',
     '**📂 Categories**',
     ...CATEGORY_CATALOG.map((category) => `${category.emoji} **${category.label}** — ${category.summary}`),
     '',
-    '**🔎 Search**',
+    `**${EMOJIS.INVESTIGATE} Search**',
     'Use the search menu at the top of your profile to jump directly to any available user tool.',
     '',
-    '**💡 Tips**',
+    `**${EMOJIS.USER_SUGGESTIONS} Tips**',
     '• Your panel is private and only visible to you.',
     '• Some tools may require a server role or permission.',
     '• Use Refresh on live pages to load the latest information.',
@@ -541,7 +541,7 @@ function buildProgressPanel(interaction, levelingProfile = {}) {
     Number.isFinite(levelingProfile.voiceMinutes) ? `Voice Activity: **${levelingProfile.voiceMinutes.toLocaleString()} minutes**` : null,
   ].filter((line) => line !== null);
   return {
-    embeds: [markLiveEmbed(createEmbed('🏆 Your Progress', lines.join('\n'), memberDisplayName))],
+    embeds: [markLiveEmbed(createEmbed(`\${EMOJIS.USER_LEVELING} Your Progress`, lines.join('\n'), memberDisplayName))],
     components: [
       row(button('user:profile:progress', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH)),
       navigationRow({ backId: 'user:home', home: false }),
@@ -564,7 +564,7 @@ function buildRolesPanel(interaction, options = {}) {
     options.showRoleList === false ? null : `**Current Roles**\n${visible.length ? visible.join('\n') : 'No roles assigned.'}${remaining ? `\n\n+${remaining} more` : ''}`,
   ].filter(Boolean).join('\n\n');
   return {
-    embeds: [markLiveEmbed(createEmbed('🎭 Your Roles', description || 'Role visibility is disabled for this server.', memberDisplayName))],
+    embeds: [markLiveEmbed(createEmbed(`\${EMOJIS.USER_ROLES} Your Roles`, description || 'Role visibility is disabled for this server.', memberDisplayName))],
     components: [
       row(button('user:profile:roles', 'Refresh', ButtonStyle.Success, false, EMOJIS.REFRESH)),
       navigationRow({ backId: 'user:home', home: false }),
@@ -581,7 +581,7 @@ function buildGiveawaysMemoPanel(interactionOrName = 'Unknown User') {
     '**Admin giveaway creation and management remain separate and are not exposed here.**',
   ].join('\n');
   return {
-    embeds: [createEmbed('🎉 Giveaways - User Panel Plan', description, memberDisplayName, DEV_COLOR)],
+    embeds: [createEmbed(`\${EMOJIS.USER_GIVEAWAYS} Giveaways - User Panel Plan`, description, memberDisplayName, DEV_COLOR)],
     components: [navigationRow({ backId: 'user:category:community' })],
   };
 }
@@ -612,7 +612,7 @@ function buildUserAppealsPanel(interaction, cases = [], getAppealEligibility = n
     lines.push(`**Case #${modCase.caseId}** • ${action} • ${status}`);
     if (latest?.submittedAt) lines.push(`↳ Appeal submitted <t:${Math.floor(new Date(latest.submittedAt).getTime() / 1000)}:R>`);
     else if (!eligibility.ok && eligibility.error) lines.push(`↳ ${eligibility.error}`);
-    if (eligibility.ok && buttons.length < 5) buttons.push(button(`user:appeal:${modCase.caseId}`, `Appeal #${modCase.caseId}`, ButtonStyle.Primary, false, '📝'));
+    if (eligibility.ok && buttons.length < 5) buttons.push(button(`user:appeal:${modCase.caseId}`, `Appeal #${modCase.caseId}`, ButtonStyle.Primary, false, EMOJIS.NOTE));
   }
   if (!mine.length) lines.push('You do not currently have any moderation cases on this server.');
   const description = [
@@ -625,7 +625,7 @@ function buildUserAppealsPanel(interaction, cases = [], getAppealEligibility = n
   const components = [];
   if (buttons.length) components.push(row(...buttons));
   components.push(navigationRow({ backId: 'user:account:record' }));
-  return { embeds: [markLiveEmbed(createEmbed('📝 Your Appeals', description, memberDisplayName))], components };
+  return { embeds: [markLiveEmbed(createEmbed(`\${EMOJIS.NOTE} Your Appeals`, description, memberDisplayName))], components };
 }
 
 function buildPlannedModulePanel(moduleKey, interactionOrName = 'Unknown User') {
