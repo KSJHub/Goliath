@@ -1314,7 +1314,7 @@ function buildPanelsPanel(i, who) {
       new ActionRowBuilder().addComponents(
         actionButton("embed:builder", "back"),
         actionButton("embed:settings", "settings"),
-        navigationButton("embed:helpers", "📖 Variables"),
+        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
       ),
     ],
   };
@@ -1348,7 +1348,7 @@ function buildFieldsPanel(i, who) {
     new ActionRowBuilder().addComponents(
       actionButton("embed:builder", "back"),
       actionButton("embed:settings", "settings"),
-      navigationButton("embed:helpers", "📖 Variables"),
+      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
     )
   );
   return {
@@ -1476,7 +1476,7 @@ function buildFieldsManagerPanel(interaction) {
     new ActionRowBuilder().addComponents(
       actionButton("embed:builder", "back"),
       actionButton("embed:settings", "settings"),
-      navigationButton("embed:helpers", "📖 Variables"),
+      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
     ),
   );
 
@@ -1511,7 +1511,7 @@ function buildButtonsPanel(i, who) {
     new ActionRowBuilder().addComponents(
       actionButton("embed:builder", "back"),
       actionButton("embed:settings", "settings"),
-      navigationButton("embed:helpers", "📖 Variables"),
+      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
     )
   );
   return { embeds: [simplePanel(emojiLabel('SECURITY_RADIO', "Button Management"), `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} buttons: ${(s.buttons || []).length}/${MAX_BUTTONS}`, s, who)], components: rows };
@@ -1617,7 +1617,7 @@ function buildButtonsManagerPanel(interaction) {
     new ActionRowBuilder().addComponents(
       actionButton("embed:builder", "back"),
       actionButton("embed:settings", "settings"),
-      navigationButton("embed:helpers", "📖 Variables"),
+      navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
     ),
   );
   // Reserve Discord's final action row for navigation.
@@ -2470,7 +2470,7 @@ function buildContentManagerPanel(interaction) {
 
         actionButton("embed:settings", "settings"),
 
-        navigationButton("embed:helpers", "📖 Variables"),
+        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
       ),
     ],
   };
@@ -2504,7 +2504,7 @@ function buildAppearancePanel(interaction) {
       new ActionRowBuilder().addComponents(
         actionButton("embed:builder", "back"),
         actionButton("embed:settings", "settings"),
-        navigationButton("embed:helpers", "📖 Variables"),
+        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
       ),
     ],
   };
@@ -2533,7 +2533,7 @@ function buildAppearanceIconPanel(interaction, kind) {
       ),
       new ActionRowBuilder().addComponents(
         actionButton("embed:content-back", "back"),
-        navigationButton("embed:helpers", "📖 Variables"),
+        navigationButton("embed:helpers", emojiLabel("VARIABLES", "Variables")),
       ),
     ],
   };
