@@ -383,6 +383,12 @@ async function sendLatestGameUpdate(guild, appId) {
     const { item } = await previewGameUpdate(guild, appId);
     appId = providers.steamAppId(appId);
     const current = store.getGameUpdates(guild.id);
+    const subscription = current.subscriptions[appId];
+    const routes = store.effectiveUpdateDestinations(subscription).filter(route => route.enabled);
+    if (routes.length !== 1 || routes[0].channelId !== subscription.channelId ||
+        (routes[0].roleId || null) !== (subscription.roleId || null)) {
+      throw new Error('Steam manual delivery paused: destination configuration requires multi-channel support. No pending deliveries were changed.');
+    }
     if (current.history.some(record => record.appId === appId && record.itemId === item.id && ['delivered', 'recovered'].includes(record.status))) return { alreadyDelivered: true };
     if (current.subscriptions[appId].pending.some(entry => entry.item.id === item.id && entry.status !== 'pending')) throw new Error('This update has an unresolved delivery. Inspect the channel and use Retry held.');
     updateSubscriptionState(guild.id, appId, subscription => ({ ...subscription, pending: [{ item, status: 'pending', suppressMention: true }, ...subscription.pending.filter(entry => entry.item.id !== item.id)],
