@@ -1605,14 +1605,14 @@ function buildButtonsManagerPanel(interaction) {
   }
   rows.push(
     new ActionRowBuilder().addComponents(
-      navigationButton("embed:button-manager-add", "➕ Add", ButtonStyle.Success, buttons.length >= MAX_BUTTONS),
-      navigationButton("embed:button-manager-edit", "✏️ Edit", ButtonStyle.Primary, index == null),
-      navigationButton("embed:button-manager-options", "⚙️ Options", ButtonStyle.Secondary, index == null),
-      navigationButton("embed:button-manager-remove", "🗑️ Remove", ButtonStyle.Danger, index == null),
+      navigationButton("embed:button-manager-add", emojiLabel('ADD', "Add"), ButtonStyle.Success, buttons.length >= MAX_BUTTONS),
+      navigationButton("embed:button-manager-edit", emojiLabel('EDIT', "Edit"), ButtonStyle.Primary, index == null),
+      navigationButton("embed:button-manager-options", emojiLabel('MODERATION_DASHBOARD', "Options"), ButtonStyle.Secondary, index == null),
+      navigationButton("embed:button-manager-remove", emojiLabel('DELETE', "Remove"), ButtonStyle.Danger, index == null),
     ),
     new ActionRowBuilder().addComponents(
-      navigationButton("embed:button-manager-up", "⬆️ Up", ButtonStyle.Secondary, index == null || index <= 0),
-      navigationButton("embed:button-manager-down", "⬇️ Down", ButtonStyle.Secondary, index == null || index >= buttons.length - 1),
+      navigationButton("embed:button-manager-up", emojiLabel('ROLE_UP', "Up"), ButtonStyle.Secondary, index == null || index <= 0),
+      navigationButton("embed:button-manager-down", emojiLabel('ROLE_DOWN', "Down"), ButtonStyle.Secondary, index == null || index >= buttons.length - 1),
     ),
     new ActionRowBuilder().addComponents(
       actionButton("embed:builder", "back"),
@@ -1663,10 +1663,10 @@ function buildButtonOptionsPanel(interaction) {
 
   const rows = [
     new ActionRowBuilder().addComponents(
-      navigationButton("embed:button-style:primary", "🔵 Primary", style === "primary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      navigationButton("embed:button-style:secondary", "⚪ Secondary", style === "secondary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      navigationButton("embed:button-style:success", "🟢 Success", style === "success" ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      navigationButton("embed:button-style:danger", "🔴 Danger", style === "danger" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:primary", emojiLabel('SEVERITY_LOW', "Primary"), style === "primary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:secondary", emojiLabel('INACTIVE', "Secondary"), style === "secondary" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:success", emojiLabel('ENABLED', "Success"), style === "success" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+      navigationButton("embed:button-style:danger", emojiLabel('DISABLED', "Danger"), style === "danger" ? ButtonStyle.Primary : ButtonStyle.Secondary),
     ),
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId("embed:button-action-select").setPlaceholder("Choose button action").setMinValues(1).setMaxValues(1).addOptions([
@@ -1697,7 +1697,7 @@ function buildButtonOptionsPanel(interaction) {
     ));
   } else if (action === "reply") {
     rows.push(new ActionRowBuilder().addComponents(
-      navigationButton("embed:button-reply-edit", "✏️ Reply Text", ButtonStyle.Primary),
+      navigationButton("embed:button-reply-edit", emojiLabel('EDIT', "Reply Text"), ButtonStyle.Primary),
     ));
   }
   rows.push(new ActionRowBuilder().addComponents(
@@ -1712,7 +1712,7 @@ function buildButtonOptionsPanel(interaction) {
     .slice(0, EMBED_COMPONENT_LIMITS.maxActionRows - 1);
 
   return {
-    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle("⚙️ Button Options").setDescription(details.join("\n").slice(0, 4096))],
+    embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('MODERATION_DASHBOARD', "Button Options")).setDescription(details.join("\n").slice(0, 4096))],
     components: [...controlRows, navigationRow].filter(Boolean),
   };
 }
@@ -1930,7 +1930,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
           .setPlaceholder(
             selectedName
               ? `Selected: ${cleanPresetName(selectedName)}`
-              : "💾 Select a saved preset"
+              : emojiLabel('PRESETS', "Select a saved preset")
           )
           .setMinValues(1)
           .setMaxValues(1)
@@ -1969,9 +1969,9 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
    */
   rows.push(
     new ActionRowBuilder().addComponents(
-      navigationButton("embed:preset-load", "📂 Load into Editor", ButtonStyle.Primary, !selectedName),
-      navigationButton("embed:preset-save", selectedName ? "💾 Update / Save" : "💾 Save Current", ButtonStyle.Success),
-      navigationButton("embed:preset-new", "➕ New Embed"),
+      navigationButton("embed:preset-load", emojiLabel('MOD_CASE_OPEN', "Load into Editor"), ButtonStyle.Primary, !selectedName),
+      navigationButton("embed:preset-save", selectedName ? emojiLabel('PRESETS', "Update / Save") : emojiLabel('PRESETS', "Save Current"), ButtonStyle.Success),
+      navigationButton("embed:preset-new", emojiLabel('ADD', "New Embed")),
     )
   );
 
@@ -1980,12 +1980,12 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
    */
   rows.push(
     new ActionRowBuilder().addComponents(
-      navigationButton("embed:preset-rename", "✏️ Rename", ButtonStyle.Secondary, !selectedName),
-      navigationButton("embed:preset-duplicate", "📄 Duplicate", ButtonStyle.Secondary, !selectedName),
-      navigationButton("embed:preset-delete", "🗑️ Delete", ButtonStyle.Danger, !selectedName),
+      navigationButton("embed:preset-rename", emojiLabel('EDIT', "Rename"), ButtonStyle.Secondary, !selectedName),
+      navigationButton("embed:preset-duplicate", emojiLabel('DOCUMENT', "Duplicate"), ButtonStyle.Secondary, !selectedName),
+      navigationButton("embed:preset-delete", emojiLabel('DELETE', "Delete"), ButtonStyle.Danger, !selectedName),
       navigationButton(
         isDefault ? "embed:preset-clear-default" : "embed:preset-default",
-        isDefault ? "☆ Clear Default" : "⭐ Set Default",
+        isDefault ? "☆ Clear Default" : emojiLabel('USER_STARBOARD', "Set Default"),
         isDefault ? ButtonStyle.Success : ButtonStyle.Secondary,
         !selectedName,
       ),
@@ -2031,7 +2031,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
 
     const status =
       summary.isDefault
-        ? "⭐ Default preset"
+        ? emojiLabel('USER_STARBOARD', "Default preset")
         : "Saved preset";
 
     description +=
@@ -2064,7 +2064,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
       `✏️ **Rename** — change this preset's name.\n` +
       `📄 **Duplicate** — create an independent copy.\n` +
       `🗑️ **Delete** — remove this saved preset.\n` +
-      `${isDefault ? "☆ **Clear Default**" : "⭐ **Set Default**"} — ` +
+      `${isDefault ? "☆ **Clear Default**" : emojiLabel('USER_STARBOARD', "**Set Default**")} — ` +
       `${
         isDefault
           ? "stop using this as the template default."
@@ -2083,7 +2083,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
     .setTitle(
       selectedPreset
         ? `💾 Preset Manager • ${cleanPresetName(selectedName)}`
-        : "💾 Embed Preset Manager"
+        : emojiLabel('PRESETS', "Embed Preset Manager")
     )
     .setDescription(description.slice(0, 4096))
     .setFooter({
@@ -2155,7 +2155,7 @@ function buildSettingsPanel(interaction) {
   return {
     embeds: [
       simplePanel(
-        "⚙️ Embed Settings",
+        emojiLabel('MODERATION_DASHBOARD', "Embed Settings"),
         description,
         state,
         memberName(interaction)
@@ -2237,21 +2237,21 @@ function buildReadinessPanel(interaction, options = {}) {
   const destination =
     state.channelId
       ? `<#${state.channelId}>`
-      : "⚪ Not selected";
+      : emojiLabel('INACTIVE', "Not selected");
 
   const status =
     report.ready
       ? (
           report.warnings.length
-            ? "🟡 Ready with warnings"
-            : "🟢 Ready to publish"
+            ? emojiLabel('SEVERITY_MEDIUM', "Ready with warnings")
+            : emojiLabel('ENABLED', "Ready to publish")
         )
-      : "🔴 Action required";
+      : emojiLabel('DISABLED', "Action required");
 
   const description = [
     ...(options.deliveryBlocked
       ? [
-          "❌ This embed is not ready to send. Fix the issues below first.",
+          emojiLabel('ERROR', "This embed is not ready to send. Fix the issues below first."),
           "",
         ]
       : []),
@@ -2287,7 +2287,7 @@ function buildReadinessPanel(interaction, options = {}) {
               )
             : 0xED4245
         )
-        .setTitle("✅ Embed Readiness")
+        .setTitle(emojiLabel('HEALTHY', "Embed Readiness"))
         .setDescription(description)
         .setFooter({
           text: `Requested by ${memberName(interaction)}`
@@ -2446,7 +2446,7 @@ function buildContentManagerPanel(interaction) {
     embeds: [
       new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle("📝 Content")
+        .setTitle(emojiLabel('NOTE', "Content"))
         .setDescription(
           lines.join("\n").slice(0, 4096)
         ),
@@ -2454,15 +2454,15 @@ function buildContentManagerPanel(interaction) {
 
     components: [
       new ActionRowBuilder().addComponents(
-        navigationButton("embed:content-edit-text", "✏️ Edit Text", ButtonStyle.Primary),
+        navigationButton("embed:content-edit-text", emojiLabel('EDIT', "Edit Text"), ButtonStyle.Primary),
 
-        navigationButton("embed:content-details", "👤 Author & Footer"),
+        navigationButton("embed:content-details", emojiLabel('USER', "Author & Footer")),
       ),
 
       new ActionRowBuilder().addComponents(
-        navigationButton("embed:content-author-icon", "👤 Author Icon"),
+        navigationButton("embed:content-author-icon", emojiLabel('USER', "Author Icon")),
 
-        navigationButton("embed:content-footer-icon", "🏷️ Footer Icon"),
+        navigationButton("embed:content-footer-icon", emojiLabel('ROLE_TAG', "Footer Icon")),
       ),
 
       new ActionRowBuilder().addComponents(
@@ -2490,16 +2490,16 @@ function buildAppearancePanel(interaction) {
     "",
     "Icon sources can use direct HTTPS image links, Embed Studio variables, or direct uploads.",
   ];
-  const embeds = [new EmbedBuilder().setColor(0x5865F2).setTitle("🎨 Appearance").setDescription(lines.join("\n").slice(0, 4096))];
-  if (authorIcon) embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle("👤 Author Icon Preview").setThumbnail(authorIcon));
-  if (footerIcon) embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle("🏷️ Footer Icon Preview").setThumbnail(footerIcon));
+  const embeds = [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('DESIGN', "Appearance")).setDescription(lines.join("\n").slice(0, 4096))];
+  if (authorIcon) embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('USER', "Author Icon Preview")).setThumbnail(authorIcon));
+  if (footerIcon) embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', "Footer Icon Preview")).setThumbnail(footerIcon));
   return {
     embeds,
     components: [
       new ActionRowBuilder().addComponents(
-        navigationButton("embed:appearance-details", "✏️ Edit Details", ButtonStyle.Primary),
-        navigationButton("embed:appearance-author-icon", "👤 Author Icon"),
-        navigationButton("embed:appearance-footer-icon", "🏷️ Footer Icon"),
+        navigationButton("embed:appearance-details", emojiLabel('EDIT', "Edit Details"), ButtonStyle.Primary),
+        navigationButton("embed:appearance-author-icon", emojiLabel('USER', "Author Icon")),
+        navigationButton("embed:appearance-footer-icon", emojiLabel('ROLE_TAG', "Footer Icon")),
       ),
       new ActionRowBuilder().addComponents(
         actionButton("embed:builder", "back"),
@@ -2516,7 +2516,7 @@ function buildAppearanceIconPanel(interaction, kind) {
   const resolved = resolveAppearanceSource(raw, interaction);
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(isAuthor ? "👤 Author Icon" : "🏷️ Footer Icon")
+    .setTitle(isAuthor ? emojiLabel('USER', "Author Icon") : emojiLabel('ROLE_TAG', "Footer Icon"))
     .setDescription([
       `**Source:** ${raw ? trim(raw, 1000) : "Not set"}`,
       "",
@@ -2527,9 +2527,9 @@ function buildAppearanceIconPanel(interaction, kind) {
     embeds: [embed],
     components: [
       new ActionRowBuilder().addComponents(
-        navigationButton(`embed:appearance-icon-url:${kind}`, "✏️ Edit URL", ButtonStyle.Primary),
-        navigationButton(`embed:appearance-icon-upload:${kind}`, "📤 Upload", ButtonStyle.Success),
-        navigationButton(`embed:appearance-icon-clear:${kind}`, "🗑️ Clear", ButtonStyle.Danger, !raw),
+        navigationButton(`embed:appearance-icon-url:${kind}`, emojiLabel('EDIT', "Edit URL"), ButtonStyle.Primary),
+        navigationButton(`embed:appearance-icon-upload:${kind}`, emojiLabel('MOD_EXPORT', "Upload"), ButtonStyle.Success),
+        navigationButton(`embed:appearance-icon-clear:${kind}`, emojiLabel('DELETE', "Clear"), ButtonStyle.Danger, !raw),
       ),
       new ActionRowBuilder().addComponents(
         actionButton("embed:content-back", "back"),
@@ -2849,10 +2849,10 @@ function buildMediaManagerPanel(
 
   const alignmentLabel =
     selectedAlignment === "center"
-      ? "↔️ Centre"
+      ? emojiLabel('PERMISSION_HORIZONTAL', "Centre")
       : selectedAlignment === "right"
-        ? "➡️ Right"
-        : "⬅️ Left";
+        ? emojiLabel('NEXT_STEP', "Right")
+        : emojiLabel('BACK', "Left");
 
   const mediaButton = navigationButton;
 
@@ -2863,7 +2863,7 @@ function buildMediaManagerPanel(
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("embed:media-gallery-select")
-          .setPlaceholder("🎞️ Select media item")
+          .setPlaceholder(emojiLabel('UTILITY_ANIMATION', "Select media item"))
           .addOptions(
             panelMedia.gallery
               .slice(0, 25)
@@ -2901,7 +2901,7 @@ function buildMediaManagerPanel(
     new ActionRowBuilder().addComponents(
       mediaButton(
         "embed:media-add",
-        "➕ Add Media / File",
+        emojiLabel('ADD', "Add Media / File"),
         ButtonStyle.Success,
         panelMedia.gallery.length >=
           mediaModel.MAX_GALLERY_ITEMS &&
@@ -2910,20 +2910,20 @@ function buildMediaManagerPanel(
       ),
       mediaButton(
         "embed:media-gallery-edit",
-        "✏️ Edit",
+        emojiLabel('EDIT', "Edit"),
         ButtonStyle.Primary,
         galleryIndex == null
       ),
       mediaButton(
         "embed:media-gallery-up",
-        "⬆️ Up",
+        emojiLabel('ROLE_UP', "Up"),
         ButtonStyle.Secondary,
         galleryIndex == null ||
         galleryIndex <= 0
       ),
       mediaButton(
         "embed:media-gallery-down",
-        "⬇️ Down",
+        emojiLabel('ROLE_DOWN', "Down"),
         ButtonStyle.Secondary,
         galleryIndex == null ||
         galleryIndex >=
@@ -2954,7 +2954,7 @@ function buildMediaManagerPanel(
       ),
       mediaButton(
         "embed:media-spoiler:off",
-        "👁️ Normal",
+        emojiLabel('WELCOME_PREVIEW', "Normal"),
         selectedMedia?.spoiler
           ? ButtonStyle.Secondary
           : ButtonStyle.Primary,
@@ -2983,20 +2983,20 @@ function buildMediaManagerPanel(
     new ActionRowBuilder().addComponents(
       mediaButton(
         "embed:media-alignments",
-        "↔️ Alignments",
+        emojiLabel('PERMISSION_HORIZONTAL', "Alignments"),
         ButtonStyle.Primary,
         galleryIndex == null
       ),
       mediaButton(
         "embed:media-thumbnail",
         panelMedia.thumbnail?.source
-          ? "🖼️ Thumbnail ✓"
-          : "🖼️ Thumbnail",
+          ? emojiLabel('MEDIA', "Thumbnail ✓")
+          : emojiLabel('MEDIA', "Thumbnail"),
         ButtonStyle.Primary
       ),
       mediaButton(
         "embed:media-gallery-remove",
-        "🗑️ Remove",
+        emojiLabel('DELETE', "Remove"),
         ButtonStyle.Danger,
         galleryIndex == null
       )
@@ -3044,8 +3044,8 @@ function buildMediaManagerPanel(
       }`,
       `📍 **Placement:** ${
         selectedMedia.placement === "above"
-          ? "⬆️ Above Content"
-          : "⬇️ Below Content"
+          ? emojiLabel('ROLE_UP', "Above Content")
+          : emojiLabel('ROLE_DOWN', "Below Content")
       }`,
       `↔️ **Alignment:** ${alignmentLabel}`,
       `🏷️ **Type:** ${
@@ -3088,7 +3088,7 @@ function buildMediaManagerPanel(
 
   const embeds = [
     simplePanel(
-      "🖼️ Media Manager",
+      emojiLabel('MEDIA', "Media Manager"),
       summary.join("\n"),
       state,
       who
@@ -3181,7 +3181,7 @@ function buildThumbnailOptionsPanel(
   const embed =
     new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle("🖼️ Thumbnail")
+      .setTitle(emojiLabel('MEDIA', "Thumbnail"))
       .setDescription(
         [
           "**Thumbnail settings**",
@@ -3214,9 +3214,9 @@ function buildThumbnailOptionsPanel(
       enforceMediaUiLimits([
         new ActionRowBuilder()
           .addComponents(
-            navigationButton("embed:thumbnail-edit", "✏️ Edit URL / Alt", ButtonStyle.Primary),
-            navigationButton("embed:thumbnail-upload", "📤 Upload Thumbnail", ButtonStyle.Success),
-            navigationButton("embed:thumbnail-clear", "🗑️ Clear", ButtonStyle.Danger, !thumbnail.source)
+            navigationButton("embed:thumbnail-edit", emojiLabel('EDIT', "Edit URL / Alt"), ButtonStyle.Primary),
+            navigationButton("embed:thumbnail-upload", emojiLabel('MOD_EXPORT', "Upload Thumbnail"), ButtonStyle.Success),
+            navigationButton("embed:thumbnail-clear", emojiLabel('DELETE', "Clear"), ButtonStyle.Danger, !thumbnail.source)
           ),
 
         new ActionRowBuilder()
@@ -3412,8 +3412,8 @@ function buildMediaAlignmentPanel(ctx) {
     `**Type:** ${typeLabel}`,
     `**Placement:** ${
       placement === "above"
-        ? "⬆️ Above Content"
-        : "⬇️ Below Content"
+        ? emojiLabel('ROLE_UP', "Above Content")
+        : emojiLabel('ROLE_DOWN', "Below Content")
     }`,
     `**Alignment:** ${alignmentLabel}`,
     `**Size:** ${size.toUpperCase()}`,
@@ -3448,17 +3448,17 @@ function buildMediaAlignmentPanel(ctx) {
 
     components: [
       new ActionRowBuilder().addComponents(
-        navigationButton("embed:media-placement:above", "⬆️ Above Content", placement === "above" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        navigationButton("embed:media-placement:above", emojiLabel('ROLE_UP', "Above Content"), placement === "above" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        navigationButton("embed:media-placement:below", "⬇️ Below Content", placement === "below" ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        navigationButton("embed:media-placement:below", emojiLabel('ROLE_DOWN', "Below Content"), placement === "below" ? ButtonStyle.Primary : ButtonStyle.Secondary)
       ),
 
       new ActionRowBuilder().addComponents(
-        navigationButton("embed:media-align:left", "⬅️ Left", ctx.alignment === "left" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        navigationButton("embed:media-align:left", emojiLabel('BACK', "Left"), ctx.alignment === "left" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        navigationButton("embed:media-align:center", "↔️ Centre", ctx.alignment === "center" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        navigationButton("embed:media-align:center", emojiLabel('PERMISSION_HORIZONTAL', "Centre"), ctx.alignment === "center" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        navigationButton("embed:media-align:right", "➡️ Right", ctx.alignment === "right" ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        navigationButton("embed:media-align:right", emojiLabel('NEXT_STEP', "Right"), ctx.alignment === "right" ? ButtonStyle.Primary : ButtonStyle.Secondary)
       ),
 
       new ActionRowBuilder().addComponents(
@@ -3489,7 +3489,7 @@ function buildUserInfoPayload(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle("👤 Your Server Info")
+    .setTitle(emojiLabel('USER', "Your Server Info"))
     .setDescription(
       [
         `**User:** <@${interaction.user.id}>`,
