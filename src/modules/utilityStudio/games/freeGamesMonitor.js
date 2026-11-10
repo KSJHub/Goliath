@@ -244,12 +244,6 @@ async function saveGameSubscription(guild, patch) {
     if (previous && (next.channelId !== previous.channelId || destinationChanged) && previous.pending.some(entry => entry.status !== 'pending')) {
       throw new Error('Resolve held deliveries before changing destination channels.');
     }
-    // The Steam dispatcher is currently single-channel. Refuse unsupported
-    // multi-route configurations instead of silently skipping destinations.
-    const activeRoutes = store.effectiveUpdateDestinations(next).filter(route => route.enabled);
-    if (activeRoutes.length > 1 || (activeRoutes.length === 1 && (activeRoutes[0].channelId !== next.channelId || (activeRoutes[0].roleId || null) !== (next.roleId || null)))) {
-      throw new Error('Steam game updates currently support one active destination matching the primary channel. Multi-channel delivery is not enabled yet.');
-    }
     // Validate every configured destination before saving, even while the legacy
     // single-channel dispatcher remains active.
     for (const route of store.effectiveUpdateDestinations(next).filter(item => item.enabled)) {
@@ -302,46 +296,97 @@ function updatesQuietNow(config, timeZone, now = Date.now()) {
   const time = parts.find(part => part.type === 'hour').value + ':' + parts.find(part => part.type === 'minute').value;
   return config.quietStart < config.quietEnd ? time >= config.quietStart && time < config.quietEnd : time >= config.quietStart || time < config.quietEnd;
 }
+// Each destination has its own persisted send state. A delivered route must
+// never be sent again just because another channel failed or the bot restarted.
+function routeStatus(entry, channelId) {
+  return entry.routes?.[channelId]?.status || (entry.routes ? 'pending' : entry.status);
+}
+function changeRoute(guildId, appId, itemId, channelId, patch) {
+  updateSubscriptionState(guildId, appId, current => ({
+    ...current, pending: current.pending.map(entry => {
+      if (entry.item.id !== itemId) return entry;
+      const routes = { ...(entry.routes || {}), [channelId]: { ...(entry.routes?.[channelId] || {}), ...patch } };
+      const statuses = Object.values(routes).map(route => route.status);
+      const status = statuses.includes('ambiguous') ? 'ambiguous' :
+        statuses.includes('dispatching') ? 'dispatching' : 'pending';
+      return { ...entry, routes, status };
+    })
+  }));
+}
+function finishUpdate(guildId, appId, itemId, activeRoutes) {
+  updateSubscriptionState(guildId, appId, current => {
+    const pending = current.pending.filter(entry => entry.item.id !== itemId ||
+      !activeRoutes.every(route => ['delivered', 'recovered'].includes(routeStatus(entry, route.channelId))));
+    return { ...current, pending, lastSuccess: pending.length !== current.pending.length ? Date.now() : current.lastSuccess,
+      error: pending.some(entry => entry.status === 'ambiguous') ? 'Some deliveries need review.' : null };
+  });
+}
+function matchesSentUpdate(message, guild, item) {
+  return message.author?.id === guild.client.user.id &&
+    message.embeds?.some(embed => embed.url === item.url && embed.footer?.text === 'Game Updates · Steam');
+}
 async function flushGameUpdates(guild, appId, manual = false, onlyIds = null) {
   let delivered = 0;
   const config = store.getGameUpdates(guild.id);
   if (!manual && updatesQuietNow(config, store.getConfig(guild.id).timeZone)) return { delivered, held: true };
-  for (const entry of [...(config.subscriptions[appId]?.pending || [])].filter(entry => entry.status !== 'ambiguous' && (!onlyIds || onlyIds.has(entry.item.id))).slice(0, 5)) {
-    if (entry.status === 'ambiguous') continue;
+  for (const queued of [...(config.subscriptions[appId]?.pending || [])].filter(entry => !onlyIds || onlyIds.has(entry.item.id)).slice(0, 5)) {
     const subscription = store.getGameUpdates(guild.id).subscriptions[appId];
     if (!subscription) break;
-    const activeRoutes = store.effectiveUpdateDestinations(subscription).filter(route => route.enabled);
-    if (activeRoutes.length !== 1 || activeRoutes[0].channelId !== subscription.channelId ||
-        (activeRoutes[0].roleId || null) !== (subscription.roleId || null)) {
-      throw new Error('Steam update delivery paused: destination configuration requires multi-channel support. No announcements were sent.');
-    }
-    const channel = await validateDestination(guild, { ...subscription, alerts: Boolean(subscription.roleId) && !entry.suppressMention });
-    if (entry.status === 'dispatching') {
-      const recent = await channel.messages.fetch({ limit: 100 });
-      const recovered = recent.find(message => message.author?.id === guild.client.user.id && message.embeds?.some(embed => embed.url === entry.item.url && embed.footer?.text === 'Game Updates · Steam'));
-      if (recovered) {
-        updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.filter(record => record.item.id !== entry.item.id), lastSuccess: Date.now() }));
-        journalUpdateDelivery(guild.id, appId, channel.id, entry.item, 'recovered', recovered.id);
-        recordUpdateDelivery(guild.id, appId, entry.item, 'recovered'); continue;
+    const routes = store.effectiveUpdateDestinations(subscription).filter(route => route.enabled);
+    if (!routes.length) continue;
+    // Convert legacy pending status into a route-scoped record without dropping
+    // an ambiguous or in-flight send from a previous version.
+    if (!queued.routes) updateSubscriptionState(guild.id, appId, current => ({
+      ...current, pending: current.pending.map(entry => entry.item.id === queued.item.id ?
+        { ...entry, routes: Object.fromEntries(routes.map(route => [route.channelId, { status: entry.status }])) } : entry)
+    }));
+    for (const route of routes) {
+      const entry = store.getGameUpdates(guild.id).subscriptions[appId].pending.find(record => record.item.id === queued.item.id);
+      if (!entry) break;
+      const state = routeStatus(entry, route.channelId);
+      if (['delivered', 'recovered', 'ambiguous'].includes(state)) continue;
+      let channel;
+      try {
+        channel = await validateDestination(guild, { ...subscription, ...route, alerts: Boolean(route.roleId) && !entry.suppressMention });
+      } catch (error) {
+        updateSubscriptionState(guild.id, appId, current => ({ ...current, error: String(error.message).slice(0, 300) }));
+        recordUpdateDelivery(guild.id, appId, entry.item, 'failed', route.channelId + ': ' + error.message);
+        continue;
       }
-      updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: 'ambiguous' } : record), error: 'A delivery needs review. Inspect the channel before retrying held updates.' }));
-      recordUpdateDelivery(guild.id, appId, entry.item, 'needs_review'); continue;
+      if (state === 'dispatching') {
+        try {
+          const recent = await channel.messages.fetch({ limit: 100 });
+          const recovered = recent.find(message => matchesSentUpdate(message, guild, entry.item));
+          if (recovered) {
+            changeRoute(guild.id, appId, entry.item.id, route.channelId, { status: 'recovered', messageId: recovered.id });
+            journalUpdateDelivery(guild.id, appId, route.channelId, entry.item, 'recovered', recovered.id);
+            recordUpdateDelivery(guild.id, appId, entry.item, 'recovered', route.channelId);
+          } else {
+            changeRoute(guild.id, appId, entry.item.id, route.channelId, { status: 'ambiguous' });
+            recordUpdateDelivery(guild.id, appId, entry.item, 'needs_review', route.channelId);
+          }
+        } catch (error) {
+          changeRoute(guild.id, appId, entry.item.id, route.channelId, { status: 'ambiguous' });
+          recordUpdateDelivery(guild.id, appId, entry.item, 'needs_review', route.channelId + ': ' + error.message);
+        }
+        continue;
+      }
+      changeRoute(guild.id, appId, entry.item.id, route.channelId, { status: 'dispatching' });
+      try {
+        const payload = require('./freeGamesEmbeds').buildGameUpdate({ ...subscription, roleId: route.roleId }, entry.item, { suppressMention: entry.suppressMention });
+        const sent = await channel.send({ ...payload, nonce: hash(['game-update', guild.id, appId, route.channelId, entry.item.id]).slice(0, 24), enforceNonce: true });
+        changeRoute(guild.id, appId, entry.item.id, route.channelId, { status: 'delivered', messageId: sent.id });
+        journalUpdateDelivery(guild.id, appId, route.channelId, entry.item, 'delivered', sent.id);
+        recordUpdateDelivery(guild.id, appId, entry.item, 'delivered', route.channelId);
+        delivered++;
+      } catch (error) {
+        const rejected = (error.status >= 400 && error.status < 500 && error.status !== 408) || [50013, 50001, 10003].includes(error.code);
+        changeRoute(guild.id, appId, entry.item.id, route.channelId, { status: rejected ? 'pending' : 'ambiguous' });
+        updateSubscriptionState(guild.id, appId, current => ({ ...current, error: rejected ? 'Delivery refused in ' + route.channelId : 'Delivery uncertain in ' + route.channelId }));
+        recordUpdateDelivery(guild.id, appId, entry.item, rejected ? 'failed' : 'needs_review', route.channelId + ': ' + error.message);
+      }
     }
-    updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: 'dispatching' } : record) }));
-    try {
-      const payload = require('./freeGamesEmbeds').buildGameUpdate(subscription, entry.item, { suppressMention: entry.suppressMention });
-      const sent = await channel.send({ ...payload, nonce: hash(['game-update', guild.id, appId, entry.item.id]).slice(0, 24), enforceNonce: true });
-      journalUpdateDelivery(guild.id, appId, channel.id, entry.item, 'delivered', sent.id);
-      updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.filter(record => record.item.id !== entry.item.id), lastSuccess: Date.now(),
-        error: current.pending.some(record => record.status === 'ambiguous') ? 'Some deliveries need review.' : null }));
-      recordUpdateDelivery(guild.id, appId, entry.item, 'delivered'); delivered++;
-    } catch (error) {
-      const rejected = (error.status >= 400 && error.status < 500 && error.status !== 408) || [50013, 50001, 10003].includes(error.code);
-      updateSubscriptionState(guild.id, appId, current => ({ ...current, pending: current.pending.map(record => record.item.id === entry.item.id ? { ...record, status: rejected ? 'pending' : 'ambiguous' } : record),
-        error: rejected ? 'Delivery was refused. Check channel and role permissions.' : 'Delivery could not be confirmed. Inspect the channel before retrying held updates.' }));
-      recordUpdateDelivery(guild.id, appId, entry.item, rejected ? 'failed' : 'needs_review', error.message);
-      break;
-    }
+    finishUpdate(guild.id, appId, queued.item.id, routes);
   }
   return { delivered };
 }
