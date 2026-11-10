@@ -223,6 +223,12 @@ const EMOJIS = Object.freeze({
   SOCIAL_FORWARD: '↪️',
   DOCUMENT: '📄',
   VARIABLES: '📖',
+  EMBED_MEDIA_LARGE: '🔶',
+  EMBED_MEDIA_MEDIUM: '🔷',
+  EMBED_MEDIA_SMALL: '🔹',
+  EMBED_DUPLICATE: '📑',
+  EMBED_SPOILER: '🙈',
+  EMBED_VALIDATION: '🔎',
 });
 
 function emojiLabel(key, label, { position = 'before' } = {}) {
