@@ -1,3 +1,4 @@
+const { emojiLabel } = require('../../../core/ui/emojis');
 const { actionButton, paginationButtons, emojiButton, navigationButton, linkButton, EMOJIS } = require('../../../core/guild/goliathNavigation');
 const {
   EmbedBuilder,
@@ -744,7 +745,7 @@ function mainEmbed(s, who, dashboard = {}) {
           s.color ||
           PANEL_COLOR
     )
-    .setTitle("💎 Embed Studio")
+    .setTitle(emojiLabel('WELCOME_EMBED', "Embed Studio"))
     .setDescription([
       "Build, test and publish your Discord embed from one workspace.",
       "",
@@ -806,7 +807,7 @@ function buildEditorPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("embed:template")
-          .setPlaceholder("🎨 Choose template")
+          .setPlaceholder(emojiLabel('DESIGN', "Choose template"))
           .setMinValues(1)
           .setMaxValues(1)
           .addOptions(
@@ -837,8 +838,8 @@ function buildEditorPanel(i, who = "Unknown User") {
           .setCustomId("embed:channel")
           .setPlaceholder(
             s.channelId
-              ? "📢 Change destination"
-              : "📢 Choose destination"
+              ? emojiLabel('WELCOME_CHANNEL', "Change destination")
+              : emojiLabel('WELCOME_CHANNEL', "Choose destination")
           )
           .setMinValues(1)
           .setMaxValues(1)
@@ -967,7 +968,7 @@ function buildResetConfirmationPanel(i, who = "Unknown User") {
   return {
     embeds: [
       simplePanel(
-        "♻️ Reset Workspace",
+        emojiLabel('AUTOMOD_DUPLICATES', "Reset Workspace"),
         description,
         s,
         who
@@ -1034,13 +1035,13 @@ function buildBuilderPanel(i, who = "Unknown User") {
 
   const saveState =
     s.hasUnsavedChanges
-      ? "🟠 Unsaved changes"
-      : "🟢 Saved";
+      ? emojiLabel('SEVERITY_HIGH', "Unsaved changes")
+      : emojiLabel('ENABLED', "Saved");
 
   const timestamp =
     s.showTimestamp
-      ? "🟢 On"
-      : "⚪ Off";
+      ? emojiLabel('ENABLED', "On")
+      : emojiLabel('INACTIVE', "Off");
 
   const dashboard =
     getFrontDashboardState(i, s);
@@ -1050,8 +1051,8 @@ function buildBuilderPanel(i, who = "Unknown User") {
 
   const readiness =
     report.ready
-      ? "🟢 Ready"
-      : "🟠 Review required";
+      ? emojiLabel('ENABLED', "Ready")
+      : emojiLabel('SEVERITY_HIGH', "Review required");
 
   const summary = [
     "Build and refine the selected content panel.",
@@ -1066,14 +1067,14 @@ function buildBuilderPanel(i, who = "Unknown User") {
     "",
     "### ➜ Next Step",
     report.ready
-      ? "✅ This panel is ready. Review the preview below or continue refining it."
-      : "⚠️ Continue editing this panel, then run Review Readiness before publishing.",
+      ? emojiLabel('HEALTHY', "This panel is ready. Review the preview below or continue refining it.")
+      : emojiLabel('WARNING', "Continue editing this panel, then run Review Readiness before publishing."),
   ].join("\n");
 
   return {
     embeds: [
       simplePanel(
-        "🛠️ Embed Builder",
+        emojiLabel('WELCOME_CUSTOM', "Embed Builder"),
         summary,
         s,
         who
@@ -1088,7 +1089,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("embed:builder-panel-select")
-          .setPlaceholder("🧩 Select content panel")
+          .setPlaceholder(emojiLabel('DELIVERY', "Select content panel"))
           .setMinValues(1)
           .setMaxValues(1)
           .addOptions(
@@ -1145,7 +1146,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
             new ActionRowBuilder().addComponents(
               new StringSelectMenuBuilder()
                 .setCustomId("embed:builder-media-select")
-                .setPlaceholder("🖼️ Select media to preview")
+                .setPlaceholder(emojiLabel('MEDIA', "Select media to preview"))
                 .setMinValues(1)
                 .setMaxValues(1)
                 .addOptions(
@@ -1253,7 +1254,7 @@ function buildPanelColourPanel(i, who = "Unknown User") {
     embeds: [
       new EmbedBuilder()
         .setColor(currentColour)
-        .setTitle("🎨 Panel Colour")
+        .setTitle(emojiLabel('DESIGN', "Panel Colour"))
         .setDescription([
           "Choose the accent colour for the currently selected embed panel.",
           "",
@@ -1272,7 +1273,7 @@ function buildPanelColourPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("embed:builder-color")
-          .setPlaceholder("🎨 Choose panel colour")
+          .setPlaceholder(emojiLabel('DESIGN', "Choose panel colour"))
           .setMinValues(1)
           .setMaxValues(1)
           .addOptions(colourOptions.slice(0, 25))
@@ -1291,10 +1292,10 @@ function buildPanelColourPanel(i, who = "Unknown User") {
 function buildPanelsPanel(i, who) {
   const s = getSession(i);
   return {
-    embeds: [simplePanel("🧩 Content Panels", `Selected **${s.selectedPanelIndex + 1}/${s.panels.length}**.`, s, who), ...buildStudioPreviewEmbeds(s, i)],
+    embeds: [simplePanel(emojiLabel('DELIVERY', "Content Panels"), `Selected **${s.selectedPanelIndex + 1}/${s.panels.length}**.`, s, who), ...buildStudioPreviewEmbeds(s, i)],
     components: [
       new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId("embed:panel-select").setPlaceholder("🧩 Select panel").addOptions(s.panels.map((p, n) => ({
+        new StringSelectMenuBuilder().setCustomId("embed:panel-select").setPlaceholder(emojiLabel('DELIVERY', "Select panel")).addOptions(s.panels.map((p, n) => ({
           label: `${n + 1}. ${trim(p.title || "Content Panel", 80)}`,
           value: String(n),
           description: trim(p.description || p.color, 100),
@@ -1302,13 +1303,13 @@ function buildPanelsPanel(i, who) {
         }))),
       ),
       new ActionRowBuilder().addComponents(
-        navigationButton("embed:panel-add", "➕ Add", ButtonStyle.Success, s.panels.length >= MAX_PANELS),
-        navigationButton("embed:panel-duplicate", "📋 Duplicate", ButtonStyle.Secondary, s.panels.length >= MAX_PANELS),
-        navigationButton("embed:panel-remove", "🗑️ Remove", ButtonStyle.Danger, s.panels.length <= 1),
+        navigationButton("embed:panel-add", emojiLabel('ADD', "Add"), ButtonStyle.Success, s.panels.length >= MAX_PANELS),
+        navigationButton("embed:panel-duplicate", emojiLabel('INCIDENT_AUDIT', "Duplicate"), ButtonStyle.Secondary, s.panels.length >= MAX_PANELS),
+        navigationButton("embed:panel-remove", emojiLabel('DELETE', "Remove"), ButtonStyle.Danger, s.panels.length <= 1),
       ),
       new ActionRowBuilder().addComponents(
-        navigationButton("embed:panel-up", "⬆️ Up", ButtonStyle.Secondary, s.selectedPanelIndex <= 0),
-        navigationButton("embed:panel-down", "⬇️ Down", ButtonStyle.Secondary, s.selectedPanelIndex >= s.panels.length - 1),
+        navigationButton("embed:panel-up", emojiLabel('ROLE_UP', "Up"), ButtonStyle.Secondary, s.selectedPanelIndex <= 0),
+        navigationButton("embed:panel-down", emojiLabel('ROLE_DOWN', "Down"), ButtonStyle.Secondary, s.selectedPanelIndex >= s.panels.length - 1),
       ),
       new ActionRowBuilder().addComponents(
         actionButton("embed:builder", "back"),
@@ -1329,7 +1330,7 @@ function buildFieldsPanel(i, who) {
     ]),
   ));
   if ((s.fields || []).length) rows.push(new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId("embed:field-select").setPlaceholder("📋 Select field").addOptions(s.fields.map((f, n) => ({
+    new StringSelectMenuBuilder().setCustomId("embed:field-select").setPlaceholder(emojiLabel('INCIDENT_AUDIT', "Select field")).addOptions(s.fields.map((f, n) => ({
       label: `${n + 1}. ${trim(f.name || "Field", 80)}`,
       value: String(n),
       description: trim(f.value || "Value", 100),
@@ -1337,9 +1338,9 @@ function buildFieldsPanel(i, who) {
     }))),
   ));
   rows.push(new ActionRowBuilder().addComponents(
-    navigationButton("embed:field-add", "➕ Add", ButtonStyle.Success),
-    navigationButton("embed:field-edit", "✏️ Edit", ButtonStyle.Primary, !Number.isInteger(s.selectedFieldIndex)),
-    navigationButton("embed:field-remove-selected", "🗑️ Remove", ButtonStyle.Danger, !Number.isInteger(s.selectedFieldIndex)),
+    navigationButton("embed:field-add", emojiLabel('ADD', "Add"), ButtonStyle.Success),
+    navigationButton("embed:field-edit", emojiLabel('EDIT', "Edit"), ButtonStyle.Primary, !Number.isInteger(s.selectedFieldIndex)),
+    navigationButton("embed:field-remove-selected", emojiLabel('DELETE', "Remove"), ButtonStyle.Danger, !Number.isInteger(s.selectedFieldIndex)),
   ));
 
   // Persistent navigation row.
@@ -1351,7 +1352,7 @@ function buildFieldsPanel(i, who) {
     )
   );
   return {
-    embeds: [simplePanel("📋 Field Management", `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} fields: ${(s.fields || []).length}/25`, s, who)],
+    embeds: [simplePanel(emojiLabel('INCIDENT_AUDIT', "Field Management"), `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} fields: ${(s.fields || []).length}/25`, s, who)],
     components: rows,
   };
 }
@@ -1411,14 +1412,14 @@ function buildFieldsManagerPanel(interaction) {
   const embeds = [
     new EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle("📋 Fields")
+      .setTitle(emojiLabel('INCIDENT_AUDIT', "Fields"))
       .setDescription(lines.join("\n").slice(0, 4096)),
   ];
   if (item) {
     embeds.push(
       new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle("👁️ Selected Field Preview")
+        .setTitle(emojiLabel('WELCOME_PREVIEW', "Selected Field Preview"))
         .addFields({
           name: trim(replaceVars(item.name || "Field", interaction), 256) || "Field",
           value: trim(replaceVars(item.value || "", interaction), 1024) || "No content",
@@ -1463,14 +1464,14 @@ function buildFieldsManagerPanel(interaction) {
 
   rows.push(
     new ActionRowBuilder().addComponents(
-      navigationButton("embed:field-manager-add", "➕ Add", ButtonStyle.Success, fields.length >= MAX_EMBED_FIELDS),
-      navigationButton("embed:field-manager-edit", "✏️ Edit", ButtonStyle.Primary, index == null),
-      navigationButton("embed:field-manager-inline", item?.inline ? "↔️ Inline ON" : "↔️ Inline OFF", item?.inline ? ButtonStyle.Success : ButtonStyle.Secondary, index == null),
-      navigationButton("embed:field-manager-remove", "🗑️ Remove", ButtonStyle.Danger, index == null),
+      navigationButton("embed:field-manager-add", emojiLabel('ADD', "Add"), ButtonStyle.Success, fields.length >= MAX_EMBED_FIELDS),
+      navigationButton("embed:field-manager-edit", emojiLabel('EDIT', "Edit"), ButtonStyle.Primary, index == null),
+      navigationButton("embed:field-manager-inline", item?.inline ? emojiLabel('PERMISSION_HORIZONTAL', "Inline ON") : emojiLabel('PERMISSION_HORIZONTAL', "Inline OFF"), item?.inline ? ButtonStyle.Success : ButtonStyle.Secondary, index == null),
+      navigationButton("embed:field-manager-remove", emojiLabel('DELETE', "Remove"), ButtonStyle.Danger, index == null),
     ),
     new ActionRowBuilder().addComponents(
-      navigationButton("embed:field-manager-up", "⬆️ Up", ButtonStyle.Secondary, index == null || index <= 0),
-      navigationButton("embed:field-manager-down", "⬇️ Down", ButtonStyle.Secondary, index == null || index >= fields.length - 1),
+      navigationButton("embed:field-manager-up", emojiLabel('ROLE_UP', "Up"), ButtonStyle.Secondary, index == null || index <= 0),
+      navigationButton("embed:field-manager-down", emojiLabel('ROLE_DOWN', "Down"), ButtonStyle.Secondary, index == null || index >= fields.length - 1),
     ),
     new ActionRowBuilder().addComponents(
       actionButton("embed:builder", "back"),
@@ -1492,7 +1493,7 @@ function buildFieldsManagerPanel(interaction) {
 function buildButtonsPanel(i, who) {
   const s = getSession(i), rows = [];
   if ((s.buttons || []).length) rows.push(new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId("embed:button-select").setPlaceholder("🔘 Select button").addOptions(s.buttons.map((b, n) => ({
+    new StringSelectMenuBuilder().setCustomId("embed:button-select").setPlaceholder(emojiLabel('SECURITY_RADIO', "Select button")).addOptions(s.buttons.map((b, n) => ({
       label: `${n + 1}. ${trim(b.label || "Button", 80)}`,
       value: String(n),
       description: trim(b.url || b.style || "Button", 100),
@@ -1500,9 +1501,9 @@ function buildButtonsPanel(i, who) {
     }))),
   ));
   rows.push(new ActionRowBuilder().addComponents(
-    navigationButton("embed:button-add", "➕ Add", ButtonStyle.Success, (s.buttons || []).length >= MAX_BUTTONS),
-    navigationButton("embed:button-edit", "✏️ Edit", ButtonStyle.Primary, !Number.isInteger(s.selectedButtonIndex)),
-    navigationButton("embed:button-remove-selected", "🗑️ Remove", ButtonStyle.Danger, !Number.isInteger(s.selectedButtonIndex)),
+    navigationButton("embed:button-add", emojiLabel('ADD', "Add"), ButtonStyle.Success, (s.buttons || []).length >= MAX_BUTTONS),
+    navigationButton("embed:button-edit", emojiLabel('EDIT', "Edit"), ButtonStyle.Primary, !Number.isInteger(s.selectedButtonIndex)),
+    navigationButton("embed:button-remove-selected", emojiLabel('DELETE', "Remove"), ButtonStyle.Danger, !Number.isInteger(s.selectedButtonIndex)),
   ));
 
   // Persistent navigation row.
@@ -1513,7 +1514,7 @@ function buildButtonsPanel(i, who) {
       navigationButton("embed:helpers", "📖 Variables"),
     )
   );
-  return { embeds: [simplePanel("🔘 Button Management", `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} buttons: ${(s.buttons || []).length}/${MAX_BUTTONS}`, s, who)], components: rows };
+  return { embeds: [simplePanel(emojiLabel('SECURITY_RADIO', "Button Management"), `Panel ${s.selectedPanelIndex + 1}/${s.panels.length} buttons: ${(s.buttons || []).length}/${MAX_BUTTONS}`, s, who)], components: rows };
 }
 function selectedButtonManagerIndex(state) {
   const buttons = Array.isArray(state.buttons) ? state.buttons : [];
@@ -1573,12 +1574,12 @@ function buildButtonsManagerPanel(interaction) {
   }
   lines.push("", "Buttons support automatic or explicit row placement. Discord limits are enforced: up to 5 buttons per row and up to 20 buttons across 4 button rows.");
 
-  const embeds = [new EmbedBuilder().setColor(0x5865F2).setTitle("🔘 Buttons").setDescription(lines.join("\n").slice(0, 4096))];
+  const embeds = [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('SECURITY_RADIO', "Buttons")).setDescription(lines.join("\n").slice(0, 4096))];
   if (item) {
     const previewLabel = trim(buttonResolved(item.label || "Button", interaction), 80) || "Button";
     const previewUrl = safeUrl(buttonResolved(item.url, interaction)) || "";
     const actualRow = buttonManagerDeployedRowFor(buttons, index);
-    embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle("👁️ Selected Button Preview").setDescription([
+    embeds.push(new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('WELCOME_PREVIEW', "Selected Button Preview")).setDescription([
       `**Label:** ${item.emoji ? `${item.emoji} ` : ""}${previewLabel}`,
       `**Style:** ${previewUrl ? "Link" : buttonManagerStyleLabel(item.style)}`,
       `**Destination:** ${previewUrl ? previewUrl : item.action ? `Action: ${buttonManagerActionLabel(item.action)}` : "Not configured"}`,
