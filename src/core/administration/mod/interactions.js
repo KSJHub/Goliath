@@ -320,12 +320,12 @@ function buildMemberScanPayload(i, target) {
   const primaryButtons = [
     new Discord.ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji(EMOJIS.REFRESH).setStyle(Discord.ButtonStyle.Primary),
   ];
-  if (access.history) primaryButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji('🕘').setStyle(Discord.ButtonStyle.Secondary));
+  if (access.history) primaryButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji(EMOJIS.MOD_SCAN_HISTORY).setStyle(Discord.ButtonStyle.Secondary));
   const components = [new Discord.ActionRowBuilder().addComponents(...primaryButtons)];
   const intelligenceButtons = [];
-  if (access.links) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_links:${target.id}`).setLabel(`Correlations (${persistentLinks.length})`.slice(0, 80)).setEmoji('🔗').setStyle(Discord.ButtonStyle.Secondary));
-  if (access.notes) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_note:${target.id}`).setLabel('Notes').setEmoji('📝').setStyle(Discord.ButtonStyle.Secondary));
-  if (access.watch) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_watch:${target.id}`).setLabel(investigation.watched ? 'Remove Watch' : 'Watch Status').setEmoji('👁️').setStyle(investigation.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Secondary));
+  if (access.links) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_links:${target.id}`).setLabel(`Correlations (${persistentLinks.length})`.slice(0, 80)).setEmoji(EMOJIS.AUTOMOD_LINKS).setStyle(Discord.ButtonStyle.Secondary));
+  if (access.notes) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_note:${target.id}`).setLabel('Notes').setEmoji(EMOJIS.NOTE).setStyle(Discord.ButtonStyle.Secondary));
+  if (access.watch) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_watch:${target.id}`).setLabel(investigation.watched ? 'Remove Watch' : 'Watch Status').setEmoji(EMOJIS.WELCOME_PREVIEW).setStyle(investigation.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Secondary));
   if (intelligenceButtons.length) components.push(new Discord.ActionRowBuilder().addComponents(...intelligenceButtons));
   const navButtons = [new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel(emojiLabel('BACK', 'Back')).setStyle(Discord.ButtonStyle.Secondary)];
   if (access.cases) navButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_export_cases:${target.id}`).setLabel('📤 Export').setStyle(Discord.ButtonStyle.Secondary));
@@ -377,7 +377,7 @@ function buildScanHistoryPayload(i, target, origin = 'scan') {
   if (origin === 'landing') buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel('⬅️ Back to Intelligence').setStyle(Discord.ButtonStyle.Secondary));
   else if (canScanCapability(i, 'scan_run')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel('⬅️ Back to Scan').setStyle(Discord.ButtonStyle.Secondary));
   if (canScanCapability(i, 'scan_compare')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history_compare:${target.id}:${origin}`).setLabel('Compare Account').setEmoji('🧬').setStyle(Discord.ButtonStyle.Secondary));
-  if (canManageHistory) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_clear_history:${target.id}:${origin}`).setLabel('Clear History').setEmoji('🧹').setStyle(Discord.ButtonStyle.Danger));
+  if (canManageHistory) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_clear_history:${target.id}:${origin}`).setLabel('Clear History').setEmoji(EMOJIS.ADMIN_PURGE).setStyle(Discord.ButtonStyle.Danger));
   if (buttons.length) components.push(new Discord.ActionRowBuilder().addComponents(...buttons));
   return { embed, components };
 }
@@ -465,7 +465,7 @@ async function showScanDeleteConfirmation(i, targetId, auditId, origin = 'scan')
   const after = parseJson(row.after_value, {});
   const label = after.scanId || row.audit_id;
   const components = [new Discord.ActionRowBuilder().addComponents(
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_delete_confirm:${targetId}:${row.audit_id}:${origin}`).setLabel('Delete Scan').setEmoji('🗑️').setStyle(Discord.ButtonStyle.Danger),
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_delete_confirm:${targetId}:${row.audit_id}:${origin}`).setLabel('Delete Scan').setEmoji(EMOJIS.DELETE).setStyle(Discord.ButtonStyle.Danger),
     new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${targetId}:${origin}`).setLabel('Cancel').setStyle(Discord.ButtonStyle.Secondary),
   )];
   return safeUpdate(i, { content: `${EMOJIS.WARNING} Delete scan snapshot \`${String(label).slice(0, 80)}\`? This removes only the stored scan snapshot, not cases, warnings, evidence, notes, watchlist records or other audit history.`, embeds: [], components });
@@ -487,7 +487,7 @@ async function showClearScanHistoryConfirmation(i, targetId, origin = 'scan') {
   const count = scanAuditRows(i.guild.id, targetId, 100).length;
   if (!count) return showMemberScanHistory(i, targetId, origin);
   const components = [new Discord.ActionRowBuilder().addComponents(
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_clear_history_confirm:${targetId}:${origin}`).setLabel('Clear All Scan History').setEmoji('🧹').setStyle(Discord.ButtonStyle.Danger),
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_clear_history_confirm:${targetId}:${origin}`).setLabel('Clear All Scan History').setEmoji(EMOJIS.ADMIN_PURGE).setStyle(Discord.ButtonStyle.Danger),
     new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${targetId}:${origin}`).setLabel('Cancel').setStyle(Discord.ButtonStyle.Secondary),
   )];
   return safeUpdate(i, { content: `${EMOJIS.WARNING} Clear all **${count}** stored Member Intelligence scan snapshot(s) for <@${targetId}>? Cases, warnings, evidence, notes, watchlist records and other moderation audit events will be retained.`, embeds: [], components });
@@ -558,7 +558,7 @@ const embed = new Discord.EmbedBuilder()
   .setFooter({ text: evidence.length ? 'Historical correlation only • review scan history before drawing conclusions' : 'No repeated correlation signals recorded' })
   .setTimestamp();
   recordModerationSystemEvent({ interaction: i, event: 'moderation.member_scan.link_evidence_viewed', action: 'member_scan_links', targetId: target.id, after: { matchCount: evidence.length } });
-  const components = canScanCapability(i, 'scan_run') ? [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel('Back to Scan').setEmoji('🔎').setStyle(Discord.ButtonStyle.Primary))] : [];
+  const components = canScanCapability(i, 'scan_run') ? [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel('Back to Scan').setEmoji(EMOJIS.INVESTIGATE).setStyle(Discord.ButtonStyle.Primary))] : [];
   return safeUpdate(i, { content: null, embeds: [embed], components });
 }
 async function showInvestigationWatch(i, targetId) {
@@ -579,7 +579,7 @@ async function showInvestigationWatch(i, targetId) {
     ].join('\n'))
     .setTimestamp();
   const buttons = [
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_watch_toggle:${target.id}`).setLabel(state.watched ? 'Remove Investigation Watch' : 'Enable Investigation Watch').setEmoji('👁️').setStyle(state.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Primary),
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_watch_toggle:${target.id}`).setLabel(state.watched ? 'Remove Investigation Watch' : 'Enable Investigation Watch').setEmoji(EMOJIS.WELCOME_PREVIEW).setStyle(state.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Primary),
     new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel('⬅️ Back to Scan').setStyle(Discord.ButtonStyle.Secondary),
   ];
   return safeUpdate(i, { content: null, embeds: [embed], components: [new Discord.ActionRowBuilder().addComponents(...buttons)] });
@@ -909,7 +909,7 @@ function ownerCaseRows(i, page = 0, archived = false) {
   nav.addComponents(new Discord.ButtonBuilder().setCustomId('mod_owner_history:0').setLabel('Case History').setStyle(Discord.ButtonStyle.Secondary));
   components.push(nav);
   components.push(new Discord.ActionRowBuilder().addComponents(
-    new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('Back to Cases').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary)));
+    new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:cases').setLabel('Back to Cases').setEmoji(EMOJIS.BACK).setStyle(Discord.ButtonStyle.Secondary)));
   const embed = new Discord.EmbedBuilder()
     .setColor(0x5865F2).setTitle(archived ? '📦 Archived Cases' : '🗂️ Case Management')
     .setDescription(archived
@@ -964,10 +964,10 @@ async function handleOwnerCaseManagement(i) {
         { name: '🗑️ Delete Case', value: 'Permanently remove the case and linked records. Only a minimal private history marker remains. This cannot be undone.', inline: false });
     await i.update({ embeds: [review], components: [
       new Discord.ActionRowBuilder().addComponents(
-        new Discord.ButtonBuilder().setCustomId(`mod_owner_archive_prompt:${caseId}`).setLabel('Archive Case').setEmoji('📦').setStyle(Discord.ButtonStyle.Primary),
-        new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('Delete Case').setEmoji('🗑️').setStyle(Discord.ButtonStyle.Danger)),
+        new Discord.ButtonBuilder().setCustomId(`mod_owner_archive_prompt:${caseId}`).setLabel('Archive Case').setEmoji(EMOJIS.BULK).setStyle(Discord.ButtonStyle.Primary),
+        new Discord.ButtonBuilder().setCustomId(`mod_owner_delete_prompt:${caseId}`).setLabel('Delete Case').setEmoji(EMOJIS.DELETE).setStyle(Discord.ButtonStyle.Danger)),
       new Discord.ActionRowBuilder().addComponents(
-        new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Back to Case Management').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary))
+        new Discord.ButtonBuilder().setCustomId('mod_owner_management:0').setLabel('Back to Case Management').setEmoji(EMOJIS.BACK).setStyle(Discord.ButtonStyle.Secondary))
     ] });
     return true;
   }
@@ -993,9 +993,9 @@ async function handleOwnerCaseManagement(i) {
       .setFooter({ text: 'Goliath • Owner Case Management' }).setTimestamp();
     await i.update({ embeds: [embed], components: [
       new Discord.ActionRowBuilder().addComponents(
-        new Discord.ButtonBuilder().setCustomId(`mod_owner_restore_prompt:${caseId}`).setLabel('Restore Case').setEmoji('♻️').setStyle(Discord.ButtonStyle.Primary)),
+        new Discord.ButtonBuilder().setCustomId(`mod_owner_restore_prompt:${caseId}`).setLabel('Restore Case').setEmoji(EMOJIS.UPDATE).setStyle(Discord.ButtonStyle.Primary)),
       new Discord.ActionRowBuilder().addComponents(
-        new Discord.ButtonBuilder().setCustomId('mod_owner_archive_list:0').setLabel('Back to Archived Cases').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary))
+        new Discord.ButtonBuilder().setCustomId('mod_owner_archive_list:0').setLabel('Back to Archived Cases').setEmoji(EMOJIS.BACK).setStyle(Discord.ButtonStyle.Secondary))
     ] });
     return true;
   }
@@ -1101,7 +1101,7 @@ async function handleOwnerCaseManagement(i) {
           .setEmoji(operation === 'ARCHIVE' ? '📦' : '⬅️').setStyle(Discord.ButtonStyle.Secondary)),
       new Discord.ActionRowBuilder().addComponents(
         new Discord.ButtonBuilder().setCustomId('mod_owner_history:0').setLabel('Case History')
-          .setEmoji('📜').setStyle(Discord.ButtonStyle.Secondary)),
+          .setEmoji(EMOJIS.CASES).setStyle(Discord.ButtonStyle.Secondary)),
     ];
     const response = { embeds: [new Discord.EmbedBuilder()
       .setColor(operation === 'DELETE' ? 0xED4245 : 0x248B57)
