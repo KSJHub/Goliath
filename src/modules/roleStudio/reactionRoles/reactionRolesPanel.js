@@ -204,22 +204,22 @@ async function buildReactionRolesAdminPanel(guild, memberDisplayName = 'Unknown 
   return {
     embeds: [new EmbedBuilder()
       .setColor(!enabled ? 0x747f8d : health.healthy ? 0x57f287 : 0xfaa61a)
-      .setTitle('🎭 Reaction Roles')
+      .setTitle(emojiLabel('USER_ROLES', 'Reaction Roles'))
       .setDescription([
         noticeLine(notice), notice ? '' : null,
         'Create and manage self-assignable role panels.', '',
-        `**Module:** ${enabled ? '🟢 Enabled' : '🔴 Disabled'}`,
+        `**Module:** ${enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled')}`,
         `**Panels:** \`${panels.length}\``,
         `**Role mappings:** \`${mappings}\``,
-        `**Health:** ${health.healthy ? '✅ Healthy' : `⚠️ ${health.unhealthy || 0} panel(s) need attention`}`,
+        `**Health:** ${health.healthy ? emojiLabel('HEALTHY', 'Healthy') : `⚠️ ${health.unhealthy || 0} panel(s) need attention`}`,
       ].filter((line) => line !== null).join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
     components: [
       row(
-        button('admin:reactionRoles:create', '➕ Create', ButtonStyle.Success),
-        button('admin:reactionRoles:existing', '🔗 Use Existing', ButtonStyle.Primary),
-        button('admin:reactionRoles:manage', '📋 Manage', ButtonStyle.Primary, !panels.length),
+        button('admin:reactionRoles:create', emojiLabel('ADD', 'Create'), ButtonStyle.Success),
+        button('admin:reactionRoles:existing', emojiLabel('AUTOMOD_LINKS', 'Use Existing'), ButtonStyle.Primary),
+        button('admin:reactionRoles:manage', emojiLabel('INCIDENT_AUDIT', 'Manage'), ButtonStyle.Primary, !panels.length),
       ),
       row(
         actionButton('admin:studio:roleStudio', 'back'),
@@ -233,7 +233,7 @@ function buildExistingPicker(guild) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(0x5865f2)
-      .setTitle('🔗 Use Existing')
+      .setTitle(emojiLabel('AUTOMOD_LINKS', 'Use Existing'))
       .setDescription([
         'Choose an existing item.', '',
         '**Existing Message**', 'Browse normal Discord messages by channel or paste a direct message link.', '',
@@ -241,8 +241,8 @@ function buildExistingPicker(guild) {
       ].join('\n'))],
     components: [
       row(
-        button('admin:reactionRoles:new:existing', '🔗 Existing Message', ButtonStyle.Primary),
-        button('admin:reactionRoles:existing:embed', '📚 Existing Panel', ButtonStyle.Primary),
+        button('admin:reactionRoles:new:existing', emojiLabel('AUTOMOD_LINKS', 'Existing Message'), ButtonStyle.Primary),
+        button('admin:reactionRoles:existing:embed', emojiLabel('FAQ_BOOKS', 'Existing Panel'), ButtonStyle.Primary),
       ),
       row(actionButton('admin:reactionRoles', 'back'), actionButton('admin:reactionRoles:settings', 'settings')),
     ],
@@ -256,7 +256,7 @@ function buildEmbedStudioPicker(guild, userId, notice = '') {
   return {
     embeds: [new EmbedBuilder()
       .setColor(channelId && deployments.length ? 0x57f287 : 0x5865f2)
-      .setTitle('📚 Select Existing Embed Studio Panel')
+      .setTitle(emojiLabel('FAQ_BOOKS', 'Select Existing Embed Studio Panel'))
       .setDescription([
         noticeLine(notice), notice ? '' : null,
         '**Step 1 — Choose a channel**',
@@ -297,16 +297,16 @@ async function buildSettingsPage(guild, memberDisplayName = 'Unknown User', noti
       .setTitle(emojiLabel('SETTINGS', 'Reaction Roles · Settings'))
       .setDescription([
         noticeLine(notice), notice ? '' : null,
-        `**Module:** ${enabled ? '🟢 Enabled' : '🔴 Disabled'}`,
+        `**Module:** ${enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled')}`,
         `**Saved panels:** \`${panels.length}\``,
-        `**Health:** ${health.healthy ? '✅ Healthy' : `⚠️ ${health.unhealthy || 0} panel(s) need attention`}`,
+        `**Health:** ${health.healthy ? emojiLabel('HEALTHY', 'Healthy') : `⚠️ ${health.unhealthy || 0} panel(s) need attention`}`,
       ].filter((line) => line !== null).join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
     components: [
       row(
-        button(enabled ? 'admin:reactionRoles:disable:confirm' : 'admin:reactionRoles:enable', enabled ? '⏸️ Disable Module' : '▶️ Enable Module', enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-        button('admin:reactionRoles:repair', '🩺 Repair All', ButtonStyle.Secondary, !panels.length || !enabled),
+        button(enabled ? 'admin:reactionRoles:disable:confirm' : 'admin:reactionRoles:enable', enabled ? emojiLabel('USER_PAUSE', 'Disable Module') : emojiLabel('USER_PLAY', 'Enable Module'), enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+        button('admin:reactionRoles:repair', emojiLabel('WELCOME_DIAGNOSTICS', 'Repair All'), ButtonStyle.Secondary, !panels.length || !enabled),
       ),
       row(actionButton('admin:reactionRoles', 'back', { label: 'Back to Reaction Roles' })),
     ],
@@ -331,13 +331,13 @@ function buildManagePicker(guild, notice = '') {
   return {
     embeds: [new EmbedBuilder()
       .setColor(notice ? 0x57f287 : 0x5865f2)
-      .setTitle('📚 Saved Reaction Role Panels')
+      .setTitle(emojiLabel('FAQ_BOOKS', 'Saved Reaction Role Panels'))
       .setDescription([
         noticeLine(notice), notice ? '' : null,
         panels.length ? 'Choose a saved panel.' : 'No panels are configured yet.',
       ].filter((line) => line !== null).join('\n'))],
     components: [
-      ...(panels.length ? [row(deploymentSelect(guild.id))] : [row(button('admin:reactionRoles:create', '➕ Create First Panel', ButtonStyle.Success))]),
+      ...(panels.length ? [row(deploymentSelect(guild.id))] : [row(button('admin:reactionRoles:create', emojiLabel('ADD', 'Create First Panel'), ButtonStyle.Success))]),
       row(actionButton('admin:reactionRoles', 'back'), actionButton('admin:reactionRoles:settings', 'settings')),
     ],
   };
@@ -349,7 +349,7 @@ function buildExistingMessageStep(guild, userId, notice = '') {
   return {
     embeds: [new EmbedBuilder()
       .setColor(draft?.messageId ? 0x57f287 : 0x5865f2)
-      .setTitle('🔗 Select Existing Message')
+      .setTitle(emojiLabel('AUTOMOD_LINKS', 'Select Existing Message'))
       .setDescription([
         noticeLine(notice), notice ? '' : null,
         '**Step 1 — Choose a channel**',
@@ -375,8 +375,8 @@ function buildExistingMessageStep(guild, userId, notice = '') {
         .setMaxValues(1)),
       row(normalMessageSelect(draft)),
       row(
-        button('admin:reactionRoles:source:link', draft?.messageId ? emojiLabel('REFRESH', 'Paste Different Link') : '🔗 Paste Message Link', ButtonStyle.Primary),
-        button('admin:reactionRoles:source:continue', '🗺️ Mapping Builder', ButtonStyle.Success, !draft?.messageId),
+        button('admin:reactionRoles:source:link', draft?.messageId ? emojiLabel('REFRESH', 'Paste Different Link') : emojiLabel('AUTOMOD_LINKS', 'Paste Message Link'), ButtonStyle.Primary),
+        button('admin:reactionRoles:source:continue', emojiLabel('ROLE_MAP', 'Mapping Builder'), ButtonStyle.Success, !draft?.messageId),
       ),
       row(
         actionButton('admin:reactionRoles:existing', 'back'),
@@ -438,10 +438,10 @@ function buildWizard(guild, userId, showRemove = false, notice = '', rolePage = 
     rolePicker.rows[0],
     row(showRemove && draft.mappings.length ? removeMappingSelect(draft, guild) : modeSelect(draft.selectedMode)),
     row(
-      button('admin:reactionRoles:wizard:name', '✏️ Name', ButtonStyle.Primary),
-      button('admin:reactionRoles:wizard:batch', '➡️ Continue', ButtonStyle.Success, !roles.length),
-      button('admin:reactionRoles:wizard:deploy', draft.panelId ? '💾 Save' : existing ? '💾 Attach' : '🚀 Deploy', ButtonStyle.Success, !ready),
-      button('admin:reactionRoles:wizard:remove', '🗑️ Remove', ButtonStyle.Secondary, !draft.mappings.length),
+      button('admin:reactionRoles:wizard:name', emojiLabel('EDIT', 'Name'), ButtonStyle.Primary),
+      button('admin:reactionRoles:wizard:batch', emojiLabel('NEXT_STEP', 'Continue'), ButtonStyle.Success, !roles.length),
+      button('admin:reactionRoles:wizard:deploy', draft.panelId ? emojiLabel('PRESETS', 'Save') : existing ? emojiLabel('PRESETS', 'Attach') : emojiLabel('DEPLOY', 'Deploy'), ButtonStyle.Success, !ready),
+      button('admin:reactionRoles:wizard:remove', emojiLabel('DELETE', 'Remove'), ButtonStyle.Secondary, !draft.mappings.length),
     ),
     row(
       actionButton(existing ? 'admin:reactionRoles:existing' : 'admin:reactionRoles', 'back'),
@@ -462,7 +462,7 @@ function buildWizard(guild, userId, showRemove = false, notice = '', rolePage = 
   return {
     embeds: [new EmbedBuilder()
       .setColor(notice || ready ? 0x57f287 : 0x5865f2)
-      .setTitle(draft.panelId ? '✏️ Edit Reaction Role Mappings' : existing ? '🔗 Attach Reaction Roles' : '✨ Reaction Role Builder')
+      .setTitle(draft.panelId ? emojiLabel('EDIT', 'Edit Reaction Role Mappings') : existing ? emojiLabel('AUTOMOD_LINKS', 'Attach Reaction Roles') : emojiLabel('INVITE_SPARKLES', 'Reaction Role Builder'))
       .setDescription([
         noticeLine(notice), notice ? '' : null,
         'Select multiple roles, choose one behaviour, then enter their emojis together.', '',
@@ -491,7 +491,7 @@ async function buildManagedPanel(guild, panelId, notice = '') {
       .setTitle(`🎭 ${panel.name}`)
       .setDescription([
         noticeLine(notice), notice ? '' : null,
-        `**Status:** ${panel.enabled === false ? '⏸️ Disabled' : '✅ Enabled'}`,
+        `**Status:** ${panel.enabled === false ? emojiLabel('USER_PAUSE', 'Disabled') : emojiLabel('HEALTHY', 'Enabled')}`,
         `**Channel:** <#${panel.channelId}>`,
         `**Message:** [Open tracked message](https://discord.com/channels/${guild.id}/${panel.channelId}/${panel.messageId})`,
         `**Mappings:** \`${panel.mappings.length}\``, '',
@@ -499,12 +499,12 @@ async function buildManagedPanel(guild, panelId, notice = '') {
       ].filter((line) => line !== null).join('\n').slice(0, 4096))],
     components: [
       row(
-        button(`admin:reactionRoles:manage:edit:${panelId}`, '✏️ Edit Mappings', ButtonStyle.Primary),
+        button(`admin:reactionRoles:manage:edit:${panelId}`, emojiLabel('EDIT', 'Edit Mappings'), ButtonStyle.Primary),
         button(`admin:reactionRoles:manage:repair:${panelId}`, emojiLabel('REFRESH', 'Sync & Repair'), ButtonStyle.Secondary, panel.enabled === false),
-        button(`admin:reactionRoles:manage:${panel.enabled === false ? 'enable' : 'disable'}:${panelId}`, panel.enabled === false ? '▶️ Enable Panel' : '⏸️ Disable Panel', panel.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary),
+        button(`admin:reactionRoles:manage:${panel.enabled === false ? 'enable' : 'disable'}:${panelId}`, panel.enabled === false ? emojiLabel('USER_PLAY', 'Enable Panel') : emojiLabel('USER_PAUSE', 'Disable Panel'), panel.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary),
       ),
       row(
-        button(`admin:reactionRoles:manage:remove:confirm:${panelId}`, '🗑️ Delete Panel', ButtonStyle.Danger),
+        button(`admin:reactionRoles:manage:remove:confirm:${panelId}`, emojiLabel('DELETE', 'Delete Panel'), ButtonStyle.Danger),
       ),
       row(
         actionButton('admin:reactionRoles:manage', 'back'),
@@ -639,7 +639,7 @@ async function handleReactionRolesAdminInteraction(interaction) {
       const message = channel?.messages?.fetch ? await channel.messages.fetch(parsed.messageId).catch(() => null) : null;
       if (!message) throw new Error('That message could not be found or Goliath cannot access it.');
       reactionRoles.saveDraft(guild.id, userId, { channelId: parsed.channelId, messageId: parsed.messageId, messageChoices: [] }, guild);
-      return interaction.reply({ ...buildExistingMessageStep(guild, userId, '✅ Message selected successfully.'), ephemeral: true });
+      return interaction.reply({ ...buildExistingMessageStep(guild, userId, emojiLabel('HEALTHY', 'Message selected successfully.')), ephemeral: true });
     }
 
     if (interaction.isModalSubmit?.() && id === 'admin:reactionRoles:wizard:name:submit') {
@@ -761,7 +761,7 @@ async function handleReactionRolesAdminInteraction(interaction) {
     }
     if (interaction.isStringSelectMenu?.() && id === 'admin:reactionRoles:wizard:remove:mapping') {
       reactionRoles.removeDraftMapping(guild.id, userId, interaction.values[0], guild);
-      return respond(interaction, buildWizard(guild, userId, false, '✅ Mapping removed.'));
+      return respond(interaction, buildWizard(guild, userId, false, emojiLabel('HEALTHY', 'Mapping removed.')));
     }
     if (interaction.isStringSelectMenu?.() && id === 'admin:reactionRoles:manage:panel' && interaction.values[0] !== 'none') return respond(interaction, await buildManagedPanel(guild, interaction.values[0]));
 
@@ -795,7 +795,7 @@ async function handleReactionRolesAdminInteraction(interaction) {
       await interaction.deferUpdate();
       const { panel, wasEdit } = await deployDraft(guild, userId);
       reactionRoles.clearDraft(guild.id, userId, guild);
-      return interaction.editReply(await buildManagedPanel(guild, panel.panelId, wasEdit ? '✅ Changes saved and reactions synchronised.' : '✅ Reaction roles deployed successfully.'));
+      return interaction.editReply(await buildManagedPanel(guild, panel.panelId, wasEdit ? emojiLabel('HEALTHY', 'Changes saved and reactions synchronised.') : emojiLabel('HEALTHY', 'Reaction roles deployed successfully.')));
     }
 
     if (id.startsWith('admin:reactionRoles:manage:view:')) return respond(interaction, await buildManagedPanel(guild, id.split(':').pop()));
@@ -816,38 +816,38 @@ async function handleReactionRolesAdminInteraction(interaction) {
       await interaction.deferUpdate();
       const panel = await reactionRoles.setPanelEnabled(guild, panelId, enabling, guild);
       if (panel.enabled !== false) await reactionRolesHealth.ensurePanelReactions(guild, panel);
-      return interaction.editReply(await buildManagedPanel(guild, panelId, enabling ? '✅ Panel enabled and reactions synchronised.' : '✅ Panel disabled. Its mappings remain saved.'));
+      return interaction.editReply(await buildManagedPanel(guild, panelId, enabling ? emojiLabel('HEALTHY', 'Panel enabled and reactions synchronised.') : emojiLabel('HEALTHY', 'Panel disabled. Its mappings remain saved.')));
     }
     if (id.startsWith('admin:reactionRoles:manage:repair:')) {
       const panelId = id.split(':').pop();
       await interaction.deferUpdate();
       const panel = await reactionRoles.repairPanel(guild, panelId, guild);
       await reactionRolesHealth.ensurePanelReactions(guild, panel);
-      return interaction.editReply(await buildManagedPanel(guild, panelId, '✅ Panel checked and repaired successfully.'));
+      return interaction.editReply(await buildManagedPanel(guild, panelId, emojiLabel('HEALTHY', 'Panel checked and repaired successfully.')));
     }
     if (id.startsWith('admin:reactionRoles:manage:remove:message:')) {
       const panelId = id.split(':').pop();
       await interaction.deferUpdate();
       const result = await deleteTrackedMessageAndPanel(guild, panelId);
       const notice = result.messageMissing
-        ? '✅ Panel removed. The tracked Discord message had already been deleted.'
-        : '✅ Panel and tracked Discord message deleted.';
+        ? emojiLabel('HEALTHY', 'Panel removed. The tracked Discord message had already been deleted.')
+        : emojiLabel('HEALTHY', 'Panel and tracked Discord message deleted.');
       return interaction.editReply(buildManagePicker(guild, notice));
     }
     if (id.startsWith('admin:reactionRoles:manage:remove:execute:')) {
       const panelId = id.split(':').pop();
       await interaction.deferUpdate();
       await reactionRoles.detachPanel(guild, panelId, { clearReactions: true });
-      return interaction.editReply(buildManagePicker(guild, '✅ Panel removed from Goliath. The Discord message was left in place.'));
+      return interaction.editReply(buildManagePicker(guild, emojiLabel('HEALTHY', 'Panel removed from Goliath. The Discord message was left in place.')));
     }
 
     if (id === 'admin:reactionRoles:enable') {
       guildManager.setModuleEnabled(guild.id, reactionRoles.SECTION, true, { actorId: userId });
-      return respond(interaction, await buildSettingsPage(guild, displayName(interaction), '✅ Reaction Roles enabled.'));
+      return respond(interaction, await buildSettingsPage(guild, displayName(interaction), emojiLabel('HEALTHY', 'Reaction Roles enabled.')));
     }
     if (id === 'admin:reactionRoles:disable:execute') {
       guildManager.setModuleEnabled(guild.id, reactionRoles.SECTION, false, { actorId: userId });
-      return respond(interaction, await buildSettingsPage(guild, displayName(interaction), '✅ Reaction Roles disabled. Saved panels were preserved.'));
+      return respond(interaction, await buildSettingsPage(guild, displayName(interaction), emojiLabel('HEALTHY', 'Reaction Roles disabled. Saved panels were preserved.')));
     }
     if (id === 'admin:reactionRoles:repair') {
       await interaction.deferUpdate();
