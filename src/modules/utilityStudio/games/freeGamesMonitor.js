@@ -243,7 +243,7 @@ async function saveGameSubscription(guild, patch) {
     // The Steam dispatcher is currently single-channel. Refuse unsupported
     // multi-route configurations instead of silently skipping destinations.
     const activeRoutes = store.effectiveUpdateDestinations(next).filter(route => route.enabled);
-    if (activeRoutes.length > 1 || (activeRoutes.length === 1 && activeRoutes[0].channelId !== next.channelId)) {
+    if (activeRoutes.length > 1 || (activeRoutes.length === 1 && (activeRoutes[0].channelId !== next.channelId || (activeRoutes[0].roleId || null) !== (next.roleId || null)))) {
       throw new Error('Steam game updates currently support one active destination matching the primary channel. Multi-channel delivery is not enabled yet.');
     }
     const destinationChanged = previous && JSON.stringify(store.effectiveUpdateDestinations(next)) !== JSON.stringify(store.effectiveUpdateDestinations(previous));
@@ -310,6 +310,11 @@ async function flushGameUpdates(guild, appId, manual = false, onlyIds = null) {
     if (entry.status === 'ambiguous') continue;
     const subscription = store.getGameUpdates(guild.id).subscriptions[appId];
     if (!subscription) break;
+    const activeRoutes = store.effectiveUpdateDestinations(subscription).filter(route => route.enabled);
+    if (activeRoutes.length !== 1 || activeRoutes[0].channelId !== subscription.channelId ||
+        (activeRoutes[0].roleId || null) !== (subscription.roleId || null)) {
+      throw new Error('Steam update delivery paused: destination configuration requires multi-channel support. No announcements were sent.');
+    }
     const channel = await validateDestination(guild, { ...subscription, alerts: Boolean(subscription.roleId) && !entry.suppressMention });
     if (entry.status === 'dispatching') {
       const recent = await channel.messages.fetch({ limit: 100 });
