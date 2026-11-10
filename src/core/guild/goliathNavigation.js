@@ -188,6 +188,8 @@ const EMOJIS = Object.freeze({
   ROLE_MAGNET: '🧲',
   ROLE_UP_RIGHT: '↗️',
   ROLE_GOLD_MEDAL: '🥇',
+  ROLE_TROPHY: '🏆',
+  ROLE_MEMBERS: '👥',
   ROLE_CLOCK: '🕒',
   UTILITY_ANIMATED_EMOJI: '😀🎞️',
   UTILITY_ANIMATION: '🎞️',
