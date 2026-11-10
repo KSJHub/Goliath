@@ -290,11 +290,11 @@ function buildMemberScanPayload(i, target) {
 
   const fields = [
     { name: '🪪 Identity & History', value: identityLines.join('\n').slice(0, 1024), inline: false },
-    { name: '🏠 Membership & Access', value: membershipLines.join('\n').slice(0, 1024), inline: false },
-    { name: '⚖️ Moderation & Risk', value: moderationLines.join('\n').slice(0, 1024), inline: false },
-    { name: '🕘 Recent Cases', value: recent.slice(0, 1024), inline: false },
+    { name: emojiLabel('USER_HOME', 'Membership & Access'), value: membershipLines.join('\n').slice(0, 1024), inline: false },
+    { name: emojiLabel('ACTIONS', 'Moderation & Risk'), value: moderationLines.join('\n').slice(0, 1024), inline: false },
+    { name: emojiLabel('MOD_SCAN_HISTORY', 'Recent Cases'), value: recent.slice(0, 1024), inline: false },
   ];
-  if (investigationLines.length) fields.push({ name: '👁️ Investigation Intelligence', value: investigationLines.join('\n').slice(0, 1024), inline: false });
+  if (investigationLines.length) fields.push({ name: emojiLabel('WELCOME_PREVIEW', 'Investigation Intelligence'), value: investigationLines.join('\n').slice(0, 1024), inline: false });
 
   const sources = ['Discord API', 'guild member cache', 'Goliath moderation cases', 'warnings', 'case metadata', 'appeals', 'evidence'];
   if (access.history) sources.push('scan history');
@@ -328,7 +328,7 @@ function buildMemberScanPayload(i, target) {
   if (access.watch) intelligenceButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_watch:${target.id}`).setLabel(investigation.watched ? 'Remove Watch' : 'Watch Status').setEmoji(EMOJIS.WELCOME_PREVIEW).setStyle(investigation.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Secondary));
   if (intelligenceButtons.length) components.push(new Discord.ActionRowBuilder().addComponents(...intelligenceButtons));
   const navButtons = [new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel(emojiLabel('BACK', 'Back')).setStyle(Discord.ButtonStyle.Secondary)];
-  if (access.cases) navButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_export_cases:${target.id}`).setLabel('📤 Export').setStyle(Discord.ButtonStyle.Secondary));
+  if (access.cases) navButtons.push(new Discord.ButtonBuilder().setCustomId(`mod_export_cases:${target.id}`).setLabel(emojiLabel('MOD_EXPORT', 'Export')).setStyle(Discord.ButtonStyle.Secondary));
   components.push(new Discord.ActionRowBuilder().addComponents(...navButtons));
   return { scanId, cases, suspects, history, crossGuild, investigation, persistentLinks, risk, access, embed, components };
 }
@@ -374,8 +374,8 @@ function buildScanHistoryPayload(i, target, origin = 'scan') {
     components.push(new Discord.ActionRowBuilder().addComponents(select));
   }
   const buttons = [];
-  if (origin === 'landing') buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel('⬅️ Back to Intelligence').setStyle(Discord.ButtonStyle.Secondary));
-  else if (canScanCapability(i, 'scan_run')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel('⬅️ Back to Scan').setStyle(Discord.ButtonStyle.Secondary));
+  if (origin === 'landing') buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:intelligence`).setLabel(emojiLabel('BACK', 'Back to Intelligence')).setStyle(Discord.ButtonStyle.Secondary));
+  else if (canScanCapability(i, 'scan_run')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel(emojiLabel('BACK', 'Back to Scan')).setStyle(Discord.ButtonStyle.Secondary));
   if (canScanCapability(i, 'scan_compare')) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history_compare:${target.id}:${origin}`).setLabel('Compare Account').setEmoji('🧬').setStyle(Discord.ButtonStyle.Secondary));
   if (canManageHistory) buttons.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_clear_history:${target.id}:${origin}`).setLabel('Clear History').setEmoji(EMOJIS.ADMIN_PURGE).setStyle(Discord.ButtonStyle.Danger));
   if (buttons.length) components.push(new Discord.ActionRowBuilder().addComponents(...buttons));
@@ -400,15 +400,15 @@ function buildComparisonPayload(i, primary, secondary, origin = 'scan') {
       'This score is an investigation aid, not proof that both Discord accounts belong to the same person.',
     ].join('\n'))
     .addFields(
-      { name: '🔎 Correlation Signals', value: correlation.signals.length ? correlation.signals.map((signal) => `• ${signal}`).join('\n') : 'No meaningful identity correlation signals detected.', inline: false },
+      { name: emojiLabel('INVESTIGATE', 'Correlation Signals'), value: correlation.signals.length ? correlation.signals.map((signal) => `• ${signal}`).join('\n') : 'No meaningful identity correlation signals detected.', inline: false },
       { name: `🪪 ${primary.user.username}`, value: [`Global: ${primary.user.globalName || 'None'}`, `Display: ${primary.displayName}`, `Created: ${scanTimestamp(primary.user.createdTimestamp)}`, `Joined: ${scanTimestamp(primary.joinedTimestamp)}`, `Warnings: ${left.warningCount} • Cases: ${left.cases.length} • Bans: ${left.bans}`].join('\n'), inline: true },
       { name: `🪪 ${secondary.user.username}`, value: [`Global: ${secondary.user.globalName || 'None'}`, `Display: ${secondary.displayName}`, `Created: ${scanTimestamp(secondary.user.createdTimestamp)}`, `Joined: ${scanTimestamp(secondary.joinedTimestamp)}`, `Warnings: ${right.warningCount} • Cases: ${right.cases.length} • Bans: ${right.bans}`].join('\n'), inline: true },
-      { name: '⏱️ Timeline Difference', value: [`Account creation gap: **${Math.round(deltaCreated / 3600000)}h**`, `Guild join gap: **${Math.round(deltaJoined / 3600000)}h**`].join('\n'), inline: false },
+      { name: emojiLabel('AUTOMOD_LIMITS', 'Timeline Difference'), value: [`Account creation gap: **${Math.round(deltaCreated / 3600000)}h**`, `Guild join gap: **${Math.round(deltaJoined / 3600000)}h**`].join('\n'), inline: false },
     )
     .setFooter({ text: 'Evidence-based comparison • no private Discord data is exposed to bots' })
     .setTimestamp();
   const buttons = [
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${primary.id}:${origin}`).setLabel('⬅️ Back to Scan History').setStyle(Discord.ButtonStyle.Secondary),
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${primary.id}:${origin}`).setLabel(emojiLabel('BACK', 'Back to Scan History')).setStyle(Discord.ButtonStyle.Secondary),
   ];
   return { correlation, embed, components: [new Discord.ActionRowBuilder().addComponents(...buttons)] };
 }
@@ -580,7 +580,7 @@ async function showInvestigationWatch(i, targetId) {
     .setTimestamp();
   const buttons = [
     new Discord.ButtonBuilder().setCustomId(`mod_scan_watch_toggle:${target.id}`).setLabel(state.watched ? 'Remove Investigation Watch' : 'Enable Investigation Watch').setEmoji(EMOJIS.WELCOME_PREVIEW).setStyle(state.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Primary),
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel('⬅️ Back to Scan').setStyle(Discord.ButtonStyle.Secondary),
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${target.id}`).setLabel(emojiLabel('BACK', 'Back to Scan')).setStyle(Discord.ButtonStyle.Secondary),
   ];
   return safeUpdate(i, { content: null, embeds: [embed], components: [new Discord.ActionRowBuilder().addComponents(...buttons)] });
 }
@@ -638,14 +638,14 @@ async function handleMemberScanButton(i) {
       if (!allowed) return true;
       const select = new Discord.UserSelectMenuBuilder().setCustomId('mod_scan_user_select').setPlaceholder('👤 Select a member to investigate').setMinValues(1).setMaxValues(1);
       const back = new Discord.ButtonBuilder().setCustomId('mod_dashboard:none:actions').setLabel(emojiLabel('BACK', 'Back')).setStyle(Discord.ButtonStyle.Secondary);
-      return safeUpdate(i, { content: '🧠 **Member Intelligence** — select a server member to open the unified intelligence workspace.', embeds: [], components: [new Discord.ActionRowBuilder().addComponents(select), new Discord.ActionRowBuilder().addComponents(back)] });
+      return safeUpdate(i, { content: emojiLabel('MOD_INTELLIGENCE', '**Member Intelligence** — select a server member to open the unified intelligence workspace.'), embeds: [], components: [new Discord.ActionRowBuilder().addComponents(select), new Discord.ActionRowBuilder().addComponents(back)] });
     }
   }
   if (id === 'mod_select_user' || id === 'mod_member_scan') {
     const allowed = await ensureScanCapability(i, 'scan_run', emojiLabel('ERROR', "You do not have permission to run a member intelligence scan."));
     if (!allowed) return true;
-    const select = new Discord.UserSelectMenuBuilder().setCustomId('mod_scan_user_select').setPlaceholder('🔎 Select a member to scan').setMinValues(1).setMaxValues(1);
-    return safeUpdate(i, { content: '🔎 **Goliath Member Scan** — select a server member to run a permission-filtered intelligence report.', embeds: [], components: [new Discord.ActionRowBuilder().addComponents(select)] });
+    const select = new Discord.UserSelectMenuBuilder().setCustomId('mod_scan_user_select').setPlaceholder(emojiLabel('INVESTIGATE', 'Select a member to scan')).setMinValues(1).setMaxValues(1);
+    return safeUpdate(i, { content: emojiLabel('INVESTIGATE', '**Goliath Member Scan** — select a server member to run a permission-filtered intelligence report.'), embeds: [], components: [new Discord.ActionRowBuilder().addComponents(select)] });
   }
   if (id.startsWith('mod_member_scan:')) return runMemberScan(i, id.split(':')[1], { record: true });
   if (id.startsWith('mod_scan_view:')) return runMemberScan(i, id.split(':')[1], { record: false });
@@ -672,7 +672,7 @@ async function handleMemberScanButton(i) {
     const allowed = await ensureScanCapability(i, 'scan_compare', emojiLabel('ERROR', "You do not have permission to compare member intelligence."));
     if (!allowed) return true;
     const select = new Discord.UserSelectMenuBuilder().setCustomId(`mod_scan_history_compare_select:${primaryId}:${origin}`).setPlaceholder('🧬 Select another member to compare').setMinValues(1).setMaxValues(1);
-    const back = new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${primaryId}:${origin}`).setLabel('⬅️ Back to Scan History').setStyle(Discord.ButtonStyle.Secondary);
+    const back = new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${primaryId}:${origin}`).setLabel(emojiLabel('BACK', 'Back to Scan History')).setStyle(Discord.ButtonStyle.Secondary);
     return safeUpdate(i, {
       content: `🧬 **Compare Accounts** — select another server member to compare against <@${primaryId}>.`,
       embeds: [],
