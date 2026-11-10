@@ -749,17 +749,17 @@ function mainEmbed(s, who, dashboard = {}) {
     .setDescription([
       "Build, test and publish your Discord embed from one workspace.",
       "",
-      "### 🗂️ Workspace",
+      `### ${EMOJIS.WORKSPACE} Workspace`,
       `**Template**　${template.emoji} ${template.label}`,
       ...(presetLine ? [presetLine] : []),
       `**Destination**　${destination}`,
       `**Workspace**　${saveState}`,
       "",
-      "### 🧩 Content",
+      `### ${EMOJIS.PANELS} Content`,
       `**Panels**　${panels.length}/${MAX_PANELS}　•　**Editing**　${panelName}`,
       `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
       "",
-      "### 🚦 Status",
+      `### ${EMOJIS.STATUS} Status`,
       `**Readiness**　${readinessState}`,
       `**Deployment**　${deploymentState}`,
       "",
@@ -1057,7 +1057,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
   const summary = [
     "Build and refine the selected content panel.",
     "",
-    "### 🧩 Current Panel",
+    `### ${EMOJIS.PANELS} Current Panel`,
     `**Panel**　${selectedIndex + 1}/${panels.length}　•　${panelName}`,
     `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
     `**Status**　${saveState}`,
@@ -2000,7 +2000,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
   let description = "";
 
   description +=
-    `### 💾 Preset Library\n` +
+    `### ${EMOJIS.PRESETS} Preset Library\n` +
     `**Saved presets:** ${visibleEntries.length}\n`;
 
   if (!selectedPreset) {
@@ -2062,7 +2062,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
       `📂 **Load into Editor** — open this preset for editing.\n` +
       `💾 **Update / Save** — save the current editor state.\n` +
       `✏️ **Rename** — change this preset's name.\n` +
-      `📄 **Duplicate** — create an independent copy.\n` +
+      `${EMOJIS.DOCUMENT} **Duplicate** — create an independent copy.\n` +
       `🗑️ **Delete** — remove this saved preset.\n` +
       `${isDefault ? "☆ **Clear Default**" : emojiLabel('USER_STARBOARD', "**Set Default**")} — ` +
       `${
@@ -2257,12 +2257,12 @@ function buildReadinessPanel(interaction, options = {}) {
       : []),
     "Final validation before returning to Embed Studio for publishing.",
     "",
-    "### 🚦 Publish Status",
+    `### ${EMOJIS.STATUS} Publish Status`,
     `**Status**　${status}`,
     `**Destination**　${destination}`,
     `**Panels**　${panels.length}/${MAX_PANELS}`,
     "",
-    "### 🔎 Validation",
+    `### ${EMOJIS.EMBED_VALIDATION} Validation`,
     ...lines,
     "",
     "### ➜ Next",
@@ -2962,7 +2962,7 @@ function buildMediaManagerPanel(
       ),
       mediaButton(
         "embed:media-spoiler:on",
-        "🙈 Spoiler",
+        emojiLabel("EMBED_SPOILER", "Spoiler"),
         selectedMedia?.spoiler
           ? ButtonStyle.Primary
           : ButtonStyle.Secondary,
@@ -2970,7 +2970,7 @@ function buildMediaManagerPanel(
       ),
       mediaButton(
         "embed:media-duplicate",
-        "📑 Duplicate",
+        emojiLabel("EMBED_DUPLICATE", "Duplicate"),
         ButtonStyle.Success,
         galleryIndex == null ||
         panelMedia.gallery.length >=
@@ -3061,7 +3061,7 @@ function buildMediaManagerPanel(
           ).toLowerCase()
         ] || "Auto"
       }`,
-      `👁️ **Spoiler:** ${
+      `${EMOJIS.WELCOME_PREVIEW} **Spoiler:** ${
         selectedMedia.spoiler
           ? "On"
           : "Off"
@@ -3081,7 +3081,7 @@ function buildMediaManagerPanel(
     "**✏️ Edit** — Edit the selected media item.",
     "**🏷️ Type** — Choose Auto, Text, GIF or Image for the selected media.",
     "**👁️ Normal** — Show the selected media normally.",
-    "**🙈 Spoiler** — Hide the selected media behind Discord’s spoiler treatment.",
+    `**${EMOJIS.EMBED_SPOILER} Spoiler** — Hide the selected media behind Discord’s spoiler treatment.",
     "**↔️ Alignments** — Set Above/Below Content, Left/Centre/Right and Small/Medium/Large.",
     "**🖼️ Thumbnail** — Add or manage the panel thumbnail."
   );
@@ -3116,7 +3116,7 @@ function buildMediaManagerPanel(
         new EmbedBuilder()
           .setColor(0x5865F2)
           .setTitle(
-            `🖼️ Selected Media Preview • ${
+            `${EMOJIS.MEDIA} Selected Media Preview • ${
               galleryIndex + 1
             }/${panelMedia.gallery.length}`
           )
@@ -3294,7 +3294,7 @@ function applyMediaPreviewPresentation(
           + rawAlignment.slice(1);
 
     preview.setTitle(
-      `🖼️ Selected Media Preview • ${placement} • ${alignment}`
+      `${EMOJIS.MEDIA} Selected Media Preview • ${placement} • ${alignment}`
     );
   }
 
@@ -3462,11 +3462,11 @@ function buildMediaAlignmentPanel(ctx) {
       ),
 
       new ActionRowBuilder().addComponents(
-        navigationButton("embed:media-size:small", "🔹 Small", size === "small" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        navigationButton("embed:media-size:small", emojiLabel("EMBED_MEDIA_SMALL", "Small"), size === "small" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        navigationButton("embed:media-size:medium", "🔷 Medium", size === "medium" ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        navigationButton("embed:media-size:medium", emojiLabel("EMBED_MEDIA_MEDIUM", "Medium"), size === "medium" ? ButtonStyle.Primary : ButtonStyle.Secondary),
 
-        navigationButton("embed:media-size:large", "🔶 Large", size === "large" ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        navigationButton("embed:media-size:large", emojiLabel("EMBED_MEDIA_LARGE", "Large"), size === "large" ? ButtonStyle.Primary : ButtonStyle.Secondary)
       ),
 
       new ActionRowBuilder().addComponents(
