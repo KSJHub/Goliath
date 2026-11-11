@@ -227,6 +227,8 @@ const EMOJIS = Object.freeze({
   EMBED_COLOUR: '🎨',
   EMBED_BUTTONS: '🔘',
   EMBED_IMPORT: '📥',
+  EMBED_OPEN_FOLDER: '📂',
+  EMBED_SAVE: '💾',
   MOD_IDENTITY: '🪪',
   ADMIN_SLOWMODE: '🐢',
   ADMIN_COMMAND: '🔏',
