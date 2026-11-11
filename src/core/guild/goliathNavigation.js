@@ -39,6 +39,8 @@ const EMOJIS = Object.freeze({
   MOD_COMMAND: '🔑',
   ROLE_REACTIONS: '😊',
   OWNER_RED: '🔴',
+  SOCIAL_MONITOR: '📡',
+  SOCIAL_CHANNEL_PIN: '📍',
   TIMEOUT: '⏳',
   KICK: '👢',
   BAN: '🔨',
