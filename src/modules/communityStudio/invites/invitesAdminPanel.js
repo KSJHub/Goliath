@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const { EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { updateModuleSection } = require('../../../core/guild/moduleSectionManager');
@@ -297,7 +297,7 @@ async function handleInviteStudioInteraction(interaction) {
     }
     nested(interaction, 'publicPanel', { title, description, footer, color: color.toUpperCase() });
     await interaction.reply({
-      content: emojiLabel('HEALTHY', 'Invite panel design saved. Use **👁️ Preview Panel** to review it, then **Publish/Update Panel** to apply it publicly.'),
+      content: emojiLabel('HEALTHY', 'Invite panel design saved. Use **' + EMOJIS.WELCOME_PREVIEW + ' Preview Panel** to review it, then **Publish/Update Panel** to apply it publicly.'),
       flags: MessageFlags.Ephemeral,
     });
     return true;
@@ -496,7 +496,7 @@ async function handleInviteStudioInteraction(interaction) {
       const health = id === 'invites:repair'
         ? await invites.repair(interaction.guild, meta(interaction, 'invite_repair'))
         : await invites.buildHealth(interaction.guild);
-      const status = (value) => value === 'healthy' ? '🟢' : value === 'issue' ? '🔴' : '🟡';
+      const status = (value) => value === 'healthy' ? EMOJIS.ACTIVE : value === 'issue' ? EMOJIS.OWNER_RED : EMOJIS.SEVERITY_MEDIUM;
       const report = new EmbedBuilder()
         .setColor(health.issues.length ? 0xED4245 : health.warnings.length ? 0xFEE75C : 0x57F287)
         .setTitle(id === 'invites:repair' ? emojiLabel('UTILITY_WRENCH', 'Invite Repair Report') : emojiLabel('WELCOME_DIAGNOSTICS', 'Invite Studio Health'))
