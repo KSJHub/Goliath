@@ -834,7 +834,7 @@ if (name === 'templates') {
       btn(`${P}settings`, emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
       btn(`${P}variables`, emojiLabel('PANELS', 'Variables'), ButtonStyle.Secondary),
     )];
-    return { embeds: [embed(config, emojiLabel('DESIGN', 'Alert Templates'), 'Edit the headline and main message for each Social Studio post. The bot keeps the layout consistent with channel links, status, metadata, thumbnails, media previews, platform colours and footer details.\n\nUse **🧩 Variables** for the complete helper list.', who(i))], components: c };
+    return { embeds: [embed(config, emojiLabel('DESIGN', 'Alert Templates'), 'Edit the headline and main message for each Social Studio post. The bot keeps the layout consistent with channel links, status, metadata, thumbnails, media previews, platform colours and footer details.\n\nUse **' + EMOJIS.PANELS + ' Variables** for the complete helper list.', who(i))], components: c };
   }
   if (name === 'variables') return { embeds: [embed(config, emojiLabel('PANELS', 'Template Variables'), variablesDescription(), who(i))], components: [
       row(
