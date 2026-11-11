@@ -230,6 +230,7 @@ const EMOJIS = Object.freeze({
   OWNER_BUILD: '🏗️',
   PERMISSION_HORIZONTAL: '↔️',
   FAQ_BOOKS: '📚',
+  FAQ_GUIDE: '📘',
   FAQ_PURPLE: '🟣',
   WRITE: '✍️',
   SUGGESTION_INBOX: '📬',
