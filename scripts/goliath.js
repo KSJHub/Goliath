@@ -5098,6 +5098,10 @@ async function gameUpdatesAudit() {
   assert.equal(multi.pending.length, 1, 'Failed secondary route must retain pending delivery.');
   assert.equal(multi.pending[0].routes[channelId].status, 'delivered');
   assert.equal(multi.pending[0].routes[secondId].status, 'ambiguous');
+  const partiallyDelivered = JSON.stringify(multi.pending);
+  await assert.rejects(monitor.sendLatestGameUpdate(guild, '730'), /queued or unresolved destination deliveries/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), partiallyDelivered,
+    'Manual latest must not replace partially delivered per-channel receipts.');
   await monitor.processGameUpdates(guild);
   assert.equal(sent.length, beforeMulti + 1, 'A successful route must not duplicate after another route becomes uncertain.');
   secondFailure = false;
