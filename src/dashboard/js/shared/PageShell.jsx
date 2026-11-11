@@ -9,6 +9,9 @@ export const DASHBOARD_EMOJIS = Object.freeze({
   REFRESH: '🔄', TEXT_CHANNEL: '#️⃣', CHART: '📊', HEALTH: '🩺',
   REPAIR: '🔧', DELETE: '🗑️', SUGGESTIONS: '💡', UPVOTE: '👍',
   DOWNVOTE: '👎', BIRTHDAY: '🎂',
+  SOCIAL: '📣', LINK: '🔗', ANNOUNCEMENT: '📢', DESIGN: '🎨', FEED: '📡',
+  CHANNELS: '📂', SETTINGS: '⚙️', AUTOMATION: '⚡', TEST: '🧪', DATA: '🗄️',
+  USER: '👤', LIVE: '🔴',
 });
 
 
