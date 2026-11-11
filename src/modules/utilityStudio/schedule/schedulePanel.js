@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -116,7 +116,7 @@ function bestCombinations(group, guildId, limit = 5) {
 function rankingText(poll, empty = 'Not created') {
   const rows = ranking(poll).slice(0, 5);
   if (!rows.length) return empty;
-  return rows.map((item, index) => `${index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '•'} **${item.label}** — ${item.count}`).join('\n');
+  return rows.map((item, index) => `${index === 0 ? EMOJIS.ROLE_GOLD_MEDAL : index === 1 ? EMOJIS.SCHEDULE_SILVER : index === 2 ? EMOJIS.SCHEDULE_BRONZE : '•'} **${item.label}** — ${item.count}`).join('\n');
 }
 function buildHome(interaction) {
   const state = getState(interaction); const section = schedule.getSection(interaction.guildId); const enabled = guildManager.isModuleEnabled(interaction.guildId, 'schedule');
@@ -160,7 +160,7 @@ function buildTemplates(interaction) {
 function buildPlanning(interaction) {
   const state = getState(interaction); const group = selectedPlanningGroup(interaction); const pollsEnabled = guildManager.isModuleEnabled(interaction.guildId, 'polls');
   const dayPoll = pollFor(interaction.guildId, group, 'day'); const timePoll = pollFor(interaction.guildId, group, 'time'); const activityPoll = pollFor(interaction.guildId, group, 'activity'); const combos = group ? bestCombinations(group, interaction.guildId) : [];
-  const comboText = combos.length ? combos.map((item, index) => `${index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '•'} **${item.day.label} · ${item.time.label}${item.activity ? ` · ${item.activity.label}` : ''}** — ${item.count} shared member${item.count === 1 ? '' : 's'}`).join('\n') : 'Create Day and Time polls to calculate shared availability.';
+  const comboText = combos.length ? combos.map((item, index) => `${index === 0 ? EMOJIS.ROLE_GOLD_MEDAL : index === 1 ? EMOJIS.SCHEDULE_SILVER : index === 2 ? EMOJIS.SCHEDULE_BRONZE : '•'} **${item.day.label} · ${item.time.label}${item.activity ? ` · ${item.activity.label}` : ''}** — ${item.count} shared member${item.count === 1 ? '' : 's'}`).join('\n') : 'Create Day and Time polls to calculate shared availability.';
   const embed = new EmbedBuilder().setColor(0x8B5CF6).setTitle(emojiLabel('VOTE', 'Schedule · Event Planner')).setDescription('Poll-powered planning. Members can select every day, time and activity that works for them. Schedule reads the canonical Polls vote sets and finds the strongest shared combination.').addFields(
     { name: 'Polls module', value: pollsEnabled ? 'Enabled ✅' : 'Disabled — enable Polls first', inline: true }, { name: 'Planning group', value: group?.groupId || 'Not started', inline: true }, { name: 'Poll channel', value: state.planningChannelId ? `<#${state.planningChannelId}>` : 'Poll default channel', inline: true },
     { name: emojiLabel('WELCOME_SCHEDULED', 'Best Days'), value: rankingText(dayPoll), inline: true }, { name: emojiLabel('ROLE_CLOCK', 'Best Times'), value: rankingText(timePoll), inline: true }, { name: emojiLabel('COMMUNITY_GAME', 'Best Activities'), value: rankingText(activityPoll, 'Optional / not created'), inline: true }, { name: emojiLabel('AUTOMOD_LINKS', 'Best Shared Combinations'), value: comboText.slice(0, 1024), inline: false },
