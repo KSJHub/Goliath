@@ -47,7 +47,7 @@ function presenceDraft(settings = {}) {
   return {
     name: 'Presence Trio',
     channelType: 'voice',
-    template: `${E.ACTIVE} {1} ⛔ {2} 🌙 {3}`,
+    template: `${E.ACTIVE} {1} ${E.DND} {2} ${E.IDLE} {3}`,
     frequencyMinutes: Number(settings.defaultFrequencyMinutes || 10),
     segments: [
       { type: 'status', options: { statuses: ['online'] } },
@@ -296,8 +296,8 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
       <SectionCard theme={theme} title="Server Counter Setup" subtitle="Live read-only text or voice channels that display your server numbers at a glance.">
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <PrimaryButton onClick={quickSetup} disabled={busy}>⚡ Quick Setup</PrimaryButton>
-          <SecondaryButton onClick={() => { setDraft(presenceDraft(config?.settings)); setPreview(''); }} disabled={busy}>🟢⛔🌙 Presence Trio</SecondaryButton>
-          <SecondaryButton onClick={refreshCounters} disabled={busy}>🔄 Refresh Now</SecondaryButton>
+          <SecondaryButton onClick={() => { setDraft(presenceDraft(config?.settings)); setPreview(''); }} disabled={busy}>{E.ACTIVE}{E.DND}{E.IDLE} Presence Trio</SecondaryButton>
+          <SecondaryButton onClick={refreshCounters} disabled={busy}>{E.REFRESH} Refresh Now</SecondaryButton>
           <SecondaryButton onClick={() => { setDraft(newDraft(config?.settings)); setPreview(''); }} disabled={busy}>➕ Create Counter</SecondaryButton>
         </div>
       </SectionCard>
@@ -321,7 +321,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
         <div style={{ display: 'grid', gap: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
             <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Counter name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} style={control(theme)} /></label>
-            <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel type<select value={draft.channelType || 'voice'} onChange={(event) => setDraft({ ...draft, channelType: event.target.value })} style={control(theme)}><option value="voice">🔊 Voice Channel</option><option value="text">#️⃣ Text Channel</option></select></label>
+            <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel type<select value={draft.channelType || 'voice'} onChange={(event) => setDraft({ ...draft, channelType: event.target.value })} style={control(theme)}><option value="voice">{E.VOICE} Voice Channel</option><option value="text">{E.TEXT_CHANNEL} Text Channel</option></select></label>
             <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Update frequency<select value={draft.frequencyMinutes} onChange={(event) => setDraft({ ...draft, frequencyMinutes: Number(event.target.value) })} style={control(theme)}><option value="10">Every 10 minutes</option><option value="15">Every 15 minutes</option><option value="30">Every 30 minutes</option><option value="60">Every hour</option><option value="360">Every 6 hours</option><option value="1440">Daily</option></select></label>
           </div>
           <label style={{ display: 'grid', gap: 6, fontWeight: 800 }}>Channel text<input value={draft.template} onChange={(event) => setDraft({ ...draft, template: event.target.value })} maxLength={100} style={control(theme)} /><span style={{ color: theme.mutedText, fontWeight: 600 }}>Use <code>{'{value}'}</code> for one counter. With multiple counters use <code>{'{1}'}</code>, <code>{'{2}'}</code>, <code>{'{3}'}</code>, <code>{'{4}'}</code>. Emojis and normal text are supported.</span></label>
@@ -376,7 +376,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
             <Row theme={theme} label="Missing channels" value={health.counters?.missing ?? 0} />
             {health.issues?.length ? <div style={{ padding: 12, borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>{health.issues.map((issue, index) => <div key={`${issue.code}-${index}`}>• {issue.code.replaceAll('_', ' ')}</div>)}</div> : <div style={{ color: theme.mutedText }}>No issues found.</div>}
           </> : <div style={{ color: theme.mutedText }}>Run a health check to inspect the live counter setup.</div>}
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><SecondaryButton onClick={runHealthCheck} disabled={busy}>🩺 Run Health Check</SecondaryButton><SecondaryButton onClick={repairStats} disabled={busy}>🔧 Repair Issues</SecondaryButton><SecondaryButton onClick={exportStats} disabled={busy}>📤 Export</SecondaryButton><SecondaryButton danger onClick={resetStats} disabled={busy}>🗑️ Reset Stats</SecondaryButton></div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><SecondaryButton onClick={runHealthCheck} disabled={busy}>{E.HEALTH} Run Health Check</SecondaryButton><SecondaryButton onClick={repairStats} disabled={busy}>{E.REPAIR} Repair Issues</SecondaryButton><SecondaryButton onClick={exportStats} disabled={busy}>{E.LEAVE} Export</SecondaryButton><SecondaryButton danger onClick={resetStats} disabled={busy}>{E.DELETE} Reset Stats</SecondaryButton></div>
         </div>
       </SectionCard>
 
