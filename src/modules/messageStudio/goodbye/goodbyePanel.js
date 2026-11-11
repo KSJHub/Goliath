@@ -9,7 +9,7 @@ const {
   ChannelType,
   AttachmentBuilder,
 } = require('discord.js');
-const { navigationButton, emojiLabel } = require('../../../core/guild/goliathNavigation');
+const { navigationButton, emojiLabel, EMOJIS } = require('../../../core/guild/goliathNavigation');
 const guildManager = require('../../../core/guild/guildManager');
 const goodbye = require('./goodbye');
 const departureDm = require('./goodbyeDeparture');
@@ -20,7 +20,7 @@ const buildGoodbyeDmPanel = (() => {
   const button = (customId, label, style = ButtonStyle.Secondary) => navigationButton(customId, label, style);
 
   function state(value) {
-    return value ? 'On ✅' : 'Off ❌';
+    return value ? `On ${EMOJIS.SUCCESS}` : `Off ${EMOJIS.ERROR}`;
   }
 
   function buildGoodbyeDmPanel(guild, memberDisplayName = 'Unknown User') {
