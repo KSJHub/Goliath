@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton, actionButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -76,7 +76,7 @@ function officialView(interaction) {
       .addFields(
         { name: emojiLabel('INVITE_GLOBE', 'OFFICIAL INVITE'), value: `**${liveStatus}**\n${invites.officialDisplayUrl(interaction.guildId) || 'No invite link created'}`, inline: false },
         { name: emojiLabel('USER_STARBOARD', 'Official Link Type'), value: config.linkType === 'vanity' ? `Custom / Vanity${config.vanityCode ? ` · discord.gg/${config.vanityCode}` : ' · Standard fallback active'}` : 'Standard Discord Invite', inline: false },
-        { name: emojiLabel('INVITE_SPARKLES', 'Vanity Availability'), value: !vanity ? emojiLabel('SEVERITY_MEDIUM', 'Not checked') : vanity.status === 'active' ? `🟢 ${vanity.detail}` : vanity.status === 'permission' ? `🔴 ${vanity.detail}` : vanity.status === 'unavailable' ? `⚪ ${vanity.detail}` : `🟡 ${vanity.detail}`, inline: false },
+        { name: emojiLabel('INVITE_SPARKLES', 'Vanity Availability'), value: !vanity ? emojiLabel('SEVERITY_MEDIUM', 'Not checked') : vanity.status === 'active' ? `${EMOJIS.ACTIVE} ${vanity.detail}` : vanity.status === 'permission' ? `${EMOJIS.OWNER_RED} ${vanity.detail}` : vanity.status === 'unavailable' ? `${EMOJIS.INACTIVE} ${vanity.detail}` : `${EMOJIS.SEVERITY_MEDIUM} ${vanity.detail}`, inline: false },
         { name: emojiLabel('WELCOME_LOCATION', 'Destination'), value: officialDestination, inline: true },
         { name: emojiLabel('MOD_STAFF', 'Uses'), value: officialUses, inline: true },
         { name: emojiLabel('INVITE_UNLIMITED', 'Link Policy'), value: 'Never expires · Unlimited uses', inline: true },
@@ -130,7 +130,7 @@ function publicView(interaction) {
       .setFooter({ text: 'Goliath Invites · Public Panel' }).setTimestamp()],
     components: [
       row(new ChannelSelectMenuBuilder().setCustomId('invites:panel-channel').setPlaceholder(emojiLabel('WELCOME_LOCATION', 'Select panel channel')).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)),
-      row(new StringSelectMenuBuilder().setCustomId('invites:panel-limit').setPlaceholder(`🏆 Leaderboard: Top ${config.leaderboardLimit}`).addOptions([5, 10, 15, 20, 25].map((value) => ({ label: `Top ${value}`, value: String(value) })))),
+      row(new StringSelectMenuBuilder().setCustomId('invites:panel-limit').setPlaceholder(`${EMOJIS.ROLE_TROPHY} Leaderboard: Top ${config.leaderboardLimit}`).addOptions([5, 10, 15, 20, 25].map((value) => ({ label: `Top ${value}`, value: String(value) })))),
       row(button('invites:panel-deploy', deployed ? emojiLabel('REFRESH', 'Update Panel') : emojiLabel('WELCOME_CHANNEL', 'Publish Panel'), ButtonStyle.Success, !ready),
         button('invites:panel-embed-modal', emojiLabel('EDIT', 'Edit Panel'), ButtonStyle.Secondary),
         button('invites:panel-preview', emojiLabel('WELCOME_PREVIEW', 'Preview Panel'), ButtonStyle.Secondary, !official.code),
@@ -281,7 +281,7 @@ function buildPublicPayload(guildId, sourceSection = null) {
   if (!url) throw new Error('Create the official invite before sending the public panel.');
   const entries = invites.leaderboard(guildId, panel.leaderboardLimit);
   const lines = entries.length
-    ? entries.map((entry, index) => `${['🥇', '🥈', '🥉'][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** referral${entry.score === 1 ? '' : 's'}`).join('\n')
+    ? entries.map((entry, index) => `${[EMOJIS.ROLE_GOLD_MEDAL, EMOJIS.SCHEDULE_SILVER, EMOJIS.SCHEDULE_BRONZE][index] || `**${index + 1}.**`} <@${entry.inviterId}> — **${entry.score}** referral${entry.score === 1 ? '' : 's'}`).join('\n')
     : 'No referrals yet — be the first on the board!';
   // Saved panels may contain a legacy invisible spacer at the end of the introduction.
   const description = panel.description.replace(/[\\s\\u200B]+$/gu, '');
@@ -291,7 +291,7 @@ function buildPublicPayload(guildId, sourceSection = null) {
       .addFields(
         { name: emojiLabel('AUTOMOD_LINKS', 'Official Server Invite'), value: `**[Join the community](${url})** · ${url}\n​`, inline: false },
         { name: emojiLabel('WELCOME_EMBED', 'Your Personal Invite'), value: memberEnabled ? 'Select **My Invite Link** to get your own referral link, share it with friends and climb the rankings. Use **My Stats** to track your progress.\n​' : 'Personal invite creation is currently paused. Your stats and the leaderboard remain available.\n​', inline: false },
-        { name: `🏆 Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
+        { name: `${EMOJIS.ROLE_TROPHY} Referral Leaderboard · Top ${panel.leaderboardLimit}`, value: lines, inline: false },
       )
       .setFooter({ text: panel.footer }).setTimestamp()],
     components: [row(
