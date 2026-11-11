@@ -61,7 +61,7 @@ function discordTimestamp(value, style = 'F') {
 }
 
 function voteSummary(suggestion) {
-  return `👍 **${suggestion.upVotes.length}** support   ·   👎 **${suggestion.downVotes.length}** not for me`;
+  return `${EMOJIS.SUGGESTIONS_UP} **${suggestion.upVotes.length}** support   ·   👎 **${suggestion.downVotes.length}** not for me`;
 }
 
 function publicSuggestionAuthor(suggestion) {
@@ -177,8 +177,8 @@ function buildSuggestionEmbed(guild, suggestion, section) { return buildSuggesti
 function buildSuggestionRows(suggestion, section, enabled = true) {
   if (!enabled || suggestion.status !== 'pending' || suggestion.votePaused || section.voting === false) return [];
   return [row(
-    button(`suggestions:vote:${suggestion.suggestionId}:up`, `👍 Support · ${suggestion.upVotes.length}`, ButtonStyle.Secondary),
-    button(`suggestions:vote:${suggestion.suggestionId}:down`, `👎 Not for me · ${suggestion.downVotes.length}`, ButtonStyle.Secondary),
+    button(`suggestions:vote:${suggestion.suggestionId}:up`, `${EMOJIS.SUGGESTIONS_UP} Support · ${suggestion.upVotes.length}`, ButtonStyle.Secondary),
+    button(`suggestions:vote:${suggestion.suggestionId}:down`, `${EMOJIS.SUGGESTIONS_DOWN} Not for me · ${suggestion.downVotes.length}`, ButtonStyle.Secondary),
   )];
 }
 
@@ -242,7 +242,7 @@ function buildAuditLogEmbed(guild, suggestion, event = {}) {
 }
 
 function defaultSubmitPanelEmbed(section, enabled) {
-  const privacyNote = section.anonymous === true ? '\n\n🔒 **Anonymous suggestions are on.** Your name is hidden from the public suggestion card. The management team can still identify submissions for moderation and follow-up.' : '';
+  const privacyNote = section.anonymous === true ? `\n\n${EMOJIS.LOCKDOWN} **Anonymous suggestions are on.** Your name is hidden from the public suggestion card. The management team can still identify submissions for moderation and follow-up.' : '';
   const description = enabled
     ? `Got an idea that could make the server better? Give it a short name, explain the idea, and share it with the community.\n\nYou can open **My Suggestions** at any time to follow its progress.${privacyNote}`
     : 'Suggestions are paused right now. You can still open **My Suggestions** to view ideas you have already shared.';
@@ -290,7 +290,7 @@ function buildMySuggestionsPayload(guildId, userId, page = 0) {
   return {
     embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'My Suggestions')).setDescription([
       'Follow the progress of ideas you have shared.', '',
-      `${EMOJIS.USER_SUGGESTIONS} Open: **${counts.pending}** · 💬 Discussing: **${counts.discussing}** · ${EMOJIS.SUCCESS} Approved: **${counts.approved}**`,
+      `${EMOJIS.USER_SUGGESTIONS} Open: **${counts.pending}** · ${EMOJIS.USER_FEEDBACK} Discussing: **${counts.discussing}** · ${EMOJIS.SUCCESS} Approved: **${counts.approved}**`,
       `${EMOJIS.DEPLOY} Implemented: **${counts.implemented}** · ${EMOJIS.ERROR} Declined: **${counts.denied}**`, '', ...lines, '',
       `Page **${safePage + 1} of ${totalPages}** · **${records.length}** total`,
     ].join('\n')).setFooter({ text: 'Only you can see this.' }).setTimestamp()],
