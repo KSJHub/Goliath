@@ -433,8 +433,13 @@ async function sendLatestGameUpdate(guild, appId) {
     appId = providers.steamAppId(appId);
     const current = store.getGameUpdates(guild.id);
     const subscription = current.subscriptions[appId];
+    const existing = subscription.pending.find(entry => entry.item.id === item.id);
+    if (existing) {
+      // Never replace a partially delivered multi-route entry: that would
+      // discard completed channel receipts and could duplicate announcements.
+      throw new Error('This update already has queued or unresolved destination deliveries. Use Check now or Retry held.');
+    }
     if (current.history.some(record => record.appId === appId && record.itemId === item.id && ['delivered', 'recovered'].includes(record.status))) return { alreadyDelivered: true };
-    if (current.subscriptions[appId].pending.some(entry => entry.item.id === item.id && entry.status !== 'pending')) throw new Error('This update has an unresolved delivery. Inspect the channel and use Retry held.');
     updateSubscriptionState(guild.id, appId, subscription => ({ ...subscription, pending: [{ item, status: 'pending', suppressMention: true }, ...subscription.pending.filter(entry => entry.item.id !== item.id)],
       seenIds: [...new Set([item.id, ...subscription.seenIds])].slice(0, 500) }));
     return flushGameUpdates(guild, appId, true, new Set([item.id]));
