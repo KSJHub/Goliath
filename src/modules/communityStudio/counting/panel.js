@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   ActionRowBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType,
@@ -101,14 +101,14 @@ function buildRulesScreen(guild) {
     .setDescription([
       'Set the game rules and choose how Goliath handles Counting messages.',
       '',
-      '**🎮 Configure Game**',
-      emojiLabel('USER', '**Turns:** ') + formatTurnLimit(section.maxConsecutivePerMember) + '   •   💀 **Game Over:** ' + formatFailureLimit(section.failureLimit),
-      emojiLabel('USER_SUGGESTIONS', '**Hints:** ') + formatHintThreshold(section.answerAfterFailures) + '   •   🎯 **Milestones:** ' + (section.milestoneAnnouncements ? 'Every ' + section.milestoneInterval : 'Off'),
+      emojiLabel('COMMUNITY_GAME', '**Configure Game**'),
+      emojiLabel('USER', '**Turns:** ') + formatTurnLimit(section.maxConsecutivePerMember) + `   •   ${EMOJIS.COMMUNITY_GAME_OVER} **Game Over:** ` + formatFailureLimit(section.failureLimit),
+      emojiLabel('USER_SUGGESTIONS', '**Hints:** ') + formatHintThreshold(section.answerAfterFailures) + `   •   ${EMOJIS.COUNTING_MILESTONE} **Milestones:** ` + (section.milestoneAnnouncements ? 'Every ' + section.milestoneInterval : 'Off'),
       '',
-      '**⏱️ Reply Timing:** ' + formatCleanup(section.responseCleanupSeconds),
+      emojiLabel('AUTOMOD_LIMITS', '**Reply Timing:** ') + formatCleanup(section.responseCleanupSeconds),
       '',
-      '**🔢 Numbers Only:** ' + (section.numbersOnly ? 'On' : 'Off') + '   •   **🗑️ Wrong Counts:** ' + (section.deleteIncorrect ? 'Delete' : 'Keep'),
-      '**😂 Banter:** ' + (section.funnyResponses ? 'On' : 'Off'),
+      emojiLabel('COUNTING_NUMBERS', '**Numbers Only:** ') + (section.numbersOnly ? 'On' : 'Off') + `   •   **${EMOJIS.DELETE} Wrong Counts:** ` + (section.deleteIncorrect ? 'Delete' : 'Keep'),
+      emojiLabel('COMMUNITY_LAUGH', '**Banter:** ') + (section.funnyResponses ? 'On' : 'Off'),
       '',
       '**Preset:** ' + (counting.rulesAreDefault(section) ? 'Goliath Defaults' : 'Custom'),
     ].join('\n')));
@@ -135,13 +135,13 @@ function buildSettingsScreen(guild) {
       '**Module Controls**',
       'Manage the Counting module without changing the current game from the main panel.',
       '',
-      '**⏸️ Disable Counting**',
+      emojiLabel('USER_PAUSE', '**Disable Counting**'),
       'Pauses Counting in this server. Your channel, rules, current count and record are kept.',
       '',
-      '**🔄 Defaults**',
+      emojiLabel('REFRESH', '**Defaults**'),
       'Restores Goliath\'s recommended game rules. The current count, record, channel and Player Panel are not reset.',
       '',
-      '**🩺 Health**',
+      emojiLabel('WELCOME_DIAGNOSTICS', '**Health**'),
       'Checks the Counting setup, channel access and configuration for problems.',
       '',
       '**Status:** ' + (enabled ? emojiLabel('ENABLED', 'Running') : emojiLabel('INACTIVE', 'Disabled')) + '   •   **Channel:** ' + (section.channelId ? '<#' + section.channelId + '>' : 'Not configured'),
