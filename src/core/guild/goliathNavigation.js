@@ -169,6 +169,7 @@ const EMOJIS = Object.freeze({
   COMMUNITY_GAME: '🎮',
   COMMUNITY_LAUGH: '😂',
   COMMUNITY_GAME_OVER: '💀',
+  COUNTING_MILESTONE: '🎯',
   GIVEAWAY_TICKET: '🎟️',
   INVITE_GLOBE: '🌍',
   INVITE_SPARKLES: '✨',
