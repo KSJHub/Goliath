@@ -208,7 +208,7 @@ function buildHealthPanel(interaction) {
   const criticalPermissions = [PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.ViewAuditLog];
   const permissionProblems = criticalPermissions.filter((flag) => !me?.permissions?.has(flag)).length;
   const degraded = antiNukeConfig.enabled === false || automod.enabled === false || failures > 0 || resourceProblems.length > 0 || permissionProblems > 0;
-  const embed = base(interaction, '🩺 Security Health', '**Live security runtime, permission and configuration diagnostics.**', degraded ? 0xFEE75C : 0x57F287)
+  const embed = base(interaction, `${EMOJIS.WELCOME_DIAGNOSTICS} Security Health`, '**Live security runtime, permission and configuration diagnostics.**', degraded ? 0xFEE75C : 0x57F287)
     .addFields(
       { name: 'Overall', value: degraded ? `${EMOJIS.SEVERITY_HIGH} Attention required` : `${EMOJIS.ENABLED} Operational`, inline: true },
       { name: 'Recorded Incidents', value: `**${incidents.length}**`, inline: true },
@@ -233,7 +233,7 @@ function buildRecoveryPanel(interaction) {
   const active = [lockdown.active, emergency.invites.active, emergency.roles.active].filter(Boolean).length;
   const failures = lockdown.failedChannels || [];
   const failedPreview = failures.slice(0, 5).map((entry) => `• <#${entry.channelId || entry.id || 'unknown'}> — ${String(entry.error || entry.reason || 'restore failed').slice(0, 100)}`).join('\n');
-  const embed = base(interaction, '🧰 Recovery Controls', '**Recovery readiness, snapshots and failed restoration state.**', active || failures.length ? 0xFEE75C : 0x57F287)
+  const embed = base(interaction, `${EMOJIS.TOOLS} Recovery Controls`, '**Recovery readiness, snapshots and failed restoration state.**', active || failures.length ? 0xFEE75C : 0x57F287)
     .addFields(
       { name: 'Active Restrictions', value: `**${active}**`, inline: true },
       { name: 'Restore Failures', value: `**${failures.length}**`, inline: true },
