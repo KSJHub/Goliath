@@ -461,14 +461,18 @@ async function retryHeldGameUpdates(guild, appId) {
     const subscription = store.getGameUpdates(guild.id).subscriptions[appId];
     if (!subscription) throw new Error('Game subscription no longer exists.');
     const routes = store.effectiveUpdateDestinations(subscription).filter(route => route.enabled);
-    // Inspect every channel first. If any history fetch fails, preserve every
-    // held record without changing the retry state.
+    const heldEntries = subscription.pending.filter(entry => entry.status === 'ambiguous' || entry.status === 'dispatching');
+    // Only inspect channels with uncertain deliveries. A healthy unrelated
+    // destination must not block recovery because its history is unavailable.
+    // Finish all required history reads before mutating any held state.
+    const heldChannelIds = new Set(heldEntries.flatMap(entry => routes
+      .filter(route => ['ambiguous', 'dispatching'].includes(routeStatus(entry, route.channelId)))
+      .map(route => route.channelId)));
     const recentByChannel = new Map();
-    for (const route of routes) {
+    for (const route of routes.filter(route => heldChannelIds.has(route.channelId))) {
       const channel = await validateDestination(guild, { ...subscription, ...route, alerts: false });
       recentByChannel.set(route.channelId, await channel.messages.fetch({ limit: 100 }));
     }
-    const heldEntries = subscription.pending.filter(entry => entry.status === 'ambiguous' || entry.status === 'dispatching');
     const retryIds = new Set();
     let recovered = 0;
     for (const entry of heldEntries) {
