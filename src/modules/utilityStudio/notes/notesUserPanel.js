@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
@@ -56,7 +56,7 @@ function buildPanel(interaction) {
     embeds: [embed],
     components: [new ActionRowBuilder().addComponents(
       button('user:home', 'Back', ButtonStyle.Secondary, '⬅️'),
-      button('user:home', 'User Panel', ButtonStyle.Secondary, '🏠'),
+      button('user:home', 'User Panel', ButtonStyle.Secondary, EMOJIS.USER_HOME),
     )],
   };
 }
