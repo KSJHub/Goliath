@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../ui/emojis');
 
 const {
   ActionRowBuilder,
@@ -101,7 +101,7 @@ async function handleRestoreBackupInteraction(interaction) {
     const backups = listServerBackups(interaction.guild.id).map(normalizeBackupId).filter(Boolean);
     await interaction.reply({
       content: backups.length
-        ? `📦 **Backups:**\n${backups.slice(0, 10).map((value) => `\`${value}\``).join('\n')}`
+        ? `${EMOJIS.BULK} **Backups:**\n${backups.slice(0, 10).map((value) => `\`${value}\``).join('\n')}`
         : emojiLabel('WELCOME_PRESET', 'No backups found.'),
       flags: MessageFlags.Ephemeral,
     });
@@ -114,7 +114,7 @@ async function handleRestoreBackupInteraction(interaction) {
     const validation = backup ? validateServerBackup(backup, { guildId: interaction.guild.id }) : null;
     await interaction.reply({
       content: backup
-        ? `🔍 **Latest Backup**\nID: \`${latest}\`\nValid: ${validation?.valid ? 'YES ✅' : 'NO ❌'}`
+        ? `${EMOJIS.SEARCH} **Latest Backup**\nID: \`${latest}\`\nValid: ${validation?.valid ? `YES ${EMOJIS.SUCCESS}` : `NO ${EMOJIS.ERROR}`}`
         : emojiLabel('SEARCH', 'No backups found.'),
       flags: MessageFlags.Ephemeral,
     });
@@ -129,7 +129,7 @@ async function handleRestoreBackupInteraction(interaction) {
       return true;
     }
     await interaction.reply({
-      content: `💾 Backup: ${latest}`,
+      content: `${EMOJIS.PRESETS} Backup: ${latest}`,
       files: [{ attachment: Buffer.from(JSON.stringify(backup, null, 2)), name: `${latest}.json` }],
       flags: MessageFlags.Ephemeral,
     });
