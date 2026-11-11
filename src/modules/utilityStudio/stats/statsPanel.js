@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -25,13 +25,13 @@ const BULK_LIMIT = 25;
 const bulkSelections = new Map();
 
 const TYPES = Object.freeze({
-  channels: ['📁', 'Channels'], countdown: ['⏳', 'Countdown / Timer'], datetime: ['📅', 'Date & Time'],
-  members: ['👥', 'Members'], status: ['🟢', 'Members with Status'], role: ['🎭', 'Members in Role'],
-  roles: ['🏷️', 'Roles'], voice: ['🔊', 'Members in Voice'], messages: ['💬', 'Message Count'],
-  voiceMinutes: ['🎙️', 'Voice Minutes'], joins: ['📥', 'Member Joins'], leaves: ['📤', 'Member Leaves'],
-  boosts: ['🚀', 'Server Boosts'], emojis: ['😀', 'Emojis'],
+  channels: [EMOJIS.MOD_CASE_FOLDER, 'Channels'], countdown: [EMOJIS.STATS_TIMER, 'Countdown / Timer'], datetime: [EMOJIS.STATS_DATE, 'Date & Time'],
+  members: [EMOJIS.ROLE_MEMBERS, 'Members'], status: [EMOJIS.ACTIVE, 'Members with Status'], role: [EMOJIS.USER_ROLES, 'Members in Role'],
+  roles: [EMOJIS.ROLE_TAG, 'Roles'], voice: [EMOJIS.USER_TEMP_VOICE, 'Members in Voice'], messages: [EMOJIS.USER_FEEDBACK, 'Message Count'],
+  voiceMinutes: [EMOJIS.STATS_VOICE_MINUTES, 'Voice Minutes'], joins: [EMOJIS.STATS_JOINS, 'Member Joins'], leaves: [EMOJIS.STATS_LEAVES, 'Member Leaves'],
+  boosts: [EMOJIS.DEPLOY, 'Server Boosts'], emojis: [EMOJIS.AUTOMOD_EMOJI, 'Emojis'],
 });
-const STATUSES = Object.freeze({ online: ['🟢', 'Online'], idle: ['🌙', 'Idle'], dnd: ['⛔', 'Do Not Disturb'], offline: ['⚫', 'Offline'] });
+const STATUSES = Object.freeze({ online: [EMOJIS.ACTIVE, 'Online'], idle: [EMOJIS.STATS_IDLE, 'Idle'], dnd: [EMOJIS.STATS_DND, 'Do Not Disturb'], offline: [EMOJIS.RULE_INACTIVE, 'Offline'] });
 
 const row = (...items) => new ActionRowBuilder().addComponents(...items.filter(Boolean));
 const button = (id, label, style = ButtonStyle.Secondary, disabled = false) => navigationButton(id, label, style, disabled);
@@ -69,11 +69,11 @@ function generatedName(segments) { return segments.length > 1 ? 'Combined Counte
 function generatedTemplate(guild, segments) {
   return segments.map((segment, index) => {
     const p = `{${index + 1}}`;
-    if (segment.type === 'datetime') return `📅 ${p}`;
+    if (segment.type === 'datetime') return `${EMOJIS.STATS_DATE} ${p}`;
     if (segment.type === 'countdown') return `⏳ ${p}`;
-    if (segment.type === 'status') { const status = segment.options?.statuses?.[0]; const meta = STATUSES[status] || ['🟢', 'Status']; return `${meta[0]} ${meta[1]}: ${p}`; }
-    if (segment.type === 'role') { const role = guild.roles.cache.get(segment.options?.roleIds?.[0]); return `🎭 ${role?.name || 'Role'}: ${p}`; }
-    const meta = TYPES[segment.type] || ['📊', 'Counter']; return `${meta[0]} ${meta[1]}: ${p}`;
+    if (segment.type === 'status') { const status = segment.options?.statuses?.[0]; const meta = STATUSES[status] || [EMOJIS.ACTIVE, 'Status']; return `${meta[0]} ${meta[1]}: ${p}`; }
+    if (segment.type === 'role') { const role = guild.roles.cache.get(segment.options?.roleIds?.[0]); return `${EMOJIS.USER_ROLES} ${role?.name || 'Role'}: ${p}`; }
+    const meta = TYPES[segment.type] || [EMOJIS.STATS_CHART, 'Counter']; return `${meta[0]} ${meta[1]}: ${p}`;
   }).join(' • ').slice(0, 100);
 }
 function category(guild) {
@@ -84,10 +84,10 @@ function category(guild) {
 }
 function summary(all) {
   if (!all.length) return '> No counters have been created yet.';
-  return all.slice(0, 12).map((item) => `${item.enabled ? '🟢' : '⚫'} ${item.channelType === 'text' ? '#️⃣' : '🔊'} **${item.name || 'Counter'}**${item.channelId ? ` — <#${item.channelId}>` : ''}`).join('\n');
+  return all.slice(0, 12).map((item) => `${item.enabled ? EMOJIS.ACTIVE : EMOJIS.RULE_INACTIVE} ${item.channelType === 'text' ? EMOJIS.STATS_TEXT_CHANNEL : EMOJIS.USER_TEMP_VOICE} **${item.name || 'Counter'}**${item.channelId ? ` — <#${item.channelId}>` : ''}`).join('\n');
 }
 function valuesText(guild, item) {
-  return (item.segments || []).map((segment, index) => `**${index + 1}.** ${(TYPES[segment.type] || ['📊', segment.type]).join(' ')}`).join('\n') || 'None';
+  return (item.segments || []).map((segment, index) => `**${index + 1}.** ${(TYPES[segment.type] || [EMOJIS.STATS_CHART, segment.type]).join(' ')}`).join('\n') || 'None';
 }
 function updateConfig(guild, patch) {
   return stats.applyRuntimeConfig(guild, patch, guild);
@@ -106,10 +106,10 @@ function setupPanel(guild, who = 'Management', notice = '') {
 }
 function managerPanel(guild, who = 'Management', notice = null) {
   const all = docks(guild.id); const cat = category(guild); const components = [];
-  if (all.length) components.push(row(select('admin:stats:manage', 'Choose a counter to manage…', all.map((item) => ({ label: String(item.name || 'Counter').slice(0, 100), value: item.id, emoji: item.channelType === 'text' ? '#️⃣' : '🔊', description: `${item.enabled ? 'Active' : 'Off'} · ${(item.segments || []).length} value${(item.segments || []).length === 1 ? '' : 's'}` })))));
+  if (all.length) components.push(row(select('admin:stats:manage', 'Choose a counter to manage…', all.map((item) => ({ label: String(item.name || 'Counter').slice(0, 100), value: item.id, emoji: item.channelType === 'text' ? EMOJIS.STATS_TEXT_CHANNEL : EMOJIS.USER_TEMP_VOICE, description: `${item.enabled ? 'Active' : 'Off'} · ${(item.segments || []).length} value${(item.segments || []).length === 1 ? '' : 's'}` })))));
   components.push(row(button('admin:stats:bulk', emojiLabel('TOOLS', 'Bulk Manage'), ButtonStyle.Primary, !all.length), button('admin:stats:category', emojiLabel('MOD_CASE_FOLDER', 'Category'), ButtonStyle.Secondary, !cat && !all.length)));
   components.push(row(button('admin:stats', emojiLabel('BACK', 'Back')), button('admin:stats:refresh', emojiLabel('REFRESH', 'Refresh'), ButtonStyle.Secondary, !all.length), button('admin:stats:settings', emojiLabel('MODERATION_DASHBOARD', 'Settings'))));
-  const embed = footer(new EmbedBuilder().setColor(notice?.error ? DANGER : COLOR).setTitle(emojiLabel('INCIDENT_AUDIT', 'Server Counters · Manage')).setDescription(all.length ? 'View and manage your Server Counters, refresh their values or make changes to several counters at once.' : 'No counters have been created yet. Go back to **Setup** to create your first counter.').addFields({ name: 'Category', value: cat ? `📁 **${cat.name}**` : '`Not created`', inline: true }, { name: 'Counters', value: `\`${all.length}\` saved · \`${all.filter((x) => x.enabled).length}\` active`, inline: true }, { name: 'Saved Counters', value: summary(all).slice(0, 1024) }), who);
+  const embed = footer(new EmbedBuilder().setColor(notice?.error ? DANGER : COLOR).setTitle(emojiLabel('INCIDENT_AUDIT', 'Server Counters · Manage')).setDescription(all.length ? 'View and manage your Server Counters, refresh their values or make changes to several counters at once.' : 'No counters have been created yet. Go back to **Setup** to create your first counter.').addFields({ name: 'Category', value: cat ? `${EMOJIS.MOD_CASE_FOLDER} **${cat.name}**` : '`Not created`', inline: true }, { name: 'Counters', value: `\`${all.length}\` saved · \`${all.filter((x) => x.enabled).length}\` active`, inline: true }, { name: 'Saved Counters', value: summary(all).slice(0, 1024) }), who);
   if (notice?.text) embed.addFields({ name: notice.error ? emojiLabel('WARNING', 'Problem') : emojiLabel('HEALTHY', 'Done'), value: notice.text.slice(0, 1024) });
   return { embeds: [embed], components };
 }
@@ -131,7 +131,7 @@ function categoryPanel(guild, who = 'Management', notice = '') {
 }
 function bulkPanel(i, who = 'Management', notice = null) {
   const all = docks(i.guild.id); const key = `${i.guild.id}:${i.user.id}`; const selected = new Set(bulkSelections.get(key) || []);
-  const options = all.slice(0, BULK_LIMIT).map((x) => ({ label: String(x.name || 'Counter').slice(0, 100), value: x.id, emoji: x.channelType === 'text' ? '#️⃣' : '🔊', default: selected.has(x.id) }));
+  const options = all.slice(0, BULK_LIMIT).map((x) => ({ label: String(x.name || 'Counter').slice(0, 100), value: x.id, emoji: x.channelType === 'text' ? EMOJIS.STATS_TEXT_CHANNEL : EMOJIS.USER_TEMP_VOICE, default: selected.has(x.id) }));
   const components = options.length ? [row(select('admin:stats:bulk:select', 'Select counters to manage…', options, 0, options.length)), row(button('admin:stats:bulk:delete', emojiLabel('DELETE', 'Delete Selected'), ButtonStyle.Danger, !selected.size), button('admin:stats:bulk:disable', emojiLabel('USER_PAUSE', 'Disable'), ButtonStyle.Secondary, !selected.size), button('admin:stats:bulk:enable', emojiLabel('USER_PLAY', 'Enable'), ButtonStyle.Success, !selected.size)), row(button('admin:stats:bulk:voice', emojiLabel('USER_TEMP_VOICE', 'Make Voice'), ButtonStyle.Primary, !selected.size), button('admin:stats:bulk:text', '#️⃣ Make Text', ButtonStyle.Primary, !selected.size))] : [];
   components.push(nav('admin:stats:manager'));
   const embed = footer(new EmbedBuilder().setColor(notice?.error ? DANGER : COLOR).setTitle(emojiLabel('TOOLS', 'Server Counters · Bulk Manage')).setDescription(`Select up to **${BULK_LIMIT} counters** and apply one action to all of them.\n\n**Selected:** \`${selected.size}\``), who);
