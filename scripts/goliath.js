@@ -5100,6 +5100,12 @@ async function gameUpdatesAudit() {
   assert.equal(multi.pending.length, 1, 'Failed secondary route must retain pending delivery.');
   assert.equal(multi.pending[0].routes[channelId].status, 'delivered');
   assert.equal(multi.pending[0].routes[secondId].status, 'ambiguous');
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: false });
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].routes[channelId].status, 'delivered',
+    'Pausing must preserve the already delivered route receipt.');
+  await monitor.saveGameSubscription(guild, { appId: '730', enabled: true });
+  assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].routes[secondId].status, 'ambiguous',
+    'Re-enabling must retain unresolved secondary channel state.');
   const partiallyDelivered = JSON.stringify(multi.pending);
   await assert.rejects(monitor.sendLatestGameUpdate(guild, '730'), /queued or unresolved destination deliveries/);
   assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), partiallyDelivered,
