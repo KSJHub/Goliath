@@ -70,7 +70,7 @@ function generatedTemplate(guild, segments) {
   return segments.map((segment, index) => {
     const p = `{${index + 1}}`;
     if (segment.type === 'datetime') return `${EMOJIS.STATS_DATE} ${p}`;
-    if (segment.type === 'countdown') return `⏳ ${p}`;
+    if (segment.type === 'countdown') return `${EMOJIS.STATS_TIMER} ${p}`;
     if (segment.type === 'status') { const status = segment.options?.statuses?.[0]; const meta = STATUSES[status] || [EMOJIS.ACTIVE, 'Status']; return `${meta[0]} ${meta[1]}: ${p}`; }
     if (segment.type === 'role') { const role = guild.roles.cache.get(segment.options?.roleIds?.[0]); return `${EMOJIS.USER_ROLES} ${role?.name || 'Role'}: ${p}`; }
     const meta = TYPES[segment.type] || [EMOJIS.STATS_CHART, 'Counter']; return `${meta[0]} ${meta[1]}: ${p}`;
