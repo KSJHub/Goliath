@@ -18,7 +18,7 @@ const P = 'social:';
 const PAGE_SIZE = 22;
 const PLATFORMS = ['facebook', 'instagram', 'kick', 'tiktok', 'twitch', 'x', 'youtube'];
 const ALERT_LABEL = { live: 'LIVE', ended: 'Stream Ended', vod: 'VOD', clip: 'Clip', upload: 'Upload', short: 'Short', post: 'Social Post' };
-const ALERT_EMOJI = { live: '🔴', ended: '⚫', vod: '🎞️', clip: '🎬', upload: '📺', short: '📱', post: '📝' };
+const ALERT_EMOJI = { live: EMOJIS.OWNER_RED, ended: EMOJIS.RULE_INACTIVE, vod: EMOJIS.SOCIAL_ALERT_VOD, clip: EMOJIS.SOCIAL_ALERT_CLIP, upload: EMOJIS.SOCIAL_ALERT_UPLOAD, short: EMOJIS.SOCIAL_ALERT_SHORT, post: EMOJIS.NOTE };
 const ALERT_HELP = {
   live: 'Controls the stream start alert.',
   ended: 'Controls the stream finished update.',
@@ -29,7 +29,7 @@ const ALERT_HELP = {
   post: 'Controls normal social feed posts, not VOD/replay alerts.',
 };
 const LABEL = { twitch: 'Twitch', youtube: 'YouTube', tiktok: 'TikTok', kick: 'Kick', facebook: 'Facebook', instagram: 'Instagram', x: 'X' };
-const ICON = { twitch: '🟣', youtube: '🔴', tiktok: '⚫', kick: '🟢', facebook: '🔵', instagram: '🟠', x: '⚪' };
+const ICON = { twitch: EMOJIS.SOCIAL_PLATFORM_TWITCH, youtube: EMOJIS.SOCIAL_PLATFORM_YOUTUBE, tiktok: EMOJIS.SOCIAL_PLATFORM_TIKTOK, kick: EMOJIS.ACTIVE, facebook: EMOJIS.SOCIAL_PLATFORM_FACEBOOK, instagram: EMOJIS.SOCIAL_PLATFORM_INSTAGRAM, x: EMOJIS.INACTIVE };
 const PLATFORM_COLOR = { twitch: 0x9146FF, youtube: 0xFF0000, tiktok: 0x2F3136, kick: 0x53FC18, facebook: 0x1877F2, instagram: 0xE1306C, x: 0xFFFFFF };
 const NAV = new Set([
   'creators',
@@ -242,7 +242,7 @@ function platformAvailabilityLines() {
   const available = {};
   for (const type of ALERT_TYPES) available[type] = [];
   for (const platform of PLATFORMS) for (const type of supportedAlerts(platform)) available[type]?.push(LABEL[platform] || platform);
-  return ALERT_TYPES.filter((type) => available[type]?.length).map((type) => `${ALERT_EMOJI[type] || '🔔'} **${ALERT_LABEL[type]}:** ${available[type].join(', ')}`);
+  return ALERT_TYPES.filter((type) => available[type]?.length).map((type) => `${ALERT_EMOJI[type] || EMOJIS.SOCIAL_ALERT_BELL} **${ALERT_LABEL[type]}:** ${available[type].join(', ')}`);
 }
 function platformAvailabilityText(type) {
   const platforms = PLATFORMS.filter((platform) => supportedAlerts(platform).includes(type)).map((platform) => LABEL[platform] || platform);
@@ -786,7 +786,7 @@ function buildTemplatePanel(i, config, type) {
     'Layout, media, links, colour, footer and previews stay managed by Goliath.'
   ].join('\n');
   return {
-    embeds: [embed(config, `${ALERT_EMOJI[type] || '🔔'} ${ALERT_LABEL[type] || type} Template`, d, who(i))],
+    embeds: [embed(config, `${ALERT_EMOJI[type] || EMOJIS.SOCIAL_ALERT_BELL} ${ALERT_LABEL[type] || type} Template`, d, who(i))],
     components: [
       row(btn(`${P}template:edit:${type}`, emojiLabel('NOTE', 'Edit Template'), ButtonStyle.Primary), btn(`${P}template:reset:${type}`, emojiLabel('REFRESH', 'Reset to Default'), ButtonStyle.Secondary, !changed)),
       goliathNavigation(
@@ -828,7 +828,7 @@ function buildSectionPanel(i, name) {
     return buildAccountManagePanel(i, config, creator);
   }
 if (name === 'templates') {
-    const templateButtons = ALERT_TYPES.map((t) => btn(`${P}template:${t}`, `${ALERT_EMOJI[t] || '🔔'} ${ALERT_LABEL[t]}`, ButtonStyle.Primary));
+    const templateButtons = ALERT_TYPES.map((t) => btn(`${P}template:${t}`, `${ALERT_EMOJI[t] || EMOJIS.SOCIAL_ALERT_BELL} ${ALERT_LABEL[t]}`, ButtonStyle.Primary));
     const c = [row(...templateButtons.slice(0, 5)), row(...templateButtons.slice(5)), row(
       btn(`${P}main`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
       btn(`${P}settings`, emojiLabel('SETTINGS', 'Settings'), ButtonStyle.Secondary),
@@ -938,7 +938,7 @@ if (name === 'templates') {
       '',
       `**Default:** ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : 'Not configured'}`,
       `**Effective LIVE Route:** ${routeSummary}`,
-      ...ALERT_TYPES.map((alertType) => `${ALERT_EMOJI[alertType] || '🔔'} **${ALERT_LABEL[alertType] || alertType}:** ${config.alertChannels?.[alertType] ? `<#${config.alertChannels[alertType]}>` : 'Uses fallback routing'}`),
+      ...ALERT_TYPES.map((alertType) => `${ALERT_EMOJI[alertType] || EMOJIS.SOCIAL_ALERT_BELL} **${ALERT_LABEL[alertType] || alertType}:** ${config.alertChannels?.[alertType] ? `<#${config.alertChannels[alertType]}>` : 'Uses fallback routing'}`),
       '',
       '**Fallback order:** User → Creator/Account → Platform → Content Type → Default.',
     ].join('\n');
@@ -1092,7 +1092,7 @@ if (name === 'templates') {
       `**Quiet Hours:** ${quietLabel}`,
       `**Failed Delivery Retry:** ${settings.retryDeliveries === false ? 'Off' : 'On'}`,
       ...(activeLive ? [`${EMOJIS.OWNER_RED} **Active LIVE Sessions:** ${activeLive}`] : []),
-      ...(heldItems ? [`🌙 **Held by Quiet Hours:** ${heldItems}`] : []),
+      ...(heldItems ? [`${EMOJIS.SOCIAL_QUIET_HOURS} **Held by Quiet Hours:** ${heldItems}`] : []),
       ...(pendingRetries ? [`${EMOJIS.REFRESH} **Pending Retries:** ${pendingRetries}`] : []),
       ...(queued ? [`${EMOJIS.SUGGESTION_INBOX} **Queued Work:** ${queued}`] : []),
       `**Last Provider Check:** ${ts(lastCheckMs ? new Date(lastCheckMs).toISOString() : null)}`,
@@ -1107,7 +1107,7 @@ if (name === 'templates') {
         row(
           btn(`${P}channels`, emojiLabel('RISK', 'Routing'), ButtonStyle.Secondary),
           btn(`${P}automation:interval`, `⏱️ Interval: ${intervalLabel}`, ButtonStyle.Secondary),
-          btn(`${P}automation:quiet`, `🌙 Quiet Hours: ${quiet.enabled === true ? 'ON' : 'OFF'}`, quiet.enabled === true ? ButtonStyle.Success : ButtonStyle.Secondary),
+          btn(`${P}automation:quiet`, `${EMOJIS.SOCIAL_QUIET_HOURS} Quiet Hours: ${quiet.enabled === true ? 'ON' : 'OFF'}`, quiet.enabled === true ? ButtonStyle.Success : ButtonStyle.Secondary),
           btn(`${P}automation:retry`, `${EMOJIS.REFRESH} Retry: ${settings.retryDeliveries === false ? 'OFF' : 'ON'}`, settings.retryDeliveries === false ? ButtonStyle.Secondary : ButtonStyle.Success),
         ),
         row(
