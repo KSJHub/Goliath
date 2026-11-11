@@ -836,7 +836,7 @@ let ticketSetupPanelApi;
       'Unknown';
 
     const embed = new EmbedBuilder()
-      .setTitle(`🎫 ${ticketTitle}`)
+      .setTitle(`${EMOJIS.USER_TICKETS} ${ticketTitle}`)
       .setDescription(
         [
           `Ticket opened by <@${user?.id || ticket.creatorId}>.`,
@@ -1189,13 +1189,13 @@ let ticketSetupPanelApi;
 
   const PANEL_TYPE_UI = {
     support: {
-      emoji: '🎟️',
+      emoji: EMOJIS.GIVEAWAY_TICKET,
       name: 'General Support',
       label: 'Create Support',
       title: 'Need Support?',
       description: 'Press the button below to open a private support ticket.',
       buttonLabel: 'Open Support Ticket',
-      buttonEmoji: '🎟️',
+      buttonEmoji: EMOJIS.GIVEAWAY_TICKET,
     },
     appeal: {
       emoji: '⚖️',
@@ -1207,22 +1207,22 @@ let ticketSetupPanelApi;
       buttonEmoji: '⚖️',
     },
     report: {
-      emoji: '🚨',
+      emoji: EMOJIS.AUTOMOD_SUSPICIOUS,
       name: 'Reports',
       label: 'Create Report',
       title: 'Submit a Report',
       description: 'Press the button below to report an issue privately.',
       buttonLabel: 'Open Report Ticket',
-      buttonEmoji: '🚨',
+      buttonEmoji: EMOJIS.AUTOMOD_SUSPICIOUS,
     },
     application: {
-      emoji: '📝',
+      emoji: EMOJIS.NOTE,
       name: 'Applications',
       label: 'Create Application',
       title: 'Submit an Application',
       description: 'Press the button below to open a private application ticket.',
       buttonLabel: 'Open Application Ticket',
-      buttonEmoji: '📝',
+      buttonEmoji: EMOJIS.NOTE,
     },
   };
 
@@ -1257,7 +1257,7 @@ let ticketSetupPanelApi;
     },
     buttonEmoji: {
       label: 'Button Emoji',
-      placeholder: '🎫',
+      placeholder: EMOJIS.USER_TICKETS,
       style: TextInputStyle.Short,
       maxLength: 50,
     },
@@ -1537,10 +1537,10 @@ let ticketSetupPanelApi;
 
   function buildSetupButtons() {
     return new ActionRowBuilder().addComponents(
-      emojiButton('ticket_setup:create_support', 'Create Support', '🎟️', ButtonStyle.Primary),
+      emojiButton('ticket_setup:create_support', 'Create Support', EMOJIS.GIVEAWAY_TICKET, ButtonStyle.Primary),
       emojiButton('ticket_setup:create_appeal', 'Create Appeal', '⚖️'),
-      emojiButton('ticket_setup:create_report', 'Create Report', '🚨'),
-      emojiButton('ticket_setup:create_application', 'Create Application', '📝'),
+      emojiButton('ticket_setup:create_report', 'Create Report', EMOJIS.AUTOMOD_SUSPICIOUS),
+      emojiButton('ticket_setup:create_application', 'Create Application', EMOJIS.NOTE),
       emojiButton('ticket_setup:refresh', 'Refresh', EMOJIS.REFRESH),
     );
   }
@@ -1549,7 +1549,7 @@ let ticketSetupPanelApi;
     const appearance = panel.appearance || {};
 
     return new EmbedBuilder()
-      .setTitle(`🎛️ ${panel.name}`)
+      .setTitle(`${EMOJIS.ADMIN_ROLE_CONTROL} ${panel.name}`)
       .setDescription(
         [
           `**Panel ID:** \`${panel.panelId}\``,
@@ -1559,22 +1559,22 @@ let ticketSetupPanelApi;
 
           '',
           '**Routing**',
-          `📁 Ticket Category: ${
+          `${EMOJIS.MOD_CASE_FOLDER} Ticket Category: ${
             panel.outputCategoryId
               ? `<#${panel.outputCategoryId}>`
               : '`Not set`'
           }`,
-          `📢 Panel Channel: ${
+          `${EMOJIS.WELCOME_CHANNEL} Panel Channel: ${
             panel.deployChannelId
               ? `<#${panel.deployChannelId}>`
               : '`Not set`'
           }`,
-          `📜 Logs Channel: ${
+          `${EMOJIS.CASES} Logs Channel: ${
             panel.logsChannelId
               ? `<#${panel.logsChannelId}>`
               : '`Not set`'
           }`,
-          `📦 Archive Category: ${
+          `${EMOJIS.BULK} Archive Category: ${
             panel.archiveCategoryId
               ? `<#${panel.archiveCategoryId}>`
               : '`Not set`'
@@ -1583,9 +1583,9 @@ let ticketSetupPanelApi;
           '',
           '**Management Summary**',
           `⚙️ Manage Ticket: \`Appearance, limits, cooldowns and roles\``,
-          `🎟️ Ticket Limit: ${formatLimit(getPanelLimit(panel))}`,
+          `${EMOJIS.GIVEAWAY_TICKET} Ticket Limit: ${formatLimit(getPanelLimit(panel))}`,
           `⏱️ Cooldown: ${formatCooldown(getPanelCooldownMs(panel))}`,
-          `🔒 One Active Per Type: \`${
+          `${EMOJIS.LOCKDOWN} One Active Per Type: \`${
             panel.oneActivePerType === false
               ? 'Off'
               : 'On'
@@ -1593,14 +1593,14 @@ let ticketSetupPanelApi;
 
           '',
           '**Roles**',
-          `👥 Staff Roles: ${formatRoleCount(panel.staffRoleIds)}`,
-          `🛡️ Manager Roles: ${formatRoleCount(panel.managerRoleIds)}`,
-          `👁️ Viewer Roles: ${formatRoleCount(panel.viewerRoleIds)}`,
+          `${EMOJIS.ROLE_MEMBERS} Staff Roles: ${formatRoleCount(panel.staffRoleIds)}`,
+          `${EMOJIS.SECURITY} Manager Roles: ${formatRoleCount(panel.managerRoleIds)}`,
+          `${EMOJIS.WELCOME_PREVIEW} Viewer Roles: ${formatRoleCount(panel.viewerRoleIds)}`,
 
           '',
           '**Appearance**',
-          `🎨 Appearance: \`Embed, button, colors and layout\``,
-          `🎨 Embed Title: \`${appearance.title || 'Not set'}\``,
+          `${EMOJIS.DESIGN} Appearance: \`Embed, button, colors and layout\``,
+          `${EMOJIS.DESIGN} Embed Title: \`${appearance.title || 'Not set'}\``,
           `🧾 Embed Description: \`${
             appearance.description
               ? 'Configured'
@@ -1637,14 +1637,14 @@ let ticketSetupPanelApi;
           }\``,
           '',
           '**Ticket Controls**',
-          `🎟️ Ticket Limit: ${formatLimit(getPanelLimit(panel))}`,
+          `${EMOJIS.GIVEAWAY_TICKET} Ticket Limit: ${formatLimit(getPanelLimit(panel))}`,
           `⏱️ Cooldown: ${formatCooldown(getPanelCooldownMs(panel))}`,
-          `🔒 One Active Per Type: \`${panel.oneActivePerType === false ? 'Off' : 'On'}\``,
+          `${EMOJIS.LOCKDOWN} One Active Per Type: \`${panel.oneActivePerType === false ? 'Off' : 'On'}\``,
           '',
           '**Roles**',
-          `👥 Staff Roles: ${formatRoleCount(panel.staffRoleIds)}`,
-          `🛡️ Manager Roles: ${formatRoleCount(panel.managerRoleIds)}`,
-          `👁️ Viewer Roles: ${formatRoleCount(panel.viewerRoleIds)}`,
+          `${EMOJIS.ROLE_MEMBERS} Staff Roles: ${formatRoleCount(panel.staffRoleIds)}`,
+          `${EMOJIS.SECURITY} Manager Roles: ${formatRoleCount(panel.managerRoleIds)}`,
+          `${EMOJIS.WELCOME_PREVIEW} Viewer Roles: ${formatRoleCount(panel.viewerRoleIds)}`,
         ].join('\n')
       )
       .setColor(appearance.color || '#5865F2')
@@ -1660,9 +1660,9 @@ let ticketSetupPanelApi;
           `**Panel ID:** \`${panel.panelId}\``,
           '',
           '**Current Roles**',
-          `👥 Staff Roles: ${formatRoleCount(panel.staffRoleIds)}`,
-          `🛡️ Manager Roles: ${formatRoleCount(panel.managerRoleIds)}`,
-          `👁️ Viewer Roles: ${formatRoleCount(panel.viewerRoleIds)}`,
+          `${EMOJIS.ROLE_MEMBERS} Staff Roles: ${formatRoleCount(panel.staffRoleIds)}`,
+          `${EMOJIS.SECURITY} Manager Roles: ${formatRoleCount(panel.managerRoleIds)}`,
+          `${EMOJIS.WELCOME_PREVIEW} Viewer Roles: ${formatRoleCount(panel.viewerRoleIds)}`,
           '',
           '**Role Access**',
           emojiLabel('MOD_STAFF', 'Staff can claim, update, close, reopen and archive tickets.'),
@@ -1685,7 +1685,7 @@ let ticketSetupPanelApi;
           `**Panel ID:** \`${panel.panelId}\``,
           '',
           '**Current Appearance**',
-          `🎨 Embed Title: \`${appearance.title || 'Not set'}\``,
+          `${EMOJIS.DESIGN} Embed Title: \`${appearance.title || 'Not set'}\``,
           `🧾 Description: \`${appearance.description ? 'Configured' : 'Not set'}\``,
           `🎨 Embed Color: \`${appearance.color || '#5865F2'}\``,
           `🖼️ Image: \`${appearance.imageUrl ? 'Configured' : 'Not set'}\``,
@@ -1858,7 +1858,7 @@ let ticketSetupPanelApi;
               label: 'Footer Text',
               description: 'Change the embed footer text',
               value: 'footerText',
-              emoji: '📝',
+              emoji: EMOJIS.NOTE,
             }
           )
       ),
