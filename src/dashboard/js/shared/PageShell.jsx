@@ -1,5 +1,17 @@
 import React, { memo } from 'react';
 
+/** Shared browser-safe dashboard icon palette; keep glyphs aligned with core EMOJIS. */
+export const DASHBOARD_EMOJIS = Object.freeze({
+  MEMBERS: '👥', ACTIVE: '🟢', INACTIVE: '⚫', ROLES: '🎭', VOICE: '🔊',
+  FOLDER: '📁', ROLE_TAG: '🏷️', DATE: '📅', TIMER: '⏳',
+  MESSAGES: '💬', MICROPHONE: '🎙️', JOIN: '📥', LEAVE: '📤',
+  BOOST: '🚀', EMOJI: '😀', DND: '⛔', IDLE: '🌙',
+  REFRESH: '🔄', TEXT_CHANNEL: '#️⃣', CHART: '📊', HEALTH: '🩺',
+  REPAIR: '🔧', DELETE: '🗑️', SUGGESTIONS: '💡', UPVOTE: '👍',
+  DOWNVOTE: '👎', BIRTHDAY: '🎂',
+});
+
+
 /**
  * Shared dashboard page shell + reusable UI system.
  * Keeps page titles readable while still showing selected guild context.
