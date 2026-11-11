@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -146,7 +146,7 @@ function recordMemberUse(interaction, emoji, context) {
 function buildLauncher() {
   return {
     content: 'Looking for an emoji? Search with `/e find`, or open the full emoji list below.',
-    components: [row(button('user:emojis:browse', 'Browse Emojis', ButtonStyle.Primary, '😀'))],
+    components: [row(button('user:emojis:browse', 'Browse Emojis', ButtonStyle.Primary, EMOJIS.AUTOMOD_EMOJI))],
   };
 }
 
@@ -267,7 +267,7 @@ async function buildMessageConversionPreview(interaction, message) {
       '',
       'Your original message will stay in place. Press **Post Converted** and Goliath will reply to it with the converted version.',
     ].join('\n'))],
-    components: [row(button(`user:emojis:convert-post:${message.channelId}:${message.id}`, 'Post Converted', ButtonStyle.Primary, '😀'))],
+    components: [row(button(`user:emojis:convert-post:${message.channelId}:${message.id}`, 'Post Converted', ButtonStyle.Primary, EMOJIS.AUTOMOD_EMOJI))],
   };
 }
 
