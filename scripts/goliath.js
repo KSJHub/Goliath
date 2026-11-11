@@ -4955,7 +4955,9 @@ async function gameUpdatesAudit() {
   await monitor.configureGameUpdates(guild, { quietStart: clockText(clock), quietEnd: clockText(new Date(clock.getTime() + 60000)) });
   feed = [makeItem(107), makeItem(106), ...feed];
   await monitor.processGameUpdates(guild); assert.equal(sent.length, 4); assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 2);
+  const queuedBeforeManual = store.getGameUpdates(guild.id).subscriptions['730'].pending.map(entry => entry.item.id);
   await monitor.sendLatestGameUpdate(guild, '730'); assert.equal(sent.length, 5); assert.deepEqual(sent[4].allowedMentions.roles, []);
+  assert(queuedBeforeManual.includes('107') && queuedBeforeManual.includes('106'), 'Quiet hours must queue both announcements before manual delivery.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 1, 'Manual send must not flush another queued announcement.');
   await monitor.retryHeldGameUpdates(guild, '730'); assert.equal(sent.length, 5, 'Retry held must not flush unrelated queued announcements.');
   await monitor.configureGameUpdates(guild, { quietStart: null, quietEnd: null }); await monitor.processGameUpdates(guild); assert.equal(sent.length, 6);
