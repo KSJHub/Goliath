@@ -736,7 +736,7 @@ function buildAccountManagePanel(i, config, creator) {
 }
 function variablesDescription() {
   const variables = variablesForModule('socialStudio');
-  const lines = ['**🧩 Available Variables**'];
+  const lines = [`**${EMOJIS.PANELS} Available Variables**`];
   let current = '';
 
   for (const variable of variables) {
@@ -998,7 +998,7 @@ if (name === 'templates') {
         row(
           btn(`${P}settings`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
           btn(`${P}roles:page:prev`, '◀️', ButtonStyle.Secondary, page <= 0),
-          btn(`${P}roles:page:info`, `📄 Roles ${page + 1}/${count}`, ButtonStyle.Secondary, true),
+          btn(`${P}roles:page:info`, `${EMOJIS.DOCUMENT} Roles ${page + 1}/${count}`, ButtonStyle.Secondary, true),
           btn(`${P}roles:page:next`, '▶️', ButtonStyle.Secondary, page >= count - 1),
         ),
       ],
@@ -1094,7 +1094,7 @@ if (name === 'templates') {
       ...(activeLive ? [`${EMOJIS.OWNER_RED} **Active LIVE Sessions:** ${activeLive}`] : []),
       ...(heldItems ? [`🌙 **Held by Quiet Hours:** ${heldItems}`] : []),
       ...(pendingRetries ? [`${EMOJIS.REFRESH} **Pending Retries:** ${pendingRetries}`] : []),
-      ...(queued ? [`📬 **Queued Work:** ${queued}`] : []),
+      ...(queued ? [`${EMOJIS.SUGGESTION_INBOX} **Queued Work:** ${queued}`] : []),
       `**Last Provider Check:** ${ts(lastCheckMs ? new Date(lastCheckMs).toISOString() : null)}`,
       '',
       '**Core Protection**',
@@ -1108,7 +1108,7 @@ if (name === 'templates') {
           btn(`${P}channels`, emojiLabel('RISK', 'Routing'), ButtonStyle.Secondary),
           btn(`${P}automation:interval`, `⏱️ Interval: ${intervalLabel}`, ButtonStyle.Secondary),
           btn(`${P}automation:quiet`, `🌙 Quiet Hours: ${quiet.enabled === true ? 'ON' : 'OFF'}`, quiet.enabled === true ? ButtonStyle.Success : ButtonStyle.Secondary),
-          btn(`${P}automation:retry`, `🔄 Retry: ${settings.retryDeliveries === false ? 'OFF' : 'ON'}`, settings.retryDeliveries === false ? ButtonStyle.Secondary : ButtonStyle.Success),
+          btn(`${P}automation:retry`, `${EMOJIS.REFRESH} Retry: ${settings.retryDeliveries === false ? 'OFF' : 'ON'}`, settings.retryDeliveries === false ? ButtonStyle.Secondary : ButtonStyle.Success),
         ),
         row(
           btn(`${P}account:check`, emojiLabel('SEARCH', 'Run Check'), ButtonStyle.Primary, !monitored),
@@ -1132,9 +1132,9 @@ if (name === 'templates') {
       emojiLabel('EDIT', 'The original LIVE post is retained and silently updated to ENDED/OFFLINE.'),
       emojiLabel('WELCOME_MUTED', 'Refreshes, recovery and ENDED updates never create another LIVE ping.'),
       '',
-      `👥 **Viewer Count:** ${settings.includeViewerCount === false ? 'Off' : 'On'}`,
+      `${EMOJIS.ROLE_MEMBERS} **Viewer Count:** ${settings.includeViewerCount === false ? 'Off' : 'On'}`,
       `⏱️ **Live Duration:** ${settings.includeLiveDuration === false ? 'Off' : 'On'}`,
-      `🔄 **Refresh:** ${refreshLabel}`,
+      `${EMOJIS.REFRESH} **Refresh:** ${refreshLabel}`,
       '',
       'Turning refresh off only stops periodic presentation refreshes. Monitoring and LIVE → ENDED still continue.',
     ].join('\n');
@@ -1144,7 +1144,7 @@ if (name === 'templates') {
         row(
           btn(`${P}automation:viewers`, settings.includeViewerCount === false ? emojiLabel('MOD_STAFF', 'Viewers: OFF') : emojiLabel('MOD_STAFF', 'Viewers: ON'), settings.includeViewerCount === false ? ButtonStyle.Secondary : ButtonStyle.Success),
           btn(`${P}automation:duration`, settings.includeLiveDuration === false ? emojiLabel('AUTOMOD_LIMITS', 'Duration: OFF') : emojiLabel('AUTOMOD_LIMITS', 'Duration: ON'), settings.includeLiveDuration === false ? ButtonStyle.Secondary : ButtonStyle.Success),
-          btn(`${P}automation:liverefreshrate`, `🔄 Refresh: ${refreshLabel}`, refreshEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
+          btn(`${P}automation:liverefreshrate`, `${EMOJIS.REFRESH} Refresh: ${refreshLabel}`, refreshEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
         ),
         row(btn(`${P}settings`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary)),
       ],
@@ -1505,7 +1505,7 @@ async function handleAccountInteraction(i, context) {
     const checkedResults = Array.isArray(result?.results) ? result.results.filter((item) => item?.status !== 'skipped') : [];
     const failures = checkedResults.filter((item) => ['unavailable', 'configuration_required', 'error'].includes(String(item?.status || '').toLowerCase()));
     const live = checkedResults.filter((item) => item?.isLive === true).length;
-    const summary = `🔍 **Provider check complete** — ${checkedResults.length} account${checkedResults.length === 1 ? '' : 's'} checked · ${checkedResults.length - failures.length} successful · ${failures.length} failed${live ? ` · ${live} LIVE` : ''}.`;
+    const summary = `${EMOJIS.SEARCH} **Provider check complete** — ${checkedResults.length} account${checkedResults.length === 1 ? '' : 's'} checked · ${checkedResults.length - failures.length} successful · ${failures.length} failed${live ? ` · ${live} LIVE` : ''}.`;
     await respond(i, buildSectionPanel(i, 'monitoring'));
     await i.followUp({ content: summary, flags: 64 }).catch(() => null);
     return true;
@@ -2158,7 +2158,7 @@ async function handleDiagnosticsInteraction(i, context) {
     if (!channel?.isTextBased?.() || typeof channel.send !== 'function') throw new Error('The resolved Social Studio alert destination is unavailable or not text based.');
     const target = config.notificationMentionMode === 'role' && config.notificationRoleId ? `<@&${config.notificationRoleId}>` : config.notificationMentionMode === 'everyone' ? '@everyone' : config.notificationMentionMode === 'here' ? '@here' : 'No notification ping';
     const message = await channel.send({ embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('TEST_SEND', 'Social Studio Delivery Test')).setDescription(`✅ Test delivery reached this channel successfully.\n\n**Resolved LIVE route:** <#${channel.id}>\n**Route source:** ${resolved.source || 'Unknown'}\n**Configured LIVE notification target:** ${target}\n**Ping safety:** No members were pinged by this test.`).setFooter({ text: 'Goliath Social Studio • Safe Test' }).setTimestamp()], allowedMentions: { parse: [], roles: [] } });
-    const notice = `📨 Test delivered to <#${channel.id}> via **${resolved.source || 'resolved route'}** without pinging members. Message ID: ${message.id}.`;
+    const notice = `${EMOJIS.USER_INVITES} Test delivered to <#${channel.id}> via **${resolved.source || 'resolved route'}** without pinging members. Message ID: ${message.id}.`;
     if (i.deferred || i.replied) await i.followUp({ content: notice, flags: 64 }).catch(() => null);
     else await i.reply({ content: notice, flags: 64 });
     return true;
@@ -2201,9 +2201,9 @@ async function handleDiagnosticsInteraction(i, context) {
       const failed = Boolean(state.lastError || state.lastDeliveryError);
       const status = failed ? emojiLabel('DISABLED', 'Issue') : state.lastCheckedAt ? emojiLabel('ENABLED', 'Checked') : emojiLabel('INACTIVE', 'Not checked');
       const name = account.displayName || account.username || account.accountId || 'Unknown account';
-      return `${status} **${LABEL[platform] || platform || 'Unknown'}** — ${String(name).slice(0, 80)} · ${supported} · Last: ${ts(state.lastCheckedAt)}${state.isLive === true ? ' · 🔴 LIVE' : ''}${state.lastError ? ` · ${String(state.lastError).slice(0, 120)}` : ''}`;
+      return `${status} **${LABEL[platform] || platform || 'Unknown'}** — ${String(name).slice(0, 80)} · ${supported} · Last: ${ts(state.lastCheckedAt)}${state.isLive === true ? ` · ${EMOJIS.OWNER_RED} LIVE` : ''}${state.lastError ? ` · ${String(state.lastError).slice(0, 120)}` : ''}`;
     }) : [emojiLabel('INACTIVE', 'No monitored accounts are available to inspect.')];
-    const content = `🩺 **Social Studio Provider Details**\n\n${lines.join('\n').slice(0, 1850)}`;
+    const content = `${EMOJIS.SOCIAL_HEALTH} **Social Studio Provider Details**\n\n${lines.join('\n').slice(0, 1850)}`;
     if (i.deferred || i.replied) await i.followUp({ content, flags: 64 }).catch(() => null); else await i.reply({ content, flags: 64 });
     return true;
   }
@@ -2605,7 +2605,7 @@ function buildUserLanding(interaction) {
           'My Creator Profile',
           ButtonStyle.Primary,
           false,
-        ).setEmoji('👤'),
+        ).setEmoji(EMOJIS.USER),
       ),
       userNavigation('user:home'),
     ],
@@ -2641,7 +2641,7 @@ function buildUserDenied(interaction, roleIds = []) {
           'Social Studio',
           ButtonStyle.Secondary,
           true,
-        ).setEmoji('👤'),
+        ).setEmoji(EMOJIS.USER),
       ),
       userNavigation(),
     ],
