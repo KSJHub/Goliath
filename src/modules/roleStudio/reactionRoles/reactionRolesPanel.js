@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton, actionButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -75,7 +75,7 @@ function generatedPanelPayload(name, mappings, guild) {
   return {
     embeds: [new EmbedBuilder()
       .setColor(0x5865f2)
-      .setTitle(`🎭 ${name || 'Reaction Roles'}`)
+      .setTitle(`${EMOJIS.USER_ROLES} ${name || 'Reaction Roles'}`)
       .setDescription([
         'React below to add or remove the roles you want.',
         '',
@@ -488,7 +488,7 @@ async function buildManagedPanel(guild, panelId, notice = '') {
   return {
     embeds: [new EmbedBuilder()
       .setColor(notice ? 0x57f287 : panel.enabled === false ? 0x747f8d : 0x57f287)
-      .setTitle(`🎭 ${panel.name}`)
+      .setTitle(`${EMOJIS.USER_ROLES} ${panel.name}`)
       .setDescription([
         noticeLine(notice), notice ? '' : null,
         `**Status:** ${panel.enabled === false ? emojiLabel('USER_PAUSE', 'Disabled') : emojiLabel('HEALTHY', 'Enabled')}`,
