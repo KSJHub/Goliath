@@ -1,5 +1,6 @@
 import { dashboardPath } from '../../services/dashboardPath.js';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -90,7 +91,7 @@ export default function Goodbye({ theme, selectedGuild, selectedGuildData }) {
     await act('save-dm', () => api.request(`/api/goodbye/${guildId}/dm-config`, { method: 'PUT', body: JSON.stringify(patch) }), message);
   }
 
-  if (!guildId) return <EmptyState theme={theme} icon="👋" title="Select a server" description="Select a server to manage Goodbye." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.GOODBYE} title="Select a server" description="Select a server to manage Goodbye." />;
 
   return <div style={{ display: 'grid', gap: 18 }}>
     <section style={{ ...card, background: 'linear-gradient(135deg, rgba(239,68,68,0.16), rgba(15,23,42,0.08) 48%, rgba(59,130,246,0.14))' }}><div style={{ color: '#fca5a5', fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Goliath Community</div><h1 style={{ margin: '8px 0 0', fontSize: 'clamp(28px,4vw,42px)' }}>Goodbye</h1><p style={{ color: theme.mutedText, lineHeight: 1.6 }}>Configure staff departure logs and private member departure DMs from one module.</p></section>
