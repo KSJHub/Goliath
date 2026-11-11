@@ -3083,7 +3083,7 @@ function buildMediaManagerPanel(
     `**${EMOJIS.WELCOME_PREVIEW} Normal** — Show the selected media normally.`,
     `**${EMOJIS.EMBED_SPOILER} Spoiler** — Hide the selected media behind Discord’s spoiler treatment.`,
     "**↔️ Alignments** — Set Above/Below Content, Left/Centre/Right and Small/Medium/Large.",
-    `**${EMOJIS.MEDIA} Thumbnail** — Add or manage the panel thumbnail."
+    `**${EMOJIS.MEDIA} Thumbnail** — Add or manage the panel thumbnail.`
   );
 
   const embeds = [
