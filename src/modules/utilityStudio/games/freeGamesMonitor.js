@@ -289,6 +289,9 @@ async function removeGameSubscription(guild, appId) {
       if (subscription?.pending?.some(entry => entry.status === 'ambiguous' || entry.status === 'dispatching')) {
         throw new Error('Resolve held deliveries before unsubscribing from this game.');
       }
+      if (subscription?.pending?.length) {
+        throw new Error('Deliver or resolve queued updates before unsubscribing from this game.');
+      }
       const subscriptions = { ...current.subscriptions };
       delete subscriptions[appId];
       return { ...current, subscriptions };
