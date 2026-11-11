@@ -2144,10 +2144,10 @@ function buildSettingsPanel(interaction) {
   const description = [
     "Move saved Embed Builder presets between Goliath servers.",
     "",
-    `**${EMOJIS.EMBED_IMPORT} Upload File** — upload a saved preset `.json` file.",
-    `**${EMOJIS.MOD_EXPORT} Export File** — download the selected preset as a `.json` file.",
-    `**${EMOJIS.EMBED_FIELDS} Paste JSON** — paste portable preset JSON from another Goliath Embed Builder.",
-    `**${EMOJIS.EMBED_FIELDS} Export JSON** — copy portable preset JSON to move it into another Embed Builder.",
+    `**${EMOJIS.EMBED_IMPORT} Upload File** — upload a saved preset \`.json\` file.`,
+    `**${EMOJIS.MOD_EXPORT} Export File** — download the selected preset as a \`.json\` file.`,
+    `**${EMOJIS.EMBED_FIELDS} Paste JSON** — paste portable preset JSON from another Goliath Embed Builder.`,
+    `**${EMOJIS.EMBED_FIELDS} Export JSON** — copy portable preset JSON to move it into another Embed Builder.`,
     "",
     "Select the preset you want to export in **Preset Manager** first.",
   ].join("\n");
@@ -3079,8 +3079,8 @@ function buildMediaManagerPanel(
   summary.push(
     "**Controls**",
     "**✏️ Edit** — Edit the selected media item.",
-    `**${EMOJIS.ROLE_TAG} Type** — Choose Auto, Text, GIF or Image for the selected media.",
-    `**${EMOJIS.WELCOME_PREVIEW} Normal** — Show the selected media normally.",
+    `**${EMOJIS.ROLE_TAG} Type** — Choose Auto, Text, GIF or Image for the selected media.`,
+    `**${EMOJIS.WELCOME_PREVIEW} Normal** — Show the selected media normally.`,
     `**${EMOJIS.EMBED_SPOILER} Spoiler** — Hide the selected media behind Discord’s spoiler treatment.`,
     "**↔️ Alignments** — Set Above/Below Content, Left/Centre/Right and Small/Medium/Large.",
     `**${EMOJIS.MEDIA} Thumbnail** — Add or manage the panel thumbnail."
