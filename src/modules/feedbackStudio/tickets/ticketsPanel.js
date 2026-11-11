@@ -1601,13 +1601,13 @@ let ticketSetupPanelApi;
           '**Appearance**',
           `${EMOJIS.DESIGN} Appearance: \`Embed, button, colors and layout\``,
           `${EMOJIS.DESIGN} Embed Title: \`${appearance.title || 'Not set'}\``,
-          `🧾 Embed Description: \`${
+          `${EMOJIS.CASE} Embed Description: \`${
             appearance.description
               ? 'Configured'
               : 'Not set'
           }\``,
-          `🎨 Embed Color: \`${appearance.color || '#5865F2'}\``,
-          `🔘 Button: \`${appearance.buttonEmoji || '🎫'} ${
+          `${EMOJIS.DESIGN} Embed Color: \`${appearance.color || '#5865F2'}\``,
+          `${EMOJIS.SECURITY_RADIO} Button: \`${appearance.buttonEmoji || '🎫'} ${
             appearance.buttonLabel || 'Open Ticket'
           }\``,
         ].join('\n')
@@ -1629,10 +1629,10 @@ let ticketSetupPanelApi;
           `**Panel ID:** \`${panel.panelId}\``,
           '',
           '**Appearance**',
-          `🎨 Title: \`${appearance.title || 'Not set'}\``,
-          `🧾 Description: \`${appearance.description ? 'Configured' : 'Not set'}\``,
-          `🎨 Color: \`${appearance.color || '#5865F2'}\``,
-          `🔘 Button: \`${appearance.buttonEmoji || '🎫'} ${
+          `${EMOJIS.DESIGN} Title: \`${appearance.title || 'Not set'}\``,
+          `${EMOJIS.CASE} Description: \`${appearance.description ? 'Configured' : 'Not set'}\``,
+          `${EMOJIS.DESIGN} Color: \`${appearance.color || '#5865F2'}\``,
+          `${EMOJIS.SECURITY_RADIO} Button: \`${appearance.buttonEmoji || '🎫'} ${
             appearance.buttonLabel || 'Open Ticket'
           }\``,
           '',
@@ -1654,7 +1654,7 @@ let ticketSetupPanelApi;
 
   function buildRoleEditorEmbed(panel) {
     return new EmbedBuilder()
-      .setTitle(`👥 Manage Roles • ${panel.name}`)
+      .setTitle(`${EMOJIS.ROLE_MEMBERS} Manage Roles • ${panel.name}`)
       .setDescription(
         [
           `**Panel ID:** \`${panel.panelId}\``,
@@ -1679,20 +1679,20 @@ let ticketSetupPanelApi;
     const appearance = panel.appearance || {};
 
     return new EmbedBuilder()
-      .setTitle(`🎨 Appearance • ${panel.name}`)
+      .setTitle(`${EMOJIS.DESIGN} Appearance • ${panel.name}`)
       .setDescription(
         [
           `**Panel ID:** \`${panel.panelId}\``,
           '',
           '**Current Appearance**',
           `${EMOJIS.DESIGN} Embed Title: \`${appearance.title || 'Not set'}\``,
-          `🧾 Description: \`${appearance.description ? 'Configured' : 'Not set'}\``,
-          `🎨 Embed Color: \`${appearance.color || '#5865F2'}\``,
-          `🖼️ Image: \`${appearance.imageUrl ? 'Configured' : 'Not set'}\``,
-          `🖼️ Thumbnail: \`${appearance.thumbnailUrl ? 'Configured' : 'Not set'}\``,
-          `🔘 Button Label: \`${appearance.buttonLabel || 'Open Ticket'}\``,
-          `😀 Button Emoji: \`${appearance.buttonEmoji || '🎫'}\``,
-          `📝 Footer Text: \`${appearance.footerText || 'Not set'}\``,
+          `${EMOJIS.CASE} Description: \`${appearance.description ? 'Configured' : 'Not set'}\``,
+          `${EMOJIS.DESIGN} Embed Color: \`${appearance.color || '#5865F2'}\``,
+          `${EMOJIS.MEDIA} Image: \`${appearance.imageUrl ? 'Configured' : 'Not set'}\``,
+          `${EMOJIS.MEDIA} Thumbnail: \`${appearance.thumbnailUrl ? 'Configured' : 'Not set'}\``,
+          `${EMOJIS.SECURITY_RADIO} Button Label: \`${appearance.buttonLabel || 'Open Ticket'}\``,
+          `${EMOJIS.AUTOMOD_EMOJI} Button Emoji: \`${appearance.buttonEmoji || '🎫'}\``,
+          `${EMOJIS.NOTE} Footer Text: \`${appearance.footerText || 'Not set'}\``,
           '',
           'Choose what you want to edit from the dropdown below.',
         ].join('\n')
@@ -1704,9 +1704,9 @@ let ticketSetupPanelApi;
 
   function buildDeploymentRow(panelId) {
     return new ActionRowBuilder().addComponents(
-      emojiButton(`ticket_setup:deploy:${panelId}`, 'Deploy', '🚀', ButtonStyle.Success),
+      emojiButton(`ticket_setup:deploy:${panelId}`, 'Deploy', EMOJIS.DEPLOY, ButtonStyle.Success),
       emojiButton(`ticket_setup:redeploy:${panelId}`, 'Redeploy', EMOJIS.REFRESH, ButtonStyle.Primary),
-      emojiButton(`ticket_setup:undeploy:${panelId}`, 'Undeploy', '📦'),
+      emojiButton(`ticket_setup:undeploy:${panelId}`, 'Undeploy', EMOJIS.BULK),
     );
   }
 
@@ -1719,7 +1719,7 @@ let ticketSetupPanelApi;
 
   function buildDangerBackRow(panelId) {
     return new ActionRowBuilder().addComponents(
-      emojiButton(`ticket_setup:delete:${panelId}`, 'Delete', '🗑️', ButtonStyle.Danger),
+      emojiButton(`ticket_setup:delete:${panelId}`, 'Delete', EMOJIS.DELETE, ButtonStyle.Danger),
       emojiButton('ticket_setup:back', 'Back', EMOJIS.BACK),
     );
   }
@@ -1757,9 +1757,9 @@ let ticketSetupPanelApi;
   function buildManagementControls(panel) {
     return [
       new ActionRowBuilder().addComponents(
-        emojiButton(`ticket_setup:appearance:${panel.panelId}`, 'Appearance', '🎨', ButtonStyle.Primary),
-        emojiButton(`ticket_setup:roles:${panel.panelId}`, 'Manage Roles', '👥', ButtonStyle.Primary),
-        emojiButton(`ticket_setup:set_limit:${panel.panelId}`, 'Ticket Limit', '🎟️', ButtonStyle.Primary),
+        emojiButton(`ticket_setup:appearance:${panel.panelId}`, 'Appearance', EMOJIS.DESIGN, ButtonStyle.Primary),
+        emojiButton(`ticket_setup:roles:${panel.panelId}`, 'Manage Roles', EMOJIS.ROLE_MEMBERS, ButtonStyle.Primary),
+        emojiButton(`ticket_setup:set_limit:${panel.panelId}`, 'Ticket Limit', EMOJIS.GIVEAWAY_TICKET, ButtonStyle.Primary),
       ),
       new ActionRowBuilder().addComponents(
         emojiButton(
