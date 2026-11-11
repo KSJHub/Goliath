@@ -224,6 +224,8 @@ const EMOJIS = Object.freeze({
   DOCUMENT: '📄',
   VARIABLES: '📖',
   MOD_IDENTITY: '🪪',
+  ADMIN_SLOWMODE: '🐢',
+  ADMIN_COMMAND: '🔏',
   MOD_ACCOUNT_COMPARE: '🧬',
   EMBED_MEDIA_LARGE: '🔶',
   EMBED_MEDIA_MEDIUM: '🔷',
