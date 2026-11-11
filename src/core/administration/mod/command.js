@@ -1,4 +1,5 @@
 'use strict';
+const { emojiLabel } = require('../../ui/emojis');
 
 // Moderation panel layout contract: feature rows first; the final row is navigation,
 // with Back first and Export immediately after it when export is available.
@@ -292,11 +293,11 @@ router.post('/appeals/:guildId/:caseId', requireAppealSession, requireSameOrigin
 
 const command = {
   category: 'Moderation',
-  help: { name: 'mod', description: '🔐 Open Goliath’s moderation hub and management tools.', usage: '/mod' },
+  help: { name: 'mod', description: emojiLabel('MODERATOR', 'Open Goliath’s moderation hub and management tools.'), usage: '/mod' },
   access: { level: 'mod', permissionKey: 'mod.panel.view', ownerOnly: false },
   data: new SlashCommandBuilder()
     .setName('mod')
-    .setDescription('🔑 Open Goliath’s moderation hub and management tools'),
+    .setDescription(emojiLabel('MOD_COMMAND', 'Open Goliath’s moderation hub and management tools')),
   async execute(interaction) {
     const denied = await enforceCommandAccess(interaction, command);
     if (denied) {
