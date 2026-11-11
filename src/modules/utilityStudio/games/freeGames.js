@@ -720,12 +720,12 @@ async function handleGameUpdatesInteraction(i, action, reply) {
     const rows = effectiveUpdateDestinations(sub).map(route => route.channelId + ',' + (route.roleId || '') + ',' + (route.enabled ? 'on' : 'off'));
     await i.showModal({ custom_id: PANEL_PREFIX + 'updates:routes-submit:' + appId, title: 'Steam update destinations', components: [
       componentRow({ type: 4, custom_id: 'routes', label: 'Channel ID, role ID, on/off (one per line)', style: 2, required: true,
-        min_length: 16, max_length: 500, value: rows.join('\\n').slice(0, 500) || '' })
+        min_length: 16, max_length: 500, value: rows.join('\n').slice(0, 500) || '' })
     ] }); return true;
   }
   if (kind === 'routes-submit') {
     const raw = i.fields.getTextInputValue('routes');
-    const routes = raw.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean).map(line => {
+    const routes = raw.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
       const [channelId, roleId = '', enabled = 'on', extra] = line.split(',').map(value => value.trim());
       if (extra !== undefined || !['on', 'off'].includes(enabled)) throw new Error('Use channel ID, optional role ID, and on/off per line.');
       return { channelId, roleId: roleId || null, enabled: enabled === 'on' };
