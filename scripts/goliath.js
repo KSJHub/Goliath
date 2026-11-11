@@ -4956,6 +4956,10 @@ async function gameUpdatesAudit() {
   feed = [makeItem(107), makeItem(106), ...feed];
   await monitor.processGameUpdates(guild); assert.equal(sent.length, 4); assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 2);
   const queuedBeforeManual = store.getGameUpdates(guild.id).subscriptions['730'].pending.map(entry => entry.item.id);
+  const queuedSnapshot = JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending);
+  await assert.rejects(monitor.removeGameSubscription(guild, '730'), /queued updates/);
+  assert.equal(JSON.stringify(store.getGameUpdates(guild.id).subscriptions['730'].pending), queuedSnapshot,
+    'Unsubscribe must not discard undelivered announcements.');
   await monitor.sendLatestGameUpdate(guild, '730'); assert.equal(sent.length, 5); assert.deepEqual(sent[4].allowedMentions.roles, []);
   assert(queuedBeforeManual.includes('107') && queuedBeforeManual.includes('106'), 'Quiet hours must queue both announcements before manual delivery.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending.length, 1, 'Manual send must not flush another queued announcement.');
