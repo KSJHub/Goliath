@@ -233,7 +233,7 @@ function ownerHomePayload(interaction, notice = null) {
       { name: 'Panel Visibility', value: 'Ephemeral • owner ID checked on every action', inline: true },
       { name: 'Context', value: guildContext, inline: false },
       { name: 'DEV Override', value: isDev ? (devState.enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled')) : emojiLabel('INACTIVE', 'DEV only'), inline: true },
-      { name: 'DEV Billing Unlock', value: isDev ? (billing.active ? `🟢 ${billing.plan || 'enabled'}` : emojiLabel('DISABLED', 'Disabled')) : emojiLabel('INACTIVE', 'DEV only'), inline: true },
+      { name: 'DEV Billing Unlock', value: isDev ? (billing.active ? `${EMOJIS.ACTIVE} ${billing.plan || 'enabled'}` : emojiLabel('DISABLED', 'Disabled')) : emojiLabel('INACTIVE', 'DEV only'), inline: true },
       { name: 'Owner Tools', value: showCommandCenter ? emojiLabel('ENABLED', 'Server Tools • Security • Maintenance • DEV Sync • Command Center') : (isDev ? emojiLabel('ENABLED', 'Server Tools • Security • Maintenance • DEV Sync') : emojiLabel('ENABLED', 'Server Tools • Security • Maintenance')), inline: true },
     )
     .setFooter({ text: 'Goliath Owner • OWNER_IDS protected' })
@@ -336,7 +336,7 @@ function maintenancePayload(interaction, explicitGuildId = null, notice = null) 
       { name: 'Automatic shutdown notices', value: emojiLabel('ENABLED', 'Enabled'), inline: true },
       { name: 'Connected guilds', value: `**${connectedGuilds}**`, inline: true },
       { name: 'Current server', value: guild ? `${guild.name}\n\`${guild.id}\`` : 'No server context', inline: false },
-      { name: 'Current server notice', value: currentChannel ? `🔴 Active • <#${currentChannel.id}>` : emojiLabel('ENABLED', 'No temporary maintenance channel'), inline: false },
+      { name: 'Current server notice', value: currentChannel ? `${EMOJIS.OWNER_RED} Active • <#${currentChannel.id}>` : emojiLabel('ENABLED', 'No temporary maintenance channel'), inline: false },
       { name: 'Private visibility', value: 'Guild owner + every role with the Discord **Administrator** permission + Goliath. `@everyone` is denied.', inline: false },
     )
     .setFooter({ text: 'Owner only • Temporary channels self-delete after recovery' })
@@ -583,7 +583,7 @@ async function handleOwnerPanelInteraction(interaction) {
       return true;
     }
     await maintenanceStatus.beginGuildMaintenance(guild, { reason: `Manual maintenance triggered by ${interaction.user.tag || interaction.user.id}` });
-    await interaction.update(maintenancePayload(interaction, guild.id, `🔴 Maintenance notice started in **${guild.name}**.`));
+    await interaction.update(maintenancePayload(interaction, guild.id, `${EMOJIS.OWNER_RED} Maintenance notice started in **${guild.name}**.`));
     return true;
   }
 
@@ -594,7 +594,7 @@ async function handleOwnerPanelInteraction(interaction) {
       return true;
     }
     const result = await maintenanceStatus.completeGuildMaintenance(guild);
-    await interaction.update(maintenancePayload(interaction, guild.id, result.found ? `✅ **${guild.name}** marked operational. Channel deletion scheduled in 5 minutes.` : `ℹ️ **${guild.name}** has no active maintenance channel.`));
+    await interaction.update(maintenancePayload(interaction, guild.id, result.found ? `✅ **${guild.name}** marked operational. Channel deletion scheduled in 5 minutes.` : `${EMOJIS.INFO} **${guild.name}** has no active maintenance channel.`));
     return true;
   }
 
@@ -605,7 +605,7 @@ async function handleOwnerPanelInteraction(interaction) {
       return true;
     }
     const result = await maintenanceStatus.deleteGuildMaintenanceChannel(guild);
-    await interaction.update(maintenancePayload(interaction, guild.id, result.found ? `🗑️ Temporary status channel deleted from **${guild.name}**.` : `ℹ️ **${guild.name}** has no active maintenance channel.`));
+    await interaction.update(maintenancePayload(interaction, guild.id, result.found ? `${EMOJIS.DELETE} Temporary status channel deleted from **${guild.name}**.` : `${EMOJIS.INFO} **${guild.name}** has no active maintenance channel.`));
     return true;
   }
 
@@ -614,7 +614,7 @@ async function handleOwnerPanelInteraction(interaction) {
     const results = await maintenanceStatus.beginMaintenanceForAll(interaction.client, { reason: `Manual global maintenance triggered by ${interaction.user.tag || interaction.user.id}` });
     const ok = results.filter((result) => result.ok).length;
     const failed = results.length - ok;
-    await interaction.editReply(maintenancePayload(interaction, contextGuildId, `🔴 Maintenance notices started in **${ok}/${results.length}** guilds${failed ? ` • **${failed}** failed` : ''}.`));
+    await interaction.editReply(maintenancePayload(interaction, contextGuildId, `${EMOJIS.OWNER_RED} Maintenance notices started in **${ok}/${results.length}** guilds${failed ? ` • **${failed}** failed` : ''}.`));
     return true;
   }
 
