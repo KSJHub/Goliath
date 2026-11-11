@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { ActionRowBuilder, AttachmentBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, EmbedBuilder, ModalBuilder, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const crypto = require('crypto');
 const security = require('../../../core/security/protection/core');
@@ -444,15 +444,15 @@ function buildMainPanel(guild, requestedBy = 'Unknown User') {
     '',
     '**Status**',
     status,
-    `👥 Creators: **${creators}**`,
-    `🔗 Accounts: **${accounts}**`,
-    `🔴 LIVE: **${stats.live}**`,
+    `${EMOJIS.ROLE_MEMBERS} Creators: **${creators}**`,
+    `${EMOJIS.AUTOMOD_LINKS} Accounts: **${accounts}**`,
+    `${EMOJIS.OWNER_RED} LIVE: **${stats.live}**`,
     `⚠️ Issues: **${stats.unavailable}**`,
     '',
     '**Delivery**',
-    `📡 Monitored Accounts: **${stats.monitored}/${accounts}**`,
-    `📨 Alerts Sent: **${Number(config.analytics?.alertsSent || 0).toLocaleString('en-GB')}**`,
-    `📍 Default Channel: ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : '**Not configured**'}`,
+    `${EMOJIS.SOCIAL_MONITOR} Monitored Accounts: **${stats.monitored}/${accounts}**`,
+    `${EMOJIS.USER_INVITES} Alerts Sent: **${Number(config.analytics?.alertsSent || 0).toLocaleString('en-GB')}**`,
+    `${EMOJIS.SOCIAL_CHANNEL_PIN} Default Channel: ${config.alertsChannelId ? `<#${config.alertsChannelId}>` : '**Not configured**'}`,
   ].join('\n');
 
   return {
@@ -516,13 +516,13 @@ function buildCreatorPanel(i, config, creators) {
 
   const description = selected
     ? [
-        `## 👤 ${selected.displayName}`,
+        `## ${EMOJIS.USER} ${selected.displayName}`,
         '',
         selected.enabled === false
           ? emojiLabel('USER_PAUSE', '**Monitoring Paused**')
           : emojiLabel('ENABLED', '**Monitoring Enabled**'),
-        `🔗 **Connected Accounts:** ${linked.length}`,
-        `🔴 **Currently LIVE:** ${linked.filter(
+        `${EMOJIS.AUTOMOD_LINKS} **Connected Accounts:** ${linked.length}`,
+        `${EMOJIS.OWNER_RED} **Currently LIVE:** ${linked.filter(
           (account) => account?.state?.isLive === true,
         ).length}`,
         '',
@@ -553,9 +553,9 @@ function buildCreatorPanel(i, config, creators) {
       ? [
           'Select a creator to manage their profile and connected social accounts.',
           '',
-          `👥 **Creators:** ${creators.length}`,
-          `🔗 **Connected Accounts:** ${allAccounts.length}`,
-          `🔴 **Currently LIVE:** ${liveAccounts}`,
+          `${EMOJIS.ROLE_MEMBERS} **Creators:** ${creators.length}`,
+          `${EMOJIS.AUTOMOD_LINKS} **Connected Accounts:** ${allAccounts.length}`,
+          `${EMOJIS.OWNER_RED} **Currently LIVE:** ${liveAccounts}`,
         ].join('\n')
       : [
           '**No creators have been added yet.**',
@@ -705,7 +705,7 @@ function buildAccountAddPanel(i, config, creator) {
   return { embeds: [embed(config, emojiLabel('ADD', 'Add Accounts'), d, who(i), creatorAccent((creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean)))], components: [platformSelect(selected), row(btn(`${P}creators`, emojiLabel('BACK', 'Back')), btn(`${P}account:continue`, emojiLabel('NEXT_STEP', 'Continue'), ButtonStyle.Success, !selected.length))] };
 }
 function buildProfileManagePanel(i, config, creator) {
-  const d = [`👤 **${creator.displayName}**`, '', '**Profile**', `Status: ${creator.enabled === false ? emojiLabel('USER_PAUSE', 'Paused') : emojiLabel('ENABLED', 'Monitoring')}`, `Group / Team: ${creator.group || 'Not set'}`, `Tags: ${creator.tags?.length ? creator.tags.join(', ') : 'None'}`, `Profile Notes: ${creator.notes || 'None'}`,
+  const d = [`${EMOJIS.USER} **${creator.displayName}**`, '', '**Profile**', `Status: ${creator.enabled === false ? emojiLabel('USER_PAUSE', 'Paused') : emojiLabel('ENABLED', 'Monitoring')}`, `Group / Team: ${creator.group || 'Not set'}`, `Tags: ${creator.tags?.length ? creator.tags.join(', ') : 'None'}`, `Profile Notes: ${creator.notes || 'None'}`,
     `\u{1F512} Admin Notes: ${creator.adminNotes || 'None'}`].join('\n');
   const components = [
     row(btn(`${P}creator:edit`, emojiLabel('NOTE', 'Edit Profile')), btn(`${P}creator:clear`, emojiLabel('REFRESH', 'Clear')), btn(`${P}creator:profile:toggle`, creator.enabled === false ? emojiLabel('USER_PLAY', 'Resume') : emojiLabel('USER_PAUSE', 'Pause'), creator.enabled === false ? ButtonStyle.Success : ButtonStyle.Secondary), btn(`${P}creator:delete`, emojiLabel('DELETE', 'Delete'), ButtonStyle.Danger)),
@@ -719,7 +719,7 @@ function buildProfileManagePanel(i, config, creator) {
 function buildAccountManagePanel(i, config, creator) {
   const linked = (creator.accountIds || []).map((id) => config.accounts[id]).filter(Boolean).sort(accountSort);
   const active = config.accounts[getAccountSession(i).accountId] || null;
-  const d = [`👤 **${creator.displayName}**`, '', '**Accounts**', `Linked: ${linked.length}`, `Selected: ${active ? `${LABEL[active.platform]} — ${active.username || active.externalId}` : linked.length ? 'Choose an account below.' : 'None yet.'}`, ...(linked.length ? ['', linked.map((a) => `• ${ICON[a.platform]} **${LABEL[a.platform]}** — ${a.profileUrl ? `[${a.username || a.externalId}](${a.profileUrl})` : a.username || a.externalId} — ${accountState(a)}`).join('\n')] : ['', 'No linked social accounts.'])].join('\n');
+  const d = [`${EMOJIS.USER} **${creator.displayName}**`, '', '**Accounts**', `Linked: ${linked.length}`, `Selected: ${active ? `${LABEL[active.platform]} — ${active.username || active.externalId}` : linked.length ? 'Choose an account below.' : 'None yet.'}`, ...(linked.length ? ['', linked.map((a) => `• ${ICON[a.platform]} **${LABEL[a.platform]}** — ${a.profileUrl ? `[${a.username || a.externalId}](${a.profileUrl})` : a.username || a.externalId} — ${accountState(a)}`).join('\n')] : ['', 'No linked social accounts.'])].join('\n');
   const components = [];
   if (linked.length) components.push(accountSelect(linked, getAccountSession(i).accountId));
   components.push(row(
@@ -869,8 +869,8 @@ if (name === 'templates') {
       'Manage Social Studio alert delivery from one workspace.',
       '',
       '**Status**',
-      `📡 Monitoring: **${config.enabled ? 'Enabled' : 'Disabled'}**`,
-      `🔗 Monitored Accounts: **${monitored}/${accounts.length}**`,
+      `${EMOJIS.SOCIAL_MONITOR} Monitoring: **${config.enabled ? 'Enabled' : 'Disabled'}**`,
+      `${EMOJIS.AUTOMOD_LINKS} Monitored Accounts: **${monitored}/${accounts.length}**`,
       `⚠️ Current Issues: **${failures}**`,
       '',
       '**Alert Controls**',
@@ -1012,8 +1012,8 @@ if (name === 'templates') {
     const description = [
       'Manage Social Studio configuration and stored activity data.',
       '',
-      `📦 **History Entries:** ${config.history.length}`,
-      `📬 **Queue Items:** ${config.queue.length}`,
+      `${EMOJIS.BULK} **History Entries:** ${config.history.length}`,
+      `${EMOJIS.SUGGESTION_INBOX} **Queue Items:** ${config.queue.length}`,
       '',
       '**Exports**',
       emojiLabel('MOD_EXPORT', '**Config Export** — download Social Studio configuration with sensitive values redacted.'),
@@ -1091,9 +1091,9 @@ if (name === 'templates') {
       `**Accounts:** ${monitored} monitored`,
       `**Quiet Hours:** ${quietLabel}`,
       `**Failed Delivery Retry:** ${settings.retryDeliveries === false ? 'Off' : 'On'}`,
-      ...(activeLive ? [`🔴 **Active LIVE Sessions:** ${activeLive}`] : []),
+      ...(activeLive ? [`${EMOJIS.OWNER_RED} **Active LIVE Sessions:** ${activeLive}`] : []),
       ...(heldItems ? [`🌙 **Held by Quiet Hours:** ${heldItems}`] : []),
-      ...(pendingRetries ? [`🔄 **Pending Retries:** ${pendingRetries}`] : []),
+      ...(pendingRetries ? [`${EMOJIS.REFRESH} **Pending Retries:** ${pendingRetries}`] : []),
       ...(queued ? [`📬 **Queued Work:** ${queued}`] : []),
       `**Last Provider Check:** ${ts(lastCheckMs ? new Date(lastCheckMs).toISOString() : null)}`,
       '',
