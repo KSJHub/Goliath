@@ -341,7 +341,7 @@ function buildGroupsPanel(guildId, selectedId = null) {
   const selected = selectedId ? roleSelector.getGroup(guildId, selectedId) : null;
   if (!selected) {
     return {
-      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', 'Role Selector · Groups')).setDescription('Create and manage self-role categories.\n\n🌈 **Colours** is the protected built-in group.')],
+      embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(emojiLabel('ROLE_TAG', 'Role Selector · Groups')).setDescription(`Create and manage self-role categories.\n\n${EMOJIS.ROLE_RAINBOW} **Colours** is the protected built-in group.`)],
       components: [groupMenu(guildId), row(button('admin:roleSelector:createGroup', emojiLabel('ADD', 'Create Group'), ButtonStyle.Success)), nav()],
     };
   }
