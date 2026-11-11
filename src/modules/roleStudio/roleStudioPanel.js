@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
@@ -22,7 +22,7 @@ const row = (...components) => new ActionRowBuilder().addComponents(...component
 const button = (customId, label, style = ButtonStyle.Primary, disabled = false) => navigationButton(customId, label, style, disabled);
 
 const statusLabel = (enabled) => enabled ? 'Enabled' : 'Disabled';
-const statusIcon = (enabled) => enabled ? '🟢' : '⏸️';
+const statusIcon = (enabled) => enabled ? EMOJIS.ACTIVE : EMOJIS.USER_PAUSE;
 const healthLabel = (healthy, detail = '') => healthy ? emojiLabel('HEALTHY', 'Healthy') : `⚠️ Needs attention${detail ? ` — ${detail}` : ''}`;
 
 async function getRoleStudioState(guild) {
@@ -97,11 +97,11 @@ async function buildRoleStudioPanel(guild, memberDisplayName = 'Unknown User') {
     .setDescription([
       'Choose a role system to configure. Current status, health and recent activity are shown below.',
       '',
-      `**👥 Auto Roles** — ${statusIcon(state.autoEnabled)} ${statusLabel(state.autoEnabled)}`,
+      `**${EMOJIS.ROLE_MEMBERS} Auto Roles** — ${statusIcon(state.autoEnabled)} ${statusLabel(state.autoEnabled)}`,
       `Configured: \`${state.autoRoleCount}\` • Assigned: \`${state.auto.analytics?.assigned || 0}\``,
       `Health: ${moduleHealthLabel({ enabled: state.autoEnabled, configured: autoConfigured, healthy: state.autoHealth.healthy })}`,
       '',
-      `**😊 Reaction Roles** — ${statusIcon(state.reactionEnabled)} ${statusLabel(state.reactionEnabled)}`,
+      `**${EMOJIS.ROLE_REACTIONS} Reaction Roles** — ${statusIcon(state.reactionEnabled)} ${statusLabel(state.reactionEnabled)}`,
       `Panels: \`${state.reactionDeployments.length}\` • Added: \`${state.reaction.analytics?.assigned || 0}\` • Removed: \`${state.reaction.analytics?.removed || 0}\``,
       `Health: ${moduleHealthLabel({ enabled: state.reactionEnabled, configured: reactionConfigured, healthy: state.reactionHealth.healthy, detail: `${state.reactionHealth.unhealthy || 0} panel(s)` })}`,
       '',
@@ -113,7 +113,7 @@ async function buildRoleStudioPanel(guild, memberDisplayName = 'Unknown User') {
       `Active: \`${state.tempAssignments.length}\` • Assigned: \`${state.temporary.analytics?.assigned || 0}\` • Expired: \`${state.temporary.analytics?.expired || 0}\``,
       `Health: ${moduleHealthLabel({ enabled: state.temporaryEnabled, configured: temporaryConfigured, healthy: state.temporaryHealth.healthy, detail: `${state.temporaryHealth.issues?.length || 0} issue(s) • ${state.temporaryHealth.warnings?.length || 0} warning(s)` })}`,
       '',
-      `**🎭 Role Selector** — ${statusIcon(state.selectorEnabled)} ${statusLabel(state.selectorEnabled)}`,
+      `**${EMOJIS.USER_ROLES} Role Selector** — ${statusIcon(state.selectorEnabled)} ${statusLabel(state.selectorEnabled)}`,
       `Groups: \`${roleSelector.listGroups(guild.id).length}\` • Using selectors: \`${state.selectorHealth.totalUsing || 0}\` • Managed roles: \`${state.selectorHealth.managedRoleCount || 0}\``,
       `Health: ${moduleHealthLabel({ enabled: state.selectorEnabled, configured: selectorConfigured, healthy: state.selectorHealth.healthy, detail: `${state.selectorHealth.issues?.length || 0} issue(s)` })}`,
       '',
