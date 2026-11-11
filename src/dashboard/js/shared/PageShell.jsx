@@ -11,7 +11,7 @@ export const DASHBOARD_EMOJIS = Object.freeze({
   DOWNVOTE: '👎', BIRTHDAY: '🎂',
   SOCIAL: '📣', LINK: '🔗', ANNOUNCEMENT: '📢', DESIGN: '🎨', FEED: '📡',
   CHANNELS: '📂', SETTINGS: '⚙️', AUTOMATION: '⚡', TEST: '🧪', DATA: '🗄️',
-  USER: '👤', LIVE: '🔴',
+  USER: '👤', LIVE: '🔴', GOODBYE: '👋',
 });
 
 
