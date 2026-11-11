@@ -140,7 +140,7 @@ let ticketSetupPanelApi;
     return button(
       CUSTOM_IDS.CLAIM,
       'Claim',
-      '🎫',
+      EMOJIS.USER_TICKETS,
       ButtonStyle.Primary,
       isLocked
     );
@@ -150,7 +150,7 @@ let ticketSetupPanelApi;
     return button(
       CUSTOM_IDS.CLOSE,
       'Close',
-      '🔒',
+      EMOJIS.LOCKDOWN,
       ButtonStyle.Danger,
       isLocked
     );
@@ -160,7 +160,7 @@ let ticketSetupPanelApi;
     return button(
       CUSTOM_IDS.ARCHIVE,
       'Archive',
-      '📁',
+      EMOJIS.MOD_CASE_FOLDER,
       ButtonStyle.Secondary,
       isArchived
     );
@@ -170,7 +170,7 @@ let ticketSetupPanelApi;
     return button(
       CUSTOM_IDS.TRANSCRIPT,
       'Transcript',
-      '📄',
+      EMOJIS.DOCUMENT,
       ButtonStyle.Secondary,
       disabled
     );
@@ -180,7 +180,7 @@ let ticketSetupPanelApi;
     return button(
       CUSTOM_IDS.ADD_USER,
       'Add User',
-      '👤',
+      EMOJIS.USER,
       ButtonStyle.Secondary,
       isLocked
     );
@@ -190,7 +190,7 @@ let ticketSetupPanelApi;
     return button(
       CUSTOM_IDS.PRIORITY,
       'Priority',
-      '⚠️',
+      EMOJIS.WARNING,
       ButtonStyle.Secondary,
       isLocked
     );
@@ -200,7 +200,7 @@ let ticketSetupPanelApi;
     return button(
       CUSTOM_IDS.REOPEN,
       'Reopen',
-      '🔓',
+      EMOJIS.UNLOCK,
       ButtonStyle.Success,
       disabled
     );
@@ -210,7 +210,7 @@ let ticketSetupPanelApi;
     return button(
       CUSTOM_IDS.DELETE,
       'Delete',
-      '🗑️',
+      EMOJIS.DELETE,
       ButtonStyle.Danger,
       disabled
     );
@@ -220,7 +220,7 @@ let ticketSetupPanelApi;
     return button(
       CUSTOM_IDS.DELETE_CONFIRM,
       'Confirm Delete',
-      '⚠️',
+      EMOJIS.WARNING,
       ButtonStyle.Danger,
       disabled
     );
@@ -1607,7 +1607,7 @@ let ticketSetupPanelApi;
               : 'Not set'
           }\``,
           `${EMOJIS.DESIGN} Embed Color: \`${appearance.color || '#5865F2'}\``,
-          `${EMOJIS.SECURITY_RADIO} Button: \`${appearance.buttonEmoji || '🎫'} ${
+          `${EMOJIS.SECURITY_RADIO} Button: \`${appearance.buttonEmoji || EMOJIS.USER_TICKETS} ${
             appearance.buttonLabel || 'Open Ticket'
           }\``,
         ].join('\n')
@@ -1632,7 +1632,7 @@ let ticketSetupPanelApi;
           `${EMOJIS.DESIGN} Title: \`${appearance.title || 'Not set'}\``,
           `${EMOJIS.CASE} Description: \`${appearance.description ? 'Configured' : 'Not set'}\``,
           `${EMOJIS.DESIGN} Color: \`${appearance.color || '#5865F2'}\``,
-          `${EMOJIS.SECURITY_RADIO} Button: \`${appearance.buttonEmoji || '🎫'} ${
+          `${EMOJIS.SECURITY_RADIO} Button: \`${appearance.buttonEmoji || EMOJIS.USER_TICKETS} ${
             appearance.buttonLabel || 'Open Ticket'
           }\``,
           '',
@@ -1691,7 +1691,7 @@ let ticketSetupPanelApi;
           `${EMOJIS.MEDIA} Image: \`${appearance.imageUrl ? 'Configured' : 'Not set'}\``,
           `${EMOJIS.MEDIA} Thumbnail: \`${appearance.thumbnailUrl ? 'Configured' : 'Not set'}\``,
           `${EMOJIS.SECURITY_RADIO} Button Label: \`${appearance.buttonLabel || 'Open Ticket'}\``,
-          `${EMOJIS.AUTOMOD_EMOJI} Button Emoji: \`${appearance.buttonEmoji || '🎫'}\``,
+          `${EMOJIS.AUTOMOD_EMOJI} Button Emoji: \`${appearance.buttonEmoji || EMOJIS.USER_TICKETS}\``,
           `${EMOJIS.NOTE} Footer Text: \`${appearance.footerText || 'Not set'}\``,
           '',
           'Choose what you want to edit from the dropdown below.',
@@ -1765,7 +1765,7 @@ let ticketSetupPanelApi;
         emojiButton(
           `ticket_setup:toggle_one_active:${panel.panelId}`,
           panel.oneActivePerType === false ? 'One Active: Off' : 'One Active: On',
-          '🔒',
+          EMOJIS.LOCKDOWN,
           panel.oneActivePerType === false ? ButtonStyle.Secondary : ButtonStyle.Success,
         ),
         emojiButton(`ticket_setup:set_cooldown:${panel.panelId}`, 'Cooldown', '⏱️'),
@@ -1816,43 +1816,43 @@ let ticketSetupPanelApi;
               label: 'Embed Title',
               description: 'Change the panel embed title',
               value: 'title',
-              emoji: '🎨',
+              emoji: EMOJIS.DESIGN,
             },
             {
               label: 'Embed Description',
               description: 'Change the panel embed description',
               value: 'description',
-              emoji: '🧾',
+              emoji: EMOJIS.CASE,
             },
             {
               label: 'Embed Color',
               description: 'Set the panel HEX color',
               value: 'color',
-              emoji: '🎨',
+              emoji: EMOJIS.DESIGN,
             },
             {
               label: 'Image URL',
               description: 'Set a large image/banner',
               value: 'imageUrl',
-              emoji: '🖼️',
+              emoji: EMOJIS.MEDIA,
             },
             {
               label: 'Thumbnail URL',
               description: 'Set a small thumbnail/icon',
               value: 'thumbnailUrl',
-              emoji: '🖼️',
+              emoji: EMOJIS.MEDIA,
             },
             {
               label: 'Button Label',
               description: 'Change the open-ticket button text',
               value: 'buttonLabel',
-              emoji: '🔘',
+              emoji: EMOJIS.SECURITY_RADIO,
             },
             {
               label: 'Button Emoji',
               description: 'Change the open-ticket button emoji',
               value: 'buttonEmoji',
-              emoji: '😀',
+              emoji: EMOJIS.AUTOMOD_EMOJI,
             },
             {
               label: 'Footer Text',
@@ -1987,7 +1987,7 @@ let ticketSetupPanelApi;
     let title = 'Need Support?';
     let description = 'Press the button below to open a private support ticket.';
     let buttonLabel = 'Open Support Ticket';
-    let buttonEmoji = '🎫';
+    let buttonEmoji = EMOJIS.USER_TICKETS;
     let priority = TICKET_PRIORITY.LOW;
     let limit = 2;
 
@@ -2006,7 +2006,7 @@ let ticketSetupPanelApi;
       title = 'Submit a Report';
       description = 'Press the button below to report an issue privately.';
       buttonLabel = 'Open Report Ticket';
-      buttonEmoji = '🚨';
+      buttonEmoji = EMOJIS.AUTOMOD_SUSPICIOUS;
       priority = TICKET_PRIORITY.NORMAL;
       limit = 3;
     }
@@ -2016,7 +2016,7 @@ let ticketSetupPanelApi;
       title = 'Submit an Application';
       description = 'Press the button below to open a private application ticket.';
       buttonLabel = 'Open Application Ticket';
-      buttonEmoji = '📝';
+      buttonEmoji = EMOJIS.NOTE;
       priority = TICKET_PRIORITY.NORMAL;
       limit = 1;
     }
@@ -2590,7 +2590,7 @@ let ticketSetupPanelApi;
       });
 
       await safeEditOrReply(interaction, {
-        content: `🔄 Ticket panel **${panel.name}** redeployed in ${deployChannel}.`,
+        content: `${EMOJIS.REFRESH} Ticket panel **${panel.name}** redeployed in ${deployChannel}.`,
       });
 
       return true;
@@ -2614,7 +2614,7 @@ let ticketSetupPanelApi;
 
       await safeEditOrReply(interaction, {
         content: success
-          ? `📦 Ticket panel **${panel.name}** undeployed.`
+          ? `${EMOJIS.BULK} Ticket panel **${panel.name}** undeployed.`
           : emojiLabel('WARNING', 'This panel was not deployed or the message could not be found.'),
       });
 
