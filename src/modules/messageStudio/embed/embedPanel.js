@@ -980,7 +980,7 @@ function buildResetConfirmationPanel(i, who = "Unknown User") {
        * DESTRUCTIVE ACTION
        */
       new ActionRowBuilder().addComponents(
-        emojiButton("embed:reset-confirm", "Confirm Reset", "🗑️", ButtonStyle.Danger)
+        emojiButton("embed:reset-confirm", "Confirm Reset", EMOJIS.DELETE, ButtonStyle.Danger)
       ),
 
       /*
@@ -1189,16 +1189,16 @@ function buildBuilderPanel(i, who = "Unknown User") {
         emojiButton("embed:edit-content", "Content", "✏️", ButtonStyle.Primary),
         actionButton("embed:edit-images", "media"),
         actionButton("embed:panels", "panels", { suffix: ` (${panels.length})` }),
-        emojiButton("embed:fields", `Fields (${fields.length})`, "📋", ButtonStyle.Primary),
+        emojiButton("embed:fields", `Fields (${fields.length})`, EMOJIS.EMBED_FIELDS, ButtonStyle.Primary),
       ),
 
       /*
        * DESIGN / OPTIONS
        */
       new ActionRowBuilder().addComponents(
-        emojiButton("embed:panel-colour", "Panel Colour", "🎨"),
-        emojiButton("embed:toggle-timestamp", "Timestamp", "🕒", s.showTimestamp ? ButtonStyle.Success : ButtonStyle.Secondary),
-        emojiButton("embed:buttons", `Buttons (${buttons.length})`, "🔘"),
+        emojiButton("embed:panel-colour", "Panel Colour", EMOJIS.EMBED_COLOUR),
+        emojiButton("embed:toggle-timestamp", "Timestamp", EMOJIS.ROLE_CLOCK, s.showTimestamp ? ButtonStyle.Success : ButtonStyle.Secondary),
+        emojiButton("embed:buttons", `Buttons (${buttons.length})`, EMOJIS.EMBED_BUTTONS),
       ),
 
       /*
@@ -1206,7 +1206,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
        */
       new ActionRowBuilder().addComponents(
         actionButton("embed:back", "back"),
-        emojiButton("embed:helpers", "Variables", "📖"),
+        emojiButton("embed:helpers", "Variables", EMOJIS.VARIABLES),
         emojiButton("embed:reset", "Reset", "♻️", ButtonStyle.Danger),
       ),
     ],
@@ -2163,15 +2163,15 @@ function buildSettingsPanel(interaction) {
     ],
     components: [
       new ActionRowBuilder().addComponents(
-        emojiButton("embed:settings-import", "Upload File", "📥", ButtonStyle.Primary),
-        emojiButton("embed:settings-export", "Export File", "📤"),
-        emojiButton("embed:settings-paste", "Paste JSON", "📋", ButtonStyle.Primary),
-        emojiButton("embed:settings-export-code", "Export JSON", "📋"),
+        emojiButton("embed:settings-import", "Upload File", EMOJIS.EMBED_IMPORT, ButtonStyle.Primary),
+        emojiButton("embed:settings-export", "Export File", EMOJIS.MOD_EXPORT),
+        emojiButton("embed:settings-paste", "Paste JSON", EMOJIS.EMBED_FIELDS, ButtonStyle.Primary),
+        emojiButton("embed:settings-export-code", "Export JSON", EMOJIS.EMBED_FIELDS),
       ),
 
       new ActionRowBuilder().addComponents(
         actionButton("embed:settings-back", "back"),
-        emojiButton("embed:helpers", "Variables", "📖"),
+        emojiButton("embed:helpers", "Variables", EMOJIS.VARIABLES),
       )
     ]
   };
@@ -2272,7 +2272,7 @@ function buildReadinessPanel(interaction, options = {}) {
   ].join("\n").slice(0, 4096);
 
   const primary = report.ready
-    ? emojiButton("embed:readiness-refresh", "Recheck", "🔄")
+    ? emojiButton("embed:readiness-refresh", "Recheck", EMOJIS.REFRESH)
     : navigationButton("embed:readiness-fix", fix.label, ButtonStyle.Primary);
 
   return {
@@ -2298,7 +2298,7 @@ function buildReadinessPanel(interaction, options = {}) {
     components: [
       new ActionRowBuilder().addComponents(
         primary,
-        emojiButton("embed:builder", "Builder", "🛠️"),
+        emojiButton("embed:builder", "Builder", EMOJIS.BUILDER),
       ),
 
       // Navigation is always isolated on the final row.
