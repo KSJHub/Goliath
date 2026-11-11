@@ -5117,7 +5117,11 @@ async function gameUpdatesAudit() {
   await monitor.processGameUpdates(guild);
   assert.equal(sent.length, beforeMulti + 1, 'A successful route must not duplicate after another route becomes uncertain.');
   secondFailure = false;
+  // The primary channel is already delivered; its unavailable history must
+  // not prevent recovery of the uncertain secondary destination.
+  historyError = new Error('Unrelated primary history unavailable');
   const multiRetry = await monitor.retryHeldGameUpdates(guild, '730');
+  historyError = null;
   assert.equal(multiRetry.delivered, 1);
   assert.equal(secondSent.length, 1);
   assert.deepEqual(secondSent[0].allowedMentions.roles, [], 'Retry must suppress role mentions.');
