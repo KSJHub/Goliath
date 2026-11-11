@@ -3026,7 +3026,7 @@ function buildMediaManagerPanel(
       panelMedia.thumbnail?.source
         ? "Configured"
         : "Not set"
-    } • 📎 **Files** — ${
+    } • ${EMOJIS.AUTOMOD_ATTACHMENTS} **Files** — ${
       panelMedia.files.length
     }/${mediaModel.MAX_FILES}`,
     "",
