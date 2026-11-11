@@ -885,7 +885,7 @@ function buildEditorPanel(i, who = "Unknown User") {
               value: "__channel_id__",
               description:
                 "Use a Discord channel ID instead",
-              emoji: "🔢",
+              emoji: EMOJIS.COUNTING_NUMBERS,
             }
           )
       ),
@@ -1247,7 +1247,7 @@ function buildPanelColourPanel(i, who = "Unknown User") {
   colourOptions.push({
     label: "Custom HEX",
     value: CUSTOM_HEX_VALUE,
-    emoji: "🎨",
+    emoji: EMOJIS.EMBED_COLOUR,
   });
 
   return {
@@ -2059,11 +2059,11 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
 
     description +=
       `### Management\n` +
-      `📂 **Load into Editor** — open this preset for editing.\n` +
-      `💾 **Update / Save** — save the current editor state.\n` +
+      `${EMOJIS.EMBED_OPEN_FOLDER} **Load into Editor** — open this preset for editing.\n` +
+      `${EMOJIS.EMBED_SAVE} **Update / Save** — save the current editor state.\n` +
       `✏️ **Rename** — change this preset's name.\n` +
       `${EMOJIS.DOCUMENT} **Duplicate** — create an independent copy.\n` +
-      `🗑️ **Delete** — remove this saved preset.\n` +
+      `${EMOJIS.DELETE} **Delete** — remove this saved preset.\n` +
       `${isDefault ? "☆ **Clear Default**" : emojiLabel('USER_STARBOARD', "**Set Default**")} — ` +
       `${
         isDefault
@@ -2082,7 +2082,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
     )
     .setTitle(
       selectedPreset
-        ? `💾 Preset Manager • ${cleanPresetName(selectedName)}`
+        ? `${EMOJIS.EMBED_SAVE} Preset Manager • ${cleanPresetName(selectedName)}`
         : emojiLabel('PRESETS', "Embed Preset Manager")
     )
     .setDescription(description.slice(0, 4096))
@@ -2144,10 +2144,10 @@ function buildSettingsPanel(interaction) {
   const description = [
     "Move saved Embed Builder presets between Goliath servers.",
     "",
-    "**📥 Upload File** — upload a saved preset `.json` file.",
-    "**📤 Export File** — download the selected preset as a `.json` file.",
-    "**📋 Paste JSON** — paste portable preset JSON from another Goliath Embed Builder.",
-    "**📋 Export JSON** — copy portable preset JSON to move it into another Embed Builder.",
+    `**${EMOJIS.EMBED_IMPORT} Upload File** — upload a saved preset `.json` file.",
+    `**${EMOJIS.MOD_EXPORT} Export File** — download the selected preset as a `.json` file.",
+    `**${EMOJIS.EMBED_FIELDS} Paste JSON** — paste portable preset JSON from another Goliath Embed Builder.",
+    `**${EMOJIS.EMBED_FIELDS} Export JSON** — copy portable preset JSON to move it into another Embed Builder.",
     "",
     "Select the preset you want to export in **Preset Manager** first.",
   ].join("\n");
@@ -2183,7 +2183,7 @@ function buildHelpersPanel(i) {
   return {
     embeds: [
       simplePanel(
-        "📖 Embed Variables",
+        emojiLabel('VARIABLES', 'Embed Variables'),
         HELPERS.map((h) => `\`${h}\``).join("\n"),
         s,
         memberName(i)
@@ -2936,7 +2936,7 @@ function buildMediaManagerPanel(
     new ActionRowBuilder().addComponents(
       mediaButton(
         "embed:media-type:cycle",
-        `🏷️ Type: ${
+        `${EMOJIS.ROLE_TAG} Type: ${
           {
             auto: "Auto",
             text: "Text",
@@ -3022,7 +3022,7 @@ function buildMediaManagerPanel(
     }**`,
     "",
     `⬆️ **Above Content** — ${aboveCount} • ⬇️ **Below Content** — ${belowCount}`,
-    `🖼️ **Thumbnail** — ${
+    `${EMOJIS.MEDIA} **Thumbnail** — ${
       panelMedia.thumbnail?.source
         ? "Configured"
         : "Not set"
@@ -3035,20 +3035,20 @@ function buildMediaManagerPanel(
   if (selectedMedia) {
     summary.push(
       "**Selected Media**",
-      `🔗 **File:** ${
+      `${EMOJIS.AUTOMOD_LINKS} **File:** ${
         String(
           selectedMedia.alt ||
           selectedMedia.source ||
           `Item ${galleryIndex + 1}`
         ).slice(0, 300)
       }`,
-      `📍 **Placement:** ${
+      `${EMOJIS.WELCOME_LOCATION} **Placement:** ${
         selectedMedia.placement === "above"
           ? emojiLabel('ROLE_UP', "Above Content")
           : emojiLabel('ROLE_DOWN', "Below Content")
       }`,
       `↔️ **Alignment:** ${alignmentLabel}`,
-      `🏷️ **Type:** ${
+      `${EMOJIS.ROLE_TAG} **Type:** ${
         {
           auto: "Auto",
           text: "Text",
@@ -3079,11 +3079,11 @@ function buildMediaManagerPanel(
   summary.push(
     "**Controls**",
     "**✏️ Edit** — Edit the selected media item.",
-    "**🏷️ Type** — Choose Auto, Text, GIF or Image for the selected media.",
-    "**👁️ Normal** — Show the selected media normally.",
+    `**${EMOJIS.ROLE_TAG} Type** — Choose Auto, Text, GIF or Image for the selected media.",
+    `**${EMOJIS.WELCOME_PREVIEW} Normal** — Show the selected media normally.",
     `**${EMOJIS.EMBED_SPOILER} Spoiler** — Hide the selected media behind Discord’s spoiler treatment.`,
     "**↔️ Alignments** — Set Above/Below Content, Left/Centre/Right and Small/Medium/Large.",
-    "**🖼️ Thumbnail** — Add or manage the panel thumbnail."
+    `**${EMOJIS.MEDIA} Thumbnail** — Add or manage the panel thumbnail."
   );
 
   const embeds = [
@@ -3423,12 +3423,12 @@ function buildMediaAlignmentPanel(ctx) {
     "**Panel media sync**",
     `⬆️ **Above Content** — ${aboveCount}`,
     `⬇️ **Below Content** — ${belowCount}`,
-    `🖼️ **Thumbnail** — ${
+    `${EMOJIS.MEDIA} **Thumbnail** — ${
       thumbnailConfigured
         ? "Configured"
         : "Not set"
     }`,
-    `📎 **Files** — ${files.length}/10`,
+    `${EMOJIS.AUTOMOD_ATTACHMENTS} **Files** — ${files.length}/10`,
     "",
     "Changes made here update the same selected media item shown in Media Manager. Placement, alignment and size are saved immediately.",
   ].join("\n");
@@ -3517,7 +3517,7 @@ function buildServerInfoPayload(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`🏠 ${guild?.name || "Server"}`)
+    .setTitle(`${EMOJIS.USER_HOME} ${guild?.name || "Server"}`)
     .setDescription(
       [
         `**Members:** ${guild?.memberCount ?? "Unknown"}`,
