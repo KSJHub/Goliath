@@ -1,4 +1,5 @@
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 import EmptyState from '../../shared/EmptyState.jsx';
 import { api } from '../../services/apiClient.js';
@@ -136,7 +137,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
     await action('template-create', () => api.request(`/api/schedule/${guildId}/templates/${template.templateId}/create-event`, { method: 'POST', body: JSON.stringify({ startAt: start.toISOString(), endAt: new Date(start.getTime() + sourceDuration).toISOString() }) }), 'Event created from template.');
   }
 
-  if (!guildId) return <EmptyState theme={theme} icon="📅" title="Select a server" description="Select a server to manage Schedule." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.DATE} title="Select a server" description="Select a server to manage Schedule." />;
   const upcoming = events.filter((event) => event.status === 'scheduled');
   const analytics = config?.analytics || {};
   const settings = config?.settings || {};
@@ -145,7 +146,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
   return <div style={{ display: 'grid', gap: 18 }}>
     <section style={{ ...card, padding: 24, background: 'linear-gradient(135deg, rgba(37,99,235,.2), rgba(15,23,42,.08) 50%, rgba(168,85,247,.16))' }}>
       <p style={{ margin: '0 0 8px', color: '#93c5fd', fontWeight: 950, letterSpacing: '.08em', textTransform: 'uppercase' }}>Utility Studio</p>
-      <h1 style={{ margin: 0, fontSize: 'clamp(28px,4vw,42px)' }}>📅 Schedule</h1>
+      <h1 style={{ margin: 0, fontSize: 'clamp(28px,4vw,42px)' }}>{E.DATE} Schedule</h1>
       <p style={{ color: theme.mutedText, maxWidth: 900, lineHeight: 1.6 }}>Create Sesh-style one-off or recurring events with custom RSVPs, capacity/waitlists, role restrictions, personal reminders, event notifications, threads, native Discord event mirroring and reusable templates.</p>
     </section>
 
@@ -227,7 +228,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
 
     <section style={{ ...card, padding: 22, display: 'grid', gap: 12 }}><h2 style={{ margin: 0 }}>Event Templates</h2>{templates.length ? templates.map((template) => <div key={template.templateId} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 14, padding: 13, display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}><strong>{template.name}</strong><div style={{ display: 'flex', gap: 8 }}><button style={buttonStyle(theme, 'primary')} onClick={() => createFromTemplate(template)}>Create Event</button><button style={buttonStyle(theme, 'danger')} onClick={async () => { if (await goliathDialog.confirm('Delete this template?', { title: 'Delete Event Template?', danger: true, confirmLabel: 'Delete Template' })) action('template-delete', () => api.request(`/api/schedule/${guildId}/templates/${template.templateId}`, { method: 'DELETE' }), 'Template deleted.'); }}>Delete</button></div></div>) : <div style={{ color: theme.mutedText }}>No templates saved yet. Save any event below as a reusable template.</div>}</section>
 
-    <section style={{ ...card, padding: 22, display: 'grid', gap: 12 }}><h2 style={{ margin: 0 }}>Events</h2>{events.length === 0 ? <EmptyState theme={theme} icon="📅" title="No events" description="Create your first scheduled event." /> : events.map((event) => {
+    <section style={{ ...card, padding: 22, display: 'grid', gap: 12 }}><h2 style={{ margin: 0 }}>Events</h2>{events.length === 0 ? <EmptyState theme={theme} icon={E.DATE} title="No events" description="Create your first scheduled event." /> : events.map((event) => {
       const attending = Object.values(event.rsvps || {}).filter((entry) => (event.rsvpOptions || []).some((option) => option.key === entry.status && option.isAttendee)).length;
       return <article key={event.eventId} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 16, padding: 16, display: 'grid', gap: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><strong>{event.title}</strong><div style={{ color: theme.mutedText }}>{new Date(event.startAt).toLocaleString()} · {event.status} · {event.timezone}</div><div style={{ color: theme.mutedText, marginTop: 4 }}>{event.recurrence?.type !== 'none' ? `Repeats ${event.recurrence.type}` : 'One-off'} · Native {event.mirrorDiscordEvent ? 'On' : 'Off'} · Thread {event.thread?.enabled ? 'On' : 'Off'}</div></div><div>{attending}{event.capacity ? `/${event.capacity}` : ''} attending</div></div>
