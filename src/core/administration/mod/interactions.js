@@ -345,7 +345,7 @@ function buildScanHistoryPayload(i, target, origin = 'scan') {
   const identity = historicalIdentitySnapshot(i.guild.id, target.id);
   const embed = new Discord.EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`🕘 Member Scan History • ${target.user.tag}`)
+    .setTitle(`${EMOJIS.MOD_SCAN_HISTORY} Member Scan History • ${target.user.tag}`)
     .setDescription(`**Target:** ${target.user} (\`${target.id}\`)\n\n${historyText.slice(0, 3500)}`)
     .addFields(
       { name: 'Captured Usernames', value: identity.names.length ? identity.names.slice(0, 20).map((value) => `\`${value}\``).join(' • ') : 'None captured yet.', inline: false },
@@ -401,8 +401,8 @@ function buildComparisonPayload(i, primary, secondary, origin = 'scan') {
     ].join('\n'))
     .addFields(
       { name: emojiLabel('INVESTIGATE', 'Correlation Signals'), value: correlation.signals.length ? correlation.signals.map((signal) => `• ${signal}`).join('\n') : 'No meaningful identity correlation signals detected.', inline: false },
-      { name: `🪪 ${primary.user.username}`, value: [`Global: ${primary.user.globalName || 'None'}`, `Display: ${primary.displayName}`, `Created: ${scanTimestamp(primary.user.createdTimestamp)}`, `Joined: ${scanTimestamp(primary.joinedTimestamp)}`, `Warnings: ${left.warningCount} • Cases: ${left.cases.length} • Bans: ${left.bans}`].join('\n'), inline: true },
-      { name: `🪪 ${secondary.user.username}`, value: [`Global: ${secondary.user.globalName || 'None'}`, `Display: ${secondary.displayName}`, `Created: ${scanTimestamp(secondary.user.createdTimestamp)}`, `Joined: ${scanTimestamp(secondary.joinedTimestamp)}`, `Warnings: ${right.warningCount} • Cases: ${right.cases.length} • Bans: ${right.bans}`].join('\n'), inline: true },
+      { name: `${EMOJIS.MOD_IDENTITY} ${primary.user.username}`, value: [`Global: ${primary.user.globalName || 'None'}`, `Display: ${primary.displayName}`, `Created: ${scanTimestamp(primary.user.createdTimestamp)}`, `Joined: ${scanTimestamp(primary.joinedTimestamp)}`, `Warnings: ${left.warningCount} • Cases: ${left.cases.length} • Bans: ${left.bans}`].join('\n'), inline: true },
+      { name: `${EMOJIS.MOD_IDENTITY} ${secondary.user.username}`, value: [`Global: ${secondary.user.globalName || 'None'}`, `Display: ${secondary.displayName}`, `Created: ${scanTimestamp(secondary.user.createdTimestamp)}`, `Joined: ${scanTimestamp(secondary.joinedTimestamp)}`, `Warnings: ${right.warningCount} • Cases: ${right.cases.length} • Bans: ${right.bans}`].join('\n'), inline: true },
       { name: emojiLabel('AUTOMOD_LIMITS', 'Timeline Difference'), value: [`Account creation gap: **${Math.round(deltaCreated / 3600000)}h**`, `Guild join gap: **${Math.round(deltaJoined / 3600000)}h**`].join('\n'), inline: false },
     )
     .setFooter({ text: 'Evidence-based comparison • no private Discord data is exposed to bots' })
@@ -553,7 +553,7 @@ async function showPersistentLinkEvidence(i, targetId) {
 ].join('\n');
 const embed = new Discord.EmbedBuilder()
   .setColor(evidence.length ? 0x5865F2 : 0x57F287)
-  .setTitle(`🔗 Correlation Evidence • ${target.user.tag}`)
+  .setTitle(`${EMOJIS.AUTOMOD_LINKS} Correlation Evidence • ${target.user.tag}`)
   .setDescription(text.slice(0, 3800))
   .setFooter({ text: evidence.length ? 'Historical correlation only • review scan history before drawing conclusions' : 'No repeated correlation signals recorded' })
   .setTimestamp();
@@ -569,7 +569,7 @@ async function showInvestigationWatch(i, targetId) {
   const state = getInvestigationState(i.guild.id, target.id);
   const embed = new Discord.EmbedBuilder()
     .setColor(state.watched ? 0xF0A202 : 0x5865F2)
-    .setTitle(`👁️ Investigation Watch • ${target.user.tag}`)
+    .setTitle(`${EMOJIS.WELCOME_PREVIEW} Investigation Watch • ${target.user.tag}`)
     .setDescription([
       `**Status:** ${state.watched ? emojiLabel('SEVERITY_HIGH', "ON") : emojiLabel('INACTIVE', "OFF")}`,
       state.watch?.reason ? `**Reason:** ${state.watch.reason}` : '**Reason:** No active investigation watch reason.',
@@ -671,10 +671,10 @@ async function handleMemberScanButton(i) {
     const origin = parts[2] || 'scan';
     const allowed = await ensureScanCapability(i, 'scan_compare', emojiLabel('ERROR', "You do not have permission to compare member intelligence."));
     if (!allowed) return true;
-    const select = new Discord.UserSelectMenuBuilder().setCustomId(`mod_scan_history_compare_select:${primaryId}:${origin}`).setPlaceholder('🧬 Select another member to compare').setMinValues(1).setMaxValues(1);
+    const select = new Discord.UserSelectMenuBuilder().setCustomId(`mod_scan_history_compare_select:${primaryId}:${origin}`).setPlaceholder(emojiLabel('MOD_ACCOUNT_COMPARE', 'Select another member to compare')).setMinValues(1).setMaxValues(1);
     const back = new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${primaryId}:${origin}`).setLabel(emojiLabel('BACK', 'Back to Scan History')).setStyle(Discord.ButtonStyle.Secondary);
     return safeUpdate(i, {
-      content: `🧬 **Compare Accounts** — select another server member to compare against <@${primaryId}>.`,
+      content: `${EMOJIS.MOD_ACCOUNT_COMPARE} **Compare Accounts** — select another server member to compare against <@${primaryId}>.`,
       embeds: [],
       components: [new Discord.ActionRowBuilder().addComponents(select), new Discord.ActionRowBuilder().addComponents(back)],
     });
@@ -698,7 +698,7 @@ async function removeQuarantine(i, targetId) {
   const result = await restoreQuarantinedMember(i.guild, target, { reason: `Quarantine removed by ${i.user?.tag || i.user?.id || 'moderator'}` });
   recordModerationSystemEvent({ interaction: i, event: result.success ? 'moderation.quarantine.removed' : 'moderation.quarantine.remove_failed', action: 'remove_quarantine', targetId: target.id, after: result });
   if (!result.success) return safeReply(i, { content: `${EMOJIS.ERROR} Failed to remove quarantine from **${target.user.tag}**: ${result.error || result.reason || 'Unknown error'}`, flags: 64 });
-  await safeReply(i, { content: `🔓 Quarantine removed from **${target.user.tag}** • restored **${result.restoredRoles || 0}** role(s).`, flags: 64 });
+  await safeReply(i, { content: `${EMOJIS.UNLOCK} Quarantine removed from **${target.user.tag}** • restored **${result.restoredRoles || 0}** role(s).`, flags: 64 });
   await refreshDashboard(Discord, i, target, { view: 'actions' });
   return true;
 }
@@ -775,7 +775,7 @@ async function handleActionModal(i) {
     const result = await quarantineMember(i.guild, target, { reason, quarantinedBy: i.user?.id || null });
     recordModerationSystemEvent({ interaction: i, event: result.success ? 'moderation.quarantine.applied' : 'moderation.quarantine.failed', action: 'quarantine', targetId: target.id, reason, after: result });
     if (!result.success) return safeReply(i, { content: `${EMOJIS.ERROR} Failed to quarantine **${target.user.tag}**: ${result.error || result.reason || 'Unknown error'}`, flags: 64 });
-    await safeReply(i, { content: result.dryRun ? `🧪 Quarantine dry-run completed for **${target.user.tag}**.` : `🚫 **${target.user.tag}** has been quarantined.`, flags: 64 });
+    await safeReply(i, { content: result.dryRun ? `${EMOJIS.TEST_SEND} Quarantine dry-run completed for **${target.user.tag}**.` : `${EMOJIS.AUTOMOD_SPAM} **${target.user.tag}** has been quarantined.`, flags: 64 });
     await refreshDashboard(Discord, i, target, { view: 'actions' });
     return true;
   }
@@ -952,7 +952,7 @@ async function handleOwnerCaseManagement(i) {
     if (!record) return safeReply(i, { content: 'Case not found.', flags: 64 });
     const warningCount = db.prepare('SELECT COUNT(*) AS n FROM warnings WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
     const auditCount = db.prepare('SELECT COUNT(*) AS n FROM case_audit WHERE guild_id = ? AND case_id = ?').get(String(i.guildId), caseId).n;
-    const review = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`🗂️ Manage Case #${caseId}`)
+    const review = new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.WORKSPACE} Manage Case #${caseId}`)
       .setDescription('Choose how this case should be handled. Both actions remove it from normal moderation records and member profiles.')
       .addFields(
         { name: emojiLabel('USER', "Member"), value: `<@${record.userId}>`, inline: false },
@@ -981,7 +981,7 @@ async function handleOwnerCaseManagement(i) {
     const warnings = JSON.parse(row.warning_data);
     const audits = JSON.parse(row.audit_data);
     const embed = new Discord.EmbedBuilder().setColor(0x5865F2)
-      .setTitle(`📦 Archived Case #${caseId}`)
+      .setTitle(`${EMOJIS.BULK} Archived Case #${caseId}`)
       .setDescription('This case is archived. Its details are restricted to the server owner and excluded from active moderation and member profiles.')
       .addFields(
         { name: emojiLabel('USER', "Member"), value: `<@${row.user_id}>`, inline: false },
@@ -1157,7 +1157,7 @@ async function routeButtonsAndSelects(i) {
       const caseId = Number(value.slice(2)), record = getCaseById(i.guild.id, caseId);
       if (!record) return safeReply(i, { content: 'Case not found.', flags: 64 });
       if (await caseProceeding.handleProceedingInteraction(i)) return true;
-      return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865f2).setTitle(`📁 Moderation Case #${caseId}`)
+      return i.update({ embeds: [new Discord.EmbedBuilder().setColor(0x5865f2).setTitle(`${EMOJIS.MOD_CASE_FOLDER} Moderation Case #${caseId}`)
         .addFields(
           { name: emojiLabel('USER', "Member"), value: `<@${record.userId || record.user_id}>`, inline: false },
           { name: emojiLabel('INCIDENT_AUDIT', "Action"), value: String(record.action || 'Unknown'), inline: true },
