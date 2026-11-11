@@ -61,7 +61,7 @@ function discordTimestamp(value, style = 'F') {
 }
 
 function voteSummary(suggestion) {
-  return `${EMOJIS.SUGGESTIONS_UP} **${suggestion.upVotes.length}** support   ·   👎 **${suggestion.downVotes.length}** not for me`;
+  return `${EMOJIS.SUGGESTIONS_UP} **${suggestion.upVotes.length}** support   ·   ${EMOJIS.SUGGESTIONS_DOWN} **${suggestion.downVotes.length}** not for me`;
 }
 
 function publicSuggestionAuthor(suggestion) {
@@ -242,7 +242,7 @@ function buildAuditLogEmbed(guild, suggestion, event = {}) {
 }
 
 function defaultSubmitPanelEmbed(section, enabled) {
-  const privacyNote = section.anonymous === true ? `\n\n${EMOJIS.LOCKDOWN} **Anonymous suggestions are on.** Your name is hidden from the public suggestion card. The management team can still identify submissions for moderation and follow-up.' : '';
+  const privacyNote = section.anonymous === true ? `\n\n${EMOJIS.LOCKDOWN} **Anonymous suggestions are on.** Your name is hidden from the public suggestion card. The management team can still identify submissions for moderation and follow-up.` : '';
   const description = enabled
     ? `Got an idea that could make the server better? Give it a short name, explain the idea, and share it with the community.\n\nYou can open **My Suggestions** at any time to follow its progress.${privacyNote}`
     : 'Suggestions are paused right now. You can still open **My Suggestions** to view ideas you have already shared.';
