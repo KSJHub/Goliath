@@ -30,10 +30,10 @@ const formatRoles = (ids = []) => Array.isArray(ids) && ids.filter(Boolean).leng
 
 function statusEmoji(status) {
   if (status === 'approved') return EMOJIS.SUCCESS;
-  if (status === 'implemented') return '🚀';
+  if (status === 'implemented') return EMOJIS.DEPLOY;
   if (status === 'denied') return EMOJIS.ERROR;
-  if (status === 'discussing') return '💬';
-  return '💡';
+  if (status === 'discussing') return EMOJIS.USER_FEEDBACK;
+  return EMOJIS.USER_SUGGESTIONS;
 }
 
 function statusLabel(status, section = {}) {
@@ -72,7 +72,7 @@ function publicSuggestionAuthor(suggestion) {
 function managementSuggestionAuthor(suggestion) {
   if (!suggestion?.authorId) return 'Unknown member';
   return suggestion.anonymous === true
-    ? `<@${suggestion.authorId}> · 🔒 hidden publicly`
+    ? `<@${suggestion.authorId}> · ${EMOJIS.LOCKDOWN} hidden publicly`
     : `<@${suggestion.authorId}>`;
 }
 
@@ -216,7 +216,7 @@ function buildManagementPayload(guild, suggestion, section) {
     button(`suggestions:manage:${suggestion.suggestionId}:deny`, emojiLabel('ERROR', 'Decline'), ButtonStyle.Danger),
   ));
   else if (suggestion.status === 'approved') components.push(row(button(`suggestions:manage:${suggestion.suggestionId}:implemented`, emojiLabel('DEPLOY', 'Mark Implemented'), ButtonStyle.Success)));
-  return { embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(`💡 ${suggestion.reference} · ${suggestion.title}`).setDescription(suggestion.content || '_No suggestion details were provided._').addFields(fields).setFooter({ text: 'Management view · actions here are logged' }).setTimestamp(new Date(suggestion.updatedAt || suggestion.createdAt || Date.now()))], components };
+  return { embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(`${EMOJIS.USER_SUGGESTIONS} ${suggestion.reference} · ${suggestion.title}`).setDescription(suggestion.content || '_No suggestion details were provided._').addFields(fields).setFooter({ text: 'Management view · actions here are logged' }).setTimestamp(new Date(suggestion.updatedAt || suggestion.createdAt || Date.now()))], components };
 }
 
 function buildAuditLogEmbed(guild, suggestion, event = {}) {
@@ -238,7 +238,7 @@ function buildAuditLogEmbed(guild, suggestion, event = {}) {
   if (publicLink) links.push(`[Public message](${publicLink})`);
   if (threadLink) links.push(`[Team discussion](${threadLink})`);
   if (links.length) fields.push({ name: 'Links', value: links.join(' · '), inline: false });
-  return new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(`💡 Suggestions Log · ${suggestion.reference}`).addFields(fields).setFooter({ text: 'Suggestions management audit log' }).setTimestamp(new Date(event.at || Date.now()));
+  return new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(`${EMOJIS.USER_SUGGESTIONS} Suggestions Log · ${suggestion.reference}`).addFields(fields).setFooter({ text: 'Suggestions management audit log' }).setTimestamp(new Date(event.at || Date.now()));
 }
 
 function defaultSubmitPanelEmbed(section, enabled) {
@@ -273,7 +273,7 @@ function buildMySuggestionsPayload(guildId, userId, page = 0) {
   const pageRecords = records.slice(safePage * pageSize, (safePage + 1) * pageSize);
   const counts = records.reduce((out, item) => { out[item.status] = Number(out[item.status] || 0) + 1; return out; }, { pending: 0, discussing: 0, approved: 0, implemented: 0, denied: 0 });
   const lines = pageRecords.length ? pageRecords.map((item) => {
-    const privacy = item.anonymous === true ? ' · 🔒 Anonymous' : '';
+    const privacy = item.anonymous === true ? ` · ${EMOJIS.LOCKDOWN} Anonymous` : '';
     return `${statusEmoji(item.status)} **${item.title}** · ${statusLabel(item.status, section)} · ${shortDate(item.createdAt)}${privacy}`;
   }) : ['You have not shared any suggestions yet.'];
   const components = [];
@@ -290,8 +290,8 @@ function buildMySuggestionsPayload(guildId, userId, page = 0) {
   return {
     embeds: [new EmbedBuilder().setColor(SUGGESTIONS_COLOR).setTitle(emojiLabel('USER_SUGGESTIONS', 'My Suggestions')).setDescription([
       'Follow the progress of ideas you have shared.', '',
-      `💡 Open: **${counts.pending}** · 💬 Discussing: **${counts.discussing}** · ${EMOJIS.SUCCESS} Approved: **${counts.approved}**`,
-      `🚀 Implemented: **${counts.implemented}** · ${EMOJIS.ERROR} Declined: **${counts.denied}**`, '', ...lines, '',
+      `${EMOJIS.USER_SUGGESTIONS} Open: **${counts.pending}** · 💬 Discussing: **${counts.discussing}** · ${EMOJIS.SUCCESS} Approved: **${counts.approved}**`,
+      `${EMOJIS.DEPLOY} Implemented: **${counts.implemented}** · ${EMOJIS.ERROR} Declined: **${counts.denied}**`, '', ...lines, '',
       `Page **${safePage + 1} of ${totalPages}** · **${records.length}** total`,
     ].join('\n')).setFooter({ text: 'Only you can see this.' }).setTimestamp()],
     components, flags: MessageFlags.Ephemeral,
