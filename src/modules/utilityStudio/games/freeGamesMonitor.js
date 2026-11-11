@@ -268,8 +268,10 @@ async function saveGameSubscription(guild, patch) {
       const feed = await providers.getGameNews(appId);
       next.seenIds = feed.items.map(item => item.id);
       next.initialized = true; next.lastCheck = Date.now();
-      // Configuration changes start from the next announcement. Preserve uncertain deliveries for review.
-      next.pending = (previous?.pending || []).filter(entry => entry.status !== 'pending');
+      // Configuration changes start from the next announcement, but disabling
+      // or re-enabling must never silently discard already queued deliveries.
+      // Existing route receipts and held sends remain intact until resolved.
+      next.pending = previous?.pending || [];
     }
     next.error = null;
     store.updateGameUpdates(guild.id, current => ({ ...current, subscriptions: { ...current.subscriptions, [appId]: next } }));
