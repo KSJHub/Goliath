@@ -1,6 +1,6 @@
 'use strict';
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   EmbedBuilder,
@@ -216,7 +216,7 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User', rolePage 
       '',
       '**XP Multiplier**',
       activeMultiplier
-        ? `🟢 **${activeMultiplier.name || 'Active Multiplier'}** · ${activeMultiplier.value}×`
+        ? `${EMOJIS.ACTIVE} **${activeMultiplier.name || 'Active Multiplier'}** · ${activeMultiplier.value}×`
         : formatMultiplier(section),
       '',
       `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`,
@@ -659,7 +659,7 @@ function buildRewardDetailPanel(guild, level, memberDisplayName = 'Unknown User'
   return {
     embeds: [new EmbedBuilder()
       .setColor(roleExists ? 0x5865f2 : 0xFEE75C)
-      .setTitle(`🏅 Reward · Level ${reward.level}`)
+      .setTitle(`${EMOJIS.LEVEL_REWARD} Reward · Level ${reward.level}`)
       .setDescription([
         `**Level:** ${reward.level}`,
         `**Role:** <@&${reward.roleId}>`,
