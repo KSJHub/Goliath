@@ -52,4 +52,46 @@ const crowded = {
 };
 assert.throws(() => planBlueprint(crowded, { categories: [{ name: 'Extra', channels: [] }] }),
   /500-channel guild limit/);
-console.log('Goliath AI blueprint dry-run contracts passed.');
+// Saved draft contracts use an isolated temporary file, never live runtime data.
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const store = require('../src/owner/dev/goliathDraftStore');
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-ai-drafts-'));
+const tempFile = path.join(tempDir, 'drafts.json');
+const oldMode = process.env.BOT_MODE;
+try {
+  process.env.BOT_MODE = 'DEV';
+  const fingerprint = 'a'.repeat(64);
+  const draft = store.saveDraft({
+    environment: 'DEV', guildId, guildName: audit.guild.name,
+    ownerId: guildId, title: 'Initial rebuild', blueprint: changed,
+    auditDigest: fingerprint, basedOnAudit: audit.timestamp
+  }, tempFile);
+  assert.equal(draft.review.status, 'draft');
+  assert.equal(draft.executable, false);
+  assert.equal(store.listDrafts(tempFile).length, 1);
+  assert.equal(store.loadDraft(draft.id, tempFile).blueprint.categories.length, 2);
+  assert.throws(() => store.reviewDraft({
+    id: draft.id, ownerId: guildId, currentAuditDigest: 'b'.repeat(64)
+  }, tempFile), /server changed/i);
+  const reviewed = store.reviewDraft({
+    id: draft.id, ownerId: guildId, currentAuditDigest: fingerprint
+  }, tempFile);
+  assert.equal(reviewed.review.status, 'reviewed');
+  assert.equal(reviewed.review.checkedBy, guildId);
+  assert.equal(reviewed.executable, false);
+  assert.equal(store.deleteDraft(draft.id, tempFile), true);
+  assert.equal(store.listDrafts(tempFile).length, 0);
+  assert.equal(store.deleteDraft(draft.id, tempFile), false);
+  process.env.BOT_MODE = 'PRODUCTION';
+  assert.throws(() => store.saveDraft({
+    environment: 'PRODUCTION', guildId, ownerId: guildId,
+    title: 'Must fail', blueprint: changed, auditDigest: fingerprint, basedOnAudit: audit.timestamp
+  }, tempFile), /DEV-only/);
+} finally {
+  if (oldMode === undefined) delete process.env.BOT_MODE; else process.env.BOT_MODE = oldMode;
+  fs.rmSync(tempDir, { recursive: true, force: true });
+}
+
+console.log('Goliath AI blueprint and saved-draft contracts passed.');
