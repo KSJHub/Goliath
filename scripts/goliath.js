@@ -5531,7 +5531,40 @@ assert.equal(buildTransactionManifest({
   currentDigest: 'b'.repeat(64)
 }).unavailable, true);
 
-console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-preflight and recovery and transaction-manifest contracts passed.');
+const { simulateTransaction } = require('../src/owner/dev/goliathExecutionReadiness');
+const originalSimulationAudit = JSON.stringify(audit);
+const structural = simulateTransaction({
+  draft: manifestDraft, audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
+});
+assert.equal(structural.simulated, true);
+assert.equal(structural.safeToApply, false);
+assert.equal(structural.canExecute, false);
+assert.equal(structural.operationsChecked, preview.operations.length);
+assert.equal(JSON.stringify(audit), originalSimulationAudit);
+const rehearsedWrongGuild = simulateTransaction({
+  draft: { ...manifestDraft, guildId: otherId },
+  audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
+});
+assert.equal(rehearsedWrongGuild.simulated, false);
+assert.equal(rehearsedWrongGuild.canExecute, false);
+const missingOriginal = simulateTransaction({
+  draft: manifestDraft, audit: readyAudit,
+  preview: { ...preview, operations: preview.operations.map((item, index) =>
+    index === 0 ? { ...item, target: { id: '999999999999999999', name: 'unknown' } } : item) },
+  currentDigest: 'a'.repeat(64)
+});
+assert.equal(missingOriginal.simulated, false);
+assert(missingOriginal.problems.some(item => item.includes('original target missing')));
+const invalidParent = simulateTransaction({
+  draft: manifestDraft, audit: readyAudit,
+  preview: { ...preview, operations: preview.operations.map(item =>
+    item.kind === 'create_channel' && item.after?.parentId
+      ? { ...item, after: { ...item.after, parentId: '999999999999999999' } } : item) },
+  currentDigest: 'a'.repeat(64)
+});
+assert.equal(invalidParent.canExecute, false);
+
+console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-preflight and recovery and transaction-manifest and offline-simulation contracts passed.');
 
   return true;
 }
