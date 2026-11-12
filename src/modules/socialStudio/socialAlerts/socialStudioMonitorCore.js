@@ -485,7 +485,7 @@ async function checkGuildAccounts(client,guildId,options={}) {
       const checkedLiveId=checked.isLive===true&&checked.event?.id?String(checked.event.id):null; if(checkedLiveId&&previous.isLive===true&&previous.liveEventId&&checkedLiveId!==String(previous.liveEventId)) console.warn('[Social Studio] LIVE provider event ID changed during active session; retaining tracked message',accountId,previous.liveEventId,checkedLiveId);
       const previousLiveId=previous.isLive===true&&previous.liveEventId?String(previous.liveEventId):null;
       const currentLiveId=state.isLive===true&&state.liveEventId?String(state.liveEventId):null;
-      const sameActiveBroadcast=Boolean(checked.isLive===true&&previous.isLive===true&&previousLiveId&&currentLiveId&&previousLiveId===currentLiveId);
+      const sameActiveBroadcast=Boolean(checked.isLive===true&&previous.isLive===true&&checked.event&&hasTrackedLiveMessage(previous)); // Track the live session by its Discord message, not unstable provider event IDs.
 
       if(sameActiveBroadcast&&liveMessageUpdateDue(account,previous,checked,config.settings)){
         let updated=null,recovered=false,refreshError=null;
