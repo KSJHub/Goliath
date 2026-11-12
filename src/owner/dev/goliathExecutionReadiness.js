@@ -145,7 +145,9 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
     throw new Error('A saved draft, verified audit and fresh preview are required.');
   }
   const sameTarget = draft.environment === audit.environment &&
-    String(draft.guildId) === String(audit.guild?.id);
+    String(draft.guildId) === String(audit.guild?.id) &&
+    preview.environment === audit.environment &&
+    String(preview.guild?.id) === String(audit.guild?.id);
   const snapshotMatches = typeof currentDigest === 'string' &&
     currentDigest.length === 64 && currentDigest === draft.auditDigest;
   const reviewed = draft.review?.status === 'reviewed';
