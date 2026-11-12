@@ -131,6 +131,67 @@ function buildFindings(guildId, roles, channels) {
       info: findings.filter(f => f.severity === 'info').length } };
 }
 
+
+// Deterministic previews only. No Discord write methods are called here.
+function buildPreview(audit) {
+  const proposals = [];
+  const roleMap = new Map(audit.roles.map(role => [role.id, role]));
+  const channelMap = new Map(audit.channels.map(channel => [channel.id, channel]));
+  const base = roleMap.get(audit.guild.id);
+  if (base) {
+    const privileged = RISK_BITS.filter(([, bit]) => (BigInt(base.permissions) & bit) !== 0n);
+    if (privileged.length) {
+      const mask = privileged.reduce((acc, [, bit]) => acc | bit, 0n);
+      const next = (BigInt(base.permissions) & ~mask).toString();
+      proposals.push({
+        id: 'base-permissions-' + base.id, kind: 'role_permissions',
+        risk: 'critical', status: 'needs-owner-review', target: { type: 'role', id: base.id, name: base.name },
+        description: 'Review elevated @everyone permissions.',
+        before: { permissions: base.permissions },
+        proposed: { permissions: next },
+        changedPermissions: privileged.map(([name]) => name),
+        warning: 'Illustrative least-privilege suggestion. Review all existing access and integrations before any actual edit.'
+      });
+    }
+  }
+  for (const role of audit.roles) {
+    if (role.id === audit.guild.id || role.managed) continue;
+    if ((BigInt(role.permissions) & (1n << 3n)) !== 0n) {
+      proposals.push({
+        id: 'review-admin-' + role.id, kind: 'manual_review',
+        risk: 'high', status: 'manual-only', target: { type: 'role', id: role.id, name: role.name },
+        description: 'Verify membership of this Administrator role.',
+        before: { permissions: role.permissions }, proposed: null,
+        warning: 'No automatic removal is proposed because the role may be intentionally privileged.'
+      });
+    }
+  }
+  const overridesCanonical = overrides => JSON.stringify(overrides.map(item =>
+    [String(item.type), String(item.id), String(item.allow), String(item.deny)].join(':')).sort());
+  for (const channel of audit.channels) {
+    const parent = channel.parentId && channelMap.get(channel.parentId);
+    if (!parent || overridesCanonical(channel.permissionOverwrites) === overridesCanonical(parent.permissionOverwrites)) continue;
+    proposals.push({
+      id: 'review-sync-' + channel.id, kind: 'channel_overwrites',
+      risk: 'medium', status: 'needs-owner-review',
+      target: { type: 'channel', id: channel.id, name: channel.name },
+      parent: { id: parent.id, name: parent.name },
+      description: 'Consider syncing channel permissions to its parent category.',
+      before: { permissionOverwrites: channel.permissionOverwrites },
+      proposed: { permissionOverwrites: parent.permissionOverwrites },
+      warning: 'Syncing may remove deliberate member/staff exceptions. Check access before approving.'
+    });
+  }
+  return {
+    readOnly: true, executable: false,
+    environment: audit.environment, guild: audit.guild,
+    basedOnAudit: audit.timestamp, generatedAt: new Date().toISOString(),
+    proposals: proposals.slice(0, 100), totalProposals: proposals.length,
+    truncated: proposals.length > 100,
+    notice: 'Preview only; no Discord changes were performed. All proposed values must be revalidated against a fresh audit before any future write capability.'
+  };
+}
+
 async function readAudit(req, id) {
   const guild = req.client?.guilds?.cache?.get(id);
   if (!guild) return null;
@@ -233,6 +294,26 @@ router.get('/audit/:environment/:guildId', requireAIIdentity, async (req, res) =
     return res.status(503).json({ error: 'Selected environment is unavailable or not yet equipped with Goliath AI auditing.' });
   }
 });
+router.get('/plan/:environment/:guildId', requireAIIdentity, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'Goliath AI controller is hosted in DEV.' });
+  const environment = String(req.params.environment || '').toUpperCase();
+  const target = ENVIRONMENTS.find(item => item.environment === environment);
+  const guildId = String(req.params.guildId || '');
+  if (!target || !SNOWFLAKE.test(guildId)) return res.status(400).json({ error: 'Invalid environment or guild ID.' });
+  try {
+    const audit = environment === 'DEV'
+      ? await readAudit(req, guildId)
+      : await internalGet(target.port, '/api/owner/ai/audit/local/' + guildId);
+    if (!audit || audit.environment !== environment || audit.guild?.id !== guildId || audit.readOnly !== true ||
+        !Array.isArray(audit.roles) || !Array.isArray(audit.channels)) {
+      return res.status(503).json({ error: 'Current audited guild data is unavailable.' });
+    }
+    return res.json(buildPreview(audit));
+  } catch (error) {
+    return res.status(503).json({ error: 'Could not prepare a preview for this environment and server.' });
+  }
+});
+
 router.get('/audit/:guildId', requireAIIdentity, async (req, res) =>
   res.status(400).json({ error: 'Select both the environment and the guild to avoid ambiguity.' }));
 
