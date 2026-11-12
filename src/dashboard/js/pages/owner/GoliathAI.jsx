@@ -108,6 +108,16 @@ export default function GoliathAI({ theme }) {
       setNewCategoryName(''); setNewChannelLines('');
     } catch (err) { setError(err.message); }
   };
+  const importBlueprint = async (file) => {
+    if (!file) return;
+    setError(''); setBlueprintPlan(null);
+    try {
+      if (file.size > 256000) throw new Error('Blueprint file is too large (256 KB maximum).');
+      const raw = JSON.parse(await file.text());
+      if (!raw || !Array.isArray(raw.categories)) throw new Error('Selected file is not a valid Goliath blueprint.');
+      setBlueprintText(JSON.stringify(raw, null, 2));
+    } catch (err) { setError(err.message); }
+  };
   const exportBlueprint = () => {
     setError('');
     try {
@@ -217,6 +227,12 @@ export default function GoliathAI({ theme }) {
           <p style={{ color: theme?.mutedText || '#94a3b8' }}>Load the current server layout as editable JSON. Add or rename categories and channels in the blueprint, then generate a proposed change list. Existing content is preserved. Nothing can be applied from this screen.</p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button type="button" onClick={loadBlueprint} disabled={blueprintBusy} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b' }}>{blueprintBusy ? 'Working…' : 'Load current layout'}</button>
+            <label style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b', cursor: 'pointer' }}>
+              Import JSON blueprint
+              <input type="file" accept=".json,application/json" aria-label="Import a Goliath AI blueprint JSON file"
+                onChange={event => { void importBlueprint(event.target.files?.[0]); event.target.value = ''; }}
+                style={{ display: 'block', width: 140, marginTop: 6, fontSize: 11 }} />
+            </label>
             <button type="button" onClick={exportBlueprint} disabled={!blueprintText.trim()} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b' }}>Export JSON blueprint</button>
             <button type="button" onClick={previewBlueprint} disabled={blueprintBusy || !blueprintText.trim()} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#2563eb', border: 'none' }}>Preview layout changes</button>
           </div>
