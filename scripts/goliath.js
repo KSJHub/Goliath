@@ -5431,7 +5431,33 @@ const prohibited = buildCapabilityPreflight({
 assert.equal(prohibited.operations[0].permission, 'blocked');
 assert.equal(prohibited.canExecute, false);
 
-console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-preflight contracts passed.');
+const { buildRecoveryPlan } = require('../src/owner/dev/goliathExecutionReadiness');
+const recovery = buildRecoveryPlan({
+  draft: { ...readyDraft, blueprint: changed }, audit: readyAudit,
+  preview, currentDigest: 'a'.repeat(64)
+});
+assert.equal(recovery.canRollback, false);
+assert.equal(recovery.executable, false);
+assert.equal(recovery.rollbackTested, false);
+assert.equal(recovery.operationCount, preview.operations.length);
+assert(recovery.items.every(item => item.automaticRollbackSupported === false && item.executable === false));
+assert.equal(recovery.items[0].recoveryType, 'restore_original_name');
+assert(recovery.items.some(item => item.kind === 'create_channel' &&
+  item.issues.some(issue => issue.includes('not an automatic rollback'))));
+assert.equal(buildRecoveryPlan({
+  draft: { ...readyDraft, blueprint: changed }, audit: readyAudit,
+  preview, currentDigest: 'b'.repeat(64)
+}).stale, true);
+assert.throws(() => buildRecoveryPlan({
+  draft: { ...readyDraft, environment: 'PRODUCTION', blueprint: changed },
+  audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
+}), /exact scoped guild/);
+assert.throws(() => buildRecoveryPlan({
+  draft: { ...readyDraft, blueprint: changed },
+  audit: { ...readyAudit, guild: { id: otherId } }, preview, currentDigest: 'a'.repeat(64)
+}), /exact scoped guild/);
+
+console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-preflight and recovery contracts passed.');
 
   return true;
 }
