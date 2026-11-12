@@ -2,7 +2,33 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../services/apiClient.js';
 
 const panel = { border: '1px solid rgba(148,163,184,.24)', borderRadius: 16, background: 'rgba(15,23,42,.65)', padding: 16 };
-const first = [{ role: 'assistant', content: 'Welcome to Goliath AI. This is your private developer chat. The free local model must be installed and enabled before I can reply.' }];
+const first = [{ role: 'assistant', content: 'Welcome to Goliath AI. This private DEV chat uses your local model when enabled. Responses are suggestions, not verified changes to Discord.' }];
+
+// Render only a small, safe subset of model Markdown as React text nodes.
+// No raw HTML, embedded images or executable links are accepted from the model.
+function renderAIInline(value) {
+  const parts = String(value).split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return <code key={index} style={{ background: 'rgba(148,163,184,.18)', padding: '1px 4px', borderRadius: 4 }}>{part.slice(1, -1)}</code>;
+    }
+    return <React.Fragment key={index}>{part}</React.Fragment>;
+  });
+}
+
+function AIReply({ content }) {
+  return <div style={{ display: 'grid', gap: 4 }}>
+    {String(content).split(/\r?\n/).map((line, index) => {
+      const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+      if (bullet) return <div key={index} style={{ paddingLeft: 16, textIndent: -12 }}>• {renderAIInline(bullet[1])}</div>;
+      if (!line.trim()) return <div key={index} style={{ height: 6 }} />;
+      return <div key={index}>{renderAIInline(line)}</div>;
+    })}
+  </div>;
+}
 export default function GoliathAI({ theme }) {
   const [status, setStatus] = useState(null);
   const [health, setHealth] = useState(null);
@@ -618,7 +644,7 @@ export default function GoliathAI({ theme }) {
     {audit && <p style={{ color: theme?.mutedText || '#94a3b8', fontSize: 13, margin: 0 }}>When AI chat is enabled, replies will use a fresh read-only audit of <strong>{audit.environment} — {audit.guild?.name}</strong> for context. No changes can be made from chat.</p>}
     <div aria-label="Conversation" style={{ ...panel, minHeight: 280, maxHeight: '52vh', overflowY: 'auto', display: 'grid', alignContent: 'start', gap: 12 }}>
       {messages.map((message, index) => <div key={index} style={{ maxWidth: '94%', justifySelf: message.role === 'user' ? 'end' : 'start', padding: 12, borderRadius: 12, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: message.role === 'user' ? 'rgba(37,99,235,.3)' : 'rgba(148,163,184,.14)' }}>
-        <strong style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>{message.role === 'user' ? 'You' : 'Goliath AI'}</strong>{message.content}
+        <strong style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>{message.role === 'user' ? 'You' : 'Goliath AI'}</strong>{message.role === 'assistant' ? <AIReply content={message.content} /> : message.content}
       </div>)}
       <div ref={bottom} />
     </div>
