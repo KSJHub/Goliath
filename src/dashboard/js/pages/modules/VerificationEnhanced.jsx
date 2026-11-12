@@ -86,6 +86,52 @@ function Field({ theme, label, value, onChange, multiline = false, placeholder =
   );
 }
 
+const SECURITY_OPTIONS = [
+  ['simple', 'Simple button'], ['captcha', 'CAPTCHA'], ['minigame', 'Mini-games'],
+  ['accountAge', 'Account age'], ['discordScreening', 'Discord screening'],
+  ['botProtection', 'Bot protection'], ['staffApproval', 'Staff approval'],
+  ['oneTimeChallenge', 'One-time challenge'], ['riskBased', 'Risk-based checks'],
+  ['rejoinHistory', 'Rejoin history'],
+];
+const FLOW_NAMES = {
+  simple: 'simple', captcha: 'captcha', minigame: 'minigame',
+  accountAge: 'account_age', discordScreening: 'discord_screening',
+  botProtection: 'bot_protection', staffApproval: 'staff_approval',
+  oneTimeChallenge: 'one_time_challenge', riskBased: 'risk_based',
+  rejoinHistory: 'rejoin_history',
+};
+function readPath(source, path) {
+  return path.split('.').reduce((value, key) => value?.[key], source);
+}
+function writePath(source, path, value) {
+  const keys = path.split('.');
+  const result = { ...source };
+  let node = result;
+  let previous = source;
+  keys.forEach((key, index) => {
+    if (index === keys.length - 1) node[key] = value;
+    else {
+      node[key] = { ...(previous?.[key] || {}) };
+      node = node[key];
+      previous = previous?.[key];
+    }
+  });
+  return result;
+}
+function Toggle({ theme, label, checked, onChange }) {
+  return <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.cardText, fontWeight: 750 }}>
+    <input type="checkbox" checked={Boolean(checked)} onChange={(event) => onChange(event.target.checked)} />
+    {label}
+  </label>;
+}
+function NumberSetting({ theme, label, value, min = 0, max = 10080, onChange }) {
+  return <label style={{ display: 'grid', gap: 6, color: theme.mutedText, fontSize: 12, fontWeight: 850 }}>
+    {label}
+    <input type="number" min={min} max={max} value={value ?? ''} onChange={(event) => onChange(event.target.value === '' ? '' : Number(event.target.value))}
+      style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.55)', color: theme.cardText, borderRadius: 10, padding: 10, width: '100%' }} />
+  </label>;
+}
+
 function Stat({ theme, label, value, hint }) {
   return (
     <div style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(15,23,42,0.32)', borderRadius: 16, padding: 15 }}>
@@ -106,6 +152,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [advanced, setAdvanced] = useState(null);
 
   const card = useMemo(() => ({
     border: `1px solid ${theme.cardBorder}`,
@@ -155,6 +202,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         adminConfig: config,
       };
       setData(adapted);
+      setAdvanced(config);
       setRoles(list(rolePayload, 'roles'));
       setChannels(list(channelPayload, 'channels'));
       const currentPanels = Array.isArray(overview?.panels) ? overview.panels : [];
@@ -188,15 +236,38 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   async function saveConfig(patch) {
-    await act('config', () => api.saveVerificationConfig(guildId, {
-      enabled: patch.enabled ?? adminConfig.enabled,
-      verificationChannelId: patch.verificationChannelId ?? adminConfig.verificationChannelId,
-      logChannelId: patch.logChannelId ?? adminConfig.logChannelId,
-      verifiedRoleIds: patch.verifiedRoleIds ?? adminConfig.verifiedRoleIds ?? [],
-      pendingRoleIds: patch.pendingRoleIds ?? adminConfig.pendingRoleIds ?? [],
-      dmOnVerify: patch.dmOnVerify ?? adminConfig.dmOnVerify,
-      removePendingRole: patch.removePendingRole ?? adminConfig.removePendingRole,
-    }), 'Verification configuration saved.');
+    await act('config', () => api.saveVerificationConfig(guildId, patch), 'Verification configuration saved.');
+  }
+
+  function setAdvancedPath(path, value) {
+    setAdvanced((current) => writePath(current || settings, path, value));
+  }
+
+  function toggleSecurity(key, enabled) {
+    setAdvanced((current) => {
+      const next = writePath(current || settings, `security.${key}`, enabled);
+      const method = FLOW_NAMES[key];
+      const ordered = [...(next.flow?.orderedSecurity || ['simple'])];
+      if (enabled && !ordered.includes(method)) ordered.push(method);
+      if (!enabled && ordered.includes(method)) ordered.splice(ordered.indexOf(method), 1);
+      return writePath(next, 'flow.orderedSecurity', ordered.length ? ordered : ['simple']);
+    });
+  }
+
+  async function saveAdvanced() {
+    if (!advanced) return;
+    const order = advanced.flow?.orderedSecurity || [];
+    if (advanced.security?.staffApproval && !order.includes('staff_approval')) {
+      setError('Add Staff Approval to the flow or disable it before saving.');
+      return;
+    }
+    const staffRoles = advanced.roles?.staff || [];
+    if (advanced.security?.staffApproval && staffRoles.length === 0) {
+      setError('Select at least one Staff Approval role before saving.');
+      return;
+    }
+    const { enabled: _enabled, ...settingsPayload } = advanced;
+    await saveConfig({ settings: settingsPayload });
   }
 
   function selectPanel(panelId) {
@@ -267,6 +338,92 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
           <a href={api.getVerificationExportUrl(guildId)} style={{ ...buttonStyle(theme), textDecoration: 'none' }}>Export JSON</a>
           <button type="button" disabled={busy} onClick={resetModule} style={buttonStyle(theme, 'danger')}>Reset Module</button>
         </div>
+      </section>
+
+      <section style={{ ...card, display: 'grid', gap: 18 }}>
+        <div><h2 style={{ margin: 0 }}>Security Methods & Verification Flow</h2>
+          <p style={{ color: theme.mutedText }}>Per-server security methods. Staff Approval is optional and can be placed anywhere in the flow.</p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: 12 }}>
+          {SECURITY_OPTIONS.map(([key, label]) => <Toggle key={key} theme={theme} label={label}
+            checked={readPath(advanced, `security.${key}`)} onChange={(value) => toggleSecurity(key, value)} />)}
+        </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Ordered Verification Steps</h3>
+          {(advanced?.flow?.orderedSecurity || []).map((method, index, items) => (
+            <div key={method} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ flex: 1 }}>{index + 1}. {SECURITY_OPTIONS.find(([key]) => FLOW_NAMES[key] === method)?.[1] || method}</span>
+              <button type="button" disabled={busy || index === 0} style={buttonStyle(theme)} onClick={() => {
+                const next = [...items]; [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                setAdvancedPath('flow.orderedSecurity', next);
+              }}>Move up</button>
+              <button type="button" disabled={busy || index === items.length - 1} style={buttonStyle(theme)} onClick={() => {
+                const next = [...items]; [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                setAdvancedPath('flow.orderedSecurity', next);
+              }}>Move down</button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: 14 }}>
+          <NumberSetting theme={theme} label="Maximum failed attempts" value={readPath(advanced, 'security.maximumFailedAttempts')} min={0} max={1000} onChange={(v) => setAdvancedPath('security.maximumFailedAttempts', v)} />
+          <NumberSetting theme={theme} label="Cooldown (seconds)" value={readPath(advanced, 'security.attemptCooldownSeconds')} max={86400} onChange={(v) => setAdvancedPath('security.attemptCooldownSeconds', v)} />
+          <NumberSetting theme={theme} label="Session timeout (minutes)" value={readPath(advanced, 'security.sessionTimeoutMinutes')} min={1} onChange={(v) => setAdvancedPath('security.sessionTimeoutMinutes', v)} />
+          <NumberSetting theme={theme} label="Minimum account age (days)" value={readPath(advanced, 'security.minimumAccountAgeDays')} max={3650} onChange={(v) => setAdvancedPath('security.minimumAccountAgeDays', v)} />
+          <NumberSetting theme={theme} label="CAPTCHA timeout (seconds)" value={readPath(advanced, 'security.captchaConfig.timeLimitSeconds')} min={15} max={900} onChange={(v) => setAdvancedPath('security.captchaConfig.timeLimitSeconds', v)} />
+          <NumberSetting theme={theme} label="CAPTCHA attempts" value={readPath(advanced, 'security.captchaConfig.maxChallengeAttempts')} min={1} max={20} onChange={(v) => setAdvancedPath('security.captchaConfig.maxChallengeAttempts', v)} />
+          <NumberSetting theme={theme} label="Mini-game rounds" value={readPath(advanced, 'security.minigameConfig.rounds')} min={1} max={10} onChange={(v) => setAdvancedPath('security.minigameConfig.rounds', v)} />
+          <NumberSetting theme={theme} label="Mini-game timeout (seconds)" value={readPath(advanced, 'security.minigameConfig.timeLimitSeconds')} min={1} onChange={(v) => setAdvancedPath('security.minigameConfig.timeLimitSeconds', v)} />
+          <NumberSetting theme={theme} label="One-time challenge timeout (seconds)" value={readPath(advanced, 'security.oneTimeChallengeConfig.timeLimitSeconds')} min={15} max={1800} onChange={(v) => setAdvancedPath('security.oneTimeChallengeConfig.timeLimitSeconds', v)} />
+          <NumberSetting theme={theme} label="Staff approval timeout (minutes)" value={readPath(advanced, 'security.staffApprovalConfig.timeoutMinutes')} min={1} onChange={(v) => setAdvancedPath('security.staffApprovalConfig.timeoutMinutes', v)} />
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+          <Toggle theme={theme} label="Random mini-games" checked={readPath(advanced, 'security.minigameConfig.random')} onChange={(v) => setAdvancedPath('security.minigameConfig.random', v)} />
+          <Toggle theme={theme} label="Quarantine after failed attempts" checked={readPath(advanced, 'security.quarantineOnLimit')} onChange={(v) => setAdvancedPath('security.quarantineOnLimit', v)} />
+          <Toggle theme={theme} label="Enable verification flow" checked={readPath(advanced, 'flow.enabled')} onChange={(v) => setAdvancedPath('flow.enabled', v)} />
+        </div>
+      </section>
+
+      <section style={{ ...card, display: 'grid', gap: 16 }}>
+        <h2 style={{ margin: 0 }}>Staff Approval</h2>
+        <p style={{ color: theme.mutedText, margin: 0 }}>Optional per server. Choose which staff role can approve members when this method is enabled.</p>
+        <Toggle theme={theme} label="Require Staff Approval" checked={readPath(advanced, 'security.staffApproval')} onChange={(v) => toggleSecurity('staffApproval', v)} />
+        <RoleSelect theme={theme} resources={usableRoles} value={advanced?.roles?.staff?.[0] || ''} label="Staff approval role"
+          onChange={(value) => setAdvancedPath('roles.staff', value ? [value] : [])} />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+          {['allowApprove', 'allowReject', 'allowQuarantine'].map((key) => <Toggle key={key} theme={theme} label={key.replace('allow', 'Allow ')}
+            checked={readPath(advanced, `security.staffApprovalConfig.${key}`)}
+            onChange={(value) => setAdvancedPath(`security.staffApprovalConfig.${key}`, value)} />)}
+        </div>
+      </section>
+
+      <section style={{ ...card, display: 'grid', gap: 16 }}>
+        <h2 style={{ margin: 0 }}>Quarantine, Raid Protection & Logs</h2>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+          {[
+            ['quarantine.enabled', 'Enable quarantine'], ['raid.enabled', 'Enable raid protection'],
+            ['raid.automatic', 'Automatic raid response'], ['raid.elevateSecurity', 'Elevate security during raids'],
+            ['logSuccess', 'Log successful verification'], ['logFailure', 'Log failed verification'],
+          ].map(([key, label]) => <Toggle key={key} theme={theme} label={label}
+            checked={readPath(advanced, key)} onChange={(value) => setAdvancedPath(key, value)} />)}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: 14 }}>
+          <NumberSetting theme={theme} label="Quarantine threshold" value={readPath(advanced, 'quarantine.attemptThreshold')} min={1} onChange={(v) => setAdvancedPath('quarantine.attemptThreshold', v)} />
+          <NumberSetting theme={theme} label="Raid join threshold" value={readPath(advanced, 'raid.joinThreshold')} min={1} onChange={(v) => setAdvancedPath('raid.joinThreshold', v)} />
+          <NumberSetting theme={theme} label="Raid window (seconds)" value={readPath(advanced, 'raid.windowSeconds')} min={1} onChange={(v) => setAdvancedPath('raid.windowSeconds', v)} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,240px),1fr))', gap: 12 }}>
+          {['join', 'intelligence', 'attempt', 'failure', 'success', 'roles', 'bot', 'raid', 'quarantine', 'staff', 'error'].map((name) =>
+            <ChannelSelect key={name} theme={theme} resources={channels} label={`${name} log channel`}
+              value={advanced?.logs?.[`${name}ChannelId`] || ''}
+              onChange={(value) => setAdvancedPath(`logs.${name}ChannelId`, value || null)} />)}
+        </div>
+      </section>
+
+      <section style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div><h2 style={{ margin: 0 }}>Save Advanced Verification Settings</h2>
+          <p style={{ color: theme.mutedText, marginBottom: 0 }}>Changes are saved only for this server. Existing panels and analytics are preserved.</p>
+        </div>
+        <button type="button" disabled={Boolean(busy) || !advanced} style={buttonStyle(theme, 'success')} onClick={saveAdvanced}>Save Advanced Settings</button>
       </section>
 
       <section style={{ ...card, display: 'grid', gap: 16 }}>
