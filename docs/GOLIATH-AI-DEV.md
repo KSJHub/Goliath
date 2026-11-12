@@ -175,3 +175,12 @@ Changing an existing draft in the editor does not overwrite stored history: save
 **Future write execution remains disabled.** An approved execution engine would require a fresh Discord backup and rollback verification, per-operation confirmation, bot role-hierarchy/permission checks, independent execution approval, scoped audit logs and failure recovery. Do not use this reviewed state alone to authorise a Discord write. BETA and PRODUCTION require the explicitly promoted read-only audit integration.
 
 **Validation:** the existing `npm run test:goliath-ai-blueprint` now includes temporary-file saved-draft tests (create/load/review/stale detection/delete/DEV gate). Storage was also exercised with a mocked filesystem in the coding environment; full local Node/Vite and live DEV deployment remain unverified.
+
+## Execution-readiness diagnostics (no Discord writes)
+A saved plan now exposes `GET /api/owner/ai/drafts/:id/readiness` to the two verified developers through the DEV Owner dashboard. **Check execution readiness** retrieves a fresh audit from the draft's exact environment and guild, calculates the current blueprint difference, and provides a checklist of safeguards.
+
+The report shows owner/guild scope, audit fingerprint freshness, whether a developer has marked the draft reviewed, bot permissions and role hierarchy (pending), verified backup (pending), per-operation approval (pending), rollback (pending), and execution engine (disabled). Every proposed operation is explicitly `executable:false`. The response **always** sets `canExecute:false`, even if all currently measurable checks pass.
+
+This is diagnostic scaffolding only; it must not be interpreted as permission to write to DEV, BETA or PRODUCTION guilds. No execute/apply endpoint, backup execution, rollback executor or automatic Discord mutation was added. Before introducing a real execution engine, require independent reviewed plan approval tied to a fresh digest, verified immutable backup/restore, bot capabilities, safe dry-run diff, explicit operation-level owner authorisation, scoped logging, rate limiting and tested failure recovery.
+
+The standard blueprint contract suite now tests blocked readiness, stale fingerprints, wrong guild targets and non-executable operation flags. A full CI/Vite build and live environment verification remain outstanding.
