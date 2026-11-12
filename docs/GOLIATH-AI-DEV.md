@@ -157,3 +157,21 @@ Server-side validation rechecks the model output using `parseBlueprint()`; no mo
 - Added pure planner contract checks to the existing `npm run doctor` chain. Sample tests were evaluated in an isolated JS runner; a real Node/Vite build and DEV VPS smoke test are still required.
 
 **Still intentionally missing:** GitHub Actions deployment verification, a locally installed CPU inference model, a tested `/owner` in-Discord conversational interface (current `/owner` entry opens the dashboard), BETA/PRODUCTION promotion of the read-only endpoints, persistent drafts, and an execution/backup/approval/rollback pipeline. Never enable write actions on public guilds before those safety gates and tests are complete. DEV code commits alone do not establish live runtime readiness.
+
+## Private saved plans and owner review (no execution)
+
+The DEV Goliath AI Owner dashboard now supports **Save current blueprint**, **Load**, **Mark reviewed**, **Delete draft** and **Refresh drafts** after selecting and auditing a guild. These actions are intentionally *not* Discord mutations.
+
+**Storage:** saved plans are maintained in the environment-local Goliath runtime data directory at `src/runtime/dev/data/goliath-ai-drafts.json` (resolved through `getRuntimePaths('DEV')`). This is runtime storage, not a new GitHub-tracked configuration. Writes are atomic via a temporary file and rename and restricted to the DEV process. Limit: 30 saved plans, 1 MiB total storage. Access is restricted to the same two configured bot owner accounts, and the data is shared between those two accounts.
+
+**Security workflow:**
+- `POST /api/owner/ai/drafts`: validate the owner session, environment, guild ID, blueprint and title; obtain a fresh read-only server audit, run the pure layout preview, compute a SHA-256 audit fingerprint and save a draft. If the caller supplied a preview fingerprint and the live guild changed, reject with HTTP 409. No Discord change occurs.
+- `GET /api/owner/ai/drafts` and `GET /api/owner/ai/drafts/:id`: list and load private draft metadata/blueprint for the two owners.
+- `POST /api/owner/ai/drafts/:id/review`: require a fresh matching guild audit and matching fingerprint; record the reviewing owner's ID and timestamp. This is a **review acknowledgement, NOT approval to execute** and never changes Discord.
+- `DELETE /api/owner/ai/drafts/:id`: remove a saved draft only. Does not remove any Discord categories, channels, roles or messages.
+
+Changing an existing draft in the editor does not overwrite stored history: save a new revision. If the guild has changed since the stored fingerprint, create and review a new preview and draft. The audit hash detects snapshot differences but is not a cryptographic signature, authorization token, or backup.
+
+**Future write execution remains disabled.** An approved execution engine would require a fresh Discord backup and rollback verification, per-operation confirmation, bot role-hierarchy/permission checks, independent execution approval, scoped audit logs and failure recovery. Do not use this reviewed state alone to authorise a Discord write. BETA and PRODUCTION require the explicitly promoted read-only audit integration.
+
+**Validation:** the existing `npm run test:goliath-ai-blueprint` now includes temporary-file saved-draft tests (create/load/review/stale detection/delete/DEV gate). Storage was also exercised with a mocked filesystem in the coding environment; full local Node/Vite and live DEV deployment remain unverified.
