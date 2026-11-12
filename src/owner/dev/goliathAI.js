@@ -4,6 +4,7 @@
 const express = require('express');
 const { getBotOwnerIds } = require('../../core/security/protection/core');
 const { parseBlueprint, toBlueprint, planBlueprint } = require('./goliathBlueprint');
+const draftStore = require('./goliathDraftStore');
 
 const router = express.Router();
 const MAX_MESSAGES = 16;
@@ -393,6 +394,89 @@ router.post('/blueprint/:environment/:guildId/preview', requirePrivateAI, async 
     return res.status(503).json({ error: 'Could not retrieve live guild data for preview.' });
   }
 });
+// Draft review is a recorded acknowledgement only; never Discord authorisation.
+async function getVerifiedAudit(req, environment, guildId) {
+  const target = ENVIRONMENTS.find(item => item.environment === environment);
+  if (localMode() !== 'DEV' || !target || !SNOWFLAKE.test(String(guildId))) {
+    const error = new Error('Invalid environment or guild ID.');
+    error.status = 400;
+    throw error;
+  }
+  const audit = environment === 'DEV' ? await readAudit(req, guildId) :
+    await internalGet(target.port, '/api/owner/ai/audit/local/' + guildId);
+  if (!audit || audit.environment !== environment || audit.guild?.id !== guildId ||
+      audit.readOnly !== true || !Array.isArray(audit.roles) || !Array.isArray(audit.channels)) {
+    const error = new Error('Selected environment or guild is unavailable.');
+    error.status = 503;
+    throw error;
+  }
+  return audit;
+}
+router.get('/drafts', requireAIIdentity, (_req, res) => {
+  try {
+    if (localMode() !== 'DEV') return res.status(503).json({ error: 'Draft storage is DEV-only.' });
+    return res.json({ drafts: draftStore.listDrafts(), readOnly: true });
+  } catch { return res.status(503).json({ error: 'Unable to read private draft storage.' }); }
+});
+router.get('/drafts/:id', requireAIIdentity, (req, res) => {
+  try {
+    if (localMode() !== 'DEV') return res.status(503).json({ error: 'Draft storage is DEV-only.' });
+    const draft = draftStore.loadDraft(String(req.params.id));
+    return draft ? res.json({ draft }) : res.status(404).json({ error: 'Draft not found.' });
+  } catch { return res.status(503).json({ error: 'Unable to read private draft storage.' }); }
+});
+router.post('/drafts', requirePrivateAI, async (req, res) => {
+  const environment = String(req.body?.environment || '').toUpperCase();
+  const guildId = String(req.body?.guildId || '');
+  let blueprint;
+  try { blueprint = parseBlueprint(req.body?.blueprint); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  try {
+    const audit = await getVerifiedAudit(req, environment, guildId);
+    // Force a complete dry-run validation before persisting a draft.
+    planBlueprint(audit, blueprint);
+    const digest = reportDigest(audit);
+    if (req.body?.auditDigest && req.body.auditDigest !== digest)
+      return res.status(409).json({ error: 'Server changed since your preview. Refresh it before saving.' });
+    const draft = draftStore.saveDraft({
+      environment, guildId, guildName: audit.guild.name, title: req.body?.title,
+      blueprint, ownerId: req.session.user.id, auditDigest: digest, basedOnAudit: audit.timestamp
+    });
+    return res.status(201).json({ draft });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    if (/Draft storage is full|Draft title|Blueprint|Duplicate|exceeds|limit|category|channel/i.test(error.message))
+      return res.status(422).json({ error: error.message });
+    return res.status(503).json({ error: 'Unable to validate or save the private draft.' });
+  }
+});
+router.post('/drafts/:id/review', requirePrivateAI, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'Draft reviews are DEV-only.' });
+  try {
+    const draft = draftStore.loadDraft(String(req.params.id));
+    if (!draft) return res.status(404).json({ error: 'Draft not found.' });
+    const audit = await getVerifiedAudit(req, draft.environment, draft.guildId);
+    planBlueprint(audit, draft.blueprint);
+    if (reportDigest(audit) !== draft.auditDigest)
+      return res.status(409).json({ error: 'Server changed since the plan was saved. Save a new draft after reviewing a fresh preview.' });
+    const updated = draftStore.reviewDraft({
+      id: draft.id, ownerId: req.session.user.id, currentAuditDigest: reportDigest(audit)
+    });
+    return res.json({ draft: updated, notice: 'Marked reviewed only. This is NOT permission to execute Discord changes.' });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    return res.status(503).json({ error: 'Unable to revalidate draft. No changes made.' });
+  }
+});
+router.delete('/drafts/:id', requirePrivateAI, (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'Draft storage is DEV-only.' });
+  try {
+    return draftStore.deleteDraft(String(req.params.id))
+      ? res.json({ success: true, notice: 'Saved draft deleted. No Discord changes made.' })
+      : res.status(404).json({ error: 'Draft not found.' });
+  } catch { return res.status(503).json({ error: 'Unable to delete private draft.' }); }
+});
+
 router.get('/plan/:environment/:guildId', requireAIIdentity, async (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'Goliath AI controller is hosted in DEV.' });
   const environment = String(req.params.environment || '').toUpperCase();
