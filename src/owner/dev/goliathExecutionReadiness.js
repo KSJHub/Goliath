@@ -1,6 +1,76 @@
 'use strict';
 
 // Pre-execution checklist only. Never calls Discord APIs, applies changes or creates backups.
+const { createHash } = require('node:crypto');
+
+// Stable offline transaction preview. Fingerprints identify a proposal but are NOT approvals.
+function buildTransactionManifest({ draft, audit, preview, currentDigest }) {
+  if (!draft || !audit?.guild?.id || !Array.isArray(preview?.operations) ||
+      preview.operations.length > 350 || draft.environment !== audit.environment ||
+      String(draft.guildId) !== String(audit.guild.id) ||
+      !/^[a-f0-9]{64}$/.test(String(currentDigest || '')) ||
+      draft.auditDigest !== currentDigest) {
+    return {
+      readOnly: true, executable: false, canExecute: false, unavailable: true,
+      reason: 'The plan, operation list, guild scope or audit fingerprint is invalid or stale.',
+      entries: [], operationCount: 0, warnings: []
+    };
+  }
+  const supportedKinds = new Set(['create_category', 'create_channel', 'rename_category', 'edit_channel']);
+  const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  const creates = new Map();
+  const warnings = [];
+  const entries = preview.operations.map((operation, index) => {
+    const sequence = index + 1;
+    const prior = operation.before ?? null;
+    const proposed = operation.after ?? null;
+    const kind = String(operation.kind || '');
+    const issues = [];
+    const dependsOn = [];
+    if (!supportedKinds.has(kind) || operation.executable !== false)
+      issues.push('Unsupported or non-read-only operation in preview.');
+    if ((kind === 'edit_channel' || kind === 'rename_category') && !operation.target?.id)
+      issues.push('Existing Discord object ID is missing.');
+    if ((kind === 'edit_channel' || kind === 'rename_category') &&
+        (!prior || typeof prior !== 'object' || !Object.keys(prior).length))
+      issues.push('Original fields are missing.');
+    if (kind === 'create_channel' && proposed?.parentId == null && proposed?.parentName) {
+      const parentSequence = creates.get(proposed.parentName);
+      if (parentSequence) dependsOn.push(parentSequence);
+      else issues.push('Proposed parent category cannot be resolved from earlier operations.');
+    }
+    if (kind === 'create_category') {
+      if (creates.has(proposed?.name)) issues.push('Duplicate new category name.');
+      else creates.set(proposed?.name, sequence);
+    }
+    if ((kind === 'create_channel' || kind === 'create_category') &&
+        (!proposed?.name || !Number.isInteger(proposed.type)))
+      issues.push('New object name or Discord type is missing.');
+    if (issues.length) warnings.push('Operation ' + sequence + ': ' + issues.join(' '));
+    return {
+      sequence, kind, target: operation.target ?? null,
+      before: prior, proposed,
+      dependsOn, issues,
+      operationFingerprint: digest({ sequence, kind, target: operation.target ?? null,
+        before: prior, proposed, dependsOn }),
+      authorised: false, executable: false
+    };
+  });
+  const fingerprint = digest({
+    draftId: draft.id, environment: draft.environment, guildId: draft.guildId,
+    auditDigest: currentDigest, blueprint: draft.blueprint,
+    entries: entries.map(item => item.operationFingerprint)
+  });
+  return {
+    readOnly: true, executable: false, canExecute: false, unavailable: false,
+    draftId: draft.id, environment: draft.environment, guildId: draft.guildId,
+    auditDigest: currentDigest, fingerprint, entries,
+    operationCount: entries.length, warnings,
+    requiresFreshAudit: true, requiresSeparateExecutionApproval: true,
+    notice: 'Deterministic dry-run manifest only. No Discord changes, backup or execution authorisation occurred.'
+  };
+}
+
 // Recovery planning describes prerequisites only; it never performs a reverse action.
 const RECOVERY_KIND = Object.freeze({
   rename_category: 'restore_original_name',
@@ -74,6 +144,7 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
   const reviewed = draft.review?.status === 'reviewed';
   // A cross-guild or malformed snapshot must produce a BLOCKED diagnostic,
   // not crash the readiness endpoint or generate a recovery proposal.
+  const transactionManifest = buildTransactionManifest({ draft, audit, preview, currentDigest });
   const recoveryPlan = sameTarget && /^[a-f0-9]{64}$/.test(String(currentDigest || ''))
     ? buildRecoveryPlan({ draft, audit, preview, currentDigest })
     : {
@@ -125,9 +196,9 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
     draftId: draft.id, auditDigest: currentDigest, savedAuditDigest: draft.auditDigest,
     generatedAt: new Date().toISOString(), operationCount: operations.length, operations,
     backupEvidence: backupEvidence || { status: 'unavailable', candidates: [], checkedAt: null },
-    recoveryPlan,
+    recoveryPlan, transactionManifest,
     checks, blockers: checks.filter(item => item.state !== 'passed').map(item => item.key),
     notice: 'Diagnostic checklist only. No approval, backup or Discord write has occurred.'
   };
 }
-module.exports = { evaluateReadiness, buildRecoveryPlan };
+module.exports = { evaluateReadiness, buildRecoveryPlan, buildTransactionManifest };
