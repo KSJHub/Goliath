@@ -9,6 +9,7 @@ const MAX_MESSAGES = 16;
 const MAX_CONTENT = 4000;
 const TIMEOUT_MS = 90000;
 const LOCAL_AI_URL = 'http://127.0.0.1:8081/v1/chat/completions';
+let requestInProgress = false;
 
 function authorised(req) {
   const ids = getBotOwnerIds();
@@ -50,6 +51,8 @@ router.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'Invalid chat messages or conversation length.' });
   }
   if (incoming[incoming.length - 1].role !== 'user') return res.status(400).json({ error: 'Last message must be from you.' });
+  if (requestInProgress) return res.status(429).json({ error: 'Goliath AI is busy with another request. Please try again shortly.' });
+  requestInProgress = true;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -75,6 +78,6 @@ router.post('/chat', async (req, res) => {
     return res.json({ reply: message.slice(0, 12000) });
   } catch (error) {
     return res.status(503).json({ error: error?.name === 'AbortError' ? 'Local AI timed out.' : 'Local AI is not available. Goliath itself is unaffected.' });
-  } finally { clearTimeout(timeout); }
+  } finally { clearTimeout(timeout); requestInProgress = false; }
 });
 module.exports = router;
