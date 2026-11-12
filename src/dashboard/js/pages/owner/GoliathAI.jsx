@@ -33,6 +33,8 @@ export default function GoliathAI({ theme }) {
   const [draftNotice, setDraftNotice] = useState('');
   const [readiness, setReadiness] = useState(null);
   const [readinessBusy, setReadinessBusy] = useState(false);
+  const [operationReviews, setOperationReviews] = useState(null);
+  const [operationReviewBusy, setOperationReviewBusy] = useState(false);
   const bottom = useRef(null);
   useEffect(() => {
     let mounted = true;
@@ -275,6 +277,31 @@ export default function GoliathAI({ theme }) {
     } catch (err) { setError(err.message); }
     finally { setReadinessBusy(false); }
   };
+  const inspectOperationReviews = async (id) => {
+    if (!audit || operationReviewBusy) return;
+    setOperationReviewBusy(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews');
+      if (result.draftId !== id || result.environment !== audit.environment ||
+          result.guildId !== audit.guild.id || result.canExecute !== false) throw new Error('Review target mismatch.');
+      setOperationReviews(result);
+    } catch (err) { setError(err.message); }
+    finally { setOperationReviewBusy(false); }
+  };
+  const recordOperationReview = async (id, sequence, decision) => {
+    if (operationReviewBusy) return;
+    setOperationReviewBusy(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews', {
+        method: 'POST', body: JSON.stringify({ sequence, decision })
+      });
+      if (result.canExecute !== false || result.executable !== false) throw new Error('Review response unsafe.');
+      const latest = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews');
+      setOperationReviews(latest);
+      setDraftNotice(result.notice);
+    } catch (err) { setError(err.message); }
+    finally { setOperationReviewBusy(false); }
+  };
   const removeSavedDraft = async (id) => {
     if (draftBusy || !window.confirm('Delete this saved Goliath AI blueprint draft? No Discord items will be deleted.')) return;
     setDraftBusy(true); setError(''); setDraftNotice('');
@@ -417,10 +444,30 @@ export default function GoliathAI({ theme }) {
                   <button type="button" disabled={draftBusy} onClick={() => openSavedDraft(item.id)}>Load</button>
                   <button type="button" disabled={draftBusy} onClick={() => reviewSavedDraft(item.id)}>Mark reviewed</button>
                   <button type="button" disabled={draftBusy || readinessBusy} onClick={() => checkDraftReadiness(item.id)}>Check execution readiness</button>
+                  <button type="button" disabled={draftBusy || operationReviewBusy} onClick={() => inspectOperationReviews(item.id)}>Operation reviews</button>
                   <button type="button" disabled={draftBusy} onClick={() => removeSavedDraft(item.id)}>Delete draft</button>
                 </div>
               </div>
             )}
+            {operationReviews && <div style={{ border: '1px solid #64748b', borderRadius: 10, padding: 12, marginTop: 12 }}>
+              <h4 style={{ marginTop: 0 }}>Operation review log — no Discord execution</h4>
+              {operationReviews.stale && <p style={{ color: '#fbbf24' }}>This plan is stale. Save and review a fresh plan before acknowledging operations.</p>}
+              {!operationReviews.stale && operationReviews.operations.map(item =>
+                <div key={item.sequence} style={{ padding: '10px 0', borderTop: '1px solid rgba(148,163,184,.25)' }}>
+                  <strong>{item.sequence}. {item.kind.replaceAll('_', ' ')} — {item.target?.name}</strong>
+                  <p style={{ fontSize: 12 }}>{item.reviews.length
+                    ? item.reviews.map(review => review.decision + ' by ' + review.reviewerId + ' (expires ' + new Date(review.expiresAt).toLocaleString() + ')').join(' · ')
+                    : 'No current acknowledgement'}</p>
+                  <button type="button" disabled={operationReviewBusy} onClick={() => recordOperationReview(operationReviews.draftId, item.sequence, 'acknowledged')}>Acknowledge review</button>
+                  <button type="button" disabled={operationReviewBusy} style={{ marginLeft: 8 }} onClick={() => recordOperationReview(operationReviews.draftId, item.sequence, 'rejected')}>Reject proposal</button>
+                </div>)}
+              <details style={{ marginTop: 10 }}><summary>Review audit history ({operationReviews.events?.length || 0})</summary>
+                {(operationReviews.events || []).map(event => <p key={event.id} style={{ fontSize: 12 }}>
+                  {event.createdAt} · operation {event.sequence} · {event.decision} · reviewer {event.reviewerId}
+                </p>)}
+              </details>
+              <p style={{ color: '#fbbf24', fontSize: 12 }}>Acknowledgements are for developer review only. They expire and never grant execution permission.</p>
+            </div>}
             {readiness && <div style={{ border: '1px solid #64748b', borderRadius: 10, padding: 12, marginTop: 12 }}>
               <h4 style={{ marginTop: 0 }}>Execution safeguards — not ready to apply</h4>
               <p role="status">{readiness.operationCount} planned operations · {readiness.blockers.length} unresolved safeguards · execution disabled</p>
