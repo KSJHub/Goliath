@@ -261,7 +261,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       const ordered = [...(next.flow?.orderedSecurity || ['simple'])];
       if (enabled && !ordered.includes(method)) ordered.push(method);
       if (!enabled && ordered.includes(method)) ordered.splice(ordered.indexOf(method), 1);
-      return writePath(next, 'flow.orderedSecurity', ordered.length ? ordered : ['simple']);
+      return writePath(next, 'flow.orderedSecurity', ordered);
     });
   }
 
@@ -270,27 +270,50 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       setError('Verification settings have not loaded yet.');
       return;
     }
+    if (busy) return;
     setError('');
     setNotice('');
-    const order = advanced.flow?.orderedSecurity || [];
-    if (advanced.security?.staffApproval && !order.includes('staff_approval')) {
-      setError('Add Staff Approval to the flow or disable it before saving.');
-      return;
-    }
-    const enabledMethods = SECURITY_OPTIONS.filter(([key]) => advanced.security?.[key] === true).map(([key]) => FLOW_NAMES[key]);
-    if (new Set(order).size !== order.length || enabledMethods.some((method) => !order.includes(method)) || order.some((method) => !enabledMethods.includes(method))) {
-      setError('Verification steps must match enabled methods, with no duplicates.');
-      return;
-    }
+
+    // Keep the user's existing step order, append newly enabled methods and
+    // remove disabled or duplicate methods. Legacy defaults may enable checks
+    // without including them in the saved flow.
+    const enabledMethods = SECURITY_OPTIONS
+      .filter(([key]) => advanced.security?.[key] === true)
+      .map(([key]) => FLOW_NAMES[key]);
+    const existingOrder = Array.isArray(advanced.flow?.orderedSecurity)
+      ? advanced.flow.orderedSecurity : [];
+    const order = [
+      ...existingOrder.filter((method, index) =>
+        enabledMethods.includes(method) && existingOrder.indexOf(method) === index),
+      ...enabledMethods.filter((method) => !existingOrder.includes(method)),
+    ];
     const staffRoles = advanced.roles?.staff || [];
     if (advanced.security?.staffApproval && staffRoles.length === 0) {
       setError('Select at least one Staff Approval role before saving.');
       return;
     }
-    const { enabled: _enabled, ...settingsPayload } = advanced;
-    await saveConfig({ settings: settingsPayload });
-    advancedDirty.current = false;
-    await load();
+    if (advanced.flow?.enabled && order.length === 0) {
+      setError('Enable at least one security method before saving an active verification flow.');
+      return;
+    }
+
+    const normalized = writePath(advanced, 'flow.orderedSecurity', order);
+    const { enabled: _enabled, ...settingsPayload } = normalized;
+    setBusy('config');
+    try {
+      await api.saveVerificationConfig(guildId, { settings: settingsPayload });
+      // Only clear the dirty flag after the API confirms persistence.
+      // Refresh once, rather than calling act() and loading twice.
+      advancedDirty.current = false;
+      setAdvanced(normalized);
+      await load();
+      setNotice('Advanced verification settings saved.');
+    } catch (saveError) {
+      advancedDirty.current = true;
+      setError(saveError.message || 'Failed to save advanced verification settings.');
+    } finally {
+      setBusy('');
+    }
   }
 
   function selectPanel(panelId) {
