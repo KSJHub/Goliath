@@ -425,6 +425,20 @@ export default function GoliathAI({ theme }) {
               <h4 style={{ marginTop: 0 }}>Execution safeguards — not ready to apply</h4>
               <p role="status">{readiness.operationCount} planned operations · {readiness.blockers.length} unresolved safeguards · execution disabled</p>
               <p style={{ fontSize: 12, color: '#fbbf24' }}>{readiness.notice}</p>
+              {readiness.backupEvidence && <div style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <strong>Existing Goliath backup history</strong>
+                <p style={{ fontSize: 12 }}>{readiness.backupEvidence.status === 'candidate-found'
+                  ? 'Matching backup metadata found (not a verified restore point).'
+                  : readiness.backupEvidence.status === 'none-found'
+                    ? 'No matching backup found in the recent history returned by the existing Backup Center.'
+                    : 'Backup history unavailable.'}</p>
+                {(readiness.backupEvidence.candidates || []).map(candidate => <div key={candidate.backupId} style={{ fontSize: 12, paddingBottom: 6 }}>
+                  {candidate.backupId} · {candidate.createdAt} · {candidate.backupType}
+                  {' · '}Integrity metadata: {candidate.hasIntegrityMetadata ? 'present' : 'missing'}
+                  {' · '}Validation: {candidate.validationReportedValid ? 'reported valid' : 'not established'}
+                </div>)}
+                <p style={{ fontSize: 12, color: '#fbbf24' }}>Existing backups have not been verified for restoration here. Execution remains disabled.</p>
+              </div>}
               {readiness.checks.map(check => <div key={check.key} style={{ padding: '8px 0', borderTop: '1px solid rgba(148,163,184,.25)' }}>
                 <strong>{check.state.toUpperCase()} · {check.label}</strong>
                 <div style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>{check.detail}</div>
