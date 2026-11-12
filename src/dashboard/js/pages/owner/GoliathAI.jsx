@@ -23,6 +23,9 @@ export default function GoliathAI({ theme }) {
   const [blueprintBusy, setBlueprintBusy] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newChannelLines, setNewChannelLines] = useState('');
+  const [targetCategoryIndex, setTargetCategoryIndex] = useState('0');
+  const [newSingleChannel, setNewSingleChannel] = useState('');
+  const [newSingleType, setNewSingleType] = useState('text');
   const [aiLayoutRequest, setAiLayoutRequest] = useState('');
   const [aiDraftBusy, setAiDraftBusy] = useState(false);
   const bottom = useRef(null);
@@ -111,6 +114,31 @@ export default function GoliathAI({ theme }) {
       setAiLayoutRequest('');
     } catch (err) { setError(err.message); }
     finally { setAiDraftBusy(false); }
+  };
+  const categoriesForEditor = (() => {
+    try {
+      const parsed = JSON.parse(blueprintText);
+      return Array.isArray(parsed?.categories) ? parsed.categories : [];
+    } catch { return []; }
+  })();
+  const addChannelToExistingCategory = () => {
+    setError(''); setBlueprintPlan(null);
+    try {
+      const name = newSingleChannel.trim();
+      if (!name || name.length > 100) throw new Error('Enter a channel name of up to 100 characters.');
+      const parsed = JSON.parse(blueprintText);
+      const index = Number(targetCategoryIndex);
+      if (!Array.isArray(parsed.categories) || !Number.isInteger(index) || index < 0 ||
+          index >= parsed.categories.length) throw new Error('Select a valid category.');
+      const category = parsed.categories[index];
+      if (!Array.isArray(category.channels)) throw new Error('Selected category has an invalid channels list.');
+      if (category.channels.some(item => item.name === name && (item.type || 'text') === newSingleType)) {
+        throw new Error('A channel with that name and type is already in this category.');
+      }
+      category.channels.push({ name, type: newSingleType });
+      setBlueprintText(JSON.stringify(parsed, null, 2));
+      setNewSingleChannel('');
+    } catch (err) { setError(err.message); }
   };
   const addCategoryToBlueprint = () => {
     setError(''); setBlueprintPlan(null);
@@ -286,6 +314,23 @@ export default function GoliathAI({ theme }) {
             <button type="button" onClick={addCategoryToBlueprint} disabled={!newCategoryName.trim()}
               style={{ padding: '10px 14px', background: '#334155', color: 'white', border: 0, borderRadius: 10 }}>Add to blueprint (not Discord)</button>
           </div>
+          {categoriesForEditor.length > 0 && <div style={{ padding: 12, border: '1px solid rgba(148,163,184,.23)', borderRadius: 10, marginTop: 12 }}>
+            <strong>Add a channel to an existing blueprint category</strong>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+              <select aria-label="Blueprint category" value={targetCategoryIndex} onChange={event => setTargetCategoryIndex(event.target.value)}
+                style={{ flex: '1 1 160px', minWidth: 0, color: 'white', background: '#111827', borderRadius: 8, padding: 9 }}>
+                {categoriesForEditor.map((category, index) => <option value={String(index)} key={index}>{category.name}</option>)}
+              </select>
+              <input aria-label="New channel name" value={newSingleChannel} maxLength={100} onChange={event => setNewSingleChannel(event.target.value)}
+                placeholder="Channel name" style={{ flex: '1 1 160px', minWidth: 0, color: 'white', background: '#111827', borderRadius: 8, padding: 9 }}/>
+              <select aria-label="New channel type" value={newSingleType} onChange={event => setNewSingleType(event.target.value)}
+                style={{ background: '#111827', color: 'white', borderRadius: 8, padding: 9 }}>
+                {['text', 'voice', 'forum', 'announcement', 'stage'].map(type => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </div>
+            <button type="button" onClick={addChannelToExistingCategory} disabled={!newSingleChannel.trim()}
+              style={{ marginTop: 10, background: '#334155', color: 'white', padding: '10px 14px', border: 0, borderRadius: 10 }}>Add channel to blueprint</button>
+          </div>}
           {blueprintText && <>
             <label htmlFor="goliath-ai-blueprint" style={{ display: 'block', fontWeight: 700, margin: '12px 0 6px' }}>Editable server blueprint (JSON)</label>
             <textarea id="goliath-ai-blueprint" value={blueprintText} spellCheck={false}
