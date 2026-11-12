@@ -82,13 +82,20 @@ router.get('/health', requirePrivateAI, async (_req, res) => {
 });
 
 const SNOWFLAKE = /^\d{16,20}$/;
-const { timingSafeEqual } = require('node:crypto');
+const { timingSafeEqual, createHash } = require('node:crypto');
 const ENVIRONMENTS = Object.freeze([
   { environment: 'DEV', port: 3001 },
   { environment: 'BETA', port: 3011 },
   { environment: 'PRODUCTION', port: 3021 }
 ]);
 
+function reportDigest(audit) {
+  // Integrity identifier for review packages; not an authorisation or signature.
+  return createHash('sha256').update(JSON.stringify({
+    environment: audit.environment, guildId: audit.guild?.id,
+    roles: audit.roles, channels: audit.channels
+  })).digest('hex');
+}
 function localMode() {
   return String(process.env.BOT_MODE || '').toUpperCase();
 }
@@ -377,8 +384,11 @@ router.post('/blueprint/:environment/:guildId/preview', requirePrivateAI, async 
         !Array.isArray(audit.channels)) {
       return res.status(503).json({ error: 'Current guild structure is unavailable.' });
     }
-    try { return res.json(planBlueprint(audit, blueprint)); }
-    catch (error) { return res.status(422).json({ error: error.message }); }
+    try {
+      const result = planBlueprint(audit, blueprint);
+      return res.json({ ...result, auditDigest: reportDigest(audit),
+        approvalRequired: true, backupRequiredBeforeExecution: true });
+    } catch (error) { return res.status(422).json({ error: error.message }); }
   } catch (error) {
     return res.status(503).json({ error: 'Could not retrieve live guild data for preview.' });
   }
@@ -397,7 +407,8 @@ router.get('/plan/:environment/:guildId', requireAIIdentity, async (req, res) =>
         !Array.isArray(audit.roles) || !Array.isArray(audit.channels)) {
       return res.status(503).json({ error: 'Current audited guild data is unavailable.' });
     }
-    return res.json(buildPreview(audit));
+    return res.json({ ...buildPreview(audit), auditDigest: reportDigest(audit),
+      approvalRequired: true, backupRequiredBeforeExecution: true });
   } catch (error) {
     return res.status(503).json({ error: 'Could not prepare a preview for this environment and server.' });
   }
