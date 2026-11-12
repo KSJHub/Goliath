@@ -80,7 +80,7 @@ export default function GoliathAI({ theme }) {
     try {
       const environment = String(audit.environment);
       const guildId = String(audit.guild.id);
-      if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\\d{16,20}$/.test(guildId)) throw new Error('Invalid selected server.');
+      if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId)) throw new Error('Invalid selected server.');
       const result = await api.request('/api/owner/ai/plan/' + environment + '/' + guildId);
       if (result.environment !== environment || result.guild?.id !== guildId || result.executable !== false) throw new Error('Preview validation failed.');
       setPreview(result);
