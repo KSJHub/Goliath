@@ -93,4 +93,136 @@ router.post('/backups/manual', requireOwner, async (req, res) => { try { const t
 router.get('/runtime/local', requireOwnerOrInternal, async (req, res) => { try { return res.json({ success: true, owner: true, runtime: buildRuntimePayload(req, getRuntimeMode()) }); } catch (error) { console.error('[OWNER RUNTIME LOCAL]', error); return res.status(500).json({ success: false, error: error.message }); } });
 router.get('/runtime', requireOwner, async (req, res) => { try { const environments = await Promise.all(ENVIRONMENT_PORTS.map((environmentConfig) => fetchEnvironmentRuntime(environmentConfig.port, environmentConfig.environment))); const current = buildRuntimePayload(req, getRuntimeMode()); return res.json({ success: true, owner: true, mode: 'GLOBAL', runtimeMode: 'GLOBAL', runtime: { ...current, environments, summary: summariseRuntimeEnvironments(environments) }, environments, summary: summariseRuntimeEnvironments(environments), updatedAt: new Date().toISOString() }); } catch (error) { console.error('[OWNER RUNTIME]', error); return res.status(500).json({ success: false, error: error.message }); } });
 
+
+/*
+ * Scoped, read-only AI audit endpoints for the remote DEV controller.
+ * No Discord writes, model inference or remote control are enabled.
+ */
+const AI_GUILD_ID = /^\d{16,20}$/;
+const aiCrypto = require('node:crypto');
+function requireAIReadOnlyInternal(req, res, next) {
+  res.set('Cache-Control', 'no-store');
+  const address = String(req.socket?.remoteAddress || '');
+  const secret = String(process.env.OWNER_INTERNAL_TOKEN || '');
+  const token = String(req.get('x-goliath-owner-token') || '');
+  const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address);
+  if (!local || secret.length < 24 || token.length !== secret.length ||
+      !aiCrypto.timingSafeEqual(Buffer.from(token), Buffer.from(secret))) {
+    return res.status(403).json({ error: 'Internal read-only AI audit access denied.' });
+  }
+  return next();
+}
+// Deterministic, explainable findings; no AI inference or Discord writes required.
+const RISK_BITS = Object.freeze([
+  ['Administrator', 1n << 3n],
+  ['Manage Channels', 1n << 4n],
+  ['Manage Server', 1n << 5n],
+  ['Manage Roles', 1n << 28n],
+  ['Manage Webhooks', 1n << 29n]
+]);
+function permissionNames(raw) {
+  let bits = 0n;
+  try { bits = BigInt(raw); } catch { return []; }
+  return RISK_BITS.filter(([, mask]) => (bits & mask) === mask).map(([name]) => name);
+}
+function buildFindings(guildId, roles, channels) {
+  const findings = [];
+  const add = (severity, code, target, message, recommendation) =>
+    findings.push({ severity, code, target, message, recommendation });
+  const everyone = roles.find(role => role.id === guildId);
+  if (everyone) {
+    const broad = permissionNames(everyone.permissions);
+    if (broad.length) add('high', 'everyone_elevated', { type: 'role', id: everyone.id, name: everyone.name },
+      '@everyone has elevated guild permissions: ' + broad.join(', ') + '.',
+      'Review base @everyone permissions; remove unnecessary elevated privileges only after confirming intended access.');
+  }
+  for (const role of roles) {
+    if (role.id === guildId || role.managed) continue;
+    const broad = permissionNames(role.permissions);
+    if (broad.includes('Administrator')) add('review', 'administrator_role',
+      { type: 'role', id: role.id, name: role.name },
+      'Role has Administrator permission, which bypasses channel permission overwrites.',
+      'Verify this role is assigned only to trusted administrators.');
+    if (broad.includes('Manage Roles') && !broad.includes('Administrator')) add('review', 'manage_roles_role',
+      { type: 'role', id: role.id, name: role.name },
+      'Role can manage lower roles within the Discord role hierarchy.',
+      'Confirm role hierarchy and whether this privilege is required.');
+  }
+  const byId = new Map(channels.map(channel => [channel.id, channel]));
+  for (const channel of channels) {
+    const target = { type: 'channel', id: channel.id, name: channel.name };
+    if (channel.parentId && byId.has(channel.parentId)) {
+      const parent = byId.get(channel.parentId);
+      const canonical = overrides => JSON.stringify(overrides.map(item =>
+        [String(item.type), String(item.id), String(item.allow), String(item.deny)].join(':')).sort());
+      if (canonical(channel.permissionOverwrites) !== canonical(parent.permissionOverwrites))
+        add('review', 'category_overrides_differ', target,
+          'Channel permissions differ from its parent category.',
+          'Confirm whether the difference is intentional before synchronising permissions.');
+    }
+    const memberOverrides = channel.permissionOverwrites.filter(item => item.type === 1);
+    if (memberOverrides.length) add('info', 'member_overrides', target,
+      'Channel has ' + memberOverrides.length + ' member-specific permission override(s).',
+      'Review individual exceptions before reorganising categories or roles.');
+  }
+  const priority = { high: 0, review: 1, info: 2 };
+  findings.sort((a,b) => (priority[a.severity] - priority[b.severity]) || a.code.localeCompare(b.code));
+  return { findings: findings.slice(0, 200), findingsTruncated: findings.length > 200,
+    totals: { high: findings.filter(f => f.severity === 'high').length,
+      review: findings.filter(f => f.severity === 'review').length,
+      info: findings.filter(f => f.severity === 'info').length } };
+}
+
+
+
+async function readAudit(req, id) {
+  const guild = req.client?.guilds?.cache?.get(id);
+  if (!guild) return null;
+  await Promise.all([guild.roles.fetch(), guild.channels.fetch()]);
+  const roles = [...guild.roles.cache.values()].sort((a, b) => b.position - a.position)
+    .map(role => ({ id: role.id, name: role.name, position: role.position,
+      permissions: role.permissions.bitfield.toString(), managed: role.managed,
+      mentionable: role.mentionable }));
+  const channels = [...guild.channels.cache.values()]
+    .sort((a,b) => (a.rawPosition || 0) - (b.rawPosition || 0))
+    .map(channel => ({ id: channel.id, name: channel.name, type: channel.type,
+      parentId: channel.parentId || null, position: channel.rawPosition || 0,
+      permissionOverwrites: [...(channel.permissionOverwrites?.cache?.values() || [])]
+        .map(entry => ({ id: entry.id, type: entry.type,
+          allow: entry.allow.bitfield.toString(), deny: entry.deny.bitfield.toString() })) }));
+  return {
+    guild: { id: guild.id, name: guild.name, memberCount: guild.memberCount || 0 },
+    environment: getRuntimeMode(), timestamp: new Date().toISOString(), readOnly: true,
+    summary: { roles: roles.length, channels: channels.length,
+      categories: channels.filter(c => c.type === 4).length,
+      unsyncedChannels: channels.filter(c => c.parentId &&
+        guild.channels.cache.get(c.id)?.permissionsLocked === false).length },
+    roles, channels, analysis: buildFindings(guild.id, roles, channels)
+  };
+}
+
+router.get('/ai/guilds/local', requireAIReadOnlyInternal, (req, res) => {
+  const client = getDiscordClient(req);
+  if (!client?.isReady?.()) return res.status(503).json({ error: 'Discord bot not ready.' });
+  return res.json({
+    environment: getRuntimeMode(),
+    guilds: [...client.guilds.cache.values()].map(guild => ({
+      id: String(guild.id), name: guild.name, memberCount: guild.memberCount || 0,
+      environment: getRuntimeMode()
+    })).sort((a, b) => a.name.localeCompare(b.name))
+  });
+});
+router.get('/ai/audit/local/:guildId', requireAIReadOnlyInternal, async (req, res) => {
+  const guildId = String(req.params.guildId || '');
+  if (!AI_GUILD_ID.test(guildId)) return res.status(400).json({ error: 'Invalid guild ID.' });
+  try {
+    const audit = await readAudit({ client: getDiscordClient(req) }, guildId);
+    return audit ? res.json(audit) :
+      res.status(404).json({ error: 'Guild not connected to this bot.' });
+  } catch (error) {
+    console.warn('[AI AUDIT] Read-only audit unavailable:', error?.message);
+    return res.status(503).json({ error: 'Read-only Discord audit unavailable.' });
+  }
+});
+
 module.exports = router;
