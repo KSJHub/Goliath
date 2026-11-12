@@ -184,3 +184,14 @@ The report shows owner/guild scope, audit fingerprint freshness, whether a devel
 This is diagnostic scaffolding only; it must not be interpreted as permission to write to DEV, BETA or PRODUCTION guilds. No execute/apply endpoint, backup execution, rollback executor or automatic Discord mutation was added. Before introducing a real execution engine, require independent reviewed plan approval tied to a fresh digest, verified immutable backup/restore, bot capabilities, safe dry-run diff, explicit operation-level owner authorisation, scoped logging, rate limiting and tested failure recovery.
 
 The standard blueprint contract suite now tests blocked readiness, stale fingerprints, wrong guild targets and non-executable operation flags. A full CI/Vite build and live environment verification remain outstanding.
+
+## Existing Backup Center integration (read-only)
+Saved-plan execution-readiness reports now query Goliath's **existing Owner Backup Center** via the local, internal-token-protected endpoint `/api/owner/backups/local` on the matching bot environment. This does not create backups, request restores, or run Discord operations.
+
+The DEV controller filters the returned recent backup entries by both `environment` and `guildId`, then shows limited metadata: backup ID, creation date, backup type, roles/channels counts, whether integrity metadata exists, whether the existing backup scanner reported valid, and blocker count. The Backup Center returns only a recent subset; absence of a matching entry **does not** prove that no historical backup exists.
+
+**Important:** A file listed as valid or with integrity metadata has *not* been proven restorable for the selected plan. The readiness report always leaves `backup` as **pending**, `canExecute:false`, and `executable:false`; neither existing backups nor reviewed drafts enable execution. If the target runtime or authenticated internal owner endpoint cannot be contacted, backup evidence is `unavailable` and no optimistic assumption is made. No runtime backup folder paths or internal token values are surfaced in the AI panel.
+
+Future promotion requires a backup created immediately before execution, independently revalidated by the existing restore subsystem, a tested rollback plan, fresh digest, exact operation approvals and an execution audit. BETA/PRODUCTION remain untouched until separately promoted and tested.
+
+The blueprint contract test suite also verifies that even a backup candidate carrying positive integrity metadata never unlocks Discord writes.
