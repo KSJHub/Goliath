@@ -40,3 +40,13 @@ This is a foundation, **not** a completed autonomous AI or 24/7 guaranteed servi
 - A `/owner` button links the two configured bot-owner accounts to the developer AI dashboard. Conversation directly inside a Discord slash-command interaction is not yet implemented; the link provides entry from `/owner`.
 - Do not allow guild admins, managers or other Discord server owners to reach the AI endpoints. Future actions must be gated to the two owner IDs independently of server administrator rights.
 - Any future **write** action (especially across production guilds) must use explicit environment+guild targeting, a fresh permission snapshot, a human-readable diff, backup, owner approval, rate limiting, and a comprehensive audit log. The read-only endpoints here cannot change guild settings.
+
+## Read-only permission findings (foundation)
+Every environment audit now calculates deterministic review findings on its own connected guild data. Checks currently include:
+- Elevated base @everyone permissions (high priority)
+- Administrator roles and Manage Roles assignments (review)
+- Child channel permission overwrites that differ from parent categories (review, may be intentional)
+- Individual member overwrites (informational)
+Findings do not establish wrongdoing or a vulnerability; the developer must review Discord's effective role hierarchy and context. The report has a 200-item display cap but returns totals, and never changes any Discord setting.
+
+The dashboard has an explicit **Refresh servers** control so newly joined guilds can be discovered without a rebuild. This requires the corresponding environment's read-only endpoints to be present. AI chat is separate and still requires a free local model process.
