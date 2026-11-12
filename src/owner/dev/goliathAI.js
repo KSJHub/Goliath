@@ -2,6 +2,7 @@
 
 // Private developer assistant. No external AI provider, shell access or Discord mutations.
 const express = require('express');
+const fs = require('node:fs');
 const { getBotOwnerIds } = require('../../core/security/protection/core');
 const { parseBlueprint, toBlueprint, planBlueprint } = require('./goliathBlueprint');
 const draftStore = require('./goliathDraftStore');
@@ -15,6 +16,18 @@ const MAX_CONTENT = 4000;
 const TIMEOUT_MS = 90000;
 const LOCAL_AI_URL = 'http://127.0.0.1:8081/v1/chat/completions';
 let requestInProgress = false;
+
+// An optional DEV-only secret file is read by the server, never sent to the browser.
+function localAIHeaders(json = false) {
+  const headers = json ? { 'Content-Type': 'application/json' } : {};
+  const keyFile = String(process.env.GOLIATH_AI_API_KEY_FILE || '').trim();
+  if (keyFile) {
+    const key = fs.readFileSync(keyFile, 'utf8').trim();
+    if (!key || /[\r\n]/.test(key)) throw new Error('Invalid local AI key file.');
+    headers.Authorization = 'Bearer ' + key;
+  }
+  return headers;
+}
 
 function authorised(req) {
   const ids = getBotOwnerIds();
@@ -59,7 +72,7 @@ router.get('/health', requirePrivateAI, async (_req, res) => {
   const timer = setTimeout(() => controller.abort(), 2500);
   try {
     const response = await fetch('http://127.0.0.1:8081/v1/models', {
-      method: 'GET', signal: controller.signal
+      method: 'GET', signal: controller.signal, headers: localAIHeaders()
     });
     if (!response.ok) return res.json({ state: 'backend-error', ready: false, enabled,
       reason: 'The local model service returned HTTP ' + response.status + '.' });
@@ -656,7 +669,7 @@ router.post('/blueprint/ai-draft', requirePrivateAI, async (req, res) => {
   try {
     const response = await fetch(LOCAL_AI_URL, {
       method: 'POST', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
+      headers: localAIHeaders(true),
       body: JSON.stringify({
         model: String(process.env.GOLIATH_AI_MODEL || 'local-model'),
         temperature: 0.1, max_tokens: 768, stream: false,
@@ -745,7 +758,7 @@ router.post('/chat', requirePrivateAI, async (req, res) => {
     const response = await fetch(LOCAL_AI_URL, {
       method: 'POST',
       signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
+      headers: localAIHeaders(true),
       body: JSON.stringify({
         model: String(process.env.GOLIATH_AI_MODEL || 'local-model'),
         stream: false,
