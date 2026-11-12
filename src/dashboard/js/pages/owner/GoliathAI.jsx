@@ -479,6 +479,20 @@ export default function GoliathAI({ theme }) {
               <h4 style={{ marginTop: 0 }}>Execution safeguards — not ready to apply</h4>
               <p role="status">{readiness.operationCount} planned operations · {readiness.blockers.length} unresolved safeguards · execution disabled</p>
               <p style={{ fontSize: 12, color: '#fbbf24' }}>{readiness.notice}</p>
+              {readiness.structuralSimulation && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <h5 style={{ margin: '0 0 8px' }}>Offline structural rehearsal (not Discord execution)</h5>
+                <p style={{ fontSize: 12 }}>
+                  {readiness.structuralSimulation.simulated
+                    ? 'In-memory structure checks passed'
+                    : 'Rehearsal blocked or incomplete'}
+                  {' · '}{readiness.structuralSimulation.operationsChecked} operations checked
+                  {' · '}Projected channels: {readiness.structuralSimulation.proposedChannelCount ?? 'unknown'}
+                </p>
+                {(readiness.structuralSimulation.problems || []).map((problem, index) =>
+                  <p key={index} style={{ color: '#fbbf24', fontSize: 12 }}>{problem}</p>)}
+                <p style={{ fontSize: 12, color: '#fbbf24' }}>{readiness.structuralSimulation.notice ||
+                  'No permissions, backup, rollback or Discord API writes were tested.'}</p>
+              </section>}
               {readiness.transactionManifest && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
                 <h5 style={{ margin: '0 0 8px' }}>Deterministic change manifest — preview only</h5>
                 <p style={{ fontSize: 12, color: '#fbbf24' }}>
