@@ -60,7 +60,7 @@ function requireDashboardAccess(base) {
     // Only this read-only AI endpoint supports trusted loopback service calls.
     // The endpoint independently validates a shared internal token; no other owner route is bypassed.
     if (base === '/api/owner/ai' && req.method === 'GET' &&
-        /^\\/audit\\/local\\/\\d{16,20}$/.test(req.path)) {
+        (/^\\/audit\\/local\\/\\d{16,20}$/.test(req.path) || req.path === '/guilds/local')) {
       const remote = String(req.socket?.remoteAddress || '');
       if (remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1') return next();
     }
