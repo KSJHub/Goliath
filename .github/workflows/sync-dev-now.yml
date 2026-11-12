@@ -142,7 +142,20 @@ jobs:
             fi
             # Runtime is Git-ignored and must remain in place while SQLite is open.
             # Never delete/recreate live runtime files as part of a deployment.
-            finish() { status=$?; cleanup_remote; exit "$status"; }
+            # Always recover DEV if this run exits after stopping it, including
+            # clean supersession (exit 0), validation failures and SSH interruption.
+            DEV_STOPPED=0
+            finish() {
+              status=$?
+              trap - EXIT ERR
+              if [ "$DEV_STOPPED" = 1 ]; then
+                echo "⚠️ DEV deployment exited before restart; restoring DEV service."
+                pm2 restart "$PM2_NAME" --update-env ||
+                  BOT_MODE=dev NODE_ENV=development pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env || true
+              fi
+              cleanup_remote
+              exit "$status"
+            }
             trap finish EXIT
 
             git reset --hard "$EXPECTED_SHA"
@@ -153,18 +166,9 @@ jobs:
             # resolve lazy imports while npm removes/recreates individual files.
             # Keep this downtime bounded to the locked install and validation.
             echo "🛑 Stop DEV before replacing node_modules"
+            DEV_STOPPED=1
             pm2 stop "$PM2_NAME" || true
-            # If a validation/build step fails, bring back the previously
-            # configured DEV process instead of leaving the bot offline.
-            recover_dev_on_error() {
-              status=$?
-              if [ "$status" -ne 0 ]; then
-                echo "⚠️ DEV sync failed; attempting to restart DEV."
-                pm2 restart "$PM2_NAME" --update-env || true
-              fi
-              return "$status"
-            }
-            trap recover_dev_on_error ERR
+            # EXIT trap also covers superseded builds that exit with code 0.
 
             echo "📦 Clean locked dependency install"
             npm ci --no-audit --no-fund
@@ -230,6 +234,7 @@ jobs:
             echo "♻️ One controlled PM2 reload from ecosystem config"
             pm2 delete "$PM2_NAME" >/dev/null 2>&1 || true
             BOT_MODE=dev NODE_ENV=development pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env
+            DEV_STOPPED=0
             pm2 save
 
             NEW_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
