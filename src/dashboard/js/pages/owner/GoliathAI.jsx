@@ -107,14 +107,17 @@ export default function GoliathAI({ theme }) {
   };
   const connectedOptions = guilds.map(guild => ({
     value: guild.environment + ':' + guild.id,
-    label: guild.environment + ' — ' + guild.name,
+    label: guild.environment + ' — ' + guild.name + (guild.auditAvailable ? ' · Audit ready' : ' · Audit pending'),
     id: guild.id
   }));
+  const botStatusUnverified = environments.some(item => item.botStatus !== 'verified');
   const personalOptions = personalGuilds.map(guild => {
     const linked = guilds.find(item => item.id === guild.id);
     return {
       value: linked ? linked.environment + ':' + linked.id : 'PERSONAL:' + guild.id,
-      label: guild.name + (linked ? ' (Goliath ' + linked.environment + ')' : ' (not connected)') +
+      label: guild.name + (linked ? ' (Goliath ' + linked.environment +
+        (linked.auditAvailable ? ', audit ready)' : ', audit pending)') :
+        botStatusUnverified ? ' (Goliath presence unverified)' : ' (Goliath not detected)') +
         (guild.owner ? ' · Owner' : ' · Manager'),
       id: guild.id
     };
@@ -129,7 +132,7 @@ export default function GoliathAI({ theme }) {
     setAudit(null); setPreview(null); setBlueprintPlan(null); setReadiness(null); setOperationReviews(null);
   }, [guildFilter, guilds, personalGuilds, selectedGuild]);
   const runAudit = async () => {
-    if (!selectedConnected || auditing) return;
+    if (!selectedConnected?.auditAvailable || auditing) return;
     setAuditing(true); setError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null);
     try {
       const [environment, guildId] = selectedGuild.split(':');
@@ -389,8 +392,8 @@ export default function GoliathAI({ theme }) {
     // DEV guilds can be fetched fresh and read-only by the authenticated owner
     // without requiring a separate scan button. Never auto-query unconnected environments.
     const selected = guilds.find(guild => guild.environment + ':' + guild.id === selectedGuild);
-    const context = selected?.environment === 'DEV'
-      ? { environment: 'DEV', guildId: selected.id }
+    const context = selected?.auditAvailable
+      ? { environment: selected.environment, guildId: selected.id }
       : audit && selectedGuild === audit.environment + ':' + audit.guild?.id
         ? { environment: audit.environment, guildId: audit.guild.id }
         : null;
@@ -433,19 +436,21 @@ export default function GoliathAI({ theme }) {
           {availableOptions.length ? availableOptions.map((guild) => <option key={guild.value} value={guild.value}>{guild.label}</option>) : <option value="">No servers available in this filter</option>}
         </select>
         <button type="button" onClick={refreshGuilds} style={{ border: '1px solid #64748b', borderRadius: 10, padding: '10px 16px', color: '#e5e7eb', background: '#1e293b' }}>Refresh servers</button>
-        <button type="button" onClick={runAudit} disabled={!selectedConnected || auditing} style={{ border: 0, borderRadius: 10, padding: '10px 16px', background: '#2563eb', color: 'white' }}>{auditing ? 'Scanning…' : 'Scan permissions'}</button>
+        <button type="button" onClick={runAudit} disabled={!selectedConnected?.auditAvailable || auditing} style={{ border: 0, borderRadius: 10, padding: '10px 16px', background: '#2563eb', color: 'white' }}>{auditing ? 'Scanning…' : 'Scan permissions'}</button>
       </div>
       {environments.length > 0 && <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>
-        {environments.map(item => item.environment + ': ' + (item.available ? item.guildCount + ' servers' : 'not yet connected')).join(' · ')}
+        {environments.map(item => item.environment + ': ' +
+          (item.botStatus === 'verified' ? item.guildCount + ' bot-connected servers' : 'bot status unverified') +
+          (item.auditStatus === 'ready' ? ' (AI audit ready)' : ' (AI audit unavailable)')).join(' · ')}
       </p>}
       <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8', marginTop: 4 }}>
         {personalGuildsStatus === 'ready' ? 'Discord account servers loaded. '
           : personalGuildsStatus === 'partial' ? 'Discord returned a partial server list; refresh to try again. '
           : personalGuildsStatus === 'reconnect-required' ? 'Reconnect your Discord login to list servers you own or manage. '
           : 'Discord account servers are temporarily unavailable. '}
-        Future servers appear when you refresh this list. Unconnected servers are visible for planning only;
-        a read-only permission scan requires an authorised Goliath connection.
-        BETA/PRODUCTION require their read-only endpoints to be deliberately deployed.
+        Future servers appear when you refresh this list. Bot presence and AI audit readiness are separate:
+        a verified Goliath installation may still need its audit endpoint enabled.
+        Owner/manager access alone cannot substitute for the bot's permissions. No Discord changes are made.
       </p>
       {audit && <div style={{ marginTop: 16 }}>
         <strong>{audit.environment} — {audit.guild?.name}</strong>
@@ -701,12 +706,12 @@ export default function GoliathAI({ theme }) {
       </div>}
     </section>
     <p style={{ color: theme?.mutedText || '#94a3b8', fontSize: 13, margin: 0 }}>
-      {selectedGuild.startsWith('DEV:') && guilds.some(guild => guild.environment + ':' + guild.id === selectedGuild)
-        ? <>Chat context: <strong>fresh, read-only DEV server audit</strong> is retrieved when you send a message. This does not modify Discord.</>
+      {selectedConnected?.auditAvailable
+        ? <>Chat context: <strong>fresh, read-only {selectedConnected.environment} server audit</strong> is retrieved when you send a message. This does not modify Discord.</>
         : audit && selectedGuild === audit.environment + ':' + audit.guild?.id
           ? <>Chat context: <strong>{audit.environment} — {audit.guild?.name}</strong> (fresh read-only audit on send).</>
           : selectedGuild.startsWith('PERSONAL:')
-            ? <>Chat context: <strong>general planning only</strong>. This account-managed server is not connected to Goliath for auditing.</>
+            ? <>Chat context: <strong>general planning only</strong>. An authorised Goliath audit is unavailable for this server.</>
             : <>Chat context: <strong>general planning only</strong>. Select a connected DEV server to use verified read-only server data.</>}
     </p>
     <div aria-label="Conversation" style={{ ...panel, minHeight: 280, maxHeight: '52vh', overflowY: 'auto', display: 'grid', alignContent: 'start', gap: 12 }}>
