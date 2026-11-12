@@ -5,6 +5,7 @@ const express = require('express');
 const { getBotOwnerIds } = require('../../core/security/protection/core');
 const { parseBlueprint, toBlueprint, planBlueprint } = require('./goliathBlueprint');
 const draftStore = require('./goliathDraftStore');
+const { evaluateReadiness } = require('./goliathExecutionReadiness');
 
 const router = express.Router();
 const MAX_MESSAGES = 16;
@@ -468,6 +469,24 @@ router.post('/drafts/:id/review', requirePrivateAI, async (req, res) => {
     return res.status(503).json({ error: 'Unable to revalidate draft. No changes made.' });
   }
 });
+// Diagnostic only: fresh guild audit and exact plan comparison, always fails closed on execution.
+router.get('/drafts/:id/readiness', requireAIIdentity, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'Execution readiness is DEV-only.' });
+  try {
+    const draft = draftStore.loadDraft(String(req.params.id));
+    if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
+    const audit = await getVerifiedAudit(req, draft.environment, draft.guildId);
+    const preview = planBlueprint(audit, draft.blueprint);
+    const report = evaluateReadiness({
+      draft, audit, preview, currentDigest: reportDigest(audit)
+    });
+    return res.json(report);
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    return res.status(503).json({ error: 'Unable to perform the fresh execution-readiness check. No changes made.' });
+  }
+});
+
 router.delete('/drafts/:id', requirePrivateAI, (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'Draft storage is DEV-only.' });
   try {
