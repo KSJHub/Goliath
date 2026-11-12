@@ -50,3 +50,11 @@ Every environment audit now calculates deterministic review findings on its own 
 Findings do not establish wrongdoing or a vulnerability; the developer must review Discord's effective role hierarchy and context. The report has a 200-item display cap but returns totals, and never changes any Discord setting.
 
 The dashboard has an explicit **Refresh servers** control so newly joined guilds can be discovered without a rebuild. This requires the corresponding environment's read-only endpoints to be present. AI chat is separate and still requires a free local model process.
+
+## Non-executable rebuild preview
+After scanning a guild, the private owner dashboard offers **Prepare proposed changes (preview only)**. The server rereads the selected `environment + guild ID` and returns a non-executable, read-only preview. This does not require the language model to be installed.
+- For elevated `@everyone` permissions, the preview shows an illustrative removal of listed elevated permission bits and the precise before/after permission bitfields.
+- For Administrator roles, the preview deliberately recommends manual verification rather than automatic changes.
+- For channel/category overwrite mismatches, the preview shows how overwrites would differ if synchronised. It warns that intentional exceptions could be lost.
+- No apply, write, delete or rollback endpoints were added. No Discord mutation functions run in this path.
+- A future apply engine must be implemented separately, with per-guild permissions, fresh-state validation, lock, snapshot backup, exact diff, owner approval, execution receipts and rollback handling. Never execute this illustrative proposal without those protections.
