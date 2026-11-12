@@ -65,3 +65,57 @@ Use **Goliath AI → Check local AI connection** to query the private DEV health
 Possible states include `not-installed-or-offline`, `offline`, `backend-error`, `no-model`, `disabled`, and `ready`. Only the `ready` state permits the initial chat test; a successful generated response is still required to verify end-to-end operation.
 
 **Activation is blocked until VPS operations can be performed.** The connected GitHub tool can update source but cannot execute commands or install software on the Revive Node VPS. Have an authorised operator measure available resources, start the separately limited local inference service, confirm it is bound to loopback, verify the two owner IDs and token consistency, and set `GOLIATH_AI_ENABLED=true` only when testing is safe. Do not install or start models inside the bot's PM2 process. Promotions to BETA and PRODUCTION are separate owner-approved operations.
+
+## VPS model activation runbook (manual operator, not run by GitHub sync)
+
+**Candidate:** official `Qwen/Qwen2.5-1.5B-Instruct-GGUF`, `Q4_K_M` (~1.12 GB GGUF), Apache-2.0. Model card: https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF. This is an initial trial, **not** a guarantee of ChatGPT-class reasoning. The model itself costs no inference fees.
+
+**Safety gates:**
+1. Confirm Goliath's DEV dashboard deployment and backend build are healthy before installing anything.
+2. Measure available RAM, CPU and storage at idle and under load. The prior screenshots were only a point-in-time sample.
+3. Reserve memory for Goliath production, beta, DEV, and websites. Stop the test if RAM pressure, swap, OOM events or request latency rises.
+4. Do **not** install the model into `/home/goliath/dev`, `src/runtime`, the Git repository or Goliath's PM2 process. Run it as a separate, constrained operating-system service after the trial.
+5. Confirm an up-to-date, trusted llama.cpp installation. Examine the official install instructions before running an installer downloaded from the internet.
+6. Bind **only** to `127.0.0.1:8081`. Never expose the inference port through nginx or the host firewall.
+
+### Manual trial (interactive terminal, deliberately not persistent)
+
+Official install option from the model card (review the official source/installer before running):
+
+```bash
+curl -LsSf https://llama.app/install.sh | sh
+```
+
+Open a fresh terminal or refresh the shell environment as instructed by the installer, and verify `llama --help` works. Start a low-concurrency test:
+
+```bash
+llama serve -hf Qwen/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M \
+  --host 127.0.0.1 --port 8081 \
+  --ctx-size 2048 --threads 2 --parallel 1 \
+  --alias local-model --no-webui
+```
+
+This command is **only** an initial manual trial. It is not yet constrained by an OS memory cgroup. Monitor usage while running; stop immediately if VPS headroom becomes insufficient. Confirm the supported options using `llama serve --help` for the installed version.
+
+From another terminal session:
+
+```bash
+curl --fail --silent http://127.0.0.1:8081/v1/models
+```
+
+The response should list `local-model`; then send a minimal **local-only** test generation:
+
+```bash
+curl --fail --silent --max-time 90 http://127.0.0.1:8081/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"local-model","messages":[{"role":"user","content":"Reply with: Goliath AI model connected."}],"max_tokens":64}'
+```
+
+Only after the model is responsive, under acceptable CPU/RAM load, and the DEV app is verified:
+- Set `GOLIATH_AI_MODEL=local-model` and `GOLIATH_AI_ENABLED=true` in the **DEV-only** environment configuration, and restart only Goliath DEV using its existing deployment procedure.
+- Recheck **Goliath AI → Check local AI connection**, then test the first chat message.
+- Turn the test off by setting `GOLIATH_AI_ENABLED=false` in DEV and stopping the model process. A future persistent systemd service must have memory/CPU limits and auto-restart; do not enable automatic startup until those are verified.
+
+**Important:** The AI is deliberately hosted in DEV as one shared developer-only controller. Cross-environment audits for BETA and PRODUCTION depend on *separately* promoting the read-only endpoints; never promote this DEV code automatically to all environments. The AI cannot write to Discord or control a PC yet.
+
+**References:** https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md and official Qwen model card above.
