@@ -472,6 +472,19 @@ export default function GoliathAI({ theme }) {
               <h4 style={{ marginTop: 0 }}>Execution safeguards — not ready to apply</h4>
               <p role="status">{readiness.operationCount} planned operations · {readiness.blockers.length} unresolved safeguards · execution disabled</p>
               <p style={{ fontSize: 12, color: '#fbbf24' }}>{readiness.notice}</p>
+              {readiness.capabilityPreflight && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <h5 style={{ margin: '0 0 8px' }}>Bot permission and rollback preflight</h5>
+                <p style={{ fontSize: 12 }}>{readiness.capabilityPreflight.permissionsVerified ? 'Read-only permission snapshot obtained.' : 'Bot permissions could not be verified.'}
+                  {' · '}{readiness.capabilityPreflight.counts?.blocked || 0} blocked
+                  {' · '}{readiness.capabilityPreflight.counts?.unknown || 0} unknown
+                  {' · '}{readiness.capabilityPreflight.counts?.permittedInPrinciple || 0} potentially permitted</p>
+                {readiness.capabilityPreflight.operations.map(item => <details key={item.sequence} style={{ borderTop: '1px solid rgba(148,163,184,.2)', padding: '8px 0' }}>
+                  <summary>{item.sequence}. {item.target?.name} · {item.permission}</summary>
+                  {(item.warnings || []).map((warning, index) => <p key={index} style={{ fontSize: 12, color: '#fbbf24' }}>{warning}</p>)}
+                  <p style={{ fontSize: 12 }}>Recovery: {item.recovery}</p>
+                </details>)}
+                <p style={{ color: '#fbbf24', fontSize: 12 }}>No rollback procedure has been verified, and no operation is executable.</p>
+              </section>}
               {readiness.backupEvidence && <div style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
                 <strong>Existing Goliath backup history</strong>
                 <p style={{ fontSize: 12 }}>{readiness.backupEvidence.status === 'candidate-found'
