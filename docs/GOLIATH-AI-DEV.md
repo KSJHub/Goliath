@@ -147,3 +147,13 @@ Server-side validation rechecks the model output using `parseBlueprint()`; no mo
 
 ## Testing and deployment status
 `npm run test:goliath-ai-blueprint` is included in the existing `npm run doctor` validation chain, so subsequent normal DEV builds should run the pure, no-token blueprint contract checks. This repository change itself does not prove that GitHub Actions or the live DEV deployment succeeded. The React dashboard must still be built by the existing deployment workflow and inspected in a browser. BETA and PRODUCTION read-only endpoints must be promoted intentionally; the model and full Goliath AI interface remain controlled from DEV.
+
+## Latest no-terminal development pass — readiness boundary
+- Added a standalone pure blueprint planner and owner-only REST endpoints to load an existing guild structure and preview a custom layout against a fresh guild audit. Every planned operation is `executable:false`.
+- Added editable layout JSON, a guided new-category builder, a guided add-channel-to-existing-category builder, and client-side JSON import/export for resumable workflows. Import/export does **not** save files on the VPS or Discord.
+- Added an optional local-model-assisted **new-category draft** tool; this stays disabled until model inference is installed and enabled. All model output is validated and is never executed.
+- Added audit SHA-256 fingerprints to plan responses plus `approvalRequired:true` and `backupRequiredBeforeExecution:true`, to support future stale-plan checks; fingerprints are identifiers, **not authorisation signatures**.
+- Tightened validation: no more than 40 blueprint categories, 50 channels per category, 300 channels per blueprint, 350 operations, or 500 projected total Discord channels; repeated channel name/type pairs and IDs fail closed.
+- Added pure planner contract checks to the existing `npm run doctor` chain. Sample tests were evaluated in an isolated JS runner; a real Node/Vite build and DEV VPS smoke test are still required.
+
+**Still intentionally missing:** GitHub Actions deployment verification, a locally installed CPU inference model, a tested `/owner` in-Discord conversational interface (current `/owner` entry opens the dashboard), BETA/PRODUCTION promotion of the read-only endpoints, persistent drafts, and an execution/backup/approval/rollback pipeline. Never enable write actions on public guilds before those safety gates and tests are complete. DEV code commits alone do not establish live runtime readiness.
