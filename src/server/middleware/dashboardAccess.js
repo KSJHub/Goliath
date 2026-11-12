@@ -57,6 +57,14 @@ function requiredPermission(base) {
 function requireDashboardAccess(base) {
   return async (req, res, next) => {
     if (isMemberEndpoint(base, req)) return next(); // These routes enforce session ownership themselves.
+    // Only this read-only AI endpoint supports trusted loopback service calls.
+    // The endpoint independently validates a shared internal token; no other owner route is bypassed.
+    if (base === '/api/owner/ai' && req.method === 'GET' &&
+        /^\\/audit\\/local\\/\\d{16,20}$/.test(req.path)) {
+      const remote = String(req.socket?.remoteAddress || '');
+      if (remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1') return next();
+    }
+
     if (!req.session?.user?.id) return res.status(401).json({ error: 'Authentication required.' });
     res.set('Cache-Control', 'no-store');
     const userId = req.session.user.id;
