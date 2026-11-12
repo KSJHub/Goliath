@@ -28,11 +28,16 @@ export default function GoliathAI({ theme }) {
   const [newSingleType, setNewSingleType] = useState('text');
   const [aiLayoutRequest, setAiLayoutRequest] = useState('');
   const [aiDraftBusy, setAiDraftBusy] = useState(false);
+  const [savedDrafts, setSavedDrafts] = useState([]);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftNotice, setDraftNotice] = useState('');
   const bottom = useRef(null);
   useEffect(() => {
     let mounted = true;
     api.request('/api/owner/ai/status').then((value) => { if (mounted) setStatus(value); })
       .catch((err) => { if (mounted) setError(err.message); });
+    api.request('/api/owner/ai/drafts').then(value => { if (mounted) setSavedDrafts(value.drafts || []); })
+      .catch(() => { /* The draft library is optional until DEV deployment is verified. */ });
     api.request('/api/owner/ai/guilds').then((value) => { if (mounted) { setGuilds(value.guilds || []); setEnvironments(value.environments || []); setSelectedGuild(value.guilds?.[0] ? (value.guilds[0].environment + ':' + value.guilds[0].id) : ''); } })
       .catch((err) => { if (mounted) setError(err.message); });
     return () => { mounted = false; };
@@ -202,6 +207,67 @@ export default function GoliathAI({ theme }) {
     } catch (err) { setError(err.message); }
     finally { setBlueprintBusy(false); }
   };
+  const refreshDrafts = async () => {
+    const value = await api.request('/api/owner/ai/drafts');
+    setSavedDrafts(value.drafts || []);
+  };
+  const saveCurrentDraft = async () => {
+    if (!audit || !blueprintText.trim() || draftBusy) return;
+    setDraftBusy(true); setDraftNotice(''); setError('');
+    try {
+      const blueprint = JSON.parse(blueprintText);
+      const title = String(blueprint?.name || audit.guild.name + ' rebuild');
+      const result = await api.request('/api/owner/ai/drafts', {
+        method: 'POST',
+        body: JSON.stringify({ environment: audit.environment, guildId: audit.guild.id,
+          blueprint, title, auditDigest: blueprintPlan?.auditDigest || undefined })
+      });
+      if (result.draft?.environment !== audit.environment || result.draft?.guildId !== audit.guild.id)
+        throw new Error('Saved draft target mismatch.');
+      await refreshDrafts();
+      setDraftNotice('Saved a private draft. It cannot modify the Discord server.');
+    } catch (err) { setError(err.message); }
+    finally { setDraftBusy(false); }
+  };
+  const openSavedDraft = async (id) => {
+    if (!audit || draftBusy) return;
+    setDraftBusy(true); setError(''); setDraftNotice('');
+    try {
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id));
+      const item = result.draft;
+      if (!item || item.environment !== audit.environment || item.guildId !== audit.guild.id)
+        throw new Error('Select and scan the draft’s original environment and server before opening it.');
+      setBlueprintText(JSON.stringify(item.blueprint, null, 2));
+      setBlueprintPlan(null);
+      setDraftNotice('Draft loaded. Run a fresh preview before relying on any proposed change.');
+    } catch (err) { setError(err.message); }
+    finally { setDraftBusy(false); }
+  };
+  const reviewSavedDraft = async (id) => {
+    if (!audit || draftBusy) return;
+    setDraftBusy(true); setError(''); setDraftNotice('');
+    try {
+      const item = savedDrafts.find(value => value.id === id);
+      if (!item || item.environment !== audit.environment || item.guildId !== audit.guild.id)
+        throw new Error('Select the saved draft’s original server before reviewing it.');
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/review', {
+        method: 'POST', body: JSON.stringify({})
+      });
+      await refreshDrafts();
+      setDraftNotice(result.notice || 'Review recorded. This does not authorise execution.');
+    } catch (err) { setError(err.message); }
+    finally { setDraftBusy(false); }
+  };
+  const removeSavedDraft = async (id) => {
+    if (draftBusy || !window.confirm('Delete this saved Goliath AI blueprint draft? No Discord items will be deleted.')) return;
+    setDraftBusy(true); setError(''); setDraftNotice('');
+    try {
+      await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id), { method: 'DELETE' });
+      await refreshDrafts();
+      setDraftNotice('Saved draft deleted; Discord was not changed.');
+    } catch (err) { setError(err.message); }
+    finally { setDraftBusy(false); }
+  };
   const send = async (event) => {
     event.preventDefault();
     const content = draft.trim();
@@ -314,6 +380,32 @@ export default function GoliathAI({ theme }) {
             <button type="button" onClick={addCategoryToBlueprint} disabled={!newCategoryName.trim()}
               style={{ padding: '10px 14px', background: '#334155', color: 'white', border: 0, borderRadius: 10 }}>Add to blueprint (not Discord)</button>
           </div>
+          <section style={{ border: '1px solid rgba(148,163,184,.25)', padding: 12, borderRadius: 10, marginTop: 12 }}>
+            <h4 style={{ marginTop: 0 }}>Saved developer plans</h4>
+            <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>Private DEV storage · up to 30 drafts · accessible only to your two developer accounts · reviews do not execute changes</p>
+            <button type="button" onClick={saveCurrentDraft} disabled={draftBusy || !blueprintText.trim()}
+              style={{ padding: '10px 14px', border: 0, borderRadius: 9, background: '#334155', color: 'white' }}>
+              {draftBusy ? 'Working…' : 'Save current blueprint'}
+            </button>
+            <button type="button" onClick={() => { void refreshDrafts().catch(err => setError(err.message)); }}
+              style={{ padding: '10px 14px', border: '1px solid #64748b', marginLeft: 8, borderRadius: 9, background: '#1e293b', color: 'white' }}>
+              Refresh drafts
+            </button>
+            {draftNotice && <p role="status" style={{ color: '#86efac' }}>{draftNotice}</p>}
+            {savedDrafts.filter(item => item.environment === audit.environment && item.guildId === audit.guild.id).map(item =>
+              <div key={item.id} style={{ borderTop: '1px solid rgba(148,163,184,.2)', padding: '12px 0', marginTop: 10 }}>
+                <strong>{item.title}</strong>
+                <p style={{ fontSize: 12, margin: '4px 0' }}>{item.review?.status === 'reviewed' ? 'Reviewed (not approved for execution)' : 'Draft'} · {new Date(item.updatedAt).toLocaleString()}</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button type="button" disabled={draftBusy} onClick={() => openSavedDraft(item.id)}>Load</button>
+                  <button type="button" disabled={draftBusy} onClick={() => reviewSavedDraft(item.id)}>Mark reviewed</button>
+                  <button type="button" disabled={draftBusy} onClick={() => removeSavedDraft(item.id)}>Delete draft</button>
+                </div>
+              </div>
+            )}
+            {savedDrafts.filter(item => item.environment === audit.environment && item.guildId === audit.guild.id).length === 0 &&
+              <p style={{ fontSize: 12 }}>No saved plans for this environment and server.</p>}
+          </section>
           {categoriesForEditor.length > 0 && <div style={{ padding: 12, border: '1px solid rgba(148,163,184,.23)', borderRadius: 10, marginTop: 12 }}>
             <strong>Add a channel to an existing blueprint category</strong>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
