@@ -470,6 +470,40 @@ router.post('/drafts/:id/review', requirePrivateAI, async (req, res) => {
   }
 });
 // Diagnostic only: fresh guild audit and exact plan comparison, always fails closed on execution.
+// Existing owner Backup Center is the source of truth. Its recent inventory is evidence,
+// NOT a verified restorable backup or permission to execute a plan.
+async function getBackupEvidence(environment, guildId) {
+  try {
+    const target = ENVIRONMENTS.find(item => item.environment === environment);
+    if (!target) throw new Error('Unsupported environment.');
+    const payload = await internalGet(target.port, '/api/owner/backups/local');
+    const overview = payload?.environment;
+    if (!payload?.success || overview?.environment !== environment) {
+      throw new Error('Backup response did not match requested environment.');
+    }
+    const recent = Array.isArray(overview.backups?.recent) ? overview.backups.recent : [];
+    const candidates = recent.filter(item =>
+      String(item.guildId || '') === guildId && String(item.environment || '') === environment)
+      .slice(0, 5).map(item => ({
+        backupId: String(item.backupId || '').slice(0, 120),
+        createdAt: String(item.createdAt || '').slice(0, 40),
+        backupType: String(item.backupType || '').slice(0, 40),
+        roles: Number(item.roles || 0), channels: Number(item.channels || 0),
+        hasIntegrityMetadata: item.integrity?.exists === true,
+        validationReportedValid: item.validation?.valid === true,
+        reportedBlockers: Number(item.validation?.blockers || 0)
+      }));
+    return { status: candidates.length ? 'candidate-found' : 'none-found',
+      environment, guildId, checkedAt: new Date().toISOString(),
+      candidates, recentOnly: true, verification: 'not-performed',
+      note: 'Recent backup metadata only. No cryptographic integrity or restore test was performed.' };
+  } catch {
+    return { status: 'unavailable', environment, guildId,
+      checkedAt: new Date().toISOString(), candidates: [],
+      verification: 'not-performed', note: 'Backup metadata could not be checked.' };
+  }
+}
+
 router.get('/drafts/:id/readiness', requireAIIdentity, async (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'Execution readiness is DEV-only.' });
   try {
@@ -477,8 +511,9 @@ router.get('/drafts/:id/readiness', requireAIIdentity, async (req, res) => {
     if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
     const audit = await getVerifiedAudit(req, draft.environment, draft.guildId);
     const preview = planBlueprint(audit, draft.blueprint);
+    const backupEvidence = await getBackupEvidence(draft.environment, draft.guildId);
     const report = evaluateReadiness({
-      draft, audit, preview, currentDigest: reportDigest(audit)
+      draft, audit, preview, currentDigest: reportDigest(audit), backupEvidence
     });
     return res.json(report);
   } catch (error) {
