@@ -108,6 +108,23 @@ export default function GoliathAI({ theme }) {
       setNewCategoryName(''); setNewChannelLines('');
     } catch (err) { setError(err.message); }
   };
+  const exportBlueprint = () => {
+    setError('');
+    try {
+      const parsed = JSON.parse(blueprintText);
+      if (!parsed || !Array.isArray(parsed.categories)) throw new Error('A valid blueprint is required before export.');
+      const json = JSON.stringify(parsed, null, 2);
+      const file = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'goliath-ai-blueprint-' + (audit?.environment || 'dev').toLowerCase() + '-' + (audit?.guild?.id || 'guild') + '.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) { setError(err.message); }
+  };
   const previewBlueprint = async () => {
     if (!audit || !blueprintText.trim() || blueprintBusy) return;
     setBlueprintBusy(true); setBlueprintPlan(null); setError('');
@@ -200,6 +217,7 @@ export default function GoliathAI({ theme }) {
           <p style={{ color: theme?.mutedText || '#94a3b8' }}>Load the current server layout as editable JSON. Add or rename categories and channels in the blueprint, then generate a proposed change list. Existing content is preserved. Nothing can be applied from this screen.</p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button type="button" onClick={loadBlueprint} disabled={blueprintBusy} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b' }}>{blueprintBusy ? 'Working…' : 'Load current layout'}</button>
+            <button type="button" onClick={exportBlueprint} disabled={!blueprintText.trim()} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b' }}>Export JSON blueprint</button>
             <button type="button" onClick={previewBlueprint} disabled={blueprintBusy || !blueprintText.trim()} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#2563eb', border: 'none' }}>Preview layout changes</button>
           </div>
           <div style={{ padding: 12, border: '1px solid rgba(148,163,184,.23)', borderRadius: 10, marginTop: 12 }}>
