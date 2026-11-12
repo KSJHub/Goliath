@@ -195,3 +195,17 @@ The DEV controller filters the returned recent backup entries by both `environme
 Future promotion requires a backup created immediately before execution, independently revalidated by the existing restore subsystem, a tested rollback plan, fresh digest, exact operation approvals and an execution audit. BETA/PRODUCTION remain untouched until separately promoted and tested.
 
 The blueprint contract test suite also verifies that even a backup candidate carrying positive integrity metadata never unlocks Discord writes.
+
+## Operation-level developer acknowledgements and review history (DEV only)
+A separate owner review ledger now records scoped, temporary **review acknowledgements**, not execution approvals. The REST endpoints are `GET /api/owner/ai/drafts/:id/operation-reviews` and `POST /api/owner/ai/drafts/:id/operation-reviews` (body: integer `sequence` and `decision` of `acknowledged` or `rejected`).
+
+A new review can be added only when:
+- The caller is one of the two configured, authenticated developer accounts;
+- The stored blueprint is marked reviewed, belongs to the requested guild/environment, and the freshly obtained audit fingerprint matches the saved fingerprint;
+- The exact operation still exists at the specified one-based sequence in a fresh, non-executable blueprint preview.
+
+The ledger stores the draft ID, DEV/BETA/PRODUCTION target environment, guild ID, exact operation hash, reviewer Discord account ID, decision, timestamp and a 30-minute expiration. Operations must have `executable:false` to be reviewable. Events are appended and not overwritten; the latest unexpired decision from a reviewer is used for display. A rejected operation remains flagged for attention. A changed operation, changed blueprint or changed audit digest invalidates a prior acknowledgement.
+
+Storage is in DEV runtime data `src/runtime/dev/data/goliath-ai-operation-reviews.json`, capped at 300 events/512 KiB; exceeding the cap fails closed. No token, model provider, Discord write, restore request or executable operation is created. These records are NOT signed execution grants, and the readiness report deliberately keeps the `per_operation_approval` check pending and `canExecute:false`. They remain review history, not a complete tamper-evident compliance audit. A future true approval system must be designed separately with authorisation-bound signatures, immutable audit storage, expiry, operation-level confirmation and permission checks immediately before execution.
+
+The DEV dashboard now supports **Operation reviews**, **Acknowledge review**, **Reject proposal** and **Review audit history**. The existing blueprint contract checks include stale-plan rejection, review-before-operation requirement, rejection precedence, operation binding and append-only event history. The full Vite build and live DEV deployment still require verification.
