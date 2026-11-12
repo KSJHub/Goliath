@@ -218,3 +218,15 @@ The pure `goliathCapabilityPreflight` module reports each planned category/chann
 Each operation also shows its recovery implications. Edits could require compensating changes based on before-state; compensating deletes of created channels/categories can themselves destroy messages or configuration. **No tested rollback exists**, and all reports retain `rollbackVerified:false`, `executable:false`, `canExecute:false`. The owner dashboard exposes these findings through the saved plan's **Check execution readiness** panel.
 
 New contract tests cover missing permissions, wrong-environment snapshots, unknown channel permissions, unsupported destructive operations, and unchanged no-execution guarantees. The full Vite build, VPS deployment and BETA/PRODUCTION audit endpoint promotion still remain outstanding.
+
+## Read-only rollback planning after green DEV build
+The saved-plan `/drafts/:id/readiness` response now includes `recoveryPlan`, generated from the saved draft, its exact target environment/guild, current audited digest and proposed operations. The Owner AI readiness screen displays each operation's original fields, proposed changes, recovery type and non-reversible side effects.
+
+- Rename/edit proposals identify the original fields a future compensating edit would need.
+- Create proposals never suggest automatic deletion as a harmless undo: messages, children and later configuration may have been added after creation.
+- New-category channel references by name are flagged because a future executor would need the generated Discord category ID.
+- Channel reparenting warns about inherited permissions and visibility.
+- Unknown operation kinds get no recovery definition.
+- Stale snapshots remain identified and are not authorisation to take action.
+
+This is **not a backup or rollback implementation**. The response always sets `canRollback:false`, `rollbackTested:false`, and `executable:false`. Existing bot capability, backup and operation-review safeguards remain in place; all Discord write endpoints are still absent. Recovery contracts are included in the canonical `scripts/goliath.js goliath-ai-blueprint` checks. No separate scripts or test folders were added.
