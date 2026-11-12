@@ -472,6 +472,26 @@ export default function GoliathAI({ theme }) {
               <h4 style={{ marginTop: 0 }}>Execution safeguards — not ready to apply</h4>
               <p role="status">{readiness.operationCount} planned operations · {readiness.blockers.length} unresolved safeguards · execution disabled</p>
               <p style={{ fontSize: 12, color: '#fbbf24' }}>{readiness.notice}</p>
+              {readiness.transactionManifest && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <h5 style={{ margin: '0 0 8px' }}>Deterministic change manifest — preview only</h5>
+                <p style={{ fontSize: 12, color: '#fbbf24' }}>
+                  {readiness.transactionManifest.unavailable
+                    ? 'Manifest unavailable: saved plan, scope or audit may be stale.'
+                    : readiness.transactionManifest.operationCount + ' operations; all authorisations disabled.'}
+                </p>
+                {readiness.transactionManifest.fingerprint && <p style={{ overflowWrap: 'anywhere', fontSize: 12 }}>
+                  SHA-256 fingerprint: <code>{readiness.transactionManifest.fingerprint}</code>
+                </p>}
+                {(readiness.transactionManifest.entries || []).map(entry => <details
+                  key={entry.sequence} style={{ borderTop: '1px solid rgba(148,163,184,.2)', padding: '8px 0' }}>
+                  <summary>{entry.sequence}. {entry.kind.replaceAll('_', ' ')}
+                    {entry.dependsOn.length ? ' · requires operation ' + entry.dependsOn.join(', ') : ''}
+                    {entry.issues.length ? ' · needs attention' : ''}</summary>
+                  <p style={{ overflowWrap: 'anywhere', fontSize: 12 }}>Operation SHA-256: {entry.operationFingerprint}</p>
+                  {entry.issues.map((issue, index) => <p key={index} style={{ fontSize: 12, color: '#fbbf24' }}>{issue}</p>)}
+                </details>)}
+                <p style={{ fontSize: 12 }}>Fingerprints identify a saved proposal; they are not an approval token or permission to execute.</p>
+              </section>}
               {readiness.recoveryPlan && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
                 <h5 style={{ margin: '0 0 8px' }}>Rollback planning (no automatic recovery)</h5>
                 <p style={{ fontSize: 12, color: '#fbbf24' }}>
