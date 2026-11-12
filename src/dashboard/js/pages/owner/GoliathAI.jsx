@@ -23,6 +23,8 @@ export default function GoliathAI({ theme }) {
   const [blueprintBusy, setBlueprintBusy] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newChannelLines, setNewChannelLines] = useState('');
+  const [aiLayoutRequest, setAiLayoutRequest] = useState('');
+  const [aiDraftBusy, setAiDraftBusy] = useState(false);
   const bottom = useRef(null);
   useEffect(() => {
     let mounted = true;
@@ -86,6 +88,29 @@ export default function GoliathAI({ theme }) {
       setBlueprintText(JSON.stringify(result.blueprint, null, 2));
     } catch (err) { setError(err.message); }
     finally { setBlueprintBusy(false); }
+  };
+  const generateLayoutDraft = async () => {
+    if (!status?.enabled || !aiLayoutRequest.trim() || aiDraftBusy) return;
+    setAiDraftBusy(true); setError(''); setBlueprintPlan(null);
+    try {
+      const result = await api.request('/api/owner/ai/blueprint/ai-draft', {
+        method: 'POST', body: JSON.stringify({ description: aiLayoutRequest.trim() })
+      });
+      if (!result.readOnly || result.executable !== false || !Array.isArray(result.categories)) throw new Error('AI draft verification failed.');
+      const raw = blueprintText.trim() ? JSON.parse(blueprintText) : { name: 'AI-assisted Discord rebuild', categories: [] };
+      if (!Array.isArray(raw.categories)) throw new Error('Invalid current blueprint.');
+      const existingNames = new Set(raw.categories.map(category => String(category.name || '').toLowerCase()));
+      let added = 0;
+      for (const category of result.categories) {
+        if (existingNames.has(category.name.toLowerCase())) continue;
+        existingNames.add(category.name.toLowerCase());
+        raw.categories.push(category); added += 1;
+      }
+      if (!added) throw new Error('The AI only suggested categories already in your blueprint. No changes were made.');
+      setBlueprintText(JSON.stringify(raw, null, 2));
+      setAiLayoutRequest('');
+    } catch (err) { setError(err.message); }
+    finally { setAiDraftBusy(false); }
   };
   const addCategoryToBlueprint = () => {
     setError(''); setBlueprintPlan(null);
@@ -235,6 +260,18 @@ export default function GoliathAI({ theme }) {
             </label>
             <button type="button" onClick={exportBlueprint} disabled={!blueprintText.trim()} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b' }}>Export JSON blueprint</button>
             <button type="button" onClick={previewBlueprint} disabled={blueprintBusy || !blueprintText.trim()} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#2563eb', border: 'none' }}>Preview layout changes</button>
+          </div>
+          <div style={{ padding: 12, border: '1px solid rgba(148,163,184,.23)', borderRadius: 10, marginTop: 12 }}>
+            <strong>Ask Goliath AI to draft new categories</strong>
+            <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>Describe the categories and channels you want. The AI will append suggestions to your blueprint, not your Discord server. This requires the free local model to be running.</p>
+            <textarea value={aiLayoutRequest} onChange={event => setAiLayoutRequest(event.target.value.slice(0, 1200))}
+              placeholder="Create a Community category with introductions and general chat, and a Gaming category with looking-for-group and a voice channel."
+              rows={3} maxLength={1200} disabled={!status?.enabled || aiDraftBusy} aria-label="AI category draft request"
+              style={{ boxSizing: 'border-box', width: '100%', padding: 10, borderRadius: 8, background: '#111827', color: '#e5e7eb', border: '1px solid #64748b' }}/>
+            <button type="button" onClick={generateLayoutDraft} disabled={!status?.enabled || aiDraftBusy || !aiLayoutRequest.trim()}
+              style={{ padding: '10px 14px', borderRadius: 10, background: '#334155', border: 0, color: 'white' }}>
+              {aiDraftBusy ? 'Generating draft…' : 'Generate suggestions (no changes)'}
+            </button>
           </div>
           <div style={{ padding: 12, border: '1px solid rgba(148,163,184,.23)', borderRadius: 10, marginTop: 12 }}>
             <strong>Add a new category to the blueprint</strong>
