@@ -3,6 +3,7 @@
 // Private developer assistant. No external AI provider, shell access or Discord mutations.
 const express = require('express');
 const { getBotOwnerIds } = require('../../core/security/protection/core');
+const { parseBlueprint, toBlueprint, planBlueprint } = require('./goliathBlueprint');
 
 const router = express.Router();
 const MAX_MESSAGES = 16;
@@ -324,6 +325,50 @@ router.get('/audit/:environment/:guildId', requireAIIdentity, async (req, res) =
     return res.json(result);
   } catch (error) {
     return res.status(503).json({ error: 'Selected environment is unavailable or not yet equipped with Goliath AI auditing.' });
+  }
+});
+// Rebuild blueprint is validated and compared entirely in memory. No apply endpoint exists.
+router.get('/blueprint/:environment/:guildId', requireAIIdentity, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'Goliath AI controller is hosted in DEV.' });
+  const environment = String(req.params.environment || '').toUpperCase();
+  const target = ENVIRONMENTS.find(item => item.environment === environment);
+  const guildId = String(req.params.guildId || '');
+  if (!target || !SNOWFLAKE.test(guildId)) return res.status(400).json({ error: 'Invalid environment or guild ID.' });
+  try {
+    const audit = environment === 'DEV'
+      ? await readAudit(req, guildId)
+      : await internalGet(target.port, '/api/owner/ai/audit/local/' + guildId);
+    if (!audit || audit.environment !== environment || audit.guild?.id !== guildId || audit.readOnly !== true ||
+        !Array.isArray(audit.channels)) {
+      return res.status(503).json({ error: 'Current guild structure is unavailable.' });
+    }
+    return res.json({ readOnly: true, environment, guild: audit.guild,
+      blueprint: toBlueprint(audit), basedOnAudit: audit.timestamp });
+  } catch (error) {
+    return res.status(503).json({ error: 'Unable to prepare a starter blueprint for this guild.' });
+  }
+});
+router.post('/blueprint/:environment/:guildId/preview', requirePrivateAI, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'Goliath AI controller is hosted in DEV.' });
+  const environment = String(req.params.environment || '').toUpperCase();
+  const target = ENVIRONMENTS.find(item => item.environment === environment);
+  const guildId = String(req.params.guildId || '');
+  if (!target || !SNOWFLAKE.test(guildId)) return res.status(400).json({ error: 'Invalid environment or guild ID.' });
+  let blueprint;
+  try { blueprint = parseBlueprint(req.body?.blueprint); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  try {
+    const audit = environment === 'DEV'
+      ? await readAudit(req, guildId)
+      : await internalGet(target.port, '/api/owner/ai/audit/local/' + guildId);
+    if (!audit || audit.environment !== environment || audit.guild?.id !== guildId || audit.readOnly !== true ||
+        !Array.isArray(audit.channels)) {
+      return res.status(503).json({ error: 'Current guild structure is unavailable.' });
+    }
+    try { return res.json(planBlueprint(audit, blueprint)); }
+    catch (error) { return res.status(422).json({ error: error.message }); }
+  } catch (error) {
+    return res.status(503).json({ error: 'Could not retrieve live guild data for preview.' });
   }
 });
 router.get('/plan/:environment/:guildId', requireAIIdentity, async (req, res) => {
