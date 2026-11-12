@@ -54,9 +54,9 @@ export function useAuthSession({
     }
   }, [clearGuilds]);
 
-  const loadSession = useCallback(async () => {
+  const loadSession = useCallback(async ({ background = false } = {}) => {
     try {
-      setAuthLoading(true);
+      if (!background) setAuthLoading(true);
 
       const authResponse = await api.getAuthMe();
 
@@ -104,8 +104,10 @@ export function useAuthSession({
       console.error('Session check failed:', error);
       clearAuthState();
     } finally {
-      setAuthLoading(false);
-      setLoginPending(false);
+      if (!background) {
+        setAuthLoading(false);
+        setLoginPending(false);
+      }
     }
   }, [applyBotProfile, clearAuthState, loadBotStatus, loadGuilds]);
 
@@ -118,7 +120,7 @@ export function useAuthSession({
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
-    const refresh = () => loadSession();
+    const refresh = () => loadSession({ background: true });
     window.addEventListener('focus', refresh);
     const timer = window.setInterval(refresh, 60000);
     return () => { window.removeEventListener('focus', refresh); window.clearInterval(timer); };
