@@ -7,6 +7,7 @@ const { parseBlueprint, toBlueprint, planBlueprint } = require('./goliathBluepri
 const draftStore = require('./goliathDraftStore');
 const { evaluateReadiness } = require('./goliathExecutionReadiness');
 const approvalLedger = require('./goliathApprovalLedger');
+const { buildCapabilityPreflight } = require('./goliathCapabilityPreflight');
 
 const router = express.Router();
 const MAX_MESSAGES = 16;
@@ -277,8 +278,36 @@ function requireLocalInternal(req, res, next) {
 }
 // Local-only endpoints are served by each environment once the feature is deliberately promoted.
 // They never require/accept a browser session or grant AI/model access.
+// Capture only the bot's effective permissions. Never return credentials or member lists.
+async function readLocalBotCapabilities(req, guildId) {
+  const guild = req.client?.guilds?.cache?.get(guildId);
+  if (!guild) return null;
+  const me = await guild.members.fetchMe();
+  if (!me) return null;
+  const channels = [...guild.channels.cache.values()];
+  return {
+    readOnly: true, environment: localMode(), guildId,
+    botPresent: true, botId: String(me.id),
+    guildPermissions: me.permissions.bitfield.toString(),
+    channelPermissions: channels.map(channel => ({
+      id: channel.id,
+      permissions: channel.permissionsFor?.(me)?.bitfield?.toString() ?? null
+    })).filter(item => item.permissions !== null),
+    checkedAt: new Date().toISOString()
+  };
+}
+
 router.get('/guilds/local', requireLocalInternal, (req, res) =>
   res.json({ environment: localMode(), guilds: localGuilds(req) }));
+router.get('/capabilities/local/:guildId', requireLocalInternal, async (req, res) => {
+  if (!SNOWFLAKE.test(String(req.params.guildId || '')))
+    return res.status(400).json({ error: 'Invalid guild ID.' });
+  try {
+    const report = await readLocalBotCapabilities(req, req.params.guildId);
+    return report ? res.json(report) : res.status(404).json({ error: 'Guild not connected.' });
+  } catch { return res.status(503).json({ error: 'Cannot inspect bot permissions.' }); }
+});
+
 router.get('/audit/local/:guildId', requireLocalInternal, async (req, res) => {
   if (!SNOWFLAKE.test(req.params.guildId)) return res.status(400).json({ error: 'Invalid guild ID.' });
   try {
@@ -505,6 +534,18 @@ async function getBackupEvidence(environment, guildId) {
   }
 }
 
+async function getBotCapabilityEvidence(req, environment, guildId) {
+  try {
+    const target = ENVIRONMENTS.find(item => item.environment === environment);
+    if (!target) throw new Error('Unknown mode.');
+    const report = environment === 'DEV' ? await readLocalBotCapabilities(req, guildId)
+      : await internalGet(target.port, '/api/owner/ai/capabilities/local/' + guildId);
+    if (!report || report.environment !== environment || report.guildId !== guildId ||
+        report.readOnly !== true || report.botPresent !== true) throw new Error('Capability response mismatch.');
+    return report;
+  } catch { return null; }
+}
+
 router.get('/drafts/:id/readiness', requireAIIdentity, async (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'Execution readiness is DEV-only.' });
   try {
@@ -513,9 +554,13 @@ router.get('/drafts/:id/readiness', requireAIIdentity, async (req, res) => {
     const audit = await getVerifiedAudit(req, draft.environment, draft.guildId);
     const preview = planBlueprint(audit, draft.blueprint);
     const backupEvidence = await getBackupEvidence(draft.environment, draft.guildId);
+    const capability = await getBotCapabilityEvidence(req, draft.environment, draft.guildId);
+    const capabilityPreflight = buildCapabilityPreflight({ audit, operations: preview.operations, capability });
     const report = evaluateReadiness({
-      draft, audit, preview, currentDigest: reportDigest(audit), backupEvidence
+      draft, audit, preview, currentDigest: reportDigest(audit), backupEvidence,
+      botCapabilities: capabilityPreflight
     });
+    report.capabilityPreflight = capabilityPreflight;
     return res.json(report);
   } catch (error) {
     if (error.status) return res.status(error.status).json({ error: error.message });
