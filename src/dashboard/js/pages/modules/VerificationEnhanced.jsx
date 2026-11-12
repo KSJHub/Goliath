@@ -247,11 +247,13 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   function setAdvancedPath(path, value) {
+    setError('');
     advancedDirty.current = true;
     setAdvanced((current) => writePath(current || settings, path, value));
   }
 
   function toggleSecurity(key, enabled) {
+    setError('');
     advancedDirty.current = true;
     setAdvanced((current) => {
       const next = writePath(current || settings, `security.${key}`, enabled);
@@ -264,7 +266,12 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   async function saveAdvanced() {
-    if (!advanced) return;
+    if (!advanced) {
+      setError('Verification settings have not loaded yet.');
+      return;
+    }
+    setError('');
+    setNotice('');
     const order = advanced.flow?.orderedSecurity || [];
     if (advanced.security?.staffApproval && !order.includes('staff_approval')) {
       setError('Add Staff Approval to the flow or disable it before saving.');
@@ -439,7 +446,8 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         <div><h2 style={{ margin: 0 }}>Save Advanced Verification Settings</h2>
           <p style={{ color: theme.mutedText, marginBottom: 0 }}>Changes are saved only for this server. Existing panels and analytics are preserved.</p>
         </div>
-        <button type="button" disabled={Boolean(busy) || !advanced} style={buttonStyle(theme, 'success')} onClick={saveAdvanced}>Save Advanced Settings</button>
+        <button type="button" disabled={Boolean(busy) || !advanced} style={buttonStyle(theme, 'success')} onClick={saveAdvanced}>{busy === 'config' ? 'Saving...' : 'Save Advanced Settings'}</button>
+        {(error || notice) ? <div role={error ? 'alert' : 'status'} style={{ flexBasis: '100%', color: error ? '#fca5a5' : '#86efac', fontWeight: 850 }}>{error || notice}</div> : null}
       </section>
 
       <section style={{ ...card, display: 'grid', gap: 16 }}>
