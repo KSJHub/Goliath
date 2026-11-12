@@ -11,6 +11,7 @@ export default function GoliathAI({ theme }) {
   const [error, setError] = useState('');
   const [guilds, setGuilds] = useState([]);
   const [selectedGuild, setSelectedGuild] = useState('');
+  const [environments, setEnvironments] = useState([]);
   const [audit, setAudit] = useState(null);
   const [auditing, setAuditing] = useState(false);
   const bottom = useRef(null);
@@ -18,7 +19,7 @@ export default function GoliathAI({ theme }) {
     let mounted = true;
     api.request('/api/owner/ai/status').then((value) => { if (mounted) setStatus(value); })
       .catch((err) => { if (mounted) setError(err.message); });
-    api.request('/api/owner/ai/guilds').then((value) => { if (mounted) { setGuilds(value.guilds || []); setSelectedGuild(value.guilds?.[0]?.id || ''); } })
+    api.request('/api/owner/ai/guilds').then((value) => { if (mounted) { setGuilds(value.guilds || []); setEnvironments(value.environments || []); setSelectedGuild(value.guilds?.[0] ? (value.guilds[0].environment + ':' + value.guilds[0].id) : ''); } })
       .catch((err) => { if (mounted) setError(err.message); });
     return () => { mounted = false; };
   }, []);
@@ -26,7 +27,11 @@ export default function GoliathAI({ theme }) {
   const runAudit = async () => {
     if (!selectedGuild || auditing) return;
     setAuditing(true); setError(''); setAudit(null);
-    try { setAudit(await api.request('/api/owner/ai/audit/' + encodeURIComponent(selectedGuild))); }
+    try {
+      const [environment, guildId] = selectedGuild.split(':');
+      if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId || '')) throw new Error('Invalid environment or guild.');
+      setAudit(await api.request('/api/owner/ai/audit/' + environment + '/' + guildId));
+    }
     catch (err) { setError(err.message); }
     finally { setAuditing(false); }
   };
@@ -46,21 +51,24 @@ export default function GoliathAI({ theme }) {
   return <section style={{ display: 'grid', gap: 16, maxWidth: 980, margin: '0 auto', color: theme?.cardText || '#e5e7eb' }}>
     <header style={panel}>
       <h1 style={{ margin: '0 0 8px', fontSize: 28 }}>Goliath AI</h1>
-      <p style={{ margin: 0, color: theme?.mutedText || '#94a3b8' }}>Developer-only · Free local inference · No paid AI API · DEV environment</p>
+      <p style={{ margin: 0, color: theme?.mutedText || '#94a3b8' }}>Developer-only · Global Discord auditing across DEV, BETA and PRODUCTION · Free local inference</p>
       <p role="status" style={{ marginBottom: 0, color: status?.enabled ? '#86efac' : '#fbbf24' }}>{status ? (status.enabled ? 'Local AI enabled' : 'Local AI not enabled') : 'Checking local AI…'}</p>
       {status?.notice && <p style={{ color: theme?.mutedText || '#94a3b8' }}>{status.notice}</p>}
     </header>
     <section style={panel}>
       <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
-      <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Only servers connected to the DEV bot can be inspected here.</p>
+      <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Connected servers across DEV, BETA and PRODUCTION can be inspected once the read-only service is deliberately deployed to each environment.</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <select aria-label="Server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
-          {guilds.length ? guilds.map((guild) => <option key={guild.id} value={guild.id}>{guild.name}</option>) : <option value="">No DEV servers connected</option>}
+        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
+          {guilds.length ? guilds.map((guild) => <option key={guild.environment + ':' + guild.id} value={guild.environment + ':' + guild.id}>{guild.environment} — {guild.name}</option>) : <option value="">No servers available</option>}
         </select>
         <button type="button" onClick={runAudit} disabled={!selectedGuild || auditing} style={{ border: 0, borderRadius: 10, padding: '10px 16px', background: '#2563eb', color: 'white' }}>{auditing ? 'Scanning…' : 'Scan permissions'}</button>
       </div>
+      {environments.length > 0 && <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>
+        {environments.map(item => item.environment + ': ' + (item.available ? item.guildCount + ' servers' : 'not yet connected')).join(' · ')}
+      </p>}
       {audit && <div style={{ marginTop: 16 }}>
-        <strong>{audit.guild?.name}</strong>
+        <strong>{audit.environment} — {audit.guild?.name}</strong>
         <p role="status">Found {audit.summary?.roles} roles, {audit.summary?.categories} categories, {audit.summary?.channels} channels and {audit.summary?.unsyncedChannels} unsynchronised child channels.</p>
         <details><summary>View role and channel inventory</summary>
           <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12, maxHeight: 360, overflowY: 'auto' }}>{JSON.stringify({ roles: audit.roles, channels: audit.channels }, null, 2)}</pre>
