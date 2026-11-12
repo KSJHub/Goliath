@@ -6,6 +6,7 @@ const { getBotOwnerIds } = require('../../core/security/protection/core');
 const { parseBlueprint, toBlueprint, planBlueprint } = require('./goliathBlueprint');
 const draftStore = require('./goliathDraftStore');
 const { evaluateReadiness } = require('./goliathExecutionReadiness');
+const approvalLedger = require('./goliathApprovalLedger');
 
 const router = express.Router();
 const MAX_MESSAGES = 16;
@@ -519,6 +520,48 @@ router.get('/drafts/:id/readiness', requireAIIdentity, async (req, res) => {
   } catch (error) {
     if (error.status) return res.status(error.status).json({ error: error.message });
     return res.status(503).json({ error: 'Unable to perform the fresh execution-readiness check. No changes made.' });
+  }
+});
+
+// Operation review and audit log are separate from all Discord write paths.
+router.get('/drafts/:id/operation-reviews', requireAIIdentity, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV review controller only.' });
+  try {
+    const draft = draftStore.loadDraft(String(req.params.id));
+    if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
+    const audit = await getVerifiedAudit(req, draft.environment, draft.guildId);
+    const operations = planBlueprint(audit, draft.blueprint).operations;
+    const currentDigest = reportDigest(audit);
+    return res.json({ draftId: draft.id, environment: draft.environment, guildId: draft.guildId,
+      stale: currentDigest !== draft.auditDigest,
+      operations: currentDigest === draft.auditDigest
+        ? approvalLedger.listReviews({ draft, currentDigest, operations }) : [],
+      events: approvalLedger.recentEvents({ draftId: draft.id }),
+      canExecute: false, executable: false });
+  } catch (error) {
+    return res.status(error.status || 503).json({ error: 'Unable to check operation reviews. No changes made.' });
+  }
+});
+router.post('/drafts/:id/operation-reviews', requirePrivateAI, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV review controller only.' });
+  try {
+    const draft = draftStore.loadDraft(String(req.params.id));
+    if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
+    const audit = await getVerifiedAudit(req, draft.environment, draft.guildId);
+    const currentDigest = reportDigest(audit);
+    if (currentDigest !== draft.auditDigest)
+      return res.status(409).json({ error: 'Server changed since draft was saved. Start a new reviewed plan.' });
+    const operations = planBlueprint(audit, draft.blueprint).operations;
+    const record = approvalLedger.recordReview({
+      draft, currentDigest, operations, reviewerId: req.session.user.id,
+      sequence: req.body?.sequence, decision: req.body?.decision
+    });
+    return res.json({ record, canExecute: false, executable: false,
+      notice: 'Review acknowledgement saved. NOT approval or permission to change Discord.' });
+  } catch (error) {
+    if (/Invalid operation|Review the complete|review context|ledger is full/i.test(error.message))
+      return res.status(422).json({ error: error.message });
+    return res.status(error.status || 503).json({ error: 'Unable to record operation review. Nothing executed.' });
   }
 });
 
