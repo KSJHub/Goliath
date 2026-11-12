@@ -230,3 +230,18 @@ The saved-plan `/drafts/:id/readiness` response now includes `recoveryPlan`, gen
 - Stale snapshots remain identified and are not authorisation to take action.
 
 This is **not a backup or rollback implementation**. The response always sets `canRollback:false`, `rollbackTested:false`, and `executable:false`. Existing bot capability, backup and operation-review safeguards remain in place; all Discord write endpoints are still absent. Recovery contracts are included in the canonical `scripts/goliath.js goliath-ai-blueprint` checks. No separate scripts or test folders were added.
+
+## Deterministic transaction manifests and offline structural rehearsal
+
+The owner-only `GET /api/owner/ai/drafts/:id/readiness` report now contains two additional read-only diagnostics, powered by existing `src/owner/dev/goliathExecutionReadiness.js` code rather than new scripts:
+
+- **`transactionManifest`**: a deterministic SHA-256 proposal fingerprint, scoped to the draft ID, environment, guild ID, saved blueprint and exact audit digest. Each operation also has a scoped fingerprint and a dependency list (for example, a channel to be created under a category that is itself proposed for creation). An invalid, cross-environment, wrong-guild or stale preview returns `unavailable:true` and cannot be executed. SHA-256 here identifies content, not a cryptographic authorisation or owner signature.
+- **`structuralSimulation`**: runs the supported create/rename/edit operations entirely in memory on a clone of the read-only audit. It uses synthetic temporary IDs only, checks existing target and parent category references, compares original fields, enforces a 500-channel guild ceiling and 50 channels per category, and reports whether this narrow structural rehearsal succeeded. Unsupported operations or mismatched target state fail closed. The source audit is never modified.
+
+Neither diagnostic applies Discord changes, validates live permissions, tests API side effects, certifies backup integrity, authorises execution or performs rollback. All results maintain `canExecute:false`, `safeToApply:false` and `executable:false`. The owner dashboard labels the result as an offline rehearsal, not a go/no-go deployment approval.
+
+The existing `npm run test:goliath-ai-blueprint` command continues to invoke the canonical `scripts/goliath.js goliath-ai-blueprint` test suite. It includes regression checks for stale/incorrect guilds, mismatched preview payloads, manifest fingerprint stability, operation dependencies, offline rehearsal success, unchanged source audits, and missing targets.
+
+### Work requiring VPS or an authorised DEV bot session
+
+Before enabling the self-hosted AI model, a developer must configure and install a compatible local llama.cpp/Qwen model on the VPS and then verify `/api/owner/ai/health`. Before allowing *any* real Discord modifications, the bot needs an isolated consenting DEV guild for live integration tests, verified per-operation permissions and hierarchy, a restorable pre-execution backup, secure independent approval tokens, rate-limit-aware mutation execution, durable write-ahead audit logging, and verified compensating recovery. Those capabilities are **not** implemented or enabled by the current read-only planning features. BETA/PRODUCTION integration must remain a separate reviewed promotion.
