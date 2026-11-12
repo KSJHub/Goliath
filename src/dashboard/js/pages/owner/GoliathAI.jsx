@@ -351,9 +351,18 @@ export default function GoliathAI({ theme }) {
     if (!content || busy || !status?.enabled) return;
     const next = [...messages.filter((item, index) => index !== 0 || item.role !== 'assistant'), { role: 'user', content }];
     const history = next.slice(-16);
+    // DEV guilds can be fetched fresh and read-only by the authenticated owner
+    // without requiring a separate scan button. Never auto-query unconnected environments.
+    const selected = guilds.find(guild => guild.environment + ':' + guild.id === selectedGuild);
+    const context = selected?.environment === 'DEV'
+      ? { environment: 'DEV', guildId: selected.id }
+      : audit && selectedGuild === audit.environment + ':' + audit.guild?.id
+        ? { environment: audit.environment, guildId: audit.guild.id }
+        : null;
     setMessages(next); setDraft(''); setBusy(true); setError('');
     try {
-      const result = await api.request('/api/owner/ai/chat', { method: 'POST', body: JSON.stringify({ messages: history, ...(audit && selectedGuild ? { guildContext: { environment: audit.environment, guildId: audit.guild.id } } : {}) }) });
+      const result = await api.request('/api/owner/ai/chat', { method: 'POST',
+        body: JSON.stringify({ messages: history, ...(context ? { guildContext: context } : {}) }) });
       setMessages((items) => [...items, { role: 'assistant', content: result.reply }]);
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
@@ -641,7 +650,13 @@ export default function GoliathAI({ theme }) {
         </details>
       </div>}
     </section>
-    {audit && <p style={{ color: theme?.mutedText || '#94a3b8', fontSize: 13, margin: 0 }}>When AI chat is enabled, replies will use a fresh read-only audit of <strong>{audit.environment} — {audit.guild?.name}</strong> for context. No changes can be made from chat.</p>}
+    <p style={{ color: theme?.mutedText || '#94a3b8', fontSize: 13, margin: 0 }}>
+      {selectedGuild.startsWith('DEV:') && guilds.some(guild => guild.environment + ':' + guild.id === selectedGuild)
+        ? <>Chat context: <strong>fresh, read-only DEV server audit</strong> is retrieved when you send a message. This does not modify Discord.</>
+        : audit && selectedGuild === audit.environment + ':' + audit.guild?.id
+          ? <>Chat context: <strong>{audit.environment} — {audit.guild?.name}</strong> (fresh read-only audit on send).</>
+          : <>Chat context: <strong>general planning only</strong>. Select a connected DEV server to use verified read-only server data.</>}
+    </p>
     <div aria-label="Conversation" style={{ ...panel, minHeight: 280, maxHeight: '52vh', overflowY: 'auto', display: 'grid', alignContent: 'start', gap: 12 }}>
       {messages.map((message, index) => <div key={index} style={{ maxWidth: '94%', justifySelf: message.role === 'user' ? 'end' : 'start', padding: 12, borderRadius: 12, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: message.role === 'user' ? 'rgba(37,99,235,.3)' : 'rgba(148,163,184,.14)' }}>
         <strong style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>{message.role === 'user' ? 'You' : 'Goliath AI'}</strong>{message.role === 'assistant' ? <AIReply content={message.content} /> : message.content}
