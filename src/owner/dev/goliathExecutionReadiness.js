@@ -8,6 +8,8 @@ function buildTransactionManifest({ draft, audit, preview, currentDigest }) {
   if (!draft || !audit?.guild?.id || !Array.isArray(preview?.operations) ||
       preview.operations.length > 350 || draft.environment !== audit.environment ||
       String(draft.guildId) !== String(audit.guild.id) ||
+      preview.environment !== audit.environment ||
+      String(preview.guild?.id) !== String(audit.guild.id) ||
       !/^[a-f0-9]{64}$/.test(String(currentDigest || '')) ||
       draft.auditDigest !== currentDigest) {
     return {
@@ -51,8 +53,11 @@ function buildTransactionManifest({ draft, audit, preview, currentDigest }) {
       sequence, kind, target: operation.target ?? null,
       before: prior, proposed,
       dependsOn, issues,
-      operationFingerprint: digest({ sequence, kind, target: operation.target ?? null,
-        before: prior, proposed, dependsOn }),
+      operationFingerprint: digest({
+        draftId: draft.id, environment: draft.environment, guildId: draft.guildId,
+        auditDigest: currentDigest, sequence, kind, target: operation.target ?? null,
+        before: prior, proposed, dependsOn
+      }),
       authorised: false, executable: false
     };
   });
@@ -81,6 +86,8 @@ const RECOVERY_KIND = Object.freeze({
 function buildRecoveryPlan({ draft, audit, preview, currentDigest }) {
   if (!draft || !audit?.guild?.id || !Array.isArray(preview?.operations) ||
       draft.environment !== audit.environment || String(draft.guildId) !== String(audit.guild.id) ||
+      preview.environment !== audit.environment ||
+      String(preview.guild?.id) !== String(audit.guild.id) ||
       typeof currentDigest !== 'string' || !/^[a-f0-9]{64}$/.test(currentDigest)) {
     throw new Error('Recovery plan requires an exact scoped guild and valid fresh audit identity.');
   }
