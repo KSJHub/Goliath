@@ -9,7 +9,7 @@ This feature is **not a public module**. The UI lives at `/owner/ai` within the 
 - Only JSON same-origin POST requests are accepted; no API key is embedded in the browser.
 - The AI inference endpoint is hard-coded to localhost (`127.0.0.1:8081`) and does not call ChatGPT, Codex or paid model services.
 - One request at a time, a 90-second deadline, small conversation/message caps.
-- Read-only Discord audit is available for guilds connected to the DEV bot, even if the model is disabled. It inventories roles, channels, categories, overwrites and unsynchronised child channels; no mutations are performed.
+- Read-only Discord audit is available for guilds connected to the DEV bot, and to BETA/PRODUCTION only after explicitly deploying their read-only service endpoints, even if the model is disabled. It inventories roles, channels, categories, overwrites and unsynchronised child channels; no mutations are performed.
 - No command execution, Discord mutations, PC controls, external browsing, model tool calls or persisted chat history yet. The AI is expressly instructed not to claim actions it cannot perform.
 - No automatic model download or process startup. DEV code deployment alone does not begin inference.
 
@@ -30,3 +30,13 @@ This is a foundation, **not** a completed autonomous AI or 24/7 guaranteed servi
 2. Select a server connected to the **DEV bot**, and run **Scan permissions**. If the desired KSJ server is not shown, it is not accessible to this DEV instance; do not switch environments or copy tokens to work around that.
 3. Review the role/channel inventory and unsynchronised permissions before proposing a staged rebuild. No existing server changes are made by this audit.
 4. Future AI-assisted edits must first show a per-item diff, request explicit owner confirmation, record backups and implement rollback.
+
+## Global guild scope (DEV, BETA and PRODUCTION)
+- Goliath AI remains **one private controller**, hosted in DEV. There is no need to run three language models.
+- The owner dashboard lists guilds by `ENVIRONMENT:guildId`; newly connected guilds appear on the next inventory refresh/reopen.
+- Each runtime provides its own **read-only** `/api/owner/ai/guilds/local` and `/api/owner/ai/audit/local/:guildId` endpoints once this change is deliberately promoted into that runtime.
+- The DEV controller talks only to `127.0.0.1` ports 3001/3011/3021 with the existing `OWNER_INTERNAL_TOKEN`, and requires the same strong shared token on each environment. Routes reject untrusted remote requests. Do not expose the internal ports publicly.
+- BETA and PRODUCTION are deliberately **not automatically updated** by a DEV commit. Promote the tested read-only feature separately when authorised; until then the UI correctly reports those environments as unavailable.
+- A `/owner` button links the two configured bot-owner accounts to the developer AI dashboard. Conversation directly inside a Discord slash-command interaction is not yet implemented; the link provides entry from `/owner`.
+- Do not allow guild admins, managers or other Discord server owners to reach the AI endpoints. Future actions must be gated to the two owner IDs independently of server administrator rights.
+- Any future **write** action (especially across production guilds) must use explicit environment+guild targeting, a fresh permission snapshot, a human-readable diff, backup, owner approval, rate limiting, and a comprehensive audit log. The read-only endpoints here cannot change guild settings.
