@@ -43,6 +43,7 @@ const Security = lazy(() => import('../pages/security/Security'));
 const MediaTools = lazy(() => import('../pages/core/MediaTools'));
 const Logs = lazy(() => import('../pages/core/Logs'));
 const OwnerView = lazy(() => import('../pages/owner/OwnerOverview'));
+const GoliathAI = lazy(() => import('../pages/owner/GoliathAI'));
 const OwnerGlobalServers = lazy(() => import('../pages/owner/GlobalServers'));
 const OwnerRuntimeMonitor = lazy(() => import('../pages/owner/RuntimeMonitor'));
 const OwnerBillingAdmin = lazy(() => import('../pages/owner/BillingAdmin'));
@@ -85,6 +86,7 @@ export const ROUTES = [
   { key: 'billing', label: 'Billing', icon: 'admin', path: '/billing', component: Billing, hidden: true },
   { key: 'notifications', label: 'Notifications', icon: 'logs', path: '/notifications', component: Notifications },
   { key: 'ownerView', label: 'Owner View', icon: 'admin', path: '/owner', component: OwnerView, ownerOnly: true },
+  { key: 'goliathAI', label: 'Goliath AI', icon: 'admin', path: '/owner/ai', component: GoliathAI, ownerOnly: true },
   { key: 'ownerServers', label: 'Global Servers', icon: 'modules', path: '/owner/servers', component: OwnerGlobalServers, ownerOnly: true },
   { key: 'ownerRuntime', label: 'Runtime Monitor', icon: 'admin', path: '/owner/runtime', component: OwnerRuntimeMonitor, ownerOnly: true },
   { key: 'ownerBilling', label: 'Billing Admin', icon: 'admin', path: '/owner/billing', component: OwnerBillingAdmin, ownerOnly: true },
