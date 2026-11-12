@@ -147,4 +147,53 @@ const missingBackupReadiness = evaluateReadiness({
 assert.equal(missingBackupReadiness.canExecute, false);
 assert(missingBackupReadiness.checks.find(item => item.key === 'backup').detail.includes('No matching backup'));
 
-console.log('Goliath AI blueprint and saved-draft and readiness contracts passed.');
+const ledger = require('../src/owner/dev/goliathApprovalLedger');
+const ledgerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-ai-reviews-'));
+const ledgerFile = path.join(ledgerDir, 'reviews.json');
+const modeBeforeReviews = process.env.BOT_MODE;
+try {
+  process.env.BOT_MODE = 'DEV';
+  const reviewDraft = { ...readyDraft, blueprint: changed };
+  const record = ledger.recordReview({
+    draft: reviewDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations, reviewerId: guildId, sequence: 1, decision: 'acknowledged'
+  }, ledgerFile);
+  assert.equal(record.isExecutionApproval, false);
+  let result = ledger.listReviews({ draft: reviewDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations }, ledgerFile);
+  assert.equal(result[0].reviews[0].decision, 'acknowledged');
+  assert.equal(result[0].executable, false);
+  assert.throws(() => ledger.recordReview({
+    draft: reviewDraft, currentDigest: 'b'.repeat(64),
+    operations: preview.operations, reviewerId: guildId, sequence: 1, decision: 'acknowledged'
+  }, ledgerFile), /stale/);
+  assert.throws(() => ledger.recordReview({
+    draft: reviewDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations, reviewerId: guildId, sequence: 999, decision: 'acknowledged'
+  }, ledgerFile), /Invalid operation/);
+  ledger.recordReview({
+    draft: reviewDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations, reviewerId: guildId, sequence: 1, decision: 'rejected'
+  }, ledgerFile);
+  result = ledger.listReviews({ draft: reviewDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations }, ledgerFile);
+  assert.equal(result[0].reviews.length, 1);
+  assert.equal(result[0].reviews[0].decision, 'rejected');
+  assert.equal(result[0].needsAttention, true);
+  assert.equal(ledger.recentEvents({ draftId: reviewDraft.id }, ledgerFile).length, 2);
+  const changedOperation = preview.operations.map((item, index) =>
+    index === 0 ? { ...item, target: { id: 'changed-target', name: 'changed' } } : item);
+  const changedResult = ledger.listReviews({ draft: reviewDraft,
+    currentDigest: 'a'.repeat(64), operations: changedOperation }, ledgerFile);
+  assert.equal(changedResult[0].reviews.length, 0);
+  assert.throws(() => ledger.recordReview({
+    draft: { ...reviewDraft, review: { status: 'draft' } }, currentDigest: 'a'.repeat(64),
+    operations: preview.operations, reviewerId: guildId, sequence: 1, decision: 'acknowledged'
+  }, ledgerFile), /Review the complete/);
+} finally {
+  if (modeBeforeReviews === undefined) delete process.env.BOT_MODE;
+  else process.env.BOT_MODE = modeBeforeReviews;
+  fs.rmSync(ledgerDir, { recursive: true, force: true });
+}
+
+console.log('Goliath AI blueprint and saved-draft and readiness and operation-review contracts passed.');
