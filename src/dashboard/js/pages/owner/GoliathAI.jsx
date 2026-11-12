@@ -472,6 +472,25 @@ export default function GoliathAI({ theme }) {
               <h4 style={{ marginTop: 0 }}>Execution safeguards — not ready to apply</h4>
               <p role="status">{readiness.operationCount} planned operations · {readiness.blockers.length} unresolved safeguards · execution disabled</p>
               <p style={{ fontSize: 12, color: '#fbbf24' }}>{readiness.notice}</p>
+              {readiness.recoveryPlan && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <h5 style={{ margin: '0 0 8px' }}>Rollback planning (no automatic recovery)</h5>
+                <p style={{ fontSize: 12, color: '#fbbf24' }}>
+                  {readiness.recoveryPlan.stale ? 'Saved snapshot is stale. ' : ''}
+                  {readiness.recoveryPlan.operationCount} recovery assessments · Restore test not performed · Rollback disabled
+                </p>
+                {readiness.recoveryPlan.items.map(item => <details key={item.sequence}
+                  style={{ padding: '8px 0', borderTop: '1px solid rgba(148,163,184,.2)' }}>
+                  <summary>{item.sequence}. {item.kind.replaceAll('_', ' ')} — {item.recoveryType.replaceAll('_', ' ')}</summary>
+                  <p style={{ fontSize: 12 }}>{item.recoveryDescription}</p>
+                  {(item.issues || []).map((warning, index) => <p key={index} style={{ color: '#fbbf24', fontSize: 12 }}>{warning}</p>)}
+                  <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>
+                    {JSON.stringify({ original: item.before, proposed: item.proposed }, null, 2)}
+                  </pre>
+                </details>)}
+                <details style={{ marginTop: 8 }}><summary>Required before execution is ever enabled</summary>
+                  <ul>{readiness.recoveryPlan.requiredBeforeExecution.map((requirement, i) => <li key={i}>{requirement}</li>)}</ul>
+                </details>
+              </section>}
               {readiness.capabilityPreflight && <section style={{ border: '1px solid rgba(148,163,184,.3)', borderRadius: 8, padding: 10, marginBottom: 12 }}>
                 <h5 style={{ margin: '0 0 8px' }}>Bot permission and rollback preflight</h5>
                 <p style={{ fontSize: 12 }}>{readiness.capabilityPreflight.permissionsVerified ? 'Read-only permission snapshot obtained.' : 'Bot permissions could not be verified.'}
