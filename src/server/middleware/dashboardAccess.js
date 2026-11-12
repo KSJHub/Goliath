@@ -61,7 +61,8 @@ function requireDashboardAccess(base) {
     // The endpoint independently validates a shared internal token; no other owner route is bypassed.
     if (base === '/api/owner/ai' && req.method === 'GET' &&
         (req.path === '/guilds/local' ||
-          (req.path.startsWith('/audit/local/') && ID.test(req.path.slice('/audit/local/'.length))))) {
+          (req.path.startsWith('/audit/local/') && ID.test(req.path.slice('/audit/local/'.length))) ||
+          (req.path.startsWith('/capabilities/local/') && ID.test(req.path.slice('/capabilities/local/'.length))))) {
       const remote = String(req.socket?.remoteAddress || '');
       if (remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1') return next();
     }
