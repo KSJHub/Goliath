@@ -18,6 +18,9 @@ export default function GoliathAI({ theme }) {
   const [auditing, setAuditing] = useState(false);
   const [preview, setPreview] = useState(null);
   const [planning, setPlanning] = useState(false);
+  const [blueprintText, setBlueprintText] = useState('');
+  const [blueprintPlan, setBlueprintPlan] = useState(null);
+  const [blueprintBusy, setBlueprintBusy] = useState(false);
   const bottom = useRef(null);
   useEffect(() => {
     let mounted = true;
@@ -45,12 +48,12 @@ export default function GoliathAI({ theme }) {
       setGuilds(next); setEnvironments(payload.environments || []);
       setSelectedGuild((previous) => next.some(g => g.environment + ':' + g.id === previous)
         ? previous : next[0] ? next[0].environment + ':' + next[0].id : '');
-      setAudit(null); setPreview(null);
+      setAudit(null); setPreview(null); setBlueprintText(''); setBlueprintPlan(null);
     } catch (err) { setError(err.message); }
   };
   const runAudit = async () => {
     if (!selectedGuild || auditing) return;
-    setAuditing(true); setError(''); setAudit(null); setPreview(null);
+    setAuditing(true); setError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText('');
     try {
       const [environment, guildId] = selectedGuild.split(':');
       if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId || '')) throw new Error('Invalid environment or guild.');
@@ -71,6 +74,30 @@ export default function GoliathAI({ theme }) {
       setPreview(result);
     } catch (err) { setError(err.message); }
     finally { setPlanning(false); }
+  };
+  const loadBlueprint = async () => {
+    if (!audit || blueprintBusy) return;
+    setBlueprintBusy(true); setError(''); setBlueprintPlan(null);
+    try {
+      const result = await api.request('/api/owner/ai/blueprint/' + audit.environment + '/' + audit.guild.id);
+      if (!result.readOnly || result.environment !== audit.environment || result.guild?.id !== audit.guild.id) throw new Error('Blueprint target mismatch.');
+      setBlueprintText(JSON.stringify(result.blueprint, null, 2));
+    } catch (err) { setError(err.message); }
+    finally { setBlueprintBusy(false); }
+  };
+  const previewBlueprint = async () => {
+    if (!audit || !blueprintText.trim() || blueprintBusy) return;
+    setBlueprintBusy(true); setBlueprintPlan(null); setError('');
+    try {
+      let blueprint;
+      try { blueprint = JSON.parse(blueprintText); } catch { throw new Error('Blueprint must be valid JSON.'); }
+      const result = await api.request('/api/owner/ai/blueprint/' + audit.environment + '/' + audit.guild.id + '/preview', {
+        method: 'POST', body: JSON.stringify({ blueprint })
+      });
+      if (result.environment !== audit.environment || result.guild?.id !== audit.guild.id || result.executable !== false) throw new Error('Preview target verification failed.');
+      setBlueprintPlan(result);
+    } catch (err) { setError(err.message); }
+    finally { setBlueprintBusy(false); }
   };
   const send = async (event) => {
     event.preventDefault();
@@ -106,7 +133,7 @@ export default function GoliathAI({ theme }) {
       <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
       <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Connected servers across DEV, BETA and PRODUCTION can be inspected once the read-only service is deliberately deployed to each environment.</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); setPreview(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
+        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText(''); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
           {guilds.length ? guilds.map((guild) => <option key={guild.environment + ':' + guild.id} value={guild.environment + ':' + guild.id}>{guild.environment} — {guild.name}</option>) : <option value="">No servers available</option>}
         </select>
         <button type="button" onClick={refreshGuilds} style={{ border: '1px solid #64748b', borderRadius: 10, padding: '10px 16px', color: '#e5e7eb', background: '#1e293b' }}>Refresh servers</button>
@@ -145,6 +172,32 @@ export default function GoliathAI({ theme }) {
           {preview.truncated && <p>Showing first 100 suggestions. Additional reviews were detected.</p>}
           <p style={{ fontSize: 12 }}>No apply button exists. These are non-executable review proposals only.</p>
         </section>}
+        <section style={{ border: '1px solid rgba(148,163,184,.25)', borderRadius: 12, padding: 14, marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Server Layout Blueprint (preview only)</h3>
+          <p style={{ color: theme?.mutedText || '#94a3b8' }}>Load the current server layout as editable JSON. Add or rename categories and channels in the blueprint, then generate a proposed change list. Existing content is preserved. Nothing can be applied from this screen.</p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" onClick={loadBlueprint} disabled={blueprintBusy} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b' }}>{blueprintBusy ? 'Working…' : 'Load current layout'}</button>
+            <button type="button" onClick={previewBlueprint} disabled={blueprintBusy || !blueprintText.trim()} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#2563eb', border: 'none' }}>Preview layout changes</button>
+          </div>
+          {blueprintText && <>
+            <label htmlFor="goliath-ai-blueprint" style={{ display: 'block', fontWeight: 700, margin: '12px 0 6px' }}>Editable server blueprint (JSON)</label>
+            <textarea id="goliath-ai-blueprint" value={blueprintText} spellCheck={false}
+              onChange={(event) => { setBlueprintText(event.target.value); setBlueprintPlan(null); }} rows={13}
+              style={{ boxSizing: 'border-box', width: '100%', resize: 'vertical', color: '#e5e7eb', background: '#0f172a', border: '1px solid #64748b', borderRadius: 10, padding: 12, fontFamily: 'monospace', fontSize: 12 }} />
+            <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>Retain existing Discord IDs when renaming. For new categories or channels, omit the ID. Supported types: text, voice, forum, announcement and stage.</p>
+          </>}
+          {blueprintPlan && <div role="region" aria-label="Blueprint preview" style={{ marginTop: 14 }}>
+            <strong>{blueprintPlan.operationCount} proposed operations · {blueprintPlan.untouchedCount} existing items unaffected</strong>
+            <p style={{ color: '#fbbf24' }}>{blueprintPlan.notice}</p>
+            {(blueprintPlan.warnings || []).map((warning, index) => <p key={index} style={{ color: '#fbbf24' }}>{warning}</p>)}
+            {blueprintPlan.operations.length === 0 && <p>No changes needed for this blueprint.</p>}
+            {blueprintPlan.operations.map((operation, index) => <details key={index} style={{ padding: '9px 0', borderTop: '1px solid rgba(148,163,184,.2)' }}>
+              <summary>{operation.kind.replaceAll('_', ' ')} · {operation.target?.name}</summary>
+              <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>{JSON.stringify({ before: operation.before, proposed: operation.after }, null, 2)}</pre>
+            </details>)}
+            <p style={{ fontSize: 12 }}>This is a planning document, not an approved or executable change set.</p>
+          </div>}
+        </section>
         <details><summary>View role and channel inventory</summary>
           <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12, maxHeight: 360, overflowY: 'auto' }}>{JSON.stringify({ roles: audit.roles, channels: audit.channels }, null, 2)}</pre>
         </details>
