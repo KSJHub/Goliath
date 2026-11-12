@@ -1,6 +1,67 @@
 'use strict';
 
 // Pre-execution checklist only. Never calls Discord APIs, applies changes or creates backups.
+// Recovery planning describes prerequisites only; it never performs a reverse action.
+const RECOVERY_KIND = Object.freeze({
+  rename_category: 'restore_original_name',
+  edit_channel: 'restore_original_fields',
+  create_channel: 'manual_review_new_channel',
+  create_category: 'manual_review_new_category'
+});
+function buildRecoveryPlan({ draft, audit, preview, currentDigest }) {
+  if (!draft || !audit?.guild?.id || !Array.isArray(preview?.operations) ||
+      draft.environment !== audit.environment || String(draft.guildId) !== String(audit.guild.id) ||
+      typeof currentDigest !== 'string' || !/^[a-f0-9]{64}$/.test(currentDigest)) {
+    throw new Error('Recovery plan requires an exact scoped guild and valid fresh audit identity.');
+  }
+  const stale = draft.auditDigest !== currentDigest;
+  const items = preview.operations.map((operation, index) => {
+    const kind = operation.kind;
+    const target = operation.target || {};
+    const before = operation.before ?? null;
+    const after = operation.after ?? null;
+    const supported = Object.hasOwn(RECOVERY_KIND, kind);
+    const needsOriginalFields = kind === 'rename_category' || kind === 'edit_channel';
+    const originalFieldsAvailable = !needsOriginalFields ||
+      (before && typeof before === 'object' && Object.keys(before).length > 0);
+    const issues = [];
+    if (!supported) issues.push('Unknown operation type; rollback definition is unavailable.');
+    if (needsOriginalFields && !originalFieldsAvailable)
+      issues.push('Original fields are missing; a compensating edit cannot be described safely.');
+    if (kind === 'create_category' || kind === 'create_channel')
+      issues.push('Deletion is not an automatic rollback: new messages or configuration could be lost.');
+    if (kind === 'edit_channel' && after?.parentId !== undefined)
+      issues.push('Reparenting may change inherited channel permissions and access.');
+    if (kind === 'create_channel' && !after?.parentId && after?.parentName)
+      issues.push('Parent category is referenced by name; generated Discord ID must be recorded after creation.');
+    return {
+      sequence: index + 1, kind, target, before, proposed: after,
+      recoveryType: supported ? RECOVERY_KIND[kind] : 'undefined',
+      recoveryDescription: needsOriginalFields
+        ? 'A future operator must verify the current target and restore captured original fields.'
+        : 'A future operator must inspect the newly created object and decide whether to retain it.',
+      issues, automaticRollbackSupported: false, verified: false, executable: false
+    };
+  });
+  return {
+    readOnly: true, executable: false, canRollback: false,
+    environment: draft.environment, guildId: draft.guildId, draftId: draft.id,
+    savedAuditDigest: draft.auditDigest, currentAuditDigest: currentDigest,
+    stale, generatedAt: new Date().toISOString(),
+    recoveryOrder: 'reverse-of-completed-operations-after-manual-review',
+    items, operationCount: items.length,
+    backupVerification: 'not-performed', rollbackTested: false,
+    requiredBeforeExecution: [
+      'Verified restorable backup from the exact environment and guild',
+      'Capture the IDs and original fields of every affected Discord object',
+      'Explicit time-limited execution authorisation independent of review acknowledgements',
+      'Tested compensating actions and irreversible-data-loss warnings',
+      'Fresh guild and bot permission checks immediately before every write'
+    ],
+    notice: 'Recovery analysis only: no backup, restoration, execution, or automated rollback was performed.'
+  };
+}
+
 // A reviewed draft is NOT an authorisation to execute.
 function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabilities = null, backupEvidence = null }) {
   if (!draft || !audit || !preview || !Array.isArray(preview.operations)) {
@@ -11,6 +72,7 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
   const snapshotMatches = typeof currentDigest === 'string' &&
     currentDigest.length === 64 && currentDigest === draft.auditDigest;
   const reviewed = draft.review?.status === 'reviewed';
+  const recoveryPlan = buildRecoveryPlan({ draft, audit, preview, currentDigest });
   const operations = preview.operations.map((operation, index) => ({
     sequence: index + 1,
     kind: operation.kind,
@@ -52,8 +114,9 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
     draftId: draft.id, auditDigest: currentDigest, savedAuditDigest: draft.auditDigest,
     generatedAt: new Date().toISOString(), operationCount: operations.length, operations,
     backupEvidence: backupEvidence || { status: 'unavailable', candidates: [], checkedAt: null },
+    recoveryPlan,
     checks, blockers: checks.filter(item => item.state !== 'passed').map(item => item.key),
     notice: 'Diagnostic checklist only. No approval, backup or Discord write has occurred.'
   };
 }
-module.exports = { evaluateReadiness };
+module.exports = { evaluateReadiness, buildRecoveryPlan };
