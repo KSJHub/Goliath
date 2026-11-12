@@ -346,6 +346,57 @@ async function internalGet(port, endpoint) {
   } finally { clearTimeout(timer); }
 }
 
+// Owner-only Discord OAuth inventory. This does not add a bot to a guild or
+// grant audit permissions. Tokens stay exclusively in the existing session.
+async function listPersonalGuilds(req) {
+  const token = String(req.session?.accessToken || '');
+  if (!token) return { guilds: [], status: 'reconnect-required' };
+  const results = [];
+  let after = '';
+  try {
+    for (let page = 0; page < 5; page += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 7000);
+      let response;
+      try {
+        const url = 'https://discord.com/api/v10/users/@me/guilds?limit=200' +
+          (after ? '&after=' + encodeURIComponent(after) : '');
+        response = await fetch(url, {
+          headers: { Authorization: 'Bearer ' + token },
+          signal: controller.signal
+        });
+      } finally { clearTimeout(timer); }
+      if (response.status === 401 || response.status === 403) {
+        return { guilds: [], status: 'reconnect-required' };
+      }
+      if (response.status === 429) return { guilds: [], status: 'rate-limited' };
+      if (!response.ok) return { guilds: [], status: 'unavailable' };
+      const guilds = await response.json();
+      if (!Array.isArray(guilds) || guilds.length > 200) {
+        return { guilds: [], status: 'unavailable' };
+      }
+      for (const guild of guilds) {
+        if (!SNOWFLAKE.test(String(guild?.id || '')) || typeof guild.name !== 'string') continue;
+        let permissions = 0n;
+        try { permissions = BigInt(String(guild.permissions || '0')); } catch { /* invalid permissions are not trusted */ }
+        const owned = guild.owner === true;
+        const manageable = owned || (permissions & 0x20n) !== 0n || (permissions & 0x8n) !== 0n;
+        if (manageable) results.push({
+          id: String(guild.id), name: guild.name.slice(0, 100),
+          owner: owned, canManage: true
+        });
+      }
+      if (guilds.length < 200) return { guilds: results, status: 'ready' };
+      const lastId = String(guilds[guilds.length - 1]?.id || '');
+      if (!SNOWFLAKE.test(lastId) || lastId === after) break;
+      after = lastId;
+    }
+    return { guilds: results, status: 'partial' };
+  } catch {
+    return { guilds: [], status: 'unavailable' };
+  }
+}
+
 router.get('/guilds', requireAIIdentity, async (req, res) => {
   // In non-DEV runtime, an AI dashboard isn't needed; the central controller
   // connects to each environment through the local read-only APIs.
@@ -366,9 +417,16 @@ router.get('/guilds', requireAIIdentity, async (req, res) => {
         error: 'Environment audit endpoint not available or not yet promoted.' };
     }
   }));
-  return res.json({ guilds: results.flatMap(result => result.guilds), environments: results.map(
-    result => ({ environment: result.environment, available: !result.unavailable,
-      guildCount: result.guilds.length, error: result.error || null })) });
+  const personal = await listPersonalGuilds(req);
+  return res.json({
+    guilds: results.flatMap(result => result.guilds),
+    personalGuilds: personal.guilds,
+    personalGuildsStatus: personal.status,
+    environments: results.map(result => ({
+      environment: result.environment, available: !result.unavailable,
+      guildCount: result.guilds.length, error: result.error || null
+    }))
+  });
 });
 
 router.get('/audit/:environment/:guildId', requireAIIdentity, async (req, res) => {
