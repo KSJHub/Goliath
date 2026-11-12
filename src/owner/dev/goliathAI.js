@@ -69,6 +69,68 @@ function localGuilds(req) {
     environment: localMode()
   })).sort((a, b) => a.name.localeCompare(b.name));
 }
+
+// Deterministic, explainable findings; no AI inference or Discord writes required.
+const RISK_BITS = Object.freeze([
+  ['Administrator', 1n << 3n],
+  ['Manage Channels', 1n << 4n],
+  ['Manage Server', 1n << 5n],
+  ['Manage Roles', 1n << 28n],
+  ['Manage Webhooks', 1n << 29n]
+]);
+function permissionNames(raw) {
+  let bits = 0n;
+  try { bits = BigInt(raw); } catch { return []; }
+  return RISK_BITS.filter(([, mask]) => (bits & mask) === mask).map(([name]) => name);
+}
+function buildFindings(guildId, roles, channels) {
+  const findings = [];
+  const add = (severity, code, target, message, recommendation) =>
+    findings.push({ severity, code, target, message, recommendation });
+  const everyone = roles.find(role => role.id === guildId);
+  if (everyone) {
+    const broad = permissionNames(everyone.permissions);
+    if (broad.length) add('high', 'everyone_elevated', { type: 'role', id: everyone.id, name: everyone.name },
+      '@everyone has elevated guild permissions: ' + broad.join(', ') + '.',
+      'Review base @everyone permissions; remove unnecessary elevated privileges only after confirming intended access.');
+  }
+  for (const role of roles) {
+    if (role.id === guildId || role.managed) continue;
+    const broad = permissionNames(role.permissions);
+    if (broad.includes('Administrator')) add('review', 'administrator_role',
+      { type: 'role', id: role.id, name: role.name },
+      'Role has Administrator permission, which bypasses channel permission overwrites.',
+      'Verify this role is assigned only to trusted administrators.');
+    if (broad.includes('Manage Roles') && !broad.includes('Administrator')) add('review', 'manage_roles_role',
+      { type: 'role', id: role.id, name: role.name },
+      'Role can manage lower roles within the Discord role hierarchy.',
+      'Confirm role hierarchy and whether this privilege is required.');
+  }
+  const byId = new Map(channels.map(channel => [channel.id, channel]));
+  for (const channel of channels) {
+    const target = { type: 'channel', id: channel.id, name: channel.name };
+    if (channel.parentId && byId.has(channel.parentId)) {
+      const parent = byId.get(channel.parentId);
+      const canonical = overrides => JSON.stringify(overrides.map(item =>
+        [String(item.type), String(item.id), String(item.allow), String(item.deny)].join(':')).sort());
+      if (canonical(channel.permissionOverwrites) !== canonical(parent.permissionOverwrites))
+        add('review', 'category_overrides_differ', target,
+          'Channel permissions differ from its parent category.',
+          'Confirm whether the difference is intentional before synchronising permissions.');
+    }
+    const memberOverrides = channel.permissionOverwrites.filter(item => item.type === 1);
+    if (memberOverrides.length) add('info', 'member_overrides', target,
+      'Channel has ' + memberOverrides.length + ' member-specific permission override(s).',
+      'Review individual exceptions before reorganising categories or roles.');
+  }
+  const priority = { high: 0, review: 1, info: 2 };
+  findings.sort((a,b) => (priority[a.severity] - priority[b.severity]) || a.code.localeCompare(b.code));
+  return { findings: findings.slice(0, 200), findingsTruncated: findings.length > 200,
+    totals: { high: findings.filter(f => f.severity === 'high').length,
+      review: findings.filter(f => f.severity === 'review').length,
+      info: findings.filter(f => f.severity === 'info').length } };
+}
+
 async function readAudit(req, id) {
   const guild = req.client?.guilds?.cache?.get(id);
   if (!guild) return null;
@@ -91,7 +153,7 @@ async function readAudit(req, id) {
       categories: channels.filter(c => c.type === 4).length,
       unsyncedChannels: channels.filter(c => c.parentId &&
         guild.channels.cache.get(c.id)?.permissionsLocked === false).length },
-    roles, channels
+    roles, channels, analysis: buildFindings(guild.id, roles, channels)
   };
 }
 function requireAIIdentity(req, res, next) {
