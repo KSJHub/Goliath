@@ -5495,6 +5495,29 @@ const manifestWrongGuild = buildTransactionManifest({
 });
 assert.equal(manifestWrongGuild.unavailable, true);
 assert.equal(manifestWrongGuild.canExecute, false);
+const wrongPreviewGuild = { ...preview, guild: { ...preview.guild, id: otherId } };
+const wrongPreviewEnvironment = { ...preview, environment: 'PRODUCTION' };
+assert.equal(buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview: wrongPreviewGuild,
+  currentDigest: 'a'.repeat(64)
+}).unavailable, true);
+assert.equal(buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview: wrongPreviewEnvironment,
+  currentDigest: 'a'.repeat(64)
+}).unavailable, true);
+assert.throws(() => buildRecoveryPlan({
+  draft: manifestDraft, audit: readyAudit, preview: wrongPreviewGuild,
+  currentDigest: 'a'.repeat(64)
+}), /exact scoped guild/);
+const alternateOperation = buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit,
+  preview: { ...preview, operations: preview.operations.map((item, i) =>
+    i === 0 ? { ...item, after: { name: 'different' } } : item) },
+  currentDigest: 'a'.repeat(64)
+});
+assert.notEqual(alternateOperation.fingerprint, manifestOne.fingerprint);
+assert.notEqual(alternateOperation.entries[0].operationFingerprint,
+  manifestOne.entries[0].operationFingerprint);
 assert.equal(buildTransactionManifest({
   draft: manifestDraft, audit: readyAudit, preview,
   currentDigest: 'b'.repeat(64)
