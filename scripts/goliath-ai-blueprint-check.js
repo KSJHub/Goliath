@@ -94,4 +94,35 @@ try {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
 
-console.log('Goliath AI blueprint and saved-draft contracts passed.');
+const { evaluateReadiness } = require('../src/owner/dev/goliathExecutionReadiness');
+const readyAudit = { ...audit, roles: [] };
+const readyDraft = {
+  id: '00000000-0000-4000-8000-000000000001',
+  environment: 'DEV', guildId, guildName: audit.guild.name,
+  auditDigest: 'a'.repeat(64), review: { status: 'reviewed', checkedBy: guildId }
+};
+const report = evaluateReadiness({
+  draft: readyDraft, audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
+});
+assert.equal(report.canExecute, false);
+assert.equal(report.executable, false);
+assert.equal(report.operationCount, preview.operations.length);
+assert.equal(report.checks.find(item => item.key === 'fresh_audit').state, 'passed');
+assert(report.blockers.includes('backup'));
+assert(report.blockers.includes('execution_engine'));
+assert(report.operations.every(item => item.executable === false && item.needsOwnerApproval === true));
+const staleReadiness = evaluateReadiness({
+  draft: readyDraft, audit: readyAudit, preview, currentDigest: 'b'.repeat(64)
+});
+assert.equal(staleReadiness.checks.find(item => item.key === 'fresh_audit').state, 'blocked');
+assert.equal(staleReadiness.canExecute, false);
+const wrongGuild = evaluateReadiness({
+  draft: { ...readyDraft, guildId: otherId }, audit: readyAudit, preview,
+  currentDigest: 'a'.repeat(64)
+});
+assert.equal(wrongGuild.checks.find(item => item.key === 'owner_scope').state, 'blocked');
+assert.equal(wrongGuild.canExecute, false);
+assert.throws(() => evaluateReadiness({ draft: readyDraft, audit: readyAudit, preview: null,
+  currentDigest: 'a'.repeat(64) }), /required/);
+
+console.log('Goliath AI blueprint and saved-draft and readiness contracts passed.');
