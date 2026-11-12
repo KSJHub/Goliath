@@ -5505,6 +5505,14 @@ assert.equal(buildTransactionManifest({
   draft: manifestDraft, audit: readyAudit, preview: wrongPreviewEnvironment,
   currentDigest: 'a'.repeat(64)
 }).unavailable, true);
+const wrongPreviewReadiness = evaluateReadiness({
+  draft: manifestDraft, audit: readyAudit, preview: wrongPreviewGuild,
+  currentDigest: 'a'.repeat(64)
+});
+assert.equal(wrongPreviewReadiness.canExecute, false);
+assert.equal(wrongPreviewReadiness.checks.find(item => item.key === 'owner_scope').state, 'blocked');
+assert.equal(wrongPreviewReadiness.recoveryPlan.unavailable, true);
+assert.equal(wrongPreviewReadiness.transactionManifest.unavailable, true);
 assert.throws(() => buildRecoveryPlan({
   draft: manifestDraft, audit: readyAudit, preview: wrongPreviewGuild,
   currentDigest: 'a'.repeat(64)
