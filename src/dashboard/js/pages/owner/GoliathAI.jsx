@@ -95,7 +95,7 @@ export default function GoliathAI({ theme }) {
       const raw = blueprintText.trim() ? JSON.parse(blueprintText) : { name: 'Discord rebuild', categories: [] };
       if (!Array.isArray(raw.categories)) throw new Error('Blueprint categories must be an array.');
       if (raw.categories.some(category => category.name?.toLowerCase() === name.toLowerCase())) throw new Error('That category is already in your blueprint.');
-      const channels = newChannelLines.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean).map(line => {
+      const channels = newChannelLines.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
         const parts = line.split('|').map(part => part.trim());
         if (parts.length > 2) throw new Error('Use one channel per line in the format: name | type.');
         const [channelName, channelType = 'text'] = parts;
@@ -210,7 +210,7 @@ export default function GoliathAI({ theme }) {
               style={{ boxSizing: 'border-box', width: '100%', padding: 10, borderRadius: 8, background: '#111827', color: '#e5e7eb', border: '1px solid #64748b' }}/>
             <label htmlFor="goliath-ai-channels" style={{ display: 'block', marginTop: 10 }}>Channels (one per line, optional type after |)</label>
             <textarea id="goliath-ai-channels" value={newChannelLines} rows={4}
-              onChange={event => setNewChannelLines(event.target.value)} placeholder={'general | text\\nvoice-lounge | voice'}
+              onChange={event => setNewChannelLines(event.target.value)} placeholder={'general | text\nvoice-lounge | voice'}
               style={{ boxSizing: 'border-box', width: '100%', padding: 10, borderRadius: 8, background: '#111827', color: '#e5e7eb', border: '1px solid #64748b' }}/>
             <button type="button" onClick={addCategoryToBlueprint} disabled={!newCategoryName.trim()}
               style={{ padding: '10px 14px', background: '#334155', color: 'white', border: 0, borderRadius: 10 }}>Add to blueprint (not Discord)</button>
