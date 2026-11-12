@@ -196,4 +196,44 @@ try {
   fs.rmSync(ledgerDir, { recursive: true, force: true });
 }
 
-console.log('Goliath AI blueprint and saved-draft and readiness and operation-review contracts passed.');
+const { buildCapabilityPreflight } = require('../src/owner/dev/goliathCapabilityPreflight');
+const capabilityAudit = { ...audit, channels: audit.channels };
+const allowedCapability = {
+  readOnly: true, environment: 'DEV', guildId, botPresent: true,
+  botId: '523456789012345678', guildPermissions: String(1n << 4n),
+  channelPermissions: [{ id: categoryId, permissions: String(1n << 4n) },
+    { id: channelId, permissions: String(1n << 4n) }]
+};
+const permissionPreview = planBlueprint(audit, changed);
+const capabilitiesGood = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: permissionPreview.operations, capability: allowedCapability
+});
+assert.equal(capabilitiesGood.canExecute, false);
+assert.equal(capabilitiesGood.rollbackVerified, false);
+assert.equal(capabilitiesGood.executable, false);
+assert.equal(capabilitiesGood.counts.blocked, 0);
+assert(capabilitiesGood.operations.every(item => item.executable === false));
+const noPermission = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: permissionPreview.operations,
+  capability: { ...allowedCapability, guildPermissions: '0' }
+});
+assert(noPermission.counts.blocked > 0);
+const wrongEnvironment = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: permissionPreview.operations,
+  capability: { ...allowedCapability, environment: 'PRODUCTION' }
+});
+assert.equal(wrongEnvironment.permissionsVerified, false);
+assert(wrongEnvironment.counts.unknown > 0);
+const missingChannelPermissions = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: permissionPreview.operations,
+  capability: { ...allowedCapability, channelPermissions: [] }
+});
+assert(missingChannelPermissions.counts.unknown > 0);
+const prohibited = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: [{ kind: 'delete_channel', target: { id: channelId },
+    after: null, executable: false }], capability: allowedCapability
+});
+assert.equal(prohibited.operations[0].permission, 'blocked');
+assert.equal(prohibited.canExecute, false);
+
+console.log('Goliath AI blueprint and saved-draft and readiness and operation-review and permission-preflight contracts passed.');
