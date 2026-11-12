@@ -125,4 +125,26 @@ assert.equal(wrongGuild.canExecute, false);
 assert.throws(() => evaluateReadiness({ draft: readyDraft, audit: readyAudit, preview: null,
   currentDigest: 'a'.repeat(64) }), /required/);
 
+const backupCandidate = {
+  status: 'candidate-found', environment: 'DEV', guildId,
+  checkedAt: new Date().toISOString(),
+  verification: 'not-performed',
+  candidates: [{ backupId: 'backup-example', hasIntegrityMetadata: true, validationReportedValid: true }]
+};
+const backupReadiness = evaluateReadiness({
+  draft: readyDraft, audit: readyAudit, preview,
+  currentDigest: 'a'.repeat(64), backupEvidence: backupCandidate
+});
+assert.equal(backupReadiness.canExecute, false);
+assert.equal(backupReadiness.checks.find(item => item.key === 'backup').state, 'pending');
+assert(backupReadiness.blockers.includes('backup'));
+assert.equal(backupReadiness.backupEvidence.verification, 'not-performed');
+const missingBackupReadiness = evaluateReadiness({
+  draft: readyDraft, audit: readyAudit, preview,
+  currentDigest: 'a'.repeat(64),
+  backupEvidence: { status: 'none-found', candidates: [], verification: 'not-performed' }
+});
+assert.equal(missingBackupReadiness.canExecute, false);
+assert(missingBackupReadiness.checks.find(item => item.key === 'backup').detail.includes('No matching backup'));
+
 console.log('Goliath AI blueprint and saved-draft and readiness contracts passed.');
