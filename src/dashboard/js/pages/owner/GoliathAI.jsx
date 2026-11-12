@@ -5,6 +5,8 @@ const panel = { border: '1px solid rgba(148,163,184,.24)', borderRadius: 16, bac
 const first = [{ role: 'assistant', content: 'Welcome to Goliath AI. This is your private developer chat. The free local model must be installed and enabled before I can reply.' }];
 export default function GoliathAI({ theme }) {
   const [status, setStatus] = useState(null);
+  const [health, setHealth] = useState(null);
+  const [checkingHealth, setCheckingHealth] = useState(false);
   const [messages, setMessages] = useState(first);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -26,6 +28,15 @@ export default function GoliathAI({ theme }) {
     return () => { mounted = false; };
   }, []);
   useEffect(() => { bottom.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' }); }, [messages]);
+  const checkAIHealth = async () => {
+    if (checkingHealth) return;
+    setCheckingHealth(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/health');
+      setHealth(result);
+    } catch (err) { setError(err.message); }
+    finally { setCheckingHealth(false); }
+  };
   const refreshGuilds = async () => {
     setError('');
     try {
@@ -80,6 +91,16 @@ export default function GoliathAI({ theme }) {
       <p style={{ margin: 0, color: theme?.mutedText || '#94a3b8' }}>Developer-only · Global Discord auditing across DEV, BETA and PRODUCTION · Free local inference</p>
       <p role="status" style={{ marginBottom: 0, color: status?.enabled ? '#86efac' : '#fbbf24' }}>{status ? (status.enabled ? 'Local AI enabled' : 'Local AI not enabled') : 'Checking local AI…'}</p>
       {status?.notice && <p style={{ color: theme?.mutedText || '#94a3b8' }}>{status.notice}</p>}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+        <button type="button" onClick={checkAIHealth} disabled={checkingHealth}
+          style={{ padding: '9px 13px', color: '#e5e7eb', background: '#1e293b', border: '1px solid #64748b', borderRadius: 10 }}>
+          {checkingHealth ? 'Checking model…' : 'Check local AI connection'}
+        </button>
+        {health && <span role="status" style={{ color: health.ready ? '#86efac' : '#fbbf24' }}>
+          {health.state === 'ready' ? 'Ready to test' : 'Not ready'} · {health.state}
+        </span>}
+      </div>
+      {health && <p style={{ fontSize: 13, color: theme?.mutedText || '#94a3b8' }}>{health.reason}{health.models?.length ? ' Loaded model(s): ' + health.models.join(', ') : ''}</p>}
     </header>
     <section style={panel}>
       <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
