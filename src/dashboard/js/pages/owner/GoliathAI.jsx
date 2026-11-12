@@ -64,12 +64,12 @@ export default function GoliathAI({ theme }) {
       setGuilds(next); setEnvironments(payload.environments || []);
       setSelectedGuild((previous) => next.some(g => g.environment + ':' + g.id === previous)
         ? previous : next[0] ? next[0].environment + ':' + next[0].id : '');
-      setAudit(null); setPreview(null); setBlueprintText(''); setBlueprintPlan(null); setReadiness(null);
+      setAudit(null); setPreview(null); setBlueprintText(''); setBlueprintPlan(null); setReadiness(null); setOperationReviews(null);
     } catch (err) { setError(err.message); }
   };
   const runAudit = async () => {
     if (!selectedGuild || auditing) return;
-    setAuditing(true); setError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText(''); setReadiness(null);
+    setAuditing(true); setError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText(''); setReadiness(null); setOperationReviews(null);
     try {
       const [environment, guildId] = selectedGuild.split(':');
       if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId || '')) throw new Error('Invalid environment or guild.');
@@ -346,7 +346,7 @@ export default function GoliathAI({ theme }) {
       <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
       <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Connected servers across DEV, BETA and PRODUCTION can be inspected once the read-only service is deliberately deployed to each environment.</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText(''); setReadiness(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
+        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText(''); setReadiness(null); setOperationReviews(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
           {guilds.length ? guilds.map((guild) => <option key={guild.environment + ':' + guild.id} value={guild.environment + ':' + guild.id}>{guild.environment} — {guild.name}</option>) : <option value="">No servers available</option>}
         </select>
         <button type="button" onClick={refreshGuilds} style={{ border: '1px solid #64748b', borderRadius: 10, padding: '10px 16px', color: '#e5e7eb', background: '#1e293b' }}>Refresh servers</button>
