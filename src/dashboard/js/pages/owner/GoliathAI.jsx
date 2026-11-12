@@ -21,6 +21,8 @@ export default function GoliathAI({ theme }) {
   const [blueprintText, setBlueprintText] = useState('');
   const [blueprintPlan, setBlueprintPlan] = useState(null);
   const [blueprintBusy, setBlueprintBusy] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newChannelLines, setNewChannelLines] = useState('');
   const bottom = useRef(null);
   useEffect(() => {
     let mounted = true;
@@ -84,6 +86,27 @@ export default function GoliathAI({ theme }) {
       setBlueprintText(JSON.stringify(result.blueprint, null, 2));
     } catch (err) { setError(err.message); }
     finally { setBlueprintBusy(false); }
+  };
+  const addCategoryToBlueprint = () => {
+    setError(''); setBlueprintPlan(null);
+    try {
+      const name = newCategoryName.trim();
+      if (!name || name.length > 100) throw new Error('Enter a category name of up to 100 characters.');
+      const raw = blueprintText.trim() ? JSON.parse(blueprintText) : { name: 'Discord rebuild', categories: [] };
+      if (!Array.isArray(raw.categories)) throw new Error('Blueprint categories must be an array.');
+      if (raw.categories.some(category => category.name?.toLowerCase() === name.toLowerCase())) throw new Error('That category is already in your blueprint.');
+      const channels = newChannelLines.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean).map(line => {
+        const parts = line.split('|').map(part => part.trim());
+        if (parts.length > 2) throw new Error('Use one channel per line in the format: name | type.');
+        const [channelName, channelType = 'text'] = parts;
+        if (!channelName || channelName.length > 100) throw new Error('Channel names must be 1–100 characters.');
+        if (!['text', 'voice', 'forum', 'announcement', 'stage'].includes(channelType)) throw new Error('Unsupported channel type: ' + channelType);
+        return { name: channelName, type: channelType };
+      });
+      raw.categories.push({ name, channels });
+      setBlueprintText(JSON.stringify(raw, null, 2));
+      setNewCategoryName(''); setNewChannelLines('');
+    } catch (err) { setError(err.message); }
   };
   const previewBlueprint = async () => {
     if (!audit || !blueprintText.trim() || blueprintBusy) return;
@@ -178,6 +201,19 @@ export default function GoliathAI({ theme }) {
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button type="button" onClick={loadBlueprint} disabled={blueprintBusy} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#1e293b', border: '1px solid #64748b' }}>{blueprintBusy ? 'Working…' : 'Load current layout'}</button>
             <button type="button" onClick={previewBlueprint} disabled={blueprintBusy || !blueprintText.trim()} style={{ padding: '10px 14px', borderRadius: 10, color: 'white', background: '#2563eb', border: 'none' }}>Preview layout changes</button>
+          </div>
+          <div style={{ padding: 12, border: '1px solid rgba(148,163,184,.23)', borderRadius: 10, marginTop: 12 }}>
+            <strong>Add a new category to the blueprint</strong>
+            <label htmlFor="goliath-ai-category" style={{ display: 'block', marginTop: 10 }}>Category name</label>
+            <input id="goliath-ai-category" value={newCategoryName} maxLength={100}
+              onChange={event => setNewCategoryName(event.target.value)} placeholder="e.g. The Rough"
+              style={{ boxSizing: 'border-box', width: '100%', padding: 10, borderRadius: 8, background: '#111827', color: '#e5e7eb', border: '1px solid #64748b' }}/>
+            <label htmlFor="goliath-ai-channels" style={{ display: 'block', marginTop: 10 }}>Channels (one per line, optional type after |)</label>
+            <textarea id="goliath-ai-channels" value={newChannelLines} rows={4}
+              onChange={event => setNewChannelLines(event.target.value)} placeholder={'general | text\\nvoice-lounge | voice'}
+              style={{ boxSizing: 'border-box', width: '100%', padding: 10, borderRadius: 8, background: '#111827', color: '#e5e7eb', border: '1px solid #64748b' }}/>
+            <button type="button" onClick={addCategoryToBlueprint} disabled={!newCategoryName.trim()}
+              style={{ padding: '10px 14px', background: '#334155', color: 'white', border: 0, borderRadius: 10 }}>Add to blueprint (not Discord)</button>
           </div>
           {blueprintText && <>
             <label htmlFor="goliath-ai-blueprint" style={{ display: 'block', fontWeight: 700, margin: '12px 0 6px' }}>Editable server blueprint (JSON)</label>
