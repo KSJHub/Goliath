@@ -37,4 +37,19 @@ assert.throws(() => planBlueprint(audit, { categories: [{ name: 'Community', cha
   { id: channelId, name: 'a', type: 'text' },
   { id: channelId, name: 'b', type: 'text' }] }] }));
 assert.throws(() => parseBlueprint({ categories: Array.from({ length: 41 }, (_, i) => ({ name: 'Category ' + i, channels: [] })) }));
+assert.throws(() => parseBlueprint({ categories: [{ name: 'General', channels: [
+  { name: 'chat', type: 'text' }, { name: 'CHAT', type: 'text' }
+] }] }), /Duplicate channel/);
+assert.throws(() => parseBlueprint({ categories: [{ name: 'Oversized', channels:
+  Array.from({ length: 51 }, (_, i) => ({ name: 'channel-' + i, type: 'text' }))
+}] }), /50 planned channels/);
+const crowded = {
+  ...audit,
+  channels: [...audit.channels,
+    ...Array.from({ length: 497 }, (_, i) => ({
+      id: String(500000000000000000n + BigInt(i)), name: 'existing-' + i, type: 0, parentId: null
+    }))]
+};
+assert.throws(() => planBlueprint(crowded, { categories: [{ name: 'Extra', channels: [] }] }),
+  /500-channel guild limit/);
 console.log('Goliath AI blueprint dry-run contracts passed.');
