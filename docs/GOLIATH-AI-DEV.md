@@ -9,7 +9,8 @@ This feature is **not a public module**. The UI lives at `/owner/ai` within the 
 - Only JSON same-origin POST requests are accepted; no API key is embedded in the browser.
 - The AI inference endpoint is hard-coded to localhost (`127.0.0.1:8081`) and does not call ChatGPT, Codex or paid model services.
 - One request at a time, a 90-second deadline, small conversation/message caps.
-- No command execution, Discord mutations, PC controls, external browsing, tool calls or persisted chat history yet. The AI is expressly instructed not to claim actions it cannot perform.
+- Read-only Discord audit is available for guilds connected to the DEV bot, even if the model is disabled. It inventories roles, channels, categories, overwrites and unsynchronised child channels; no mutations are performed.
+- No command execution, Discord mutations, PC controls, external browsing, model tool calls or persisted chat history yet. The AI is expressly instructed not to claim actions it cannot perform.
 - No automatic model download or process startup. DEV code deployment alone does not begin inference.
 
 ## Future VPS setup (manual, only after measuring resources)
@@ -23,3 +24,9 @@ This feature is **not a public module**. The UI lives at `/owner/ai` within the 
 
 ## Operational notes
 This is a foundation, **not** a completed autonomous AI or 24/7 guaranteed service. Reliability depends on the separately managed inference service, VPS load, uptime and configured operating-system limits. Future Discord and Windows integrations must have their own permission checks, action previews, approval gates and audit trails. Do not grant remote shell access or arbitrary command execution through AI chat.
+
+## Discord rebuild workflow
+1. In Developer/Owner Tools, open **Goliath AI** and select **Discord Server Audit**.
+2. Select a server connected to the **DEV bot**, and run **Scan permissions**. If the desired KSJ server is not shown, it is not accessible to this DEV instance; do not switch environments or copy tokens to work around that.
+3. Review the role/channel inventory and unsynchronised permissions before proposing a staged rebuild. No existing server changes are made by this audit.
+4. Future AI-assisted edits must first show a per-item diff, request explicit owner confirmation, record backups and implement rollback.
