@@ -14,6 +14,8 @@ export default function GoliathAI({ theme }) {
   const [environments, setEnvironments] = useState([]);
   const [audit, setAudit] = useState(null);
   const [auditing, setAuditing] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [planning, setPlanning] = useState(false);
   const bottom = useRef(null);
   useEffect(() => {
     let mounted = true;
@@ -32,12 +34,12 @@ export default function GoliathAI({ theme }) {
       setGuilds(next); setEnvironments(payload.environments || []);
       setSelectedGuild((previous) => next.some(g => g.environment + ':' + g.id === previous)
         ? previous : next[0] ? next[0].environment + ':' + next[0].id : '');
-      setAudit(null);
+      setAudit(null); setPreview(null);
     } catch (err) { setError(err.message); }
   };
   const runAudit = async () => {
     if (!selectedGuild || auditing) return;
-    setAuditing(true); setError(''); setAudit(null);
+    setAuditing(true); setError(''); setAudit(null); setPreview(null);
     try {
       const [environment, guildId] = selectedGuild.split(':');
       if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId || '')) throw new Error('Invalid environment or guild.');
@@ -45,6 +47,19 @@ export default function GoliathAI({ theme }) {
     }
     catch (err) { setError(err.message); }
     finally { setAuditing(false); }
+  };
+  const buildPlan = async () => {
+    if (!audit || planning) return;
+    setPlanning(true); setError(''); setPreview(null);
+    try {
+      const environment = String(audit.environment);
+      const guildId = String(audit.guild.id);
+      if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\\d{16,20}$/.test(guildId)) throw new Error('Invalid selected server.');
+      const result = await api.request('/api/owner/ai/plan/' + environment + '/' + guildId);
+      if (result.environment !== environment || result.guild?.id !== guildId || result.executable !== false) throw new Error('Preview validation failed.');
+      setPreview(result);
+    } catch (err) { setError(err.message); }
+    finally { setPlanning(false); }
   };
   const send = async (event) => {
     event.preventDefault();
@@ -70,7 +85,7 @@ export default function GoliathAI({ theme }) {
       <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
       <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Connected servers across DEV, BETA and PRODUCTION can be inspected once the read-only service is deliberately deployed to each environment.</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
+        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); setPreview(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
           {guilds.length ? guilds.map((guild) => <option key={guild.environment + ':' + guild.id} value={guild.environment + ':' + guild.id}>{guild.environment} — {guild.name}</option>) : <option value="">No servers available</option>}
         </select>
         <button type="button" onClick={refreshGuilds} style={{ border: '1px solid #64748b', borderRadius: 10, padding: '10px 16px', color: '#e5e7eb', background: '#1e293b' }}>Refresh servers</button>
@@ -94,6 +109,21 @@ export default function GoliathAI({ theme }) {
           {audit.analysis.findingsTruncated && <p>Showing the first 200 findings. The totals include all findings.</p>}
           <p style={{ fontSize: 12, marginBottom: 0 }}>Findings are prompts for review, not confirmed vulnerabilities. No permissions are modified.</p>
         </div>}
+        <button type="button" onClick={buildPlan} disabled={planning || auditing} style={{ padding: '10px 14px', border: '1px solid #64748b', borderRadius: 10, background: '#1e293b', color: '#e5e7eb' }}>{planning ? 'Preparing preview…' : 'Prepare proposed changes (preview only)'}</button>
+        {preview && <section style={{ marginTop: 12, border: '1px solid #64748b', borderRadius: 12, padding: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Proposed Discord changes — no actions performed</h3>
+          <p>{preview.totalProposals} suggestions · {preview.environment} · {preview.guild?.name}</p>
+          <p style={{ color: '#fbbf24' }}>{preview.notice}</p>
+          {preview.proposals.map(item => <details key={item.id} style={{ padding: '10px 0', borderTop: '1px solid rgba(148,163,184,.25)' }}>
+            <summary>{item.risk.toUpperCase()} · {item.target.name} — {item.description}</summary>
+            <p>{item.warning}</p>
+            <div style={{ fontSize: 12 }}>Current</div>
+            <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>{JSON.stringify(item.before, null, 2)}</pre>
+            {item.proposed && <><div style={{ fontSize: 12 }}>Suggested</div><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>{JSON.stringify(item.proposed, null, 2)}</pre></>}
+          </details>)}
+          {preview.truncated && <p>Showing first 100 suggestions. Additional reviews were detected.</p>}
+          <p style={{ fontSize: 12 }}>No apply button exists. These are non-executable review proposals only.</p>
+        </section>}
         <details><summary>View role and channel inventory</summary>
           <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12, maxHeight: 360, overflowY: 'auto' }}>{JSON.stringify({ roles: audit.roles, channels: audit.channels }, null, 2)}</pre>
         </details>
