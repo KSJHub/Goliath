@@ -397,6 +397,11 @@ export default function GoliathAI({ theme }) {
       {environments.length > 0 && <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>
         {environments.map(item => item.environment + ': ' + (item.available ? item.guildCount + ' servers' : 'not yet connected')).join(' · ')}
       </p>}
+      <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8', marginTop: 4 }}>
+        Only servers connected through the verified, read-only audit endpoint appear in this menu.
+        BETA and PRODUCTION cannot be selected until their audit endpoints are deliberately deployed and authenticated.
+        A Discord server without a connected Goliath bot cannot be scanned.
+      </p>
       {audit && <div style={{ marginTop: 16 }}>
         <strong>{audit.environment} — {audit.guild?.name}</strong>
         <p role="status">Found {audit.summary?.roles} roles, {audit.summary?.categories} categories, {audit.summary?.channels} channels and {audit.summary?.unsyncedChannels} unsynchronised child channels.</p>
