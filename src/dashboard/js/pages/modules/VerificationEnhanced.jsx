@@ -1,5 +1,5 @@
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
 import { api } from '../../services/apiClient.js';
@@ -153,6 +153,8 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [advanced, setAdvanced] = useState(null);
+  const advancedDirty = useRef(false);
+  const loadedGuild = useRef('');
 
   const card = useMemo(() => ({
     border: `1px solid ${theme.cardBorder}`,
@@ -202,7 +204,11 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         adminConfig: config,
       };
       setData(adapted);
-      setAdvanced(config);
+      if (loadedGuild.current !== guildId || !advancedDirty.current) {
+        setAdvanced(config);
+        advancedDirty.current = false;
+        loadedGuild.current = guildId;
+      }
       setRoles(list(rolePayload, 'roles'));
       setChannels(list(channelPayload, 'channels'));
       const currentPanels = Array.isArray(overview?.panels) ? overview.panels : [];
@@ -217,6 +223,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   useEffect(() => {
+    if (loadedGuild.current !== guildId) advancedDirty.current = false;
     load();
   }, [guildId]);
 
@@ -240,10 +247,12 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }
 
   function setAdvancedPath(path, value) {
+    advancedDirty.current = true;
     setAdvanced((current) => writePath(current || settings, path, value));
   }
 
   function toggleSecurity(key, enabled) {
+    advancedDirty.current = true;
     setAdvanced((current) => {
       const next = writePath(current || settings, `security.${key}`, enabled);
       const method = FLOW_NAMES[key];
@@ -273,6 +282,8 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     }
     const { enabled: _enabled, ...settingsPayload } = advanced;
     await saveConfig({ settings: settingsPayload });
+    advancedDirty.current = false;
+    await load();
   }
 
   function selectPanel(panelId) {
