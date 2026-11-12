@@ -398,33 +398,65 @@ async function listPersonalGuilds(req) {
 }
 
 router.get('/guilds', requireAIIdentity, async (req, res) => {
-  // In non-DEV runtime, an AI dashboard isn't needed; the central controller
-  // connects to each environment through the local read-only APIs.
+  // Distinguish an installed Goliath bot from the separate AI audit capability.
+  // The existing owner registry may know a guild even when its AI audit route
+  // has not been deliberately promoted to that environment.
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'Goliath AI controller is hosted in DEV.' });
   const results = await Promise.all(ENVIRONMENTS.map(async target => {
+    if (target.environment === 'DEV') return {
+      environment: 'DEV',
+      botGuilds: localGuilds(req),
+      auditGuildIds: new Set(localGuilds(req).map(guild => guild.id)),
+      botStatus: 'verified', auditStatus: 'ready'
+    };
+    let botGuilds = [];
+    let botStatus = 'unverified';
+    let auditGuildIds = new Set();
+    let auditStatus = 'unavailable';
     try {
-      if (target.environment === 'DEV') return { environment: 'DEV', guilds: localGuilds(req) };
-      const result = await internalGet(target.port, '/api/owner/ai/guilds/local');
-      if (result?.environment !== target.environment || !Array.isArray(result.guilds) ||
-          result.guilds.length > 10000 ||
-          result.guilds.some(g => g.environment !== target.environment ||
-            !SNOWFLAKE.test(String(g.id || '')) || typeof g.name !== 'string')) {
-        throw new Error('Cross-environment guild inventory verification failed.');
+      const result = await internalGet(target.port, '/api/owner/guilds');
+      if (result?.mode === target.environment && Array.isArray(result.guilds) &&
+          result.guilds.length <= 10000 && result.guilds.every(guild =>
+            SNOWFLAKE.test(String(guild.id || guild.guildId || '')) &&
+            typeof guild.name === 'string')) {
+        botGuilds = result.guilds.map(guild => ({
+          id: String(guild.id || guild.guildId), name: guild.name.slice(0, 100),
+          environment: target.environment, memberCount: Number(guild.memberCount || 0)
+        }));
+        botStatus = 'verified';
       }
-      return result;
-    } catch (error) {
-      return { environment: target.environment, guilds: [], unavailable: true,
-        error: 'Environment audit endpoint not available or not yet promoted.' };
-    }
+    } catch { /* Inaccessible owner registry must never be mistaken for bot absence. */ }
+    try {
+      const result = await internalGet(target.port, '/api/owner/ai/guilds/local');
+      if (result?.environment === target.environment && Array.isArray(result.guilds) &&
+          result.guilds.length <= 10000 && result.guilds.every(guild =>
+            guild.environment === target.environment &&
+            SNOWFLAKE.test(String(guild.id || '')) && typeof guild.name === 'string')) {
+        auditGuildIds = new Set(result.guilds.map(guild => String(guild.id)));
+        auditStatus = 'ready';
+        // Successful authenticated audit inventory is itself proof of bot presence.
+        if (botStatus !== 'verified') {
+          botGuilds = result.guilds;
+          botStatus = 'verified';
+        }
+      }
+    } catch { /* Only explicitly enabled AI endpoints can provide audit readiness. */ }
+    return { environment: target.environment, botGuilds, auditGuildIds, botStatus, auditStatus };
   }));
+  const connected = results.flatMap(result => result.botGuilds.map(guild => ({
+    id: String(guild.id), name: String(guild.name).slice(0, 100),
+    environment: result.environment, memberCount: guild.memberCount || 0,
+    botConnected: true, auditAvailable: result.auditGuildIds.has(String(guild.id))
+  })));
   const personal = await listPersonalGuilds(req);
   return res.json({
-    guilds: results.flatMap(result => result.guilds),
+    guilds: connected,
     personalGuilds: personal.guilds,
     personalGuildsStatus: personal.status,
     environments: results.map(result => ({
-      environment: result.environment, available: !result.unavailable,
-      guildCount: result.guilds.length, error: result.error || null
+      environment: result.environment, available: result.auditStatus === 'ready',
+      botStatus: result.botStatus, auditStatus: result.auditStatus,
+      guildCount: result.botGuilds.length, auditGuildCount: result.auditGuildIds.size
     }))
   });
 });
