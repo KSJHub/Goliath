@@ -261,6 +261,11 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       setError('Add Staff Approval to the flow or disable it before saving.');
       return;
     }
+    const enabledMethods = SECURITY_OPTIONS.filter(([key]) => advanced.security?.[key] === true).map(([key]) => FLOW_NAMES[key]);
+    if (new Set(order).size !== order.length || enabledMethods.some((method) => !order.includes(method)) || order.some((method) => !enabledMethods.includes(method))) {
+      setError('Verification steps must match enabled methods, with no duplicates.');
+      return;
+    }
     const staffRoles = advanced.roles?.staff || [];
     if (advanced.security?.staffApproval && staffRoles.length === 0) {
       setError('Select at least one Staff Approval role before saving.');
