@@ -63,8 +63,8 @@ function recordReview({ draft, currentDigest, operations, reviewerId, sequence, 
   const key = operationKey({ draft, currentDigest, operation, sequence });
   const now = new Date();
   const existing = load(file);
-  const updated = existing.filter(item => !(item.draftId === draft.id &&
-    item.sequence === sequence && item.reviewerId === String(reviewerId) && item.status === 'active'));
+  // Append-only events: never erase an earlier decision from the audit trail.
+  const updated = existing;
   const item = {
     id: randomUUID(), draftId: draft.id, environment: draft.environment, guildId: draft.guildId,
     sequence, operationKey: key, reviewerId: String(reviewerId), decision,
@@ -83,10 +83,14 @@ function listReviews({ draft, currentDigest, operations }, file) {
   return operations.map((operation, i) => {
     const sequence = i + 1;
     const key = operationKey({ draft, currentDigest, operation, sequence });
-    const records = load(file).filter(item => item.draftId === draft.id &&
-      item.environment === draft.environment && item.guildId === draft.guildId &&
-      item.sequence === sequence && item.operationKey === key &&
-      item.status === 'active' && Date.parse(item.expiresAt) > now);
+    const latestByReviewer = new Map();
+    for (const item of load(file)) {
+      if (item.draftId === draft.id && item.environment === draft.environment &&
+          item.guildId === draft.guildId && item.sequence === sequence &&
+          item.operationKey === key && item.status === 'active' &&
+          Date.parse(item.expiresAt) > now) latestByReviewer.set(item.reviewerId, item);
+    }
+    const records = [...latestByReviewer.values()];
     return { sequence, kind: operation.kind, target: operation.target,
       reviews: records.map(({ reviewerId, decision, createdAt, expiresAt }) =>
         ({ reviewerId, decision, createdAt, expiresAt })),
