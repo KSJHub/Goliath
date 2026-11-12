@@ -729,22 +729,28 @@ router.post('/chat', requirePrivateAI, async (req, res) => {
       if (!audit || audit.environment !== environment || audit.guild?.id !== guildId || audit.readOnly !== true) {
         return res.status(404).json({ error: 'Selected server audit is unavailable.' });
       }
+      // Fit verified read-only evidence into the 2,048-token local model context.
+      // Preserve exact counts and distinct priority findings, not an arbitrary JSON truncation.
+      const findings = (audit.analysis?.findings || [])
+        .filter(f => f && ['high', 'review', 'info'].includes(f.severity))
+        .sort((a, b) => ({ high: 0, review: 1, info: 2 })[a.severity] -
+          ({ high: 0, review: 1, info: 2 })[b.severity])
+        .slice(0, 4).map(f => ({
+          severity: f.severity,
+          target: String(f.target?.name || '').slice(0, 50),
+          finding: String(f.message || '').slice(0, 125)
+        }));
       serverContext = JSON.stringify({
-        environment, guildId, guildName: audit.guild.name, summary: audit.summary,
-        findings: (audit.analysis?.findings || []).slice(0, 25).map(f => ({
-          severity: f.severity, code: f.code, target: f.target?.name,
-          message: f.message, recommendation: f.recommendation
-        })),
-        roles: audit.roles.slice(0, 45).map(role => ({
-          id: role.id, name: role.name, permissions: role.permissions, managed: role.managed
-        })),
-        categories: audit.channels.filter(c => c.type === 4).slice(0, 30).map(c => ({
-          id: c.id, name: c.name
-        })),
-        channels: audit.channels.filter(c => c.type !== 4).slice(0, 55).map(c => ({
-          id: c.id, name: c.name, parentId: c.parentId, type: c.type
-        }))
-      }).slice(0, 15000);
+        environment,
+        guildName: String(audit.guild.name).slice(0, 80),
+        summary: {
+          roles: audit.summary.roles, channels: audit.summary.channels,
+          categories: audit.summary.categories, unsyncedChannels: audit.summary.unsyncedChannels
+        },
+        findings,
+        findingsTotal: audit.analysis?.findings?.length || 0,
+        findingLimit: 4
+      });
     } catch (error) {
       return res.status(503).json({ error: 'Unable to load server context for AI chat.' });
     }
@@ -780,7 +786,12 @@ router.post('/chat', requirePrivateAI, async (req, res) => {
         ]
       })
     });
-    if (!response.ok) return res.status(502).json({ error: 'Local AI model returned an error.' });
+    if (!response.ok) {
+      console.warn('[GoliathAI] Local chat inference HTTP status:', response.status);
+      return res.status(502).json({ error: response.status === 400
+        ? 'The local model rejected the chat request. Try a shorter question or conversation.'
+        : 'The local AI model could not complete the request (HTTP ' + response.status + ').' });
+    }
     const data = await response.json();
     const message = data?.choices?.[0]?.message?.content;
     if (typeof message !== 'string' || !message.trim()) return res.status(502).json({ error: 'Local AI returned no message.' });
