@@ -5465,7 +5465,42 @@ assert.throws(() => buildRecoveryPlan({
   audit: { ...readyAudit, guild: { id: otherId } }, preview, currentDigest: 'a'.repeat(64)
 }), /exact scoped guild/);
 
-console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-preflight and recovery contracts passed.');
+const { buildTransactionManifest } = require('../src/owner/dev/goliathExecutionReadiness');
+const manifestDraft = { ...readyDraft, blueprint: changed };
+const manifestOne = buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview,
+  currentDigest: 'a'.repeat(64)
+});
+const manifestTwo = buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview,
+  currentDigest: 'a'.repeat(64)
+});
+assert.equal(manifestOne.fingerprint, manifestTwo.fingerprint);
+assert.equal(manifestOne.executable, false);
+assert.equal(manifestOne.canExecute, false);
+assert.equal(manifestOne.unavailable, false);
+assert.equal(manifestOne.entries.length, preview.operations.length);
+assert(manifestOne.entries.every(item => item.executable === false && item.authorised === false));
+const createdCategoryEntry = manifestOne.entries.find(item => item.kind === 'create_category');
+const newCategoryChannel = manifestOne.entries.find(item =>
+  item.kind === 'create_channel' && item.proposed?.parentName === 'Voice');
+assert.deepEqual(newCategoryChannel.dependsOn, [createdCategoryEntry.sequence]);
+assert.notEqual(buildTransactionManifest({
+  draft: { ...manifestDraft, blueprint: { categories: [] } },
+  audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
+}).fingerprint, manifestOne.fingerprint);
+const manifestWrongGuild = buildTransactionManifest({
+  draft: { ...manifestDraft, guildId: otherId }, audit: readyAudit,
+  preview, currentDigest: 'a'.repeat(64)
+});
+assert.equal(manifestWrongGuild.unavailable, true);
+assert.equal(manifestWrongGuild.canExecute, false);
+assert.equal(buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview,
+  currentDigest: 'b'.repeat(64)
+}).unavailable, true);
+
+console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-preflight and recovery and transaction-manifest contracts passed.');
 
   return true;
 }
