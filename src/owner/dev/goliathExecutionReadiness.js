@@ -2,7 +2,7 @@
 
 // Pre-execution checklist only. Never calls Discord APIs, applies changes or creates backups.
 // A reviewed draft is NOT an authorisation to execute.
-function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabilities = null }) {
+function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabilities = null, backupEvidence = null }) {
   if (!draft || !audit || !preview || !Array.isArray(preview.operations)) {
     throw new Error('A saved draft, verified audit and fresh preview are required.');
   }
@@ -31,7 +31,11 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
     { key: 'bot_permissions', label: 'Bot permission and hierarchy validation', state: 'pending',
       detail: botCapabilities ? 'Capability data supplied but must be verified immediately before any write.' : 'No verified bot role-hierarchy and permission check exists yet.' },
     { key: 'backup', label: 'Verified restore point', state: 'pending',
-      detail: 'No backup integrity check or rollback proof is attached to this plan.' },
+      detail: backupEvidence?.status === 'candidate-found'
+        ? 'Existing backup candidate found, but integrity and rollback must still be verified before execution.'
+        : backupEvidence?.status === 'none-found'
+          ? 'No matching backup candidate was found in recent backup history.'
+          : 'Backup evidence is unavailable; no integrity check or rollback proof is attached.' },
     { key: 'per_operation_approval', label: 'Explicit approval of each operation', state: 'pending',
       detail: 'No signed, time-limited and guild-scoped operation approvals exist yet.' },
     { key: 'rollback', label: 'Rollback and failure recovery', state: 'pending',
@@ -44,6 +48,7 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
     environment: draft.environment, guildId: draft.guildId, guildName: draft.guildName,
     draftId: draft.id, auditDigest: currentDigest, savedAuditDigest: draft.auditDigest,
     generatedAt: new Date().toISOString(), operationCount: operations.length, operations,
+    backupEvidence: backupEvidence || { status: 'unavailable', candidates: [], checkedAt: null },
     checks, blockers: checks.filter(item => item.state !== 'passed').map(item => item.key),
     notice: 'Diagnostic checklist only. No approval, backup or Discord write has occurred.'
   };
