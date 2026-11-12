@@ -33,13 +33,20 @@ function parseBlueprint(raw) {
       ids.add(id);
     }
     if (!Array.isArray(category.channels)) throw new Error('Every category must include a channels array.');
+    if (category.channels.length > 50) throw new Error('A category may contain no more than 50 planned channels.');
     count += category.channels.length;
     if (count > MAX_CHANNELS) throw new Error('Blueprint exceeds 300 channels.');
+    const categoryChannelNames = new Set();
     const channels = category.channels.map((channel) => {
       if (!channel || typeof channel !== 'object' || Array.isArray(channel)) throw new Error('Invalid channel.');
       const cname = assertString(channel.name, 'Channel name', 100);
       const type = channel.type || 'text';
       if (!TYPES.has(type)) throw new Error('Unsupported channel type: ' + String(type));
+      const compositeName = cname.toLocaleLowerCase('en') + ':' + type;
+      if (categoryChannelNames.has(compositeName)) {
+        throw new Error('Duplicate channel name and type in category: ' + cname);
+      }
+      categoryChannelNames.add(compositeName);
       const cid = channel.id === undefined || channel.id === null || channel.id === ''
         ? null : String(channel.id);
       if (cid !== null && !ID.test(cid)) throw new Error('Invalid channel ID.');
@@ -142,6 +149,11 @@ function planBlueprint(audit, raw) {
           }, executable: false });
       }
     }
+  }
+  const newChannelCount = actions.filter(action =>
+    action.kind === 'create_category' || action.kind === 'create_channel').length;
+  if (current.length + newChannelCount > 500) {
+    throw new Error('The proposed layout may exceed Discord\'s 500-channel guild limit.');
   }
   const untouched = current.filter(item => !usedIds.has(item.id));
   return {
