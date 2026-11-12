@@ -5317,6 +5317,14 @@ const wrongGuild = evaluateReadiness({
 });
 assert.equal(wrongGuild.checks.find(item => item.key === 'owner_scope').state, 'blocked');
 assert.equal(wrongGuild.canExecute, false);
+assert.equal(wrongGuild.recoveryPlan.unavailable, true);
+assert.equal(wrongGuild.recoveryPlan.canRollback, false);
+const malformedReadiness = evaluateReadiness({
+  draft: readyDraft, audit: readyAudit, preview, currentDigest: 'invalid'
+});
+assert.equal(malformedReadiness.canExecute, false);
+assert.equal(malformedReadiness.recoveryPlan.unavailable, true);
+assert.equal(malformedReadiness.checks.find(item => item.key === 'fresh_audit').state, 'blocked');
 assert.throws(() => evaluateReadiness({ draft: readyDraft, audit: readyAudit, preview: null,
   currentDigest: 'a'.repeat(64) }), /required/);
 
