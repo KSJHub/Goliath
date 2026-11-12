@@ -137,3 +137,13 @@ This stage adds a **non-executable, developer-only** layout planning workflow us
 **Validation:** The pure planner has a standalone contract test at `npm run test:goliath-ai-blueprint` covering unchanged layouts, proposed rename/create operations, preservation, invalid types and duplicate IDs. This test does not require a bot token, VPS or Discord access.
 
 **Known limitations:** The starter layout includes channels inside existing categories, not uncategorised channels; uncategorised channels remain untouched by default. The builder is a blueprint editor, not yet a drag-and-drop channel designer. Long-term server-side plan storage and approved execution still require a separate safety review.
+
+## AI-generated category drafts (disabled until local model is installed)
+The **Ask Goliath AI to draft new categories** text area uses `POST /api/owner/ai/blueprint/ai-draft`. This is available only to the two configured owner accounts and only when `GOLIATH_AI_ENABLED=true` in DEV. It sends a short plain-English design request to the loopback model, and asks for a narrow JSON shape containing **new categories and channels only**.
+
+Server-side validation rechecks the model output using `parseBlueprint()`; no model-generated Discord IDs, API calls, permissions, deletions, or existing-guild mutations are accepted. Output is limited to eight categories and forty channels, and existing category names are skipped when suggestions are added to the editable client-side blueprint. The owner must then explicitly preview the proposed changes against fresh live guild data. If the small model returns invalid JSON, the interface displays an error and offers the manual builder.
+
+**No server-side execution exists.** A successful AI draft or preview is not approval to modify an actual public guild. Chat requests and draft generation share a single in-process concurrency guard. Model use is subject to the existing local inference service's resource restrictions and failure behavior.
+
+## Testing and deployment status
+`npm run test:goliath-ai-blueprint` is included in the existing `npm run doctor` validation chain, so subsequent normal DEV builds should run the pure, no-token blueprint contract checks. This repository change itself does not prove that GitHub Actions or the live DEV deployment succeeded. The React dashboard must still be built by the existing deployment workflow and inspected in a browser. BETA and PRODUCTION read-only endpoints must be promoted intentionally; the model and full Goliath AI interface remain controlled from DEV.
