@@ -29,7 +29,10 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
     { key: 'owner_review', label: 'Developer reviewed plan', state: reviewed ? 'passed' : 'blocked',
       detail: reviewed ? 'Draft was marked reviewed. This is not execution approval.' : 'Draft has not been reviewed.' },
     { key: 'bot_permissions', label: 'Bot permission and hierarchy validation', state: 'pending',
-      detail: botCapabilities ? 'Capability data supplied but must be verified immediately before any write.' : 'No verified bot role-hierarchy and permission check exists yet.' },
+      detail: !botCapabilities?.permissionsVerified ? 'Bot permission evidence is unavailable or mismatched.' :
+        botCapabilities.counts?.blocked ? botCapabilities.counts.blocked + ' operations are blocked by preflight checks.' :
+        botCapabilities.counts?.unknown ? botCapabilities.counts.unknown + ' operations still have unknown capabilities.' :
+        'Read-only channel permission preflight found no obvious blockers; role hierarchy, Discord API failures and runtime changes still require revalidation.' },
     { key: 'backup', label: 'Verified restore point', state: 'pending',
       detail: backupEvidence?.status === 'candidate-found'
         ? 'Existing backup candidate found, but integrity and rollback must still be verified before execution.'
