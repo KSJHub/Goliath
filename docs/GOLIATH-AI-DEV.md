@@ -58,3 +58,10 @@ After scanning a guild, the private owner dashboard offers **Prepare proposed ch
 - For channel/category overwrite mismatches, the preview shows how overwrites would differ if synchronised. It warns that intentional exceptions could be lost.
 - No apply, write, delete or rollback endpoints were added. No Discord mutation functions run in this path.
 - A future apply engine must be implemented separately, with per-guild permissions, fresh-state validation, lock, snapshot backup, exact diff, owner approval, execution receipts and rollback handling. Never execute this illustrative proposal without those protections.
+
+## Private model readiness check
+Use **Goliath AI → Check local AI connection** to query the private DEV health route `GET /api/owner/ai/health`. It probes `127.0.0.1:8081/v1/models` with a 2.5-second timeout. This checks for a reachable model service and a loaded model, but it does not confirm response quality. There is no automatic install, chat inference or change to the enable switch.
+
+Possible states include `not-installed-or-offline`, `offline`, `backend-error`, `no-model`, `disabled`, and `ready`. Only the `ready` state permits the initial chat test; a successful generated response is still required to verify end-to-end operation.
+
+**Activation is blocked until VPS operations can be performed.** The connected GitHub tool can update source but cannot execute commands or install software on the Revive Node VPS. Have an authorised operator measure available resources, start the separately limited local inference service, confirm it is bound to loopback, verify the two owner IDs and token consistency, and set `GOLIATH_AI_ENABLED=true` only when testing is safe. Do not install or start models inside the bot's PM2 process. Promotions to BETA and PRODUCTION are separate owner-approved operations.
