@@ -64,12 +64,12 @@ export default function GoliathAI({ theme }) {
       setGuilds(next); setEnvironments(payload.environments || []);
       setSelectedGuild((previous) => next.some(g => g.environment + ':' + g.id === previous)
         ? previous : next[0] ? next[0].environment + ':' + next[0].id : '');
-      setAudit(null); setPreview(null); setBlueprintText(''); setBlueprintPlan(null); setReadiness(null); setOperationReviews(null);
+      setAudit(null); setPreview(null); replaceBlueprintText(''); setBlueprintPlan(null); setReadiness(null); setOperationReviews(null);
     } catch (err) { setError(err.message); }
   };
   const runAudit = async () => {
     if (!selectedGuild || auditing) return;
-    setAuditing(true); setError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText(''); setReadiness(null); setOperationReviews(null);
+    setAuditing(true); setError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null);
     try {
       const [environment, guildId] = selectedGuild.split(':');
       if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId || '')) throw new Error('Invalid environment or guild.');
@@ -91,13 +91,20 @@ export default function GoliathAI({ theme }) {
     } catch (err) { setError(err.message); }
     finally { setPlanning(false); }
   };
+  // Changing editor content invalidates previews and saved-plan diagnostics immediately.
+  const replaceBlueprintText = value => {
+    setBlueprintText(value);
+    setBlueprintPlan(null);
+    setReadiness(null);
+    setOperationReviews(null);
+  };
   const loadBlueprint = async () => {
     if (!audit || blueprintBusy) return;
     setBlueprintBusy(true); setError(''); setBlueprintPlan(null);
     try {
       const result = await api.request('/api/owner/ai/blueprint/' + audit.environment + '/' + audit.guild.id);
       if (!result.readOnly || result.environment !== audit.environment || result.guild?.id !== audit.guild.id) throw new Error('Blueprint target mismatch.');
-      setBlueprintText(JSON.stringify(result.blueprint, null, 2));
+      replaceBlueprintText(JSON.stringify(result.blueprint, null, 2));
     } catch (err) { setError(err.message); }
     finally { setBlueprintBusy(false); }
   };
@@ -119,7 +126,7 @@ export default function GoliathAI({ theme }) {
         raw.categories.push(category); added += 1;
       }
       if (!added) throw new Error('The AI only suggested categories already in your blueprint. No changes were made.');
-      setBlueprintText(JSON.stringify(raw, null, 2));
+      replaceBlueprintText(JSON.stringify(raw, null, 2));
       setAiLayoutRequest('');
     } catch (err) { setError(err.message); }
     finally { setAiDraftBusy(false); }
@@ -145,7 +152,7 @@ export default function GoliathAI({ theme }) {
         throw new Error('A channel with that name and type is already in this category.');
       }
       category.channels.push({ name, type: newSingleType });
-      setBlueprintText(JSON.stringify(parsed, null, 2));
+      replaceBlueprintText(JSON.stringify(parsed, null, 2));
       setNewSingleChannel('');
     } catch (err) { setError(err.message); }
   };
@@ -166,7 +173,7 @@ export default function GoliathAI({ theme }) {
         return { name: channelName, type: channelType };
       });
       raw.categories.push({ name, channels });
-      setBlueprintText(JSON.stringify(raw, null, 2));
+      replaceBlueprintText(JSON.stringify(raw, null, 2));
       setNewCategoryName(''); setNewChannelLines('');
     } catch (err) { setError(err.message); }
   };
@@ -177,7 +184,7 @@ export default function GoliathAI({ theme }) {
       if (file.size > 256000) throw new Error('Blueprint file is too large (256 KB maximum).');
       const raw = JSON.parse(await file.text());
       if (!raw || !Array.isArray(raw.categories)) throw new Error('Selected file is not a valid Goliath blueprint.');
-      setBlueprintText(JSON.stringify(raw, null, 2));
+      replaceBlueprintText(JSON.stringify(raw, null, 2));
     } catch (err) { setError(err.message); }
   };
   const exportBlueprint = () => {
@@ -241,7 +248,7 @@ export default function GoliathAI({ theme }) {
       const item = result.draft;
       if (!item || item.environment !== audit.environment || item.guildId !== audit.guild.id)
         throw new Error('Select and scan the draft’s original environment and server before opening it.');
-      setBlueprintText(JSON.stringify(item.blueprint, null, 2));
+      replaceBlueprintText(JSON.stringify(item.blueprint, null, 2));
       setBlueprintPlan(null);
       setDraftNotice('Draft loaded. Run a fresh preview before relying on any proposed change.');
     } catch (err) { setError(err.message); }
@@ -264,7 +271,7 @@ export default function GoliathAI({ theme }) {
   };
   const checkDraftReadiness = async (id) => {
     if (!audit || readinessBusy) return;
-    setReadinessBusy(true); setError(''); setReadiness(null);
+    setReadinessBusy(true); setError(''); setReadiness(null); setOperationReviews(null);
     try {
       const item = savedDrafts.find(value => value.id === id);
       if (!item || item.environment !== audit.environment || item.guildId !== audit.guild.id)
@@ -279,7 +286,7 @@ export default function GoliathAI({ theme }) {
   };
   const inspectOperationReviews = async (id) => {
     if (!audit || operationReviewBusy) return;
-    setOperationReviewBusy(true); setError('');
+    setOperationReviewBusy(true); setError(''); setOperationReviews(null); setReadiness(null);
     try {
       const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews');
       if (result.draftId !== id || result.environment !== audit.environment ||
@@ -346,7 +353,7 @@ export default function GoliathAI({ theme }) {
       <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
       <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Connected servers across DEV, BETA and PRODUCTION can be inspected once the read-only service is deliberately deployed to each environment.</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText(''); setReadiness(null); setOperationReviews(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
+        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
           {guilds.length ? guilds.map((guild) => <option key={guild.environment + ':' + guild.id} value={guild.environment + ':' + guild.id}>{guild.environment} — {guild.name}</option>) : <option value="">No servers available</option>}
         </select>
         <button type="button" onClick={refreshGuilds} style={{ border: '1px solid #64748b', borderRadius: 10, padding: '10px 16px', color: '#e5e7eb', background: '#1e293b' }}>Refresh servers</button>
@@ -573,7 +580,7 @@ export default function GoliathAI({ theme }) {
           {blueprintText && <>
             <label htmlFor="goliath-ai-blueprint" style={{ display: 'block', fontWeight: 700, margin: '12px 0 6px' }}>Editable server blueprint (JSON)</label>
             <textarea id="goliath-ai-blueprint" value={blueprintText} spellCheck={false}
-              onChange={(event) => { setBlueprintText(event.target.value); setBlueprintPlan(null); }} rows={13}
+              onChange={(event) => { replaceBlueprintText(event.target.value); setBlueprintPlan(null); }} rows={13}
               style={{ boxSizing: 'border-box', width: '100%', resize: 'vertical', color: '#e5e7eb', background: '#0f172a', border: '1px solid #64748b', borderRadius: 10, padding: 12, fontFamily: 'monospace', fontSize: 12 }} />
             <p style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>Retain existing Discord IDs when renaming. For new categories or channels, omit the ID. Supported types: text, voice, forum, announcement and stage.</p>
           </>}
