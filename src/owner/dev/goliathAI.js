@@ -43,6 +43,38 @@ router.get('/status', requirePrivateAI, (_req, res) => res.json({
     'AI is disabled until the local model is installed and GOLIATH_AI_ENABLED=true is set in DEV.'
 }));
 
+// Health check never starts a model or sends chat content to an inference service.
+router.get('/health', requirePrivateAI, async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (String(process.env.BOT_MODE || '').toUpperCase() !== 'DEV') {
+    return res.json({ state: 'not-controller', ready: false, enabled: false, reason: 'The AI controller is hosted in DEV.' });
+  }
+  const enabled = isEnabled();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const response = await fetch('http://127.0.0.1:8081/v1/models', {
+      method: 'GET', signal: controller.signal
+    });
+    if (!response.ok) return res.json({ state: 'backend-error', ready: false, enabled,
+      reason: 'The local model service returned HTTP ' + response.status + '.' });
+    const payload = await response.json();
+    const models = Array.isArray(payload?.data) ? payload.data
+      .map(item => String(item?.id || '')).filter(Boolean).slice(0, 8) : [];
+    if (!models.length) return res.json({ state: 'no-model', ready: false, enabled,
+      reason: 'The local service responded but did not report a loaded model.' });
+    return res.json({ state: enabled ? 'ready' : 'disabled', ready: enabled, enabled, models,
+      reason: enabled ? 'Local inference is reachable. Try a chat message to verify generation.' :
+        'Local model service is reachable, but Goliath AI remains disabled in the DEV environment.' });
+  } catch {
+    return res.json({ state: enabled ? 'offline' : 'not-installed-or-offline', ready: false, enabled,
+      reason: enabled ? 'Local inference service is unreachable.' :
+        'No responding local inference service was found. Goliath AI remains safely disabled.' });
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 const SNOWFLAKE = /^\d{16,20}$/;
 const { timingSafeEqual } = require('node:crypto');
 const ENVIRONMENTS = Object.freeze([
