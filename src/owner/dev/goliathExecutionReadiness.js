@@ -72,7 +72,18 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
   const snapshotMatches = typeof currentDigest === 'string' &&
     currentDigest.length === 64 && currentDigest === draft.auditDigest;
   const reviewed = draft.review?.status === 'reviewed';
-  const recoveryPlan = buildRecoveryPlan({ draft, audit, preview, currentDigest });
+  // A cross-guild or malformed snapshot must produce a BLOCKED diagnostic,
+  // not crash the readiness endpoint or generate a recovery proposal.
+  const recoveryPlan = sameTarget && /^[a-f0-9]{64}$/.test(String(currentDigest || ''))
+    ? buildRecoveryPlan({ draft, audit, preview, currentDigest })
+    : {
+        readOnly: true, executable: false, canRollback: false,
+        rollbackTested: false, unavailable: true,
+        environment: draft.environment, guildId: draft.guildId,
+        draftId: draft.id, stale: true, items: [], operationCount: 0,
+        requiredBeforeExecution: [],
+        notice: 'Recovery planning blocked: guild scope or audit fingerprint is invalid.'
+      };
   const operations = preview.operations.map((operation, index) => ({
     sequence: index + 1,
     kind: operation.kind,
