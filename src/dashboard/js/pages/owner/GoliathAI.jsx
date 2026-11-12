@@ -54,7 +54,7 @@ export default function GoliathAI({ theme }) {
     const history = next.slice(-16);
     setMessages(next); setDraft(''); setBusy(true); setError('');
     try {
-      const result = await api.request('/api/owner/ai/chat', { method: 'POST', body: JSON.stringify({ messages: history }) });
+      const result = await api.request('/api/owner/ai/chat', { method: 'POST', body: JSON.stringify({ messages: history, ...(audit && selectedGuild ? { guildContext: { environment: audit.environment, guildId: audit.guild.id } } : {}) }) });
       setMessages((items) => [...items, { role: 'assistant', content: result.reply }]);
     } catch (err) { setError(err.message); }
     finally { setBusy(false); }
@@ -99,6 +99,7 @@ export default function GoliathAI({ theme }) {
         </details>
       </div>}
     </section>
+    {audit && <p style={{ color: theme?.mutedText || '#94a3b8', fontSize: 13, margin: 0 }}>When AI chat is enabled, replies will use a fresh read-only audit of <strong>{audit.environment} — {audit.guild?.name}</strong> for context. No changes can be made from chat.</p>}
     <div aria-label="Conversation" style={{ ...panel, minHeight: 280, maxHeight: '52vh', overflowY: 'auto', display: 'grid', alignContent: 'start', gap: 12 }}>
       {messages.map((message, index) => <div key={index} style={{ maxWidth: '94%', justifySelf: message.role === 'user' ? 'end' : 'start', padding: 12, borderRadius: 12, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: message.role === 'user' ? 'rgba(37,99,235,.3)' : 'rgba(148,163,184,.14)' }}>
         <strong style={{ display: 'block', fontSize: 12, marginBottom: 6 }}>{message.role === 'user' ? 'You' : 'Goliath AI'}</strong>{message.content}
