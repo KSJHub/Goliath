@@ -31,6 +31,8 @@ export default function GoliathAI({ theme }) {
   const [savedDrafts, setSavedDrafts] = useState([]);
   const [draftBusy, setDraftBusy] = useState(false);
   const [draftNotice, setDraftNotice] = useState('');
+  const [readiness, setReadiness] = useState(null);
+  const [readinessBusy, setReadinessBusy] = useState(false);
   const bottom = useRef(null);
   useEffect(() => {
     let mounted = true;
@@ -60,12 +62,12 @@ export default function GoliathAI({ theme }) {
       setGuilds(next); setEnvironments(payload.environments || []);
       setSelectedGuild((previous) => next.some(g => g.environment + ':' + g.id === previous)
         ? previous : next[0] ? next[0].environment + ':' + next[0].id : '');
-      setAudit(null); setPreview(null); setBlueprintText(''); setBlueprintPlan(null);
+      setAudit(null); setPreview(null); setBlueprintText(''); setBlueprintPlan(null); setReadiness(null);
     } catch (err) { setError(err.message); }
   };
   const runAudit = async () => {
     if (!selectedGuild || auditing) return;
-    setAuditing(true); setError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText('');
+    setAuditing(true); setError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText(''); setReadiness(null);
     try {
       const [environment, guildId] = selectedGuild.split(':');
       if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId || '')) throw new Error('Invalid environment or guild.');
@@ -258,6 +260,21 @@ export default function GoliathAI({ theme }) {
     } catch (err) { setError(err.message); }
     finally { setDraftBusy(false); }
   };
+  const checkDraftReadiness = async (id) => {
+    if (!audit || readinessBusy) return;
+    setReadinessBusy(true); setError(''); setReadiness(null);
+    try {
+      const item = savedDrafts.find(value => value.id === id);
+      if (!item || item.environment !== audit.environment || item.guildId !== audit.guild.id)
+        throw new Error('Select and scan the exact environment and guild for this saved draft.');
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/readiness');
+      if (result.draftId !== id || result.environment !== audit.environment ||
+          result.guildId !== audit.guild.id || result.canExecute !== false || result.executable !== false)
+        throw new Error('Execution readiness target validation failed.');
+      setReadiness(result);
+    } catch (err) { setError(err.message); }
+    finally { setReadinessBusy(false); }
+  };
   const removeSavedDraft = async (id) => {
     if (draftBusy || !window.confirm('Delete this saved Goliath AI blueprint draft? No Discord items will be deleted.')) return;
     setDraftBusy(true); setError(''); setDraftNotice('');
@@ -302,7 +319,7 @@ export default function GoliathAI({ theme }) {
       <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
       <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Connected servers across DEV, BETA and PRODUCTION can be inspected once the read-only service is deliberately deployed to each environment.</p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText(''); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
+        <select aria-label="Environment and server to audit" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); setPreview(null); setBlueprintPlan(null); setBlueprintText(''); setReadiness(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
           {guilds.length ? guilds.map((guild) => <option key={guild.environment + ':' + guild.id} value={guild.environment + ':' + guild.id}>{guild.environment} — {guild.name}</option>) : <option value="">No servers available</option>}
         </select>
         <button type="button" onClick={refreshGuilds} style={{ border: '1px solid #64748b', borderRadius: 10, padding: '10px 16px', color: '#e5e7eb', background: '#1e293b' }}>Refresh servers</button>
@@ -399,10 +416,27 @@ export default function GoliathAI({ theme }) {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <button type="button" disabled={draftBusy} onClick={() => openSavedDraft(item.id)}>Load</button>
                   <button type="button" disabled={draftBusy} onClick={() => reviewSavedDraft(item.id)}>Mark reviewed</button>
+                  <button type="button" disabled={draftBusy || readinessBusy} onClick={() => checkDraftReadiness(item.id)}>Check execution readiness</button>
                   <button type="button" disabled={draftBusy} onClick={() => removeSavedDraft(item.id)}>Delete draft</button>
                 </div>
               </div>
             )}
+            {readiness && <div style={{ border: '1px solid #64748b', borderRadius: 10, padding: 12, marginTop: 12 }}>
+              <h4 style={{ marginTop: 0 }}>Execution safeguards — not ready to apply</h4>
+              <p role="status">{readiness.operationCount} planned operations · {readiness.blockers.length} unresolved safeguards · execution disabled</p>
+              <p style={{ fontSize: 12, color: '#fbbf24' }}>{readiness.notice}</p>
+              {readiness.checks.map(check => <div key={check.key} style={{ padding: '8px 0', borderTop: '1px solid rgba(148,163,184,.25)' }}>
+                <strong>{check.state.toUpperCase()} · {check.label}</strong>
+                <div style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>{check.detail}</div>
+              </div>)}
+              <details style={{ marginTop: 10 }}><summary>View operations requiring explicit approval</summary>
+                {readiness.operations.map(operation => <div key={operation.sequence} style={{ borderTop: '1px solid rgba(148,163,184,.2)', padding: '8px 0' }}>
+                  <strong>{operation.sequence}. {operation.kind.replaceAll('_',' ')} — {operation.target?.name}</strong>
+                  <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>{JSON.stringify({ before: operation.before, proposed: operation.proposed }, null, 2)}</pre>
+                </div>)}
+              </details>
+              <p style={{ fontSize: 12 }}>There is no Apply button or Discord mutation endpoint. A review is not execution approval.</p>
+            </div>}
             {savedDrafts.filter(item => item.environment === audit.environment && item.guildId === audit.guild.id).length === 0 &&
               <p style={{ fontSize: 12 }}>No saved plans for this environment and server.</p>}
           </section>
