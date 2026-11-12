@@ -119,3 +119,21 @@ Only after the model is responsive, under acceptable CPU/RAM load, and the DEV a
 **Important:** The AI is deliberately hosted in DEV as one shared developer-only controller. Cross-environment audits for BETA and PRODUCTION depend on *separately* promoting the read-only endpoints; never promote this DEV code automatically to all environments. The AI cannot write to Discord or control a PC yet.
 
 **References:** https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md and official Qwen model card above.
+
+## Discord category/channel layout blueprints
+This stage adds a **non-executable, developer-only** layout planning workflow usable before any AI model is installed.
+
+1. Choose the intended `ENVIRONMENT — Server` in Owner → Goliath AI.
+2. Run **Scan permissions** to capture a fresh inventory.
+3. Open **Server Layout Blueprint** and press **Load current layout**. The current category/channel structure is returned as editable JSON, retaining channel IDs for safe identification.
+4. Use the guided **Add a new category** control to add a category and lines of channels (`general | text`, `voice-lounge | voice`), or edit the JSON manually. Use `text`, `voice`, `forum`, `announcement`, or `stage`.
+5. Press **Preview layout changes**. The backend reads fresh guild data and proposes `create_category`, `create_channel`, `rename_category`, and `edit_channel` operations with explicit `environment`, `guild ID`, and before/after values.
+6. Use **Export JSON blueprint** to preserve the design locally. Exporting does not upload or write it to Discord.
+
+**Preservation rules:** Nothing is deleted or executed. Existing IDs can be used to rename/reparent identifiable objects; absent IDs use exact matching within the correct category. Unlisted existing channels are left untouched. Reparenting can change effective access and must receive manual permission review. Permissions, roles, messages, and channel history are not modified. The future execution engine must not treat this design preview as an authorisation.
+
+**Input validation:** Maximum 40 categories, 300 channels, 350 planned operations. Duplicate Discord IDs, unsupported types, malformed names, missing current IDs and ambiguous current name matches fail closed. No arbitrary Discord API method or action string is accepted from the browser.
+
+**Validation:** The pure planner has a standalone contract test at `npm run test:goliath-ai-blueprint` covering unchanged layouts, proposed rename/create operations, preservation, invalid types and duplicate IDs. This test does not require a bot token, VPS or Discord access.
+
+**Known limitations:** The starter layout includes channels inside existing categories, not uncategorised channels; uncategorised channels remain untouched by default. The builder is a blueprint editor, not yet a drag-and-drop channel designer. Long-term server-side plan storage and approved execution still require a separate safety review.
