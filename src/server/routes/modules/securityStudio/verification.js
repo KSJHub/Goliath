@@ -170,11 +170,20 @@ function saveConfig(guildId, input = {}, meta = {}) {
   if (Object.prototype.hasOwnProperty.call(settingsInput, 'pendingRoleIds')) {
     roles.pending = settingsInput.pendingRoleIds;
   }
-  const settings = verificationStore.normalizeSettings({
-    ...current.settings,
-    ...settingsInput,
-    roles,
-  });
+  // Merge nested configuration groups so partial dashboard updates cannot
+  // silently reset unrelated security, flow, raid or logging settings.
+  const merged = { ...current.settings, ...settingsInput, roles };
+  for (const key of ['security', 'flow', 'intelligence', 'logs', 'raid', 'quarantine', 'botPolicy', 'health']) {
+    if (settingsInput[key] && typeof settingsInput[key] === 'object' && !Array.isArray(settingsInput[key])) {
+      merged[key] = { ...(current.settings[key] || {}), ...settingsInput[key] };
+    }
+  }
+  for (const key of ['captchaConfig', 'minigameConfig', 'staffApprovalConfig', 'oneTimeChallengeConfig', 'riskConfig', 'rejoinConfig']) {
+    if (settingsInput.security?.[key] && typeof settingsInput.security[key] === 'object' && !Array.isArray(settingsInput.security[key])) {
+      merged.security[key] = { ...(current.settings.security?.[key] || {}), ...settingsInput.security[key] };
+    }
+  }
+  const settings = verificationStore.normalizeSettings(merged);
 
   if (input.enabled !== undefined) {
     guildManager.setModuleEnabled(
