@@ -256,6 +256,9 @@ function ownerHomePayload(interaction, notice = null) {
 
   const navigationComponents = [
     navigationButton(contextualOwnerId('refresh', interaction), 'Refresh', ButtonStyle.Secondary).setEmoji(EMOJIS.REFRESH),
+    ...(security.getBotOwnerIds().length === 2 && new Set(security.getBotOwnerIds()).size === 2 ? [
+      linkButton('Goliath AI', 'https://dev.goliath.ksjdigital.co.uk/owner/ai', { emoji: EMOJIS.TOOLS })
+    ] : []),
   ];
 
   if (isDev) {
