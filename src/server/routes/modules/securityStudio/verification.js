@@ -185,6 +185,9 @@ function saveConfig(guildId, input = {}, meta = {}) {
   }
   const settings = verificationStore.normalizeSettings(merged);
 
+  // Persist and validate the configuration before changing module enablement.
+  // A failed configuration write must not leave the module toggled unexpectedly.
+  verificationManager.configureVerification(guildId, { settings }, meta);
   if (input.enabled !== undefined) {
     guildManager.setModuleEnabled(
       guildId,
@@ -193,8 +196,6 @@ function saveConfig(guildId, input = {}, meta = {}) {
       meta
     );
   }
-
-  verificationManager.configureVerification(guildId, { settings }, meta);
   return getConfig(guildId);
 }
 
