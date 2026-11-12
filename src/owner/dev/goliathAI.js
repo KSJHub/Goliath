@@ -33,8 +33,8 @@ function requirePrivateAI(req, res, next) {
   }
   next();
 }
-router.use(requirePrivateAI);
-router.get('/status', (_req, res) => res.json({
+// Each route enforces its own identity or loopback-service access. Never grant one via the other.
+router.get('/status', requirePrivateAI, (_req, res) => res.json({
   enabled: isEnabled(),
   configured: isEnabled(),
   backend: 'local',
@@ -43,61 +43,138 @@ router.get('/status', (_req, res) => res.json({
     'AI is disabled until the local model is installed and GOLIATH_AI_ENABLED=true is set in DEV.'
 }));
 
-const SNOWFLAKE = /^\\d{16,20}$/;
-// Read-only audit. Never call Discord mutation methods from this route.
-router.get('/guilds', (req, res) => {
-  if (String(process.env.BOT_MODE || '').toUpperCase() !== 'DEV') return res.status(503).json({ error: 'DEV environment only.' });
-  const guilds = [...(req.client?.guilds?.cache?.values() || [])].map((guild) => ({
-    id: guild.id, name: guild.name, memberCount: guild.memberCount || 0
-  })).sort((a, b) => a.name.localeCompare(b.name));
-  return res.json({ guilds });
-});
+const SNOWFLAKE = /^\d{16,20}$/;
+const { timingSafeEqual } = require('node:crypto');
+const ENVIRONMENTS = Object.freeze([
+  { environment: 'DEV', port: 3001 },
+  { environment: 'BETA', port: 3011 },
+  { environment: 'PRODUCTION', port: 3021 }
+]);
 
-router.get('/audit/:guildId', async (req, res) => {
-  if (String(process.env.BOT_MODE || '').toUpperCase() !== 'DEV') return res.status(503).json({ error: 'DEV environment only.' });
-  const id = String(req.params.guildId || '');
-  if (!SNOWFLAKE.test(id)) return res.status(400).json({ error: 'Invalid guild ID.' });
-  // Restrict to this bot instance's connected guilds. Never switch to another environment.
+function localMode() {
+  return String(process.env.BOT_MODE || '').toUpperCase();
+}
+function isLoopback(req) {
+  return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(String(req.socket?.remoteAddress || ''));
+}
+function hasInternalAccess(req) {
+  const expected = String(process.env.OWNER_INTERNAL_TOKEN || '');
+  const received = String(req.get('x-goliath-owner-token') || '');
+  if (!isLoopback(req) || expected.length < 24 || !received || expected.length !== received.length) return false;
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+}
+function localGuilds(req) {
+  return [...(req.client?.guilds?.cache?.values() || [])].map(guild => ({
+    id: guild.id, name: guild.name, memberCount: guild.memberCount || 0,
+    environment: localMode()
+  })).sort((a, b) => a.name.localeCompare(b.name));
+}
+async function readAudit(req, id) {
   const guild = req.client?.guilds?.cache?.get(id);
-  if (!guild) return res.status(404).json({ error: 'Guild is not connected to the DEV bot.' });
+  if (!guild) return null;
+  await Promise.all([guild.roles.fetch(), guild.channels.fetch()]);
+  const roles = [...guild.roles.cache.values()].sort((a, b) => b.position - a.position)
+    .map(role => ({ id: role.id, name: role.name, position: role.position,
+      permissions: role.permissions.bitfield.toString(), managed: role.managed,
+      mentionable: role.mentionable }));
+  const channels = [...guild.channels.cache.values()]
+    .sort((a,b) => (a.rawPosition || 0) - (b.rawPosition || 0))
+    .map(channel => ({ id: channel.id, name: channel.name, type: channel.type,
+      parentId: channel.parentId || null, position: channel.rawPosition || 0,
+      permissionOverwrites: [...(channel.permissionOverwrites?.cache?.values() || [])]
+        .map(entry => ({ id: entry.id, type: entry.type,
+          allow: entry.allow.bitfield.toString(), deny: entry.deny.bitfield.toString() })) }));
+  return {
+    guild: { id: guild.id, name: guild.name, memberCount: guild.memberCount || 0 },
+    environment: localMode(), timestamp: new Date().toISOString(), readOnly: true,
+    summary: { roles: roles.length, channels: channels.length,
+      categories: channels.filter(c => c.type === 4).length,
+      unsyncedChannels: channels.filter(c => c.parentId &&
+        guild.channels.cache.get(c.id)?.permissionsLocked === false).length },
+    roles, channels
+  };
+}
+function requireAIIdentity(req, res, next) {
+  res.set('Cache-Control', 'no-store');
+  if (!authorised(req)) return res.status(403).json({ error: 'Only the two configured developer accounts may access Goliath AI.' });
+  next();
+}
+function requireLocalInternal(req, res, next) {
+  res.set('Cache-Control', 'no-store');
+  if (!hasInternalAccess(req)) return res.status(403).json({ error: 'Internal audit access denied.' });
+  next();
+}
+// Local-only endpoints are served by each environment once the feature is deliberately promoted.
+// They never require/accept a browser session or grant AI/model access.
+router.get('/guilds/local', requireLocalInternal, (req, res) =>
+  res.json({ environment: localMode(), guilds: localGuilds(req) }));
+router.get('/audit/local/:guildId', requireLocalInternal, async (req, res) => {
+  if (!SNOWFLAKE.test(req.params.guildId)) return res.status(400).json({ error: 'Invalid guild ID.' });
   try {
-    await Promise.all([guild.roles.fetch(), guild.channels.fetch()]);
-    const roles = [...guild.roles.cache.values()]
-      .sort((a, b) => b.position - a.position)
-      .map((role) => ({
-        id: role.id, name: role.name, position: role.position,
-        permissions: role.permissions.bitfield.toString(),
-        managed: role.managed, mentionable: role.mentionable
-      }));
-    const channels = [...guild.channels.cache.values()]
-      .sort((a, b) => (a.rawPosition || 0) - (b.rawPosition || 0))
-      .map((channel) => ({
-        id: channel.id, name: channel.name, type: channel.type,
-        parentId: channel.parentId || null, position: channel.rawPosition || 0,
-        permissionOverwrites: [...(channel.permissionOverwrites?.cache?.values() || [])]
-          .map((entry) => ({ id: entry.id, type: entry.type,
-            allow: entry.allow.bitfield.toString(), deny: entry.deny.bitfield.toString() }))
-      }));
-    const categoryCount = channels.filter((channel) => channel.type === 4).length;
-    const unsynced = channels.filter((channel) => {
-      if (!channel.parentId) return false;
-      const item = guild.channels.cache.get(channel.id);
-      return item && item.permissionsLocked === false;
-    }).length;
-    return res.json({
-      guild: { id: guild.id, name: guild.name, memberCount: guild.memberCount || 0 },
-      timestamp: new Date().toISOString(), readOnly: true,
-      summary: { roles: roles.length, channels: channels.length,
-        categories: categoryCount, unsyncedChannels: unsynced },
-      roles, channels
-    });
+    const report = await readAudit(req, req.params.guildId);
+    return report ? res.json(report) : res.status(404).json({ error: 'Guild is not connected to this environment.' });
   } catch (error) {
-    console.error('[GoliathAI] Read-only audit failed:', error?.message);
-    return res.status(503).json({ error: 'Unable to read Discord server structure and permissions.' });
+    console.error('[GoliathAI] Local audit failed:', error?.message);
+    return res.status(503).json({ error: 'Unable to read guild structure.' });
   }
 });
 
-router.post('/chat', async (req, res) => {
+async function internalGet(port, endpoint) {
+  const token = String(process.env.OWNER_INTERNAL_TOKEN || '');
+  if (token.length < 24) throw new Error('Shared internal owner token not configured.');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch('http://127.0.0.1:' + port + endpoint, {
+      headers: { 'x-goliath-owner-token': token }, signal: controller.signal
+    });
+    if (!response.ok) throw new Error('Internal service returned HTTP ' + response.status);
+    return await response.json();
+  } finally { clearTimeout(timer); }
+}
+
+router.get('/guilds', requireAIIdentity, async (req, res) => {
+  // In non-DEV runtime, an AI dashboard isn't needed; the central controller
+  // connects to each environment through the local read-only APIs.
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'Goliath AI controller is hosted in DEV.' });
+  const results = await Promise.all(ENVIRONMENTS.map(async target => {
+    try {
+      if (target.environment === 'DEV') return { environment: 'DEV', guilds: localGuilds(req) };
+      return await internalGet(target.port, '/api/owner/ai/guilds/local');
+    } catch (error) {
+      return { environment: target.environment, guilds: [], unavailable: true,
+        error: 'Environment audit endpoint not available or not yet promoted.' };
+    }
+  }));
+  return res.json({ guilds: results.flatMap(result => result.guilds), environments: results.map(
+    result => ({ environment: result.environment, available: !result.unavailable,
+      guildCount: result.guilds.length, error: result.error || null })) });
+});
+
+router.get('/audit/:environment/:guildId', requireAIIdentity, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'Goliath AI controller is hosted in DEV.' });
+  const environment = String(req.params.environment || '').toUpperCase();
+  const target = ENVIRONMENTS.find(item => item.environment === environment);
+  const id = String(req.params.guildId || '');
+  if (!target || !SNOWFLAKE.test(id)) return res.status(400).json({ error: 'Invalid environment or guild ID.' });
+  try {
+    if (environment === 'DEV') {
+      const result = await readAudit(req, id);
+      return result ? res.json(result) : res.status(404).json({ error: 'Guild not connected to DEV.' });
+    }
+    const result = await internalGet(target.port, '/api/owner/ai/audit/local/' + id);
+    if (result?.environment !== environment || result?.guild?.id !== id || result?.readOnly !== true) {
+      return res.status(502).json({ error: 'Environment audit response failed verification.' });
+    }
+    return res.json(result);
+  } catch (error) {
+    return res.status(503).json({ error: 'Selected environment is unavailable or not yet equipped with Goliath AI auditing.' });
+  }
+});
+router.get('/audit/:guildId', requireAIIdentity, async (req, res) =>
+  res.status(400).json({ error: 'Select both the environment and the guild to avoid ambiguity.' }));
+
+router.post('/chat', requirePrivateAI, async (req, res) => {
   if (!isEnabled()) return res.status(503).json({ error: 'Goliath AI is disabled until local inference is configured.' });
   const incoming = req.body?.messages;
   if (!Array.isArray(incoming) || incoming.length < 1 || incoming.length > MAX_MESSAGES ||
