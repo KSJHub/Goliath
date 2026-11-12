@@ -77,6 +77,90 @@ function buildTransactionManifest({ draft, audit, preview, currentDigest }) {
 }
 
 // Recovery planning describes prerequisites only; it never performs a reverse action.
+// Structural rehearsal only: synthetic IDs are never used for Discord API calls.
+function simulateTransaction({ draft, audit, preview, currentDigest }) {
+  const manifest = buildTransactionManifest({ draft, audit, preview, currentDigest });
+  const blocked = reason => ({
+    readOnly: true, executable: false, canExecute: false, simulated: false,
+    safeToApply: false, reason,
+    operationsChecked: 0, currentChannelCount: Array.isArray(audit?.channels) ? audit.channels.length : null,
+    proposedChannelCount: null
+  });
+  if (manifest.unavailable || !Array.isArray(audit?.channels)) return blocked('Invalid or stale transaction scope.');
+  const channels = audit.channels.map(item => ({ id: String(item.id), name: item.name,
+    type: item.type, parentId: item.parentId ?? null }));
+  const byId = new Map(channels.map(item => [item.id, item]));
+  const syntheticCategories = new Map();
+  const problems = [...manifest.warnings];
+  let checked = 0;
+  for (const entry of manifest.entries) {
+    const target = entry.target || {};
+    const proposed = entry.proposed || {};
+    if (entry.issues.length) {
+      problems.push('Operation ' + entry.sequence + ': unresolved manifest issues.');
+      break;
+    }
+    if (entry.kind === 'create_category') {
+      const id = 'synthetic-category-' + entry.sequence;
+      const item = { id, name: proposed.name, type: 4, parentId: null };
+      channels.push(item); byId.set(id, item);
+      syntheticCategories.set(proposed.name, id);
+    } else if (entry.kind === 'create_channel') {
+      let parentId = proposed.parentId || null;
+      if (!parentId && proposed.parentName) parentId = syntheticCategories.get(proposed.parentName);
+      if (parentId && (byId.get(parentId)?.type !== 4)) {
+        problems.push('Operation ' + entry.sequence + ': parent category is missing or invalid.');
+        break;
+      }
+      const id = 'synthetic-channel-' + entry.sequence;
+      const item = { id, name: proposed.name, type: proposed.type, parentId };
+      channels.push(item); byId.set(id, item);
+    } else if (entry.kind === 'rename_category' || entry.kind === 'edit_channel') {
+      const item = byId.get(String(target.id || ''));
+      if (!item || (entry.kind === 'rename_category' && item.type !== 4)) {
+        problems.push('Operation ' + entry.sequence + ': original target missing or wrong type.');
+        break;
+      }
+      const before = entry.before || {};
+      let conflict = false;
+      for (const field of ['name', 'parentId']) {
+        if (Object.hasOwn(before, field) && (item[field] ?? null) !== (before[field] ?? null)) {
+          conflict = true;
+          problems.push('Operation ' + entry.sequence + ': original ' + field + ' no longer matches.');
+        }
+      }
+      if (conflict) break;
+      if (Object.hasOwn(proposed, 'parentId') && proposed.parentId &&
+          byId.get(proposed.parentId)?.type !== 4) {
+        problems.push('Operation ' + entry.sequence + ': proposed destination category missing.');
+        break;
+      }
+      if (Object.hasOwn(proposed, 'name')) item.name = proposed.name;
+      if (Object.hasOwn(proposed, 'parentId')) item.parentId = proposed.parentId;
+    } else {
+      problems.push('Operation ' + entry.sequence + ': unsupported operation.');
+      break;
+    }
+    checked++;
+  }
+  if (channels.length > 500) problems.push('Proposed layout exceeds the guild channel limit.');
+  for (const category of channels.filter(item => item.type === 4)) {
+    if (channels.filter(item => item.parentId === category.id).length > 50) {
+      problems.push('Category ' + category.name + ' would contain more than 50 channels.');
+    }
+  }
+  const valid = problems.length === 0 && checked === manifest.entries.length;
+  return {
+    readOnly: true, executable: false, canExecute: false, safeToApply: false,
+    simulated: valid, status: valid ? 'structural-preview-passed' : 'blocked',
+    manifestFingerprint: manifest.fingerprint,
+    operationsChecked: checked, operationCount: manifest.entries.length,
+    currentChannelCount: audit.channels.length, proposedChannelCount: channels.length,
+    problems,
+    notice: 'In-memory structural rehearsal only. Discord API limits, permissions, content and rollback are NOT verified.'
+  };
+}
+
 const RECOVERY_KIND = Object.freeze({
   rename_category: 'restore_original_name',
   edit_channel: 'restore_original_fields',
@@ -154,6 +238,7 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
   // A cross-guild or malformed snapshot must produce a BLOCKED diagnostic,
   // not crash the readiness endpoint or generate a recovery proposal.
   const transactionManifest = buildTransactionManifest({ draft, audit, preview, currentDigest });
+  const structuralSimulation = simulateTransaction({ draft, audit, preview, currentDigest });
   const recoveryPlan = sameTarget && /^[a-f0-9]{64}$/.test(String(currentDigest || ''))
     ? buildRecoveryPlan({ draft, audit, preview, currentDigest })
     : {
@@ -205,9 +290,9 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
     draftId: draft.id, auditDigest: currentDigest, savedAuditDigest: draft.auditDigest,
     generatedAt: new Date().toISOString(), operationCount: operations.length, operations,
     backupEvidence: backupEvidence || { status: 'unavailable', candidates: [], checkedAt: null },
-    recoveryPlan, transactionManifest,
+    recoveryPlan, transactionManifest, structuralSimulation,
     checks, blockers: checks.filter(item => item.state !== 'passed').map(item => item.key),
     notice: 'Diagnostic checklist only. No approval, backup or Discord write has occurred.'
   };
 }
-module.exports = { evaluateReadiness, buildRecoveryPlan, buildTransactionManifest };
+module.exports = { evaluateReadiness, buildRecoveryPlan, buildTransactionManifest, simulateTransaction };
