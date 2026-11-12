@@ -1,7 +1,6 @@
 'use strict';
 // Pure advisory check; no Discord API calls, no permission grants, no restore operations.
 const MANAGE_CHANNELS = 1n << 4n;
-const VIEW_CHANNEL = 1n << 10n;
 const SNOWFLAKE = /^\d{16,20}$/;
 function flag(raw, bit) {
   try { return (BigInt(raw) & bit) === bit; } catch { return false; }
@@ -53,6 +52,12 @@ function buildCapabilityPreflight({ audit, operations, capability }) {
         if (parentId && !channelMap.has(parentId)) {
           permission = 'blocked';
           warnings.push('Category parent ID does not exist.');
+        } else if (parentId && !channelPermissions.has(parentId)) {
+          permission = 'unknown';
+          warnings.push('Bot permissions for the destination category must be checked.');
+        } else if (parentId && !flag(channelPermissions.get(parentId), MANAGE_CHANNELS)) {
+          permission = 'blocked';
+          warnings.push('Bot lacks Manage Channels on the destination category.');
         } else if (!parentId && operation.after?.parentName) {
           permission = 'unknown';
           warnings.push('Proposed new category is not created yet. Parent linkage requires runtime verification.');
