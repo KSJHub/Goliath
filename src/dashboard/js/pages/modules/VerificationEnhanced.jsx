@@ -155,6 +155,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   const [advanced, setAdvanced] = useState(null);
   const advancedDirty = useRef(false);
   const loadedGuild = useRef('');
+  const panelDraftDirty = useRef(false);
 
   const card = useMemo(() => ({
     border: `1px solid ${theme.cardBorder}`,
@@ -212,9 +213,12 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       setRoles(list(rolePayload, 'roles'));
       setChannels(list(channelPayload, 'channels'));
       const currentPanels = Array.isArray(overview?.panels) ? overview.panels : [];
-      const current = currentPanels.find((panel) => String(panel.panelId) === String(selectedPanelId)) || currentPanels[0] || null;
-      if (current && !selectedPanelId) setSelectedPanelId(current.panelId || current.id || '');
-      setDraft(panelDraft(current, adapted.moduleConfig, adapted.adminConfig));
+      const current = currentPanels.find((panel) => String(panel.panelId || panel.id) === String(selectedPanelId)) || null;
+      if (selectedPanelId && !current) setSelectedPanelId('');
+      if (!panelDraftDirty.current || loadedGuild.current !== guildId) {
+        setDraft(panelDraft(current, adapted.moduleConfig, adapted.adminConfig));
+        panelDraftDirty.current = false;
+      }
     } catch (loadError) {
       setError(loadError.message || 'Failed to load verification.');
     } finally {
@@ -318,6 +322,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
 
   function selectPanel(panelId) {
     setSelectedPanelId(panelId);
+    panelDraftDirty.current = false;
     const panel = panels.find((item) => String(item.panelId || item.id) === String(panelId));
     applyPanel(panel || null);
   }
@@ -337,8 +342,19 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   async function removePanel() {
     if (!selectedPanelId) return;
     if (!await goliathDialog.confirm('Delete this verification panel message and its saved record?', { title: 'Delete Verification Panel?', danger: true, confirmLabel: 'Delete Panel' })) return;
-    await act('delete', () => api.deleteVerificationPanel(guildId, selectedPanelId), 'Verification panel deleted.');
-    setSelectedPanelId('');
+    setBusy('delete');
+    setError('');
+    try {
+      await api.deleteVerificationPanel(guildId, selectedPanelId);
+      setSelectedPanelId('');
+      panelDraftDirty.current = false;
+      await load();
+      setNotice('Verification panel deleted.');
+    } catch (deleteError) {
+      setError(deleteError.message || 'Failed to delete verification panel.');
+    } finally {
+      setBusy('');
+    }
   }
 
   async function resetModule() {
@@ -483,7 +499,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
           </select>
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,240px),1fr))', gap: 14 }}>
-          <ChannelSelect theme={theme} resources={channels} value={draft.channelId} onChange={(value) => setDraft((current) => ({ ...current, channelId: value }))} label="Deploy Channel" />
+          <ChannelSelect theme={theme} resources={channels} value={draft.channelId} onChange={(value) => { panelDraftDirty.current = true; setDraft((current) => ({ ...current, channelId: value })); }} label="Deploy Channel" />
           <Field theme={theme} label="Title" value={draft.title} onChange={(value) => setDraft((current) => ({ ...current, title: value }))} />
           <Field theme={theme} label="Colour" value={draft.color} onChange={(value) => setDraft((current) => ({ ...current, color: value }))} placeholder="#57f287" />
           <Field theme={theme} label="Footer" value={draft.footer} onChange={(value) => setDraft((current) => ({ ...current, footer: value }))} />
