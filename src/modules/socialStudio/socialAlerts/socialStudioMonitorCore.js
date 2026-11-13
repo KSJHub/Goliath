@@ -494,6 +494,7 @@ async function checkGuildAccounts(client,guildId,options={}) {
             updated=await updateLiveAlert(client,guildId,config,account,checked.event,previous);
           }catch(error){
             refreshError=error?.message||String(error);
+            if(String(account?.platform||'').toLowerCase()==='tiktok') console.error('[Social Studio] TikTok LIVE refresh failed',JSON.stringify({accountId,messageId:previous.lastLiveMessageId||previous.lastAlertMessageId,error:String(refreshError).slice(0,500)}));
           }
 
         if(!updated&&hasTrackedLiveMessage(previous)){
@@ -523,6 +524,7 @@ async function checkGuildAccounts(client,guildId,options={}) {
         }
 
         if(updated){
+          if(String(account?.platform||'').toLowerCase()==='tiktok') console.info('[Social Studio] TikTok LIVE tracked message refreshed',JSON.stringify({accountId,messageId:updated.messageId,recovered}));
           const key=eventKey(checked.event);
           rememberDelivered(state,key);
           state.lastAlertKey=key;
