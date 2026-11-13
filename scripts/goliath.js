@@ -2071,30 +2071,30 @@ function socialLivePresentationAudit() {
     );
     
     /*
-     * TikTok uses status transitions rather than the normal timed LIVE
-     * refresh while the same broadcast remains active.
+     * TikTok LIVE refreshes immediately on LIVE/PAUSED transitions and
+     * periodically on the configured interval, like other LIVE providers.
+     * This prevents stale portrait-era Discord messages persisting forever.
      */
-    
     assert(
       compactCore.includes("platform==='tiktok'") ||
         compactCore.includes('platform==="tiktok"'),
-      'TikTok LIVE refresh exception missing'
+      'TikTok LIVE refresh handling missing'
     );
-    
     assert(
       compactCore.includes('previous.lastLiveEvent?.liveStatus') &&
-        (
-          compactCore.includes('checked.event?.liveStatus') ||
-          compactCore.includes('checked.event.liveStatus')
-        ),
-      'TikTok refresh exception must compare LIVE/PAUSED status'
+        (compactCore.includes('checked.event?.liveStatus') ||
+          compactCore.includes('checked.event.liveStatus')),
+      'TikTok refresh must compare LIVE/PAUSED status'
     );
-    
     assert(
-      compactCore.includes('returnbefore!==current'),
-      'TikTok refresh exception must update only on status transition'
+      compactCore.includes('if(before!==current)returntrue'),
+      'TikTok status transition must trigger immediate refresh'
     );
-    
+    assert(
+      compactCore.includes('Date.now()-last>=refresh'),
+      'TikTok and other LIVE messages must refresh on configured interval'
+    );
+
     assert(
       compactCore.includes('sameActiveBroadcast'),
       'LIVE presentation must preserve same-broadcast lifecycle handling'
