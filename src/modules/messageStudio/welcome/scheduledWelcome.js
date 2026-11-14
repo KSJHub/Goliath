@@ -196,9 +196,13 @@ async function getWaitingMembers(guild) {
   // must complete Verification before being announced as joined.
   const verificationEnabled = guildManager.isModuleEnabled(guild.id, 'verification');
   const verificationStore = verificationEnabled ? require('../../securityStudio/verificationStore') : null;
-  return members.filter((member) => !completed.has(member.id)
+  return members.filter((member) => {
+    const joinedAt = member.joinedAt?.toISOString?.() || null;
+    const deliveredJoin = config.completedMemberJoins?.[member.id];
+    return (!completed.has(member.id) || (joinedAt && deliveredJoin && deliveredJoin !== joinedAt))
     && member.pending !== true
-    && (!verificationEnabled || verificationStore.getSession(guild.id, member.id)?.state === 'verified'));
+    && (!verificationEnabled || verificationStore.getSession(guild.id, member.id)?.state === 'verified');
+  });
 }
 
 async function executeScheduledWelcome(guild, options = {}) {
@@ -252,7 +256,6 @@ async function executeScheduledWelcome(guild, options = {}) {
   let sendFailed = 0;
   let roleRemovalFailed = retryRoleRemovalFailed;
   const errors = [...retryErrors];
-  const completed = new Set(config.completedMemberIds);
 
   for (const batch of batches) {
     try {
@@ -263,16 +266,26 @@ async function executeScheduledWelcome(guild, options = {}) {
       welcomed += batch.length;
       // Persist successful delivery before attempting role cleanup. A role
       // removal failure must never make an already-sent welcome eligible again.
-      for (const member of batch) completed.add(member.id);
-      const pendingMembers = { ...getScheduledConfig(guild.id).pendingMembers };
+      const checkpoint = getScheduledConfig(guild.id);
+      const completed = new Set(checkpoint.completedMemberIds);
+      const pendingMembers = { ...checkpoint.pendingMembers };
       for (const member of batch) {
         const queuedJoin = pendingMembers[member.id]?.joinedAt;
         const deliveredJoin = member.joinedAt?.toISOString?.() || null;
         // Do not erase a fresh queue entry created by a rejoin while this batch was sending.
-        if (!queuedJoin || queuedJoin === deliveredJoin) delete pendingMembers[member.id];
+        if (!queuedJoin || queuedJoin === deliveredJoin) {
+          delete pendingMembers[member.id];
+          completed.add(member.id);
+        }
+        // A newer join remains eligible even if the older batch just sent.
+        else completed.delete(member.id);
       }
-      const completedMemberJoins = { ...getScheduledConfig(guild.id).completedMemberJoins };
-      for (const member of batch) if (member.joinedAt?.toISOString?.()) completedMemberJoins[member.id] = member.joinedAt.toISOString();
+      const completedMemberJoins = { ...checkpoint.completedMemberJoins };
+      for (const member of batch) {
+        const deliveredJoin = member.joinedAt?.toISOString?.() || null;
+        const newerJoin = pendingMembers[member.id]?.joinedAt;
+        if (deliveredJoin && (!newerJoin || newerJoin === deliveredJoin)) completedMemberJoins[member.id] = deliveredJoin;
+      }
       updateScheduledConfig(guild.id, { completedMemberIds: [...completed], completedMemberJoins, pendingMembers }, { actorId: options.actorId, action: 'scheduled_welcome_delivery_checkpoint' });
       if (config.queueRoleId && config.removeQueueRole) {
         for (const member of batch) {
@@ -301,7 +314,7 @@ async function executeScheduledWelcome(guild, options = {}) {
     lastRunDate: sendFailed > 0 ? config.analytics.lastRunDate : runDate,
     lastError: errors.length ? errors[0].slice(0, 500) : null,
   };
-  updateScheduledConfig(guild.id, { analytics, completedMemberIds: [...completed] }, { actorId: options.actorId, action: 'scheduled_welcome_run' });
+  updateScheduledConfig(guild.id, { analytics }, { actorId: options.actorId, action: 'scheduled_welcome_run' });
 
   return { skipped: false, empty: false, welcomed, messagesSent, sendFailed, roleRemovalFailed, errors };
 }
