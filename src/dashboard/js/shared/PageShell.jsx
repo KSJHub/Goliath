@@ -16,7 +16,7 @@ export const DASHBOARD_EMOJIS = Object.freeze({
   TICKETS: '🎫', DOCUMENT: '📄', SECURITY: '🛡️', SAVE: '💾',
   SYSTEM: '🧩', HISTORY: '🕘', LOCK: '🔒', COLOURS: '🌈',
   ENV_DEV: '🔵', ENV_BETA: '🟡', ENV_PRODUCTION: '🟢', CROWN: '👑',
-  STATUS_ALERT: '🔴', STATUS_UNKNOWN: '⚪',
+  STATUS_ALERT: '🔴', STATUS_UNKNOWN: '⚪', PERMISSIONS: '🔐',
 });
 
 
