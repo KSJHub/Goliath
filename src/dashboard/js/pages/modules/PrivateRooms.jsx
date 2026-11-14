@@ -1,5 +1,6 @@
 import { dashboardPath } from '../../services/dashboardPath.js';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -52,7 +53,7 @@ export default function PrivateRooms({ theme, selectedGuild, selectedGuildData }
     return action('settings', () => api.request(`/api/private-rooms/${guildId}/settings`, { method: 'PATCH', body: JSON.stringify({ settings: patch }) }), 'Settings saved.');
   }
 
-  if (!guildId) return <EmptyState theme={theme} icon="🔒" title="Select a server" description="Select a server to manage Private Rooms." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.LOCK} title="Select a server" description="Select a server to manage Private Rooms." />;
 
   const config = data?.config || {};
   const overview = data?.overview || {};
