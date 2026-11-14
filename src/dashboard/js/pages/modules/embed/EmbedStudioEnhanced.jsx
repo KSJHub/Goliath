@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../../shared/PageShell';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../../services/apiClient.js';
@@ -252,7 +253,7 @@ export default function EmbedStudioEnhanced(props) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <div style={{ color: theme.mutedText, fontSize: 12, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Embed Studio Health</div>
-            <strong style={{ display: 'block', marginTop: 5 }}>{health ? (health.healthy ? '🟢 Healthy' : '🔴 Attention required') : '⚪ Health unavailable'}</strong>
+            <strong style={{ display: 'block', marginTop: 5 }}>{health ? (health.healthy ? `${E.ACTIVE} Healthy` : `${E.STATUS_ALERT} Attention required`) : `${E.STATUS_UNKNOWN} Health unavailable`}</strong>
             <span style={{ display: 'block', marginTop: 4, color: theme.mutedText, fontSize: 12 }}>{health ? `${health.templates || 0} templates • ${health.deployments || 0} deployments • ${health.unavailable || 0} unavailable` : 'Run a health check to inspect tracked deployments.'}</span>
           </div>
           <button type="button" disabled={busy} onClick={repairHealth} style={{ border: `1px solid ${theme.cardBorder}`, background: 'rgba(37,99,235,0.18)', color: theme.cardText, borderRadius: 12, padding: '10px 12px', fontWeight: 950, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.55 : 1 }}>{busy ? 'Checking…' : 'Check & Repair'}</button>
