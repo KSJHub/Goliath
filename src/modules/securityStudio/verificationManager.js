@@ -53,22 +53,32 @@ async function logEvent(g,section,type,content){
   const c=g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null);
   if(!c?.send)return false;
   const styles={
-    join:{emoji:'🚪',title:'Member Joined • Pending Verification',color:0xffffff},
-    attempt:{emoji:'🔐',title:'Verification Activity',color:0x5865f2},
-    success:{emoji:'✅',title:'Verification Successful',color:0x2ecc71},
-    failure:{emoji:'❌',title:'Verification Failed',color:0xe74c3c},
-    quarantine:{emoji:'🚨',title:'Member Quarantined',color:0xe74c3c},
-    error:{emoji:'❌',title:'Verification Error',color:0xe74c3c},
-    bot:{emoji:'🤖',title:'Bot Verification Event',color:0x95a5a6}
+    join:{emoji:'🚪',title:'New Member',color:0xffffff,status:'Pending',access:'Restricted'},
+    attempt:{emoji:'🔐',title:'Verification Activity',color:0x5865f2,status:'In progress'},
+    success:{emoji:'✅',title:'Verification Successful',color:0x2ecc71,status:'Verified',access:'Granted'},
+    failure:{emoji:'❌',title:'Verification Failed',color:0xe74c3c,status:'Failed',access:'Restricted'},
+    quarantine:{emoji:'🚨',title:'Member Quarantined',color:0xe74c3c,status:'Quarantined',access:'Restricted'},
+    error:{emoji:'⚠️',title:'Verification Error',color:0xe74c3c,status:'Action required'},
+    bot:{emoji:'🤖',title:'Bot Verification Event',color:0x95a5a6,status:'Recorded'}
   };
-  const style=styles[type]||{emoji:'📋',title:'Verification Log',color:0x5865f2};
+  const style=styles[type]||{emoji:'📋',title:'Verification Event',color:0x5865f2,status:'Recorded'};
+  const raw=String(content).trim();
+  const mention=raw.match(/<@!?(\d{15,25})>/);
+  const userId=mention?.[1]||null;
+  const details=raw.replace(/^(?:🚪|🔐|✅|❌|⚠️|🚨|🤖|📋)\s*/u,'').trim();
+  const isDefaultJoin=type==='join'&&userId&&/^<@!?\d{15,25}> entered Verification\.?$/i.test(details);
   const embed=new EmbedBuilder()
     .setColor(style.color)
-    .setAuthor({name:`${g.name||'Server'} • Verification`,...(g.iconURL?.({size:128})?{iconURL:g.iconURL({size:128})}:{})})
+    .setAuthor({name:`${g.name||'Server'} • Security`,...(g.iconURL?.({size:128})?{iconURL:g.iconURL({size:128})}:{})})
     .setTitle(`${style.emoji} ${style.title}`)
-    .setDescription(String(content).slice(0,4096))
-    .setFooter({text:'Goliath Security • Verification Logs'})
+    .addFields(
+      ...(userId?[{name:'👤 Member',value:`<@${userId}>`,inline:false}]:[]),
+      {name:'🔐 Status',value:style.status,inline:true},
+      ...(style.access?[{name:'🛡️ Access',value:style.access,inline:true}]:[])
+    )
+    .setFooter({text:'Goliath • Verification'})
     .setTimestamp();
+  if(!isDefaultJoin&&details)embed.setDescription(details.slice(0,4096));
   try{
     await c.send({embeds:[embed],allowedMentions:{parse:[],users:[],roles:[]}});
     return true;
