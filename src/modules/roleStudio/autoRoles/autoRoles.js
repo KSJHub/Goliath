@@ -252,6 +252,26 @@ async function applyAutoRoles(member, options = {}) {
 
   const roleIds = member.user?.bot ? section.botRoles || [] : section.joinRoles || [];
   const uniqueRoleIds = cleanRoleIds(roleIds);
+  // Human join roles are deferred while Verification is active. Persist the
+  // entitlement in this existing module section for restart-safe delivery.
+  if (!member.user?.bot && guildManager.isModuleEnabled(guild.id, 'verification')) {
+    const verificationStore = require('../../securityStudio/verificationStore');
+    const session = verificationStore.getSession(guild.id, member.id);
+    if (session?.state !== 'verified' || member.pending === true) {
+      updateAutoRolesSection(guild.id, (current) => ({
+        ...current,
+        deferredJoinRoles: {
+          ...(current.deferredJoinRoles || {}),
+          [member.id]: {
+            roleIds: uniqueRoleIds,
+            joinedAt: member.joinedAt?.toISOString?.() || null,
+            queuedAt: now(),
+          },
+        },
+      }));
+      return [];
+    }
+  }
   if (!uniqueRoleIds.length) {
     incrementAnalytics(guild.id, { skipped: 1, botsProcessed: member.user?.bot ? 1 : 0, membersProcessed: member.user?.bot ? 0 : 1 });
     return [];
@@ -282,6 +302,29 @@ async function applyAutoRoles(member, options = {}) {
     botsProcessed: member.user?.bot ? 1 : 0,
   });
   return addedRoles;
+}
+
+
+async function releaseDeferredJoinRoles(member) {
+  if (!member?.guild?.id || member.user?.bot || member.pending === true) return [];
+  const guildId = member.guild.id;
+  if (guildManager.isModuleEnabled(guildId, 'verification')) {
+    const store = require('../../securityStudio/verificationStore');
+    if (store.getSession(guildId, member.id)?.state !== 'verified') return [];
+  }
+  const pending = getAutoRolesSection(guildId).deferredJoinRoles?.[member.id];
+  if (!pending || (pending.joinedAt && pending.joinedAt !== member.joinedAt?.toISOString?.())) return [];
+  if (!isAutoRolesEnabled(guildId)) return [];
+  const assigned = await applyAutoRoles(member, { reason: 'Goliath verified member Auto Roles' });
+  const required = cleanRoleIds(pending.roleIds).filter(id => getAutoRolesSection(guildId).joinRoles.includes(id));
+  const remaining = required.filter(id => !member.roles.cache.has(id) && !assigned.some(role => role.id === id));
+  updateAutoRolesSection(guildId, (section) => {
+    const deferredJoinRoles = { ...(section.deferredJoinRoles || {}) };
+    if (remaining.length) deferredJoinRoles[member.id] = { ...pending, roleIds: remaining };
+    else delete deferredJoinRoles[member.id];
+    return { ...section, deferredJoinRoles };
+  });
+  return assigned;
 }
 
 function configureAutoRoles(guildId, input = {}, meta = {}) {
@@ -521,6 +564,7 @@ module.exports = {
   validateManageableRole,
   isAutoRolesEnabled,
   applyAutoRoles,
+  releaseDeferredJoinRoles,
   configureAutoRoles,
   setAutoRolesEnabled,
   addAutoRole,
