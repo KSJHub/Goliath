@@ -32,9 +32,16 @@ async function getQueuedMembers(guild, config = {}) {
   }
   const role = guild.roles?.cache?.get(roleId) || await guild.roles?.fetch?.(roleId).catch(() => null);
   if (!role) return [];
-  return [...role.members.values()]
-    .filter((member) => config.ignoreBots === false || !member.user?.bot)
-    .sort((a, b) => Number(a.joinedTimestamp || 0) - Number(b.joinedTimestamp || 0));
+  const members = [];
+  for (const cachedMember of role.members.values()) {
+    // Role membership in the cache can be stale after a leave, rejoin or
+    // restart. Confirm both current membership and the role before delivery.
+    const member = await guild.members.fetch({ user: cachedMember.id, force: true }).catch(() => null);
+    if (!member?.roles?.cache?.has(roleId)) continue;
+    if (config.ignoreBots !== false && member.user?.bot) continue;
+    members.push(member);
+  }
+  return members.sort((a, b) => Number(a.joinedTimestamp || 0) - Number(b.joinedTimestamp || 0));
 }
 
 async function removeQueueRole(member, roleId, reason = 'Scheduled welcome completed') {
