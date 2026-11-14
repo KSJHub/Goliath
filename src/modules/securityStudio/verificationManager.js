@@ -46,7 +46,37 @@ function roleIds(s,key){return cleanIds(s.roles?.[key]||[]);}
 function enabledSecurity(s){const sec=s.security||{},map={simple:'simple',captcha:'captcha',minigame:'minigame',account_age:'accountAge',discord_screening:'discordScreening',bot_protection:'botProtection',staff_approval:'staffApproval',one_time_challenge:'oneTimeChallenge',risk_based:'riskBased',rejoin_history:'rejoinHistory'};const ordered=Array.isArray(s.flow?.orderedSecurity)?s.flow.orderedSecurity:[];return unique([...ordered.filter(k=>map[k]&&sec[map[k]]===true),...Object.keys(map).filter(k=>sec[map[k]]===true)]);}
 function hasAnyRole(m,ids){return cleanIds(ids).some(id=>m.roles.cache.has(id));}
 function isBypass(m,s){return hasAnyRole(m,roleIds(s,'bypass'))||(s.allowStaffBypass&&canManageVerification(m));}
-async function logEvent(g,section,type,content){if(!content)return false;const configured=section.settings?.logs?.[`${type}ChannelId`]||section.settings?.logChannelId;if(!configured)return false;const c=g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null);if(!c?.send)return false;await c.send({content:String(content).slice(0,2000),allowedMentions:{parse:[],users:[],roles:[]}}).catch(()=>null);return true;}
+async function logEvent(g,section,type,content){
+  if(!content)return false;
+  const configured=section.settings?.logs?.[`${type}ChannelId`]||section.settings?.logChannelId;
+  if(!configured)return false;
+  const c=g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null);
+  if(!c?.send)return false;
+  const styles={
+    join:{emoji:'🚪',title:'Member Entered Verification',color:0x3498db},
+    attempt:{emoji:'🔐',title:'Verification Activity',color:0x5865f2},
+    success:{emoji:'✅',title:'Verification Successful',color:0x2ecc71},
+    failure:{emoji:'⚠️',title:'Verification Challenge Failed',color:0xf1c40f},
+    quarantine:{emoji:'🚨',title:'Member Quarantined',color:0xe74c3c},
+    error:{emoji:'❌',title:'Verification Error',color:0xe74c3c},
+    bot:{emoji:'🤖',title:'Bot Verification Event',color:0x95a5a6}
+  };
+  const style=styles[type]||{emoji:'📋',title:'Verification Log',color:0x5865f2};
+  const embed=new EmbedBuilder()
+    .setColor(style.color)
+    .setAuthor({name:`${g.name||'Server'} • Verification`,...(g.iconURL?.({size:128})?{iconURL:g.iconURL({size:128})}:{})})
+    .setTitle(`${style.emoji} ${style.title}`)
+    .setDescription(String(content).slice(0,4096))
+    .setFooter({text:'Goliath Security • Verification Logs'})
+    .setTimestamp();
+  try{
+    await c.send({embeds:[embed],allowedMentions:{parse:[],users:[],roles:[]}});
+    return true;
+  }catch(error){
+    console.error('[Verification] Log embed delivery failed:',error?.message||error);
+    return false;
+  }
+}
 function setSession(gid,uid,patch){return verificationStore.upsertSession(gid,uid,patch);}
 function history(gid,uid,type,data={}){verificationStore.addSecurityHistory(gid,uid,{type,...data});}
 function accountAgeDays(m){return (Date.now()-Number(m?.user?.createdTimestamp||Date.now()))/86400000;}
