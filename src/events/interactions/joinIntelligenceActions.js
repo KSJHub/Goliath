@@ -113,21 +113,22 @@ module.exports = {
     if (handledInteractions.has(interaction)) return;
     handledInteractions.add(interaction);
     try {
-
+      // Acknowledge immediately. Permission checks and member fetches can exceed
+      // Discord's three-second interaction deadline during busy join events.
+      await interaction.deferReply({ flags: 64 });
       const [, action, guildId, userId] = id.split(':');
-      if (id.split(':').length !== 4 || !['view', 'watch', 'clear'].includes(action) || String(interaction.guild.id) !== String(guildId) || !/^\d{15,25}$/.test(userId || '')) {
-        await interaction.reply({ content: '❌ That intelligence action is no longer valid.', flags: 64 }).catch(() => null);
+      if (id.split(':').length !== 4 || !['view', 'watch', 'clear'].includes(action) || String(interaction.guild.id) !== String(guildId) || !/^\\d{15,25}$/.test(userId || '')) {
+        await interaction.editReply({ content: '❌ That intelligence action is no longer valid.' });
         return;
       }
 
       const allowed = canUseModAction(interaction.member, interaction.guild, 'scan_run', interaction)
         || canUseModAction(interaction.member, interaction.guild, 'view_case_detail', interaction);
       if (!allowed) {
-        await interaction.reply({ content: '❌ You do not have permission to manage Member Intelligence.', flags: 64 }).catch(() => null);
+        await interaction.editReply({ content: '❌ You do not have permission to manage Member Intelligence.' });
         return;
       }
 
-      await interaction.deferReply({ flags: 64 });
       const target = await resolveTarget(interaction, userId);
       if (!target) {
         await interaction.editReply({ content: '❌ That member is no longer available in this server.' }).catch(() => null);
