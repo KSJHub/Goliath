@@ -327,6 +327,17 @@ async function releaseDeferredJoinRoles(member) {
   return assigned;
 }
 
+function clearDeferredJoinRoles(guildId, memberId) {
+  const existing = getAutoRolesSection(guildId).deferredJoinRoles || {};
+  if (!Object.prototype.hasOwnProperty.call(existing, memberId)) return false;
+  updateAutoRolesSection(guildId, section => {
+    const deferredJoinRoles = { ...(section.deferredJoinRoles || {}) };
+    delete deferredJoinRoles[memberId];
+    return { ...section, deferredJoinRoles };
+  });
+  return true;
+}
+
 function configureAutoRoles(guildId, input = {}, meta = {}) {
   if (typeof input.enabled === 'boolean') guildManager.setModuleEnabled(guildId, MODULE, input.enabled, meta);
   const settings = input.settings && typeof input.settings === 'object' ? input.settings : {};
@@ -565,6 +576,7 @@ module.exports = {
   isAutoRolesEnabled,
   applyAutoRoles,
   releaseDeferredJoinRoles,
+  clearDeferredJoinRoles,
   configureAutoRoles,
   setAutoRolesEnabled,
   addAutoRole,
