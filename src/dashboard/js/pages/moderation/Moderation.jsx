@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useMemo } from 'react';
 import PageShell, {
   EmptyState,
@@ -46,7 +47,7 @@ export default function Moderation({ selectedGuild, theme }) {
             
             <div style={styles.futurePanel}>
               <div style={styles.futureInnerPanel}>
-                <h4 style={{ margin: 0 }}>📂 Cases</h4>
+                <h4 style={{ margin: 0 }}>{E.CHANNELS} Cases</h4>
                 <p style={{ margin: 0 }}>
                   View and manage moderation case history.
                 </p>
@@ -64,7 +65,7 @@ export default function Moderation({ selectedGuild, theme }) {
 
             <div style={styles.futurePanel}>
               <div style={styles.futureInnerPanel}>
-                <h4 style={{ margin: 0 }}>🤖 AutoMod</h4>
+                <h4 style={{ margin: 0 }}>{E.BOT} AutoMod</h4>
                 <p style={{ margin: 0 }}>
                   Configure automated moderation filters and punishments.
                 </p>
@@ -73,7 +74,7 @@ export default function Moderation({ selectedGuild, theme }) {
 
             <div style={styles.futurePanel}>
               <div style={styles.futureInnerPanel}>
-                <h4 style={{ margin: 0 }}>🔐 Permissions</h4>
+                <h4 style={{ margin: 0 }}>{E.PERMISSIONS} Permissions</h4>
                 <p style={{ margin: 0 }}>
                   Control moderator roles and permissions.
                 </p>
