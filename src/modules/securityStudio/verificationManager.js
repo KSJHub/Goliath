@@ -53,7 +53,7 @@ async function logEvent(g,section,type,content){
   const c=g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null);
   if(!c?.send)return false;
   const styles={
-    join:{emoji:'⏳',title:'Verification Pending',color:0xffffff,status:'Unverified'},
+    join:{emoji:'⏳',title:'Verification Pending',color:0xfefefe,status:'Unverified'},
     attempt:{emoji:'🔐',title:'Verification Activity',color:0x5865f2,status:'In progress'},
     success:{emoji:'✅',title:'Verification Successful',color:0x2ecc71,status:'Verified',access:'Granted'},
     failure:{emoji:'❌',title:'Verification Failed',color:0xe74c3c,status:'Failed',access:'Restricted'},
@@ -70,8 +70,9 @@ async function logEvent(g,section,type,content){
   const details=raw.replace(/^(?:🚪|🔐|✅|❌|⚠️|🚨|🤖|📋)\s*/u,'').trim();
   const isDefaultJoin=type==='join'&&userId&&/^<@!?\d{15,25}> entered Verification\.?$/i.test(details);
   const timestamp=Math.floor(Date.now()/1000);
-  const joinedAt=userId?g.members?.cache?.get(userId)?.joinedTimestamp:null;
+  const joinedAt=member?.joinedTimestamp||null;
   const joinedSeconds=Number.isFinite(joinedAt)&&joinedAt>0?Math.floor(joinedAt/1000):timestamp;
+  const joinedFooter=type==='join'&&Number.isFinite(joinedAt)&&joinedAt>0?`Joined ${new Date(joinedAt).toLocaleString('en-GB',{timeZone:'Europe/London',weekday:'long',day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})} UK time`:'Goliath • Verification Security Log';
   const embed=new EmbedBuilder()
     .setColor(style.color)
     .setAuthor({name:`${g.name||'Server'} • Security`,...(g.iconURL?.({size:128})?{iconURL:g.iconURL({size:128})}:{})})
@@ -83,7 +84,7 @@ async function logEvent(g,section,type,content){
       {name:'🕒 Event Time',value:`<t:${timestamp}:F> • <t:${timestamp}:R>`,inline:false},
       ...(type==='join'?[{name:'📅 Joined Server',value:`<t:${joinedSeconds}:F>`,inline:false}]:[])
     )
-    .setFooter({text:'Goliath • Verification Security Log'})
+    .setFooter({text:joinedFooter})
     .setTimestamp();
   if(type==='join'&&isDefaultJoin)embed.setDescription('This member has entered the server and is awaiting verification. Access remains limited until the required security checks are complete.');
   else if(details)embed.setDescription(details.slice(0,4096));
