@@ -21,7 +21,9 @@ async function getQueuedMembers(guild, config = {}) {
     for (const [memberId, entry] of Object.entries(entries)) {
       const id = cleanId(memberId);
       if (!id) continue;
-      const member = guild.members.cache.get(id) || await guild.members.fetch(id).catch(() => null);
+      // Verify membership against Discord rather than trusting a possibly stale cache
+      // after a restart or a missed leave event.
+      const member = await guild.members.fetch({ user: id, force: true }).catch(() => null);
       if (!member || (entry?.joinedAt && entry.joinedAt !== member.joinedAt?.toISOString?.())) continue;
       if (config.ignoreBots !== false && member.user?.bot) continue;
       members.push(member);
