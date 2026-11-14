@@ -60,7 +60,7 @@ function startStep(guildId, userId, method, settings = {}) {
   if (session.staffApprovalContinuationPending || session.staffActionProcessingPending) return { ok: false, reason: 'staff_action_in_progress', method };
   if (isOutdatedSecuritySession(guildId, session)) return { ok: false, reason: 'security_configuration_changed', method };
   let active = verificationChallenges.active(guildId, userId);
-  if (active?.status === 'pending' && !verificationChallenges.hasAnswerVerifier(session.activeChallenge)) {
+  if (active?.status === 'pending' && active.method !== 'staff_approval' && !verificationChallenges.hasAnswerVerifier(session.activeChallenge)) {
     verificationChallenges.clear(guildId, userId, 'missing_answer_verifier');
     active = null;
   }
@@ -110,8 +110,9 @@ function resolveStaffAction(guildId, targetUserId, challengeId, staffUserId, act
   if (active.status !== 'pending') return { ok: false, complete: false, reason: 'challenge_closed' };
   const result = verificationChallenges.staffAction(guildId, targetUserId, challengeId, staffUserId, action);
   if (result.ok && result.action === 'approve') {
+    const completedSecurity = markCompleted(guildId, targetUserId, 'staff_approval');
     verificationStore.upsertSession(guildId, targetUserId, { staffApprovalContinuationPending: { challengeId: clean(challengeId), staffUserId: clean(staffUserId), recordedAt: new Date().toISOString() } });
-    return { ...result, resumeFlow: true, completedSecurity: markCompleted(guildId, targetUserId, 'staff_approval') };
+    return { ...result, resumeFlow: true, completedSecurity };
   }
   if (result.complete && ['reject', 'quarantine'].includes(result.action)) {
     verificationStore.upsertSession(guildId, targetUserId, { staffActionProcessingPending: { challengeId: clean(challengeId), staffUserId: clean(staffUserId), action: result.action, recordedAt: new Date().toISOString() } });
