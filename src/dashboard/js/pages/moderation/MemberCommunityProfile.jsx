@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useState } from 'react';
 import { api } from '../../services/apiClient';
 
@@ -45,19 +46,19 @@ export default function MemberCommunityProfile() {
   }
   return <div style={{display:'grid',gap:14,marginTop:18}}>
     <section style={card}>
-      <h3 style={{margin:'0 0 8px'}}>🏘️ Your communities</h3>
+      <h3 style={{margin:'0 0 8px'}}>{E.COMMUNITIES} Your communities</h3>
       <p style={{color:'#a7b4c8',lineHeight:1.5}}>Choose a community to see your details and preferences.</p>
       {loading ? <p>Loading communities…</p> : communities.length ? <label>Community <select style={{...field,marginLeft:10}} value={guildId} onChange={e => setGuildId(e.target.value)}>{communities.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select></label> : <p>No shared communities found.</p>}
     </section>
     {message ? <div role="status" style={{...card,color:'#bfdbfe'}}>{message}</div> : null}
     {profile ? <>
-      <section style={card}><h3 style={{marginTop:0}}>👤 Your community profile</h3>
+      <section style={card}><h3 style={{marginTop:0}}>{E.USER} Your community profile</h3>
         <p>Community: <strong>{profile.community.name}</strong></p>
         <p>Nickname: <strong>{profile.community.nickname || 'No server nickname'}</strong></p>
         <p>Joined: <strong>{profile.community.joinedAt ? new Date(profile.community.joinedAt).toLocaleDateString() : 'Unavailable'}</strong></p>
         <p>Your roles: {profile.community.roles.length ? profile.community.roles.map(r => r.name).join(', ') : 'No roles assigned'}</p>
       </section>
-      <section style={card}><h3 style={{marginTop:0}}>🎂 Birthday & privacy</h3>
+      <section style={card}><h3 style={{marginTop:0}}>{E.BIRTHDAY} Birthday & privacy</h3>
         {!profile.birthdayEnabled ? <p>Birthdays are not enabled in this community.</p> : <form onSubmit={e => {e.preventDefault(); save('/birthday','PUT',birthday,'Birthday settings saved.');}} style={{display:'grid',gap:12}}>
           <p style={{color:'#a7b4c8',margin:0}}>Choose whether your birthday appears on the public birthday list, is announced, or includes your age.</p>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -69,7 +70,7 @@ export default function MemberCommunityProfile() {
           <div style={{display:'flex',gap:10,flexWrap:'wrap'}}><button disabled={busy} style={button}>Save birthday</button>{profile.birthday ? <button disabled={busy} type="button" style={{...button,background:'#334155'}} onClick={() => {if (window.confirm('Remove your birthday from this community?')) save('/birthday','DELETE',null,'Birthday removed.');}}>Remove birthday</button> : null}</div>
         </form>}
       </section>
-      <section style={card}><h3 style={{marginTop:0}}>🎭 Choose your roles</h3>
+      <section style={card}><h3 style={{marginTop:0}}>{E.ROLES} Choose your roles</h3>
         {!profile.groups.length ? <p>No standard self-selectable roles are currently available here.</p> : profile.groups.map(g => <div key={g.id} style={{borderTop:'1px solid #334155',padding:'14px 0'}}>
           <strong>{g.name}</strong>{g.description ? <p style={{color:'#a7b4c8'}}>{g.description}</p> : null}
           <div style={{display:'grid',gap:8,margin:'10px 0'}}>{g.options.map(o => <label key={o.id}><input type={g.selectionMode === 'single' ? 'radio' : 'checkbox'} name={'role-'+g.id} checked={(choices[g.id] || []).includes(o.id)} onChange={e => setChoices({...choices,[g.id]:g.selectionMode === 'single' ? [o.id] : e.target.checked ? [...(choices[g.id] || []),o.id] : (choices[g.id] || []).filter(x => x !== o.id)})} /> {o.emoji} {o.label}</label>)}</div>
@@ -77,7 +78,7 @@ export default function MemberCommunityProfile() {
           {g.allowRemove && (choices[g.id] || []).length ? <button disabled={busy} style={{...button,background:'#334155',marginLeft:8}} onClick={() => setChoices({...choices,[g.id]:[]})}>Clear selection</button> : null}
         </div>)}
       </section>
-      <section style={card}><h3 style={{marginTop:0}}>📺 Creator accounts</h3>
+      <section style={card}><h3 style={{marginTop:0}}>{E.TV} Creator accounts</h3>
         {profile.accounts.length ? profile.accounts.map((a,i) => <p key={i}><strong>{a.platform || 'Account'}</strong> · {a.username || 'Username unavailable'}{a.enabled ? '' : ' · Paused'}</p>) : <p>No creator accounts are connected in this community.</p>}
         <p style={{color:'#a7b4c8',fontSize:14}}>Manage creator accounts through Goliath’s /user Social Studio. A listed account is not necessarily verified.</p>
       </section>
