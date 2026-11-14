@@ -1,4 +1,5 @@
 import { goDashboard } from '../../services/dashboardPath.js';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient.js';
@@ -26,9 +27,9 @@ function card(theme, extra = {}) {
 }
 function envBadge(env = '') {
   const mode = String(env || '').toUpperCase();
-  if (mode === 'DEV') return '🔵 DEV';
-  if (mode === 'BETA') return '🟡 BETA';
-  if (mode === 'PRODUCTION') return '🟢 PROD';
+  if (mode === 'DEV') return `${E.ENV_DEV} DEV`;
+  if (mode === 'BETA') return `${E.ENV_BETA} BETA`;
+  if (mode === 'PRODUCTION') return `${E.ENV_PRODUCTION} PROD`;
   return '⚪ UNKNOWN';
 }
 function Stat({ theme, label, value, hint, accent = '#93c5fd' }) {
@@ -66,7 +67,7 @@ export default function OwnerOverview({ theme, currentUser }) {
   const stats = useMemo(() => { const result = { guilds: guilds.length, members: 0, connected: 0, missing: 0, dev: 0, beta: 0, production: 0 }; guilds.forEach((guild) => { result.members += Number(guild.memberCount || 0); if (connected(guild)) result.connected += 1; else result.missing += 1; const env = environment(guild); if (env === 'DEV') result.dev += 1; if (env === 'BETA') result.beta += 1; if (env === 'PRODUCTION') result.production += 1; }); return result; }, [guilds]);
   if (!isOwner) return <section style={card(viewTheme, { padding: 24 })}><h1 style={{ margin: '0 0 8px', fontSize: 26 }}>Owner View</h1><p style={{ margin: 0, color: viewTheme.mutedText }}>You do not have permission to view this page.</p></section>;
   return <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
-    <section style={card(viewTheme, { padding: 'clamp(18px, 2.4vw, 24px)', background: 'linear-gradient(135deg, rgba(59,130,246,0.18), rgba(15,23,42,0.06) 45%, rgba(168,85,247,0.12))' })}><p style={{ margin: '0 0 8px', color: '#93c5fd', fontWeight: 950, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Owner View</p><h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: '-0.04em', lineHeight: 1 }}>👑 Goliath Command Centre</h1><p style={{ margin: '10px 0 0', color: viewTheme.mutedText, lineHeight: 1.55, maxWidth: 820 }}>Platform-level operations across guilds, runtime environments, security, tickets, forms, translation, backups and deployments.</p></section>
+    <section style={card(viewTheme, { padding: 'clamp(18px, 2.4vw, 24px)', background: 'linear-gradient(135deg, rgba(59,130,246,0.18), rgba(15,23,42,0.06) 45%, rgba(168,85,247,0.12))' })}><p style={{ margin: '0 0 8px', color: '#93c5fd', fontWeight: 950, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Owner View</p><h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: '-0.04em', lineHeight: 1 }}>{E.CROWN} Goliath Command Centre</h1><p style={{ margin: '10px 0 0', color: viewTheme.mutedText, lineHeight: 1.55, maxWidth: 820 }}>Platform-level operations across guilds, runtime environments, security, tickets, forms, translation, backups and deployments.</p></section>
     {error ? <section style={card(viewTheme, { padding: 16, color: '#fca5a5' })}>{error}</section> : null}{loading ? <section style={card(viewTheme, { padding: 16, color: viewTheme.mutedText })}>Loading command centre...</section> : null}
     <OwnerCommandCentrePanel theme={viewTheme} guilds={guilds} runtime={runtimePayload || {}} realtimeEvents={[]} onOpenRoute={(route) => goDashboard(route)} />
     <OwnerAnalyticsPanel theme={viewTheme} guilds={guilds} runtime={runtimePayload || {}} />
