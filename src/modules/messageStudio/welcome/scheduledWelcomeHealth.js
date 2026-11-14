@@ -25,7 +25,6 @@ async function buildHealth(guild) {
   const permissions = channel && me ? channel.permissionsFor(me) : null;
 
   if (config.enabled && !parentEnabled) issues.push('Scheduled Welcome is enabled but the parent Welcome module is disabled.');
-  if (config.enabled && !config.queueRoleId) issues.push('Scheduled Welcome needs a queue role.');
   if (config.enabled && config.queueRoleId && !role) issues.push(`Queue role ${config.queueRoleId} no longer exists.`);
   if (config.enabled && !config.channelId) issues.push('Scheduled Welcome needs a destination channel.');
   if (config.enabled && config.channelId && !channel) issues.push(`Scheduled Welcome channel ${config.channelId} is unavailable.`);
@@ -49,7 +48,7 @@ async function buildHealth(guild) {
   }
   if (stuckMemberIds.length) warnings.push(`${stuckMemberIds.length} welcomed member(s) still have the queue role and need cleanup.`);
 
-  const waitingMembers = config.queueRoleId ? await scheduledWelcome.getWaitingMembers(guild) : [];
+  const waitingMembers = await scheduledWelcome.getWaitingMembers(guild);
   const templateBindingHealthy = !config.templateId
     ? !templateBinding
     : Boolean(template && templateBinding && boundTemplate && templateBinding.templateId === config.templateId);
@@ -60,6 +59,7 @@ async function buildHealth(guild) {
     issues,
     warnings,
     queueRoleId: config.queueRoleId,
+    queueMode: config.queueRoleId ? 'legacy_role' : 'persistent_members',
     queueRoleName: role?.name || null,
     channelId: config.channelId,
     channelName: channel?.name || null,
@@ -88,14 +88,18 @@ async function repair(guild, meta = {}) {
   if (config.channelId && !await scheduledWelcome.resolveChannel(guild, config.channelId)) patch.channelId = null;
   if (config.templateId && !embedTemplateManager.getTemplate(guild.id, config.templateId)) patch.templateId = null;
 
-  const remainingCompleted = [];
-  for (const memberId of config.completedMemberIds) {
-    const member = guild.members.cache.get(memberId) || await guild.members.fetch(memberId).catch(() => null);
-    if (!member || !member.roles?.cache?.has(config.queueRoleId)) continue;
-    const result = await queue.removeQueueRole(member, config.queueRoleId, 'Scheduled Welcome repair cleanup');
-    if (!result.removed && !result.skipped) remainingCompleted.push(memberId);
+  // Never clear role-free delivery checkpoints during repair: they are the
+  // only persistent evidence that a scheduled message was already delivered.
+  if (config.queueRoleId) {
+    const remainingCompleted = [];
+    for (const memberId of config.completedMemberIds) {
+      const member = guild.members.cache.get(memberId) || await guild.members.fetch(memberId).catch(() => null);
+      if (!member || !member.roles?.cache?.has(config.queueRoleId)) continue;
+      const result = await queue.removeQueueRole(member, config.queueRoleId, 'Scheduled Welcome repair cleanup');
+      if (!result.removed && !result.skipped) remainingCompleted.push(memberId);
+    }
+    patch.completedMemberIds = remainingCompleted;
   }
-  patch.completedMemberIds = remainingCompleted;
   config = scheduledWelcome.updateScheduledConfig(guild.id, patch, { ...meta, action: 'scheduled_welcome_repair' });
   scheduledWelcome.syncTemplateBinding(guild.id, config.templateId);
   return { before, config, health: await buildHealth(guild) };
