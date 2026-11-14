@@ -191,8 +191,10 @@ async function clearCompletedWithoutRole(guild, config) {
 }
 
 async function getWaitingMembers(guild) {
-  let config = getScheduledConfig(guild.id);
-  config = await clearCompletedWithoutRole(guild, config);
+  const config = getScheduledConfig(guild.id);
+  // A removed queue role does not undo a successful welcome. Keep the
+  // delivery checkpoint even if that role is later added again; a genuinely
+  // new membership is handled by the joinedAt comparison below.
   const completed = new Set(config.completedMemberIds);
   const members = await queue.getQueuedMembers(guild, config);
   // Scheduled delivery is independent of the queue mechanism, but members
