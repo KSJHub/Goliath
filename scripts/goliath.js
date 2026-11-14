@@ -3086,7 +3086,7 @@ function load(file, mocks, testExport = '') {
   const fixtureRequire = id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
     if ((file === base + 'investigationRooms.js' && id === '../../../guild/goliathNavigation')
-      || (file === 'src/events/client/sentinelControlCenter.js' && id === '../../core/guild/goliathNavigation')) return localRequire(id);
+      || (file === 'src/events/client/sentinelControlCenter.js' && id === '../../../core/guild/goliathNavigation')) return localRequire(id);
     if (id === 'discord.js' || id.startsWith('node:')) return localRequire(id);
     throw new Error(`Unmocked quarantine audit dependency: ${file} -> ${id}`);
   };
@@ -3228,10 +3228,10 @@ function fixture(snapshot = {}) {
   const noMutation = () => { throw Error('Legacy audit attempted a mutation'); };
   const verificationApi = load('src/modules/securityStudio/verification/verificationQuarantine.js', {
     './verificationStore': { getSession: () => session, getVerificationSection: () => ({ sessions: { [uid]: session } }), normalizeSettings: () => ({ roles: {} }), upsertSession: noMutation, addSecurityHistory: noMutation },
-    '../../core/guild/goliathNavigation': { navigationButton: (...args) => require(root + '/src/core/guild/goliathNavigation').navigationButton(...args) },
-    '../../core/guild/guildManager': { isModuleEnabled: () => true },
-    '../../core/security/protection/quarantine/state': stateApi,
-    '../../core/security/protection/quarantine': { ...f.api, quarantineMember: noMutation },
+    '../../../core/guild/goliathNavigation': { navigationButton: (...args) => require(root + '/src/core/guild/goliathNavigation').navigationButton(...args) },
+    '../../../core/guild/guildManager': { isModuleEnabled: () => true },
+    '../../../core/security/protection/quarantine/state': stateApi,
+    '../../../core/security/protection/quarantine': { ...f.api, quarantineMember: noMutation },
   });
   assert.equal((await verificationApi.ensureQuarantineCase(f.guild, f.member)).needsReview, true);
   for (const action of ['release', 'reject', 'escalate']) assert.equal((await verificationApi.resolveQuarantineCase(f.guild, uid, action, 'staff')).needsReview, true);
@@ -3275,10 +3275,10 @@ function fixture(snapshot = {}) {
       const api = load('src/modules/securityStudio/verification/verificationQuarantine.js', {
         './verificationStore': { getVerificationSection: () => section, getSession: () => section.sessions[uid], normalizeSettings: s => s,
           upsertSession: (g, u, patch) => Object.assign(section.sessions[u], patch), addSecurityHistory: () => {} },
-        '../../core/guild/goliathNavigation': { navigationButton: (...args) => require(root + '/src/core/guild/goliathNavigation').navigationButton(...args) },
-    '../../core/guild/guildManager': {}, '../../core/security/protection/quarantine/state': stateApi,
-        '../../core/security/protection/quarantine': engine,
-        '../../owner/auditIntelligence/auditStore': { getUser: () => ({ roleHistory: evidence }) },
+        '../../../core/guild/goliathNavigation': { navigationButton: (...args) => require(root + '/src/core/guild/goliathNavigation').navigationButton(...args) },
+    '../../../core/guild/guildManager': {}, '../../../core/security/protection/quarantine/state': stateApi,
+        '../../../core/security/protection/quarantine': engine,
+        '../../../owner/auditIntelligence/auditStore': { getUser: () => ({ roleHistory: evidence }) },
       });
       const result = await api.reconcileLegacyQuarantine(f.guild, input);
       assert.equal(locked, false); assert.equal(f.mutations.length, 0, 'Adoption must not grant or remove roles');
@@ -3323,7 +3323,7 @@ function fixture(snapshot = {}) {
     let calls = 0, outcome;
     const command = { id: 'test', action: 'legacy-quarantine-reconcile', guildId: 'guild', targetMode, requestedFrom, requestedBy, payload: { userId: uid } };
     const controls = load('src/events/client/sentinelControlCenter.js', {
-      '../../owner/auditIntelligence/auditStore': { runtimeMode: () => mode, getPendingRemoteCommands: () => [command], claimRemoteCommand: () => command, finishRemoteCommand: (id, result) => { outcome = result; } },
+      '../../../owner/auditIntelligence/auditStore': { runtimeMode: () => mode, getPendingRemoteCommands: () => [command], claimRemoteCommand: () => command, finishRemoteCommand: (id, result) => { outcome = result; } },
       '../../owner/sentinel/eventPipeline': {}, '../../core/security/protection/core': {},
       '../../modules/securityStudio/verification/verificationQuarantine': { reconcileLegacyQuarantine: async (guild, payload) => { calls++; assert.equal(payload.userId, uid); return { ok: true }; } },
     }, '\nmodule.exports.processRemote = processRemote;');
