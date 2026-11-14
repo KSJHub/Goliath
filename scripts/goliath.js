@@ -2444,6 +2444,7 @@ function welcomeEmbedDeliveryAudit() {
     const verificationContinuation = read('src/modules/securityStudio/verificationFlowContinuation.js');
     const verificationManager = read('src/modules/securityStudio/verificationManager.js');
     const scheduledQueue = read('src/modules/messageStudio/welcome/scheduledWelcomeQueue.js');
+    const memberEvents = read('src/events/members/memberJoinLeave.js');
     assert(welcome.includes('waitForVerification: false') && welcome.includes('waitForVerification: source.waitForVerification === true'),
       'Instant Welcome verification gating must be opt-in and persist through normalization.');
     assert(dashboard.includes('waitForVerification: e.target.checked') && route.includes("router.put('/:guildId/config'"),
@@ -2466,7 +2467,7 @@ function welcomeEmbedDeliveryAudit() {
       'Scheduled Welcome dashboard must allow role-free delivery.');
     
     // Delivery-failure regression contracts: public and DM attempts must remain independent.
-    const memberEvents = read('src/events/members/memberJoinLeave.js');
+
     assert(memberEvents.includes("name:'guildMemberAdd'") && memberEvents.includes('welcomeManager.sendWelcome(member)'), 'Member join must invoke the canonical Welcome sender.');
     assert(welcome.includes("reason: 'disabled'") && welcome.includes("reason: 'ignored_bot'"), 'Disabled Welcome and ignored bots must be skipped explicitly.');
     assert(welcome.includes('if (config.channelId && options.skipPublic !== true)'), 'Public delivery must honour the configured channel and skip flag.');
