@@ -30,6 +30,41 @@ function currentInvestigationWatch(guildId, userId) {
   return false;
 }
 
+// Keep the persistent report and its controls in sync with staff actions.
+async function refreshJoinReport(interaction, watched, cleared = false) {
+  const message = interaction.message;
+  if (!message?.edit || !message.embeds?.length) return;
+  const original = message.embeds[0];
+  if (!String(original.title || '').startsWith('🧠 Join Intelligence')) return;
+  const embed = EmbedBuilder.from(original);
+  const fields = (original.fields || []).map(field => ({ ...field }));
+  const risk = fields.find(field => field.name?.includes('Risk'));
+  if (risk) {
+    risk.value = String(risk.value).replace(/\nInvestigation Watch: \*\*(?:ON|OFF)\*\*/, '');
+    risk.value = (risk.value + '\nInvestigation Watch: **' + (watched ? 'ON' : 'OFF') + '**').slice(0, 1024);
+  }
+  embed.setFields(fields);
+  if (cleared) {
+    embed.setDescription(String(original.description || '').replace(/[^\n]*\*\*Decision: [^\n]+/, '🟢 **Decision: CLEAR**'));
+    embed.setColor(0x57F287);
+  }
+  const rows = (message.components || []).map(row => {
+    const data = typeof row.toJSON === 'function' ? row.toJSON() : row;
+    return new ActionRowBuilder().addComponents((data.components || []).map(button => {
+      const updated = ButtonBuilder.from(button);
+      if (String(button.custom_id || '').startsWith('joinintel:watch:')) {
+        updated.setLabel(watched ? 'Remove Watch' : 'Watch Member')
+          .setStyle(watched ? ButtonStyle.Danger : ButtonStyle.Secondary);
+      }
+      if (cleared && String(button.custom_id || '').startsWith('joinintel:clear:')) {
+        updated.setLabel('Marked Clear').setDisabled(true);
+      }
+      return updated;
+    }));
+  });
+  await message.edit({ embeds: [embed], components: rows, allowedMentions: { parse: [] } });
+}
+
 async function resolveTarget(interaction, userId) {
   return interaction.guild.members.cache.get(userId)
     || await interaction.guild.members.fetch(userId).catch(() => null);
@@ -138,6 +173,7 @@ module.exports = {
           allowedMentions: { parse: [] },
         });
         console.log(`[Join Intelligence] ${interaction.user.id} marked ${userId} clear in ${interaction.guild.id} (previous=${result.before?.decision || 'none'}).`);
+        await refreshJoinReport(interaction, currentInvestigationWatch(interaction.guild.id, userId), true).catch(error => console.error('[Join Intelligence] Report refresh failed:', error));
         return;
       }
 
@@ -156,22 +192,21 @@ module.exports = {
 
       if (action === 'watch') {
         const before = currentInvestigationWatch(interaction.guild.id, userId);
-        if (!before) {
-          recordModerationSystemEvent({
-            interaction,
-            event: 'moderation.member_scan.watch_updated',
-            action: 'member_watch',
-            targetId: userId,
-            before: { enabled: false },
-            after: { enabled: true, reason: 'Enabled from persistent Member Intelligence report.' },
-            metadata: { targetId: userId, source: 'join_intelligence_report' },
-          });
-        }
+        recordModerationSystemEvent({
+          interaction,
+          event: 'moderation.member_scan.watch_updated',
+          action: 'member_watch',
+          targetId: userId,
+          before: { enabled: before },
+          after: { enabled: !before, reason: 'Toggled from persistent Member Intelligence report.' },
+          metadata: { targetId: userId, source: 'join_intelligence_report' },
+        });
         await interaction.editReply({
           content: before
-            ? `👁️ ${target.user} is already on **Investigation Watch**.`
-            : `👁️ ${target.user} is now on **Investigation Watch**. The channel report has been left in place.`,
+            ? `👁️ ${target.user} has been **removed** from Investigation Watch.`
+            : `👁️ ${target.user} is now on **Investigation Watch**.`,
         });
+        await refreshJoinReport(interaction, !before).catch(error => console.error('[Join Intelligence] Report refresh failed:', error));
         return;
       }
 
