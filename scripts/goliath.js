@@ -2439,6 +2439,32 @@ function welcomeEmbedDeliveryAudit() {
     const dashboard = read('src/dashboard/js/pages/modules/Welcome.jsx');
     const route = read('src/server/routes/modules/messageStudio/welcome.js');
     
+    // Verification-aware onboarding regression contracts. These checks cover
+    // the existing production paths without introducing test infrastructure.
+    const verificationContinuation = read('src/modules/securityStudio/verificationFlowContinuation.js');
+    const verificationManager = read('src/modules/securityStudio/verificationManager.js');
+    const scheduledQueue = read('src/modules/messageStudio/welcome/scheduledWelcomeQueue.js');
+    assert(welcome.includes('waitForVerification: false') && welcome.includes('waitForVerification: source.waitForVerification === true'),
+      'Instant Welcome verification gating must be opt-in and persist through normalization.');
+    assert(dashboard.includes('waitForVerification: e.target.checked') && route.includes("router.put('/:guildId/config'"),
+      'Dashboard must save the verification gate through the existing Welcome API.');
+    assert(welcome.includes('deferredWelcomeInFlight.has(key)') && welcome.includes('deferredWelcomeInFlight.delete(key)'),
+      'Deferred Instant Welcome must prevent concurrent duplicate releases and clear the lock.');
+    assert(welcome.includes('skipPublic: pending.publicSent === true') && welcome.includes('skipDm: pending.dmSent === true'),
+      'Deferred Instant Welcome retries must skip successfully delivered destinations.');
+    assert(welcome.includes('welcome_deferred_partial_delivery') && welcome.includes('welcome_deferred_for_verification'),
+      'Deferred welcome progress must persist in the canonical Welcome section.');
+    assert(verificationContinuation.includes('releaseDeferredWelcome(confirmed)') && verificationManager.includes('releaseDeferredWelcome(confirmed)'),
+      'Both authorised verification completion paths must release deferred welcomes.');
+    assert(memberEvents.includes('releaseDeferredWelcome(newMember)') && memberEvents.includes('clearDeferredWelcome(member.guild.id,member.id)'),
+      'Member update must recover deferred welcomes and departure must clean them up.');
+    assert(scheduled.includes('completedMemberJoins') && scheduled.includes('deliveredJoin === joinedAt'),
+      'Scheduled Welcome must retain join-specific checkpoints for duplicate and rejoin protection.');
+    assert(scheduledQueue.includes('pendingMembers'),
+      'Scheduled Welcome must support the persistent member queue without a queue role.');
+    assert(dashboard.includes('WELCOME QUEUE ROLE (OPTIONAL)') && dashboard.includes('disabled={busy || !scheduled?.channelId}'),
+      'Scheduled Welcome dashboard must allow role-free delivery.');
+    
     // Delivery-failure regression contracts: public and DM attempts must remain independent.
     const memberEvents = read('src/events/members/memberJoinLeave.js');
     assert(memberEvents.includes("name:'guildMemberAdd'") && memberEvents.includes('welcomeManager.sendWelcome(member)'), 'Member join must invoke the canonical Welcome sender.');
