@@ -1,5 +1,5 @@
 'use strict';
-const { STORES, TYPES, safeUrl } = require('./freeGamesProviders');
+const { STORES, TYPES, safeUrl } = require('./gamesProviders');
 const NEW_MS = 24 * 3600_000;
 const ENDING_MS = 48 * 3600_000;
 const SECTIONS = [
@@ -135,7 +135,7 @@ module.exports = { NEW_MS, ENDING_MS, SECTIONS, PLATFORM_STYLE, platformPresenta
 
 
 function buildGameUpdate(subscription, item, options = {}) {
-  const { steamArtwork } = require('./freeGamesProviders');
+  const { steamArtwork } = require('./gamesProviders');
   const summary = escape(item.description).slice(0, subscription.detail === 'detailed' ? 3000 : 650);
   const embed = { author: { name: subscription.name.slice(0, 100), url: 'https://store.steampowered.com/app/' + subscription.appId + '/' },
     title: item.title.slice(0, 200), url: item.url, color: SECTIONS[2].color,

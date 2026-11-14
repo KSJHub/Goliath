@@ -4324,9 +4324,9 @@ return true;
 
 async function freeGamesAudit() {
   const assert = require('node:assert/strict');
-  const providers = require('../src/modules/utilityStudio/games/freeGamesProviders');
-  const embeds = require('../src/modules/utilityStudio/games/freeGamesEmbeds');
-  const store = require('../src/modules/utilityStudio/games/freeGames');
+  const providers = require('../src/modules/utilityStudio/games/gamesProviders');
+  const embeds = require('../src/modules/utilityStudio/games/gamesEmbeds');
+  const store = require('../src/modules/utilityStudio/games/games');
 
   const fs = require('node:fs');
   assert(fs.existsSync(root + '/src/modules/utilityStudio/games'), 'Canonical Games folder must exist.');
@@ -4372,9 +4372,9 @@ async function freeGamesAudit() {
         return new Map([['steam', { name: 'goliath_steam', id: emojiId }], ['epic', { name: 'goliath_epic', id: '123456789012345682' }]]);
       },
     };
-    const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/freeGamesEmbeds.js', 'utf8');
+    const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/gamesEmbeds.js', 'utf8');
     vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(
-      name => name === './freeGamesProviders' ? providers : emojiService, moduleFixture, moduleFixture.exports);
+      name => name === './gamesProviders' ? providers : emojiService, moduleFixture, moduleFixture.exports);
     const coldClient = { application: { emojis: { fetch: async () => { throw Error('Use the shared module'); }, cache: new Map() } } };
     const resolved = await moduleFixture.exports.loadPlatformPresentation(coldClient, 'fixture');
     assert.equal(loads, 1); assert.equal(resolved.steam.emoji, '<:goliath_steam:' + emojiId + '>');
@@ -4445,15 +4445,15 @@ async function freeGamesAudit() {
         getModuleSection: () => structuredClone(memory),
         updateModuleSection: (_id, _key, fn) => { memory = fn(structuredClone(memory)); writes++; return memory; },
       };
-      if (name === './freeGamesProviders') return { ...providers, getOffers: async () => ({ offers: panelOffers, fetchedAt: now }), getPricing: async () => config.pricing };
-      if (name === './freeGamesEmbeds') return embeds;
-      if (name === './freeGamesMonitor') return { withGuildLock: async (_id, task) => task(), validateDestination: async () => { sends++; } };
+      if (name === './gamesProviders') return { ...providers, getOffers: async () => ({ offers: panelOffers, fetchedAt: now }), getPricing: async () => config.pricing };
+      if (name === './gamesEmbeds') return embeds;
+      if (name === './gamesMonitor') return { withGuildLock: async (_id, task) => task(), validateDestination: async () => { sends++; } };
       if (name.endsWith('/security/protection/core')) return { isBotOwner: () => false };
       if (name.endsWith('/core/guild/goliathNavigation')) return require('../src/core/guild/goliathNavigation');
       if (name === 'discord.js') return require('discord.js');
       throw new Error('Unexpected Free Games panel dependency: ' + name);
     };
-    const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/freeGames.js', 'utf8');
+    const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/games.js', 'utf8');
     vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(injectedRequire, mod, mod.exports);
     const handler = mod.exports.handleAdminInteraction;
     const guildFixture = { id: 'fixture', client: {}, members: { fetch: async () => ({ permissions: { has: () => permitted } }) } };
@@ -4528,7 +4528,7 @@ async function freeGamesAudit() {
         assert(String(url).includes('sort-by=popularity'));
         return { status: 200, json: async () => [12, 11].map(id => ({ id, title: 'Main ' + id, type: 'Game', status: 'Active', platforms: 'Steam', gamerpower_url: 'https://www.gamerpower.com/offer/' + id, image: 'https://www.gamerpower.com/game.jpg', worth: '$10.00' })) };
       };
-      const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/freeGamesProviders.js', 'utf8');
+      const source = fs.readFileSync(root + '/src/modules/utilityStudio/games/gamesProviders.js', 'utf8');
       vm.runInThisContext('(function(require,module,exports){' + source + '\n})')(require, moduleFixture, moduleFixture.exports);
       const ranked = await moduleFixture.exports.getOffers();
       assert.deepEqual(ranked.offers.map(item => [item.id, item.popularityRank]), [['gamerpower:12', 0], ['gamerpower:11', 1]]);
@@ -4545,7 +4545,7 @@ async function freeGamesAudit() {
     assert.equal(failed.mode, 'unavailable'); assert(failed.warning);
     assert.equal((await providers.getPricing({ ...config, priceMode: 'hidden' })).mode, 'hidden');
   } finally { global.fetch = savedFetch; }
-  const monitor = require('../src/modules/utilityStudio/games/freeGamesMonitor');
+  const monitor = require('../src/modules/utilityStudio/games/gamesMonitor');
   const originals = { getConfig: store.getConfig, update: store.update, getOffers: providers.getOffers, getPricing: providers.getPricing };
   let state = { ...structuredClone(config), enabled: true, channelId: '123456789012345678', alerts: true, roleId: null };
   let feedOffers = [offer];
@@ -4593,7 +4593,7 @@ async function freeGamesAudit() {
   const express = require('express');
   const http = require('node:http');
   const { once } = require('node:events');
-  const routePath = require.resolve('../src/server/routes/modules/utilityStudio/freeGames');
+  const routePath = require.resolve('../src/server/routes/modules/utilityStudio/games');
   const priorRoute = require.cache[routePath];
   let server;
   const priorConfig = store.getConfig;
@@ -4709,7 +4709,7 @@ function selectSteamCatalogueAuditBatch(catalogue, requested, offsetArg) {
 }
 
 async function gameCatalogueIdentityAudit() {
-  const { UPDATE_CATALOG, inspectSteamGameIdentity } = require('../src/modules/utilityStudio/games/freeGamesProviders');
+  const { UPDATE_CATALOG, inspectSteamGameIdentity } = require('../src/modules/utilityStudio/games/gamesProviders');
   const { offset, games } = selectSteamCatalogueAuditBatch(UPDATE_CATALOG, process.argv[3], process.argv[4]);
   const totals = { match: 0, 'name-mismatch': 0, 'not-found': 0, unavailable: 0, unlisted: 0, 'non-game': 0 };
   const issues = [], expectedLegacy = [], unverifiedLegacy = [];
@@ -4769,7 +4769,7 @@ async function gameUpdatesAudit() {
     if (modules[name]) return modules[name].exports;
     const module = { exports: {} }; modules[name] = module;
     const localRequire = id => {
-      if (id.startsWith('./freeGames')) return load(id.slice(2));
+      if (id.startsWith('./games')) return load(id.slice(2));
       if (id.includes('moduleSectionManager')) return section;
       if (id.includes('guildManager')) return { isModuleEnabled: () => memory.enabled };
       if (id.endsWith('/core/guild/goliathNavigation')) return require('../src/core/guild/goliathNavigation');
@@ -4781,8 +4781,8 @@ async function gameUpdatesAudit() {
     new Function('require', 'module', 'exports', fs.readFileSync(directory + name + '.js', 'utf8'))(localRequire, module, module.exports);
     return module.exports;
   }
-  const providers = load('freeGamesProviders'), store = load('freeGames'), embeds = load('freeGamesEmbeds');
-  let monitor = load('freeGamesMonitor');
+  const providers = load('gamesProviders'), store = load('games'), embeds = load('gamesEmbeds');
+  let monitor = load('gamesMonitor');
   // Catalogue regression: IDs are unique, publisher entries remain discovery-only,
   // and source checks cannot silently turn into subscriptions.
   assert(providers.UPDATE_CATALOG.length >= 189, 'Steam catalogue unexpectedly shrank below validated baseline');
@@ -4941,7 +4941,7 @@ async function gameUpdatesAudit() {
   feed = [makeItem(101), ...feed];
   await Promise.all([monitor.processGameUpdates(guild), monitor.processGameUpdates(guild)]);
   assert.equal(sent.length, 1); assert.deepEqual(sent[0].allowedMentions.roles, [roleId]); assert.equal(memory.enabled, false, 'Game Updates works independently of free-offer delivery.');
-  delete modules.freeGamesMonitor; monitor = load('freeGamesMonitor');
+  delete modules.gamesMonitor; monitor = load('gamesMonitor');
   await monitor.processGameUpdates(guild); assert.equal(sent.length, 1, 'Persistent state prevents reposting after restart.');
   const beforePreview = JSON.stringify(memory); await monitor.previewGameUpdate(guild, '730'); assert.equal(JSON.stringify(memory), beforePreview);
   assert((await monitor.sendLatestGameUpdate(guild, '730')).alreadyDelivered); assert.equal(sent.length, 1);
@@ -4995,7 +4995,7 @@ async function gameUpdatesAudit() {
   // not proof of non-delivery. Hold it for review rather than risk a duplicate post.
   const uncertain = makeItem(1051);
   store.updateGameUpdates(guild.id, state => { const sub = state.subscriptions['730']; return { ...state, subscriptions: { ...state.subscriptions, '730': { ...sub, seenIds: [uncertain.id, ...sub.seenIds], pending: [{ item: uncertain, status: 'dispatching' }] } } }; });
-  delete modules.freeGamesMonitor; monitor = load('freeGamesMonitor');
+  delete modules.gamesMonitor; monitor = load('gamesMonitor');
   await monitor.processGameUpdates(guild);
   assert.equal(sent.length, 4, 'Restart must not resend an unconfirmed dispatch absent from channel history.');
   assert.equal(store.getGameUpdates(guild.id).subscriptions['730'].pending[0].status, 'ambiguous');

@@ -88,7 +88,7 @@ const automationRoutes = route('automation routes', './src/server/routes/automat
 const notificationRoutes = route('notification routes', './src/server/routes/notifications');
 const activityRoutes = route('activity routes', './src/server/routes/activity');
 const pollsRoutes = route('polls routes', './src/server/routes/modules/communityStudio/polls');
-const freeGamesRoutes = route('free games routes', './src/server/routes/modules/utilityStudio/freeGames');
+const freeGamesRoutes = route('free games routes', './src/server/routes/modules/utilityStudio/games');
 const statsRoutes = route('stats routes', './src/server/routes/modules/utilityStudio/stats');
 const tempVoiceRoutes = route('temp voice routes', './src/server/routes/modules/utilityStudio/tempVoice');
 const starboardRoutes = route('starboard routes', './src/server/routes/modules/messageStudio/starboard');
@@ -243,7 +243,7 @@ async function startConfiguredModules(client) {
       return require('./src/modules/roleStudio/reactionRoles/reactionRoles').startup({ guilds: { cache: enabledGuilds } });
     }),
     runStartupTask('Verification', () => require('./src/modules/securityStudio/verification/verification').startupVerification(client)),
-    runStartupTask('Games', () => require('./src/modules/utilityStudio/games/freeGamesMonitor').startup(client)),
+    runStartupTask('Games', () => require('./src/modules/utilityStudio/games/gamesMonitor').startup(client)),
     runStartupTask('Stats', () => require('./src/modules/utilityStudio/stats/stats').startup(client)),
     runStartupTask('Birthdays', async () => {
       const birthdays = require('./src/modules/communityStudio/birthdays/birthdays');
@@ -278,7 +278,7 @@ async function gracefulShutdown(signal) {
   console.log(`[Runtime] ${signal} received. Shutting down cleanly.`);
   const forceTimer = setTimeout(() => process.exit(0), 8000);
   forceTimer.unref?.();
-  try { require('./src/modules/utilityStudio/games/freeGamesMonitor').shutdown(client); }
+  try { require('./src/modules/utilityStudio/games/gamesMonitor').shutdown(client); }
   catch (error) { console.warn('[Free Games] Shutdown failed:', error.message); }
   try { require('./src/modules/utilityStudio/stats/stats').shutdown(client); }
   catch (error) { console.error('[Stats] Shutdown failed:', error?.stack || error?.message || error); }

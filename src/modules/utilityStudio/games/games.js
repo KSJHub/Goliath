@@ -1,7 +1,7 @@
 'use strict';
 const guildManager = require('../../../core/guild/guildManager');
 const { getModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
-const { STORES, TYPES, CURRENCIES } = require('./freeGamesProviders');
+const { STORES, TYPES, CURRENCIES } = require('./gamesProviders');
 // Keep the established section key so the Games rename preserves all guild data and authority bindings.
 const MODULE_KEY = 'freeGames';
 const MODULE_NAME = 'Games';
@@ -134,7 +134,7 @@ function choiceMenu(action, placeholder, choices, selected = [], multi = false) 
 }
 function statusTime(value) { return value ? '<t:' + Math.floor(value / 1000) + ':f>' : 'Never'; }
 function buildAdminPanel(guild, page = 'home', notice = '', c = getConfig(guild.id)) {
-  const { escape, SECTIONS } = require('./freeGamesEmbeds');
+  const { escape, SECTIONS } = require('./gamesEmbeds');
   const back = gamesNavigation(page === 'home' ? 'studio' : page === 'settings' ? 'home' : 'settings', 'settings');
   const nav = componentRow(panelButton('delivery', '📨 Delivery'), panelButton('filters', '🎮 Offers'),
     panelButton('pricing', '💱 Currency'), panelButton('display', '🎨 Display'));
@@ -271,8 +271,8 @@ function regionalModal(guild, c = getConfig(guild.id)) {
 
 async function buildFeaturedPanel(guild, requestedPage = 0, notice = '') {
   const c = getConfig(guild.id);
-  const { getOffers } = require('./freeGamesProviders');
-  const { featuredCandidates, selectFeaturedOffer, shortTitle, escape } = require('./freeGamesEmbeds');
+  const { getOffers } = require('./gamesProviders');
+  const { featuredCandidates, selectFeaturedOffer, shortTitle, escape } = require('./gamesEmbeds');
   const feed = await getOffers();
   const offers = filterOffers(feed.offers, c);
   const candidates = featuredCandidates(offers, c);
@@ -296,7 +296,7 @@ async function buildFeaturedPanel(guild, requestedPage = 0, notice = '') {
 }
 
 async function applySettings(guild, patch) {
-  const monitor = require('./freeGamesMonitor');
+  const monitor = require('./gamesMonitor');
   return monitor.withGuildLock(guild.id, async () => {
     const previous = getConfig(guild.id);
     const changes = validateSettings(patch, previous);
@@ -336,8 +336,8 @@ async function handleAdminInteraction(interaction) {
     if (/^featured:\d+$/.test(action)) { await reply(await buildFeaturedPanel(guild, Number(action.split(':')[1]))); return true; }
     if (['home', 'settings', 'health', 'delivery', 'filters', 'pricing', 'display'].includes(action) || /^route:\d{16,20}$/.test(action)) { await reply(buildAdminPanel(guild, action)); return true; }
     if (/^preview:\d+$/.test(action)) {
-      const { getOffers, getPricing } = require('./freeGamesProviders');
-      const { buildListing, loadPlatformPresentation } = require('./freeGamesEmbeds');
+      const { getOffers, getPricing } = require('./gamesProviders');
+      const { buildListing, loadPlatformPresentation } = require('./gamesEmbeds');
       const c = getConfig(guild.id);
       const feed = await getOffers();
       const pricing = await getPricing(c);
@@ -350,7 +350,7 @@ async function handleAdminInteraction(interaction) {
       return true;
     }
     if (action === 'refresh') {
-      const result = await require('./freeGamesMonitor').processGuild(guild);
+      const result = await require('./gamesMonitor').processGuild(guild);
       await reply(buildAdminPanel(guild, 'home', result.skipped ? 'Updates are paused.' : 'Listing refreshed.'));
       return true;
     }
@@ -402,7 +402,7 @@ async function handleAdminInteraction(interaction) {
       page = ['stores', 'types'].includes(action) ? 'filters' : action === 'priceMode' ? 'pricing' : 'display';
     } else if (['enabled', 'alerts'].includes(action) && interaction.isButton?.()) {
       // Read the latest value inside the delivery lock so concurrent toggles cannot overwrite each other.
-      const monitor = require('./freeGamesMonitor');
+      const monitor = require('./gamesMonitor');
       await monitor.withGuildLock(guild.id, async () => {
         const current = getConfig(guild.id), changes = validateSettings({ [action]: !current[action] }, current);
         const next = { ...current, ...changes };
@@ -418,7 +418,7 @@ async function handleAdminInteraction(interaction) {
     if (action.startsWith('featured')) { await reply(await buildFeaturedPanel(guild, 0, 'Settings saved.')); return true; }
     await reply(buildAdminPanel(guild, page, 'Settings saved. The listing updates within five minutes.'));
   } catch (error) {
-    const { escape } = require('./freeGamesEmbeds');
+    const { escape } = require('./gamesEmbeds');
     if (modalOpen && !interaction.deferred && !interaction.replied) await interaction.reply({ content: escape(error.message).slice(0, 1500), flags: 64, allowedMentions: { parse: [] } });
     else if (guild) await reply(buildAdminPanel(guild, 'home', 'Unable to apply change: ' + error.message));
     else await reply({ content: 'Open Free Games inside a server.', embeds: [], components: [] });
@@ -483,7 +483,7 @@ function effectiveUpdateDestinations(subscription) {
       : [];
 }
 function normalizeUpdateSubscription(input, previous = {}) {
-  const { steamAppId, UPDATE_CATALOG } = require('./freeGamesProviders');
+  const { steamAppId, UPDATE_CATALOG } = require('./gamesProviders');
   const appId = steamAppId(input.appId || previous.appId);
   const next = { appId, name: UPDATE_CATALOG.find(game => game.appId === appId)?.name || 'Steam game ' + appId,
     channelId: null, roleId: null, enabled: false, filter: 'patches', artwork: 'banner', detail: 'compact', includeWords: [], excludeWords: [],
@@ -528,7 +528,7 @@ function visibleSteamUpdateCatalog(catalogue, subscriptions = {}) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 function buildUpdatesPanel(guild, page = 0, notice = '') {
-  const config = getGameUpdates(guild.id), { escape, SECTIONS } = require('./freeGamesEmbeds');
+  const config = getGameUpdates(guild.id), { escape, SECTIONS } = require('./gamesEmbeds');
   const subscriptions = Object.values(config.subscriptions).sort((a, b) => a.name.localeCompare(b.name));
   const pages = Math.max(1, Math.ceil(subscriptions.length / 25)); page = Math.min(Math.max(0, Number(page) || 0), pages - 1);
   const embed = { title: '📰 Games · Game Updates', color: SECTIONS[2].color,
@@ -548,7 +548,7 @@ function buildUpdatesPanel(guild, page = 0, notice = '') {
 function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
   const sub = getGameUpdates(guild.id).subscriptions[appId];
   if (!sub) return buildUpdatesPanel(guild, 0, 'Game subscription no longer exists.');
-  const { escape, SECTIONS } = require('./freeGamesEmbeds');
+  const { escape, SECTIONS } = require('./gamesEmbeds');
   const heldCount = sub.pending.filter(entry => entry.status === 'ambiguous' || entry.status === 'dispatching').length;
   const updateRoutes = effectiveUpdateDestinations(sub);
   const queuedCount = sub.pending.length - heldCount;
@@ -580,7 +580,7 @@ function buildUpdateSubscriptionPanel(guild, appId, notice = '', more = false) {
 }
 function buildGameUpdateHistoryPanel(guild, page = 0, status = 'all') {
   const config = getGameUpdates(guild.id);
-  const { escape, SECTIONS } = require('./freeGamesEmbeds');
+  const { escape, SECTIONS } = require('./gamesEmbeds');
   const statuses = ['all', 'delivered', 'recovered', 'failed', 'needs_review'];
   if (!statuses.includes(status)) status = 'all';
   const records = (config.history || []).filter(record => status === 'all' || record.status === status);
@@ -607,7 +607,7 @@ function buildGameUpdateHistoryPanel(guild, page = 0, status = 'all') {
   ] };
 }
 async function handleGameUpdatesInteraction(i, action, reply) {
-  const guild = i.guild, monitor = require('./freeGamesMonitor'), providers = require('./freeGamesProviders');
+  const guild = i.guild, monitor = require('./gamesMonitor'), providers = require('./gamesProviders');
   const [kind, argument] = action.split(':');
   if (kind === 'home') { await reply(buildUpdatesPanel(guild, Number(argument || 0))); return true; }
   if (kind === 'history') { const [, page, status] = action.split(':'); await reply(buildGameUpdateHistoryPanel(guild, page || 0, status || 'all')); return true; }

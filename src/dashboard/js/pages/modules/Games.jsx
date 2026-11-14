@@ -6,7 +6,7 @@ import { ChannelSelect, RoleSelect, DiscordResourceSelect } from '../../ui/Disco
 
 function stamp(value, config = {}) { return value ? new Date(value).toLocaleString(config.locale || 'en-GB', { timeZone: config.timeZone || 'Europe/London' }) : 'Never'; }
 const blankUpdate = () => ({ appId: '', name: '', channelId: null, roleId: null, enabled: true, filter: 'patches', artwork: 'banner', detail: 'compact', includeWords: '', excludeWords: '' });
-export default function FreeGames({ theme, selectedGuild, selectedGuildData }) {
+export default function Games({ theme, selectedGuild, selectedGuildData }) {
   const guildId = String(selectedGuildData?.guildId || selectedGuildData?.id || selectedGuild || '').split(':').pop();
   const generation = useRef(0);
   const [data, setData] = useState(null);

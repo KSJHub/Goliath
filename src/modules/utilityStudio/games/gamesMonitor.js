@@ -1,9 +1,9 @@
 'use strict';
 const { createHash } = require('node:crypto');
 const { PermissionFlagsBits: P } = require('discord.js');
-const store = require('./freeGames');
-const providers = require('./freeGamesProviders');
-const { buildListing, SECTIONS, line, loadPlatformPresentation } = require('./freeGamesEmbeds');
+const store = require('./games');
+const providers = require('./gamesProviders');
+const { buildListing, SECTIONS, line, loadPlatformPresentation } = require('./gamesEmbeds');
 const locks = new Map();
 const timers = new WeakMap();
 const TICK_MS = 5 * 60_000;
@@ -382,7 +382,7 @@ async function flushGameUpdates(guild, appId, manual = false, onlyIds = null) {
       }
       changeRoute(guild.id, appId, entry.item.id, route.channelId, { status: 'dispatching' });
       try {
-        const payload = require('./freeGamesEmbeds').buildGameUpdate({ ...subscription, roleId: route.roleId }, entry.item, { suppressMention: entry.suppressMention });
+        const payload = require('./gamesEmbeds').buildGameUpdate({ ...subscription, roleId: route.roleId }, entry.item, { suppressMention: entry.suppressMention });
         const sent = await channel.send({ ...payload, nonce: hash(['game-update', guild.id, appId, route.channelId, entry.item.id]).slice(0, 24), enforceNonce: true });
         changeRoute(guild.id, appId, entry.item.id, route.channelId, { status: 'delivered', messageId: sent.id });
         journalUpdateDelivery(guild.id, appId, route.channelId, entry.item, 'delivered', sent.id);
@@ -430,7 +430,7 @@ async function previewGameUpdate(guild, appId) {
   const feed = await providers.getGameNews(appId);
   const item = feed.items.find(item => store.matchesGameUpdate(item, subscription));
   if (!item) throw new Error('No matching publisher announcement is currently available.');
-  return { item, payload: require('./freeGamesEmbeds').buildGameUpdate(subscription, item, { suppressMention: true }) };
+  return { item, payload: require('./gamesEmbeds').buildGameUpdate(subscription, item, { suppressMention: true }) };
 }
 async function sendLatestGameUpdate(guild, appId) {
   return withGuildLock(guild.id, async () => {

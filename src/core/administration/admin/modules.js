@@ -283,7 +283,7 @@ async function handleModuleAdminInteraction(interaction) {
     return safeUpdate(interaction, buildStudioPanel(studio[1], name));
   }
   if (id.startsWith('admin:module:freeGames:')) {
-    return require('../../../modules/utilityStudio/games/freeGames').handleAdminInteraction(interaction);
+    return require('../../../modules/utilityStudio/games/games').handleAdminInteraction(interaction);
   }
   if (id.startsWith('admin:module:emojis:')) {
     const emojiPanel = require('../../../modules/utilityStudio/emojis/emojisPanel');

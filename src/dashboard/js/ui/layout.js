@@ -36,7 +36,7 @@ const Translation = lazy(() => import('../pages/modules/Translation'));
 const ReactionRoles = lazy(() => import('../pages/modules/ReactionRoles'));
 const Leveling = lazy(() => import('../pages/modules/Leveling'));
 const Polls = lazy(() => import('../pages/modules/Polls'));
-const FreeGames = lazy(() => import('../pages/modules/FreeGames'));
+const FreeGames = lazy(() => import('../pages/modules/Games'));
 const Stats = lazy(() => import('../pages/modules/Stats'));
 const Restore = lazy(() => import('../pages/security/Restore'));
 const Security = lazy(() => import('../pages/security/Security'));
