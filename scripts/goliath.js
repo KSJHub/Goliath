@@ -1145,8 +1145,11 @@ async function verificationLifecycleAudit() {
         ${quarantineSource}
         return{complete,quarantineVerificationMember};
       })(id=>{
-        assert.equal(id,'../../core/security/protection/quarantine');
-        return sharedQuarantine;
+        if(id==='../../../core/security/protection/quarantine')return sharedQuarantine;
+        if(id==='../../roleStudio/autoRoles/autoRoles')return{releaseDeferredJoinRoles:async()=>true};
+        if(id==='../../communityStudio/invites/invites')return{releaseDeferredInviteRoles:async()=>true};
+        if(id==='../../messageStudio/welcome/welcome')return{releaseDeferredWelcome:async()=>true};
+        assert.fail('Unexpected Verification integration dependency: '+id);
       });
       const watchdog=setTimeout(()=>{console.error('Verification integration did not finish');process.exit(1);},4000);
       (async()=>{
