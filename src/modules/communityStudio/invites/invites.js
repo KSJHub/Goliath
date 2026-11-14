@@ -312,7 +312,10 @@ async function releaseDeferredInviteRoles(member, meta = {}) {
   }
   updateSection(guildId, section => {
     const deferredInviteRoles = { ...(section.deferredInviteRoles || {}) };
-    if (failed.length) deferredInviteRoles[member.id] = { ...pending, roleIds: failed };
+    const current = deferredInviteRoles[member.id];
+    // Ignore completion from an older membership after a leave/rejoin.
+    if (!current || current.joinedAt !== pending.joinedAt) return section;
+    if (failed.length) deferredInviteRoles[member.id] = { ...current, roleIds: failed };
     else delete deferredInviteRoles[member.id];
     return { ...section, deferredInviteRoles, members: {
       ...section.members,
@@ -321,10 +324,12 @@ async function releaseDeferredInviteRoles(member, meta = {}) {
   }, meta);
   return { granted, failed };
 }
-function clearDeferredInviteRoles(guildId, memberId, meta = {}) {
-  if (!getSection(guildId).deferredInviteRoles?.[memberId]) return false;
+function clearDeferredInviteRoles(guildId, memberId, meta = {}, expectedJoinedAt = undefined) {
+  const pending = getSection(guildId).deferredInviteRoles?.[memberId];
+  if (!pending || (expectedJoinedAt !== undefined && pending.joinedAt !== expectedJoinedAt)) return false;
   updateSection(guildId, section => {
     const deferredInviteRoles = { ...(section.deferredInviteRoles || {}) };
+    if (!deferredInviteRoles[memberId] || (expectedJoinedAt !== undefined && deferredInviteRoles[memberId].joinedAt !== expectedJoinedAt)) return section;
     delete deferredInviteRoles[memberId];
     return { ...section, deferredInviteRoles };
   }, meta);
