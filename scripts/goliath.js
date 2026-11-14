@@ -749,11 +749,11 @@ async function verificationAnswerAudit() {
   }
   let data = null, numbers = [];
   const store = load('src/modules/securityStudio/verification/verificationStore.js', {
-    '../../core/guild/moduleSectionManager': {
+    '../../../core/guild/moduleSectionManager': {
       getModuleSection: (guild, name, fallback) => clone(data || fallback),
       saveModuleSection: (guild, name, value) => { data = clone(value); return clone(data); },
       updateModuleSection: (guild, name, update, fallback) => { data = clone(update(clone(data || fallback))); return clone(data); },
-    }, '../../core/guild/guildManager': {},
+    }, '../../../core/guild/guildManager': {},
   });
   const challenges = load('src/modules/securityStudio/verification/verificationChallenges.js', { './verificationStore': store, crypto: { ...crypto, randomInt: (min, max) => numbers.length ? numbers.shift() : crypto.randomInt(min, max) } });
   const runtime = () => load('src/modules/securityStudio/verification/verificationChallengeRuntime.js', { './verificationChallenges': challenges, './verificationStore': store });
@@ -812,7 +812,7 @@ async function verificationAnswerAudit() {
   assert.deepEqual(data.securityHistory[user], historyBefore);
   const replies = [];
   let failureCalls = 0;
-  const interactions = load('src/modules/securityStudio/verification/verificationChallengeInteractions.js', { '../../core/guild/guildManager': { isModuleEnabled: () => true }, './verificationChallengeRuntime': runtime(), './verificationStore': store });
+  const interactions = load('src/modules/securityStudio/verification/verificationChallengeInteractions.js', { '../../../core/guild/guildManager': { isModuleEnabled: () => true }, './verificationChallengeRuntime': runtime(), './verificationStore': store });
   await interactions.handleVerificationChallengeInteraction({
     customId: `verify:answer:${user}:${challenge.challengeId}`, guildId: guild, user: { id: user },
     isModalSubmit: () => true, fields: { getTextInputValue: () => '72' }, reply: async payload => replies.push(payload),
