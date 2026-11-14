@@ -276,6 +276,10 @@ async function verifyTikTokWideImage(message,account,event,expectedEmbed=null) {
   const latest=await message.channel.messages.fetch(message.id,{force:true});
   const live=String(event.type).toLowerCase()==='live';
   const actual=latest.embeds?.[0], image=actual?.image;
+  if(live && (String(actual?.footer?.text||'').includes('OFFLINE') || String(actual?.description||'').includes('STREAM ENDED'))) {
+    console.info('[Social Studio] TikTok LIVE layout recheck skipped: message now ENDED',message.id);
+    return;
+  }
   const hasWideImage=Boolean(image && Number(image.width)>=900 && Number(image.height)>=500 && Number(image.width)/Math.max(1,Number(image.height))>=1.7);
   const expected=expectedEmbed?.toJSON?.()||null;
   const fields=actual?.fields||[];
@@ -286,7 +290,12 @@ async function verifyTikTokWideImage(message,account,event,expectedEmbed=null) {
   if(!expected) {console.error('[Social Studio] TikTok LIVE layout mismatch; expected embed unavailable',message.id);return;}
   console.warn('[Social Studio] TikTok LIVE layout mismatch; rebuilding delivered card',message.id);
   const media=await socialWideMediaPayload(account,event,EmbedBuilder.from(expected),latest);
-  await latest.edit({embeds:[media.embed],files:media.files,attachments:[]});
+  const beforeEdit=await latest.channel.messages.fetch(latest.id,{force:true});
+  if(live && (String(beforeEdit.embeds?.[0]?.footer?.text||'').includes('OFFLINE') || String(beforeEdit.embeds?.[0]?.description||'').includes('STREAM ENDED'))) {
+    console.info('[Social Studio] TikTok LIVE repair cancelled: stream ended during image rebuild',message.id);
+    return;
+  }
+  await beforeEdit.edit({embeds:[media.embed],files:media.files,attachments:[]});
   const verified=await latest.channel.messages.fetch(latest.id,{force:true});
   const repaired=verified.embeds?.[0],repairedImage=repaired?.image;
   const repairedWide=Boolean(repairedImage&&Number(repairedImage.width)>=900&&Number(repairedImage.height)>=500&&Number(repairedImage.width)/Math.max(1,Number(repairedImage.height))>=1.7);
