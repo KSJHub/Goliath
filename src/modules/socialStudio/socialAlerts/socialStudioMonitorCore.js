@@ -283,9 +283,10 @@ async function verifyTikTokWideImage(message,account,event,expectedEmbed=null) {
   const hasWideImage=Boolean(image && Number(image.width)>=900 && Number(image.height)>=500 && Number(image.width)/Math.max(1,Number(image.height))>=1.7);
   const expected=expectedEmbed?.toJSON?.()||null;
   const fields=actual?.fields||[];
-  const layoutCorrect=!live||(fields.length>=6&&!actual?.thumbnail);
+  const requiredLiveFields=['TikTok','Started','Language','Viewers','Live For','Status'];
+  const layoutCorrect=!live||(requiredLiveFields.every(name=>fields.some(field=>String(field.name||'').includes(name)))&&!actual?.thumbnail);
   const imageIsOurs=!live||String(image?.url||'').includes('goliath-tiktok-live-wide.jpg');
-  if(live) console.info('[Social Studio] TikTok LIVE delivered layout',message.id,JSON.stringify({wide:hasWideImage,width:image?.width||null,height:image?.height||null,fields:fields.map(field=>field.name),thumbnail:Boolean(actual?.thumbnail),imageIsOurs,imageUrl:image?.url||null,expectedFields:expected?.fields?.length||null}));
+  if(live) console.info('[Social Studio] TikTok LIVE delivered layout',message.id,JSON.stringify({mode:process.env.BOT_MODE||'unknown',pid:process.pid,wide:hasWideImage,width:image?.width||null,height:image?.height||null,fields:fields.map(field=>field.name),thumbnail:Boolean(actual?.thumbnail),imageIsOurs,imageUrl:image?.url||null,expectedFields:expected?.fields?.length||null}));
   if(hasWideImage&&layoutCorrect&&imageIsOurs) return;
   if(!expected) {console.error('[Social Studio] TikTok LIVE layout mismatch; expected embed unavailable',message.id);return;}
   console.warn('[Social Studio] TikTok LIVE layout mismatch; rebuilding delivered card',message.id);
@@ -409,8 +410,9 @@ async function checkGuildAccounts(client,guildId,options={}) {
         // Periodically enforce the approved TikTok LIVE card even between full
       // refreshes. Another editor may replace the embed after delivery.
       if(sameActiveBroadcast&&String(account.platform||'').toLowerCase()==='tiktok'){
-        const lastAudit=Date.parse(String(previous.lastTikTokLiveLayoutAuditAt||''));
-        if(!Number.isFinite(lastAudit)||Date.now()-lastAudit>=120000){
+        // Audit on every monitor cycle: a different writer can revert the
+        // Discord embed immediately after the normal refresh.
+        {
           state.lastTikTokLiveLayoutAuditAt=now();
           try {
             const tracked=await trackedMessage(client,guildId,{...previous,...state});
