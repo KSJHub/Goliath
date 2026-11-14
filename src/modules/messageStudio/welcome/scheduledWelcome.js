@@ -154,7 +154,10 @@ function dequeueScheduledMember(guildId, memberId, departedJoinedAt = null) {
   const pending = config.pendingMembers[memberId];
   if (!pending) return false;
   // A delayed leave event must not remove the queue entry for a newer join.
-  if (departedJoinedAt && pending.joinedAt && pending.joinedAt !== departedJoinedAt) return false;
+  // A missing departure timestamp cannot prove this queue entry belongs to
+  // the departed membership. Keep timestamped entries rather than deleting
+  // a newer join's pending welcome after an out-of-order leave event.
+  if (pending.joinedAt && (!departedJoinedAt || pending.joinedAt !== departedJoinedAt)) return false;
   const pendingMembers = { ...config.pendingMembers };
   delete pendingMembers[memberId];
   updateScheduledConfig(guildId, { pendingMembers }, { action: 'scheduled_welcome_member_left' });
