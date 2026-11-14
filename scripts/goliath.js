@@ -1104,16 +1104,17 @@ async function verificationLifecycleAudit() {
       const fetchRoles=async(guild,ids)=>ids.map(id=>({id}));
       const now=()=>new Date().toISOString();
       const enabledSecurity=()=>[];
+      const requiredSecurity=()=>({steps:[]});
       const section=()=>config;
-      let state='verifying',transitions=0,mode='normal',release,entered;
+      let state='verifying',transitions=0,mode='normal',release,entered,completedSecurity=[],activeChallenge=null;
       let wait,started;
       function reset(){
-        state='verifying';transitions=0;mode='normal';
+        state='verifying';transitions=0;mode='normal';completedSecurity=[];activeChallenge=null;
         wait=new Promise(resolve=>{release=resolve;});
         started=new Promise(resolve=>{entered=resolve;});
       }
       const verificationStore={
-        getSession:()=>({state}),
+        getSession:()=>({state,completedSecurity,activeChallenge}),
         upsertSession:(guild,user,value)=>{if(value.state)state=value.state;},
         addSecurityHistory:()=>{},
         clearAttempts:()=>{},
