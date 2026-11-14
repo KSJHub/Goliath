@@ -107,6 +107,13 @@ async function releaseDeferredWelcome(member) {
       // Departure cleanup is responsible for removing genuinely abandoned entries.
       return { skipped: true, reason: 'stale_join' };
     }
+    // Deferred welcomes may resume long after the join event. Confirm the
+    // member still belongs to the same membership before sending anything.
+    const currentMember = await member.guild.members.fetch({ user: member.id, force: true }).catch(() => null);
+    if (!currentMember || !pending.joinedAt || currentMember.joinedAt?.toISOString?.() !== pending.joinedAt) {
+      return { skipped: true, reason: 'membership_unconfirmed' };
+    }
+    member = currentMember;
     if (guildManager.isModuleEnabled(member.guild.id, 'verification')) {
       const verificationStore = require('../../securityStudio/verification/verificationStore');
       if (verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') return { skipped: true, reason: 'awaiting_verification' };
