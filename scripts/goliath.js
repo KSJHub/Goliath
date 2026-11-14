@@ -2629,7 +2629,7 @@ async function memberIntelligenceRoutingAudit() {
   }
   allowed = false;
   const denied = interaction(); const before = builds; await router.execute(denied.i, {}); await handlers.execute(denied.i);
-  assert.deepEqual(denied.events.map(([name]) => name), ['reply']); assert.equal(builds, before);
+  assert.deepEqual(denied.events.map(([name]) => name), ['defer', 'edit']); assert.match(denied.events.at(-1)[1].content, /permission/); assert.equal(builds, before);
   allowed = true; missing = true;
   const gone = interaction(); await router.execute(gone.i, {}); assert.match(gone.events.at(-1)[1].content, /no longer available/);
   missing = false; fail = true;
