@@ -29,17 +29,17 @@ const updateGuildSection = (_guild, section, update) => {
   const updated = update(state.modules);
   if (updated !== state.modules) state = { ...state, modules: updated };
 };
-const testExports = {};
+const walletModule = { exports: {} };
 vm.runInNewContext(source, {
-  module: { exports: testExports },
-  exports: testExports,
+  module: walletModule,
+  exports: walletModule.exports,
   require: id => {
     assert.equal(id, '../../../core/guild/guildManager');
     return { getGuildSection, updateGuildSection };
   },
   Date, Number, Object, Array, String, JSON, Error, Set
 }, { filename: walletPath });
-const { casinoBalance, casinoTransaction } = testExports;
+const { casinoBalance, casinoTransaction } = walletModule.exports;
 assert.equal(casinoBalance(guildId, alice), 100);
 const credit = casinoTransaction(guildId, { key: 'credit-1', operation: 'credit', userId: alice, amount: 50, reason: 'test' });
 assert.equal(credit.balanceAfter, 150);
