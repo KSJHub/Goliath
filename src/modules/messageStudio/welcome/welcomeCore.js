@@ -80,10 +80,12 @@ async function buildDiscordPayload(member, type, config = getWelcomeSection(memb
   return buildTemplateDeliveryPayload({ template, variables: deliveryVariables, interaction: renderInteraction, includeComponents: options.includeComponents !== false, allowUserPing: userPingEnabled, userId: member.user.id, ephemeral: options.ephemeral === true, allowedMentions });
 }
 async function resolveWelcomeChannel(guild, channelId) { if (!guild || !channelId) return null; const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null); return channel?.isTextBased?.() ? channel : null; }
-function clearDeferredWelcome(guildId, memberId) {
+function clearDeferredWelcome(guildId, memberId, expectedJoinedAt = undefined) {
   const current = getWelcomeSection(guildId);
-  if (!current.deferredWelcomes[memberId]) return false;
+  const pending = current.deferredWelcomes[memberId];
+  if (!pending || (expectedJoinedAt !== undefined && pending.joinedAt !== expectedJoinedAt)) return false;
   updateWelcomeSection(guildId, section => {
+    if (!section.deferredWelcomes[memberId] || (expectedJoinedAt !== undefined && section.deferredWelcomes[memberId].joinedAt !== expectedJoinedAt)) return section;
     const deferredWelcomes = { ...section.deferredWelcomes };
     delete deferredWelcomes[memberId];
     return { ...section, deferredWelcomes };
@@ -101,7 +103,7 @@ async function releaseDeferredWelcome(member) {
     const pending = config.deferredWelcomes[member.id];
     if (!pending) return { skipped: true, reason: 'not_queued' };
     if (pending.joinedAt && pending.joinedAt !== member.joinedAt?.toISOString?.()) {
-      clearDeferredWelcome(member.guild.id, member.id);
+      clearDeferredWelcome(member.guild.id, member.id, pending.joinedAt);
       return { skipped: true, reason: 'stale_join' };
     }
     if (guildManager.isModuleEnabled(member.guild.id, 'verification')) {
@@ -117,15 +119,24 @@ async function releaseDeferredWelcome(member) {
     const publicDone = pending.publicSent === true || result.publicSent || !config.channelId;
     const dmDone = pending.dmSent === true || result.dmSent || !config.dmEnabled || member.user?.bot;
     if (publicDone && dmDone) {
-      clearDeferredWelcome(member.guild.id, member.id);
+      clearDeferredWelcome(member.guild.id, member.id, pending.joinedAt);
     } else {
-      updateWelcomeSection(member.guild.id, section => ({
-        ...section,
-        deferredWelcomes: {
-          ...section.deferredWelcomes,
-          [member.id]: { ...section.deferredWelcomes[member.id], publicSent: publicDone, dmSent: dmDone },
-        },
-      }), { action: 'welcome_deferred_partial_delivery' });
+      // A leave/rejoin during the network send must not resurrect an old queue entry
+      // or overwrite the newer membership's delivery checkpoint.
+      const latest = getWelcomeSection(member.guild.id).deferredWelcomes[member.id];
+      if (latest && latest.joinedAt === pending.joinedAt) {
+        updateWelcomeSection(member.guild.id, section => {
+          const current = section.deferredWelcomes[member.id];
+          if (!current || current.joinedAt !== pending.joinedAt) return section;
+          return {
+            ...section,
+            deferredWelcomes: {
+              ...section.deferredWelcomes,
+              [member.id]: { ...current, publicSent: current.publicSent === true || publicDone, dmSent: current.dmSent === true || dmDone },
+            },
+          };
+        }, { action: 'welcome_deferred_partial_delivery' });
+      }
     }
     return result;
   } finally {
@@ -141,7 +152,11 @@ async function sendWelcome(member, options = {}) {
       updateWelcomeSection(member.guild.id, section => ({
         ...section, deferredWelcomes: {
           ...section.deferredWelcomes,
-          [member.id]: { joinedAt: member.joinedAt?.toISOString?.() || null, queuedAt: now() },
+          [member.id]: {
+            ...(section.deferredWelcomes[member.id]?.joinedAt === (member.joinedAt?.toISOString?.() || null) ? section.deferredWelcomes[member.id] : {}),
+            joinedAt: member.joinedAt?.toISOString?.() || null,
+            queuedAt: section.deferredWelcomes[member.id]?.joinedAt === (member.joinedAt?.toISOString?.() || null) ? section.deferredWelcomes[member.id].queuedAt : now(),
+          },
         },
       }), { action: 'welcome_deferred_for_verification' });
       return { publicSent: false, dmSent: false, skipped: true, reason: 'awaiting_verification', errors: [] };
