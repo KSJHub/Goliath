@@ -2479,8 +2479,10 @@ function welcomeEmbedDeliveryAudit() {
       'Scheduled Welcome must preserve newer join eligibility when an older batch completes.');
     assert(scheduled.includes("updateScheduledConfig(guild.id, { analytics }, { actorId: options.actorId, action: 'scheduled_welcome_run' })"),
       'Scheduled Welcome final analytics must not overwrite newer delivery checkpoints.');
-    assert(scheduled.includes('const deliveredJoin = config.completedMemberJoins?.[memberId]') && scheduled.includes('deliveredJoin !== joinedAt) continue') && scheduled.includes('const currentMember = await guild.members.fetch({ user: member.id, force: true })'),
+    assert(scheduled.includes('const deliveredJoin = config.completedMemberJoins?.[memberId]') && scheduled.includes('!joinedAt || !deliveredJoin || deliveredJoin !== joinedAt) continue') && scheduled.includes('const currentMember = await guild.members.fetch({ user: member.id, force: true })'),
       'Scheduled Welcome queue-role cleanup must not remove roles from newer memberships.');
+    assert(scheduled.includes('!member.joinedAt?.toISOString?.() || currentMember.joinedAt?.toISOString?.() !== member.joinedAt.toISOString()'),
+      'Scheduled Welcome must never remove a queue role when original membership identity is unknown.');
     assert(scheduledQueue.includes('pendingMembers'),
       'Scheduled Welcome must support the persistent member queue without a queue role.');
     assert(dashboard.includes('WELCOME QUEUE ROLE (OPTIONAL)') && dashboard.includes('disabled={busy || !scheduled?.channelId}'),
