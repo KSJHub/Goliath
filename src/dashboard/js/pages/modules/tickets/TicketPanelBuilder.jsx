@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../../shared/PageShell';
 import React, { useMemo, useState } from 'react';
 
 const DEFAULT_PANEL = {
@@ -20,7 +21,7 @@ const DEFAULT_PANEL = {
     description: 'Press the button below to open a private support ticket.',
     color: '#5865F2',
     buttonLabel: 'Open Support Ticket',
-    buttonEmoji: '🎫',
+    buttonEmoji: E.TICKETS,
     footerText: 'Goliath • Ticket System',
   },
 };
@@ -89,7 +90,7 @@ function Preview({ theme, panel }) {
         </div>
         {appearance.footerText ? <span style={{ color: theme.mutedText, fontSize: 12 }}>{appearance.footerText}</span> : null}
       </div>
-      <button type="button" disabled style={{ ...buttonStyle(theme, 'primary', true), justifySelf: 'start' }}>{appearance.buttonEmoji || '🎫'} {appearance.buttonLabel || 'Open Ticket'}</button>
+      <button type="button" disabled style={{ ...buttonStyle(theme, 'primary', true), justifySelf: 'start' }}>{appearance.buttonEmoji || E.TICKETS} {appearance.buttonLabel || 'Open Ticket'}</button>
     </div>
   );
 }
