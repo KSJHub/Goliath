@@ -172,7 +172,21 @@ jobs:
             rm -rf "$DASHBOARD_ROOT" && mkdir -p "$DASHBOARD_ROOT" && cp -a dist/. "$DASHBOARD_ROOT/"
             nginx -t && systemctl reload nginx
 
-            BOT_MODE="$ENVIRONMENT" COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
+            # Discord API can intermittently time out during command synchronisation.
+            # Retry only connection/time-out failures; fail immediately on other errors.
+            for attempt in 1 2 3; do
+              SYNC_LOG="$(mktemp)"
+              if BOT_MODE="$ENVIRONMENT" COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})" >"$SYNC_LOG" 2>&1; then
+                cat "$SYNC_LOG"; rm -f "$SYNC_LOG"; break
+              fi
+              cat "$SYNC_LOG"
+              if [ "$attempt" -eq 3 ] || ! grep -Eq 'UND_ERR_CONNECT_TIMEOUT|ConnectTimeoutError|ETIMEDOUT|ECONNRESET|EAI_AGAIN' "$SYNC_LOG"; then
+                rm -f "$SYNC_LOG"; echo "Command sync failed (attempt $attempt)" >&2; exit 1
+              fi
+              rm -f "$SYNC_LOG"
+              echo "⚠️ Transient Discord connection failure; retrying command sync ($attempt/3)"
+              sleep $((attempt * 5))
+            done
 
             echo "♻️ One controlled PM2 start from ecosystem config"
             pm2 delete "$PM2_NAME" >/dev/null 2>&1 || true
