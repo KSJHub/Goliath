@@ -533,7 +533,31 @@ async function checkGuildAccounts(client,guildId,options={}) {
           continue;
         }
         if(event.type==='ended'){let updated=null; updated=await updateEndedAlert(client,guildId,config,account,event,previous).catch(()=>null); if(updated){delivered.push({type:'ended',id:event.id,...updated}); rememberDelivered(state,key); state.lastAlertKey=key; state.lastAlertAt=now(); state.pendingEndedEvent=null; state.lastLiveMessageId=null; state.lastLiveMessageChannelId=null; state.lastAlertMessageId=null; state.lastAlertChannelId=null;} else {state.pendingEndedEvent=event;} continue;}
-        if(event.type==='live'&&previous.isLive===true&&hasTrackedLiveMessage(previous)){const existing=await trackedMessage(client,guildId,previous).catch(()=>null); if(existing){state.lastAlertKey=key;rememberDelivered(state,key);state.lastLiveMessageId=existing.messageId;state.lastLiveMessageChannelId=existing.channelId;continue;} console.warn('[Social Studio] LIVE tracked message unavailable; suppressing duplicate until stream identity is confirmed',accountId,previous.lastLiveMessageId);continue;}
+        if(event.type==='live'&&previous.isLive===true&&hasTrackedLiveMessage(previous)){
+          const existing=await trackedMessage(client,guildId,previous).catch(()=>null);
+          if(existing){
+            state.lastAlertKey=key;
+            rememberDelivered(state,key);
+            state.lastLiveMessageId=existing.messageId;
+            state.lastLiveMessageChannelId=existing.channelId;
+            // A repeated LIVE event must not skip the canonical TikTok layout:
+            // edit the tracked message instead of leaving a stale portrait card.
+            if(String(account.platform||'').toLowerCase()==='tiktok'){
+              try{
+                const refreshed=await updateLiveAlert(client,guildId,config,account,event,previous);
+                if(refreshed){
+                  state.lastLiveMessageUpdatedAt=now();
+                  delivered.push({type:'live',id:event.id,refreshed:true,...refreshed});
+                }
+              }catch(error){
+                console.error('[Social Studio] TikTok repeated LIVE canonical refresh failed',accountId,existing.messageId,error?.message||error);
+              }
+            }
+            continue;
+          }
+          console.warn('[Social Studio] LIVE tracked message unavailable; suppressing duplicate until stream identity is confirmed',accountId,previous.lastLiveMessageId);
+          continue;
+        }
         activeDeliveryEvent=event; const delivery=await sendAlert(client,guildId,config,account,event,options); activeDeliveryEvent=null; delivered.push({type:event.type,id:event.id,...delivery}); rememberDelivered(state,key);completedEventKeys.add(keyString);state.pendingDelivery=null;state.lastAlertKey=key;state.lastAlertAt=now();state.lastAlertMessageId=delivery.messageId;state.lastAlertChannelId=delivery.channelId;state.lastDeliveryError=null;if(event.type==='live'){state.lastLiveMessageId=delivery.messageId;state.lastLiveMessageChannelId=delivery.channelId;state.lastLiveMessageUpdatedAt=now();}
       }
       const checkedLiveId=checked.isLive===true&&checked.event?.id?String(checked.event.id):null; if(checkedLiveId&&previous.isLive===true&&previous.liveEventId&&checkedLiveId!==String(previous.liveEventId)) console.warn('[Social Studio] LIVE provider event ID changed during active session; retaining tracked message',accountId,previous.liveEventId,checkedLiveId);
