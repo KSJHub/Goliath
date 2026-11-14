@@ -90,23 +90,47 @@ function clearDeferredWelcome(guildId, memberId) {
   }, { action: 'welcome_deferred_cleanup' });
   return true;
 }
+const deferredWelcomeInFlight = new Set();
 async function releaseDeferredWelcome(member) {
   if (!member?.guild?.id || member.pending === true) return { skipped: true, reason: 'pending_screening' };
-  const config = getWelcomeSection(member.guild.id);
-  const pending = config.deferredWelcomes[member.id];
-  if (!pending) return { skipped: true, reason: 'not_queued' };
-  if (pending.joinedAt && pending.joinedAt !== member.joinedAt?.toISOString?.()) {
-    clearDeferredWelcome(member.guild.id, member.id);
-    return { skipped: true, reason: 'stale_join' };
+  const key = `${member.guild.id}:${member.id}`;
+  if (deferredWelcomeInFlight.has(key)) return { skipped: true, reason: 'already_processing' };
+  deferredWelcomeInFlight.add(key);
+  try {
+    const config = getWelcomeSection(member.guild.id);
+    const pending = config.deferredWelcomes[member.id];
+    if (!pending) return { skipped: true, reason: 'not_queued' };
+    if (pending.joinedAt && pending.joinedAt !== member.joinedAt?.toISOString?.()) {
+      clearDeferredWelcome(member.guild.id, member.id);
+      return { skipped: true, reason: 'stale_join' };
+    }
+    if (guildManager.isModuleEnabled(member.guild.id, 'verification')) {
+      const verificationStore = require('../../securityStudio/verificationStore');
+      if (verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') return { skipped: true, reason: 'awaiting_verification' };
+    }
+    if (!guildManager.isModuleEnabled(member.guild.id, MODULE)) return { skipped: true, reason: 'disabled' };
+    const result = await sendWelcome(member, {
+      bypassVerificationGate: true,
+      skipPublic: pending.publicSent === true,
+      skipDm: pending.dmSent === true,
+    });
+    const publicDone = pending.publicSent === true || result.publicSent || !config.channelId;
+    const dmDone = pending.dmSent === true || result.dmSent || !config.dmEnabled || member.user?.bot;
+    if (publicDone && dmDone) {
+      clearDeferredWelcome(member.guild.id, member.id);
+    } else {
+      updateWelcomeSection(member.guild.id, section => ({
+        ...section,
+        deferredWelcomes: {
+          ...section.deferredWelcomes,
+          [member.id]: { ...section.deferredWelcomes[member.id], publicSent: publicDone, dmSent: dmDone },
+        },
+      }), { action: 'welcome_deferred_partial_delivery' });
+    }
+    return result;
+  } finally {
+    deferredWelcomeInFlight.delete(key);
   }
-  if (guildManager.isModuleEnabled(member.guild.id, 'verification')) {
-    const verificationStore = require('../../securityStudio/verificationStore');
-    if (verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') return { skipped: true, reason: 'awaiting_verification' };
-  }
-  if (!guildManager.isModuleEnabled(member.guild.id, MODULE)) return { skipped: true, reason: 'disabled' };
-  const result = await sendWelcome(member, { bypassVerificationGate: true });
-  if (result.publicSent || result.dmSent || (!result.publicFailed && !result.dmFailed)) clearDeferredWelcome(member.guild.id, member.id);
-  return result;
 }
 async function sendWelcome(member, options = {}) {
   if (!member?.guild?.id || !member?.user?.id) return { publicSent: false, dmSent: false, skipped: true, reason: 'invalid_member', errors: [] };
