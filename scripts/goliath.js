@@ -2445,6 +2445,8 @@ function welcomeEmbedDeliveryAudit() {
     const verificationManager = read('src/modules/securityStudio/verificationManager.js');
     const scheduledQueue = read('src/modules/messageStudio/welcome/scheduledWelcomeQueue.js');
     const memberEvents = read('src/events/members/memberJoinLeave.js');
+    const autoRoles = read('src/modules/roleStudio/autoRoles/autoRoles.js');
+    const inviteStudio = read('src/modules/communityStudio/invites/invites.js');
     assert(welcome.includes('waitForVerification: false') && welcome.includes('waitForVerification: source.waitForVerification === true'),
       'Instant Welcome verification gating must be opt-in and persist through normalization.');
     assert(dashboard.includes('waitForVerification: e.target.checked') && route.includes("router.put('/:guildId/config'"),
@@ -2463,6 +2465,12 @@ function welcomeEmbedDeliveryAudit() {
       'Deferred welcome retries must not erase or recreate a newer membership queue entry.');
     assert(welcome.includes('current.publicSent === true || publicDone') && welcome.includes('current.dmSent === true || dmDone'),
       'Partial delivery checkpoints must remain monotonic across retries.');
+    assert(autoRoles.includes('current.joinedAt !== pending.joinedAt') && autoRoles.includes('clearDeferredJoinRoles(guildId, memberId, expectedJoinedAt = undefined)'),
+      'Auto Roles must protect deferred role checkpoints from stale membership releases and cleanup.');
+    assert(inviteStudio.includes('current.joinedAt !== pending.joinedAt') && inviteStudio.includes('clearDeferredInviteRoles(guildId, memberId, meta = {}, expectedJoinedAt = undefined)'),
+      'Invite Studio must protect deferred role checkpoints from stale membership releases and cleanup.');
+    assert(memberEvents.includes('clearDeferredJoinRoles(member.guild.id,member.id,member.joinedAt?.toISOString?.()||null)') && memberEvents.includes('clearDeferredInviteRoles(member.guild.id,member.id,{},member.joinedAt?.toISOString?.()||null)'),
+      'Member departure must only clear deferred roles belonging to the departed membership.');
     assert(scheduled.includes('completedMemberJoins') && scheduled.includes('deliveredJoin === joinedAt'),
       'Scheduled Welcome must retain join-specific checkpoints for duplicate and rejoin protection.');
     assert(scheduledQueue.includes('pendingMembers'),
