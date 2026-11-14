@@ -142,7 +142,12 @@ async function resolveChannel(guild, channelId) {
 async function clearCompletedWithoutRole(guild, config) {
   if (!config.completedMemberIds.length || !config.queueRoleId) return config;
   await queue.refreshMembers(guild);
-  const stillQueued = config.completedMemberIds.filter((memberId) => guild.members.cache.get(memberId)?.roles?.cache?.has(config.queueRoleId));
+  // Missing cache entries are not evidence that a member left the queue.
+  // Retain their delivery checkpoint until their role state is known.
+  const stillQueued = config.completedMemberIds.filter((memberId) => {
+    const member = guild.members.cache.get(memberId);
+    return !member || member.roles?.cache?.has(config.queueRoleId);
+  });
   if (stillQueued.length === config.completedMemberIds.length) return config;
   return updateScheduledConfig(guild.id, { completedMemberIds: stillQueued }, { action: 'scheduled_welcome_completed_cleanup' });
 }
