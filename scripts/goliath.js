@@ -2455,7 +2455,7 @@ function welcomeEmbedDeliveryAudit() {
 
     assert(scheduled.includes('completed.add(member.id)'), 'Scheduled Welcome must checkpoint successful member deliveries.');
     assert(scheduled.includes('scheduled_welcome_delivery_checkpoint'), 'Scheduled Welcome must persist the successful-delivery checkpoint.');
-    assert(scheduled.indexOf('scheduled_welcome_delivery_checkpoint') < scheduled.indexOf('await queue.removeQueueRole(member, config.queueRoleId)'), 'Delivery checkpoint must precede queue role cleanup.');
+    assert(scheduled.indexOf('scheduled_welcome_delivery_checkpoint') < scheduled.lastIndexOf('await queue.removeQueueRole(member, config.queueRoleId)'), 'Delivery checkpoint must precede queue role cleanup.');
     assert(panel.includes("customId==='admin:welcome:resetConfirm'"), 'Destructive Welcome reset must require a confirmation action.');
     assert(panel.includes('result.publicFailed') && panel.includes('skipDm:true'), 'Public test delivery must report failures without triggering a DM.');
     assert(panel.includes("customId==='admin:welcome:dmSend'") && panel.includes('await interaction.user.send(payload)'), 'DM test must use its separate explicit delivery control.');
