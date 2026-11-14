@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient';
@@ -116,7 +117,7 @@ function MonitorCard({ theme, monitor }) {
 }
 
 function AdvancedSecurityLock({ theme, entitlements }) {
-  return <PremiumLock theme={theme} title="🛡️ Advanced Security Center" featureKey="security.advanced" currentPlan={entitlements?.plan} requiredPlan={{ name: 'Pro', icon: '👑' }} message="Core security remains available. Advanced threat analytics, audit intelligence and security trend tooling require Goliath Pro or Lifetime." unlocks={['Threat analytics', 'Security trends', 'Audit intelligence', 'Owner monitoring views', 'Webhook intelligence', 'Cross-incident correlation']} />;
+  return <PremiumLock theme={theme} title={`${E.SECURITY} Advanced Security Center`} featureKey="security.advanced" currentPlan={entitlements?.plan} requiredPlan={{ name: 'Pro', icon: E.CROWN }} message="Core security remains available. Advanced threat analytics, audit intelligence and security trend tooling require Goliath Pro or Lifetime." unlocks={['Threat analytics', 'Security trends', 'Audit intelligence', 'Owner monitoring views', 'Webhook intelligence', 'Cross-incident correlation']} />;
 }
 
 export default function Security({ selectedGuild, selectedGuildId, theme, guilds = [] }) {
