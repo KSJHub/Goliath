@@ -173,6 +173,22 @@ async function executeScheduledWelcome(guild, options = {}) {
   if (!role) throw new Error('Scheduled Welcome queue role is unavailable.');
 
   const waiting = await getWaitingMembers(guild);
+  config = getScheduledConfig(guild.id);
+  // A previous send may have succeeded even when queue-role removal failed.
+  // Retry that cleanup without sending a duplicate welcome.
+  let retryRoleRemovalFailed = 0;
+  const retryErrors = [];
+  if (config.removeQueueRole && config.completedMemberIds.length) {
+    for (const memberId of config.completedMemberIds) {
+      const member = guild.members.cache.get(memberId);
+      if (!member?.roles?.cache?.has(config.queueRoleId)) continue;
+      const removal = await queue.removeQueueRole(member, config.queueRoleId);
+      if (!removal.removed && !removal.skipped) {
+        retryRoleRemovalFailed += 1;
+        retryErrors.push(`${memberId}: queue role cleanup retry failed: ${removal.error || 'Unknown error'}`);
+      }
+    }
+  }
   const runDate = zonedDateKey(config.timezone);
   if (!waiting.length) {
     const analytics = {
@@ -181,18 +197,19 @@ async function executeScheduledWelcome(guild, options = {}) {
       emptyRuns: Number(config.analytics.emptyRuns || 0) + 1,
       lastRunAt: now(),
       lastRunDate: runDate,
-      lastError: null,
+      roleRemovalFailed: Number(config.analytics.roleRemovalFailed || 0) + retryRoleRemovalFailed,
+      lastError: retryErrors[0]?.slice(0, 500) || null,
     };
     updateScheduledConfig(guild.id, { analytics }, { actorId: options.actorId, action: 'scheduled_welcome_empty_run' });
-    return { skipped: false, empty: true, welcomed: 0, messagesSent: 0, roleRemovalFailed: 0, errors: [] };
+    return { skipped: false, empty: true, welcomed: 0, messagesSent: 0, roleRemovalFailed: retryRoleRemovalFailed, errors: retryErrors };
   }
 
   const batches = messages.splitIntoBatches(waiting, config, guild);
   let welcomed = 0;
   let messagesSent = 0;
   let sendFailed = 0;
-  let roleRemovalFailed = 0;
-  const errors = [];
+  let roleRemovalFailed = retryRoleRemovalFailed;
+  const errors = [...retryErrors];
   const completed = new Set(config.completedMemberIds);
 
   for (const batch of batches) {
