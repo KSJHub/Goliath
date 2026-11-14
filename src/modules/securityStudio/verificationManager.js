@@ -65,6 +65,8 @@ async function logEvent(g,section,type,content){
   const raw=String(content).trim();
   const mention=raw.match(/<@!?(\d{15,25})>/);
   const userId=mention?.[1]||null;
+  const member=userId?(g.members?.cache?.get(userId)||await g.members?.fetch?.(userId).catch(()=>null)):null;
+  const username=member?.user?.username||null;
   const details=raw.replace(/^(?:🚪|🔐|✅|❌|⚠️|🚨|🤖|📋)\s*/u,'').trim();
   const isDefaultJoin=type==='join'&&userId&&/^<@!?\d{15,25}> entered Verification\.?$/i.test(details);
   const timestamp=Math.floor(Date.now()/1000);
@@ -75,7 +77,7 @@ async function logEvent(g,section,type,content){
     .setAuthor({name:`${g.name||'Server'} • Security`,...(g.iconURL?.({size:128})?{iconURL:g.iconURL({size:128})}:{})})
     .setTitle(`${style.emoji} ${style.title}`)
     .addFields(
-      ...(userId?[{name:'👤 Member',value:`<@${userId}>`,inline:false}]:[]),
+      ...(userId?[{name:'👤 Member',value:`<@${userId}>`,inline:false},{name:'🏷️ Discord Username',value:username?`\`${username.replace(/`/g,'') .slice(0,80)}\``:'Unavailable',inline:true},{name:'🆔 User ID',value:`\`${userId}\``,inline:true}]:[]),
       {name:'🔐 Status',value:style.status,inline:true},
       ...(style.access?[{name:'🛡️ Access',value:style.access,inline:true}]:[]),
       {name:'🕒 Event Time',value:`<t:${timestamp}:F> • <t:${timestamp}:R>`,inline:false},
