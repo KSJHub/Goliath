@@ -226,8 +226,12 @@ async function executeScheduledWelcome(guild, options = {}) {
   const retryErrors = [];
   if (config.queueRoleId && config.removeQueueRole && config.completedMemberIds.length) {
     for (const memberId of config.completedMemberIds) {
-      const member = guild.members.cache.get(memberId);
+      const member = await guild.members.fetch({ user: memberId, force: true }).catch(() => null);
       if (!member?.roles?.cache?.has(config.queueRoleId)) continue;
+      const joinedAt = member.joinedAt?.toISOString?.() || null;
+      const deliveredJoin = config.completedMemberJoins?.[memberId];
+      // Never remove the queue role from a newer, not-yet-welcomed membership.
+      if (joinedAt && deliveredJoin && deliveredJoin !== joinedAt) continue;
       const removal = await queue.removeQueueRole(member, config.queueRoleId);
       if (!removal.removed && !removal.skipped) {
         retryRoleRemovalFailed += 1;
@@ -289,7 +293,10 @@ async function executeScheduledWelcome(guild, options = {}) {
       updateScheduledConfig(guild.id, { completedMemberIds: [...completed], completedMemberJoins, pendingMembers }, { actorId: options.actorId, action: 'scheduled_welcome_delivery_checkpoint' });
       if (config.queueRoleId && config.removeQueueRole) {
         for (const member of batch) {
-          const removal = await queue.removeQueueRole(member, config.queueRoleId);
+          const currentMember = await guild.members.fetch({ user: member.id, force: true }).catch(() => null);
+          // The member could have left and rejoined while the message was sending.
+          if (!currentMember || (member.joinedAt?.toISOString?.() && currentMember.joinedAt?.toISOString?.() !== member.joinedAt.toISOString())) continue;
+          const removal = await queue.removeQueueRole(currentMember, config.queueRoleId);
           if (!removal.removed && !removal.skipped) {
             roleRemovalFailed += 1;
             errors.push(`${member.id}: welcome sent but queue role removal failed: ${removal.error || 'Unknown error'}`);
