@@ -294,6 +294,15 @@ async function verifyTikTokWideImage(message,account,event,expectedEmbed=null) {
   console.info('[Social Studio] TikTok layout repair result',message.id,JSON.stringify({wide:repairedWide,fields:repaired?.fields?.length||0,thumbnail:Boolean(repaired?.thumbnail),imageUrl:repairedImage?.url||null}));
   if(!repairedWide||!repairedLayout) console.error('[Social Studio] TikTok LIVE layout still incorrect after repair',message.id);
 }
+function scheduleTikTokLiveLayoutRecheck(message,account,event,expectedEmbed) {
+  if(String(account?.platform||'').toLowerCase()!=='tiktok'||String(event?.type||'').toLowerCase()!=='live') return;
+  const timer=setTimeout(()=>{
+    verifyTikTokWideImage(message,account,event,expectedEmbed).catch(error=>
+      console.error('[Social Studio] TikTok LIVE delayed layout verification failed',message.id,error?.message||error)
+    );
+  },20000);
+  timer.unref?.();
+}
 async function sendAlert(client,guildId,config,account,event,options={}) {
   const channelId = alertChannelId(config,account,event.type);
   if (!channelId) throw permanentDeliveryError(`No alert channel configured for ${account.platform}/${event.type}.`);
@@ -325,10 +334,11 @@ async function sendAlert(client,guildId,config,account,event,options={}) {
 
   if (!message?.id) throw new Error('Discord did not return a message id for the alert.');
   await verifyTikTokWideImage(message,account,event,media.embed).catch((error)=>console.warn('[Social Studio] TikTok delivery verification:',error?.message||error));
+  scheduleTikTokLiveLayoutRecheck(message,account,event,media.embed);
   return {channelId,messageId:message.id};
 }
 async function trackedMessage(client,guildId,previous) { const channelId=previous.lastLiveMessageChannelId||previous.lastAlertChannelId, messageId=previous.lastLiveMessageId||previous.lastAlertMessageId; if(!channelId||!messageId)return null; const guild=client.guilds.cache.get(guildId)||await client.guilds.fetch(guildId).catch(()=>null); if(!guild)return null; const channel=guild.channels.cache.get(channelId)||await guild.channels.fetch(channelId).catch(()=>null); if(!channel?.isTextBased?.())return null; const message=await channel.messages.fetch(messageId).catch(()=>null); return message?{channelId,messageId,message}:null; }
-async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); await verifyTikTokWideImage(tracked.message,account,event,media.embed).catch((error)=>console.warn('[Social Studio] TikTok refresh verification:',error?.message||error)); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
+async function updateLiveAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'live'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); await verifyTikTokWideImage(tracked.message,account,event,media.embed).catch((error)=>console.warn('[Social Studio] TikTok refresh verification:',error?.message||error)); scheduleTikTokLiveLayoutRecheck(tracked.message,account,event,media.embed); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
 async function updateEndedAlert(client,guildId,config,account,event,previous) { const tracked=await trackedMessage(client,guildId,previous); if(!tracked)return null; const media=await socialWideMediaPayload(account,event,buildEmbed(account,event,templateFor(config,'ended'),creatorFor(config,account.accountId),config.settings),tracked.message); await tracked.message.edit({content:null,embeds:[media.embed],files:media.files,...(media.keepAttachments?{}:{attachments:[]})}); await verifyTikTokWideImage(tracked.message,account,event,media.embed).catch((error)=>console.warn('[Social Studio] TikTok ended verification:',error?.message||error)); return {channelId:tracked.channelId,messageId:tracked.messageId}; }
 function livePostInWindow(config,creator,windowMs=2*60*60*1000) { const ids=new Set(creator?.accountIds||[]), cutoff=Date.now()-windowMs; return [...(config.history||[])].reverse().find((item)=>ids.has(item.accountId)&&['alert_sent','alert_updated','alert_recovered'].includes(item.status)&&item.alertType==='live'&&new Date(item.createdAt||0).getTime()>=cutoff)||null; }
 function accountLivePostInWindow(config,account,windowMs=2*60*60*1000) {
