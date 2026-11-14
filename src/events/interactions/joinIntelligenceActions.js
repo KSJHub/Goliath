@@ -117,7 +117,7 @@ module.exports = {
       // Discord's three-second interaction deadline during busy join events.
       await interaction.deferReply({ flags: 64 });
       const [, action, guildId, userId] = id.split(':');
-      if (id.split(':').length !== 4 || !['view', 'watch', 'clear'].includes(action) || String(interaction.guild.id) !== String(guildId) || !/^\\d{15,25}$/.test(userId || '')) {
+      if (id.split(':').length !== 4 || !['view', 'watch', 'clear'].includes(action) || String(interaction.guild.id) !== String(guildId) || !/^\d{15,25}$/.test(userId || '')) {
         await interaction.editReply({ content: '❌ That intelligence action is no longer valid.' });
         return;
       }
