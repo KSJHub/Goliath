@@ -98,31 +98,34 @@ function currentSnapshot(interaction, targetId) {
   return getQuarantineState(interaction.guild.id)?.users?.[String(targetId)] || null;
 }
 
-async function openQuarantine(interaction, targetId) {
-  const target = await resolveTarget(interaction, targetId, 'quarantine');
-  if (!target) return true;
-  const existing = currentSnapshot(interaction, target.id);
+// Modal interactions must be acknowledged by showModal (not deferReply).
+// Avoid a network member fetch before the modal, which can exceed Discord's
+// three-second deadline. Full target safety checks remain on submission.
+async function openInvestigationPrompt(interaction, targetId) {
+  if (!/^\\d{15,25}$/.test(String(targetId || ''))) {
+    return safeReply(interaction, { content: '❌ Invalid target member.', flags: 64 });
+  }
+  if (!canUseModAction(interaction.member, interaction.guild, 'quarantine', interaction)) {
+    return safeReply(interaction, { content: '❌ You do not have permission to investigate members.', flags: 64 });
+  }
+  const existing = currentSnapshot(interaction, targetId);
   if (existing) {
     const mode = getQuarantineMode(existing);
     return safeReply(interaction, {
-      content: `⚠️ **${target.user.tag}** is already in **${mode === QUARANTINE_MODES.SECURITY ? 'Full Security Isolation' : 'Investigation Isolation'}**.`,
+      content: `⚠️ <@${targetId}> is already in **${mode === QUARANTINE_MODES.SECURITY ? 'Full Security Isolation' : 'Investigation Isolation'}**.`,
       flags: 64,
     });
   }
-
-  // /mod is an investigation workflow only. Manual Full Security Isolation lives in /admin.
-  await interaction.showModal(investigationModal(target.id));
+  await interaction.showModal(investigationModal(targetId));
   return true;
 }
 
+async function openQuarantine(interaction, targetId) {
+  return openInvestigationPrompt(interaction, targetId);
+}
+
 async function openInvestigationModal(interaction, targetId) {
-  const target = await resolveTarget(interaction, targetId, 'quarantine');
-  if (!target) return true;
-  if (currentSnapshot(interaction, target.id)) {
-    return safeReply(interaction, { content: `⚠️ **${target.user.tag}** is already isolated.`, flags: 64 });
-  }
-  await interaction.showModal(investigationModal(target.id));
-  return true;
+  return openInvestigationPrompt(interaction, targetId);
 }
 
 async function securityMovedToAdmin(interaction, targetId, submitAttempt = false) {
