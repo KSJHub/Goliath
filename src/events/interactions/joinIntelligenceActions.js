@@ -129,6 +129,18 @@ module.exports = {
         return;
       }
 
+      // Mark Clear only updates guild-scoped intelligence state. It does not
+      // need a Discord API member fetch, which can stall on busy join events.
+      if (action === 'clear') {
+        const result = decisioning.markClear(interaction.guild.id, userId, interaction.user.id);
+        await interaction.editReply({
+          content: `✅ <@${userId}> has been reviewed and marked **CLEAR** in Member Intelligence. This does not erase moderation history or watchlist evidence.`,
+          allowedMentions: { parse: [] },
+        });
+        console.log(`[Join Intelligence] ${interaction.user.id} marked ${userId} clear in ${interaction.guild.id} (previous=${result.before?.decision || 'none'}).`);
+        return;
+      }
+
       const target = await resolveTarget(interaction, userId);
       if (!target) {
         await interaction.editReply({ content: '❌ That member is no longer available in this server.' }).catch(() => null);
@@ -163,13 +175,7 @@ module.exports = {
         return;
       }
 
-      if (action === 'clear') {
-        const result = decisioning.markClear(interaction.guild.id, userId, interaction.user.id);
-        await interaction.editReply({
-          content: `✅ ${target.user} has been reviewed and marked **CLEAR** in Member Intelligence. This does not erase moderation history or watchlist evidence.`,
-        });
-        console.log(`[Join Intelligence] ${interaction.user.id} marked ${userId} clear in ${interaction.guild.id} (previous=${result.before?.decision || 'none'}).`);
-      }
+
     } catch (error) {
       console.error('[Join Intelligence] Action failed:', error);
       const payload = { content: 'Member Intelligence could not complete this action. Please try again.' };
