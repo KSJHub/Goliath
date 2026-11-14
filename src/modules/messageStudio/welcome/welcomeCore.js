@@ -117,7 +117,7 @@ async function releaseDeferredWelcome(member) {
     // The event snapshot may be stale: a freshly fetched member can still be
     // awaiting Discord membership screening even when the caller was not.
     if (member.pending === true) return { skipped: true, reason: 'pending_screening' };
-    if (guildManager.isModuleEnabled(member.guild.id, 'verification')) {
+    if (config.waitForVerification && guildManager.isModuleEnabled(member.guild.id, 'verification')) {
       const verificationStore = require('../../securityStudio/verification/verificationStore');
       if (verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') return { skipped: true, reason: 'awaiting_verification' };
     }
