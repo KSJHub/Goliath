@@ -344,7 +344,31 @@ async function buildHealthReport(guild) {
     enabled === true && !configured ? 'No automatic roles are configured.' : null,
   ].filter(Boolean);
 
+  // Diagnose unsafe cross-module grants before introducing deferred role delivery.
+  // This check is read-only and preserves every configured role assignment.
+  const verificationEnabled = guildManager.isModuleEnabled(guild.id, 'verification');
+  const verificationStore = verificationEnabled ? require('../../securityStudio/verificationStore') : null;
+  const verificationSettings = verificationStore?.getVerificationSection(guild.id)?.settings || {};
+  const restrictedRoleIds = new Set([
+    ...(verificationSettings.roles?.pending || []),
+    ...(verificationSettings.roles?.verifying || []),
+    ...(verificationSettings.roles?.quarantine || []),
+  ].map(String));
+  const conflictingJoinRoles = verificationEnabled
+    ? (section.joinRoles || []).filter((id) => restrictedRoleIds.has(String(id)))
+    : [];
+  const accessBearingJoinRoles = verificationEnabled
+    ? roles.filter((entry) => section.joinRoles.includes(entry.roleId) && entry.exists)
+      .filter((entry) => {
+        const role = guild.roles.cache.get(entry.roleId);
+        return role?.permissions?.has(PermissionFlagsBits.Administrator)
+          || role?.permissions?.has(PermissionFlagsBits.ManageRoles)
+          || role?.permissions?.has(PermissionFlagsBits.ManageChannels);
+      })
+    : [];
   const warnings = [
+    ...conflictingJoinRoles.map((id) => `Auto Role ${id} overlaps a Verification pending, verifying or quarantine role; check role ownership and removal transitions.`),
+    ...accessBearingJoinRoles.map((role) => `Auto Role ${role.name || role.roleId} has elevated permissions and is assigned before Verification completes.`),
     enabled === true && !botMember?.permissions?.has(PermissionFlagsBits.ManageRoles) ? 'Goliath is missing Manage Roles.' : null,
     ...roles.filter((role) => !role.exists).map((role) => `Role ${role.roleId} no longer exists.`),
     ...roles.filter((role) => role.exists && !role.manageable).map((role) => `${role.name || role.roleId} is above Goliath or managed by an integration.`),
