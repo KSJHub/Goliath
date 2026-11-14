@@ -53,7 +53,7 @@ async function logEvent(g,section,type,content){
   const c=g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null);
   if(!c?.send)return false;
   const styles={
-    join:{emoji:'🚪',title:'New Member',color:0xffffff,status:'Pending',access:'Restricted'},
+    join:{emoji:'⏳',title:'Verification Pending',color:0xffffff,status:'Unverified'},
     attempt:{emoji:'🔐',title:'Verification Activity',color:0x5865f2,status:'In progress'},
     success:{emoji:'✅',title:'Verification Successful',color:0x2ecc71,status:'Verified',access:'Granted'},
     failure:{emoji:'❌',title:'Verification Failed',color:0xe74c3c,status:'Failed',access:'Restricted'},
@@ -67,6 +67,9 @@ async function logEvent(g,section,type,content){
   const userId=mention?.[1]||null;
   const details=raw.replace(/^(?:🚪|🔐|✅|❌|⚠️|🚨|🤖|📋)\s*/u,'').trim();
   const isDefaultJoin=type==='join'&&userId&&/^<@!?\d{15,25}> entered Verification\.?$/i.test(details);
+  const timestamp=Math.floor(Date.now()/1000);
+  const joinedAt=userId?g.members?.cache?.get(userId)?.joinedTimestamp:null;
+  const joinedSeconds=Number.isFinite(joinedAt)&&joinedAt>0?Math.floor(joinedAt/1000):timestamp;
   const embed=new EmbedBuilder()
     .setColor(style.color)
     .setAuthor({name:`${g.name||'Server'} • Security`,...(g.iconURL?.({size:128})?{iconURL:g.iconURL({size:128})}:{})})
@@ -74,11 +77,14 @@ async function logEvent(g,section,type,content){
     .addFields(
       ...(userId?[{name:'👤 Member',value:`<@${userId}>`,inline:false}]:[]),
       {name:'🔐 Status',value:style.status,inline:true},
-      ...(style.access?[{name:'🛡️ Access',value:style.access,inline:true}]:[])
+      ...(style.access?[{name:'🛡️ Access',value:style.access,inline:true}]:[]),
+      {name:'🕒 Event Time',value:`<t:${timestamp}:F> • <t:${timestamp}:R>`,inline:false},
+      ...(type==='join'?[{name:'📅 Joined Server',value:`<t:${joinedSeconds}:F>`,inline:false}]:[])
     )
-    .setFooter({text:'Goliath • Verification'})
+    .setFooter({text:'Goliath • Verification Security Log'})
     .setTimestamp();
-  if(!isDefaultJoin&&details)embed.setDescription(details.slice(0,4096));
+  if(type==='join'&&isDefaultJoin)embed.setDescription('This member has entered the server and is awaiting verification. Access remains limited until the required security checks are complete.');
+  else if(details)embed.setDescription(details.slice(0,4096));
   try{
     await c.send({embeds:[embed],allowedMentions:{parse:[],users:[],roles:[]}});
     return true;
