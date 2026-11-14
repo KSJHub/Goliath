@@ -13,6 +13,8 @@ export const DASHBOARD_EMOJIS = Object.freeze({
   CHANNELS: '📂', SETTINGS: '⚙️', AUTOMATION: '⚡', TEST: '🧪', DATA: '🗄️',
   USER: '👤', LIVE: '🔴', GOODBYE: '👋',
   BOT: '🤖', BUILDER: '🛠', PRESET: '📦', DIRECT_MESSAGE: '📨', PREVIEW: '👁',
+  TICKETS: '🎫', DOCUMENT: '📄', SECURITY: '🛡️', SAVE: '💾',
+  SYSTEM: '🧩', HISTORY: '🕘', LOCK: '🔒', COLOURS: '🌈',
 });
 
 
