@@ -53,10 +53,10 @@ async function logEvent(g,section,type,content){
   const c=g.channels.cache.get(configured)||await g.channels.fetch(configured).catch(()=>null);
   if(!c?.send)return false;
   const styles={
-    join:{emoji:'🚪',title:'Member Entered Verification',color:0x3498db},
+    join:{emoji:'🚪',title:'Member Joined • Pending Verification',color:0xffffff},
     attempt:{emoji:'🔐',title:'Verification Activity',color:0x5865f2},
     success:{emoji:'✅',title:'Verification Successful',color:0x2ecc71},
-    failure:{emoji:'⚠️',title:'Verification Challenge Failed',color:0xf1c40f},
+    failure:{emoji:'❌',title:'Verification Failed',color:0xe74c3c},
     quarantine:{emoji:'🚨',title:'Member Quarantined',color:0xe74c3c},
     error:{emoji:'❌',title:'Verification Error',color:0xe74c3c},
     bot:{emoji:'🤖',title:'Bot Verification Event',color:0x95a5a6}
