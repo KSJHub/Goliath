@@ -242,7 +242,7 @@ async function startConfiguredModules(client) {
       const enabledGuilds = client.guilds.cache.filter((guild) => guildManager.isModuleEnabled(guild.id, 'reactionRoles'));
       return require('./src/modules/roleStudio/reactionRoles/reactionRoles').startup({ guilds: { cache: enabledGuilds } });
     }),
-    runStartupTask('Verification', () => require('./src/modules/securityStudio/verification').startupVerification(client)),
+    runStartupTask('Verification', () => require('./src/modules/securityStudio/verification/verification').startupVerification(client)),
     runStartupTask('Games', () => require('./src/modules/utilityStudio/games/freeGamesMonitor').startup(client)),
     runStartupTask('Stats', () => require('./src/modules/utilityStudio/stats/stats').startup(client)),
     runStartupTask('Birthdays', async () => {

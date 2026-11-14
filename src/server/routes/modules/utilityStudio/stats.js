@@ -4,7 +4,7 @@ const express = require('express');
 const { PermissionFlagsBits } = require('discord.js');
 const guildManager = require('../../../../core/guild/guildManager');
 const security = require('../../../../core/security/protection/core');
-const verificationManager = require('../../../../modules/securityStudio/verificationManager');
+const verificationManager = require('../../../../modules/securityStudio/verification/verificationManager');
 const stats = require('../../../../modules/utilityStudio/stats/stats');
 
 const router = express.Router();

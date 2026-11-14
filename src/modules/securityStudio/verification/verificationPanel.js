@@ -1,15 +1,15 @@
 'use strict';
-const { EMOJIS, emojiLabel } = require('../../core/ui/emojis');
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   ChannelSelectMenuBuilder, ChannelType, PermissionFlagsBits, RoleSelectMenuBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
-const guildManager = require('../../core/guild/guildManager');
+const guildManager = require('../../../core/guild/guildManager');
 const verificationManager = require('./verificationManager');
 const verificationStore = require('./verificationStore');
-const { rolePages, rolePager, rolePageSelect, mergePageSelection } = require('../../core/ui/rolePagination');
+const { rolePages, rolePager, rolePageSelect, mergePageSelection } = require('../../../core/ui/rolePagination');
 
 const SECTIONS=new Set(['panel','home','roles','security','intelligence','flow','messages','logs','settings']);
 const ROLE_TYPES=['pending','verifying','verified','auto','bot','bypass','quarantine','staff'];

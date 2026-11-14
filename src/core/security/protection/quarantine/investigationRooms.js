@@ -119,7 +119,7 @@ async function ensureInvestigationCategory(guild, options = {}) {
 }
 
 function getOtherIsolatedMemberIds(guildId, memberId) {
-  const sessions = require('../../../../modules/securityStudio/verificationStore').getVerificationSection(guildId)?.sessions || {};
+  const sessions = require('../../../../modules/securityStudio/verification/verificationStore').getVerificationSection(guildId)?.sessions || {};
   const isolated = id => sessions[id]?.state === 'quarantined' || (sessions[id]?.state === 'review' && Boolean(sessions[id]?.quarantineChannelId));
   return [...new Set([...Object.keys(getQuarantineState(guildId).users || {}), ...Object.keys(sessions).filter(isolated)])].filter(id => id !== memberId);
 }
@@ -139,7 +139,7 @@ async function buildInvestigationRoomOverwrites(guild, member, quarantineRole, o
     overwrites.push({ id: guild.ownerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
   }
   if (options.invitationSelection === true) {
-    const sessions = require('../../../../modules/securityStudio/verificationStore').getVerificationSection(guild.id)?.sessions || {};
+    const sessions = require('../../../../modules/securityStudio/verification/verificationStore').getVerificationSection(guild.id)?.sessions || {};
     const hasIsolatedVerification = id => sessions[id]?.state === 'quarantined'
       || (sessions[id]?.state === 'review' && Boolean(sessions[id]?.quarantineChannelId));
     const selectedUsers = [...new Set((options.invitedUserIds || []).map(String))].filter(id => id !== member.id && id !== botMember.id && id !== guild.ownerId);

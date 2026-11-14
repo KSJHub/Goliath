@@ -278,7 +278,7 @@ async function ensureOfficialInvite(guild, meta = {}, regenerate = false) {
 
 async function applyInviteRoles(member, inviteCode, meta = {}) { const link = getSection(member.guild.id).inviteLinks[inviteCode]; if (!link?.enabled || !link.roleIds.length) return { granted: [], failed: [] }; const granted = []; const failed = [];
   if (!member.user?.bot && guildManager.isModuleEnabled(member.guild.id, 'verification')) {
-    const verificationStore = require('../../securityStudio/verificationStore');
+    const verificationStore = require('../../securityStudio/verification/verificationStore');
     if (member.pending === true || verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') {
       updateSection(member.guild.id, section => ({
         ...section,
@@ -295,7 +295,7 @@ async function releaseDeferredInviteRoles(member, meta = {}) {
   if (!member?.guild?.id || member.user?.bot || member.pending === true) return { granted: [], failed: [] };
   const guildId = member.guild.id;
   if (guildManager.isModuleEnabled(guildId, 'verification')) {
-    const store = require('../../securityStudio/verificationStore');
+    const store = require('../../securityStudio/verification/verificationStore');
     if (store.getSession(guildId, member.id)?.state !== 'verified') return { granted: [], failed: [] };
   }
   const pending = getSection(guildId).deferredInviteRoles?.[member.id];

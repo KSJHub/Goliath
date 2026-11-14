@@ -1,12 +1,12 @@
 'use strict';
-const { emojiLabel } = require('../../core/ui/emojis');
+const { emojiLabel } = require('../../../core/ui/emojis');
 
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const {
   ActionRowBuilder, ButtonStyle, EmbedBuilder, MessageFlags,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
-const guildManager = require('../../core/guild/guildManager');
+const guildManager = require('../../../core/guild/guildManager');
 const runtime = require('./verificationChallengeRuntime');
 const verificationStore = require('./verificationStore');
 

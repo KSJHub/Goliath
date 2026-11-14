@@ -1004,7 +1004,7 @@ async function handleInvestigationRoomControl(interaction) {
       const state = getQuarantineState(interaction.guild.id);
       if ((state.pendingRoomCleanups || []).some(record => record.channelId === channelId)) throw Error('A case record is still being saved. Keep this room until recovery completes.');
       if (Object.values(state.users || {}).some(snapshot => [snapshot.interviewChannelId, snapshot.previousInterviewChannelId].includes(channelId))) throw Error('An active investigation still uses this room. It cannot be deleted.');
-      const sessions = require('../../../modules/securityStudio/verificationStore').getVerificationSection(interaction.guild.id).sessions || {};
+      const sessions = require('../../../modules/securityStudio/verification/verificationStore').getVerificationSection(interaction.guild.id).sessions || {};
       if (Object.values(sessions).some(session => ['quarantined', 'review'].includes(session.state) && session.quarantineChannelId === channelId)) throw Error('An active Verification case still uses this room. It cannot be deleted.');
     }
     const transcripts = require('../../../modules/feedbackStudio/tickets/ticketsTranscripts');

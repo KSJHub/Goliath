@@ -1,16 +1,16 @@
 'use strict';
 
 const { ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonStyle } = require('discord.js');
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const verificationStore = require('./verificationStore');
-const guildManager = require('../../core/guild/guildManager');
-const { auditQuarantineSnapshots } = require('../../core/security/protection/quarantine/state');
+const guildManager = require('../../../core/guild/guildManager');
+const { auditQuarantineSnapshots } = require('../../../core/security/protection/quarantine/state');
 const {
   QUARANTINE_MODES,
   quarantineMember,
   getQuarantineState,
   getQuarantineMode,
-} = require('../../core/security/protection/quarantine');
+} = require('../../../core/security/protection/quarantine');
 
 const cleanIds = value => [...new Set((Array.isArray(value) ? value : value ? [value] : []).map(String).filter(Boolean))];
 
@@ -312,7 +312,7 @@ async function resolveQuarantineCase(guild, userId, action, actorId, reason = ''
 // the member's already-stripped roles. Never invoked by startup or Verification.
 async function reconcileLegacyQuarantine(guild, input = {}) {
   if (String(process.env.BOT_MODE || '').toUpperCase() !== 'DEV') return { ok: false, reason: 'Legacy reconciliation is DEV-only.' };
-  const engine = require('../../core/security/protection/quarantine');
+  const engine = require('../../../core/security/protection/quarantine');
   const userId = String(input.userId || '');
   const roomId = String(input.roomId || '');
   if (![userId, roomId].every(id => /^\d{15,25}$/.test(id))) return { ok: false, reason: 'Invalid member or room ID.' };
@@ -329,7 +329,7 @@ async function reconcileLegacyQuarantine(guild, input = {}) {
     const roleIds = cleanIds(verificationStore.normalizeSettings(section.settings || {}).roles?.quarantine);
     if (roleIds.length !== 1 || (state.roleId && state.roleId !== roleIds[0])) throw Error('Verification and shared quarantine roles must agree.');
     const quarantineId = roleIds[0];
-    const history = require('../../owner/auditIntelligence/auditStore').getUser(userId)?.roleHistory || [];
+    const history = require('../../../owner/auditIntelligence/auditStore').getUser(userId)?.roleHistory || [];
     const first = history.find(e => e.eventId === input.addEventId && String(e.guildId) === guild.id);
     const second = history.find(e => e.eventId === input.stripEventId && String(e.guildId) === guild.id);
     const ids = roles => {

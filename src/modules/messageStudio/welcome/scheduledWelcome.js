@@ -200,7 +200,7 @@ async function getWaitingMembers(guild) {
   // Scheduled delivery is independent of the queue mechanism, but members
   // must complete Verification before being announced as joined.
   const verificationEnabled = guildManager.isModuleEnabled(guild.id, 'verification');
-  const verificationStore = verificationEnabled ? require('../../securityStudio/verificationStore') : null;
+  const verificationStore = verificationEnabled ? require('../../securityStudio/verification/verificationStore') : null;
   return members.filter((member) => {
     const joinedAt = member.joinedAt?.toISOString?.() || null;
     const deliveredJoin = config.completedMemberJoins?.[member.id];

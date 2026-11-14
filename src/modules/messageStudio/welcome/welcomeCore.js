@@ -108,7 +108,7 @@ async function releaseDeferredWelcome(member) {
       return { skipped: true, reason: 'stale_join' };
     }
     if (guildManager.isModuleEnabled(member.guild.id, 'verification')) {
-      const verificationStore = require('../../securityStudio/verificationStore');
+      const verificationStore = require('../../securityStudio/verification/verificationStore');
       if (verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') return { skipped: true, reason: 'awaiting_verification' };
     }
     if (!guildManager.isModuleEnabled(member.guild.id, MODULE)) return { skipped: true, reason: 'disabled' };
@@ -148,7 +148,7 @@ async function sendWelcome(member, options = {}) {
   if (!member?.guild?.id || !member?.user?.id) return { publicSent: false, dmSent: false, skipped: true, reason: 'invalid_member', errors: [] };
   const config = getWelcomeSection(member.guild.id); if (!options.force && !guildManager.isModuleEnabled(member.guild.id, MODULE)) { if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 }); return { publicSent: false, dmSent: false, skipped: true, reason: 'disabled', errors: [] }; } if (config.ignoreBots && member.user.bot) { if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 }); return { publicSent: false, dmSent: false, skipped: true, reason: 'ignored_bot', errors: [] }; }
   if (!options.force && !options.previewOnly && !options.bypassVerificationGate && config.waitForVerification && guildManager.isModuleEnabled(member.guild.id, 'verification')) {
-    const verificationStore = require('../../securityStudio/verificationStore');
+    const verificationStore = require('../../securityStudio/verification/verificationStore');
     if (member.pending === true || verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') {
       updateWelcomeSection(member.guild.id, section => ({
         ...section, deferredWelcomes: {

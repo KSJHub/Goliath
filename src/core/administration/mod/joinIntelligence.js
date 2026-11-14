@@ -6,7 +6,7 @@ const intelligence = require('./intelligence');
 const decisioning = require('./memberDecisioning');
 const { db } = require('./storage');
 const { recordModerationSystemEvent } = require('./permissions');
-const verificationStore = require('../../../modules/securityStudio/verificationStore');
+const verificationStore = require('../../../modules/securityStudio/verification/verificationStore');
 
 const DEFAULT_CONFIG = Object.freeze({
   enabled: false,

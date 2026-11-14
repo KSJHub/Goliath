@@ -1,8 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
-const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../core/guild/moduleSectionManager');
-const guildManager = require('../../core/guild/guildManager');
+const { getModuleSection, saveModuleSection, updateModuleSection } = require('../../../core/guild/moduleSectionManager');
+const guildManager = require('../../../core/guild/guildManager');
 
 const MODULE = 'verification';
 const CONFIG_HISTORY_LIMIT = 5;

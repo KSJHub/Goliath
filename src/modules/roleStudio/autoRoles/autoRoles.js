@@ -255,7 +255,7 @@ async function applyAutoRoles(member, options = {}) {
   // Human join roles are deferred while Verification is active. Persist the
   // entitlement in this existing module section for restart-safe delivery.
   if (!member.user?.bot && guildManager.isModuleEnabled(guild.id, 'verification')) {
-    const verificationStore = require('../../securityStudio/verificationStore');
+    const verificationStore = require('../../securityStudio/verification/verificationStore');
     const session = verificationStore.getSession(guild.id, member.id);
     if (session?.state !== 'verified' || member.pending === true) {
       updateAutoRolesSection(guild.id, (current) => ({
@@ -309,7 +309,7 @@ async function releaseDeferredJoinRoles(member) {
   if (!member?.guild?.id || member.user?.bot || member.pending === true) return [];
   const guildId = member.guild.id;
   if (guildManager.isModuleEnabled(guildId, 'verification')) {
-    const store = require('../../securityStudio/verificationStore');
+    const store = require('../../securityStudio/verification/verificationStore');
     if (store.getSession(guildId, member.id)?.state !== 'verified') return [];
   }
   const pending = getAutoRolesSection(guildId).deferredJoinRoles?.[member.id];
@@ -405,7 +405,7 @@ async function buildHealthReport(guild) {
   // Diagnose unsafe cross-module grants before introducing deferred role delivery.
   // This check is read-only and preserves every configured role assignment.
   const verificationEnabled = guildManager.isModuleEnabled(guild.id, 'verification');
-  const verificationStore = verificationEnabled ? require('../../securityStudio/verificationStore') : null;
+  const verificationStore = verificationEnabled ? require('../../securityStudio/verification/verificationStore') : null;
   const verificationSettings = verificationStore?.getVerificationSection(guild.id)?.settings || {};
   const restrictedRoleIds = new Set([
     ...(verificationSettings.roles?.pending || []),

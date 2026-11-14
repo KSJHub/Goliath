@@ -28,7 +28,7 @@ async function cleanupReleasedInvitationDenies(guild, onlyMemberId = null, optio
   for (const snapshot of Object.values(state.users || {})) for (const id of snapshot.protectedInvitationMembers || []) if (!onlyMemberId || id === onlyMemberId) targets.add(id);
   if (!targets.size) return { cleaned: 0, failed: 0 };
   let sessions;
-  try { sessions = require('../../../../modules/securityStudio/verificationStore').getVerificationSection(guild.id)?.sessions || {}; }
+  try { sessions = require('../../../../modules/securityStudio/verification/verificationStore').getVerificationSection(guild.id)?.sessions || {}; }
   catch (error) { return { cleaned: 0, failed: targets.size }; }
   let cleaned = 0, failed = 0;
   for (const memberId of targets) {
@@ -65,7 +65,7 @@ async function cleanupReleasedInvitationDenies(guild, onlyMemberId = null, optio
 
 async function reconcileVerificationRelease(guild, member, options = {}) {
   try {
-    const verificationQuarantine = require('../../../../modules/securityStudio/verificationQuarantine');
+    const verificationQuarantine = require('../../../../modules/securityStudio/verification/verificationQuarantine');
     if (typeof verificationQuarantine?.reconcileModerationRelease !== 'function') return null;
     return await verificationQuarantine.reconcileModerationRelease(
       guild,

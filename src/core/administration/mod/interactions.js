@@ -20,8 +20,8 @@ const { openCaseSearch, handleCaseSearchAction, handleCaseSearchSelect, handleCa
 const memberIntelligence = require('./intelligence');
 const caseProceeding = require('./caseProceeding');
 const quarantineInteractions = require('./quarantineInteractions');
-const verificationStore = require('../../../modules/securityStudio/verificationStore');
-const verificationQuarantine = require('../../../modules/securityStudio/verificationQuarantine');
+const verificationStore = require('../../../modules/securityStudio/verification/verificationStore');
+const verificationQuarantine = require('../../../modules/securityStudio/verification/verificationQuarantine');
 const { quarantineMember, restoreQuarantinedMember, getQuarantineState } = require('../../security/protection/quarantine');
 const {
   renderDashboard,

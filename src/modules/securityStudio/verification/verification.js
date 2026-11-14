@@ -1,6 +1,6 @@
 'use strict';
 
-const guildManager = require('../../core/guild/guildManager');
+const guildManager = require('../../../core/guild/guildManager');
 const verificationHealth = require('./verificationHealth');
 
 const MODULE = 'verification';
