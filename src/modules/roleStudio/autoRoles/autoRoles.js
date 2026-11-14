@@ -320,18 +320,22 @@ async function releaseDeferredJoinRoles(member) {
   const remaining = required.filter(id => !member.roles.cache.has(id) && !assigned.some(role => role.id === id));
   updateAutoRolesSection(guildId, (section) => {
     const deferredJoinRoles = { ...(section.deferredJoinRoles || {}) };
-    if (remaining.length) deferredJoinRoles[member.id] = { ...pending, roleIds: remaining };
+    const current = deferredJoinRoles[member.id];
+    // A leave/rejoin during role assignment must not overwrite a newer queue entry.
+    if (!current || current.joinedAt !== pending.joinedAt) return section;
+    if (remaining.length) deferredJoinRoles[member.id] = { ...current, roleIds: remaining };
     else delete deferredJoinRoles[member.id];
     return { ...section, deferredJoinRoles };
   });
   return assigned;
 }
 
-function clearDeferredJoinRoles(guildId, memberId) {
+function clearDeferredJoinRoles(guildId, memberId, expectedJoinedAt = undefined) {
   const existing = getAutoRolesSection(guildId).deferredJoinRoles || {};
-  if (!Object.prototype.hasOwnProperty.call(existing, memberId)) return false;
+  if (!Object.prototype.hasOwnProperty.call(existing, memberId) || (expectedJoinedAt !== undefined && existing[memberId]?.joinedAt !== expectedJoinedAt)) return false;
   updateAutoRolesSection(guildId, section => {
     const deferredJoinRoles = { ...(section.deferredJoinRoles || {}) };
+    if (!deferredJoinRoles[memberId] || (expectedJoinedAt !== undefined && deferredJoinRoles[memberId].joinedAt !== expectedJoinedAt)) return section;
     delete deferredJoinRoles[memberId];
     return { ...section, deferredJoinRoles };
   });
