@@ -265,11 +265,13 @@ async function executeScheduledWelcome(guild, options = {}) {
   let welcomed = 0;
   let messagesSent = 0;
   let sendFailed = 0;
+  let checkpointFailed = 0;
   let roleRemovalFailed = retryRoleRemovalFailed;
   const errors = [...retryErrors];
 
   for (const batch of batches) {
     let delivered = false;
+    let checkpointSaved = false;
     try {
       const built = await messages.buildTemplateBatchPayload(guild, batch, config);
       const payload = await emojiPayload.resolveMessagePayload(guild.client, guild.id, built, 'welcome');
@@ -300,6 +302,7 @@ async function executeScheduledWelcome(guild, options = {}) {
         if (deliveredJoin && (!newerJoin || newerJoin === deliveredJoin)) completedMemberJoins[member.id] = deliveredJoin;
       }
       updateScheduledConfig(guild.id, { completedMemberIds: [...completed], completedMemberJoins, pendingMembers }, { actorId: options.actorId, action: 'scheduled_welcome_delivery_checkpoint' });
+      checkpointSaved = true;
       if (config.queueRoleId && config.removeQueueRole) {
         for (const member of batch) {
           const currentMember = await guild.members.fetch({ user: member.id, force: true }).catch(() => null);
@@ -314,7 +317,8 @@ async function executeScheduledWelcome(guild, options = {}) {
       }
     } catch (error) {
       if (!delivered) sendFailed += batch.length;
-      errors.push(`${delivered ? 'Post-delivery checkpoint/cleanup failed' : 'Batch send failed'}: ${error.message || error}`);
+      if (delivered && !checkpointSaved) checkpointFailed += batch.length;
+      errors.push(`${!delivered ? 'Batch send failed' : !checkpointSaved ? 'Delivery checkpoint failed after send' : 'Post-delivery cleanup failed'}: ${error.message || error}`);
     }
   }
 
@@ -327,7 +331,7 @@ async function executeScheduledWelcome(guild, options = {}) {
     sendFailed: Number(config.analytics.sendFailed || 0) + sendFailed,
     roleRemovalFailed: Number(config.analytics.roleRemovalFailed || 0) + roleRemovalFailed,
     lastRunAt: now(),
-    lastRunDate: sendFailed > 0 ? config.analytics.lastRunDate : runDate,
+    lastRunDate: sendFailed > 0 || checkpointFailed > 0 ? config.analytics.lastRunDate : runDate,
     lastError: errors.length ? errors[0].slice(0, 500) : null,
   };
   updateScheduledConfig(guild.id, { analytics }, { actorId: options.actorId, action: 'scheduled_welcome_run' });
