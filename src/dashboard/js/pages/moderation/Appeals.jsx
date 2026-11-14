@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goDashboard } from '../../services/dashboardPath.js';
 import { dashboardPath, localDashboardPath } from '../../services/dashboardPath.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -19,7 +20,7 @@ function caseStatus(status) {
   if (value === 'reversed') return { label: '✅ Case Resolved', color: '#67e8f9' };
   if (value === 'expired') return { label: '⌛ Case Expired', color: '#cbd5e1' };
   if (value === 'active') return { label: '⚠️ Case Active', color: '#fbbf24' };
-  return { label: '📁 ' + value.replace(/[_-]/g, ' '), color: '#bfdbfe' };
+  return { label: E.FOLDER + ' ' + value.replace(/[_-]/g, ' '), color: '#bfdbfe' };
 }
 
 function discordAvatar(user) {
@@ -301,7 +302,7 @@ export default function Appeals() {
         <header style={{ ...card, display: 'flex', justifyContent: 'space-between', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.13em', textTransform: 'uppercase' }}>Member Portal</div>
-            <h1 style={{ margin: '6px 0 4px', fontSize: 'clamp(30px, 7vw, 44px)', lineHeight: 1.05 }}>💎 Member Portal</h1>
+            <h1 style={{ margin: '6px 0 4px', fontSize: 'clamp(30px, 7vw, 44px)', lineHeight: 1.05 }}>{E.DIAMOND} Member Portal</h1>
             <p style={{ ...muted, margin: 0 }}>Your account, community history and appeals.</p>
           </div>
           <div style={{ display: 'flex', gap: 9, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -315,7 +316,7 @@ export default function Appeals() {
           <h2 style={{ margin: '0 0 5px', fontSize: 'clamp(22px, 4vw, 30px)' }}>Welcome back, {displayName}</h2>
           <p style={{ ...muted, margin: '0 0 18px' }}>Your personal space for community activity, account restrictions, case history and appeals.</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-            {[['📁 Cases', cases.length], ['🔒 Active Restrictions', restrictions.length], ['⏳ Under Review', pendingCount], ['✅ Resolved Appeals', resolvedCount]].map(([label, count]) => (
+            {[[`${E.FOLDER} Cases`, cases.length], [`${E.LOCK} Active Restrictions`, restrictions.length], [`${E.TIMER} Under Review`, pendingCount], [`${E.SUCCESS} Resolved Appeals`, resolvedCount]].map(([label, count]) => (
               <div key={label} style={{ padding: 14, borderRadius: 13, background: 'rgba(2,6,23,.35)', border: '1px solid rgba(148,163,184,.15)' }}>
                 <div style={{ ...muted, fontSize: 13 }}>{label}</div><strong style={{ fontSize: 25 }}>{count}</strong>
               </div>
@@ -324,13 +325,13 @@ export default function Appeals() {
         </section>
 
         <nav aria-label="Member portal sections" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {[['overview', '🏠 Overview'], ['cases', '⚖️ Cases & Appeals'], ['restrictions', '🔒 Restrictions'], ['timeline', '📅 Timeline'], ['profile', '👤 Profile']].map(([id, label]) => (
+          {[['overview', `${E.HOME} Overview`], ['cases', `${E.JUSTICE} Cases & Appeals`], ['restrictions', `${E.LOCK} Restrictions`], ['timeline', `${E.DATE} Timeline`], ['profile', `${E.USER} Profile`]].map(([id, label]) => (
             <button key={id} type="button" aria-current={portalTab === id ? 'page' : undefined} style={{ ...secondaryButton, background: portalTab === id ? '#2563eb' : '#18273c' }} onClick={() => { if (id === 'cases') { goDashboard('/appeals'); return; } if (localDashboardPath(window.location.pathname).replace(/\/+$/, '') === '/appeals') window.history.replaceState({}, '', dashboardPath('/portal')); setPortalTab(id); }}>{label}</button>
           ))}
         </nav>
         {(portalTab === 'overview' || portalTab === 'restrictions') ? (
           <section style={card}>
-            <h2 style={{ marginTop: 0 }}>🔒 Account Restrictions</h2>
+            <h2 style={{ marginTop: 0 }}>{E.LOCK} Account Restrictions</h2>
             {restrictions.length ? restrictions.map(item => (
               <div key={item.guildId} style={{ border: '1px solid rgba(245,158,11,.3)', borderRadius: 12, padding: 14, marginTop: 10 }}>
                 <strong>{item.guildName} · {item.mode === 'investigation' ? 'Investigation hold' : 'Security restriction'}</strong>
@@ -342,7 +343,7 @@ export default function Appeals() {
         ) : null}
         {(portalTab === 'overview' || portalTab === 'timeline') ? (
           <section style={card}>
-            <h2 style={{ marginTop: 0 }}>📅 Personal Timeline</h2>
+            <h2 style={{ marginTop: 0 }}>{E.DATE} Personal Timeline</h2>
             {timeline.length ? <ol style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 10 }}>
               {timeline.slice(0, portalTab === 'overview' ? 6 : 100).map(item => (
                 <li key={item.key} style={{ borderLeft: '3px solid #60a5fa', padding: '4px 0 4px 13px' }}>
@@ -355,7 +356,7 @@ export default function Appeals() {
         {portalTab === 'profile' ? (
           <section style={{ ...card, padding: 'clamp(20px, 4vw, 32px)' }}>
             <div style={{ color: '#60a5fa', fontSize: 12, fontWeight: 900, letterSpacing: '.1em', textTransform: 'uppercase' }}>Your account</div>
-            <h2 style={{ margin: '8px 0 6px', fontSize: 'clamp(24px, 4vw, 30px)' }}>👤 My Profile</h2>
+            <h2 style={{ margin: '8px 0 6px', fontSize: 'clamp(24px, 4vw, 30px)' }}>{E.USER} My Profile</h2>
             <p style={{ ...muted, margin: '0 0 22px' }}>The account connected to your member portal.</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: 20, borderRadius: 16, background: 'rgba(2,6,23,.36)', border: '1px solid rgba(148,163,184,.16)' }}>
               {avatarUrl ? <img src={avatarUrl} alt="" width="64" height="64" style={{ borderRadius: '50%', border: '2px solid rgba(96,165,250,.4)' }} referrerPolicy="no-referrer" /> : <div aria-hidden="true" style={{ width: 64, height: 64, display: 'grid', placeItems: 'center', borderRadius: '50%', background: '#18273c', fontSize: 28 }}>👤</div>}
@@ -395,7 +396,7 @@ export default function Appeals() {
 
           {!cases.length ? (
             <div style={{ marginTop: 20, border: '1px dashed rgba(148,163,184,.25)', borderRadius: 16, padding: '34px 20px', textAlign: 'center', background: 'rgba(2,6,23,.28)' }}>
-              <div style={{ fontSize: 38, marginBottom: 8 }}>📄</div>
+              <div style={{ fontSize: 38, marginBottom: 8 }}>{E.DOCUMENT}</div>
               <h3 style={{ margin: '0 0 8px', fontSize: 20 }}>No cases to display</h3>
               <p style={{ ...muted, maxWidth: 590, margin: '0 auto' }}>There are no member-visible cases or previous appeals to show for this Discord account.</p>
               <p style={{ ...muted, maxWidth: 590, margin: '10px auto 0', fontSize: 14 }}>If you expected to see a case here, check that you signed in with the same Discord account that received the moderation action.</p>
@@ -440,9 +441,9 @@ export default function Appeals() {
                       {item.appeals.map((appeal) => (
                         <div key={appeal.id} style={{ borderLeft: `3px solid ${statusTone(appeal.status)}`, padding: '5px 0 5px 11px', lineHeight: 1.5 }}>
                           <strong style={{ color: statusTone(appeal.status) }}>{statusLabel(appeal.status)}</strong>
-                          <div style={{ color: '#a7b4c8', fontSize: 13, marginTop: 5 }}>📝 Submitted: {formatDate(appeal.submittedAt)}</div>
+                          <div style={{ color: '#a7b4c8', fontSize: 13, marginTop: 5 }} >{E.NOTE} Submitted: {formatDate(appeal.submittedAt)}</div>
 
-                          {appeal.reviewedAt ? <div style={{ color: '#a7b4c8', fontSize: 13 }}>{appeal.status === 'approved' ? '✅' : appeal.status === 'denied' ? '❌' : '📋'} Reviewed: {formatDate(appeal.reviewedAt)}</div> : null}
+                          {appeal.reviewedAt ? <div style={{ color: '#a7b4c8', fontSize: 13 }}>{appeal.status === 'approved' ? E.SUCCESS : appeal.status === 'denied' ? E.ERROR : E.CLIPBOARD} Reviewed: {formatDate(appeal.reviewedAt)}</div> : null}
                           {appeal.reviewNote ? <div style={{ color: '#d7e0ec', marginTop: 5 }}><strong>Review note:</strong> {appeal.reviewNote}</div> : null}
                           {appeal.remedyDetail ? <div style={{ color: '#d7e0ec', marginTop: 4 }}><strong>Outcome:</strong> {appeal.remedyDetail}</div> : null}
                         </div>
@@ -510,15 +511,15 @@ export default function Appeals() {
           </div>
 
           <div style={card}>
-            <h3 style={{ marginTop: 0 }}>🔒 Privacy & Security</h3>
+            <h3 style={{ marginTop: 0 }}>{E.LOCK} Privacy & Security</h3>
             <p style={{ ...muted, marginBottom: 0 }}>This page only shows information that is appropriate for you to see about your own cases and appeals. Private moderator notes and internal review material remain private.</p>
-            <div style={{ marginTop: 16, padding: 13, borderRadius: 12, background: 'rgba(34,197,94,.07)', border: '1px solid rgba(34,197,94,.14)', color: '#d1fae5', fontSize: 14, lineHeight: 1.55 }}>🔒 Your appeal is tied to the Discord account you are currently signed in with.</div>
+            <div style={{ marginTop: 16, padding: 13, borderRadius: 12, background: 'rgba(34,197,94,.07)', border: '1px solid rgba(34,197,94,.14)', color: '#d1fae5', fontSize: 14, lineHeight: 1.55 }}>{E.LOCK} Your appeal is tied to the Discord account you are currently signed in with.</div>
           </div>
         </section> : null}
 
         <footer aria-label="Portal information" style={{ borderTop: '1px solid rgba(148,163,184,.18)', padding: '22px 4px 4px', color: '#94a3b8', fontSize: 13, lineHeight: 1.6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
-            <div><strong style={{ color: '#cbd5e1' }}>💎 Member Portal</strong><div>Your account and community information, in one place.</div></div>
+            <div><strong style={{ color: '#cbd5e1' }}>{E.DIAMOND} Member Portal</strong><div>Your account and community information, in one place.</div></div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
               <details style={{ maxWidth: 330 }}>
                 <summary style={{ cursor: 'pointer', color: '#cbd5e1', fontWeight: 700 }}>Privacy &amp; security</summary>
