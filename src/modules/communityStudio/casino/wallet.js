@@ -57,10 +57,12 @@ function casinoTransaction(guildId, { key, operation, userId, targetUserId, amou
   updateGuildSection(guildId, 'modules', (modules = {}) => {
     const next = isPlainObject(modules) ? clone(modules) : {};
     const casino = isPlainObject(next.casino) ? next.casino : {};
+    if (casino.enabled !== true) throw new Error('Casino is disabled for this server.');
     if (operation === 'transfer' && casino.settings?.transfersEnabled !== true) throw new Error('Casino transfers are disabled.');
     const wallet = isPlainObject(casino.wallet) ? casino.wallet : {};
     const balances = isPlainObject(wallet.balances) ? wallet.balances : {};
     const transactions = isPlainObject(wallet.transactions) ? wallet.transactions : {};
+    // Never truncate financial history; fail closed at configured storage capacity.
     const processedKeys = isPlainObject(wallet.processedKeys) ? wallet.processedKeys : {};
     const fingerprint = JSON.stringify([operation, sourceId, destinationId, quantity, memo]);
     if (Object.prototype.hasOwnProperty.call(processedKeys, transactionKey)) {
@@ -99,7 +101,7 @@ function casinoTransaction(guildId, { key, operation, userId, targetUserId, amou
     processedKeys[transactionKey] = { fingerprint, result: entry };
     // Preserve the complete idempotency index: eviction would permit replay.
     // Fail closed before allowing unbounded growth.
-    if (Object.keys(processedKeys).length > CASINO_KEY_LIMIT) throw new Error('Casino idempotency index capacity reached.');
+    if (Object.keys(processedKeys).length > CASINO_KEY_LIMIT) throw new Error('Casino ledger capacity reached; migrate to transactional storage before continuing.');
     next.casino = {
       ...casino,
       wallet: { ...wallet, balances, transactions, processedKeys },
