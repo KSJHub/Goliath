@@ -122,10 +122,21 @@ async function releaseDeferredWelcome(member) {
       if (verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') return { skipped: true, reason: 'awaiting_verification' };
     }
     if (!guildManager.isModuleEnabled(member.guild.id, MODULE)) return { skipped: true, reason: 'disabled' };
+    const checkpointDelivery = (field) => {
+      updateWelcomeSection(member.guild.id, section => {
+        const current = section.deferredWelcomes[member.id];
+        if (!current || current.joinedAt !== pending.joinedAt) return section;
+        return { ...section, deferredWelcomes: {
+          ...section.deferredWelcomes,
+          [member.id]: { ...current, [field]: true },
+        } };
+      }, { action: 'welcome_deferred_delivery_checkpoint' });
+    };
     const result = await sendWelcome(member, {
       bypassVerificationGate: true,
       skipPublic: pending.publicSent === true,
       skipDm: pending.dmSent === true,
+      onDelivery: checkpointDelivery,
     });
     const publicDone = pending.publicSent === true || result.publicSent || !config.channelId;
     const dmDone = pending.dmSent === true || result.dmSent || !config.dmEnabled || member.user?.bot;
@@ -174,8 +185,8 @@ async function sendWelcome(member, options = {}) {
     }
   }
   await refreshMemberCache(member.guild); let publicSent = false; let dmSent = false; let publicFailed = false; let dmFailed = false; const errors = [];
-  if (config.channelId && options.skipPublic !== true) { const channel = await resolveWelcomeChannel(member.guild, config.channelId); if (!channel) { publicFailed = true; errors.push('Welcome channel is unavailable.'); } else { try { const payload = await buildDiscordPayload(member, 'welcome', config); await channel.send(payload); publicSent = true; } catch (error) { publicFailed = true; errors.push(`Public welcome failed: ${error.message || error}`); if (!options.silent) console.error('[Welcome] Failed to send public welcome:', error); } } }
-  if (config.dmEnabled && options.skipDm !== true && !member.user.bot) { try { const payload = await buildDiscordPayload(member, 'dmWelcome', config, { includeComponents: false, suppressPing: true }); await member.send(payload); dmSent = true; } catch (error) { dmFailed = true; errors.push(`Welcome DM failed: ${error.message || error}`); if (!options.silent) console.warn('[Welcome] Failed to send welcome DM:', error.message || error); } }
+  if (config.channelId && options.skipPublic !== true) { const channel = await resolveWelcomeChannel(member.guild, config.channelId); if (!channel) { publicFailed = true; errors.push('Welcome channel is unavailable.'); } else { try { const payload = await buildDiscordPayload(member, 'welcome', config); await channel.send(payload); publicSent = true; if (options.onDelivery) { try { options.onDelivery('publicSent'); } catch (error) { console.error('[Welcome] Public delivery checkpoint failed:', error); } } } catch (error) { publicFailed = true; errors.push(`Public welcome failed: ${error.message || error}`); if (!options.silent) console.error('[Welcome] Failed to send public welcome:', error); } } }
+  if (config.dmEnabled && options.skipDm !== true && !member.user.bot) { try { const payload = await buildDiscordPayload(member, 'dmWelcome', config, { includeComponents: false, suppressPing: true }); await member.send(payload); dmSent = true; if (options.onDelivery) { try { options.onDelivery('dmSent'); } catch (error) { console.error('[Welcome] DM delivery checkpoint failed:', error); } } } catch (error) { dmFailed = true; errors.push(`Welcome DM failed: ${error.message || error}`); if (!options.silent) console.warn('[Welcome] Failed to send welcome DM:', error.message || error); } }
   if (!options.previewOnly) incrementAnalytics(member.guild.id, { publicSent: publicSent ? 1 : 0, publicFailed: publicFailed ? 1 : 0, dmSent: dmSent ? 1 : 0, dmFailed: dmFailed ? 1 : 0, skipped: !publicSent && !dmSent && !publicFailed && !dmFailed ? 1 : 0 });
   return { publicSent, dmSent, publicFailed, dmFailed, skipped: false, errors };
 }
