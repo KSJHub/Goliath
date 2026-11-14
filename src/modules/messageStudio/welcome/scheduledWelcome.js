@@ -264,10 +264,12 @@ async function executeScheduledWelcome(guild, options = {}) {
   const errors = [...retryErrors];
 
   for (const batch of batches) {
+    let delivered = false;
     try {
       const built = await messages.buildTemplateBatchPayload(guild, batch, config);
       const payload = await emojiPayload.resolveMessagePayload(guild.client, guild.id, built, 'welcome');
       await channel.send(payload);
+      delivered = true;
       messagesSent += 1;
       welcomed += batch.length;
       // Persist successful delivery before attempting role cleanup. A role
@@ -306,8 +308,8 @@ async function executeScheduledWelcome(guild, options = {}) {
         }
       }
     } catch (error) {
-      sendFailed += batch.length;
-      errors.push(`Batch send failed: ${error.message || error}`);
+      if (!delivered) sendFailed += batch.length;
+      errors.push(`${delivered ? 'Post-delivery checkpoint/cleanup failed' : 'Batch send failed'}: ${error.message || error}`);
     }
   }
 
