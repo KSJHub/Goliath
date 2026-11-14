@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../services/apiClient';
@@ -405,7 +406,7 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
     return listenForGuildUpdate('logs', (data, payload = {}) => {
       if (payload.source === 'dashboard') return;
       setLogs(normalizeLogs(data));
-      setSaveMessage('🔄 Logs updated live.');
+      setSaveMessage(`${E.REFRESH} Logs updated live.`);
     });
   }, [guildId]);
 
