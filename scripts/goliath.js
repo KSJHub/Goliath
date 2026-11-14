@@ -2473,6 +2473,10 @@ function welcomeEmbedDeliveryAudit() {
       'Member departure must only clear deferred roles belonging to the departed membership.');
     assert(scheduled.includes('completedMemberJoins') && scheduled.includes('deliveredJoin === joinedAt'),
       'Scheduled Welcome must retain join-specific checkpoints for duplicate and rejoin protection.');
+    assert(scheduled.includes('deliveredJoin !== joinedAt') && scheduled.includes('else completed.delete(member.id)') && scheduled.includes('const checkpoint = getScheduledConfig(guild.id)'),
+      'Scheduled Welcome must preserve newer join eligibility when an older batch completes.');
+    assert(scheduled.includes("updateScheduledConfig(guild.id, { analytics }, { actorId: options.actorId, action: 'scheduled_welcome_run' })"),
+      'Scheduled Welcome final analytics must not overwrite newer delivery checkpoints.');
     assert(scheduledQueue.includes('pendingMembers'),
       'Scheduled Welcome must support the persistent member queue without a queue role.');
     assert(dashboard.includes('WELCOME QUEUE ROLE (OPTIONAL)') && dashboard.includes('disabled={busy || !scheduled?.channelId}'),
