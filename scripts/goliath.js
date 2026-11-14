@@ -3323,7 +3323,7 @@ function fixture(snapshot = {}) {
     let calls = 0, outcome;
     const command = { id: 'test', action: 'legacy-quarantine-reconcile', guildId: 'guild', targetMode, requestedFrom, requestedBy, payload: { userId: uid } };
     const controls = load('src/events/client/sentinelControlCenter.js', {
-      '../../../owner/auditIntelligence/auditStore': { runtimeMode: () => mode, getPendingRemoteCommands: () => [command], claimRemoteCommand: () => command, finishRemoteCommand: (id, result) => { outcome = result; } },
+      '../../owner/auditIntelligence/auditStore': { runtimeMode: () => mode, getPendingRemoteCommands: () => [command], claimRemoteCommand: () => command, finishRemoteCommand: (id, result) => { outcome = result; } },
       '../../owner/sentinel/eventPipeline': {}, '../../core/security/protection/core': {},
       '../../modules/securityStudio/verification/verificationQuarantine': { reconcileLegacyQuarantine: async (guild, payload) => { calls++; assert.equal(payload.userId, uid); return { ok: true }; } },
     }, '\nmodule.exports.processRemote = processRemote;');
