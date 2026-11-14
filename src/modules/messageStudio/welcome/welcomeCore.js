@@ -24,11 +24,11 @@ function cleanCount(value) { const parsed = Number(value); return Number.isFinit
 function cleanDate(value) { if (!value) return null; const date = new Date(value); return Number.isFinite(date.getTime()) ? date.toISOString() : null; }
 function normalizeMessageSource(value, templateId = 'welcome_default') { const source = String(value || '').trim(); if (MESSAGE_SOURCES.includes(source)) return source; return BUILT_IN_PRESET_IDS.has(String(templateId || '').trim()) ? 'preset' : 'embedStudio'; }
 function defaultAnalytics() { return { publicSent: 0, publicFailed: 0, dmSent: 0, dmFailed: 0, skipped: 0, lastPublicSentAt: null, lastDmSentAt: null, lastFailedAt: null }; }
-function defaultWelcomeSection() { return { channelId: null, messageSource: 'preset', templateId: 'welcome_default', dmEnabled: false, dmMessageSource: 'inherit', dmTemplateId: null, allowUserPing: true, allowRolePings: false, mentionRoleIds: [], ignoreBots: true, analytics: defaultAnalytics(), createdAt: now(), updatedAt: now() }; }
+function defaultWelcomeSection() { return { channelId: null, messageSource: 'preset', templateId: 'welcome_default', dmEnabled: false, dmMessageSource: 'inherit', dmTemplateId: null, allowUserPing: true, allowRolePings: false, mentionRoleIds: [], ignoreBots: true, waitForVerification: false, deferredWelcomes: {}, analytics: defaultAnalytics(), createdAt: now(), updatedAt: now() }; }
 function normalizeAnalytics(value = {}) { const source = value && typeof value === 'object' ? value : {}; return { ...defaultAnalytics(), ...clone(source), publicSent: cleanCount(source.publicSent), publicFailed: cleanCount(source.publicFailed), dmSent: cleanCount(source.dmSent), dmFailed: cleanCount(source.dmFailed), skipped: cleanCount(source.skipped), lastPublicSentAt: cleanDate(source.lastPublicSentAt), lastDmSentAt: cleanDate(source.lastDmSentAt), lastFailedAt: cleanDate(source.lastFailedAt) }; }
 function normalizeWelcomeSection(section = {}) {
   const base = defaultWelcomeSection(); const source = section && typeof section === 'object' ? section : {}; const channelId = cleanDiscordId(source.channelId || source.welcomeChannelId); const legacyDmTemplate = String(source.dmTemplateId || '').trim(); const templateId = cleanString(source.templateId || base.templateId, base.templateId, 120); const dmTemplateId = legacyDmTemplate ? cleanString(legacyDmTemplate, '', 120) : null;
-  const normalized = { ...base, ...clone(source), channelId, messageSource: normalizeMessageSource(source.messageSource, templateId), templateId, dmEnabled: source.dmEnabled === true || source.sendDm === true, dmMessageSource: dmTemplateId ? normalizeMessageSource(source.dmMessageSource, dmTemplateId) : 'inherit', dmTemplateId, allowUserPing: source.allowUserPing !== false, allowRolePings: source.allowRolePings === true, mentionRoleIds: cleanDiscordIds(source.mentionRoleIds), ignoreBots: source.ignoreBots !== false, analytics: normalizeAnalytics(source.analytics), createdAt: source.createdAt || base.createdAt, updatedAt: source.updatedAt || now() };
+  const normalized = { ...base, ...clone(source), channelId, messageSource: normalizeMessageSource(source.messageSource, templateId), templateId, dmEnabled: source.dmEnabled === true || source.sendDm === true, dmMessageSource: dmTemplateId ? normalizeMessageSource(source.dmMessageSource, dmTemplateId) : 'inherit', dmTemplateId, allowUserPing: source.allowUserPing !== false, allowRolePings: source.allowRolePings === true, mentionRoleIds: cleanDiscordIds(source.mentionRoleIds), ignoreBots: source.ignoreBots !== false, waitForVerification: source.waitForVerification === true, deferredWelcomes: source.deferredWelcomes && typeof source.deferredWelcomes === 'object' && !Array.isArray(source.deferredWelcomes) ? clone(source.deferredWelcomes) : {}, analytics: normalizeAnalytics(source.analytics), createdAt: source.createdAt || base.createdAt, updatedAt: source.updatedAt || now() };
   delete normalized.enabled; return normalized;
 }
 function getWelcomeSection(guildId) { return normalizeWelcomeSection(getModuleSection(guildId, MODULE, defaultWelcomeSection())); }
@@ -36,7 +36,7 @@ function saveWelcomeSection(guildId, section, meta = {}) { return normalizeWelco
 function updateWelcomeSection(guildId, updater, meta = {}) { return normalizeWelcomeSection(updateModuleSection(guildId, MODULE, (current) => { const normalized = normalizeWelcomeSection(current); const next = typeof updater === 'function' ? updater(clone(normalized)) : updater; return normalizeWelcomeSection(next); }, defaultWelcomeSection(), meta)); }
 function updateConfig(guildId, patch = {}, meta = {}) {
   const { enabled, ...configPatch } = patch || {}; if (typeof enabled === 'boolean') guildManager.setModuleEnabled(guildId, MODULE, enabled, meta);
-  return updateWelcomeSection(guildId, (section) => { const templateId = configPatch.templateId === undefined ? section.templateId : cleanString(configPatch.templateId, section.templateId, 120); const dmTemplateId = configPatch.dmTemplateId === undefined ? section.dmTemplateId : (configPatch.dmTemplateId ? cleanString(configPatch.dmTemplateId, '', 120) : null); return { ...section, ...configPatch, channelId: configPatch.channelId === undefined ? section.channelId : cleanDiscordId(configPatch.channelId), messageSource: configPatch.messageSource === undefined ? section.messageSource : normalizeMessageSource(configPatch.messageSource, templateId), templateId, dmTemplateId, dmMessageSource: dmTemplateId ? (configPatch.dmMessageSource === undefined ? normalizeMessageSource(section.dmMessageSource, dmTemplateId) : normalizeMessageSource(configPatch.dmMessageSource, dmTemplateId)) : 'inherit', dmEnabled: typeof configPatch.dmEnabled === 'boolean' ? configPatch.dmEnabled : section.dmEnabled, allowUserPing: typeof configPatch.allowUserPing === 'boolean' ? configPatch.allowUserPing : section.allowUserPing, allowRolePings: typeof configPatch.allowRolePings === 'boolean' ? configPatch.allowRolePings : section.allowRolePings, mentionRoleIds: configPatch.mentionRoleIds === undefined ? section.mentionRoleIds : cleanDiscordIds(configPatch.mentionRoleIds), ignoreBots: typeof configPatch.ignoreBots === 'boolean' ? configPatch.ignoreBots : section.ignoreBots, updatedAt: now() }; }, meta);
+  return updateWelcomeSection(guildId, (section) => { const templateId = configPatch.templateId === undefined ? section.templateId : cleanString(configPatch.templateId, section.templateId, 120); const dmTemplateId = configPatch.dmTemplateId === undefined ? section.dmTemplateId : (configPatch.dmTemplateId ? cleanString(configPatch.dmTemplateId, '', 120) : null); return { ...section, ...configPatch, channelId: configPatch.channelId === undefined ? section.channelId : cleanDiscordId(configPatch.channelId), messageSource: configPatch.messageSource === undefined ? section.messageSource : normalizeMessageSource(configPatch.messageSource, templateId), templateId, dmTemplateId, dmMessageSource: dmTemplateId ? (configPatch.dmMessageSource === undefined ? normalizeMessageSource(section.dmMessageSource, dmTemplateId) : normalizeMessageSource(configPatch.dmMessageSource, dmTemplateId)) : 'inherit', dmEnabled: typeof configPatch.dmEnabled === 'boolean' ? configPatch.dmEnabled : section.dmEnabled, allowUserPing: typeof configPatch.allowUserPing === 'boolean' ? configPatch.allowUserPing : section.allowUserPing, allowRolePings: typeof configPatch.allowRolePings === 'boolean' ? configPatch.allowRolePings : section.allowRolePings, mentionRoleIds: configPatch.mentionRoleIds === undefined ? section.mentionRoleIds : cleanDiscordIds(configPatch.mentionRoleIds), ignoreBots: typeof configPatch.ignoreBots === 'boolean' ? configPatch.ignoreBots : section.ignoreBots, waitForVerification: typeof configPatch.waitForVerification === 'boolean' ? configPatch.waitForVerification : section.waitForVerification, updatedAt: now() }; }, meta);
 }
 function incrementAnalytics(guildId, increments = {}, meta = {}) {
   const timestamp = now(); return updateWelcomeSection(guildId, (section) => { const analytics = normalizeAnalytics(section.analytics); const next = { ...analytics }; for (const key of ['publicSent', 'publicFailed', 'dmSent', 'dmFailed', 'skipped']) next[key] = cleanCount(analytics[key] + cleanCount(increments[key])); if (cleanCount(increments.publicSent) > 0) next.lastPublicSentAt = timestamp; if (cleanCount(increments.dmSent) > 0) next.lastDmSentAt = timestamp; if (cleanCount(increments.publicFailed) > 0 || cleanCount(increments.dmFailed) > 0) next.lastFailedAt = timestamp; return { ...section, analytics: next, updatedAt: timestamp }; }, meta).analytics;
@@ -80,9 +80,49 @@ async function buildDiscordPayload(member, type, config = getWelcomeSection(memb
   return buildTemplateDeliveryPayload({ template, variables: deliveryVariables, interaction: renderInteraction, includeComponents: options.includeComponents !== false, allowUserPing: userPingEnabled, userId: member.user.id, ephemeral: options.ephemeral === true, allowedMentions });
 }
 async function resolveWelcomeChannel(guild, channelId) { if (!guild || !channelId) return null; const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null); return channel?.isTextBased?.() ? channel : null; }
+function clearDeferredWelcome(guildId, memberId) {
+  const current = getWelcomeSection(guildId);
+  if (!current.deferredWelcomes[memberId]) return false;
+  updateWelcomeSection(guildId, section => {
+    const deferredWelcomes = { ...section.deferredWelcomes };
+    delete deferredWelcomes[memberId];
+    return { ...section, deferredWelcomes };
+  }, { action: 'welcome_deferred_cleanup' });
+  return true;
+}
+async function releaseDeferredWelcome(member) {
+  if (!member?.guild?.id || member.pending === true) return { skipped: true, reason: 'pending_screening' };
+  const config = getWelcomeSection(member.guild.id);
+  const pending = config.deferredWelcomes[member.id];
+  if (!pending) return { skipped: true, reason: 'not_queued' };
+  if (pending.joinedAt && pending.joinedAt !== member.joinedAt?.toISOString?.()) {
+    clearDeferredWelcome(member.guild.id, member.id);
+    return { skipped: true, reason: 'stale_join' };
+  }
+  if (guildManager.isModuleEnabled(member.guild.id, 'verification')) {
+    const verificationStore = require('../../securityStudio/verificationStore');
+    if (verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') return { skipped: true, reason: 'awaiting_verification' };
+  }
+  if (!guildManager.isModuleEnabled(member.guild.id, MODULE)) return { skipped: true, reason: 'disabled' };
+  const result = await sendWelcome(member, { bypassVerificationGate: true });
+  if (result.publicSent || result.dmSent || (!result.publicFailed && !result.dmFailed)) clearDeferredWelcome(member.guild.id, member.id);
+  return result;
+}
 async function sendWelcome(member, options = {}) {
   if (!member?.guild?.id || !member?.user?.id) return { publicSent: false, dmSent: false, skipped: true, reason: 'invalid_member', errors: [] };
   const config = getWelcomeSection(member.guild.id); if (!options.force && !guildManager.isModuleEnabled(member.guild.id, MODULE)) { if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 }); return { publicSent: false, dmSent: false, skipped: true, reason: 'disabled', errors: [] }; } if (config.ignoreBots && member.user.bot) { if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 }); return { publicSent: false, dmSent: false, skipped: true, reason: 'ignored_bot', errors: [] }; }
+  if (!options.force && !options.previewOnly && !options.bypassVerificationGate && config.waitForVerification && guildManager.isModuleEnabled(member.guild.id, 'verification')) {
+    const verificationStore = require('../../securityStudio/verificationStore');
+    if (member.pending === true || verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') {
+      updateWelcomeSection(member.guild.id, section => ({
+        ...section, deferredWelcomes: {
+          ...section.deferredWelcomes,
+          [member.id]: { joinedAt: member.joinedAt?.toISOString?.() || null, queuedAt: now() },
+        },
+      }), { action: 'welcome_deferred_for_verification' });
+      return { publicSent: false, dmSent: false, skipped: true, reason: 'awaiting_verification', errors: [] };
+    }
+  }
   await refreshMemberCache(member.guild); let publicSent = false; let dmSent = false; let publicFailed = false; let dmFailed = false; const errors = [];
   if (config.channelId && options.skipPublic !== true) { const channel = await resolveWelcomeChannel(member.guild, config.channelId); if (!channel) { publicFailed = true; errors.push('Welcome channel is unavailable.'); } else { try { const payload = await buildDiscordPayload(member, 'welcome', config); await channel.send(payload); publicSent = true; } catch (error) { publicFailed = true; errors.push(`Public welcome failed: ${error.message || error}`); if (!options.silent) console.error('[Welcome] Failed to send public welcome:', error); } } }
   if (config.dmEnabled && options.skipDm !== true && !member.user.bot) { try { const payload = await buildDiscordPayload(member, 'dmWelcome', config, { includeComponents: false, suppressPing: true }); await member.send(payload); dmSent = true; } catch (error) { dmFailed = true; errors.push(`Welcome DM failed: ${error.message || error}`); if (!options.silent) console.warn('[Welcome] Failed to send welcome DM:', error.message || error); } }
@@ -222,4 +262,4 @@ async function startupWelcome(client) {
   const summary = { ok: results.every((result) => result.healthy || result.enabled === false), guildsChecked: results.length, enabledGuilds: results.filter((result) => result.enabled).length, warnings: results.reduce((total, result) => total + result.warnings.length, 0), results }; console.log(`[Welcome] Startup check complete: ${summary.guildsChecked} guild(s), ${summary.enabledGuilds} enabled, ${summary.warnings} warning(s).`); return summary;
 }
 
-module.exports = { MODULE, MESSAGE_SOURCES, BUILT_IN_PRESET_IDS, cleanDiscordId, cleanDiscordIds, normalizeMessageSource, defaultAnalytics, defaultWelcomeSection, normalizeAnalytics, normalizeWelcomeSection, getWelcomeSection, saveWelcomeSection, updateWelcomeSection, updateConfig, incrementAnalytics, resetWelcomeSection, formatTimestamp, getMemberCount, getMemberJoinNumber, getWelcomeRoleState, buildTemplateVariables, getWelcomeTemplates, getWelcomeBinding, bindWelcomeTemplate, clearDmTemplate, getAssignedTemplate, templateToPreviewState, buildDiscordPayload, resolveWelcomeChannel, sendWelcome, buildHealthReport, repairConfiguration, exportConfiguration, resetWelcome, startupWelcome };
+module.exports = { MODULE, MESSAGE_SOURCES, BUILT_IN_PRESET_IDS, cleanDiscordId, cleanDiscordIds, normalizeMessageSource, defaultAnalytics, defaultWelcomeSection, normalizeAnalytics, normalizeWelcomeSection, getWelcomeSection, saveWelcomeSection, updateWelcomeSection, updateConfig, incrementAnalytics, resetWelcomeSection, formatTimestamp, getMemberCount, getMemberJoinNumber, getWelcomeRoleState, buildTemplateVariables, getWelcomeTemplates, getWelcomeBinding, bindWelcomeTemplate, clearDmTemplate, getAssignedTemplate, templateToPreviewState, buildDiscordPayload, resolveWelcomeChannel, sendWelcome, releaseDeferredWelcome, clearDeferredWelcome, buildHealthReport, repairConfiguration, exportConfiguration, resetWelcome, startupWelcome };
