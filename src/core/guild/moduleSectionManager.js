@@ -270,7 +270,7 @@ const CASINO_KEY_LIMIT = 2000;
 
 function casinoUserId(value) {
   const id = String(value || '').trim();
-  if (!/^\\d{16,20}$/.test(id)) throw new Error('Invalid Discord user ID.');
+  if (!/^\d{16,20}$/.test(id)) throw new Error('Invalid Discord user ID.');
   return id;
 }
 
@@ -313,6 +313,7 @@ function casinoTransaction(guildId, { key, operation, userId, targetUserId, amou
   updateGuildSection(guildId, 'modules', (modules = {}) => {
     const next = isPlainObject(modules) ? clone(modules) : {};
     const casino = isPlainObject(next.casino) ? next.casino : {};
+    if (operation === 'transfer' && casino.settings?.transfersEnabled !== true) throw new Error('Casino transfers are disabled.');
     const wallet = isPlainObject(casino.wallet) ? casino.wallet : {};
     const balances = isPlainObject(wallet.balances) ? wallet.balances : {};
     const transactions = isPlainObject(wallet.transactions) ? wallet.transactions : {};
