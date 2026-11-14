@@ -41,6 +41,7 @@ function defaultScheduledConfig() {
     ignoreBots: true,
     batchSize: 20,
     completedMemberIds: [],
+    completedMemberJoins: {},
     analytics: defaultAnalytics(),
     createdAt: now(),
     updatedAt: now(),
@@ -84,6 +85,7 @@ function normalizeScheduledConfig(value = {}) {
     // Never discard successful-delivery checkpoints solely because a guild is large.
     // Dropping older IDs can resend welcomes when queue-role cleanup is disabled or fails.
     completedMemberIds: [...new Set((Array.isArray(source.completedMemberIds) ? source.completedMemberIds : []).map(queue.cleanId).filter(Boolean))],
+    completedMemberJoins: Object.fromEntries(Object.entries(source.completedMemberJoins && typeof source.completedMemberJoins === 'object' && !Array.isArray(source.completedMemberJoins) ? source.completedMemberJoins : {}).filter(([id, joinedAt]) => queue.cleanId(id) && typeof joinedAt === 'string')),
     analytics: { ...defaultAnalytics(), ...(source.analytics || {}) },
     createdAt: source.createdAt || base.createdAt,
     updatedAt: source.updatedAt || now(),
@@ -139,9 +141,10 @@ function enqueueScheduledMember(member) {
   const previous = config.pendingMembers[member.id];
   if (previous && previous.joinedAt === joinedAt) return false;
   const deliveredJoin = config.completedMemberJoins?.[member.id];
-  if (config.completedMemberIds.includes(member.id) && (!joinedAt || deliveredJoin === joinedAt)) return false;
+  if (config.completedMemberIds.includes(member.id) && (!joinedAt || !deliveredJoin || deliveredJoin === joinedAt)) return false;
   updateScheduledConfig(member.guild.id, {
     completedMemberIds: config.completedMemberIds.filter(id => id !== member.id),
+    completedMemberJoins: Object.fromEntries(Object.entries(config.completedMemberJoins || {}).filter(([id]) => id !== member.id)),
     pendingMembers: { ...config.pendingMembers, [member.id]: { joinedAt, queuedAt: now() } },
   }, { action: 'scheduled_welcome_member_queued' });
   return true;
@@ -260,7 +263,9 @@ async function executeScheduledWelcome(guild, options = {}) {
       for (const member of batch) completed.add(member.id);
       const pendingMembers = { ...getScheduledConfig(guild.id).pendingMembers };
       for (const member of batch) delete pendingMembers[member.id];
-      updateScheduledConfig(guild.id, { completedMemberIds: [...completed], pendingMembers }, { actorId: options.actorId, action: 'scheduled_welcome_delivery_checkpoint' });
+      const completedMemberJoins = { ...getScheduledConfig(guild.id).completedMemberJoins };
+      for (const member of batch) if (member.joinedAt?.toISOString?.()) completedMemberJoins[member.id] = member.joinedAt.toISOString();
+      updateScheduledConfig(guild.id, { completedMemberIds: [...completed], completedMemberJoins, pendingMembers }, { actorId: options.actorId, action: 'scheduled_welcome_delivery_checkpoint' });
       if (config.queueRoleId && config.removeQueueRole) {
         for (const member of batch) {
           const removal = await queue.removeQueueRole(member, config.queueRoleId);
