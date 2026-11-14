@@ -1,4 +1,5 @@
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -6,7 +7,7 @@ import { api } from '../../services/apiClient.js';
 import { ChannelSelect, RoleSelect } from '../../ui/DiscordResourceSelects.jsx';
 
 const baseApi = (guildId) => `/api/role-selector/${guildId}`;
-const blankGroup = () => ({ name: '', emoji: '🏷️', description: '', selectionMode: 'single', allowRemove: true, optionsText: '' });
+const blankGroup = () => ({ name: '', emoji: E.ROLE_TAG, description: '', selectionMode: 'single', allowRemove: true, optionsText: '' });
 function guildIdFrom(selectedGuild, selectedGuildData) { return String(selectedGuildData?.guildId || selectedGuildData?.id || selectedGuild || '').split(':').pop().trim(); }
 function normalizeList(payload, key) { if (Array.isArray(payload)) return payload; if (Array.isArray(payload?.[key])) return payload[key]; if (Array.isArray(payload?.data)) return payload.data; return []; }
 function box(theme) { return { border: `1px solid ${theme.cardBorder}`, background: theme.cardBg, color: theme.cardText, borderRadius: 20, boxShadow: theme.shadow, padding: 20 }; }
@@ -23,7 +24,7 @@ function parseOptions(text, existing = []) {
   });
 }
 function groupDraft(group) {
-  return { name: group?.name || '', emoji: group?.emoji || '🏷️', description: group?.description || '', selectionMode: group?.selectionMode || 'single', allowRemove: group?.allowRemove !== false, optionsText: (group?.options || []).map((item) => `${item.emoji || ''} | ${item.label} | ${item.description || ''} | ${item.managed === false ? item.roleId || '' : ''}`).join('\n') };
+  return { name: group?.name || '', emoji: group?.emoji || E.ROLE_TAG, description: group?.description || '', selectionMode: group?.selectionMode || 'single', allowRemove: group?.allowRemove !== false, optionsText: (group?.options || []).map((item) => `${item.emoji || ''} | ${item.label} | ${item.description || ''} | ${item.managed === false ? item.roleId || '' : ''}`).join('\n') };
 }
 
 export default function RoleSelector({ theme, selectedGuild, selectedGuildData }) {
@@ -75,7 +76,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   }
   const saveConfig = (patch, message = 'Role Selector saved.') => run(() => api.request(`${baseApi(guildId)}/config`, { method: 'PUT', body: JSON.stringify(patch) }), message);
 
-  if (!guildId) return <EmptyState theme={theme} icon="🎭" title="Select a server" description="Select a server to manage Role Selector." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.ROLES} title="Select a server" description="Select a server to manage Role Selector." />;
   if (!data) return <div style={card}>{error || 'Loading Role Selector...'}</div>;
 
   const config = data.config || {};
@@ -112,7 +113,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
   return <div style={{ display: 'grid', gap: 16 }}>
     <section style={{ ...card, background: 'linear-gradient(135deg, rgba(139,92,246,.17), rgba(59,130,246,.12))' }}>
       <div style={{ color: '#c4b5fd', fontWeight: 950, textTransform: 'uppercase', letterSpacing: '.08em' }}>Role Studio</div>
-      <h1 style={{ margin: '7px 0 5px', fontSize: 'clamp(28px,4vw,42px)' }}>🎭 Role Selector</h1>
+      <h1 style={{ margin: '7px 0 5px', fontSize: 'clamp(28px,4vw,42px)' }}>{E.ROLES} Role Selector</h1>
       <p style={{ margin: 0, color: theme.mutedText, lineHeight: 1.6 }}>Universal self-role categories with Colours built in. Add platforms, regions, interests, games, notification roles or any other community choices.</p>
     </section>
 
@@ -120,10 +121,10 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
 
     <section style={{ ...card, display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><div><h2 style={{ margin: 0 }}>Module & Placement</h2><div style={{ color: theme.mutedText }}>Using selectors: {usage.totalUsing}/{usage.totalMembers} · Groups: {groups.length}</div></div><button disabled={busy} onClick={() => saveConfig({ enabled: !data.enabled }, data.enabled ? 'Role Selector disabled.' : 'Role Selector enabled.')} style={btn(theme, 'primary')}>{data.enabled ? 'Disable' : 'Enable'}</button></div>
-      <label style={{ display: 'grid', gap: 6 }}><span style={{ color: theme.mutedText, fontWeight: 900 }}>Role format</span><Input theme={theme} value={config.style?.format || '🎭 | {role}'} onChange={(event) => setData({ ...data, config: { ...config, style: { ...config.style, format: event.target.value } } })} onBlur={() => saveConfig({ style: config.style })} /></label>
+      <label style={{ display: 'grid', gap: 6 }}><span style={{ color: theme.mutedText, fontWeight: 900 }}>Role format</span><Input theme={theme} value={config.style?.format || `${E.ROLES} | {role}`} onChange={(event) => setData({ ...data, config: { ...config, style: { ...config.style, format: event.target.value } } })} onBlur={() => saveConfig({ style: config.style })} /></label>
       <RoleSelect theme={theme} resources={roles} value={config.style?.anchorRoleId || ''} onChange={(value) => saveConfig({ style: { ...config.style, anchorRoleId: value || null } }, 'Anchor saved.')} label="Divider / Anchor Role" />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button disabled={busy} onClick={async () => { const name = await goliathDialog.prompt('Divider role name', { title: 'Create Divider Role', defaultValue: '🎭 | ROLE SELECTOR' }); if (name) run(() => api.request(`${baseApi(guildId)}/create-divider`, { method: 'POST', body: JSON.stringify({ name }) }), 'Divider created.'); }} style={btn(theme)}>Create Divider</button>
+        <button disabled={busy} onClick={async () => { const name = await goliathDialog.prompt('Divider role name', { title: 'Create Divider Role', defaultValue: `${E.ROLES} | ROLE SELECTOR` }); if (name) run(() => api.request(`${baseApi(guildId)}/create-divider`, { method: 'POST', body: JSON.stringify({ name }) }), 'Divider created.'); }} style={btn(theme)}>Create Divider</button>
         <button disabled={busy} onClick={() => saveConfig({ style: { ...config.style, placement: config.style?.placement === 'above' ? 'below' : 'above' } }, 'Placement updated.')} style={btn(theme)}>{config.style?.placement === 'above' ? 'Switch to Below Anchor' : 'Switch to Above Anchor'}</button>
         <button disabled={busy} onClick={() => run(() => api.request(`${baseApi(guildId)}/scan-style`, { method: 'POST' }), 'Guild style scanned.')} style={btn(theme)}>Scan Guild Style</button>
         {config.style?.detectedFormat ? <button disabled={busy} onClick={() => run(() => api.request(`${baseApi(guildId)}/apply-style`, { method: 'POST' }), 'Suggested style applied.')} style={btn(theme)}>Apply Suggestion</button> : null}
@@ -136,7 +137,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
       <div><h2 style={{ margin: 0 }}>Selector Groups</h2><div style={{ color: theme.mutedText }}>Single-choice and multi-choice groups are isolated from each other.</div></div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{groups.map((group) => <button key={group.id} onClick={() => chooseGroup(group)} style={btn(theme, group.id === selectedGroupId ? 'primary' : 'default')}>{group.emoji || '🏷️'} {group.name}</button>)}</div>
       {selectedGroup?.id === 'colours' ? <div style={{ display: 'grid', gap: 10 }}>
-        <strong>🌈 Built-in Colours</strong>
+        <strong>{E.COLOURS} Built-in Colours</strong>
         <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={colours?.customHexEnabled !== false} onChange={(event) => run(() => api.request(`${baseApi(guildId)}/colours`, { method: 'PUT', body: JSON.stringify({ customHexEnabled: event.target.checked }) }), 'Colour settings saved.')} /> Allow custom HEX</label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8 }}>{(colours?.palette || []).map((item) => <label key={item.id} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 12, padding: 9 }}><input type="checkbox" checked={item.enabled !== false} onChange={(event) => run(() => api.request(`${baseApi(guildId)}/colours`, { method: 'PUT', body: JSON.stringify({ palette: colours.palette.map((entry) => entry.id === item.id ? { ...entry, enabled: event.target.checked } : entry) }) }), 'Palette saved.')} /> {item.emoji} <strong>{item.label}</strong><div style={{ color: theme.mutedText, fontSize: 12 }}>{item.hex}</div></label>)}</div>
       </div> : selectedGroup ? <div style={{ display: 'grid', gap: 9 }}>
@@ -162,7 +163,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
     </section>
 
     <section style={{ ...card, display: 'grid', gap: 10 }}>
-      <h2 style={{ margin: 0 }}>📊 Selector Stats</h2>
+      <h2 style={{ margin: 0 }}>{E.CHART} Selector Stats</h2>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{(usage.groups || []).map((group) => {
         const target = groups.find((item) => item.id === group.groupId);
         return <button key={group.groupId} onClick={() => chooseGroup(target)} style={btn(theme, group.groupId === selectedGroupId ? 'primary' : 'default')}>{group.emoji} {group.name}</button>;
