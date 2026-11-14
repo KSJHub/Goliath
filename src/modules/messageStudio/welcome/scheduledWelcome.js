@@ -30,6 +30,7 @@ function defaultScheduledConfig() {
   return {
     enabled: false,
     queueRoleId: null,
+    pendingMembers: {},
     channelId: null,
     time: '19:00',
     timezone: 'Europe/London',
@@ -70,6 +71,7 @@ function normalizeScheduledConfig(value = {}) {
     ...clone(source),
     enabled: source.enabled === true,
     queueRoleId: queue.cleanId(source.queueRoleId),
+    pendingMembers: Object.fromEntries(Object.entries(source.pendingMembers && typeof source.pendingMembers === 'object' && !Array.isArray(source.pendingMembers) ? source.pendingMembers : {}).filter(([id]) => queue.cleanId(id)).map(([id, entry]) => [id, { joinedAt: typeof entry?.joinedAt === 'string' ? entry.joinedAt : null, queuedAt: typeof entry?.queuedAt === 'string' ? entry.queuedAt : now() }])),
     channelId: queue.cleanId(source.channelId),
     time: cleanTime(source.time),
     timezone: cleanTimezone(source.timezone),
@@ -127,6 +129,21 @@ function updateScheduledConfig(guildId, patch = {}, meta = {}) {
   return result;
 }
 
+function enqueueScheduledMember(member) {
+  if (!member?.guild?.id || !member.id) return false;
+  const config = getScheduledConfig(member.guild.id);
+  if (!config.enabled || config.queueRoleId || (config.ignoreBots && member.user?.bot) || config.completedMemberIds.includes(member.id)) return false;
+  updateScheduledConfig(member.guild.id, { pendingMembers: { ...config.pendingMembers, [member.id]: { joinedAt: member.joinedAt?.toISOString?.() || null, queuedAt: now() } } }, { action: 'scheduled_welcome_member_queued' });
+  return true;
+}
+function dequeueScheduledMember(guildId, memberId) {
+  const config = getScheduledConfig(guildId);
+  if (!config.pendingMembers[memberId]) return false;
+  const pendingMembers = { ...config.pendingMembers };
+  delete pendingMembers[memberId];
+  updateScheduledConfig(guildId, { pendingMembers }, { action: 'scheduled_welcome_member_left' });
+  return true;
+}
 function zonedDateKey(timezone, date = new Date()) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: cleanTimezone(timezone), year: 'numeric', month: '2-digit', day: '2-digit',
@@ -166,13 +183,14 @@ async function executeScheduledWelcome(guild, options = {}) {
   let config = getScheduledConfig(guild.id);
   if (!options.force && !guildManager.isModuleEnabled(guild.id, MODULE)) return { skipped: true, reason: 'welcome_disabled' };
   if (!options.force && !config.enabled) return { skipped: true, reason: 'scheduled_disabled' };
-  if (!config.queueRoleId) throw new Error('Scheduled Welcome queue role is not configured.');
   if (!config.channelId) throw new Error('Scheduled Welcome channel is not configured.');
 
   const channel = await resolveChannel(guild, config.channelId);
   if (!channel) throw new Error('Scheduled Welcome channel is unavailable.');
-  const role = guild.roles.cache.get(config.queueRoleId) || await guild.roles.fetch(config.queueRoleId).catch(() => null);
-  if (!role) throw new Error('Scheduled Welcome queue role is unavailable.');
+  if (config.queueRoleId) {
+    const role = guild.roles.cache.get(config.queueRoleId) || await guild.roles.fetch(config.queueRoleId).catch(() => null);
+    if (!role) throw new Error('Scheduled Welcome queue role is unavailable.');
+  }
 
   const waiting = await getWaitingMembers(guild);
   config = getScheduledConfig(guild.id);
@@ -180,7 +198,7 @@ async function executeScheduledWelcome(guild, options = {}) {
   // Retry that cleanup without sending a duplicate welcome.
   let retryRoleRemovalFailed = 0;
   const retryErrors = [];
-  if (config.removeQueueRole && config.completedMemberIds.length) {
+  if (config.queueRoleId && config.removeQueueRole && config.completedMemberIds.length) {
     for (const memberId of config.completedMemberIds) {
       const member = guild.members.cache.get(memberId);
       if (!member?.roles?.cache?.has(config.queueRoleId)) continue;
@@ -224,8 +242,10 @@ async function executeScheduledWelcome(guild, options = {}) {
       // Persist successful delivery before attempting role cleanup. A role
       // removal failure must never make an already-sent welcome eligible again.
       for (const member of batch) completed.add(member.id);
-      updateScheduledConfig(guild.id, { completedMemberIds: [...completed] }, { actorId: options.actorId, action: 'scheduled_welcome_delivery_checkpoint' });
-      if (config.removeQueueRole) {
+      const pendingMembers = { ...getScheduledConfig(guild.id).pendingMembers };
+      for (const member of batch) delete pendingMembers[member.id];
+      updateScheduledConfig(guild.id, { completedMemberIds: [...completed], pendingMembers }, { actorId: options.actorId, action: 'scheduled_welcome_delivery_checkpoint' });
+      if (config.queueRoleId && config.removeQueueRole) {
         for (const member of batch) {
           const removal = await queue.removeQueueRole(member, config.queueRoleId);
           if (!removal.removed && !removal.skipped) {
@@ -280,6 +300,8 @@ module.exports = {
   getTemplateBinding,
   syncTemplateBinding,
   updateScheduledConfig,
+  enqueueScheduledMember,
+  dequeueScheduledMember,
   zonedDateKey,
   resolveChannel,
   getWaitingMembers,
