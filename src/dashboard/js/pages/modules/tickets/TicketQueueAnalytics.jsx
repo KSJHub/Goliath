@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../../shared/PageShell';
 import React, { useMemo } from 'react';
 
 import EmptyState from '../../../shared/EmptyState.jsx';
@@ -157,7 +158,7 @@ export default function TicketQueueAnalytics({ theme, tickets = [] }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 14 }}>
         <div style={cardStyle(theme)}>
           <strong>Workload</strong>
-          {data.workload.length ? data.workload.map((item) => <WorkloadRow key={item.assignee} theme={theme} item={item} />) : <EmptyState theme={theme} icon="🎫" title="No active tickets" description="Open tickets will appear here with workload, ownership and queue-age details." />}
+          {data.workload.length ? data.workload.map((item) => <WorkloadRow key={item.assignee} theme={theme} item={item} />) : <EmptyState theme={theme} icon={E.TICKETS} title="No active tickets" description="Open tickets will appear here with workload, ownership and queue-age details." />}
         </div>
 
         <div style={cardStyle(theme)}>
