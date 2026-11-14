@@ -276,7 +276,60 @@ async function ensureOfficialInvite(guild, meta = {}, regenerate = false) {
   return { invite: result.invite, created: true };
 }
 
-async function applyInviteRoles(member, inviteCode, meta = {}) { const link = getSection(member.guild.id).inviteLinks[inviteCode]; if (!link?.enabled || !link.roleIds.length) return { granted: [], failed: [] }; const granted = []; const failed = []; for (const roleId of link.roleIds) { const role = member.guild.roles.cache.get(roleId) || await member.guild.roles.fetch(roleId).catch(() => null); if (!role || role.managed || member.guild.members.me.roles.highest.position <= role.position) { failed.push(roleId); continue; } try { await member.roles.add(role, `Goliath invite role via ${inviteCode}`); granted.push(roleId); } catch { failed.push(roleId); } } addAnalytics(member.guild.id, { inviteRolesGranted: granted.length, inviteRoleFailures: failed.length }, meta); return { granted, failed }; }
+async function applyInviteRoles(member, inviteCode, meta = {}) { const link = getSection(member.guild.id).inviteLinks[inviteCode]; if (!link?.enabled || !link.roleIds.length) return { granted: [], failed: [] }; const granted = []; const failed = [];
+  if (!member.user?.bot && guildManager.isModuleEnabled(member.guild.id, 'verification')) {
+    const verificationStore = require('../../securityStudio/verificationStore');
+    if (member.pending === true || verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') {
+      updateSection(member.guild.id, section => ({
+        ...section,
+        deferredInviteRoles: {
+          ...(section.deferredInviteRoles || {}),
+          [member.id]: { inviteCode, roleIds: normalizeRoleIds(link.roleIds), joinedAt: member.joinedAt?.toISOString?.() || null, queuedAt: now() },
+        },
+      }), meta);
+      return { granted: [], failed: [], deferred: normalizeRoleIds(link.roleIds) };
+    }
+  }
+  for (const roleId of link.roleIds) { const role = member.guild.roles.cache.get(roleId) || await member.guild.roles.fetch(roleId).catch(() => null); if (!role || role.managed || member.guild.members.me.roles.highest.position <= role.position) { failed.push(roleId); continue; } try { await member.roles.add(role, `Goliath invite role via ${inviteCode}`); granted.push(roleId); } catch { failed.push(roleId); } } addAnalytics(member.guild.id, { inviteRolesGranted: granted.length, inviteRoleFailures: failed.length }, meta); return { granted, failed }; }
+async function releaseDeferredInviteRoles(member, meta = {}) {
+  if (!member?.guild?.id || member.user?.bot || member.pending === true) return { granted: [], failed: [] };
+  const guildId = member.guild.id;
+  if (guildManager.isModuleEnabled(guildId, 'verification')) {
+    const store = require('../../securityStudio/verificationStore');
+    if (store.getSession(guildId, member.id)?.state !== 'verified') return { granted: [], failed: [] };
+  }
+  const pending = getSection(guildId).deferredInviteRoles?.[member.id];
+  if (!pending || (pending.joinedAt && pending.joinedAt !== member.joinedAt?.toISOString?.())) return { granted: [], failed: [] };
+  const configured = getSection(guildId).inviteLinks[pending.inviteCode];
+  const roleIds = normalizeRoleIds(pending.roleIds).filter(id => configured?.enabled && configured.roleIds.includes(id));
+  const granted = [], failed = [];
+  for (const roleId of roleIds) {
+    if (member.roles.cache.has(roleId)) { granted.push(roleId); continue; }
+    const role = member.guild.roles.cache.get(roleId) || await member.guild.roles.fetch(roleId).catch(() => null);
+    if (!role || role.managed || !member.guild.members.me || member.guild.members.me.roles.highest.position <= role.position) { failed.push(roleId); continue; }
+    try { await member.roles.add(role, 'Goliath verified invite role'); granted.push(roleId); }
+    catch { failed.push(roleId); }
+  }
+  updateSection(guildId, section => {
+    const deferredInviteRoles = { ...(section.deferredInviteRoles || {}) };
+    if (failed.length) deferredInviteRoles[member.id] = { ...pending, roleIds: failed };
+    else delete deferredInviteRoles[member.id];
+    return { ...section, deferredInviteRoles, members: {
+      ...section.members,
+      [member.id]: { ...section.members[member.id], grantedRoleIds: [...new Set([...(section.members[member.id]?.grantedRoleIds || []), ...granted])] },
+    } };
+  }, meta);
+  return { granted, failed };
+}
+function clearDeferredInviteRoles(guildId, memberId, meta = {}) {
+  if (!getSection(guildId).deferredInviteRoles?.[memberId]) return false;
+  updateSection(guildId, section => {
+    const deferredInviteRoles = { ...(section.deferredInviteRoles || {}) };
+    delete deferredInviteRoles[memberId];
+    return { ...section, deferredInviteRoles };
+  }, meta);
+  return true;
+}
 async function applyRewards(guild, inviterId, meta = {}) { const section = getSection(guild.id); const stats = inviterStats(section, inviterId); const member = await guild.members.fetch(inviterId).catch(() => null); if (!member) return []; const granted = []; for (const reward of section.settings.rewardRoles) { if (stats.active + stats.bonus < reward.invites || stats.rewards.includes(reward.roleId)) continue; const role = guild.roles.cache.get(reward.roleId) || await guild.roles.fetch(reward.roleId).catch(() => null); if (!role || role.managed || guild.members.me.roles.highest.position <= role.position) continue; await member.roles.add(role, `Goliath invite reward: ${reward.invites} invites`); stats.rewards.push(reward.roleId); granted.push(reward.roleId); } if (granted.length) updateSection(guild.id, (current) => ({ ...current, inviters: { ...current.inviters, [inviterId]: stats } }), meta); return granted; }
 
 async function trackJoin(member, meta = {}) {
@@ -411,4 +464,4 @@ async function repair(guild, meta = {}) {
 }
 async function startup(client) { if (client.__goliathInvitesStarted) return; client.__goliathInvitesStarted = true; const panels = require('./invitesPublicPanels'); for (const guild of client.guilds.cache.values()) { if (!guildManager.isModuleEnabled(guild.id, SECTION)) continue; await syncGuild(guild, { action: 'invites_startup_sync' }).catch(() => null); panels.startAutoRefresh(guild, TWO_HOURS_MS); } }
 
-module.exports = { SECTION, TWO_HOURS_MS, defaults, getSection, setEnabled, updateSettings, addHistory, syncGuild, trackJoin, trackLeave, leaderboard, setBonus, createInviteLink, deleteInviteLink, listInviteLinks, listAdminInviteLinks, findPersonalInvite, createPersonalInvite, deletePersonalInvite, ensureOfficialInvite, getVanityStatus, syncVanityStatus, officialDisplayUrl, buildHealth, repair, startup, applyInviteRoles, exportConfiguration: getSection, reset: (guildId, meta = {}) => saveSection(guildId, defaults(), meta) };
+module.exports = { SECTION, TWO_HOURS_MS, defaults, getSection, setEnabled, updateSettings, addHistory, syncGuild, trackJoin, trackLeave, leaderboard, setBonus, createInviteLink, deleteInviteLink, listInviteLinks, listAdminInviteLinks, findPersonalInvite, createPersonalInvite, deletePersonalInvite, ensureOfficialInvite, getVanityStatus, syncVanityStatus, officialDisplayUrl, buildHealth, repair, startup, applyInviteRoles, releaseDeferredInviteRoles, clearDeferredInviteRoles, exportConfiguration: getSection, reset: (guildId, meta = {}) => saveSection(guildId, defaults(), meta) };
