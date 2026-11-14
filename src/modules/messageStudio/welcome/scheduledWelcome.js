@@ -79,7 +79,9 @@ function normalizeScheduledConfig(value = {}) {
     removeQueueRole: source.removeQueueRole !== false,
     ignoreBots: source.ignoreBots !== false,
     batchSize: Number.isFinite(batchSize) ? Math.min(50, Math.max(1, Math.floor(batchSize))) : base.batchSize,
-    completedMemberIds: [...new Set((Array.isArray(source.completedMemberIds) ? source.completedMemberIds : []).map(queue.cleanId).filter(Boolean))].slice(-1000),
+    // Never discard successful-delivery checkpoints solely because a guild is large.
+    // Dropping older IDs can resend welcomes when queue-role cleanup is disabled or fails.
+    completedMemberIds: [...new Set((Array.isArray(source.completedMemberIds) ? source.completedMemberIds : []).map(queue.cleanId).filter(Boolean))],
     analytics: { ...defaultAnalytics(), ...(source.analytics || {}) },
     createdAt: source.createdAt || base.createdAt,
     updatedAt: source.updatedAt || now(),
