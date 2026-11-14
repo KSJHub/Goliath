@@ -364,7 +364,23 @@ async function checkGuildAccounts(client,guildId,options={}) {
     let checked = null;
     let currentState = { ...previous };
     let activeDeliveryEvent = null;
-    try { checked=await checkAccount(account); const state={...previous,lastCheckedAt:checked.checkedAt||now(),lastStatus:checked.status,lastError:['unavailable','configuration_required'].includes(checked.status)?checked.reason:null}; currentState=state;
+    try {
+      checked=await checkAccount(account);
+      const tiktok=String(account.platform||'').toLowerCase()==='tiktok';
+      const wasLive=previous.isLive===true;
+      const negative=tiktok&&wasLive&&checked.isLive===false;
+      const misses=negative?Number(previous.tiktokOfflineChecks||0)+1:0;
+      const firstMiss=negative?(previous.tiktokOfflineFirstAt||now()):null;
+      const elapsed=negative?Date.now()-Date.parse(firstMiss):0;
+      const confirmedOffline=negative&&misses>=3&&Number.isFinite(elapsed)&&elapsed>=120000;
+      if(negative&&!confirmedOffline){
+        console.warn('[Social Studio] TikTok offline unconfirmed; preserving LIVE notification',JSON.stringify({accountId,misses,elapsedMs:elapsed,providerStatus:checked.status}));
+        checked={...checked,isLive:null,event:null,status:'offline_unconfirmed'};
+      }
+      const state={...previous,lastCheckedAt:checked.checkedAt||now(),lastStatus:checked.status,lastError:['unavailable','configuration_required'].includes(checked.status)?checked.reason:null};
+      state.tiktokOfflineChecks=negative?misses:0;
+      state.tiktokOfflineFirstAt=negative?firstMiss:null;
+      currentState=state;
       if(checked.isLive===true){const incoming=checked.event?.id?String(checked.event.id):null, old=previous.liveEventId?String(previous.liveEventId):null, newBroadcast=Boolean(incoming&&old&&incoming!==old&&previous.isLive!==true); state.isLive=true; state.liveEventId=(previous.isLive===true&&old?old:incoming)||state.liveEventId||null; state.liveStartedAt=checked.event?.startedAt||(newBroadcast?null:state.liveStartedAt)||null; state.lastLiveEvent=checked.event||state.lastLiveEvent||null; if(newBroadcast){state.peakViewers=0;state.lastLiveMessageId=null;state.lastLiveMessageChannelId=null;state.lastAlertMessageId=null;state.lastAlertChannelId=null;} const viewers=Number(checked.event?.viewerCount); if(Number.isFinite(viewers)&&viewers>=0)state.peakViewers=Math.max(Number(state.peakViewers||0),viewers);
       } else if(checked.isLive===false){state.isLive=false;if(previous.isLive===true)state.lastLiveEndedAt=checked.checkedAt||now();}
       const creator=creatorFor(config,accountId);
