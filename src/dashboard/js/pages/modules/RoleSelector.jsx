@@ -135,7 +135,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
 
     <section style={{ ...card, display: 'grid', gap: 12 }}>
       <div><h2 style={{ margin: 0 }}>Selector Groups</h2><div style={{ color: theme.mutedText }}>Single-choice and multi-choice groups are isolated from each other.</div></div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{groups.map((group) => <button key={group.id} onClick={() => chooseGroup(group)} style={btn(theme, group.id === selectedGroupId ? 'primary' : 'default')}>{group.emoji || '🏷️'} {group.name}</button>)}</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{groups.map((group) => <button key={group.id} onClick={() => chooseGroup(group)} style={btn(theme, group.id === selectedGroupId ? 'primary' : 'default')}>{group.emoji || E.ROLE_TAG} {group.name}</button>)}</div>
       {selectedGroup?.id === 'colours' ? <div style={{ display: 'grid', gap: 10 }}>
         <strong>{E.COLOURS} Built-in Colours</strong>
         <label style={{ color: theme.mutedText, fontWeight: 850 }}><input type="checkbox" checked={colours?.customHexEnabled !== false} onChange={(event) => run(() => api.request(`${baseApi(guildId)}/colours`, { method: 'PUT', body: JSON.stringify({ customHexEnabled: event.target.checked }) }), 'Colour settings saved.')} /> Allow custom HEX</label>
