@@ -13,8 +13,21 @@ async function refreshMembers(guild) {
 
 async function getQueuedMembers(guild, config = {}) {
   const roleId = cleanId(config.queueRoleId);
-  if (!guild || !roleId) return [];
+  if (!guild) return [];
   await refreshMembers(guild);
+  if (!roleId) {
+    const entries = config.pendingMembers && typeof config.pendingMembers === 'object' ? config.pendingMembers : {};
+    const members = [];
+    for (const [memberId, entry] of Object.entries(entries)) {
+      const id = cleanId(memberId);
+      if (!id) continue;
+      const member = guild.members.cache.get(id) || await guild.members.fetch(id).catch(() => null);
+      if (!member || (entry?.joinedAt && entry.joinedAt !== member.joinedAt?.toISOString?.())) continue;
+      if (config.ignoreBots !== false && member.user?.bot) continue;
+      members.push(member);
+    }
+    return members.sort((a, b) => Number(a.joinedTimestamp || 0) - Number(b.joinedTimestamp || 0));
+  }
   const role = guild.roles?.cache?.get(roleId) || await guild.roles?.fetch?.(roleId).catch(() => null);
   if (!role) return [];
   return [...role.members.values()]
