@@ -132,8 +132,18 @@ function updateScheduledConfig(guildId, patch = {}, meta = {}) {
 function enqueueScheduledMember(member) {
   if (!member?.guild?.id || !member.id) return false;
   const config = getScheduledConfig(member.guild.id);
-  if (!config.enabled || config.queueRoleId || (config.ignoreBots && member.user?.bot) || config.completedMemberIds.includes(member.id)) return false;
-  updateScheduledConfig(member.guild.id, { pendingMembers: { ...config.pendingMembers, [member.id]: { joinedAt: member.joinedAt?.toISOString?.() || null, queuedAt: now() } } }, { action: 'scheduled_welcome_member_queued' });
+  if (!config.enabled || config.queueRoleId || (config.ignoreBots && member.user?.bot)) return false;
+  const joinedAt = member.joinedAt?.toISOString?.() || null;
+  // A new join is a new delivery opportunity, but repeated join events for
+  // the same membership must not erase an already successful checkpoint.
+  const previous = config.pendingMembers[member.id];
+  if (previous && previous.joinedAt === joinedAt) return false;
+  const deliveredJoin = config.completedMemberJoins?.[member.id];
+  if (config.completedMemberIds.includes(member.id) && (!joinedAt || deliveredJoin === joinedAt)) return false;
+  updateScheduledConfig(member.guild.id, {
+    completedMemberIds: config.completedMemberIds.filter(id => id !== member.id),
+    pendingMembers: { ...config.pendingMembers, [member.id]: { joinedAt, queuedAt: now() } },
+  }, { action: 'scheduled_welcome_member_queued' });
   return true;
 }
 function dequeueScheduledMember(guildId, memberId) {
