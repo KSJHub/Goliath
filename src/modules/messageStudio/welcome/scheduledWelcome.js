@@ -231,7 +231,9 @@ async function executeScheduledWelcome(guild, options = {}) {
       const joinedAt = member.joinedAt?.toISOString?.() || null;
       const deliveredJoin = config.completedMemberJoins?.[memberId];
       // Never remove the queue role from a newer, not-yet-welcomed membership.
-      if (joinedAt && deliveredJoin && deliveredJoin !== joinedAt) continue;
+      // Legacy ID-only checkpoints cannot establish which membership received
+      // the message, so do not risk removing a role from a subsequent join.
+      if (!joinedAt || !deliveredJoin || deliveredJoin !== joinedAt) continue;
       const removal = await queue.removeQueueRole(member, config.queueRoleId);
       if (!removal.removed && !removal.skipped) {
         retryRoleRemovalFailed += 1;
@@ -295,7 +297,7 @@ async function executeScheduledWelcome(guild, options = {}) {
         for (const member of batch) {
           const currentMember = await guild.members.fetch({ user: member.id, force: true }).catch(() => null);
           // The member could have left and rejoined while the message was sending.
-          if (!currentMember || (member.joinedAt?.toISOString?.() && currentMember.joinedAt?.toISOString?.() !== member.joinedAt.toISOString())) continue;
+          if (!currentMember || !member.joinedAt?.toISOString?.() || currentMember.joinedAt?.toISOString?.() !== member.joinedAt.toISOString()) continue;
           const removal = await queue.removeQueueRole(currentMember, config.queueRoleId);
           if (!removal.removed && !removal.skipped) {
             roleRemovalFailed += 1;
