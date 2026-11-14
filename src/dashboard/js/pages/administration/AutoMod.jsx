@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/apiClient';
 import { joinGuildRoom, listenForGuildUpdate } from '../../services/socketClient';
@@ -70,7 +71,7 @@ export default function AutoMod({selectedGuild,theme}){
  const styles=useMemo(()=>createAutoModPageStyles(theme),[theme]),page=PAGE_LAYOUTS[PAGE_KEY]||{};
  const [form,setForm]=useState(defaults),[cases,setCases]=useState([]),[nativeRules,setNativeRules]=useState([]),[health,setHealth]=useState(null),[loading,setLoading]=useState(false),[saving,setSaving]=useState(false),[message,setMessage]=useState('');
  useEffect(()=>{let live=true;(async()=>{if(!selectedGuild){setForm(defaults());return;}try{setLoading(true);const [data,caseData,nativeData,healthData]=await Promise.all([api.getAutoModConfig(selectedGuild),api.getCases(selectedGuild).catch(()=>[]),api.getNativeAutoModRules(selectedGuild).catch(()=>({rules:[]})),api.getAutoModHealth(selectedGuild).catch(()=>null)]);if(live){setForm(normalize(data?.config||data));setNativeRules(nativeData?.rules||[]);setHealth(healthData);const rows=Array.isArray(caseData)?caseData:(caseData?.cases||[]);setCases(rows.filter(entry=>entry?.action==='automod'||entry?.metadata?.source==='automod').slice(0,50));}}catch(e){console.error(e);if(live)setMessage('❌ Could not load AutoMod.');}finally{if(live)setLoading(false);}})();return()=>{live=false};},[selectedGuild]);
- useEffect(()=>{if(!selectedGuild)return;joinGuildRoom(selectedGuild);return listenForGuildUpdate('automod',(data)=>{setForm(normalize(data));setMessage('🔄 AutoMod updated live.');});},[selectedGuild]);
+ useEffect(()=>{if(!selectedGuild)return;joinGuildRoom(selectedGuild);return listenForGuildUpdate('automod',(data)=>{setForm(normalize(data));setMessage(`${E.REFRESH} AutoMod updated live.`);});},[selectedGuild]);
  const setRule=useCallback((key,field,value)=>setForm(f=>({...f,[key]:{...f[key],[field]:value}})),[]);
  const applyPreset=(preset)=>setForm(current=>{
    const next={...current,preset};
