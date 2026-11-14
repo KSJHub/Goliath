@@ -2461,8 +2461,10 @@ function welcomeEmbedDeliveryAudit() {
       'Both authorised verification completion paths must release deferred welcomes.');
     assert(memberEvents.includes('releaseDeferredWelcome(newMember)') && memberEvents.includes('clearDeferredWelcome(member.guild.id,member.id,member.joinedAt?.toISOString?.()||null)'),
       'Member update must recover deferred welcomes and departure cleanup must match the original membership.');
-    assert(welcome.includes('clearDeferredWelcome(member.guild.id, member.id, pending.joinedAt)') && welcome.includes('latest.joinedAt === pending.joinedAt'),
-      'Deferred welcome retries must not erase or recreate a newer membership queue entry.');
+    assert(welcome.includes('return { skipped: true, reason: \'stale_join\' }') && !welcome.includes('clearDeferredWelcome(member.guild.id, member.id, pending.joinedAt);\n      return { skipped: true, reason: \'stale_join\' }') && welcome.includes('latest.joinedAt === pending.joinedAt'),
+      'Stale member updates must preserve newer deferred welcomes and retries must not recreate old entries.');
+    assert(welcome.includes('clearDeferredWelcome(member.guild.id, member.id, pending.joinedAt)'),
+      'Successful deferred delivery must clear only the matching membership checkpoint.');
     assert(welcome.includes('current.publicSent === true || publicDone') && welcome.includes('current.dmSent === true || dmDone'),
       'Partial delivery checkpoints must remain monotonic across retries.');
     assert(autoRoles.includes('current.joinedAt !== pending.joinedAt') && autoRoles.includes('clearDeferredJoinRoles(guildId, memberId, expectedJoinedAt = undefined)'),
