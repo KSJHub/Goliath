@@ -2457,8 +2457,12 @@ function welcomeEmbedDeliveryAudit() {
       'Deferred welcome progress must persist in the canonical Welcome section.');
     assert(verificationContinuation.includes('releaseDeferredWelcome(confirmed)') && verificationManager.includes('releaseDeferredWelcome(confirmed)'),
       'Both authorised verification completion paths must release deferred welcomes.');
-    assert(memberEvents.includes('releaseDeferredWelcome(newMember)') && memberEvents.includes('clearDeferredWelcome(member.guild.id,member.id)'),
-      'Member update must recover deferred welcomes and departure must clean them up.');
+    assert(memberEvents.includes('releaseDeferredWelcome(newMember)') && memberEvents.includes('clearDeferredWelcome(member.guild.id,member.id,member.joinedAt?.toISOString?.()||null)'),
+      'Member update must recover deferred welcomes and departure cleanup must match the original membership.');
+    assert(welcome.includes('clearDeferredWelcome(member.guild.id, member.id, pending.joinedAt)') && welcome.includes('latest.joinedAt === pending.joinedAt'),
+      'Deferred welcome retries must not erase or recreate a newer membership queue entry.');
+    assert(welcome.includes('current.publicSent === true || publicDone') && welcome.includes('current.dmSent === true || dmDone'),
+      'Partial delivery checkpoints must remain monotonic across retries.');
     assert(scheduled.includes('completedMemberJoins') && scheduled.includes('deliveredJoin === joinedAt'),
       'Scheduled Welcome must retain join-specific checkpoints for duplicate and rejoin protection.');
     assert(scheduledQueue.includes('pendingMembers'),
