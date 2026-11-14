@@ -103,7 +103,8 @@ async function releaseDeferredWelcome(member) {
     const pending = config.deferredWelcomes[member.id];
     if (!pending) return { skipped: true, reason: 'not_queued' };
     if (pending.joinedAt && pending.joinedAt !== member.joinedAt?.toISOString?.()) {
-      clearDeferredWelcome(member.guild.id, member.id, pending.joinedAt);
+      // A delayed update for the old membership must not erase a newer join's queue.
+      // Departure cleanup is responsible for removing genuinely abandoned entries.
       return { skipped: true, reason: 'stale_join' };
     }
     if (guildManager.isModuleEnabled(member.guild.id, 'verification')) {
