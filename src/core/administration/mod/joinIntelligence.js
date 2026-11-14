@@ -93,12 +93,12 @@ function suspectedAccounts(member) {
   return rows.sort((a, b) => b.score - a.score).slice(0, 5);
 }
 
-function buildActionRows(member) {
+function buildActionRows(member, watched = false) {
   if (member.user.bot) return [];
   return [new ActionRowBuilder().addComponents(
     navigationButton(`joinintel:view:${member.guild.id}:${member.id}`, 'Open Intelligence', ButtonStyle.Primary).setEmoji('🧠'),
     navigationButton(`mod_open_quarantine:${member.id}`, 'Investigate', ButtonStyle.Danger).setEmoji('🔎'),
-    navigationButton(`joinintel:watch:${member.guild.id}:${member.id}`, 'Watch Member', ButtonStyle.Secondary).setEmoji('👁️'),
+    navigationButton(`joinintel:watch:${member.guild.id}:${member.id}`, watched ? 'Remove Watch' : 'Watch Member', watched ? ButtonStyle.Danger : ButtonStyle.Secondary).setEmoji('👁️'),
     navigationButton(`joinintel:clear:${member.guild.id}:${member.id}`, 'Mark Clear', ButtonStyle.Success).setEmoji('✅'),
   )];
 }
@@ -188,7 +188,8 @@ async function scanMemberOnJoin(member) {
   }
 
   const embed = buildEmbed(member, context, local, suspects, scanId, assessment);
-  await channel.send({ embeds: [embed], components: buildActionRows(member), allowedMentions: { parse: [] } });
+  const watched = Boolean(context.watch?.state && !['clear', 'none'].includes(String(context.watch.state).toLowerCase()));
+  await channel.send({ embeds: [embed], components: buildActionRows(member, watched), allowedMentions: { parse: [] } });
   return { success: true, scanId, delivered: true, channelId: channel.id, risk: context.risk, assessment, suspectedCount: suspects.length };
 }
 
