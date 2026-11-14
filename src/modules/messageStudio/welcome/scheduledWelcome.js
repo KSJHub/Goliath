@@ -265,7 +265,12 @@ async function executeScheduledWelcome(guild, options = {}) {
       // removal failure must never make an already-sent welcome eligible again.
       for (const member of batch) completed.add(member.id);
       const pendingMembers = { ...getScheduledConfig(guild.id).pendingMembers };
-      for (const member of batch) delete pendingMembers[member.id];
+      for (const member of batch) {
+        const queuedJoin = pendingMembers[member.id]?.joinedAt;
+        const deliveredJoin = member.joinedAt?.toISOString?.() || null;
+        // Do not erase a fresh queue entry created by a rejoin while this batch was sending.
+        if (!queuedJoin || queuedJoin === deliveredJoin) delete pendingMembers[member.id];
+      }
       const completedMemberJoins = { ...getScheduledConfig(guild.id).completedMemberJoins };
       for (const member of batch) if (member.joinedAt?.toISOString?.()) completedMemberJoins[member.id] = member.joinedAt.toISOString();
       updateScheduledConfig(guild.id, { completedMemberIds: [...completed], completedMemberJoins, pendingMembers }, { actorId: options.actorId, action: 'scheduled_welcome_delivery_checkpoint' });
