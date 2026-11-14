@@ -214,6 +214,13 @@ module.exports={
     try{
       wrapInteractionResponses(interaction);
       if(interaction?.isAutocomplete?.()){const command=client.commands?.get?.(interaction.commandName);if(command?.autocomplete)await command.autocomplete(interaction,client);else await interaction.respond([]).catch(()=>null);return;}
+      // Join Intelligence buttons must bypass legacy role pagination and other
+      // potentially slow routers so their handler can acknowledge immediately.
+      if (String(interaction?.customId || '').startsWith('joinintel:')) {
+        if (typeof joinIntelligenceActions.execute !== 'function') throw new Error('Member Intelligence controls are unavailable.');
+        await joinIntelligenceActions.execute(interaction);
+        return;
+      }
       if(!interaction?.customId&&!interaction?.isChatInputCommand?.())return;
       if(interaction.isChatInputCommand?.()){const command=client.commands?.get?.(interaction.commandName);if(!command)return;await command.execute(interaction,client);return;}
       if(await handleLegacyRolePage(interaction))return;
@@ -248,9 +255,6 @@ module.exports={
         await require('../../core/administration/mod/quarantineInteractions').handleInvestigationTranscriptDownload(interaction);
         return;
       }
-      // This event also has a legacy listener. Its handler deduplicates the
-      // interaction before any await so only one listener can acknowledge it.
-      if(customId.startsWith('joinintel:')){if(typeof joinIntelligenceActions.execute!=='function')throw new Error('Member Intelligence controls are unavailable.');await joinIntelligenceActions.execute(interaction);return;}
       if(customId.startsWith('mod_')||customId.startsWith('mod:')){if(!await callHandler(modInteractions,'handleModInteraction',interaction))throw new Error(`Mod did not handle ${customId}.`);return;}
       if(isVerificationMemberInteraction(interaction)){await handleVerificationMemberInteraction(interaction);return;}
       if(customId.startsWith('verify:challenge:')||customId.startsWith('verify:staff:')||customId.startsWith('verify:answer:')){
