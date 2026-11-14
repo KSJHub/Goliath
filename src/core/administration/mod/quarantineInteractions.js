@@ -102,7 +102,7 @@ function currentSnapshot(interaction, targetId) {
 // Avoid a network member fetch before the modal, which can exceed Discord's
 // three-second deadline. Full target safety checks remain on submission.
 async function openInvestigationPrompt(interaction, targetId) {
-  if (!/^\\d{15,25}$/.test(String(targetId || ''))) {
+  if (!/^\d{15,25}$/.test(String(targetId || ''))) {
     return safeReply(interaction, { content: '❌ Invalid target member.', flags: 64 });
   }
   if (!canUseModAction(interaction.member, interaction.guild, 'quarantine', interaction)) {
