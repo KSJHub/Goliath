@@ -93,6 +93,18 @@ function suspectedAccounts(member) {
   return rows.sort((a, b) => b.score - a.score).slice(0, 5);
 }
 
+function investigationWatchEnabled(guildId, userId) {
+  try {
+    const rows = db.prepare("SELECT after_value, metadata FROM case_audit WHERE guild_id = ? AND event = 'moderation.member_scan.watch_updated' ORDER BY created_at DESC LIMIT 250").all(String(guildId));
+    for (const row of rows) {
+      let metadata = {}, after = {};
+      try { metadata = JSON.parse(row.metadata || '{}'); after = JSON.parse(row.after_value || '{}'); } catch { continue; }
+      if (String(metadata.targetId || '') === String(userId)) return after.enabled === true;
+    }
+  } catch {}
+  return false;
+}
+
 function buildActionRows(member, watched = false) {
   if (member.user.bot) return [];
   return [new ActionRowBuilder().addComponents(
@@ -188,7 +200,9 @@ async function scanMemberOnJoin(member) {
   }
 
   const embed = buildEmbed(member, context, local, suspects, scanId, assessment);
-  const watched = Boolean(context.watch?.state && !['clear', 'none'].includes(String(context.watch.state).toLowerCase()));
+  const riskField = embed.data.fields?.find(field => field.name?.includes('Risk'));
+  if (riskField) riskField.value = (riskField.value + `\nInvestigation Watch: **${investigationWatchEnabled(member.guild.id, member.id) ? 'ON' : 'OFF'}**`).slice(0, 1024);
+  const watched = investigationWatchEnabled(member.guild.id, member.id);
   await channel.send({ embeds: [embed], components: buildActionRows(member, watched), allowedMentions: { parse: [] } });
   return { success: true, scanId, delivered: true, channelId: channel.id, risk: context.risk, assessment, suspectedCount: suspects.length };
 }
