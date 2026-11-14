@@ -1,5 +1,6 @@
 import { dashboardPath } from '../../services/dashboardPath.js';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -57,7 +58,7 @@ function RoleList({ theme, title, roles, selectedRoles, onRemove, removingRole, 
       {selectedRoles.length === 0 ? (
         <EmptyState
           theme={theme}
-          icon={type === 'bot' ? '🤖' : '👥'}
+          icon={type === 'bot' ? E.BOT : E.MEMBERS}
           title={type === 'bot' ? 'No bot roles configured' : 'No join roles configured'}
           description={type === 'bot' ? 'Add roles for bots that join the server.' : 'Add roles for new members who join the server.'}
         />
@@ -179,7 +180,7 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
     await runAction('reset', () => api.request(`/api/auto-roles/${guildId}/reset`, { method: 'POST' }), 'Auto Roles reset to defaults.');
   }
 
-  if (!guildId) return <EmptyState theme={theme} icon="👥" title="Select a server" description="Select a server to manage Auto Roles." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.MEMBERS} title="Select a server" description="Select a server to manage Auto Roles." />;
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
