@@ -1,11 +1,12 @@
 import { goDashboard } from '../../services/dashboardPath.js';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import EmptyState from '../../shared/EmptyState.jsx';
 import { api } from '../../services/apiClient.js';
 
 const fallback = { cardBorder: 'rgba(148,163,184,0.22)', cardBg: 'rgba(15,23,42,0.42)', cardText: '#e5e7eb', mutedText: '#94a3b8', shadow: '0 18px 50px rgba(0,0,0,0.25)' };
-const MODULE_ICONS = { tickets: '🎫', forms: '📄', automation: '⚙️', security: '🛡️', runtime: '🤖', deployment: '🚀', backup: '💾', dashboard: '📊', system: '🧩' };
+const MODULE_ICONS = { tickets: E.TICKETS, forms: E.DOCUMENT, automation: E.SETTINGS, security: E.SECURITY, runtime: E.BOT, deployment: E.BOOST, backup: E.SAVE, dashboard: E.CHART, system: E.SYSTEM };
 const SEVERITIES = ['info', 'success', 'warning', 'danger'];
 
 function t(theme) { return { ...fallback, ...(theme || {}) }; }
@@ -135,7 +136,7 @@ export default function Timeline({ theme, selectedGuild, selectedGuildData }) {
               <button type="button" onClick={() => setModuleFilter(entry.module)} style={button(x)}>{iconFor(entry.module)} Filter module</button>
             </div>
           </article>
-        )) : <EmptyState theme={x} icon="🕘" title="No activity recorded yet" description="Tickets, forms, automation, security, runtime, deployment and backup events will be written here as they happen." />}
+        )) : <EmptyState theme={x} icon={E.HISTORY} title="No activity recorded yet" description="Tickets, forms, automation, security, runtime, deployment and backup events will be written here as they happen." />}
       </section>
     </div>
   );
