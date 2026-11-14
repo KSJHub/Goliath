@@ -44,7 +44,7 @@ const { getWarningCountForUser, syncExpiredWarningsToCases } = require('./warns'
 const { canUseModAction, getStaffDisplay, hasModPermission, fetchTarget } = require('./permissions');
 const { getQuarantineState } = require('../../security/protection/quarantine');
 const caseProceeding = require('./caseProceeding');
-const verificationStore = require('../../../modules/securityStudio/verificationStore');
+const verificationStore = require('../../../modules/securityStudio/verification/verificationStore');
 
 const DEFAULT_VIEW = 'actions';
 const dashboardHistory = new Map();
