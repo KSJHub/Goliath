@@ -176,7 +176,13 @@ async function getWaitingMembers(guild) {
   config = await clearCompletedWithoutRole(guild, config);
   const completed = new Set(config.completedMemberIds);
   const members = await queue.getQueuedMembers(guild, config);
-  return members.filter((member) => !completed.has(member.id));
+  // Scheduled delivery is independent of the queue mechanism, but members
+  // must complete Verification before being announced as joined.
+  const verificationEnabled = guildManager.isModuleEnabled(guild.id, 'verification');
+  const verificationStore = verificationEnabled ? require('../../securityStudio/verificationStore') : null;
+  return members.filter((member) => !completed.has(member.id)
+    && member.pending !== true
+    && (!verificationEnabled || verificationStore.getSession(guild.id, member.id)?.state === 'verified'));
 }
 
 async function executeScheduledWelcome(guild, options = {}) {
