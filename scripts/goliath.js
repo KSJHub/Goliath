@@ -748,15 +748,15 @@ async function verificationAnswerAudit() {
     return module.exports;
   }
   let data = null, numbers = [];
-  const store = load('src/modules/securityStudio/verificationStore.js', {
+  const store = load('src/modules/securityStudio/verification/verificationStore.js', {
     '../../core/guild/moduleSectionManager': {
       getModuleSection: (guild, name, fallback) => clone(data || fallback),
       saveModuleSection: (guild, name, value) => { data = clone(value); return clone(data); },
       updateModuleSection: (guild, name, update, fallback) => { data = clone(update(clone(data || fallback))); return clone(data); },
     }, '../../core/guild/guildManager': {},
   });
-  const challenges = load('src/modules/securityStudio/verificationChallenges.js', { './verificationStore': store, crypto: { ...crypto, randomInt: (min, max) => numbers.length ? numbers.shift() : crypto.randomInt(min, max) } });
-  const runtime = () => load('src/modules/securityStudio/verificationChallengeRuntime.js', { './verificationChallenges': challenges, './verificationStore': store });
+  const challenges = load('src/modules/securityStudio/verification/verificationChallenges.js', { './verificationStore': store, crypto: { ...crypto, randomInt: (min, max) => numbers.length ? numbers.shift() : crypto.randomInt(min, max) } });
+  const runtime = () => load('src/modules/securityStudio/verification/verificationChallengeRuntime.js', { './verificationChallenges': challenges, './verificationStore': store });
   const guild = '1515201360386068642', user = '815257293347880961';
   const reset = () => { data = store.defaultVerificationSection(); store.upsertSession(guild, user, { state: 'verifying', securityConfigRevision: data.configRevision }); };
   reset(); numbers = [42, 30, 0];
@@ -812,7 +812,7 @@ async function verificationAnswerAudit() {
   assert.deepEqual(data.securityHistory[user], historyBefore);
   const replies = [];
   let failureCalls = 0;
-  const interactions = load('src/modules/securityStudio/verificationChallengeInteractions.js', { '../../core/guild/guildManager': { isModuleEnabled: () => true }, './verificationChallengeRuntime': runtime(), './verificationStore': store });
+  const interactions = load('src/modules/securityStudio/verification/verificationChallengeInteractions.js', { '../../core/guild/guildManager': { isModuleEnabled: () => true }, './verificationChallengeRuntime': runtime(), './verificationStore': store });
   await interactions.handleVerificationChallengeInteraction({
     customId: `verify:answer:${user}:${challenge.challengeId}`, guildId: guild, user: { id: user },
     isModalSubmit: () => true, fields: { getTextInputValue: () => '72' }, reply: async payload => replies.push(payload),
@@ -837,7 +837,7 @@ async function verificationAnswerAudit() {
   // Exhaust every generated arithmetic combination through the real verifier.
   // A small serialised store keeps exhaustive generation separate from the full-store tests above.
   let sample = null, draws = [], arithmeticCases = 0, gameCases = 0;
-  const exhaustive = load('src/modules/securityStudio/verificationChallenges.js', {
+  const exhaustive = load('src/modules/securityStudio/verification/verificationChallenges.js', {
     crypto: { ...crypto, randomInt: (min, max) => { const value = draws.length ? draws.shift() : min; assert(value >= min && value < max, 'Fixture random draw out of range'); return value; } },
     './verificationStore': { getSession: () => clone(sample), upsertSession: (g, u, patch) => { sample = clone({ ...sample, ...patch }); }, addSecurityHistory: () => {}, incrementAnalytics: () => {} },
   });
@@ -967,16 +967,16 @@ async function verificationLifecycleAudit() {
       assert(source.includes(token), `Verification contract missing: ${label}`);
     }
     
-    const flow = read('./src/modules/securityStudio/verificationFlowContinuation.js');
-    const quarantine = read('./src/modules/securityStudio/verificationQuarantine.js');
+    const flow = read('./src/modules/securityStudio/verification/verificationFlowContinuation.js');
+    const quarantine = read('./src/modules/securityStudio/verification/verificationQuarantine.js');
     const lifecycle = read('./src/events/members/verificationLifecycle.js');
     const risk = read('./src/core/administration/mod/verificationRiskBridge.js');
-    const store = read('./src/modules/securityStudio/verificationStore.js');
-    const manager = read('./src/modules/securityStudio/verificationManager.js');
-    const panel = read('./src/modules/securityStudio/verificationPanel.js');
+    const store = read('./src/modules/securityStudio/verification/verificationStore.js');
+    const manager = read('./src/modules/securityStudio/verification/verificationManager.js');
+    const panel = read('./src/modules/securityStudio/verification/verificationPanel.js');
     const memberIntelligence = read('./src/events/members/memberIntelligence.js');
-    const challengeRuntime = read('./src/modules/securityStudio/verificationChallengeRuntime.js');
-    const challengeInteractions = read('./src/modules/securityStudio/verificationChallengeInteractions.js');
+    const challengeRuntime = read('./src/modules/securityStudio/verification/verificationChallengeRuntime.js');
+    const challengeInteractions = read('./src/modules/securityStudio/verification/verificationChallengeInteractions.js');
     
     // Exercise the existing Mod Hub Verification review route with real snowflakes.
     // An over-escaped digit regex previously rejected every legitimate case ID.
@@ -1706,7 +1706,7 @@ function adminModuleRoutingAudit() {
     
     const modules = fs.readFileSync(root + '/src/core/administration/admin/modules.js', 'utf8');
     const router = fs.readFileSync(root + '/src/events/interactions/interactionCreate.js', 'utf8');
-    const verification = fs.readFileSync(root + '/src/modules/securityStudio/verificationPanel.js', 'utf8');
+    const verification = fs.readFileSync(root + '/src/modules/securityStudio/verification/verificationPanel.js', 'utf8');
     
     const catalogBlock = modules.match(/const MODULE_CATALOG = \[([\s\S]*?)\n\];/);
     assert(catalogBlock, 'MODULE_CATALOG could not be parsed');
@@ -2441,8 +2441,8 @@ function welcomeEmbedDeliveryAudit() {
     
     // Verification-aware onboarding regression contracts. These checks cover
     // the existing production paths without introducing test infrastructure.
-    const verificationContinuation = read('src/modules/securityStudio/verificationFlowContinuation.js');
-    const verificationManager = read('src/modules/securityStudio/verificationManager.js');
+    const verificationContinuation = read('src/modules/securityStudio/verification/verificationFlowContinuation.js');
+    const verificationManager = read('src/modules/securityStudio/verification/verificationManager.js');
     const scheduledQueue = read('src/modules/messageStudio/welcome/scheduledWelcomeQueue.js');
     const memberEvents = read('src/events/members/memberJoinLeave.js');
     const autoRoles = read('src/modules/roleStudio/autoRoles/autoRoles.js');
@@ -3053,7 +3053,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const isolation = read('src/core/security/protection/quarantine/isolation.js');
 const recovery = read('src/core/security/protection/quarantine/recoveryEvents.js');
 const release = read('src/core/security/protection/quarantine/releaseLifecycle.js');
-const verification = read('src/modules/securityStudio/verificationQuarantine.js');
+const verification = read('src/modules/securityStudio/verification/verificationQuarantine.js');
 
 function required(source, fragment, label) {
   assert(source.includes(fragment), label);
@@ -3155,7 +3155,7 @@ function fixture(snapshot = {}) {
       './investigationRooms': { cleanChannelName: value => value },
       '../../../ui/memberNotice': require(root + '/src/core/ui/memberNotice'),
       '../../../administration/mod/storage': storage,
-      '../../../../modules/securityStudio/verificationQuarantine': { reconcileModerationRelease: async () => ({ reconciled: true }) },
+      '../../../../modules/securityStudio/verification/verificationQuarantine': { reconcileModerationRelease: async () => ({ reconciled: true }) },
     });
     lifecycle = load(base + 'memberLifecycle.js', { './state': f.api, './releaseLifecycle': release,
       '../../../../owner/dev/DevOverrideManager': { shouldBlockOwnerDestructiveAction: () => false },
@@ -3223,7 +3223,7 @@ function fixture(snapshot = {}) {
   delete f.state.users[uid];
   const session = { state: 'quarantined', quarantineChannelId: 'legacy' };
   const noMutation = () => { throw Error('Legacy audit attempted a mutation'); };
-  const verificationApi = load('src/modules/securityStudio/verificationQuarantine.js', {
+  const verificationApi = load('src/modules/securityStudio/verification/verificationQuarantine.js', {
     './verificationStore': { getSession: () => session, getVerificationSection: () => ({ sessions: { [uid]: session } }), normalizeSettings: () => ({ roles: {} }), upsertSession: noMutation, addSecurityHistory: noMutation },
     '../../core/guild/goliathNavigation': { navigationButton: (...args) => require(root + '/src/core/guild/goliathNavigation').navigationButton(...args) },
     '../../core/guild/guildManager': { isModuleEnabled: () => true },
@@ -3269,7 +3269,7 @@ function fixture(snapshot = {}) {
           assert.equal(f.state.users[uid].expiresAt, null);
           return { success: containmentSuccess, verification: { success: containmentSuccess } };
         } };
-      const api = load('src/modules/securityStudio/verificationQuarantine.js', {
+      const api = load('src/modules/securityStudio/verification/verificationQuarantine.js', {
         './verificationStore': { getVerificationSection: () => section, getSession: () => section.sessions[uid], normalizeSettings: s => s,
           upsertSession: (g, u, patch) => Object.assign(section.sessions[u], patch), addSecurityHistory: () => {} },
         '../../core/guild/goliathNavigation': { navigationButton: (...args) => require(root + '/src/core/guild/goliathNavigation').navigationButton(...args) },
@@ -3322,7 +3322,7 @@ function fixture(snapshot = {}) {
     const controls = load('src/events/client/sentinelControlCenter.js', {
       '../../owner/auditIntelligence/auditStore': { runtimeMode: () => mode, getPendingRemoteCommands: () => [command], claimRemoteCommand: () => command, finishRemoteCommand: (id, result) => { outcome = result; } },
       '../../owner/sentinel/eventPipeline': {}, '../../core/security/protection/core': {},
-      '../../modules/securityStudio/verificationQuarantine': { reconcileLegacyQuarantine: async (guild, payload) => { calls++; assert.equal(payload.userId, uid); return { ok: true }; } },
+      '../../modules/securityStudio/verification/verificationQuarantine': { reconcileLegacyQuarantine: async (guild, payload) => { calls++; assert.equal(payload.userId, uid); return { ok: true }; } },
     }, '\nmodule.exports.processRemote = processRemote;');
     await controls.processRemote({ guilds: { cache: new Collection([['guild', { id: 'guild' }]]) } });
     assert.equal(calls, allowed ? 1 : 0); assert.equal(outcome.ok, allowed);
@@ -3362,7 +3362,7 @@ function fixture(snapshot = {}) {
   const roleApi = load(base + 'memberLifecycle.js', { './state': f.api, './roleManager': {}, './isolation': {}, './investigationRooms': {}, '../../../../owner/dev/DevOverrideManager': {}, '../core': {} });
   const releaseApi = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': { ensureQuarantineRole: async () => f.role }, './memberLifecycle': roleApi,
     './isolation': { restoreMemberViewAllows: async () => ({ restored: [], failed: [] }), recontainMemberViewAllows: async () => ({ contained: [], failed: [] }), verifyMemberContainment: async () => ({ success: true }) },
-    '../../../../modules/securityStudio/verificationQuarantine': { reconcileModerationRelease: async () => ({ ok: true }) },
+    '../../../../modules/securityStudio/verification/verificationQuarantine': { reconcileModerationRelease: async () => ({ ok: true }) },
   });
   f.state.users[uid].roles = undefined;
   assert.equal((await releaseApi.restoreQuarantinedMember(f.guild, f.member, { restoredBy: 'staff' })).success, false);
@@ -3566,7 +3566,7 @@ function fixture(snapshot = {}) {
   f.guild.members.fetch = async ({ user }) => user ? ({ id: user, roles: { cache: new Collection() }, permissions: new PermissionsBitField() }) : new Collection();
   const verificationSessions = {};
   const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' },
-    '../../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: verificationSessions }) },
+    '../../../../modules/securityStudio/verification/verificationStore': { getVerificationSection: () => ({ sessions: verificationSessions }) },
     './isolation': { investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }) } });
   const options = { invitationSelection: true, invitedUserIds: [invitee], invitedRoleIds: [roleId], protectedCaseIds: [other] };
   const overwrites = await rooms.buildInvestigationRoomOverwrites(f.guild, f.member, f.role, options);
@@ -3639,7 +3639,7 @@ function fixture(snapshot = {}) {
   f.guild.channels.cache.set('room', channel);
   f.guild.channels.fetch = async () => channel;
   const cleanup = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {},
-    '../../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: {} }) } });
+    '../../../../modules/securityStudio/verification/verificationStore': { getVerificationSection: () => ({ sessions: {} }) } });
   assert.equal((await cleanup.cleanupReleasedInvitationDenies(f.guild, other)).cleaned, 0, 'An active case retains the isolation deny');
   delete f.state.users[other];
   assert.equal((await cleanup.cleanupReleasedInvitationDenies(f.guild, other)).cleaned, 1);
@@ -3705,7 +3705,7 @@ function fixture(snapshot = {}) {
   const locks = load(base + 'releaseLifecycle.js', { './state': f.api, './roleManager': {}, './memberLifecycle': {}, './isolation': {} });
   const rooms = load(base + 'investigationRooms.js', { './state': { ...f.api, DEFAULT_INVESTIGATION_CATEGORY_NAME: 'Investigations' }, './releaseLifecycle': locks,
     './isolation': { quarantineDenyOverwrite: () => ({ ViewChannel: false }), investigationMemberOverwrite: () => ({ ViewChannel: true, SendMessages: true, ReadMessageHistory: true }), investigationStaffOverwrite: () => ({ ViewChannel: true }) },
-    '../../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: {} }) } });
+    '../../../../modules/securityStudio/verification/verificationStore': { getVerificationSection: () => ({ sessions: {} }) } });
   const pair = await Promise.all([rooms.ensureInvestigationRoomForSnapshot(f.guild, f.member, f.role, f.state.users[uid]), rooms.ensureInvestigationRoomForSnapshot(f.guild, second, f.role, f.state.users[other])]);
   assert.equal(creates, 1); assert.equal(pair[0].id, pair[1].id);
   assert.equal(f.state.users[uid].interviewChannelId, pair[0].id); assert.equal(f.state.users[other].interviewChannelId, pair[0].id);
@@ -3744,7 +3744,7 @@ function fixture(snapshot = {}) {
         f.state.archivedRooms = [{ channelId: 'room', memberId: uid, investigationGroupId: f.state.users[uid].investigationGroupId, roomTranscript: f.state.users[uid].roomTranscript }];
         delete f.state.users[uid];
         return { success: true, archive: { archived: true, shared: Object.keys(f.state.users).length > 0, channelId: 'room' } }; } },
-      '../../../modules/securityStudio/verificationStore': { getVerificationSection: () => ({ sessions: {} }) },
+      '../../../modules/securityStudio/verification/verificationStore': { getVerificationSection: () => ({ sessions: {} }) },
       '../../../modules/feedbackStudio/tickets/ticketsTranscripts': { buildTranscriptArchive: (transcript, expected) => {
         const saved = JSON.parse(fs.readFileSync(transcript.jsonPath));
         assert.equal(saved.ticket.guildId, expected.guildId); assert.equal(saved.ticket.discordChannelId, expected.channelId); assert.equal(saved.ticket.creatorId, expected.memberId);
