@@ -51,7 +51,7 @@ const FEATURE_LABELS = {
   'tickets.advanced': { icon: E.PREMIUM_TICKET, label: 'Advanced Tickets', description: 'Higher limits and more flexible ticket workflows.' },
   'forms.basic': { icon: E.NOTE, label: 'Forms System', description: 'Applications, appeals, reports and custom forms.' },
   'forms.advanced': { icon: E.CLIPBOARD, label: 'Advanced Forms', description: 'Expanded form limits and workflows.' },
-  'embeds.basic': { icon: '✨', label: 'Embed Builder', description: 'Create professional Discord embeds.' },
+  'embeds.basic': { icon: E.SPARKLES, label: 'Embed Builder', description: 'Create professional Discord embeds.' },
   'embeds.presets': { icon: E.SAVE, label: 'Embed Presets', description: 'Save reusable embed designs and templates.' },
   'moderation.basic': { icon: E.SECURITY, label: 'Moderation Tools', description: 'Core moderation utilities.' },
   'dashboard.basic': { icon: E.CHART, label: 'Dashboard Access', description: 'Manage Goliath from the web dashboard.' },
