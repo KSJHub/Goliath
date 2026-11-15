@@ -8,7 +8,7 @@ import { ChannelSelect, RoleSelect } from '../../ui/DiscordResourceSelects.jsx';
 
 const DEFAULT_PANEL_DRAFT = Object.freeze({
   channelId: '',
-  title: '🛡️ Server Verification',
+  title: `${E.SECURITY} Server Verification`,
   description: '**⏳ Verification Required**\nWelcome! Complete the server security checks to unlock your member access.\n\n**🔐 What happens next?**\nPress **Verify** below to begin. Follow the on-screen instructions and complete any required challenges.\n\n**✅ Once verified**\nYour configured member roles and server access will be applied automatically.',
   color: '#5865f2',
   footer: 'Goliath Verification •',
@@ -16,7 +16,7 @@ const DEFAULT_PANEL_DRAFT = Object.freeze({
   showFooter: true,
   showTimestamp: true,
   buttonLabel: 'Verify',
-  buttonEmoji: '🔐',
+  buttonEmoji: E.PERMISSIONS,
   buttonStyle: 'success',
   imageUrl: '',
   thumbnailUrl: '',
@@ -394,7 +394,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     setSelectedPanelId('');
   }
 
-  if (!guildId) return <EmptyState theme={theme} icon="✅" title="Select a server" description="Select a server to manage Verification." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.SUCCESS} title="Select a server" description="Select a server to manage Verification." />;
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
@@ -560,7 +560,7 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         <h2 style={{ margin: 0 }}>Health & Diagnostics</h2>
         {health?.warnings?.length
           ? health.warnings.map((warning) => <div key={warning} style={{ color: '#fbbf24', fontWeight: 800 }}>{E.WARNING} {warning}</div>)
-          : <div style={{ color: '#86efac', fontWeight: 900 }}>✅ Verification configuration is healthy.</div>}
+          : <div style={{ color: '#86efac', fontWeight: 900 }}>{E.SUCCESS} Verification configuration is healthy.</div>}
         {(health?.panels || []).map((panel) => <div key={panel.panelId} style={{ color: panel.ok ? '#86efac' : '#fca5a5' }}>{panel.ok ? E.SUCCESS : E.ERROR} {panel.panelId}: {panel.status}</div>)}
         <button type="button" disabled={busy === 'load'} onClick={load} style={{ ...buttonStyle(theme), justifySelf: 'start' }}>Refresh Health</button>
       </section>
