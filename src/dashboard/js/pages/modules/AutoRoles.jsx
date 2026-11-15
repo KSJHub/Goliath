@@ -240,9 +240,9 @@ export default function AutoRoles({ theme, selectedGuild, selectedGuildData }) {
       <section style={{ ...cardStyle, padding: 22, display: 'grid', gap: 12 }}>
         <h2 style={{ margin: 0 }}>Health & Diagnostics</h2>
         {health?.warnings?.length
-          ? health.warnings.map((warning) => <div key={warning} style={{ color: '#fbbf24', fontWeight: 850 }}>⚠ {warning}</div>)
+          ? health.warnings.map((warning) => <div key={warning} style={{ color: '#fbbf24', fontWeight: 850 }}>{E.WARNING} {warning}</div>)
           : <div style={{ color: '#86efac', fontWeight: 900 }}>✅ Auto Roles configuration is healthy.</div>}
-        {(health?.roles || []).map((role) => <div key={role.roleId} style={{ color: role.exists && role.manageable ? '#86efac' : '#fca5a5' }}>{role.exists && role.manageable ? '✅' : '❌'} {role.name || role.roleId}</div>)}
+        {(health?.roles || []).map((role) => <div key={role.roleId} style={{ color: role.exists && role.manageable ? '#86efac' : '#fca5a5' }}>{role.exists && role.manageable ? E.SUCCESS : E.ERROR} {role.name || role.roleId}</div>)}
         <button type="button" onClick={load} disabled={loading} style={{ ...buttonStyle(theme), justifySelf: 'start' }}>{loading ? 'Refreshing...' : 'Refresh Health'}</button>
       </section>
     </div>
