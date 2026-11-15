@@ -952,8 +952,8 @@ let ticketSetupPanelApi;
 
       await interaction.editReply({
         content: existingChannelId
-          ? `❌ ${guard.reason}\nExisting ticket: <#${existingChannelId}>`
-          : `❌ ${guard.reason}`,
+          ? `${EMOJIS.ERROR} ${guard.reason}\nExisting ticket: <#${existingChannelId}>`
+          : `${EMOJIS.ERROR} ${guard.reason}`,
       });
 
       return true;
@@ -1582,7 +1582,7 @@ let ticketSetupPanelApi;
 
           '',
           '**Management Summary**',
-          `⚙️ Manage Ticket: \`Appearance, limits, cooldowns and roles\``,
+          `${EMOJIS.SETTINGS} Manage Ticket: \`Appearance, limits, cooldowns and roles\``,
           `${EMOJIS.GIVEAWAY_TICKET} Ticket Limit: ${formatLimit(getPanelLimit(panel))}`,
           `⏱️ Cooldown: ${formatCooldown(getPanelCooldownMs(panel))}`,
           `${EMOJIS.LOCKDOWN} One Active Per Type: \`${
@@ -1623,7 +1623,7 @@ let ticketSetupPanelApi;
     const appearance = panel.appearance || {};
 
     return new EmbedBuilder()
-      .setTitle(`⚙️ Manage Ticket • ${panel.name}`)
+      .setTitle(`${EMOJIS.SETTINGS} Manage Ticket • ${panel.name}`)
       .setDescription(
         [
           `**Panel ID:** \`${panel.panelId}\``,
@@ -1713,7 +1713,7 @@ let ticketSetupPanelApi;
   function buildManagementRow(panelId) {
     return new ActionRowBuilder().addComponents(
       emojiButton(`ticket_setup:management:${panelId}`, 'Manage Ticket', EMOJIS.SETTINGS, ButtonStyle.Primary),
-      emojiButton(`ticket_setup:refresh_deployed:${panelId}`, 'Refresh Panel', '♻️'),
+      emojiButton(`ticket_setup:refresh_deployed:${panelId}`, 'Refresh Panel', EMOJIS.REFRESH),
     );
   }
 
