@@ -20,7 +20,7 @@ function digest(value) { return createHash('sha256').update(JSON.stringify(value
 function operationKey({ draft, currentDigest, operation, sequence }) {
   return digest({ draftId: draft.id, environment: draft.environment, guildId: draft.guildId,
     blueprint: draft.blueprint, currentDigest,
-    reviewCheckpoint: draft.review?.checkedAt || null,
+    reviewCheckpoint: draft.review?.checkpointId || null,
     sequence, kind: operation.kind,
     target: operation.target, before: operation.before ?? null, proposed: operation.after ?? operation.proposed ?? null });
 }
@@ -68,6 +68,7 @@ function validateContext({ draft, currentDigest, operations, reviewerId }) {
   if (draft.auditDigest !== currentDigest) throw new Error('Saved plan is stale; no operation review is allowed.');
   if (draft.review?.status !== 'reviewed' ||
       draft.review.checkedBy !== draft.createdBy ||
+      !UUID.test(String(draft.review.checkpointId || '')) ||
       !Number.isFinite(Date.parse(draft.review.checkedAt)) ||
       Date.parse(draft.review.checkedAt) > Date.now())
     throw new Error('Review the complete saved plan with its creator identity first.');
