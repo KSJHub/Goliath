@@ -733,6 +733,70 @@ router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, re
   }
 });
 
+// Owner confirmation is recorded as an ephemeral intent, NOT an execution
+// authorisation. A future executor must implement separate single-use grants,
+// fresh state checks, recovery and an explicit feature switch.
+const executionIntents = new Map();
+const INTENT_TTL_MS = 5 * 60 * 1000;
+router.post('/drafts/:id/execution-intent', requirePrivateAI, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV controller only.' });
+  const sequence = req.body?.sequence;
+  const expectedKey = req.body?.operationKey;
+  if (!Number.isInteger(sequence) || sequence < 1 || sequence > 350 ||
+      !/^[a-f0-9]{64}$/.test(String(expectedKey || '')) ||
+      req.body?.confirmation !== 'I understand this is not execution approval') {
+    return res.status(422).json({ error: 'Exact operation identity and confirmation required.' });
+  }
+  try {
+    const draft = draftStore.loadDraft(String(req.params.id));
+    if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
+    if (draft.environment !== 'DEV') return res.status(403).json({ error: 'DEV guilds only.' });
+    const audit = await getVerifiedAudit(req, 'DEV', draft.guildId);
+    const currentDigest = reportDigest(audit);
+    if (currentDigest !== draft.auditDigest || draft.review?.status !== 'reviewed')
+      return res.status(409).json({ error: 'Draft is stale or has not been reviewed.' });
+    const preview = planBlueprint(audit, draft.blueprint);
+    const operation = preview.operations[sequence - 1];
+    if (!operation || operation.kind !== 'rename_category' || operation.executable !== false)
+      return res.status(422).json({ error: 'Only reviewed category rename previews are supported.' });
+    const key = approvalLedger.operationKey({ draft, currentDigest, operation, sequence });
+    if (key !== expectedKey) return res.status(409).json({ error: 'Operation fingerprint changed.' });
+    const manifest = buildTransactionManifest({ draft, audit, preview, currentDigest });
+    const rehearsal = simulateTransaction({ draft, audit, preview, currentDigest });
+    if (manifest.unavailable || manifest.warnings.length || !rehearsal.simulated)
+      return res.status(409).json({ error: 'Transaction integrity or rehearsal failed.' });
+    const capability = await getBotCapabilityEvidence(req, 'DEV', draft.guildId);
+    const preflight = buildCapabilityPreflight({ audit, operations: preview.operations, capability });
+    if (preflight.operations[sequence - 1]?.permission !== 'permitted-in-principle')
+      return res.status(409).json({ error: 'Effective Discord permissions are not verified.' });
+    const review = approvalLedger.listReviews({
+      draft, currentDigest, operations: preview.operations
+    })[sequence - 1];
+    if (review.needsAttention || !review.reviews.some(item => item.decision === 'acknowledged'))
+      return res.status(409).json({ error: 'Operation review is missing or rejected.' });
+    const ownerId = String(req.session.user.id);
+    const id = require('node:crypto').randomUUID();
+    const expiresAt = new Date(Date.now() + INTENT_TTL_MS).toISOString();
+    for (const [intentId, intent] of executionIntents)
+      if (Date.parse(intent.expiresAt) <= Date.now()) executionIntents.delete(intentId);
+    if (executionIntents.size >= 30) return res.status(429).json({ error: 'Too many pending intents.' });
+    executionIntents.set(id, {
+      draftId: draft.id, guildId: draft.guildId, environment: 'DEV',
+      sequence, operationKey: key, ownerId, expiresAt
+    });
+    return res.json({
+      intentId: id, draftId: draft.id, guildId: draft.guildId, sequence,
+      operationKey: key, expiresAt, authorised: false, canExecute: false,
+      executable: false,
+      notice: 'Intent recorded in memory for five minutes. No execution grant or Discord write was issued.'
+    });
+  } catch (error) {
+    return res.status(error.status || 503).json({
+      error: 'Execution intent validation failed. No Discord change occurred.'
+    });
+  }
+});
+
 // Operation review and audit log are separate from all Discord write paths.
 router.get('/drafts/:id/operation-reviews', requireAIIdentity, async (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV review controller only.' });
