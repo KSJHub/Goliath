@@ -1,6 +1,6 @@
 'use strict';
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 // src/modules/feedbackStudio/forms/formManager.js
 
@@ -338,14 +338,14 @@ function buildFormsAdminPanel(guild, memberDisplayName = 'Unknown User', rolePag
     .setDescription([
       'Configure form deployment, logging and review behaviour.',
       '',
-      `**Status:** ${moduleEnabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${moduleEnabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Submit Channel:** ${formatChannel(section.submitChannelId)}`,
       `**Log Channel:** ${formatChannel(section.logChannelId)}`,
       `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`,
       `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`,
-      `**Require Review:** ${section.requireReview !== false ? 'Yes ✅' : 'No ❌'}`,
-      `**Anonymous:** ${section.anonymousSubmissions ? 'Yes ✅' : 'No ❌'}`,
-      `**Store Responses:** ${section.storeResponses !== false ? 'Yes ✅' : 'No ❌'}`,
+      `**Require Review:** ${section.requireReview !== false ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Anonymous:** ${section.anonymousSubmissions ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Store Responses:** ${section.storeResponses !== false ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
       '',
       `Forms: \`${formItems.length}\` | Submissions: \`${submissions.length}\` | Pending: \`${pending}\``,
       `Submitted: \`${section.analytics.submitted}\` | Approved: \`${section.analytics.approved}\` | Denied: \`${section.analytics.denied}\``,
@@ -443,7 +443,7 @@ async function handleFormsAdminInteraction(interaction) {
 
     return safeUpdate(interaction, buildFormsAdminPanel(interaction.guild, memberDisplayName));
   } catch (error) {
-    const payload = { content: `❌ Forms setup failed: ${error.message}`, flags: 64 };
+    const payload = { content: `${EMOJIS.ERROR} Forms setup failed: ${error.message}`, flags: 64 };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
     return true;
