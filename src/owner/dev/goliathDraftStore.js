@@ -87,7 +87,8 @@ function reviewDraft({ id, ownerId, currentAuditDigest }, file) {
   if (item.auditDigest !== currentAuditDigest) throw new Error('The server changed since this draft was saved. Refresh and save a new plan.');
   const now = new Date().toISOString();
   item.updatedAt = now;
-  item.review = { status: 'reviewed', checkedBy: String(ownerId), checkedAt: now };
+  item.review = { status: 'reviewed', checkedBy: String(ownerId), checkedAt: now,
+    checkpointId: randomUUID() };
   writeStore(data, file);
   return publicDraft(item, true);
 }
