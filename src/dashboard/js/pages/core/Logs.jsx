@@ -350,7 +350,7 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
   const refreshResources = useCallback(async () => {
     const nextChannels = await loadResources();
     setChannels(nextChannels);
-    if (!nextChannels.length) setSaveMessage('⚠️ No text channels returned. Check bot guild access.');
+    if (!nextChannels.length) setSaveMessage(`${E.WARNING} No text channels returned. Check bot guild access.`);
   }, [loadResources]);
 
   useEffect(() => {
