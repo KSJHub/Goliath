@@ -21,6 +21,9 @@ function buildCapabilityPreflight({ audit, operations, capability }) {
   if (!Array.isArray(audit.channels) || audit.channels.length > 500 ||
       audit.channels.some(c => !SNOWFLAKE.test(String(c?.id || ''))))
     throw new Error('A bounded, valid channel inventory is required.');
+  if (!audit.readOnly ||
+      !['DEV', 'BETA', 'PRODUCTION'].includes(audit.environment))
+    throw new Error('Permission preflight requires a scoped read-only guild audit.');
   const channelMap = new Map(audit.channels.map(c => [c.id, c]));
   if (channelMap.size !== audit.channels.length) throw new Error('Duplicate channel IDs in audit.');
   const knownKinds = new Set(['create_category', 'create_channel', 'rename_category', 'edit_channel']);
