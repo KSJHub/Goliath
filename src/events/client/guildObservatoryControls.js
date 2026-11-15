@@ -9,7 +9,7 @@ const {
   MessageFlags,
   StringSelectMenuBuilder,
 } = require('discord.js');
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../core/guild/goliathNavigation');
 const auditStore = require('../../owner/auditIntelligence/auditStore');
 const observatory = require('../../owner/auditIntelligence/guildObservatory');
 const security = require('../../core/security/protection/core');
@@ -155,15 +155,15 @@ function payload(client, interaction) {
   if (guilds.length) rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`${PREFIX}guild`).setPlaceholder('Select a monitored guild').addOptions(guilds.map((item) => ({ label: item.name.slice(0, 100), value: item.id, description: `${item.environments.join(' • ') || 'Registry'} • ${item.id}`.slice(0, 100), default: item.id === state.guildId })))));
   if (selected) {
     rows.push(new ActionRowBuilder().addComponents(
-      navigationButton(`${PREFIX}scan`, 'Scan Server', ButtonStyle.Primary).setLabel('Scan Server').setEmoji('🔎'),
-      navigationButton(`${PREFIX}overview`, 'Intelligence', state.view === 'overview' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Intelligence').setEmoji('📊'),
-      navigationButton(`${PREFIX}changes`, 'Changes', state.view === 'changes' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Changes').setEmoji('🔄'),
-      navigationButton(`${PREFIX}history`, 'History', state.view === 'history' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('History').setEmoji('🕒'),
+      navigationButton(`${PREFIX}scan`, 'Scan Server', ButtonStyle.Primary).setLabel('Scan Server').setEmoji(EMOJIS.INVESTIGATE),
+      navigationButton(`${PREFIX}overview`, 'Intelligence', state.view === 'overview' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Intelligence').setEmoji(EMOJIS.DASHBOARD),
+      navigationButton(`${PREFIX}changes`, 'Changes', state.view === 'changes' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Changes').setEmoji(EMOJIS.REFRESH),
+      navigationButton(`${PREFIX}history`, 'History', state.view === 'history' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('History').setEmoji(EMOJIS.ROLE_CLOCK),
     ));
     rows.push(new ActionRowBuilder().addComponents(
-      navigationButton(`${PREFIX}security`, 'Security', state.view === 'security' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Security').setEmoji('🛡️'),
-      navigationButton(`${PREFIX}audit`, 'Audit History', state.view === 'audit' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Audit History').setEmoji('📜'),
-      navigationButton(`${PREFIX}refresh`, 'Refresh', ButtonStyle.Secondary).setLabel('Refresh').setEmoji('🔄'),
+      navigationButton(`${PREFIX}security`, 'Security', state.view === 'security' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Security').setEmoji(EMOJIS.SECURITY),
+      navigationButton(`${PREFIX}audit`, 'Audit History', state.view === 'audit' ? ButtonStyle.Success : ButtonStyle.Secondary).setLabel('Audit History').setEmoji(EMOJIS.CASES),
+      navigationButton(`${PREFIX}refresh`, 'Refresh', ButtonStyle.Secondary).setLabel('Refresh').setEmoji(EMOJIS.REFRESH),
     ));
   }
   return { embeds: [embed], components: rows, allowedMentions: { parse: [] } };
