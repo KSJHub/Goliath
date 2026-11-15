@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   EmbedBuilder,
@@ -60,12 +60,12 @@ async function buildAutoRolesPanel(guild, memberDisplayName = 'Unknown User', ro
     .setColor(health.healthy ? 0x57f287 : 0xfaa61a)
     .setTitle(emojiLabel('MOD_STAFF', 'Auto Roles · Setup'))
     .setDescription([
-      `**Status:** ${moduleEnabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${moduleEnabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Join Roles:** ${formatRoles(config.joinRoles)}`,
       `**Bot Roles:** ${formatRoles(config.botRoles)}`,
-      `**Apply To Bots:** ${config.settings.applyToBots ? 'Yes ✅' : 'No ❌'}`,
-      `**Reapply On Startup:** ${config.settings.reapplyOnStartup ? 'Yes ✅' : 'No ❌'}`,
-      `**Audit Logging:** ${config.settings.auditLog ? 'Yes ✅' : 'No ❌'}`,
+      `**Apply To Bots:** ${config.settings.applyToBots ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Reapply On Startup:** ${config.settings.reapplyOnStartup ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Audit Logging:** ${config.settings.auditLog ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
       '',
       `Assigned: \`${config.analytics.assigned || 0}\` | Failed: \`${config.analytics.failed || 0}\` | Skipped: \`${config.analytics.skipped || 0}\``,
       '',
@@ -166,7 +166,7 @@ async function handleAutoRolesInteraction(interaction) {
 
     return updatePanel(interaction);
   } catch (error) {
-    const payload = { content: `❌ Auto Roles setup failed: ${error.message}`, ephemeral: true };
+    const payload = { content: `${EMOJIS.ERROR} Auto Roles setup failed: ${error.message}`, ephemeral: true };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
     return true;
