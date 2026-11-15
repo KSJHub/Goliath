@@ -1,7 +1,6 @@
 'use strict';
 
 const { Events } = require('discord.js');
-const guildManager = require('../../core/guild/guildManager');
 const { startupWelcome } = require('../../modules/messageStudio/welcome/welcome');
 const scheduledWelcomeScheduler = require('../../modules/messageStudio/welcome/scheduledWelcomeScheduler');
 
@@ -16,15 +15,16 @@ module.exports = {
       console.error('[Welcome] Scheduled Welcome startup failed:', error);
     }
 
-    const enabledGuilds = client.guilds.cache.filter((guild) => guildManager.isModuleEnabled(guild.id, 'welcome'));
-    if (!enabledGuilds.size) {
-      console.log('[Welcome] Startup check skipped: no enabled guilds.');
-      return;
+    // Let startupWelcome inspect each guild independently. Filtering here
+    // could throw on one guild's configuration and prevent recovery for all.
+    // startupWelcome already skips recovery for disabled guilds.
+    try {
+      const summary = await startupWelcome(client);
+      if (!summary.ok) {
+        console.warn(`[Welcome] Startup reported ${summary.warnings} warning(s) across ${summary.guildsChecked} guild(s).`);
+      }
+    } catch (error) {
+      console.error('[Welcome] Startup health and recovery failed:', error);
     }
-
-    await startupWelcome({
-      ...client,
-      guilds: { ...client.guilds, cache: enabledGuilds },
-    });
   },
 };
