@@ -7,7 +7,7 @@ const {
   Events,
   MessageFlags,
 } = require('discord.js');
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../core/guild/goliathNavigation');
 const auditStore = require('../../owner/auditIntelligence/auditStore');
 const security = require('../../core/security/protection/core');
 const maintenance = require('../../owner/dev/maintenanceStatus');
@@ -106,15 +106,15 @@ function payload(client, result = null) {
     embeds: [embed],
     components: [
       new ActionRowBuilder().addComponents(
-        navigationButton(`${PREFIX}pause-all`, 'Pause ALL Notices', ButtonStyle.Danger, disabled).setLabel('Pause ALL Notices').setEmoji('🔕'),
-        navigationButton(`${PREFIX}resume-all`, 'Resume ALL Notices', ButtonStyle.Success, disabled).setLabel('Resume ALL Notices').setEmoji('🔔'),
+        navigationButton(`${PREFIX}pause-all`, 'Pause ALL Notices', ButtonStyle.Danger, disabled).setLabel('Pause ALL Notices').setEmoji(EMOJIS.WELCOME_MUTED),
+        navigationButton(`${PREFIX}resume-all`, 'Resume ALL Notices', ButtonStyle.Success, disabled).setLabel('Resume ALL Notices').setEmoji(EMOJIS.SOCIAL_ALERT_BELL),
       ),
       new ActionRowBuilder().addComponents(
         navigationButton(`${PREFIX}maintenance`, 'Toggle Maintenance ALL', ButtonStyle.Secondary, disabled).setLabel('Toggle Maintenance ALL'),
         navigationButton(`${PREFIX}restart`, 'Toggle Restart ALL', ButtonStyle.Secondary, disabled).setLabel('Toggle Restart ALL'),
         navigationButton(`${PREFIX}recovery`, 'Toggle Recovery ALL', ButtonStyle.Secondary, disabled).setLabel('Toggle Recovery ALL'),
       ),
-      new ActionRowBuilder().addComponents(navigationButton(`${PREFIX}refresh`, 'Refresh', ButtonStyle.Primary).setLabel('Refresh').setEmoji('🔄')),
+      new ActionRowBuilder().addComponents(navigationButton(`${PREFIX}refresh`, 'Refresh', ButtonStyle.Primary).setLabel('Refresh').setEmoji(EMOJIS.REFRESH)),
     ],
     allowedMentions: { parse: [] },
   };
@@ -159,7 +159,7 @@ async function ensureButton(client) {
   if (!message) return false;
   const rows = message.components.map((r) => ActionRowBuilder.from(r));
   if (rows.some((r) => r.components.some((c) => c.data?.custom_id === `${PREFIX}open`))) return true;
-  const button = navigationButton(`${PREFIX}open`, 'Global Notices', ButtonStyle.Danger).setLabel('Global Notices').setEmoji('🚨');
+  const button = navigationButton(`${PREFIX}open`, 'Global Notices', ButtonStyle.Danger).setLabel('Global Notices').setEmoji(EMOJIS.ISOLATION);
   let row = rows.find((r) => r.components.length < 5);
   if (row) row.addComponents(button); else if (rows.length < 5) rows.push(new ActionRowBuilder().addComponents(button)); else return false;
   await message.edit({ components: rows }).catch(() => null);
