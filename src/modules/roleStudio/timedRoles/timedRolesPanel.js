@@ -1,6 +1,6 @@
 'use strict';
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   ActionRowBuilder,
@@ -58,10 +58,10 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
   });
   const lines = rules.length
     ? rules.slice(0, 15).map((rule, index) => [
-      `**${index + 1}. ${rule.enabled ? '✅' : '⏸️'} ${rule.name}**`,
+      `**${index + 1}. ${rule.enabled ? EMOJIS.SUCCESS : EMOJIS.USER_PAUSE} ${rule.name}**`,
       `↳ After **${formatDuration(rule)}** → <@&${rule.roleId}>`,
       rule.removeRoleIds.length ? `↳ Also removes ${rule.removeRoleIds.map((id) => `<@&${id}>`).join(', ')}` : null,
-      rule.lastError ? `↳ ⚠️ ${rule.lastError}` : null,
+      rule.lastError ? `↳ ${EMOJIS.WARNING} ${rule.lastError}` : null,
     ].filter(Boolean).join('\n'))
     : ['No milestones configured. Select any role below to create the first one.'];
 
@@ -71,7 +71,7 @@ async function buildTimedRolesPanel(guild, memberDisplayName = 'Unknown User', r
     .setDescription([
       'Reward members automatically for how long they have stayed in the server.',
       '',
-      `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Progression:** ${mode}`,
       `**Promotion announcements:** ${section.settings.announcePromotions ? `Enabled in ${section.settings.announcementChannelId ? `<#${section.settings.announcementChannelId}>` : 'no channel selected'} ✅` : 'Disabled'}`,
       `**Scan interval:** ${section.settings.scanIntervalMinutes} minutes`,
@@ -137,7 +137,7 @@ function buildRulePanel(guild, ruleId, rolePage = 0) {
       .setDescription([
         `**Award role:** <@&${rule.roleId}>`,
         `**Required tenure:** ${formatDuration(rule)}`,
-        `**Status:** ${rule.enabled ? 'Enabled ✅' : 'Disabled ⏸️'}`,
+        `**Status:** ${rule.enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.USER_PAUSE}`}`,
         `**Additional roles removed:** ${rule.removeRoleIds.length ? rule.removeRoleIds.map((id) => `<@&${id}>`).join(', ') : '`None`'}`,
         `**Last scan:** ${formatTimestamp(rule.lastRunAt)}`,
         `**Last awarded:** ${rule.lastAwarded || 0}`,
@@ -429,7 +429,7 @@ async function handleTimedRolesInteraction(interaction) {
     }
     return refresh(interaction);
   } catch (error) {
-    const payload = { content: `❌ Timed Roles setup failed: ${error.message}`, ephemeral: true };
+    const payload = { content: `${EMOJIS.ERROR} Timed Roles setup failed: ${error.message}`, ephemeral: true };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
     return true;
