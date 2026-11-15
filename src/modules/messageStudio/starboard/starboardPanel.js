@@ -1,6 +1,6 @@
 'use strict';
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
 const starboardStore = require('./starboardStore');
@@ -23,14 +23,14 @@ function buildStarboardAdminPanel(guild, memberDisplayName = 'Unknown User', rol
     .setTitle(emojiLabel('USER_STARBOARD', 'Starboard'))
     .setDescription([
       'Configure highlighted messages powered by reactions.', '',
-      `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Starboard Channel:** ${formatChannel(section.channelId)}`,
       `**Log Channel:** ${formatChannel(section.logChannelId)}`,
       `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`,
       `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`,
       `**Emoji:** ${section.emoji || '⭐'}`,
       `**Threshold:** \`${section.threshold || 3}\``,
-      `**Self Star:** ${section.allowSelfStar ? 'Allowed ✅' : 'Blocked ❌'}`, '',
+      `**Self Star:** ${section.allowSelfStar ? `Allowed ${EMOJIS.SUCCESS}` : `Blocked ${EMOJIS.ERROR}`}`, '',
       `Posts: \`${posts.length}\` | Posted: \`${section.analytics?.posted || 0}\` | Updated: \`${section.analytics?.updated || 0}\``,
     ].join('\n'))
     .setFooter({ text: `Requested by ${memberDisplayName}` })
@@ -99,7 +99,7 @@ async function handleStarboardAdminInteraction(interaction) {
     }
     return safeUpdate(interaction, buildStarboardAdminPanel(interaction.guild, member));
   } catch (error) {
-    const payload = { content: `❌ Starboard setup failed: ${error.message}`, flags: 64 };
+    const payload = { content: `${EMOJIS.ERROR} Starboard setup failed: ${error.message}`, flags: 64 };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
     return true;
