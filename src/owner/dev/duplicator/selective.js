@@ -11,7 +11,7 @@ const {
   StringSelectMenuBuilder,
 } = require('discord.js');
 const history = require('./history');
-const { navigationButton } = require('../../../core/guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../../core/guild/goliathNavigation');
 
 const PREFIX = 'dupselect';
 const SESSION_TTL = 30 * 60 * 1000;
@@ -222,9 +222,9 @@ function landingPayload(session) {
       new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(componentId(session, 'source')).setPlaceholder('Source server').addOptions(guildOptions(session, session.sourceGuildId))),
       new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(componentId(session, 'destination')).setPlaceholder('Destination server').addOptions(guildOptions(session, session.destinationGuildId))),
       new ActionRowBuilder().addComponents(
-        navigationButton(componentId(session, 'scan'), 'Scan Source', ButtonStyle.Primary, !ready).setEmoji('🔎'),
-        navigationButton(componentId(session, 'history'), 'Transfer History', ButtonStyle.Secondary).setEmoji('📜'),
-        navigationButton(componentId(session, 'delete-scan'), 'Bulk Delete', ButtonStyle.Danger, !session.destinationGuildId).setEmoji('🗑️'),
+        navigationButton(componentId(session, 'scan'), 'Scan Source', ButtonStyle.Primary, !ready).setEmoji(EMOJIS.INVESTIGATE),
+        navigationButton(componentId(session, 'history'), 'Transfer History', ButtonStyle.Secondary).setEmoji(EMOJIS.CASES),
+        navigationButton(componentId(session, 'delete-scan'), 'Bulk Delete', ButtonStyle.Danger, !session.destinationGuildId).setEmoji(EMOJIS.DELETE),
       ),
     ],
     flags: MessageFlags.Ephemeral,
@@ -256,13 +256,13 @@ function scanPayload(session) {
     components: [
       new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(componentId(session, 'items')).setPlaceholder('Choose categories/channels on this page').setMinValues(0).setMaxValues(options.length).addOptions(options)),
       new ActionRowBuilder().addComponents(
-        navigationButton(componentId(session, 'prev'), 'Previous', ButtonStyle.Secondary, page.safePage === 0).setEmoji('⬅️'),
-        navigationButton(componentId(session, 'next'), 'Next', ButtonStyle.Secondary, page.safePage >= page.pageCount - 1).setEmoji('➡️'),
+        navigationButton(componentId(session, 'prev'), 'Previous', ButtonStyle.Secondary, page.safePage === 0).setEmoji(EMOJIS.BACK),
+        navigationButton(componentId(session, 'next'), 'Next', ButtonStyle.Secondary, page.safePage >= page.pageCount - 1).setEmoji(EMOJIS.NEXT),
         navigationButton(componentId(session, 'select-page'), 'Select Page', ButtonStyle.Secondary),
         navigationButton(componentId(session, 'clear-page'), 'Clear Page', ButtonStyle.Secondary),
       ),
       new ActionRowBuilder().addComponents(
-        navigationButton(componentId(session, 'review'), 'Review Transfer', ButtonStyle.Success, session.selected.size === 0).setEmoji('✅'),
+        navigationButton(componentId(session, 'review'), 'Review Transfer', ButtonStyle.Success, session.selected.size === 0).setEmoji(EMOJIS.SUCCESS),
         navigationButton(componentId(session, 'select-all'), 'Select All', ButtonStyle.Primary),
         navigationButton(componentId(session, 'back'), 'Back', ButtonStyle.Secondary),
       ),
@@ -287,8 +287,8 @@ function reviewPayload(session, dryRun = null) {
       '', '**Roles carried/mapped because selected permissions depend on them:**', roleNames, ...dry,
     ].join('\n'), dryRun?.errors?.length ? 0xf59e0b : 0x5865f2)],
     components: [new ActionRowBuilder().addComponents(
-      navigationButton(componentId(session, 'dryrun'), 'Run Dry-Run', ButtonStyle.Secondary).setEmoji('🧪'),
-      navigationButton(componentId(session, 'confirm-view'), 'Continue', ButtonStyle.Success, blocked).setEmoji('➡️'),
+      navigationButton(componentId(session, 'dryrun'), 'Run Dry-Run', ButtonStyle.Secondary).setEmoji(EMOJIS.TEST_SEND),
+      navigationButton(componentId(session, 'confirm-view'), 'Continue', ButtonStyle.Success, blocked).setEmoji(EMOJIS.NEXT),
       navigationButton(componentId(session, 'scan-back'), 'Back to Selection', ButtonStyle.Secondary),
     )],
   };
@@ -305,7 +305,7 @@ function confirmPayload(session) {
       'If the destination Goliath instance cannot grant a source permission bit, that bit is deferred and recorded instead of blocking the entire copy.',
     ].join('\n'), 0xf59e0b)],
     components: [new ActionRowBuilder().addComponents(
-      navigationButton(componentId(session, 'copy-now'), 'Confirm Copy', ButtonStyle.Danger).setEmoji('⚠️'),
+      navigationButton(componentId(session, 'copy-now'), 'Confirm Copy', ButtonStyle.Danger).setEmoji(EMOJIS.WARNING),
       navigationButton(componentId(session, 'review-back'), 'Back', ButtonStyle.Secondary),
     )],
   };
@@ -446,7 +446,7 @@ function resultPayload(session, response, manifest) {
       ...(manifest.warnings || []).slice(0, 8).map((warning) => '⚠️ ' + warning),
     ].filter(Boolean).join('\n'), color)],
     components: [new ActionRowBuilder().addComponents(
-      navigationButton(componentId(session, 'manifest-last'), 'View Transfer Manifest', ButtonStyle.Primary).setEmoji('📜'),
+      navigationButton(componentId(session, 'manifest-last'), 'View Transfer Manifest', ButtonStyle.Primary).setEmoji(EMOJIS.CASES),
       navigationButton(componentId(session, 'home'), 'New Transfer', ButtonStyle.Secondary),
     )],
   };
@@ -528,8 +528,8 @@ function manifestPayload(session, manifest) {
     ].filter(Boolean).join('\n'))],
     components: [new ActionRowBuilder().addComponents(
       navigationButton(componentId(session, 'history'), 'Back to History', ButtonStyle.Secondary),
-      navigationButton(componentId(session, `undo-view:${manifest.id}`), legacy ? 'Undo Unavailable (Legacy)' : 'Undo Transfer', ButtonStyle.Danger, !canUndoManifest(manifest)).setEmoji('↩️'),
-      navigationButton(componentId(session, `history-delete-view:${manifest.id}`), 'Delete History Record', ButtonStyle.Secondary).setEmoji('🗑️'),
+      navigationButton(componentId(session, `undo-view:${manifest.id}`), legacy ? 'Undo Unavailable (Legacy)' : 'Undo Transfer', ButtonStyle.Danger, !canUndoManifest(manifest)).setEmoji(EMOJIS.WELCOME_INHERIT),
+      navigationButton(componentId(session, `history-delete-view:${manifest.id}`), 'Delete History Record', ButtonStyle.Secondary).setEmoji(EMOJIS.DELETE),
     )],
   };
 }
@@ -569,7 +569,7 @@ function undoPreviewPayload(session, manifest, inspection) {
       ...(unsafe.slice(0, 6).map((item) => `⚠️ ${item.name || item.id}: ${item.reason}`)),
     ].join('\n'), unsafe.length ? 0xf59e0b : 0xed4245)],
     components: [new ActionRowBuilder().addComponents(
-      navigationButton(componentId(session, `undo-now:${manifest.id}`), 'Confirm Undo', ButtonStyle.Danger, !(inspection.counts?.present > 0)).setEmoji('↩️'),
+      navigationButton(componentId(session, `undo-now:${manifest.id}`), 'Confirm Undo', ButtonStyle.Danger, !(inspection.counts?.present > 0)).setEmoji(EMOJIS.WELCOME_INHERIT),
       navigationButton(componentId(session, 'history'), 'Cancel', ButtonStyle.Secondary),
     )],
   };
@@ -628,7 +628,7 @@ function deletePayload(session) {
         ),
       new ActionRowBuilder().addComponents(
         navigationButton(componentId(session, 'delete-clear-page'), 'Clear Page', ButtonStyle.Secondary),
-        navigationButton(componentId(session, 'delete-review'), 'Review Selected', ButtonStyle.Danger, session.deleteSelected.size === 0).setEmoji('🗑️'),
+        navigationButton(componentId(session, 'delete-review'), 'Review Selected', ButtonStyle.Danger, session.deleteSelected.size === 0).setEmoji(EMOJIS.DELETE),
         navigationButton(componentId(session, 'home'), 'Cancel', ButtonStyle.Secondary),
       ),
     ],
@@ -644,7 +644,7 @@ function deleteConfirmPayload(session, ids = null, manifestId = null) {
       selected.size > 15 ? `…and ${selected.size - 15} more.` : null, '', '**This action permanently deletes Discord channels/categories.**',
     ].filter(Boolean).join('\n'), 0xed4245)],
     components: [new ActionRowBuilder().addComponents(
-      navigationButton(componentId(session, manifestId ? `delete-manifest-now:${manifestId}` : 'delete-now'), 'Confirm Delete', ButtonStyle.Danger).setEmoji('⚠️'),
+      navigationButton(componentId(session, manifestId ? `delete-manifest-now:${manifestId}` : 'delete-now'), 'Confirm Delete', ButtonStyle.Danger).setEmoji(EMOJIS.WARNING),
       navigationButton(componentId(session, manifestId ? 'history' : 'delete-back'), 'Cancel', ButtonStyle.Secondary),
     )],
   };
