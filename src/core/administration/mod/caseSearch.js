@@ -405,7 +405,7 @@ function caseDetailButtons(c, token, audit) {
 }
 
 function formatEvidence(entry) {
-  const flags = [entry.removedAt ? `${EMOJIS.DELETE} REMOVED` : '✅ ACTIVE', evidenceIsIntact(entry) ? `${EMOJIS.PERMISSION_GUARD} intact` : '⚠️ integrity mismatch'];
+  const flags = [entry.removedAt ? `${EMOJIS.DELETE} REMOVED` : `${EMOJIS.SUCCESS} ACTIVE`, evidenceIsIntact(entry) ? `${EMOJIS.PERMISSION_GUARD} intact` : `${EMOJIS.WARNING} integrity mismatch`];
   const lines = [`**${entry.id}** • ${entry.type || 'evidence'} • ${flags.join(' • ')}`];
   if (entry.messageUrl) lines.push(`[Discord message](${entry.messageUrl})`);
   if (entry.channelId || entry.messageId) lines.push(`Channel: \`${entry.channelId || '—'}\` • Message: \`${entry.messageId || '—'}\``);
