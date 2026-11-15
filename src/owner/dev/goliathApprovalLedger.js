@@ -19,7 +19,9 @@ function ledgerFile() {
 function digest(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 function operationKey({ draft, currentDigest, operation, sequence }) {
   return digest({ draftId: draft.id, environment: draft.environment, guildId: draft.guildId,
-    blueprint: draft.blueprint, currentDigest, sequence, kind: operation.kind,
+    blueprint: draft.blueprint, currentDigest,
+    reviewCheckpoint: draft.review?.checkedAt || null,
+    sequence, kind: operation.kind,
     target: operation.target, before: operation.before ?? null, proposed: operation.after ?? operation.proposed ?? null });
 }
 function load(file = ledgerFile()) {
@@ -64,7 +66,11 @@ function validateContext({ draft, currentDigest, operations, reviewerId }) {
       !SNOWFLAKE.test(String(reviewerId || '')) || !Array.isArray(operations) ||
       operations.length > 350) throw new Error('Invalid review context.');
   if (draft.auditDigest !== currentDigest) throw new Error('Saved plan is stale; no operation review is allowed.');
-  if (draft.review?.status !== 'reviewed') throw new Error('Review the complete saved plan first.');
+  if (draft.review?.status !== 'reviewed' ||
+      draft.review.checkedBy !== draft.createdBy ||
+      !Number.isFinite(Date.parse(draft.review.checkedAt)) ||
+      Date.parse(draft.review.checkedAt) > Date.now())
+    throw new Error('Review the complete saved plan with its creator identity first.');
 }
 function recordReview({ draft, currentDigest, operations, reviewerId, sequence, decision }, file) {
   validateContext({ draft, currentDigest, operations, reviewerId });
