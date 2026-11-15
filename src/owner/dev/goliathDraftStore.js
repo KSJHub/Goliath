@@ -83,6 +83,7 @@ function reviewDraft({ id, ownerId, currentAuditDigest }, file) {
       !/^[a-f0-9]{64}$/.test(String(currentAuditDigest))) throw new Error('Invalid review request.');
   const data = readStore(file), item = data.find(entry => entry.id === id);
   if (!item) return null;
+  if (item.createdBy !== String(ownerId)) throw new Error('Only the draft creator may review this draft.');
   if (item.auditDigest !== currentAuditDigest) throw new Error('The server changed since this draft was saved. Refresh and save a new plan.');
   const now = new Date().toISOString();
   item.updatedAt = now;
