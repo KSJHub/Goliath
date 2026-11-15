@@ -15,7 +15,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../core/guild/goliathNavigation');
 const audit = require('./auditIntelligence');
 const auditRouter = require('./auditRouter');
 const auditStore = require('./auditStore');
@@ -206,8 +206,8 @@ function buildRoutingPanel(client, interaction) {
     rows.push(new ActionRowBuilder().addComponents(routeSelect));
     const channelSelect = new ChannelSelectMenuBuilder().setCustomId('owner:commandcenter:routing:channel').setPlaceholder(`3. Choose destination for ${ROUTE_LABELS[session.routeKey] || 'route'}`).setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(1).setMaxValues(1);
     rows.push(new ActionRowBuilder().addComponents(channelSelect));
-    const provisionButton = navigationButton('owner:commandcenter:routing:provision', 'Create / Repair Report Channels', ButtonStyle.Success).setEmoji('🛠️');
-    const testButton = navigationButton('owner:commandcenter:routing:test', 'Send Test Report', ButtonStyle.Primary).setEmoji('🧪');
+    const provisionButton = navigationButton('owner:commandcenter:routing:provision', 'Create / Repair Report Channels', ButtonStyle.Success).setEmoji(EMOJIS.BUILDER);
+    const testButton = navigationButton('owner:commandcenter:routing:test', 'Send Test Report', ButtonStyle.Primary).setEmoji(EMOJIS.TEST_SEND);
     const resetButton = navigationButton('owner:commandcenter:routing:reset', 'Reset This Route', ButtonStyle.Secondary);
     const backButton = navigationButton('owner:commandcenter:refresh', 'Back / Refresh Home', ButtonStyle.Secondary);
     rows.push(new ActionRowBuilder().addComponents(provisionButton, testButton, resetButton, backButton));
@@ -347,7 +347,7 @@ async function buildIntelligencePanel(client, interaction) {
   const rows = [];
   if (sourceGuilds.length) rows.push(new ActionRowBuilder().addComponents(sourceGuildSelect('owner:commandcenter:intelligence:guild', '1. Select source guild', sourceGuilds, session.sourceGuildId)));
   if (sourceGuild) {
-    const searchButton = navigationButton('owner:commandcenter:intelligence:search', 'Search User', ButtonStyle.Primary).setEmoji('🔎');
+    const searchButton = navigationButton('owner:commandcenter:intelligence:search', 'Search User', ButtonStyle.Primary).setEmoji(EMOJIS.INVESTIGATE);
     const resetButton = navigationButton('owner:commandcenter:intelligence:reset', 'Reset User', ButtonStyle.Secondary, !session.userId && !session.matches?.length);
     const backButton = navigationButton('owner:commandcenter:refresh', 'Back / Refresh Home', ButtonStyle.Secondary);
     rows.push(new ActionRowBuilder().addComponents(searchButton, resetButton, backButton));
@@ -367,7 +367,7 @@ async function buildIntelligencePanel(client, interaction) {
     rows.push(new ActionRowBuilder().addComponents(resultSelect));
   }
   if (sourceGuild && session.userId) {
-    const channelButton = navigationButton('owner:commandcenter:intelligence:channel', 'Create / Open Intelligence Channel', ButtonStyle.Success).setEmoji('📂');
+    const channelButton = navigationButton('owner:commandcenter:intelligence:channel', 'Create / Open Intelligence Channel', ButtonStyle.Success).setEmoji(EMOJIS.USER_HELP_CATEGORIES);
     rows.push(new ActionRowBuilder().addComponents(channelButton));
   }
   return { embeds: report ? [embed, buildUserIntelligenceEmbed(report, sourceGuild)] : [embed], components: rows, allowedMentions: { parse: [] } };
@@ -463,7 +463,7 @@ async function buildHealthPanel(client, repairResult = null) {
       ...(repairSummary ? [{ name: 'Last Health Repair', value: repairSummary, inline: false }] : []),
     )
     .setFooter({ text: `Goliath Command Center • Health • Owner only • Checked ${report.checkedAt || 'now'}` });
-  const repairButton = navigationButton('owner:commandcenter:health:repair', 'Repair Health', report.healthy ? ButtonStyle.Secondary : ButtonStyle.Success, report.healthy).setEmoji('🛠️');
+  const repairButton = navigationButton('owner:commandcenter:health:repair', 'Repair Health', report.healthy ? ButtonStyle.Secondary : ButtonStyle.Success, report.healthy).setEmoji(EMOJIS.BUILDER);
   const rescanButton = navigationButton('owner:commandcenter:health:rescan', 'Rescan Health', ButtonStyle.Primary);
   const backButton = navigationButton('owner:commandcenter:refresh', 'Back / Refresh Home', ButtonStyle.Secondary);
   return { embeds: [embed], components: [new ActionRowBuilder().addComponents(repairButton, rescanButton, backButton)], allowedMentions: { parse: [] } };
