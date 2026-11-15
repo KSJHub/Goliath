@@ -285,7 +285,15 @@ function evaluateReadiness({ draft, audit, currentDigest, preview, botCapabiliti
       detail: snapshotMatches ? 'Saved fingerprint matches the freshly fetched guild structure.' : 'Guild state changed or audit fingerprint is missing.' },
     { key: 'owner_review', label: 'Developer reviewed plan', state: reviewed ? 'passed' : 'blocked',
       detail: reviewed ? 'Draft was marked reviewed. This is not execution approval.' : 'Draft has not been reviewed.' },
-    { key: 'bot_permissions', label: 'Bot permission and hierarchy validation', state: 'pending',
+    { key: 'transaction_integrity', label: 'Manifest and structural rehearsal',
+      state: transactionManifest.unavailable || transactionManifest.warnings.length ||
+        !structuralSimulation.simulated ? 'blocked' : 'passed',
+      detail: transactionManifest.unavailable ? 'Transaction scope or audit fingerprint is invalid.' :
+        transactionManifest.warnings.length ? 'Transaction manifest has unresolved operation issues.' :
+          !structuralSimulation.simulated ? 'Offline structural rehearsal did not pass.' :
+            'Offline structural rehearsal passed; this does not authorise Discord writes.' },
+    { key: 'bot_permissions', label: 'Bot permission and hierarchy validation',
+      state: botCapabilities?.counts?.blocked ? 'blocked' : 'pending',
       detail: !botCapabilities?.permissionsVerified ? 'Bot permission evidence is unavailable or mismatched.' :
         botCapabilities.counts?.blocked ? botCapabilities.counts.blocked + ' operations are blocked by preflight checks.' :
         botCapabilities.counts?.unknown ? botCapabilities.counts.unknown + ' operations still have unknown capabilities.' :
