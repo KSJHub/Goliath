@@ -73,12 +73,18 @@ function toBlueprint(audit) {
   return { name: audit.guild?.name ? audit.guild.name + ' rebuild' : 'Discord rebuild', categories };
 }
 function planBlueprint(audit, raw) {
-  if (!audit?.guild?.id || !ID.test(String(audit.guild.id)) || !Array.isArray(audit.channels))
-    throw new Error('A verified guild audit is required.');
+  if (!audit?.guild?.id || !ID.test(String(audit.guild.id)) || !Array.isArray(audit.channels) ||
+      audit.readOnly !== true || !['DEV', 'BETA', 'PRODUCTION'].includes(audit.environment) ||
+      audit.channels.length > 500 || audit.channels.some(channel =>
+        !channel || !ID.test(String(channel.id || '')) || !Number.isInteger(channel.type)))
+    throw new Error('A verified, bounded, read-only guild audit is required.');
+  if (new Set(audit.channels.map(channel => String(channel.id))).size !== audit.channels.length)
+    throw new Error('Guild audit contains duplicate Discord channel IDs.');
   const blueprint = parseBlueprint(raw);
   const current = audit.channels;
   const byId = new Map(current.map(item => [String(item.id), item]));
   const existingCategories = current.filter(item => item.type === 4);
+  if (existingCategories.length > 500) throw new Error('Guild category inventory exceeds safety limit.');
   const actions = [];
   const warnings = [];
   const plannedNames = new Set();
