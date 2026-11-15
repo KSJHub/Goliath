@@ -16,7 +16,7 @@ const {
 } = require('../../core/security/restoreBackup/backup');
 const security = require('../../core/security/protection/core');
 
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../core/guild/goliathNavigation');
 
 const BUTTON_PREFIX = 'testsecurity:';
 
@@ -238,7 +238,7 @@ function buildRows() {
     ),
 
     new ActionRowBuilder().addComponents(
-      navigationButton(`${BUTTON_PREFIX}full-run`, 'Run Full Safe Test', ButtonStyle.Success).setEmoji('🧪'),
+      navigationButton(`${BUTTON_PREFIX}full-run`, 'Run Full Safe Test', ButtonStyle.Success).setEmoji(EMOJIS.TEST_SEND),
 
       navigationButton(`${BUTTON_PREFIX}manual-backup`, TESTS['manual-backup'].label, TESTS['manual-backup'].style).setEmoji(TESTS['manual-backup'].emoji)
     ),
