@@ -1,5 +1,5 @@
 'use strict';
-const { navigationButton } = require('../../../core/guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../../core/guild/goliathNavigation');
 
 const { ActionRowBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder } = require('discord.js');
 const detector = require('./auditDetector');
@@ -51,8 +51,8 @@ function payload(guild, report) {
     components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(cid('open', guild.id)).setPlaceholder('Inspect a finding…').addOptions(options)));
   }
   components.push(new ActionRowBuilder().addComponents(
-    navigationButton(cid('rescan', guild.id), 'Rescan', ButtonStyle.Primary).setEmoji('🔄'),
-    navigationButton(studioId('audit', guild.id), 'Back to Audit', ButtonStyle.Secondary).setEmoji('⬅️'),
+    navigationButton(cid('rescan', guild.id), 'Rescan', ButtonStyle.Primary).setEmoji(EMOJIS.REFRESH),
+    navigationButton(studioId('audit', guild.id), 'Back to Audit', ButtonStyle.Secondary).setEmoji(EMOJIS.BACK),
   ));
   return { embeds: [embed], components };
 }
