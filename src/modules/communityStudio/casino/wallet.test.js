@@ -40,7 +40,7 @@ vm.runInNewContext(source, {
   },
   Date, Number, Object, Array, String, JSON, Error, Set
 }, { filename: walletPath });
-const { casinoBalance, casinoTransaction, casinoDice, casinoRoulette, casinoSlots } = walletModule.exports;
+const { casinoBalance, casinoTransaction, casinoDice, casinoRoulette, casinoSlots, casinoPayout } = walletModule.exports;
 assert.equal(casinoDice('under', 6).won, true);
 assert.equal(casinoDice('seven', 7).won, true);
 assert.equal(casinoDice('over', 8).won, true);
@@ -56,6 +56,15 @@ assert.equal(casinoSlots([0, 0, 0]).matches, 3);
 assert.equal(casinoSlots([0, 1, 0]).matches, 2);
 assert.equal(casinoSlots([0, 1, 2]).matches, 0);
 assert.throws(() => casinoSlots([0, 6, 0]), /Invalid slot reels/);
+assert.equal(casinoPayout('dice', 10, casinoDice('seven', 7)).total, 130);
+assert.equal(casinoPayout('dice', 10, casinoDice('under', 9)).total, 0);
+assert.equal(casinoPayout('roulette', 10, casinoRoulette('red', 1)).total, 20);
+assert.equal(casinoPayout('roulette', 10, casinoRoulette(36, 36)).total, 360);
+assert.equal(casinoPayout('slots', 10, casinoSlots([5, 5, 5])).total, 200);
+assert.equal(casinoPayout('slots', 10, casinoSlots([0, 0, 1])).total, 20);
+assert.equal(casinoPayout('slots', 10, casinoSlots([0, 1, 2])).total, 0);
+assert.throws(() => casinoPayout('dice', 1, { choice: 'seven', roll: 1, won: true }), /Invalid dice outcome/);
+assert.throws(() => casinoPayout('dice', Number.MAX_SAFE_INTEGER, casinoDice('seven', 7)), /safe integer range/);
 assert.equal(casinoBalance(guildId, alice), 100);
 const credit = casinoTransaction(guildId, { key: 'credit-1', operation: 'credit', userId: alice, amount: 50, reason: 'test' });
 assert.equal(credit.balanceAfter, 150);
