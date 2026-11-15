@@ -84,7 +84,7 @@ function leaderboardRows(guildId, { page = 0, sortBy = 'xp', includePaused = fal
           : safeSort === 'level'
             ? `Level ${Number(user.level || 0).toLocaleString()} · ${Number(user.xp || 0).toLocaleString()} XP`
             : `${Number(user.xp || 0).toLocaleString()} XP · Level ${Number(user.level || 0).toLocaleString()}`;
-      return `**${rank}.** <@${user.userId}> — ${detail}${user.participating === false ? ' · ⏸️ Paused' : ''}`;
+      return `**${rank}.** <@${user.userId}> — ${detail}${user.participating === false ? ` · ${EMOJIS.USER_PAUSE} Paused` : ''}`;
     })
     : ['`No XP tracked yet.`'];
   return { records, lines, page: safePage, totalPages, sortBy: safeSort };
@@ -125,7 +125,7 @@ function recentActivityLines(section) {
   return records.map((user) => {
     const timestamp = Math.floor(user.lastXpMs / 1000);
     const source = user.lastXpSource ? ` · \`${user.lastXpSource}\`` : '';
-    return `• <@${user.userId}> — Level **${Number(user.level || 0)}** · ${Number(user.xp || 0).toLocaleString()} XP${source} · <t:${timestamp}:R>${user.participating === false ? ' · ⏸️' : ''}`;
+    return `• <@${user.userId}> — Level **${Number(user.level || 0)}** · ${Number(user.xp || 0).toLocaleString()} XP${source} · <t:${timestamp}:R>${user.participating === false ? ` · ${EMOJIS.USER_PAUSE}` : ''}`;
   });
 }
 
@@ -182,7 +182,7 @@ function sourceLine(id, source) {
       ? ` · Every ${source.intervalMinutes}m`
       : '';
   const amount = source.amount > 0 ? `${source.amount} XP` : 'Variable XP';
-  return `${source.enabled ? '✅' : '❌'} **${source.label}** — ${amount}${timing}`;
+  return `${source.enabled ? EMOJIS.SUCCESS : EMOJIS.ERROR} **${source.label}** — ${amount}${timing}`;
 }
 
 function rewardLines(section, limit = 15) {
@@ -206,10 +206,10 @@ function buildLevelingPanel(guild, memberDisplayName = 'Unknown User', rolePage 
     .setDescription([
       'Configure XP sources, multipliers, rank rewards, maintenance and giveaway-ready leaderboards.',
       '',
-      `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Announce Channel:** ${formatChannel(section.announceChannelId)}`,
       `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`,
-      `**Level Up Announcements:** ${section.announceLevelUps !== false ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Level Up Announcements:** ${section.announceLevelUps !== false ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       '',
       '**XP Sources**',
       ...Object.entries(section.xpSources).map(([id, source]) => sourceLine(id, source)),
@@ -313,7 +313,7 @@ function buildXpMemberPanel(guild, userId, memberDisplayName = 'Unknown User') {
       .setTitle(emojiLabel('USER', 'Member XP Record'))
       .setDescription([
         `**Member:** <@${userId}>`,
-        `**Participation:** ${participating ? 'Enabled ✅' : 'Paused ⏸️'}`,
+        `**Participation:** ${participating ? `Enabled ${EMOJIS.SUCCESS}` : `Paused ${EMOJIS.USER_PAUSE}`}`,
         `**Level:** ${Number(user.level || 0).toLocaleString()}`,
         `**XP:** ${Number(user.xp || 0).toLocaleString()}`,
         `**Next Level:** ${Math.max(0, nextLevelXp - Number(user.xp || 0)).toLocaleString()} XP remaining`,
@@ -562,7 +562,7 @@ function buildRankRewardsPanel(guild, memberDisplayName = 'Unknown User') {
         '',
         '**Current Rewards**',
         rewardLines(section),
-        missing.length ? `\n⚠️ ${missing.length} configured reward role${missing.length === 1 ? ' is' : 's are'} missing from Discord.` : '',
+        missing.length ? `\n${EMOJIS.WARNING} ${missing.length} configured reward role${missing.length === 1 ? ' is' : 's are'} missing from Discord.` : '',
       ].join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
@@ -663,7 +663,7 @@ function buildRewardDetailPanel(guild, level, memberDisplayName = 'Unknown User'
       .setDescription([
         `**Level:** ${reward.level}`,
         `**Role:** <@&${reward.roleId}>`,
-        `**Role Status:** ${roleExists ? 'Available ✅' : 'Missing ⚠️'}`,
+        `**Role Status:** ${roleExists ? `Available ${EMOJIS.SUCCESS}` : `Missing ${EMOJIS.WARNING}`}`,
         `**Behaviour:** ${rewardBehaviourLabel(leveling.getSection(guild.id))}`,
       ].join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
