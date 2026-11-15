@@ -34,7 +34,7 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? 'Not recorded' : date.toLocaleString();
 }
 
-const defaultHub = { joinChannelId: '', joinChannelName: '➕ Create Temp Voice', categoryId: '', categoryName: 'Temporary Voice Channels', nameTemplate: "{username}'s Channel", userLimit: 0, bitrate: 0, enabled: true, createCategory: true, lockedByDefault: false, hiddenByDefault: false, ownerControlsEnabled: true };
+const defaultHub = { joinChannelId: '', joinChannelName: `${E.ADD} Create Temp Voice`, categoryId: '', categoryName: 'Temporary Voice Channels', nameTemplate: "{username}'s Channel", userLimit: 0, bitrate: 0, enabled: true, createCategory: true, lockedByDefault: false, hiddenByDefault: false, ownerControlsEnabled: true };
 
 export default function TempVoice({ theme, selectedGuild, selectedGuildData }) {
   const guildId = getGuildId(selectedGuild, selectedGuildData);
