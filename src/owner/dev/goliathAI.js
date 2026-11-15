@@ -818,13 +818,34 @@ router.post('/drafts/:id/execution-intent', requirePrivateAI, async (req, res) =
 
 // Intent lifecycle is owner-bound and always non-executable. It is not a
 // substitute for a signed, single-use execution authorisation.
-router.get('/drafts/:id/execution-intents', requireAIIdentity, (req, res) => {
+router.get('/drafts/:id/execution-intents', requireAIIdentity, async (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV controller only.' });
   try {
     const draft = draftStore.loadDraft(String(req.params.id));
     if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
     if (draft.environment !== 'DEV') return res.status(403).json({ error: 'DEV guilds only.' });
     const ownerId = String(req.session.user.id);
+    if (draft.createdBy !== ownerId)
+      return res.status(403).json({ error: 'Only the draft creator may inspect execution intents.' });
+    // Revalidate the live audit and review state before presenting an intent
+    // as pending. Fail closed rather than displaying stale confirmations.
+    const audit = await getVerifiedAudit(req, 'DEV', draft.guildId);
+    const currentDigest = reportDigest(audit);
+    const reviewed = draft.review?.status === 'reviewed' &&
+      draft.review.checkedBy === ownerId &&
+      Number.isFinite(Date.parse(draft.review.checkedAt)) &&
+      Date.parse(draft.review.checkedAt) <= Date.now();
+    if (!reviewed || currentDigest !== draft.auditDigest) {
+      for (const [id, intent] of executionIntents) {
+        if (intent.draftId === draft.id) executionIntents.delete(id);
+      }
+      return res.status(409).json({
+        error: 'Draft review or guild snapshot is stale. Pending intents invalidated.',
+        intents: [], canExecute: false, executable: false
+      });
+    }
+    const operations = planBlueprint(audit, draft.blueprint).operations;
+    const reviews = approvalLedger.listReviews({ draft, currentDigest, operations });
     const now = Date.now();
     const intents = [];
     for (const [id, intent] of executionIntents) {
@@ -832,6 +853,17 @@ router.get('/drafts/:id/execution-intents', requireAIIdentity, (req, res) => {
         executionIntents.delete(id);
       } else if (intent.ownerId === ownerId && intent.draftId === draft.id &&
                  intent.guildId === draft.guildId) {
+        const operation = operations[intent.sequence - 1];
+        const review = reviews[intent.sequence - 1];
+        const currentKey = operation && approvalLedger.operationKey({
+          draft, currentDigest, operation, sequence: intent.sequence
+        });
+        if (!operation || operation.kind !== 'rename_category' ||
+            currentKey !== intent.operationKey || !review || review.needsAttention ||
+            !review.reviews.some(item => item.decision === 'acknowledged')) {
+          executionIntents.delete(id);
+          continue;
+        }
         intents.push({
           intentId: id, sequence: intent.sequence,
           operationKey: intent.operationKey, expiresAt: intent.expiresAt,
@@ -841,7 +873,7 @@ router.get('/drafts/:id/execution-intents', requireAIIdentity, (req, res) => {
     }
     return res.json({ draftId: draft.id, intents, canExecute: false, executable: false });
   } catch {
-    return res.status(503).json({ error: 'Unable to inspect pending intents.' });
+    return res.status(503).json({ error: 'Unable to revalidate pending intents.' });
   }
 });
 router.delete('/drafts/:id/execution-intents/:intentId', requirePrivateAI, (req, res) => {
