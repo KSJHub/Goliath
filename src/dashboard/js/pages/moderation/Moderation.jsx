@@ -56,7 +56,7 @@ export default function Moderation({ selectedGuild, theme }) {
 
             <div style={styles.futurePanel}>
               <div style={styles.futureInnerPanel}>
-                <h4 style={{ margin: 0 }}>⚠️ Warnings</h4>
+                <h4 style={{ margin: 0 }}>{E.WARNING} Warnings</h4>
                 <p style={{ margin: 0 }}>
                   Track user warnings and enforcement actions.
                 </p>
