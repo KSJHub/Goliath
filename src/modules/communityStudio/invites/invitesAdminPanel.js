@@ -272,7 +272,7 @@ async function handleInviteStudioInteraction(interaction) {
       const payload = panel.buildPublicPayload(interaction.guildId);
       await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
     } catch (error) {
-      await interaction.reply({ content: `❌ Preview unavailable: ${String(error.message || error).slice(0, 1700)}`, flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: `${EMOJIS.ERROR} Preview unavailable: ${String(error.message || error).slice(0, 1700)}`, flags: MessageFlags.Ephemeral });
     }
     return true;
   }
@@ -455,7 +455,7 @@ async function handleInviteStudioInteraction(interaction) {
       );
     } catch (error) {
       await interaction.editReply(
-        `❌ ${String(error.message || error).slice(0, 1800)}`,
+        `${EMOJIS.ERROR} ${String(error.message || error).slice(0, 1800)}`,
       );
     }
 
@@ -510,7 +510,7 @@ async function handleInviteStudioInteraction(interaction) {
         .setTimestamp(new Date(health.checkedAt));
       await interaction.editReply({ embeds: [report] });
     } catch (error) {
-      await interaction.editReply({ content: `❌ Diagnostics failed: ${String(error.message || error).slice(0, 1700)}` });
+      await interaction.editReply({ content: `${EMOJIS.ERROR} Diagnostics failed: ${String(error.message || error).slice(0, 1700)}` });
     }
     return true;
   }
@@ -801,7 +801,7 @@ async function handleMemberInteraction(interaction) {
       });
     } catch (error) {
       await interaction.editReply(
-        `❌ ${String(error.message || error).slice(0, 1800)}`,
+        `${EMOJIS.ERROR} ${String(error.message || error).slice(0, 1800)}`,
       );
     }
 
