@@ -82,6 +82,17 @@ function planBlueprint(audit, raw) {
     throw new Error('Guild audit contains duplicate Discord channel IDs.');
   const blueprint = parseBlueprint(raw);
   const current = audit.channels;
+  // Discord can return channels with parent references missing from a partial
+  // snapshot. Do not plan mutations against an inconsistent guild inventory.
+  const currentIds = new Set(current.map(item => String(item.id)));
+  if (current.some(item => item.parentId &&
+      (!currentIds.has(String(item.parentId)) ||
+       !current.some(parent => parent.id === item.parentId && parent.type === 4))))
+    throw new Error('Guild audit contains an invalid or missing parent category.');
+  // A category may not be nested inside another category.
+  if (current.some(item => item.type === 4 && item.parentId))
+    throw new Error('Guild audit contains a nested category.');
+
   const byId = new Map(current.map(item => [String(item.id), item]));
   const existingCategories = current.filter(item => item.type === 4);
   if (existingCategories.length > 500) throw new Error('Guild category inventory exceeds safety limit.');
