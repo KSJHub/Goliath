@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../guild/goliathNavigation');
 
 const { buildMemberNotice, COLORS } = require('../../ui/memberNotice');
 
@@ -11,7 +12,7 @@ function buildAutoModDMEmbed({ guild, rule, reason, action, messageContent, chan
   const safeRule = clean(rule, 'Unknown Rule', 240);
   const payload = buildMemberNotice(guild, {
     module: 'Goliath AutoMod',
-    emoji: '🤖',
+    emoji: EMOJIS.AUTOMOD,
     title: `AutoMod Action • ${safeRule}`,
     color: COLORS.danger,
     description: 'Goliath AutoMod detected activity that matched a server rule. This notice records what happened and what action was taken.',
