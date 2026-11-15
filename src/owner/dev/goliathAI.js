@@ -899,9 +899,13 @@ router.post('/drafts/:id/operation-reviews', requirePrivateAI, async (req, res) 
 router.delete('/drafts/:id', requirePrivateAI, (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'Draft storage is DEV-only.' });
   try {
-    return draftStore.deleteDraft(String(req.params.id))
-      ? res.json({ success: true, notice: 'Saved draft deleted. No Discord changes made.' })
-      : res.status(404).json({ error: 'Draft not found.' });
+    const draftId = String(req.params.id);
+    const deleted = draftStore.deleteDraft(draftId);
+    if (!deleted) return res.status(404).json({ error: 'Draft not found.' });
+    for (const [intentId, intent] of executionIntents) {
+      if (intent.draftId === draftId) executionIntents.delete(intentId);
+    }
+    return res.json({ success: true, notice: 'Saved draft and its pending intents deleted. No Discord changes made.' });
   } catch { return res.status(503).json({ error: 'Unable to delete private draft.' }); }
 });
 
