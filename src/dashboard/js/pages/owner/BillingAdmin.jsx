@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient.js';
@@ -283,7 +284,7 @@ export default function BillingAdmin({ theme }) {
     <div style={{ display: 'grid', gap: 16, minWidth: 0 }}>
       <section style={card(theme, { background: 'linear-gradient(135deg, rgba(250,204,21,0.14), rgba(15,23,42,0.08) 48%, rgba(59,130,246,0.12))', padding: 'clamp(18px, 2.4vw, 24px)' })}>
         <p style={{ margin: 0, color: '#fde68a', fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Owner Billing</p>
-        <h1 style={{ margin: '8px 0 0', fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: '-0.04em', lineHeight: 1 }}>💎 Billing Admin</h1>
+        <h1 style={{ margin: '8px 0 0', fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: '-0.04em', lineHeight: 1 }}>{E.DIAMOND} Billing Admin</h1>
         <p style={{ margin: '10px 0 0', color: theme.mutedText, lineHeight: 1.6, maxWidth: 860 }}>
           Generate codes, grant plans directly, control Lifetime availability, update pricing and manage premium access for Goliath guilds.
         </p>
