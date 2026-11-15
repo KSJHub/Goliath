@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('./goliathNavigation');
 
 // src/core/guild/moduleSectionManager.js
 
@@ -51,7 +52,7 @@ function migrateColourRolesToRoleSelector(colourRoles = {}) {
     id: 'colours',
     key: 'colours',
     name: 'Colours',
-    emoji: '🌈',
+    emoji: EMOJIS.ROLE_RAINBOW,
     description: 'Choose a cosmetic Discord name colour.',
     type: 'colour',
     builtIn: true,
