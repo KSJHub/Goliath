@@ -162,14 +162,9 @@ jobs:
             restore_missing_audit_files
             test -d "$RUNTIME_DIR"
 
-            # Do not replace a live Node.js module tree: running workers can
-            # resolve lazy imports while npm removes/recreates individual files.
-            # Keep this downtime bounded to the locked install and validation.
-            echo "🛑 Stop DEV before replacing node_modules"
-            DEV_STOPPED=1
-            pm2 stop "$PM2_NAME" || true
-            # EXIT trap also covers superseded builds that exit with code 0.
-
+            # Keep DEV serving requests during checks when the dependency tree
+            # is reusable. Stop before npm ci only if a clean install is needed.
+            # EXIT trap restores DEV if a later step fails.
             # Reuse dependencies only when npm's installed lock metadata agrees
             # with the repository lock and the full dependency tree is healthy.
             # Otherwise retain the original clean-install safety path.
@@ -192,11 +187,15 @@ jobs:
               if npm ls --all --omit=optional --silent >/dev/null 2>&1; then
                 echo "✅ Reusing validated dependencies; skipping npm ci"
               else
-                echo "⚠️ Dependency tree inconsistent; reinstalling"
+                echo "⚠️ Dependency tree inconsistent; stopping DEV for reinstall"
+                DEV_STOPPED=1
+                pm2 stop "$PM2_NAME" || true
                 npm ci --no-audit --no-fund
               fi
             else
-              echo "⚠️ Lock metadata missing or mismatched; reinstalling"
+              echo "⚠️ Lock metadata missing or mismatched; stopping DEV for reinstall"
+              DEV_STOPPED=1
+              pm2 stop "$PM2_NAME" || true
               npm ci --no-audit --no-fund
             fi
 
@@ -252,6 +251,14 @@ jobs:
             cp -a dist/. "$DASHBOARD_ROOT/"
 
             # Fail before command registration if dependency files are unavailable.
+            # Stop only for the final command sync and controlled PM2 replacement
+            # when dependency installation did not already require downtime.
+            if [ "$DEV_STOPPED" = 0 ]; then
+              echo "🛑 Stop DEV for final command sync and restart"
+              DEV_STOPPED=1
+              pm2 stop "$PM2_NAME" || true
+            fi
+
             node -e "require('discord.js'); require('./src/core/commands/syncCommands'); console.log('✅ Command sync dependencies ready')"
             BOT_MODE=dev COMMAND_SYNC_DELETE_STALE=true COMMAND_SYNC_UPDATE_EXISTING=true node -e "require('./src/core/commands/syncCommands').syncCommands().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})"
 
