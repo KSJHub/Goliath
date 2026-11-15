@@ -40,8 +40,15 @@ async function refreshJoinReport(interaction, watched, cleared = false) {
   const fields = (original.fields || []).map(field => ({ ...field }));
   const risk = fields.find(field => field.name?.includes('Risk'));
   if (risk) {
-    risk.value = String(risk.value).replace(/\nInvestigation Watch: \*\*(?:ON|OFF)\*\*/, '');
-    risk.value = (risk.value + '\nInvestigation Watch: **' + (watched ? 'ON' : 'OFF') + '**').slice(0, 1024);
+    // New reports show watch status alongside Watchlist; older reports used
+    // a standalone line. Update either format without duplicating the status.
+    const status = watched ? 'ON' : 'OFF';
+    const value = String(risk.value);
+    if (/Investigation Watch: \*\*(?:ON|OFF)\*\*/.test(value)) {
+      risk.value = value.replace(/Investigation Watch: \*\*(?:ON|OFF)\*\*/g, `Investigation Watch: **${status}**`);
+    } else {
+      risk.value = (value + `\nInvestigation Watch: **${status}**`).slice(0, 1024);
+    }
   }
   embed.setFields(fields);
   if (cleared) {
