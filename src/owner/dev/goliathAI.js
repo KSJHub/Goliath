@@ -831,7 +831,7 @@ router.get('/drafts/:id/execution-intents', requireAIIdentity, (req, res) => {
     return res.status(503).json({ error: 'Unable to inspect pending intents.' });
   }
 });
-router.delete('/drafts/:id/execution-intents/:intentId', requireAIIdentity, (req, res) => {
+router.delete('/drafts/:id/execution-intents/:intentId', requirePrivateAI, (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV controller only.' });
   try {
     const draft = draftStore.loadDraft(String(req.params.id));
