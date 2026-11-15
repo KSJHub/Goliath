@@ -298,7 +298,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
           <PrimaryButton onClick={quickSetup} disabled={busy}>⚡ Quick Setup</PrimaryButton>
           <SecondaryButton onClick={() => { setDraft(presenceDraft(config?.settings)); setPreview(''); }} disabled={busy}>{E.ACTIVE}{E.DND}{E.IDLE} Presence Trio</SecondaryButton>
           <SecondaryButton onClick={refreshCounters} disabled={busy}>{E.REFRESH} Refresh Now</SecondaryButton>
-          <SecondaryButton onClick={() => { setDraft(newDraft(config?.settings)); setPreview(''); }} disabled={busy}>➕ Create Counter</SecondaryButton>
+          <SecondaryButton onClick={() => { setDraft(newDraft(config?.settings)); setPreview(''); }} disabled={busy}>{E.ADD} Create Counter</SecondaryButton>
         </div>
       </SectionCard>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,300px),1fr))', gap: 16 }}>
@@ -371,7 +371,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
       <SectionCard theme={theme} title="Diagnostics" subtitle="Check missing counter channels and tracking configuration before they become a problem.">
         <div style={{ display: 'grid', gap: 10 }}>
           {health ? <>
-            <Row theme={theme} label="Health" value={health.healthy ? '✅ Healthy' : '⚠️ Needs attention'} />
+            <Row theme={theme} label="Health" value={health.healthy ? `${E.SUCCESS} Healthy` : `${E.WARNING} Needs attention`} />
             <Row theme={theme} label="Configured counters" value={health.counters?.configured ?? 0} />
             <Row theme={theme} label="Missing channels" value={health.counters?.missing ?? 0} />
             {health.issues?.length ? <div style={{ padding: 12, borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>{health.issues.map((issue, index) => <div key={`${issue.code}-${index}`}>• {issue.code.replaceAll('_', ' ')}</div>)}</div> : <div style={{ color: theme.mutedText }}>No issues found.</div>}
