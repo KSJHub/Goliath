@@ -401,6 +401,17 @@ function sharedEmojiPaletteAudit() {
       }
     }
   }
+  // Validate static palette references in browser code; dynamic guild emoji data is excluded.
+  for (const filePath of walk(absolute('src/dashboard'), JS_EXTENSIONS)) {
+    const source = read(filePath);
+    const hasAlias = /\bimport\s*\{[^}]*\bDASHBOARD_EMOJIS\s+as\s+E\b[^}]*\}/s.test(source);
+    if (!hasAlias) continue;
+    for (const match of source.matchAll(/\bE\.([A-Z][A-Z_0-9]*)\b/g)) {
+      if (!browser.entries.has(match[1])) {
+        errors.push(relative(filePath) + ': unknown dashboard emoji E.' + match[1]);
+      }
+    }
+  }
   for (const error of errors) console.error(' - ' + error);
   console.log('Discord: ' + server.entries.size + ', Dashboard: ' + browser.entries.size + ', issues: ' + errors.length);
   return errors.length === 0;
