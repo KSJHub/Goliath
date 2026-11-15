@@ -140,7 +140,7 @@ async function handleUser(interaction) {
       birthdays.setBirthday(interaction.guildId, interaction.user.id, parseDate(interaction.fields.getTextInputValue('date')), { actorId: interaction.user.id, action: 'birthday_user_set' });
       await interaction.reply({ content: emojiLabel('HEALTHY', 'Your birthday has been saved.'), flags: 64 });
     } catch (error) {
-      await interaction.reply({ content: `❌ ${error.message || 'That birthday could not be saved.'}`, flags: 64 });
+      await interaction.reply({ content: `${EMOJIS.ERROR} ${error.message || 'That birthday could not be saved.'}`, flags: 64 });
     }
     return true;
   }
