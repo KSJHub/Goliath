@@ -14,7 +14,7 @@ const {
 
 const fetch = global.fetch;
 const security = require('../../../core/security/protection/core');
-const { navigationButton } = require('../../../core/guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../../core/guild/goliathNavigation');
 const guildManager = require('../../../core/guild/guildManager');
 const { createServerBackup } = require('../../../core/security/restoreBackup/backup');
 const permissionEngine = require('../../../core/permissions/engine');
@@ -863,7 +863,7 @@ async function copyPanel(interaction, session) {
     new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(componentId(COPY_PREFIX, session.id, 'conflict')).setPlaceholder('Conflict mode').addOptions(conflictChoices(session.conflictMode))),
     new ActionRowBuilder().addComponents(
       navigationButton(componentId(COPY_PREFIX, session.id, 'start'), 'Start Copy', ButtonStyle.Success, !session.sourceGuildId || !session.destinationGuildId || session.sourceGuildId === session.destinationGuildId),
-      navigationButton(componentId(COPY_PREFIX, session.id, 'refresh'), 'Refresh Guilds', ButtonStyle.Secondary).setEmoji('🔄'),
+      navigationButton(componentId(COPY_PREFIX, session.id, 'refresh'), 'Refresh Guilds', ButtonStyle.Secondary).setEmoji(EMOJIS.REFRESH),
       navigationButton(componentId(COPY_PREFIX, session.id, 'dryrun'), 'Dry Run: ' + (session.dryRun ? 'ON' : 'OFF'), session.dryRun ? ButtonStyle.Primary : ButtonStyle.Secondary),
       navigationButton(componentId(COPY_PREFIX, session.id, 'cancel'), 'Cancel', ButtonStyle.Danger),
     ),
@@ -878,7 +878,7 @@ async function analysePanel(interaction, session) {
     new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(componentId(ANALYSE_PREFIX, session.id, 'destination')).setPlaceholder('Destination server').addOptions(guildChoices(session, session.destinationGuildId))),
     new ActionRowBuilder().addComponents(
       navigationButton(componentId(ANALYSE_PREFIX, session.id, 'start'), 'Analyse Servers', ButtonStyle.Primary, !session.sourceGuildId || !session.destinationGuildId || session.sourceGuildId === session.destinationGuildId),
-      navigationButton(componentId(ANALYSE_PREFIX, session.id, 'refresh'), 'Refresh Guilds', ButtonStyle.Secondary).setEmoji('🔄'),
+      navigationButton(componentId(ANALYSE_PREFIX, session.id, 'refresh'), 'Refresh Guilds', ButtonStyle.Secondary).setEmoji(EMOJIS.REFRESH),
       navigationButton(componentId(ANALYSE_PREFIX, session.id, 'cancel'), 'Cancel', ButtonStyle.Secondary),
     ),
   ], flags: MessageFlags.Ephemeral };
