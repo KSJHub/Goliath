@@ -12,10 +12,10 @@ const COLORS = {
 };
 
 const GUILD_ACTIVITY_FAMILIES = {
-  all: { label: 'Recent Activity', emoji: '🕒' }, moderation: { label: 'Moderation', emoji: '🛡️' },
-  members: { label: 'Members', emoji: '👥' }, roles: { label: 'Roles / Permissions', emoji: '🎭' },
-  messages: { label: 'Messages / Reactions', emoji: '💬' }, voice: { label: 'Voice', emoji: '🔊' },
-  security: { label: 'Security / AutoMod', emoji: '🔐' }, goliath: { label: 'Goliath Actions', emoji: '🤖' },
+  all: { label: 'Recent Activity', emoji: EMOJIS.ROLE_CLOCK }, moderation: { label: 'Moderation', emoji: EMOJIS.SECURITY },
+  members: { label: 'Members', emoji: EMOJIS.ROLE_MEMBERS }, roles: { label: 'Roles / Permissions', emoji: EMOJIS.USER_ROLES },
+  messages: { label: 'Messages / Reactions', emoji: EMOJIS.USER_FEEDBACK }, voice: { label: 'Voice', emoji: EMOJIS.USER_TEMP_VOICE },
+  security: { label: 'Security / AutoMod', emoji: EMOJIS.PERMISSION_GUARD }, goliath: { label: 'Goliath Actions', emoji: EMOJIS.AUTOMOD },
 };
 
 function runtimeMode() {
