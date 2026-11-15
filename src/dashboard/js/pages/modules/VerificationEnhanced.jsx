@@ -9,7 +9,7 @@ import { ChannelSelect, RoleSelect } from '../../ui/DiscordResourceSelects.jsx';
 const DEFAULT_PANEL_DRAFT = Object.freeze({
   channelId: '',
   title: `${E.SECURITY} Server Verification`,
-  description: '**⏳ Verification Required**\nWelcome! Complete the server security checks to unlock your member access.\n\n**🔐 What happens next?**\nPress **Verify** below to begin. Follow the on-screen instructions and complete any required challenges.\n\n**✅ Once verified**\nYour configured member roles and server access will be applied automatically.',
+  description: `**${E.TIMER} Verification Required**\nWelcome! Complete the server security checks to unlock your member access.\n\n**${E.PERMISSIONS} What happens next?**\nPress **Verify** below to begin. Follow the on-screen instructions and complete any required challenges.\n\n**${E.SUCCESS} Once verified**\nYour configured member roles and server access will be applied automatically.`,
   color: '#5865f2',
   footer: 'Goliath Verification •',
   showHeader: true,
