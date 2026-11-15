@@ -25,6 +25,8 @@ function buildCapabilityPreflight({ audit, operations, capability }) {
   if (channelMap.size !== audit.channels.length) throw new Error('Duplicate channel IDs in audit.');
   const knownKinds = new Set(['create_category', 'create_channel', 'rename_category', 'edit_channel']);
   const items = operations.map((operation, index) => {
+    if (!operation || typeof operation !== 'object' || Array.isArray(operation))
+      throw new Error('Invalid operation in permission preflight.');
     const targetId = operation.target?.id || null;
     const current = targetId ? channelMap.get(targetId) : null;
     const type = operation.kind;
@@ -33,6 +35,11 @@ function buildCapabilityPreflight({ audit, operations, capability }) {
     if (!knownKinds.has(type)) {
       permission = 'blocked';
       warnings.push('Unsupported operation type; no execution path permitted.');
+    } else if (operation.executable !== false ||
+               ((type === 'rename_category' || type === 'edit_channel') && !targetId) ||
+               ((type === 'create_category' || type === 'create_channel') && !operation.after?.name)) {
+      permission = 'blocked';
+      warnings.push('Operation is not a valid non-executable preview with a complete target or proposed name.');
     } else if (!ready) {
       warnings.push('Could not verify the bot member and permissions in the selected environment.');
     } else if (!manageGuildChannels) {
