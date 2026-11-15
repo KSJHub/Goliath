@@ -882,8 +882,13 @@ router.delete('/drafts/:id/execution-intents/:intentId', requirePrivateAI, (req,
     const draft = draftStore.loadDraft(String(req.params.id));
     if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
     const intent = executionIntents.get(String(req.params.intentId));
+    if (intent && Date.parse(intent.expiresAt) <= Date.now()) {
+      executionIntents.delete(String(req.params.intentId));
+      return res.status(404).json({ error: 'Pending intent has expired.' });
+    }
     if (!intent || intent.ownerId !== String(req.session.user.id) ||
-        intent.draftId !== draft.id || intent.guildId !== draft.guildId)
+        intent.draftId !== draft.id || intent.guildId !== draft.guildId ||
+        draft.createdBy !== String(req.session.user.id))
       return res.status(404).json({ error: 'Pending intent not found.' });
     executionIntents.delete(String(req.params.intentId));
     return res.json({ cancelled: true, canExecute: false, executable: false,
