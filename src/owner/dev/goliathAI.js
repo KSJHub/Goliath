@@ -889,6 +889,12 @@ router.post('/drafts/:id/operation-reviews', requirePrivateAI, async (req, res) 
       draft, currentDigest, operations, reviewerId: req.session.user.id,
       sequence: req.body?.sequence, decision: req.body?.decision
     });
+    // A review change supersedes any previously confirmed intent for that
+    // exact operation, regardless of which developer submitted the review.
+    for (const [intentId, intent] of executionIntents) {
+      if (intent.draftId === draft.id && intent.sequence === record.sequence)
+        executionIntents.delete(intentId);
+    }
     return res.json({ record, canExecute: false, executable: false,
       notice: 'Review acknowledgement saved. NOT approval or permission to change Discord.' });
   } catch (error) {
