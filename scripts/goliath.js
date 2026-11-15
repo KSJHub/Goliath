@@ -2668,6 +2668,7 @@ async function memberIntelligenceRoutingAudit() {
   }
   const handlers = fixtureModule('src/events/interactions/joinIntelligenceActions.js', id => {
     if (id === 'discord.js') return Discord;
+    if (id === '../../core/guild/goliathNavigation') return { EMOJIS: require('../src/core/guild/goliathNavigation').EMOJIS };
     if (id.endsWith('/permissions')) return { canUseModAction: () => allowed, recordModerationSystemEvent: () => { writes++; } };
     if (id.endsWith('/storage')) return { db: { prepare: () => ({ all: () => [] }) } };
     if (id.endsWith('/joinIntelligence')) return { localSummary: () => ({ caseCount: 0 }), suspectedAccounts: () => [] };
