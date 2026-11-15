@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient.js';
@@ -76,7 +77,7 @@ function ReadinessBanner({ theme, enabled, providerReady, channels, threads, pro
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: 8 }}>
         {items.map((item, index) => {
           const done = index === 0 ? enabled : index === 1 ? providerReady : index === 2 ? channels.length > 0 : threads.length > 0;
-          return <div key={item} style={{ border: `1px solid ${done ? 'rgba(134,239,172,0.35)' : 'rgba(252,211,77,0.35)'}`, borderRadius: 12, padding: 10, color: done ? '#bbf7d0' : '#fde68a', fontWeight: 900 }}>{done ? '✅' : '⚠️'} {item}</div>;
+          return <div key={item} style={{ border: `1px solid ${done ? 'rgba(134,239,172,0.35)' : 'rgba(252,211,77,0.35)'}`, borderRadius: 12, padding: 10, color: done ? '#bbf7d0' : '#fde68a', fontWeight: 900 }}>{done ? E.SUCCESS : E.WARNING} {item}</div>;
         })}
       </div>
     </div>
