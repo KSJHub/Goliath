@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import useOwnerGuilds from '../../hooks/useOwnerGuilds.js';
@@ -172,7 +173,7 @@ export default function TranslationHub({ theme }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0, flex: '1 1 420px' }}>
             <p style={{ margin: 0, color: '#93c5fd', fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Owner Translation</p>
-            <h1 style={{ margin: '8px 0 0', fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: '-0.04em', lineHeight: 1 }}>🌍 Translation Hub</h1>
+            <h1 style={{ margin: '8px 0 0', fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: '-0.04em', lineHeight: 1 }}>{E.GLOBE} Translation Hub</h1>
             <p style={{ margin: '10px 0 0', color: theme.mutedText, lineHeight: 1.6, maxWidth: 860 }}>
               Monitor global translation usage, providers, channels, thread mappings and selected-guild configuration from one owner dashboard.
             </p>
