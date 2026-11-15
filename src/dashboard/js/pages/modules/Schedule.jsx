@@ -197,7 +197,7 @@ export default function Schedule({ theme, selectedGuild, selectedGuildData }) {
           <label>RSVP closes<input style={fieldStyle(theme)} type="datetime-local" value={draft.rsvpCloseAt || ''} onChange={(e) => setDraft({ ...draft, rsvpCloseAt: e.target.value })} /></label>
           <label><input type="checkbox" checked={draft.waitlistEnabled !== false} onChange={(e) => setDraft({ ...draft, waitlistEnabled: e.target.checked })} /> Enable waitlist</label>
         </div>
-        <TextAreaField theme={theme} label="RSVP options" value={rsvpOptionsText(draft.rsvpOptions)} onChange={(text) => setDraft({ ...draft, rsvpOptions: parseRsvpOptions(text) })} placeholder="✅|Going|attendee|ROLE_ID" rows={6} />
+        <TextAreaField theme={theme} label="RSVP options" value={rsvpOptionsText(draft.rsvpOptions)} onChange={(text) => setDraft({ ...draft, rsvpOptions: parseRsvpOptions(text) })} placeholder={`${E.SUCCESS}|Going|attendee|ROLE_ID`} rows={6} />
         <div style={{ color: theme.mutedText, fontSize: 12 }}>Format: emoji | label | attendee/choice | optional role ID. Attendee options count against event capacity and can grant the selected role.</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12 }}><MultiRoleSelect theme={theme} label="Roles allowed to RSVP (none = everyone)" roles={roles} value={draft.allowedRoleIds} onChange={(allowedRoleIds) => setDraft({ ...draft, allowedRoleIds })} /><MultiRoleSelect theme={theme} label="Roles blocked from RSVP" roles={roles} value={draft.deniedRoleIds} onChange={(deniedRoleIds) => setDraft({ ...draft, deniedRoleIds })} /></div>
       </>}
