@@ -335,6 +335,10 @@ jobs:
             DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/auth/me || true)"
             PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' "$DEV_PUBLIC_URL/api/auth/me" || true)"
             DASHBOARD_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' "$DEV_PUBLIC_URL/" || true)"
+            SUBDOMAIN_API_STATUS="$(curl -fsS -o /dev/null -w '%{http_code}' https://dev.goliath.ksjdigital.co.uk/api/auth/me || true)"
+            SUBDOMAIN_DASHBOARD_STATUS="$(curl -fsS -o /dev/null -w '%{http_code}' https://dev.goliath.ksjdigital.co.uk/ || true)"
+            [ "$SUBDOMAIN_DASHBOARD_STATUS" = 200 ] || { echo "DEV subdomain dashboard health failed: $SUBDOMAIN_DASHBOARD_STATUS" >&2; exit 1; }
+            case "$SUBDOMAIN_API_STATUS" in 200|401) ;; *) echo "DEV subdomain API health failed: $SUBDOMAIN_API_STATUS" >&2; exit 1;; esac
             [ "$DASHBOARD_STATUS" = 200 ] || { echo "DEV dashboard health failed: $DASHBOARD_STATUS" >&2; exit 1; }
             case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
             case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
