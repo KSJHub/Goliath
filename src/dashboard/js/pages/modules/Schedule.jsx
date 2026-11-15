@@ -7,7 +7,7 @@ import { ChannelSelect } from '../../ui/DiscordResourceSelects.jsx';
 
 const DEFAULT_OPTIONS = [
   { key: 'going', label: 'Going', emoji: E.SUCCESS, style: 'success', isAttendee: true, roleId: '', enabled: true },
-  { key: 'maybe', label: 'Maybe', emoji: '❔', style: 'primary', isAttendee: false, roleId: '', enabled: true },
+  { key: 'maybe', label: 'Maybe', emoji: E.RSVP_MAYBE, style: 'primary', isAttendee: false, roleId: '', enabled: true },
   { key: 'declined', label: 'Decline', emoji: E.ERROR, style: 'secondary', isAttendee: false, roleId: '', enabled: true },
 ];
 const emptyDraft = {
