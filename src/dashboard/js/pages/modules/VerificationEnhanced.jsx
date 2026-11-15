@@ -239,6 +239,17 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
   }, [guildId]);
   // Re-read the shared guild configuration when returning from Discord or another tab.
   // Never replace an unsaved panel or advanced-settings draft.
+  // Poll the same guild configuration used by Discord while this page is visible.
+  // Skip unsaved drafts and active operations so background updates cannot erase edits.
+  useEffect(() => {
+    if (!guildId) return undefined;
+    const timer = window.setInterval(() => {
+      if (document.hidden || busy || panelDraftDirty.current || advancedDirty.current) return;
+      load();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [guildId, busy, selectedPanelId]);
+
   useEffect(() => {
     const refreshOnReturn = () => {
       if (!document.hidden && !panelDraftDirty.current && !advancedDirty.current && !busy) load();
