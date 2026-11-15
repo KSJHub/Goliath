@@ -148,7 +148,7 @@ function buildEmbed(member, context, local, suspects, scanId, assessment) {
       { name: '🌐 Network Intelligence', value: [`Observed guilds: **${history.length}** • Cross-guild cases: **${context.network?.caseCount || 0}** • Cross-guild bans: **${context.network?.banCount || 0}**`, `External records: **${externalCount}** • Verified: **${reputation.verifiedExternal || 0}** • Submitted: **${reputation.submitted || 0}** • Unverified: **${reputation.unverified || 0}**`].join('\n'), inline: false },
       { name: '🔗 Account Correlation', value: `${suspectText.slice(0, 900)}\n\n*Heuristic correlation is an investigation aid, not proof of shared ownership.*`, inline: false },
     )
-    .setFooter({ text: 'Automatic Join Intelligence • report remains in-channel; staff actions open privately where appropriate' })
+    .setFooter({ text: 'Goliath • Join Intelligence' })
     .setTimestamp();
   const avatar = member.user.displayAvatarURL?.({ size: 256 });
   if (avatar) embed.setThumbnail(avatar);
