@@ -1002,6 +1002,21 @@ async function verificationLifecycleAudit() {
       allowed = true; await review({ ...interaction, customId: 'mod_verification_case:invalid' }); assert.match(replies.at(-1).content, /no longer active/);
     }
 
+    // Regression contracts: relocated panels must retire old buttons, and stale
+    // interactions must fail closed using the current channel and message IDs.
+    contains(manager, 'if(existing&&existing.id!==message.id)', 'relocation cleans up old panel message');
+    contains(manager, 'await existing.delete()', 'relocation deletes old panel message');
+    contains(manager, 'await existing.edit({components:[]})', 'relocation disables old buttons if deletion fails');
+    contains(manager, 's.activePanelId!==id', 'reject inactive verification panels');
+    contains(manager, 'mid!==p.messageId', 'reject stale panel message IDs');
+    contains(manager, 'cid!==p.channelId', 'reject stale panel channel IDs');
+    contains(manager, 'if(!panel)return {ok:false', 'reject outdated panel before member verification');
+    contains(panel, 'admin:verification:panelDefaultConfirm', 'confirm before restoring default design');
+    contains(panel, 'admin:verification:panelSave', 'Discord panel editor uses shared deployment');
+    const dashboard = read('./src/dashboard/js/pages/modules/VerificationEnhanced.jsx');
+    contains(dashboard, 'panelDraftDirty.current', 'preserve unsaved dashboard panel drafts');
+    contains(dashboard, 'window.setInterval', 'refresh dashboard configuration periodically');
+
     // Guard the security handoff and challenge recovery against regressions.
     contains(manager, 'pendingSecurity:true', 'manager delegates security checks to continuation');
     contains(manager, 'Verification starting roles could not be confirmed.', 'block security flow if starting roles fail');
