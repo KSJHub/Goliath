@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -534,9 +535,9 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
       <section style={{ ...card, display: 'grid', gap: 12 }}>
         <h2 style={{ margin: 0 }}>Health & Diagnostics</h2>
         {health?.warnings?.length
-          ? health.warnings.map((warning) => <div key={warning} style={{ color: '#fbbf24', fontWeight: 800 }}>⚠ {warning}</div>)
+          ? health.warnings.map((warning) => <div key={warning} style={{ color: '#fbbf24', fontWeight: 800 }}>{E.WARNING} {warning}</div>)
           : <div style={{ color: '#86efac', fontWeight: 900 }}>✅ Verification configuration is healthy.</div>}
-        {(health?.panels || []).map((panel) => <div key={panel.panelId} style={{ color: panel.ok ? '#86efac' : '#fca5a5' }}>{panel.ok ? '✅' : '❌'} {panel.panelId}: {panel.status}</div>)}
+        {(health?.panels || []).map((panel) => <div key={panel.panelId} style={{ color: panel.ok ? '#86efac' : '#fca5a5' }}>{panel.ok ? E.SUCCESS : E.ERROR} {panel.panelId}: {panel.status}</div>)}
         <button type="button" disabled={busy === 'load'} onClick={load} style={{ ...buttonStyle(theme), justifySelf: 'start' }}>Refresh Health</button>
       </section>
     </div>
