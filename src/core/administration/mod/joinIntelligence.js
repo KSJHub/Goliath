@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../../core/guild/goliathNavigation');
 
 const { ActionRowBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { navigationButton } = require('../../guild/goliathNavigation');
@@ -108,10 +109,10 @@ function investigationWatchEnabled(guildId, userId) {
 function buildActionRows(member, watched = false) {
   if (member.user.bot) return [];
   return [new ActionRowBuilder().addComponents(
-    navigationButton(`joinintel:view:${member.guild.id}:${member.id}`, 'Open Intelligence', ButtonStyle.Primary).setEmoji('🧠'),
-    navigationButton(`mod_open_quarantine:${member.id}`, 'Investigate', ButtonStyle.Danger).setEmoji('🔎'),
-    navigationButton(`joinintel:watch:${member.guild.id}:${member.id}`, watched ? 'Remove Watch' : 'Watch Member', watched ? ButtonStyle.Danger : ButtonStyle.Secondary).setEmoji('👁️'),
-    navigationButton(`joinintel:clear:${member.guild.id}:${member.id}`, 'Mark Clear', ButtonStyle.Success).setEmoji('✅'),
+    navigationButton(`joinintel:view:${member.guild.id}:${member.id}`, 'Open Intelligence', ButtonStyle.Primary).setEmoji(EMOJIS.MOD_INTELLIGENCE),
+    navigationButton(`mod_open_quarantine:${member.id}`, 'Investigate', ButtonStyle.Danger).setEmoji(EMOJIS.INVESTIGATE),
+    navigationButton(`joinintel:watch:${member.guild.id}:${member.id}`, watched ? 'Remove Watch' : 'Watch Member', watched ? ButtonStyle.Danger : ButtonStyle.Secondary).setEmoji(EMOJIS.WELCOME_PREVIEW),
+    navigationButton(`joinintel:clear:${member.guild.id}:${member.id}`, 'Mark Clear', ButtonStyle.Success).setEmoji(EMOJIS.SUCCESS),
   )];
 }
 
