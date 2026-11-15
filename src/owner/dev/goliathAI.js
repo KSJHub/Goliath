@@ -702,6 +702,7 @@ router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, re
     });
     const reviewed = draft.review?.status === 'reviewed' &&
       draft.review.checkedBy === draft.createdBy &&
+      /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(draft.review.checkpointId || '')) &&
       Number.isFinite(Date.parse(draft.review.checkedAt)) &&
       Date.parse(draft.review.checkedAt) <= Date.now();
     const candidates = preview.operations.map((operation, index) => {
@@ -765,6 +766,7 @@ router.post('/drafts/:id/execution-intent', requirePrivateAI, async (req, res) =
     const currentDigest = reportDigest(audit);
     if (currentDigest !== draft.auditDigest || draft.review?.status !== 'reviewed' ||
         draft.review.checkedBy !== draft.createdBy ||
+        !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(draft.review.checkpointId || '')) ||
         !Number.isFinite(Date.parse(draft.review.checkedAt)) ||
         Date.parse(draft.review.checkedAt) > Date.now())
       return res.status(409).json({ error: 'Draft is stale or has not been reviewed.' });
@@ -833,6 +835,7 @@ router.get('/drafts/:id/execution-intents', requireAIIdentity, async (req, res) 
     const currentDigest = reportDigest(audit);
     const reviewed = draft.review?.status === 'reviewed' &&
       draft.review.checkedBy === ownerId &&
+      /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(draft.review.checkpointId || '')) &&
       Number.isFinite(Date.parse(draft.review.checkedAt)) &&
       Date.parse(draft.review.checkedAt) <= Date.now();
     if (!reviewed || currentDigest !== draft.auditDigest) {
