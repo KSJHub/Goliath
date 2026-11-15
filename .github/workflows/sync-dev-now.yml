@@ -277,7 +277,8 @@ jobs:
             echo "♻️ One controlled PM2 reload from ecosystem config"
             pm2 delete "$PM2_NAME" >/dev/null 2>&1 || true
             BOT_MODE=dev NODE_ENV=development pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env
-            DEV_STOPPED=0
+            # Keep the recovery trap armed until health and stability checks pass.
+            # A successful PM2 start alone does not mean DEV is healthy.
             pm2 save
 
             NEW_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
@@ -343,6 +344,7 @@ jobs:
             case "$DIRECT_STATUS" in 200|401) ;; *) echo "Direct health failed: $DIRECT_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
             case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
 
+            DEV_STOPPED=0
             echo "✅ DEV stable: sha=$FINAL_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
             test -d "$RUNTIME_DIR"
             rm -rf "$BACKUP_DIR"
