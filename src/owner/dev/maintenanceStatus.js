@@ -4,7 +4,7 @@ const {
   ActionRowBuilder, ButtonStyle, ChannelType, EmbedBuilder, MessageFlags,
   PermissionFlagsBits, StringSelectMenuBuilder,
 } = require('discord.js');
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../core/guild/goliathNavigation');
 const auditStore = require('../auditIntelligence/auditStore');
 const observatory = require('../auditIntelligence/guildObservatory');
 const security = require('../../core/security/protection/core');
@@ -192,7 +192,7 @@ function guildControlPayload(client, interaction, notice = null) {
       navigationButton(`${CONTROL_PREFIX}maintenance`, 'Maintenance', notices.maintenance ? ButtonStyle.Success : ButtonStyle.Secondary),
       navigationButton(`${CONTROL_PREFIX}restart`, 'Restart', notices.restart ? ButtonStyle.Success : ButtonStyle.Secondary),
       navigationButton(`${CONTROL_PREFIX}recovery`, 'Recovery', notices.recovery ? ButtonStyle.Success : ButtonStyle.Secondary),
-      navigationButton(`${CONTROL_PREFIX}scan`, 'Scan Guild', ButtonStyle.Primary).setEmoji('🔎'),
+      navigationButton(`${CONTROL_PREFIX}scan`, 'Scan Guild', ButtonStyle.Primary).setEmoji(EMOJIS.INVESTIGATE),
     ));
     rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`${CONTROL_PREFIX}family`).setPlaceholder('Choose Discord report family').addOptions(Object.entries(REPORT_FAMILIES).map(([value, label]) => ({ label, value, default: value === state.family })))));
     rows.push(new ActionRowBuilder().addComponents(
@@ -201,9 +201,9 @@ function guildControlPayload(client, interaction, notice = null) {
       navigationButton(`${CONTROL_PREFIX}all-on`, 'Enable All Feeds', ButtonStyle.Secondary),
     ));
     rows.push(new ActionRowBuilder().addComponents(
-      navigationButton(`${CONTROL_PREFIX}start`, 'Send Maintenance Now', ButtonStyle.Danger, !liveGuild).setEmoji('🚨'),
-      navigationButton(`${CONTROL_PREFIX}restore`, 'Restore / Clear', ButtonStyle.Success, !liveGuild).setEmoji('✅'),
-      navigationButton(`${CONTROL_PREFIX}refresh`, 'Refresh', ButtonStyle.Secondary).setEmoji('🔄'),
+      navigationButton(`${CONTROL_PREFIX}start`, 'Send Maintenance Now', ButtonStyle.Danger, !liveGuild).setEmoji(EMOJIS.ISOLATION),
+      navigationButton(`${CONTROL_PREFIX}restore`, 'Restore / Clear', ButtonStyle.Success, !liveGuild).setEmoji(EMOJIS.SUCCESS),
+      navigationButton(`${CONTROL_PREFIX}refresh`, 'Refresh', ButtonStyle.Secondary).setEmoji(EMOJIS.REFRESH),
     ));
   }
   return { embeds: [embed], components: rows, allowedMentions: { parse: [] } };
@@ -241,7 +241,7 @@ async function ensureCommandCenterControls(client) {
   const messages = await channel.messages.fetch({ limit: 20 }).catch(() => null); if (!messages) return false;
   const message = messages.find((item) => item.author?.id === client.user?.id && item.embeds?.some((embed) => String(embed.title || '').includes('GOLIATH COMMAND CENTER'))); if (!message) return false;
   const rows = message.components.map((row) => ActionRowBuilder.from(row)); const exists = message.components.some((row) => row.components.some((component) => component.customId === `${CONTROL_PREFIX}open`)); if (exists) return true;
-  const button = navigationButton(`${CONTROL_PREFIX}open`, 'Guild Controls', ButtonStyle.Primary).setEmoji('🎛️'); const last = rows[rows.length - 1];
+  const button = navigationButton(`${CONTROL_PREFIX}open`, 'Guild Controls', ButtonStyle.Primary).setEmoji(EMOJIS.ADMIN_ROLE_CONTROL); const last = rows[rows.length - 1];
   if (last && last.components.length < 5) last.addComponents(button); else if (rows.length < 5) rows.push(new ActionRowBuilder().addComponents(button)); else return false;
   await message.edit({ components: rows }); return true;
 }
