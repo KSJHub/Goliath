@@ -368,6 +368,44 @@ function syncCommands(target = mode) {
   return result.status === 0;
 }
 
+function sharedEmojiPaletteAudit() {
+  section('Shared Discord/dashboard emoji palette');
+  const core = read(absolute('src/core/guild/goliathNavigation.js'));
+  const dashboard = read(absolute('src/dashboard/js/shared/PageShell.jsx'));
+  const coreBody = core.match(/const EMOJIS = Object\\.freeze\\(\\{([\\s\\S]*?)\\}\\);/);
+  const dashboardBody = dashboard.match(/export const DASHBOARD_EMOJIS = Object\\.freeze\\(\\{([\\s\\S]*?)\\}\\);/);
+  if (!coreBody || !dashboardBody) {
+    console.error('Could not locate both emoji palette definitions.');
+    return false;
+  }
+  const parse = (body, label) => {
+    const entries = new Map();
+    const errors = [];
+    for (const match of body.matchAll(/\\b([A-Z][A-Z_0-9]*):\\s*'([^']+)'/g)) {
+      if (entries.has(match[1])) errors.push(label + ': duplicate key ' + match[1]);
+      entries.set(match[1], match[2]);
+    }
+    return { entries, errors };
+  };
+  const server = parse(coreBody[1], 'Discord');
+  const browser = parse(dashboardBody[1], 'Dashboard');
+  const exceptions = new Map([['INACTIVE', ['⚪', '⚫']], ['REPAIR', ['🩹', '🔧']], ['BUILDER', ['🛠️', '🛠']]]);
+  const errors = [...server.errors, ...browser.errors];
+  for (const [key, glyph] of browser.entries) {
+    if (!server.entries.has(key)) {
+      errors.push('Dashboard-only emoji key: ' + key);
+    } else if (server.entries.get(key) !== glyph) {
+      const allowed = exceptions.get(key);
+      if (!allowed || allowed[0] !== server.entries.get(key) || allowed[1] !== glyph) {
+        errors.push('Emoji glyph mismatch: ' + key);
+      }
+    }
+  }
+  for (const error of errors) console.error(' - ' + error);
+  console.log('Discord: ' + server.entries.size + ', Dashboard: ' + browser.entries.size + ', issues: ' + errors.length);
+  return errors.length === 0;
+}
+
 function dashboardImportAudit() {
   section('Dashboard imports');
   const files = walk(absolute('src/dashboard'), JS_EXTENSIONS);
@@ -2731,7 +2769,7 @@ async function memberIntelligenceRoutingAudit() {
 async function doctor(target = '') {
   const suites = { goodbye: goodbyeAudit, reaction: reactionRolesAudit, reactionroles: reactionRolesAudit, 'reaction-roles': reactionRolesAudit, 'role-studio': roleStudioAudit, rolestudio: roleStudioAudit, invites: inviteStudioAudit };
   if (target) return suites[target]?.() ?? false;
-  const suitesToRun = [projectShape, commandAudit, dashboardAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, memberIntelligenceRoutingAudit, dashboardRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit, freeGamesAudit];
+  const suitesToRun = [projectShape, commandAudit, dashboardAudit, sharedEmojiPaletteAudit, sourceAudit, importAudit, runtimeAudit, goodbyeAudit, reactionRolesAudit, roleStudioAudit, inviteStudioAudit, adminModuleRoutingAudit, memberIntelligenceRoutingAudit, dashboardRoutingAudit, embedGraphicHeadersAudit, universalMemberNoticesAudit, welcomeEmbedDeliveryAudit, freeGamesAudit];
   const results = [];
   for (const suite of suitesToRun) results.push(await suite());
   return results.every(Boolean);
