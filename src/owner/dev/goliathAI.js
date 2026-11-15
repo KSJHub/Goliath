@@ -902,13 +902,17 @@ router.delete('/drafts/:id', requirePrivateAI, (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'Draft storage is DEV-only.' });
   try {
     const draftId = String(req.params.id);
-    const deleted = draftStore.deleteDraft(draftId);
+    const deleted = draftStore.deleteDraft(draftId, undefined, req.session.user.id);
     if (!deleted) return res.status(404).json({ error: 'Draft not found.' });
     for (const [intentId, intent] of executionIntents) {
       if (intent.draftId === draftId) executionIntents.delete(intentId);
     }
     return res.json({ success: true, notice: 'Saved draft and its pending intents deleted. No Discord changes made.' });
-  } catch { return res.status(503).json({ error: 'Unable to delete private draft.' }); }
+  } catch (error) {
+    if (/Only the draft creator/.test(error.message))
+      return res.status(403).json({ error: error.message });
+    return res.status(503).json({ error: 'Unable to delete private draft.' });
+  }
 });
 
 router.get('/plan/:environment/:guildId', requireAIIdentity, async (req, res) => {
