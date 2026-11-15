@@ -168,9 +168,12 @@ async function releaseDeferredWelcome(member) {
 async function sendWelcome(member, options = {}) {
   if (!member?.guild?.id || !member?.user?.id) return { publicSent: false, dmSent: false, skipped: true, reason: 'invalid_member', errors: [] };
   const config = getWelcomeSection(member.guild.id); if (!options.force && !guildManager.isModuleEnabled(member.guild.id, MODULE)) { if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 }); return { publicSent: false, dmSent: false, skipped: true, reason: 'disabled', errors: [] }; } if (config.ignoreBots && member.user.bot) { if (!options.previewOnly) incrementAnalytics(member.guild.id, { skipped: 1 }); return { publicSent: false, dmSent: false, skipped: true, reason: 'ignored_bot', errors: [] }; }
-  if (!options.force && !options.previewOnly && !options.bypassVerificationGate && config.waitForVerification && guildManager.isModuleEnabled(member.guild.id, 'verification')) {
-    const verificationStore = require('../../securityStudio/verification/verificationStore');
-    if (member.pending === true || verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified') {
+  if (!options.force && !options.previewOnly && !options.bypassVerificationGate) {
+    const needsVerification = config.waitForVerification && guildManager.isModuleEnabled(member.guild.id, 'verification');
+    const verificationStore = needsVerification ? require('../../securityStudio/verification/verificationStore') : null;
+    // Discord membership screening is independent of the optional Welcome
+    // verification gate. Queue either condition for eventual release.
+    if (member.pending === true || (needsVerification && verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified')) {
       updateWelcomeSection(member.guild.id, section => ({
         ...section, deferredWelcomes: {
           ...section.deferredWelcomes,
