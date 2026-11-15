@@ -596,6 +596,11 @@ router.post('/drafts/:id/review', requirePrivateAI, async (req, res) => {
     const updated = draftStore.reviewDraft({
       id: draft.id, ownerId: req.session.user.id, currentAuditDigest: reportDigest(audit)
     });
+    // Re-review creates a new review checkpoint. Any prior intentions must
+    // be explicitly reconfirmed against the newly reviewed draft.
+    for (const [intentId, intent] of executionIntents) {
+      if (intent.draftId === draft.id) executionIntents.delete(intentId);
+    }
     return res.json({ draft: updated, notice: 'Marked reviewed only. This is NOT permission to execute Discord changes.' });
   } catch (error) {
     if (error.status) return res.status(error.status).json({ error: error.message });
