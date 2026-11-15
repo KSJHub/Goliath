@@ -6,7 +6,7 @@ const {
   ActionRowBuilder, ButtonStyle, MessageFlags,
 } = require('discord.js');
 const security = require('../../core/security/protection/core');
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../core/guild/goliathNavigation');
 
 const PREFIX = 'ownerpanel:restart:';
 const TARGETS = Object.freeze({
@@ -20,7 +20,7 @@ const cooldowns = new Map();
 function buildRow() {
   return new ActionRowBuilder().addComponents(
     ...Object.keys(TARGETS).map(target =>
-      navigationButton(`${PREFIX}ask:${target}`, `Restart ${target.toUpperCase()}`, target === 'production' ? ButtonStyle.Danger : ButtonStyle.Secondary).setEmoji('🔄')
+      navigationButton(`${PREFIX}ask:${target}`, `Restart ${target.toUpperCase()}`, target === 'production' ? ButtonStyle.Danger : ButtonStyle.Secondary).setEmoji(EMOJIS.REFRESH)
     )
   );
 }
