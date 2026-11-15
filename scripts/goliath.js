@@ -372,8 +372,8 @@ function sharedEmojiPaletteAudit() {
   section('Shared Discord/dashboard emoji palette');
   const core = read(absolute('src/core/guild/goliathNavigation.js'));
   const dashboard = read(absolute('src/dashboard/js/shared/PageShell.jsx'));
-  const coreBody = core.match(/const EMOJIS = Object\\.freeze\\(\\{([\\s\\S]*?)\\}\\);/);
-  const dashboardBody = dashboard.match(/export const DASHBOARD_EMOJIS = Object\\.freeze\\(\\{([\\s\\S]*?)\\}\\);/);
+  const coreBody = core.match(/const EMOJIS = Object\.freeze\(\{([\s\S]*?)\}\);/);
+  const dashboardBody = dashboard.match(/export const DASHBOARD_EMOJIS = Object\.freeze\(\{([\s\S]*?)\}\);/);
   if (!coreBody || !dashboardBody) {
     console.error('Could not locate both emoji palette definitions.');
     return false;
@@ -381,7 +381,7 @@ function sharedEmojiPaletteAudit() {
   const parse = (body, label) => {
     const entries = new Map();
     const errors = [];
-    for (const match of body.matchAll(/\\b([A-Z][A-Z_0-9]*):\\s*'([^']+)'/g)) {
+    for (const match of body.matchAll(/\b([A-Z][A-Z_0-9]*):\s*'([^']+)'/g)) {
       if (entries.has(match[1])) errors.push(label + ': duplicate key ' + match[1]);
       entries.set(match[1], match[2]);
     }
