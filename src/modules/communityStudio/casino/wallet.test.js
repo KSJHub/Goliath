@@ -34,12 +34,28 @@ vm.runInNewContext(source, {
   module: walletModule,
   exports: walletModule.exports,
   require: id => {
+    if (id === 'node:crypto') return { randomInt: (min, max) => min }; 
     assert.equal(id, '../../../core/guild/guildManager');
     return { getGuildSection, updateGuildSection };
   },
   Date, Number, Object, Array, String, JSON, Error, Set
 }, { filename: walletPath });
-const { casinoBalance, casinoTransaction } = walletModule.exports;
+const { casinoBalance, casinoTransaction, casinoDice, casinoRoulette, casinoSlots } = walletModule.exports;
+assert.equal(casinoDice('under', 6).won, true);
+assert.equal(casinoDice('seven', 7).won, true);
+assert.equal(casinoDice('over', 8).won, true);
+assert.equal(casinoDice('over', 7).won, false);
+assert.throws(() => casinoDice('under', 14), /Invalid dice roll/);
+assert.equal(casinoRoulette('green', 0).won, true);
+assert.equal(casinoRoulette('red', 1).won, true);
+assert.equal(casinoRoulette('black', 2).won, true);
+assert.equal(casinoRoulette(36, 36).won, true);
+assert.equal(casinoRoulette('red', 0).won, false);
+assert.throws(() => casinoRoulette('blue', 1), /Invalid roulette choice/);
+assert.equal(casinoSlots([0, 0, 0]).matches, 3);
+assert.equal(casinoSlots([0, 1, 0]).matches, 2);
+assert.equal(casinoSlots([0, 1, 2]).matches, 0);
+assert.throws(() => casinoSlots([0, 6, 0]), /Invalid slot reels/);
 assert.equal(casinoBalance(guildId, alice), 100);
 const credit = casinoTransaction(guildId, { key: 'credit-1', operation: 'credit', userId: alice, amount: 50, reason: 'test' });
 assert.equal(credit.balanceAfter, 150);
