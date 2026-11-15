@@ -5447,6 +5447,11 @@ try {
   }, tempFile);
   assert.equal(reviewed.review.status, 'reviewed');
   assert.equal(reviewed.review.checkedBy, guildId);
+  assert.match(reviewed.review.checkpointId, /^[0-9a-f-]{36}$/i);
+  const reviewedAgain = store.reviewDraft({
+    id: draft.id, ownerId: guildId, currentAuditDigest: fingerprint
+  }, tempFile);
+  assert.notEqual(reviewedAgain.review.checkpointId, reviewed.review.checkpointId);
   assert.throws(() => store.reviewDraft({
     id: draft.id, ownerId: otherId, currentAuditDigest: fingerprint
   }, tempFile), /Only the draft creator/);
@@ -5475,7 +5480,8 @@ const readyDraft = {
   id: '00000000-0000-4000-8000-000000000001',
   environment: 'DEV', guildId, guildName: audit.guild.name,
   auditDigest: 'a'.repeat(64), createdBy: guildId,
-  review: { status: 'reviewed', checkedBy: guildId, checkedAt: '2026-11-15T00:00:00.000Z' }
+  review: { status: 'reviewed', checkedBy: guildId, checkedAt: '2026-11-15T00:00:00.000Z',
+    checkpointId: '00000000-0000-4000-8000-000000000002' }
 };
 const report = evaluateReadiness({
   draft: readyDraft, audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
@@ -5548,7 +5554,7 @@ try {
   assert.equal(result[0].reviews[0].decision, 'acknowledged');
   assert.equal(result[0].executable, false);
   const reReviewedDraft = {
-    ...reviewDraft, review: { ...reviewDraft.review, checkedAt: '2026-11-15T00:01:00.000Z' }
+    ...reviewDraft, review: { ...reviewDraft.review, checkpointId: '00000000-0000-4000-8000-000000000003' }
   };
   assert.equal(ledger.listReviews({
     draft: reReviewedDraft, currentDigest: 'a'.repeat(64),
