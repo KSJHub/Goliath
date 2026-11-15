@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../../shared/PageShell';
 import React, { useMemo, useState } from 'react';
 
 import EmptyState from '../../../shared/EmptyState.jsx';
@@ -199,7 +200,7 @@ export default function FormsFinalPolishPanel({ theme, forms = [], submissions =
               <span style={{ color: theme?.mutedText || '#94a3b8', fontSize: 12 }}>{item.active} active</span>
               <span style={{ color: toneForAge(item.oldestAge), fontSize: 12, fontWeight: 950 }}>{formatDuration(item.oldestAge)}</span>
             </div>
-          )) : <EmptyState theme={theme} icon="📄" title="No form workload yet" description="Create forms and collect submissions to see workload, review age and ticket-link coverage here." />}
+          )) : <EmptyState theme={theme} icon={E.DOCUMENT} title="No form workload yet" description="Create forms and collect submissions to see workload, review age and ticket-link coverage here." />}
         </div>
 
         <div style={card(theme)}>
