@@ -209,7 +209,7 @@ async function ensureHomeButton(client) {
   if (!message) return false;
   if (message.components.some((row) => row.components.some((component) => component.customId === `${PREFIX}open`))) return true;
   const rows = message.components.map((row) => ActionRowBuilder.from(row));
-  const button = navigationButton(`${PREFIX}open`, 'Observatory', ButtonStyle.Primary).setLabel('Observatory').setEmoji('🔭');
+  const button = navigationButton(`${PREFIX}open`, 'Observatory', ButtonStyle.Primary).setLabel('Observatory').setEmoji(EMOJIS.GUILD_OBSERVATORY);
   const target = rows.find((row) => row.components.length < 5);
   if (target) target.addComponents(button); else if (rows.length < 5) rows.push(new ActionRowBuilder().addComponents(button)); else return false;
   await message.edit({ components: rows });
