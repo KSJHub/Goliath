@@ -174,6 +174,14 @@ async function sendWelcome(member, options = {}) {
     // Discord membership screening is independent of the optional Welcome
     // verification gate. Queue either condition for eventual release.
     if (member.pending === true || (needsVerification && verificationStore.getSession(member.guild.id, member.id)?.state !== 'verified')) {
+      // Confirm this is still the same join before creating a deferred entry.
+      // Otherwise a late event from a departed member can overwrite the queue
+      // for a newer membership of the same user.
+      const joinedAt = member.joinedAt?.toISOString?.() || null;
+      const currentMember = await member.guild.members.fetch({ user: member.id, force: true }).catch(() => null);
+      if (!currentMember || !joinedAt || currentMember.joinedAt?.toISOString?.() !== joinedAt) {
+        return { publicSent: false, dmSent: false, skipped: true, reason: 'membership_unconfirmed', errors: [] };
+      }
       updateWelcomeSection(member.guild.id, section => ({
         ...section, deferredWelcomes: {
           ...section.deferredWelcomes,
