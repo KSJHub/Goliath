@@ -23,7 +23,7 @@ const button = (customId, label, style = ButtonStyle.Primary, disabled = false) 
 
 const statusLabel = (enabled) => enabled ? 'Enabled' : 'Disabled';
 const statusIcon = (enabled) => enabled ? EMOJIS.ACTIVE : EMOJIS.USER_PAUSE;
-const healthLabel = (healthy, detail = '') => healthy ? emojiLabel('HEALTHY', 'Healthy') : `⚠️ Needs attention${detail ? ` — ${detail}` : ''}`;
+const healthLabel = (healthy, detail = '') => healthy ? emojiLabel('HEALTHY', 'Healthy') : `${EMOJIS.WARNING} Needs attention${detail ? ` — ${detail}` : ''}`;
 
 async function getRoleStudioState(guild) {
   const auto = autoroles.getAutoRolesSection(guild.id);
