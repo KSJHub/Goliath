@@ -161,7 +161,7 @@ async function buildGoodbyePanel(guild, memberDisplayName = 'Unknown User', user
     .setColor(config.enabled === false ? 0xed4245 : warnings.length ? 0xfaa61a : 0x57f287)
     .setTitle(emojiLabel('WELCOME', 'Goodbye · Setup'))
     .setDescription([
-      `**Module:** ${config.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Module:** ${config.enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Log Channel:** ${config.channelId ? `<#${config.channelId}>` : '\`Not set\`'}`,
       `**Bots:** ${config.ignoreBots ? 'Excluded' : 'Included'}`,
       '',
@@ -173,7 +173,7 @@ async function buildGoodbyePanel(guild, memberDisplayName = 'Unknown User', user
       `Sent: \`${analytics.sent || 0}\` | Failed: \`${analytics.failed || 0}\` | Skipped: \`${analytics.skipped || 0}\``,
       '',
       emojiLabel('GOODBYE_LOVE_LETTER', '**Member Departure DM**'),
-      `**Status:** ${dm.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${dm.enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Events:** Leave ${dm.sendOnLeave ? 'On' : 'Off'} · Kick ${dm.sendOnKick ? 'On' : 'Off'} · Ban ${dm.sendOnBan ? 'On' : 'Off'} · Prune ${dm.sendOnPrune ? 'On' : 'Off'}`,
       `DM Sent: \`${dmAnalytics.sent || 0}\` | Failed: \`${dmAnalytics.failed || 0}\` | Skipped: \`${dmAnalytics.skipped || 0}\``,
       '',
@@ -302,7 +302,7 @@ async function handleGoodbyeInteraction(interaction) {
       const latestConfig = goodbye.getGoodbyeSection(interaction.guild.id);
       if (!latestConfig.channelId) throw new Error('Choose a goodbye channel first.');
       const result = await goodbye.sendGoodbye(interaction.member, { silent: false, force: true, previewOnly: true });
-      return interaction.reply({ content: result.sent ? `✅ Goodbye log sent to <#${result.channelId}>.` : `❌ Goodbye log failed: ${result.reason || result.error || 'unknown error'}`, ephemeral: true });
+      return interaction.reply({ content: result.sent ? `${EMOJIS.SUCCESS} Goodbye log sent to <#${result.channelId}>.` : `${EMOJIS.ERROR} Goodbye log failed: ${result.reason || result.error || 'unknown error'}`, ephemeral: true });
     }
 
     if (customId === 'admin:goodbye:dm:preview') {
@@ -312,7 +312,7 @@ async function handleGoodbyeInteraction(interaction) {
 
     if (customId === 'admin:goodbye:dm:test') {
       const result = await departureDm.sendDepartureDm(interaction.member, { key: 'left' }, { force: true });
-      return interaction.reply({ content: result.sent ? emojiLabel('HEALTHY', 'Departure DM sent to you.') : `❌ Departure DM failed: ${result.error || result.reason || 'unknown error'}`, ephemeral: true });
+      return interaction.reply({ content: result.sent ? emojiLabel('HEALTHY', 'Departure DM sent to you.') : `${EMOJIS.ERROR} Departure DM failed: ${result.error || result.reason || 'unknown error'}`, ephemeral: true });
     }
 
     if (customId === 'admin:goodbye:repair') {
@@ -342,7 +342,7 @@ async function handleGoodbyeInteraction(interaction) {
 
     return updatePanel(interaction);
   } catch (error) {
-    const payload = { content: `❌ Goodbye setup failed: ${error.message}`, ephemeral: true };
+    const payload = { content: `${EMOJIS.ERROR} Goodbye setup failed: ${error.message}`, ephemeral: true };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
     return true;
