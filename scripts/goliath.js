@@ -5348,6 +5348,20 @@ const crowded = {
 };
 assert.throws(() => planBlueprint(crowded, { categories: [{ name: 'Extra', channels: [] }] }),
   /500-channel guild limit/);
+// A category's real occupancy includes channels omitted from the blueprint.
+const fullCategoryAudit = {
+  ...audit, channels: [...audit.channels, ...Array.from({ length: 49 }, (_, i) => ({
+    id: String(600000000000000000n + BigInt(i)),
+    name: 'untouched-' + i, type: 0, parentId: categoryId
+  }))]
+};
+assert.throws(() => planBlueprint(fullCategoryAudit, {
+  categories: [{ id: categoryId, name: 'Community',
+    channels: [{ name: 'new-channel', type: 'text' }] }]
+}), /50-channel category limit/);
+assert.equal(planBlueprint(fullCategoryAudit, {
+  categories: [{ id: categoryId, name: 'Community', channels: [] }]
+}).operationCount, 0);
 // Saved draft contracts use an isolated temporary file, never live runtime data.
 const fs = require('node:fs');
 const os = require('node:os');
