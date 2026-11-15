@@ -103,7 +103,7 @@ export default function Invites({ theme, selectedGuild, selectedGuildData }) {
     catch { setError('Could not copy the invite link.'); }
   }
 
-  if (!guildId) return <EmptyState theme={theme} icon="✉️" title="Select a server" description="Select a server to manage Invite Studio." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.DIRECT_MESSAGE} title="Select a server" description="Select a server to manage Invite Studio." />;
 
   const activeReferrals = leaderboard.reduce((total, item) => total + Number(item.active || 0), 0);
   const departedReferrals = leaderboard.reduce((total, item) => total + Number(item.left || 0), 0);
