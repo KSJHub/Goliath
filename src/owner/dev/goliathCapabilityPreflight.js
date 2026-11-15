@@ -53,13 +53,13 @@ function buildCapabilityPreflight({ audit, operations, capability }) {
           permission = 'blocked';
           warnings.push('Channel parent must be an existing category.');
         } else if (parentId && !channelPermissions.has(parentId)) {
-          permission = 'unknown';
+          if (permission !== 'blocked') permission = 'unknown';
           warnings.push('Bot permissions for the destination category must be checked.');
         } else if (parentId && !flag(channelPermissions.get(parentId), MANAGE_CHANNELS)) {
           permission = 'blocked';
           warnings.push('Bot lacks Manage Channels on the destination category.');
         } else if (!parentId && operation.after?.parentName) {
-          permission = 'unknown';
+          if (permission !== 'blocked') permission = 'unknown';
           warnings.push('Proposed new category is not created yet. Parent linkage requires runtime verification.');
         }
       }
