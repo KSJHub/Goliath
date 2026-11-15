@@ -11,6 +11,9 @@ const DEFAULT_PANEL_DRAFT = Object.freeze({
   description: '**⏳ Verification Required**\nWelcome! Complete the server security checks to unlock your member access.\n\n**🔐 What happens next?**\nPress **Verify** below to begin. Follow the on-screen instructions and complete any required challenges.\n\n**✅ Once verified**\nYour configured member roles and server access will be applied automatically.',
   color: '#5865f2',
   footer: 'Goliath Verification •',
+  showHeader: true,
+  showFooter: true,
+  showTimestamp: true,
   buttonLabel: 'Verify',
   buttonEmoji: '🔐',
   buttonStyle: 'success',
@@ -39,7 +42,10 @@ function panelDraft(panel, moduleConfig, adminConfig) {
     title: template.title || DEFAULT_PANEL_DRAFT.title,
     description: template.description || DEFAULT_PANEL_DRAFT.description,
     color: template.color || DEFAULT_PANEL_DRAFT.color,
-    footer: template.footer || DEFAULT_PANEL_DRAFT.footer,
+    footer: template.footer ?? DEFAULT_PANEL_DRAFT.footer,
+    showHeader: template.showHeader !== false,
+    showFooter: template.showFooter !== false,
+    showTimestamp: template.showTimestamp !== false,
     buttonLabel: template.buttonLabel || DEFAULT_PANEL_DRAFT.buttonLabel,
     buttonEmoji: template.buttonEmoji || DEFAULT_PANEL_DRAFT.buttonEmoji,
     buttonStyle: template.buttonStyle || DEFAULT_PANEL_DRAFT.buttonStyle,
@@ -500,9 +506,12 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,240px),1fr))', gap: 14 }}>
           <ChannelSelect theme={theme} resources={channels} value={draft.channelId} onChange={(value) => { panelDraftDirty.current = true; setDraft((current) => ({ ...current, channelId: value })); }} label="Deploy Channel" />
+          <label><input type="checkbox" checked={draft.showHeader !== false} onChange={(event) => setDraft((current) => ({ ...current, showHeader: event.target.checked }))} /> Show header / title</label>
           <Field theme={theme} label="Title" value={draft.title} onChange={(value) => setDraft((current) => ({ ...current, title: value }))} />
           <Field theme={theme} label="Colour" value={draft.color} onChange={(value) => setDraft((current) => ({ ...current, color: value }))} placeholder="#57f287" />
+          <label><input type="checkbox" checked={draft.showFooter !== false} onChange={(event) => setDraft((current) => ({ ...current, showFooter: event.target.checked }))} /> Show footer</label>
           <Field theme={theme} label="Footer" value={draft.footer} onChange={(value) => setDraft((current) => ({ ...current, footer: value }))} />
+          <label><input type="checkbox" checked={draft.showTimestamp !== false} onChange={(event) => setDraft((current) => ({ ...current, showTimestamp: event.target.checked }))} /> Show timestamp</label>
           <Field theme={theme} label="Button Label" value={draft.buttonLabel} onChange={(value) => setDraft((current) => ({ ...current, buttonLabel: value }))} />
           <Field theme={theme} label="Button Emoji" value={draft.buttonEmoji} onChange={(value) => setDraft((current) => ({ ...current, buttonEmoji: value }))} />
           <Field theme={theme} label="Image URL" value={draft.imageUrl} onChange={(value) => setDraft((current) => ({ ...current, imageUrl: value }))} />
