@@ -4330,6 +4330,17 @@ async function freeGamesAudit() {
 
   const fs = require('node:fs');
   assert(fs.existsSync(root + '/src/modules/utilityStudio/games'), 'Canonical Games folder must exist.');
+  // Keep the public module naming stable without changing persisted guild keys.
+  for (const file of ['games.js', 'gamesEmbeds.js', 'gamesMonitor.js', 'gamesProviders.js']) {
+    assert(fs.existsSync(root + '/src/modules/utilityStudio/games/' + file), 'Missing canonical Games file: ' + file);
+  }
+  for (const file of ['freeGames.js', 'freeGamesEmbeds.js', 'freeGamesMonitor.js', 'freeGamesProviders.js']) {
+    assert(!fs.existsSync(root + '/src/modules/utilityStudio/games/' + file), 'Legacy Games filename remains: ' + file);
+  }
+  assert(fs.existsSync(root + '/src/server/routes/modules/utilityStudio/games.js'));
+  assert(!fs.existsSync(root + '/src/server/routes/modules/utilityStudio/freeGames.js'));
+  assert(fs.existsSync(root + '/src/dashboard/js/pages/modules/Games.jsx'));
+  assert(!fs.existsSync(root + '/src/dashboard/js/pages/modules/FreeGames.jsx'));
   const oldTracked = require('node:child_process').spawnSync('git', ['ls-files', '--', 'src/modules/utilityStudio/' + 'freeGames'], { cwd: root, encoding: 'utf8' });
   if (oldTracked.status === 0) assert.equal(oldTracked.stdout.trim(), '', 'The previous folder must be moved, not duplicated in Git.');
   assert.equal(store.MODULE_KEY, 'freeGames', 'Renaming must preserve the established guild storage and authority key.');
