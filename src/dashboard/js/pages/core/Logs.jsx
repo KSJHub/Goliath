@@ -309,7 +309,7 @@ export default function Logs({ selectedGuild, selectedGuildId, selectedGuildData
       setError('');
       const saved = await api.saveLogConfig(guildId, normalizeLogs(nextLogs));
       if (saved?.config) setLogs(normalizeLogs(saved.config));
-      setSaveMessage(quiet ? '✅ Auto-saved.' : '✅ Logging saved successfully.');
+      setSaveMessage(quiet ? `${E.SUCCESS} Auto-saved.` : `${E.SUCCESS} Logging saved successfully.`);
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to save logging.');
