@@ -49,9 +49,9 @@ function buildCapabilityPreflight({ audit, operations, capability }) {
       }
       if (type === 'create_channel') {
         const parentId = operation.after?.parentId;
-        if (parentId && !channelMap.has(parentId)) {
+        if (parentId && (!channelMap.has(parentId) || channelMap.get(parentId).type !== 4)) {
           permission = 'blocked';
-          warnings.push('Category parent ID does not exist.');
+          warnings.push('Channel parent must be an existing category.');
         } else if (parentId && !channelPermissions.has(parentId)) {
           permission = 'unknown';
           warnings.push('Bot permissions for the destination category must be checked.');
@@ -63,10 +63,18 @@ function buildCapabilityPreflight({ audit, operations, capability }) {
           warnings.push('Proposed new category is not created yet. Parent linkage requires runtime verification.');
         }
       }
-      if (type === 'edit_channel' && operation.after?.parentId &&
-          !channelMap.has(operation.after.parentId)) {
-        permission = 'blocked';
-        warnings.push('Proposed destination category is missing from the audit.');
+      if (type === 'edit_channel' && operation.after?.parentId) {
+        const parent = channelMap.get(operation.after.parentId);
+        if (!parent || parent.type !== 4) {
+          permission = 'blocked';
+          warnings.push('Proposed destination must be an existing category.');
+        } else if (!channelPermissions.has(parent.id)) {
+          if (permission !== 'blocked') permission = 'unknown';
+          warnings.push('Effective permissions on the destination category must be refreshed.');
+        } else if (!flag(channelPermissions.get(parent.id), MANAGE_CHANNELS)) {
+          permission = 'blocked';
+          warnings.push('Goliath lacks Manage Channels on the destination category.');
+        }
       }
     }
     if (type === 'edit_channel' && operation.after?.parentId !== undefined)
