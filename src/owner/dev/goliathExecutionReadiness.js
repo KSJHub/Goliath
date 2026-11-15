@@ -11,7 +11,10 @@ function buildTransactionManifest({ draft, audit, preview, currentDigest }) {
       preview.environment !== audit.environment ||
       String(preview.guild?.id) !== String(audit.guild.id) ||
       !/^[a-f0-9]{64}$/.test(String(currentDigest || '')) ||
-      draft.auditDigest !== currentDigest) {
+      draft.auditDigest !== currentDigest || audit.readOnly !== true ||
+      !Array.isArray(audit.channels) || audit.channels.length > 500 ||
+      audit.channels.some(channel => !/^\d{16,20}$/.test(String(channel?.id || ''))) ||
+      new Set(audit.channels.map(channel => String(channel.id))).size !== audit.channels.length) {
     return {
       readOnly: true, executable: false, canExecute: false, unavailable: true,
       reason: 'The plan, operation list, guild scope or audit fingerprint is invalid or stale.',
@@ -54,6 +57,12 @@ function buildTransactionManifest({ draft, audit, preview, currentDigest }) {
       issues.push('Channel creation uses an unsupported Discord type.');
     if ((kind === 'create_channel' || kind === 'create_category') && operation.target?.id)
       issues.push('Create operations cannot target an existing Discord object.');
+    if (kind === 'create_channel' && proposed?.parentId &&
+        !audit.channels.some(channel => channel.id === proposed.parentId && channel.type === 4))
+      issues.push('New channel destination is not an existing category.');
+    if (kind === 'edit_channel' && proposed?.parentId &&
+        !audit.channels.some(channel => channel.id === proposed.parentId && channel.type === 4))
+      issues.push('Channel move destination is not an existing category.');
     if ((kind === 'edit_channel' || kind === 'rename_category') &&
         !audit.channels.some(channel => channel.id === operation.target?.id &&
           (kind === 'rename_category' ? channel.type === 4 : channel.type !== 4)))
@@ -111,10 +120,6 @@ function simulateTransaction({ draft, audit, preview, currentDigest }) {
       break;
     }
     if (entry.kind === 'create_category') {
-      if (channels.filter(item => item.type === 4).length >= 500) {
-        problems.push('Operation ' + entry.sequence + ': category limit reached.');
-        break;
-      }
       const id = 'synthetic-category-' + entry.sequence;
       const item = { id, name: proposed.name, type: 4, parentId: null };
       channels.push(item); byId.set(id, item);
