@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const stickyStore = require('./stickyStore');
@@ -23,10 +23,10 @@ function buildStickyAdminPanel(guild, memberDisplayName = 'Unknown User') {
   const c = getConfig(guild.id); const active = Object.values(c.channels || {}).filter((s) => s?.enabled !== false).length;
   const embed = new EmbedBuilder().setColor(c.enabled ? 0x57f287 : 0x5865f2).setTitle(emojiLabel('USER_FEEDBACK', 'Sticky Messages')).setDescription([
     'Configure channels that automatically repost a sticky message after chat activity.', '',
-    `**Status:** ${c.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+    `**Status:** ${c.enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
     `**Sticky Channels:** ${formatChannels(c)}`, `**Active Stickies:** \`${active}\``,
     `**Manager Roles:** ${formatRoles(c.managerRoleIds)}`, `**Repost Every:** \`${c.repostEvery}\` message(s)`,
-    `**Cooldown:** \`${c.cooldownSeconds}\` second(s)`, `**Embeds:** ${c.allowEmbeds ? 'Enabled ✅' : 'Disabled ❌'}`, '', '**Default Message**', c.defaultContent.slice(0, 1000),
+    `**Cooldown:** \`${c.cooldownSeconds}\` second(s)`, `**Embeds:** ${c.allowEmbeds ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`, '', '**Default Message**', c.defaultContent.slice(0, 1000),
   ].join('\n')).setFooter({ text: `Requested by ${memberDisplayName}` }).setTimestamp();
   return { embeds: [embed], components: [
     row(new ChannelSelectMenuBuilder().setCustomId('admin:sticky:channels').setPlaceholder('Sticky channels').setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setMinValues(0).setMaxValues(10)),
@@ -56,6 +56,6 @@ async function handleStickyAdminInteraction(i) {
     else if (id === 'admin:sticky:cooldownDown') saveConfig(i.guild, (c) => ({ ...c, cooldownSeconds: Math.max(0, Number(c.cooldownSeconds || 60) - 15) }));
     else if (id === 'admin:sticky:refresh') { await i.deferUpdate().catch(() => null); const c = getConfig(i.guild.id); for (const channelId of Object.keys(c.channels || {})) { const channel = i.guild.channels.cache.get(channelId) || await i.guild.channels.fetch(channelId).catch(() => null); const sticky = stickyStore.getChannelSticky(i.guild.id, channelId); if (channel?.send && sticky) await stickyManager.repostSticky(channel, sticky, i.client).catch(() => null); } }
     return safeUpdate(i, buildStickyAdminPanel(i.guild, member));
-  } catch (error) { const p = { content: `❌ Sticky setup failed: ${error.message}`, flags: 64 }; if (i.deferred || i.replied) await i.followUp(p).catch(() => null); else await i.reply(p).catch(() => null); return true; }
+  } catch (error) { const p = { content: `${EMOJIS.ERROR} Sticky setup failed: ${error.message}`, flags: 64 }; if (i.deferred || i.replied) await i.followUp(p).catch(() => null); else await i.reply(p).catch(() => null); return true; }
 }
 module.exports = { buildStickyAdminPanel, handleStickyAdminInteraction };
