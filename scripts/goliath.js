@@ -5398,6 +5398,9 @@ try {
   }, tempFile);
   assert.equal(reviewed.review.status, 'reviewed');
   assert.equal(reviewed.review.checkedBy, guildId);
+  assert.throws(() => store.reviewDraft({
+    id: draft.id, ownerId: otherId, currentAuditDigest: fingerprint
+  }, tempFile), /Only the draft creator/);
   assert.equal(reviewed.executable, false);
   assert.equal(store.deleteDraft(draft.id, tempFile), true);
   assert.equal(store.listDrafts(tempFile).length, 0);
