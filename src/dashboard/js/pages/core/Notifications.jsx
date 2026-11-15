@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goDashboard } from '../../services/dashboardPath.js';
 import React, { useCallback, useEffect, useState } from 'react';
 
@@ -103,7 +104,7 @@ export default function Notifications({ theme, selectedGuild, selectedGuildData 
               <button type="button" onClick={() => markRead(item, !item.read)} disabled={busy} style={button(t, busy)}>{item.read ? 'Mark unread' : 'Mark read'}</button>
             </div>
           </article>
-        )) : <EmptyState theme={t} icon="🔔" title="You're all caught up" description="Alerts from Tickets, Forms, Automation, Security, Runtime, Deployments and Backups will appear here." />}
+        )) : <EmptyState theme={t} icon={E.BELL} title="You're all caught up" description="Alerts from Tickets, Forms, Automation, Security, Runtime, Deployments and Backups will appear here." />}
       </section>
     </div>
   );
