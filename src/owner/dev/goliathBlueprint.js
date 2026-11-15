@@ -161,6 +161,31 @@ function planBlueprint(audit, raw) {
   if (current.length + newChannelCount > 500) {
     throw new Error('The proposed layout may exceed Discord\'s 500-channel guild limit.');
   }
+  // Rehearse category occupancy against the complete guild, including channels
+  // intentionally left untouched by this blueprint. A blueprint can describe
+  // 50 channels while the destination already contains additional channels.
+  const occupancy = new Map(existingCategories.map(category => [
+    category.id, current.filter(channel => channel.parentId === category.id).length
+  ]));
+  const createdCategories = new Map();
+  for (const action of actions) {
+    if (action.kind === 'create_category') {
+      createdCategories.set(action.after.name, 0);
+    } else if (action.kind === 'create_channel') {
+      const parentId = action.after.parentId;
+      if (parentId) occupancy.set(parentId, (occupancy.get(parentId) || 0) + 1);
+      else if (createdCategories.has(action.after.parentName))
+        createdCategories.set(action.after.parentName, createdCategories.get(action.after.parentName) + 1);
+      else throw new Error('New channel has an unresolved destination category.');
+    } else if (action.kind === 'edit_channel' && Object.hasOwn(action.after, 'parentId')) {
+      const previous = action.before.parentId;
+      if (previous && occupancy.has(previous)) occupancy.set(previous, occupancy.get(previous) - 1);
+      const next = action.after.parentId;
+      if (next) occupancy.set(next, (occupancy.get(next) || 0) + 1);
+    }
+  }
+  if ([...occupancy.values(), ...createdCategories.values()].some(count => count > 50))
+    throw new Error('Proposed layout exceeds the 50-channel category limit.');
   const untouched = current.filter(item => !usedIds.has(item.id));
   return {
     readOnly: true, executable: false,
