@@ -28,7 +28,20 @@ function load(file = ledgerFile()) {
   const raw = fs.readFileSync(file, 'utf8');
   if (Buffer.byteLength(raw) > 512 * 1024) throw new Error('Review ledger exceeds storage limit.');
   const items = JSON.parse(raw);
-  if (!Array.isArray(items) || items.length > MAX_RECORDS) throw new Error('Invalid review ledger.');
+  if (!Array.isArray(items) || items.length > MAX_RECORDS ||
+      items.some(item => !item || typeof item !== 'object' ||
+        !UUID.test(String(item.id || '')) ||
+        !UUID.test(String(item.draftId || '')) ||
+        !MODES.has(item.environment) ||
+        !SNOWFLAKE.test(String(item.guildId || '')) ||
+        !SNOWFLAKE.test(String(item.reviewerId || '')) ||
+        !SHA.test(String(item.operationKey || '')) ||
+        !Number.isInteger(item.sequence) || item.sequence < 1 || item.sequence > 350 ||
+        !['acknowledged', 'rejected'].includes(item.decision) ||
+        item.isExecutionApproval !== false || item.status !== 'active' ||
+        !Number.isFinite(Date.parse(item.createdAt)) ||
+        !Number.isFinite(Date.parse(item.expiresAt))))
+    throw new Error('Invalid review ledger.');
   return items;
 }
 function persist(items, file = ledgerFile()) {
