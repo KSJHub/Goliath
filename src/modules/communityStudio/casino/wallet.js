@@ -155,7 +155,57 @@ function casinoSlots(reels = [randomInt(0, 6), randomInt(0, 6), randomInt(0, 6)]
   const symbols = reels.map(index => SLOT_SYMBOLS[index]);
   const matches = symbols[0] === symbols[1] && symbols[1] === symbols[2] ? 3 :
     (symbols[0] === symbols[1] || symbols[0] === symbols[2] || symbols[1] === symbols[2]) ? 2 : 0;
-  return Object.freeze({ symbols: Object.freeze(symbols), matches });
+  return Object.freeze({ symbols: Object.freeze(symbols), matches, won: matches >= 2 });
 }
 
-module.exports = { casinoBalance, casinoTransaction, casinoDice, casinoRoulette, casinoSlots };
+
+// Return total winnings including the original stake. Settlement is deliberately
+// separate: no game result may mutate a wallet until atomic wager storage exists.
+const CASINO_PAYOUTS = Object.freeze({
+  dice: Object.freeze({ under: 2, seven: 13, over: 2 }),
+  roulette: Object.freeze({ red: 2, black: 2, green: 36, number: 36 }),
+  slots: Object.freeze({ pair: 2, triple: 5, sevenTriple: 20 }),
+});
+function casinoPayout(game, stake, outcome) {
+  casinoAmount(stake, 'Stake');
+  if (!isPlainObject(outcome) || typeof outcome.won !== 'boolean') {
+    throw new Error('Invalid casino outcome.');
+  }
+  let multiplier = 0;
+  if (game === 'dice') {
+    if (!['under', 'seven', 'over'].includes(outcome.choice) ||
+        !Number.isInteger(outcome.roll) || outcome.roll < 1 || outcome.roll > 13 ||
+        outcome.won !== (outcome.choice === 'under' ? outcome.roll < 7 :
+          outcome.choice === 'over' ? outcome.roll > 7 : outcome.roll === 7)) {
+      throw new Error('Invalid dice outcome.');
+    }
+    multiplier = outcome.won ? CASINO_PAYOUTS.dice[outcome.choice] : 0;
+  } else if (game === 'roulette') {
+    const expected = casinoRoulette(outcome.choice, outcome.roll);
+    if (expected.won !== outcome.won || expected.colour !== outcome.colour) {
+      throw new Error('Invalid roulette outcome.');
+    }
+    multiplier = outcome.won ? (typeof outcome.choice === 'number' ?
+      CASINO_PAYOUTS.roulette.number : CASINO_PAYOUTS.roulette[outcome.choice]) : 0;
+  } else if (game === 'slots') {
+    if (!Array.isArray(outcome.symbols) || outcome.symbols.length !== 3 ||
+        !outcome.symbols.every(symbol => SLOT_SYMBOLS.includes(symbol))) {
+      throw new Error('Invalid slots outcome.');
+    }
+    const [a,b,c] = outcome.symbols;
+    const matches = a === b && b === c ? 3 : (a === b || a === c || b === c) ? 2 : 0;
+    if (outcome.matches !== matches || outcome.won !== (matches >= 2)) {
+      throw new Error('Invalid slots outcome.');
+    }
+    multiplier = matches === 3 ? (a === 'seven' ?
+      CASINO_PAYOUTS.slots.sevenTriple : CASINO_PAYOUTS.slots.triple) :
+      matches === 2 ? CASINO_PAYOUTS.slots.pair : 0;
+  } else {
+    throw new Error('Invalid casino game.');
+  }
+  const total = stake * multiplier;
+  if (!Number.isSafeInteger(total)) throw new Error('Casino payout exceeds safe integer range.');
+  return Object.freeze({ stake, multiplier, total, net: total - stake });
+}
+
+module.exports = { casinoBalance, casinoTransaction, casinoDice, casinoRoulette, casinoSlots, casinoPayout, CASINO_PAYOUTS };
