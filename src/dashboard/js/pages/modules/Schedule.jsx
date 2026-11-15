@@ -6,9 +6,9 @@ import { api } from '../../services/apiClient.js';
 import { ChannelSelect } from '../../ui/DiscordResourceSelects.jsx';
 
 const DEFAULT_OPTIONS = [
-  { key: 'going', label: 'Going', emoji: '✅', style: 'success', isAttendee: true, roleId: '', enabled: true },
+  { key: 'going', label: 'Going', emoji: E.SUCCESS, style: 'success', isAttendee: true, roleId: '', enabled: true },
   { key: 'maybe', label: 'Maybe', emoji: '❔', style: 'primary', isAttendee: false, roleId: '', enabled: true },
-  { key: 'declined', label: 'Decline', emoji: '❌', style: 'secondary', isAttendee: false, roleId: '', enabled: true },
+  { key: 'declined', label: 'Decline', emoji: E.ERROR, style: 'secondary', isAttendee: false, roleId: '', enabled: true },
 ];
 const emptyDraft = {
   title: '', description: '', startAt: '', durationMinutes: 60, timezone: 'Europe/London', channelId: '', voiceChannelId: '', location: '', color: 0x5865F2,
