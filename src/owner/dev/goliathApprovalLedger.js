@@ -80,11 +80,12 @@ function listReviews({ draft, currentDigest, operations }, file) {
   if (!draft || !UUID.test(String(draft.id || '')) || !Array.isArray(operations) ||
       !SHA.test(String(currentDigest || ''))) throw new Error('Invalid review listing context.');
   const now = Date.now();
+  const events = load(file);
   return operations.map((operation, i) => {
     const sequence = i + 1;
     const key = operationKey({ draft, currentDigest, operation, sequence });
     const latestByReviewer = new Map();
-    for (const item of load(file)) {
+    for (const item of events) {
       if (item.draftId === draft.id && item.environment === draft.environment &&
           item.guildId === draft.guildId && item.sequence === sequence &&
           item.operationKey === key && item.status === 'active' &&
