@@ -5616,6 +5616,24 @@ assert.equal(manifestOne.fingerprint, manifestTwo.fingerprint);
 assert.equal(manifestOne.executable, false);
 assert.equal(manifestOne.canExecute, false);
 assert.equal(manifestOne.unavailable, false);
+assert.equal(buildTransactionManifest({
+  draft: manifestDraft, audit: { ...readyAudit, readOnly: false },
+  preview, currentDigest: 'a'.repeat(64)
+}).unavailable, true);
+assert.equal(buildTransactionManifest({
+  draft: manifestDraft,
+  audit: { ...readyAudit, channels: [...readyAudit.channels, readyAudit.channels[0]] },
+  preview, currentDigest: 'a'.repeat(64)
+}).unavailable, true);
+const invalidDestinationPreview = {
+  ...preview, operations: [{ kind: 'edit_channel', target: { id: channelId },
+    before: { parentId: categoryId }, after: { parentId: otherId },
+    executable: false }]
+};
+assert(buildTransactionManifest({
+  draft: manifestDraft, audit: readyAudit, preview: invalidDestinationPreview,
+  currentDigest: 'a'.repeat(64)
+}).warnings.some(warning => warning.includes('destination is not an existing category')));
 assert.equal(manifestOne.entries.length, preview.operations.length);
 assert(manifestOne.entries.every(item => item.executable === false && item.authorised === false));
 const createdCategoryEntry = manifestOne.entries.find(item => item.kind === 'create_category');
