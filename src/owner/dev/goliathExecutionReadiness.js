@@ -48,6 +48,16 @@ function buildTransactionManifest({ draft, audit, preview, currentDigest }) {
     if ((kind === 'create_channel' || kind === 'create_category') &&
         (!proposed?.name || !Number.isInteger(proposed.type)))
       issues.push('New object name or Discord type is missing.');
+    if (kind === 'create_category' && proposed?.type !== 4)
+      issues.push('Category creation must use Discord type 4.');
+    if (kind === 'create_channel' && ![0, 2, 5, 13, 15, 16].includes(proposed?.type))
+      issues.push('Channel creation uses an unsupported Discord type.');
+    if ((kind === 'create_channel' || kind === 'create_category') && operation.target?.id)
+      issues.push('Create operations cannot target an existing Discord object.');
+    if ((kind === 'edit_channel' || kind === 'rename_category') &&
+        !audit.channels.some(channel => channel.id === operation.target?.id &&
+          (kind === 'rename_category' ? channel.type === 4 : channel.type !== 4)))
+      issues.push('Existing operation target is missing or has the wrong Discord type.');
     if (issues.length) warnings.push('Operation ' + sequence + ': ' + issues.join(' '));
     return {
       sequence, kind, target: operation.target ?? null,
@@ -101,6 +111,10 @@ function simulateTransaction({ draft, audit, preview, currentDigest }) {
       break;
     }
     if (entry.kind === 'create_category') {
+      if (channels.filter(item => item.type === 4).length >= 500) {
+        problems.push('Operation ' + entry.sequence + ': category limit reached.');
+        break;
+      }
       const id = 'synthetic-category-' + entry.sequence;
       const item = { id, name: proposed.name, type: 4, parentId: null };
       channels.push(item); byId.set(id, item);
