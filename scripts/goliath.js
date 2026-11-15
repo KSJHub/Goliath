@@ -412,6 +412,19 @@ function sharedEmojiPaletteAudit() {
       }
     }
   }
+  // Check static Discord palette references without evaluating guild-specific overrides.
+  for (const filePath of walk(absolute('src'), JS_EXTENSIONS)) {
+    if (filePath.startsWith(absolute('src/dashboard') + path.sep)) continue;
+    const source = read(filePath);
+    const hasPaletteImport = /(?:\bEMOJIS\b|\bSHARED_EMOJIS\b)\s*(?:,|\}|\s*=)/.test(source) &&
+      /(?:goliathNavigation|core\/ui\/emojis|ui\/emojis)/.test(source);
+    if (!hasPaletteImport) continue;
+    for (const match of source.matchAll(/\b(?:EMOJIS|SHARED_EMOJIS)\.([A-Z][A-Z_0-9]*)\b/g)) {
+      if (!server.entries.has(match[1])) {
+        errors.push(relative(filePath) + ': unknown Discord emoji ' + match[1]);
+      }
+    }
+  }
   for (const error of errors) console.error(' - ' + error);
   console.log('Discord: ' + server.entries.size + ', Dashboard: ' + browser.entries.size + ', issues: ' + errors.length);
   return errors.length === 0;
