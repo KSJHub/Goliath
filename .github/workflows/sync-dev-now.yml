@@ -170,8 +170,35 @@ jobs:
             pm2 stop "$PM2_NAME" || true
             # EXIT trap also covers superseded builds that exit with code 0.
 
-            echo "📦 Clean locked dependency install"
-            npm ci --no-audit --no-fund
+            # Reuse dependencies only when npm's installed lock metadata agrees
+            # with the repository lock and the full dependency tree is healthy.
+            # Otherwise retain the original clean-install safety path.
+            echo "📦 Check locked dependency installation"
+            if node - <<'NODE'
+            const fs = require('node:fs');
+            const expected = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+            const installed = JSON.parse(fs.readFileSync('node_modules/.package-lock.json', 'utf8'));
+            if (expected.lockfileVersion !== installed.lockfileVersion) process.exit(1);
+            for (const [name, pkg] of Object.entries(expected.packages || {})) {
+              if (!name || pkg.optional) continue;
+              const actual = installed.packages?.[name];
+              if (!actual || actual.version !== pkg.version ||
+                  (pkg.integrity && actual.integrity !== pkg.integrity) ||
+                  (pkg.resolved && actual.resolved !== pkg.resolved)) process.exit(1);
+            }
+            console.log('✅ Installed lock metadata matches required packages');
+            NODE
+            then
+              if npm ls --all --omit=optional --silent >/dev/null 2>&1; then
+                echo "✅ Reusing validated dependencies; skipping npm ci"
+              else
+                echo "⚠️ Dependency tree inconsistent; reinstalling"
+                npm ci --no-audit --no-fund
+              fi
+            else
+              echo "⚠️ Lock metadata missing or mismatched; reinstalling"
+              npm ci --no-audit --no-fund
+            fi
 
             echo "🔧 Verify native/runtime dependencies"
             node - <<'NODE'
