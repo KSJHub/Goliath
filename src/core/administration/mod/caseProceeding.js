@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../../core/guild/goliathNavigation');
 
 const {
   ActionRowBuilder,
@@ -277,12 +278,12 @@ function buildCaseFile(interaction, modCase) {
     .setCustomId(`mod_proceeding_workspace:${modCase.caseId}`)
     .setPlaceholder('🗂️ Open case workspace')
     .addOptions(
-      { label: 'Evidence', description: `${proceeding.evidence.length} item(s) • review sources and verification`, value: 'evidence', emoji: '🔎' },
-      { label: 'Private Notes', description: `${proceeding.notes.length} note(s) • internal staff working notes`, value: 'notes', emoji: '📝' },
-      { label: 'Timeline', description: 'Audit trail and case activity', value: 'timeline', emoji: '🕘' },
-      { label: 'Review Brief', description: 'Reviewer summary, assignment and review controls', value: 'review', emoji: '📋' },
-      { label: 'Member Preview', description: 'Exactly what the member can see', value: 'preview', emoji: '👁️' },
-      { label: 'Record History', description: 'Decision and publication history', value: 'history', emoji: '📚' },
+      { label: 'Evidence', description: `${proceeding.evidence.length} item(s) • review sources and verification`, value: 'evidence', emoji: EMOJIS.INVESTIGATE },
+      { label: 'Private Notes', description: `${proceeding.notes.length} note(s) • internal staff working notes`, value: 'notes', emoji: EMOJIS.NOTE },
+      { label: 'Timeline', description: 'Audit trail and case activity', value: 'timeline', emoji: EMOJIS.MOD_SCAN_HISTORY },
+      { label: 'Review Brief', description: 'Reviewer summary, assignment and review controls', value: 'review', emoji: EMOJIS.REVIEW },
+      { label: 'Member Preview', description: 'Exactly what the member can see', value: 'preview', emoji: EMOJIS.WELCOME_PREVIEW },
+      { label: 'Record History', description: 'Decision and publication history', value: 'history', emoji: EMOJIS.FAQ_BOOKS },
     );
 
   const workflowButtons = [
