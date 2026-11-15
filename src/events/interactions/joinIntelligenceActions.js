@@ -199,7 +199,7 @@ module.exports = {
 
       if (action === 'watch') {
         const before = currentInvestigationWatch(interaction.guild.id, userId);
-        recordModerationSystemEvent({
+        const audit = recordModerationSystemEvent({
           interaction,
           event: 'moderation.member_scan.watch_updated',
           action: 'member_watch',
@@ -208,6 +208,10 @@ module.exports = {
           after: { enabled: !before, reason: 'Toggled from persistent Member Intelligence report.' },
           metadata: { targetId: userId, source: 'join_intelligence_report' },
         });
+        if (!audit) {
+          await interaction.editReply({ content: '❌ Investigation Watch could not be saved. The report was not changed; please try again.' });
+          return;
+        }
         await interaction.editReply({
           content: before
             ? `👁️ ${target.user} has been **removed** from Investigation Watch.`
