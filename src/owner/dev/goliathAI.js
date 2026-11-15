@@ -818,6 +818,99 @@ router.post('/drafts/:id/execution-intent', requirePrivateAI, async (req, res) =
   }
 });
 
+// Non-executable single-use authorisation rehearsal. Tokens are deliberately
+// process-local, cannot survive restart and are never accepted by a Discord
+// write route. This tests grant lifecycle without enabling execution.
+const rehearsalGrants = new Map();
+const GRANT_TTL_MS = 60 * 1000;
+function revokeRehearsalGrants(draftId, sequence = null) {
+  for (const [id, grant] of rehearsalGrants) {
+    if (grant.draftId === draftId && (sequence === null || grant.sequence === sequence))
+      rehearsalGrants.delete(id);
+  }
+}
+router.post('/drafts/:id/authorisation-rehearsal', requirePrivateAI, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV controller only.' });
+  if (req.body?.confirmation !== 'I understand no Discord execution is authorised' ||
+      !/^[0-9a-f-]{36}$/i.test(String(req.body?.intentId || '')))
+    return res.status(422).json({ error: 'Exact non-execution confirmation and intent ID required.' });
+  try {
+    const ownerId = String(req.session.user.id);
+    const draft = draftStore.loadDraft(String(req.params.id));
+    if (!draft) return res.status(404).json({ error: 'Draft not found.' });
+    if (draft.environment !== 'DEV' || draft.createdBy !== ownerId)
+      return res.status(403).json({ error: 'Only the DEV draft creator may rehearse authorisation.' });
+    const intent = executionIntents.get(String(req.body.intentId));
+    if (!intent || intent.ownerId !== ownerId || intent.draftId !== draft.id ||
+        intent.guildId !== draft.guildId || intent.environment !== 'DEV' ||
+        Date.parse(intent.expiresAt) <= Date.now())
+      return res.status(409).json({ error: 'Intent missing, expired or not owned by this draft.' });
+    const audit = await getVerifiedAudit(req, 'DEV', draft.guildId);
+    const currentDigest = reportDigest(audit);
+    if (currentDigest !== draft.auditDigest || draft.review?.status !== 'reviewed' ||
+        draft.review.checkedBy !== ownerId ||
+        !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(draft.review.checkpointId || '')))
+      return res.status(409).json({ error: 'Draft review or audit changed.' });
+    const preview = planBlueprint(audit, draft.blueprint);
+    const operation = preview.operations[intent.sequence - 1];
+    if (!operation || operation.kind !== 'rename_category' ||
+        approvalLedger.operationKey({
+          draft, currentDigest, operation, sequence: intent.sequence
+        }) !== intent.operationKey)
+      return res.status(409).json({ error: 'Operation fingerprint changed.' });
+    const manifest = buildTransactionManifest({ draft, audit, preview, currentDigest });
+    const rehearsal = simulateTransaction({ draft, audit, preview, currentDigest });
+    if (manifest.unavailable || manifest.warnings.length || !rehearsal.simulated)
+      return res.status(409).json({ error: 'Transaction rehearsal failed.' });
+    const capability = await getBotCapabilityEvidence(req, 'DEV', draft.guildId);
+    const preflight = buildCapabilityPreflight({ audit, operations: preview.operations, capability });
+    if (!preflight.permissionsVerified ||
+        preflight.operations[intent.sequence - 1]?.permission !== 'permitted-in-principle')
+      return res.status(409).json({ error: 'Permission preflight failed.' });
+    const review = approvalLedger.listReviews({
+      draft, currentDigest, operations: preview.operations
+    })[intent.sequence - 1];
+    if (!review || review.needsAttention ||
+        !review.reviews.some(item => item.decision === 'acknowledged'))
+      return res.status(409).json({ error: 'Operation acknowledgement invalid.' });
+    // Consume the intent before issuing the rehearsal token. Neither object
+    // authorises a Discord write, even if it is replayed.
+    executionIntents.delete(String(req.body.intentId));
+    revokeRehearsalGrants(draft.id, intent.sequence);
+    const now = Date.now();
+    for (const [id, grant] of rehearsalGrants)
+      if (Date.parse(grant.expiresAt) <= now) rehearsalGrants.delete(id);
+    if (rehearsalGrants.size >= 30)
+      return res.status(429).json({ error: 'Too many pending rehearsals.' });
+    const grantId = require('node:crypto').randomUUID();
+    const expiresAt = new Date(now + GRANT_TTL_MS).toISOString();
+    rehearsalGrants.set(grantId, {
+      draftId: draft.id, ownerId, guildId: draft.guildId, sequence: intent.sequence,
+      operationKey: intent.operationKey, auditDigest: currentDigest,
+      checkpointId: draft.review.checkpointId, expiresAt
+    });
+    return res.json({ grantId, expiresAt, operationKey: intent.operationKey,
+      singleUse: true, rehearsalOnly: true, authorised: false,
+      canExecute: false, executable: false,
+      notice: 'One-minute rehearsal token issued. No Discord execution permission was granted.' });
+  } catch {
+    return res.status(503).json({ error: 'Authorisation rehearsal failed. No Discord change occurred.' });
+  }
+});
+router.post('/drafts/:id/authorisation-rehearsal/:grantId/consume', requirePrivateAI, (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV controller only.' });
+  const grantId = String(req.params.grantId);
+  const grant = rehearsalGrants.get(grantId);
+  if (!grant || grant.ownerId !== String(req.session.user.id) ||
+      grant.draftId !== String(req.params.id))
+    return res.status(404).json({ error: 'Rehearsal token not found.' });
+  rehearsalGrants.delete(grantId);
+  if (Date.parse(grant.expiresAt) <= Date.now())
+    return res.status(410).json({ error: 'Rehearsal token expired.', canExecute: false });
+  return res.json({ consumed: true, canExecute: false, executable: false,
+    notice: 'Single-use token consumed. No Discord write performed.' });
+});
+
 // Intent lifecycle is owner-bound and always non-executable. It is not a
 // substitute for a signed, single-use execution authorisation.
 router.get('/drafts/:id/execution-intents', requireAIIdentity, async (req, res) => {
