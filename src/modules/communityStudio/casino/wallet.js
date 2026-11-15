@@ -122,4 +122,40 @@ function casinoTransaction(guildId, { key, operation, userId, targetUserId, amou
   return result;
 }
 
-module.exports = { casinoBalance, casinoTransaction };
+/**
+ * Casino game outcomes only. These functions do not debit, credit or pay out
+ * wallets: wagering stays disabled until durable transactional storage exists.
+ * Randomness is supplied by Node's cryptographic randomInt.
+ */
+const { randomInt } = require('node:crypto');
+const SLOT_SYMBOLS = Object.freeze(['cherry', 'lemon', 'orange', 'bell', 'star', 'seven']);
+
+function casinoDice(choice, roll = randomInt(1, 14)) {
+  if (!['under', 'seven', 'over'].includes(choice)) throw new Error('Invalid dice choice.');
+  if (!Number.isInteger(roll) || roll < 1 || roll > 13) throw new Error('Invalid dice roll.');
+  return Object.freeze({ roll, choice, won: choice === 'under' ? roll < 7 : choice === 'over' ? roll > 7 : roll === 7 });
+}
+
+function casinoRoulette(choice, roll = randomInt(0, 37)) {
+  if (!Number.isInteger(roll) || roll < 0 || roll > 36) throw new Error('Invalid roulette roll.');
+  const valid = choice === 'red' || choice === 'black' || choice === 'green' ||
+    (Number.isInteger(choice) && choice >= 0 && choice <= 36);
+  if (!valid) throw new Error('Invalid roulette choice.');
+  // European single-zero roulette: 18 red, 18 black, one green.
+  const red = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+  const colour = roll === 0 ? 'green' : red.has(roll) ? 'red' : 'black';
+  return Object.freeze({ roll, colour, choice, won: typeof choice === 'number' ? choice === roll : choice === colour });
+}
+
+function casinoSlots(reels = [randomInt(0, 6), randomInt(0, 6), randomInt(0, 6)]) {
+  if (!Array.isArray(reels) || reels.length !== 3 ||
+      !reels.every(value => Number.isInteger(value) && value >= 0 && value < SLOT_SYMBOLS.length)) {
+    throw new Error('Invalid slot reels.');
+  }
+  const symbols = reels.map(index => SLOT_SYMBOLS[index]);
+  const matches = symbols[0] === symbols[1] && symbols[1] === symbols[2] ? 3 :
+    (symbols[0] === symbols[1] || symbols[0] === symbols[2] || symbols[1] === symbols[2]) ? 2 : 0;
+  return Object.freeze({ symbols: Object.freeze(symbols), matches });
+}
+
+module.exports = { casinoBalance, casinoTransaction, casinoDice, casinoRoulette, casinoSlots };
