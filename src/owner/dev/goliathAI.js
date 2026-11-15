@@ -779,6 +779,12 @@ router.post('/drafts/:id/execution-intent', requirePrivateAI, async (req, res) =
     const expiresAt = new Date(Date.now() + INTENT_TTL_MS).toISOString();
     for (const [intentId, intent] of executionIntents)
       if (Date.parse(intent.expiresAt) <= Date.now()) executionIntents.delete(intentId);
+    // One outstanding intent per owner/draft/operation. A repeated submission
+    // invalidates the earlier identifier rather than accumulating grants.
+    for (const [intentId, intent] of executionIntents) {
+      if (intent.ownerId === ownerId && intent.draftId === draft.id &&
+          intent.sequence === sequence) executionIntents.delete(intentId);
+    }
     if (executionIntents.size >= 30) return res.status(429).json({ error: 'Too many pending intents.' });
     executionIntents.set(id, {
       draftId: draft.id, guildId: draft.guildId, environment: 'DEV',
@@ -794,6 +800,51 @@ router.post('/drafts/:id/execution-intent', requirePrivateAI, async (req, res) =
     return res.status(error.status || 503).json({
       error: 'Execution intent validation failed. No Discord change occurred.'
     });
+  }
+});
+
+// Intent lifecycle is owner-bound and always non-executable. It is not a
+// substitute for a signed, single-use execution authorisation.
+router.get('/drafts/:id/execution-intents', requireAIIdentity, (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV controller only.' });
+  try {
+    const draft = draftStore.loadDraft(String(req.params.id));
+    if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
+    if (draft.environment !== 'DEV') return res.status(403).json({ error: 'DEV guilds only.' });
+    const ownerId = String(req.session.user.id);
+    const now = Date.now();
+    const intents = [];
+    for (const [id, intent] of executionIntents) {
+      if (Date.parse(intent.expiresAt) <= now) {
+        executionIntents.delete(id);
+      } else if (intent.ownerId === ownerId && intent.draftId === draft.id &&
+                 intent.guildId === draft.guildId) {
+        intents.push({
+          intentId: id, sequence: intent.sequence,
+          operationKey: intent.operationKey, expiresAt: intent.expiresAt,
+          authorised: false, executable: false
+        });
+      }
+    }
+    return res.json({ draftId: draft.id, intents, canExecute: false, executable: false });
+  } catch {
+    return res.status(503).json({ error: 'Unable to inspect pending intents.' });
+  }
+});
+router.delete('/drafts/:id/execution-intents/:intentId', requireAIIdentity, (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV controller only.' });
+  try {
+    const draft = draftStore.loadDraft(String(req.params.id));
+    if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
+    const intent = executionIntents.get(String(req.params.intentId));
+    if (!intent || intent.ownerId !== String(req.session.user.id) ||
+        intent.draftId !== draft.id || intent.guildId !== draft.guildId)
+      return res.status(404).json({ error: 'Pending intent not found.' });
+    executionIntents.delete(String(req.params.intentId));
+    return res.json({ cancelled: true, canExecute: false, executable: false,
+      notice: 'Pending intent cancelled. No Discord action was performed.' });
+  } catch {
+    return res.status(503).json({ error: 'Unable to cancel pending intent.' });
   }
 });
 
