@@ -211,7 +211,7 @@ async function buildReactionRolesAdminPanel(guild, memberDisplayName = 'Unknown 
         `**Module:** ${enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled')}`,
         `**Panels:** \`${panels.length}\``,
         `**Role mappings:** \`${mappings}\``,
-        `**Health:** ${health.healthy ? emojiLabel('HEALTHY', 'Healthy') : `⚠️ ${health.unhealthy || 0} panel(s) need attention`}`,
+        `**Health:** ${health.healthy ? emojiLabel('HEALTHY', 'Healthy') : `${EMOJIS.WARNING} ${health.unhealthy || 0} panel(s) need attention`}`,
       ].filter((line) => line !== null).join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
@@ -299,7 +299,7 @@ async function buildSettingsPage(guild, memberDisplayName = 'Unknown User', noti
         noticeLine(notice), notice ? '' : null,
         `**Module:** ${enabled ? emojiLabel('ENABLED', 'Enabled') : emojiLabel('DISABLED', 'Disabled')}`,
         `**Saved panels:** \`${panels.length}\``,
-        `**Health:** ${health.healthy ? emojiLabel('HEALTHY', 'Healthy') : `⚠️ ${health.unhealthy || 0} panel(s) need attention`}`,
+        `**Health:** ${health.healthy ? emojiLabel('HEALTHY', 'Healthy') : `${EMOJIS.WARNING} ${health.unhealthy || 0} panel(s) need attention`}`,
       ].filter((line) => line !== null).join('\n'))
       .setFooter({ text: `Requested by ${memberDisplayName}` })
       .setTimestamp()],
@@ -853,14 +853,14 @@ async function handleReactionRolesAdminInteraction(interaction) {
       await interaction.deferUpdate();
       const result = await reactionRoles.repairAll(guild);
       const repairNotice = result.failed?.length
-        ? `⚠️ Repair finished: ${result.repaired.length} repaired, ${result.failed.length} failed.`
+        ? `${EMOJIS.WARNING} Repair finished: ${result.repaired.length} repaired, ${result.failed.length} failed.`
         : `✅ Repair finished: ${result.repaired.length} panel${result.repaired.length === 1 ? '' : 's'} synchronised.`;
       return interaction.editReply(await buildSettingsPage(guild, displayName(interaction), repairNotice));
     }
 
     return respond(interaction, await buildReactionRolesAdminPanel(guild, displayName(interaction)));
   } catch (error) {
-    const payload = { content: `❌ Reaction Roles failed: ${error.message}`, ephemeral: true };
+    const payload = { content: `${EMOJIS.ERROR} Reaction Roles failed: ${error.message}`, ephemeral: true };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null);
     else await interaction.reply(payload).catch(() => null);
     return true;
