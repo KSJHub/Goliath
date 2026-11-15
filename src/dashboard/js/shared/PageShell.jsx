@@ -20,6 +20,7 @@ export const DASHBOARD_EMOJIS = Object.freeze({
   DIAMOND: '💎', HOME: '🏠', JUSTICE: '⚖️', COMMUNITIES: '🏘️',
   TV: '📺', NOTE: '📝', SUCCESS: '✅', ERROR: '❌', CLIPBOARD: '📋',
   WARNING: '⚠️', INFO: 'ℹ️', ADD: '➕', PLAY: '▶️', PAUSE: '⏸️', BELL: '🔔',
+  GLOBE: '🌍', FILM: '🎞️', PREMIUM_TICKET: '🎟️', RESTORE: '♻️', TREND: '📈',
 });
 
 
