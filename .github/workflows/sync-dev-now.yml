@@ -50,9 +50,18 @@ jobs:
 
             cd "$APP_DIR"
 
-            AUTH_URL="https://x-access-token:${GITHUB_DEPLOY_TOKEN}@github.com/${{ github.repository }}.git"
-            git remote set-url origin "$AUTH_URL"
-            cleanup_remote() { git remote set-url origin "https://github.com/${{ github.repository }}.git" || true; }
+            # Keep credentials out of Git remote URLs and process arguments.
+            # Git reads this transient HTTP header from the process environment.
+            git remote set-url origin "https://github.com/${{ github.repository }}.git"
+            AUTH_HEADER="$(printf 'x-access-token:%s' "$GITHUB_DEPLOY_TOKEN" | base64 -w0)"
+            export GIT_CONFIG_COUNT=1
+            export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+            export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $AUTH_HEADER"
+            unset AUTH_HEADER
+            cleanup_remote() {
+              git remote set-url origin "https://github.com/${{ github.repository }}.git" || true
+              unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+            }
             trap cleanup_remote EXIT
 
             retry_git() {
