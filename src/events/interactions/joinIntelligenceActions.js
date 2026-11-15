@@ -1,6 +1,7 @@
 'use strict';
 
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events } = require('discord.js');
+const { EMOJIS } = require('../../core/guild/goliathNavigation');
 const { canUseModAction, recordModerationSystemEvent } = require('../../core/administration/mod/permissions');
 const decisioning = require('../../core/administration/mod/memberDecisioning');
 const joinIntelligence = require('../../core/administration/mod/joinIntelligence');
@@ -137,10 +138,10 @@ async function buildEphemeralIntelligence(interaction, target) {
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji('🔄').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji('🕘').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_intel_guilds:${target.id}`).setLabel('Network').setEmoji('🌐').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`mod_scan_watch:${target.id}`).setLabel(watchOn ? 'Watch On' : 'Watch Off').setEmoji('👁️').setStyle(watchOn ? ButtonStyle.Danger : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji(EMOJIS.REFRESH).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji(EMOJIS.MOD_SCAN_HISTORY).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_intel_guilds:${target.id}`).setLabel('Network').setEmoji(EMOJIS.USER_TRANSLATE).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`mod_scan_watch:${target.id}`).setLabel(watchOn ? 'Watch On' : 'Watch Off').setEmoji(EMOJIS.WELCOME_PREVIEW).setStyle(watchOn ? ButtonStyle.Danger : ButtonStyle.Secondary),
   );
 
   return { embeds: [embed], components: [row], flags: 64 };
