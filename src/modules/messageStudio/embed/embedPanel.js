@@ -953,7 +953,7 @@ function buildResetConfirmationPanel(i, who = "Unknown User") {
   );
 
   const description = [
-    "### ⚠️ Reset Embed Studio?",
+    `### ${EMOJIS.WARNING} Reset Embed Studio?`,
     "This will clear the current working workspace and restore Embed Studio to its default state.",
     "",
     `**Current panel**　${panelName}`,
@@ -1062,7 +1062,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
     `**Fields**　${fields.length}/${MAX_EMBED_FIELDS}　•　**Buttons**　${buttons.length}/${MAX_BUTTONS}`,
     `**Status**　${saveState}`,
     "",
-    "### ⚙️ Panel Status",
+    `### ${EMOJIS.SETTINGS} Panel Status`,
     `**Timestamp**　${timestamp}　•　**Readiness**　${readiness}`,
     "",
     "### ➜ Next Step",
@@ -1186,7 +1186,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
        * CONTENT / MEDIA
        */
       new ActionRowBuilder().addComponents(
-        emojiButton("embed:edit-content", "Content", "✏️", ButtonStyle.Primary),
+        emojiButton("embed:edit-content", "Content", EMOJIS.EDIT, ButtonStyle.Primary),
         actionButton("embed:edit-images", "media"),
         actionButton("embed:panels", "panels", { suffix: ` (${panels.length})` }),
         emojiButton("embed:fields", `Fields (${fields.length})`, EMOJIS.EMBED_FIELDS, ButtonStyle.Primary),
@@ -1207,7 +1207,7 @@ function buildBuilderPanel(i, who = "Unknown User") {
       new ActionRowBuilder().addComponents(
         actionButton("embed:back", "back"),
         emojiButton("embed:helpers", "Variables", EMOJIS.VARIABLES),
-        emojiButton("embed:reset", "Reset", "♻️", ButtonStyle.Danger),
+        emojiButton("embed:reset", "Reset", EMOJIS.REFRESH, ButtonStyle.Danger),
       ),
     ],
   };
@@ -2061,7 +2061,7 @@ function buildPresetsPanel(i, presets = null, defaultName = null) {
       `### Management\n` +
       `${EMOJIS.EMBED_OPEN_FOLDER} **Load into Editor** — open this preset for editing.\n` +
       `${EMOJIS.EMBED_SAVE} **Update / Save** — save the current editor state.\n` +
-      `✏️ **Rename** — change this preset's name.\n` +
+      `${EMOJIS.EDIT} **Rename** — change this preset's name.\n` +
       `${EMOJIS.DOCUMENT} **Duplicate** — create an independent copy.\n` +
       `${EMOJIS.DELETE} **Delete** — remove this saved preset.\n` +
       `${isDefault ? "☆ **Clear Default**" : emojiLabel('USER_STARBOARD', "**Set Default**")} — ` +
@@ -3071,14 +3071,14 @@ function buildMediaManagerPanel(
   } else {
     summary.push(
       "**Selected Media**",
-      "None selected — use ➕ Add Media / File or select an existing item.",
+      `None selected — use ${EMOJIS.ADD} Add Media / File or select an existing item.`,
       ""
     );
   }
 
   summary.push(
     "**Controls**",
-    "**✏️ Edit** — Edit the selected media item.",
+    `**${EMOJIS.EDIT} Edit** — Edit the selected media item.`,
     `**${EMOJIS.ROLE_TAG} Type** — Choose Auto, Text, GIF or Image for the selected media.`,
     `**${EMOJIS.WELCOME_PREVIEW} Normal** — Show the selected media normally.`,
     `**${EMOJIS.EMBED_SPOILER} Spoiler** — Hide the selected media behind Discord’s spoiler treatment.`,
