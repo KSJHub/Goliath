@@ -60,4 +60,11 @@ assert.equal(state.modules.casino.analytics.transactions, 3);
 state.modules.casino.enabled = false;
 assert.throws(() => casinoTransaction(guildId, { key: 'disabled', operation: 'credit', userId: alice, amount: 1 }), /disabled/);
 assert.equal(casinoBalance(guildId, alice), 100);
+// Read-only balance checks must reject corrupt values and currency configuration.
+state.modules.casino.wallet.balances[alice] = 1001;
+assert.throws(() => casinoBalance(guildId, alice), /Corrupt casino wallet balance/);
+state.modules.casino.wallet.balances[alice] = 100;
+state.modules.casino.currency.maxBalance = 50;
+assert.throws(() => casinoBalance(guildId, alice), /Invalid casino currency limits/);
+state.modules.casino.currency.maxBalance = 1000;
 console.log('Casino wallet isolated contracts passed.');
