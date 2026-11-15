@@ -1017,6 +1017,26 @@ async function verificationLifecycleAudit() {
     contains(dashboard, 'panelDraftDirty.current', 'preserve unsaved dashboard panel drafts');
     contains(dashboard, 'window.setInterval', 'refresh dashboard configuration periodically');
 
+    // Exercise the actual active-panel gate with relocated message IDs.
+    {
+      const begin = manager.indexOf('function getActivePanel(');
+      const end = manager.indexOf('async function verifyMember(', begin);
+      assert(begin >= 0 && end > begin, 'Verification active-panel gate must exist');
+      const gate = new Function('verificationStore', 'cleanId', manager.slice(begin, end) + '\\nreturn getActivePanel;')(
+        { getVerificationSection: () => ({ activePanelId: 'panel-1', panels: {
+          'panel-1': { panelId: 'panel-1', enabled: true, channelId: 'new-channel', messageId: 'new-message' },
+          'panel-old': { panelId: 'panel-old', enabled: false, channelId: 'old-channel', messageId: 'old-message' },
+        } }) },
+        value => value == null ? null : String(value)
+      );
+      assert(gate('guild', 'panel-1', { channelId: 'new-channel', messageId: 'new-message' }), 'Current panel must be accepted');
+      assert.equal(gate('guild', 'panel-1', { channelId: 'old-channel', messageId: 'old-message' }), null, 'Relocated panel old message must be rejected');
+      assert.equal(gate('guild', 'panel-1', { channelId: 'new-channel', messageId: 'old-message' }), null, 'Stale message ID must be rejected');
+      assert.equal(gate('guild', 'panel-1', { channelId: 'old-channel', messageId: 'new-message' }), null, 'Stale channel ID must be rejected');
+      assert.equal(gate('guild', 'panel-old', { channelId: 'old-channel', messageId: 'old-message' }), null, 'Retired panel must be rejected');
+      assert.equal(gate('guild', 'unknown', { channelId: 'new-channel', messageId: 'new-message' }), null, 'Unknown panel must be rejected');
+    }
+
     // Guard the security handoff and challenge recovery against regressions.
     contains(manager, 'pendingSecurity:true', 'manager delegates security checks to continuation');
     contains(manager, 'Verification starting roles could not be confirmed.', 'block security flow if starting roles fail');
