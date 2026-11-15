@@ -359,7 +359,7 @@ export default function Appeals() {
             <h2 style={{ margin: '8px 0 6px', fontSize: 'clamp(24px, 4vw, 30px)' }}>{E.USER} My Profile</h2>
             <p style={{ ...muted, margin: '0 0 22px' }}>The account connected to your member portal.</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: 20, borderRadius: 16, background: 'rgba(2,6,23,.36)', border: '1px solid rgba(148,163,184,.16)' }}>
-              {avatarUrl ? <img src={avatarUrl} alt="" width="64" height="64" style={{ borderRadius: '50%', border: '2px solid rgba(96,165,250,.4)' }} referrerPolicy="no-referrer" /> : <div aria-hidden="true" style={{ width: 64, height: 64, display: 'grid', placeItems: 'center', borderRadius: '50%', background: '#18273c', fontSize: 28 }}>👤</div>}
+              {avatarUrl ? <img src={avatarUrl} alt="" width="64" height="64" style={{ borderRadius: '50%', border: '2px solid rgba(96,165,250,.4)' }} referrerPolicy="no-referrer" /> : <div aria-hidden="true" style={{ width: 64, height: 64, display: 'grid', placeItems: 'center', borderRadius: '50%', background: '#18273c', fontSize: 28 }}>{E.USER}</div>}
               <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
                 <div style={{ color: '#94a3b8', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em' }}>Signed in as</div>
                 <strong style={{ display: 'block', marginTop: 4, fontSize: 20 }}>{displayName}</strong>
