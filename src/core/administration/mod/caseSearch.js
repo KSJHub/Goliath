@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../guild/goliathNavigation');
 
 const { createHash } = require('node:crypto');
 const { ActionRowBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder } = require('discord.js');
@@ -289,7 +290,7 @@ function removeCaseEvidence(guildId, caseId, evidenceId, reason, actorId = null)
 function resultEmbed(r) {
   const d = r.results.length ? r.results.map((e) => {
     const state = [e.status || 'active'];
-    if (isCaseLocked(e)) state.push('🔒 locked');
+    if (isCaseLocked(e)) state.push(`${EMOJIS.RESTRICTIONS} locked`);
     if (getMergedIntoId(e)) state.push(`merged → #${getMergedIntoId(e)}`);
     if (getMergedCaseIds(e).length) state.push(`${getMergedCaseIds(e).length} merged`);
     const evidenceCount = getCaseEvidence(e).filter((entry) => !entry.removedAt).length;
@@ -333,7 +334,7 @@ function formatAuditEntry(entry) {
 
 function caseDetailEmbed(c, audit) {
   const ts = (v) => { const n = new Date(v).getTime(); return Number.isFinite(n) ? Math.floor(n / 1000) : Math.floor(Date.now() / 1000); };
-  const e = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`🧾 Case #${c.caseId}`).addFields(
+  const e = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`${EMOJIS.CASE} Case #${c.caseId}`).addFields(
     { name: 'Action', value: String(c.action || 'unknown'), inline: true }, { name: 'Status', value: String(c.status || 'active'), inline: true },
     { name: 'User ID', value: String(c.userId), inline: true }, { name: 'Moderator ID', value: String(c.moderatorId), inline: true },
     { name: 'Reason', value: String(c.reason || 'No reason provided').slice(0, 1024), inline: false },
@@ -343,11 +344,11 @@ function caseDetailEmbed(c, audit) {
   const mergedInto = getMergedIntoId(c);
   const mergedCases = getMergedCaseIds(c);
   if (mergedInto) e.addFields({ name: '↪️ Merged Into', value: `Case #${mergedInto} • this source case is read-only until split`, inline: false });
-  if (mergedCases.length) e.addFields({ name: '🧩 Merged Cases', value: mergedCases.map((id) => `#${id}`).join(', ').slice(0, 1024), inline: false });
+  if (mergedCases.length) e.addFields({ name: `${EMOJIS.PANELS} Merged Cases`, value: mergedCases.map((id) => `#${id}`).join(', ').slice(0, 1024), inline: false });
   if (isCaseLocked(c)) {
     const lockedBy = c.metadata?.lockedBy ? `<@${c.metadata.lockedBy}>` : 'Unknown';
     const lockedAt = c.metadata?.lockedAt ? `<t:${ts(c.metadata.lockedAt)}:R>` : 'Unknown time';
-    e.addFields({ name: '🔒 Case Lock', value: `Locked by ${lockedBy} • ${lockedAt}`, inline: false });
+    e.addFields({ name: `${EMOJIS.RESTRICTIONS} Case Lock`, value: `Locked by ${lockedBy} • ${lockedAt}`, inline: false });
   }
   const tags = Array.isArray(c.metadata?.tags) ? c.metadata.tags : [];
   if (tags.length) e.addFields({ name: 'Tags', value: tags.map((tag) => `\`${String(tag).slice(0, 32)}\``).join(' ').slice(0, 1024), inline: false });
@@ -357,7 +358,7 @@ function caseDetailEmbed(c, audit) {
   if (evidence.length) {
     const last = [...evidence].sort((a, b) => String(b.addedAt || '').localeCompare(String(a.addedAt || '')))[0];
     const intact = activeEvidence.filter(evidenceIsIntact).length;
-    e.addFields({ name: '📎 Evidence', value: `Active: **${activeEvidence.length}** • Removed: **${removedEvidence}** • Integrity: **${intact}/${activeEvidence.length}**${last?.addedAt ? ` • Latest <t:${ts(last.addedAt)}:R>` : ''}`, inline: false });
+    e.addFields({ name: `${EMOJIS.AUTOMOD_ATTACHMENTS} Evidence`, value: `Active: **${activeEvidence.length}** • Removed: **${removedEvidence}** • Integrity: **${intact}/${activeEvidence.length}**${last?.addedAt ? ` • Latest <t:${ts(last.addedAt)}:R>` : ''}`, inline: false });
   }
   if (c.note) e.addFields({ name: 'Staff Note', value: String(c.note).slice(0, 1024), inline: false });
   if (audit?.results?.length) e.addFields({ name: `Audit Timeline • Page ${audit.page + 1}/${audit.totalPages}`, value: audit.results.map(formatAuditEntry).join('\n').slice(0, 1024), inline: false });
@@ -376,25 +377,25 @@ function caseDetailButtons(c, token, audit) {
     navigationButton(`mod_case_search_back:${token}`, '← Back to Search', ButtonStyle.Secondary),
     navigationButton(`mod_case_reverse_warning:${c.caseId}`, '↩️ Remove Warning', ButtonStyle.Secondary, c.action !== 'warn' || closed),
     navigationButton(`mod_case_reverse_timeout:${c.caseId}`, '⏪ Clear Timeout', ButtonStyle.Secondary, c.action !== 'timeout' || closed),
-    navigationButton(`mod_case_note:${c.caseId}`, '📝 Add/Edit Note', ButtonStyle.Primary, readOnly),
-    navigationButton(`mod_case_lock:${token}:${c.caseId}`, locked ? '🔓 Unlock Case' : '🔒 Lock Case', locked ? ButtonStyle.Success : ButtonStyle.Danger, mergedSource)
+    navigationButton(`mod_case_note:${c.caseId}`, `${EMOJIS.NOTE} Add/Edit Note`, ButtonStyle.Primary, readOnly),
+    navigationButton(`mod_case_lock:${token}:${c.caseId}`, locked ? `${EMOJIS.UNLOCK} Unlock Case` : `${EMOJIS.RESTRICTIONS} Lock Case`, locked ? ButtonStyle.Success : ButtonStyle.Danger, mergedSource)
   )];
   rows.push(new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_reason:${token}:${c.caseId}`, '✏️ Edit Reason', ButtonStyle.Primary, readOnly),
-    navigationButton(`mod_case_tags:${token}:${c.caseId}`, '🏷️ Edit Tags', ButtonStyle.Primary, readOnly),
-    navigationButton(`mod_case_link:${token}:${c.caseId}`, '🔗 Link Case', ButtonStyle.Secondary, readOnly || Boolean(c.relatedCaseId)),
+    navigationButton(`mod_case_tags:${token}:${c.caseId}`, `${EMOJIS.ROLE_TAG} Edit Tags`, ButtonStyle.Primary, readOnly),
+    navigationButton(`mod_case_link:${token}:${c.caseId}`, `${EMOJIS.AUTOMOD_LINKS} Link Case`, ButtonStyle.Secondary, readOnly || Boolean(c.relatedCaseId)),
     navigationButton(`mod_case_unlink:${token}:${c.caseId}`, 'Unlink Case', ButtonStyle.Secondary, readOnly || !c.relatedCaseId),
     navigationButton(`mod_case_related_open:${token}:${c.caseId}`, 'Open Related', ButtonStyle.Secondary, !c.relatedCaseId)
   ));
   rows.push(new ActionRowBuilder().addComponents(
-    navigationButton(`mod_case_merge:${token}:${c.caseId}`, '🧩 Merge Case', ButtonStyle.Secondary, readOnly),
+    navigationButton(`mod_case_merge:${token}:${c.caseId}`, `${EMOJIS.PANELS} Merge Case`, ButtonStyle.Secondary, readOnly),
     navigationButton(`mod_case_split:${token}:${c.caseId}`, '↔️ Split Case', ButtonStyle.Secondary, locked || (!mergedSource && !mergedCases.length)),
-    navigationButton(`mod_case_bulk:${token}:${c.caseId}`, '📚 Bulk Edit', ButtonStyle.Primary)
+    navigationButton(`mod_case_bulk:${token}:${c.caseId}`, `${EMOJIS.FAQ_BOOKS} Bulk Edit`, ButtonStyle.Primary)
   ));
   rows.push(new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_evidence_add:${token}:${c.caseId}`, '➕ Add Evidence', ButtonStyle.Primary, readOnly || activeEvidence.length >= MAX_ACTIVE_EVIDENCE),
-    navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:0`, `📎 View Evidence (${activeEvidence.length})`, ButtonStyle.Secondary, !evidence.length),
-    navigationButton(`mod_case_evidence_remove:${token}:${c.caseId}`, '🗑️ Remove Evidence', ButtonStyle.Danger, readOnly || !activeEvidence.length)
+    navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:0`, `${EMOJIS.AUTOMOD_ATTACHMENTS} View Evidence (${activeEvidence.length})`, ButtonStyle.Secondary, !evidence.length),
+    navigationButton(`mod_case_evidence_remove:${token}:${c.caseId}`, `${EMOJIS.DELETE} Remove Evidence`, ButtonStyle.Danger, readOnly || !activeEvidence.length)
   ));
   if (audit?.totalPages > 1) rows.push(new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_audit_page:${token}:${c.caseId}:${Math.max(0, audit.page - 1)}`, '◀ Audit', ButtonStyle.Secondary, audit.page <= 0),
@@ -404,7 +405,7 @@ function caseDetailButtons(c, token, audit) {
 }
 
 function formatEvidence(entry) {
-  const flags = [entry.removedAt ? '🗑️ REMOVED' : '✅ ACTIVE', evidenceIsIntact(entry) ? '🔐 intact' : '⚠️ integrity mismatch'];
+  const flags = [entry.removedAt ? `${EMOJIS.DELETE} REMOVED` : '✅ ACTIVE', evidenceIsIntact(entry) ? `${EMOJIS.PERMISSION_GUARD} intact` : '⚠️ integrity mismatch'];
   const lines = [`**${entry.id}** • ${entry.type || 'evidence'} • ${flags.join(' • ')}`];
   if (entry.messageUrl) lines.push(`[Discord message](${entry.messageUrl})`);
   if (entry.channelId || entry.messageId) lines.push(`Channel: \`${entry.channelId || '—'}\` • Message: \`${entry.messageId || '—'}\``);
@@ -422,7 +423,7 @@ function evidenceViewer(c, token, requestedPage = 0) {
   const pageEntries = evidence.slice(page * EVIDENCE_PAGE_SIZE, (page + 1) * EVIDENCE_PAGE_SIZE);
   const active = evidence.filter((entry) => !entry.removedAt).length;
   const intact = evidence.filter(evidenceIsIntact).length;
-  const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`📎 Case #${c.caseId} Evidence`).setDescription(`Active **${active}** • History **${evidence.length}** • Integrity **${intact}/${evidence.length}**`).setFooter({ text: `Evidence page ${page + 1}/${totalPages}` });
+  const embed = new EmbedBuilder().setColor(COLORS.PRIMARY).setTitle(`${EMOJIS.AUTOMOD_ATTACHMENTS} Case #${c.caseId} Evidence`).setDescription(`Active **${active}** • History **${evidence.length}** • Integrity **${intact}/${evidence.length}**`).setFooter({ text: `Evidence page ${page + 1}/${totalPages}` });
   if (pageEntries.length) pageEntries.forEach((entry) => embed.addFields({ name: entry.id, value: formatEvidence(entry), inline: false }));
   else embed.addFields({ name: 'No evidence', value: 'No evidence has been recorded for this case.', inline: false });
   const readOnly = isCaseReadOnly(c);
@@ -431,7 +432,7 @@ function evidenceViewer(c, token, requestedPage = 0) {
     navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:${Math.max(0, page - 1)}`, '◀ Previous', ButtonStyle.Secondary, page <= 0),
     navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:${Math.min(totalPages - 1, page + 1)}`, 'Next ▶', ButtonStyle.Secondary, page >= totalPages - 1),
     navigationButton(`mod_case_evidence_add:${token}:${c.caseId}`, '➕ Add', ButtonStyle.Primary, readOnly || activeEntries.length >= MAX_ACTIVE_EVIDENCE),
-    navigationButton(`mod_case_evidence_remove:${token}:${c.caseId}`, '🗑️ Remove', ButtonStyle.Danger, readOnly || !activeEntries.length),
+    navigationButton(`mod_case_evidence_remove:${token}:${c.caseId}`, `${EMOJIS.DELETE} Remove`, ButtonStyle.Danger, readOnly || !activeEntries.length),
     navigationButton(`mod_case_evidence_back:${token}:${c.caseId}`, '← Case Detail', ButtonStyle.Secondary)
   )];
   return { embeds: [embed], components };
