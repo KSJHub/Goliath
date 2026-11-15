@@ -52,7 +52,7 @@ function buildPanel(guild, memberDisplayName = 'Unknown User') {
     .setTitle(emojiLabel('COUNTING_NUMBERS', 'Counting Management'))
     .setDescription([
       '**' + status + '**  •  ' + channel,
-      !hasChannel ? '\n⚠️ Choose a Counting channel before Counting can process messages or deploy the Player Panel.' : '',
+      !hasChannel ? `\n${EMOJIS.WARNING} Choose a Counting channel before Counting can process messages or deploy the Player Panel.` : '',
     ].filter(Boolean).join('\n'))
     .addFields(
       {
@@ -324,7 +324,7 @@ async function handleInteraction(interaction) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const health = await countingHealth.buildHealthReport(interaction.guild);
       const lines = [
-        `**Status:** ${health.healthy ? 'Healthy ✅' : 'Needs attention ⚠️'}`,
+        `**Status:** ${health.healthy ? `Healthy ${EMOJIS.SUCCESS}` : `Needs attention ${EMOJIS.WARNING}`}`,
         `**Configured:** ${health.configured ? 'Yes' : 'No'} • **Enabled:** ${health.enabled ? 'Yes' : 'No'}`,
         '',
         health.issues.length ? '**Issues**\n' + health.issues.map((item) => `• ${healthLabel(item)}`).join('\n') : '**Issues**\n• None',
@@ -337,7 +337,7 @@ async function handleInteraction(interaction) {
       await interaction.deferUpdate();
       const health = await countingHealth.repair(interaction.guild, { actorId });
       const lines = [
-        `**Repair complete:** ${health.healthy ? 'Healthy ✅' : 'Still needs attention ⚠️'}`,
+        `**Repair complete:** ${health.healthy ? `Healthy ${EMOJIS.SUCCESS}` : `Still needs attention ${EMOJIS.WARNING}`}`,
         health.issues.length ? '**Remaining issues**\n' + health.issues.map((item) => `• ${item.code}`).join('\n') : '**Remaining issues**\n• None',
         health.warnings.length ? '**Remaining warnings**\n' + health.warnings.map((item) => `• ${item.code}`).join('\n') : '**Remaining warnings**\n• None',
       ];
@@ -370,7 +370,7 @@ async function handleInteraction(interaction) {
     }
     return safeUpdate(interaction, buildPanel(interaction.guild, name));
   } catch (error) {
-    const payload = { content: `❌ Counting setup failed: ${error.message}`, flags: MessageFlags.Ephemeral };
+    const payload = { content: `${EMOJIS.ERROR} Counting setup failed: ${error.message}`, flags: MessageFlags.Ephemeral };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null); else await interaction.reply(payload).catch(() => null);
     return true;
   }
