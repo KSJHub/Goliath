@@ -365,7 +365,11 @@ async function startupWelcome(client) {
       }
       results.push({ guildId: guild.id, guildName: guild.name, enabled, healthy: health.healthy && warnings.length === 0, warnings });
     } catch (error) {
-      results.push({ guildId: guild.id, guildName: guild.name, enabled: false, healthy: false, warnings: [error.message || 'Welcome startup check failed.'] });
+      // Preserve the actual enabled state: marking a failed enabled guild as
+      // disabled would incorrectly make the overall startup summary look OK.
+      let enabled = true;
+      try { enabled = guildManager.isModuleEnabled(guild.id, MODULE); } catch (_) { /* Unknown state must not hide a startup failure. */ }
+      results.push({ guildId: guild.id, guildName: guild.name, enabled, healthy: false, warnings: [error.message || 'Welcome startup check failed.'] });
     }
   }
   const summary = { ok: results.every((result) => result.healthy || result.enabled === false), guildsChecked: results.length, enabledGuilds: results.filter((result) => result.enabled).length, warnings: results.reduce((total, result) => total + result.warnings.length, 0), results }; console.log(`[Welcome] Startup check complete: ${summary.guildsChecked} guild(s), ${summary.enabledGuilds} enabled, ${summary.warnings} warning(s).`); return summary;
