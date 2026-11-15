@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const { getBotOwnerIds } = require('../../core/security/protection/core');
 const { parseBlueprint, toBlueprint, planBlueprint } = require('./goliathBlueprint');
 const draftStore = require('./goliathDraftStore');
-const { evaluateReadiness } = require('./goliathExecutionReadiness');
+const { evaluateReadiness, buildTransactionManifest, simulateTransaction } = require('./goliathExecutionReadiness');
 const approvalLedger = require('./goliathApprovalLedger');
 const { buildCapabilityPreflight } = require('./goliathCapabilityPreflight');
 
@@ -688,6 +688,8 @@ router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, re
       error: 'Guild state has changed. Save and review a fresh draft.', canExecute: false
     });
     const preview = planBlueprint(audit, draft.blueprint);
+    const manifest = buildTransactionManifest({ draft, audit, preview, currentDigest });
+    const rehearsal = simulateTransaction({ draft, audit, preview, currentDigest });
     const capability = await getBotCapabilityEvidence(req, 'DEV', draft.guildId);
     const preflight = buildCapabilityPreflight({ audit, operations: preview.operations, capability });
     const reviews = approvalLedger.listReviews({
@@ -697,12 +699,17 @@ router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, re
     const candidates = preview.operations.map((operation, index) => {
       const permission = preflight.operations[index];
       const review = reviews[index];
-      const eligibleForFutureApproval = reviewed && operation.kind === 'rename_category' &&
+      const entry = manifest.entries[index];
+      const eligibleForFutureApproval = reviewed && !manifest.unavailable &&
+        manifest.warnings.length === 0 && rehearsal.simulated === true &&
+        entry?.issues.length === 0 && operation.kind === 'rename_category' &&
         permission.permission === 'permitted-in-principle' && !review.needsAttention &&
         review.reviews.some(item => item.decision === 'acknowledged');
       return {
         sequence: index + 1, kind: operation.kind, target: operation.target,
         before: operation.before, proposed: operation.after,
+        manifestFingerprint: manifest.fingerprint || null,
+        operationFingerprint: entry?.operationFingerprint || null,
         operationKey: approvalLedger.operationKey({
           draft, currentDigest, operation, sequence: index + 1
         }),
@@ -714,6 +721,8 @@ router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, re
       readOnly: true, canExecute: false, executable: false,
       environment: 'DEV', guildId: draft.guildId, draftId: draft.id,
       auditDigest: currentDigest, candidates,
+      manifestValid: !manifest.unavailable && manifest.warnings.length === 0,
+      rehearsalPassed: rehearsal.simulated === true,
       notice: 'Eligibility only. No signed authorisation, execution grant, or Discord mutation exists.'
     });
   } catch (error) {
