@@ -671,6 +671,59 @@ router.get('/drafts/:id/readiness', requireAIIdentity, async (req, res) => {
   }
 });
 
+// A dedicated authorisation precheck. This never issues an execution grant and
+// never treats an acknowledgement as approval. Only an exact, reviewed DEV
+// operation with a current guild snapshot can become an execution candidate.
+router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV controller only.' });
+  try {
+    const draft = draftStore.loadDraft(String(req.params.id));
+    if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
+    if (draft.environment !== 'DEV') return res.status(403).json({
+      error: 'Only DEV guilds are eligible for future execution.', canExecute: false
+    });
+    const audit = await getVerifiedAudit(req, 'DEV', draft.guildId);
+    const currentDigest = reportDigest(audit);
+    if (currentDigest !== draft.auditDigest) return res.status(409).json({
+      error: 'Guild state has changed. Save and review a fresh draft.', canExecute: false
+    });
+    const preview = planBlueprint(audit, draft.blueprint);
+    const capability = await getBotCapabilityEvidence(req, 'DEV', draft.guildId);
+    const preflight = buildCapabilityPreflight({ audit, operations: preview.operations, capability });
+    const reviews = approvalLedger.listReviews({
+      draft, currentDigest, operations: preview.operations
+    });
+    const reviewed = draft.review?.status === 'reviewed';
+    const candidates = preview.operations.map((operation, index) => {
+      const permission = preflight.operations[index];
+      const review = reviews[index];
+      const eligibleForFutureApproval = reviewed && operation.kind === 'rename_category' &&
+        permission.permission === 'permitted-in-principle' && !review.needsAttention &&
+        review.reviews.some(item => item.decision === 'acknowledged');
+      return {
+        sequence: index + 1, kind: operation.kind, target: operation.target,
+        before: operation.before, proposed: operation.after,
+        operationKey: approvalLedger.operationKey({
+          draft, currentDigest, operation, sequence: index + 1
+        }),
+        permission: permission.permission, reviewed: !review.needsAttention,
+        eligibleForFutureApproval, authorised: false, executable: false
+      };
+    });
+    return res.json({
+      readOnly: true, canExecute: false, executable: false,
+      environment: 'DEV', guildId: draft.guildId, draftId: draft.id,
+      auditDigest: currentDigest, candidates,
+      notice: 'Eligibility only. No signed authorisation, execution grant, or Discord mutation exists.'
+    });
+  } catch (error) {
+    return res.status(error.status || 503).json({
+      error: 'Unable to establish safe execution candidates. Nothing changed.',
+      canExecute: false
+    });
+  }
+});
+
 // Operation review and audit log are separate from all Discord write paths.
 router.get('/drafts/:id/operation-reviews', requireAIIdentity, async (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV review controller only.' });
