@@ -19,7 +19,7 @@ export const DASHBOARD_EMOJIS = Object.freeze({
   STATUS_ALERT: '🔴', STATUS_UNKNOWN: '⚪', PERMISSIONS: '🔐',
   DIAMOND: '💎', HOME: '🏠', JUSTICE: '⚖️', COMMUNITIES: '🏘️',
   TV: '📺', NOTE: '📝', SUCCESS: '✅', ERROR: '❌', CLIPBOARD: '📋',
-  WARNING: '⚠️', INFO: 'ℹ️', ADD: '➕',
+  WARNING: '⚠️', INFO: 'ℹ️', ADD: '➕', PLAY: '▶️', PAUSE: '⏸️',
 });
 
 
