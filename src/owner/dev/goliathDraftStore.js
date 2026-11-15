@@ -91,10 +91,14 @@ function reviewDraft({ id, ownerId, currentAuditDigest }, file) {
   writeStore(data, file);
   return publicDraft(item, true);
 }
-function deleteDraft(id, file) {
+function deleteDraft(id, file, ownerId) {
   ensureDEV();
   if (!VALID_ID.test(String(id))) return false;
+  if (!SNOWFLAKE.test(String(ownerId || ''))) throw new Error('Draft owner identity is required.');
   const data = readStore(file);
+  const item = data.find(entry => entry.id === id);
+  if (item && item.createdBy !== String(ownerId))
+    throw new Error('Only the draft creator may delete this draft.');
   const next = data.filter(entry => entry.id !== id);
   if (next.length === data.length) return false;
   writeStore(next, file);
