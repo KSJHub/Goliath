@@ -117,7 +117,7 @@ function planDisplayIcon(plan = {}) {
 
 function featureInfo(feature) {
   return FEATURE_LABELS[feature] || {
-    icon: '✅',
+    icon: E.SUCCESS,
     label: String(feature || '').replace(/[._-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
     description: 'Included with this Goliath plan.',
   };
