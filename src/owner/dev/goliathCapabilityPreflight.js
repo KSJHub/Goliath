@@ -1,9 +1,11 @@
 'use strict';
 // Pure advisory check; no Discord API calls, no permission grants, no restore operations.
 const MANAGE_CHANNELS = 1n << 4n;
+const ADMINISTRATOR = 1n << 3n;
 const SNOWFLAKE = /^\d{16,20}$/;
 function flag(raw, bit) {
-  try { return (BigInt(raw) & bit) === bit; } catch { return false; }
+  try { const bits = BigInt(raw); return (bits & ADMINISTRATOR) === ADMINISTRATOR || (bits & bit) === bit; }
+  catch { return false; }
 }
 function buildCapabilityPreflight({ audit, operations, capability }) {
   if (!audit?.guild?.id || !SNOWFLAKE.test(String(audit.guild.id)) ||
@@ -16,7 +18,11 @@ function buildCapabilityPreflight({ audit, operations, capability }) {
   const channelPermissions = new Map((ready && Array.isArray(capability.channelPermissions) ? capability.channelPermissions : [])
     .filter(c => SNOWFLAKE.test(String(c.id || '')) && /^\d+$/.test(String(c.permissions || '')))
     .map(c => [c.id, c.permissions]));
+  if (!Array.isArray(audit.channels) || audit.channels.length > 500 ||
+      audit.channels.some(c => !SNOWFLAKE.test(String(c?.id || ''))))
+    throw new Error('A bounded, valid channel inventory is required.');
   const channelMap = new Map(audit.channels.map(c => [c.id, c]));
+  if (channelMap.size !== audit.channels.length) throw new Error('Duplicate channel IDs in audit.');
   const knownKinds = new Set(['create_category', 'create_channel', 'rename_category', 'edit_channel']);
   const items = operations.map((operation, index) => {
     const targetId = operation.target?.id || null;
@@ -35,6 +41,11 @@ function buildCapabilityPreflight({ audit, operations, capability }) {
     } else if (targetId && !current) {
       permission = 'blocked';
       warnings.push('Operation target no longer exists in the guild audit.');
+    } else if ((type === 'rename_category' && (!current || current.type !== 4)) ||
+               (type === 'edit_channel' && (!current || current.type === 4)) ||
+               ((type === 'create_category' || type === 'create_channel') && targetId)) {
+      permission = 'blocked';
+      warnings.push('Operation target is missing, has the wrong Discord type, or a create operation supplies an existing target.');
     } else {
       permission = 'permitted-in-principle';
       if (targetId) {
@@ -46,6 +57,14 @@ function buildCapabilityPreflight({ audit, operations, capability }) {
           permission = 'blocked';
           warnings.push('Goliath lacks effective Manage Channels on this channel.');
         }
+      }
+      if (type === 'create_category' && operation.after?.type !== 4) {
+        permission = 'blocked';
+        warnings.push('A new category must use Discord category type 4.');
+      }
+      if (type === 'create_channel' && ![0, 2, 5, 13, 15, 16].includes(operation.after?.type)) {
+        permission = 'blocked';
+        warnings.push('Unsupported Discord channel type for a new channel.');
       }
       if (type === 'create_channel') {
         const parentId = operation.after?.parentId;
