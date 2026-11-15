@@ -18,6 +18,28 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } 
 
 // 1. Shared emojis and text labels
 const EMOJIS = Object.freeze({
+  // Shared dashboard labels and status glyphs (keep existing browser display unchanged).
+  MEMBERS: '👥',
+  ROLES: '🎭',
+  VOICE: '🔊',
+  FOLDER: '📁',
+  DATE: '📅',
+  TIMER: '⏳',
+  MESSAGES: '💬',
+  MICROPHONE: '🎙️',
+  JOIN: '📥',
+  LEAVE: '📤',
+  BOOST: '🚀',
+  EMOJI: '😀',
+  DND: '⛔',
+  IDLE: '🌙',
+  TEXT_CHANNEL: '#️⃣',
+  CHART: '📊',
+  HEALTH: '🩺',
+  SUGGESTIONS: '💡',
+  UPVOTE: '👍',
+  DOWNVOTE: '👎',
+  BIRTHDAY: '🎂',
   // Shared Dashboard example/default glyphs; browser equivalents live in PageShell.jsx.
   RSVP_MAYBE: '❔',
   SPARKLES: '✨',
