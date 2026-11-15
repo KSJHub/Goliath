@@ -1,6 +1,13 @@
 import React, { memo } from 'react';
 
-/** Shared browser-safe dashboard icon palette; keep glyphs aligned with core EMOJIS. */
+/**
+ * Browser-safe dashboard icon palette. Keep shared glyphs aligned with core EMOJIS.
+ * Intentional legacy differences (do not silently change displayed icons):
+ * INACTIVE: dashboard ⚫ / Discord ⚪; REPAIR: dashboard 🔧 / Discord 🩹;
+ * BUILDER: dashboard 🛠 / Discord 🛠️ (variation selector).
+ * This module must remain browser-safe; core/guild/goliathNavigation.js imports discord.js.
+ * Guild-configured emojis and saved module content must not be overwritten by defaults.
+ */
 export const DASHBOARD_EMOJIS = Object.freeze({
   MEMBERS: '👥', ACTIVE: '🟢', INACTIVE: '⚫', ROLES: '🎭', VOICE: '🔊',
   FOLDER: '📁', ROLE_TAG: '🏷️', DATE: '📅', TIMER: '⏳',
