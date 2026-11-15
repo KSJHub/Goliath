@@ -33,7 +33,7 @@ const { canUseModAction } = require('./permissions');
 const { restoreQuarantinedMember } = require('../../security/protection/quarantine');
 
 const STATUS_LABELS = Object.freeze({
-  active: '🟢 Active',
+  active: `${SHARED_EMOJIS.ACTIVE} Active`,
   reversed: emojiLabel('SUCCESS', 'Closed'),
   expired: '⌛ Expired',
 });
@@ -593,9 +593,9 @@ function buildCaseDetailButtons(modCase) {
   if (!inactive && isTimeout) management.push(navigationButton(`mod_case_reverse_timeout:${modCase.caseId}`, '⏪ Clear Timeout', ButtonStyle.Secondary));
   management.push(navigationButton(`mod_case_note:${modCase.caseId}`, hasNote ? `${EMOJIS.EDIT} Edit Note` : `${EMOJIS.NOTE} Add Note`, ButtonStyle.Primary));
   const appealButtons = [];
-  if (!pending && appeals.length < MAX_APPEALS_PER_CASE && !inactive && APPEALABLE_ACTIONS.has(modCase.action)) appealButtons.push(navigationButton(`mod_case_appeal_submit:${modCase.caseId}`, '📨 Record Appeal', ButtonStyle.Primary));
+  if (!pending && appeals.length < MAX_APPEALS_PER_CASE && !inactive && APPEALABLE_ACTIONS.has(modCase.action)) appealButtons.push(navigationButton(`mod_case_appeal_submit:${modCase.caseId}`, `${SHARED_EMOJIS.USER_INVITES} Record Appeal`, ButtonStyle.Primary));
   if (appeals.length) appealButtons.push(navigationButton(`mod_case_appeal_history:${modCase.caseId}:0`, `⚖️ Appeals (${appeals.length})`, ButtonStyle.Secondary));
-  appealButtons.push(navigationButton('mod_case_appeal_queue:0', '📥 Appeal Queue', ButtonStyle.Secondary));
+  appealButtons.push(navigationButton('mod_case_appeal_queue:0', `${SHARED_EMOJIS.MOD_APPEAL_PENDING} Appeal Queue`, ButtonStyle.Secondary));
   return [new ActionRowBuilder().addComponents(management), new ActionRowBuilder().addComponents(appealButtons)];
 }
 function buildCaseIdModal(customId, title, label = 'Case ID') {
@@ -660,13 +660,13 @@ function buildCaseDetailEmbed(modCase) {
     ? `\n**Strike Weight:** ${modCase.metadata.strikeWeight}` : '';
   const embed = new EmbedBuilder()
     .setColor(modCase.status === 'expired' ? '#FEE75C' : modCase.status === 'reversed' ? '#57F287' : '#5865F2')
-    .setTitle(`🧾 Moderation Case #${modCase.caseId}`)
+    .setTitle(`${SHARED_EMOJIS.CASE} Moderation Case #${modCase.caseId}`)
     .setDescription(`**Original Action:** ${action}  •  **Status:** ${status}`)
     .addFields(
-      { name: '👤 Case Information', value: `**Member:** ${member}\n**Moderator:** ${moderator}\n**Reason:**\n${String(modCase.reason || 'No reason provided').slice(0, 750)}${strikeWeight}`, inline: false },
-      { name: '📅 Timeline', value: `**Created:** <t:${getCaseTimestamp(modCase.createdAt)}:f>\n**Updated:** ${modCase.updatedAt ? `<t:${getCaseTimestamp(modCase.updatedAt)}:f>` : 'Never'}`, inline: false }
+      { name: `${SHARED_EMOJIS.USER} Case Information`, value: `**Member:** ${member}\n**Moderator:** ${moderator}\n**Reason:**\n${String(modCase.reason || 'No reason provided').slice(0, 750)}${strikeWeight}`, inline: false },
+      { name: `${SHARED_EMOJIS.STATS_DATE} Timeline`, value: `**Created:** <t:${getCaseTimestamp(modCase.createdAt)}:f>\n**Updated:** ${modCase.updatedAt ? `<t:${getCaseTimestamp(modCase.updatedAt)}:f>` : 'Never'}`, inline: false }
     );
-  if (modCase.relatedCaseId) embed.addFields({ name: '🔗 Related Case', value: `#${modCase.relatedCaseId}`, inline: false });
+  if (modCase.relatedCaseId) embed.addFields({ name: `${SHARED_EMOJIS.AUTOMOD_LINKS} Related Case`, value: `#${modCase.relatedCaseId}`, inline: false });
   const appeals = getCaseAppeals(modCase);
   if (appeals.length) {
     const pending = appeals.filter(appeal => appeal.status === 'pending').length;
@@ -676,9 +676,9 @@ function buildCaseDetailEmbed(modCase) {
   }
   if (modCase.metadata?.appealNotice) {
     const notice = modCase.metadata.appealNotice;
-    embed.addFields({ name: '📨 Member Notification', value: notice.sent ? `${SHARED_EMOJIS.SUCCESS} Delivered${notice.sentAt ? ` • <t:${getCaseTimestamp(notice.sentAt)}:R>` : ''}` : `${SHARED_EMOJIS.WARNING} Not delivered${notice.error ? ` • ${String(notice.error).slice(0, 180)}` : ''}`, inline: false });
+    embed.addFields({ name: `${SHARED_EMOJIS.USER_INVITES} Member Notification`, value: notice.sent ? `${SHARED_EMOJIS.SUCCESS} Delivered${notice.sentAt ? ` • <t:${getCaseTimestamp(notice.sentAt)}:R>` : ''}` : `${SHARED_EMOJIS.WARNING} Not delivered${notice.error ? ` • ${String(notice.error).slice(0, 180)}` : ''}`, inline: false });
   }
-  if (modCase.note && String(modCase.note).trim()) embed.addFields({ name: '📝 Management Note', value: String(modCase.note).slice(0, 1024), inline: false });
+  if (modCase.note && String(modCase.note).trim()) embed.addFields({ name: `${SHARED_EMOJIS.NOTE} Management Note`, value: String(modCase.note).slice(0, 1024), inline: false });
   embed.setFooter({ text: 'Moderation case record • Management workspace' });
   return embed;
 }
@@ -697,20 +697,20 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
     .setTitle(`⚖️ Appeal History • Case #${modCase.caseId}`)
     .setDescription(`**Original Action:** ${String(modCase.action || 'case').toUpperCase()}\n**Total:** ${appeals.length}  •  **⏳ Pending:** ${counts.pending}  •  **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}  •  **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`)
     .setFooter({ text: `Appeal history • Page ${page + 1}/${totalPages}` });
-  if (!entries.length) embed.addFields({ name: '📭 No Appeals', value: 'No appeals have been recorded for this case.', inline: false });
+  if (!entries.length) embed.addFields({ name: `${SHARED_EMOJIS.MOD_APPEAL_EMPTY} No Appeals`, value: 'No appeals have been recorded for this case.', inline: false });
   for (const appeal of entries) {
     const status = appeal.status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : appeal.status === 'denied' ? emojiLabel('ERROR', 'Denied') : '⏳ Pending Review';
     const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:R>` : 'Unknown';
     const lines = [
       `**Member:** <@${appeal.appellantId}>  •  **Submitted:** ${submitted}`,
       `**Source:** ${String(appeal.source || 'Unknown').slice(0, 50)}`,
-      `\n**📝 Appeal Grounds**\n${String(appeal.grounds || 'No grounds recorded').replace(/\s+/g, ' ').slice(0, 190)}`,
+      `\n**${SHARED_EMOJIS.NOTE} Appeal Grounds**\n${String(appeal.grounds || 'No grounds recorded').replace(/\s+/g, ' ').slice(0, 190)}`,
     ];
     if (appeal.requestedResolution) lines.push(`**Requested Outcome:** ${String(appeal.requestedResolution).replace(/\s+/g, ' ').slice(0, 120)}`);
     if (appeal.reviewedBy) lines.push(`**Reviewed By:** <@${appeal.reviewedBy}>${appeal.reviewedAt ? ` • <t:${getCaseTimestamp(appeal.reviewedAt)}:R>` : ''}`);
-    if (appeal.reviewNote) lines.push(`\n**📋 Review Rationale**\n${String(appeal.reviewNote).replace(/\s+/g, ' ').slice(0, 150)}`);
+    if (appeal.reviewNote) lines.push(`\n**${SHARED_EMOJIS.REVIEW} Review Rationale**\n${String(appeal.reviewNote).replace(/\s+/g, ' ').slice(0, 150)}`);
     if (appeal.remedy) lines.push(`\n**${SHARED_EMOJIS.REFRESH} Appeal Remedy:** ${appeal.remedy.ok ? emojiLabel('SUCCESS', 'Completed') : emojiLabel('WARNING', 'Requires attention')}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').replace(/\s+/g, ' ').slice(0, 150)}`);
-    if (appeal.notification) lines.push(`**📨 Member Notification:** ${appeal.notification.sent ? emojiLabel('SUCCESS', 'Sent') : emojiLabel('WARNING', 'Not delivered')}`);
+    if (appeal.notification) lines.push(`**${SHARED_EMOJIS.USER_INVITES} Member Notification:** ${appeal.notification.sent ? emojiLabel('SUCCESS', 'Sent') : emojiLabel('WARNING', 'Not delivered')}`);
     embed.addFields({ name: `⚖️ Appeal • ${status}`, value: lines.join('\n').slice(0, 1024), inline: false });
   }
   const components = [];
@@ -739,8 +739,8 @@ function buildAppealDetailPayload(modCase, appeal) {
     .setTitle(`⚖️ Appeal Review • Case #${modCase.caseId}`)
     .setDescription(`**Original Action:** ${originalAction}\n**Appeal Status:** ${status}`)
     .addFields(
-      { name: '👤 Appeal Information', value: `**Member:** <@${appeal.appellantId}>\n**Submitted:** ${submitted}\n**Source:** ${String(appeal.source || 'Unknown').slice(0, 80)}`, inline: false },
-      { name: '📝 Appeal & Decision', value: [
+      { name: `${SHARED_EMOJIS.USER} Appeal Information`, value: `**Member:** <@${appeal.appellantId}>\n**Submitted:** ${submitted}\n**Source:** ${String(appeal.source || 'Unknown').slice(0, 80)}`, inline: false },
+      { name: `${SHARED_EMOJIS.NOTE} Appeal & Decision`, value: [
         `**Appeal Grounds:**\n${String(appeal.grounds || 'No grounds recorded').slice(0, 650)}`,
         appeal.requestedResolution ? `**Requested Outcome:**\n${String(appeal.requestedResolution).slice(0, 300)}` : null,
         !pending ? `**Decision:** ${status}\n**Reviewed By:** ${reviewer}\n**Reviewed On:** ${reviewed}` : null,
@@ -767,7 +767,7 @@ function buildAppealDetailPayload(modCase, appeal) {
   }
   components.push(new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_appeal_history:${modCase.caseId}:0`, emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
-    navigationButton(`mod_search_open:${modCase.caseId}`, '📁 View Case', ButtonStyle.Secondary)
+    navigationButton(`mod_search_open:${modCase.caseId}`, `${SHARED_EMOJIS.MOD_CASE_FOLDER} View Case`, ButtonStyle.Secondary)
   ));
   const footer = `Case #${modCase.caseId} • Appeal ${pending ? 'Pending' : appeal.status === 'approved' ? 'Approved' : 'Denied'}`;
   embed.setFooter({ text: footer });
@@ -786,8 +786,8 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
   const activeToken = token || rememberAppealQueue(guildId, activeFilters);
   const extraFilters = [activeFilters.userId ? `User <@${activeFilters.userId}>` : null, activeFilters.caseId ? `Case #${activeFilters.caseId}` : null, activeFilters.moderatorId ? `Moderator <@${activeFilters.moderatorId}>` : null].filter(Boolean);
   const emptyText = normalizedStatus === 'pending' && !extraFilters.length
-    ? '**📭 No Pending Appeals**\nThere are currently no moderation appeals awaiting review.'
-    : `**📭 No Appeals Found**\nNo ${normalizedStatus === 'all' ? '' : normalizedStatus + ' '}appeals matched the current filters.`;
+    ? `**${SHARED_EMOJIS.MOD_APPEAL_EMPTY} No Pending Appeals**\nThere are currently no moderation appeals awaiting review.`
+    : `**${SHARED_EMOJIS.MOD_APPEAL_EMPTY} No Appeals Found**\nNo ${normalizedStatus === 'all' ? '' : normalizedStatus + ' '}appeals matched the current filters.`;
   const description = slice.length
     ? ['Review and manage appeals submitted against moderation cases.', '', ...slice.map(({ case: modCase, appeal }) => {
         const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:f>` : 'Unknown';
@@ -797,16 +797,16 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
     .setTitle('⚖️ Moderation Appeals')
-    .setDescription(['**Review submitted appeals and manage decisions.**', '', `**📥 Pending:** ${counts.pending}   •   **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}   •   **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`, `**Viewing:** ${normalizedStatus === 'all' ? 'All Appeals' : normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)}`, '', description].join('\n'))
+    .setDescription(['**Review submitted appeals and manage decisions.**', '`, `**${SHARED_EMOJIS.MOD_APPEAL_PENDING} Pending:** ${counts.pending}   •   **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}   •   **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`, `**Viewing:** ${normalizedStatus === `all' ? 'All Appeals' : normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)}`, '', description].join('\n'))
     ;
-  if (extraFilters.length) embed.addFields({ name: '🔎 Additional Filters', value: extraFilters.join(' • '), inline: false });
+  if (extraFilters.length) embed.addFields({ name: `${SHARED_EMOJIS.INVESTIGATE} Additional Filters`, value: extraFilters.join(' • '), inline: false });
   embed.setFooter({ text: `${results.length} matching appeal${results.length === 1 ? '' : 's'} • Page ${page + 1}/${totalPages}` });
   const statusRow = new ActionRowBuilder().addComponents(
-    ...['pending', 'approved', 'denied', 'all'].map(status => navigationButton(`mod_case_appeal_queue_status:${activeToken}:${status}`, status === 'all' ? '📋 All' : status === 'pending' ? '📥 Pending' : status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : emojiLabel('ERROR', 'Denied'), normalizedStatus === status ? ButtonStyle.Primary : ButtonStyle.Secondary))
+    ...['pending', 'approved', 'denied', 'all'].map(status => navigationButton(`mod_case_appeal_queue_status:${activeToken}:${status}`, status === 'all' ? `${SHARED_EMOJIS.REVIEW} All` : status === 'pending' ? `${SHARED_EMOJIS.MOD_APPEAL_PENDING} Pending` : status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : emojiLabel('ERROR', 'Denied'), normalizedStatus === status ? ButtonStyle.Primary : ButtonStyle.Secondary))
   );
   const rows = [statusRow];
   if (slice.length) rows.push(new ActionRowBuilder().addComponents(...slice.map(({ case: modCase, appeal }) =>
-    navigationButton(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`, `${appeal.status === 'pending' ? '⚖️ Review' : '📁 View'} #${modCase.caseId}`, ButtonStyle.Primary)
+    navigationButton(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`, `${appeal.status === 'pending' ? '⚖️ Review' : `${SHARED_EMOJIS.MOD_CASE_FOLDER} View`} #${modCase.caseId}`, ButtonStyle.Primary)
   )));
   if (totalPages > 1) rows.push(new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_appeal_queue:${activeToken}:${Math.max(0, page - 1)}`, '◀ Previous', ButtonStyle.Secondary, page <= 0),
@@ -1059,7 +1059,7 @@ async function submitCaseModal(interaction, { fetchTarget, refreshCasesDashboard
     const updated = setCaseNote(interaction.guild.id, caseId, note, actorId);
     if (!updated) return safeReply(interaction, ephemeralError('Failed to update case note.'));
     const target = typeof fetchTarget === 'function' ? await fetchTarget(interaction.guild, updated.userId) : null;
-    await safeReply(interaction, { content: note ? `📝 Updated note for **Case #${updated.caseId}**.` : `🗑️ Cleared note for **Case #${updated.caseId}**.`, flags: 64 });
+    await safeReply(interaction, { content: note ? `${SHARED_EMOJIS.NOTE} Updated note for **Case #${updated.caseId}**.` : `${SHARED_EMOJIS.DELETE} Cleared note for **Case #${updated.caseId}**.`, flags: 64 });
     if (target && typeof refreshCasesDashboard === 'function') await refreshCasesDashboard(interaction, target);
     return true;
   }
