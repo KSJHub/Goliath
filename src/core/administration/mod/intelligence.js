@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../../core/guild/goliathNavigation');
 
 const Discord = require('discord.js');
 const { db } = require('./storage');
@@ -626,26 +627,26 @@ async function decorateScan(interaction, target, report) {
     ),
   ];
   const primary = [
-    new Discord.ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji('🔄').setStyle(Discord.ButtonStyle.Primary),
+    new Discord.ButtonBuilder().setCustomId(`mod_member_scan:${target.id}`).setLabel('Rescan').setEmoji(EMOJIS.REFRESH).setStyle(Discord.ButtonStyle.Primary),
   ];
-  if (report.access?.history) primary.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji('🕘').setStyle(Discord.ButtonStyle.Secondary));
+  if (report.access?.history) primary.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_history:${target.id}`).setLabel('History').setEmoji(EMOJIS.MOD_SCAN_HISTORY).setStyle(Discord.ButtonStyle.Secondary));
   primary.push(
-    new Discord.ButtonBuilder().setCustomId(`mod_intel_guilds:${target.id}`).setLabel('Network').setEmoji('🌐').setStyle(Discord.ButtonStyle.Secondary),
+    new Discord.ButtonBuilder().setCustomId(`mod_intel_guilds:${target.id}`).setLabel('Network').setEmoji(EMOJIS.USER_TRANSLATE).setStyle(Discord.ButtonStyle.Secondary),
   );
   components.push(new Discord.ActionRowBuilder().addComponents(...primary));
 
   const evidence = [];
-  if (report.access?.links) evidence.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_links:${target.id}`).setLabel(`Correlations (${report.persistentLinks?.length || 0})`.slice(0, 80)).setEmoji('🔗').setStyle(Discord.ButtonStyle.Secondary));
-  if (report.access?.notes) evidence.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_note:${target.id}`).setLabel('Notes').setEmoji('📝').setStyle(Discord.ButtonStyle.Secondary));
+  if (report.access?.links) evidence.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_links:${target.id}`).setLabel(`Correlations (${report.persistentLinks?.length || 0})`.slice(0, 80)).setEmoji(EMOJIS.AUTOMOD_LINKS).setStyle(Discord.ButtonStyle.Secondary));
+  if (report.access?.notes) evidence.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_note:${target.id}`).setLabel('Notes').setEmoji(EMOJIS.NOTE).setStyle(Discord.ButtonStyle.Secondary));
   if (report.access?.watch) evidence.push(new Discord.ButtonBuilder()
     .setCustomId(`mod_scan_watch:${target.id}`)
     .setLabel(report.investigation?.watched ? 'Watch On' : 'Watch Off')
-    .setEmoji('👁️')
+    .setEmoji(EMOJIS.WELCOME_PREVIEW)
     .setStyle(report.investigation?.watched ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Secondary));
   evidence.push(new Discord.ButtonBuilder()
     .setCustomId(`mod_intel_watchlist:${target.id}`)
     .setLabel('Watchlist')
-    .setEmoji('🛡️')
+    .setEmoji(EMOJIS.SECURITY)
     .setStyle(watchState === 'blacklisted' ? Discord.ButtonStyle.Danger : Discord.ButtonStyle.Secondary));
   if (evidence.length) {
     const investigationRow = evidence.slice(0, 3);
@@ -654,8 +655,8 @@ async function decorateScan(interaction, target, report) {
 
   const finalRow = [];
   if (evidence[3]) finalRow.push(evidence[3]);
-  finalRow.push(new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:actions`).setLabel('Back').setEmoji('⬅️').setStyle(Discord.ButtonStyle.Secondary));
-  if (report.access?.cases) finalRow.push(new Discord.ButtonBuilder().setCustomId(`mod_export_cases:${target.id}`).setLabel('Export').setEmoji('📤').setStyle(Discord.ButtonStyle.Secondary));
+  finalRow.push(new Discord.ButtonBuilder().setCustomId(`mod_dashboard:${target.id}:actions`).setLabel('Back').setEmoji(EMOJIS.BACK).setStyle(Discord.ButtonStyle.Secondary));
+  if (report.access?.cases) finalRow.push(new Discord.ButtonBuilder().setCustomId(`mod_export_cases:${target.id}`).setLabel('Export').setEmoji(EMOJIS.MOD_EXPORT).setStyle(Discord.ButtonStyle.Secondary));
   components.push(new Discord.ActionRowBuilder().addComponents(...finalRow));
   report.components = components;
   return report;
@@ -698,7 +699,7 @@ function guildHistoryEmbed(target, context, client) {
 }
 function reputationRows(targetId, canManage = false) {
   const components = [];
-  if (canManage) components.push(new Discord.ButtonBuilder().setCustomId(`mod_intel_reputation_add:${targetId}`).setLabel('Add External Record').setEmoji('➕').setStyle(Discord.ButtonStyle.Secondary));
+  if (canManage) components.push(new Discord.ButtonBuilder().setCustomId(`mod_intel_reputation_add:${targetId}`).setLabel('Add External Record').setEmoji(EMOJIS.ADD).setStyle(Discord.ButtonStyle.Secondary));
   components.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${targetId}`).setLabel('⬅️ Back to Scan').setStyle(Discord.ButtonStyle.Secondary));
   return new Discord.ActionRowBuilder().addComponents(...components);
 }
@@ -750,10 +751,10 @@ function watchlistEmbed(target, context) {
 function watchlistRows(targetId, canManage = false) {
   const rows = [];
   if (canManage) rows.push(new Discord.ActionRowBuilder().addComponents(
-    new Discord.ButtonBuilder().setCustomId(`mod_intel_watch_set:${targetId}:watchlisted`).setLabel('Watchlist').setEmoji('👁️').setStyle(Discord.ButtonStyle.Secondary),
-    new Discord.ButtonBuilder().setCustomId(`mod_intel_watch_set:${targetId}:restricted`).setLabel('Restrict').setEmoji('⚠️').setStyle(Discord.ButtonStyle.Secondary),
-    new Discord.ButtonBuilder().setCustomId(`mod_intel_watch_set:${targetId}:blacklisted`).setLabel('Blacklist').setEmoji('⛔').setStyle(Discord.ButtonStyle.Danger),
-    new Discord.ButtonBuilder().setCustomId(`mod_intel_watch_set:${targetId}:clear`).setLabel('Clear').setEmoji('✅').setStyle(Discord.ButtonStyle.Secondary),
+    new Discord.ButtonBuilder().setCustomId(`mod_intel_watch_set:${targetId}:watchlisted`).setLabel('Watchlist').setEmoji(EMOJIS.WELCOME_PREVIEW).setStyle(Discord.ButtonStyle.Secondary),
+    new Discord.ButtonBuilder().setCustomId(`mod_intel_watch_set:${targetId}:restricted`).setLabel('Restrict').setEmoji(EMOJIS.WARNING).setStyle(Discord.ButtonStyle.Secondary),
+    new Discord.ButtonBuilder().setCustomId(`mod_intel_watch_set:${targetId}:blacklisted`).setLabel('Blacklist').setEmoji(EMOJIS.BLOCKED).setStyle(Discord.ButtonStyle.Danger),
+    new Discord.ButtonBuilder().setCustomId(`mod_intel_watch_set:${targetId}:clear`).setLabel('Clear').setEmoji(EMOJIS.SUCCESS).setStyle(Discord.ButtonStyle.Secondary),
   ));
   rows.push(backRow(targetId));
   return rows;
