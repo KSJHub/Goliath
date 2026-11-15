@@ -18,6 +18,12 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } 
 
 // 1. Shared emojis and text labels
 const EMOJIS = Object.freeze({
+  // Shared Dashboard example/default glyphs; browser equivalents live in PageShell.jsx.
+  RSVP_MAYBE: '❔',
+  SPARKLES: '✨',
+  GAMEPAD: '🎮',
+  JOYSTICK: '🕹️',
+  COMPUTER: '💻',
   SUCCESS: '✅',
   ERROR: '❌',
   WARNING: '⚠️',
