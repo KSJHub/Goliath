@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 import EmptyState from '../../shared/EmptyState.jsx';
@@ -161,7 +162,7 @@ export default function Invites({ theme, selectedGuild, selectedGuildData }) {
 
     {activeTab === 'health' && <>
       <Card theme={theme}><h2 style={{ marginTop:0 }}>Module health</h2><p style={{ color:theme.mutedText }}>Checks permissions, invite access, role hierarchy, configured channels and runtime synchronization.</p><div style={{ display:'flex',gap:10,flexWrap:'wrap' }}><button style={button(theme,'primary')} disabled={busy} onClick={()=>action('repair',()=>api.request(`/api/invites/${guildId}/repair`,{method:'POST'}),'Repair completed.')}>Run Repair</button><button style={button(theme)} disabled={busy} onClick={load}>Refresh Health</button><a style={{ ...button(theme),textDecoration:'none' }} href={`/api/invites/${guildId}/export`}>Export Data</a></div></Card>
-      <Card theme={theme}><h3 style={{ marginTop:0 }}>{health?.healthy ? '✅ Healthy' : '⚠️ Attention required'}</h3><div style={{ display:'grid',gap:8 }}>{(health?.issues || []).map((issue,index)=><div key={`issue-${index}`}>❌ {issue.code || issue.reason || JSON.stringify(issue)}</div>)}{(health?.warnings || []).map((warning,index)=><div key={`warning-${index}`}>⚠️ {warning.code || warning.reason || JSON.stringify(warning)}</div>)}{health?.healthy && <div>No issues detected.</div>}</div></Card>
+      <Card theme={theme}><h3 style={{ marginTop:0 }}>{health?.healthy ? `${E.SUCCESS} Healthy` : `${E.WARNING} Attention required`}</h3><div style={{ display:'grid',gap:8 }}>{(health?.issues || []).map((issue,index)=><div key={`issue-${index}`}>{E.ERROR} {issue.code || issue.reason || JSON.stringify(issue)}</div>)}{(health?.warnings || []).map((warning,index)=><div key={`warning-${index}`}>⚠️ {warning.code || warning.reason || JSON.stringify(warning)}</div>)}{health?.healthy && <div>No issues detected.</div>}</div></Card>
     </>}
 
     {activeTab === 'settings' && <>
