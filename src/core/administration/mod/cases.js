@@ -797,7 +797,7 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
     .setTitle('⚖️ Moderation Appeals')
-    .setDescription(['**Review submitted appeals and manage decisions.**', '`, `**${SHARED_EMOJIS.MOD_APPEAL_PENDING} Pending:** ${counts.pending}   •   **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}   •   **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`, `**Viewing:** ${normalizedStatus === `all' ? 'All Appeals' : normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)}`, '', description].join('\n'))
+    .setDescription(['**Review submitted appeals and manage decisions.**', '', `**${SHARED_EMOJIS.MOD_APPEAL_PENDING} Pending:** ${counts.pending}   •   **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}   •   **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`, `**Viewing:** ${normalizedStatus === 'all' ? 'All Appeals' : normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)}`, '', description].join('\n'))
     ;
   if (extraFilters.length) embed.addFields({ name: `${SHARED_EMOJIS.INVESTIGATE} Additional Filters`, value: extraFilters.join(' • '), inline: false });
   embed.setFooter({ text: `${results.length} matching appeal${results.length === 1 ? '' : 's'} • Page ${page + 1}/${totalPages}` });
