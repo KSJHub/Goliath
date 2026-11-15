@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { dashboardPath } from '../../services/dashboardPath.js';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -7,13 +8,13 @@ const TOOLS = [
   {
     key: 'gif',
     label: 'GIF Maker',
-    icon: '🎞️',
+    icon: E.FILM,
     description: 'Create Discord-ready GIFs from short videos or animated uploads.',
   },
   {
     key: 'emoji',
     label: 'Emoji Maker',
-    icon: '😀',
+    icon: E.EMOJI,
     description: 'Create emoji and role-icon assets for Discord servers.',
   },
 ];
