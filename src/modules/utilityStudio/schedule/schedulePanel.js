@@ -291,7 +291,7 @@ async function handleScheduleAdminInteraction(interaction) {
     if (id === 'admin:schedule:health') { const health = await schedule.buildHealth(interaction.guild); return interaction.reply({ content: `Schedule health: **${health.healthy ? 'Healthy' : 'Needs attention'}**\nIssues: ${health.issues.length}\nWarnings: ${health.warnings.length}`, flags: 64 }); }
     return respond(interaction, buildPanel(interaction));
   } catch (error) {
-    const payload = { content: `❌ Schedule Studio failed: ${error.message}`, flags: 64 };
+    const payload = { content: `${EMOJIS.ERROR} Schedule Studio failed: ${error.message}`, flags: 64 };
     if (interaction.deferred || interaction.replied) await interaction.followUp(payload).catch(() => null); else await interaction.reply(payload).catch(() => null); return true;
   }
 }
