@@ -32,8 +32,16 @@ function casinoKey(value) {
 function casinoBalance(guildId, userId) {
   const id = casinoUserId(userId);
   const section = getModuleSection(guildId, 'casino', { enabled: false });
-  const balance = section.wallet?.balances?.[id] ?? section.currency?.startingBalance ?? 0;
-  if (!Number.isSafeInteger(balance) || balance < 0) throw new Error('Corrupt casino wallet balance.');
+  const initial = section.currency?.startingBalance ?? 0;
+  const limit = section.currency?.maxBalance ?? 1000000000;
+  if (!Number.isSafeInteger(initial) || initial < 0 ||
+      !Number.isSafeInteger(limit) || limit < initial) {
+    throw new Error('Invalid casino currency limits.');
+  }
+  const balance = section.wallet?.balances?.[id] ?? initial;
+  if (!Number.isSafeInteger(balance) || balance < 0 || balance > limit) {
+    throw new Error('Corrupt casino wallet balance.');
+  }
   return balance;
 }
 
