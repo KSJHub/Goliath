@@ -19,7 +19,7 @@ function caseStatus(status) {
   const value = String(status || 'active').toLowerCase();
   if (value === 'reversed') return { label: '✅ Case Resolved', color: '#67e8f9' };
   if (value === 'expired') return { label: '⌛ Case Expired', color: '#cbd5e1' };
-  if (value === 'active') return { label: '⚠️ Case Active', color: '#fbbf24' };
+  if (value === 'active') return { label: `${E.WARNING} Case Active`, color: '#fbbf24' };
   return { label: E.FOLDER + ' ' + value.replace(/[_-]/g, ' '), color: '#bfdbfe' };
 }
 
@@ -271,7 +271,7 @@ export default function Appeals() {
     return (
       <main aria-busy="true" style={{ ...page, display: 'grid', placeItems: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 38, marginBottom: 10 }}>⚖️</div>
+          <div style={{ fontSize: 38, marginBottom: 10 }}>{E.JUSTICE}</div>
           <strong>Loading your appeals…</strong>
         </div>
       </main>
@@ -282,7 +282,7 @@ export default function Appeals() {
     return (
       <main style={{ ...page, display: 'grid', placeItems: 'center' }}>
         <section style={{ ...card, width: 'min(560px, 100%)', textAlign: 'center', padding: '30px 24px' }}>
-          <div style={{ fontSize: 44 }}>⚖️</div>
+          <div style={{ fontSize: 44 }}>{E.JUSTICE}</div>
           <div style={{ color: '#60a5fa', fontWeight: 900, fontSize: 12, letterSpacing: '.14em', textTransform: 'uppercase', marginTop: 10 }}>Member Portal</div>
           <h1 style={{ margin: '8px 0 10px', fontSize: 'clamp(30px, 8vw, 46px)' }}>Appeal a moderation decision</h1>
           <p style={{ ...muted, margin: '0 auto 22px', maxWidth: 470 }}>Sign in with Discord to see decisions linked to your account, submit an appeal when one is available, and check the outcome of appeals you have already sent.</p>
@@ -371,9 +371,9 @@ export default function Appeals() {
           </section>
         ) : null}
 
-        {error ? <div role="alert" style={{ ...card, borderColor: 'rgba(239,68,68,.5)', color: '#fecaca' }}>⚠️ {error}</div> : null}
+        {error ? <div role="alert" style={{ ...card, borderColor: 'rgba(239,68,68,.5)', color: '#fecaca' }}>{E.WARNING} {error}</div> : null}
         {success ? <div role="status" style={{ ...card, borderColor: 'rgba(34,197,94,.48)', color: '#bbf7d0' }}>✓ {success}</div> : null}
-        {deepLinkNotice ? <div role="status" style={{ ...card, borderColor: 'rgba(245,158,11,.45)', color: '#fde68a' }}>ℹ️ {deepLinkNotice}</div> : null}
+        {deepLinkNotice ? <div role="status" style={{ ...card, borderColor: 'rgba(245,158,11,.45)', color: '#fde68a' }}>{E.INFO} {deepLinkNotice}</div> : null}
 
         {(portalTab === 'overview' || portalTab === 'cases') ? <section style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'start', flexWrap: 'wrap' }}>
@@ -422,7 +422,7 @@ export default function Appeals() {
                     <span style={{ ...pill, color: caseStatus(item.status).color }}>{caseStatus(item.status).label}</span>
                     {item.appeals.some(a => a.status === 'approved') ? <span style={{ ...pill, color: '#bbf7d0' }}>✅ Appeal Approved</span> : null}
                     {item.appeals.some(a => a.status === 'pending') ? <span style={{ ...pill, color: '#fde68a' }}>⏳ Under Review</span> : null}
-                    {item.appeals.some(a => a.status === 'denied') ? <span style={{ ...pill, color: '#fca5a5' }}>❌ Appeal Denied</span> : null}
+                    {item.appeals.some(a => a.status === 'denied') ? <span style={{ ...pill, color: '#fca5a5' }}>{E.ERROR} Appeal Denied</span> : null}
                   </div>
                   <button type="button" style={{ ...secondaryButton, marginTop: 12 }} aria-expanded={Boolean(expandedCases[`${item.guildId}:${item.caseId}`])} onClick={() => setExpandedCases(prev => ({ ...prev, [`${item.guildId}:${item.caseId}`]: !prev[`${item.guildId}:${item.caseId}`] }))}>
                     {expandedCases[`${item.guildId}:${item.caseId}`] ? 'Hide Details ▲' : 'View Case Details ▼'}
