@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../../core/guild/goliathNavigation');
 
 const Discord = require('discord.js');
 const { safeReply, safeEditReply } = require('../../../core/ui/interactionResponse');
@@ -439,14 +440,14 @@ async function openInvestigationAccess(interaction, targetId) {
     new Discord.ButtonBuilder()
       .setCustomId(`mod_invroom_access_remove:${targetId}`)
       .setLabel('Remove Access')
-      .setEmoji('➖')
+      .setEmoji(EMOJIS.REMOVE)
       .setStyle(Discord.ButtonStyle.Danger)
       .setDisabled(true),
 
     new Discord.ButtonBuilder()
       .setCustomId(`mod_invroom_access_clear:${targetId}`)
       .setLabel('Room Only')
-      .setEmoji('🔒')
+      .setEmoji(EMOJIS.RESTRICTIONS)
       .setStyle(Discord.ButtonStyle.Secondary)
       .setDisabled(allowedIds.length === 0)
   );
@@ -550,14 +551,14 @@ async function selectInvestigationAccessChannel(interaction) {
     new Discord.ButtonBuilder()
       .setCustomId(`mod_invroom_access_remove:${targetId}:${channelId}`)
       .setLabel('Remove Access')
-      .setEmoji('➖')
+      .setEmoji(EMOJIS.REMOVE)
       .setStyle(Discord.ButtonStyle.Danger)
       .setDisabled(!allowedIds.has(channelId)),
 
     new Discord.ButtonBuilder()
       .setCustomId(`mod_invroom_access_clear:${targetId}`)
       .setLabel('Room Only')
-      .setEmoji('🔒')
+      .setEmoji(EMOJIS.RESTRICTIONS)
       .setStyle(Discord.ButtonStyle.Secondary)
       .setDisabled(allowedIds.size === 0)
   );
@@ -676,21 +677,21 @@ async function changeInvestigationAccess(interaction, action) {
       new Discord.ButtonBuilder()
         .setCustomId(`mod_invroom_access_allow:${targetId}`)
         .setLabel('Allow Access')
-        .setEmoji('➕')
+        .setEmoji(EMOJIS.ADD)
         .setStyle(Discord.ButtonStyle.Success)
         .setDisabled(true),
 
       new Discord.ButtonBuilder()
         .setCustomId(`mod_invroom_access_remove:${targetId}`)
         .setLabel('Remove Access')
-        .setEmoji('➖')
+        .setEmoji(EMOJIS.REMOVE)
         .setStyle(Discord.ButtonStyle.Danger)
         .setDisabled(true),
 
       new Discord.ButtonBuilder()
         .setCustomId(`mod_invroom_access_clear:${targetId}`)
         .setLabel('Room Only')
-        .setEmoji('🔒')
+        .setEmoji(EMOJIS.RESTRICTIONS)
         .setStyle(Discord.ButtonStyle.Secondary)
         .setDisabled(allowedIds.length === 0)
     );
@@ -764,7 +765,7 @@ async function deliverFinalInvestigationTranscript(interaction, targetId, channe
     delete payload.flags; delete payload.content;
     payload.components = [new Discord.ActionRowBuilder().addComponents(new Discord.ButtonBuilder()
       .setCustomId(`inv_transcript_download:${interaction.guild.id}:${channelId}:${targetId}`)
-      .setLabel('Download Transcript').setEmoji('📥').setStyle(Discord.ButtonStyle.Primary))];
+      .setLabel('Download Transcript').setEmoji(EMOJIS.STATS_JOINS).setStyle(Discord.ButtonStyle.Primary))];
     const message = await user.send(payload);
     delivery = { sent: true, sentAt: Date.now(), recipientId: targetId, jsonPath: transcript.jsonPath,
       messageId: message.id, channelId: message.channelId, format: 'download-button-v1' };
