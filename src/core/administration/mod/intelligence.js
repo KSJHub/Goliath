@@ -7,10 +7,10 @@ const { safeReply, safeUpdate } = require('../../../core/ui/interactionResponse'
 const sentinel = require('../../../owner/sentinel');
 
 const WATCH_STATES = Object.freeze({
-  clear: { label: 'Clear', emoji: '✅', severity: 0, risk: 0 },
-  watchlisted: { label: 'Watchlisted', emoji: '👁️', severity: 1, risk: 8 },
-  restricted: { label: 'Restricted', emoji: '⚠️', severity: 2, risk: 18 },
-  blacklisted: { label: 'Blacklisted', emoji: '⛔', severity: 3, risk: 32 },
+  clear: { label: 'Clear', emoji: EMOJIS.SUCCESS, severity: 0, risk: 0 },
+  watchlisted: { label: 'Watchlisted', emoji: EMOJIS.WELCOME_PREVIEW, severity: 1, risk: 8 },
+  restricted: { label: 'Restricted', emoji: EMOJIS.WARNING, severity: 2, risk: 18 },
+  blacklisted: { label: 'Blacklisted', emoji: EMOJIS.BLOCKED, severity: 3, risk: 32 },
 });
 
 function now() { return new Date().toISOString(); }
