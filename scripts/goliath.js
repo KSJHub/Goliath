@@ -5539,6 +5539,42 @@ const prohibited = buildCapabilityPreflight({
 });
 assert.equal(prohibited.operations[0].permission, 'blocked');
 assert.equal(prohibited.canExecute, false);
+const administratorCapability = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: [{ kind: 'rename_category',
+    target: { id: categoryId }, before: { name: 'Community' },
+    after: { name: 'Social' }, executable: false }],
+  capability: { ...allowedCapability, guildPermissions: String(1n << 3n),
+    channelPermissions: [{ id: categoryId, permissions: String(1n << 3n) }] }
+});
+assert.equal(administratorCapability.operations[0].permission, 'permitted-in-principle');
+const malformedCreate = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: [{ kind: 'create_category',
+    after: { name: 'Invalid', type: 0 }, executable: false }], capability: allowedCapability
+});
+assert.equal(malformedCreate.operations[0].permission, 'blocked');
+const invalidTargetType = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: [{ kind: 'rename_category',
+    target: { id: channelId }, after: { name: 'Wrong' }, executable: false }],
+  capability: allowedCapability
+});
+assert.equal(invalidTargetType.operations[0].permission, 'blocked');
+const deniedDestination = buildCapabilityPreflight({
+  audit: capabilityAudit, operations: [{ kind: 'edit_channel',
+    target: { id: channelId }, before: { parentId: categoryId },
+    after: { parentId: categoryId }, executable: false }],
+  capability: { ...allowedCapability, channelPermissions: [
+    { id: channelId, permissions: '0' }
+  ] }
+});
+assert.equal(deniedDestination.operations[0].permission, 'blocked');
+assert.throws(() => buildCapabilityPreflight({
+  audit: { ...capabilityAudit, readOnly: false }, operations: [],
+  capability: allowedCapability
+}), /read-only guild audit/);
+assert.throws(() => planBlueprint({ ...audit, readOnly: false }, changed), /read-only guild audit/);
+assert.throws(() => planBlueprint({
+  ...audit, channels: [...audit.channels, audit.channels[0]]
+}, changed), /duplicate Discord channel IDs/);
 
 const { buildRecoveryPlan } = require('../src/owner/dev/goliathExecutionReadiness');
 const recovery = buildRecoveryPlan({
