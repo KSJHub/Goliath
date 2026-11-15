@@ -5654,7 +5654,8 @@ const missingOriginal = simulateTransaction({
   currentDigest: 'a'.repeat(64)
 });
 assert.equal(missingOriginal.simulated, false);
-assert(missingOriginal.problems.some(item => item.includes('original target missing')));
+assert(missingOriginal.problems.some(item => item.includes('original target missing') || item.includes('unresolved manifest issues')));
+assert.equal(missingOriginal.canExecute, false);
 const invalidParent = simulateTransaction({
   draft: manifestDraft, audit: readyAudit,
   preview: { ...preview, operations: preview.operations.map(item =>
