@@ -1022,7 +1022,7 @@ async function verificationLifecycleAudit() {
       const begin = manager.indexOf('function getActivePanel(');
       const end = manager.indexOf('async function verifyMember(', begin);
       assert(begin >= 0 && end > begin, 'Verification active-panel gate must exist');
-      const gate = new Function('verificationStore', 'cleanId', manager.slice(begin, end) + '\\nreturn getActivePanel;')(
+      const gate = new Function('verificationStore', 'cleanId', manager.slice(begin, end) + '\nreturn getActivePanel;')(
         { getVerificationSection: () => ({ activePanelId: 'panel-1', panels: {
           'panel-1': { panelId: 'panel-1', enabled: true, channelId: 'new-channel', messageId: 'new-message' },
           'panel-old': { panelId: 'panel-old', enabled: false, channelId: 'old-channel', messageId: 'old-message' },
