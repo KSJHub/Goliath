@@ -174,6 +174,7 @@ async function scanMemberOnJoin(member) {
   const assessment = decisioning.classify({ ...context, guild: member.guild }, suspects);
   decisioning.saveDecision(member.guild.id, member.id, assessment, { trigger: 'guild_member_add', scanId });
   const channel = await resolveOutputChannel(member);
+  const watched = investigationWatchEnabled(member.guild.id, member.id);
 
   recordModerationSystemEvent({
     guildId: member.guild.id,
@@ -188,7 +189,7 @@ async function scanMemberOnJoin(member) {
       identity: { username: member.user.username || null, globalName: member.user.globalName || null, displayName: member.displayName || null, avatarHash: member.user.avatar || null, accountCreatedAt: member.user.createdTimestamp || null, joinedAt: member.joinedTimestamp || null },
       network: { otherGuildCount: context.network?.guildCount || 0, otherGuildCaseCount: context.network?.caseCount || 0 },
       risk: context.risk,
-      investigation: { watched: false, noteCount: 0 },
+      investigation: { watched, noteCount: 0 },
       persistentLinkEvidence: [], visibleCapabilities: { automatic: true, fullSystemContext: true },
     },
     metadata: { targetId: member.id, automatic: true, trigger: 'guild_member_add', dataSources: ['discord_api', 'guild_cache', 'moderation_cases', 'warnings', 'member_intelligence', 'cross_guild_same_id_cases', 'watchlist', 'reputation'] },
@@ -199,10 +200,18 @@ async function scanMemberOnJoin(member) {
     return { success: true, scanId, delivered: false, reason: 'missing_output_channel', risk: context.risk, assessment };
   }
 
-  const watched = investigationWatchEnabled(member.guild.id, member.id);
   const embed = buildEmbed(member, context, local, suspects, scanId, assessment, watched);
-  await channel.send({ embeds: [embed], components: buildActionRows(member, watched), allowedMentions: { parse: [] } });
-  return { success: true, scanId, delivered: true, channelId: channel.id, risk: context.risk, assessment, suspectedCount: suspects.length };
+  const report = await channel.send({ embeds: [embed], components: buildActionRows(member, watched), allowedMentions: { parse: [] } });
+  recordModerationSystemEvent({
+    guildId: member.guild.id,
+    actorId: 'system:auto-join-intelligence',
+    event: 'moderation.member_scan.report_delivered',
+    action: 'member_scan',
+    targetId: member.id,
+    after: { scanId, channelId: channel.id, messageId: report.id },
+    metadata: { targetId: member.id, scanId, channelId: channel.id, messageId: report.id },
+  });
+  return { success: true, scanId, delivered: true, channelId: channel.id, messageId: report.id, risk: context.risk, assessment, suspectedCount: suspects.length };
 }
 
 module.exports = {
