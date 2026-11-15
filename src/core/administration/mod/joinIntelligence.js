@@ -115,7 +115,7 @@ function buildActionRows(member, watched = false) {
   )];
 }
 
-function buildEmbed(member, context, local, suspects, scanId, assessment) {
+function buildEmbed(member, context, local, suspects, scanId, assessment, investigationWatched = false) {
   const risk = context.risk || { score: 0, label: '🟢 Low', reasons: [] };
   const watch = context.watch || { state: 'clear' };
   const reputation = context.reputation || {};
@@ -144,7 +144,7 @@ function buildEmbed(member, context, local, suspects, scanId, assessment) {
     ].join('\n'))
     .addFields(
       { name: '👤 Account', value: [`Created: <t:${Math.floor((member.user.createdTimestamp || Date.now()) / 1000)}:F>${ageDays !== null ? ` • **${ageDays} days old**` : ''}`, `Joined: <t:${Math.floor((member.joinedTimestamp || Date.now()) / 1000)}:R>`, `Verification: **${member.pending ? 'Pending' : 'Complete'}** • Account type: **${member.user.bot ? 'Bot' : 'Member'}**`].join('\n'), inline: false },
-      { name: '🚦 Risk & Moderation', value: [`**${risk.score || 0}/100 • ${risk.label || '🟢 Low'}**`, `Watchlist: **${String(watch.state || 'clear').toUpperCase()}** • Cases: **${local.caseCount}** (${local.activeCases} active) • Warnings: **${local.warningCount}**`, riskFactors].join('\n').slice(0, 1024), inline: false },
+      { name: '🚦 Risk & Moderation', value: [`Risk: **${risk.score || 0}/100 • ${risk.label || '🟢 Low'}**`, `Investigation Watch: **${investigationWatched ? 'ON' : 'OFF'}** • Watchlist: **${String(watch.state || 'clear').toUpperCase()}**`, `Cases: **${local.caseCount}** (${local.activeCases} active) • Warnings: **${local.warningCount}**`, riskFactors].join('\n').slice(0, 1024), inline: false },
       { name: '🌐 Network Intelligence', value: [`Observed servers: **${history.length}** • Cases: **${context.network?.caseCount || 0}** • Bans: **${context.network?.banCount || 0}**`, `External reports: **${externalCount}** (Verified: ${reputation.verifiedExternal || 0} • Submitted: ${reputation.submitted || 0} • Unverified: ${reputation.unverified || 0})`].join('\n'), inline: false },
       { name: '🔗 Account Correlation', value: suspects.length ? `${suspectText.slice(0, 850)}\n\n*Possible matches require staff verification.*` : suspectText, inline: false },
     )
@@ -199,10 +199,8 @@ async function scanMemberOnJoin(member) {
     return { success: true, scanId, delivered: false, reason: 'missing_output_channel', risk: context.risk, assessment };
   }
 
-  const embed = buildEmbed(member, context, local, suspects, scanId, assessment);
-  const riskField = embed.data.fields?.find(field => field.name?.includes('Risk'));
-  if (riskField) riskField.value = (riskField.value + `\nInvestigation Watch: **${investigationWatchEnabled(member.guild.id, member.id) ? 'ON' : 'OFF'}**`).slice(0, 1024);
   const watched = investigationWatchEnabled(member.guild.id, member.id);
+  const embed = buildEmbed(member, context, local, suspects, scanId, assessment, watched);
   await channel.send({ embeds: [embed], components: buildActionRows(member, watched), allowedMentions: { parse: [] } });
   return { success: true, scanId, delivered: true, channelId: channel.id, risk: context.risk, assessment, suspectedCount: suspects.length };
 }
