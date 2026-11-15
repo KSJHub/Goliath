@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -81,7 +81,7 @@ function buildTemporaryRolesPanel(guild, userId, memberDisplayName = 'Unknown Us
     .setDescription([
       'Assign a role for a fixed amount of time. Goliath removes it automatically when it expires.',
       '',
-      `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ⏸️'}`,
+      `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.USER_PAUSE}`}`,
       `**Active assignments:** ${assignments.length}`,
       `**Selected member:** ${selection.memberId ? `<@${selection.memberId}>` : 'Choose below'}`,
       `**Selected role:** ${selection.roleId ? `<@&${selection.roleId}>` : 'Choose below'}`,
