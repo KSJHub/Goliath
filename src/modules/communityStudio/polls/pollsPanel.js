@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 const { actionButton, navigationButton } = require('../../../core/guild/goliathNavigation');
 
 const {
@@ -34,12 +34,12 @@ function buildPollsAdminPanel(guild, memberDisplayName = 'Unknown User') {
     .setTitle(emojiLabel('ANALYTICS', 'Polls'))
     .setDescription([
       'Create, deploy and manage community polls directly in Discord.', '',
-      `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Default Channel:** ${formatChannel(section.defaultChannelId || section.settings?.defaultChannelId)}`,
       `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`,
-      `**Anonymous Voting:** ${section.anonymousVoting ? 'Yes ✅' : 'No ❌'}`,
-      `**Multiple Choice:** ${section.allowMultipleChoice ? 'Yes ✅' : 'No ❌'}`,
-      `**Live Results:** ${section.showResultsLive !== false ? 'Yes ✅' : 'No ❌'}`,
+      `**Anonymous Voting:** ${section.anonymousVoting ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Multiple Choice:** ${section.allowMultipleChoice ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Live Results:** ${section.showResultsLive !== false ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
       `**Auto Close:** ${Number(section.settings?.autoCloseHours || 0) > 0 ? `${section.settings.autoCloseHours} hour(s)` : 'Disabled'}`, '',
       `Polls: \`${pollList.length}\` | Active: \`${active}\` | Votes: \`${section.analytics.votes || 0}\``,
       `Created: \`${section.analytics.created || 0}\` | Deployed: \`${section.analytics.deployed || 0}\` | Closed: \`${section.analytics.closed || 0}\``,
