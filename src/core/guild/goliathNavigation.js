@@ -5,6 +5,14 @@
  * Shared Goliath-owned emojis, button styles, navigation rows and labels.
  * Guild variables, user-managed emoji banks, interaction routing and permissions
  * remain owned by their respective systems.
+ *
+ * Dashboard's browser-safe DASHBOARD_EMOJIS lives in
+ * src/dashboard/js/shared/PageShell.jsx. Do not import this module into the
+ * browser: its discord.js dependency is server-only. Shared names should keep
+ * matching glyphs except three documented legacy presentation differences:
+ * INACTIVE (Discord ⚪ / Dashboard ⚫), REPAIR (Discord 🩹 / Dashboard 🔧),
+ * BUILDER (Discord 🛠️ / Dashboard 🛠). Preserve these until a deliberate
+ * visual migration is approved. Never overwrite guild-configured emojis.
  */
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 
