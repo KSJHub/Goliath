@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { api } from '../../services/apiClient';
-import PageShell, { EmptyState, LoadingPanel, Notice, PrimaryButton, StatGrid, SummaryStat } from '../../shared/PageShell';
+import PageShell, { EmptyState, LoadingPanel, Notice, PrimaryButton, StatGrid, SummaryStat, DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import TempVoiceControlCentre from './tempvoice/TempVoiceControlCentre.jsx';
 
 function getGuildId(selectedGuild, selectedGuildData) {
@@ -99,7 +99,7 @@ export default function TempVoice({ theme, selectedGuild, selectedGuildData }) {
       const result = await api.request(`/api/temp-voice/${guildId}/enabled`, { method: 'PATCH', body: JSON.stringify({ enabled }) });
       setConfig(result.config || null);
       setOverview(result.overview || null);
-      setMessage(`✅ Temp Voice ${enabled ? 'enabled' : 'disabled'}.`);
+      setMessage(`${E.SUCCESS} Temp Voice ${enabled ? 'enabled' : 'disabled'}.`);
     } catch (saveError) {
       setError(saveError.message || 'Failed to update Temp Voice state.');
     } finally {
@@ -114,7 +114,7 @@ export default function TempVoice({ theme, selectedGuild, selectedGuildData }) {
       const result = await api.request(`/api/temp-voice/${guildId}/settings`, { method: 'PATCH', body: JSON.stringify({ settings: settingsDraft }) });
       setConfig(result.config || null);
       setOverview(result.overview || null);
-      setMessage('✅ Temp Voice settings saved.');
+      setMessage(`${E.SUCCESS} Temp Voice settings saved.`);
     } catch (saveError) {
       setError(saveError.message || 'Failed to save Temp Voice settings.');
     } finally {
@@ -128,7 +128,7 @@ export default function TempVoice({ theme, selectedGuild, selectedGuildData }) {
     try {
       await api.request(hub.hubId ? `/api/temp-voice/${guildId}/hubs/${hub.hubId}` : `/api/temp-voice/${guildId}/hubs`, { method: hub.hubId ? 'PUT' : 'POST', body: JSON.stringify(hub) });
       setHubDraft({ ...defaultHub, userLimit: settingsDraft.defaultUserLimit || 0 });
-      setMessage('✅ Temp Voice hub saved.');
+      setMessage(`${E.SUCCESS} Temp Voice hub saved.`);
       await load();
     } catch (saveError) {
       setError(saveError.message || 'Failed to save hub.');
@@ -143,7 +143,7 @@ export default function TempVoice({ theme, selectedGuild, selectedGuildData }) {
     try {
       await api.request(`/api/temp-voice/${guildId}/hubs/deploy`, { method: 'POST', body: JSON.stringify({ ...hubDraft, enabled: true }) });
       setHubDraft({ ...defaultHub, userLimit: settingsDraft.defaultUserLimit || 0 });
-      setMessage('✅ Temp Voice deployed to Discord.');
+      setMessage(`${E.SUCCESS} Temp Voice deployed to Discord.`);
       await load();
     } catch (saveError) {
       setError(saveError.message || 'Failed to deploy Temp Voice. Check bot permissions: Manage Channels and Move Members.');
@@ -157,7 +157,7 @@ export default function TempVoice({ theme, selectedGuild, selectedGuildData }) {
     setError('');
     try {
       await api.request(`/api/temp-voice/${guildId}/hubs/${hubId}`, { method: 'DELETE' });
-      setMessage('✅ Temp Voice hub deleted.');
+      setMessage(`${E.SUCCESS} Temp Voice hub deleted.`);
       await load();
     } catch (deleteError) {
       setError(deleteError.message || 'Failed to delete hub.');
