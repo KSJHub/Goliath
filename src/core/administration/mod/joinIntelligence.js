@@ -143,9 +143,9 @@ function buildEmbed(member, context, local, suspects, scanId, assessment) {
       'Assessment only • No automatic moderation action taken.',
     ].join('\n'))
     .addFields(
-      { name: '👤 Account', value: [`Created: <t:${Math.floor((member.user.createdTimestamp || Date.now()) / 1000)}:F>${ageDays !== null ? ` • **${ageDays}d old**` : ''}`, `Joined: <t:${Math.floor((member.joinedTimestamp || Date.now()) / 1000)}:R>`, `Screening: **${member.pending ? 'Pending' : 'Complete'}** • Bot: **${member.user.bot ? 'Yes' : 'No'}**`].join('\n'), inline: false },
+      { name: '👤 Account', value: [`Created: <t:${Math.floor((member.user.createdTimestamp || Date.now()) / 1000)}:F>${ageDays !== null ? ` • **${ageDays} days old**` : ''}`, `Joined: <t:${Math.floor((member.joinedTimestamp || Date.now()) / 1000)}:R>`, `Verification: **${member.pending ? 'Pending' : 'Complete'}** • Account type: **${member.user.bot ? 'Bot' : 'Member'}**`].join('\n'), inline: false },
       { name: '🚦 Risk & Moderation', value: [`**${risk.score || 0}/100 • ${risk.label || '🟢 Low'}**`, `Watchlist: **${String(watch.state || 'clear').toUpperCase()}** • Cases: **${local.caseCount}** (${local.activeCases} active) • Warnings: **${local.warningCount}**`, riskFactors].join('\n').slice(0, 1024), inline: false },
-      { name: '🌐 Network Intelligence', value: [`Observed guilds: **${history.length}** • Cross-guild cases: **${context.network?.caseCount || 0}** • Cross-guild bans: **${context.network?.banCount || 0}**`, `External records: **${externalCount}** • Verified: **${reputation.verifiedExternal || 0}** • Submitted: **${reputation.submitted || 0}** • Unverified: **${reputation.unverified || 0}**`].join('\n'), inline: false },
+      { name: '🌐 Network Intelligence', value: [`Observed servers: **${history.length}** • Cases: **${context.network?.caseCount || 0}** • Bans: **${context.network?.banCount || 0}**`, `External reports: **${externalCount}** (Verified: ${reputation.verifiedExternal || 0} • Submitted: ${reputation.submitted || 0} • Unverified: ${reputation.unverified || 0})`].join('\n'), inline: false },
       { name: '🔗 Account Correlation', value: suspects.length ? `${suspectText.slice(0, 850)}\n\n*Possible matches require staff verification.*` : suspectText, inline: false },
     )
     .setFooter({ text: 'Goliath • Join Intelligence' })
