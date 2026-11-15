@@ -184,6 +184,19 @@ async function sendWelcome(member, options = {}) {
       return { publicSent: false, dmSent: false, skipped: true, reason: 'awaiting_verification', errors: [] };
     }
   }
+  if (!options.previewOnly && !options.force) {
+    // A join event can become stale while Verification or Discord is processing.
+    // Never send a welcome to someone who has left or joined again.
+    const joinedAt = member.joinedAt?.toISOString?.() || null;
+    const currentMember = await member.guild.members.fetch({ user: member.id, force: true }).catch(() => null);
+    if (!currentMember || !joinedAt || currentMember.joinedAt?.toISOString?.() !== joinedAt) {
+      return { publicSent: false, dmSent: false, skipped: true, reason: 'membership_unconfirmed', errors: [] };
+    }
+    if (currentMember.pending === true) {
+      return { publicSent: false, dmSent: false, skipped: true, reason: 'pending_screening', errors: [] };
+    }
+    member = currentMember;
+  }
   await refreshMemberCache(member.guild); let publicSent = false; let dmSent = false; let publicFailed = false; let dmFailed = false; const errors = [];
   if (config.channelId && options.skipPublic !== true) { const channel = await resolveWelcomeChannel(member.guild, config.channelId); if (!channel) { publicFailed = true; errors.push('Welcome channel is unavailable.'); } else { try { const payload = await buildDiscordPayload(member, 'welcome', config); await channel.send(payload); publicSent = true; if (options.onDelivery) { try { options.onDelivery('publicSent'); } catch (error) { console.error('[Welcome] Public delivery checkpoint failed:', error); } } } catch (error) { publicFailed = true; errors.push(`Public welcome failed: ${error.message || error}`); if (!options.silent) console.error('[Welcome] Failed to send public welcome:', error); } } }
   if (config.dmEnabled && options.skipDm !== true && !member.user.bot) { try { const payload = await buildDiscordPayload(member, 'dmWelcome', config, { includeComponents: false, suppressPing: true }); await member.send(payload); dmSent = true; if (options.onDelivery) { try { options.onDelivery('dmSent'); } catch (error) { console.error('[Welcome] DM delivery checkpoint failed:', error); } } } catch (error) { dmFailed = true; errors.push(`Welcome DM failed: ${error.message || error}`); if (!options.silent) console.warn('[Welcome] Failed to send welcome DM:', error.message || error); } }
