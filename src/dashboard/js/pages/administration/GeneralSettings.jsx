@@ -87,7 +87,7 @@ export default function GeneralSettings({ selectedGuild, theme }) {
         setRoles([]);
       }
 
-      setSaveMessage('✅ Roles/channels synced from Discord.');
+      setSaveMessage(`${E.SUCCESS} Roles/channels synced from Discord.`);
     } catch (err) {
       console.error(err);
       setSaveMessage(`${E.ERROR} Failed to sync roles/channels.`);
@@ -226,7 +226,7 @@ export default function GeneralSettings({ selectedGuild, theme }) {
         instantDeleteDataEnabled: Boolean(form.instantDeleteDataEnabled),
       });
 
-      setSaveMessage('✅ General settings saved successfully.');
+      setSaveMessage(`${E.SUCCESS} General settings saved successfully.`);
     } catch (err) {
       console.error(err);
       setSaveMessage(`${E.ERROR} Failed to save general settings.`);
