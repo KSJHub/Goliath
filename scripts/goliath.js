@@ -5362,6 +5362,14 @@ assert.throws(() => planBlueprint(fullCategoryAudit, {
 assert.equal(planBlueprint(fullCategoryAudit, {
   categories: [{ id: categoryId, name: 'Community', channels: [] }]
 }).operationCount, 0);
+assert.throws(() => planBlueprint({
+  ...audit, channels: audit.channels.map(channel =>
+    channel.id === channelId ? { ...channel, parentId: '999999999999999999' } : channel)
+}, starter), /invalid or missing parent category/);
+assert.throws(() => planBlueprint({
+  ...audit, channels: audit.channels.map(channel =>
+    channel.id === categoryId ? { ...channel, parentId: categoryId } : channel)
+}, starter), /nested category|invalid or missing parent category/);
 // Saved draft contracts use an isolated temporary file, never live runtime data.
 const fs = require('node:fs');
 const os = require('node:os');
