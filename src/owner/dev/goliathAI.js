@@ -754,6 +754,8 @@ router.post('/drafts/:id/execution-intent', requirePrivateAI, async (req, res) =
     const draft = draftStore.loadDraft(String(req.params.id));
     if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
     if (draft.environment !== 'DEV') return res.status(403).json({ error: 'DEV guilds only.' });
+    if (draft.createdBy !== String(req.session.user.id))
+      return res.status(403).json({ error: 'Only the draft creator may register an execution intent.' });
     const audit = await getVerifiedAudit(req, 'DEV', draft.guildId);
     const currentDigest = reportDigest(audit);
     if (currentDigest !== draft.auditDigest || draft.review?.status !== 'reviewed' ||
