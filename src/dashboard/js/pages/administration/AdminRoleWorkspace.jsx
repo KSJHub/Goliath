@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -347,7 +348,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
       setRoleSyncReport(reordered?.diagnostics || null);
       const moved = reordered?.diagnostics?.appliedRoles?.length || 0;
       const skipped = reordered?.diagnostics?.skippedRoles?.length || 0;
-      setNotice(skipped ? `⚠️ Saved. Discord moved ${moved} role${moved === 1 ? '' : 's'} and skipped ${skipped}.` : `✅ Saved. Discord moved ${moved} role${moved === 1 ? '' : 's'}.`);
+      setNotice(skipped ? `${E.WARNING} Saved. Discord moved ${moved} role${moved === 1 ? '' : 's'} and skipped ${skipped}.` : `${E.SUCCESS} Saved. Discord moved ${moved} role${moved === 1 ? '' : 's'}.`);
     } catch (err) {
       console.error(err);
       setRoleSyncReport(err.diagnostics || null);
