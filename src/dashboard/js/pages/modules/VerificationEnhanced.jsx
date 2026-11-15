@@ -237,6 +237,19 @@ export default function VerificationEnhanced({ theme, selectedGuild, selectedGui
     if (loadedGuild.current !== guildId) advancedDirty.current = false;
     load();
   }, [guildId]);
+  // Re-read the shared guild configuration when returning from Discord or another tab.
+  // Never replace an unsaved panel or advanced-settings draft.
+  useEffect(() => {
+    const refreshOnReturn = () => {
+      if (!document.hidden && !panelDraftDirty.current && !advancedDirty.current && !busy) load();
+    };
+    window.addEventListener('focus', refreshOnReturn);
+    document.addEventListener('visibilitychange', refreshOnReturn);
+    return () => {
+      window.removeEventListener('focus', refreshOnReturn);
+      document.removeEventListener('visibilitychange', refreshOnReturn);
+    };
+  }, [guildId, busy, selectedPanelId]);
 
   async function act(name, fn, successText) {
     setBusy(name);
