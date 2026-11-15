@@ -295,7 +295,7 @@ export default function Stats({ theme, selectedGuild, selectedGuildData }) {
       </StatGrid>
       <SectionCard theme={theme} title="Server Counter Setup" subtitle="Live read-only text or voice channels that display your server numbers at a glance.">
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <PrimaryButton onClick={quickSetup} disabled={busy}>⚡ Quick Setup</PrimaryButton>
+          <PrimaryButton onClick={quickSetup} disabled={busy}>{E.AUTOMATION} Quick Setup</PrimaryButton>
           <SecondaryButton onClick={() => { setDraft(presenceDraft(config?.settings)); setPreview(''); }} disabled={busy}>{E.ACTIVE}{E.DND}{E.IDLE} Presence Trio</SecondaryButton>
           <SecondaryButton onClick={refreshCounters} disabled={busy}>{E.REFRESH} Refresh Now</SecondaryButton>
           <SecondaryButton onClick={() => { setDraft(newDraft(config?.settings)); setPreview(''); }} disabled={busy}>{E.ADD} Create Counter</SecondaryButton>
