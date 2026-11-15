@@ -153,7 +153,7 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
     </section>
 
     <section style={{ ...card, display: 'grid', gap: 9 }}>
-      <h2 style={{ margin: 0 }}>➕ New Custom Group</h2>
+      <h2 style={{ margin: 0 }}>{E.ADD} New Custom Group</h2>
       <Input theme={theme} value={newDraft.name} onChange={(event) => setNewDraft({ ...newDraft, name: event.target.value })} placeholder="Gaming Platform / Region / Interests" />
       <Input theme={theme} value={newDraft.emoji} onChange={(event) => setNewDraft({ ...newDraft, emoji: event.target.value })} placeholder="Emoji" />
       <Input theme={theme} value={newDraft.description} onChange={(event) => setNewDraft({ ...newDraft, description: event.target.value })} placeholder="Description" />
@@ -173,14 +173,14 @@ export default function RoleSelector({ theme, selectedGuild, selectedGuildData }
 
     <section style={{ ...card, display: 'grid', gap: 8 }}>
       <h2 style={{ margin: 0 }}>Health & Acceptance</h2>
-      <strong style={{ color: health.healthy ? '#86efac' : '#fbbf24' }}>{health.healthy ? '✅ Healthy' : '⚠️ Needs attention'}</strong>
+      <strong style={{ color: health.healthy ? '#86efac' : '#fbbf24' }}>{health.healthy ? `${E.SUCCESS} Healthy` : `${E.WARNING} Needs attention`}</strong>
       {(health.issues || []).map((item, index) => <div key={`i-${index}`} style={{ color: '#fca5a5' }}>• {item}</div>)}
       {(health.warnings || []).slice(0, 12).map((item, index) => <div key={`w-${index}`} style={{ color: '#fbbf24' }}>• {item}</div>)}
       <div style={{ borderTop: `1px solid ${theme.cardBorder}`, marginTop: 4, paddingTop: 10 }}>
-        <strong style={{ color: acceptance.ready ? '#86efac' : '#fbbf24' }}>{acceptance.ready ? '✅ Acceptance Ready' : '⚠️ Acceptance Not Ready'}</strong>
+        <strong style={{ color: acceptance.ready ? '#86efac' : '#fbbf24' }}>{acceptance.ready ? `${E.SUCCESS} Acceptance Ready` : `${E.WARNING} Acceptance Not Ready`}</strong>
         <div style={{ color: theme.mutedText, fontSize: 12, marginTop: 3 }}>{acceptance.ready ? 'The guild is configured for the manual Role Selector acceptance run.' : `${acceptance.failed?.length || 0} readiness check(s) still need attention.`}</div>
       </div>
-      {(acceptance.checks || []).map((check) => <div key={check.id} style={{ display: 'grid', gridTemplateColumns: '22px 1fr', gap: 6, alignItems: 'start' }}><span>{check.passed ? '✅' : '❌'}</span><div><strong>{String(check.id || '').replaceAll('_', ' ')}</strong><div style={{ color: theme.mutedText, fontSize: 12 }}>{check.detail}</div></div></div>)}
+      {(acceptance.checks || []).map((check) => <div key={check.id} style={{ display: 'grid', gridTemplateColumns: '22px 1fr', gap: 6, alignItems: 'start' }}><span>{check.passed ? E.SUCCESS : E.ERROR}</span><div><strong>{String(check.id || '').replaceAll('_', ' ')}</strong><div style={{ color: theme.mutedText, fontSize: 12 }}>{check.detail}</div></div></div>)}
     </section>
   </div>;
 }
