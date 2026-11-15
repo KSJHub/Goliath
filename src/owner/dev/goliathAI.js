@@ -695,12 +695,15 @@ router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, re
     const reviews = approvalLedger.listReviews({
       draft, currentDigest, operations: preview.operations
     });
-    const reviewed = draft.review?.status === 'reviewed';
+    const reviewed = draft.review?.status === 'reviewed' &&
+      draft.review.checkedBy === draft.createdBy &&
+      Number.isFinite(Date.parse(draft.review.checkedAt)) &&
+      Date.parse(draft.review.checkedAt) <= Date.now();
     const candidates = preview.operations.map((operation, index) => {
       const permission = preflight.operations[index];
       const review = reviews[index];
       const entry = manifest.entries[index];
-      const eligibleForFutureApproval = reviewed && !manifest.unavailable &&
+      const eligibleForFutureApproval = reviewed && preflight.permissionsVerified === true && !manifest.unavailable &&
         manifest.warnings.length === 0 && rehearsal.simulated === true &&
         entry?.issues.length === 0 && operation.kind === 'rename_category' &&
         permission.permission === 'permitted-in-principle' && !review.needsAttention &&
@@ -753,7 +756,10 @@ router.post('/drafts/:id/execution-intent', requirePrivateAI, async (req, res) =
     if (draft.environment !== 'DEV') return res.status(403).json({ error: 'DEV guilds only.' });
     const audit = await getVerifiedAudit(req, 'DEV', draft.guildId);
     const currentDigest = reportDigest(audit);
-    if (currentDigest !== draft.auditDigest || draft.review?.status !== 'reviewed')
+    if (currentDigest !== draft.auditDigest || draft.review?.status !== 'reviewed' ||
+        draft.review.checkedBy !== draft.createdBy ||
+        !Number.isFinite(Date.parse(draft.review.checkedAt)) ||
+        Date.parse(draft.review.checkedAt) > Date.now())
       return res.status(409).json({ error: 'Draft is stale or has not been reviewed.' });
     const preview = planBlueprint(audit, draft.blueprint);
     const operation = preview.operations[sequence - 1];
@@ -767,7 +773,7 @@ router.post('/drafts/:id/execution-intent', requirePrivateAI, async (req, res) =
       return res.status(409).json({ error: 'Transaction integrity or rehearsal failed.' });
     const capability = await getBotCapabilityEvidence(req, 'DEV', draft.guildId);
     const preflight = buildCapabilityPreflight({ audit, operations: preview.operations, capability });
-    if (preflight.operations[sequence - 1]?.permission !== 'permitted-in-principle')
+    if (preflight.permissionsVerified !== true || preflight.operations[sequence - 1]?.permission !== 'permitted-in-principle')
       return res.status(409).json({ error: 'Effective Discord permissions are not verified.' });
     const review = approvalLedger.listReviews({
       draft, currentDigest, operations: preview.operations
