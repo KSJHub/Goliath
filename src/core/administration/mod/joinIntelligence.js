@@ -134,19 +134,19 @@ function buildEmbed(member, context, local, suspects, scanId, assessment) {
     .setColor(decision.color)
     .setTitle(`🧠 Join Intelligence • ${member.user.tag || member.user.username}`)
     .setDescription([
-      `**Automatic join scan** • \`${scanId}\``,
       `**Member:** ${member.user} • \`${member.id}\``,
+      `**Scan:** \`${scanId}\``, 
       '',
       `${decision.emoji} **Decision: ${decision.label}**`,
       assessment.reasons.length ? assessment.reasons.slice(0, 4).map((reason) => `• ${reason}`).join('\n') : '• No attention threshold reached.',
       '',
-      'Decisioning is an intelligence aid only. It does not automatically punish, isolate or blacklist the member.',
+      'Assessment only • No automatic moderation action taken.',
     ].join('\n'))
     .addFields(
       { name: '👤 Account', value: [`Created: <t:${Math.floor((member.user.createdTimestamp || Date.now()) / 1000)}:F>${ageDays !== null ? ` • **${ageDays}d old**` : ''}`, `Joined: <t:${Math.floor((member.joinedTimestamp || Date.now()) / 1000)}:R>`, `Screening: **${member.pending ? 'Pending' : 'Complete'}** • Bot: **${member.user.bot ? 'Yes' : 'No'}**`].join('\n'), inline: false },
-      { name: '🚦 Risk', value: [`**${risk.score || 0}/100 • ${risk.label || '🟢 Low'}**`, `Watchlist: **${String(watch.state || 'clear').toUpperCase()}** • Local cases: **${local.caseCount}** • Active: **${local.activeCases}** • Warnings: **${local.warningCount}**`, riskFactors].join('\n').slice(0, 1024), inline: false },
+      { name: '🚦 Risk & Moderation', value: [`**${risk.score || 0}/100 • ${risk.label || '🟢 Low'}**`, `Watchlist: **${String(watch.state || 'clear').toUpperCase()}** • Cases: **${local.caseCount}** (${local.activeCases} active) • Warnings: **${local.warningCount}**`, riskFactors].join('\n').slice(0, 1024), inline: false },
       { name: '🌐 Network Intelligence', value: [`Observed guilds: **${history.length}** • Cross-guild cases: **${context.network?.caseCount || 0}** • Cross-guild bans: **${context.network?.banCount || 0}**`, `External records: **${externalCount}** • Verified: **${reputation.verifiedExternal || 0}** • Submitted: **${reputation.submitted || 0}** • Unverified: **${reputation.unverified || 0}**`].join('\n'), inline: false },
-      { name: '🔗 Account Correlation', value: `${suspectText.slice(0, 900)}\n\n*Heuristic correlation is an investigation aid, not proof of shared ownership.*`, inline: false },
+      { name: '🔗 Account Correlation', value: suspects.length ? `${suspectText.slice(0, 850)}\n\n*Possible matches require staff verification.*` : suspectText, inline: false },
     )
     .setFooter({ text: 'Goliath • Join Intelligence' })
     .setTimestamp();
