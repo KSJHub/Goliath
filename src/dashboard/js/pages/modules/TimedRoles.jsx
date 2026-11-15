@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 import { goliathDialog } from '../../shared/GoliathDialogHost.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -263,7 +264,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
         {rules.length === 0 ? <EmptyState theme={theme} icon="⏳" title="No milestones configured" description="Create a milestone such as Veteran after one year." /> : rules.map((rule) => (
           <div key={rule.ruleId} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 16, padding: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontWeight: 950 }}>{rule.enabled ? '✅' : '⏸️'} {rule.name}</div>
+              <div style={{ fontWeight: 950 }}>{rule.enabled ? E.SUCCESS : E.PAUSE} {rule.name}</div>
               <div style={{ marginTop: 4, color: theme.mutedText }}>{roleName(rule.roleId)} after {rule.value} {rule.unit}{rule.removeRoleIds?.length ? ` · removes ${rule.removeRoleIds.map(roleName).join(', ')}` : ''}</div>
               {rule.lastError ? <div style={{ marginTop: 4, color: '#fca5a5' }}>{rule.lastError}</div> : null}
             </div>
