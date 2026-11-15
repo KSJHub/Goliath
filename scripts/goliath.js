@@ -5425,7 +5425,8 @@ const readyAudit = { ...audit, roles: [] };
 const readyDraft = {
   id: '00000000-0000-4000-8000-000000000001',
   environment: 'DEV', guildId, guildName: audit.guild.name,
-  auditDigest: 'a'.repeat(64), review: { status: 'reviewed', checkedBy: guildId }
+  auditDigest: 'a'.repeat(64), createdBy: guildId,
+  review: { status: 'reviewed', checkedBy: guildId, checkedAt: '2026-11-15T00:00:00.000Z' }
 };
 const report = evaluateReadiness({
   draft: readyDraft, audit: readyAudit, preview, currentDigest: 'a'.repeat(64)
@@ -5497,6 +5498,18 @@ try {
     operations: preview.operations }, ledgerFile);
   assert.equal(result[0].reviews[0].decision, 'acknowledged');
   assert.equal(result[0].executable, false);
+  const reReviewedDraft = {
+    ...reviewDraft, review: { ...reviewDraft.review, checkedAt: '2026-11-15T00:01:00.000Z' }
+  };
+  assert.equal(ledger.listReviews({
+    draft: reReviewedDraft, currentDigest: 'a'.repeat(64),
+    operations: preview.operations
+  }, ledgerFile)[0].needsAttention, true);
+  assert.throws(() => ledger.recordReview({
+    draft: { ...reviewDraft, createdBy: otherId },
+    currentDigest: 'a'.repeat(64), operations: preview.operations,
+    reviewerId: guildId, sequence: 1, decision: 'acknowledged'
+  }, ledgerFile), /creator identity/);
   assert.throws(() => ledger.recordReview({
     draft: reviewDraft, currentDigest: 'b'.repeat(64),
     operations: preview.operations, reviewerId: guildId, sequence: 1, decision: 'acknowledged'
