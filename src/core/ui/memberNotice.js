@@ -114,7 +114,7 @@ function buildMemberNotice(guild, options = {}) {
   ].filter(Boolean);
 
   embed.setFooter({
-    text: footerBits.join(' • ').slice(0, 2048),
+    text: moduleName === 'Verification' ? 'Goliath Verification •' : footerBits.join(' • ').slice(0, 2048),
     ...(icon ? { iconURL: icon } : {}),
   });
 
