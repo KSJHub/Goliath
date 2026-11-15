@@ -5402,9 +5402,14 @@ try {
     id: draft.id, ownerId: otherId, currentAuditDigest: fingerprint
   }, tempFile), /Only the draft creator/);
   assert.equal(reviewed.executable, false);
-  assert.equal(store.deleteDraft(draft.id, tempFile), true);
+  assert.throws(() => store.deleteDraft(draft.id, tempFile, otherId),
+    /Only the draft creator/);
+  assert.equal(store.loadDraft(draft.id, tempFile).id, draft.id);
+  assert.throws(() => store.deleteDraft(draft.id, tempFile),
+    /Draft owner identity is required/);
+  assert.equal(store.deleteDraft(draft.id, tempFile, guildId), true);
   assert.equal(store.listDrafts(tempFile).length, 0);
-  assert.equal(store.deleteDraft(draft.id, tempFile), false);
+  assert.equal(store.deleteDraft(draft.id, tempFile, guildId), false);
   process.env.BOT_MODE = 'PRODUCTION';
   assert.throws(() => store.saveDraft({
     environment: 'PRODUCTION', guildId, ownerId: guildId,
