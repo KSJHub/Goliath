@@ -30,10 +30,10 @@ async function discordOverview(interaction) { if (!interaction?.guild?.id || !in
 function mainEmbed(overview, interaction, notice = '') {
   return new EmbedBuilder().setColor(overview.enabled ? 0x57F287 : PANEL_COLOR).setTitle(emojiLabel('UTILITY_ANIMATED_EMOJI', 'Emoji & GIF Studio')).setDescription([
     'Give your community a shared library of static emojis and animated GIFs without filling this server\'s normal emoji slots. Goliath handles optimisation and animation automatically.', '',
-    `**Emoji & GIF Studio:** ${overview.enabled ? 'On ✅' : 'Off ❌'}`,
+    `**Emoji & GIF Studio:** ${overview.enabled ? `On ${EMOJIS.SUCCESS}` : `Off ${EMOJIS.ERROR}`}`,
     `**Your Emojis & GIFs:** ${overview.guildCapacity.used} / ${overview.guildCapacity.max}`,
     `**Built-in Library:** ${overview.coreCapacity.used} / ${overview.coreCapacity.max}`,
-    `**Status:** ${overview.health?.healthy ? 'Everything working ✅' : 'Needs attention ⚠️'}`,
+    `**Status:** ${overview.health?.healthy ? `Everything working ${EMOJIS.SUCCESS}` : `Needs attention ${EMOJIS.WARNING}`}`,
     notice ? `\n${notice}` : '',
   ].filter(Boolean).join('\n')).setFooter({ text: `Requested by ${memberName(interaction)}` }).setTimestamp();
 }
@@ -76,8 +76,8 @@ function settingsPanel(overview, interaction, notice = '') {
   const attention = (health.brokenFavourites?.length || 0) + (health.brokenAliases?.length || 0) + (health.brokenPackEntries?.length || 0) + (health.expiredTemporary?.length || 0);
   return { embeds: [new EmbedBuilder().setColor(health.healthy ? 0x57F287 : 0xFEE75C).setTitle(emojiLabel('MODERATION_DASHBOARD', 'Emoji & GIF Studio Settings')).setDescription([
     'Control Emoji & GIF Studio and keep static and animated media running smoothly.', '',
-    `**Emoji & GIF Studio:** ${overview.enabled ? 'On ✅' : 'Off ❌'}`,
-    `**Status:** ${health.healthy ? 'Everything working ✅' : 'Needs attention ⚠️'}`,
+    `**Emoji & GIF Studio:** ${overview.enabled ? `On ${EMOJIS.SUCCESS}` : `Off ${EMOJIS.ERROR}`}`,
+    `**Status:** ${health.healthy ? `Everything working ${EMOJIS.SUCCESS}` : `Needs attention ${EMOJIS.WARNING}`}`,
     `**Library space used:** ${overview.forecast?.used || 0}/${overview.forecast?.max || 2000}`,
     `**Items needing attention:** ${attention}`,
     notice ? `\n${notice}` : '', '', '**Most used emojis & GIFs**',
@@ -321,7 +321,7 @@ async function handleDiscordInteraction(interaction) {
         failed += 1;
         const message = String(error?.message || error);
         if (gifOnly && message.includes('without flattening the animation')) fallbackEligible += 1;
-        lines.push(`❌ **${attachment.name}** — ${message.slice(0, 160)}${message.includes('without flattening the animation') ? ' • static fallback available below' : ''}`);
+        lines.push(`${EMOJIS.ERROR} **${attachment.name}** — ${message.slice(0, 160)}${message.includes('without flattening the animation') ? ' • static fallback available below' : ''}`);
       }
     }
     const summary = `**${uploads.size - failed} added** • **${animated} animated** • **${optimised} optimised** • **${failed} failed**`;
@@ -347,13 +347,13 @@ async function handleDiscordInteraction(interaction) {
       lines.push(`✅ ${result.emoji.mention || `:${result.emoji.name}:`} **${attachment.name}** — ${emojiMedia.processingSummary(prepared)} • animation removed by explicit choice`);
     } catch (error) {
       failed += 1;
-      lines.push(`❌ **${attachment.name}** — ${String(error?.message || error).slice(0, 180)}`);
+      lines.push(`${EMOJIS.ERROR} **${attachment.name}** — ${String(error?.message || error).slice(0, 180)}`);
     }
   }
   await interaction.editReply({ embeds: [new EmbedBuilder().setColor(failed ? 0xFEE75C : 0x57F287).setTitle(emojiLabel('MEDIA', 'Static Fallback Complete')).setDescription(`**${added} added as static** • **${failed} failed**\n\n${lines.join('\n')}`.slice(0, 4000)).setFooter({ text: 'Static fallback uses the first animation frame only.' })], components: [row(button('admin:module:emojis:guild', emojiLabel('USER_STARBOARD', 'Manage Library'), ButtonStyle.Primary)), row(button('admin:module:emojis:gif-upload-open', emojiLabel('BACK', 'Back to Add GIF'), ButtonStyle.Secondary))] });
   return true;
 }
-  if (id === 'admin:module:emojis:health') { const h = (await discordOverview(interaction)).health || {}; await sendPanel(interaction, { embeds: [new EmbedBuilder().setColor(h.healthy ? 0x57F287 : 0xFEE75C).setTitle(emojiLabel('WELCOME_DIAGNOSTICS', 'Check for Problems')).setDescription([`**Status:** ${h.healthy ? 'Everything working ✅' : 'Needs attention ⚠️'}`, `Missing server emojis: **${h.brokenFavourites?.length || 0}**`, `Broken shortcuts: **${h.brokenAliases?.length || 0}**`, `Broken emoji groups: **${h.brokenPackEntries?.length || 0}**`, `Expired temporary emojis: **${h.expiredTemporary?.length || 0}**`, `Emoji spaces remaining: **${h.capacity?.remaining ?? 0}**`].join('\n'))], components: [row(button('admin:module:emojis:settings', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary))] }); return true; }
+  if (id === 'admin:module:emojis:health') { const h = (await discordOverview(interaction)).health || {}; await sendPanel(interaction, { embeds: [new EmbedBuilder().setColor(h.healthy ? 0x57F287 : 0xFEE75C).setTitle(emojiLabel('WELCOME_DIAGNOSTICS', 'Check for Problems')).setDescription([`**Status:** ${h.healthy ? `Everything working ${EMOJIS.SUCCESS}` : `Needs attention ${EMOJIS.WARNING}`}`, `Missing server emojis: **${h.brokenFavourites?.length || 0}**`, `Broken shortcuts: **${h.brokenAliases?.length || 0}**`, `Broken emoji groups: **${h.brokenPackEntries?.length || 0}**`, `Expired temporary emojis: **${h.expiredTemporary?.length || 0}**`, `Emoji spaces remaining: **${h.capacity?.remaining ?? 0}**`].join('\n'))], components: [row(button('admin:module:emojis:settings', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary))] }); return true; }
   if (id === 'admin:module:emojis:cleanup') { const section = emojiStore.getSection(guildId); const candidates = await emojis.cleanupCandidates(interaction.client, section.cleanup.unusedDays); await sendPanel(interaction, { embeds: [new EmbedBuilder().setColor(PANEL_COLOR).setTitle(emojiLabel('ADMIN_PURGE', 'Find Unused Emojis')).setDescription(candidates.length ? candidates.slice(0, 20).map((entry) => `• \`:${entry.emoji.name}:\` — ${entry.count} uses`).join('\n') : 'No unused emojis found.')], components: [row(button('admin:module:emojis:storage', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary))] }); return true; }
   if (id === 'admin:module:emojis:duplicates') { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); const groups = await emojis.duplicates(interaction.client); await interaction.editReply({ embeds: [new EmbedBuilder().setColor(PANEL_COLOR).setTitle(emojiLabel('UTILITY_GROUP', 'Find Duplicate Emojis')).setDescription(groups.length ? groups.slice(0, 15).map((group, index) => `**Group ${index + 1}:** ${group.entries.map((entry) => `\`:${entry.name}:\``).join(', ')}`).join('\n') : 'No exact duplicate images were found.')], components: [row(button('admin:module:emojis:storage', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary))] }); return true; }
   if (id === 'admin:module:emojis:export') { const exported = emojis.exportGuildConfig(guildId); await sendPanel(interaction, { embeds: [new EmbedBuilder().setColor(PANEL_COLOR).setTitle(emojiLabel('WELCOME_PRESET', 'Backup Emoji Settings')).setDescription(`\`\`\`json\n${JSON.stringify(exported, null, 2).slice(0, 3500)}\n\`\`\``)], components: [row(button('admin:module:emojis:settings', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary))] }); return true; }
