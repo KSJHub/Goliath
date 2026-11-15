@@ -9,7 +9,7 @@ const {
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require('discord.js');
 const security = require('../../core/security/protection/core');
-const { navigationButton } = require('../../core/guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../core/guild/goliathNavigation');
 
 const ROOT = '/home/goliath';
 const PREFIX = 'ownerpanel:guildaccess:';
@@ -83,10 +83,10 @@ function appendBetaGuild(id, remove = false) {
 
 function buildRow() {
   return new ActionRowBuilder().addComponents(
-    navigationButton(`${PREFIX}list`, 'Connected Guilds', ButtonStyle.Secondary).setEmoji('🌐'),
-    navigationButton(`${PREFIX}add`, 'Approve BETA Guild', ButtonStyle.Primary).setEmoji('➕'),
-    navigationButton(`${PREFIX}remove`, 'Remove BETA Guild', ButtonStyle.Danger).setEmoji('➖'),
-    navigationButton(`${PREFIX}invite`, 'Invite BETA Bot', ButtonStyle.Secondary).setEmoji('🔗')
+    navigationButton(`${PREFIX}list`, 'Connected Guilds', ButtonStyle.Secondary).setEmoji(EMOJIS.USER_TRANSLATE),
+    navigationButton(`${PREFIX}add`, 'Approve BETA Guild', ButtonStyle.Primary).setEmoji(EMOJIS.ADD),
+    navigationButton(`${PREFIX}remove`, 'Remove BETA Guild', ButtonStyle.Danger).setEmoji(EMOJIS.REMOVE),
+    navigationButton(`${PREFIX}invite`, 'Invite BETA Bot', ButtonStyle.Secondary).setEmoji(EMOJIS.AUTOMOD_LINKS)
   );
 }
 
@@ -180,7 +180,7 @@ async function handle(interaction) {
         content: `${result.added ? '✅ Saved' : 'ℹ️ Already approved'}: **${guildId}**.\n` +
           'Restart BETA to load the saved list, then invite the beta bot. Approval does not invite it automatically.',
         components: [new ActionRowBuilder().addComponents(
-          navigationButton('ownerpanel:restart:ask:beta', 'Restart BETA', ButtonStyle.Primary).setEmoji('🔄')
+          navigationButton('ownerpanel:restart:ask:beta', 'Restart BETA', ButtonStyle.Primary).setEmoji(EMOJIS.REFRESH)
         )],
         allowedMentions: { parse: [] },
       });
