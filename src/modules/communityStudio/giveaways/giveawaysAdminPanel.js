@@ -1,6 +1,6 @@
 'use strict';
 const { navigationButton } = require('../../../core/guild/goliathNavigation');
-const { emojiLabel } = require('../../../core/ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../../core/ui/emojis');
 
 const {
   EmbedBuilder,
@@ -74,15 +74,15 @@ function buildGiveawaysAdminPanel(guild, memberDisplayName = 'Unknown User', rol
     .setTitle(emojiLabel('USER_GIVEAWAYS', 'Giveaways'))
     .setDescription([
       'Configure giveaway channels, roles and entry rules.', '',
-      `**Status:** ${enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
+      `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
       `**Announcement Channel:** ${formatChannel(section.announcementChannelId)}`,
       `**Log Channel:** ${formatChannel(section.logChannelId)}`,
       `**Manager Roles:** ${formatRoles(section.managerRoleIds)}`,
       `**Role Selection · Page ${roleInfo.page + 1}/${roleInfo.pages}**`,
       `**Required Roles:** ${formatRoles(section.requiredRoleIds)}`,
-      `**Multiple Entries:** ${section.allowMultipleEntries ? 'Yes ✅' : 'No ❌'}`,
-      `**Require Role:** ${section.requireRole ? 'Yes ✅' : 'No ❌'}`,
-      `**Ping Winners:** ${section.pingWinners !== false ? 'Yes ✅' : 'No ❌'}`,
+      `**Multiple Entries:** ${section.allowMultipleEntries ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Require Role:** ${section.requireRole ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
+      `**Ping Winners:** ${section.pingWinners !== false ? `Yes ${EMOJIS.SUCCESS}` : `No ${EMOJIS.ERROR}`}`,
       `**Leveling Eligibility:** ${eligibilitySummary(section)}`, '',
       `Active: \`${active}\` | Created: \`${section.analytics.created}\` | Ended: \`${section.analytics.ended}\` | Entries: \`${section.analytics.entries}\``,
     ].join('\n')).setFooter({ text: `Requested by ${memberDisplayName}` }).setTimestamp();
@@ -104,8 +104,8 @@ function buildLevelingEligibilityPanel(guild, memberDisplayName = 'Unknown User'
   const lines = [
     'Use the Leveling module as an additional giveaway entry and winner requirement.',
     '',
-    `**Eligibility:** ${config.enabled ? 'Enabled ✅' : 'Disabled ❌'}`,
-    `**Leveling Module:** ${levelingEnabled ? 'Enabled ✅' : 'Disabled ⚠️'}`,
+    `**Eligibility:** ${config.enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`,
+    `**Leveling Module:** ${levelingEnabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.WARNING}`}`,
     `**Minimum Level:** ${config.minLevel || 'None'}`,
     `**Minimum XP:** ${config.minXp ? config.minXp.toLocaleString() : 'None'}`,
     `**Top Rank Limit:** ${config.top ? `Top ${config.top}` : 'None'}`,
@@ -114,7 +114,7 @@ function buildLevelingEligibilityPanel(guild, memberDisplayName = 'Unknown User'
     '',
     'Role requirements still apply separately. If XP eligibility is enabled, a member must satisfy both the role rules and these Leveling rules.',
     'Eligibility is checked when entering and checked again before winner selection/rerolls.',
-    !levelingEnabled && config.enabled ? '\n⚠️ Leveling eligibility is enabled while the Leveling module is disabled. Entries will be blocked until Leveling is enabled again.' : null,
+    !levelingEnabled && config.enabled ? `\n${EMOJIS.WARNING} Leveling eligibility is enabled while the Leveling module is disabled. Entries will be blocked until Leveling is enabled again.` : null,
   ].filter(Boolean);
 
   return {
