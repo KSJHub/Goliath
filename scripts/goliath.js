@@ -5303,7 +5303,7 @@ const categoryId = '223456789012345678';
 const channelId = '323456789012345678';
 const otherId = '423456789012345678';
 const audit = {
-  environment: 'DEV', timestamp: '2026-11-12T01:00:00.000Z',
+  readOnly: true, environment: 'DEV', timestamp: '2026-11-12T01:00:00.000Z',
   guild: { id: guildId, name: 'Test Discord' }, channels: [
     { id: categoryId, name: 'Community', type: 4, parentId: null },
     { id: channelId, name: 'general', type: 0, parentId: categoryId },
