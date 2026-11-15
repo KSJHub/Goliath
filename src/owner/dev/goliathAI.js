@@ -601,6 +601,7 @@ router.post('/drafts/:id/review', requirePrivateAI, async (req, res) => {
     for (const [intentId, intent] of executionIntents) {
       if (intent.draftId === draft.id) executionIntents.delete(intentId);
     }
+    revokeRehearsalGrants(draft.id);
     return res.json({ draft: updated, notice: 'Marked reviewed only. This is NOT permission to execute Discord changes.' });
   } catch (error) {
     if (error.status) return res.status(error.status).json({ error: error.message });
@@ -1033,6 +1034,7 @@ router.post('/drafts/:id/operation-reviews', requirePrivateAI, async (req, res) 
       if (intent.draftId === draft.id && intent.sequence === record.sequence)
         executionIntents.delete(intentId);
     }
+    revokeRehearsalGrants(draft.id, record.sequence);
     return res.json({ record, canExecute: false, executable: false,
       notice: 'Review acknowledgement saved. NOT approval or permission to change Discord.' });
   } catch (error) {
@@ -1051,6 +1053,7 @@ router.delete('/drafts/:id', requirePrivateAI, (req, res) => {
     for (const [intentId, intent] of executionIntents) {
       if (intent.draftId === draftId) executionIntents.delete(intentId);
     }
+    revokeRehearsalGrants(draftId);
     return res.json({ success: true, notice: 'Saved draft and its pending intents deleted. No Discord changes made.' });
   } catch (error) {
     if (/Only the draft creator/.test(error.message))
