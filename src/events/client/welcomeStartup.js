@@ -8,7 +8,13 @@ const scheduledWelcomeScheduler = require('../../modules/messageStudio/welcome/s
 module.exports = {
   name: Events.ClientReady,
   async execute(client) {
-    await scheduledWelcomeScheduler.startup(client);
+    // Scheduled Welcome startup must not prevent recovery of ordinary
+    // deferred welcomes when its scheduler fails to initialise.
+    try {
+      await scheduledWelcomeScheduler.startup(client);
+    } catch (error) {
+      console.error('[Welcome] Scheduled Welcome startup failed:', error);
+    }
 
     const enabledGuilds = client.guilds.cache.filter((guild) => guildManager.isModuleEnabled(guild.id, 'welcome'));
     if (!enabledGuilds.size) {
