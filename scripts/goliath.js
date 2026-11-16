@@ -5622,6 +5622,12 @@ for (const guard of [
 ]) assert(aiSelfTestSource.includes(guard), 'Missing local generation probe guard: ' + guard);
 assert(!/readAudit\(|internalGet\(|guildContext|guild\.channels\./.test(aiSelfTestSource),
   'Local readiness probe must not access guild data or mutate Discord');
+const aiStatusSource = aiRouterSource.split(
+  "router.get('/status', requirePrivateAI, (_req, res) => res.json({")[1]?.split(
+  "// A developer-only readiness probe")[0];
+assert(aiStatusSource && aiStatusSource.includes('verified: false') &&
+  aiStatusSource.includes("verificationRequired: 'POST /self-test'"),
+  'Configuration status must not claim live inference verification');
 const aiHealthSource = aiRouterSource.split(
   "router.get('/health', requirePrivateAI, async (_req, res) => {")[1]?.split(
   "const SNOWFLAKE =")[0];
@@ -5635,7 +5641,8 @@ for (const guard of [
 ]) assert(aiHealthSource.includes(guard), 'Missing health check: ' + guard);
 for (const guard of [
   "if (!isEnabled())", "Array.isArray(incoming)", "MAX_MESSAGES",
-  "MAX_CONTENT", "readAudit(req, guildId)", "requestInProgress",
+  "MAX_CONTENT", "MAX_TOTAL_CHAT_CHARS", "incoming.reduce(",
+  "res.status(413)", "readAudit(req, guildId)", "requestInProgress",
   "fetch(LOCAL_AI_URL", "localAIHeaders(true)", "controller.abort()",
   "clearTimeout(timeout)", "requestInProgress = false",
   "message.slice(0, 12000)"
