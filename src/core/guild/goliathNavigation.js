@@ -64,7 +64,7 @@ const EMOJIS = Object.freeze({
   ENV_DEV: '🔵',
   ENV_BETA: '🟡',
   ENV_PRODUCTION: '🟢',
-  CROWN: '👑',
+  CROWN: '👑', FREE: '🆓',
   STATUS_ALERT: '🔴',
   STATUS_UNKNOWN: '⚪',
   PERMISSIONS: '🔐',
