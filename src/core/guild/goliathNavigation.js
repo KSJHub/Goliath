@@ -68,6 +68,8 @@ const EMOJIS = Object.freeze({
   STAFF_HELPER: '🪪',
   STAFF_JUNIOR_MOD: '🗝️',
   STAFF_ADMIN: '🔏',
+  TARGET: '🎯',
+  REPEAT: '🔁',
   HELP_QUESTION: '❓',
   HEALTH_STABLE: '🟡',
   HEALTH_SLOW: '🟠',
