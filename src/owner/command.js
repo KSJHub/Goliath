@@ -848,13 +848,20 @@ async function aiRecoverChannel(interaction, guildId, confirm = false) {
       await channel.permissionOverwrites.delete(role, 'Goliath AI DEV approved channel recovery by ' + interaction.user.id);
     } else {
       const values = {};
-      for (const permission of previousAllow.toArray()) values[permission] = true;
-      for (const permission of new PermissionsBitField(BigInt(snapshot.before.deny)).toArray()) values[permission] = false;
-      // Replace, rather than merge, so grants added by the AI are removed on recovery.
-      await channel.permissionOverwrites.set([
-        ...channel.permissionOverwrites.cache.filter(item => item.id !== role.id).values(),
-        { id: role.id, type: 0, allow: snapshot.before.allow, deny: snapshot.before.deny }
-      ], 'Goliath AI DEV approved channel recovery by ' + interaction.user.id);
+      // Reset only permissions changed by this operation. Never replace the
+      // channel-wide overwrite collection, which may contain other users/roles.
+      const allBits = new PermissionsBitField(
+        BigInt(snapshot.after.allow) | BigInt(snapshot.after.deny) |
+        BigInt(snapshot.before.allow) | BigInt(snapshot.before.deny)
+      );
+      const previousDeny = new PermissionsBitField(BigInt(snapshot.before.deny));
+      for (const permission of allBits.toArray()) {
+        values[permission] = previousAllow.has(permission) ? true :
+          previousDeny.has(permission) ? false : null;
+      }
+      await channel.permissionOverwrites.edit(role, values, {
+        reason: 'Goliath AI DEV approved channel recovery by ' + interaction.user.id
+      });
     }
     const refreshed = await guild.channels.fetch(channel.id, { force: true });
     if (!aiOverwriteMatches(aiOverwriteSnapshot(refreshed, role.id), snapshot.before))
