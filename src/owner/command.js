@@ -567,6 +567,55 @@ function aiTemplateSelectRow(guildId, roleId) {
   return new ActionRowBuilder().addComponents(select);
 }
 
+function aiChannelPermissionPlan(guild, channelId, roleId, templateName) {
+  const channel = guild?.channels?.cache?.get(channelId);
+  const role = guild?.roles?.cache?.get(roleId);
+  const template = AI_ROLE_TEMPLATES[templateName];
+  if (!channel || !role || !template) return ['Channel, role or template unavailable.'];
+  const overwrite = channel.permissionOverwrites.cache.get(role.id);
+  const currentAllow = new Set(overwrite?.allow?.toArray() || []);
+  const currentDeny = new Set(overwrite?.deny?.toArray() || []);
+  const grants = template.filter(permission => !currentAllow.has(permission));
+  const conflicting = template.filter(permission => currentDeny.has(permission));
+  const bot = guild.members.me;
+  const botAccess = channel.permissionsFor(bot);
+  const canEdit = Boolean(bot?.permissions?.has('ManageRoles') &&
+    botAccess?.has('ManageRoles') && bot.roles.highest.comparePositionTo(role) > 0 &&
+    !role.managed && role.id !== guild.id);
+  return [
+    '**Channel/category:** <#' + channel.id + '> • **Target role:** <@&' + role.id + '>',
+    '**Requested template:** ' + templateName,
+    '**Explicit grants already set:** ' + (template.length - grants.length) + '/' + template.length,
+    '**Grants to add (' + grants.length + '):** ' + (grants.join(', ') || 'None'),
+    '**Explicit denies conflicting with template (' + conflicting.length + '):** ' + (conflicting.join(', ') || 'None'),
+    '**Other existing allows:** ' + ([...currentAllow].filter(p => !template.includes(p)).join(', ') || 'None'),
+    '**Other existing denies:** ' + ([...currentDeny].filter(p => !template.includes(p)).join(', ') || 'None'),
+    '**Goliath can edit this overwrite:** ' + (canEdit ? 'Likely (Discord permissions still apply)' : 'No — verify bot permissions and role hierarchy'),
+    '',
+    'Preview only. A role may inherit access from other roles or category settings. Explicit grants do not guarantee effective access.',
+    'No permission overwrites have been changed.'
+  ];
+}
+
+function aiChannelRoleSelectRow(guild, channelId) {
+  const roles = [...guild.roles.cache.values()].filter(role => !role.managed && role.id !== guild.id)
+    .sort((a, b) => b.position - a.position).slice(0, 25);
+  if (!roles.length) return null;
+  return new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+    .setCustomId('ownerpanel:ai-target-role:' + channelId + ':guild:' + guild.id)
+    .setPlaceholder('Select role for channel permission plan')
+    .addOptions(roles.map(role => ({ label: role.name.slice(0, 100), value: role.id }))));
+}
+
+function aiChannelTemplateRow(guildId, channelId, roleId) {
+  return new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+    .setCustomId('ownerpanel:ai-channel-template:' + channelId + ':' + roleId + ':guild:' + guildId)
+    .setPlaceholder('Choose channel permission template')
+    .addOptions(Object.keys(AI_ROLE_TEMPLATES).map(name => ({
+      label: name[0].toUpperCase() + name.slice(1), value: name
+    }))));
+}
+
 function aiPermissionDetails(guild, kind, id) {
   if (!guild) return ['Guild unavailable.'];
   if (kind === 'role') {
@@ -641,6 +690,10 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
       '',
       'Discord role hierarchy limits which roles Goliath can edit. Category and channel overwrites may further restrict access.'
     );
+  } else if (detail === 'channel-plan') {
+    lines.push(...aiChannelPermissionPlan(guild, selectedId?.channelId, selectedId?.roleId, selectedId?.template));
+  } else if (detail === 'channel-target') {
+    lines.push('**Selected channel:** <#' + selectedId?.channelId + '>', 'Choose a role below, then select the template to preview the exact channel overwrite differences.');
   } else if (detail === 'comparison') {
     lines.push(...aiRoleTemplateComparison(guild, selectedId?.roleId, selectedId?.template));
   } else if (detail === 'role' || detail === 'channel') {
@@ -675,6 +728,13 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
     navigationButton(contextualOwnerId('home', guildId), 'Back', ButtonStyle.Secondary)
   );
   const rows = [controls];
+  if (guild && detail === 'channel' && typeof selectedId === 'string') {
+    const selector = aiChannelRoleSelectRow(guild, selectedId);
+    if (selector) rows.push(selector);
+  }
+  if (guild && detail === 'channel-target' && selectedId?.channelId && selectedId?.roleId) {
+    rows.push(aiChannelTemplateRow(guild.id, selectedId.channelId, selectedId.roleId));
+  }
   if (guild && detail === 'role' && selectedId && typeof selectedId === 'string') {
     rows.push(aiTemplateSelectRow(guild.id, selectedId));
   }
@@ -816,6 +876,21 @@ async function handleOwnerPanelInteraction(interaction) {
     return true;
   }
 
+  if (id.startsWith(`${OWNER_PREFIX}ai-target-role:`)) {
+    const match = id.match(/^ownerpanel:ai-target-role:(\d{16,25})$/);
+    if (!match || !interaction.isStringSelectMenu?.()) return true;
+    const roleId = validGuildId(interaction.values?.[0]);
+    await handleOwnerAI(interaction, 'channel-target', contextGuildId, { channelId: match[1], roleId });
+    return true;
+  }
+  if (id.startsWith(`${OWNER_PREFIX}ai-channel-template:`)) {
+    const match = id.match(/^ownerpanel:ai-channel-template:(\\d{16,25}):(\d{16,25})$/);
+    if (!match || !interaction.isStringSelectMenu?.()) return true;
+    const template = String(interaction.values?.[0] || '');
+    if (!Object.hasOwn(AI_ROLE_TEMPLATES, template)) return true;
+    await handleOwnerAI(interaction, 'channel-plan', contextGuildId, { channelId: match[1], roleId: match[2], template });
+    return true;
+  }
   if (id.startsWith(`${OWNER_PREFIX}ai-compare:`)) {
     const match = id.match(/^ownerpanel:ai-compare:(\d{16,25})$/);
     if (!match || !interaction.isStringSelectMenu?.()) return true;
