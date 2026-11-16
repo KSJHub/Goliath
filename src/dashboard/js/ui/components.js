@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../shared/PageShell.jsx';
 import { DASHBOARD_LAYOUT } from './layout';
 
 const buttonTones = (theme) => ({
@@ -412,7 +413,7 @@ export function navbarStyles(theme) {
       };
     },
     collapseButtonGlyph(expanded = true) {
-      return expanded ? '🔓' : '🔒';
+      return expanded ? E.UNLOCK : E.LOCK;
     },
   };
 }
