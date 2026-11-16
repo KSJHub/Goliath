@@ -587,13 +587,14 @@ async function aiStageRolePlan(interaction, guildId, roleId, templateName) {
 async function aiApplyRolePlan(interaction, guildId) {
   await interaction.deferUpdate();
   const plan = aiPendingRolePlans.get(interaction.user.id);
+  // A second confirmation cannot race the first write.
   aiPendingRolePlans.delete(interaction.user.id);
   if (mode() !== 'DEV' || !plan || plan.guildId !== guildId || Date.now() > plan.expiresAt)
     return interaction.editReply({ content: 'Permission plan expired or invalid. Create a new preview.', embeds: [], components: [] });
   const { guild } = await resolveInteractionGuild(interaction, plan.guildId);
   if (!guild) return interaction.editReply({ content: 'Guild unavailable.', embeds: [], components: [] });
   await Promise.all([guild.roles.fetch(), guild.members.fetchMe()]);
-  const role = guild.roles.cache.get(plan.roleId);
+  const role = await guild.roles.fetch(plan.roleId, { force: true }).catch(() => null);
   if (!role || role.permissions.bitfield.toString() !== plan.original ||
       !aiRoleCanEdit(guild, role, guild.members.me, plan.grants))
     return interaction.editReply({ content: 'Permissions or hierarchy changed. Nothing applied; prepare a new plan.', embeds: [], components: [] });
@@ -602,7 +603,7 @@ async function aiApplyRolePlan(interaction, guildId) {
   try {
     await role.setPermissions(expected, 'Goliath AI DEV owner-approved role grants by ' + interaction.user.id);
     const verified = await guild.roles.fetch(role.id, { force: true });
-    if (!verified || plan.grants.some(permission => !verified.permissions.has(permission)))
+    if (!verified || verified.permissions.bitfield.toString() !== expected.bitfield.toString())
       throw new Error('Permission verification failed after Discord update.');
     const after = verified.permissions.bitfield.toString();
     aiRoleRecovery.set(interaction.user.id, {
@@ -640,13 +641,16 @@ async function aiRecoverRole(interaction, guildId, confirm = false) {
   const { guild } = await resolveInteractionGuild(interaction, guildId);
   if (!guild) return interaction.editReply({ content: 'Guild unavailable.', embeds: [], components: [] });
   await Promise.all([guild.roles.fetch(), guild.members.fetchMe()]);
-  const role = guild.roles.cache.get(snapshot.roleId);
+  const role = await guild.roles.fetch(snapshot.roleId, { force: true }).catch(() => null);
   if (!role || role.permissions.bitfield.toString() !== snapshot.after) {
     return interaction.editReply({ content: 'Role permissions have changed since the operation. Recovery blocked to avoid overwriting newer changes.',
       embeds: [], components: [] });
   }
   const oldPermissions = new PermissionsBitField(BigInt(snapshot.before));
-  if (!aiRoleCanEdit(guild, role, guild.members.me, oldPermissions.toArray())) {
+  const currentPermissions = new PermissionsBitField(BigInt(snapshot.after));
+  // Restoring a snapshot must not grant permissions Goliath cannot itself grant.
+  const restoreGrants = oldPermissions.toArray().filter(permission => !currentPermissions.has(permission));
+  if (!aiRoleCanEdit(guild, role, guild.members.me, restoreGrants)) {
     return interaction.editReply({ content: 'Goliath lacks permission or hierarchy to restore the previous role settings.',
       embeds: [], components: [] });
   }
