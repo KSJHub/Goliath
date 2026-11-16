@@ -386,9 +386,15 @@ export default function GoliathAI({ theme }) {
     if (!audit || operationReviewBusy) return;
     setOperationReviewBusy(true); setError(''); setOperationReviews(null); setReadiness(null);
     try {
+      const environment = audit.environment;
+      const guildId = String(audit.guild.id);
+      const requestedGuild = environment + ':' + guildId;
       const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews');
-      if (result.draftId !== id || result.environment !== audit.environment ||
-          result.guildId !== audit.guild.id || result.canExecute !== false) throw new Error('Review target mismatch.');
+      // Ignore review data returned after the owner has switched guilds.
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result.draftId !== id || result.environment !== environment ||
+          String(result.guildId) !== guildId || result.canExecute !== false)
+        throw new Error('Review target mismatch.');
       setOperationReviews(result);
     } catch (err) { setError(err.message); }
     finally { setOperationReviewBusy(false); }
