@@ -578,6 +578,8 @@ async function aiStageRolePlan(interaction, guildId, roleId, templateName) {
   const template = AI_ROLE_TEMPLATES[templateName];
   if (!role || !template) return interaction.editReply({ content: 'Invalid role or template.', embeds: [], components: [] });
   const grants = template.filter(permission => !role.permissions.has(permission));
+  if (grants.includes('Administrator'))
+    return interaction.editReply({ content: 'Administrator cannot be granted through AI plans.', embeds: [], components: [] });
   if (!aiRoleCanEdit(guild, role, guild.members.me, grants))
     return interaction.editReply({ content: 'Goliath cannot safely grant these permissions. Check its permissions and role hierarchy.', embeds: [], components: [] });
   const plan = { ownerId: interaction.user.id, guildId: guild.id, roleId: role.id,
@@ -598,6 +600,7 @@ async function aiApplyRolePlan(interaction, guildId) {
   await Promise.all([guild.roles.fetch(), guild.members.fetchMe()]);
   const role = await guild.roles.fetch(plan.roleId, { force: true }).catch(() => null);
   if (!role || role.permissions.bitfield.toString() !== plan.original ||
+      plan.grants.includes('Administrator') ||
       !aiRoleCanEdit(guild, role, guild.members.me, plan.grants))
     return interaction.editReply({ content: 'Permissions or hierarchy changed. Nothing applied; prepare a new plan.', embeds: [], components: [] });
   if (!plan.grants.length) return interaction.editReply({ content: 'No changes required.', embeds: [], components: [] });
@@ -726,7 +729,7 @@ const AI_CHANNEL_GRANTS = new Set([
   'ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AddReactions',
   'Connect', 'Speak', 'EmbedLinks', 'AttachFiles', 'ManageMessages',
   'ManageThreads', 'SendMessagesInThreads', 'UseApplicationCommands',
-  'CreatePublicThreads', 'CreatePrivateThreads', 'ManageChannels'
+  'CreatePublicThreads', 'CreatePrivateThreads'
 ]);
 function aiChannelTemplatePermissions(template) {
   return template.filter(permission => AI_CHANNEL_GRANTS.has(permission));
@@ -759,6 +762,7 @@ async function aiStageChannelPlan(interaction, guildId, channelId, roleId, templ
   const before = aiOverwriteSnapshot(channel, role.id);
   const grants = aiChannelTemplatePermissions(template).filter(permission =>
     !(new PermissionsBitField(BigInt(before.allow))).has(permission));
+  if (!grants.length) return interaction.editReply({ content: 'All eligible channel permissions are already allowed. No changes needed.', embeds: [], components: [] });
   if (!aiChannelCanEdit(guild, channel, role, guild.members.me, grants))
     return interaction.editReply({ content: 'Goliath cannot safely edit this role overwrite.', embeds: [], components: [] });
   const plan = { guildId: guild.id, channelId: channel.id, roleId: role.id, template: templateName,
@@ -795,7 +799,8 @@ async function aiApplyChannelPlan(interaction, guildId) {
   await Promise.all([guild.members.fetchMe(), guild.roles.fetch()]);
   const channel = await guild.channels.fetch(plan.channelId, { force: true }).catch(() => null);
   const role = await guild.roles.fetch(plan.roleId, { force: true }).catch(() => null);
-  if (!channel || !role || !aiOverwriteMatches(aiOverwriteSnapshot(channel, plan.roleId), plan.before) ||
+  if (!channel || !role || plan.grants.some(permission => !AI_CHANNEL_GRANTS.has(permission)) ||
+      !aiOverwriteMatches(aiOverwriteSnapshot(channel, plan.roleId), plan.before) ||
       !aiChannelCanEdit(guild, channel, role, guild.members.me, plan.grants))
     return interaction.editReply({ content: 'Overwrite, bot access or hierarchy changed. No changes applied.', embeds: [], components: [] });
   if (!plan.grants.length) return interaction.editReply({ content: 'No changes required.', embeds: [], components: [] });
@@ -1035,7 +1040,7 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
       '**Goliath bot role:** ' + (botRole ? '<@&' + botRole.id + '>' : 'Unavailable'),
       '',
       'Choose **Scan Goliath** for the bot permission baseline or **Role Templates** for recommended starting permissions.',
-      'Detailed per-role/channel overwrite editing and approved execution are still under development.'
+      'Role and channel permission plans require explicit owner approval. Execution is DEV-only and not yet validated for production use.'
     );
   }
   const embed = new EmbedBuilder()
@@ -1043,7 +1048,7 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
     .setTitle('Goliath AI • Permission Architect')
     .setDescription(lines.join('\n').slice(0, 3900))
     .addFields({ name: 'Selected guild', value: guild ? guild.name + ' • ' + guild.id : (guildId || 'No guild selected') })
-    .setFooter({ text: 'DEV • Owner-only • Read-only • No Discord changes' });
+    .setFooter({ text: 'DEV • Owner-only • Inspection is read-only; approved plans can change Discord permissions' });
   const controls = new ActionRowBuilder().addComponents(
     navigationButton(contextualOwnerId('ai-scan', guildId), 'Scan Goliath', ButtonStyle.Primary, !guildId),
     navigationButton(contextualOwnerId('ai-templates', guildId), 'Role Templates', ButtonStyle.Secondary),
