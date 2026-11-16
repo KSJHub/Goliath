@@ -5597,6 +5597,8 @@ for (const guard of [
   "draft.review.checkpointId", "preflight.permissionsVerified",
   "review.needsAttention", "executionIntents.get(String(req.body.intentId)) !== intent",
   "latestDraft.review.checkpointId !== draft.review.checkpointId",
+  "const latestReview = approvalLedger.listReviews(",
+  "latestReview.needsAttention",
   "executionIntents.delete(String(req.body.intentId))",
   "revokeRehearsalGrants(draft.id, intent.sequence)",
   "GRANT_TTL_MS"
