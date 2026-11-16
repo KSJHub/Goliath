@@ -8,6 +8,7 @@ const {
   Events,
   MessageFlags,
   ModalBuilder,
+  PermissionsBitField,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
   TextInputBuilder,
@@ -596,7 +597,7 @@ async function aiApplyRolePlan(interaction, guildId) {
       !aiRoleCanEdit(guild, role, guild.members.me, plan.grants))
     return interaction.editReply({ content: 'Permissions or hierarchy changed. Nothing applied; prepare a new plan.', embeds: [], components: [] });
   if (!plan.grants.length) return interaction.editReply({ content: 'No changes required.', embeds: [], components: [] });
-  const expected = role.permissions.add(...plan.grants);
+  const expected = new PermissionsBitField(role.permissions.bitfield).add(...plan.grants);
   try {
     await role.setPermissions(expected, 'Goliath AI DEV owner-approved role grants by ' + interaction.user.id);
     const verified = await guild.roles.fetch(role.id, { force: true });
