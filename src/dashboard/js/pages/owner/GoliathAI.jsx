@@ -68,6 +68,7 @@ export default function GoliathAI({ theme }) {
   const selectedGuildRef = useRef(selectedGuild);
   const blueprintRevisionRef = useRef(0);
   const draftRefreshRevisionRef = useRef(0);
+  const guildRefreshRevisionRef = useRef(0);
   selectedGuildRef.current = selectedGuild;
   useEffect(() => {
     let mounted = true;
@@ -79,7 +80,9 @@ export default function GoliathAI({ theme }) {
         setSavedDrafts(value.drafts || []);
     })
       .catch(() => { /* The draft library is optional until DEV deployment is verified. */ });
-    api.request('/api/owner/ai/guilds').then((value) => { if (mounted) {
+    const initialGuildRefresh = ++guildRefreshRevisionRef.current;
+    api.request('/api/owner/ai/guilds').then((value) => {
+      if (mounted && guildRefreshRevisionRef.current === initialGuildRefresh) {
       setGuilds(value.guilds || []);
       setPersonalGuilds(value.personalGuilds || []);
       setPersonalGuildsStatus(value.personalGuildsStatus || 'unavailable');
@@ -87,7 +90,9 @@ export default function GoliathAI({ theme }) {
       setSelectedGuild(value.guilds?.[0] ? (value.guilds[0].environment + ':' + value.guilds[0].id) :
         value.personalGuilds?.[0] ? 'PERSONAL:' + value.personalGuilds[0].id : '');
     } })
-      .catch((err) => { if (mounted) setError(err.message); });
+      .catch((err) => {
+        if (mounted && guildRefreshRevisionRef.current === initialGuildRefresh) setError(err.message);
+      });
     return () => { mounted = false; };
   }, []);
   useEffect(() => { bottom.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' }); }, [messages]);
@@ -101,9 +106,11 @@ export default function GoliathAI({ theme }) {
     finally { setCheckingHealth(false); }
   };
   const refreshGuilds = async () => {
+    const revision = ++guildRefreshRevisionRef.current;
     setError('');
     try {
       const payload = await api.request('/api/owner/ai/guilds');
+      if (guildRefreshRevisionRef.current !== revision) return;
       const next = payload.guilds || [];
       setGuilds(next);
       setPersonalGuilds(payload.personalGuilds || []);
@@ -119,7 +126,9 @@ export default function GoliathAI({ theme }) {
         return valid.includes(previous) ? previous : (valid[0] || '');
       });
       setAudit(null); setPreview(null); replaceBlueprintText(''); setBlueprintPlan(null); setReadiness(null); setOperationReviews(null);
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      if (guildRefreshRevisionRef.current === revision) setError(err.message);
+    }
   };
   const connectedOptions = guilds.map(guild => ({
     value: guild.environment + ':' + guild.id,
