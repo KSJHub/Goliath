@@ -17,7 +17,7 @@ function formatDate(value) {
 
 function caseStatus(status) {
   const value = String(status || 'active').toLowerCase();
-  if (value === 'reversed') return { label: '✅ Case Resolved', color: '#67e8f9' };
+  if (value === 'reversed') return { label: `${E.SUCCESS} Case Resolved`, color: '#67e8f9' };
   if (value === 'expired') return { label: '⌛ Case Expired', color: '#cbd5e1' };
   if (value === 'active') return { label: `${E.WARNING} Case Active`, color: '#fbbf24' };
   return { label: E.FOLDER + ' ' + value.replace(/[_-]/g, ' '), color: '#bfdbfe' };
@@ -420,8 +420,8 @@ export default function Appeals() {
 
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
                     <span style={{ ...pill, color: caseStatus(item.status).color }}>{caseStatus(item.status).label}</span>
-                    {item.appeals.some(a => a.status === 'approved') ? <span style={{ ...pill, color: '#bbf7d0' }}>✅ Appeal Approved</span> : null}
-                    {item.appeals.some(a => a.status === 'pending') ? <span style={{ ...pill, color: '#fde68a' }}>⏳ Under Review</span> : null}
+                    {item.appeals.some(a => a.status === 'approved') ? <span style={{ ...pill, color: '#bbf7d0' }}>{E.SUCCESS} Appeal Approved</span> : null}
+                    {item.appeals.some(a => a.status === 'pending') ? <span style={{ ...pill, color: '#fde68a' }}>{E.TIMER} Under Review</span> : null}
                     {item.appeals.some(a => a.status === 'denied') ? <span style={{ ...pill, color: '#fca5a5' }}>{E.ERROR} Appeal Denied</span> : null}
                   </div>
                   <button type="button" style={{ ...secondaryButton, marginTop: 12 }} aria-expanded={Boolean(expandedCases[`${item.guildId}:${item.caseId}`])} onClick={() => setExpandedCases(prev => ({ ...prev, [`${item.guildId}:${item.caseId}`]: !prev[`${item.guildId}:${item.caseId}`] }))}>
