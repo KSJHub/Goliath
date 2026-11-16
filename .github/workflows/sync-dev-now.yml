@@ -312,7 +312,11 @@ jobs:
             # to deploy the newer commit instead of reporting a false SHA mismatch.
             REMOTE_SHA="$(remote_dev_sha)"
             if [ "$EXPECTED_SHA" != "$REMOTE_SHA" ]; then
-              echo "Superseded during stability gate; exiting cleanly."
+              echo "Superseded during stability gate; handing over to newer deployment."
+              # This run already restarted DEV and verified the new PID is alive.
+              # Do not let the EXIT recovery handler restart it a second time;
+              # the queued newer deployment owns the next controlled restart.
+              DEV_STOPPED=0
               exit 0
             fi
 
