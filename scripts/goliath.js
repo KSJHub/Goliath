@@ -425,6 +425,13 @@ function sharedEmojiPaletteAudit() {
       }
     }
   }
+  // Guard against empty or malformed palette entries (including whitespace-only glyphs).
+  for (const [label, palette] of [['Discord', server.entries], ['Dashboard', browser.entries]]) {
+    for (const [key, glyph] of palette) {
+      if (!glyph.trim()) errors.push(label + ': empty emoji value for ' + key);
+      if (/\r|\n/.test(glyph)) errors.push(label + ': multiline emoji value for ' + key);
+    }
+  }
   for (const error of errors) console.error(' - ' + error);
   console.log('Discord: ' + server.entries.size + ', Dashboard: ' + browser.entries.size + ', issues: ' + errors.length);
   return errors.length === 0;
