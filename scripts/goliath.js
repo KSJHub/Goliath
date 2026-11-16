@@ -5582,6 +5582,18 @@ assert(missingBackupReadiness.checks.find(item => item.key === 'backup').detail.
 // accidental removal of replay/expiry/revocation guards fails this audit.
 const aiRouterSource = fs.readFileSync(
   path.join(__dirname, '../src/owner/dev/goliathAI.js'), 'utf8');
+const aiSelfTestSource = aiRouterSource.split(
+  "router.post('/self-test', requirePrivateAI, async (_req, res) => {")[1]?.split(
+  "// Health check never starts a model")[0];
+assert(aiSelfTestSource, 'Developer-only local generation self-test must exist');
+for (const guard of [
+  "if (!isEnabled())", "if (requestInProgress)", "requestInProgress = true",
+  "fetch(LOCAL_AI_URL", "localAIHeaders(true)", "stream: false",
+  "controller.abort()", "clearTimeout(timeout)", "requestInProgress = false",
+  "ready: true", "canExecute: false"
+]) assert(aiSelfTestSource.includes(guard), 'Missing local generation probe guard: ' + guard);
+assert(!/readAudit\(|internalGet\(|guildContext|guild\.channels\./.test(aiSelfTestSource),
+  'Local readiness probe must not access guild data or mutate Discord');
 const rehearsalIssueSource = aiRouterSource.split(
   "router.post('/drafts/:id/authorisation-rehearsal', requirePrivateAI, async (req, res) => {")[1]?.split(
   "router.post('/drafts/:id/authorisation-rehearsal/:grantId/consume'")[0];
