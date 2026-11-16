@@ -746,12 +746,12 @@ async function handleUserManualPostLive(interaction) {
     .filter(Boolean);
 
   if (!accountIds.length) {
-    await interaction.reply({ content: `${EMOJIS.SOCIAL} Manual Post LIVE is unavailable. Your Creator Profile has no enabled social accounts.', flags: 64 });
+    await interaction.reply({ content: `${EMOJIS.SOCIAL} Manual Post LIVE is unavailable. Your Creator Profile has no enabled social accounts.`, flags: 64 });
     return true;
   }
 
   await interaction.reply({
-    content: `${EMOJIS.SEARCH} **Checking your LIVE status...**\nVerifying your connected account before posting.',
+    content: `${EMOJIS.SEARCH} **Checking your LIVE status...**\nVerifying your connected account before posting.`,
     flags: 64,
   });
 
