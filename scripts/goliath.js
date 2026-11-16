@@ -5705,6 +5705,14 @@ assert(candidateSource?.includes('draft.createdBy !== String(req.session.user.id
   'Execution candidate preflight must require draft ownership');
 assert(readinessSource?.includes('draft.createdBy !== String(req.session.user.id)'),
   'Execution readiness must require draft ownership');
+const draftReviewSource = routeBody(
+  "router.post('/drafts/:id/review', requirePrivateAI, async (req, res) => {",
+  "router.get('/drafts/:id/readiness'");
+assert(draftReviewSource &&
+  draftReviewSource.includes('draft.createdBy !== String(req.session.user.id)') &&
+  draftReviewSource.indexOf('draft.createdBy !== String(req.session.user.id)') <
+  draftReviewSource.indexOf('await getVerifiedAudit('),
+  'Draft review must verify creator ownership before the guild audit');
 assert(cancelIntentSource &&
   cancelIntentSource.indexOf('intent.ownerId !== String(req.session.user.id)') <
   cancelIntentSource.indexOf('Date.parse(intent.expiresAt) <= Date.now()'),
