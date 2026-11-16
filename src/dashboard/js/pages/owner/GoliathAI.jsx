@@ -66,6 +66,7 @@ export default function GoliathAI({ theme }) {
   const [operationReviewBusy, setOperationReviewBusy] = useState(false);
   const bottom = useRef(null);
   const selectedGuildRef = useRef(selectedGuild);
+  const blueprintRevisionRef = useRef(0);
   selectedGuildRef.current = selectedGuild;
   useEffect(() => {
     let mounted = true;
@@ -177,6 +178,8 @@ export default function GoliathAI({ theme }) {
   };
   // Changing editor content invalidates previews and saved-plan diagnostics immediately.
   const replaceBlueprintText = value => {
+    // Invalidate any in-flight preview as soon as the editor changes.
+    blueprintRevisionRef.current += 1;
     setBlueprintText(value);
     setBlueprintPlan(null);
     setReadiness(null);
@@ -296,6 +299,7 @@ export default function GoliathAI({ theme }) {
   const previewBlueprint = async () => {
     if (!audit || !blueprintText.trim() || blueprintBusy) return;
     setBlueprintBusy(true); setBlueprintPlan(null); setError('');
+    const editorRevision = blueprintRevisionRef.current;
     try {
       let blueprint;
       try { blueprint = JSON.parse(blueprintText); } catch { throw new Error('Blueprint must be valid JSON.'); }
@@ -307,7 +311,8 @@ export default function GoliathAI({ theme }) {
       });
       // A server switch or inventory refresh may finish while the preview is
       // pending. Never attach a late preview to a different selected server.
-      if (selectedGuildRef.current !== requestedGuild) return;
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
       if (result.environment !== environment || String(result.guild?.id || '') !== guildId ||
           result.executable !== false) throw new Error('Preview target verification failed.');
       setBlueprintPlan(result);
