@@ -46,6 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           BOT_MODE=dev npm run doctor
+          npm run audit:emojis
           node scripts/goliath.js embed-graphic-headers
           node scripts/goliath.js runtime-contracts
           node <<'NODE'
