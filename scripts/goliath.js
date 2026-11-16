@@ -5618,7 +5618,7 @@ for (const guard of [
   "if (!isEnabled())", "if (requestInProgress)", "requestInProgress = true",
   "fetch(LOCAL_AI_URL", "localAIHeaders(true)", "stream: false",
   "controller.abort()", "clearTimeout(timeout)", "requestInProgress = false",
-  "ready: true", "canExecute: false"
+  "ready: true", "canExecute: false", "/^READY[.!]?$/i.test(answer.trim())"
 ]) assert(aiSelfTestSource.includes(guard), 'Missing local generation probe guard: ' + guard);
 assert(!/readAudit\(|internalGet\(|guildContext|guild\.channels\./.test(aiSelfTestSource),
   'Local readiness probe must not access guild data or mutate Discord');
