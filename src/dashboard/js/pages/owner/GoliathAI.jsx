@@ -154,7 +154,10 @@ export default function GoliathAI({ theme }) {
   useEffect(() => {
     if (availableOptions.some(item => item.value === selectedGuild)) return;
     setSelectedGuild(availableOptions[0]?.value || '');
-    setAudit(null); setPreview(null); setBlueprintPlan(null); setReadiness(null); setOperationReviews(null);
+    // Filter-driven selection changes must clear the same server-specific
+    // editor state as an explicit server switch.
+    setAudit(null); setPreview(null); replaceBlueprintText('');
+    setDraftNotice(''); setError('');
   }, [guildFilter, guilds, personalGuilds, selectedGuild]);
   const runAudit = async () => {
     if (!selectedConnected?.auditAvailable || auditing) return;
