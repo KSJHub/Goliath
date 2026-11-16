@@ -432,8 +432,13 @@ function sharedEmojiPaletteAudit() {
       if (/\r|\n/.test(glyph)) errors.push(label + ': multiline emoji value for ' + key);
     }
   }
+  const aligned = [...browser.entries].filter(([key, glyph]) => server.entries.get(key) === glyph).length;
+  const intentional = [...exceptions].filter(([key, [discordGlyph, dashboardGlyph]]) =>
+    server.entries.get(key) === discordGlyph && browser.entries.get(key) === dashboardGlyph).length;
   for (const error of errors) console.error(' - ' + error);
-  console.log('Discord: ' + server.entries.size + ', Dashboard: ' + browser.entries.size + ', issues: ' + errors.length);
+  console.log('Discord: ' + server.entries.size + ', Dashboard: ' + browser.entries.size +
+    ', matching: ' + aligned + ', protected differences: ' + intentional +
+    ', issues: ' + errors.length);
   return errors.length === 0;
 }
 
