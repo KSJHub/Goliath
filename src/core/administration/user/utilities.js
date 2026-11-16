@@ -34,10 +34,10 @@ async function replaceComponent(interaction, payload) {
 }
 
 function latencyHealth(clientLatency, apiLatency) {
-  if (clientLatency < 100 && apiLatency < 100) return '🟢 Excellent';
-  if (clientLatency < 200 && apiLatency < 200) return '🟡 Stable';
-  if (clientLatency < 400 && apiLatency < 400) return '🟠 Slower than usual';
-  return '🔴 Needs attention';
+  if (clientLatency < 100 && apiLatency < 100) return `${EMOJIS.ACTIVE} Excellent`;
+  if (clientLatency < 200 && apiLatency < 200) return `${EMOJIS.HEALTH_STABLE} Stable`;
+  if (clientLatency < 400 && apiLatency < 400) return `${EMOJIS.HEALTH_SLOW} Slower than usual`;
+  return `${EMOJIS.STATUS_ALERT} Needs attention`;
 }
 
 function latencyBar(ms) {
@@ -65,7 +65,7 @@ async function showPing(interaction) {
   const health = latencyHealth(clientLatency, apiLatency);
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🏓 Goliath Status')
+    .setTitle(`${EMOJIS.STATUS_PING} Goliath Status`)
     .setDescription([
       `**Status:** ${health}`, '', '**Bot Latency**', `\`${clientLatency}ms\``, latencyBar(clientLatency),
       '', '**Discord API**', `\`${apiLatency}ms\``, latencyBar(apiLatency), '', '**Uptime**',
@@ -87,7 +87,7 @@ async function showServerInfo(interaction) {
   const bots = guild.members.cache.filter((member) => member.user.bot).size;
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🏰 Server Overview')
+    .setTitle(`${EMOJIS.SERVER_CASTLE} Server Overview`)
     .setThumbnail(guild.iconURL({ size: 256 }))
     .setDescription([
       `**${guild.name}**`, '', `**Owner:** ${owner ? `<@${owner.id}>` : 'Unknown'}`,
@@ -151,7 +151,7 @@ async function showHelp(interaction, options = {}) {
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('❓ Goliath Help')
+    .setTitle(`${EMOJIS.HELP_QUESTION} Goliath Help`)
     .setDescription(description)
     .setFooter({ text: 'Goliath Help' })
     .setTimestamp();
