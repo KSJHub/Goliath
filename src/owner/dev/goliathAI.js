@@ -606,6 +606,9 @@ router.get('/drafts/:id', requireAIIdentity, (req, res) => {
   } catch { return res.status(503).json({ error: 'Unable to read private draft storage.' }); }
 });
 router.post('/drafts', requirePrivateAI, async (req, res) => {
+  // Match draft listing, review and deletion: persistence belongs to DEV only.
+  // Never parse or persist submitted blueprints on a BETA/PRODUCTION controller.
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'Draft storage is DEV-only.' });
   const environment = String(req.body?.environment || '').toUpperCase();
   const guildId = String(req.body?.guildId || '');
   let blueprint;
