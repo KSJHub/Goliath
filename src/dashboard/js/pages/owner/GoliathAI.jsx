@@ -179,18 +179,20 @@ export default function GoliathAI({ theme }) {
   };
   const buildPlan = async () => {
     if (!audit || planning) return;
+    const requestedGuild = String(audit.environment) + ':' + String(audit.guild.id);
     setPlanning(true); setError(''); setPreview(null);
     try {
       const environment = String(audit.environment);
       const guildId = String(audit.guild.id);
       if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId)) throw new Error('Invalid selected server.');
-      const requestedGuild = environment + ':' + guildId;
       const result = await api.request('/api/owner/ai/plan/' + environment + '/' + guildId);
       if (selectedGuildRef.current !== requestedGuild) return;
       if (result.environment !== environment || String(result.guild?.id || '') !== guildId ||
           result.executable !== false) throw new Error('Preview validation failed.');
       setPreview(result);
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    }
     finally { setPlanning(false); }
   };
   // Changing editor content invalidates previews and saved-plan diagnostics immediately.
@@ -429,6 +431,7 @@ export default function GoliathAI({ theme }) {
   };
   const checkDraftReadiness = async (id) => {
     if (!audit || readinessBusy) return;
+    const requestedGuild = String(audit.environment) + ':' + String(audit.guild.id);
     setReadinessBusy(true); setError(''); setReadiness(null); setOperationReviews(null);
     try {
       const item = savedDrafts.find(value => value.id === id);
@@ -436,7 +439,6 @@ export default function GoliathAI({ theme }) {
         throw new Error('Select and scan the exact environment and guild for this saved draft.');
       const environment = audit.environment;
       const guildId = String(audit.guild.id);
-      const requestedGuild = environment + ':' + guildId;
       const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/readiness');
       // A late response must not show readiness for a previously selected guild.
       if (selectedGuildRef.current !== requestedGuild) return;
@@ -444,16 +446,18 @@ export default function GoliathAI({ theme }) {
           String(result.guildId) !== guildId || result.canExecute !== false || result.executable !== false)
         throw new Error('Execution readiness target validation failed.');
       setReadiness(result);
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    }
     finally { setReadinessBusy(false); }
   };
   const inspectOperationReviews = async (id) => {
     if (!audit || operationReviewBusy) return;
+    const requestedGuild = String(audit.environment) + ':' + String(audit.guild.id);
     setOperationReviewBusy(true); setError(''); setOperationReviews(null); setReadiness(null);
     try {
       const environment = audit.environment;
       const guildId = String(audit.guild.id);
-      const requestedGuild = environment + ':' + guildId;
       const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews');
       // Ignore review data returned after the owner has switched guilds.
       if (selectedGuildRef.current !== requestedGuild) return;
@@ -461,7 +465,9 @@ export default function GoliathAI({ theme }) {
           String(result.guildId) !== guildId || result.canExecute !== false)
         throw new Error('Review target mismatch.');
       setOperationReviews(result);
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    }
     finally { setOperationReviewBusy(false); }
   };
   const recordOperationReview = async (id, sequence, decision) => {
