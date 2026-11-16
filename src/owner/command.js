@@ -535,6 +535,7 @@ const AI_ROLE_TEMPLATES = Object.freeze({
 // One pending operation per owner; short-lived, bound to a single guild and role.
 // Never trust role IDs or permission values from Discord component payloads.
 const aiPendingRolePlans = new Map();
+const aiRoleRecovery = new Map();
 const AI_PLAN_TTL = 10 * 60 * 1000;
 function aiRoleCanEdit(guild, role, bot, grants) {
   return Boolean(role && bot && !role.managed && role.id !== guild.id &&
@@ -603,15 +604,77 @@ async function aiApplyRolePlan(interaction, guildId) {
     const verified = await guild.roles.fetch(role.id, { force: true });
     if (!verified || plan.grants.some(permission => !verified.permissions.has(permission)))
       throw new Error('Permission verification failed after Discord update.');
+    const after = verified.permissions.bitfield.toString();
+    aiRoleRecovery.set(interaction.user.id, {
+      guildId: guild.id, roleId: role.id, before: plan.original, after,
+      expiresAt: Date.now() + 30 * 60 * 1000
+    });
     console.info('[Goliath AI] Owner-approved role grants', { guildId: guild.id, roleId: role.id,
       ownerId: interaction.user.id, grants: plan.grants });
-    return interaction.editReply({ content: 'Applied and verified ' + plan.grants.length +
-      ' permission grants for <@&' + role.id + '>. No existing permissions removed.', embeds: [], components: [] });
+    return interaction.editReply({
+      content: 'Applied and verified ' + plan.grants.length +
+        ' permission grants for <@&' + role.id + '>. No existing permissions removed. ' +
+        'A 30-minute recovery snapshot is available while this DEV process remains running.',
+      embeds: [],
+      components: [new ActionRowBuilder().addComponents(
+        navigationButton(contextualOwnerId('ai-recovery-preview', guild.id), 'Review Recovery', ButtonStyle.Secondary)
+      )]
+    });
   } catch (error) {
     console.error('[Goliath AI] Role grant failed', { guildId: guild.id, roleId: plan.roleId,
       ownerId: interaction.user.id, error: error?.message });
     return interaction.editReply({ content: 'Permission update or verification failed. Review Discord role permissions before retrying. ' +
       'The original permissions were: ' + plan.original, embeds: [], components: [] });
+  }
+}
+
+async function aiRecoverRole(interaction, guildId, confirm = false) {
+  await interaction.deferUpdate();
+  const snapshot = aiRoleRecovery.get(interaction.user.id);
+  if (mode() !== 'DEV' || !snapshot || snapshot.guildId !== guildId ||
+      Date.now() > snapshot.expiresAt) {
+    aiRoleRecovery.delete(interaction.user.id);
+    return interaction.editReply({ content: 'No active recovery snapshot. Recovery expires after 30 minutes or a DEV restart.',
+      embeds: [], components: [] });
+  }
+  const { guild } = await resolveInteractionGuild(interaction, guildId);
+  if (!guild) return interaction.editReply({ content: 'Guild unavailable.', embeds: [], components: [] });
+  await Promise.all([guild.roles.fetch(), guild.members.fetchMe()]);
+  const role = guild.roles.cache.get(snapshot.roleId);
+  if (!role || role.permissions.bitfield.toString() !== snapshot.after) {
+    return interaction.editReply({ content: 'Role permissions have changed since the operation. Recovery blocked to avoid overwriting newer changes.',
+      embeds: [], components: [] });
+  }
+  const oldPermissions = new PermissionsBitField(BigInt(snapshot.before));
+  if (!aiRoleCanEdit(guild, role, guild.members.me, oldPermissions.toArray())) {
+    return interaction.editReply({ content: 'Goliath lacks permission or hierarchy to restore the previous role settings.',
+      embeds: [], components: [] });
+  }
+  if (!confirm) {
+    const embed = new EmbedBuilder().setColor(0xF0B232)
+      .setTitle('Goliath AI • Recovery Confirmation')
+      .setDescription('Restore the previous permission bitfield for <@&' + role.id +
+        '>? This replaces the current role permission set. It is only permitted if the role is unchanged since the AI operation.')
+      .setFooter({ text: 'DEV • Recovery expires after 30 minutes or restart' });
+    return interaction.editReply({ embeds: [embed], content: '',
+      components: [new ActionRowBuilder().addComponents(
+        navigationButton(contextualOwnerId('ai-recovery-confirm', guildId), 'Confirm Restore', ButtonStyle.Danger),
+        navigationButton(contextualOwnerId('ai-recovery-cancel', guildId), 'Cancel', ButtonStyle.Secondary)
+      )] });
+  }
+  // Consume before the write to prevent replay of the same recovery request.
+  aiRoleRecovery.delete(interaction.user.id);
+  try {
+    await role.setPermissions(oldPermissions, 'Goliath AI DEV owner-approved recovery by ' + interaction.user.id);
+    const verified = await guild.roles.fetch(role.id, { force: true });
+    if (!verified || verified.permissions.bitfield.toString() !== snapshot.before)
+      throw new Error('Recovery verification mismatch');
+    console.info('[Goliath AI] Role recovery verified', { guildId, roleId: role.id, ownerId: interaction.user.id });
+    return interaction.editReply({ content: 'Original permissions restored and verified for <@&' + role.id + '>.', embeds: [], components: [] });
+  } catch (error) {
+    console.error('[Goliath AI] Role recovery failed', { guildId, roleId: role.id, error: error?.message });
+    return interaction.editReply({ content: 'Recovery failed or could not be verified. Check the role manually. Original bitfield: ' +
+      snapshot.before, embeds: [], components: [] });
   }
 }
 
@@ -965,6 +1028,14 @@ async function handleOwnerPanelInteraction(interaction) {
     return true;
   }
 
+  if (id === `${OWNER_PREFIX}ai-recovery-preview` || id === `${OWNER_PREFIX}ai-recovery-confirm`) {
+    await aiRecoverRole(interaction, contextGuildId, id.endsWith('confirm'));
+    return true;
+  }
+  if (id === `${OWNER_PREFIX}ai-recovery-cancel`) {
+    await interaction.update(ownerHomePayload(interaction, 'Recovery cancelled. Snapshot remains available until expiry.'));
+    return true;
+  }
   if (id.startsWith(`${OWNER_PREFIX}ai-stage-`)) {
     const match = id.match(/^ownerpanel:ai-stage-(\d{16,25})-(admin|moderator|member|newcomer|bot)$/);
     if (!match) return true;
