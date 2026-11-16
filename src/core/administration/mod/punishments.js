@@ -16,7 +16,7 @@ const {
   recordCaseAudit,
   sendModLog,
 } = require('./storage');
-const { navigationButton } = require('../../guild/goliathNavigation');
+const { navigationButton, EMOJIS } = require('../../guild/goliathNavigation');
 const { applyPunishmentEngine } = require('../automod/engine');
 const { safeReply, safeEditReply, ephemeralError } = require('../../../core/ui/interactionResponse');
 const { checkHierarchy, checkHierarchyForBulk, fetchTarget, ensureActionAccess } = require('./permissions');
@@ -34,7 +34,7 @@ const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000;
 const MAX_BULK_TARGETS = 25;
 const DURATION_UNITS = Object.freeze({ s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 });
 const ACTION_LABELS = Object.freeze({ warn: 'Bulk Warn', timeout: 'Bulk Timeout', kick: 'Bulk Kick', ban: 'Bulk Ban', 'remove-warning': 'Bulk Remove Warning', 'remove-timeout': 'Bulk Remove Timeout' });
-const ACTION_EMOJIS = Object.freeze({ warn: '⚠️', timeout: '⏳', kick: '👢', ban: '🔨', 'remove-warning': '🗑️', 'remove-timeout': '✅' });
+const ACTION_EMOJIS = Object.freeze({ warn: EMOJIS.WARNING, timeout: EMOJIS.TIMER, kick: EMOJIS.KICK, ban: EMOJIS.BAN, 'remove-warning': EMOJIS.DELETE, 'remove-timeout': EMOJIS.SUCCESS });
 const BULK_PERMISSION_ACTIONS = Object.freeze({ warn: 'bulk_warn', timeout: 'bulk_timeout', kick: 'bulk_kick', ban: 'bulk_ban', 'remove-warning': 'bulk_remove_warning', 'remove-timeout': 'bulk_remove_timeout' });
 const ENGINE_ACTIONS = Object.freeze({
   timeout: { punishments: ['dm', 'timeout'], rule: 'Timeout', logAction: 'Timeout', caseAction: 'timeout', appliedKey: 'timeout' },
@@ -111,7 +111,7 @@ function deletePendingAction(guildId, token) { return db.prepare('DELETE FROM pe
 function normalizeDashboardContext(context = {}) { return { view: context.view || 'actions', actionFilter: context.actionFilter || 'all', statusFilter: context.statusFilter || 'all', page: Math.max(0, Math.trunc(Number(context.page) || 0)) }; }
 function buildConfirmCustomId(token, context = DEFAULT_DASHBOARD_CONTEXT) { const c = normalizeDashboardContext(context); return ['mod_confirm_action', token, c.view, c.actionFilter, c.statusFilter, c.page].join(':'); }
 function buildCancelCustomId(targetId, context = DEFAULT_DASHBOARD_CONTEXT, token = null) { const c = normalizeDashboardContext(context); return ['mod_cancel_action', targetId || 'none', c.view, c.actionFilter, c.statusFilter, c.page, token || 'legacy'].join(':'); }
-function buildConfirmRow(confirmId, cancelId) { return [new ActionRowBuilder().addComponents(navigationButton(confirmId, '⚠️ Confirm', ButtonStyle.Danger), navigationButton(cancelId, '❌ Cancel', ButtonStyle.Secondary))]; }
+function buildConfirmRow(confirmId, cancelId) { return [new ActionRowBuilder().addComponents(navigationButton(confirmId, `${EMOJIS.WARNING} Confirm`, ButtonStyle.Danger), navigationButton(cancelId, '❌ Cancel', ButtonStyle.Secondary))]; }
 async function createConfirmation(interaction, targetId, type, payload, message, context = DEFAULT_DASHBOARD_CONTEXT) {
   const normalizedContext = normalizeDashboardContext(context);
   const token = createPendingAction(interaction.guild.id, { moderatorId: interaction.user.id, targetId, type, payload });
