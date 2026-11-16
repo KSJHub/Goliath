@@ -734,6 +734,11 @@ router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, re
   try {
     const draft = draftStore.loadDraft(String(req.params.id));
     if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
+    // Execution candidates are draft-owner-only, like intents and rehearsals.
+    // A second authorised developer must not inspect another owner's
+    // operation-level authorisation preflight by guessing a draft ID.
+    if (draft.createdBy !== String(req.session.user.id))
+      return res.status(403).json({ error: 'Only the draft creator may inspect execution candidates.' });
     if (draft.environment !== 'DEV') return res.status(403).json({
       error: 'Only DEV guilds are eligible for future execution.', canExecute: false
     });
