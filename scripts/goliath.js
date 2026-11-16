@@ -5594,6 +5594,26 @@ for (const guard of [
 ]) assert(aiSelfTestSource.includes(guard), 'Missing local generation probe guard: ' + guard);
 assert(!/readAudit\(|internalGet\(|guildContext|guild\.channels\./.test(aiSelfTestSource),
   'Local readiness probe must not access guild data or mutate Discord');
+const aiHealthSource = aiRouterSource.split(
+  "router.get('/health', requirePrivateAI, async (_req, res) => {")[1]?.split(
+  "const SNOWFLAKE =")[0];
+const aiChatSource = aiRouterSource.split(
+  "router.post('/chat', requirePrivateAI, async (req, res) => {")[1]?.split(
+  "module.exports = router;")[0];
+assert(aiHealthSource && aiChatSource, 'Local health and private chat routes must exist');
+for (const guard of [
+  "localAIHeaders()", "response.ok", "models.includes(configuredModel)",
+  "ready: enabled", "clearTimeout(timer)", "controller.abort()"
+]) assert(aiHealthSource.includes(guard), 'Missing health check: ' + guard);
+for (const guard of [
+  "if (!isEnabled())", "Array.isArray(incoming)", "MAX_MESSAGES",
+  "MAX_CONTENT", "readAudit(req, guildId)", "requestInProgress",
+  "fetch(LOCAL_AI_URL", "localAIHeaders(true)", "controller.abort()",
+  "clearTimeout(timeout)", "requestInProgress = false",
+  "message.slice(0, 12000)"
+]) assert(aiChatSource.includes(guard), 'Missing private chat guard: ' + guard);
+assert(!/guild\\.channels\\.create\\(|guild\\.channels\\.edit\\(/.test(aiChatSource),
+  'Private AI chat must not directly mutate Discord');
 const rehearsalIssueSource = aiRouterSource.split(
   "router.post('/drafts/:id/authorisation-rehearsal', requirePrivateAI, async (req, res) => {")[1]?.split(
   "router.post('/drafts/:id/authorisation-rehearsal/:grantId/consume'")[0];
