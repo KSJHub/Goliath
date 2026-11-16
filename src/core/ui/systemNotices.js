@@ -130,25 +130,25 @@ function buildPrivateRoomDecisionNotice({ guild, member, request, room, approved
 function buildSecurityIncidentNotice({ guild, owner, incident } = {}) {
   const severity = clean(incident?.severity || 'unknown', 40).toUpperCase();
   const fields = [
-    { name: '🚨 Incident', value: `\`${clean(incident?.type || 'unknown', 100)}\``, inline: true },
-    { name: '⚠️ Severity', value: `\`${severity}\``, inline: true },
-    { name: '👤 Actor', value: `${clean(incident?.actorTag || 'Unknown', 100)}${incident?.actorId ? ` (<@${incident.actorId}>)` : ''}`, inline: false },
-    { name: '🛡️ Automatic Response', value: clean(incident?.actionTaken || 'Logged only', 1024), inline: false },
+    { name: `${EMOJIS.ISOLATION} Incident`, value: `\`${clean(incident?.type || 'unknown', 100)}\``, inline: true },
+    { name: `${EMOJIS.WARNING} Severity`, value: `\`${severity}\``, inline: true },
+    { name: `${EMOJIS.USER} Actor`, value: `${clean(incident?.actorTag || 'Unknown', 100)}${incident?.actorId ? ` (<@${incident.actorId}>)` : ''}`, inline: false },
+    { name: `${EMOJIS.SECURITY} Automatic Response`, value: clean(incident?.actionTaken || 'Logged only', 1024), inline: false },
   ];
-  if (incident?.targetName || incident?.targetId) fields.push({ name: '🎯 Target', value: clean(incident.targetName || incident.targetId, 1024), inline: false });
+  if (incident?.targetName || incident?.targetId) fields.push({ name: `${EMOJIS.RISK} Target`, value: clean(incident.targetName || incident.targetId, 1024), inline: false });
 
   return buildMemberNotice(guild, {
     moduleName: 'Security',
-    moduleEmoji: '🚨',
+    moduleEmoji: EMOJIS.ISOLATION,
     title: 'SECURITY INCIDENT DETECTED',
     subtitle: 'Goliath Anti-Nuke Owner Alert',
     color: String(incident?.severity).toLowerCase() === 'critical' ? 0xed4245 : 0xfee75c,
     referenceLabel: 'Incident',
     referenceValue: clean(incident?.id || incident?.type || 'Security Incident', 100),
-    status: `🚨 ${severity}`,
+    status: `${EMOJIS.ISOLATION} ${severity}`,
     member: owner?.user || owner,
     contextFields: fields,
-    detailsTitle: '🔐 INCIDENT DETAILS',
+    detailsTitle: `${EMOJIS.PERMISSIONS} INCIDENT DETAILS`,
     details: clean(incident?.reason || 'Goliath detected activity that met the Anti-Nuke incident threshold.', 1800),
     meaning: 'Goliath detected and recorded a server security incident. The automatic response shown above reflects the protections that were attempted or applied.',
     nextSteps: 'Review the server security logs and affected resources. Confirm the server is stable before reversing any automatic protection.',
@@ -190,7 +190,7 @@ function buildScheduleWaitlistPromotionNotice({ guild, member, event } = {}) {
 
   return buildMemberNotice(guild, {
     moduleName: 'Schedule',
-    moduleEmoji: '✅',
+    moduleEmoji: EMOJIS.SUCCESS,
     title: 'WAITLIST PROMOTION',
     subtitle: 'Schedule RSVP Update',
     color: Number(event?.color) || 0x57f287,
@@ -199,10 +199,10 @@ function buildScheduleWaitlistPromotionNotice({ guild, member, event } = {}) {
       event?.eventId || event?.id || event?.title || 'Scheduled Event',
       100,
     ),
-    status: '🟢 Place Confirmed',
+    status: `${EMOJIS.ACTIVE} Place Confirmed`,
     member: member?.user || member,
     contextFields: fields,
-    detailsTitle: '🎟️ YOUR PLACE IS AVAILABLE',
+    detailsTitle: `${EMOJIS.PREMIUM_TICKET} YOUR PLACE IS AVAILABLE`,
     details: `A place opened up for **${clean(event?.title || 'this event', 200)}** and you have been promoted from the waitlist.`,
     meaning: 'Your RSVP has automatically moved from the waitlist into an attending position because a place became available.',
     nextSteps: 'No action is required unless your plans have changed. Review the event details above and update your RSVP if you can no longer attend.',
@@ -215,29 +215,29 @@ function buildInviteUsedNotice({ guild, inviter, member, score = 0 } = {}) {
 
   return buildMemberNotice(guild, {
     moduleName: 'Invites',
-    moduleEmoji: '🎉',
+    moduleEmoji: EMOJIS.USER_GIVEAWAYS,
     title: 'YOUR INVITE WAS USED',
     subtitle: 'Invite Studio Notification',
     color: 0x57f287,
     referenceLabel: 'Member',
     referenceValue: joinedMember?.id || member?.id || 'Unknown',
-    status: '🟢 Joined',
+    status: `${EMOJIS.ACTIVE} Joined`,
     member: inviter?.user || inviter,
     contextFields: [
       {
-        name: '👤 New Member',
+        name: `${EMOJIS.USER} New Member`,
         value: joinedMember?.id
           ? `<@${joinedMember.id}>`
           : clean(joinedMember?.tag || 'Unknown member', 100),
         inline: true,
       },
       {
-        name: '🏆 Current Score',
+        name: `${EMOJIS.USER_LEVELING} Current Score`,
         value: String(Number(score) || 0),
         inline: true,
       },
     ],
-    detailsTitle: '🎉 INVITE ACTIVITY',
+    detailsTitle: `${EMOJIS.USER_GIVEAWAYS} INVITE ACTIVITY`,
     details: `**${clean(joinedMember?.tag || joinedMember?.username || joinedMember?.id || 'A member', 200)}** joined **${clean(guild?.name || 'the server', 200)}** using your invite.`,
     meaning: 'Goliath detected a successful join attributed to one of your tracked invites.',
     nextSteps: 'No action is required. Your Invite Studio statistics have been updated automatically.',
