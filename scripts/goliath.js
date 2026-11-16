@@ -5580,6 +5580,7 @@ for (const guard of [
   "currentDigest !== draft.auditDigest",
   "draft.review.checkpointId", "preflight.permissionsVerified",
   "review.needsAttention", "executionIntents.get(String(req.body.intentId)) !== intent",
+  "latestDraft.review.checkpointId !== draft.review.checkpointId",
   "executionIntents.delete(String(req.body.intentId))",
   "revokeRehearsalGrants(draft.id, intent.sequence)",
   "GRANT_TTL_MS"
@@ -5594,7 +5595,7 @@ for (const guard of [
 assert(rehearsalConsumeSource.indexOf('rehearsalGrants.delete(grantId)') <
   rehearsalConsumeSource.indexOf('await getVerifiedAudit('),
   'Token must be consumed synchronously before the first await');
-assert(!/client\\.channels\\.edit|guild\\.channels\\.edit|guild\\.channels\\.create/.test(
+assert(!/client\.channels\.edit|guild\.channels\.edit|guild\.channels\.create/.test(
   rehearsalIssueSource + rehearsalConsumeSource), 'Rehearsal must never mutate Discord');
 assert(aiRouterSource.includes('revokeRehearsalGrants(draft.id, record.sequence)'),
   'Operation re-review must revoke matching rehearsal tokens');
