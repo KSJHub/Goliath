@@ -1,11 +1,12 @@
 const { PermissionFlagsBits } = require('discord.js');
+const { EMOJIS } = require('../../ui/emojis');
 const security = require('../../security/protection/core');
 const { safeReply, ephemeralError } = require('../../../core/ui/interactionResponse');
 
 const STAFF_LEVELS = { NONE: 'none', HELPER: 'helper', JUNIOR_MOD: 'junior_mod', MOD: 'mod', ADMIN: 'admin', OWNER: 'owner' };
 const STAFF_LEVEL_RANKS = { [STAFF_LEVELS.NONE]: 0, [STAFF_LEVELS.HELPER]: 1, [STAFF_LEVELS.JUNIOR_MOD]: 2, [STAFF_LEVELS.MOD]: 3, [STAFF_LEVELS.ADMIN]: 4, [STAFF_LEVELS.OWNER]: 5 };
 const STAFF_LEVEL_LABELS = { [STAFF_LEVELS.NONE]: 'No Access', [STAFF_LEVELS.HELPER]: 'Helper', [STAFF_LEVELS.JUNIOR_MOD]: 'Junior Mod', [STAFF_LEVELS.MOD]: 'Moderator', [STAFF_LEVELS.ADMIN]: 'Admin', [STAFF_LEVELS.OWNER]: 'Owner' };
-const STAFF_BADGES = { [STAFF_LEVELS.NONE]: '🚫', [STAFF_LEVELS.HELPER]: '🪪', [STAFF_LEVELS.JUNIOR_MOD]: '🗝️', [STAFF_LEVELS.MOD]: '🔐', [STAFF_LEVELS.ADMIN]: '🔏', [STAFF_LEVELS.OWNER]: '👑' };
+const STAFF_BADGES = { [STAFF_LEVELS.NONE]: EMOJIS.STAFF_NONE, [STAFF_LEVELS.HELPER]: EMOJIS.STAFF_HELPER, [STAFF_LEVELS.JUNIOR_MOD]: EMOJIS.STAFF_JUNIOR_MOD, [STAFF_LEVELS.MOD]: EMOJIS.PERMISSIONS, [STAFF_LEVELS.ADMIN]: EMOJIS.STAFF_ADMIN, [STAFF_LEVELS.OWNER]: EMOJIS.CROWN };
 
 const ACTION_REQUIREMENTS = {
   view_dashboard: STAFF_LEVELS.JUNIOR_MOD,
@@ -262,7 +263,7 @@ function getStaffLevel(member, guild) {
 function getStaffLevelRank(level) { return STAFF_LEVEL_RANKS[level] ?? STAFF_LEVEL_RANKS[STAFF_LEVELS.NONE]; }
 function getRequiredStaffLevel(action) { return ACTION_REQUIREMENTS[action] || STAFF_LEVELS.OWNER; }
 function getStaffLevelLabel(level) { return STAFF_LEVEL_LABELS[level] || 'Unknown'; }
-function getStaffBadge(level) { return STAFF_BADGES[level] || '❔'; }
+function getStaffBadge(level) { return STAFF_BADGES[level] || EMOJIS.RSVP_MAYBE; }
 function getStaffDisplay(member, guild) {
   if (!member || !guild) return { level: STAFF_LEVELS.NONE, label: STAFF_LEVEL_LABELS[STAFF_LEVELS.NONE], badge: STAFF_BADGES[STAFF_LEVELS.NONE] };
   const panel = getAuthorityPanel();
