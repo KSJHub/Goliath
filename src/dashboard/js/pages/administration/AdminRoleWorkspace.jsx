@@ -252,7 +252,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
       const nextRoles = normalizeArray(rolesRes, 'roles');
       setRoles(nextRoles);
       setSelectedRoleId((current) => current || nextRoles[0]?.id || '');
-      setNotice(`${E.SUCCESS} Synced latest roles from Discord.');
+      setNotice(`${E.SUCCESS} Synced latest roles from Discord.`);
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to sync roles from Discord.');
@@ -326,7 +326,7 @@ export default function AdminRoleWorkspace({ selectedGuild, theme }) {
       const nextPermissions = { ...permissions, accessControl, syncDiscordRoles: false };
       const saved = await api.saveGeneralSettings(guildId, { ...general, dashboardPermissions: nextPermissions });
       setGeneral(normalizeGeneral(saved?.config || { ...general, dashboardPermissions: nextPermissions }));
-      setNotice(`${E.SUCCESS} Access control saved.');
+      setNotice(`${E.SUCCESS} Access control saved.`);
     } catch (err) {
       console.error(err);
       setError(err.message || 'Failed to save access control.');
