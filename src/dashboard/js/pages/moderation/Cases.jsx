@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell';
 
 import { api } from '../../services/apiClient';
 import { joinGuildRoom, listenForGuildUpdate } from '../../services/socketClient';
@@ -305,7 +306,7 @@ export default function Cases({ selectedGuild, theme }) {
 
     return listenForGuildUpdate('cases', async () => {
       await loadCases({ quiet: true });
-      setSyncMessage('✅ Cases synced live.');
+      setSyncMessage(`${E.SUCCESS} Cases synced live.`);
     });
   }, [guildId, loadCases]);
 
