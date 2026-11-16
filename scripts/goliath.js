@@ -5557,6 +5557,45 @@ const missingBackupReadiness = evaluateReadiness({
 assert.equal(missingBackupReadiness.canExecute, false);
 assert(missingBackupReadiness.checks.find(item => item.key === 'backup').detail.includes('No matching backup'));
 
+// Security contract regression: inspect the live router implementation so
+// accidental removal of replay/expiry/revocation guards fails this audit.
+const aiRouterSource = fs.readFileSync(
+  path.join(__dirname, '../src/owner/dev/goliathAI.js'), 'utf8');
+const rehearsalIssueSource = aiRouterSource.split(
+  "router.post('/drafts/:id/authorisation-rehearsal', requirePrivateAI, async (req, res) => {")[1]?.split(
+  "router.post('/drafts/:id/authorisation-rehearsal/:grantId/consume'")[0];
+const rehearsalConsumeSource = aiRouterSource.split(
+  "router.post('/drafts/:id/authorisation-rehearsal/:grantId/consume', requirePrivateAI, async (req, res) => {")[1]?.split(
+  "// Intent lifecycle is owner-bound")[0];
+assert(rehearsalIssueSource && rehearsalConsumeSource,
+  'Rehearsal issue and consume endpoints must exist');
+for (const guard of [
+  "draft.createdBy !== ownerId", "intent.ownerId !== ownerId",
+  "Date.parse(intent.expiresAt) <= Date.now()",
+  "currentDigest !== draft.auditDigest",
+  "draft.review.checkpointId", "preflight.permissionsVerified",
+  "review.needsAttention", "executionIntents.get(String(req.body.intentId)) !== intent",
+  "executionIntents.delete(String(req.body.intentId))",
+  "revokeRehearsalGrants(draft.id, intent.sequence)",
+  "GRANT_TTL_MS"
+]) assert(rehearsalIssueSource.includes(guard), 'Missing issuance guard: ' + guard);
+for (const guard of [
+  "rehearsalGrants.delete(grantId)", "Date.parse(grant.expiresAt) <= Date.now()",
+  "draft.createdBy !== grant.ownerId", "draft.review.checkpointId !== grant.checkpointId",
+  "currentDigest !== grant.auditDigest", "grant.operationKey",
+  "preflight.permissionsVerified", "review.needsAttention",
+  "canExecute: false", "executable: false"
+]) assert(rehearsalConsumeSource.includes(guard), 'Missing consumption guard: ' + guard);
+assert(rehearsalConsumeSource.indexOf('rehearsalGrants.delete(grantId)') <
+  rehearsalConsumeSource.indexOf('await getVerifiedAudit('),
+  'Token must be consumed synchronously before the first await');
+assert(!/client\\.channels\\.edit|guild\\.channels\\.edit|guild\\.channels\\.create/.test(
+  rehearsalIssueSource + rehearsalConsumeSource), 'Rehearsal must never mutate Discord');
+assert(aiRouterSource.includes('revokeRehearsalGrants(draft.id, record.sequence)'),
+  'Operation re-review must revoke matching rehearsal tokens');
+assert(aiRouterSource.includes('revokeRehearsalGrants(draft.id);'),
+  'Full draft re-review must revoke rehearsal tokens');
+
 const ledger = require('../src/owner/dev/goliathApprovalLedger');
 const ledgerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-ai-reviews-'));
 const ledgerFile = path.join(ledgerDir, 'reviews.json');
