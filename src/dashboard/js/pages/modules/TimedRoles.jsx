@@ -183,7 +183,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
     await runAction(`delete-${ruleId}`, () => api.request(`/api/timed-roles/${guildId}/rules/${ruleId}`, { method: 'DELETE' }), 'Milestone deleted.');
   }
 
-  if (!guildId) return <EmptyState theme={theme} icon="⏳" title="Select a server" description="Select a server to manage Timed Roles." />;
+  if (!guildId) return <EmptyState theme={theme} icon={E.TIMER} title="Select a server" description="Select a server to manage Timed Roles." />;
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
@@ -261,7 +261,7 @@ export default function TimedRoles({ theme, selectedGuild, selectedGuildData }) 
 
       <section style={{ ...cardStyle, padding: 22, display: 'grid', gap: 14 }}>
         <h2 style={{ margin: 0 }}>Milestones</h2>
-        {rules.length === 0 ? <EmptyState theme={theme} icon="⏳" title="No milestones configured" description="Create a milestone such as Veteran after one year." /> : rules.map((rule) => (
+        {rules.length === 0 ? <EmptyState theme={theme} icon={E.TIMER} title="No milestones configured" description="Create a milestone such as Veteran after one year." /> : rules.map((rule) => (
           <div key={rule.ruleId} style={{ border: `1px solid ${theme.cardBorder}`, borderRadius: 16, padding: 14, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontWeight: 950 }}>{rule.enabled ? E.SUCCESS : E.PAUSE} {rule.name}</div>
