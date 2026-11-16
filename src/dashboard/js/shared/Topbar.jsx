@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from './PageShell.jsx';
 import { goDashboard } from '../services/dashboardPath.js';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../services/apiClient.js';
@@ -131,7 +132,7 @@ function Topbar({
           {isAuthenticated ? (
             <>
               <button ref={bellRef} type="button" title="Notifications" aria-label={`Notifications${unreadNotifications ? `, ${unreadNotifications} unread` : ''}`} aria-expanded={drawerOpen} onClick={toggleDrawer} onMouseEnter={() => setBellHovered(true)} onMouseLeave={() => setBellHovered(false)} onBlur={() => setBellHovered(false)} style={bellButtonStyle}>
-                <span aria-hidden="true">🔔</span>{unreadNotifications ? <span style={{ color: '#93c5fd' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</span> : null}
+                <span aria-hidden="true">{E.BELL}</span>{unreadNotifications ? <span style={{ color: '#93c5fd' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</span> : null}
               </button>
 
               {drawerOpen ? (
