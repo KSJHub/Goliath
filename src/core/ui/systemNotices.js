@@ -1,6 +1,7 @@
 'use strict';
 
 const { buildMemberNotice } = require('./memberNotice');
+const { EMOJIS } = require('./emojis');
 
 function clean(value, max = 1024) {
   return String(value ?? '').trim().slice(0, max);
@@ -15,14 +16,14 @@ function buildScheduleReminderNotice({ guild, member, event, minutes } = {}) {
   const start = discordTime(event?.startAt, 'F');
   const relative = discordTime(event?.startAt, 'R');
   const fields = [
-    { name: '📅 Event', value: clean(event?.title || 'Scheduled event'), inline: false },
+    { name: `${EMOJIS.DATE} Event`, value: clean(event?.title || 'Scheduled event'), inline: false },
     { name: '🕒 Starts', value: `${start}\n${relative}`, inline: true },
     { name: '⏰ Reminder', value: `${Number(minutes) || 0} minute${Number(minutes) === 1 ? '' : 's'} before`, inline: true },
   ];
-  if (event?.location) fields.push({ name: '📍 Location', value: clean(event.location), inline: false });
-  if (event?.channelId) fields.push({ name: '💬 Event Channel', value: `<#${event.channelId}>`, inline: true });
-  if (event?.voiceChannelId) fields.push({ name: '🔊 Voice Channel', value: `<#${event.voiceChannelId}>`, inline: true });
-  if (event?.hostUserId) fields.push({ name: '👤 Host', value: `<@${event.hostUserId}>`, inline: true });
+  if (event?.location) fields.push({ name: `${EMOJIS.SOCIAL_CHANNEL_PIN} Location`, value: clean(event.location), inline: false });
+  if (event?.channelId) fields.push({ name: `${EMOJIS.MESSAGES} Event Channel`, value: `<#${event.channelId}>`, inline: true });
+  if (event?.voiceChannelId) fields.push({ name: `${EMOJIS.VOICE} Voice Channel`, value: `<#${event.voiceChannelId}>`, inline: true });
+  if (event?.hostUserId) fields.push({ name: `${EMOJIS.USER} Host`, value: `<@${event.hostUserId}>`, inline: true });
 
   return buildMemberNotice(guild, {
     moduleName: 'Schedule',
@@ -32,10 +33,10 @@ function buildScheduleReminderNotice({ guild, member, event, minutes } = {}) {
     color: Number(event?.color) || 0x5865f2,
     referenceLabel: 'Event',
     referenceValue: clean(event?.eventId || event?.id || event?.title || 'Scheduled Event', 100),
-    status: '🔔 Upcoming',
+    status: `${EMOJIS.BELL} Upcoming`,
     member: member?.user || member,
     contextFields: fields,
-    detailsTitle: '📣 YOUR REMINDER',
+    detailsTitle: `${EMOJIS.SOCIAL} YOUR REMINDER`,
     details: `**${clean(event?.title || 'Scheduled event', 200)}** starts ${relative} (${start}).`,
     meaning: 'You asked Goliath to remind you about this event based on your RSVP reminder settings.',
     nextSteps: 'No action is required. Use the event channel or voice channel above when it is time to join.',
@@ -46,22 +47,22 @@ function buildScheduleReminderNotice({ guild, member, event, minutes } = {}) {
 function buildVerificationNotice({ guild, member, type, roles = [], reason = null, values = {} } = {}) {
   const variants = {
     pending: {
-      emoji: '🛡️', title: 'VERIFICATION REQUIRED', status: '🟡 Pending', color: 0xfee75c,
+      emoji: EMOJIS.SECURITY, title: 'VERIFICATION REQUIRED', status: '🟡 Pending', color: 0xfee75c,
       meaning: 'Your server access is currently in the verification stage.',
       next: 'Complete the active verification process in the server to unlock the access configured for verified members.',
     },
     success: {
-      emoji: '✅', title: 'VERIFICATION COMPLETE', status: '🟢 Verified', color: 0x57f287,
+      emoji: EMOJIS.SUCCESS, title: 'VERIFICATION COMPLETE', status: '🟢 Verified', color: 0x57f287,
       meaning: 'Goliath has completed your verification and confirmed the configured verified access.',
       next: 'You can return to the server and use the channels and features available to verified members.',
     },
     failed: {
-      emoji: '❌', title: 'VERIFICATION FAILED', status: '🔴 Failed', color: 0xed4245,
+      emoji: EMOJIS.ERROR, title: 'VERIFICATION FAILED', status: '🔴 Failed', color: 0xed4245,
       meaning: 'Goliath could not complete this verification attempt.',
       next: 'Review the reason below and try again when the requirement has been resolved.',
     },
     cooldown: {
-      emoji: '⏳', title: 'VERIFICATION COOLDOWN', status: '🟠 Cooldown', color: 0xfee75c,
+      emoji: EMOJIS.TIMER, title: 'VERIFICATION COOLDOWN', status: '🟠 Cooldown', color: 0xfee75c,
       meaning: 'Another verification attempt cannot be made yet because the configured cooldown is active.',
       next: values.cooldownSeconds ? `Try again in approximately ${Number(values.cooldownSeconds)} seconds.` : 'Wait for the cooldown to expire, then use the active verification panel again.',
     },
@@ -159,13 +160,13 @@ function buildScheduleWaitlistPromotionNotice({ guild, member, event } = {}) {
   const start = discordTime(event?.startAt, 'F');
   const relative = discordTime(event?.startAt, 'R');
   const fields = [
-    { name: '📅 Event', value: clean(event?.title || 'Scheduled event'), inline: false },
+    { name: `${EMOJIS.DATE} Event`, value: clean(event?.title || 'Scheduled event'), inline: false },
     { name: '🕒 Starts', value: `${start}\n${relative}`, inline: true },
   ];
 
   if (event?.location) {
     fields.push({
-      name: '📍 Location',
+      name: `${EMOJIS.SOCIAL_CHANNEL_PIN} Location`,
       value: clean(event.location),
       inline: false,
     });
@@ -173,7 +174,7 @@ function buildScheduleWaitlistPromotionNotice({ guild, member, event } = {}) {
 
   if (event?.channelId) {
     fields.push({
-      name: '💬 Event Channel',
+      name: `${EMOJIS.MESSAGES} Event Channel`,
       value: `<#${event.channelId}>`,
       inline: true,
     });
@@ -181,7 +182,7 @@ function buildScheduleWaitlistPromotionNotice({ guild, member, event } = {}) {
 
   if (event?.voiceChannelId) {
     fields.push({
-      name: '🔊 Voice Channel',
+      name: `${EMOJIS.VOICE} Voice Channel`,
       value: `<#${event.voiceChannelId}>`,
       inline: true,
     });
