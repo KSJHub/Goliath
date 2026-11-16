@@ -67,12 +67,17 @@ export default function GoliathAI({ theme }) {
   const bottom = useRef(null);
   const selectedGuildRef = useRef(selectedGuild);
   const blueprintRevisionRef = useRef(0);
+  const draftRefreshRevisionRef = useRef(0);
   selectedGuildRef.current = selectedGuild;
   useEffect(() => {
     let mounted = true;
     api.request('/api/owner/ai/status').then((value) => { if (mounted) setStatus(value); })
       .catch((err) => { if (mounted) setError(err.message); });
-    api.request('/api/owner/ai/drafts').then(value => { if (mounted) setSavedDrafts(value.drafts || []); })
+    const initialDraftRefresh = ++draftRefreshRevisionRef.current;
+    api.request('/api/owner/ai/drafts').then(value => {
+      if (mounted && draftRefreshRevisionRef.current === initialDraftRefresh)
+        setSavedDrafts(value.drafts || []);
+    })
       .catch(() => { /* The draft library is optional until DEV deployment is verified. */ });
     api.request('/api/owner/ai/guilds').then((value) => { if (mounted) {
       setGuilds(value.guilds || []);
@@ -320,8 +325,11 @@ export default function GoliathAI({ theme }) {
     finally { setBlueprintBusy(false); }
   };
   const refreshDrafts = async () => {
+    const revision = ++draftRefreshRevisionRef.current;
     const value = await api.request('/api/owner/ai/drafts');
-    setSavedDrafts(value.drafts || []);
+    // A slower earlier fetch must not replace a newer saved-draft library.
+    if (draftRefreshRevisionRef.current === revision)
+      setSavedDrafts(value.drafts || []);
   };
   const saveCurrentDraft = async () => {
     if (!audit || !blueprintText.trim() || draftBusy) return;
