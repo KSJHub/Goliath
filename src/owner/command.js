@@ -1,5 +1,9 @@
 'use strict';
 const { EMOJIS, emojiLabel } = require('../core/ui/emojis');
+const fs = require('node:fs');
+const path = require('node:path');
+const { randomUUID } = require('node:crypto');
+const { getRuntimePaths } = require('../config/runtimePaths');
 
 const {
   ActionRowBuilder,
@@ -536,8 +540,46 @@ const AI_ROLE_TEMPLATES = Object.freeze({
 // Never trust role IDs or permission values from Discord component payloads.
 const aiPendingRolePlans = new Map();
 const aiPendingChannelPlans = new Map();
-const aiChannelRecovery = new Map();
-const aiRoleRecovery = new Map();
+// Durable DEV-local recovery snapshots, never shared with BETA or PRODUCTION.
+function aiRecoveryFile() {
+  return path.join(getRuntimePaths('DEV').data, 'goliath-ai-permission-recovery.json');
+}
+function aiRecoveryRead() {
+  if (mode() !== 'DEV') throw new Error('DEV-only recovery');
+  const file = aiRecoveryFile();
+  if (!fs.existsSync(file)) return [];
+  if (fs.statSync(file).size > 262144) throw new Error('Recovery storage limit exceeded');
+  const entries = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!Array.isArray(entries) || entries.length > 100) throw new Error('Invalid recovery storage');
+  return entries;
+}
+function aiRecoveryWrite(entries) {
+  if (mode() !== 'DEV' || !Array.isArray(entries) || entries.length > 100)
+    throw new Error('Invalid DEV recovery write');
+  const file = aiRecoveryFile();
+  const raw = JSON.stringify(entries);
+  if (Buffer.byteLength(raw) > 262144) throw new Error('Recovery storage limit exceeded');
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const tmp = file + '.' + randomUUID() + '.tmp';
+  try {
+    fs.writeFileSync(tmp, raw, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    fs.renameSync(tmp, file);
+    fs.chmodSync(file, 0o600);
+  } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
+}
+function aiRecoveryGet(ownerId, kind) {
+  return aiRecoveryRead().filter(item => item.ownerId === ownerId && item.kind === kind &&
+    Number.isFinite(item.expiresAt) && item.expiresAt > Date.now()).at(-1) || null;
+}
+function aiRecoverySave(ownerId, kind, snapshot) {
+  const entries = aiRecoveryRead().filter(item => item.expiresAt > Date.now() &&
+    !(item.ownerId === ownerId && item.kind === kind));
+  entries.push({ ...snapshot, ownerId, kind, createdAt: new Date().toISOString() });
+  aiRecoveryWrite(entries.slice(-100));
+}
+function aiRecoveryDelete(ownerId, kind) {
+  aiRecoveryWrite(aiRecoveryRead().filter(item => !(item.ownerId === ownerId && item.kind === kind)));
+}
 const AI_PLAN_TTL = 10 * 60 * 1000;
 function aiRoleCanEdit(guild, role, bot, grants) {
   return Boolean(role && bot && !role.managed && role.id !== guild.id &&
@@ -611,7 +653,7 @@ async function aiApplyRolePlan(interaction, guildId) {
     if (!verified || verified.permissions.bitfield.toString() !== expected.bitfield.toString())
       throw new Error('Permission verification failed after Discord update.');
     const after = verified.permissions.bitfield.toString();
-    aiRoleRecovery.set(interaction.user.id, {
+    aiRecoverySave(interaction.user.id, 'role', {
       guildId: guild.id, roleId: role.id, before: plan.original, after,
       expiresAt: Date.now() + 30 * 60 * 1000
     });
@@ -620,7 +662,7 @@ async function aiApplyRolePlan(interaction, guildId) {
     return interaction.editReply({
       content: 'Applied and verified ' + plan.grants.length +
         ' permission grants for <@&' + role.id + '>. No existing permissions removed. ' +
-        'A 30-minute recovery snapshot is available while this DEV process remains running.',
+        'A 30-minute recovery snapshot is saved in DEV runtime storage.',
       embeds: [],
       components: [new ActionRowBuilder().addComponents(
         navigationButton(contextualOwnerId('ai-recovery-preview', guild.id), 'Review Recovery', ButtonStyle.Secondary)
@@ -636,11 +678,11 @@ async function aiApplyRolePlan(interaction, guildId) {
 
 async function aiRecoverRole(interaction, guildId, confirm = false) {
   await interaction.deferUpdate();
-  const snapshot = aiRoleRecovery.get(interaction.user.id);
+  const snapshot = aiRecoveryGet(interaction.user.id, 'role');
   if (mode() !== 'DEV' || !snapshot || snapshot.guildId !== guildId ||
       Date.now() > snapshot.expiresAt) {
-    aiRoleRecovery.delete(interaction.user.id);
-    return interaction.editReply({ content: 'No active recovery snapshot. Recovery expires after 30 minutes or a DEV restart.',
+    aiRecoveryDelete(interaction.user.id, 'role');
+    return interaction.editReply({ content: 'No active recovery snapshot. Recovery expires after 30 minutes.',
       embeds: [], components: [] });
   }
   const { guild } = await resolveInteractionGuild(interaction, guildId);
@@ -664,7 +706,7 @@ async function aiRecoverRole(interaction, guildId, confirm = false) {
       .setTitle('Goliath AI • Recovery Confirmation')
       .setDescription('Restore the previous permission bitfield for <@&' + role.id +
         '>? This replaces the current role permission set. It is only permitted if the role is unchanged since the AI operation.')
-      .setFooter({ text: 'DEV • Recovery expires after 30 minutes or restart' });
+      .setFooter({ text: 'DEV • Recovery expires after 30 minutes' });
     return interaction.editReply({ embeds: [embed], content: '',
       components: [new ActionRowBuilder().addComponents(
         navigationButton(contextualOwnerId('ai-recovery-confirm', guildId), 'Confirm Restore', ButtonStyle.Danger),
@@ -672,7 +714,7 @@ async function aiRecoverRole(interaction, guildId, confirm = false) {
       )] });
   }
   // Consume before the write to prevent replay of the same recovery request.
-  aiRoleRecovery.delete(interaction.user.id);
+  aiRecoveryDelete(interaction.user.id, 'role');
   try {
     await role.setPermissions(oldPermissions, 'Goliath AI DEV owner-approved recovery by ' + interaction.user.id);
     const verified = await guild.roles.fetch(role.id, { force: true });
@@ -814,12 +856,12 @@ async function aiApplyChannelPlan(interaction, guildId) {
     const after = aiOverwriteSnapshot(updated, role.id);
     if (!after.exists || after.allow !== allow.bitfield.toString() || after.deny !== deny.bitfield.toString())
       throw new Error('Channel overwrite verification mismatch');
-    aiChannelRecovery.set(interaction.user.id, { guildId, channelId: channel.id, roleId: role.id,
+    aiRecoverySave(interaction.user.id, 'channel', { guildId, channelId: channel.id, roleId: role.id,
       before: plan.before, after, expiresAt: Date.now() + 30 * 60 * 1000 });
     console.info('[Goliath AI] Channel grants verified', { guildId, channelId: channel.id,
       roleId: role.id, ownerId: interaction.user.id, grants: plan.grants, before: plan.before, after });
     return interaction.editReply({ content: 'Channel overwrite applied and verified for <@&' + role.id +
-      '> in <#' + channel.id + '>. A 30-minute recovery snapshot is available while DEV remains running.',
+      '> in <#' + channel.id + '>. A 30-minute recovery snapshot is saved in DEV runtime storage.',
       embeds: [], components: [new ActionRowBuilder().addComponents(
         navigationButton(contextualOwnerId('ai-channel-recover', guild.id), 'Review Channel Recovery', ButtonStyle.Secondary)
       )] });
@@ -833,9 +875,9 @@ async function aiApplyChannelPlan(interaction, guildId) {
 
 async function aiRecoverChannel(interaction, guildId, confirm = false) {
   await interaction.deferUpdate();
-  const snapshot = aiChannelRecovery.get(interaction.user.id);
+  const snapshot = aiRecoveryGet(interaction.user.id, 'channel');
   if (mode() !== 'DEV' || !snapshot || snapshot.guildId !== guildId || Date.now() > snapshot.expiresAt) {
-    aiChannelRecovery.delete(interaction.user.id);
+    aiRecoveryDelete(interaction.user.id, 'channel');
     return interaction.editReply({ content: 'No active channel recovery snapshot.', embeds: [], components: [] });
   }
   const { guild } = await resolveInteractionGuild(interaction, guildId);
@@ -859,7 +901,7 @@ async function aiRecoverChannel(interaction, guildId, confirm = false) {
         navigationButton(contextualOwnerId('ai-channel-abort', guildId), 'Cancel', ButtonStyle.Secondary)
       )] });
   }
-  aiChannelRecovery.delete(interaction.user.id);
+  aiRecoveryDelete(interaction.user.id, 'channel');
   try {
     if (!snapshot.before.exists) {
       await channel.permissionOverwrites.delete(role, 'Goliath AI DEV approved channel recovery by ' + interaction.user.id);
