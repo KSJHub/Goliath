@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../../shared/PageShell.jsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import useOwnerGuilds from '../../hooks/useOwnerGuilds.js';
@@ -238,7 +239,7 @@ function IssueRow({ title, detail, meta, theme }) {
 }
 
 function HealthyPanel({ theme, title, text, compact = false }) {
-  return <div style={{ border: `1px dashed ${theme.cardBorder}`, background: 'rgba(15,23,42,0.20)', borderRadius: 16, padding: compact ? 14 : 18, display: 'grid', gap: 6, textAlign: 'center', color: theme.mutedText }}><strong style={{ color: theme.cardText }}>✅ {title}</strong><span style={{ lineHeight: 1.5 }}>{text}</span></div>;
+  return <div style={{ border: `1px dashed ${theme.cardBorder}`, background: 'rgba(15,23,42,0.20)', borderRadius: 16, padding: compact ? 14 : 18, display: 'grid', gap: 6, textAlign: 'center', color: theme.mutedText }}><strong style={{ color: theme.cardText }}>{E.SUCCESS} {title}</strong><span style={{ lineHeight: 1.5 }}>{text}</span></div>;
 }
 
 function Muted({ theme, children }) {
