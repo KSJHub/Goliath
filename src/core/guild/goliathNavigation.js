@@ -60,6 +60,7 @@ const EMOJIS = Object.freeze({
   SYSTEM: '🧩',
   HISTORY: '🕘',
   LOCK: '🔒',
+  SETTINGS_PLAIN: '⚙',
   COLOURS: '🌈',
   ENV_DEV: '🔵',
   ENV_BETA: '🟡',
