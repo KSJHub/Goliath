@@ -5612,7 +5612,7 @@ for (const guard of [
   "clearTimeout(timeout)", "requestInProgress = false",
   "message.slice(0, 12000)"
 ]) assert(aiChatSource.includes(guard), 'Missing private chat guard: ' + guard);
-assert(!/guild\\.channels\\.create\\(|guild\\.channels\\.edit\\(/.test(aiChatSource),
+assert(!/guild\.channels\.create\(|guild\.channels\.edit\(/.test(aiChatSource),
   'Private AI chat must not directly mutate Discord');
 const rehearsalIssueSource = aiRouterSource.split(
   "router.post('/drafts/:id/authorisation-rehearsal', requirePrivateAI, async (req, res) => {")[1]?.split(
