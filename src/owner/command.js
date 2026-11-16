@@ -257,7 +257,7 @@ function ownerHomePayload(interaction, notice = null) {
   const navigationComponents = [
     navigationButton(contextualOwnerId('refresh', interaction), 'Refresh', ButtonStyle.Secondary).setEmoji(EMOJIS.REFRESH),
     ...(security.getBotOwnerIds().length === 2 && new Set(security.getBotOwnerIds()).size === 2 ? [
-      linkButton('Goliath AI', 'https://dev.goliath.ksjdigital.co.uk/owner/ai', { emoji: EMOJIS.TOOLS })
+      ...(isDev ? [navigationButton(contextualOwnerId('ai-home', guildId), 'Goliath AI', ButtonStyle.Primary).setEmoji(EMOJIS.TOOLS)] : [linkButton('Goliath AI', 'https://dev.goliath.ksjdigital.co.uk/owner/ai', { emoji: EMOJIS.TOOLS })])
     ] : []),
   ];
 
@@ -520,6 +520,84 @@ async function resolveMaintenanceGuild(interaction, explicitGuildId = null) {
   return resolved.guild || null;
 }
 
+// DEV-only Discord entry point for the permission architect. Read-only until
+// a separately reviewed execution engine and rollback support are available.
+const AI_ROLE_TEMPLATES = Object.freeze({
+  admin: ['ViewChannel', 'SendMessages', 'ManageChannels', 'ManageRoles', 'ManageMessages', 'ManageThreads', 'KickMembers', 'BanMembers', 'ModerateMembers', 'ViewAuditLog'],
+  moderator: ['ViewChannel', 'SendMessages', 'ManageMessages', 'ManageThreads', 'KickMembers', 'ModerateMembers', 'ViewAuditLog'],
+  member: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AddReactions', 'Connect', 'Speak'],
+  newcomer: ['ViewChannel', 'ReadMessageHistory'],
+  bot: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'EmbedLinks', 'AttachFiles'],
+});
+
+function aiPanelPayload(interaction, guild, detail = 'overview') {
+  const guildId = validGuildId(guild?.id) || interactionGuildId(interaction);
+  const roles = guild?.roles?.cache;
+  const channels = guild?.channels?.cache;
+  const botMember = guild?.members?.me || guild?.members?.cache?.get?.(interaction.client.user?.id);
+  const botRole = botMember?.roles?.highest;
+  const categoryCount = channels ? [...channels.values()].filter(channel => channel.type === 4).length : 0;
+  const lines = [];
+  if (!guild) {
+    lines.push('Select a guild where the DEV bot is present, then run the scan. No changes will be made.');
+  } else if (detail === 'bot') {
+    const permissions = botMember?.permissions;
+    lines.push(
+      '**Goliath bot identity:** ' + (botMember ? '<@' + botMember.id + '>' : 'Not available'),
+      '**Highest role:** ' + (botRole ? '<@&' + botRole.id + '>' : 'Unavailable'),
+      '**Administrator:** ' + (permissions?.has('Administrator') ? 'Granted (bypasses channel overwrites)' : 'Not granted'),
+      '**Manage Roles:** ' + (permissions?.has('ManageRoles') ? 'Granted' : 'Missing'),
+      '**Manage Channels:** ' + (permissions?.has('ManageChannels') ? 'Granted' : 'Missing'),
+      '**View Audit Log:** ' + (permissions?.has('ViewAuditLog') ? 'Granted' : 'Missing'),
+      '',
+      'Discord role hierarchy limits which roles Goliath can edit. Category and channel overwrites may further restrict access.'
+    );
+  } else if (detail === 'templates') {
+    for (const [name, permissions] of Object.entries(AI_ROLE_TEMPLATES)) {
+      lines.push('**' + name[0].toUpperCase() + name.slice(1) + ':** ' + permissions.map(p => '\`' + p + '\`').join(', '));
+    }
+    lines.push('', 'Advisory baselines only. Bot permissions must be adjusted per enabled module and channel. Administrator is intentionally excluded.');
+  } else {
+    lines.push(
+      '**Roles:** ' + (roles?.size ?? 'Unavailable'),
+      '**Channels:** ' + (channels?.size ?? 'Unavailable'),
+      '**Categories:** ' + categoryCount,
+      '**Goliath bot role:** ' + (botRole ? '<@&' + botRole.id + '>' : 'Unavailable'),
+      '',
+      'Choose **Scan Goliath** for the bot permission baseline or **Role Templates** for recommended starting permissions.',
+      'Detailed per-role/channel overwrite editing and approved execution are still under development.'
+    );
+  }
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('Goliath AI • Permission Architect')
+    .setDescription(lines.join('\n').slice(0, 3900))
+    .addFields({ name: 'Selected guild', value: guild ? guild.name + ' • ' + guild.id : (guildId || 'No guild selected') })
+    .setFooter({ text: 'DEV • Owner-only • Read-only • No Discord changes' });
+  const controls = new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-scan', guildId), 'Scan Goliath', ButtonStyle.Primary, !guildId),
+    navigationButton(contextualOwnerId('ai-templates', guildId), 'Role Templates', ButtonStyle.Secondary),
+    navigationButton(contextualOwnerId('ai-home', guildId), 'Overview', ButtonStyle.Secondary),
+    navigationButton(contextualOwnerId('home', guildId), 'Back', ButtonStyle.Secondary)
+  );
+  return { embeds: [embed], components: [controls] };
+}
+
+async function handleOwnerAI(interaction, action, guildId) {
+  if (mode() !== 'DEV') {
+    await interaction.update(ownerHomePayload(interaction, 'Goliath AI Discord controls are DEV-only.'));
+    return;
+  }
+  await interaction.deferUpdate();
+  const resolved = await resolveInteractionGuild(interaction, guildId);
+  const guild = resolved.guild;
+  if (guild) {
+    await Promise.all([guild.roles.fetch(), guild.channels.fetch(), guild.members.fetchMe()]).catch(() => null);
+  }
+  await interaction.editReply(aiPanelPayload(interaction, guild, action === 'ai-scan' ? 'bot' :
+    action === 'ai-templates' ? 'templates' : 'overview'));
+}
+
 async function handleOwnerPanelInteraction(interaction) {
   const rawId = String(interaction?.customId || '');
   if (rawId.startsWith('ownerpanel:restart:') ||
@@ -627,6 +705,12 @@ async function handleOwnerPanelInteraction(interaction) {
     const recovered = results.filter((result) => result?.found).length;
     const failed = results.filter((result) => result?.ok === false).length;
     await interaction.editReply(maintenancePayload(interaction, contextGuildId, `✅ **${recovered}** active maintenance channel(s) marked operational and scheduled for deletion${failed ? ` • **${failed}** failed` : ''}.`));
+    return true;
+  }
+
+  if (id === `${OWNER_PREFIX}ai-home` || id === `${OWNER_PREFIX}ai-scan` ||
+      id === `${OWNER_PREFIX}ai-templates`) {
+    await handleOwnerAI(interaction, id.slice(OWNER_PREFIX.length), contextGuildId);
     return true;
   }
 
