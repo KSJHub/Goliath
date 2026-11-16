@@ -347,6 +347,9 @@ jobs:
             DEV_STOPPED=0
             echo "✅ DEV stable: sha=$FINAL_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
             test -d "$RUNTIME_DIR"
+            # Only disarm recovery after all health checks and runtime checks pass.
+            # Otherwise the EXIT handler would restart a healthy DEV process.
+            DEV_STOPPED=0
             rm -rf "$BACKUP_DIR"
             trap - EXIT
             cleanup_remote
