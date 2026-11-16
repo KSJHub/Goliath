@@ -231,6 +231,9 @@ jobs:
 
             echo "🔎 Validate DEV"
             BOT_MODE=dev npm run doctor
+            # Exercise the existing Goliath AI blueprint safety contract before
+            # building or restarting DEV; no new test files or runtime writes.
+            BOT_MODE=dev npm run test:goliath-ai-blueprint
             node scripts/goliath.js embed-graphic-headers
             node - <<'NODE'
             const fs=require('node:fs'),assert=require('node:assert/strict');
