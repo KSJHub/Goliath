@@ -473,8 +473,10 @@ export default function GoliathAI({ theme }) {
       // Ignore review data returned after the owner has switched guilds.
       if (selectedGuildRef.current !== requestedGuild) return;
       if (result.draftId !== id || result.environment !== environment ||
-          String(result.guildId) !== guildId || result.canExecute !== false)
-        throw new Error('Review target mismatch.');
+          String(result.guildId) !== guildId || result.canExecute !== false ||
+          result.executable !== false || !Array.isArray(result.operations) ||
+          !Array.isArray(result.events))
+        throw new Error('Review target mismatch or unsafe review response.');
       setOperationReviews(result);
     } catch (err) {
       if (selectedGuildRef.current === requestedGuild) setError(err.message);
