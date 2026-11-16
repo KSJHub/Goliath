@@ -569,15 +569,22 @@ function aiRecoveryWrite(entries) {
     fs.chmodSync(file, 0o600);
   } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
 }
-function aiRecoveryReady() {
+function aiRecoveryReady(ownerId, kind) {
   // Refuse a Discord write when its recovery store cannot be read or written.
   // This does not guarantee a later write succeeds, but catches common
   // filesystem failures before permissions are changed.
   const entries = aiRecoveryRead();
+  if (entries.some(item => item.ownerId === ownerId && item.kind === kind &&
+      item.status === 'pending' && item.expiresAt > Date.now()))
+    throw new Error('Previous permission operation requires manual reconciliation');
+  if (entries.filter(item => item.expiresAt > Date.now() &&
+      !(item.ownerId === ownerId && item.kind === kind)).length >= 100)
+    throw new Error('Recovery storage full');
   aiRecoveryWrite(entries);
 }
 function aiRecoverySnapshotValid(item) {
   if (!item || !['role', 'channel'].includes(item.kind) ||
+      (item.status && !['pending', 'verified'].includes(item.status)) ||
       !/^\d{16,25}$/.test(String(item.ownerId || '')) ||
       !/^\d{16,25}$/.test(String(item.guildId || '')) ||
       !/^\d{16,25}$/.test(String(item.roleId || '')) ||
@@ -590,6 +597,7 @@ function aiRecoverySnapshotValid(item) {
 }
 function aiRecoveryGet(ownerId, kind) {
   return aiRecoveryRead().filter(item => item.ownerId === ownerId && item.kind === kind &&
+    item.status !== 'pending' &&
     Number.isFinite(item.expiresAt) && item.expiresAt > Date.now()).at(-1) || null;
 }
 function aiRecoverySave(ownerId, kind, snapshot) {
@@ -671,7 +679,12 @@ async function aiApplyRolePlan(interaction, guildId) {
   if (!plan.grants.length) return interaction.editReply({ content: 'No changes required.', embeds: [], components: [] });
   const expected = new PermissionsBitField(role.permissions.bitfield).add(...plan.grants);
   try {
-    aiRecoveryReady();
+    aiRecoveryReady(interaction.user.id, 'role');
+    aiRecoverySave(interaction.user.id, 'role', {
+      guildId: guild.id, roleId: role.id, before: plan.original,
+      after: expected.bitfield.toString(), status: 'pending',
+      expiresAt: Date.now() + 30 * 60 * 1000
+    });
     await role.setPermissions(expected, 'Goliath AI DEV owner-approved role grants by ' + interaction.user.id);
     const verified = await guild.roles.fetch(role.id, { force: true });
     if (!verified || verified.permissions.bitfield.toString() !== expected.bitfield.toString())
@@ -679,7 +692,7 @@ async function aiApplyRolePlan(interaction, guildId) {
     const after = verified.permissions.bitfield.toString();
     aiRecoverySave(interaction.user.id, 'role', {
       guildId: guild.id, roleId: role.id, before: plan.original, after,
-      expiresAt: Date.now() + 30 * 60 * 1000
+      status: 'verified', expiresAt: Date.now() + 30 * 60 * 1000
     });
     console.info('[Goliath AI] Owner-approved role grants', { guildId: guild.id, roleId: role.id,
       ownerId: interaction.user.id, grants: plan.grants });
@@ -875,14 +888,19 @@ async function aiApplyChannelPlan(interaction, guildId) {
   const changes = {};
   for (const permission of plan.grants) changes[permission] = true;
   try {
-    aiRecoveryReady();
+    aiRecoveryReady(interaction.user.id, 'channel');
+    aiRecoverySave(interaction.user.id, 'channel', {
+      guildId, channelId: channel.id, roleId: role.id, before: plan.before,
+      after: { exists: true, allow: allow.bitfield.toString(), deny: deny.bitfield.toString() },
+      status: 'pending', expiresAt: Date.now() + 30 * 60 * 1000
+    });
     await channel.permissionOverwrites.edit(role, changes, { reason: 'Goliath AI DEV approved channel grants by ' + interaction.user.id });
     const updated = await guild.channels.fetch(channel.id, { force: true });
     const after = aiOverwriteSnapshot(updated, role.id);
     if (!after.exists || after.allow !== allow.bitfield.toString() || after.deny !== deny.bitfield.toString())
       throw new Error('Channel overwrite verification mismatch');
     aiRecoverySave(interaction.user.id, 'channel', { guildId, channelId: channel.id, roleId: role.id,
-      before: plan.before, after, expiresAt: Date.now() + 30 * 60 * 1000 });
+      before: plan.before, after, status: 'verified', expiresAt: Date.now() + 30 * 60 * 1000 });
     console.info('[Goliath AI] Channel grants verified', { guildId, channelId: channel.id,
       roleId: role.id, ownerId: interaction.user.id, grants: plan.grants, before: plan.before, after });
     return interaction.editReply({ content: 'Channel overwrite applied and verified for <@&' + role.id +
