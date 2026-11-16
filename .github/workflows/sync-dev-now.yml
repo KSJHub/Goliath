@@ -334,8 +334,10 @@ jobs:
             fi
 
             DIRECT_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 http://127.0.0.1:3001/api/auth/me || true)"
-            PUBLIC_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 "$DEV_PUBLIC_URL/api/auth/me" || true)"
-            DASHBOARD_STATUS="$(curl -ksS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 "$DEV_PUBLIC_URL/" || true)"
+            # Verify public HTTPS certificates; never accept an invalid TLS
+            # chain as a successful deployment health check.
+            PUBLIC_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 "$DEV_PUBLIC_URL/api/auth/me" || true)"
+            DASHBOARD_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 "$DEV_PUBLIC_URL/" || true)"
             SUBDOMAIN_API_STATUS="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 https://dev.goliath.ksjdigital.co.uk/api/auth/me || true)"
             SUBDOMAIN_DASHBOARD_STATUS="$(curl -fsS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 10 https://dev.goliath.ksjdigital.co.uk/ || true)"
             [ "$SUBDOMAIN_DASHBOARD_STATUS" = 200 ] || { echo "DEV subdomain dashboard health failed: $SUBDOMAIN_DASHBOARD_STATUS" >&2; exit 1; }
