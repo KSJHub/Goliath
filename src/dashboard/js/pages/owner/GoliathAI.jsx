@@ -291,10 +291,17 @@ export default function GoliathAI({ theme }) {
     try {
       let blueprint;
       try { blueprint = JSON.parse(blueprintText); } catch { throw new Error('Blueprint must be valid JSON.'); }
-      const result = await api.request('/api/owner/ai/blueprint/' + audit.environment + '/' + audit.guild.id + '/preview', {
+      const environment = audit.environment;
+      const guildId = String(audit.guild.id);
+      const requestedGuild = environment + ':' + guildId;
+      const result = await api.request('/api/owner/ai/blueprint/' + environment + '/' + guildId + '/preview', {
         method: 'POST', body: JSON.stringify({ blueprint })
       });
-      if (result.environment !== audit.environment || result.guild?.id !== audit.guild.id || result.executable !== false) throw new Error('Preview target verification failed.');
+      // A server switch or inventory refresh may finish while the preview is
+      // pending. Never attach a late preview to a different selected server.
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result.environment !== environment || String(result.guild?.id || '') !== guildId ||
+          result.executable !== false) throw new Error('Preview target verification failed.');
       setBlueprintPlan(result);
     } catch (err) { setError(err.message); }
     finally { setBlueprintBusy(false); }
