@@ -21,7 +21,7 @@ export const DASHBOARD_EMOJIS = Object.freeze({
   USER: '👤', LIVE: '🔴', GOODBYE: '👋',
   BOT: '🤖', BUILDER: '🛠', PRESET: '📦', DIRECT_MESSAGE: '📨', PREVIEW: '👁',
   TICKETS: '🎫', DOCUMENT: '📄', SECURITY: '🛡️', SAVE: '💾',
-  SYSTEM: '🧩', HISTORY: '🕘', LOCK: '🔒', COLOURS: '🌈',
+  SYSTEM: '🧩', HISTORY: '🕘', LOCK: '🔒', UNLOCK: '🔓', SETTINGS_PLAIN: '⚙', COLOURS: '🌈',
   ENV_DEV: '🔵', ENV_BETA: '🟡', ENV_PRODUCTION: '🟢', CROWN: '👑', FREE: '🆓',
   STATUS_ALERT: '🔴', STATUS_UNKNOWN: '⚪', PERMISSIONS: '🔐',
   DIAMOND: '💎', HOME: '🏠', JUSTICE: '⚖️', COMMUNITIES: '🏘️',
