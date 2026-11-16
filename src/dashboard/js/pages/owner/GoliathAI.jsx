@@ -433,9 +433,15 @@ export default function GoliathAI({ theme }) {
       const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/review', {
         method: 'POST', body: JSON.stringify({})
       });
+      // The review endpoint returns the updated saved draft, not execution flags.
+      // Validate its identity before showing a review acknowledgement.
+      if (String(result.draft?.id || '') !== String(id) ||
+          result.draft?.environment !== environment ||
+          String(result.draft?.guildId || '') !== guildId)
+        throw new Error('Reviewed draft target mismatch.');
       await refreshDrafts();
       if (selectedGuildRef.current !== requestedGuild) return;
-      setDraftNotice(result.notice || 'Review recorded. This does not authorise execution.');
+      setDraftNotice('Review recorded. This does not authorise execution.');
     } catch (err) {
       if (selectedGuildRef.current === requestedGuild) setError(err.message);
     } finally { setDraftBusy(false); }
