@@ -817,7 +817,7 @@ async function handleOwnerPanelInteraction(interaction) {
   }
 
   if (id.startsWith(`${OWNER_PREFIX}ai-compare:`)) {
-    const match = id.match(/^ownerpanel:ai-compare:(\\d{16,25})$/);
+    const match = id.match(/^ownerpanel:ai-compare:(\d{16,25})$/);
     if (!match || !interaction.isStringSelectMenu?.()) return true;
     const template = String(interaction.values?.[0] || '');
     if (!Object.hasOwn(AI_ROLE_TEMPLATES, template)) return true;
