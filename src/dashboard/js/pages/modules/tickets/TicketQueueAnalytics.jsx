@@ -182,7 +182,7 @@ export default function TicketQueueAnalytics({ theme, tickets = [] }) {
             </div>
             <span style={{ color: toneForAge(ageMs(ticket)), fontWeight: 950 }}>{formatDuration(ageMs(ticket))}</span>
           </div>
-        )) : <EmptyState theme={theme} icon="✅" title="No ticket risks detected" description="Unassigned, old or recovery-needed tickets will appear here when attention is required." />}
+        )) : <EmptyState theme={theme} icon={E.SUCCESS} title="No ticket risks detected" description="Unassigned, old or recovery-needed tickets will appear here when attention is required." />}
       </div>
     </section>
   );
