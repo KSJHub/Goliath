@@ -590,7 +590,7 @@ function aiRecoveryLocked(mutator) {
 }
 function aiRecoveryReady(ownerId, kind, guildId, roleId, channelId = null) {
   const entries = aiRecoveryRead();
-  const targetBusy = entries.some(item => item.status === 'pending' &&
+  const targetBusy = entries.some(item => (item.status === 'pending' || item.expiresAt > Date.now()) &&
     item.guildId === guildId && item.kind === kind && item.roleId === roleId &&
     (kind === 'role' || item.channelId === channelId));
   if (targetBusy) throw new Error('Target has an unresolved permission transaction');
@@ -636,10 +636,10 @@ function aiRecoverySave(ownerId, kind, snapshot) {
   if (snapshot.status === 'pending' && entries.some(item => item.ownerId === ownerId &&
       item.kind === kind && item.status !== 'pending' && item.expiresAt > Date.now()))
     throw new Error('Active recovery snapshot cannot be replaced by a new operation');
-  if (snapshot.status === 'pending' && entries.some(item => item.status === 'pending' &&
+  if (snapshot.status === 'pending' && entries.some(item => (item.status === 'pending' || item.expiresAt > Date.now()) &&
       item.guildId === snapshot.guildId && item.kind === kind && item.roleId === snapshot.roleId &&
       (kind === 'role' || item.channelId === snapshot.channelId)))
-    throw new Error('Target already has a pending transaction');
+    throw new Error('Target already has an active recovery or pending transaction');
   const retained = entries.filter(item => (item.expiresAt > Date.now() || item.status === 'pending') &&
     !(item.ownerId === ownerId && item.kind === kind));
   retained.push({ ...snapshot, ownerId, kind, createdAt: prior?.createdAt || new Date().toISOString() });
