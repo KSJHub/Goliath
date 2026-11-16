@@ -101,7 +101,15 @@ export default function GoliathAI({ theme }) {
       setPersonalGuilds(payload.personalGuilds || []);
       setPersonalGuildsStatus(payload.personalGuildsStatus || 'unavailable');
       setEnvironments(payload.environments || []);
-      setSelectedGuild(previous => previous);
+      // Refresh can remove a guild or change its environment availability.
+      // Never retain a stale selected server or its previous audit/plan.
+      setSelectedGuild(previous => {
+        const valid = [
+          ...next.map(guild => guild.environment + ':' + guild.id),
+          ...(payload.personalGuilds || []).map(guild => 'PERSONAL:' + guild.id)
+        ];
+        return valid.includes(previous) ? previous : (valid[0] || '');
+      });
       setAudit(null); setPreview(null); replaceBlueprintText(''); setBlueprintPlan(null); setReadiness(null); setOperationReviews(null);
     } catch (err) { setError(err.message); }
   };
