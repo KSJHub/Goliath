@@ -577,6 +577,9 @@ function aiRecoveryReady(ownerId, kind, guildId, roleId, channelId = null) {
   if (targetBusy) throw new Error('Target has an unresolved permission transaction');
   if (entries.some(item => item.ownerId === ownerId && item.kind === kind && item.status === 'pending'))
     throw new Error('Previous permission operation requires reconciliation');
+  if (entries.some(item => item.ownerId === ownerId && item.kind === kind &&
+      item.status !== 'pending' && item.expiresAt > Date.now()))
+    throw new Error('Existing recovery snapshot must be restored or allowed to expire before another operation');
   const retained = entries.filter(item => item.expiresAt > Date.now() || item.status === 'pending');
   if (retained.length >= 100 && !retained.some(item => item.ownerId === ownerId && item.kind === kind))
     throw new Error('Recovery storage full');
@@ -609,6 +612,9 @@ function aiRecoverySave(ownerId, kind, snapshot) {
       JSON.stringify(prior.before) !== JSON.stringify(snapshot.before) ||
       JSON.stringify(prior.after) !== JSON.stringify(snapshot.after)))
     throw new Error('Pending transaction cannot be overwritten with a different operation');
+  if (snapshot.status === 'pending' && entries.some(item => item.ownerId === ownerId &&
+      item.kind === kind && item.status !== 'pending' && item.expiresAt > Date.now()))
+    throw new Error('Active recovery snapshot cannot be replaced by a new operation');
   if (snapshot.status === 'pending' && entries.some(item => item.status === 'pending' &&
       item.guildId === snapshot.guildId && item.kind === kind && item.roleId === snapshot.roleId &&
       (kind === 'role' || item.channelId === snapshot.channelId)))
