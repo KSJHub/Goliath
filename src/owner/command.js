@@ -652,8 +652,8 @@ async function aiReconcilePending(interaction, guildId) {
       results.push(item.kind + ': unable to verify; pending record retained (' + String(error?.message || 'error').slice(0, 100) + ')');
     }
   }
-  return interaction.editReply({ content: 'Goliath AI • DEV transaction reconciliation\\n' +
-    results.join('\\n'), embeds: [], components: [] });
+  return interaction.editReply({ content: 'Goliath AI • DEV transaction reconciliation\n' +
+    results.join('\n'), embeds: [], components: [] });
 }
 function aiRecoveryDelete(ownerId, kind) {
   aiRecoveryWrite(aiRecoveryRead().filter(item => !(item.ownerId === ownerId && item.kind === kind && item.status !== 'pending')));
@@ -1190,6 +1190,9 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
     navigationButton(contextualOwnerId('home', guildId), 'Back', ButtonStyle.Secondary)
   );
   const rows = [controls];
+  if (guild && mode() === 'DEV') rows.push(new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-reconcile', guild.id), 'Reconcile Pending', ButtonStyle.Secondary)
+  ));
   if (guild && detail === 'channel' && typeof selectedId === 'string') {
     const selector = aiChannelRoleSelectRow(guild, selectedId);
     if (selector) rows.push(selector);
