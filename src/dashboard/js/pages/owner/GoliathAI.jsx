@@ -325,21 +325,30 @@ export default function GoliathAI({ theme }) {
   };
   const saveCurrentDraft = async () => {
     if (!audit || !blueprintText.trim() || draftBusy) return;
+    const environment = String(audit.environment);
+    const guildId = String(audit.guild.id);
+    const requestedGuild = environment + ':' + guildId;
+    const editorRevision = blueprintRevisionRef.current;
     setDraftBusy(true); setDraftNotice(''); setError('');
     try {
       const blueprint = JSON.parse(blueprintText);
       const title = String(blueprint?.name || audit.guild.name + ' rebuild');
       const result = await api.request('/api/owner/ai/drafts', {
         method: 'POST',
-        body: JSON.stringify({ environment: audit.environment, guildId: audit.guild.id,
+        body: JSON.stringify({ environment, guildId,
           blueprint, title, auditDigest: blueprintPlan?.auditDigest || undefined })
       });
-      if (result.draft?.environment !== audit.environment || result.draft?.guildId !== audit.guild.id)
+      if (result.draft?.environment !== environment || String(result.draft?.guildId || '') !== guildId)
         throw new Error('Saved draft target mismatch.');
       await refreshDrafts();
+      // Saving has already happened server-side. Avoid a misleading notice
+      // when the owner has since switched guilds or edited the blueprint.
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
       setDraftNotice('Saved a private draft. It cannot modify the Discord server.');
-    } catch (err) { setError(err.message); }
-    finally { setDraftBusy(false); }
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    } finally { setDraftBusy(false); }
   };
   const openSavedDraft = async (id) => {
     if (!audit || draftBusy) return;
