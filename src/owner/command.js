@@ -536,6 +536,7 @@ const AI_ROLE_TEMPLATES = Object.freeze({
 // Never trust role IDs or permission values from Discord component payloads.
 const aiPendingRolePlans = new Map();
 const aiPendingChannelPlans = new Map();
+const aiChannelRecovery = new Map();
 const aiRoleRecovery = new Map();
 const AI_PLAN_TTL = 10 * 60 * 1000;
 function aiRoleCanEdit(guild, role, bot, grants) {
@@ -796,16 +797,76 @@ async function aiApplyChannelPlan(interaction, guildId) {
     const after = aiOverwriteSnapshot(updated, role.id);
     if (!after.exists || after.allow !== allow.bitfield.toString() || after.deny !== deny.bitfield.toString())
       throw new Error('Channel overwrite verification mismatch');
+    aiChannelRecovery.set(interaction.user.id, { guildId, channelId: channel.id, roleId: role.id,
+      before: plan.before, after, expiresAt: Date.now() + 30 * 60 * 1000 });
     console.info('[Goliath AI] Channel grants verified', { guildId, channelId: channel.id,
       roleId: role.id, ownerId: interaction.user.id, grants: plan.grants, before: plan.before, after });
     return interaction.editReply({ content: 'Channel overwrite applied and verified for <@&' + role.id +
-      '> in <#' + channel.id + '>. Previous overwrite recorded in DEV logs; persistent rollback is not yet available.',
-      embeds: [], components: [] });
+      '> in <#' + channel.id + '>. A 30-minute recovery snapshot is available while DEV remains running.',
+      embeds: [], components: [new ActionRowBuilder().addComponents(
+        navigationButton(contextualOwnerId('ai-channel-recover', guild.id), 'Review Channel Recovery', ButtonStyle.Secondary)
+      )] });
   } catch (error) {
     console.error('[Goliath AI] Channel grants failed', { guildId, channelId: plan.channelId,
       roleId: plan.roleId, error: error?.message, before: plan.before });
     return interaction.editReply({ content: 'Channel update or verification failed. Review the overwrite manually; prior state: ' +
       JSON.stringify(plan.before), embeds: [], components: [] });
+  }
+}
+
+async function aiRecoverChannel(interaction, guildId, confirm = false) {
+  await interaction.deferUpdate();
+  const snapshot = aiChannelRecovery.get(interaction.user.id);
+  if (mode() !== 'DEV' || !snapshot || snapshot.guildId !== guildId || Date.now() > snapshot.expiresAt) {
+    aiChannelRecovery.delete(interaction.user.id);
+    return interaction.editReply({ content: 'No active channel recovery snapshot.', embeds: [], components: [] });
+  }
+  const { guild } = await resolveInteractionGuild(interaction, guildId);
+  if (!guild) return interaction.editReply({ content: 'Guild unavailable.', embeds: [], components: [] });
+  await Promise.all([guild.members.fetchMe(), guild.roles.fetch()]);
+  const channel = await guild.channels.fetch(snapshot.channelId, { force: true }).catch(() => null);
+  const role = await guild.roles.fetch(snapshot.roleId, { force: true }).catch(() => null);
+  if (!channel || !role || !aiOverwriteMatches(aiOverwriteSnapshot(channel, role.id), snapshot.after))
+    return interaction.editReply({ content: 'Channel overwrite changed since execution. Recovery blocked.', embeds: [], components: [] });
+  const previousAllow = new PermissionsBitField(BigInt(snapshot.before.allow));
+  const currentAllow = new PermissionsBitField(BigInt(snapshot.after.allow));
+  const restoreGrants = previousAllow.toArray().filter(permission => !currentAllow.has(permission));
+  if (!aiChannelCanEdit(guild, channel, role, guild.members.me, restoreGrants))
+    return interaction.editReply({ content: 'Goliath cannot safely restore this channel overwrite.', embeds: [], components: [] });
+  if (!confirm) {
+    return interaction.editReply({ content: 'Restore the previous overwrite for <@&' + role.id +
+      '> in <#' + channel.id + '>?' + (snapshot.before.exists ? ' Existing allows and denies will be restored.' :
+      ' The AI-created overwrite will be removed.'), embeds: [],
+      components: [new ActionRowBuilder().addComponents(
+        navigationButton(contextualOwnerId('ai-channel-restore', guildId), 'Confirm Restore', ButtonStyle.Danger),
+        navigationButton(contextualOwnerId('ai-channel-abort', guildId), 'Cancel', ButtonStyle.Secondary)
+      )] });
+  }
+  aiChannelRecovery.delete(interaction.user.id);
+  try {
+    if (!snapshot.before.exists) {
+      await channel.permissionOverwrites.delete(role, 'Goliath AI DEV approved channel recovery by ' + interaction.user.id);
+    } else {
+      const values = {};
+      for (const permission of previousAllow.toArray()) values[permission] = true;
+      for (const permission of new PermissionsBitField(BigInt(snapshot.before.deny)).toArray()) values[permission] = false;
+      // Replace, rather than merge, so grants added by the AI are removed on recovery.
+      await channel.permissionOverwrites.set([
+        ...channel.permissionOverwrites.cache.filter(item => item.id !== role.id).values(),
+        { id: role.id, type: 0, allow: snapshot.before.allow, deny: snapshot.before.deny }
+      ], 'Goliath AI DEV approved channel recovery by ' + interaction.user.id);
+    }
+    const refreshed = await guild.channels.fetch(channel.id, { force: true });
+    if (!aiOverwriteMatches(aiOverwriteSnapshot(refreshed, role.id), snapshot.before))
+      throw new Error('Channel recovery verification mismatch');
+    console.info('[Goliath AI] Channel recovery verified', { guildId, channelId: channel.id, roleId: role.id,
+      ownerId: interaction.user.id });
+    return interaction.editReply({ content: 'Previous channel overwrite restored and verified.', embeds: [], components: [] });
+  } catch (error) {
+    console.error('[Goliath AI] Channel recovery failed', { guildId, channelId: snapshot.channelId,
+      roleId: snapshot.roleId, error: error?.message, before: snapshot.before });
+    return interaction.editReply({ content: 'Recovery failed or verification mismatched. Review manually. Previous overwrite: ' +
+      JSON.stringify(snapshot.before), embeds: [], components: [] });
   }
 }
 
@@ -1134,6 +1195,14 @@ async function handleOwnerPanelInteraction(interaction) {
   }
   if (id === `${OWNER_PREFIX}ai-recovery-cancel`) {
     await interaction.update(ownerHomePayload(interaction, 'Recovery cancelled. Snapshot remains available until expiry.'));
+    return true;
+  }
+  if (id === `${OWNER_PREFIX}ai-channel-recover` || id === `${OWNER_PREFIX}ai-channel-restore`) {
+    await aiRecoverChannel(interaction, contextGuildId, id.endsWith('restore'));
+    return true;
+  }
+  if (id === `${OWNER_PREFIX}ai-channel-abort`) {
+    await interaction.update(ownerHomePayload(interaction, 'Channel recovery cancelled. Snapshot remains available until expiry.'));
     return true;
   }
   if (id.startsWith(`${OWNER_PREFIX}acs:`)) {
