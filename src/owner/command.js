@@ -778,14 +778,14 @@ async function handleOwnerPanelInteraction(interaction) {
   }
 
   if (id.startsWith(`${OWNER_PREFIX}ai-select-`)) {
-    const match = id.match(/^ownerpanel:ai-select-(role|channel):(\\d+)$/);
+    const match = id.match(/^ownerpanel:ai-select-(role|channel):(\d+)$/);
     if (!match || !interaction.isStringSelectMenu?.()) return true;
     const selectedId = validGuildId(interaction.values?.[0]);
     await handleOwnerAI(interaction, match[1], contextGuildId, selectedId, Number(match[2]));
     return true;
   }
   if (id.startsWith(`${OWNER_PREFIX}ai-page-`)) {
-    const match = id.match(/^ownerpanel:ai-page-(role|channel)-(\\d+)$/);
+    const match = id.match(/^ownerpanel:ai-page-(role|channel)-(\d+)$/);
     if (!match) return true;
     await handleOwnerAI(interaction, match[1], contextGuildId, null, Number(match[2]));
     return true;
