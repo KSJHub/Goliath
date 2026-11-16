@@ -535,6 +535,7 @@ const AI_ROLE_TEMPLATES = Object.freeze({
 // One pending operation per owner; short-lived, bound to a single guild and role.
 // Never trust role IDs or permission values from Discord component payloads.
 const aiPendingRolePlans = new Map();
+const aiPendingChannelPlans = new Map();
 const aiRoleRecovery = new Map();
 const AI_PLAN_TTL = 10 * 60 * 1000;
 function aiRoleCanEdit(guild, role, bot, grants) {
@@ -718,6 +719,96 @@ function aiTemplateSelectRow(guildId, roleId) {
   return new ActionRowBuilder().addComponents(select);
 }
 
+function aiChannelCanEdit(guild, channel, role, bot, grants) {
+  const access = bot && channel?.permissionsFor(bot);
+  return Boolean(channel?.permissionOverwrites && role && bot && !role.managed &&
+    role.id !== guild.id && bot.roles.highest.comparePositionTo(role) > 0 &&
+    access?.has('ManageRoles') && grants.every(permission => bot.permissions.has(permission)));
+}
+function aiOverwriteSnapshot(channel, roleId) {
+  const entry = channel.permissionOverwrites.cache.get(roleId);
+  return { exists: Boolean(entry), allow: entry?.allow?.bitfield?.toString() || '0',
+    deny: entry?.deny?.bitfield?.toString() || '0' };
+}
+function aiOverwriteMatches(a, b) {
+  return a.exists === b.exists && a.allow === b.allow && a.deny === b.deny;
+}
+async function aiStageChannelPlan(interaction, guildId, channelId, roleId, templateName) {
+  await interaction.deferUpdate();
+  if (mode() !== 'DEV') return interaction.editReply({ content: 'DEV only.', embeds: [], components: [] });
+  const { guild } = await resolveInteractionGuild(interaction, guildId);
+  if (!guild) return interaction.editReply({ content: 'Guild unavailable.', embeds: [], components: [] });
+  await Promise.all([guild.channels.fetch(), guild.roles.fetch(), guild.members.fetchMe()]);
+  const channel = await guild.channels.fetch(channelId, { force: true }).catch(() => null);
+  const role = await guild.roles.fetch(roleId, { force: true }).catch(() => null);
+  const template = AI_ROLE_TEMPLATES[templateName];
+  if (!channel || !role || !template)
+    return interaction.editReply({ content: 'Invalid channel, role or template.', embeds: [], components: [] });
+  const before = aiOverwriteSnapshot(channel, role.id);
+  const grants = template.filter(permission => !(new PermissionsBitField(BigInt(before.allow))).has(permission));
+  if (!aiChannelCanEdit(guild, channel, role, guild.members.me, grants))
+    return interaction.editReply({ content: 'Goliath cannot safely edit this role overwrite.', embeds: [], components: [] });
+  const plan = { guildId: guild.id, channelId: channel.id, roleId: role.id, template: templateName,
+    grants, before, expiresAt: Date.now() + AI_PLAN_TTL };
+  aiPendingChannelPlans.set(interaction.user.id, plan);
+  const embed = new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath AI • Confirm Channel Grants')
+    .setDescription([
+      '**Channel/category:** <#' + channel.id + '>',
+      '**Role:** <@&' + role.id + '>',
+      '**Template:** ' + templateName,
+      '**Explicit permissions to grant:** ' + (grants.join(', ') || 'None'),
+      '**Conflicting denies to clear:** ' + grants.filter(permission =>
+        new PermissionsBitField(BigInt(before.deny)).has(permission)).join(', '),
+      '**Other allows and denies:** Preserved',
+      '',
+      'This modifies a channel overwrite, not the server-wide role. Category changes may affect synced children.',
+      'Expires in 10 minutes. Any overwrite drift blocks execution.'
+    ].join('\n').slice(0, 3900));
+  return interaction.editReply({ embeds: [embed], content: '',
+    components: [new ActionRowBuilder().addComponents(
+      navigationButton(contextualOwnerId('ai-apply-channel', guild.id), 'Confirm Channel Grants', ButtonStyle.Danger, !grants.length),
+      navigationButton(contextualOwnerId('ai-cancel-channel', guild.id), 'Cancel', ButtonStyle.Secondary)
+    )] });
+}
+async function aiApplyChannelPlan(interaction, guildId) {
+  await interaction.deferUpdate();
+  const plan = aiPendingChannelPlans.get(interaction.user.id);
+  aiPendingChannelPlans.delete(interaction.user.id);
+  if (mode() !== 'DEV' || !plan || plan.guildId !== guildId || Date.now() > plan.expiresAt)
+    return interaction.editReply({ content: 'Channel plan expired or invalid.', embeds: [], components: [] });
+  const { guild } = await resolveInteractionGuild(interaction, guildId);
+  if (!guild) return interaction.editReply({ content: 'Guild unavailable.', embeds: [], components: [] });
+  await Promise.all([guild.members.fetchMe(), guild.roles.fetch()]);
+  const channel = await guild.channels.fetch(plan.channelId, { force: true }).catch(() => null);
+  const role = await guild.roles.fetch(plan.roleId, { force: true }).catch(() => null);
+  if (!channel || !role || !aiOverwriteMatches(aiOverwriteSnapshot(channel, plan.roleId), plan.before) ||
+      !aiChannelCanEdit(guild, channel, role, guild.members.me, plan.grants))
+    return interaction.editReply({ content: 'Overwrite, bot access or hierarchy changed. No changes applied.', embeds: [], components: [] });
+  if (!plan.grants.length) return interaction.editReply({ content: 'No changes required.', embeds: [], components: [] });
+  const allow = new PermissionsBitField(BigInt(plan.before.allow)).add(...plan.grants);
+  const deny = new PermissionsBitField(BigInt(plan.before.deny)).remove(...plan.grants);
+  const changes = {};
+  for (const permission of allow.toArray()) changes[permission] = true;
+  for (const permission of deny.toArray()) changes[permission] = false;
+  try {
+    await channel.permissionOverwrites.edit(role, changes, { reason: 'Goliath AI DEV approved channel grants by ' + interaction.user.id });
+    const updated = await guild.channels.fetch(channel.id, { force: true });
+    const after = aiOverwriteSnapshot(updated, role.id);
+    if (!after.exists || after.allow !== allow.bitfield.toString() || after.deny !== deny.bitfield.toString())
+      throw new Error('Channel overwrite verification mismatch');
+    console.info('[Goliath AI] Channel grants verified', { guildId, channelId: channel.id,
+      roleId: role.id, ownerId: interaction.user.id, grants: plan.grants, before: plan.before, after });
+    return interaction.editReply({ content: 'Channel overwrite applied and verified for <@&' + role.id +
+      '> in <#' + channel.id + '>. Previous overwrite recorded in DEV logs; persistent rollback is not yet available.',
+      embeds: [], components: [] });
+  } catch (error) {
+    console.error('[Goliath AI] Channel grants failed', { guildId, channelId: plan.channelId,
+      roleId: plan.roleId, error: error?.message, before: plan.before });
+    return interaction.editReply({ content: 'Channel update or verification failed. Review the overwrite manually; prior state: ' +
+      JSON.stringify(plan.before), embeds: [], components: [] });
+  }
+}
+
 function aiChannelPermissionPlan(guild, channelId, roleId, templateName) {
   const channel = guild?.channels?.cache?.get(channelId);
   const role = guild?.roles?.cache?.get(roleId);
@@ -886,6 +977,11 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
   if (guild && detail === 'channel-target' && selectedId?.channelId && selectedId?.roleId) {
     rows.push(aiChannelTemplateRow(guild.id, selectedId.channelId, selectedId.roleId));
   }
+  if (guild && detail === 'channel-plan' && selectedId?.channelId && selectedId?.roleId && selectedId?.template) {
+    rows.push(new ActionRowBuilder().addComponents(
+      navigationButton(contextualOwnerId('ai-stage-channel:' + selectedId.channelId + ':' + selectedId.roleId + ':' + selectedId.template, guild.id), 'Prepare Channel Plan', ButtonStyle.Primary)
+    ));
+  }
   if (guild && detail === 'comparison' && selectedId?.roleId && selectedId?.template) {
     rows.push(new ActionRowBuilder().addComponents(
       navigationButton(contextualOwnerId('ai-stage-' + selectedId.roleId + '-' + selectedId.template, guild.id), 'Prepare Grant Plan', ButtonStyle.Primary)
@@ -1038,6 +1134,21 @@ async function handleOwnerPanelInteraction(interaction) {
   }
   if (id === `${OWNER_PREFIX}ai-recovery-cancel`) {
     await interaction.update(ownerHomePayload(interaction, 'Recovery cancelled. Snapshot remains available until expiry.'));
+    return true;
+  }
+  if (id.startsWith(`${OWNER_PREFIX}ai-stage-channel-`)) {
+    const match = id.match(/^ownerpanel:ai-stage-channel:(\d{16,25}):(\d{16,25}):(admin|moderator|member|newcomer|bot)$/);
+    if (!match) return true;
+    await aiStageChannelPlan(interaction, contextGuildId, match[1], match[2], match[3]);
+    return true;
+  }
+  if (id === `${OWNER_PREFIX}ai-apply-channel`) {
+    await aiApplyChannelPlan(interaction, contextGuildId);
+    return true;
+  }
+  if (id === `${OWNER_PREFIX}ai-cancel-channel`) {
+    aiPendingChannelPlans.delete(interaction.user.id);
+    await interaction.update(ownerHomePayload(interaction, 'Channel plan cancelled; no changes applied.'));
     return true;
   }
   if (id.startsWith(`${OWNER_PREFIX}ai-stage-`)) {
