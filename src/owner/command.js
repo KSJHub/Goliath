@@ -808,13 +808,13 @@ async function aiRecoverRole(interaction, guildId, confirm = false) {
         navigationButton(contextualOwnerId('ai-recovery-cancel', guildId), 'Cancel', ButtonStyle.Secondary)
       )] });
   }
-  // Consume before the write to prevent replay of the same recovery request.
-  aiRecoveryDelete(interaction.user.id, 'role');
+  // Keep the durable recovery record until Discord confirms restoration.
   try {
     await role.setPermissions(oldPermissions, 'Goliath AI DEV owner-approved recovery by ' + interaction.user.id);
     const verified = await guild.roles.fetch(role.id, { force: true });
     if (!verified || verified.permissions.bitfield.toString() !== snapshot.before)
       throw new Error('Recovery verification mismatch');
+    aiRecoveryDelete(interaction.user.id, 'role');
     console.info('[Goliath AI] Role recovery verified', { guildId, roleId: role.id, ownerId: interaction.user.id });
     return interaction.editReply({ content: 'Original permissions restored and verified for <@&' + role.id + '>.', embeds: [], components: [] });
   } catch (error) {
@@ -1002,7 +1002,7 @@ async function aiRecoverChannel(interaction, guildId, confirm = false) {
         navigationButton(contextualOwnerId('ai-channel-abort', guildId), 'Cancel', ButtonStyle.Secondary)
       )] });
   }
-  aiRecoveryDelete(interaction.user.id, 'channel');
+  // Preserve the recovery record if the Discord write or verification fails.
   try {
     if (!snapshot.before.exists) {
       await channel.permissionOverwrites.delete(role, 'Goliath AI DEV approved channel recovery by ' + interaction.user.id);
@@ -1026,6 +1026,7 @@ async function aiRecoverChannel(interaction, guildId, confirm = false) {
     const refreshed = await guild.channels.fetch(channel.id, { force: true });
     if (!aiOverwriteMatches(aiOverwriteSnapshot(refreshed, role.id), snapshot.before))
       throw new Error('Channel recovery verification mismatch');
+    aiRecoveryDelete(interaction.user.id, 'channel');
     console.info('[Goliath AI] Channel recovery verified', { guildId, channelId: channel.id, roleId: role.id,
       ownerId: interaction.user.id });
     return interaction.editReply({ content: 'Previous channel overwrite restored and verified.', embeds: [], components: [] });
