@@ -5710,9 +5710,27 @@ assert(cancelIntentSource &&
   cancelIntentSource.indexOf('Date.parse(intent.expiresAt) <= Date.now()'),
   'Intent cancellation must verify ownership before expiry cleanup');
 assert(listIntentsSource &&
+  listIntentsSource.includes('intent.ownerId !== ownerId') &&
+  listIntentsSource.includes('Date.parse(intent.expiresAt) <= now') &&
   listIntentsSource.indexOf('intent.ownerId !== ownerId') <
   listIntentsSource.indexOf('Date.parse(intent.expiresAt) <= now'),
   'Intent listing must scope expiry cleanup to the draft owner');
+const privateAccessSource = routeBody(
+  'function requirePrivateAI(req, res, next) {',
+  '// Each route enforces its own identity');
+const createDraftSource = routeBody(
+  "router.post('/drafts', requirePrivateAI, async (req, res) => {",
+  "router.post('/drafts/:id/review'");
+assert(privateAccessSource &&
+  privateAccessSource.includes("fetchSite === 'cross-site'") &&
+  privateAccessSource.includes("new URL(origin).host !== host") &&
+  privateAccessSource.includes("req.is('application/json')"),
+  'Private Goliath AI writes must reject cross-site browser requests and non-JSON bodies');
+assert(createDraftSource &&
+  createDraftSource.includes("if (localMode() !== 'DEV')") &&
+  createDraftSource.indexOf("if (localMode() !== 'DEV')") <
+  createDraftSource.indexOf('parseBlueprint(req.body?.blueprint)'),
+  'Draft creation must reject non-DEV requests before parsing blueprints');
 
 const ledger = require('../src/owner/dev/goliathApprovalLedger');
 const ledgerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-ai-reviews-'));
