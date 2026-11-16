@@ -61,6 +61,8 @@ const EMOJIS = Object.freeze({
   HISTORY: '🕘',
   LOCK: '🔒',
   STATUS_PING: '🏓',
+  TROPHY: '🏆',
+  SCROLL: '📜',
   SERVER_CASTLE: '🏰',
   HELP_QUESTION: '❓',
   HEALTH_STABLE: '🟡',
