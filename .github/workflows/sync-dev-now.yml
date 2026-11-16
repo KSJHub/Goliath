@@ -279,7 +279,7 @@ jobs:
             BOT_MODE=dev NODE_ENV=development pm2 start ecosystem.config.js --only "$PM2_NAME" --update-env
             # Keep the recovery trap armed until health and stability checks pass.
             # A successful PM2 start alone does not mean DEV is healthy.
-            pm2 save
+            # Persist PM2 state only after verification, not before it.
 
             NEW_PID="$(pm2 pid "$PM2_NAME" | tail -n1 | tr -d '[:space:]')"
             if [ -z "$NEW_PID" ] || [ "$NEW_PID" = "0" ]; then
@@ -351,6 +351,8 @@ jobs:
             case "$PUBLIC_STATUS" in 200|401) ;; *) echo "Public health failed: $PUBLIC_STATUS" >&2; pm2 logs "$PM2_NAME" --lines 120 --nostream || true; exit 1;; esac
 
             test -d "$RUNTIME_DIR"
+            # Do not persist a potentially broken PM2 process before health checks.
+            pm2 save
             # Disarm recovery only after every process, endpoint and runtime check passes.
             DEV_STOPPED=0
             echo "✅ DEV stable: sha=$FINAL_SHA pid=$STABLE_PID public=$PUBLIC_STATUS direct=$DIRECT_STATUS"
