@@ -979,7 +979,7 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
   }
   if (guild && detail === 'channel-plan' && selectedId?.channelId && selectedId?.roleId && selectedId?.template) {
     rows.push(new ActionRowBuilder().addComponents(
-      navigationButton(contextualOwnerId('ai-stage-channel:' + selectedId.channelId + ':' + selectedId.roleId + ':' + selectedId.template, guild.id), 'Prepare Channel Plan', ButtonStyle.Primary)
+      navigationButton(contextualOwnerId('acs:' + selectedId.channelId + ':' + selectedId.roleId + ':' + selectedId.template, guild.id), 'Prepare Channel Plan', ButtonStyle.Primary)
     ));
   }
   if (guild && detail === 'comparison' && selectedId?.roleId && selectedId?.template) {
@@ -1136,8 +1136,8 @@ async function handleOwnerPanelInteraction(interaction) {
     await interaction.update(ownerHomePayload(interaction, 'Recovery cancelled. Snapshot remains available until expiry.'));
     return true;
   }
-  if (id.startsWith(`${OWNER_PREFIX}ai-stage-channel-`)) {
-    const match = id.match(/^ownerpanel:ai-stage-channel:(\d{16,25}):(\d{16,25}):(admin|moderator|member|newcomer|bot)$/);
+  if (id.startsWith(`${OWNER_PREFIX}acs:`)) {
+    const match = id.match(/^ownerpanel:acs:(\d{16,25}):(\d{16,25}):(admin|moderator|member|newcomer|bot)$/);
     if (!match) return true;
     await aiStageChannelPlan(interaction, contextGuildId, match[1], match[2], match[3]);
     return true;
