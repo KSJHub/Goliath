@@ -531,6 +531,89 @@ const AI_ROLE_TEMPLATES = Object.freeze({
   bot: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'EmbedLinks', 'AttachFiles'],
 });
 
+// One pending operation per owner; short-lived, bound to a single guild and role.
+// Never trust role IDs or permission values from Discord component payloads.
+const aiPendingRolePlans = new Map();
+const AI_PLAN_TTL = 10 * 60 * 1000;
+function aiRoleCanEdit(guild, role, bot, grants) {
+  return Boolean(role && bot && !role.managed && role.id !== guild.id &&
+    bot.permissions.has('ManageRoles') &&
+    bot.roles.highest.comparePositionTo(role) > 0 &&
+    grants.every(permission => bot.permissions.has(permission)));
+}
+function aiPlanPayload(guild, plan, message) {
+  const role = guild?.roles?.cache?.get(plan.roleId);
+  const add = plan.grants;
+  const embed = new EmbedBuilder().setColor(0xF0B232)
+    .setTitle('Goliath AI • Confirm Role Permission Grants')
+    .setDescription([
+      '**Guild:** ' + (guild?.name || plan.guildId),
+      '**Role:** ' + (role ? '<@&' + role.id + '>' : plan.roleId),
+      '**Template:** ' + plan.template,
+      '**Permissions to GRANT (' + add.length + '):** ' + (add.join(', ') || 'None'),
+      '**Permissions to REMOVE:** None',
+      '',
+      message || 'Confirm to grant only these permissions. Existing grants are retained.',
+      'The bot must hold each granted permission and outrank the target role.',
+      'Plan expires after 10 minutes. If the role changes before confirmation, the plan is rejected.'
+    ].join('\n').slice(0, 3900))
+    .setFooter({ text: 'DEV • Owner-only • Explicit approval required' });
+  const row = new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-apply-role', plan.guildId), 'Confirm Grants', ButtonStyle.Danger, !add.length),
+    navigationButton(contextualOwnerId('ai-cancel-role', plan.guildId), 'Cancel', ButtonStyle.Secondary)
+  );
+  return { embeds: [embed], components: [row] };
+}
+async function aiStageRolePlan(interaction, guildId, roleId, templateName) {
+  if (mode() !== 'DEV') return interaction.reply({ content: 'DEV only.', flags: MessageFlags.Ephemeral });
+  await interaction.deferUpdate();
+  const { guild } = await resolveInteractionGuild(interaction, guildId);
+  if (!guild) return interaction.editReply({ content: 'Guild unavailable.', embeds: [], components: [] });
+  await Promise.all([guild.roles.fetch(), guild.members.fetchMe()]);
+  const role = guild.roles.cache.get(roleId);
+  const template = AI_ROLE_TEMPLATES[templateName];
+  if (!role || !template) return interaction.editReply({ content: 'Invalid role or template.', embeds: [], components: [] });
+  const grants = template.filter(permission => !role.permissions.has(permission));
+  if (!aiRoleCanEdit(guild, role, guild.members.me, grants))
+    return interaction.editReply({ content: 'Goliath cannot safely grant these permissions. Check its permissions and role hierarchy.', embeds: [], components: [] });
+  const plan = { ownerId: interaction.user.id, guildId: guild.id, roleId: role.id,
+    template: templateName, grants, original: role.permissions.bitfield.toString(),
+    expiresAt: Date.now() + AI_PLAN_TTL };
+  aiPendingRolePlans.set(interaction.user.id, plan);
+  return interaction.editReply(aiPlanPayload(guild, plan));
+}
+async function aiApplyRolePlan(interaction, guildId) {
+  await interaction.deferUpdate();
+  const plan = aiPendingRolePlans.get(interaction.user.id);
+  aiPendingRolePlans.delete(interaction.user.id);
+  if (mode() !== 'DEV' || !plan || plan.guildId !== guildId || Date.now() > plan.expiresAt)
+    return interaction.editReply({ content: 'Permission plan expired or invalid. Create a new preview.', embeds: [], components: [] });
+  const { guild } = await resolveInteractionGuild(interaction, plan.guildId);
+  if (!guild) return interaction.editReply({ content: 'Guild unavailable.', embeds: [], components: [] });
+  await Promise.all([guild.roles.fetch(), guild.members.fetchMe()]);
+  const role = guild.roles.cache.get(plan.roleId);
+  if (!role || role.permissions.bitfield.toString() !== plan.original ||
+      !aiRoleCanEdit(guild, role, guild.members.me, plan.grants))
+    return interaction.editReply({ content: 'Permissions or hierarchy changed. Nothing applied; prepare a new plan.', embeds: [], components: [] });
+  if (!plan.grants.length) return interaction.editReply({ content: 'No changes required.', embeds: [], components: [] });
+  const expected = role.permissions.add(...plan.grants);
+  try {
+    await role.setPermissions(expected, 'Goliath AI DEV owner-approved role grants by ' + interaction.user.id);
+    const verified = await guild.roles.fetch(role.id, { force: true });
+    if (!verified || plan.grants.some(permission => !verified.permissions.has(permission)))
+      throw new Error('Permission verification failed after Discord update.');
+    console.info('[Goliath AI] Owner-approved role grants', { guildId: guild.id, roleId: role.id,
+      ownerId: interaction.user.id, grants: plan.grants });
+    return interaction.editReply({ content: 'Applied and verified ' + plan.grants.length +
+      ' permission grants for <@&' + role.id + '>. No existing permissions removed.', embeds: [], components: [] });
+  } catch (error) {
+    console.error('[Goliath AI] Role grant failed', { guildId: guild.id, roleId: plan.roleId,
+      ownerId: interaction.user.id, error: error?.message });
+    return interaction.editReply({ content: 'Permission update or verification failed. Review Discord role permissions before retrying. ' +
+      'The original permissions were: ' + plan.original, embeds: [], components: [] });
+  }
+}
+
 function aiRoleTemplateComparison(guild, roleId, templateName) {
   const role = guild?.roles?.cache?.get(roleId);
   const expected = AI_ROLE_TEMPLATES[templateName];
@@ -735,6 +818,11 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
   if (guild && detail === 'channel-target' && selectedId?.channelId && selectedId?.roleId) {
     rows.push(aiChannelTemplateRow(guild.id, selectedId.channelId, selectedId.roleId));
   }
+  if (guild && detail === 'comparison' && selectedId?.roleId && selectedId?.template) {
+    rows.push(new ActionRowBuilder().addComponents(
+      navigationButton(contextualOwnerId('ai-stage-' + selectedId.roleId + '-' + selectedId.template, guild.id), 'Prepare Grant Plan', ButtonStyle.Primary)
+    ));
+  }
   if (guild && detail === 'role' && selectedId && typeof selectedId === 'string') {
     rows.push(aiTemplateSelectRow(guild.id, selectedId));
   }
@@ -876,6 +964,21 @@ async function handleOwnerPanelInteraction(interaction) {
     return true;
   }
 
+  if (id.startsWith(`${OWNER_PREFIX}ai-stage-`)) {
+    const match = id.match(/^ownerpanel:ai-stage-(\d{16,25})-(admin|moderator|member|newcomer|bot)$/);
+    if (!match) return true;
+    await aiStageRolePlan(interaction, contextGuildId, match[1], match[2]);
+    return true;
+  }
+  if (id === `${OWNER_PREFIX}ai-apply-role`) {
+    await aiApplyRolePlan(interaction, contextGuildId);
+    return true;
+  }
+  if (id === `${OWNER_PREFIX}ai-cancel-role`) {
+    aiPendingRolePlans.delete(interaction.user.id);
+    await interaction.update(ownerHomePayload(interaction, 'AI permission plan cancelled; no changes applied.'));
+    return true;
+  }
   if (id.startsWith(`${OWNER_PREFIX}ai-target-role:`)) {
     const match = id.match(/^ownerpanel:ai-target-role:(\d{16,25})$/);
     if (!match || !interaction.isStringSelectMenu?.()) return true;
