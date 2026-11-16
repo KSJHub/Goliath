@@ -5845,6 +5845,7 @@ console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-p
 
 const commands = {
   'goliath-ai-blueprint': goliathAiBlueprintAudit,
+  'emoji-palette': sharedEmojiPaletteAudit,
   'dashboard-routing': dashboardRoutingAudit,
   'member-intelligence-routing': memberIntelligenceRoutingAudit,
   'game-updates': gameUpdatesAudit,
