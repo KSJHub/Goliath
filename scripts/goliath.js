@@ -6048,6 +6048,52 @@ function goliathAiRecoveryAudit() {
     after: { exists: true, allow: '1024', deny: '0' } };
   assert.equal(validate(validChannel), true, 'Valid channel journal rejected');
   assert.equal(validate({ ...validChannel, after: { ...validChannel.after, deny: 'invalid' } }), false);
+  // Exercise the real recovery-save implementation with a fake in-memory store.
+  // No Discord requests or runtime files are created.
+  const saveStart = source.indexOf('function aiRecoverySave(');
+  const saveEnd = source.indexOf('function aiRecoveryResolvePending(', saveStart);
+  assert(saveStart >= 0 && saveEnd > saveStart, 'Recovery save function missing');
+  const records = [];
+  const sandbox = {
+    Date, JSON, Error,
+    aiRecoveryRead: () => records.map(item => JSON.parse(JSON.stringify(item))),
+    aiRecoveryWrite: items => { records.splice(0, records.length, ...items); },
+    aiRecoveryLocked: fn => fn()
+  };
+  const save = vm.runInNewContext(source.slice(saveStart, saveEnd) + '; aiRecoverySave', sandbox);
+  save(ownerId, 'role', { guildId: ownerId, roleId: ownerId, before: '0',
+    after: '1024', status: 'pending', expiresAt: Date.now() + 60000 });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].status, 'pending');
+  assert.throws(() => save('223456789012345678', 'role', {
+    guildId: ownerId, roleId: ownerId, before: '0', after: '2048',
+    status: 'pending', expiresAt: Date.now() + 60000
+  }), /Target already has/);
+  assert.throws(() => save(ownerId, 'role', {
+    guildId: ownerId, roleId: ownerId, before: '0', after: '2048',
+    status: 'verified', expiresAt: Date.now() + 60000
+  }), /Pending transaction cannot be overwritten/);
+  save(ownerId, 'role', { guildId: ownerId, roleId: ownerId, before: '0',
+    after: '1024', status: 'verified', expiresAt: Date.now() + 60000 });
+  assert.equal(records[0].status, 'verified');
+  assert.throws(() => save(ownerId, 'role', {
+    guildId: ownerId, roleId: ownerId, before: '1024', after: '2048',
+    status: 'pending', expiresAt: Date.now() + 60000
+  }), /Active recovery snapshot/);
+  assert.throws(() => save('223456789012345678', 'role', {
+    guildId: ownerId, roleId: ownerId, before: '1024', after: '2048',
+    status: 'pending', expiresAt: Date.now() + 60000
+  }), /Target already has/);
+  const resolveStart = source.indexOf('function aiRecoveryResolvePending(');
+  const resolveEnd = source.indexOf('async function aiReconcilePending(', resolveStart);
+  assert(resolveStart >= 0 && resolveEnd > resolveStart);
+  const resolve = vm.runInNewContext(source.slice(resolveStart, resolveEnd) + '; aiRecoveryResolvePending', sandbox);
+  records[0].status = 'pending';
+  resolve(ownerId, 'role', 'applied');
+  assert.equal(records[0].status, 'verified');
+  records[0].status = 'pending';
+  resolve(ownerId, 'role', 'unchanged');
+  assert.equal(records.length, 0);
   assert(source.includes("return aiRecoveryLocked(() => {"), 'Recovery writes must use cross-process lock');
   assert(source.includes("status: 'pending'"), 'Missing write-ahead transaction state');
   assert(source.includes("status: 'verified'"), 'Missing verified transaction state');
