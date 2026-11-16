@@ -65,6 +65,8 @@ export default function GoliathAI({ theme }) {
   const [operationReviews, setOperationReviews] = useState(null);
   const [operationReviewBusy, setOperationReviewBusy] = useState(false);
   const bottom = useRef(null);
+  const selectedGuildRef = useRef(selectedGuild);
+  selectedGuildRef.current = selectedGuild;
   useEffect(() => {
     let mounted = true;
     api.request('/api/owner/ai/status').then((value) => { if (mounted) setStatus(value); })
@@ -145,7 +147,14 @@ export default function GoliathAI({ theme }) {
     try {
       const [environment, guildId] = selectedGuild.split(':');
       if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId || '')) throw new Error('Invalid environment or guild.');
-      setAudit(await api.request('/api/owner/ai/audit/' + environment + '/' + guildId));
+      const requestedGuild = environment + ':' + guildId;
+      const result = await api.request('/api/owner/ai/audit/' + environment + '/' + guildId);
+      // Ignore late responses after the owner switches servers or refreshes
+      // the inventory; never display an audit under the wrong guild.
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result?.environment !== environment || String(result?.guild?.id || '') !== guildId ||
+          result?.readOnly !== true) throw new Error('Audit response did not match the selected server.');
+      setAudit(result);
     }
     catch (err) { setError(err.message); }
     finally { setAuditing(false); }
