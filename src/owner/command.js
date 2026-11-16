@@ -569,16 +569,16 @@ function aiRecoveryWrite(entries) {
     fs.chmodSync(file, 0o600);
   } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
 }
-function aiRecoveryReady(ownerId, kind) {
-  // Refuse a Discord write when its recovery store cannot be read or written.
-  // This does not guarantee a later write succeeds, but catches common
-  // filesystem failures before permissions are changed.
+function aiRecoveryReady(ownerId, kind, guildId, roleId, channelId = null) {
   const entries = aiRecoveryRead();
-  if (entries.some(item => item.ownerId === ownerId && item.kind === kind &&
-      item.status === 'pending'))
-    throw new Error('Previous permission operation requires manual reconciliation');
-  if (entries.filter(item => (item.expiresAt > Date.now() || item.status === 'pending') &&
-      !(item.ownerId === ownerId && item.kind === kind)).length >= 100)
+  const targetBusy = entries.some(item => item.status === 'pending' &&
+    item.guildId === guildId && item.kind === kind && item.roleId === roleId &&
+    (kind === 'role' || item.channelId === channelId));
+  if (targetBusy) throw new Error('Target has an unresolved permission transaction');
+  if (entries.some(item => item.ownerId === ownerId && item.kind === kind && item.status === 'pending'))
+    throw new Error('Previous permission operation requires reconciliation');
+  const retained = entries.filter(item => item.expiresAt > Date.now() || item.status === 'pending');
+  if (retained.length >= 100 && !retained.some(item => item.ownerId === ownerId && item.kind === kind))
     throw new Error('Recovery storage full');
   aiRecoveryWrite(entries);
 }
@@ -601,12 +601,23 @@ function aiRecoveryGet(ownerId, kind) {
     Number.isFinite(item.expiresAt) && item.expiresAt > Date.now()).at(-1) || null;
 }
 function aiRecoverySave(ownerId, kind, snapshot) {
-  const entries = aiRecoveryRead().filter(item => (item.expiresAt > Date.now() || item.status === 'pending') &&
+  const entries = aiRecoveryRead();
+  const prior = entries.find(item => item.ownerId === ownerId && item.kind === kind &&
+    item.status === 'pending');
+  if (prior && (snapshot.status !== 'verified' || prior.guildId !== snapshot.guildId ||
+      prior.roleId !== snapshot.roleId || (kind === 'channel' && prior.channelId !== snapshot.channelId) ||
+      JSON.stringify(prior.before) !== JSON.stringify(snapshot.before) ||
+      JSON.stringify(prior.after) !== JSON.stringify(snapshot.after)))
+    throw new Error('Pending transaction cannot be overwritten with a different operation');
+  if (snapshot.status === 'pending' && entries.some(item => item.status === 'pending' &&
+      item.guildId === snapshot.guildId && item.kind === kind && item.roleId === snapshot.roleId &&
+      (kind === 'role' || item.channelId === snapshot.channelId)))
+    throw new Error('Target already has a pending transaction');
+  const retained = entries.filter(item => (item.expiresAt > Date.now() || item.status === 'pending') &&
     !(item.ownerId === ownerId && item.kind === kind));
-  entries.push({ ...snapshot, ownerId, kind, createdAt: new Date().toISOString() });
-  // Never silently discard another owner's active recovery record.
-  if (entries.length > 100) throw new Error('Recovery storage full; Discord mutation blocked');
-  aiRecoveryWrite(entries);
+  retained.push({ ...snapshot, ownerId, kind, createdAt: prior?.createdAt || new Date().toISOString() });
+  if (retained.length > 100) throw new Error('Recovery storage full');
+  aiRecoveryWrite(retained);
 }
 function aiRecoveryResolvePending(ownerId, kind, resolution) {
   const entries = aiRecoveryRead();
@@ -726,7 +737,7 @@ async function aiApplyRolePlan(interaction, guildId) {
   if (!plan.grants.length) return interaction.editReply({ content: 'No changes required.', embeds: [], components: [] });
   const expected = new PermissionsBitField(role.permissions.bitfield).add(...plan.grants);
   try {
-    aiRecoveryReady(interaction.user.id, 'role');
+    aiRecoveryReady(interaction.user.id, 'role', guild.id, role.id);
     aiRecoverySave(interaction.user.id, 'role', {
       guildId: guild.id, roleId: role.id, before: plan.original,
       after: expected.bitfield.toString(), status: 'pending',
@@ -935,7 +946,7 @@ async function aiApplyChannelPlan(interaction, guildId) {
   const changes = {};
   for (const permission of plan.grants) changes[permission] = true;
   try {
-    aiRecoveryReady(interaction.user.id, 'channel');
+    aiRecoveryReady(interaction.user.id, 'channel', guildId, role.id, channel.id);
     aiRecoverySave(interaction.user.id, 'channel', {
       guildId, channelId: channel.id, roleId: role.id, before: plan.before,
       after: { exists: true, allow: allow.bitfield.toString(), deny: deny.bitfield.toString() },
