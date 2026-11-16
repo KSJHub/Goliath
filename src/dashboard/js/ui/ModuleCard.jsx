@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from '../shared/PageShell.jsx';
 import React, { memo, useState } from 'react';
 
 import { getModuleStatusMeta } from '../shared/moduleRegistry.js';
@@ -113,7 +114,7 @@ function ModuleCard({ module, theme, onOpen, onToggle, saving }) {
             fontSize: 13,
           }}
         >
-          {locked ? '🔒' : module.icon}
+          {locked ? E.LOCK : module.icon}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -141,7 +142,7 @@ function ModuleCard({ module, theme, onOpen, onToggle, saving }) {
               title={`Configure ${module.name}`}
               aria-label={`Configure ${module.name}`}
             >
-              ⚙
+              {E.SETTINGS_PLAIN}
             </button>
           ) : null}
 
