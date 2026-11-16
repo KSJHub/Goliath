@@ -205,12 +205,14 @@ export default function GoliathAI({ theme }) {
   const loadBlueprint = async () => {
     if (!audit || blueprintBusy) return;
     setBlueprintBusy(true); setError(''); setBlueprintPlan(null);
+    const editorRevision = blueprintRevisionRef.current;
     try {
       const environment = String(audit.environment);
       const guildId = String(audit.guild.id);
       const requestedGuild = environment + ':' + guildId;
       const result = await api.request('/api/owner/ai/blueprint/' + environment + '/' + guildId);
-      if (selectedGuildRef.current !== requestedGuild) return;
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
       if (result.readOnly !== true || result.environment !== environment ||
           String(result.guild?.id || '') !== guildId) throw new Error('Blueprint target mismatch.');
       replaceBlueprintText(JSON.stringify(result.blueprint, null, 2));
@@ -385,6 +387,7 @@ export default function GoliathAI({ theme }) {
   };
   const openSavedDraft = async (id) => {
     if (!audit || draftBusy) return;
+    const editorRevision = blueprintRevisionRef.current;
     setDraftBusy(true); setError(''); setDraftNotice('');
     try {
       const environment = audit.environment;
@@ -392,7 +395,8 @@ export default function GoliathAI({ theme }) {
       const requestedGuild = environment + ':' + guildId;
       const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id));
       // The selected server can change while the draft is loading.
-      if (selectedGuildRef.current !== requestedGuild) return;
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
       const item = result.draft;
       if (!item || item.environment !== environment || String(item.guildId) !== guildId)
         throw new Error('Select and scan the draft’s original environment and server before opening it.');
