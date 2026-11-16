@@ -21,7 +21,7 @@ const RULES=[
   ['attachments','Attachments','Attachment count and extension protection.'],
   ['scamPatterns','Suspicious Content','Configured high-risk phrase and combined-content protection.'],
 ];
-const DM_DEFAULT=(name)=>'⚠️ **{server} AutoMod**\n'+name+' triggered: {reason}';
+const DM_DEFAULT=(name)=>`${E.WARNING} **{server} AutoMod**\n${name} triggered: {reason}`;
 const DEFAULT_RULE={enabled:false,risk:20,timeoutMinutes:10,actions:['delete']};
 function defaults(){
   const out={enabled:false,dmUser:true,shadowMode:false,caseMode:'punishments',evidenceRetentionDays:30,accountRisk:{enabled:false,newAccountDays:7,newMemberHours:24,riskBoost:15},risk:{enabled:true,low:25,medium:50,high:75,critical:100,repeatWindowHours:24,repeatWeight:10},dmMessages:{},ignoredRoles:'',ignoredChannels:'',ignoredCategories:'',ignoredUsers:''};
