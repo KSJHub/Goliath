@@ -550,11 +550,13 @@ function aiRecoveryRead() {
   if (!fs.existsSync(file)) return [];
   if (fs.statSync(file).size > 262144) throw new Error('Recovery storage limit exceeded');
   const entries = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (!Array.isArray(entries) || entries.length > 100) throw new Error('Invalid recovery storage');
+  if (!Array.isArray(entries) || entries.length > 100 ||
+      entries.some(item => !aiRecoverySnapshotValid(item))) throw new Error('Invalid recovery storage');
   return entries;
 }
 function aiRecoveryWrite(entries) {
-  if (mode() !== 'DEV' || !Array.isArray(entries) || entries.length > 100)
+  if (mode() !== 'DEV' || !Array.isArray(entries) || entries.length > 100 ||
+      entries.some(item => !aiRecoverySnapshotValid(item)))
     throw new Error('Invalid DEV recovery write');
   const file = aiRecoveryFile();
   const raw = JSON.stringify(entries);
@@ -566,6 +568,25 @@ function aiRecoveryWrite(entries) {
     fs.renameSync(tmp, file);
     fs.chmodSync(file, 0o600);
   } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
+}
+function aiRecoveryReady() {
+  // Refuse a Discord write when its recovery store cannot be read or written.
+  // This does not guarantee a later write succeeds, but catches common
+  // filesystem failures before permissions are changed.
+  const entries = aiRecoveryRead();
+  aiRecoveryWrite(entries);
+}
+function aiRecoverySnapshotValid(item) {
+  if (!item || !['role', 'channel'].includes(item.kind) ||
+      !/^\\d{16,25}$/.test(String(item.ownerId || '')) ||
+      !/^\\d{16,25}$/.test(String(item.guildId || '')) ||
+      !/^\\d{16,25}$/.test(String(item.roleId || '')) ||
+      !Number.isFinite(item.expiresAt) || !Number.isFinite(Date.parse(item.createdAt))) return false;
+  const bits = value => typeof value === 'string' && /^\\d{1,25}$/.test(value);
+  if (item.kind === 'role') return bits(item.before) && bits(item.after);
+  return /^\\d{16,25}$/.test(String(item.channelId || '')) &&
+    [item.before, item.after].every(state => state &&
+      typeof state.exists === 'boolean' && bits(state.allow) && bits(state.deny));
 }
 function aiRecoveryGet(ownerId, kind) {
   return aiRecoveryRead().filter(item => item.ownerId === ownerId && item.kind === kind &&
@@ -648,6 +669,7 @@ async function aiApplyRolePlan(interaction, guildId) {
   if (!plan.grants.length) return interaction.editReply({ content: 'No changes required.', embeds: [], components: [] });
   const expected = new PermissionsBitField(role.permissions.bitfield).add(...plan.grants);
   try {
+    aiRecoveryReady();
     await role.setPermissions(expected, 'Goliath AI DEV owner-approved role grants by ' + interaction.user.id);
     const verified = await guild.roles.fetch(role.id, { force: true });
     if (!verified || verified.permissions.bitfield.toString() !== expected.bitfield.toString())
@@ -851,6 +873,7 @@ async function aiApplyChannelPlan(interaction, guildId) {
   const changes = {};
   for (const permission of plan.grants) changes[permission] = true;
   try {
+    aiRecoveryReady();
     await channel.permissionOverwrites.edit(role, changes, { reason: 'Goliath AI DEV approved channel grants by ' + interaction.user.id });
     const updated = await guild.channels.fetch(channel.id, { force: true });
     const after = aiOverwriteSnapshot(updated, role.id);
