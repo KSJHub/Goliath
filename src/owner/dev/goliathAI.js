@@ -44,6 +44,11 @@ function requirePrivateAI(req, res, next) {
   res.set('Cache-Control', 'no-store');
   if (!authorised(req)) return res.status(403).json({ error: 'Goliath AI is restricted to the two configured developer accounts.' });
   if (req.method !== 'GET') {
+    // Defence in depth: browsers identify cross-site requests even when an
+    // Origin header is absent. Never accept such writes to the private API.
+    const fetchSite = String(req.get('sec-fetch-site') || '').toLowerCase();
+    if (fetchSite === 'cross-site')
+      return res.status(403).json({ error: 'Cross-site request denied.' });
     const origin = req.get('origin');
     const host = req.get('host');
     if (origin) {
