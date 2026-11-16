@@ -643,6 +643,10 @@ router.post('/drafts/:id/review', requirePrivateAI, async (req, res) => {
   try {
     const draft = draftStore.loadDraft(String(req.params.id));
     if (!draft) return res.status(404).json({ error: 'Draft not found.' });
+    // Fail before querying the target guild. The draft store also enforces
+    // ownership when writing, but that check must not happen after the audit.
+    if (draft.createdBy !== String(req.session.user.id))
+      return res.status(403).json({ error: 'Only the draft creator may review this draft.' });
     const audit = await getVerifiedAudit(req, draft.environment, draft.guildId);
     planBlueprint(audit, draft.blueprint);
     if (reportDigest(audit) !== draft.auditDigest)
