@@ -313,7 +313,7 @@ export default function Translation({ theme, selectedGuild, selectedGuildData })
   if (!guildId) return <PageShell title="Translation Hub" subtitle="Select a server to manage translation settings." theme={theme}><EmptyState theme={theme} text="Select a server to manage Translation Hub." /></PageShell>;
 
   if (!loading && entitlements && !hasTranslationAccess) {
-    return <PageShell title="Translation Hub" subtitle="Translation Hub is a premium Goliath Pro feature." theme={theme} guild={{ id: guildId, name: 'Translation Hub' }}><PremiumLock theme={theme} title="Translation Hub" featureKey="translation.hub" currentPlan={entitlements.plan} requiredPlan={{ name: 'Pro', icon: '👑' }} message="Realtime multilingual channels, provider integration and translation threads require Goliath Pro." unlocks={['OpenAI, DeepL or Google provider support', 'Realtime translation channels', 'User language profiles', 'Translation threads', 'Translation analytics']} /></PageShell>;
+    return <PageShell title="Translation Hub" subtitle="Translation Hub is a premium Goliath Pro feature." theme={theme} guild={{ id: guildId, name: 'Translation Hub' }}><PremiumLock theme={theme} title="Translation Hub" featureKey="translation.hub" currentPlan={entitlements.plan} requiredPlan={{ name: 'Pro', icon: E.CROWN }} message="Realtime multilingual channels, provider integration and translation threads require Goliath Pro." unlocks={['OpenAI, DeepL or Google provider support', 'Realtime translation channels', 'User language profiles', 'Translation threads', 'Translation analytics']} /></PageShell>;
   }
 
   const providerName = providerStatus?.label || settings.provider || config.provider || 'Not configured';
