@@ -58,9 +58,11 @@ function requirePrivateAI(req, res, next) {
 router.get('/status', requirePrivateAI, (_req, res) => res.json({
   enabled: isEnabled(),
   configured: isEnabled(),
+  verified: false,
+  verificationRequired: 'POST /self-test',
   backend: 'local',
   model: String(process.env.GOLIATH_AI_MODEL || 'local-model').slice(0, 80),
-  notice: isEnabled() ? 'Local inference configured. Model availability is checked when you send a message.' :
+  notice: isEnabled() ? 'Local inference enabled, but generation has not been verified by this status endpoint. Run the private self-test.' :
     'AI is disabled until the local model is installed and GOLIATH_AI_ENABLED=true is set in DEV.'
 }));
 
