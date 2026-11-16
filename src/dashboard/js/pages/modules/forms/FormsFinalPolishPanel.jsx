@@ -221,7 +221,7 @@ export default function FormsFinalPolishPanel({ theme, forms = [], submissions =
               <span style={{ color: theme?.mutedText || '#94a3b8', fontSize: 12 }}>User: {submission.userTag || submission.userId || 'Unknown'} · Created: {formatDate(submission.createdAt)}</span>
               <span style={{ color: hasMissingTicketChannel(submission) ? '#fca5a5' : theme?.mutedText || '#94a3b8', fontSize: 12 }}>Ticket: {submission.ticketId || submission.workflow?.ticketId || 'Not linked'} · Age: {formatDuration(ageMs(submission))}</span>
             </div>
-          )) : <EmptyState theme={theme} icon="✅" title="Nothing needs attention" description="No submissions match this filter. New reviews, missing ticket links and request-info cases will appear here." />}
+          )) : <EmptyState theme={theme} icon={E.SUCCESS} title="Nothing needs attention" description="No submissions match this filter. New reviews, missing ticket links and request-info cases will appear here." />}
         </div>
       </div>
     </section>
