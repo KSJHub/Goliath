@@ -371,18 +371,24 @@ export default function GoliathAI({ theme }) {
   };
   const reviewSavedDraft = async (id) => {
     if (!audit || draftBusy) return;
+    const environment = String(audit.environment);
+    const guildId = String(audit.guild.id);
+    const requestedGuild = environment + ':' + guildId;
     setDraftBusy(true); setError(''); setDraftNotice('');
     try {
       const item = savedDrafts.find(value => value.id === id);
-      if (!item || item.environment !== audit.environment || item.guildId !== audit.guild.id)
+      if (!item || item.environment !== environment || String(item.guildId) !== guildId ||
+          selectedGuildRef.current !== requestedGuild)
         throw new Error('Select the saved draft’s original server before reviewing it.');
       const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/review', {
         method: 'POST', body: JSON.stringify({})
       });
       await refreshDrafts();
+      if (selectedGuildRef.current !== requestedGuild) return;
       setDraftNotice(result.notice || 'Review recorded. This does not authorise execution.');
-    } catch (err) { setError(err.message); }
-    finally { setDraftBusy(false); }
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    } finally { setDraftBusy(false); }
   };
   const checkDraftReadiness = async (id) => {
     if (!audit || readinessBusy) return;
@@ -452,14 +458,27 @@ export default function GoliathAI({ theme }) {
     } finally { setOperationReviewBusy(false); }
   };
   const removeSavedDraft = async (id) => {
-    if (draftBusy || !window.confirm('Delete this saved Goliath AI blueprint draft? No Discord items will be deleted.')) return;
+    if (!audit || draftBusy) return;
+    const environment = String(audit.environment);
+    const guildId = String(audit.guild.id);
+    const requestedGuild = environment + ':' + guildId;
+    const item = savedDrafts.find(value => value.id === id);
+    if (!item || item.environment !== environment || String(item.guildId) !== guildId ||
+        selectedGuildRef.current !== requestedGuild) {
+      setError('Select the saved draft’s original server before deleting it.');
+      return;
+    }
+    if (!window.confirm('Delete this saved Goliath AI blueprint draft? No Discord items will be deleted.')) return;
+    if (selectedGuildRef.current !== requestedGuild) return;
     setDraftBusy(true); setError(''); setDraftNotice('');
     try {
       await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id), { method: 'DELETE' });
       await refreshDrafts();
+      if (selectedGuildRef.current !== requestedGuild) return;
       setDraftNotice('Saved draft deleted; Discord was not changed.');
-    } catch (err) { setError(err.message); }
-    finally { setDraftBusy(false); }
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    } finally { setDraftBusy(false); }
   };
   const send = async (event) => {
     event.preventDefault();
