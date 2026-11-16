@@ -877,6 +877,14 @@ router.post('/drafts/:id/authorisation-rehearsal', requirePrivateAI, async (req,
     // Awaiting audit/capability evidence allows another request to revoke or
     // replace the intent. Require the exact same live object before consuming.
     const latestDraft = draftStore.loadDraft(draft.id);
+    // Recheck acknowledgements after the last await as another request may
+    // have rejected this operation while permission evidence was fetched.
+    const latestReview = approvalLedger.listReviews({
+      draft: latestDraft || draft, currentDigest, operations: preview.operations
+    })[intent.sequence - 1];
+    if (!latestReview || latestReview.needsAttention ||
+        !latestReview.reviews.some(item => item.decision === 'acknowledged'))
+      return res.status(409).json({ error: 'Operation review changed during validation.' });
     if (!latestDraft || latestDraft.createdBy !== ownerId ||
         latestDraft.environment !== 'DEV' ||
         latestDraft.auditDigest !== currentDigest ||
