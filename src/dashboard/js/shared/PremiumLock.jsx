@@ -1,3 +1,4 @@
+import { DASHBOARD_EMOJIS as E } from './PageShell.jsx';
 import { goDashboard } from '../services/dashboardPath.js';
 import React from 'react';
 
@@ -5,7 +6,7 @@ function formatPlanName(plan = {}) {
   const id = String(plan.id || plan.plan || '').toLowerCase();
   const fallbackName = id === 'free' ? 'Basic' : 'Pro';
   const name = plan.name || plan.requiredPlanName || fallbackName;
-  const icon = plan.icon || (id === 'free' ? '🆓' : '👑');
+  const icon = plan.icon || (id === 'free' ? E.FREE : E.CROWN);
   return `${icon} ${name}`.trim();
 }
 
@@ -19,8 +20,8 @@ export default function PremiumLock({
   unlocks = [],
   ctaLabel = 'Open Billing',
 }) {
-  const required = formatPlanName(requiredPlan || { name: 'Pro', icon: '👑' });
-  const current = formatPlanName(currentPlan || { name: 'Basic', icon: '🆓' });
+  const required = formatPlanName(requiredPlan || { name: 'Pro', icon: E.CROWN });
+  const current = formatPlanName(currentPlan || { name: 'Basic', icon: E.FREE });
   const unlockList = Array.isArray(unlocks) ? unlocks.filter(Boolean) : [];
 
   return (
@@ -38,7 +39,7 @@ export default function PremiumLock({
       }}
     >
       <div style={{ display: 'grid', gap: 8 }}>
-        <div style={{ color: '#fde68a', fontSize: 13, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>🔒 Goliath Pro Feature</div>
+        <div style={{ color: '#fde68a', fontSize: 13, fontWeight: 950, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{E.LOCK} Goliath Pro Feature</div>
         <h2 style={{ margin: 0, fontSize: 'clamp(24px, 4vw, 36px)', letterSpacing: '-0.04em' }}>{title}</h2>
         <p style={{ margin: 0, color: theme.mutedText, lineHeight: 1.6, maxWidth: 760 }}>
           {message || `This feature requires Goliath ${required}.`}
