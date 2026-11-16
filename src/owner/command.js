@@ -575,9 +575,9 @@ function aiRecoveryReady(ownerId, kind) {
   // filesystem failures before permissions are changed.
   const entries = aiRecoveryRead();
   if (entries.some(item => item.ownerId === ownerId && item.kind === kind &&
-      item.status === 'pending' && item.expiresAt > Date.now()))
+      item.status === 'pending'))
     throw new Error('Previous permission operation requires manual reconciliation');
-  if (entries.filter(item => item.expiresAt > Date.now() &&
+  if (entries.filter(item => (item.expiresAt > Date.now() || item.status === 'pending') &&
       !(item.ownerId === ownerId && item.kind === kind)).length >= 100)
     throw new Error('Recovery storage full');
   aiRecoveryWrite(entries);
@@ -601,15 +601,62 @@ function aiRecoveryGet(ownerId, kind) {
     Number.isFinite(item.expiresAt) && item.expiresAt > Date.now()).at(-1) || null;
 }
 function aiRecoverySave(ownerId, kind, snapshot) {
-  const entries = aiRecoveryRead().filter(item => item.expiresAt > Date.now() &&
+  const entries = aiRecoveryRead().filter(item => (item.expiresAt > Date.now() || item.status === 'pending') &&
     !(item.ownerId === ownerId && item.kind === kind));
   entries.push({ ...snapshot, ownerId, kind, createdAt: new Date().toISOString() });
   // Never silently discard another owner's active recovery record.
   if (entries.length > 100) throw new Error('Recovery storage full; Discord mutation blocked');
   aiRecoveryWrite(entries);
 }
+function aiRecoveryResolvePending(ownerId, kind, resolution) {
+  const entries = aiRecoveryRead();
+  const index = entries.findIndex(item => item.ownerId === ownerId && item.kind === kind &&
+    item.status === 'pending');
+  if (index < 0) return;
+  if (resolution === 'unchanged') entries.splice(index, 1);
+  else if (resolution === 'applied') {
+    entries[index] = { ...entries[index], status: 'verified',
+      expiresAt: Math.max(entries[index].expiresAt, Date.now() + 30 * 60 * 1000) };
+  } else throw new Error('Invalid reconciliation outcome');
+  aiRecoveryWrite(entries);
+}
+async function aiReconcilePending(interaction, guildId) {
+  await interaction.deferUpdate();
+  if (mode() !== 'DEV') return interaction.editReply({ content: 'DEV only.', embeds: [], components: [] });
+  const entries = aiRecoveryRead().filter(item => item.ownerId === interaction.user.id &&
+    item.guildId === guildId && item.status === 'pending');
+  if (!entries.length) return interaction.editReply({ content: 'No pending permission transactions for this guild.', embeds: [], components: [] });
+  const { guild } = await resolveInteractionGuild(interaction, guildId);
+  if (!guild) return interaction.editReply({ content: 'Guild unavailable; pending transactions retained.', embeds: [], components: [] });
+  const results = [];
+  for (const item of entries) {
+    try {
+      const target = item.kind === 'role'
+        ? await guild.roles.fetch(item.roleId, { force: true })
+        : await guild.channels.fetch(item.channelId, { force: true });
+      const actual = item.kind === 'role'
+        ? target?.permissions?.bitfield?.toString()
+        : target && aiOverwriteSnapshot(target, item.roleId);
+      const equal = (expected) => item.kind === 'role'
+        ? actual === expected : actual && aiOverwriteMatches(actual, expected);
+      if (equal(item.after)) {
+        aiRecoveryResolvePending(interaction.user.id, item.kind, 'applied');
+        results.push(item.kind + ': applied state verified; recovery enabled');
+      } else if (equal(item.before)) {
+        aiRecoveryResolvePending(interaction.user.id, item.kind, 'unchanged');
+        results.push(item.kind + ': original state verified; pending record cleared');
+      } else {
+        results.push(item.kind + ': drift or unavailable target; pending record retained for manual review');
+      }
+    } catch (error) {
+      results.push(item.kind + ': unable to verify; pending record retained (' + String(error?.message || 'error').slice(0, 100) + ')');
+    }
+  }
+  return interaction.editReply({ content: 'Goliath AI • DEV transaction reconciliation\\n' +
+    results.join('\\n'), embeds: [], components: [] });
+}
 function aiRecoveryDelete(ownerId, kind) {
-  aiRecoveryWrite(aiRecoveryRead().filter(item => !(item.ownerId === ownerId && item.kind === kind)));
+  aiRecoveryWrite(aiRecoveryRead().filter(item => !(item.ownerId === ownerId && item.kind === kind && item.status !== 'pending')));
 }
 const AI_PLAN_TTL = 10 * 60 * 1000;
 function aiRoleCanEdit(guild, role, bot, grants) {
@@ -1134,6 +1181,7 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
     .setDescription(lines.join('\n').slice(0, 3900))
     .addFields({ name: 'Selected guild', value: guild ? guild.name + ' • ' + guild.id : (guildId || 'No guild selected') })
     .setFooter({ text: 'DEV • Owner-only • Inspection is read-only; approved plans can change Discord permissions' });
+  if (guild && mode() === 'DEV') lines.push('', 'Interrupted permission transactions can be inspected using **Reconcile Pending**.');
   const controls = new ActionRowBuilder().addComponents(
     navigationButton(contextualOwnerId('ai-scan', guildId), 'Scan Goliath', ButtonStyle.Primary, !guildId),
     navigationButton(contextualOwnerId('ai-templates', guildId), 'Role Templates', ButtonStyle.Secondary),
@@ -1306,6 +1354,10 @@ async function handleOwnerPanelInteraction(interaction) {
   }
   if (id === `${OWNER_PREFIX}ai-recovery-cancel`) {
     await interaction.update(ownerHomePayload(interaction, 'Recovery cancelled. Snapshot remains available until expiry.'));
+    return true;
+  }
+  if (id === `${OWNER_PREFIX}ai-reconcile`) {
+    await aiReconcilePending(interaction, contextGuildId);
     return true;
   }
   if (id === `${OWNER_PREFIX}ai-channel-recover` || id === `${OWNER_PREFIX}ai-channel-restore`) {
