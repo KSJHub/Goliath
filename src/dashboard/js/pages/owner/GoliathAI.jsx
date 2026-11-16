@@ -400,18 +400,34 @@ export default function GoliathAI({ theme }) {
     finally { setOperationReviewBusy(false); }
   };
   const recordOperationReview = async (id, sequence, decision) => {
-    if (operationReviewBusy) return;
+    if (operationReviewBusy || !audit) return;
+    const environment = audit.environment;
+    const guildId = String(audit.guild.id);
+    const requestedGuild = environment + ':' + guildId;
+    const currentReviews = operationReviews;
+    if (selectedGuildRef.current !== requestedGuild ||
+        currentReviews?.draftId !== id || currentReviews?.environment !== environment ||
+        String(currentReviews?.guildId) !== guildId || currentReviews?.canExecute !== false) {
+      setError('Load operation reviews for the selected server before recording a decision.');
+      return;
+    }
     setOperationReviewBusy(true); setError('');
     try {
       const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews', {
         method: 'POST', body: JSON.stringify({ sequence, decision })
       });
+      if (selectedGuildRef.current !== requestedGuild) return;
       if (result.canExecute !== false || result.executable !== false) throw new Error('Review response unsafe.');
       const latest = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/operation-reviews');
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (latest.draftId !== id || latest.environment !== environment ||
+          String(latest.guildId) !== guildId || latest.canExecute !== false ||
+          latest.executable !== false) throw new Error('Refreshed review target mismatch.');
       setOperationReviews(latest);
       setDraftNotice(result.notice);
-    } catch (err) { setError(err.message); }
-    finally { setOperationReviewBusy(false); }
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild) setError(err.message);
+    } finally { setOperationReviewBusy(false); }
   };
   const removeSavedDraft = async (id) => {
     if (draftBusy || !window.confirm('Delete this saved Goliath AI blueprint draft? No Discord items will be deleted.')) return;
