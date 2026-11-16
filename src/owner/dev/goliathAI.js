@@ -709,6 +709,11 @@ router.get('/drafts/:id/readiness', requireAIIdentity, async (req, res) => {
   try {
     const draft = draftStore.loadDraft(String(req.params.id));
     if (!draft) return res.status(404).json({ error: 'Saved draft not found.' });
+    // Execution readiness contains operation-level capability and backup
+    // preflight evidence. Keep it restricted to the draft creator, matching
+    // execution candidates, intents and authorisation rehearsals.
+    if (draft.createdBy !== String(req.session.user.id))
+      return res.status(403).json({ error: 'Only the draft creator may inspect execution readiness.' });
     const audit = await getVerifiedAudit(req, draft.environment, draft.guildId);
     const preview = planBlueprint(audit, draft.blueprint);
     const backupEvidence = await getBackupEvidence(draft.environment, draft.guildId);
