@@ -5687,6 +5687,33 @@ assert(aiRouterSource.includes('revokeRehearsalGrants(draft.id, record.sequence)
 assert(aiRouterSource.includes('revokeRehearsalGrants(draft.id);'),
   'Full draft re-review must revoke rehearsal tokens');
 
+// Regression guards for owner isolation on non-executable readiness and intent routes.
+const routeBody = (start, end) => aiRouterSource.split(start)[1]?.split(end)[0];
+const candidateSource = routeBody(
+  "router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, res) => {",
+  "router.post('/drafts/:id/execution-intent'");
+const readinessSource = routeBody(
+  "router.get('/drafts/:id/readiness', requireAIIdentity, async (req, res) => {",
+  "router.get('/drafts/:id/execution-candidates'");
+const cancelIntentSource = routeBody(
+  "router.delete('/drafts/:id/execution-intents/:intentId', requirePrivateAI, (req, res) => {",
+  "// Operation review and audit log");
+const listIntentsSource = routeBody(
+  "router.get('/drafts/:id/execution-intents', requireAIIdentity, async (req, res) => {",
+  "router.delete('/drafts/:id/execution-intents");
+assert(candidateSource?.includes('draft.createdBy !== String(req.session.user.id)'),
+  'Execution candidate preflight must require draft ownership');
+assert(readinessSource?.includes('draft.createdBy !== String(req.session.user.id)'),
+  'Execution readiness must require draft ownership');
+assert(cancelIntentSource &&
+  cancelIntentSource.indexOf('intent.ownerId !== String(req.session.user.id)') <
+  cancelIntentSource.indexOf('Date.parse(intent.expiresAt) <= Date.now()'),
+  'Intent cancellation must verify ownership before expiry cleanup');
+assert(listIntentsSource &&
+  listIntentsSource.indexOf('intent.ownerId !== ownerId') <
+  listIntentsSource.indexOf('Date.parse(intent.expiresAt) <= now'),
+  'Intent listing must scope expiry cleanup to the draft owner');
+
 const ledger = require('../src/owner/dev/goliathApprovalLedger');
 const ledgerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goliath-ai-reviews-'));
 const ledgerFile = path.join(ledgerDir, 'reviews.json');
