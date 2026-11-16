@@ -569,6 +569,25 @@ function aiRecoveryWrite(entries) {
     fs.chmodSync(file, 0o600);
   } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
 }
+// Exclusive cross-process lock for recovery record mutations. A crashed process
+// leaves the lock behind deliberately: fail closed until an operator investigates.
+function aiRecoveryLocked(mutator) {
+  if (mode() !== 'DEV') throw new Error('DEV-only recovery');
+  const lock = aiRecoveryFile() + '.lock';
+  fs.mkdirSync(path.dirname(lock), { recursive: true, mode: 0o700 });
+  try {
+    fs.mkdirSync(lock, { mode: 0o700 });
+  } catch (error) {
+    if (error?.code === 'EEXIST') throw new Error('Recovery store locked; investigate before retrying');
+    throw error;
+  }
+  try {
+    return mutator();
+  } finally {
+    // Never delete a lock owned by another process.
+    fs.rmdirSync(lock);
+  }
+}
 function aiRecoveryReady(ownerId, kind, guildId, roleId, channelId = null) {
   const entries = aiRecoveryRead();
   const targetBusy = entries.some(item => item.status === 'pending' &&
@@ -583,7 +602,8 @@ function aiRecoveryReady(ownerId, kind, guildId, roleId, channelId = null) {
   const retained = entries.filter(item => item.expiresAt > Date.now() || item.status === 'pending');
   if (retained.length >= 100 && !retained.some(item => item.ownerId === ownerId && item.kind === kind))
     throw new Error('Recovery storage full');
-  aiRecoveryWrite(entries);
+  // Journal insertion is separately locked and rechecks conflicts.
+  if (entries.length > 100) throw new Error('Recovery storage full');
 }
 function aiRecoverySnapshotValid(item) {
   if (!item || !['role', 'channel'].includes(item.kind) ||
@@ -604,6 +624,7 @@ function aiRecoveryGet(ownerId, kind) {
     Number.isFinite(item.expiresAt) && item.expiresAt > Date.now()).at(-1) || null;
 }
 function aiRecoverySave(ownerId, kind, snapshot) {
+  return aiRecoveryLocked(() => {
   const entries = aiRecoveryRead();
   const prior = entries.find(item => item.ownerId === ownerId && item.kind === kind &&
     item.status === 'pending');
@@ -624,8 +645,10 @@ function aiRecoverySave(ownerId, kind, snapshot) {
   retained.push({ ...snapshot, ownerId, kind, createdAt: prior?.createdAt || new Date().toISOString() });
   if (retained.length > 100) throw new Error('Recovery storage full');
   aiRecoveryWrite(retained);
+  });
 }
 function aiRecoveryResolvePending(ownerId, kind, resolution) {
+  return aiRecoveryLocked(() => {
   const entries = aiRecoveryRead();
   const index = entries.findIndex(item => item.ownerId === ownerId && item.kind === kind &&
     item.status === 'pending');
@@ -636,6 +659,7 @@ function aiRecoveryResolvePending(ownerId, kind, resolution) {
       expiresAt: Math.max(entries[index].expiresAt, Date.now() + 30 * 60 * 1000) };
   } else throw new Error('Invalid reconciliation outcome');
   aiRecoveryWrite(entries);
+  });
 }
 async function aiReconcilePending(interaction, guildId) {
   await interaction.deferUpdate();
@@ -673,7 +697,9 @@ async function aiReconcilePending(interaction, guildId) {
     results.join('\n'), embeds: [], components: [] });
 }
 function aiRecoveryDelete(ownerId, kind) {
+  return aiRecoveryLocked(() => {
   aiRecoveryWrite(aiRecoveryRead().filter(item => !(item.ownerId === ownerId && item.kind === kind && item.status !== 'pending')));
+  });
 }
 const AI_PLAN_TTL = 10 * 60 * 1000;
 function aiRoleCanEdit(guild, role, bot, grants) {
