@@ -720,6 +720,17 @@ function aiTemplateSelectRow(guildId, roleId) {
   return new ActionRowBuilder().addComponents(select);
 }
 
+// Channel overwrites must never be used to escalate guild-wide privileges.
+// Templates can contain guild-level bits; those belong in the separate role plan.
+const AI_CHANNEL_GRANTS = new Set([
+  'ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AddReactions',
+  'Connect', 'Speak', 'EmbedLinks', 'AttachFiles', 'ManageMessages',
+  'ManageThreads', 'SendMessagesInThreads', 'UseApplicationCommands',
+  'CreatePublicThreads', 'CreatePrivateThreads', 'ManageChannels'
+]);
+function aiChannelTemplatePermissions(template) {
+  return template.filter(permission => AI_CHANNEL_GRANTS.has(permission));
+}
 function aiChannelCanEdit(guild, channel, role, bot, grants) {
   const access = bot && channel?.permissionsFor(bot);
   return Boolean(channel?.permissionOverwrites && role && bot && !role.managed &&
@@ -746,7 +757,8 @@ async function aiStageChannelPlan(interaction, guildId, channelId, roleId, templ
   if (!channel || !role || !template)
     return interaction.editReply({ content: 'Invalid channel, role or template.', embeds: [], components: [] });
   const before = aiOverwriteSnapshot(channel, role.id);
-  const grants = template.filter(permission => !(new PermissionsBitField(BigInt(before.allow))).has(permission));
+  const grants = aiChannelTemplatePermissions(template).filter(permission =>
+    !(new PermissionsBitField(BigInt(before.allow))).has(permission));
   if (!aiChannelCanEdit(guild, channel, role, guild.members.me, grants))
     return interaction.editReply({ content: 'Goliath cannot safely edit this role overwrite.', embeds: [], components: [] });
   const plan = { guildId: guild.id, channelId: channel.id, roleId: role.id, template: templateName,
@@ -757,6 +769,7 @@ async function aiStageChannelPlan(interaction, guildId, channelId, roleId, templ
       '**Channel/category:** <#' + channel.id + '>',
       '**Role:** <@&' + role.id + '>',
       '**Template:** ' + templateName,
+      '**Guild-only permissions excluded:** ' + (template.filter(permission => !AI_CHANNEL_GRANTS.has(permission)).join(', ') || 'None'),
       '**Explicit permissions to grant:** ' + (grants.join(', ') || 'None'),
       '**Conflicting denies to clear:** ' + grants.filter(permission =>
         new PermissionsBitField(BigInt(before.deny)).has(permission)).join(', '),
@@ -789,8 +802,7 @@ async function aiApplyChannelPlan(interaction, guildId) {
   const allow = new PermissionsBitField(BigInt(plan.before.allow)).add(...plan.grants);
   const deny = new PermissionsBitField(BigInt(plan.before.deny)).remove(...plan.grants);
   const changes = {};
-  for (const permission of allow.toArray()) changes[permission] = true;
-  for (const permission of deny.toArray()) changes[permission] = false;
+  for (const permission of plan.grants) changes[permission] = true;
   try {
     await channel.permissionOverwrites.edit(role, changes, { reason: 'Goliath AI DEV approved channel grants by ' + interaction.user.id });
     const updated = await guild.channels.fetch(channel.id, { force: true });
@@ -885,8 +897,9 @@ function aiChannelPermissionPlan(guild, channelId, roleId, templateName) {
   const overwrite = channel.permissionOverwrites.cache.get(role.id);
   const currentAllow = new Set(overwrite?.allow?.toArray() || []);
   const currentDeny = new Set(overwrite?.deny?.toArray() || []);
-  const grants = template.filter(permission => !currentAllow.has(permission));
-  const conflicting = template.filter(permission => currentDeny.has(permission));
+  const channelTemplate = aiChannelTemplatePermissions(template);
+  const grants = channelTemplate.filter(permission => !currentAllow.has(permission));
+  const conflicting = channelTemplate.filter(permission => currentDeny.has(permission));
   const bot = guild.members.me;
   const botAccess = channel.permissionsFor(bot);
   const canEdit = Boolean(bot?.permissions?.has('ManageRoles') &&
@@ -895,7 +908,8 @@ function aiChannelPermissionPlan(guild, channelId, roleId, templateName) {
   return [
     '**Channel/category:** <#' + channel.id + '> • **Target role:** <@&' + role.id + '>',
     '**Requested template:** ' + templateName,
-    '**Explicit grants already set:** ' + (template.length - grants.length) + '/' + template.length,
+    '**Explicit grants already set:** ' + (channelTemplate.length - grants.length) + '/' + channelTemplate.length,
+    '**Guild-only permissions excluded:** ' + (template.filter(permission => !AI_CHANNEL_GRANTS.has(permission)).join(', ') || 'None'),
     '**Grants to add (' + grants.length + '):** ' + (grants.join(', ') || 'None'),
     '**Explicit denies conflicting with template (' + conflicting.length + '):** ' + (conflicting.join(', ') || 'None'),
     '**Other existing allows:** ' + ([...currentAllow].filter(p => !template.includes(p)).join(', ') || 'None'),
