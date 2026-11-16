@@ -931,6 +931,15 @@ router.post('/drafts/:id/authorisation-rehearsal/:grantId/consume', requirePriva
           draft, currentDigest, operation, sequence: grant.sequence
         }) !== grant.operationKey)
       return res.status(409).json({ error: 'Operation fingerprint changed.', canExecute: false });
+    const manifest = buildTransactionManifest({ draft, audit, preview, currentDigest });
+    const rehearsal = simulateTransaction({ draft, audit, preview, currentDigest });
+    if (manifest.unavailable || manifest.warnings.length || !rehearsal.simulated)
+      return res.status(409).json({ error: 'Transaction rehearsal changed.', canExecute: false });
+    const capability = await getBotCapabilityEvidence(req, 'DEV', grant.guildId);
+    const preflight = buildCapabilityPreflight({ audit, operations: preview.operations, capability });
+    if (!preflight.permissionsVerified ||
+        preflight.operations[grant.sequence - 1]?.permission !== 'permitted-in-principle')
+      return res.status(409).json({ error: 'Effective bot permissions changed.', canExecute: false });
     const review = approvalLedger.listReviews({
       draft, currentDigest, operations: preview.operations
     })[grant.sequence - 1];
