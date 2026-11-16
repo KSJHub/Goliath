@@ -9,6 +9,7 @@ const {
   MessageFlags,
   ModalBuilder,
   SlashCommandBuilder,
+  StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
 } = require('discord.js');
@@ -530,7 +531,61 @@ const AI_ROLE_TEMPLATES = Object.freeze({
   bot: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'EmbedLinks', 'AttachFiles'],
 });
 
-function aiPanelPayload(interaction, guild, detail = 'overview') {
+function aiPermissionDetails(guild, kind, id) {
+  if (!guild) return ['Guild unavailable.'];
+  if (kind === 'role') {
+    const role = guild.roles.cache.get(id);
+    if (!role) return ['Role not found. Refresh the scan.'];
+    const enabled = role.permissions.toArray().sort();
+    const missing = AI_ROLE_TEMPLATES.bot.filter(permission => !role.permissions.has(permission));
+    return [
+      '**Role:** <@&' + role.id + '> (ID: ' + role.id + ')',
+      '**Position:** ' + role.position + ' • **Managed:** ' + (role.managed ? 'Yes' : 'No'),
+      '**Permissions (' + enabled.length + '):** ' + (enabled.map(p => '\`' + p + '\`').join(', ') || 'None'),
+      '',
+      '**Bot baseline missing (' + missing.length + '):** ' + (missing.join(', ') || 'None'),
+      'The bot baseline is advisory; use the correct template for this role before proposing changes.'
+    ];
+  }
+  const channel = guild.channels.cache.get(id);
+  if (!channel) return ['Channel not found. Refresh the scan.'];
+  const entries = [...channel.permissionOverwrites.cache.values()];
+  const lines = [
+    '**Channel:** <#' + channel.id + '> (ID: ' + channel.id + ')',
+    '**Category:** ' + (channel.parent ? channel.parent.name : 'None'),
+    '**Overwrites:** ' + entries.length,
+    '**Category-synced:** ' + (channel.permissionsLocked === null ? 'N/A' : channel.permissionsLocked ? 'Yes' : 'No'),
+    ''
+  ];
+  for (const overwrite of entries.slice(0, 18)) {
+    const label = overwrite.type === 0 ? '<@&' + overwrite.id + '>' : '<@' + overwrite.id + '>';
+    const allow = overwrite.allow.toArray().join(', ') || 'None';
+    const deny = overwrite.deny.toArray().join(', ') || 'None';
+    lines.push('**' + label + '**', 'Allow: ' + allow, 'Deny: ' + deny);
+  }
+  if (entries.length > 18) lines.push('+' + (entries.length - 18) + ' additional overwrites not shown.');
+  return lines;
+}
+
+function aiSelectRow(guild, kind, page) {
+  const collection = kind === 'role' ? guild?.roles?.cache : guild?.channels?.cache;
+  if (!collection?.size) return null;
+  const items = [...collection.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const pages = Math.max(1, Math.ceil(items.length / 25));
+  const current = Math.max(0, Math.min(page, pages - 1));
+  const slice = items.slice(current * 25, (current + 1) * 25);
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('ownerpanel:ai-select-' + kind + ':' + current + ':guild:' + guild.id)
+    .setPlaceholder('Inspect ' + kind + ' (' + (current + 1) + '/' + pages + ')')
+    .addOptions(slice.map(item => ({
+      label: item.name.slice(0, 100) || item.id,
+      value: item.id,
+      description: ('ID ' + item.id).slice(0, 100)
+    })));
+  return new ActionRowBuilder().addComponents(select);
+}
+
+function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = null, page = 0) {
   const guildId = validGuildId(guild?.id) || interactionGuildId(interaction);
   const roles = guild?.roles?.cache;
   const channels = guild?.channels?.cache;
@@ -552,6 +607,8 @@ function aiPanelPayload(interaction, guild, detail = 'overview') {
       '',
       'Discord role hierarchy limits which roles Goliath can edit. Category and channel overwrites may further restrict access.'
     );
+  } else if (detail === 'role' || detail === 'channel') {
+    lines.push(...(selectedId ? aiPermissionDetails(guild, detail, selectedId) : ['Select a ' + detail + ' to inspect its permissions and channel overwrites.']));
   } else if (detail === 'templates') {
     for (const [name, permissions] of Object.entries(AI_ROLE_TEMPLATES)) {
       lines.push('**' + name[0].toUpperCase() + name.slice(1) + ':** ' + permissions.map(p => '\`' + p + '\`').join(', '));
@@ -577,13 +634,24 @@ function aiPanelPayload(interaction, guild, detail = 'overview') {
   const controls = new ActionRowBuilder().addComponents(
     navigationButton(contextualOwnerId('ai-scan', guildId), 'Scan Goliath', ButtonStyle.Primary, !guildId),
     navigationButton(contextualOwnerId('ai-templates', guildId), 'Role Templates', ButtonStyle.Secondary),
-    navigationButton(contextualOwnerId('ai-home', guildId), 'Overview', ButtonStyle.Secondary),
+    navigationButton(contextualOwnerId('ai-roles', guildId), 'Inspect Roles', ButtonStyle.Secondary, !guildId),
+    navigationButton(contextualOwnerId('ai-channels', guildId), 'Inspect Channels', ButtonStyle.Secondary, !guildId),
     navigationButton(contextualOwnerId('home', guildId), 'Back', ButtonStyle.Secondary)
   );
-  return { embeds: [embed], components: [controls] };
+  const rows = [controls];
+  if (guild && (detail === 'role' || detail === 'channel')) {
+    const selector = aiSelectRow(guild, detail, page);
+    if (selector) rows.push(selector);
+    const total = detail === 'role' ? guild.roles.cache.size : guild.channels.cache.size;
+    if (total > 25) rows.push(new ActionRowBuilder().addComponents(
+      navigationButton(contextualOwnerId('ai-page-' + detail + '-' + Math.max(0, page - 1), guildId), 'Previous', ButtonStyle.Secondary, page <= 0),
+      navigationButton(contextualOwnerId('ai-page-' + detail + '-' + (page + 1), guildId), 'Next', ButtonStyle.Secondary, (page + 1) * 25 >= total)
+    ));
+  }
+  return { embeds: [embed], components: rows };
 }
 
-async function handleOwnerAI(interaction, action, guildId) {
+async function handleOwnerAI(interaction, action, guildId, selectedId = null, page = 0) {
   if (mode() !== 'DEV') {
     await interaction.update(ownerHomePayload(interaction, 'Goliath AI Discord controls are DEV-only.'));
     return;
@@ -594,8 +662,9 @@ async function handleOwnerAI(interaction, action, guildId) {
   if (guild) {
     await Promise.all([guild.roles.fetch(), guild.channels.fetch(), guild.members.fetchMe()]).catch(() => null);
   }
-  await interaction.editReply(aiPanelPayload(interaction, guild, action === 'ai-scan' ? 'bot' :
-    action === 'ai-templates' ? 'templates' : 'overview'));
+  const detail = action === 'ai-scan' ? 'bot' : action === 'ai-templates' ? 'templates' :
+    action === 'ai-roles' ? 'role' : action === 'ai-channels' ? 'channel' : action;
+  await interaction.editReply(aiPanelPayload(interaction, guild, detail, selectedId, page));
 }
 
 async function handleOwnerPanelInteraction(interaction) {
@@ -708,8 +777,21 @@ async function handleOwnerPanelInteraction(interaction) {
     return true;
   }
 
-  if (id === `${OWNER_PREFIX}ai-home` || id === `${OWNER_PREFIX}ai-scan` ||
-      id === `${OWNER_PREFIX}ai-templates`) {
+  if (id.startsWith(`${OWNER_PREFIX}ai-select-`)) {
+    const match = id.match(/^ownerpanel:ai-select-(role|channel):(\\d+)$/);
+    if (!match || !interaction.isStringSelectMenu?.()) return true;
+    const selectedId = validGuildId(interaction.values?.[0]);
+    await handleOwnerAI(interaction, match[1], contextGuildId, selectedId, Number(match[2]));
+    return true;
+  }
+  if (id.startsWith(`${OWNER_PREFIX}ai-page-`)) {
+    const match = id.match(/^ownerpanel:ai-page-(role|channel)-(\\d+)$/);
+    if (!match) return true;
+    await handleOwnerAI(interaction, match[1], contextGuildId, null, Number(match[2]));
+    return true;
+  }
+  if ([`${OWNER_PREFIX}ai-home`, `${OWNER_PREFIX}ai-scan`, `${OWNER_PREFIX}ai-templates`,
+       `${OWNER_PREFIX}ai-roles`, `${OWNER_PREFIX}ai-channels`].includes(id)) {
     await handleOwnerAI(interaction, id.slice(OWNER_PREFIX.length), contextGuildId);
     return true;
   }
