@@ -241,7 +241,7 @@ export default function MediaTools(props) {
               }}
             >
               <div style={{ fontSize: 30 }}>{tool.icon}</div>
-              <div style={{ marginTop: 10, fontSize: 18, fontWeight: 950 }}>{tool.label} ⭐</div>
+              <div style={{ marginTop: 10, fontSize: 18, fontWeight: 950 }}>{tool.label} {E.SPARKLES}</div>
               <div style={{ marginTop: 6, color: '#94a3b8', lineHeight: 1.45 }}>{tool.description}</div>
             </button>
           );
