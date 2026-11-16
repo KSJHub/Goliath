@@ -207,11 +207,15 @@ export default function GoliathAI({ theme }) {
   };
   const generateLayoutDraft = async () => {
     if (!status?.enabled || !aiLayoutRequest.trim() || aiDraftBusy) return;
+    const editorRevision = blueprintRevisionRef.current;
+    const requestedGuild = selectedGuildRef.current;
     setAiDraftBusy(true); setError(''); setBlueprintPlan(null);
     try {
       const result = await api.request('/api/owner/ai/blueprint/ai-draft', {
         method: 'POST', body: JSON.stringify({ description: aiLayoutRequest.trim() })
       });
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
       if (!result.readOnly || result.executable !== false || !Array.isArray(result.categories)) throw new Error('AI draft verification failed.');
       const raw = blueprintText.trim() ? JSON.parse(blueprintText) : { name: 'AI-assisted Discord rebuild', categories: [] };
       if (!Array.isArray(raw.categories)) throw new Error('Invalid current blueprint.');
@@ -225,8 +229,10 @@ export default function GoliathAI({ theme }) {
       if (!added) throw new Error('The AI only suggested categories already in your blueprint. No changes were made.');
       replaceBlueprintText(JSON.stringify(raw, null, 2));
       setAiLayoutRequest('');
-    } catch (err) { setError(err.message); }
-    finally { setAiDraftBusy(false); }
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild &&
+          blueprintRevisionRef.current === editorRevision) setError(err.message);
+    } finally { setAiDraftBusy(false); }
   };
   const categoriesForEditor = (() => {
     try {
@@ -276,13 +282,20 @@ export default function GoliathAI({ theme }) {
   };
   const importBlueprint = async (file) => {
     if (!file) return;
+    const editorRevision = blueprintRevisionRef.current;
+    const requestedGuild = selectedGuildRef.current;
     setError(''); setBlueprintPlan(null);
     try {
       if (file.size > 256000) throw new Error('Blueprint file is too large (256 KB maximum).');
       const raw = JSON.parse(await file.text());
+      if (selectedGuildRef.current !== requestedGuild ||
+          blueprintRevisionRef.current !== editorRevision) return;
       if (!raw || !Array.isArray(raw.categories)) throw new Error('Selected file is not a valid Goliath blueprint.');
       replaceBlueprintText(JSON.stringify(raw, null, 2));
-    } catch (err) { setError(err.message); }
+    } catch (err) {
+      if (selectedGuildRef.current === requestedGuild &&
+          blueprintRevisionRef.current === editorRevision) setError(err.message);
+    }
   };
   const exportBlueprint = () => {
     setError('');
