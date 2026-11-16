@@ -93,8 +93,8 @@ router.post('/self-test', requirePrivateAI, async (_req, res) => {
     });
     const payload = await response.json();
     const answer = payload?.choices?.[0]?.message?.content;
-    if (typeof answer !== 'string' || !answer.trim()) return res.status(502).json({
-      ready: false, reason: 'Local generation returned no text.'
+    if (typeof answer !== 'string' || !/^READY[.!]?$/i.test(answer.trim())) return res.status(502).json({
+      ready: false, reason: 'Local generation did not return the expected readiness response.'
     });
     return res.json({ ready: true, generated: true, readOnly: true,
       canExecute: false, reason: 'Local text generation responded successfully.' });
