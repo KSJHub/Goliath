@@ -874,6 +874,11 @@ router.post('/drafts/:id/authorisation-rehearsal', requirePrivateAI, async (req,
     if (!review || review.needsAttention ||
         !review.reviews.some(item => item.decision === 'acknowledged'))
       return res.status(409).json({ error: 'Operation acknowledgement invalid.' });
+    // Awaiting audit/capability evidence allows another request to revoke or
+    // replace the intent. Require the exact same live object before consuming.
+    if (executionIntents.get(String(req.body.intentId)) !== intent ||
+        Date.parse(intent.expiresAt) <= Date.now())
+      return res.status(409).json({ error: 'Intent expired or was revoked during validation.' });
     // Consume the intent before issuing the rehearsal token. Neither object
     // authorises a Discord write, even if it is replayed.
     executionIntents.delete(String(req.body.intentId));
