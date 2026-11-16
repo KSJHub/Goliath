@@ -166,8 +166,11 @@ export default function GoliathAI({ theme }) {
       const environment = String(audit.environment);
       const guildId = String(audit.guild.id);
       if (!['DEV', 'BETA', 'PRODUCTION'].includes(environment) || !/^\d{16,20}$/.test(guildId)) throw new Error('Invalid selected server.');
+      const requestedGuild = environment + ':' + guildId;
       const result = await api.request('/api/owner/ai/plan/' + environment + '/' + guildId);
-      if (result.environment !== environment || result.guild?.id !== guildId || result.executable !== false) throw new Error('Preview validation failed.');
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result.environment !== environment || String(result.guild?.id || '') !== guildId ||
+          result.executable !== false) throw new Error('Preview validation failed.');
       setPreview(result);
     } catch (err) { setError(err.message); }
     finally { setPlanning(false); }
@@ -183,8 +186,13 @@ export default function GoliathAI({ theme }) {
     if (!audit || blueprintBusy) return;
     setBlueprintBusy(true); setError(''); setBlueprintPlan(null);
     try {
-      const result = await api.request('/api/owner/ai/blueprint/' + audit.environment + '/' + audit.guild.id);
-      if (!result.readOnly || result.environment !== audit.environment || result.guild?.id !== audit.guild.id) throw new Error('Blueprint target mismatch.');
+      const environment = String(audit.environment);
+      const guildId = String(audit.guild.id);
+      const requestedGuild = environment + ':' + guildId;
+      const result = await api.request('/api/owner/ai/blueprint/' + environment + '/' + guildId);
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result.readOnly !== true || result.environment !== environment ||
+          String(result.guild?.id || '') !== guildId) throw new Error('Blueprint target mismatch.');
       replaceBlueprintText(JSON.stringify(result.blueprint, null, 2));
     } catch (err) { setError(err.message); }
     finally { setBlueprintBusy(false); }
