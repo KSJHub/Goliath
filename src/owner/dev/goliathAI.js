@@ -13,6 +13,9 @@ const { buildCapabilityPreflight } = require('./goliathCapabilityPreflight');
 const router = express.Router();
 const MAX_MESSAGES = 16;
 const MAX_CONTENT = 4000;
+// The local model uses a small context window. Bound total history, not just
+// individual messages, so long conversations fail clearly instead of timing out.
+const MAX_TOTAL_CHAT_CHARS = 4800;
 const TIMEOUT_MS = 90000;
 const LOCAL_AI_URL = 'http://127.0.0.1:8081/v1/chat/completions';
 let requestInProgress = false;
@@ -1244,6 +1247,11 @@ router.post('/chat', requirePrivateAI, async (req, res) => {
     return res.status(400).json({ error: 'Invalid chat messages or conversation length.' });
   }
   if (incoming[incoming.length - 1].role !== 'user') return res.status(400).json({ error: 'Last message must be from you.' });
+  if (incoming.reduce((total, message) => total + message.content.length, 0) > MAX_TOTAL_CHAT_CHARS)
+    return res.status(413).json({
+      error: 'Conversation exceeds the local model context budget. Start a new conversation or shorten earlier messages.'
+    });
+
 
   // Optional live server context: resolved server-side, never trusted from browser supplied audit data.
   let serverContext = null;
