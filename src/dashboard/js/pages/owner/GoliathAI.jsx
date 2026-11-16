@@ -369,9 +369,14 @@ export default function GoliathAI({ theme }) {
       const item = savedDrafts.find(value => value.id === id);
       if (!item || item.environment !== audit.environment || item.guildId !== audit.guild.id)
         throw new Error('Select and scan the exact environment and guild for this saved draft.');
+      const environment = audit.environment;
+      const guildId = String(audit.guild.id);
+      const requestedGuild = environment + ':' + guildId;
       const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/readiness');
-      if (result.draftId !== id || result.environment !== audit.environment ||
-          result.guildId !== audit.guild.id || result.canExecute !== false || result.executable !== false)
+      // A late response must not show readiness for a previously selected guild.
+      if (selectedGuildRef.current !== requestedGuild) return;
+      if (result.draftId !== id || result.environment !== environment ||
+          String(result.guildId) !== guildId || result.canExecute !== false || result.executable !== false)
         throw new Error('Execution readiness target validation failed.');
       setReadiness(result);
     } catch (err) { setError(err.message); }
