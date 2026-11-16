@@ -6026,7 +6026,37 @@ console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-p
   return true;
 }
 
+function goliathAiRecoveryAudit() {
+  const assert = require('node:assert/strict');
+  const vm = require('node:vm');
+  const source = fs.readFileSync(absolute('src/owner/command.js'), 'utf8');
+  const start = source.indexOf('function aiRecoverySnapshotValid(');
+  const end = source.indexOf('function aiRecoveryGet(', start);
+  assert(start >= 0 && end > start, 'Recovery validator missing');
+  const validate = vm.runInNewContext(source.slice(start, end) + '; aiRecoverySnapshotValid');
+  const ownerId = '123456789012345678';
+  const validRole = { ownerId, guildId: ownerId, roleId: ownerId,
+    kind: 'role', status: 'pending', before: '0', after: '1024',
+    createdAt: new Date().toISOString(), expiresAt: Date.now() + 60000 };
+  assert.equal(validate(validRole), true, 'Valid role journal rejected');
+  assert.equal(validate({ ...validRole, status: 'verified' }), true);
+  assert.equal(validate({ ...validRole, ownerId: 'not-a-discord-id' }), false);
+  assert.equal(validate({ ...validRole, after: 'not-bits' }), false);
+  assert.equal(validate({ ...validRole, status: 'unknown' }), false);
+  const validChannel = { ...validRole, kind: 'channel', channelId: ownerId,
+    before: { exists: false, allow: '0', deny: '0' },
+    after: { exists: true, allow: '1024', deny: '0' } };
+  assert.equal(validate(validChannel), true, 'Valid channel journal rejected');
+  assert.equal(validate({ ...validChannel, after: { ...validChannel.after, deny: 'invalid' } }), false);
+  assert(source.includes("return aiRecoveryLocked(() => {"), 'Recovery writes must use cross-process lock');
+  assert(source.includes("status: 'pending'"), 'Missing write-ahead transaction state');
+  assert(source.includes("status: 'verified'"), 'Missing verified transaction state');
+  console.log('✅ Goliath AI recovery validation and transaction guard contracts passed.');
+  return true;
+}
+
 const commands = {
+  'goliath-ai-recovery': goliathAiRecoveryAudit,
   'goliath-ai-blueprint': goliathAiBlueprintAudit,
   'emoji-palette': sharedEmojiPaletteAudit,
   'emoji-inventory': emojiInventoryAudit,
