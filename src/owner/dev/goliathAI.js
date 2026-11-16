@@ -61,6 +61,47 @@ router.get('/status', requirePrivateAI, (_req, res) => res.json({
     'AI is disabled until the local model is installed and GOLIATH_AI_ENABLED=true is set in DEV.'
 }));
 
+// A developer-only readiness probe checks actual text generation, not just
+// /v1/models metadata. Never supplies guild data or writes to Discord.
+router.post('/self-test', requirePrivateAI, async (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!isEnabled()) return res.status(503).json({
+    ready: false, reason: 'Local inference is not enabled on DEV.'
+  });
+  if (requestInProgress) return res.status(429).json({
+    ready: false, reason: 'A local inference request is already running.'
+  });
+  requestInProgress = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.min(TIMEOUT_MS, 20000));
+  try {
+    const response = await fetch(LOCAL_AI_URL, {
+      method: 'POST', signal: controller.signal, headers: localAIHeaders(true),
+      body: JSON.stringify({
+        model: String(process.env.GOLIATH_AI_MODEL || 'local-model'),
+        stream: false, temperature: 0, max_tokens: 24,
+        messages: [{ role: 'user', content: 'Reply with the single word READY.' }]
+      })
+    });
+    if (!response.ok) return res.status(502).json({
+      ready: false, reason: 'Local generation returned HTTP ' + response.status + '.'
+    });
+    const payload = await response.json();
+    const answer = payload?.choices?.[0]?.message?.content;
+    if (typeof answer !== 'string' || !answer.trim()) return res.status(502).json({
+      ready: false, reason: 'Local generation returned no text.'
+    });
+    return res.json({ ready: true, generated: true, readOnly: true,
+      canExecute: false, reason: 'Local text generation responded successfully.' });
+  } catch (error) {
+    return res.status(503).json({ ready: false, reason: error?.name === 'AbortError'
+      ? 'Local generation timed out.' : 'Local generation is unreachable.' });
+  } finally {
+    clearTimeout(timeout);
+    requestInProgress = false;
+  }
+});
+
 // Health check never starts a model or sends chat content to an inference service.
 router.get('/health', requirePrivateAI, async (_req, res) => {
   res.set('Cache-Control', 'no-store');
