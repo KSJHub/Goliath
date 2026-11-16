@@ -18,7 +18,7 @@ function formatDate(value) {
 function caseStatus(status) {
   const value = String(status || 'active').toLowerCase();
   if (value === 'reversed') return { label: `${E.SUCCESS} Case Resolved`, color: '#67e8f9' };
-  if (value === 'expired') return { label: '⌛ Case Expired', color: '#cbd5e1' };
+  if (value === 'expired') return { label: `${E.TIMER} Case Expired`, color: '#cbd5e1' };
   if (value === 'active') return { label: `${E.WARNING} Case Active`, color: '#fbbf24' };
   return { label: E.FOLDER + ' ' + value.replace(/[_-]/g, ' '), color: '#bfdbfe' };
 }
@@ -495,7 +495,7 @@ export default function Appeals() {
 
         {portalTab !== 'profile' ? <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 12 }}>
           <div style={card}>
-            <h3 style={{ marginTop: 0 }}>❓ Appeals Help</h3>
+            <h3 style={{ marginTop: 0 }}>{E.RSVP_MAYBE} Appeals Help</h3>
             <details style={{ marginBottom: 10 }}>
               <summary style={{ cursor: 'pointer', fontWeight: 800 }}>What can I appeal?</summary>
               <p style={{ ...muted, fontSize: 14 }}>Any case available for appeal will be clearly marked above. Some decisions may need to reach a particular stage before an appeal can be submitted.</p>
