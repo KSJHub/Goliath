@@ -578,13 +578,13 @@ function aiRecoveryReady() {
 }
 function aiRecoverySnapshotValid(item) {
   if (!item || !['role', 'channel'].includes(item.kind) ||
-      !/^\\d{16,25}$/.test(String(item.ownerId || '')) ||
-      !/^\\d{16,25}$/.test(String(item.guildId || '')) ||
-      !/^\\d{16,25}$/.test(String(item.roleId || '')) ||
+      !/^\d{16,25}$/.test(String(item.ownerId || '')) ||
+      !/^\d{16,25}$/.test(String(item.guildId || '')) ||
+      !/^\d{16,25}$/.test(String(item.roleId || '')) ||
       !Number.isFinite(item.expiresAt) || !Number.isFinite(Date.parse(item.createdAt))) return false;
-  const bits = value => typeof value === 'string' && /^\\d{1,25}$/.test(value);
+  const bits = value => typeof value === 'string' && /^\d{1,25}$/.test(value);
   if (item.kind === 'role') return bits(item.before) && bits(item.after);
-  return /^\\d{16,25}$/.test(String(item.channelId || '')) &&
+  return /^\d{16,25}$/.test(String(item.channelId || '')) &&
     [item.before, item.after].every(state => state &&
       typeof state.exists === 'boolean' && bits(state.allow) && bits(state.deny));
 }
