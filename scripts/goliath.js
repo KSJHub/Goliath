@@ -458,6 +458,34 @@ function sharedEmojiPaletteAudit() {
   return errors.length === 0;
 }
 
+// Read-only inventory: reports candidate hardcoded UI emojis without changing guild settings.
+function emojiInventoryAudit() {
+  section('Hardcoded emoji inventory (review only)');
+  const paths = walk(absolute('src'), JS_EXTENSIONS);
+  const findings = [];
+  for (const filePath of paths) {
+    const name = relative(filePath).replace(/\\/g, '/');
+    if (name === 'src/core/guild/goliathNavigation.js' ||
+        name === 'src/dashboard/js/shared/PageShell.jsx') continue;
+    const lines = read(filePath).split(/\r?\n/);
+    let count = 0;
+    for (const line of lines) {
+      if (!/\p{Extended_Pictographic}/u.test(line)) continue;
+      // Count candidates, not defects: user defaults, saved templates and comments may be intentional.
+      if (/^\s*(?:\/\/|\/\*|\*|#)/.test(line)) continue;
+      count++;
+    }
+    if (count) findings.push({ name, count });
+  }
+  findings.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const total = findings.reduce((sum, item) => sum + item.count, 0);
+  console.log('Scanned ' + paths.length + ' source files; ' + findings.length +
+    ' files contain ' + total + ' candidate emoji-bearing lines.');
+  for (const item of findings.slice(0, 40)) console.log(' ' + item.count + '  ' + item.name);
+  console.log('These are candidates, not automatically safe replacements. Preserve guild overrides and visual glyphs.');
+  return true;
+}
+
 function dashboardImportAudit() {
   section('Dashboard imports');
   const files = walk(absolute('src/dashboard'), JS_EXTENSIONS);
@@ -5941,6 +5969,7 @@ console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-p
 const commands = {
   'goliath-ai-blueprint': goliathAiBlueprintAudit,
   'emoji-palette': sharedEmojiPaletteAudit,
+  'emoji-inventory': emojiInventoryAudit,
   'dashboard-routing': dashboardRoutingAudit,
   'member-intelligence-routing': memberIntelligenceRoutingAudit,
   'game-updates': gameUpdatesAudit,
