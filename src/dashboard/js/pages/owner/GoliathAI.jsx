@@ -332,9 +332,14 @@ export default function GoliathAI({ theme }) {
     if (!audit || draftBusy) return;
     setDraftBusy(true); setError(''); setDraftNotice('');
     try {
+      const environment = audit.environment;
+      const guildId = String(audit.guild.id);
+      const requestedGuild = environment + ':' + guildId;
       const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id));
+      // The selected server can change while the draft is loading.
+      if (selectedGuildRef.current !== requestedGuild) return;
       const item = result.draft;
-      if (!item || item.environment !== audit.environment || item.guildId !== audit.guild.id)
+      if (!item || item.environment !== environment || String(item.guildId) !== guildId)
         throw new Error('Select and scan the draft’s original environment and server before opening it.');
       replaceBlueprintText(JSON.stringify(item.blueprint, null, 2));
       setBlueprintPlan(null);
