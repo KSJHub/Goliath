@@ -564,9 +564,23 @@ function aiRecoveryWrite(entries) {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const tmp = file + '.' + randomUUID() + '.tmp';
   try {
-    fs.writeFileSync(tmp, raw, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    // Flush the write-ahead journal before exposing it via atomic rename.
+    const fd = fs.openSync(tmp, 'wx', 0o600);
+    try {
+      fs.writeFileSync(fd, raw, { encoding: 'utf8' });
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
     fs.renameSync(tmp, file);
-    fs.chmodSync(file, 0o600);
+    // Persist the directory entry as well, so a restart cannot silently lose
+    // a journal that was acknowledged before the Discord mutation.
+    const dirFd = fs.openSync(path.dirname(file), 'r');
+    try {
+      fs.fsyncSync(dirFd);
+    } finally {
+      fs.closeSync(dirFd);
+    }
   } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
 }
 // Exclusive cross-process lock for recovery record mutations. A crashed process
