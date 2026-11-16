@@ -531,20 +531,54 @@ const AI_ROLE_TEMPLATES = Object.freeze({
   bot: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'EmbedLinks', 'AttachFiles'],
 });
 
+function aiRoleTemplateComparison(guild, roleId, templateName) {
+  const role = guild?.roles?.cache?.get(roleId);
+  const expected = AI_ROLE_TEMPLATES[templateName];
+  if (!role || !expected) return ['Role or template unavailable. Refresh and select again.'];
+  const actual = new Set(role.permissions.toArray());
+  const target = new Set(expected);
+  const add = [...target].filter(permission => !actual.has(permission));
+  const remove = [...actual].filter(permission => !target.has(permission));
+  const bot = guild.members.me;
+  const editable = Boolean(bot?.permissions?.has('ManageRoles') &&
+    bot.roles.highest.comparePositionTo(role) > 0 && !role.managed && role.id !== guild.id);
+  return [
+    '**Role:** <@&' + role.id + '> • **Template:** ' + templateName,
+    '**Suggested grants (' + add.length + '):** ' + (add.join(', ') || 'None'),
+    '**Existing permissions outside template (' + remove.length + '):** ' + (remove.join(', ') || 'None'),
+    '',
+    '**Goliath can manage this role:** ' + (editable ? 'Yes (subject to permission hierarchy)' : 'No — check Manage Roles, hierarchy or managed-role restrictions'),
+    '**Administrator currently granted:** ' + (actual.has('Administrator') ? 'Yes — bypasses channel restrictions' : 'No'),
+    '',
+    'This is a proposed difference, NOT an instruction to remove every extra permission. Review every grant and removal before execution.',
+    'No permissions have been changed.'
+  ];
+}
+
+function aiTemplateSelectRow(guildId, roleId) {
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('ownerpanel:ai-compare:' + roleId + ':guild:' + guildId)
+    .setPlaceholder('Compare selected role with a template')
+    .addOptions(Object.keys(AI_ROLE_TEMPLATES).map(name => ({
+      label: name[0].toUpperCase() + name.slice(1),
+      value: name,
+      description: 'Preview grants and extra permissions'
+    })));
+  return new ActionRowBuilder().addComponents(select);
+}
+
 function aiPermissionDetails(guild, kind, id) {
   if (!guild) return ['Guild unavailable.'];
   if (kind === 'role') {
     const role = guild.roles.cache.get(id);
     if (!role) return ['Role not found. Refresh the scan.'];
     const enabled = role.permissions.toArray().sort();
-    const missing = AI_ROLE_TEMPLATES.bot.filter(permission => !role.permissions.has(permission));
     return [
       '**Role:** <@&' + role.id + '> (ID: ' + role.id + ')',
       '**Position:** ' + role.position + ' • **Managed:** ' + (role.managed ? 'Yes' : 'No'),
       '**Permissions (' + enabled.length + '):** ' + (enabled.map(p => '\`' + p + '\`').join(', ') || 'None'),
       '',
-      '**Bot baseline missing (' + missing.length + '):** ' + (missing.join(', ') || 'None'),
-      'The bot baseline is advisory; use the correct template for this role before proposing changes.'
+      'Choose a template below to preview differences for this specific role. No changes are made.'
     ];
   }
   const channel = guild.channels.cache.get(id);
@@ -607,6 +641,8 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
       '',
       'Discord role hierarchy limits which roles Goliath can edit. Category and channel overwrites may further restrict access.'
     );
+  } else if (detail === 'comparison') {
+    lines.push(...aiRoleTemplateComparison(guild, selectedId?.roleId, selectedId?.template));
   } else if (detail === 'role' || detail === 'channel') {
     lines.push(...(selectedId ? aiPermissionDetails(guild, detail, selectedId) : ['Select a ' + detail + ' to inspect its permissions and channel overwrites.']));
   } else if (detail === 'templates') {
@@ -639,6 +675,9 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
     navigationButton(contextualOwnerId('home', guildId), 'Back', ButtonStyle.Secondary)
   );
   const rows = [controls];
+  if (guild && detail === 'role' && selectedId && typeof selectedId === 'string') {
+    rows.push(aiTemplateSelectRow(guild.id, selectedId));
+  }
   if (guild && (detail === 'role' || detail === 'channel')) {
     const selector = aiSelectRow(guild, detail, page);
     if (selector) rows.push(selector);
@@ -777,6 +816,14 @@ async function handleOwnerPanelInteraction(interaction) {
     return true;
   }
 
+  if (id.startsWith(`${OWNER_PREFIX}ai-compare:`)) {
+    const match = id.match(/^ownerpanel:ai-compare:(\\d{16,25})$/);
+    if (!match || !interaction.isStringSelectMenu?.()) return true;
+    const template = String(interaction.values?.[0] || '');
+    if (!Object.hasOwn(AI_ROLE_TEMPLATES, template)) return true;
+    await handleOwnerAI(interaction, 'comparison', contextGuildId, { roleId: match[1], template });
+    return true;
+  }
   if (id.startsWith(`${OWNER_PREFIX}ai-select-`)) {
     const match = id.match(/^ownerpanel:ai-select-(role|channel):(\d+)$/);
     if (!match || !interaction.isStringSelectMenu?.()) return true;
