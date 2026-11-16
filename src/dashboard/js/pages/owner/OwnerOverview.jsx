@@ -30,7 +30,7 @@ function envBadge(env = '') {
   if (mode === 'DEV') return `${E.ENV_DEV} DEV`;
   if (mode === 'BETA') return `${E.ENV_BETA} BETA`;
   if (mode === 'PRODUCTION') return `${E.ENV_PRODUCTION} PROD`;
-  return '⚪ UNKNOWN';
+  return `${E.STATUS_UNKNOWN} UNKNOWN`;
 }
 function Stat({ theme, label, value, hint, accent = '#93c5fd' }) {
   const viewTheme = safeTheme(theme);
