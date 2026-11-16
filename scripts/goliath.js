@@ -425,6 +425,22 @@ function sharedEmojiPaletteAudit() {
       }
     }
   }
+  // Track palette aliases imported under the original name or a local alias.
+  for (const filePath of walk(absolute('src/dashboard'), JS_EXTENSIONS)) {
+    const source = read(filePath);
+    const imported = [...source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"][^'"]*(?:PageShell|shared\/PageShell)['"]/g)];
+    for (const statement of imported) {
+      for (const spec of statement[1].split(',')) {
+        const match = spec.trim().match(/^DASHBOARD_EMOJIS(?:\s+as\s+([A-Za-z_$][\w$]*))?$/);
+        if (!match) continue;
+        const alias = match[1] || 'DASHBOARD_EMOJIS';
+        const refs = new RegExp('\\b' + alias + '\\.([A-Z][A-Z_0-9]*)\\b', 'g');
+        for (const ref of source.matchAll(refs)) {
+          if (!browser.entries.has(ref[1])) errors.push(relative(filePath) + ': unknown dashboard emoji ' + alias + '.' + ref[1]);
+        }
+      }
+    }
+  }
   // Guard against empty or malformed palette entries (including whitespace-only glyphs).
   for (const [label, palette] of [['Discord', server.entries], ['Dashboard', browser.entries]]) {
     for (const [key, glyph] of palette) {
