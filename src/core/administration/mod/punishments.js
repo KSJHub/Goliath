@@ -242,7 +242,7 @@ async function executeRemoveWarning(interaction, pending, fallbackTarget) {
   const logTarget = fallbackTarget || await fetchTarget(interaction.guild, userId);
   const logUser = logTarget?.user || await interaction.client?.users?.fetch(String(userId)).catch(() => null) || null;
   await logAction(interaction, logTarget, 'Unwarn', unwindCase.reason, unwindCase.caseId, {}, logUser);
-  return { target: logTarget, content: `🗑️ Removed warning linked to **Case #${caseId}**.` };
+  return { target: logTarget, content: `${EMOJIS.DELETE} Removed warning linked to **Case #${caseId}**.` };
 }
 async function executeRemoveTimeout(interaction, pending, target) {
   if (!target) return { error: 'Target is no longer available.' };
@@ -308,7 +308,7 @@ async function runBulkAction(interaction, options) {
     try {
       if (options.actionType === 'remove-warning') {
         const modCase = await runBulkRemoveWarning(interaction, id, options);
-        success.push(`🗑️ Case #${id} → unwind #${modCase.caseId}`);
+        success.push(`${EMOJIS.DELETE} Case #${id} → unwind #${modCase.caseId}`);
       } else {
         const member = await interaction.guild.members.fetch(id);
         const hierarchyError = checkHierarchyForBulk(interaction.member, interaction.guild.members.me, interaction.guild.ownerId, member, interaction.user.id);
