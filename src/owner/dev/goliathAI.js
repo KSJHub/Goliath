@@ -898,18 +898,51 @@ router.post('/drafts/:id/authorisation-rehearsal', requirePrivateAI, async (req,
     return res.status(503).json({ error: 'Authorisation rehearsal failed. No Discord change occurred.' });
   }
 });
-router.post('/drafts/:id/authorisation-rehearsal/:grantId/consume', requirePrivateAI, (req, res) => {
+router.post('/drafts/:id/authorisation-rehearsal/:grantId/consume', requirePrivateAI, async (req, res) => {
   if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV controller only.' });
   const grantId = String(req.params.grantId);
   const grant = rehearsalGrants.get(grantId);
   if (!grant || grant.ownerId !== String(req.session.user.id) ||
       grant.draftId !== String(req.params.id))
     return res.status(404).json({ error: 'Rehearsal token not found.' });
+  // Consume first, before any asynchronous validation. Concurrent requests
+  // cannot replay the same token in this single-process controller.
   rehearsalGrants.delete(grantId);
   if (Date.parse(grant.expiresAt) <= Date.now())
     return res.status(410).json({ error: 'Rehearsal token expired.', canExecute: false });
-  return res.json({ consumed: true, canExecute: false, executable: false,
-    notice: 'Single-use token consumed. No Discord write performed.' });
+  try {
+    const draft = draftStore.loadDraft(grant.draftId);
+    if (!draft || draft.environment !== 'DEV' ||
+        draft.guildId !== grant.guildId ||
+        draft.createdBy !== grant.ownerId ||
+        draft.review?.status !== 'reviewed' ||
+        draft.review.checkedBy !== grant.ownerId ||
+        draft.review.checkpointId !== grant.checkpointId ||
+        draft.auditDigest !== grant.auditDigest)
+      return res.status(409).json({ error: 'Draft or review checkpoint changed.', canExecute: false });
+    const audit = await getVerifiedAudit(req, 'DEV', grant.guildId);
+    const currentDigest = reportDigest(audit);
+    if (currentDigest !== grant.auditDigest)
+      return res.status(409).json({ error: 'Guild audit changed.', canExecute: false });
+    const preview = planBlueprint(audit, draft.blueprint);
+    const operation = preview.operations[grant.sequence - 1];
+    if (!operation || operation.kind !== 'rename_category' ||
+        approvalLedger.operationKey({
+          draft, currentDigest, operation, sequence: grant.sequence
+        }) !== grant.operationKey)
+      return res.status(409).json({ error: 'Operation fingerprint changed.', canExecute: false });
+    const review = approvalLedger.listReviews({
+      draft, currentDigest, operations: preview.operations
+    })[grant.sequence - 1];
+    if (!review || review.needsAttention ||
+        !review.reviews.some(item => item.decision === 'acknowledged'))
+      return res.status(409).json({ error: 'Operation acknowledgement changed.', canExecute: false });
+    return res.json({ consumed: true, rehearsalOnly: true, authorised: false,
+      canExecute: false, executable: false,
+      notice: 'Single-use rehearsal token consumed after fresh checks. No Discord write performed.' });
+  } catch {
+    return res.status(503).json({ error: 'Rehearsal revalidation failed. Token consumed; no Discord change.' });
+  }
 });
 
 // Intent lifecycle is owner-bound and always non-executable. It is not a
