@@ -1062,10 +1062,13 @@ router.get('/drafts/:id/execution-intents', requireAIIdentity, async (req, res) 
     const now = Date.now();
     const intents = [];
     for (const [id, intent] of executionIntents) {
+      // Inspect and expire only intents belonging to this owner and draft.
+      // Reading one draft must not mutate another developer's intent state.
+      if (intent.ownerId !== ownerId || intent.draftId !== draft.id ||
+          intent.guildId !== draft.guildId) continue;
       if (Date.parse(intent.expiresAt) <= now) {
         executionIntents.delete(id);
-      } else if (intent.ownerId === ownerId && intent.draftId === draft.id &&
-                 intent.guildId === draft.guildId) {
+      } else {
         const operation = operations[intent.sequence - 1];
         const review = reviews[intent.sequence - 1];
         const currentKey = operation && approvalLedger.operationKey({
