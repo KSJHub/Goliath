@@ -596,7 +596,9 @@ function aiRecoverySave(ownerId, kind, snapshot) {
   const entries = aiRecoveryRead().filter(item => item.expiresAt > Date.now() &&
     !(item.ownerId === ownerId && item.kind === kind));
   entries.push({ ...snapshot, ownerId, kind, createdAt: new Date().toISOString() });
-  aiRecoveryWrite(entries.slice(-100));
+  // Never silently discard another owner's active recovery record.
+  if (entries.length > 100) throw new Error('Recovery storage full; Discord mutation blocked');
+  aiRecoveryWrite(entries);
 }
 function aiRecoveryDelete(ownerId, kind) {
   aiRecoveryWrite(aiRecoveryRead().filter(item => !(item.ownerId === ownerId && item.kind === kind)));
