@@ -1,3 +1,4 @@
+const { EMOJIS } = require('../../ui/emojis');
 'use strict';
 
 const {
@@ -412,10 +413,10 @@ async function submitWarning(interaction, target) {
       },
     });
     const extra = [
-      `🎯 Strike weight: **${strikeWeight}** • Active score: **${warningContext.strikeScore}** (${warningContext.count} warning${warningContext.count === 1 ? '' : 's'})`,
-      `📈 Next: ${warningContext.nextEscalation}`,
+      `${EMOJIS.TARGET} Strike weight: **${strikeWeight}** • Active score: **${warningContext.strikeScore}** (${warningContext.count} warning${warningContext.count === 1 ? '' : 's'})`,
+      `${EMOJIS.TREND} Next: ${warningContext.nextEscalation}`,
     ];
-    if (warningContext.repeatInfo.isRepeatPattern) extra.push(`🔁 Repeat reason detected (${warningContext.repeatInfo.repeatCount} matching active warnings)`);
+    if (warningContext.repeatInfo.isRepeatPattern) extra.push(`${EMOJIS.REPEAT} Repeat reason detected (${warningContext.repeatInfo.repeatCount} matching active warnings)`);
     if (escalatedCase) extra.push(`⚡ Auto escalation triggered: **${escalatedCase.action}** (Case #${escalatedCase.caseId})`);
     await safeEditReply(interaction, { content: [`⚠️ Warned **${target.user.tag}** • Case #${modCase.caseId}`, ...extra].join('\n'), flags: 64 });
     return { ok: true, target, modCase, warningContext, escalatedCase, strikeWeight };
