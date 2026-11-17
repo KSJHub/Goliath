@@ -575,22 +575,6 @@ export default function GoliathAI({ theme }) {
     finally { setBusy(false); }
   };
   return <section style={{ display: 'grid', gap: 16, maxWidth: 980, margin: '0 auto', color: theme?.cardText || '#e5e7eb' }}>
-    <div style={{ ...panel, display: 'grid', gap: 8 }} aria-label="Permission recovery status">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <strong>DEV permission recovery</strong>
-        <button type="button" onClick={refreshRecovery}>Refresh status</button>
-      </div>
-      <p style={{ margin: 0, fontSize: 13 }}>Read-only status from the same recovery journal as Discord /owner. Restore or reconcile permissions in Discord.</p>
-      {recoveryError && <p role="alert" style={{ color: '#fca5a5', margin: 0 }}>{recoveryError}</p>}
-      {!recoveryError && !recovery && <p style={{ margin: 0 }}>Loading recovery status…</p>}
-      {recovery && (recovery.entries.length === 0
-        ? <p style={{ margin: 0 }}>No active recovery records for your owner account.</p>
-        : recovery.entries.map((item, index) => <div key={item.kind + item.roleId + (item.channelId || '') + index} style={{ borderTop: '1px solid rgba(148,163,184,.2)', paddingTop: 8 }}>
-            <strong>{item.kind === 'role' ? 'Role' : 'Channel'} · {item.status === 'pending' ? 'Reconciliation required' : 'Recovery available'}</strong>
-            <div style={{ fontSize: 12, overflowWrap: 'anywhere' }}>Server: {item.guildId} · Role: {item.roleId}{item.channelId ? ' · Channel: ' + item.channelId : ''}</div>
-            <div style={{ fontSize: 12 }}>{item.status === 'pending' ? 'Pending until reconciled' : 'Expires: ' + new Date(item.expiresAt).toLocaleString()}</div>
-          </div>))}
-    </div>
 
     <header style={panel}>
       <h1 style={{ margin: '0 0 8px', fontSize: 28 }}>Goliath AI</h1>
@@ -608,6 +592,23 @@ export default function GoliathAI({ theme }) {
       </div>
       {health && <p style={{ fontSize: 13, color: theme?.mutedText || '#94a3b8' }}>{health.reason}{health.models?.length ? ' Loaded model(s): ' + health.models.join(', ') : ''}</p>}
     </header>
+    <details style={panel} aria-label="Permission recovery status">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Permission Management · DEV recovery</summary>
+        <button type="button" onClick={refreshRecovery}>Refresh status</button>
+      </div>
+      <p style={{ margin: 0, fontSize: 13 }}>Read-only status from the same recovery journal as Discord /owner. Restore or reconcile permissions in Discord.</p>
+      {recoveryError && <p role="alert" style={{ color: '#fca5a5', margin: 0 }}>{recoveryError}</p>}
+      {!recoveryError && !recovery && <p style={{ margin: 0 }}>Loading recovery status…</p>}
+      {recovery && (recovery.entries.length === 0
+        ? <p style={{ margin: 0 }}>No active recovery records for your owner account.</p>
+        : recovery.entries.map((item, index) => <div key={item.kind + item.roleId + (item.channelId || '') + index} style={{ borderTop: '1px solid rgba(148,163,184,.2)', paddingTop: 8 }}>
+            <strong>{item.kind === 'role' ? 'Role' : 'Channel'} · {item.status === 'pending' ? 'Reconciliation required' : 'Recovery available'}</strong>
+            <div style={{ fontSize: 12, overflowWrap: 'anywhere' }}>Server: {item.guildId} · Role: {item.roleId}{item.channelId ? ' · Channel: ' + item.channelId : ''}</div>
+            <div style={{ fontSize: 12 }}>{item.status === 'pending' ? 'Pending until reconciled' : 'Expires: ' + new Date(item.expiresAt).toLocaleString()}</div>
+          </div>))}
+    </details>
+
     <section style={panel}>
       <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
       <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Connected servers across DEV, BETA and PRODUCTION can be inspected once the read-only service is deliberately deployed to each environment.</p>
