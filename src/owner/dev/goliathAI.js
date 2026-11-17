@@ -71,6 +71,38 @@ router.get('/status', requirePrivateAI, (_req, res) => res.json({
     'AI is disabled until the local model is installed and GOLIATH_AI_ENABLED=true is set in DEV.'
 }));
 
+// Read-only view of the same DEV journal used by Discord /owner.
+// Never expose permission bitfields or another owner's recovery records.
+router.get('/permission-recovery', requirePrivateAI, (req, res) => {
+  if (!isEnabled()) return res.status(503).json({ error: 'Goliath AI DEV is disabled.' });
+  const ownerId = String(req.session?.user?.id || '');
+  try {
+    const file = require('node:path').join(
+      require('../../config/runtimePaths').getRuntimePaths('DEV').data,
+      'goliath-ai-permission-recovery.json'
+    );
+    if (!fs.existsSync(file)) return res.json({ entries: [], checkedAt: new Date().toISOString() });
+    if (fs.statSync(file).size > 262144) throw new Error('Recovery journal exceeds storage limit');
+    const entries = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!Array.isArray(entries) || entries.length > 100) throw new Error('Invalid recovery journal');
+    const visible = entries.filter(item => item && item.ownerId === ownerId &&
+      ['role', 'channel'].includes(item.kind) &&
+      ['pending', 'verified'].includes(item.status) &&
+      /^\\d{16,25}$/.test(String(item.guildId || '')) &&
+      /^\\d{16,25}$/.test(String(item.roleId || '')) &&
+      (item.kind !== 'channel' || /^\\d{16,25}$/.test(String(item.channelId || ''))) &&
+      Number.isFinite(item.expiresAt) &&
+      (item.status === 'pending' || item.expiresAt > Date.now()))
+      .map(item => ({ kind: item.kind, status: item.status, guildId: item.guildId,
+        roleId: item.roleId, channelId: item.kind === 'channel' ? item.channelId : null,
+        expiresAt: item.expiresAt }));
+    return res.json({ entries: visible, checkedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('[Goliath AI] Recovery journal read failed', error?.message);
+    return res.status(503).json({ error: 'Recovery journal unavailable; inspect DEV storage.' });
+  }
+});
+
 // A developer-only readiness probe checks actual text generation, not just
 // /v1/models metadata. Never supplies guild data or writes to Discord.
 router.post('/self-test', requirePrivateAI, async (_req, res) => {
