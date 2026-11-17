@@ -593,8 +593,16 @@ export default function GoliathAI({ theme }) {
       {health && <p style={{ fontSize: 13, color: theme?.mutedText || '#94a3b8' }}>{health.reason}{health.models?.length ? ' Loaded model(s): ' + health.models.join(', ') : ''}</p>}
     </header>
     <details style={panel} aria-label="Permission recovery status">
-      <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Permission Management · DEV recovery</summary>
-      <button type="button" onClick={refreshRecovery} style={{ marginTop: 12 }}>Refresh status</button>
+      <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+        Permission Management · DEV recovery
+        {recoveryError ? ' · Status unavailable' : !recovery ? ' · Loading…' :
+          ' · ' + recovery.entries.filter(item => item.status === 'pending').length + ' pending / ' +
+          recovery.entries.filter(item => item.status !== 'pending').length + ' recoverable'}
+      </summary>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+        <button type="button" onClick={refreshRecovery}>Refresh status</button>
+        {recovery?.checkedAt && <span style={{ fontSize: 12, color: theme?.mutedText || '#94a3b8' }}>Last checked: {new Date(recovery.checkedAt).toLocaleTimeString()}</span>}
+      </div>
       <p style={{ margin: 0, fontSize: 13 }}>Read-only status from the same recovery journal as Discord /owner. Restore or reconcile permissions in Discord.</p>
       {recoveryError && <p role="alert" style={{ color: '#fca5a5', margin: 0 }}>{recoveryError}</p>}
       {!recoveryError && !recovery && <p style={{ margin: 0 }}>Loading recovery status…</p>}
