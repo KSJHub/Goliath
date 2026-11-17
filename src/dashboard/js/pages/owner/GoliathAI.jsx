@@ -31,6 +31,8 @@ function AIReply({ content }) {
 }
 export default function GoliathAI({ theme }) {
   const [status, setStatus] = useState(null);
+  const [recovery, setRecovery] = useState(null);
+  const [recoveryError, setRecoveryError] = useState('');
   const [health, setHealth] = useState(null);
   const [checkingHealth, setCheckingHealth] = useState(false);
   const [messages, setMessages] = useState(first);
@@ -64,6 +66,14 @@ export default function GoliathAI({ theme }) {
   const [readinessBusy, setReadinessBusy] = useState(false);
   const [operationReviews, setOperationReviews] = useState(null);
   const [operationReviewBusy, setOperationReviewBusy] = useState(false);
+  const refreshRecovery = () => api.request('/api/owner/ai/permission-recovery')
+    .then(value => { setRecovery(value); setRecoveryError(''); })
+    .catch(error => { setRecovery(null); setRecoveryError(error.message); });
+  useEffect(() => {
+    refreshRecovery();
+    const interval = setInterval(refreshRecovery, 30000);
+    return () => clearInterval(interval);
+  }, []);
   const bottom = useRef(null);
   const selectedGuildRef = useRef(selectedGuild);
   const blueprintRevisionRef = useRef(0);
@@ -565,6 +575,23 @@ export default function GoliathAI({ theme }) {
     finally { setBusy(false); }
   };
   return <section style={{ display: 'grid', gap: 16, maxWidth: 980, margin: '0 auto', color: theme?.cardText || '#e5e7eb' }}>
+    <div style={{ ...panel, display: 'grid', gap: 8 }} aria-label="Permission recovery status">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <strong>DEV permission recovery</strong>
+        <button type="button" onClick={refreshRecovery}>Refresh status</button>
+      </div>
+      <p style={{ margin: 0, fontSize: 13 }}>Read-only status from the same recovery journal as Discord /owner. Restore or reconcile permissions in Discord.</p>
+      {recoveryError && <p role="alert" style={{ color: '#fca5a5', margin: 0 }}>{recoveryError}</p>}
+      {!recoveryError && !recovery && <p style={{ margin: 0 }}>Loading recovery status…</p>}
+      {recovery && (recovery.entries.length === 0
+        ? <p style={{ margin: 0 }}>No active recovery records for your owner account.</p>
+        : recovery.entries.map((item, index) => <div key={item.kind + item.roleId + (item.channelId || '') + index} style={{ borderTop: '1px solid rgba(148,163,184,.2)', paddingTop: 8 }}>
+            <strong>{item.kind === 'role' ? 'Role' : 'Channel'} · {item.status === 'pending' ? 'Reconciliation required' : 'Recovery available'}</strong>
+            <div style={{ fontSize: 12, overflowWrap: 'anywhere' }}>Server: {item.guildId} · Role: {item.roleId}{item.channelId ? ' · Channel: ' + item.channelId : ''}</div>
+            <div style={{ fontSize: 12 }}>{item.status === 'pending' ? 'Pending until reconciled' : 'Expires: ' + new Date(item.expiresAt).toLocaleString()}</div>
+          </div>))}
+    </div>
+
     <header style={panel}>
       <h1 style={{ margin: '0 0 8px', fontSize: 28 }}>Goliath AI</h1>
       <p style={{ margin: 0, color: theme?.mutedText || '#94a3b8' }}>Developer-only · Global Discord auditing across DEV, BETA and PRODUCTION · Free local inference</p>
