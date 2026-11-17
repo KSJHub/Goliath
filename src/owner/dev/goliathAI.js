@@ -88,9 +88,9 @@ router.get('/permission-recovery', requirePrivateAI, (req, res) => {
     const visible = entries.filter(item => item && item.ownerId === ownerId &&
       ['role', 'channel'].includes(item.kind) &&
       ['pending', 'verified'].includes(item.status) &&
-      /^\\d{16,25}$/.test(String(item.guildId || '')) &&
-      /^\\d{16,25}$/.test(String(item.roleId || '')) &&
-      (item.kind !== 'channel' || /^\\d{16,25}$/.test(String(item.channelId || ''))) &&
+      /^\d{16,25}$/.test(String(item.guildId || '')) &&
+      /^\d{16,25}$/.test(String(item.roleId || '')) &&
+      (item.kind !== 'channel' || /^\d{16,25}$/.test(String(item.channelId || ''))) &&
       Number.isFinite(item.expiresAt) &&
       (item.status === 'pending' || item.expiresAt > Date.now()))
       .map(item => ({ kind: item.kind, status: item.status, guildId: item.guildId,
