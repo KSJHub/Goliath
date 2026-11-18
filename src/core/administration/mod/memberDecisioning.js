@@ -195,7 +195,7 @@ function buildChangeEmbed(member, result, trigger) {
 
   return new EmbedBuilder()
     .setColor(config.color)
-    .setTitle(`🧠 Intelligence Change • ${member.user.tag || member.user.username}`)
+    .setTitle(`${EMOJIS.BRAIN} Intelligence Change • ${member.user.tag || member.user.username}`)
     .setDescription(`${config.emoji} **${config.label}** • Risk **${result.after.riskScore}/100**\n\n${changeText}`)
     .addFields(
       { name: 'Why this score?', value: riskFactors.slice(0, 1024), inline: false },
