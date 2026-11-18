@@ -506,6 +506,8 @@ export default function GoliathAI({ theme }) {
       const result = await api.request('/api/owner/ai/category-rename-journal');
       if (!Array.isArray(result.entries)) throw new Error('Invalid rename history response.');
       setRenameJournal(result.entries);
+      const latestStatus = await api.request('/api/owner/ai/status');
+      setStatus(latestStatus);
     } catch (err) { setError(err.message); }
     finally { setRenameJournalBusy(false); }
   };
@@ -523,6 +525,11 @@ export default function GoliathAI({ theme }) {
       const history = await api.request('/api/owner/ai/category-rename-journal');
       if (!Array.isArray(history.entries)) throw new Error('Invalid refreshed history.');
       setRenameJournal(history.entries);
+      const latestStatus = await api.request('/api/owner/ai/status');
+      setStatus(latestStatus);
+      setRenameCandidate(null);
+      setRenameConfirmation('');
+      setAudit(null); setReadiness(null); setOperationReviews(null);
       setDraftNotice('DEV rename reconciliation: ' + result.status + ' — ' + result.currentName);
     } catch (err) { setError(err.message); }
     finally { setRenameJournalBusy(false); }
