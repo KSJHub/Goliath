@@ -683,7 +683,7 @@ async function handleMemberScanButton(i) {
 }
 
 async function showPunishmentModal(i, action, targetId) { if (!PUNISHMENT_ACTIONS.has(action)) return false; const target = await requireModeratableTarget(i, targetId, action); if (!target) return true; await i.showModal(buildPunishmentModal(action, target.id)); return true; }
-async function requestRemoveTimeout(i, targetId) { const target = await requireModeratableTarget(i, targetId, 'remove_timeout'); if (!target) return true; return createConfirmation(i, target.id, 'remove-timeout', {}, `✅ Remove timeout from **${target.user.tag}**?`); }
+async function requestRemoveTimeout(i, targetId) { const target = await requireModeratableTarget(i, targetId, 'remove_timeout'); if (!target) return true; return createConfirmation(i, target.id, 'remove-timeout', {}, `${EMOJIS.SUCCESS} Remove timeout from **${target.user.tag}**?`); }
 async function showQuarantineModal(i, targetId) {
   const target = await requireModeratableTarget(i, targetId, 'quarantine');
   if (!target) return true;
