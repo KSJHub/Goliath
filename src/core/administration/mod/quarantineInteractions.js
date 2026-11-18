@@ -139,7 +139,7 @@ async function securityMovedToAdmin(interaction, targetId, submitAttempt = false
     metadata: { submitAttempt },
   });
   return safeReply(interaction, {
-    content: '🚨 **Full Security Isolation has moved to `/admin`.** The `/mod` panel is for staff investigations only.',
+    content: `${EMOJIS.SECURITY_SIREN} **Full Security Isolation has moved to \`/admin\`.** The \`/mod\` panel is for staff investigations only.`,
     flags: 64,
   });
 }
@@ -410,7 +410,7 @@ async function openInvestigationAccess(interaction, targetId) {
 
   const embed = new Discord.EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🔐 Investigation Channel Access')
+    .setTitle(`${EMOJIS.PERMISSIONS} Investigation Channel Access`)
     .setDescription([
       `**Member:** ${target}`,
       '',
@@ -526,7 +526,7 @@ async function selectInvestigationAccessChannel(interaction) {
 
   if (String(auth.snapshot.interviewChannelId || '') === channelId) {
     return safeReply(interaction, {
-      content: 'ℹ️ The private investigation room is always available and does not need additional access.',
+      content: `${EMOJIS.INFO} The private investigation room is always available and does not need additional access.`,
       flags: 64,
     });
   }
@@ -647,7 +647,7 @@ async function changeInvestigationAccess(interaction, action) {
 
     const embed = new Discord.EmbedBuilder()
       .setColor(0x5865F2)
-      .setTitle('🔐 Investigation Channel Access')
+      .setTitle(`${EMOJIS.PERMISSIONS} Investigation Channel Access`)
       .setDescription([
         `**Member:** ${target}`,
         '',
@@ -842,7 +842,7 @@ async function removeQuarantine(interaction, targetId, options = {}) {
       metadata: { containmentMode: mode, caseId: snapshot.caseId || null },
     });
     return safeEditReply(interaction, {
-      content: '🚨 **Full Security Isolation can only be cleared from `/admin` by the server owner.**',
+      content: `${EMOJIS.SECURITY_SIREN} **Full Security Isolation can only be cleared from \`/admin\` by the server owner.**`,
       flags: 64,
     });
   }
