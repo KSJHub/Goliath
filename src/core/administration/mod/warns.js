@@ -248,7 +248,7 @@ async function handleEscalation({ guild, member, moderator, reason, previousStri
     if (escalation.action === 'ban') return applyBan({ guild, member, moderator, escalation, finalReason });
     return null;
   } catch (error) {
-    console.error('❌ Escalation error:', error);
+    console.error(`${EMOJIS.ERROR} Escalation error:`, error);
     recordModerationSystemEvent({ guildId: guild.id, actorId: moderator.id, event: 'moderation.escalation.failed', action: escalation.action, targetId: member.id, reason: error?.message || error, metadata: { sourceWarningCaseId, strikeScore: currentScore, threshold: escalation.threshold || null, stack: String(error?.stack || '').slice(0, 1500) } });
     return null;
   }
@@ -291,14 +291,14 @@ function removeWarningByCaseId(guildId, caseId, actorId = null) {
 async function getWarningContext({ guildId, userId, reason }) {
   let repeatInfo = { isRepeatPattern: false, repeatCount: 0, newlyTriggered: false, matchingCaseIds: [] };
   try { repeatInfo = getRepeatReasonInfo({ guildId, userId, reason }) || repeatInfo; }
-  catch (error) { console.error('❌ Warning repeat-reason check failed:', error); }
+  catch (error) { console.error(`${EMOJIS.ERROR} Warning repeat-reason check failed:`, error); }
   const profile = getActiveStrikeProfile(guildId, userId);
   return { count: profile.warningCount, strikeScore: profile.strikeScore, repeatInfo, nextEscalation: getNextEscalationPreview(guildId, userId) };
 }
 async function runWarningEscalation({ guild, member, moderator, reason, previousStrikeScore = null, sourceWarningCaseId = null }) {
   try { return await handleEscalation({ guild, member, moderator, reason, previousStrikeScore, sourceWarningCaseId }); }
   catch (error) {
-    console.error('❌ Warning escalation failed:', error);
+    console.error(`${EMOJIS.ERROR} Warning escalation failed:`, error);
     recordModerationSystemEvent({ guildId: guild?.id || 'system', actorId: moderator?.id || null, event: 'moderation.escalation.failed', targetId: member?.id || null, reason: error?.message || error, metadata: { sourceWarningCaseId, stack: String(error?.stack || '').slice(0, 1500) } });
     return null;
   }
@@ -323,7 +323,7 @@ async function showWarningModal(interaction, targetId) {
   return true;
 }
 async function showRemoveWarningModal(interaction, targetId) {
-  const allowed = await ensureActionAccess(interaction, 'remove_warning', '❌ No permission to remove warnings.');
+  const allowed = await ensureActionAccess(interaction, 'remove_warning', `${EMOJIS.ERROR} No permission to remove warnings.`);
   if (!allowed) return true;
   if (!targetId || targetId === 'none') return safeReply(interaction, ephemeralError('No user selected.'));
   await interaction.showModal(buildRemoveWarningModal(targetId));
@@ -417,11 +417,11 @@ async function submitWarning(interaction, target) {
       `${EMOJIS.TREND} Next: ${warningContext.nextEscalation}`,
     ];
     if (warningContext.repeatInfo.isRepeatPattern) extra.push(`${EMOJIS.REPEAT} Repeat reason detected (${warningContext.repeatInfo.repeatCount} matching active warnings)`);
-    if (escalatedCase) extra.push(`⚡ Auto escalation triggered: **${escalatedCase.action}** (Case #${escalatedCase.caseId})`);
-    await safeEditReply(interaction, { content: [`⚠️ Warned **${target.user.tag}** • Case #${modCase.caseId}`, ...extra].join('\n'), flags: 64 });
+    if (escalatedCase) extra.push(`${EMOJIS.AUTOMATION} Auto escalation triggered: **${escalatedCase.action}** (Case #${escalatedCase.caseId})`);
+    await safeEditReply(interaction, { content: [`${EMOJIS.WARNING} Warned **${target.user.tag}** • Case #${modCase.caseId}`, ...extra].join('\n'), flags: 64 });
     return { ok: true, target, modCase, warningContext, escalatedCase, strikeWeight };
   } catch (error) {
-    console.error('❌ Warn error:', error);
+    console.error(`${EMOJIS.ERROR} Warn error:`, error);
     await safeEditReply(interaction, ephemeralError('Failed to warn user.'));
     return { ok: false, target, error };
   }
