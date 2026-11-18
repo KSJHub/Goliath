@@ -19,9 +19,9 @@ function buildAutoModDMEmbed({ guild, rule, reason, action, messageContent, chan
     reference: `Rule • ${safeRule}`,
     status: 'Action Applied',
     fields: [
-      { name: '📍 Channel', value: channel ? `<#${channel.id}>` : 'Not available', inline: true },
-      { name: '🛡️ Action Taken', value: clean(action, 'Action taken', 1024), inline: true },
-      { name: '💬 Message Content', value: clean(messageContent, 'No message content recorded', 1000) },
+      { name: `${EMOJIS.CHANNELS} Channel`, value: channel ? `<#${channel.id}>` : 'Not available', inline: true },
+      { name: `${EMOJIS.SECURITY} Action Taken`, value: clean(action, 'Action taken', 1024), inline: true },
+      { name: `${EMOJIS.MESSAGES} Message Content`, value: clean(messageContent, 'No message content recorded', 1000) },
     ],
     reason: clean(reason, 'Rule triggered', 1024),
     issuedBy: 'Goliath AutoMod',
