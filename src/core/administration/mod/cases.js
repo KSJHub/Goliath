@@ -590,7 +590,7 @@ function buildCaseDetailButtons(modCase) {
   const pending = appeals.some(appeal => appeal.status === 'pending');
   const management = [];
   if (!inactive && isWarning) management.push(navigationButton(`mod_case_reverse_warning:${modCase.caseId}`, `${EMOJIS.REVERSED} Remove Warning`, ButtonStyle.Secondary));
-  if (!inactive && isTimeout) management.push(navigationButton(`mod_case_reverse_timeout:${modCase.caseId}`, '⏪ Clear Timeout', ButtonStyle.Secondary));
+  if (!inactive && isTimeout) management.push(navigationButton(`mod_case_reverse_timeout:${modCase.caseId}`, `${SHARED_EMOJIS.TIMEOUT} Clear Timeout`, ButtonStyle.Secondary));
   management.push(navigationButton(`mod_case_note:${modCase.caseId}`, hasNote ? `${EMOJIS.EDIT} Edit Note` : `${EMOJIS.NOTE} Add Note`, ButtonStyle.Primary));
   const appealButtons = [];
   if (!pending && appeals.length < MAX_APPEALS_PER_CASE && !inactive && APPEALABLE_ACTIONS.has(modCase.action)) appealButtons.push(navigationButton(`mod_case_appeal_submit:${modCase.caseId}`, `${SHARED_EMOJIS.USER_INVITES} Record Appeal`, ButtonStyle.Primary));
