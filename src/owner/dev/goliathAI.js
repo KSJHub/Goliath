@@ -843,6 +843,89 @@ router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, re
   }
 });
 
+// Explicitly gated first live mutation: a single reviewed DEV category rename.
+// The local model cannot invoke this route. It requires a human owner session,
+// an exact operation fingerprint, a fresh guild snapshot and a typed approval.
+// The feature flag defaults OFF until recovery and live testing are complete.
+let categoryRenameInProgress = false;
+router.post('/drafts/:id/apply-category-rename', requirePrivateAI, async (req, res) => {
+  if (localMode() !== 'DEV' || process.env.GOLIATH_AI_DEV_RENAME_ENABLED !== 'true')
+    return res.status(503).json({ error: 'DEV category rename execution is disabled.' });
+  if (categoryRenameInProgress) return res.status(409).json({ error: 'Another rename is in progress.' });
+  const sequence = req.body?.sequence;
+  const key = String(req.body?.operationKey || '');
+  if (!Number.isInteger(sequence) || sequence < 1 || sequence > 350 ||
+      !/^[a-f0-9]{64}$/.test(key) ||
+      req.body?.confirmation !== 'APPLY DEV CATEGORY RENAME')
+    return res.status(422).json({ error: 'Exact operation identity and typed confirmation required.' });
+  categoryRenameInProgress = true;
+  try {
+    const ownerId = String(req.session.user.id);
+    const draft = draftStore.loadDraft(String(req.params.id));
+    if (!draft || draft.environment !== 'DEV' || draft.createdBy !== ownerId)
+      return res.status(403).json({ error: 'Only the DEV draft creator can apply this change.' });
+    if (draft.review?.status !== 'reviewed' || draft.review.checkedBy !== ownerId ||
+        !draft.review.checkpointId || !Number.isFinite(Date.parse(draft.review.checkedAt)) ||
+        Date.parse(draft.review.checkedAt) > Date.now())
+      return res.status(409).json({ error: 'Draft requires a valid owner review checkpoint.' });
+    const audit = await getVerifiedAudit(req, 'DEV', draft.guildId);
+    const currentDigest = reportDigest(audit);
+    if (draft.auditDigest !== currentDigest)
+      return res.status(409).json({ error: 'Server changed since draft review.' });
+    const preview = planBlueprint(audit, draft.blueprint);
+    // Fail closed if the draft contains ANY other pending operation.
+    if (preview.operations.length !== 1 || sequence !== 1)
+      return res.status(422).json({ error: 'Execution requires a single-operation category rename draft.' });
+    const operation = preview.operations[0];
+    if (operation.kind !== 'rename_category' || operation.executable !== false ||
+        !SNOWFLAKE.test(String(operation.target?.id || '')) ||
+        typeof operation.before?.name !== 'string' ||
+        typeof operation.after?.name !== 'string' ||
+        !operation.after.name.trim() || operation.after.name.length > 100 ||
+        approvalLedger.operationKey({ draft, currentDigest, operation, sequence }) !== key)
+      return res.status(409).json({ error: 'Operation identity or proposed rename is invalid.' });
+    const manifest = buildTransactionManifest({ draft, audit, preview, currentDigest });
+    const simulation = simulateTransaction({ draft, audit, preview, currentDigest });
+    if (manifest.unavailable || manifest.warnings.length || !simulation.simulated ||
+        manifest.entries[0]?.issues?.length)
+      return res.status(409).json({ error: 'Transaction checks failed.' });
+    const capability = await getBotCapabilityEvidence(req, 'DEV', draft.guildId);
+    const preflight = buildCapabilityPreflight({ audit, operations: preview.operations, capability });
+    if (!preflight.permissionsVerified ||
+        preflight.operations[0]?.permission !== 'permitted-in-principle')
+      return res.status(409).json({ error: 'Bot permission preflight failed.' });
+    const review = approvalLedger.listReviews({ draft, currentDigest, operations: preview.operations })[0];
+    if (!review || review.needsAttention ||
+        !review.reviews.some(item => item.reviewerId === ownerId && item.decision === 'acknowledged'))
+      return res.status(409).json({ error: 'Owner operation acknowledgement is missing.' });
+    const guild = req.client?.guilds?.cache?.get(draft.guildId);
+    const channel = await guild?.channels?.fetch(operation.target.id);
+    if (!channel || channel.type !== 4 || channel.name !== operation.before.name)
+      return res.status(409).json({ error: 'Category changed before execution.' });
+    const me = await guild.members.fetchMe();
+    const { PermissionsBitField } = require('discord.js');
+    if (!me.permissions.has(PermissionsBitField.Flags.ManageChannels))
+      return res.status(403).json({ error: 'Manage Channels permission is missing.' });
+    // Fresh audit immediately before the write; no automatic retry.
+    if (reportDigest(await getVerifiedAudit(req, 'DEV', draft.guildId)) !== currentDigest)
+      return res.status(409).json({ error: 'Server changed during execution checks.' });
+    await channel.setName(operation.after.name, 'Goliath AI: explicitly approved DEV category rename');
+    const updated = await guild.channels.fetch(operation.target.id);
+    if (updated?.name !== operation.after.name)
+      return res.status(502).json({ error: 'Discord did not confirm the new category name; inspect manually.' });
+    console.info('[GoliathAI] DEV category rename applied', {
+      guildId: draft.guildId, categoryId: channel.id, ownerId,
+      from: operation.before.name, to: operation.after.name, draftId: draft.id
+    });
+    return res.json({ applied: true, environment: 'DEV', guildId: draft.guildId,
+      categoryId: channel.id, previousName: operation.before.name,
+      currentName: updated.name, draftId: draft.id });
+  } catch (error) {
+    console.error('[GoliathAI] DEV category rename failed:', error?.message);
+    return res.status(503).json({ error: 'Category rename failed or could not be verified. Inspect DEV before retrying.' });
+  } finally { categoryRenameInProgress = false; }
+});
+
 // Owner confirmation is recorded as an ephemeral intent, NOT an execution
 // authorisation. A future executor must implement separate single-use grants,
 // fresh state checks, recovery and an explicit feature switch.
