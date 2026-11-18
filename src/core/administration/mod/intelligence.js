@@ -420,7 +420,7 @@ function calculateRisk({ localSummary = {}, network = {}, watch = {}, behavior =
   add(watchCfg.risk, `${watchCfg.label} by Goliath intelligence`);
   if (behavior?.trend === 'increasing' && Number(behavior?.windows?.d30?.total || 0) >= 2) add(6, 'moderation activity is increasing over the last 30 days');
   score = Math.min(100, score);
-  const label = score >= 70 ? '🔴 High' : score >= 40 ? '🟠 Elevated' : score >= 20 ? '🟡 Moderate' : '🟢 Low';
+  const label = score >= 70 ? `${EMOJIS.STATUS_ALERT} High` : score >= 40 ? `${EMOJIS.SEVERITY_HIGH} Elevated` : score >= 20 ? `${EMOJIS.HEALTH_STABLE} Moderate` : `${EMOJIS.ACTIVE} Low`;
   return { score, label, reasons };
 }
 
@@ -508,16 +508,16 @@ async function decorateScan(interaction, target, report) {
   report.risk = context.risk;
 
   for (const field of [
-    '🪪 Identity & History',
-    '🏠 Membership & Access',
-    '⚖️ Moderation & Risk',
-    '🕘 Recent Cases',
-    '👁️ Investigation Intelligence',
-    '⚖️ Moderation Overview',
-    '🧠 Intelligence Summary',
-    '🌐 Network Reputation',
-    '📊 Behaviour Pattern',
-    '🔗 Verified Identity Links',
+    `${EMOJIS.STAFF_HELPER} Identity & History`,
+    `${EMOJIS.HOME} Membership & Access`,
+    `${EMOJIS.JUSTICE} Moderation & Risk`,
+    `${EMOJIS.HISTORY} Recent Cases`,
+    `${EMOJIS.WELCOME_PREVIEW} Investigation Intelligence`,
+    `${EMOJIS.JUSTICE} Moderation Overview`,
+    `${EMOJIS.BRAIN} Intelligence Summary`,
+    `${EMOJIS.AUTOMOD_DOMAINS} Network Reputation`,
+    `${EMOJIS.CHART} Behaviour Pattern`,
+    `${EMOJIS.LINK} Verified Identity Links`,
   ]) removeField(report.embed, field);
 
   const history = context.guildHistory || [];
@@ -535,7 +535,7 @@ async function decorateScan(interaction, target, report) {
   const investigationWatch = report.investigation?.watched ? 'On' : 'Off';
 
   report.embed
-    .setTitle(`🧠 Member Intelligence • ${target.user.tag}`)
+    .setTitle(`${EMOJIS.BRAIN} Member Intelligence • ${target.user.tag}`)
     .setDescription([
       `**Target:** ${target.user} • ID **${target.id}**`,
       'Evidence-led member overview for authorised management. Key intelligence and investigation state are summarised below.',
@@ -551,7 +551,7 @@ async function decorateScan(interaction, target, report) {
   } else {
     riskLines.push('**No verified risk factors**');
   }
-  setOrReplaceField(report.embed, '🚦 Status & Risk', riskLines.join('\n'));
+  setOrReplaceField(report.embed, `${EMOJIS.STATUS} Status & Risk`, riskLines.join('\n'));
 
   const identity = context.identity || {};
   const currentIdentityValues = new Set([
@@ -581,7 +581,7 @@ async function decorateScan(interaction, target, report) {
     ? `**${identityChangeCount} change${identityChangeCount === 1 ? '' : 's'}**${latestIdentityChange ? ` • Last ${discordTime(latestIdentityChange, 'R')}` : ''}`
     : '**No recorded changes**';
 
-  setOrReplaceField(report.embed, '👤 Member', [
+  setOrReplaceField(report.embed, `${EMOJIS.USER} Member`, [
     `Username **${target.user.username}** • Display **${target.displayName || target.user.username}**`,
     `Created ${discordTime(target.user.createdAt || target.user.createdTimestamp, 'F')} • Joined ${discordTime(target.joinedAt || target.joinedTimestamp, 'F')}`,
     `Roles **${roles.length}** • Elevated permissions **${elevated.length ? elevated.join(', ') : 'None'}**`,
@@ -589,7 +589,7 @@ async function decorateScan(interaction, target, report) {
     `Identity: ${identityStatus}`,
   ].join('\n'));
 
-  setOrReplaceField(report.embed, '⚖️ Moderation', [
+  setOrReplaceField(report.embed, `${EMOJIS.JUSTICE} Moderation`, [
     `Cases **${report.cases?.length || 0}** • Warnings **${localSummary.warningCount}** • Timeouts **${localSummary.timeouts}** • Bans **${localSummary.bans}**`,
     latestCase
       ? `Latest: **#${latestCase.caseId} • ${latestCase.action} • ${latestCase.status || 'active'}** — ${String(latestCase.reason || 'No reason').slice(0, 180)}`
@@ -597,15 +597,15 @@ async function decorateScan(interaction, target, report) {
   ].join('\n'));
 
   const investigationLines = [
-    `Watch **${report.investigation?.watched ? '🟢' : '⚪'} ${investigationWatch}** • Notes **${report.investigation?.notes?.length || 0}**`,
+    `Watch **${report.investigation?.watched ? EMOJIS.ACTIVE : EMOJIS.STATUS_UNKNOWN} ${investigationWatch}** • Notes **${report.investigation?.notes?.length || 0}**`,
     `Correlations **${report.persistentLinks?.length || 0}** • Verified Links **${context.confirmedLinks?.length || 0}**`,
   ];
   if (report.suspects?.length) investigationLines.push(`Suspected accounts **${report.suspects.length} match(es)** — open evidence/history before drawing a conclusion.`);
-  setOrReplaceField(report.embed, '🔎 Investigation', investigationLines.join('\n'));
+  setOrReplaceField(report.embed, `${EMOJIS.INVESTIGATE} Investigation`, investigationLines.join('\n'));
 
   const behaviourTrend = String(behavior.trend || 'stable').toLowerCase();
   const behaviourLabel = behaviourTrend ? `${behaviourTrend.charAt(0).toUpperCase()}${behaviourTrend.slice(1)}` : 'Stable';
-  const behaviourIcon = behaviourTrend === 'increasing' ? '🟠' : '🟢';
+  const behaviourIcon = behaviourTrend === 'increasing' ? EMOJIS.SEVERITY_HIGH : EMOJIS.ACTIVE;
   const externalCount = Number(reputation.verifiedExternal || 0) + Number(reputation.submitted || 0) + Number(reputation.unverified || 0);
   const networkLines = [
     `Guilds **${history.length} observed • ${currentGuilds} current • ${formerGuilds} former**`,
@@ -615,13 +615,13 @@ async function decorateScan(interaction, target, report) {
     networkLines.push(`External **${reputation.verifiedExternal || 0} verified • ${reputation.submitted || 0} submitted • ${reputation.unverified || 0} unverified**`);
   }
   networkLines.push(`Behaviour **${behaviourIcon} ${behaviourLabel} • ${behavior.windows?.d30?.total || 0} cases / 30d**`);
-  setOrReplaceField(report.embed, '🌐 Network & Behaviour', networkLines.join('\n'));
+  setOrReplaceField(report.embed, `${EMOJIS.AUTOMOD_DOMAINS} Network & Behaviour`, networkLines.join('\n'));
 
   const components = [
     new Discord.ActionRowBuilder().addComponents(
       new Discord.UserSelectMenuBuilder()
         .setCustomId('mod_scan_user_select')
-        .setPlaceholder('👤 Select another member to investigate')
+        .setPlaceholder(`${EMOJIS.USER} Select another member to investigate`)
         .setMinValues(1)
         .setMaxValues(1)
     ),
@@ -679,7 +679,7 @@ function guildHistoryEmbed(target, context, client) {
   const guildRows = (context.guildHistory || []).slice(0, 12).map((item) => {
     const guild = client?.guilds?.cache?.get?.(item.guildId);
     const name = guild?.name || context.auditReport?.guilds?.find?.((entry) => String(entry.guildId) === String(item.guildId))?.guildName || `Guild ${item.guildId}`;
-    const status = item.present ? '🟢 Current' : '⚪ Former';
+    const status = item.present ? `${EMOJIS.ACTIVE} Current` : `${EMOJIS.STATUS_UNKNOWN} Former`;
     const mod = context.network?.rows?.find?.((entry) => String(entry.guildId) === String(item.guildId));
     return `**${name}** • ${status}\nFirst ${discordTime(item.firstSeenAt)} • Last ${discordTime(item.lastSeenAt)}${mod ? `\nCases **${mod.cases}** • Bans **${mod.bans}** • Timeouts **${mod.timeouts}**` : ''}`;
   });
@@ -695,7 +695,7 @@ function guildHistoryEmbed(target, context, client) {
     `**Goliath-Observed Guild History**\n${guildRows.length ? guildRows.join('\n\n') : 'No stored Goliath guild-presence history yet.'}`,
     `**External / Submitted Intelligence**\n${externalRows.length ? externalRows.join('\n\n') : 'No external or submitted reputation records are stored.'}`,
   ];
-  return new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`🌐 Network Reputation • ${target.user.tag}`).setDescription(sections.join('\n\n').slice(0, 4000)).setFooter({ text: 'Verified, submitted and unverified information are kept separate. No external report automatically blacklists a member.' }).setTimestamp();
+  return new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.AUTOMOD_DOMAINS} Network Reputation • ${target.user.tag}`).setDescription(sections.join('\n\n').slice(0, 4000)).setFooter({ text: 'Verified, submitted and unverified information are kept separate. No external report automatically blacklists a member.' }).setTimestamp();
 }
 function reputationRows(targetId, canManage = false) {
   const components = [];
@@ -724,7 +724,7 @@ function identityEmbed(target, context) {
     `**Known global/display names**\n${[...(identity.globalNames || []), ...(identity.displayNames || [])].length ? [...new Set([...(identity.globalNames || []), ...(identity.displayNames || [])])].slice(0, 20).map((name) => `\`${name}\``).join(' • ') : 'None recorded.'}`,
     `**Avatar history:** ${identity.avatarHashes?.length || 0} distinct stored hash(es)`,
   ];
-  return new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`🪪 Identity History • ${target.user.tag}`).setDescription(lines.join('\n\n').slice(0, 4000)).setFooter({ text: 'Built from observations Goliath legitimately captured.' }).setTimestamp();
+  return new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.STAFF_HELPER} Identity History • ${target.user.tag}`).setDescription(lines.join('\n\n').slice(0, 4000)).setFooter({ text: 'Built from observations Goliath legitimately captured.' }).setTimestamp();
 }
 function behaviorEmbed(target, context) {
   const b = context.behavior; const lines = [];
@@ -732,7 +732,7 @@ function behaviorEmbed(target, context) {
     lines.push(`**${label}** • ${window.total} case(s)\nWarn ${window.counts.warn} • Timeout ${window.counts.timeout} • Kick ${window.counts.kick} • Ban ${window.counts.ban} • Moderators ${window.uniqueModerators} • Closed ${window.reversed} • Appeals ${window.appeals}`);
   }
   lines.push(`**Activity Trend:** ${String(b.trend).toUpperCase()} • last 30d ${b.windows.d30.total} vs previous 30d ${b.prior30}`);
-  return new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`📊 Moderation Behaviour • ${target.user.tag}`).setDescription(lines.join('\n\n').slice(0, 4000)).setTimestamp();
+  return new Discord.EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.CHART} Moderation Behaviour • ${target.user.tag}`).setDescription(lines.join('\n\n').slice(0, 4000)).setTimestamp();
 }
 function watchlistEmbed(target, context) {
   const watch = context.watch; const cfg = WATCH_STATES[watch.state] || WATCH_STATES.clear; const audit = getWatchAudit(target.id, 5);
@@ -786,16 +786,16 @@ async function handleInteraction(interaction, { ensureCapability, canCapability 
   const parts = id.split(':'); const action = parts[0]; const targetId = parts[1];
   if (!targetId) return false;
   const target = await resolveTarget(interaction, targetId);
-  if (!target) { await safeReply(interaction, { content: '❌ Could not find that member in this server.', flags: 64 }); return true; }
+  if (!target) { await safeReply(interaction, { content: `${EMOJIS.ERROR} Could not find that member in this server.`, flags: 64 }); return true; }
   const need = async (capability, message) => typeof ensureCapability === 'function' ? ensureCapability(interaction, capability, message) : true;
 
   if (action === 'mod_intel_watch_set') {
-    if (!(await need('scan_watch', '❌ You do not have permission to manage intelligence watchlist status.'))) return true;
+    if (!(await need('scan_watch', `${EMOJIS.ERROR} You do not have permission to manage intelligence watchlist status.`))) return true;
     const state = parts[2]; if (!WATCH_STATES[state]) return true;
     await interaction.showModal(watchModal(targetId, state)); return true;
   }
   if (action === 'mod_intel_watch_submit' && interaction.isModalSubmit?.()) {
-    if (!(await need('scan_watch', '❌ You do not have permission to manage intelligence watchlist status.'))) return true;
+    if (!(await need('scan_watch', `${EMOJIS.ERROR} You do not have permission to manage intelligence watchlist status.`))) return true;
     const state = parts[2]; if (!WATCH_STATES[state]) return true;
     const reason = String(interaction.fields.getTextInputValue('reason') || '').trim();
     const category = String(interaction.fields.getTextInputValue('category') || '').trim() || null;
@@ -810,17 +810,17 @@ async function handleInteraction(interaction, { ensureCapability, canCapability 
   }
 
   if (action === 'mod_intel_watchlist') {
-    if (!(await need('scan_network', '❌ You do not have permission to view Goliath intelligence.'))) return true;
+    if (!(await need('scan_network', `${EMOJIS.ERROR} You do not have permission to view Goliath intelligence.`))) return true;
     const canManage = typeof canCapability === 'function' ? Boolean(canCapability(interaction, 'scan_watch')) : false;
     const context = await buildContext(interaction.client, target, {});
     await safeUpdate(interaction, { content: null, embeds: [watchlistEmbed(target, context)], components: watchlistRows(targetId, canManage) }); return true;
   }
   if (action === 'mod_intel_reputation_add') {
-    if (!(await need('scan_links', '❌ You do not have permission to add external intelligence records.'))) return true;
+    if (!(await need('scan_links', `${EMOJIS.ERROR} You do not have permission to add external intelligence records.`))) return true;
     await interaction.showModal(reputationModal(targetId)); return true;
   }
   if (action === 'mod_intel_reputation_submit' && interaction.isModalSubmit?.()) {
-    if (!(await need('scan_links', '❌ You do not have permission to add external intelligence records.'))) return true;
+    if (!(await need('scan_links', `${EMOJIS.ERROR} You do not have permission to add external intelligence records.`))) return true;
     try {
       const record = addReputationRecord({
         userId: targetId,
@@ -843,28 +843,28 @@ async function handleInteraction(interaction, { ensureCapability, canCapability 
       const context = await buildContext(interaction.client, target, {});
       await safeUpdate(interaction, { content: null, embeds: [guildHistoryEmbed(target, context, interaction.client)], components: [reputationRows(targetId, true)] });
     } catch (error) {
-      await safeReply(interaction, { content: `❌ ${String(error?.message || error).slice(0, 1500)}`, flags: 64 });
+      await safeReply(interaction, { content: `${EMOJIS.ERROR} ${String(error?.message || error).slice(0, 1500)}`, flags: 64 });
     }
     return true;
   }
   if (action === 'mod_intel_guilds') {
-    if (!(await need('scan_network', '❌ You do not have permission to view cross-guild intelligence.'))) return true;
+    if (!(await need('scan_network', `${EMOJIS.ERROR} You do not have permission to view cross-guild intelligence.`))) return true;
     const canManage = typeof canCapability === 'function' ? Boolean(canCapability(interaction, 'scan_links')) : false;
     const context = await buildContext(interaction.client, target, {});
     await safeUpdate(interaction, { content: null, embeds: [guildHistoryEmbed(target, context, interaction.client)], components: [reputationRows(targetId, canManage)] }); return true;
   }
   if (action === 'mod_intel_risk') {
-    if (!(await need('scan_network', '❌ You do not have permission to view intelligence risk details.'))) return true;
+    if (!(await need('scan_network', `${EMOJIS.ERROR} You do not have permission to view intelligence risk details.`))) return true;
     const context = await buildContext(interaction.client, target, {});
     await safeUpdate(interaction, { content: null, embeds: [riskEmbed(target, context)], components: [backRow(targetId)] }); return true;
   }
   if (action === 'mod_intel_identity') {
-    if (!(await need('scan_history', '❌ You do not have permission to view identity history.'))) return true;
+    if (!(await need('scan_history', `${EMOJIS.ERROR} You do not have permission to view identity history.`))) return true;
     const context = await buildContext(interaction.client, target, {});
     await safeUpdate(interaction, { content: null, embeds: [identityEmbed(target, context)], components: [backRow(targetId)] }); return true;
   }
   if (action === 'mod_intel_behavior') {
-    if (!(await need('scan_network', '❌ You do not have permission to view moderation behaviour intelligence.'))) return true;
+    if (!(await need('scan_network', `${EMOJIS.ERROR} You do not have permission to view moderation behaviour intelligence.`))) return true;
     const context = await buildContext(interaction.client, target, {});
     await safeUpdate(interaction, { content: null, embeds: [behaviorEmbed(target, context)], components: [backRow(targetId)] }); return true;
   }
