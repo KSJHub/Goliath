@@ -235,8 +235,8 @@ async function notifyInvestigationManagement(channel, memberId, leadId = null, o
   const pingRoles = roleIds.filter(id => guild.roles.cache.get(id)?.mentionable || (channel.permissionsFor?.(bot) || bot.permissions).has(PermissionFlagsBits.MentionEveryone));
   await channel.send({
     content: options.invitationSelection === true
-      ? `🔔 **Investigation room invitation**\n${[...roleIds.map(id => `<@&${id}>`), ...users.map(id => `<@${id}>`)].join(' ')}\nPlease join the investigation room for <@${memberId}>.${pingRoles.length < roleIds.length ? '\nSome selected roles cannot be pinged with my current permissions.' : ''}`
-      : `🔔 **Management review requested**\n${[...roleIds.map(id => `<@&${id}>`), ...users.map(id => `<@${id}>`)].join(' ')}\nPlease join this room to review the investigation for <@${memberId}>.${pingRoles.length < roleIds.length ? '\nSome management roles cannot be pinged with my current Discord permissions.' : ''}`,
+      ? `${EMOJIS.BELL} **Investigation room invitation**\n${[...roleIds.map(id => `<@&${id}>`), ...users.map(id => `<@${id}>`)].join(' ')}\nPlease join the investigation room for <@${memberId}>.${pingRoles.length < roleIds.length ? '\nSome selected roles cannot be pinged with my current permissions.' : ''}`
+      : `${EMOJIS.BELL} **Management review requested**\n${[...roleIds.map(id => `<@&${id}>`), ...users.map(id => `<@${id}>`)].join(' ')}\nPlease join this room to review the investigation for <@${memberId}>.${pingRoles.length < roleIds.length ? '\nSome management roles cannot be pinged with my current Discord permissions.' : ''}`,
     allowedMentions: { parse: [], roles: pingRoles, users },
   });
   return { roleIds, pingedRoleIds: pingRoles, userIds: users };
@@ -268,11 +268,11 @@ function buildInvestigationRoomPanel(member, channelId, options = {}) {
     .setTitle(`${EMOJIS.INVESTIGATE} Private Investigation Room`)
     .setDescription([`Hi ${member}. This private room has been opened while the moderation team reviews a concern involving your account.`, '', '**This is not a final decision or punishment.** You can continue speaking with the management team here while the review is active.'].join('\n'))
     .addFields(
-      ...(options.investigationMemberIds?.length ? [{ name: '👥 Investigation members', value: options.investigationMemberIds.map(id => `<@${id}>`).join(', '), inline: false }, { name: '👤 These controls apply to', value: `<@${member.id}> • Release affects this member only.`, inline: false }] : []),
-      { name: '📋 Why this room was opened', value: String(options.reason || 'No reason provided').slice(0, 1024), inline: false },
-      { name: '🧭 What happens next', value: '• Management will review the available information.\n• You may provide context or ask questions in this room.\n• You will be told when the investigation is concluded or moved to the next stage.', inline: false },
-      { name: '👤 Lead investigator', value: leadId ? `<@${leadId}>` : 'An authorised member of the moderation team', inline: true },
-      { name: '💬 Your access', value: 'You can read and reply in this room while the investigation is active.', inline: true },
+      ...(options.investigationMemberIds?.length ? [{ name: `${EMOJIS.MEMBERS} Investigation members`, value: options.investigationMemberIds.map(id => `<@${id}>`).join(', '), inline: false }, { name: `${EMOJIS.USER} These controls apply to`, value: `<@${member.id}> • Release affects this member only.`, inline: false }] : []),
+      { name: `${EMOJIS.CLIPBOARD} Why this room was opened`, value: String(options.reason || 'No reason provided').slice(0, 1024), inline: false },
+      { name: `${EMOJIS.USER_HELP_NAVIGATION} What happens next`, value: '• Management will review the available information.\n• You may provide context or ask questions in this room.\n• You will be told when the investigation is concluded or moved to the next stage.', inline: false },
+      { name: `${EMOJIS.USER} Lead investigator`, value: leadId ? `<@${leadId}>` : 'An authorised member of the moderation team', inline: true },
+      { name: `${EMOJIS.MESSAGES} Your access`, value: 'You can read and reply in this room while the investigation is active.', inline: true },
     )
     .setFooter({ text: 'Private Moderation Review' })
     .setTimestamp();
