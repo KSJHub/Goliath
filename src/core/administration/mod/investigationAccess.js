@@ -1,5 +1,6 @@
 'use strict';
 
+const { EMOJIS } = require('../../guild/goliathNavigation');
 const guildManager = require('../../guild/guildManager');
 const { getQuarantineState, getQuarantineMode, QUARANTINE_MODES } = require('../../security/protection/quarantine');
 const audit = require('../../../owner/auditIntelligence/auditIntelligence');
@@ -34,7 +35,7 @@ async function logAccessChange(interaction, target, action, channel, beforeIds, 
     category: 'goliath',
     action: action === 'add' ? 'create' : action === 'remove' ? 'delete' : 'update',
     title: actionLabels[action] || 'Investigation Access Changed',
-    icon: '🔒',
+    icon: EMOJIS.LOCK,
     guild: interaction.guild,
     channel: channel || interaction.channel || null,
     user: target.user,
