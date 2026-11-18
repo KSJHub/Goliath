@@ -1342,6 +1342,15 @@ router.post('/chat', requirePrivateAI, async (req, res) => {
           target: String(f.target?.name || '').slice(0, 50),
           finding: String(f.message || '').slice(0, 125)
         }));
+      // The local model has a 2,048-token context window. A full inventory of
+      // 35 channels plus chat history can overflow it. Keep a compact, grouped
+      // sample while retaining exact counts and clear truncation metadata.
+      const channels = Array.isArray(audit.channels) ? audit.channels : [];
+      const categories = channels.filter(channel => channel.type === 4);
+      const sample = [
+        ...categories.slice(0, 8),
+        ...channels.filter(channel => channel.type !== 4).slice(0, 12)
+      ];
       serverContext = JSON.stringify({
         environment,
         guildName: String(audit.guild.name).slice(0, 80),
@@ -1352,16 +1361,14 @@ router.post('/chat', requirePrivateAI, async (req, res) => {
         findings,
         findingsTotal: audit.analysis?.findings?.length || 0,
         findingLimit: 4,
-        // Give the assistant a bounded, factual channel inventory so it can
-        // help finish the actual server rather than inventing channel names.
-        channelInventory: (audit.channels || []).slice(0, 35).map(channel => ({
+        channelInventory: sample.map(channel => ({
           id: String(channel.id),
-          name: String(channel.name || '').slice(0, 60),
+          name: String(channel.name || '').slice(0, 45),
           type: channel.type,
           parentId: channel.parentId || null
         })),
-        channelInventoryTotal: audit.channels?.length || 0,
-        channelInventoryTruncated: (audit.channels?.length || 0) > 35
+        channelInventoryTotal: channels.length,
+        channelInventoryTruncated: sample.length < channels.length
       });
     } catch (error) {
       return res.status(503).json({ error: 'Unable to load server context for AI chat.' });
