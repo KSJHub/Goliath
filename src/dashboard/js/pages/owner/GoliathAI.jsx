@@ -66,13 +66,29 @@ export default function GoliathAI({ theme }) {
   const [readinessBusy, setReadinessBusy] = useState(false);
   const [operationReviews, setOperationReviews] = useState(null);
   const [operationReviewBusy, setOperationReviewBusy] = useState(false);
-  const refreshRecovery = () => api.request('/api/owner/ai/permission-recovery')
-    .then(value => { setRecovery(value); setRecoveryError(''); })
-    .catch(error => { setRecovery(null); setRecoveryError(error.message); });
+  const recoveryRequestRef = useRef(0);
+  const refreshRecovery = () => {
+    const requestId = ++recoveryRequestRef.current;
+    return api.request('/api/owner/ai/permission-recovery')
+      .then(value => {
+        if (requestId !== recoveryRequestRef.current) return;
+        if (!value || !Array.isArray(value.entries) || !value.entries.every(item =>
+          ['role', 'channel'].includes(item.kind) && ['pending', 'verified'].includes(item.status))) {
+          throw new Error('Invalid permission recovery response.');
+        }
+        setRecovery(value);
+        setRecoveryError('');
+      })
+      .catch(error => {
+        if (requestId !== recoveryRequestRef.current) return;
+        setRecovery(null);
+        setRecoveryError(error.message);
+      });
+  };
   useEffect(() => {
     refreshRecovery();
     const interval = setInterval(refreshRecovery, 30000);
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); recoveryRequestRef.current += 1; };
   }, []);
   const bottom = useRef(null);
   const selectedGuildRef = useRef(selectedGuild);
@@ -597,7 +613,7 @@ export default function GoliathAI({ theme }) {
         Permission Management · DEV recovery
         {recoveryError ? ' · Status unavailable' : !recovery ? ' · Loading…' :
           ' · ' + recovery.entries.filter(item => item.status === 'pending').length + ' pending / ' +
-          recovery.entries.filter(item => item.status !== 'pending').length + ' recoverable'}
+          recovery.entries.filter(item => item.status === 'verified').length + ' recoverable'}
       </summary>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
         <button type="button" onClick={refreshRecovery}>Refresh status</button>
