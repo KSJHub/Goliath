@@ -69,6 +69,8 @@ export default function GoliathAI({ theme }) {
   const [renameCandidate, setRenameCandidate] = useState(null);
   const [renameConfirmation, setRenameConfirmation] = useState('');
   const [renameBusy, setRenameBusy] = useState(false);
+  const [renameJournal, setRenameJournal] = useState([]);
+  const [renameJournalBusy, setRenameJournalBusy] = useState(false);
   const recoveryRequestRef = useRef(0);
   const refreshRecovery = () => {
     const requestId = ++recoveryRequestRef.current;
@@ -497,6 +499,34 @@ export default function GoliathAI({ theme }) {
     }
     finally { setReadinessBusy(false); }
   };
+  const refreshRenameJournal = async () => {
+    if (renameJournalBusy) return;
+    setRenameJournalBusy(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/category-rename-journal');
+      if (!Array.isArray(result.entries)) throw new Error('Invalid rename history response.');
+      setRenameJournal(result.entries);
+    } catch (err) { setError(err.message); }
+    finally { setRenameJournalBusy(false); }
+  };
+  const reconcileRename = async (entry) => {
+    if (renameJournalBusy || entry.status !== 'pending' ||
+        !window.confirm('Verify the current DEV Discord category name? This will not rename anything.')) return;
+    setRenameJournalBusy(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/category-rename-journal/' +
+        encodeURIComponent(entry.id) + '/reconcile', {
+        method: 'POST', body: JSON.stringify({ confirmation: 'VERIFY DEV RENAME STATE' })
+      });
+      if (!result.reconciled || result.guildId !== entry.guildId ||
+          result.categoryId !== entry.categoryId) throw new Error('Recovery response mismatch.');
+      const history = await api.request('/api/owner/ai/category-rename-journal');
+      if (!Array.isArray(history.entries)) throw new Error('Invalid refreshed history.');
+      setRenameJournal(history.entries);
+      setDraftNotice('DEV rename reconciliation: ' + result.status + ' — ' + result.currentName);
+    } catch (err) { setError(err.message); }
+    finally { setRenameJournalBusy(false); }
+  };
   const inspectRenameCandidate = async (id) => {
     if (!audit || audit.environment !== 'DEV' || renameBusy) return;
     const selected = String(audit.environment) + ':' + String(audit.guild.id);
@@ -802,6 +832,19 @@ export default function GoliathAI({ theme }) {
                 </div>
               </div>
             )}
+            <details style={{ marginTop: 12 }}>
+              <summary>DEV category rename history and recovery</summary>
+              <button type="button" disabled={renameJournalBusy} onClick={refreshRenameJournal}>
+                {renameJournalBusy ? 'Checking…' : 'Refresh execution history'}
+              </button>
+              {renameJournal.map(entry => <div key={entry.id}
+                style={{ borderTop: '1px solid rgba(148,163,184,.25)', padding: '8px 0' }}>
+                <strong>{entry.status}</strong> · {entry.previousName} → {entry.proposedName}
+                <p style={{ fontSize: 12 }}>Guild {entry.guildId} · Category {entry.categoryId} · {entry.updatedAt}</p>
+                {entry.status === 'pending' && <button type="button" disabled={renameJournalBusy}
+                  onClick={() => reconcileRename(entry)}>Verify against Discord</button>}
+              </div>)}
+            </details>
             {renameCandidate && audit?.environment === 'DEV' &&
               String(audit.guild.id) === renameCandidate.guildId && <div style={{ border: '1px solid #64748b', borderRadius: 10, padding: 12, marginTop: 12 }}>
                 <h4 style={{ marginTop: 0 }}>DEV category rename — explicit owner approval</h4>
