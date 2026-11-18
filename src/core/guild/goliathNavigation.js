@@ -65,6 +65,7 @@ const EMOJIS = Object.freeze({
   SCROLL: '📜',
   SERVER_CASTLE: '🏰',
   SECURITY_SIREN: '🚨',
+  BRAIN: '🧠',
   STAFF_NONE: '🚫',
   STAFF_HELPER: '🪪',
   STAFF_JUNIOR_MOD: '🗝️',
