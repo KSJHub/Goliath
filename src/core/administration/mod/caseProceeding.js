@@ -376,7 +376,7 @@ function buildReviewBriefPage(interaction, modCase) {
   const judgeAuthority = isJudge(interaction);
   const assignedToOther = proceeding.reviewingAdminId && proceeding.reviewingAdminId !== interaction.user.id;
   const controls = [];
-  if (proceeding.stage === 'review' && !proceeding.reviewingAdminId) controls.push(button(`mod_proceeding_claim_review:${modCase.caseId}`, 'Claim Review', '✋', ButtonStyle.Primary, !judgeAuthority));
+  if (proceeding.stage === 'review' && !proceeding.reviewingAdminId) controls.push(button(`mod_proceeding_claim_review:${modCase.caseId}`, 'Claim Review', EMOJIS.JUSTICE, ButtonStyle.Primary, !judgeAuthority));
   if (proceeding.stage === 'review' && proceeding.reviewingAdminId === interaction.user.id) {
     controls.push(button(`mod_proceeding_decide:${modCase.caseId}`, 'Record Decision', EMOJIS.JUSTICE, ButtonStyle.Danger, !verified.length));
     controls.push(button(`mod_proceeding_return:${modCase.caseId}`, 'Return for Work', EMOJIS.WELCOME_INHERIT, ButtonStyle.Secondary));
@@ -419,7 +419,7 @@ function buildRecordHistoryPage(modCase) {
     .setTitle(`${EMOJIS.FAQ_BOOKS} Official Record History • Case #${modCase.caseId}`)
     .setDescription('Decision, publication and appeal history for this case. Internal evidence and private staff notes are intentionally excluded.')
     .addFields(
-      { name: '👨‍⚖️ Decision History', value: decisionLines.join('\n\n').slice(0, 1024), inline: false },
+      { name: `${EMOJIS.JUSTICE} Decision History`, value: decisionLines.join('\n\n').slice(0, 1024), inline: false },
       { name: `${EMOJIS.SCROLL} Publication Revisions`, value: publicationLines.join('\n\n').slice(0, 1024), inline: false },
       { name: `${EMOJIS.JUSTICE} Appeal History`, value: appealLines.join('\n\n').slice(0, 1024), inline: false },
     )
