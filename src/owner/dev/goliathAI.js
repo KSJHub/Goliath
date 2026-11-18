@@ -60,17 +60,26 @@ function requirePrivateAI(req, res, next) {
   next();
 }
 // Each route enforces its own identity or loopback-service access. Never grant one via the other.
-router.get('/status', requirePrivateAI, (_req, res) => res.json({
-  enabled: isEnabled(),
-  configured: isEnabled(),
-  devCategoryRenameEnabled: isEnabled() && process.env.GOLIATH_AI_DEV_RENAME_ENABLED === 'true',
-  verified: false,
-  verificationRequired: 'POST /self-test',
-  backend: 'local',
-  model: String(process.env.GOLIATH_AI_MODEL || 'local-model').slice(0, 80),
-  notice: isEnabled() ? 'Local inference enabled, but generation has not been verified by this status endpoint. Run the private self-test.' :
-    'AI is disabled until the local model is installed and GOLIATH_AI_ENABLED=true is set in DEV.'
-}));
+router.get('/status', requirePrivateAI, (_req, res) => {
+  let renameRecoveryBlocked = true;
+  let renameRecoveryError = null;
+  try { renameRecoveryBlocked = readRenameJournal().some(item => item.status === 'pending'); }
+  catch { renameRecoveryError = 'DEV rename journal unavailable or invalid.'; }
+  return res.json({
+    enabled: isEnabled(),
+    configured: isEnabled(),
+    devCategoryRenameEnabled: isEnabled() &&
+      process.env.GOLIATH_AI_DEV_RENAME_ENABLED === 'true' && !renameRecoveryBlocked,
+    devCategoryRenameConfigured: process.env.GOLIATH_AI_DEV_RENAME_ENABLED === 'true',
+    renameRecoveryBlocked, renameRecoveryError,
+    verified: false,
+    verificationRequired: 'POST /self-test',
+    backend: 'local',
+    model: String(process.env.GOLIATH_AI_MODEL || 'local-model').slice(0, 80),
+    notice: isEnabled() ? 'Local inference enabled, but generation has not been verified by this status endpoint. Run the private self-test.' :
+      'AI is disabled until the local model is installed and GOLIATH_AI_ENABLED=true is set in DEV.'
+  });
+});
 
 // Read-only view of the same DEV journal used by Discord /owner.
 // Never expose permission bitfields or another owner's recovery records.
