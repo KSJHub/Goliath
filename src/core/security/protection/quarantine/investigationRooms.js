@@ -45,7 +45,7 @@ function matchInvestigationCategoryStyle(channels) {
   // Require repeated evidence and a majority; mixed/empty guilds keep the plain default.
   if (!ranked.length || ranked[0][1] < 2 || ranked[0][1] <= categories.length / 2) return DEFAULT_INVESTIGATION_CATEGORY_NAME;
   const [separator, hasIcon] = JSON.parse(ranked[0][0]);
-  return `${hasIcon ? '🔎' : ''}${separator}${DEFAULT_INVESTIGATION_CATEGORY_NAME}`;
+  return `${hasIcon ? EMOJIS.INVESTIGATE : ''}${separator}${DEFAULT_INVESTIGATION_CATEGORY_NAME}`;
 }
 
 function cleanChannelName(value) {
@@ -265,7 +265,7 @@ function buildInvestigationRoomPanel(member, channelId, options = {}) {
   const leadId = options.quarantinedBy && /^\d+$/.test(String(options.quarantinedBy)) ? String(options.quarantinedBy) : null;
   const intro = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('🔎 Private Investigation Room')
+    .setTitle(`${EMOJIS.INVESTIGATE} Private Investigation Room`)
     .setDescription([`Hi ${member}. This private room has been opened while the moderation team reviews a concern involving your account.`, '', '**This is not a final decision or punishment.** You can continue speaking with the management team here while the review is active.'].join('\n'))
     .addFields(
       ...(options.investigationMemberIds?.length ? [{ name: '👥 Investigation members', value: options.investigationMemberIds.map(id => `<@${id}>`).join(', '), inline: false }, { name: '👤 These controls apply to', value: `<@${member.id}> • Release affects this member only.`, inline: false }] : []),
@@ -332,7 +332,7 @@ async function refreshInvestigationPresentation(guild, channel, memberId) {
   const key = `${guild.id}:${channel.id}:${memberId}`;
   if (presentationChecks.has(key) || !channel.messages?.fetch || !guild.client?.user?.id) return;
   const ownsPanel = message => message?.author?.id === guild.client.user.id
-    && message.embeds?.[0]?.title === '🔎 Private Investigation Room'
+    && message.embeds?.[0]?.title === `${EMOJIS.INVESTIGATE} Private Investigation Room`
     && message.components?.some(row => row.components.some(component => component.customId === `mod_invroom_transcript:${memberId}:${channel.id}`));
   let panel = null;
   const snapshot = state.users?.[memberId];
