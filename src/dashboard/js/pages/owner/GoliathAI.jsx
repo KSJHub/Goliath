@@ -850,7 +850,11 @@ export default function GoliathAI({ theme }) {
                 <h4 style={{ marginTop: 0 }}>DEV category rename — explicit owner approval</h4>
                 <p>Category: {renameCandidate.candidate.target?.name} → {renameCandidate.candidate.proposed?.name}</p>
                 <p style={{ fontSize: 12 }}>This changes one real Discord category. The server will revalidate the reviewed plan, permissions and current state.</p>
-                {status?.devCategoryRenameEnabled !== true && <p role="alert" style={{ color: '#fbbf24' }}>Live execution is disabled on DEV. You can review the proposed change, but applying it is unavailable until the server feature switch is enabled and tested.</p>}
+                {status?.devCategoryRenameEnabled !== true && <p role="alert" style={{ color: '#fbbf24' }}>
+                  {status?.renameRecoveryBlocked
+                    ? 'Execution blocked: unresolved or unreadable DEV rename recovery journal. Open the history section and reconcile pending entries before continuing.'
+                    : 'Live execution is disabled on DEV. You can review the proposed change, but applying it is unavailable until the server feature switch is enabled and tested.'}
+                </p>}
                 <label htmlFor="goliath-rename-confirmation">Type APPLY DEV CATEGORY RENAME to approve</label>
                 <input id="goliath-rename-confirmation" value={renameConfirmation}
                   onChange={event => setRenameConfirmation(event.target.value)}
