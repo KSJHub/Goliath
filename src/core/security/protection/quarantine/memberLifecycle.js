@@ -1,6 +1,7 @@
 'use strict';
 
 const { PermissionFlagsBits } = require('discord.js');
+const { EMOJIS } = require('../../../ui/emojis');
 const { shouldBlockOwnerDestructiveAction } = require('../../../../owner/dev/DevOverrideManager');
 const { canManageTargetMember } = require('../core');
 const {
@@ -74,7 +75,7 @@ async function escalateInvestigationToSecurity(guild, member, existing, options 
     if (!interviewChannel && existing.interviewChannelId) interviewChannel = await guild.channels.fetch(String(existing.interviewChannelId)).catch(() => null);
     if (interviewChannel?.permissionOverwrites?.edit) {
       await interviewChannel.permissionOverwrites.edit(member.id, { ViewChannel: false }, { reason: 'Investigation escalated to full Security Isolation' });
-      await interviewChannel.send({ content: '🚨 This investigation hold has been escalated to **Full Security Isolation**. Member access to this room has been revoked.', allowedMentions: { parse: [] } }).catch(() => null);
+      await interviewChannel.send({ content: `${EMOJIS.SECURITY_SIREN} This investigation hold has been escalated to **Full Security Isolation**. Member access to this room has been revoked.` allowedMentions: { parse: [] } }).catch(() => null);
     }
     state.users[member.id] = {
       ...existing,
