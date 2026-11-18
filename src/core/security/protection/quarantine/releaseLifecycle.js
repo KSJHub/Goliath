@@ -1,4 +1,5 @@
 'use strict';
+const { EMOJIS } = require('../../../ui/emojis');
 
 const {
   QUARANTINE_MODES,
@@ -97,9 +98,9 @@ async function archiveInvestigationRoom(guild, snapshot, options = {}) {
   try {
     const { buildMemberNotice, COLORS } = require('../../../ui/memberNotice');
     const notice = buildMemberNotice(guild, {
-      module: 'Moderation', emoji: '🔓', title: shared ? 'Member Investigation Closed' : 'Investigation Closed', color: COLORS.success,
+      module: 'Moderation', emoji: EMOJIS.UNLOCK, title: shared ? 'Member Investigation Closed' : 'Investigation Closed', color: COLORS.success,
       description: shared ? `The investigation for <@${snapshot.memberId}> has ended. Their restrictions have been lifted. Other members’ investigations remain active in this room.` : 'Your investigation has ended, and your quarantine restrictions have been lifted.\n\nIf you need any further help, please contact server management.',
-      fields: snapshot.caseId ? [{ name: '📁 Case reference', value: `#${snapshot.caseId}`, inline: true }] : [],
+      fields: snapshot.caseId ? [{ name: `${EMOJIS.FOLDER} Case reference`, value: `#${snapshot.caseId}`, inline: true }] : [],
       compactModerationLayout: true,
     });
     notice.embeds[0].setFooter({ text: 'Private Moderation Review' });
