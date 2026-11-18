@@ -3242,6 +3242,8 @@ function load(file, mocks, testExport = '') {
     if ((file === base + 'investigationRooms.js' && id === '../../../guild/goliathNavigation')
       || (file === 'src/events/client/sentinelControlCenter.js' && id === '../../core/guild/goliathNavigation')
       || (file === 'src/core/administration/mod/quarantineInteractions.js' && id === '../../../core/guild/goliathNavigation')) return localRequire(id);
+    // Shared emoji constants are stateless; permit the real palette in quarantine fixtures.
+    if (id === '../../../ui/emojis' && file.startsWith(base)) return localRequire(id);
     if (id === 'discord.js' || id.startsWith('node:')) return localRequire(id);
     throw new Error(`Unmocked quarantine audit dependency: ${file} -> ${id}`);
   };
