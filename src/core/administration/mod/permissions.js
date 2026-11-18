@@ -116,7 +116,7 @@ let doctorScheduled = false;
 
 function getModerationDb() {
   try { return require('./storage').db || null; }
-  catch (error) { console.error('❌ Moderation DB unavailable:', error); return null; }
+  catch (error) { console.error(`${EMOJIS.ERROR} Moderation DB unavailable:`, error); return null; }
 }
 function safeJson(value) {
   if (value === undefined || value === null) return null;
@@ -144,7 +144,7 @@ function recordModerationSystemEvent({ interaction = null, guildId = null, actor
     );
     return { auditId: Number(result.lastInsertRowid), guildId: resolvedGuildId, caseId: 0, actorId: resolvedActorId, event, createdAt };
   } catch (error) {
-    console.error(`❌ Failed to record moderation system event ${event}:`, error);
+    console.error(`${EMOJIS.ERROR} Failed to record moderation system event ${event}:`, error);
     return null;
   }
 }
@@ -189,7 +189,7 @@ function scheduleModerationDoctor() {
   doctorScheduled = true;
   setImmediate(() => {
     try { runModerationDoctor({ record: true }); }
-    catch (error) { console.error('❌ Moderation doctor failed:', error); }
+    catch (error) { console.error(`${EMOJIS.ERROR} Moderation doctor failed:`, error); }
   });
 }
 scheduleModerationDoctor();
@@ -204,7 +204,7 @@ function buildAuthorityInteraction(member, guild, interaction = null) {
 }
 function getAuthorityPanel() {
   try { return require('../admin/panel'); }
-  catch (error) { console.error('❌ Goliath authority resolver unavailable:', error); return null; }
+  catch (error) { console.error(`${EMOJIS.ERROR} Goliath authority resolver unavailable:`, error); return null; }
 }
 function resolveActionFromInteraction(action, interaction) {
   if (action !== 'view_case_detail') return action;
@@ -300,7 +300,7 @@ function canUseModAction(member, guild, action, interaction = null) {
   const requiredLevel = getRequiredStaffLevel(action);
   return getStaffLevelRank(staffLevel) >= getStaffLevelRank(requiredLevel) && hasNativeActionPermission(member, guild, action);
 }
-function getModActionDeniedMessage(action) { return `❌ You do not have permission to use this action. Required level: ${getStaffLevelLabel(getRequiredStaffLevel(action))}.`; }
+function getModActionDeniedMessage(action) { return `${EMOJIS.ERROR} You do not have permission to use this action. Required level: ${getStaffLevelLabel(getRequiredStaffLevel(action))}.`; }
 function getHighestRolePosition(member) { return member?.roles?.highest?.position ?? 0; }
 function canActOnTarget(actorMember, targetMember, guildOwnerId) {
   if (!actorMember || !targetMember || isGuildOwner(targetMember, guildOwnerId) || actorMember.id === targetMember.id) return false;
@@ -309,17 +309,17 @@ function canActOnTarget(actorMember, targetMember, guildOwnerId) {
 }
 function canBotActOnTarget(botMember, targetMember) { return Boolean(botMember && targetMember && getHighestRolePosition(botMember) > getHighestRolePosition(targetMember)); }
 function getHierarchySummary(actorMember, botMember, targetMember, guildOwnerId) {
-  if (!targetMember) return { ok: false, actorCanAct: false, botCanAct: false, reason: '❌ Target not found.' };
-  if (isGuildOwner(targetMember, guildOwnerId)) return { ok: false, actorCanAct: false, botCanAct: false, reason: '❌ Cannot moderate the server owner.' };
-  if (actorMember?.id === targetMember.id) return { ok: false, actorCanAct: false, botCanAct: false, reason: '❌ You cannot moderate yourself.' };
+  if (!targetMember) return { ok: false, actorCanAct: false, botCanAct: false, reason: `${EMOJIS.ERROR} Target not found.` };
+  if (isGuildOwner(targetMember, guildOwnerId)) return { ok: false, actorCanAct: false, botCanAct: false, reason: `${EMOJIS.ERROR} Cannot moderate the server owner.` };
+  if (actorMember?.id === targetMember.id) return { ok: false, actorCanAct: false, botCanAct: false, reason: `${EMOJIS.ERROR} You cannot moderate yourself.` };
   const actorCanAct = canActOnTarget(actorMember, targetMember, guildOwnerId);
   const botCanAct = canBotActOnTarget(botMember, targetMember);
-  if (!actorCanAct) return { ok: false, actorCanAct, botCanAct, reason: '❌ You cannot act on this target due to role hierarchy.' };
-  if (!botCanAct) return { ok: false, actorCanAct, botCanAct, reason: '❌ Bot cannot act on this target due to role hierarchy.' };
+  if (!actorCanAct) return { ok: false, actorCanAct, botCanAct, reason: `${EMOJIS.ERROR} You cannot act on this target due to role hierarchy.` };
+  if (!botCanAct) return { ok: false, actorCanAct, botCanAct, reason: `${EMOJIS.ERROR} Bot cannot act on this target due to role hierarchy.` };
   return { ok: true, actorCanAct, botCanAct, reason: null };
 }
 function checkHierarchy(interaction, target) {
-  if (!interaction?.guild || !interaction?.member) return '❌ Invalid interaction context.';
+  if (!interaction?.guild || !interaction?.member) return `${EMOJIS.ERROR} Invalid interaction context.`;
   const summary = getHierarchySummary(interaction.member, interaction.guild.members.me, target, interaction.guild.ownerId);
   return summary.ok ? null : summary.reason;
 }
