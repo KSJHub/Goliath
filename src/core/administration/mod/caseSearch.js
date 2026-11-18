@@ -304,8 +304,8 @@ function resultComponents(r, token) {
   const rows = [];
   if (r.results.length) rows.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(`mod_case_search_select:${token}`).setPlaceholder('Select a case to open Case Detail').addOptions(r.results.map((e) => ({ label: `Case #${e.caseId} • ${e.action}`.slice(0, 100), description: `${e.status || 'active'}${isCaseLocked(e) ? ' • locked' : ''}${getMergedIntoId(e) ? ` • merged into #${getMergedIntoId(e)}` : ''} • User ${e.userId}`.slice(0, 100), value: String(e.caseId) })))));
   rows.push(new ActionRowBuilder().addComponents(
-    navigationButton(`mod_case_search_page:${token}:${Math.max(0, r.page - 1)}`, '◀ Previous', ButtonStyle.Secondary, r.page <= 0),
-    navigationButton(`mod_case_search_page:${token}:${r.page + 1}`, 'Next ▶', ButtonStyle.Secondary, r.page >= r.totalPages - 1 || r.totalPages === 0),
+    navigationButton(`mod_case_search_page:${token}:${Math.max(0, r.page - 1)}`, `${EMOJIS.CHANNEL_PREVIOUS} Previous`, ButtonStyle.Secondary, r.page <= 0),
+    navigationButton(`mod_case_search_page:${token}:${r.page + 1}`, `Next ${EMOJIS.CHANNEL_NEXT}`, ButtonStyle.Secondary, r.page >= r.totalPages - 1 || r.totalPages === 0),
     navigationButton(`mod_case_search_advanced:${token}`, 'Advanced Filters', ButtonStyle.Secondary),
     navigationButton('mod_case_search', 'New Search', ButtonStyle.Primary)
   ));
@@ -398,8 +398,8 @@ function caseDetailButtons(c, token, audit) {
     navigationButton(`mod_case_evidence_remove:${token}:${c.caseId}`, `${EMOJIS.DELETE} Remove Evidence`, ButtonStyle.Danger, readOnly || !activeEvidence.length)
   ));
   if (audit?.totalPages > 1) rows.push(new ActionRowBuilder().addComponents(
-    navigationButton(`mod_case_audit_page:${token}:${c.caseId}:${Math.max(0, audit.page - 1)}`, '◀ Audit', ButtonStyle.Secondary, audit.page <= 0),
-    navigationButton(`mod_case_audit_page:${token}:${c.caseId}:${Math.min(audit.totalPages - 1, audit.page + 1)}`, 'Audit ▶', ButtonStyle.Secondary, audit.page >= audit.totalPages - 1)
+    navigationButton(`mod_case_audit_page:${token}:${c.caseId}:${Math.max(0, audit.page - 1)}`, `${EMOJIS.CHANNEL_PREVIOUS} Audit`, ButtonStyle.Secondary, audit.page <= 0),
+    navigationButton(`mod_case_audit_page:${token}:${c.caseId}:${Math.min(audit.totalPages - 1, audit.page + 1)}`, `Audit ${EMOJIS.CHANNEL_NEXT}`, ButtonStyle.Secondary, audit.page >= audit.totalPages - 1)
   ));
   return rows.slice(0, 5);
 }
@@ -429,8 +429,8 @@ function evidenceViewer(c, token, requestedPage = 0) {
   const readOnly = isCaseReadOnly(c);
   const activeEntries = evidence.filter((entry) => !entry.removedAt);
   const components = [new ActionRowBuilder().addComponents(
-    navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:${Math.max(0, page - 1)}`, '◀ Previous', ButtonStyle.Secondary, page <= 0),
-    navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:${Math.min(totalPages - 1, page + 1)}`, 'Next ▶', ButtonStyle.Secondary, page >= totalPages - 1),
+    navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:${Math.max(0, page - 1)}`, `${EMOJIS.CHANNEL_PREVIOUS} Previous`, ButtonStyle.Secondary, page <= 0),
+    navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:${Math.min(totalPages - 1, page + 1)}`, `Next ${EMOJIS.CHANNEL_NEXT}`, ButtonStyle.Secondary, page >= totalPages - 1),
     navigationButton(`mod_case_evidence_add:${token}:${c.caseId}`, `${EMOJIS.ADD} Add`, ButtonStyle.Primary, readOnly || activeEntries.length >= MAX_ACTIVE_EVIDENCE),
     navigationButton(`mod_case_evidence_remove:${token}:${c.caseId}`, `${EMOJIS.DELETE} Remove`, ButtonStyle.Danger, readOnly || !activeEntries.length),
     navigationButton(`mod_case_evidence_back:${token}:${c.caseId}`, '← Case Detail', ButtonStyle.Secondary)
