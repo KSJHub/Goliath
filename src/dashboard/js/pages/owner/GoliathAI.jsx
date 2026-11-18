@@ -849,12 +849,13 @@ export default function GoliathAI({ theme }) {
               String(audit.guild.id) === renameCandidate.guildId && <div style={{ border: '1px solid #64748b', borderRadius: 10, padding: 12, marginTop: 12 }}>
                 <h4 style={{ marginTop: 0 }}>DEV category rename — explicit owner approval</h4>
                 <p>Category: {renameCandidate.candidate.target?.name} → {renameCandidate.candidate.proposed?.name}</p>
-                <p style={{ fontSize: 12 }}>This changes one real Discord category. The server will revalidate the reviewed plan, permissions and current state. Execution may still be disabled by the DEV feature switch.</p>
+                <p style={{ fontSize: 12 }}>This changes one real Discord category. The server will revalidate the reviewed plan, permissions and current state.</p>
+                {status?.devCategoryRenameEnabled !== true && <p role="alert" style={{ color: '#fbbf24' }}>Live execution is disabled on DEV. You can review the proposed change, but applying it is unavailable until the server feature switch is enabled and tested.</p>}
                 <label htmlFor="goliath-rename-confirmation">Type APPLY DEV CATEGORY RENAME to approve</label>
                 <input id="goliath-rename-confirmation" value={renameConfirmation}
                   onChange={event => setRenameConfirmation(event.target.value)}
                   autoComplete="off" style={{ display: 'block', width: '100%', margin: '8px 0' }} />
-                <button type="button" disabled={renameBusy || renameConfirmation !== 'APPLY DEV CATEGORY RENAME'}
+                <button type="button" disabled={renameBusy || status?.devCategoryRenameEnabled !== true || renameConfirmation !== 'APPLY DEV CATEGORY RENAME'}
                   onClick={applyRenameCandidate}>Apply this DEV rename</button>
                 <button type="button" disabled={renameBusy} style={{ marginLeft: 8 }}
                   onClick={() => { setRenameCandidate(null); setRenameConfirmation(''); }}>Cancel</button>
