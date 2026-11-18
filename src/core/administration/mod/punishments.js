@@ -155,7 +155,7 @@ async function submitTimeout(interaction, target) {
     const result = await executeEnginePunishment(interaction, target, 'timeout', reason, { durationRaw, durationMs });
     await safeReply(interaction, { content: `${EMOJIS.TIMEOUT} Timed out **${target.user.tag}** for **${durationRaw}** • Case #${result.modCase.caseId}`, flags: 64 });
     return { ok: true, ...result };
-  } catch (error) { console.error('❌ Timeout error:', error); await safeReply(interaction, ephemeralError('Failed to timeout user.')); return { ok: false, target, error }; }
+  } catch (error) { console.error(`${EMOJIS.ERROR} Timeout error:`, error); await safeReply(interaction, ephemeralError('Failed to timeout user.')); return { ok: false, target, error }; }
 }
 async function submitPunishmentRequest(interaction, target, action, confirm = createConfirmation) {
   if (!target || !ENGINE_ACTIONS[action]) return { ok: false, target, error: 'Unknown punishment action.' };
@@ -200,9 +200,9 @@ function validateBulkOptions(actionType, options = {}) {
   if (!Array.isArray(options.ids) || !options.ids.length) errors.push(`${EMOJIS.ERROR} No valid ${actionType === 'remove-warning' ? 'warning case IDs' : 'user IDs'} provided.`);
   if (options.ids?.length > MAX_BULK_TARGETS) errors.push(`${EMOJIS.ERROR} Bulk moderation is limited to ${MAX_BULK_TARGETS} unique targets per batch.`);
   if (!String(options.reason || '').trim()) errors.push(`${EMOJIS.ERROR} A reason is required.`);
-  if (actionType === 'timeout') { const ms = parseDuration(options.durationRaw); if (!ms) errors.push('❌ Invalid duration. Use `10m`, `1h`, or `1d`.'); else if (!isValidTimeoutDuration(ms)) errors.push(`${EMOJIS.ERROR} Timeout cannot exceed 28 days.`); }
+  if (actionType === 'timeout') { const ms = parseDuration(options.durationRaw); if (!ms) errors.push(`${EMOJIS.ERROR} Invalid duration. Use \`10m\`, \`1h\`, or \`1d\`.`); else if (!isValidTimeoutDuration(ms)) errors.push(`${EMOJIS.ERROR} Timeout cannot exceed 28 days.`); }
   if (actionType === 'ban' && parseDeleteDays(options.deleteDays) === null) errors.push(`${EMOJIS.ERROR} Delete message days must be between 0 and 7.`);
-  if (actionType === 'warn') { if (!options.strikeWeight) errors.push(`${EMOJIS.ERROR} Strike weight must be a whole number from 1 to 5.`); if (options.expiresAt === undefined) errors.push('❌ Warning expiry must be `7d`, `2w`, `1m`, or `never`.'); }
+  if (actionType === 'warn') { if (!options.strikeWeight) errors.push(`${EMOJIS.ERROR} Strike weight must be a whole number from 1 to 5.`); if (options.expiresAt === undefined) errors.push(`${EMOJIS.ERROR} Warning expiry must be \`7d\`, \`2w\`, \`1m\`, or \`never\`.`); }
   return errors;
 }
 function buildBulkPreview(options, batchId) {
@@ -364,7 +364,7 @@ async function executePendingAction(discord, interaction, token, returnContext =
     }
     return true;
   } catch (error) {
-    console.error('❌ Pending action execution error:', error);
+    console.error(`${EMOJIS.ERROR} Pending action execution error:`, error);
     deletePendingAction(interaction.guild.id, token);
     return safeReply(interaction, ephemeralError('Failed to complete that action.'));
   }
