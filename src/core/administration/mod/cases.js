@@ -35,7 +35,7 @@ const { restoreQuarantinedMember } = require('../../security/protection/quaranti
 const STATUS_LABELS = Object.freeze({
   active: `${SHARED_EMOJIS.ACTIVE} Active`,
   reversed: emojiLabel('SUCCESS', 'Closed'),
-  expired: '⌛ Expired',
+  expired: `${SHARED_EMOJIS.EXPIRED} Expired`,
 });
 const APPEALABLE_ACTIONS = new Set(['warn', 'timeout', 'kick', 'ban', 'case']);
 const APPEAL_PAGE_SIZE = 5;
@@ -594,7 +594,7 @@ function buildCaseDetailButtons(modCase) {
   management.push(navigationButton(`mod_case_note:${modCase.caseId}`, hasNote ? `${EMOJIS.EDIT} Edit Note` : `${EMOJIS.NOTE} Add Note`, ButtonStyle.Primary));
   const appealButtons = [];
   if (!pending && appeals.length < MAX_APPEALS_PER_CASE && !inactive && APPEALABLE_ACTIONS.has(modCase.action)) appealButtons.push(navigationButton(`mod_case_appeal_submit:${modCase.caseId}`, `${SHARED_EMOJIS.USER_INVITES} Record Appeal`, ButtonStyle.Primary));
-  if (appeals.length) appealButtons.push(navigationButton(`mod_case_appeal_history:${modCase.caseId}:0`, `⚖️ Appeals (${appeals.length})`, ButtonStyle.Secondary));
+  if (appeals.length) appealButtons.push(navigationButton(`mod_case_appeal_history:${modCase.caseId}:0`, `${SHARED_EMOJIS.JUSTICE} Appeals (${appeals.length})`, ButtonStyle.Secondary));
   appealButtons.push(navigationButton('mod_case_appeal_queue:0', `${SHARED_EMOJIS.MOD_APPEAL_PENDING} Appeal Queue`, ButtonStyle.Secondary));
   return [new ActionRowBuilder().addComponents(management), new ActionRowBuilder().addComponents(appealButtons)];
 }
@@ -672,7 +672,7 @@ function buildCaseDetailEmbed(modCase) {
     const pending = appeals.filter(appeal => appeal.status === 'pending').length;
     const approved = appeals.filter(appeal => appeal.status === 'approved').length;
     const denied = appeals.filter(appeal => appeal.status === 'denied').length;
-    embed.addFields({ name: '⚖️ Appeals', value: `**Total:** ${appeals.length}  •  **Pending:** ${pending}  •  **Approved:** ${approved}  •  **Denied:** ${denied}`, inline: false });
+    embed.addFields({ name: `${SHARED_EMOJIS.JUSTICE} Appeals`, value: `**Total:** ${appeals.length}  •  **Pending:** ${pending}  •  **Approved:** ${approved}  •  **Denied:** ${denied}`, inline: false });
   }
   if (modCase.metadata?.appealNotice) {
     const notice = modCase.metadata.appealNotice;
@@ -694,12 +694,12 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
   };
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
-    .setTitle(`⚖️ Appeal History • Case #${modCase.caseId}`)
+    .setTitle(`${SHARED_EMOJIS.JUSTICE} Appeal History • Case #${modCase.caseId}`)
     .setDescription(`**Original Action:** ${String(modCase.action || 'case').toUpperCase()}\n**Total:** ${appeals.length}  •  **⏳ Pending:** ${counts.pending}  •  **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}  •  **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`)
     .setFooter({ text: `Appeal history • Page ${page + 1}/${totalPages}` });
   if (!entries.length) embed.addFields({ name: `${SHARED_EMOJIS.MOD_APPEAL_EMPTY} No Appeals`, value: 'No appeals have been recorded for this case.', inline: false });
   for (const appeal of entries) {
-    const status = appeal.status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : appeal.status === 'denied' ? emojiLabel('ERROR', 'Denied') : '⏳ Pending Review';
+    const status = appeal.status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : appeal.status === 'denied' ? emojiLabel('ERROR', 'Denied') : `${SHARED_EMOJIS.TIMEOUT} Pending Review`;
     const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:R>` : 'Unknown';
     const lines = [
       `**Member:** <@${appeal.appellantId}>  •  **Submitted:** ${submitted}`,
@@ -711,7 +711,7 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
     if (appeal.reviewNote) lines.push(`\n**${SHARED_EMOJIS.REVIEW} Review Rationale**\n${String(appeal.reviewNote).replace(/\s+/g, ' ').slice(0, 150)}`);
     if (appeal.remedy) lines.push(`\n**${SHARED_EMOJIS.REFRESH} Appeal Remedy:** ${appeal.remedy.ok ? emojiLabel('SUCCESS', 'Completed') : emojiLabel('WARNING', 'Requires attention')}\n${String(appeal.remedy.detail || appeal.remedy.action || 'Recorded').replace(/\s+/g, ' ').slice(0, 150)}`);
     if (appeal.notification) lines.push(`**${SHARED_EMOJIS.USER_INVITES} Member Notification:** ${appeal.notification.sent ? emojiLabel('SUCCESS', 'Sent') : emojiLabel('WARNING', 'Not delivered')}`);
-    embed.addFields({ name: `⚖️ Appeal • ${status}`, value: lines.join('\n').slice(0, 1024), inline: false });
+    embed.addFields({ name: `${SHARED_EMOJIS.JUSTICE} Appeal • ${status}`, value: lines.join('\n').slice(0, 1024), inline: false });
   }
   const components = [];
   if (totalPages > 1) components.push(new ActionRowBuilder().addComponents(
@@ -720,23 +720,23 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
   ));
   const pendingAppeal = getPendingAppeal(modCase);
   if (pendingAppeal) components.push(new ActionRowBuilder().addComponents(
-    navigationButton(`mod_case_appeal_open:${modCase.caseId}:${pendingAppeal.id}`, '⚖️ Review Pending Appeal', ButtonStyle.Primary)
+    navigationButton(`mod_case_appeal_open:${modCase.caseId}:${pendingAppeal.id}`, `${SHARED_EMOJIS.JUSTICE} Review Pending Appeal`, ButtonStyle.Primary)
   ));
   components.push(new ActionRowBuilder().addComponents(
-    navigationButton(`mod_search_open:${modCase.caseId}`, '⬅️ Back to Case', ButtonStyle.Secondary)
+    navigationButton(`mod_search_open:${modCase.caseId}`, `${SHARED_EMOJIS.BACK} Back to Case`, ButtonStyle.Secondary)
   ));
   return { embeds: [embed], components };
 }
 function buildAppealDetailPayload(modCase, appeal) {
   const pending = appeal.status === 'pending';
-  const status = pending ? '⏳ Pending Review' : appeal.status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : emojiLabel('ERROR', 'Denied');
+  const status = pending ? `${SHARED_EMOJIS.TIMEOUT} Pending Review` : appeal.status === 'approved' ? emojiLabel('SUCCESS', 'Approved') : emojiLabel('ERROR', 'Denied');
   const originalAction = String(modCase.action || 'case').toUpperCase();
   const submitted = appeal.submittedAt ? `<t:${getCaseTimestamp(appeal.submittedAt)}:f>` : 'Unknown';
   const reviewed = appeal.reviewedAt ? `<t:${getCaseTimestamp(appeal.reviewedAt)}:f>` : 'Not reviewed';
   const reviewer = /^\d{15,22}$/.test(String(appeal.reviewedBy || '')) ? `<@${appeal.reviewedBy}>` : 'Not recorded';
   const embed = new EmbedBuilder()
     .setColor(pending ? COLORS.PRIMARY : appeal.status === 'approved' ? COLORS.SUCCESS : COLORS.ERROR)
-    .setTitle(`⚖️ Appeal Review • Case #${modCase.caseId}`)
+    .setTitle(`${SHARED_EMOJIS.JUSTICE} Appeal Review • Case #${modCase.caseId}`)
     .setDescription(`**Original Action:** ${originalAction}\n**Appeal Status:** ${status}`)
     .addFields(
       { name: `${SHARED_EMOJIS.USER} Appeal Information`, value: `**Member:** <@${appeal.appellantId}>\n**Submitted:** ${submitted}\n**Source:** ${String(appeal.source || 'Unknown').slice(0, 80)}`, inline: false },
