@@ -375,13 +375,13 @@ function caseDetailButtons(c, token, audit) {
   const activeEvidence = evidence.filter((entry) => !entry.removedAt);
   const rows = [new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_search_back:${token}`, '← Back to Search', ButtonStyle.Secondary),
-    navigationButton(`mod_case_reverse_warning:${c.caseId}`, '↩️ Remove Warning', ButtonStyle.Secondary, c.action !== 'warn' || closed),
+    navigationButton(`mod_case_reverse_warning:${c.caseId}`, `${EMOJIS.WELCOME_INHERIT} Remove Warning`, ButtonStyle.Secondary, c.action !== 'warn' || closed),
     navigationButton(`mod_case_reverse_timeout:${c.caseId}`, '⏪ Clear Timeout', ButtonStyle.Secondary, c.action !== 'timeout' || closed),
     navigationButton(`mod_case_note:${c.caseId}`, `${EMOJIS.NOTE} Add/Edit Note`, ButtonStyle.Primary, readOnly),
     navigationButton(`mod_case_lock:${token}:${c.caseId}`, locked ? `${EMOJIS.UNLOCK} Unlock Case` : `${EMOJIS.RESTRICTIONS} Lock Case`, locked ? ButtonStyle.Success : ButtonStyle.Danger, mergedSource)
   )];
   rows.push(new ActionRowBuilder().addComponents(
-    navigationButton(`mod_case_reason:${token}:${c.caseId}`, '✏️ Edit Reason', ButtonStyle.Primary, readOnly),
+    navigationButton(`mod_case_reason:${token}:${c.caseId}`, `${EMOJIS.EDIT} Edit Reason`, ButtonStyle.Primary, readOnly),
     navigationButton(`mod_case_tags:${token}:${c.caseId}`, `${EMOJIS.ROLE_TAG} Edit Tags`, ButtonStyle.Primary, readOnly),
     navigationButton(`mod_case_link:${token}:${c.caseId}`, `${EMOJIS.AUTOMOD_LINKS} Link Case`, ButtonStyle.Secondary, readOnly || Boolean(c.relatedCaseId)),
     navigationButton(`mod_case_unlink:${token}:${c.caseId}`, 'Unlink Case', ButtonStyle.Secondary, readOnly || !c.relatedCaseId),
@@ -389,11 +389,11 @@ function caseDetailButtons(c, token, audit) {
   ));
   rows.push(new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_merge:${token}:${c.caseId}`, `${EMOJIS.PANELS} Merge Case`, ButtonStyle.Secondary, readOnly),
-    navigationButton(`mod_case_split:${token}:${c.caseId}`, '↔️ Split Case', ButtonStyle.Secondary, locked || (!mergedSource && !mergedCases.length)),
+    navigationButton(`mod_case_split:${token}:${c.caseId}`, `${EMOJIS.PERMISSION_HORIZONTAL} Split Case`, ButtonStyle.Secondary, locked || (!mergedSource && !mergedCases.length)),
     navigationButton(`mod_case_bulk:${token}:${c.caseId}`, `${EMOJIS.FAQ_BOOKS} Bulk Edit`, ButtonStyle.Primary)
   ));
   rows.push(new ActionRowBuilder().addComponents(
-    navigationButton(`mod_case_evidence_add:${token}:${c.caseId}`, '➕ Add Evidence', ButtonStyle.Primary, readOnly || activeEvidence.length >= MAX_ACTIVE_EVIDENCE),
+    navigationButton(`mod_case_evidence_add:${token}:${c.caseId}`, `${EMOJIS.ADD} Add Evidence`, ButtonStyle.Primary, readOnly || activeEvidence.length >= MAX_ACTIVE_EVIDENCE),
     navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:0`, `${EMOJIS.AUTOMOD_ATTACHMENTS} View Evidence (${activeEvidence.length})`, ButtonStyle.Secondary, !evidence.length),
     navigationButton(`mod_case_evidence_remove:${token}:${c.caseId}`, `${EMOJIS.DELETE} Remove Evidence`, ButtonStyle.Danger, readOnly || !activeEvidence.length)
   ));
@@ -431,7 +431,7 @@ function evidenceViewer(c, token, requestedPage = 0) {
   const components = [new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:${Math.max(0, page - 1)}`, '◀ Previous', ButtonStyle.Secondary, page <= 0),
     navigationButton(`mod_case_evidence_view:${token}:${c.caseId}:${Math.min(totalPages - 1, page + 1)}`, 'Next ▶', ButtonStyle.Secondary, page >= totalPages - 1),
-    navigationButton(`mod_case_evidence_add:${token}:${c.caseId}`, '➕ Add', ButtonStyle.Primary, readOnly || activeEntries.length >= MAX_ACTIVE_EVIDENCE),
+    navigationButton(`mod_case_evidence_add:${token}:${c.caseId}`, `${EMOJIS.ADD} Add`, ButtonStyle.Primary, readOnly || activeEntries.length >= MAX_ACTIVE_EVIDENCE),
     navigationButton(`mod_case_evidence_remove:${token}:${c.caseId}`, `${EMOJIS.DELETE} Remove`, ButtonStyle.Danger, readOnly || !activeEntries.length),
     navigationButton(`mod_case_evidence_back:${token}:${c.caseId}`, '← Case Detail', ButtonStyle.Secondary)
   )];
@@ -439,7 +439,7 @@ function evidenceViewer(c, token, requestedPage = 0) {
 }
 
 function bulkSummaryEmbed(result) {
-  const lines = result.results.map((entry) => `${entry.ok ? (entry.changed ? '✅' : '➖') : '❌'} **#${entry.caseId}**${entry.error ? ` — ${entry.error}` : entry.changed ? ' — changed' : ' — no change'}`);
+  const lines = result.results.map((entry) => `${entry.ok ? (entry.changed ? EMOJIS.SUCCESS : EMOJIS.REMOVE) : EMOJIS.ERROR} **#${entry.caseId}**${entry.error ? ` — ${entry.error}` : entry.changed ? ' — changed' : ' — no change'}`);
   return createEmbed({ title: `Bulk Case Update • ${result.operation}`, description: [`Requested: **${result.requested}** • Succeeded: **${result.succeeded}** • Failed: **${result.failed}** • Changed: **${result.changed}**`, '', ...lines].join('\n').slice(0, 3900), color: result.failed ? COLORS.WARNING || COLORS.PRIMARY : COLORS.SUCCESS || COLORS.PRIMARY });
 }
 
