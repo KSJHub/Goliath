@@ -113,7 +113,7 @@ else {
             const value = cases.map((entry) => {
               const proceeding = caseProceeding.parseProceeding(entry);
               const display = caseDisplayTitle(entry, liveSubjectName(interaction, targetId, entry?.metadata?.proceeding?.subjectName));
-              const stage = proceeding.stage === 'review' ? `${EMOJIS.JUSTICE} Awaiting Review` : proceeding.stage === 'published' ? `${EMOJIS.SCROLL} Published` : proceeding.stage === 'closed' ? `${EMOJIS.LOCK} Closed` : proceeding.stage === 'decided' ? '👨‍⚖️ Decision Recorded' : `${EMOJIS.INVESTIGATE} Under Investigation`;
+              const stage = proceeding.stage === 'review' ? `${EMOJIS.JUSTICE} Awaiting Review` : proceeding.stage === 'published' ? `${EMOJIS.SCROLL} Published` : proceeding.stage === 'closed' ? `${EMOJIS.LOCK} Closed` : proceeding.stage === 'decided' ? `${EMOJIS.JUSTICE} Decision Recorded` : `${EMOJIS.INVESTIGATE} Under Investigation`;
               const severity = ['Low', 'Medium', 'High', 'Severe', 'Critical'][Math.max(0, Math.min(4, Number(proceeding.severity || 1) - 1))];
               return `**${display}**\n${stage} • Severity **${severity}**`;
             }).join('\n\n').slice(0, 1024);
@@ -130,7 +130,7 @@ else {
     return ({
       investigation: `${EMOJIS.INVESTIGATE} Under Investigation`,
       review: `${EMOJIS.JUSTICE} Awaiting Review`,
-      decided: '👨‍⚖️ Decision Recorded',
+      decided: `${EMOJIS.JUSTICE} Decision Recorded`,
       published: `${EMOJIS.SCROLL} Published`,
       closed: `${EMOJIS.LOCK} Closed`,
     })[String(stage || 'investigation')] || `${EMOJIS.INVESTIGATE} Under Investigation`;
