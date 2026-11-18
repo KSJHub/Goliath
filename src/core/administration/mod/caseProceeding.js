@@ -238,7 +238,7 @@ function buildCaseFile(interaction, modCase) {
         `**Action:** ${String(proceeding.decision.action || 'none').replaceAll('_', ' ')}`,
         `**Recorded by:** <@${proceeding.decision.decidedBy}> • ${discordTime(proceeding.decision.decidedAt)}`,
         proceeding.decision.action === 'ban' ? `**Second approval:** ${proceeding.sanctionReview?.status === 'approved' ? `${EMOJIS.SUCCESS} Approved by <@${proceeding.sanctionReview.approvedBy}>` : `${EMOJIS.TIMEOUT} Required`}` : null,
-        proceeding.sanctionExecution ? `**Execution:** ${proceeding.sanctionExecution.status === 'executed' ? `${EMOJIS.SUCCESS} Completed` : proceeding.sanctionExecution.status === 'reversed' ? `${EMOJIS.SUCCESS} Resolved` : proceeding.sanctionExecution.status === 'reversing' ? `${EMOJIS.TIMEOUT} Applying appeal outcome` : proceeding.sanctionExecution.status === 'reversal_failed' ? `${EMOJIS.WARNING} Appeal remedy failed` : proceeding.sanctionExecution.status === 'executing' ? `${EMOJIS.TIMEOUT} In progress` : proceeding.sanctionExecution.status === 'failed' ? `${EMOJIS.ERROR} Failed` : `${EMOJIS.TIMEOUT} Pending`}` : (proceeding.decision.action !== 'no_action' ? '**Execution:** ⏳ Pending' : null),
+        proceeding.sanctionExecution ? `**Execution:** ${proceeding.sanctionExecution.status === 'executed' ? `${EMOJIS.SUCCESS} Completed` : proceeding.sanctionExecution.status === 'reversed' ? `${EMOJIS.SUCCESS} Resolved` : proceeding.sanctionExecution.status === 'reversing' ? `${EMOJIS.TIMEOUT} Applying appeal outcome` : proceeding.sanctionExecution.status === 'reversal_failed' ? `${EMOJIS.WARNING} Appeal remedy failed` : proceeding.sanctionExecution.status === 'executing' ? `${EMOJIS.TIMEOUT} In progress` : proceeding.sanctionExecution.status === 'failed' ? `${EMOJIS.ERROR} Failed` : `${EMOJIS.TIMEOUT} Pending`}` : (proceeding.decision.action !== 'no_action' ? `**Execution:** ${EMOJIS.TIMEOUT} Pending` : null),
       ].filter(Boolean).join('\n')
     : 'No decision has been recorded yet.';
 
@@ -263,7 +263,7 @@ function buildCaseFile(interaction, modCase) {
     .addFields(
       { name: `${EMOJIS.CLIPBOARD} Case Summary`, value: cleanExcerpt(proceeding.allegations || modCase.reason || 'No case summary recorded.', 1024), inline: false },
       { name: `${EMOJIS.WORKSPACE} Working File`, value: [
-        `**Evidence:** ✅ ${verified.length} verified • 🟡 ${draft.length} draft • 🔴 ${rejected.length} rejected`,
+        `**Evidence:** ${EMOJIS.SUCCESS} ${verified.length} verified • ${EMOJIS.HEALTH_STABLE} ${draft.length} draft • ${EMOJIS.STATUS_ALERT} ${rejected.length} rejected`,
         `**Private notes:** ${proceeding.notes.length}`,
         `**Linked moderation records:** ${proceeding.linkedCases.length}`,
         `**Recommendation:** ${proceeding.recommendation?.reason ? cleanExcerpt(proceeding.recommendation.reason, 180) : 'Not set'}`,
@@ -340,7 +340,7 @@ function buildNotesPage(interaction, modCase) {
 function buildTimelinePage(interaction, modCase) {
   const rows = auditRows(interaction.guildId, modCase.caseId, 20);
   const lines = rows.length ? rows.map((entry) => `**${String(entry.event || 'case.updated').replace(/^case\.proceeding\./, '').replaceAll('_', ' ')}** • ${discordTime(entry.created_at)}\nActor: ${entry.actor_id ? `<@${entry.actor_id}>` : 'System'}`) : ['No case audit activity recorded yet.'];
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`🕘 Case Timeline • #${modCase.caseId}`).setDescription(lines.join('\n\n').slice(0, 4000)).setFooter({ text: 'Immutable case audit trail • newest activity first' }).setTimestamp();
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.HISTORY} Case Timeline • #${modCase.caseId}`).setDescription(lines.join('\n\n').slice(0, 4000)).setFooter({ text: 'Immutable case audit trail • newest activity first' }).setTimestamp();
   return { embeds: [embed], components: [caseFileBackRow(modCase.caseId)] };
 }
 function recommendationModal(caseId, proceeding) {
@@ -379,7 +379,7 @@ function buildReviewBriefPage(interaction, modCase) {
   if (proceeding.stage === 'review' && !proceeding.reviewingAdminId) controls.push(button(`mod_proceeding_claim_review:${modCase.caseId}`, 'Claim Review', '✋', ButtonStyle.Primary, !judgeAuthority));
   if (proceeding.stage === 'review' && proceeding.reviewingAdminId === interaction.user.id) {
     controls.push(button(`mod_proceeding_decide:${modCase.caseId}`, 'Record Decision', EMOJIS.JUSTICE, ButtonStyle.Danger, !verified.length));
-    controls.push(button(`mod_proceeding_return:${modCase.caseId}`, 'Return for Work', '↩️', ButtonStyle.Secondary));
+    controls.push(button(`mod_proceeding_return:${modCase.caseId}`, 'Return for Work', EMOJIS.WELCOME_INHERIT, ButtonStyle.Secondary));
   }
   if (assignedToOther) controls.push(button(`mod_proceeding_claim_review:${modCase.caseId}`, 'Assigned to Another Reviewer', EMOJIS.LOCK, ButtonStyle.Secondary, true));
   const components = [];
@@ -416,7 +416,7 @@ function buildRecordHistoryPage(modCase) {
   const appealLines = appeals.length ? appeals.slice(-8).reverse().map((appeal) => `**${appealStatusText(appeal)}** • ${discordTime(appeal.submittedAt)}\n${cleanExcerpt(appeal.grounds || '', 180)}${appeal.reviewNote ? `\nReview: ${cleanExcerpt(appeal.reviewNote, 140)}` : ''}${appeal.remedy?.detail ? `\nRemedy: ${cleanExcerpt(appeal.remedy.detail, 140)}` : ''}`) : ['No appeal history recorded.'];
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(`📚 Official Record History • Case #${modCase.caseId}`)
+    .setTitle(`${EMOJIS.FAQ_BOOKS} Official Record History • Case #${modCase.caseId}`)
     .setDescription('Decision, publication and appeal history for this case. Internal evidence and private staff notes are intentionally excluded.')
     .addFields(
       { name: '👨‍⚖️ Decision History', value: decisionLines.join('\n\n').slice(0, 1024), inline: false },
@@ -435,7 +435,7 @@ function buildMemberPreviewPage(modCase) {
   const summary = published?.summary || 'No member-facing summary has been published yet. Use Publish Record to create one.';
   const embed = new EmbedBuilder()
     .setColor(0x57F287)
-    .setTitle(`👁️ Member Preview • Case #${modCase.caseId}`)
+    .setTitle(`${EMOJIS.WELCOME_PREVIEW} Member Preview • Case #${modCase.caseId}`)
     .setDescription('This preview intentionally excludes private notes, draft/rejected evidence, scan intelligence and staff deliberation.')
     .addFields(
       { name: 'Status', value: published ? `Published • Revision ${published.revision || 1}` : 'Not yet published', inline: true },
@@ -762,7 +762,7 @@ async function handleProceedingModal(interaction) {
     if (!isJudge(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Admin authority is required to verify evidence.`, flags: 64 }); return true; }
     const wantedId = field(interaction, 'evidenceId').toUpperCase();
     const status = field(interaction, 'status').toLowerCase();
-    if (!['verified', 'rejected'].includes(status)) { await interaction.reply({ content: '❌ Evidence status must be `verified` or `rejected`.', flags: 64 }); return true; }
+    if (!['verified', 'rejected'].includes(status)) { await interaction.reply({ content: `${EMOJIS.ERROR} Evidence status must be \`verified\` or \`rejected\`.`, flags: 64 }); return true; }
     const index = proceeding.evidence.findIndex((item) => String(item.id).toUpperCase() === wantedId);
     if (index < 0) { await interaction.reply({ content: `${EMOJIS.ERROR} Evidence ${wantedId} was not found in this case.`, flags: 64 }); return true; }
     const evidence = [...proceeding.evidence];
@@ -918,7 +918,7 @@ async function handleProceedingModal(interaction) {
 
 function buildUserPublishedCasesPanel(interaction) {
   const cases = getProceedingCases(interaction.guildId, interaction.user.id).filter((entry) => parseProceeding(entry).stage === 'published' && parseProceeding(entry).publication);
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle('📁 My Published Cases')
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.FOLDER} My Published Cases`)
     .setDescription(cases.length
       ? ['These are the official records staff have published to you. Internal staff notes, drafts and rejected evidence are not shown.', '', ...cases.slice(0, 10).map((entry) => {
         const proceeding = parseProceeding(entry); const pub = proceeding.publication; const decision = proceeding.decision || {};
@@ -933,7 +933,7 @@ function buildUserPublishedCasesPanel(interaction) {
   return {
     embeds: [embed],
     components: [
-      row(button('user:module:appeals', 'Appeals', EMOJIS.NOTE, ButtonStyle.Primary), button('user:home', 'User Panel', '🏠')),
+      row(button('user:module:appeals', 'Appeals', EMOJIS.NOTE, ButtonStyle.Primary), button('user:home', 'User Panel', EMOJIS.HOME)),
       row(button('user:category:account', 'Back', EMOJIS.BACK)),
     ],
   };
