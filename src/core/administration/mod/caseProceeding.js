@@ -36,13 +36,13 @@ const SEVERITY = Object.freeze({
   5: 'Critical',
 });
 const STAGES = Object.freeze({
-  investigation: '🔎 Under Investigation',
-  review: '📥 Awaiting Review',
-  decided: '✅ Decision Recorded',
-  published: '📜 Published',
-  closed: '🔒 Closed',
+  investigation: `${EMOJIS.INVESTIGATE} Under Investigation`,
+  review: `${EMOJIS.JOIN} Awaiting Review`,
+  decided: `${EMOJIS.SUCCESS} Decision Recorded`,
+  published: `${EMOJIS.SCROLL} Published`,
+  closed: `${EMOJIS.LOCK} Closed`,
 });
-const EVIDENCE_STATUS = Object.freeze({ draft: '🟡 Draft', verified: '🟢 Verified', rejected: '🔴 Rejected' });
+const EVIDENCE_STATUS = Object.freeze({ draft: `${EMOJIS.HEALTH_STABLE} Draft`, verified: `${EMOJIS.ACTIVE} Verified`, rejected: `${EMOJIS.STATUS_ALERT} Rejected` });
 const PROCEEDING_EXECUTION_LOCKS = new Set();
 const PROCEEDING_EXECUTION_STALE_MS = 5 * 60 * 1000;
 
@@ -115,7 +115,7 @@ function modalInput(id, label, style = TextInputStyle.Paragraph, required = true
 function caseIsProceeding(modCase) { return Boolean(modCase && (modCase.action === PROCEEDING_ACTION || modCase.metadata?.proceeding)); }
 function getProceedingAppeals(modCase = {}) { return Array.isArray(modCase?.metadata?.appeals) ? modCase.metadata.appeals.filter((appeal) => appeal && typeof appeal === 'object' && appeal.id) : []; }
 function latestProceedingAppeal(modCase = {}) { return getProceedingAppeals(modCase).slice().sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')))[0] || null; }
-function appealStatusText(appeal) { if (!appeal) return 'No appeal submitted.'; return appeal.status === 'approved' ? '✅ Approved' : appeal.status === 'denied' ? '❌ Denied' : '⏳ Pending review'; }
+function appealStatusText(appeal) { if (!appeal) return 'No appeal submitted.'; return appeal.status === 'approved' ? `${EMOJIS.SUCCESS} Approved` : appeal.status === 'denied' ? `${EMOJIS.ERROR} Denied` : `${EMOJIS.TIMEOUT} Pending review`; }
 function proceedingExecutionLockKey(guildId, caseId) { return `${guildId}:${caseId}`; }
 function executionIsStale(execution) { if (!execution || execution.status !== 'executing') return false; const started = new Date(execution.startedAt || execution.claimedAt || 0).getTime(); return !Number.isFinite(started) || Date.now() - started > PROCEEDING_EXECUTION_STALE_MS; }
 function getProceedingCases(guildId, userId = null) {
@@ -131,14 +131,14 @@ function cleanExcerpt(value, max = 220) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
-function staffBackRow(targetId) { return row(button(`mod_proceeding_back:${targetId}`, 'Back', '⬅️')); }
+function staffBackRow(targetId) { return row(button(`mod_proceeding_back:${targetId}`, 'Back', EMOJIS.BACK)); }
 function caseManagementNavigationRow(interaction, targetId) {
-  return row(button(`mod_dashboard:${targetId}:actions`, 'Back', '⬅️'));
+  return row(button(`mod_dashboard:${targetId}:actions`, 'Back', EMOJIS.BACK));
 }
-function caseFileBackRow(caseId) { return row(button(`mod_proceeding_file:${caseId}`, 'Back', '⬅️')); }
+function caseFileBackRow(caseId) { return row(button(`mod_proceeding_file:${caseId}`, 'Back', EMOJIS.BACK)); }
 function canDeleteProceeding(interaction) { return canUseModAction(interaction.member, interaction.guild, 'proceeding_delete', interaction); }
 function caseFileNavigationRow(interaction, modCase) {
-  return row(button(`mod_proceeding_back:${modCase.userId}`, 'Back', '⬅️'));
+  return row(button(`mod_proceeding_back:${modCase.userId}`, 'Back', EMOJIS.BACK));
 }
 function auditRows(guildId, caseId, limit = 25) {
   try { return db.prepare('SELECT actor_id, event, after_value, metadata, created_at FROM case_audit WHERE guild_id = ? AND case_id = ? ORDER BY audit_id DESC LIMIT ?').all(String(guildId), Number(caseId), Math.max(1, Math.min(50, Number(limit) || 25))); }
@@ -151,7 +151,7 @@ function buildProceedingDashboard(interaction, target) {
   const latest = cases.slice(0, 5);
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle(target ? `📂 Cases · ${target.displayName || target.user.globalName || target.user.username || target.user.tag}` : '📂 Cases')
+    .setTitle(target ? `${EMOJIS.MOD_CASE_OPEN} Cases · ${target.displayName || target.user.globalName || target.user.username || target.user.tag}` : `${EMOJIS.MOD_CASE_OPEN} Cases`)
     .setDescription(target
       ? ['Build the internal case file here. Only a **published record** is visible to the member.', '', `**Subject:** ${target.user} • \`${target.id}\``].join('\n')
       : 'Review case files and entry-security quarantines. Select a member to manage their records.')
@@ -175,7 +175,7 @@ function buildProceedingDashboard(interaction, target) {
   if (target) {
     if (cases.length) components.push(row(new StringSelectMenuBuilder()
       .setCustomId(`mod_proceeding_open:${target.id}`)
-      .setPlaceholder('📂 Open a case file')
+      .setPlaceholder(`${EMOJIS.MOD_CASE_OPEN} Open a case file`)
       .addOptions(cases.slice(0, 25).map((entry) => {
         const proceeding = parseProceeding(entry);
         const memberName = target.displayName || target.user?.globalName || target.user?.username || 'Unknown Member';
@@ -184,15 +184,15 @@ function buildProceedingDashboard(interaction, target) {
           label: cleanExcerpt(`${memberName} • ${target.id} • ${caseTitle}`, 100),
           description: cleanExcerpt(`Case #${entry.caseId} • ${stageText(proceeding.stage).replace(/^\S+\s/, '')} • Severity ${severityText(proceeding.severity)}`, 100),
           value: String(entry.caseId),
-          emoji: proceeding.stage === 'published' ? '📜' : proceeding.stage === 'review' ? '⚖️' : '📂',
+          emoji: proceeding.stage === 'published' ? EMOJIS.SCROLL : proceeding.stage === 'review' ? EMOJIS.JUSTICE : EMOJIS.MOD_CASE_OPEN,
         };
       }))));
     const dashboardActions = [
-    button(`mod_proceeding_new:${target.id}`, 'New Case', '➕', ButtonStyle.Primary, !canManageProceeding(interaction)),
-    button(`mod_proceeding_review_queue:${target.id}`, 'Review Queue', '⚖️'),
-    button(`mod_proceeding_published:${target.id}`, 'Published', '📜'),
+    button(`mod_proceeding_new:${target.id}`, 'New Case', EMOJIS.ADD, ButtonStyle.Primary, !canManageProceeding(interaction)),
+    button(`mod_proceeding_review_queue:${target.id}`, 'Review Queue', EMOJIS.JUSTICE),
+    button(`mod_proceeding_published:${target.id}`, 'Published', EMOJIS.SCROLL),
   ];
-  if (canUseModAction(interaction.member, interaction.guild, 'export_cases', interaction)) dashboardActions.push(button(`mod_export_cases:${target.id}`, 'Export', '📤'));
+  if (canUseModAction(interaction.member, interaction.guild, 'export_cases', interaction)) dashboardActions.push(button(`mod_export_cases:${target.id}`, 'Export', EMOJIS.LEAVE));
   components.push(row(...dashboardActions));
   components.push(caseManagementNavigationRow(interaction, target.id));
   }
@@ -237,14 +237,14 @@ function buildCaseFile(interaction, modCase) {
         `**Finding:** ${cleanExcerpt(proceeding.decision.finding, 180)}`,
         `**Action:** ${String(proceeding.decision.action || 'none').replaceAll('_', ' ')}`,
         `**Recorded by:** <@${proceeding.decision.decidedBy}> • ${discordTime(proceeding.decision.decidedAt)}`,
-        proceeding.decision.action === 'ban' ? `**Second approval:** ${proceeding.sanctionReview?.status === 'approved' ? `✅ Approved by <@${proceeding.sanctionReview.approvedBy}>` : '⏳ Required'}` : null,
-        proceeding.sanctionExecution ? `**Execution:** ${proceeding.sanctionExecution.status === 'executed' ? '✅ Completed' : proceeding.sanctionExecution.status === 'reversed' ? '✅ Resolved' : proceeding.sanctionExecution.status === 'reversing' ? '⏳ Applying appeal outcome' : proceeding.sanctionExecution.status === 'reversal_failed' ? '⚠️ Appeal remedy failed' : proceeding.sanctionExecution.status === 'executing' ? '⏳ In progress' : proceeding.sanctionExecution.status === 'failed' ? '❌ Failed' : '⏳ Pending'}` : (proceeding.decision.action !== 'no_action' ? '**Execution:** ⏳ Pending' : null),
+        proceeding.decision.action === 'ban' ? `**Second approval:** ${proceeding.sanctionReview?.status === 'approved' ? `${EMOJIS.SUCCESS} Approved by <@${proceeding.sanctionReview.approvedBy}>` : `${EMOJIS.TIMEOUT} Required`}` : null,
+        proceeding.sanctionExecution ? `**Execution:** ${proceeding.sanctionExecution.status === 'executed' ? `${EMOJIS.SUCCESS} Completed` : proceeding.sanctionExecution.status === 'reversed' ? `${EMOJIS.SUCCESS} Resolved` : proceeding.sanctionExecution.status === 'reversing' ? `${EMOJIS.TIMEOUT} Applying appeal outcome` : proceeding.sanctionExecution.status === 'reversal_failed' ? `${EMOJIS.WARNING} Appeal remedy failed` : proceeding.sanctionExecution.status === 'executing' ? `${EMOJIS.TIMEOUT} In progress` : proceeding.sanctionExecution.status === 'failed' ? `${EMOJIS.ERROR} Failed` : `${EMOJIS.TIMEOUT} Pending`}` : (proceeding.decision.action !== 'no_action' ? '**Execution:** ⏳ Pending' : null),
       ].filter(Boolean).join('\n')
     : 'No decision has been recorded yet.';
 
   const recordSummary = proceeding.publication
-    ? `✅ **Published** • Revision ${proceeding.publication.revision || 1}\nPublished by <@${proceeding.publication.publishedBy}> ${discordTime(proceeding.publication.publishedAt)}\n${cleanExcerpt(proceeding.publication.summary, 360)}`
-    : '🔒 **Internal only** • Nothing from this case is currently visible to the member.';
+    ? `${EMOJIS.SUCCESS} **Published** • Revision ${proceeding.publication.revision || 1}\nPublished by <@${proceeding.publication.publishedBy}> ${discordTime(proceeding.publication.publishedAt)}\n${cleanExcerpt(proceeding.publication.summary, 360)}`
+    : `${EMOJIS.LOCK} **Internal only** • Nothing from this case is currently visible to the member.`;
 
   const appealSummary = latestAppeal
     ? `${appealStatusText(latestAppeal)} • ${discordTime(latestAppeal.submittedAt)}${latestAppeal.reviewedAt ? ` • reviewed ${discordTime(latestAppeal.reviewedAt)}` : ''}`
@@ -252,7 +252,7 @@ function buildCaseFile(interaction, modCase) {
 
   const embed = new EmbedBuilder()
     .setColor(proceeding.stage === 'review' ? 0xFEE75C : proceeding.stage === 'published' ? 0x57F287 : proceeding.stage === 'closed' ? 0x747F8D : 0x5865F2)
-    .setTitle(`📂 ${cleanExcerpt(proceeding.title, 72)} • Case #${modCase.caseId}`)
+    .setTitle(`${EMOJIS.MOD_CASE_OPEN} ${cleanExcerpt(proceeding.title, 72)} • Case #${modCase.caseId}`)
     .setDescription([
       `**${stageText(proceeding.stage)}** • Severity **${severityText(proceeding.severity)}**`,
       `**Subject:** <@${modCase.userId}> • \`${modCase.userId}\``,
@@ -261,22 +261,22 @@ function buildCaseFile(interaction, modCase) {
       `**Next step:** ${nextStep}`,
     ].join('\n'))
     .addFields(
-      { name: '📋 Case Summary', value: cleanExcerpt(proceeding.allegations || modCase.reason || 'No case summary recorded.', 1024), inline: false },
-      { name: '🗂️ Working File', value: [
+      { name: `${EMOJIS.CLIPBOARD} Case Summary`, value: cleanExcerpt(proceeding.allegations || modCase.reason || 'No case summary recorded.', 1024), inline: false },
+      { name: `${EMOJIS.WORKSPACE} Working File`, value: [
         `**Evidence:** ✅ ${verified.length} verified • 🟡 ${draft.length} draft • 🔴 ${rejected.length} rejected`,
         `**Private notes:** ${proceeding.notes.length}`,
         `**Linked moderation records:** ${proceeding.linkedCases.length}`,
         `**Recommendation:** ${proceeding.recommendation?.reason ? cleanExcerpt(proceeding.recommendation.reason, 180) : 'Not set'}`,
       ].join('\n'), inline: false },
-      { name: '✅ Review & Decision', value: decisionSummary.slice(0, 1024), inline: false },
-      { name: '📜 Member Record', value: `${recordSummary}\n**Appeal:** ${appealSummary}`.slice(0, 1024), inline: false },
+      { name: `${EMOJIS.SUCCESS} Review & Decision`, value: decisionSummary.slice(0, 1024), inline: false },
+      { name: `${EMOJIS.SCROLL} Member Record`, value: `${recordSummary}\n**Appeal:** ${appealSummary}`.slice(0, 1024), inline: false },
     )
     .setFooter({ text: 'Private staff case file • only verified, approved information may be published to the member' })
     .setTimestamp();
 
   const workspace = new StringSelectMenuBuilder()
     .setCustomId(`mod_proceeding_workspace:${modCase.caseId}`)
-    .setPlaceholder('🗂️ Open case workspace')
+    .setPlaceholder(`${EMOJIS.WORKSPACE} Open case workspace`)
     .addOptions(
       { label: 'Evidence', description: `${proceeding.evidence.length} item(s) • review sources and verification`, value: 'evidence', emoji: EMOJIS.INVESTIGATE },
       { label: 'Private Notes', description: `${proceeding.notes.length} note(s) • internal staff working notes`, value: 'notes', emoji: EMOJIS.NOTE },
@@ -287,30 +287,30 @@ function buildCaseFile(interaction, modCase) {
     );
 
   const workflowButtons = [
-    button(`mod_proceeding_submit_review:${modCase.caseId}`, proceeding.stage === 'review' ? 'Pending' : 'Review', '📥', ButtonStyle.Primary, !canManage || proceeding.stage !== 'investigation'),
-    button(`mod_proceeding_verify:${modCase.caseId}`, 'Verify', '✅', ButtonStyle.Secondary, !reviewerAuthority || !proceeding.evidence.length || isClosed),
-    button(`mod_proceeding_decide:${modCase.caseId}`, 'Decide', '🧾', canDecide ? ButtonStyle.Primary : ButtonStyle.Secondary, !canDecide),
-    button(`mod_proceeding_publish:${modCase.caseId}`, proceeding.publication ? 'Update' : 'Publish', '📜', ButtonStyle.Success, !canPublishProceeding(interaction) || !proceeding.decision || isClosed || (proceeding.decision?.action === 'ban' && proceeding.sanctionReview?.status !== 'approved')),
-    button(`mod_proceeding_execute:${modCase.caseId}`, proceeding.sanctionExecution?.status === 'executed' ? 'Done' : proceeding.sanctionExecution?.status === 'reversed' ? 'Resolved' : proceeding.sanctionExecution?.status === 'reversing' ? 'Processing appeal' : proceeding.sanctionExecution?.status === 'reversal_failed' ? 'Appeal Failed' : proceeding.sanctionExecution?.status === 'executing' && !executionIsStale(proceeding.sanctionExecution) ? 'Running' : proceeding.sanctionExecution?.status === 'failed' || executionIsStale(proceeding.sanctionExecution) ? 'Retry' : 'Execute', '⚡', ButtonStyle.Danger, !reviewerAuthority || !canExecuteAction || isClosed || modCase.status === 'reversed' || proceeding.stage !== 'published' || !proceeding.decision || proceeding.decision.action === 'no_action' || ['executed', 'reversed', 'reversing', 'reversal_failed'].includes(proceeding.sanctionExecution?.status) || (proceeding.sanctionExecution?.status === 'executing' && !executionIsStale(proceeding.sanctionExecution)) || (proceeding.decision?.action === 'ban' && proceeding.sanctionReview?.status !== 'approved')),
+    button(`mod_proceeding_submit_review:${modCase.caseId}`, proceeding.stage === 'review' ? 'Pending' : 'Review', EMOJIS.JOIN, ButtonStyle.Primary, !canManage || proceeding.stage !== 'investigation'),
+    button(`mod_proceeding_verify:${modCase.caseId}`, 'Verify', EMOJIS.SUCCESS, ButtonStyle.Secondary, !reviewerAuthority || !proceeding.evidence.length || isClosed),
+    button(`mod_proceeding_decide:${modCase.caseId}`, 'Decide', EMOJIS.CASE, canDecide ? ButtonStyle.Primary : ButtonStyle.Secondary, !canDecide),
+    button(`mod_proceeding_publish:${modCase.caseId}`, proceeding.publication ? 'Update' : 'Publish', EMOJIS.SCROLL, ButtonStyle.Success, !canPublishProceeding(interaction) || !proceeding.decision || isClosed || (proceeding.decision?.action === 'ban' && proceeding.sanctionReview?.status !== 'approved')),
+    button(`mod_proceeding_execute:${modCase.caseId}`, proceeding.sanctionExecution?.status === 'executed' ? 'Done' : proceeding.sanctionExecution?.status === 'reversed' ? 'Resolved' : proceeding.sanctionExecution?.status === 'reversing' ? 'Processing appeal' : proceeding.sanctionExecution?.status === 'reversal_failed' ? 'Appeal Failed' : proceeding.sanctionExecution?.status === 'executing' && !executionIsStale(proceeding.sanctionExecution) ? 'Running' : proceeding.sanctionExecution?.status === 'failed' || executionIsStale(proceeding.sanctionExecution) ? 'Retry' : 'Execute', EMOJIS.THREAT, ButtonStyle.Danger, !reviewerAuthority || !canExecuteAction || isClosed || modCase.status === 'reversed' || proceeding.stage !== 'published' || !proceeding.decision || proceeding.decision.action === 'no_action' || ['executed', 'reversed', 'reversing', 'reversal_failed'].includes(proceeding.sanctionExecution?.status) || (proceeding.sanctionExecution?.status === 'executing' && !executionIsStale(proceeding.sanctionExecution)) || (proceeding.decision?.action === 'ban' && proceeding.sanctionReview?.status !== 'approved')),
   ];
 
   const controlButtons = [];
   if (proceeding.decision?.action === 'ban' && proceeding.sanctionReview?.status !== 'approved') {
-    controlButtons.push(button(`mod_proceeding_approve_ban:${modCase.caseId}`, 'Approve Ban', '🛡️', ButtonStyle.Danger, !reviewerAuthority || proceeding.decision?.decidedBy === interaction.user.id));
+    controlButtons.push(button(`mod_proceeding_approve_ban:${modCase.caseId}`, 'Approve Ban', EMOJIS.SECURITY, ButtonStyle.Danger, !reviewerAuthority || proceeding.decision?.decidedBy === interaction.user.id));
   }
-  if (appeals.length) controlButtons.push(button(`mod_case_appeal_history:${modCase.caseId}:0`, `Appeals (${appeals.length})`, '⚖️'));
-  controlButtons.push(button('mod_case_appeal_queue:0', 'Appeals', '📥'));
-  if (canDeleteProceeding(interaction)) controlButtons.push(button(`mod_proceeding_delete:${modCase.caseId}`, 'Delete Case', '🗑️', ButtonStyle.Danger));
-  controlButtons.push(button(isClosed ? `mod_proceeding_reopen:${modCase.caseId}` : `mod_proceeding_close:${modCase.caseId}`, isClosed ? 'Reopen' : 'Close', isClosed ? '🔓' : '🔒', ButtonStyle.Secondary, !canCloseProceeding(interaction)));
+  if (appeals.length) controlButtons.push(button(`mod_case_appeal_history:${modCase.caseId}:0`, `Appeals (${appeals.length})`, EMOJIS.JUSTICE));
+  controlButtons.push(button('mod_case_appeal_queue:0', 'Appeals', EMOJIS.JOIN));
+  if (canDeleteProceeding(interaction)) controlButtons.push(button(`mod_proceeding_delete:${modCase.caseId}`, 'Delete Case', EMOJIS.DELETE, ButtonStyle.Danger));
+  controlButtons.push(button(isClosed ? `mod_proceeding_reopen:${modCase.caseId}` : `mod_proceeding_close:${modCase.caseId}`, isClosed ? 'Reopen' : 'Close', isClosed ? EMOJIS.UNLOCK : EMOJIS.LOCK, ButtonStyle.Secondary, !canCloseProceeding(interaction)));
 
   const components = [
     row(workspace),
     row(
-      button(`mod_proceeding_evidence:${modCase.caseId}`, 'Evidence', '➕', ButtonStyle.Primary, !canManage || isClosed),
-      button(`mod_proceeding_note:${modCase.caseId}`, 'Note', '📝', ButtonStyle.Secondary, !canManage || isClosed),
-      button(`mod_proceeding_import:${modCase.caseId}`, 'Import', '🔗', ButtonStyle.Secondary, !canManage || isClosed),
-      button(`mod_proceeding_severity:${modCase.caseId}`, 'Severity', '📊', ButtonStyle.Secondary, !canManage || isClosed),
-      button(`mod_proceeding_recommend:${modCase.caseId}`, 'Recommend', '📋', ButtonStyle.Secondary, !canManage || isClosed),
+      button(`mod_proceeding_evidence:${modCase.caseId}`, 'Evidence', EMOJIS.ADD, ButtonStyle.Primary, !canManage || isClosed),
+      button(`mod_proceeding_note:${modCase.caseId}`, 'Note', EMOJIS.NOTE, ButtonStyle.Secondary, !canManage || isClosed),
+      button(`mod_proceeding_import:${modCase.caseId}`, 'Import', EMOJIS.LINK, ButtonStyle.Secondary, !canManage || isClosed),
+      button(`mod_proceeding_severity:${modCase.caseId}`, 'Severity', EMOJIS.CHART, ButtonStyle.Secondary, !canManage || isClosed),
+      button(`mod_proceeding_recommend:${modCase.caseId}`, 'Recommend', EMOJIS.CLIPBOARD, ButtonStyle.Secondary, !canManage || isClosed),
     ),
     row(...workflowButtons),
     row(...controlButtons),
@@ -327,15 +327,15 @@ function buildEvidencePage(interaction, modCase) {
     const verification = item.status === 'verified' ? `\nVerified by <@${item.verifiedBy}> ${discordTime(item.verifiedAt)}` : item.status === 'rejected' ? `\nRejected by <@${item.verifiedBy}> ${discordTime(item.verifiedAt)}` : '';
     return `${EVIDENCE_STATUS[item.status] || EVIDENCE_STATUS.draft} **${item.id} • ${cleanExcerpt(item.title, 90)}**\nSource: ${cleanExcerpt(item.source || 'Internal submission', 120)}\n${cleanExcerpt(item.details, 240)}${verification}`;
   }) : ['No evidence has been added to this case.'];
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`🔎 Evidence • Case #${modCase.caseId}`).setDescription(lines.join('\n\n').slice(0, 4000)).setFooter({ text: 'Draft evidence stays internal until an authorised admin verifies it' }).setTimestamp();
-  return { embeds: [embed], components: [row(button(`mod_proceeding_evidence:${modCase.caseId}`, 'Add Evidence', '➕', ButtonStyle.Primary, !canManage), button(`mod_proceeding_verify:${modCase.caseId}`, 'Verify Evidence', '✅', ButtonStyle.Secondary, !judgeAuthority || !proceeding.evidence.length || proceeding.stage === 'closed')), caseFileBackRow(modCase.caseId)] };
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.INVESTIGATE} Evidence • Case #${modCase.caseId}`).setDescription(lines.join('\n\n').slice(0, 4000)).setFooter({ text: 'Draft evidence stays internal until an authorised admin verifies it' }).setTimestamp();
+  return { embeds: [embed], components: [row(button(`mod_proceeding_evidence:${modCase.caseId}`, 'Add Evidence', EMOJIS.ADD, ButtonStyle.Primary, !canManage), button(`mod_proceeding_verify:${modCase.caseId}`, 'Verify Evidence', EMOJIS.SUCCESS, ButtonStyle.Secondary, !judgeAuthority || !proceeding.evidence.length || proceeding.stage === 'closed')), caseFileBackRow(modCase.caseId)] };
 }
 function buildNotesPage(interaction, modCase) {
   const proceeding = parseProceeding(modCase);
   const canManage = canManageProceeding(interaction) && proceeding.stage !== 'closed';
   const lines = proceeding.notes.length ? proceeding.notes.slice(-15).reverse().map((item) => `**${item.id || 'Note'}** • <@${item.authorId}> • ${discordTime(item.createdAt)}\n${cleanExcerpt(item.text, 300)}`) : ['No private staff notes have been added.'];
-  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`📝 Case Notes • #${modCase.caseId}`).setDescription(lines.join('\n\n').slice(0, 4000)).setFooter({ text: 'Private staff paperwork • never published automatically' }).setTimestamp();
-  return { embeds: [embed], components: [row(button(`mod_proceeding_note:${modCase.caseId}`, 'Add Case Note', '➕', ButtonStyle.Primary, !canManage)), caseFileBackRow(modCase.caseId)] };
+  const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(`${EMOJIS.NOTE} Case Notes • #${modCase.caseId}`).setDescription(lines.join('\n\n').slice(0, 4000)).setFooter({ text: 'Private staff paperwork • never published automatically' }).setTimestamp();
+  return { embeds: [embed], components: [row(button(`mod_proceeding_note:${modCase.caseId}`, 'Add Case Note', EMOJIS.ADD, ButtonStyle.Primary, !canManage)), caseFileBackRow(modCase.caseId)] };
 }
 function buildTimelinePage(interaction, modCase) {
   const rows = auditRows(interaction.guildId, modCase.caseId, 20);
@@ -356,20 +356,20 @@ function buildReviewBriefPage(interaction, modCase) {
   const recommendation = proceeding.recommendation?.reason || 'No moderator recommendation recorded.';
   const reviewer = proceeding.reviewingAdminId ? `<@${proceeding.reviewingAdminId}>${proceeding.reviewClaimedAt ? ` • claimed ${discordTime(proceeding.reviewClaimedAt)}` : ''}` : 'Unassigned';
   const readiness = [
-    verified.length ? '✅ Verified evidence present' : '❌ No verified evidence',
-    proceeding.recommendation ? '✅ Moderator recommendation recorded' : '⚠️ No recommendation',
-    proceeding.stage === 'review' ? '✅ Submitted for review' : `⚠️ Current stage: ${stageText(proceeding.stage)}`,
-    proceeding.reviewingAdminId ? '✅ Reviewer assigned' : '⚠️ Awaiting reviewer claim',
+    verified.length ? `${EMOJIS.SUCCESS} Verified evidence present` : `${EMOJIS.ERROR} No verified evidence`,
+    proceeding.recommendation ? `${EMOJIS.SUCCESS} Moderator recommendation recorded` : `${EMOJIS.WARNING} No recommendation`,
+    proceeding.stage === 'review' ? `${EMOJIS.SUCCESS} Submitted for review` : `${EMOJIS.WARNING} Current stage: ${stageText(proceeding.stage)}`,
+    proceeding.reviewingAdminId ? `${EMOJIS.SUCCESS} Reviewer assigned` : `${EMOJIS.WARNING} Awaiting reviewer claim`,
   ].join('\n');
   const embed = new EmbedBuilder()
     .setColor(0xFEE75C)
-    .setTitle(`⚖️ Review Brief • Case #${modCase.caseId}`)
+    .setTitle(`${EMOJIS.JUSTICE} Review Brief • Case #${modCase.caseId}`)
     .setDescription(`**Subject:** <@${modCase.userId}> • \`${modCase.userId}\`\n**Severity:** **${severityText(proceeding.severity)}**\n**Lead:** <@${proceeding.leadModeratorId}>\n**Decision by:** ${reviewer}`)
     .addFields(
-      { name: '📋 Allegations', value: cleanExcerpt(proceeding.allegations || modCase.reason, 1024), inline: false },
-      { name: '🔎 Evidence Position', value: `Verified **${verified.length}** • Draft **${draft.length}** • Rejected **${proceeding.evidence.filter((item) => item.status === 'rejected').length}**\n${verified.slice(0, 6).map((item) => `• **${item.id}** ${cleanExcerpt(item.title, 90)}`).join('\n') || 'No verified evidence.'}`, inline: false },
-      { name: '📋 Moderator Recommendation', value: cleanExcerpt(recommendation, 1024), inline: false },
-      { name: '✅ Decision Readiness', value: readiness, inline: false },
+      { name: `${EMOJIS.CLIPBOARD} Allegations`, value: cleanExcerpt(proceeding.allegations || modCase.reason, 1024), inline: false },
+      { name: `${EMOJIS.INVESTIGATE} Evidence Position`, value: `Verified **${verified.length}** • Draft **${draft.length}** • Rejected **${proceeding.evidence.filter((item) => item.status === 'rejected').length}**\n${verified.slice(0, 6).map((item) => `• **${item.id}** ${cleanExcerpt(item.title, 90)}`).join('\n') || 'No verified evidence.'}`, inline: false },
+      { name: `${EMOJIS.CLIPBOARD} Moderator Recommendation`, value: cleanExcerpt(recommendation, 1024), inline: false },
+      { name: `${EMOJIS.SUCCESS} Decision Readiness`, value: readiness, inline: false },
     )
     .setFooter({ text: 'An authorised reviewer must claim the case before recording a decision' })
     .setTimestamp();
@@ -378,10 +378,10 @@ function buildReviewBriefPage(interaction, modCase) {
   const controls = [];
   if (proceeding.stage === 'review' && !proceeding.reviewingAdminId) controls.push(button(`mod_proceeding_claim_review:${modCase.caseId}`, 'Claim Review', '✋', ButtonStyle.Primary, !judgeAuthority));
   if (proceeding.stage === 'review' && proceeding.reviewingAdminId === interaction.user.id) {
-    controls.push(button(`mod_proceeding_decide:${modCase.caseId}`, 'Record Decision', '⚖️', ButtonStyle.Danger, !verified.length));
+    controls.push(button(`mod_proceeding_decide:${modCase.caseId}`, 'Record Decision', EMOJIS.JUSTICE, ButtonStyle.Danger, !verified.length));
     controls.push(button(`mod_proceeding_return:${modCase.caseId}`, 'Return for Work', '↩️', ButtonStyle.Secondary));
   }
-  if (assignedToOther) controls.push(button(`mod_proceeding_claim_review:${modCase.caseId}`, 'Assigned to Another Reviewer', '🔒', ButtonStyle.Secondary, true));
+  if (assignedToOther) controls.push(button(`mod_proceeding_claim_review:${modCase.caseId}`, 'Assigned to Another Reviewer', EMOJIS.LOCK, ButtonStyle.Secondary, true));
   const components = [];
   if (controls.length) components.push(row(...controls.slice(0, 5)));
   components.push(caseFileBackRow(modCase.caseId));
@@ -420,8 +420,8 @@ function buildRecordHistoryPage(modCase) {
     .setDescription('Decision, publication and appeal history for this case. Internal evidence and private staff notes are intentionally excluded.')
     .addFields(
       { name: '👨‍⚖️ Decision History', value: decisionLines.join('\n\n').slice(0, 1024), inline: false },
-      { name: '📜 Publication Revisions', value: publicationLines.join('\n\n').slice(0, 1024), inline: false },
-      { name: '⚖️ Appeal History', value: appealLines.join('\n\n').slice(0, 1024), inline: false },
+      { name: `${EMOJIS.SCROLL} Publication Revisions`, value: publicationLines.join('\n\n').slice(0, 1024), inline: false },
+      { name: `${EMOJIS.JUSTICE} Appeal History`, value: appealLines.join('\n\n').slice(0, 1024), inline: false },
     )
     .setFooter({ text: 'Case record history • newest entries first' })
     .setTimestamp();
@@ -567,7 +567,7 @@ async function handleProceedingInteraction(interaction) {
   const parts = id.split(':');
   const key = parts[0];
   const value = parts[1];
-  if (key === 'mod_proceeding_new') { if (!canManageProceeding(interaction)) { await interaction.reply({ content: '❌ Case-management authority is required to open a case.', flags: 64 }); return true; } await interaction.showModal(newCaseModal(value)); return true; }
+  if (key === 'mod_proceeding_new') { if (!canManageProceeding(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Case-management authority is required to open a case.`, flags: 64 }); return true; } await interaction.showModal(newCaseModal(value)); return true; }
   if (key === 'mod_proceeding_back') {
     const target = await interaction.guild.members.fetch(value).catch(() => null);
     if (!target) return false;
@@ -580,10 +580,10 @@ async function handleProceedingInteraction(interaction) {
     const wanted = key === 'mod_proceeding_review_queue' ? 'review' : 'published';
     const all = wanted === 'review' ? getProceedingCases(interaction.guildId) : (target ? getProceedingCases(interaction.guildId, target.id) : []);
     const matches = all.filter((entry) => parseProceeding(entry).stage === wanted);
-    const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(wanted === 'review' ? '⚖️ Review Queue' : '📜 Published Records')
+    const embed = new EmbedBuilder().setColor(0x5865F2).setTitle(wanted === 'review' ? `${EMOJIS.JUSTICE} Review Queue` : `${EMOJIS.SCROLL} Published Records`)
       .setDescription(matches.length ? matches.map((entry) => `**#${entry.caseId}** • Severity **${severityText(parseProceeding(entry).severity)}**\n${cleanExcerpt(parseProceeding(entry).allegations, 160)}`).join('\n\n') : `No ${wanted === 'review' ? 'cases awaiting review' : 'published records'} for this member.`);
     const components = [];
-    if (matches.length) components.push(row(new StringSelectMenuBuilder().setCustomId(`mod_proceeding_open:${value}`).setPlaceholder('Open a case file').addOptions(matches.slice(0, 25).map((entry) => ({ label: `Case #${entry.caseId}`, description: cleanExcerpt(parseProceeding(entry).allegations, 80), value: String(entry.caseId), emoji: wanted === 'review' ? '⚖️' : '📜' })))));
+    if (matches.length) components.push(row(new StringSelectMenuBuilder().setCustomId(`mod_proceeding_open:${value}`).setPlaceholder('Open a case file').addOptions(matches.slice(0, 25).map((entry) => ({ label: `Case #${entry.caseId}`, description: cleanExcerpt(parseProceeding(entry).allegations, 80), value: String(entry.caseId), emoji: wanted === 'review' ? EMOJIS.JUSTICE : EMOJIS.SCROLL })))));
     components.push(staffBackRow(value));
     await interaction.update({ embeds: [embed], components });
     return true;
@@ -596,65 +596,65 @@ async function handleProceedingInteraction(interaction) {
   if (key === 'mod_proceeding_evidence_view') { await interaction.update(buildEvidencePage(interaction, modCase)); return true; }
   if (key === 'mod_proceeding_notes_view') { await interaction.update(buildNotesPage(interaction, modCase)); return true; }
   if (key === 'mod_proceeding_timeline') { await interaction.update(buildTimelinePage(interaction, modCase)); return true; }
-  if (key === 'mod_proceeding_recommend') { if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: '❌ This case cannot be edited with your current authority or stage.', flags: 64 }); return true; } await interaction.showModal(recommendationModal(caseId, proceeding)); return true; }
+  if (key === 'mod_proceeding_recommend') { if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} This case cannot be edited with your current authority or stage.`, flags: 64 }); return true; } await interaction.showModal(recommendationModal(caseId, proceeding)); return true; }
   if (key === 'mod_proceeding_review_brief') { await interaction.update(buildReviewBriefPage(interaction, modCase)); return true; }
   if (key === 'mod_proceeding_preview') { await interaction.update(buildMemberPreviewPage(modCase)); return true; }
   if (key === 'mod_proceeding_record_history') { await interaction.update(buildRecordHistoryPage(modCase)); return true; }
   if (key === 'mod_proceeding_claim_review') {
-    if (!isJudge(interaction) || proceeding.stage !== 'review') { await interaction.reply({ content: '❌ This review cannot be claimed.', flags: 64 }); return true; }
-    if (proceeding.reviewingAdminId && proceeding.reviewingAdminId !== interaction.user.id) { await interaction.reply({ content: '❌ Another reviewer has already claimed this review.', flags: 64 }); return true; }
+    if (!isJudge(interaction) || proceeding.stage !== 'review') { await interaction.reply({ content: `${EMOJIS.ERROR} This review cannot be claimed.`, flags: 64 }); return true; }
+    if (proceeding.reviewingAdminId && proceeding.reviewingAdminId !== interaction.user.id) { await interaction.reply({ content: `${EMOJIS.ERROR} Another reviewer has already claimed this review.`, flags: 64 }); return true; }
     const next = { ...proceeding, reviewingAdminId: interaction.user.id, reviewClaimedAt: now() };
     const updated = saveProceeding(interaction.guildId, caseId, next, interaction.user.id, 'case.proceeding.review_claimed', proceeding);
     await interaction.update(buildReviewBriefPage(interaction, updated));
     return true;
   }
   if (key === 'mod_proceeding_return') {
-    if (!isJudge(interaction) || proceeding.reviewingAdminId !== interaction.user.id || proceeding.stage !== 'review') { await interaction.reply({ content: '❌ Only the assigned reviewer can return this case for more work.', flags: 64 }); return true; }
+    if (!isJudge(interaction) || proceeding.reviewingAdminId !== interaction.user.id || proceeding.stage !== 'review') { await interaction.reply({ content: `${EMOJIS.ERROR} Only the assigned reviewer can return this case for more work.`, flags: 64 }); return true; }
     const next = { ...proceeding, stage: 'investigation', reviewingAdminId: null, reviewClaimedAt: null, submittedForReviewAt: null, submittedForReviewBy: null, notes: [...proceeding.notes, { id: `N${proceeding.notes.length + 1}`, text: 'Reviewer returned the case to investigation for further work.', authorId: interaction.user.id, createdAt: now() }] };
     const updated = saveProceeding(interaction.guildId, caseId, next, interaction.user.id, 'case.proceeding.returned_to_investigation', proceeding);
     await updateCaseMessage(interaction, updated);
     return true;
   }
   if (key === 'mod_proceeding_approve_ban') {
-    if (!isJudge(interaction) || proceeding.decision?.action !== 'ban') { await interaction.reply({ content: '❌ There is no ban decision awaiting approval.', flags: 64 }); return true; }
-    if (proceeding.decision.decidedBy === interaction.user.id) { await interaction.reply({ content: '❌ The admin who recorded the decision cannot also approve the ban. A second admin must approve it.', flags: 64 }); return true; }
-    if (proceeding.sanctionReview?.status === 'approved') { await interaction.reply({ content: '❌ This ban decision is already approved.', flags: 64 }); return true; }
+    if (!isJudge(interaction) || proceeding.decision?.action !== 'ban') { await interaction.reply({ content: `${EMOJIS.ERROR} There is no ban decision awaiting approval.`, flags: 64 }); return true; }
+    if (proceeding.decision.decidedBy === interaction.user.id) { await interaction.reply({ content: `${EMOJIS.ERROR} The admin who recorded the decision cannot also approve the ban. A second admin must approve it.`, flags: 64 }); return true; }
+    if (proceeding.sanctionReview?.status === 'approved') { await interaction.reply({ content: `${EMOJIS.ERROR} This ban decision is already approved.`, flags: 64 }); return true; }
     const next = { ...proceeding, sanctionReview: { ...(proceeding.sanctionReview || {}), required: true, status: 'approved', approvedBy: interaction.user.id, approvedAt: now() } };
     const updated = saveProceeding(interaction.guildId, caseId, next, interaction.user.id, 'case.proceeding.ban_approved', proceeding);
     await updateCaseMessage(interaction, updated);
     return true;
   }
   if (key === 'mod_proceeding_delete') {
-    if (!canDeleteProceeding(interaction)) { await interaction.reply({ content: '❌ Case deletion authority is required.', flags: 64 }); return true; }
+    if (!canDeleteProceeding(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Case deletion authority is required.`, flags: 64 }); return true; }
     await interaction.showModal(deleteCaseModal(caseId));
     return true;
   }
-  if (key === 'mod_proceeding_close') { if (!canCloseProceeding(interaction)) { await interaction.reply({ content: '❌ Case closure authority is required.', flags: 64 }); return true; } await interaction.showModal(closeCaseModal(caseId)); return true; }
-  if (key === 'mod_proceeding_reopen') { if (!canCloseProceeding(interaction)) { await interaction.reply({ content: '❌ Case closure authority is required.', flags: 64 }); return true; }
-    if (proceeding.stage !== 'closed') { await interaction.reply({ content: '❌ This case cannot be reopened.', flags: 64 }); return true; }
+  if (key === 'mod_proceeding_close') { if (!canCloseProceeding(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Case closure authority is required.`, flags: 64 }); return true; } await interaction.showModal(closeCaseModal(caseId)); return true; }
+  if (key === 'mod_proceeding_reopen') { if (!canCloseProceeding(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Case closure authority is required.`, flags: 64 }); return true; }
+    if (proceeding.stage !== 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} This case cannot be reopened.`, flags: 64 }); return true; }
     const next = { ...proceeding, stage: proceeding.previousStage || (proceeding.publication ? 'published' : proceeding.decision ? 'decided' : 'investigation'), previousStage: null, closedAt: null, closedBy: null, closeReason: null };
     const updated = saveProceeding(interaction.guildId, caseId, next, interaction.user.id, 'case.proceeding.reopened', proceeding);
     await updateCaseMessage(interaction, updated);
     return true;
   }
-  if (key === 'mod_proceeding_evidence') { if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: '❌ This case cannot be edited with your current authority or stage.', flags: 64 }); return true; } await interaction.showModal(evidenceModal(caseId)); return true; }
-  if (key === 'mod_proceeding_note') { if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: '❌ This case cannot be edited with your current authority or stage.', flags: 64 }); return true; } await interaction.showModal(noteModal(caseId)); return true; }
-  if (key === 'mod_proceeding_severity') { if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: '❌ This case cannot be edited with your current authority or stage.', flags: 64 }); return true; } await interaction.showModal(severityModal(caseId, proceeding)); return true; }
-  if (key === 'mod_proceeding_verify') { if (!isJudge(interaction)) return interaction.reply({ content: '❌ Admin authority is required to verify evidence.', flags: 64 }).then(() => true); await interaction.showModal(verifyModal(caseId)); return true; }
-  if (key === 'mod_proceeding_decide') { if (!isJudge(interaction)) return interaction.reply({ content: '❌ Case-review authority is required to record a decision.', flags: 64 }).then(() => true); await interaction.showModal(decisionModal(caseId, proceeding)); return true; }
-  if (key === 'mod_proceeding_publish') { if (!canPublishProceeding(interaction)) return interaction.reply({ content: '❌ Case-publishing authority is required to publish the member record.', flags: 64 }).then(() => true); await interaction.showModal(publishModal(caseId, proceeding)); return true; }
+  if (key === 'mod_proceeding_evidence') { if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} This case cannot be edited with your current authority or stage.`, flags: 64 }); return true; } await interaction.showModal(evidenceModal(caseId)); return true; }
+  if (key === 'mod_proceeding_note') { if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} This case cannot be edited with your current authority or stage.`, flags: 64 }); return true; } await interaction.showModal(noteModal(caseId)); return true; }
+  if (key === 'mod_proceeding_severity') { if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} This case cannot be edited with your current authority or stage.`, flags: 64 }); return true; } await interaction.showModal(severityModal(caseId, proceeding)); return true; }
+  if (key === 'mod_proceeding_verify') { if (!isJudge(interaction)) return interaction.reply({ content: `${EMOJIS.ERROR} Admin authority is required to verify evidence.`, flags: 64 }).then(() => true); await interaction.showModal(verifyModal(caseId)); return true; }
+  if (key === 'mod_proceeding_decide') { if (!isJudge(interaction)) return interaction.reply({ content: `${EMOJIS.ERROR} Case-review authority is required to record a decision.`, flags: 64 }).then(() => true); await interaction.showModal(decisionModal(caseId, proceeding)); return true; }
+  if (key === 'mod_proceeding_publish') { if (!canPublishProceeding(interaction)) return interaction.reply({ content: `${EMOJIS.ERROR} Case-publishing authority is required to publish the member record.`, flags: 64 }).then(() => true); await interaction.showModal(publishModal(caseId, proceeding)); return true; }
   if (key === 'mod_proceeding_execute') {
     const action = String(proceeding.decision?.action || '');
-    if (!isJudge(interaction) || !action || action === 'no_action') { await interaction.reply({ content: '❌ There is no executable sanction.', flags: 64 }); return true; }
-    if (proceeding.stage !== 'published' || !proceeding.publication) { await interaction.reply({ content: '❌ Publish the official member record before executing the sanction.', flags: 64 }); return true; }
-    if (['executed', 'reversed', 'reversal_failed'].includes(proceeding.sanctionExecution?.status)) { await interaction.reply({ content: proceeding.sanctionExecution?.status === 'reversal_failed' ? '❌ This sanction is under an approved appeal with a failed appeal remedy. Do not re-execute it; resolve the reversal failure instead.' : '❌ This sanction has already been finalised. Duplicate execution is blocked.', flags: 64 }); return true; }
-    if (proceeding.sanctionExecution?.status === 'executing' && !executionIsStale(proceeding.sanctionExecution)) { await interaction.reply({ content: '❌ This sanction is already being executed by another reviewer.', flags: 64 }); return true; }
-    if (action === 'ban' && proceeding.sanctionReview?.status !== 'approved') { await interaction.reply({ content: '❌ A second admin must approve this ban before execution.', flags: 64 }); return true; }
-    if (!canUseModAction(interaction.member, interaction.guild, action, interaction)) { await interaction.reply({ content: `❌ You do not have authority to execute the ${action} sanction.`, flags: 64 }); return true; }
+    if (!isJudge(interaction) || !action || action === 'no_action') { await interaction.reply({ content: `${EMOJIS.ERROR} There is no executable sanction.`, flags: 64 }); return true; }
+    if (proceeding.stage !== 'published' || !proceeding.publication) { await interaction.reply({ content: `${EMOJIS.ERROR} Publish the official member record before executing the sanction.`, flags: 64 }); return true; }
+    if (['executed', 'reversed', 'reversal_failed'].includes(proceeding.sanctionExecution?.status)) { await interaction.reply({ content: proceeding.sanctionExecution?.status === 'reversal_failed' ? `${EMOJIS.ERROR} This sanction is under an approved appeal with a failed appeal remedy. Do not re-execute it; resolve the reversal failure instead.` : `${EMOJIS.ERROR} This sanction has already been finalised. Duplicate execution is blocked.`, flags: 64 }); return true; }
+    if (proceeding.sanctionExecution?.status === 'executing' && !executionIsStale(proceeding.sanctionExecution)) { await interaction.reply({ content: `${EMOJIS.ERROR} This sanction is already being executed by another reviewer.`, flags: 64 }); return true; }
+    if (action === 'ban' && proceeding.sanctionReview?.status !== 'approved') { await interaction.reply({ content: `${EMOJIS.ERROR} A second admin must approve this ban before execution.`, flags: 64 }); return true; }
+    if (!canUseModAction(interaction.member, interaction.guild, action, interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} You do not have authority to execute the ${action} sanction.`, flags: 64 }); return true; }
     await interaction.showModal(sanctionExecutionModal(caseId, proceeding)); return true;
   }
   if (key === 'mod_proceeding_import') {
-    if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: '❌ Case-management authority is required to import records into an open case.', flags: 64 }); return true; }
+    if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} Case-management authority is required to import records into an open case.`, flags: 64 }); return true; }
     const before = proceeding;
     const related = getCasesForUser(interaction.guildId, modCase.userId).filter((entry) => entry.caseId !== caseId && !caseIsProceeding(entry));
     const linkedCases = [...new Set([...proceeding.linkedCases, ...related.map((entry) => entry.caseId)])].slice(-50);
@@ -687,9 +687,9 @@ async function handleProceedingInteraction(interaction) {
     return true;
   }
   if (key === 'mod_proceeding_submit_review') {
-    if (!canManageProceeding(interaction) || proceeding.stage !== 'investigation') { await interaction.reply({ content: '❌ Only an authorised open investigation can be submitted for review.', flags: 64 }); return true; }
+    if (!canManageProceeding(interaction) || proceeding.stage !== 'investigation') { await interaction.reply({ content: `${EMOJIS.ERROR} Only an authorised open investigation can be submitted for review.`, flags: 64 }); return true; }
     if (!proceeding.evidence.some((item) => item.status === 'verified')) {
-      await interaction.reply({ content: '❌ At least one verified evidence item is required before submitting this case for review.', flags: 64 });
+      await interaction.reply({ content: `${EMOJIS.ERROR} At least one verified evidence item is required before submitting this case for review.`, flags: 64 });
       return true;
     }
     const next = { ...proceeding, stage: 'review', reviewingAdminId: null, reviewClaimedAt: null, submittedForReviewAt: now(), submittedForReviewBy: interaction.user.id };
@@ -705,14 +705,14 @@ async function handleProceedingModal(interaction) {
   if (!(id.startsWith('mod_proceeding_') || id.startsWith('mod_case_new_submit:')) || !interaction.isModalSubmit?.()) return false;
   const [key, raw] = id.split(':');
   if (key === 'mod_case_new_submit') {
-    if (!canManageProceeding(interaction)) { await interaction.reply({ content: '❌ Case-management authority is required to open a case.', flags: 64 }); return true; }
+    if (!canManageProceeding(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Case-management authority is required to open a case.`, flags: 64 }); return true; }
     const severity = parseSeverityInput(field(interaction, 'severity'));
-    if (!severity) { await interaction.reply({ content: '❌ Severity must be Low, Medium, High, Severe, or Critical.', flags: 64 }); return true; }
+    if (!severity) { await interaction.reply({ content: `${EMOJIS.ERROR} Severity must be Low, Medium, High, Severe, or Critical.`, flags: 64 }); return true; }
     const caseTitle = field(interaction, 'caseTitle');
     const allegations = field(interaction, 'allegations');
     const recommendation = field(interaction, 'recommendation');
     const created = createCase({ guildId: interaction.guildId, userId: raw, moderatorId: interaction.user.id, action: PROCEEDING_ACTION, reason: allegations, metadata: { proceeding: { stage: 'investigation', severity, title: caseTitle, allegations, leadModeratorId: interaction.user.id, reviewingAdminId: null, evidence: [], notes: [], linkedCases: [], recommendation: recommendation ? { reason: recommendation, by: interaction.user.id, at: now() } : null, decision: null, publication: null } }, status: 'active', actorId: interaction.user.id });
-    if (!created) { await interaction.reply({ content: '❌ Failed to create the case.', flags: 64 }); return true; }
+    if (!created) { await interaction.reply({ content: `${EMOJIS.ERROR} Failed to create the case.`, flags: 64 }); return true; }
     await interaction.update(buildCaseFile(interaction, created));
     return true;
   }
@@ -721,68 +721,68 @@ async function handleProceedingModal(interaction) {
   if (!caseIsProceeding(modCase)) return false;
   const proceeding = parseProceeding(modCase);
   if (key === 'mod_proceeding_delete_submit') {
-    if (!canDeleteProceeding(interaction)) { await interaction.reply({ content: '❌ Case deletion authority is required.', flags: 64 }); return true; }
-    if (field(interaction, 'confirmation').toUpperCase() !== 'DELETE') { await interaction.reply({ content: '❌ Deletion cancelled. Type DELETE exactly to confirm.', flags: 64 }); return true; }
+    if (!canDeleteProceeding(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Case deletion authority is required.`, flags: 64 }); return true; }
+    if (field(interaction, 'confirmation').toUpperCase() !== 'DELETE') { await interaction.reply({ content: `${EMOJIS.ERROR} Deletion cancelled. Type DELETE exactly to confirm.`, flags: 64 }); return true; }
     const reason = field(interaction, 'reason');
     recordCaseAudit({ guildId: interaction.guildId, caseId, actorId: interaction.user.id, event: 'case.management.deleted', before: modCase, after: null, metadata: { permanent: true, reason } });
     const deleted = db.prepare('DELETE FROM cases WHERE guild_id = ? AND case_id = ?').run(String(interaction.guildId), Number(caseId));
-    if (!deleted.changes) { await interaction.reply({ content: '❌ Case could not be deleted.', flags: 64 }); return true; }
+    if (!deleted.changes) { await interaction.reply({ content: `${EMOJIS.ERROR} Case could not be deleted.`, flags: 64 }); return true; }
     const target = await interaction.guild.members.fetch(modCase.userId).catch(() => null);
-    if (!target) { await interaction.update({ content: `✅ Case #${caseId} permanently deleted.`, embeds: [], components: [] }); return true; }
+    if (!target) { await interaction.update({ content: `${EMOJIS.SUCCESS} Case #${caseId} permanently deleted.`, embeds: [], components: [] }); return true; }
     const built = buildProceedingDashboard(interaction, target);
     await interaction.update({ content: null, embeds: [built.embed], components: built.components });
     return true;
   }
   if (key === 'mod_proceeding_recommend_submit') {
-    if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: '❌ This case cannot be edited with your current authority or stage.', flags: 64 }); return true; }
+    if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} This case cannot be edited with your current authority or stage.`, flags: 64 }); return true; }
     const recommendation = { reason: field(interaction, 'recommendation'), by: interaction.user.id, at: now() };
     const next = { ...proceeding, recommendation };
     return updateCaseMessage(interaction, saveProceeding(interaction.guildId, caseId, next, interaction.user.id, 'case.proceeding.recommendation_updated', proceeding)).then(() => true);
   }
   if (key === 'mod_proceeding_evidence_submit') {
-    if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: '❌ This case cannot be edited with your current authority or stage.', flags: 64 }); return true; }
+    if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} This case cannot be edited with your current authority or stage.`, flags: 64 }); return true; }
     const item = { id: evidenceId(proceeding), title: field(interaction, 'title'), source: field(interaction, 'source') || null, details: field(interaction, 'details'), status: 'draft', addedBy: interaction.user.id, addedAt: now(), verifiedBy: null, verifiedAt: null, verificationNote: null };
     const next = { ...proceeding, evidence: [...proceeding.evidence, item] };
     return updateCaseMessage(interaction, saveProceeding(interaction.guildId, caseId, next, interaction.user.id, 'case.proceeding.evidence_added', proceeding)).then(() => true);
   }
   if (key === 'mod_proceeding_note_submit') {
-    if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: '❌ This case cannot be edited with your current authority or stage.', flags: 64 }); return true; }
+    if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} This case cannot be edited with your current authority or stage.`, flags: 64 }); return true; }
     const item = { id: `N${proceeding.notes.length + 1}`, text: field(interaction, 'note'), authorId: interaction.user.id, createdAt: now() };
     const next = { ...proceeding, notes: [...proceeding.notes, item] };
     return updateCaseMessage(interaction, saveProceeding(interaction.guildId, caseId, next, interaction.user.id, 'case.proceeding.note_added', proceeding)).then(() => true);
   }
   if (key === 'mod_proceeding_severity_submit') {
-    if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: '❌ This case cannot be edited with your current authority or stage.', flags: 64 }); return true; }
+    if (!canManageProceeding(interaction) || proceeding.stage === 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} This case cannot be edited with your current authority or stage.`, flags: 64 }); return true; }
     const severity = parseSeverityInput(field(interaction, 'severity'));
-    if (!severity) { await interaction.reply({ content: '❌ Severity must be Low, Medium, High, Severe, or Critical.', flags: 64 }); return true; }
+    if (!severity) { await interaction.reply({ content: `${EMOJIS.ERROR} Severity must be Low, Medium, High, Severe, or Critical.`, flags: 64 }); return true; }
     const next = { ...proceeding, severity, notes: [...proceeding.notes, { id: `N${proceeding.notes.length + 1}`, text: `Severity changed from ${proceeding.severity}/5 to ${severity}/5. Reason: ${field(interaction, 'reason')}`, authorId: interaction.user.id, createdAt: now() }] };
     return updateCaseMessage(interaction, saveProceeding(interaction.guildId, caseId, next, interaction.user.id, 'case.proceeding.severity_changed', proceeding)).then(() => true);
   }
   if (key === 'mod_proceeding_verify_submit') {
-    if (!isJudge(interaction)) { await interaction.reply({ content: '❌ Admin authority is required to verify evidence.', flags: 64 }); return true; }
+    if (!isJudge(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Admin authority is required to verify evidence.`, flags: 64 }); return true; }
     const wantedId = field(interaction, 'evidenceId').toUpperCase();
     const status = field(interaction, 'status').toLowerCase();
     if (!['verified', 'rejected'].includes(status)) { await interaction.reply({ content: '❌ Evidence status must be `verified` or `rejected`.', flags: 64 }); return true; }
     const index = proceeding.evidence.findIndex((item) => String(item.id).toUpperCase() === wantedId);
-    if (index < 0) { await interaction.reply({ content: `❌ Evidence ${wantedId} was not found in this case.`, flags: 64 }); return true; }
+    if (index < 0) { await interaction.reply({ content: `${EMOJIS.ERROR} Evidence ${wantedId} was not found in this case.`, flags: 64 }); return true; }
     const evidence = [...proceeding.evidence];
     evidence[index] = { ...evidence[index], status, verifiedBy: interaction.user.id, verifiedAt: now(), verificationNote: field(interaction, 'reason') };
     const next = { ...proceeding, evidence };
     return updateCaseMessage(interaction, saveProceeding(interaction.guildId, caseId, next, interaction.user.id, `case.proceeding.evidence_${status}`, proceeding)).then(() => true);
   }
-  if (key === 'mod_proceeding_close_submit') { if (!canCloseProceeding(interaction)) { await interaction.reply({ content: '❌ Case closure authority is required.', flags: 64 }); return true; }
-    if (proceeding.stage === 'closed') { await interaction.reply({ content: '❌ This case is already closed.', flags: 64 }); return true; }
+  if (key === 'mod_proceeding_close_submit') { if (!canCloseProceeding(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Case closure authority is required.`, flags: 64 }); return true; }
+    if (proceeding.stage === 'closed') { await interaction.reply({ content: `${EMOJIS.ERROR} This case is already closed.`, flags: 64 }); return true; }
     const next = { ...proceeding, previousStage: proceeding.stage, stage: 'closed', closedAt: now(), closedBy: interaction.user.id, closeReason: field(interaction, 'reason') };
     const updated = saveProceeding(interaction.guildId, caseId, next, interaction.user.id, 'case.proceeding.closed', proceeding);
     await updateCaseMessage(interaction, updated);
     return true;
   }
   if (key === 'mod_proceeding_decide_submit') {
-    if (!isJudge(interaction)) { await interaction.reply({ content: '❌ Admin authority is required to record a decision.', flags: 64 }); return true; }
-    if (proceeding.stage !== 'review' || proceeding.reviewingAdminId !== interaction.user.id) { await interaction.reply({ content: '❌ Claim this case from the Review Brief before recording a decision.', flags: 64 }); return true; }
+    if (!isJudge(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Admin authority is required to record a decision.`, flags: 64 }); return true; }
+    if (proceeding.stage !== 'review' || proceeding.reviewingAdminId !== interaction.user.id) { await interaction.reply({ content: `${EMOJIS.ERROR} Claim this case from the Review Brief before recording a decision.`, flags: 64 }); return true; }
     const action = field(interaction, 'action').toLowerCase();
     const allowed = new Set(['warn', 'timeout', 'quarantine', 'kick', 'ban', 'no_action']);
-    if (!allowed.has(action)) { await interaction.reply({ content: '❌ Decision action must be warn, timeout, quarantine, kick, ban, or no_action.', flags: 64 }); return true; }
+    if (!allowed.has(action)) { await interaction.reply({ content: `${EMOJIS.ERROR} Decision action must be warn, timeout, quarantine, kick, ban, or no_action.`, flags: 64 }); return true; }
     const decision = { finding: field(interaction, 'finding'), action, reason: field(interaction, 'reason'), decidedBy: interaction.user.id, decidedAt: now() };
     const recommendationText = field(interaction, 'recommendation');
     const decisionHistory = proceeding.decision ? [...proceeding.decisionHistory, proceeding.decision].slice(-20) : proceeding.decisionHistory;
@@ -796,24 +796,24 @@ async function handleProceedingModal(interaction) {
   }
   if (key === 'mod_proceeding_execute_submit') {
     const action = String(proceeding.decision?.action || '');
-    if (!isJudge(interaction) || !action || action === 'no_action') { await interaction.reply({ content: '❌ There is no executable sanction.', flags: 64 }); return true; }
-    if (proceeding.stage !== 'published' || !proceeding.publication) { await interaction.reply({ content: '❌ The official member record must be published first.', flags: 64 }); return true; }
-    if (proceeding.sanctionExecution?.status === 'executed') { await interaction.reply({ content: '❌ Duplicate execution blocked: this sanction has already been executed.', flags: 64 }); return true; }
-    if (action === 'ban' && proceeding.sanctionReview?.status !== 'approved') { await interaction.reply({ content: '❌ Second-admin ban approval is still required.', flags: 64 }); return true; }
-    if (!canUseModAction(interaction.member, interaction.guild, action, interaction)) { await interaction.reply({ content: `❌ You do not have authority to execute the ${action} sanction.`, flags: 64 }); return true; }
-    if (field(interaction, 'confirmation').toUpperCase() !== 'EXECUTE') { await interaction.reply({ content: '❌ Execution cancelled. Type EXECUTE exactly to confirm.', flags: 64 }); return true; }
+    if (!isJudge(interaction) || !action || action === 'no_action') { await interaction.reply({ content: `${EMOJIS.ERROR} There is no executable sanction.`, flags: 64 }); return true; }
+    if (proceeding.stage !== 'published' || !proceeding.publication) { await interaction.reply({ content: `${EMOJIS.ERROR} The official member record must be published first.`, flags: 64 }); return true; }
+    if (proceeding.sanctionExecution?.status === 'executed') { await interaction.reply({ content: `${EMOJIS.ERROR} Duplicate execution blocked: this sanction has already been executed.`, flags: 64 }); return true; }
+    if (action === 'ban' && proceeding.sanctionReview?.status !== 'approved') { await interaction.reply({ content: `${EMOJIS.ERROR} Second-admin ban approval is still required.`, flags: 64 }); return true; }
+    if (!canUseModAction(interaction.member, interaction.guild, action, interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} You do not have authority to execute the ${action} sanction.`, flags: 64 }); return true; }
+    if (field(interaction, 'confirmation').toUpperCase() !== 'EXECUTE') { await interaction.reply({ content: `${EMOJIS.ERROR} Execution cancelled. Type EXECUTE exactly to confirm.`, flags: 64 }); return true; }
     const parameter = field(interaction, 'parameter');
     const note = field(interaction, 'note');
     const strikeWeight = action === 'warn' ? Number(parameter) : null;
     const durationMs = action === 'timeout' ? parseProceedingTimeout(parameter) : null;
     const deleteDays = action === 'ban' ? Number(parameter) : null;
-    if (action === 'warn' && (!Number.isInteger(strikeWeight) || strikeWeight < 1 || strikeWeight > 5)) { await interaction.reply({ content: '❌ Warning strike weight must be a whole number from 1 to 5.', flags: 64 }); return true; }
-    if (action === 'timeout' && !durationMs) { await interaction.reply({ content: '❌ Invalid timeout duration. Use values such as 10m, 1h or 1d; maximum 28 days.', flags: 64 }); return true; }
-    if (action === 'ban' && (!Number.isInteger(deleteDays) || deleteDays < 0 || deleteDays > 7)) { await interaction.reply({ content: '❌ Ban delete-message days must be a whole number from 0 to 7.', flags: 64 }); return true; }
+    if (action === 'warn' && (!Number.isInteger(strikeWeight) || strikeWeight < 1 || strikeWeight > 5)) { await interaction.reply({ content: `${EMOJIS.ERROR} Warning strike weight must be a whole number from 1 to 5.`, flags: 64 }); return true; }
+    if (action === 'timeout' && !durationMs) { await interaction.reply({ content: `${EMOJIS.ERROR} Invalid timeout duration. Use values such as 10m, 1h or 1d; maximum 28 days.`, flags: 64 }); return true; }
+    if (action === 'ban' && (!Number.isInteger(deleteDays) || deleteDays < 0 || deleteDays > 7)) { await interaction.reply({ content: `${EMOJIS.ERROR} Ban delete-message days must be a whole number from 0 to 7.`, flags: 64 }); return true; }
     if (!interaction.deferred && !interaction.replied) await interaction.deferReply({ flags: 64 });
     const lockKey = proceedingExecutionLockKey(interaction.guildId, caseId);
-    if (PROCEEDING_EXECUTION_LOCKS.has(lockKey)) { await interaction.editReply({ content: '❌ This sanction is already being executed. Duplicate execution is blocked.' }); return true; }
-    if (proceeding.sanctionExecution?.status === 'executing' && !executionIsStale(proceeding.sanctionExecution)) { await interaction.editReply({ content: '❌ This sanction is already being executed by another reviewer.' }); return true; }
+    if (PROCEEDING_EXECUTION_LOCKS.has(lockKey)) { await interaction.editReply({ content: `${EMOJIS.ERROR} This sanction is already being executed. Duplicate execution is blocked.` }); return true; }
+    if (proceeding.sanctionExecution?.status === 'executing' && !executionIsStale(proceeding.sanctionExecution)) { await interaction.editReply({ content: `${EMOJIS.ERROR} This sanction is already being executed by another reviewer.` }); return true; }
     PROCEEDING_EXECUTION_LOCKS.add(lockKey);
     const executionStarted = now();
     const operationId = `proceeding_exec_${caseId}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
@@ -823,10 +823,10 @@ async function handleProceedingModal(interaction) {
     if (!atomicClaim?.ok || !claimed) {
       PROCEEDING_EXECUTION_LOCKS.delete(lockKey);
       const message = atomicClaim?.reason === 'busy'
-        ? '❌ This sanction is already being executed by another Goliath process.'
+        ? `${EMOJIS.ERROR} This sanction is already being executed by another Goliath process.`
         : atomicClaim?.reason === 'finalized'
-          ? '❌ This sanction was already finalised before this execution claim completed.'
-          : '❌ Failed to claim the sanction execution lock. No punishment was applied.';
+          ? `${EMOJIS.ERROR} This sanction was already finalised before this execution claim completed.`
+          : `${EMOJIS.ERROR} Failed to claim the sanction execution lock. No punishment was applied.`;
       await interaction.editReply({ content: message });
       return true;
     }
@@ -836,7 +836,7 @@ async function handleProceedingModal(interaction) {
       const failed = { ...claimedExecution, status: 'failed', executedAt: now(), error: 'Member is not currently available in this server.' };
       saveProceeding(interaction.guildId, caseId, { ...proceeding, sanctionExecution: failed }, interaction.user.id, 'case.proceeding.sanction_failed', claimedExecution);
       PROCEEDING_EXECUTION_LOCKS.delete(lockKey);
-      await interaction.editReply({ content: '❌ The member is not currently available in this server, so this action cannot be executed from Case Management.' }); return true;
+      await interaction.editReply({ content: `${EMOJIS.ERROR} The member is not currently available in this server, so this action cannot be executed from Case Management.` }); return true;
     }
     try {
       let linkedCaseId = null;
@@ -901,9 +901,9 @@ async function handleProceedingModal(interaction) {
     }
   }
   if (key === 'mod_proceeding_publish_submit') {
-    if (!canPublishProceeding(interaction)) { await interaction.reply({ content: '❌ Case publishing authority is required to publish a record.', flags: 64 }); return true; }
-    if (!proceeding.decision) { await interaction.reply({ content: '❌ Record a decision before publishing the member record.', flags: 64 }); return true; }
-    if (proceeding.decision.action === 'ban' && proceeding.sanctionReview?.status !== 'approved') { await interaction.reply({ content: '❌ Ban decisions require approval from a second admin before the member record can be published.', flags: 64 }); return true; }
+    if (!canPublishProceeding(interaction)) { await interaction.reply({ content: `${EMOJIS.ERROR} Case publishing authority is required to publish a record.`, flags: 64 }); return true; }
+    if (!proceeding.decision) { await interaction.reply({ content: `${EMOJIS.ERROR} Record a decision before publishing the member record.`, flags: 64 }); return true; }
+    if (proceeding.decision.action === 'ban' && proceeding.sanctionReview?.status !== 'approved') { await interaction.reply({ content: `${EMOJIS.ERROR} Ban decisions require approval from a second admin before the member record can be published.`, flags: 64 }); return true; }
     const summary = field(interaction, 'summary');
     const previousRevision = Number(proceeding.publication?.revision || 0);
     const publicationHistory = proceeding.publication ? [...proceeding.publicationHistory, proceeding.publication].slice(-20) : proceeding.publicationHistory;
@@ -924,7 +924,7 @@ function buildUserPublishedCasesPanel(interaction) {
         const proceeding = parseProceeding(entry); const pub = proceeding.publication; const decision = proceeding.decision || {};
         const appeals = Array.isArray(entry.metadata?.appeals) ? entry.metadata.appeals : [];
         const latestAppeal = appeals.slice().sort((a, b) => String(b.submittedAt || '').localeCompare(String(a.submittedAt || '')))[0];
-        const appealLine = latestAppeal ? `\n**Appeal:** ${latestAppeal.status === 'pending' ? '⏳ Pending' : latestAppeal.status === 'approved' ? '✅ Approved' : '❌ Denied'}` : '';
+        const appealLine = latestAppeal ? `\n**Appeal:** ${latestAppeal.status === 'pending' ? `${EMOJIS.TIMEOUT} Pending` : latestAppeal.status === 'approved' ? `${EMOJIS.SUCCESS} Approved` : `${EMOJIS.ERROR} Denied`}` : '';
         return `**Case #${entry.caseId}** • Severity **${severityText(proceeding.severity)}** • Revision **${pub.revision || 1}**\n**Finding:** ${decision.finding || 'Recorded'}\n**Decision:** ${decision.action || 'No action'}${appealLine}\n${cleanExcerpt(pub.summary, 350)}\nPublished ${discordTime(pub.updatedAt || pub.publishedAt)}`;
       })].join('\n\n')
       : 'No proceeding case records have been published to you.')
@@ -933,8 +933,8 @@ function buildUserPublishedCasesPanel(interaction) {
   return {
     embeds: [embed],
     components: [
-      row(button('user:module:appeals', 'Appeals', '📝', ButtonStyle.Primary), button('user:home', 'User Panel', '🏠')),
-      row(button('user:category:account', 'Back', '⬅️')),
+      row(button('user:module:appeals', 'Appeals', EMOJIS.NOTE, ButtonStyle.Primary), button('user:home', 'User Panel', '🏠')),
+      row(button('user:category:account', 'Back', EMOJIS.BACK)),
     ],
   };
 }
