@@ -117,7 +117,7 @@ function buildActionRows(member, watched = false) {
 }
 
 function buildEmbed(member, context, local, suspects, scanId, assessment, investigationWatched = false) {
-  const risk = context.risk || { score: 0, label: '🟢 Low', reasons: [] };
+  const risk = context.risk || { score: 0, label: `${EMOJIS.ACTIVE} Low`, reasons: [] };
   const watch = context.watch || { state: 'clear' };
   const reputation = context.reputation || {};
   const history = context.guildHistory || [];
@@ -133,7 +133,7 @@ function buildEmbed(member, context, local, suspects, scanId, assessment, invest
 
   const embed = new EmbedBuilder()
     .setColor(decision.color)
-    .setTitle(`🧠 Join Intelligence • ${member.user.tag || member.user.username}`)
+    .setTitle(`${EMOJIS.BRAIN} Join Intelligence • ${member.user.tag || member.user.username}`)
     .setDescription([
       `**Member:** ${member.user} • \`${member.id}\``,
       `**Scan:** \`${scanId}\``, 
@@ -144,10 +144,10 @@ function buildEmbed(member, context, local, suspects, scanId, assessment, invest
       'Assessment only • No automatic moderation action taken.',
     ].join('\n'))
     .addFields(
-      { name: '👤 Account', value: [`Created: <t:${Math.floor((member.user.createdTimestamp || Date.now()) / 1000)}:F>${ageDays !== null ? ` • **${ageDays} days old**` : ''}`, `Joined: <t:${Math.floor((member.joinedTimestamp || Date.now()) / 1000)}:R>`, `Verification: **${member.pending ? 'Pending' : 'Complete'}** • Account type: **${member.user.bot ? 'Bot' : 'Member'}**`].join('\n'), inline: false },
-      { name: '🚦 Risk & Moderation', value: [`Risk: **${risk.score || 0}/100 • ${risk.label || '🟢 Low'}**`, `Investigation Watch: **${investigationWatched ? 'ON' : 'OFF'}** • Watchlist: **${String(watch.state || 'clear').toUpperCase()}**`, `Cases: **${local.caseCount}** (${local.activeCases} active) • Warnings: **${local.warningCount}**`, riskFactors].join('\n').slice(0, 1024), inline: false },
-      { name: '🌐 Network Intelligence', value: [`Observed servers: **${history.length}** • Cases: **${context.network?.caseCount || 0}** • Bans: **${context.network?.banCount || 0}**`, `External reports: **${externalCount}** (Verified: ${reputation.verifiedExternal || 0} • Submitted: ${reputation.submitted || 0} • Unverified: ${reputation.unverified || 0})`].join('\n'), inline: false },
-      { name: '🔗 Account Correlation', value: suspects.length ? `${suspectText.slice(0, 850)}\n\n*Possible matches require staff verification.*` : suspectText, inline: false },
+      { name: `${EMOJIS.USER} Account`, value: [`Created: <t:${Math.floor((member.user.createdTimestamp || Date.now()) / 1000)}:F>${ageDays !== null ? ` • **${ageDays} days old**` : ''}`, `Joined: <t:${Math.floor((member.joinedTimestamp || Date.now()) / 1000)}:R>`, `Verification: **${member.pending ? 'Pending' : 'Complete'}** • Account type: **${member.user.bot ? 'Bot' : 'Member'}**`].join('\n'), inline: false },
+      { name: `${EMOJIS.RISK} Risk & Moderation`, value: [`Risk: **${risk.score || 0}/100 • ${risk.label || `${EMOJIS.ACTIVE} Low`}**`, `Investigation Watch: **${investigationWatched ? 'ON' : 'OFF'}** • Watchlist: **${String(watch.state || 'clear').toUpperCase()}**`, `Cases: **${local.caseCount}** (${local.activeCases} active) • Warnings: **${local.warningCount}**`, riskFactors].join('\n').slice(0, 1024), inline: false },
+      { name: `${EMOJIS.NETWORK} Network Intelligence`, value: [`Observed servers: **${history.length}** • Cases: **${context.network?.caseCount || 0}** • Bans: **${context.network?.banCount || 0}**`, `External reports: **${externalCount}** (Verified: ${reputation.verifiedExternal || 0} • Submitted: ${reputation.submitted || 0} • Unverified: ${reputation.unverified || 0})`].join('\n'), inline: false },
+      { name: `${EMOJIS.LINK} Account Correlation`, value: suspects.length ? `${suspectText.slice(0, 850)}\n\n*Possible matches require staff verification.*` : suspectText, inline: false },
     )
     .setFooter({ text: 'Goliath • Join Intelligence' })
     .setTimestamp();
