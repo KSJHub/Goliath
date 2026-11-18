@@ -111,7 +111,7 @@ function deletePendingAction(guildId, token) { return db.prepare('DELETE FROM pe
 function normalizeDashboardContext(context = {}) { return { view: context.view || 'actions', actionFilter: context.actionFilter || 'all', statusFilter: context.statusFilter || 'all', page: Math.max(0, Math.trunc(Number(context.page) || 0)) }; }
 function buildConfirmCustomId(token, context = DEFAULT_DASHBOARD_CONTEXT) { const c = normalizeDashboardContext(context); return ['mod_confirm_action', token, c.view, c.actionFilter, c.statusFilter, c.page].join(':'); }
 function buildCancelCustomId(targetId, context = DEFAULT_DASHBOARD_CONTEXT, token = null) { const c = normalizeDashboardContext(context); return ['mod_cancel_action', targetId || 'none', c.view, c.actionFilter, c.statusFilter, c.page, token || 'legacy'].join(':'); }
-function buildConfirmRow(confirmId, cancelId) { return [new ActionRowBuilder().addComponents(navigationButton(confirmId, `${EMOJIS.WARNING} Confirm`, ButtonStyle.Danger), navigationButton(cancelId, '❌ Cancel', ButtonStyle.Secondary))]; }
+function buildConfirmRow(confirmId, cancelId) { return [new ActionRowBuilder().addComponents(navigationButton(confirmId, `${EMOJIS.WARNING} Confirm`, ButtonStyle.Danger), navigationButton(cancelId, `${EMOJIS.ERROR} Cancel`, ButtonStyle.Secondary))]; }
 async function createConfirmation(interaction, targetId, type, payload, message, context = DEFAULT_DASHBOARD_CONTEXT) {
   const normalizedContext = normalizeDashboardContext(context);
   const token = createPendingAction(interaction.guild.id, { moderatorId: interaction.user.id, targetId, type, payload });
@@ -153,7 +153,7 @@ async function submitTimeout(interaction, target) {
   if (!durationMs || !isValidTimeoutDuration(durationMs)) { await safeReply(interaction, ephemeralError(durationMs ? 'Timeout cannot exceed 28 days.' : 'Invalid duration. Use `10m`, `1h`, or `1d`.')); return { ok: false, target, error: 'Invalid timeout duration.' }; }
   try {
     const result = await executeEnginePunishment(interaction, target, 'timeout', reason, { durationRaw, durationMs });
-    await safeReply(interaction, { content: `⏳ Timed out **${target.user.tag}** for **${durationRaw}** • Case #${result.modCase.caseId}`, flags: 64 });
+    await safeReply(interaction, { content: `${EMOJIS.TIMEOUT} Timed out **${target.user.tag}** for **${durationRaw}** • Case #${result.modCase.caseId}`, flags: 64 });
     return { ok: true, ...result };
   } catch (error) { console.error('❌ Timeout error:', error); await safeReply(interaction, ephemeralError('Failed to timeout user.')); return { ok: false, target, error }; }
 }
@@ -196,19 +196,19 @@ function parseBulkModalPayload(interaction, buttonAction) {
 }
 function validateBulkOptions(actionType, options = {}) {
   const errors = [];
-  if (!VALID_BULK_ACTIONS.has(actionType)) errors.push('❌ Unknown bulk action type.');
-  if (!Array.isArray(options.ids) || !options.ids.length) errors.push(`❌ No valid ${actionType === 'remove-warning' ? 'warning case IDs' : 'user IDs'} provided.`);
-  if (options.ids?.length > MAX_BULK_TARGETS) errors.push(`❌ Bulk moderation is limited to ${MAX_BULK_TARGETS} unique targets per batch.`);
-  if (!String(options.reason || '').trim()) errors.push('❌ A reason is required.');
-  if (actionType === 'timeout') { const ms = parseDuration(options.durationRaw); if (!ms) errors.push('❌ Invalid duration. Use `10m`, `1h`, or `1d`.'); else if (!isValidTimeoutDuration(ms)) errors.push('❌ Timeout cannot exceed 28 days.'); }
-  if (actionType === 'ban' && parseDeleteDays(options.deleteDays) === null) errors.push('❌ Delete message days must be between 0 and 7.');
-  if (actionType === 'warn') { if (!options.strikeWeight) errors.push('❌ Strike weight must be a whole number from 1 to 5.'); if (options.expiresAt === undefined) errors.push('❌ Warning expiry must be `7d`, `2w`, `1m`, or `never`.'); }
+  if (!VALID_BULK_ACTIONS.has(actionType)) errors.push(`${EMOJIS.ERROR} Unknown bulk action type.`);
+  if (!Array.isArray(options.ids) || !options.ids.length) errors.push(`${EMOJIS.ERROR} No valid ${actionType === 'remove-warning' ? 'warning case IDs' : 'user IDs'} provided.`);
+  if (options.ids?.length > MAX_BULK_TARGETS) errors.push(`${EMOJIS.ERROR} Bulk moderation is limited to ${MAX_BULK_TARGETS} unique targets per batch.`);
+  if (!String(options.reason || '').trim()) errors.push(`${EMOJIS.ERROR} A reason is required.`);
+  if (actionType === 'timeout') { const ms = parseDuration(options.durationRaw); if (!ms) errors.push('❌ Invalid duration. Use `10m`, `1h`, or `1d`.'); else if (!isValidTimeoutDuration(ms)) errors.push(`${EMOJIS.ERROR} Timeout cannot exceed 28 days.`); }
+  if (actionType === 'ban' && parseDeleteDays(options.deleteDays) === null) errors.push(`${EMOJIS.ERROR} Delete message days must be between 0 and 7.`);
+  if (actionType === 'warn') { if (!options.strikeWeight) errors.push(`${EMOJIS.ERROR} Strike weight must be a whole number from 1 to 5.`); if (options.expiresAt === undefined) errors.push('❌ Warning expiry must be `7d`, `2w`, `1m`, or `never`.'); }
   return errors;
 }
 function buildBulkPreview(options, batchId) {
   const ids = options.ids || [];
   return [
-    `⚠️ **Confirm ${ACTION_LABELS[options.actionType] || 'Bulk Moderation'}**`, `Batch: \`${batchId}\``,
+    `${EMOJIS.WARNING} **Confirm ${ACTION_LABELS[options.actionType] || 'Bulk Moderation'}**`, `Batch: \`${batchId}\``,
     `Targets: **${ids.length}** unique ${options.actionType === 'remove-warning' ? 'warning case' : 'member'}${ids.length === 1 ? '' : 's'} (max ${MAX_BULK_TARGETS})`,
     options.invalidTargets?.length ? `Invalid entries skipped: **${options.invalidTargets.length}**` : null,
     options.duplicateCount ? `Duplicates removed: **${options.duplicateCount}**` : null,
@@ -252,7 +252,7 @@ async function executeRemoveTimeout(interaction, pending, target) {
   const reason = sourceCaseId ? `Removed timeout from case #${sourceCaseId}` : 'Timeout removed from panel';
   const modCase = createModerationCase(interaction, target.id, 'remove-timeout', reason, {}, { relatedCaseId: sourceCaseId, status: 'reversed' });
   await logAction(interaction, target, 'Remove Timeout', reason, modCase.caseId);
-  return { target, content: `✅ Removed timeout from **${target.user.tag}** • Case #${modCase.caseId}` };
+  return { target, content: `${EMOJIS.SUCCESS} Removed timeout from **${target.user.tag}** • Case #${modCase.caseId}` };
 }
 
 async function runBulkWarn(interaction, member, options) {
@@ -312,14 +312,14 @@ async function runBulkAction(interaction, options) {
       } else {
         const member = await interaction.guild.members.fetch(id);
         const hierarchyError = checkHierarchyForBulk(interaction.member, interaction.guild.members.me, interaction.guild.ownerId, member, interaction.user.id);
-        if (hierarchyError) failed.push(`❌ ${id} — ${hierarchyError}`);
+        if (hierarchyError) failed.push(`${EMOJIS.ERROR} ${id} — ${hierarchyError}`);
         else {
           const result = await runSingleBulkAction(interaction, member, { ...options, durationMs });
           const caseId = result?.modCase?.caseId || result?.caseId || null;
-          success.push(`${ACTION_EMOJIS[options.actionType] || '✅'} ${member.user.tag}${caseId ? ` • #${caseId}` : ''}`);
+          success.push(`${ACTION_EMOJIS[options.actionType] || EMOJIS.SUCCESS} ${member.user.tag}${caseId ? ` • #${caseId}` : ''}`);
         }
       }
-    } catch (error) { failed.push(`❌ ${id} — ${String(error?.message || 'Failed to process.').slice(0, 180)}`); }
+    } catch (error) { failed.push(`${EMOJIS.ERROR} ${id} — ${String(error?.message || 'Failed to process.').slice(0, 180)}`); }
     const processed = index + 1;
     if (processed % PROGRESS_UPDATE_EVERY === 0 || processed === total) await safeEditReply(interaction, { content: `Batch \`${options.bulkBatchId}\``, embeds: [getBulkActionProgressEmbed({ actionLabel, total, processed, successCount: success.length, failCount: failed.length })] });
   }
@@ -346,7 +346,7 @@ async function executePendingAction(discord, interaction, token, returnContext =
     let result;
     if (pending.type === 'ban' || pending.type === 'kick') {
       const actionResult = await executeEnginePunishment(interaction, target, pending.type, pending.payload.reason || 'No reason provided', pending.type === 'ban' ? { deleteDays: Number(pending.payload.deleteDays || 0) } : {});
-      result = { target, content: `✅ ${pending.type === 'ban' ? 'Banned' : 'Kicked'} **${target.user.tag}** • Case #${actionResult.modCase.caseId}${actionResult.report.dmSent ? ' • DM sent ✅' : ' • DM failed ❌'}` };
+      result = { target, content: `${EMOJIS.SUCCESS} ${pending.type === 'ban' ? 'Banned' : 'Kicked'} **${target.user.tag}** • Case #${actionResult.modCase.caseId}${actionResult.report.dmSent ? ' • DM sent ${EMOJIS.SUCCESS}' : ' • DM failed ${EMOJIS.ERROR}'}` };
     } else if (pending.type === 'remove-warning') result = await executeRemoveWarning(interaction, pending, target);
     else if (pending.type === 'remove-timeout') result = await executeRemoveTimeout(interaction, pending, target);
     else result = { error: 'Unknown pending action type.' };
