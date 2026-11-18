@@ -664,7 +664,7 @@ async function decorateScan(interaction, target, report) {
 
 function backRow(targetId) {
   return new Discord.ActionRowBuilder().addComponents(
-    new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${targetId}`).setLabel('⬅️ Back to Scan').setStyle(Discord.ButtonStyle.Secondary)
+    new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${targetId}`).setLabel(`${EMOJIS.BACK} Back to Scan`).setStyle(Discord.ButtonStyle.Secondary)
   );
 }
 async function resolveTarget(interaction, targetId) {
@@ -700,7 +700,7 @@ function guildHistoryEmbed(target, context, client) {
 function reputationRows(targetId, canManage = false) {
   const components = [];
   if (canManage) components.push(new Discord.ButtonBuilder().setCustomId(`mod_intel_reputation_add:${targetId}`).setLabel('Add External Record').setEmoji(EMOJIS.ADD).setStyle(Discord.ButtonStyle.Secondary));
-  components.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${targetId}`).setLabel('⬅️ Back to Scan').setStyle(Discord.ButtonStyle.Secondary));
+  components.push(new Discord.ButtonBuilder().setCustomId(`mod_scan_view:${targetId}`).setLabel(`${EMOJIS.BACK} Back to Scan`).setStyle(Discord.ButtonStyle.Secondary));
   return new Discord.ActionRowBuilder().addComponents(...components);
 }
 function reputationModal(targetId) {
@@ -713,7 +713,7 @@ function reputationModal(targetId) {
   );
 }
 function riskEmbed(target, context) {
-  return new Discord.EmbedBuilder().setColor(context.risk.score >= 70 ? 0xED4245 : context.risk.score >= 40 ? 0xF0A202 : 0x5865F2).setTitle(`📈 Risk Breakdown • ${target.user.tag}`).setDescription(`**${context.risk.score}/100 • ${context.risk.label}**\n\n${context.risk.reasons.length ? context.risk.reasons.map((item) => `**+${item.points}** • ${item.reason}`).join('\n') : 'No verified moderation-risk factors currently contribute to this score.'}\n\nHeuristic suspected-account correlation does **not** add risk unless it becomes verified evidence.`).setTimestamp();
+  return new Discord.EmbedBuilder().setColor(context.risk.score >= 70 ? 0xED4245 : context.risk.score >= 40 ? 0xF0A202 : 0x5865F2).setTitle(`${EMOJIS.TREND} Risk Breakdown • ${target.user.tag}`).setDescription(`**${context.risk.score}/100 • ${context.risk.label}**\n\n${context.risk.reasons.length ? context.risk.reasons.map((item) => `**+${item.points}** • ${item.reason}`).join('\n') : 'No verified moderation-risk factors currently contribute to this score.'}\n\nHeuristic suspected-account correlation does **not** add risk unless it becomes verified evidence.`).setTimestamp();
 }
 function identityEmbed(target, context) {
   const identity = context.identity || {};
@@ -737,7 +737,7 @@ function behaviorEmbed(target, context) {
 function watchlistEmbed(target, context) {
   const watch = context.watch; const cfg = WATCH_STATES[watch.state] || WATCH_STATES.clear; const audit = getWatchAudit(target.id, 5);
   const history = audit.length ? audit.map((row) => `• ${String(row.before_state || 'clear')} → **${row.after_state}** • ${discordTime(row.created_at)} • ${row.reason || 'No reason'}`).join('\n') : 'No watchlist changes recorded.';
-  return new Discord.EmbedBuilder().setColor(watch.state === 'blacklisted' ? 0xED4245 : watch.state === 'restricted' ? 0xF0A202 : 0x5865F2).setTitle(`🛡️ Goliath Watchlist • ${target.user.tag}`).setDescription([
+  return new Discord.EmbedBuilder().setColor(watch.state === 'blacklisted' ? 0xED4245 : watch.state === 'restricted' ? 0xF0A202 : 0x5865F2).setTitle(`${EMOJIS.SECURITY} Goliath Watchlist • ${target.user.tag}`).setDescription([
     `**Status:** ${cfg.emoji} **${cfg.label}**`,
     `**Category:** ${watch.category || 'None'}`,
     `**Reason:** ${watch.reason || 'No active watchlist reason.'}`,
