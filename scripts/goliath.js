@@ -5625,10 +5625,11 @@ for (const guard of [
 assert(!/readAudit\(|internalGet\(|guildContext|guild\.channels\./.test(aiSelfTestSource),
   'Local readiness probe must not access guild data or mutate Discord');
 const aiStatusSource = aiRouterSource.split(
-  "router.get('/status', requirePrivateAI, (_req, res) => res.json({")[1]?.split(
+  "router.get('/status', requirePrivateAI, (_req, res) =>")[1]?.split(
   "// A developer-only readiness probe")[0];
-assert(aiStatusSource && aiStatusSource.includes('verified: false') &&
-  aiStatusSource.includes("verificationRequired: 'POST /self-test'"),
+assert(aiStatusSource && /verified:\\s*false/.test(aiStatusSource) &&
+  aiStatusSource.includes("verificationRequired: 'POST /self-test'") &&
+  !/verified:\\s*true/.test(aiStatusSource),
   'Configuration status must not claim live inference verification');
 const aiHealthSource = aiRouterSource.split(
   "router.get('/health', requirePrivateAI, async (_req, res) => {")[1]?.split(
