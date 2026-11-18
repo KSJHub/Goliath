@@ -5627,9 +5627,9 @@ assert(!/readAudit\(|internalGet\(|guildContext|guild\.channels\./.test(aiSelfTe
 const aiStatusSource = aiRouterSource.split(
   "router.get('/status', requirePrivateAI, (_req, res) =>")[1]?.split(
   "// A developer-only readiness probe")[0];
-assert(aiStatusSource && /verified:\\s*false/.test(aiStatusSource) &&
+assert(aiStatusSource && /verified:\s*false/.test(aiStatusSource) &&
   aiStatusSource.includes("verificationRequired: 'POST /self-test'") &&
-  !/verified:\\s*true/.test(aiStatusSource),
+  !/verified:\s*true/.test(aiStatusSource),
   'Configuration status must not claim live inference verification');
 const aiHealthSource = aiRouterSource.split(
   "router.get('/health', requirePrivateAI, async (_req, res) => {")[1]?.split(
