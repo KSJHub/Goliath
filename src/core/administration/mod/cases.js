@@ -695,7 +695,7 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
     .setTitle(`${SHARED_EMOJIS.JUSTICE} Appeal History • Case #${modCase.caseId}`)
-    .setDescription(`**Original Action:** ${String(modCase.action || 'case').toUpperCase()}\n**Total:** ${appeals.length}  •  **⏳ Pending:** ${counts.pending}  •  **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}  •  **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`)
+    .setDescription(`**Original Action:** ${String(modCase.action || 'case').toUpperCase()}\n**Total:** ${appeals.length}  •  **${SHARED_EMOJIS.TIMEOUT} Pending:** ${counts.pending}  •  **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}  •  **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`)
     .setFooter({ text: `Appeal history • Page ${page + 1}/${totalPages}` });
   if (!entries.length) embed.addFields({ name: `${SHARED_EMOJIS.MOD_APPEAL_EMPTY} No Appeals`, value: 'No appeals have been recorded for this case.', inline: false });
   for (const appeal of entries) {
@@ -796,7 +796,7 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
     : [emptyText].join('\n');
   const embed = new EmbedBuilder()
     .setColor(COLORS.PRIMARY)
-    .setTitle('⚖️ Moderation Appeals')
+    .setTitle(`${SHARED_EMOJIS.JUSTICE} Moderation Appeals`)
     .setDescription(['**Review submitted appeals and manage decisions.**', '', `**${SHARED_EMOJIS.MOD_APPEAL_PENDING} Pending:** ${counts.pending}   •   **${SHARED_EMOJIS.SUCCESS} Approved:** ${counts.approved}   •   **${SHARED_EMOJIS.ERROR} Denied:** ${counts.denied}`, `**Viewing:** ${normalizedStatus === 'all' ? 'All Appeals' : normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)}`, '', description].join('\n'))
     ;
   if (extraFilters.length) embed.addFields({ name: `${SHARED_EMOJIS.INVESTIGATE} Additional Filters`, value: extraFilters.join(' • '), inline: false });
@@ -806,7 +806,7 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
   );
   const rows = [statusRow];
   if (slice.length) rows.push(new ActionRowBuilder().addComponents(...slice.map(({ case: modCase, appeal }) =>
-    navigationButton(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`, `${appeal.status === 'pending' ? '⚖️ Review' : `${SHARED_EMOJIS.MOD_CASE_FOLDER} View`} #${modCase.caseId}`, ButtonStyle.Primary)
+    navigationButton(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`, `${appeal.status === 'pending' ? `${SHARED_EMOJIS.JUSTICE} Review` : `${SHARED_EMOJIS.MOD_CASE_FOLDER} View`} #${modCase.caseId}`, ButtonStyle.Primary)
   )));
   if (totalPages > 1) rows.push(new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_appeal_queue:${activeToken}:${Math.max(0, page - 1)}`, '◀ Previous', ButtonStyle.Secondary, page <= 0),
@@ -995,7 +995,7 @@ async function handleCaseAction(interaction, { fetchTarget, createConfirmation }
     if (typeof fetchTarget !== 'function' || typeof createConfirmation !== 'function') return false;
     const target = await fetchTarget(interaction.guild, modCase.userId);
     if (!target) return safeReply(interaction, ephemeralError('User not found for that case.'));
-    return createConfirmation(interaction, target.id, isWarning ? 'remove-warning' : 'remove-timeout', isWarning ? { caseId: modCase.caseId } : { sourceCaseId: modCase.caseId }, isWarning ? `${SHARED_EMOJIS.WARNING} Remove warning from **Case #${modCase.caseId}**?` : `⏳ Clear timeout from **Case #${modCase.caseId}**?`);
+    return createConfirmation(interaction, target.id, isWarning ? 'remove-warning' : 'remove-timeout', isWarning ? { caseId: modCase.caseId } : { sourceCaseId: modCase.caseId }, isWarning ? `${SHARED_EMOJIS.WARNING} Remove warning from **Case #${modCase.caseId}**?` : `${SHARED_EMOJIS.TIMEOUT} Clear timeout from **Case #${modCase.caseId}**?`);
   }
   return false;
 }
@@ -1045,7 +1045,7 @@ async function submitCaseModal(interaction, { fetchTarget, refreshCasesDashboard
     const updated = editCaseReason(interaction.guild.id, caseId, reason, actorId);
     if (!updated) return safeReply(interaction, ephemeralError('Failed to update case.'));
     const target = typeof fetchTarget === 'function' ? await fetchTarget(interaction.guild, updated.userId) : null;
-    await safeReply(interaction, { content: `✏️ Updated reason for **Case #${updated.caseId}**.`, flags: 64 });
+    await safeReply(interaction, { content: `${SHARED_EMOJIS.EDIT} Updated reason for **Case #${updated.caseId}**.`, flags: 64 });
     if (target && typeof refreshCasesDashboard === 'function') await refreshCasesDashboard(interaction, target);
     return true;
   }
