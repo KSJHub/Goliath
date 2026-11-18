@@ -376,7 +376,7 @@ function caseDetailButtons(c, token, audit) {
   const rows = [new ActionRowBuilder().addComponents(
     navigationButton(`mod_case_search_back:${token}`, '← Back to Search', ButtonStyle.Secondary),
     navigationButton(`mod_case_reverse_warning:${c.caseId}`, `${EMOJIS.WELCOME_INHERIT} Remove Warning`, ButtonStyle.Secondary, c.action !== 'warn' || closed),
-    navigationButton(`mod_case_reverse_timeout:${c.caseId}`, '⏪ Clear Timeout', ButtonStyle.Secondary, c.action !== 'timeout' || closed),
+    navigationButton(`mod_case_reverse_timeout:${c.caseId}`, `${EMOJIS.TIMEOUT} Clear Timeout`, ButtonStyle.Secondary, c.action !== 'timeout' || closed),
     navigationButton(`mod_case_note:${c.caseId}`, `${EMOJIS.NOTE} Add/Edit Note`, ButtonStyle.Primary, readOnly),
     navigationButton(`mod_case_lock:${token}:${c.caseId}`, locked ? `${EMOJIS.UNLOCK} Unlock Case` : `${EMOJIS.RESTRICTIONS} Lock Case`, locked ? ButtonStyle.Success : ButtonStyle.Danger, mergedSource)
   )];
