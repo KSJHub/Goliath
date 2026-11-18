@@ -888,6 +888,43 @@ router.get('/category-rename-journal', requireAIIdentity, (req, res) => {
   } catch { return res.status(503).json({ error: 'Rename journal unavailable.' }); }
 });
 let categoryRenameInProgress = false;
+// Reconcile an interrupted write against Discord, without guessing whether
+// the API call succeeded. This never renames anything or clears uncertainty.
+router.post('/category-rename-journal/:id/reconcile', requirePrivateAI, async (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV only.' });
+  if (categoryRenameInProgress) return res.status(409).json({ error: 'Rename in progress.' });
+  if (req.body?.confirmation !== 'VERIFY DEV RENAME STATE')
+    return res.status(422).json({ error: 'Exact verification confirmation required.' });
+  categoryRenameInProgress = true;
+  try {
+    const ownerId = String(req.session.user.id);
+    const entries = readRenameJournal();
+    const entry = entries.find(item => item.id === String(req.params.id) && item.ownerId === ownerId);
+    if (!entry) return res.status(404).json({ error: 'Rename journal entry not found.' });
+    if (entry.status !== 'pending') return res.status(409).json({ error: 'Only pending entries may be reconciled.' });
+    const guild = req.client?.guilds?.cache?.get(entry.guildId);
+    if (!guild) return res.status(503).json({ error: 'DEV guild is not connected.' });
+    const category = await guild.channels.fetch(entry.categoryId);
+    if (!category || category.type !== 4)
+      return res.status(409).json({ error: 'Category missing or changed type. Manual recovery required.' });
+    if (category.name !== entry.proposedName && category.name !== entry.previousName)
+      return res.status(409).json({ error: 'Category has a third name. Manual recovery required.' });
+    entry.status = category.name === entry.proposedName ? 'verified' : 'failed';
+    entry.updatedAt = new Date().toISOString();
+    entry.reconciledBy = ownerId;
+    writeRenameJournal(entries);
+    return res.json({ reconciled: true, status: entry.status, guildId: entry.guildId,
+      categoryId: entry.categoryId, currentName: category.name,
+      notice: entry.status === 'verified'
+        ? 'Discord confirms the proposed category name.'
+        : 'Discord confirms the original category name. No rollback was performed.' });
+  } catch (error) {
+    console.error('[GoliathAI] Rename reconciliation failed:', error?.message);
+    return res.status(503).json({ error: 'Could not reconcile pending rename. Journal remains unchanged.' });
+  } finally { categoryRenameInProgress = false; }
+});
+
+
 router.post('/drafts/:id/apply-category-rename', requirePrivateAI, async (req, res) => {
   if (localMode() !== 'DEV' || process.env.GOLIATH_AI_DEV_RENAME_ENABLED !== 'true')
     return res.status(503).json({ error: 'DEV category rename execution is disabled.' });
