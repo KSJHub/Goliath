@@ -343,7 +343,7 @@ function caseDetailEmbed(c, audit) {
   if (c.relatedCaseId) e.addFields({ name: 'Related Case', value: `#${c.relatedCaseId}`, inline: true });
   const mergedInto = getMergedIntoId(c);
   const mergedCases = getMergedCaseIds(c);
-  if (mergedInto) e.addFields({ name: '↪️ Merged Into', value: `Case #${mergedInto} • this source case is read-only until split`, inline: false });
+  if (mergedInto) e.addFields({ name: `${EMOJIS.WELCOME_INHERIT} Merged Into`, value: `Case #${mergedInto} • this source case is read-only until split`, inline: false });
   if (mergedCases.length) e.addFields({ name: `${EMOJIS.PANELS} Merged Cases`, value: mergedCases.map((id) => `#${id}`).join(', ').slice(0, 1024), inline: false });
   if (isCaseLocked(c)) {
     const lockedBy = c.metadata?.lockedBy ? `<@${c.metadata.lockedBy}>` : 'Unknown';
