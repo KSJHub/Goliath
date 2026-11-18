@@ -1,5 +1,5 @@
 'use strict';
-const { emojiLabel } = require('../../ui/emojis');
+const { EMOJIS, emojiLabel } = require('../../ui/emojis');
 
 // Moderation panel layout contract: feature rows first; the final row is navigation,
 // with Back first and Export immediately after it when export is available.
@@ -315,7 +315,7 @@ const command = {
       return openModPanel(interaction);
     } catch (error) {
       if (error?.code === 10062 || error?.code === 40060) return;
-      console.error('❌ Mod command failed:', error);
+      console.error(`${EMOJIS.ERROR} Mod command failed:`, error);
       recordModerationSystemEvent({ interaction, event: 'moderation.command.failed', action: 'view_dashboard', reason: error?.message || error, metadata: { stack: String(error?.stack || '').slice(0, 1500) } });
       return safeEditReply(interaction, {
         embeds: [errorEmbed('Failed to open the moderation hub. Please try again.')],
