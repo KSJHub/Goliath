@@ -63,6 +63,7 @@ function requirePrivateAI(req, res, next) {
 router.get('/status', requirePrivateAI, (_req, res) => res.json({
   enabled: isEnabled(),
   configured: isEnabled(),
+  devCategoryRenameEnabled: isEnabled() && process.env.GOLIATH_AI_DEV_RENAME_ENABLED === 'true',
   verified: false,
   verificationRequired: 'POST /self-test',
   backend: 'local',
@@ -859,7 +860,14 @@ function readRenameJournal() {
   if (fs.statSync(file).size > 262144) throw new Error('Rename journal storage limit exceeded.');
   const entries = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (!Array.isArray(entries) || entries.length > 200 ||
-      entries.some(entry => !entry || !['pending', 'verified', 'failed'].includes(entry.status)))
+      entries.some(entry => !entry || !['pending', 'verified', 'failed'].includes(entry.status) ||
+        !/^[0-9a-f-]{36}$/i.test(String(entry.id || '')) ||
+        !SNOWFLAKE.test(String(entry.guildId || '')) ||
+        !SNOWFLAKE.test(String(entry.categoryId || '')) ||
+        !SNOWFLAKE.test(String(entry.ownerId || '')) ||
+        typeof entry.previousName !== 'string' || typeof entry.proposedName !== 'string' ||
+        !entry.previousName || !entry.proposedName ||
+        entry.previousName.length > 100 || entry.proposedName.length > 100))
     throw new Error('Invalid rename journal.');
   return entries;
 }
