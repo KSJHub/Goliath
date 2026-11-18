@@ -847,6 +847,46 @@ router.get('/drafts/:id/execution-candidates', requireAIIdentity, async (req, re
 // The local model cannot invoke this route. It requires a human owner session,
 // an exact operation fingerprint, a fresh guild snapshot and a typed approval.
 // The feature flag defaults OFF until recovery and live testing are complete.
+// Durable write-ahead journal for the first live executor. An unresolved
+// attempt blocks further renames until an owner investigates Discord state.
+const renameJournalPath = () => require('node:path').join(
+  require('../../config/runtimePaths').getRuntimePaths('DEV').data,
+  'goliath-ai-category-rename-journal.json'
+);
+function readRenameJournal() {
+  const file = renameJournalPath();
+  if (!fs.existsSync(file)) return [];
+  if (fs.statSync(file).size > 262144) throw new Error('Rename journal storage limit exceeded.');
+  const entries = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!Array.isArray(entries) || entries.length > 200 ||
+      entries.some(entry => !entry || !['pending', 'verified', 'failed'].includes(entry.status)))
+    throw new Error('Invalid rename journal.');
+  return entries;
+}
+function writeRenameJournal(entries) {
+  if (!Array.isArray(entries) || entries.length > 200) throw new Error('Rename journal is full.');
+  const file = renameJournalPath();
+  const path = require('node:path');
+  const crypto = require('node:crypto');
+  const raw = JSON.stringify(entries);
+  if (Buffer.byteLength(raw) > 262144) throw new Error('Rename journal storage limit exceeded.');
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = file + '.' + crypto.randomUUID() + '.tmp';
+  try {
+    fs.writeFileSync(temporary, raw, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    fs.renameSync(temporary, file);
+    fs.chmodSync(file, 0o600);
+  } finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
+}
+router.get('/category-rename-journal', requireAIIdentity, (req, res) => {
+  if (localMode() !== 'DEV') return res.status(503).json({ error: 'DEV only.' });
+  try {
+    const ownerId = String(req.session.user.id);
+    return res.json({ entries: readRenameJournal().filter(entry => entry.ownerId === ownerId)
+      .map(({ id, guildId, categoryId, previousName, proposedName, status, createdAt, updatedAt }) =>
+        ({ id, guildId, categoryId, previousName, proposedName, status, createdAt, updatedAt })) });
+  } catch { return res.status(503).json({ error: 'Rename journal unavailable.' }); }
+});
 let categoryRenameInProgress = false;
 router.post('/drafts/:id/apply-category-rename', requirePrivateAI, async (req, res) => {
   if (localMode() !== 'DEV' || process.env.GOLIATH_AI_DEV_RENAME_ENABLED !== 'true')
@@ -909,10 +949,34 @@ router.post('/drafts/:id/apply-category-rename', requirePrivateAI, async (req, r
     // Fresh audit immediately before the write; no automatic retry.
     if (reportDigest(await getVerifiedAudit(req, 'DEV', draft.guildId)) !== currentDigest)
       return res.status(409).json({ error: 'Server changed during execution checks.' });
-    await channel.setName(operation.after.name, 'Goliath AI: explicitly approved DEV category rename');
+    const history = readRenameJournal();
+    if (history.some(entry => entry.status === 'pending'))
+      return res.status(409).json({ error: 'Unresolved rename attempt in DEV journal. Inspect Discord before continuing.' });
+    if (history.length >= 200) return res.status(409).json({ error: 'Rename journal is full.' });
+    const journalId = require('node:crypto').randomUUID();
+    const now = new Date().toISOString();
+    history.push({ id: journalId, draftId: draft.id, guildId: draft.guildId,
+      categoryId: channel.id, ownerId, previousName: operation.before.name,
+      proposedName: operation.after.name, status: 'pending',
+      createdAt: now, updatedAt: now });
+    // Write-ahead entry must reach disk before any Discord mutation.
+    writeRenameJournal(history);
+    try {
+      await channel.setName(operation.after.name, 'Goliath AI: explicitly approved DEV category rename');
+    } catch (error) {
+      // The API may have applied the write even if the response failed.
+      // Keep the journal pending rather than assuming a safe rollback.
+      throw error;
+    }
     const updated = await guild.channels.fetch(operation.target.id);
     if (updated?.name !== operation.after.name)
-      return res.status(502).json({ error: 'Discord did not confirm the new category name; inspect manually.' });
+      return res.status(502).json({ error: 'Discord did not confirm the new category name; pending journal requires manual inspection.' });
+    const verifiedHistory = readRenameJournal();
+    const record = verifiedHistory.find(entry => entry.id === journalId && entry.status === 'pending');
+    if (!record) throw new Error('Rename journal entry missing after Discord write.');
+    record.status = 'verified';
+    record.updatedAt = new Date().toISOString();
+    writeRenameJournal(verifiedHistory);
     console.info('[GoliathAI] DEV category rename applied', {
       guildId: draft.guildId, categoryId: channel.id, ownerId,
       from: operation.before.name, to: operation.after.name, draftId: draft.id
