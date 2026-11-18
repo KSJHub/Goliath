@@ -66,6 +66,9 @@ export default function GoliathAI({ theme }) {
   const [readinessBusy, setReadinessBusy] = useState(false);
   const [operationReviews, setOperationReviews] = useState(null);
   const [operationReviewBusy, setOperationReviewBusy] = useState(false);
+  const [renameCandidate, setRenameCandidate] = useState(null);
+  const [renameConfirmation, setRenameConfirmation] = useState('');
+  const [renameBusy, setRenameBusy] = useState(false);
   const recoveryRequestRef = useRef(0);
   const refreshRecovery = () => {
     const requestId = ++recoveryRequestRef.current;
@@ -494,6 +497,49 @@ export default function GoliathAI({ theme }) {
     }
     finally { setReadinessBusy(false); }
   };
+  const inspectRenameCandidate = async (id) => {
+    if (!audit || audit.environment !== 'DEV' || renameBusy) return;
+    const selected = String(audit.environment) + ':' + String(audit.guild.id);
+    setRenameBusy(true); setRenameCandidate(null); setRenameConfirmation(''); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/drafts/' + encodeURIComponent(id) + '/execution-candidates');
+      if (selectedGuildRef.current !== selected) return;
+      if (result.environment !== 'DEV' || result.guildId !== String(audit.guild.id) ||
+          result.draftId !== id || result.canExecute !== false ||
+          result.candidates?.length !== 1 || result.candidates[0]?.kind !== 'rename_category' ||
+          !result.candidates[0]?.eligibleForFutureApproval)
+        throw new Error('Only a reviewed, single-operation DEV category rename can be prepared.');
+      setRenameCandidate({ draftId: id, guildId: result.guildId, candidate: result.candidates[0] });
+    } catch (err) {
+      if (selectedGuildRef.current === selected) setError(err.message);
+    } finally { setRenameBusy(false); }
+  };
+  const applyRenameCandidate = async () => {
+    const candidate = renameCandidate;
+    if (!candidate || renameBusy || renameConfirmation !== 'APPLY DEV CATEGORY RENAME' ||
+        selectedGuildRef.current !== 'DEV:' + candidate.guildId) return;
+    setRenameBusy(true); setError('');
+    try {
+      const result = await api.request('/api/owner/ai/drafts/' +
+        encodeURIComponent(candidate.draftId) + '/apply-category-rename', {
+        method: 'POST', body: JSON.stringify({
+          sequence: candidate.candidate.sequence,
+          operationKey: candidate.candidate.operationKey,
+          confirmation: renameConfirmation
+        })
+      });
+      if (selectedGuildRef.current !== 'DEV:' + candidate.guildId) return;
+      if (result.applied !== true || result.environment !== 'DEV' ||
+          result.guildId !== candidate.guildId ||
+          result.categoryId !== candidate.candidate.target?.id)
+        throw new Error('Discord rename response could not be verified.');
+      setDraftNotice('DEV category renamed and verified: ' + result.previousName + ' → ' + result.currentName);
+      setRenameCandidate(null); setRenameConfirmation('');
+      setAudit(null); setBlueprintPlan(null); setReadiness(null); setOperationReviews(null);
+    } catch (err) {
+      if (selectedGuildRef.current === 'DEV:' + candidate.guildId) setError(err.message);
+    } finally { setRenameBusy(false); }
+  };
   const inspectOperationReviews = async (id) => {
     if (!audit || operationReviewBusy) return;
     const requestedGuild = String(audit.environment) + ':' + String(audit.guild.id);
@@ -751,10 +797,25 @@ export default function GoliathAI({ theme }) {
                   <button type="button" disabled={draftBusy} onClick={() => reviewSavedDraft(item.id)}>Mark reviewed</button>
                   <button type="button" disabled={draftBusy || readinessBusy} onClick={() => checkDraftReadiness(item.id)}>Check execution readiness</button>
                   <button type="button" disabled={draftBusy || operationReviewBusy} onClick={() => inspectOperationReviews(item.id)}>Operation reviews</button>
+                  {item.environment === 'DEV' && <button type="button" disabled={draftBusy || renameBusy} onClick={() => inspectRenameCandidate(item.id)}>Prepare approved rename</button>}
                   <button type="button" disabled={draftBusy} onClick={() => removeSavedDraft(item.id)}>Delete draft</button>
                 </div>
               </div>
             )}
+            {renameCandidate && audit?.environment === 'DEV' &&
+              String(audit.guild.id) === renameCandidate.guildId && <div style={{ border: '1px solid #64748b', borderRadius: 10, padding: 12, marginTop: 12 }}>
+                <h4 style={{ marginTop: 0 }}>DEV category rename — explicit owner approval</h4>
+                <p>Category: {renameCandidate.candidate.target?.name} → {renameCandidate.candidate.proposed?.name}</p>
+                <p style={{ fontSize: 12 }}>This changes one real Discord category. The server will revalidate the reviewed plan, permissions and current state. Execution may still be disabled by the DEV feature switch.</p>
+                <label htmlFor="goliath-rename-confirmation">Type APPLY DEV CATEGORY RENAME to approve</label>
+                <input id="goliath-rename-confirmation" value={renameConfirmation}
+                  onChange={event => setRenameConfirmation(event.target.value)}
+                  autoComplete="off" style={{ display: 'block', width: '100%', margin: '8px 0' }} />
+                <button type="button" disabled={renameBusy || renameConfirmation !== 'APPLY DEV CATEGORY RENAME'}
+                  onClick={applyRenameCandidate}>Apply this DEV rename</button>
+                <button type="button" disabled={renameBusy} style={{ marginLeft: 8 }}
+                  onClick={() => { setRenameCandidate(null); setRenameConfirmation(''); }}>Cancel</button>
+              </div>}
             {operationReviews && <div style={{ border: '1px solid #64748b', borderRadius: 10, padding: 12, marginTop: 12 }}>
               <h4 style={{ marginTop: 0 }}>Operation review log — no Discord execution</h4>
               {operationReviews.stale && <p style={{ color: '#fbbf24' }}>This plan is stale. Save and review a fresh plan before acknowledging operations.</p>}
