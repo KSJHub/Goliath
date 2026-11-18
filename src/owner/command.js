@@ -661,12 +661,22 @@ function aiRecoverySave(ownerId, kind, snapshot) {
   aiRecoveryWrite(retained);
   });
 }
-function aiRecoveryResolvePending(ownerId, kind, resolution) {
+function aiRecoveryResolvePending(ownerId, kind, resolution, expectedSnapshot) {
   return aiRecoveryLocked(() => {
   const entries = aiRecoveryRead();
   const index = entries.findIndex(item => item.ownerId === ownerId && item.kind === kind &&
     item.status === 'pending');
-  if (index < 0) return;
+  if (index < 0) throw new Error('Pending transaction disappeared; retry reconciliation');
+  // Discord was read before acquiring the journal lock. Refuse to resolve a
+  // different transaction that may have replaced it in the meantime.
+  const current = entries[index];
+  if (!expectedSnapshot || current.guildId !== expectedSnapshot.guildId ||
+      current.roleId !== expectedSnapshot.roleId ||
+      current.channelId !== expectedSnapshot.channelId ||
+      current.createdAt !== expectedSnapshot.createdAt ||
+      JSON.stringify(current.before) !== JSON.stringify(expectedSnapshot.before) ||
+      JSON.stringify(current.after) !== JSON.stringify(expectedSnapshot.after))
+    throw new Error('Pending transaction changed; retry reconciliation');
   if (resolution === 'unchanged') entries.splice(index, 1);
   else if (resolution === 'applied') {
     entries[index] = { ...entries[index], status: 'verified',
@@ -695,10 +705,10 @@ async function aiReconcilePending(interaction, guildId) {
       const equal = (expected) => item.kind === 'role'
         ? actual === expected : actual && aiOverwriteMatches(actual, expected);
       if (equal(item.after)) {
-        aiRecoveryResolvePending(interaction.user.id, item.kind, 'applied');
+        aiRecoveryResolvePending(interaction.user.id, item.kind, 'applied', item);
         results.push(item.kind + ': applied state verified; recovery enabled');
       } else if (equal(item.before)) {
-        aiRecoveryResolvePending(interaction.user.id, item.kind, 'unchanged');
+        aiRecoveryResolvePending(interaction.user.id, item.kind, 'unchanged', item);
         results.push(item.kind + ': original state verified; pending record cleared');
       } else {
         results.push(item.kind + ': drift or unavailable target; pending record retained for manual review');
