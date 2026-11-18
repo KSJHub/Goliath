@@ -6091,10 +6091,18 @@ function goliathAiRecoveryAudit() {
   assert(resolveStart >= 0 && resolveEnd > resolveStart);
   const resolve = vm.runInNewContext(source.slice(resolveStart, resolveEnd) + '; aiRecoveryResolvePending', sandbox);
   records[0].status = 'pending';
-  resolve(ownerId, 'role', 'applied');
+  const pending = JSON.parse(JSON.stringify(records[0]));
+  assert.throws(() => resolve(ownerId, 'role', 'applied', {
+    ...pending, after: '2048'
+  }), /Pending transaction changed/);
+  assert.equal(records[0].status, 'pending', 'Stale reconciliation must retain pending journal');
+  resolve(ownerId, 'role', 'applied', pending);
   assert.equal(records[0].status, 'verified');
   records[0].status = 'pending';
-  resolve(ownerId, 'role', 'unchanged');
+  assert.throws(() => resolve(ownerId, 'role', 'unchanged', {
+    ...pending, createdAt: new Date(0).toISOString()
+  }), /Pending transaction changed/);
+  resolve(ownerId, 'role', 'unchanged', pending);
   assert.equal(records.length, 0);
   assert(source.includes("return aiRecoveryLocked(() => {"), 'Recovery writes must use cross-process lock');
   assert(source.includes("status: 'pending'"), 'Missing write-ahead transaction state');
