@@ -1351,7 +1351,17 @@ router.post('/chat', requirePrivateAI, async (req, res) => {
         },
         findings,
         findingsTotal: audit.analysis?.findings?.length || 0,
-        findingLimit: 4
+        findingLimit: 4,
+        // Give the assistant a bounded, factual channel inventory so it can
+        // help finish the actual server rather than inventing channel names.
+        channelInventory: (audit.channels || []).slice(0, 35).map(channel => ({
+          id: String(channel.id),
+          name: String(channel.name || '').slice(0, 60),
+          type: channel.type,
+          parentId: channel.parentId || null
+        })),
+        channelInventoryTotal: audit.channels?.length || 0,
+        channelInventoryTruncated: (audit.channels?.length || 0) > 35
       });
     } catch (error) {
       return res.status(503).json({ error: 'Unable to load server context for AI chat.' });
