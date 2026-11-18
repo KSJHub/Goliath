@@ -715,8 +715,8 @@ function buildAppealHistoryEmbed(modCase, requestedPage = 0) {
   }
   const components = [];
   if (totalPages > 1) components.push(new ActionRowBuilder().addComponents(
-    navigationButton(`mod_case_appeal_history:${modCase.caseId}:${Math.max(0, page - 1)}`, '◀ Previous', ButtonStyle.Secondary, page <= 0),
-    navigationButton(`mod_case_appeal_history:${modCase.caseId}:${Math.min(totalPages - 1, page + 1)}`, 'Next ▶', ButtonStyle.Secondary, page >= totalPages - 1)
+    navigationButton(`mod_case_appeal_history:${modCase.caseId}:${Math.max(0, page - 1)}`, `${SHARED_EMOJIS.CHANNEL_PREVIOUS} Previous`, ButtonStyle.Secondary, page <= 0),
+    navigationButton(`mod_case_appeal_history:${modCase.caseId}:${Math.min(totalPages - 1, page + 1)}`, `Next ${SHARED_EMOJIS.CHANNEL_NEXT}`, ButtonStyle.Secondary, page >= totalPages - 1)
   ));
   const pendingAppeal = getPendingAppeal(modCase);
   if (pendingAppeal) components.push(new ActionRowBuilder().addComponents(
@@ -809,8 +809,8 @@ function buildAppealQueuePayload(guildId, requestedPage = 0, filters = { status:
     navigationButton(`mod_case_appeal_open:${modCase.caseId}:${appeal.id}`, `${appeal.status === 'pending' ? `${SHARED_EMOJIS.JUSTICE} Review` : `${SHARED_EMOJIS.MOD_CASE_FOLDER} View`} #${modCase.caseId}`, ButtonStyle.Primary)
   )));
   if (totalPages > 1) rows.push(new ActionRowBuilder().addComponents(
-    navigationButton(`mod_case_appeal_queue:${activeToken}:${Math.max(0, page - 1)}`, '◀ Previous', ButtonStyle.Secondary, page <= 0),
-    navigationButton(`mod_case_appeal_queue:${activeToken}:${Math.min(totalPages - 1, page + 1)}`, 'Next ▶', ButtonStyle.Secondary, page >= totalPages - 1)
+    navigationButton(`mod_case_appeal_queue:${activeToken}:${Math.max(0, page - 1)}`, `${SHARED_EMOJIS.CHANNEL_PREVIOUS} Previous`, ButtonStyle.Secondary, page <= 0),
+    navigationButton(`mod_case_appeal_queue:${activeToken}:${Math.min(totalPages - 1, page + 1)}`, `Next ${SHARED_EMOJIS.CHANNEL_NEXT}`, ButtonStyle.Secondary, page >= totalPages - 1)
   ));
   rows.push(new ActionRowBuilder().addComponents(
     navigationButton('mod_dashboard:none:analytics', emojiLabel('BACK', 'Back'), ButtonStyle.Secondary),
