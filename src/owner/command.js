@@ -1271,11 +1271,17 @@ function aiDeployJournalHistoryPayload(guild) {
   return {content:null,embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Deployment History').setDescription((lines.join('\n')||'No deployment transactions recorded yet.')+'\n\nUnresolved transactions block new deployments. Execution and recovery controls are still under development.')],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary))]};
 }
 const aiGoliathRoleDrafts = new Map();
+function aiDeploySavedRoles(guildId) {
+  const record=aiDeployJournalRead(guildId).filter(item=>item.status==='verified'&&item.roles).at(-1);
+  return record?.roles || {};
+}
 function aiGoliathRoleDraft(interaction, guild) {
   const key = interaction.user.id + ':' + guild.id;
   let draft = aiGoliathRoleDrafts.get(key);
   if (!draft || draft.expiresAt < Date.now()) {
-    draft = { operational: null, display: null, expiresAt: Date.now() + 600000 };
+    const saved=aiDeploySavedRoles(guild.id);
+    const valid=id=>id&&guild.roles.cache.has(id)&&guild.members.me?.roles.cache.has(id)?id:null;
+    draft = { operational: valid(saved.operational), display: valid(saved.display), expiresAt: Date.now() + 600000 };
     aiGoliathRoleDrafts.set(key, draft);
   }
   return draft;
@@ -1321,6 +1327,7 @@ async function aiDeployApplyRoles(interaction,guildId,token) {
   await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
   const plan=aiGoliathRolePlan(interaction,guild);
   if(plan.blockers.length||JSON.stringify(plan.steps)!==approval.steps||!plan.steps.length) return interaction.editReply({content:'Plan changed, blocked or empty. Prepare a fresh preview.',embeds:[],components:[]});
+  const selected={...aiGoliathRoleDraft(interaction,guild)};
   const tx=aiDeployJournalBegin(guildId,interaction.user.id,plan.steps);
   const update=mutate=>aiDeployJournalUpdate(guildId,records=>{
     const record=records.find(item=>item.id===tx);
@@ -1346,7 +1353,14 @@ async function aiDeployApplyRoles(interaction,guildId,token) {
       if(!verified.roles.cache.has(role.id)) throw new Error('Assignment verification failed');
       update(record=>{record.steps[index].phase='verified';});
     }
-    update(record=>{record.status='verified';record.completedAt=new Date().toISOString();});
+    const roles={operational:selected.operational,display:selected.display};
+    update(record=>{
+      for(const step of record.steps) roles[step.kind]=step.roleId;
+      if(!validGuildId(roles.operational)||!validGuildId(roles.display)||roles.operational===roles.display) throw new Error('Invalid verified role configuration');
+      record.roles=roles;
+      record.status='verified';record.completedAt=new Date().toISOString();
+    });
+    aiGoliathRoleDrafts.delete(key);
     return interaction.editReply({content:'Role assignments applied and verified. Channel permissions unchanged. Transaction '+tx,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Sync Scan',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
   } catch(error){
     update(record=>{record.status='failed';record.error=String(error.message).slice(0,500);});
