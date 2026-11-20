@@ -6145,6 +6145,12 @@ function goliathDeploymentRegression(source, assert, vm) {
   check(helpers.required({type:13},profile),['ViewChannel','Connect']);
   check(helpers.required({type:4},profile),['ViewChannel','ManageChannels']);
   check(helpers.required({type:0},profile),['ViewChannel','SendMessages']);
+  const expanded={permissions:[...profile.permissions,'MoveMembers','CreatePublicThreads','SendMessagesInThreads'],groups:['tempVoice','translation']};
+  check(helpers.required({type:2},expanded),['ViewChannel','Connect','Speak','ManageChannels','MoveMembers']);
+  check(helpers.required({type:0},expanded),['ViewChannel','SendMessages','CreatePublicThreads','SendMessagesInThreads']);
+  check(helpers.required({type:13},expanded),['ViewChannel','Connect']);
+  check(helpers.required({type:0},{...expanded,groups:[]}),['ViewChannel','SendMessages']);
+  check(helpers.required({type:0},{...expanded,groups:['schedule']}),['ViewChannel','SendMessages','CreatePublicThreads','SendMessagesInThreads']);
   const channels=[{id:'3',parentId:'c',permissionsLocked:true},{id:'2',parentId:'c',permissionsLocked:false},{id:'1',parentId:'c',permissionsLocked:true},{id:'4',parentId:'d',permissionsLocked:true}];
   const guild={channels:{cache:new Map(channels.map(c=>[c.id,c]))}};
   check(helpers.children(guild,'c').map(c=>c.id),['1','3']);
