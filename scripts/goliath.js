@@ -6180,6 +6180,36 @@ function goliathDeploymentRegression(source, assert, vm) {
   check(plan.steps[0].after,{allow:'3',deny:'4'});
   fixtures.length=0;
   check(planSync(guild),{steps:[],blocked:[]});
+  const roleStart=source.indexOf('function aiGoliathRolePlan(');
+  const roleEnd=source.indexOf('const aiDeployApprovals',roleStart);
+  assert(roleStart>=0 && roleEnd>roleStart);
+  const draft={operational:'create',display:'create'};
+  const scan={profile,missing:[]};
+  bot.roles={cache:new Map(),highest:{comparePositionTo:()=>1}};
+  guild.roles={cache:new Map()};
+  const rolePlan=vm.runInNewContext(source.slice(roleStart,roleEnd)+'; aiGoliathRolePlan',{
+    aiGoliathRoleDraft:()=>draft,aiGoliathDeploymentScan:()=>scan
+  });
+  let roles=rolePlan({},guild);
+  check(roles.blockers,[]);
+  assert.equal(roles.steps.length,2);
+  check(roles.steps[0].permissions,profile.permissions);
+  check(roles.steps[1].permissions,[]);
+  assert.equal(roles.steps[1].hoist,true);
+  scan.missing=['ManageRoles'];
+  assert(rolePlan({},guild).blockers.length>0);
+  scan.missing=[];
+  draft.operational='missing';
+  assert(rolePlan({},guild).blockers.length>0);
+  const rollbackStart=source.indexOf('function aiDeployRollbackPlan(');
+  const rollbackEnd=source.indexOf('function aiDeployRollbackPreview(',rollbackStart);
+  assert(rollbackStart>=0 && rollbackEnd>rollbackStart);
+  const rollback=vm.runInNewContext(source.slice(rollbackStart,rollbackEnd)+'; aiDeployRollbackPlan',{aiGoliathInheritedChildren:helpers.children});
+  check(rollback(guild,{steps:[{action:'create',name:'New',phase:'creating'}]}).steps,[]);
+  assert(rollback(guild,{steps:[{action:'create',name:'New',phase:'creating'}]}).blockers.length>0);
+  check(rollback(guild,{steps:[{action:'create',name:'New'}]}),{steps:[],blockers:[]});
+  assert(rollback(guild,{steps:[{action:'unknown'}]}).blockers.length>0);
+
 }
 function goliathAiRecoveryAudit() {
   const assert = require('node:assert/strict');
