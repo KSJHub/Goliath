@@ -1206,8 +1206,20 @@ function aiSelectRow(guild, kind, page) {
 
 // Dedicated installation baseline; intentionally excludes Administrator.
 // Module-specific requirements will extend this baseline as module contracts are registered.
-const AI_GOLIATH_BASELINE = Object.freeze(['ViewChannel','SendMessages','ReadMessageHistory','EmbedLinks','AttachFiles','AddReactions','ManageRoles','ManageChannels','ManageGuild','ManageMessages','ManageThreads','KickMembers','BanMembers','ModerateMembers','ViewAuditLog']);
-const AI_GOLIATH_TEXT = Object.freeze(['ViewChannel','SendMessages','ReadMessageHistory','EmbedLinks','AttachFiles','AddReactions']);
+// Conservative all-module installation profile; individual guild enablement is not inferred.
+const AI_GOLIATH_MODULE_REQUIREMENTS = Object.freeze({
+  core: ['ViewChannel','SendMessages','ReadMessageHistory','AddReactions','ManageRoles','ManageGuild','ViewAuditLog'],
+  embed: ['ViewChannel','SendMessages','EmbedLinks','ReadMessageHistory','AttachFiles'],
+  suggestions: ['ViewChannel','SendMessages','EmbedLinks','ReadMessageHistory'],
+  privateRooms: ['ViewChannel','SendMessages','ReadMessageHistory','ManageChannels','ManageMessages','AttachFiles','EmbedLinks'],
+  moderation: ['ManageMessages','ManageThreads','KickMembers','BanMembers','ModerateMembers'],
+  voice: ['Connect','Speak']
+});
+const AI_GOLIATH_BASELINE = Object.freeze([...new Set(Object.values(AI_GOLIATH_MODULE_REQUIREMENTS).flat())]);
+const AI_GOLIATH_TEXT = Object.freeze([...new Set([...AI_GOLIATH_MODULE_REQUIREMENTS.embed,...AI_GOLIATH_MODULE_REQUIREMENTS.suggestions,'AddReactions'])]);
+function aiGoliathInvitePermissions(){
+  return new PermissionsBitField(AI_GOLIATH_BASELINE).bitfield.toString();
+}
 function aiGoliathDeploymentScan(guild) {
   const bot = guild.members.me;
   if (!bot) throw new Error('Bot membership unavailable');
@@ -1218,7 +1230,7 @@ function aiGoliathDeploymentScan(guild) {
   const gaps = targets.map(channel => {
     const effective = channel.permissionsFor(bot);
     const required = [2,13].includes(channel.type) ? ['ViewChannel','Connect','Speak'] :
-      channel.type === 4 ? ['ViewChannel'] : AI_GOLIATH_TEXT;
+      channel.type === 4 ? ['ViewChannel','ManageChannels'] : AI_GOLIATH_TEXT;
     return { id: channel.id, category: channel.type === 4, missing: required.filter(permission => !effective?.has(permission)),
       synced: channel.permissionsLocked === true, editable: Boolean(effective?.has('ManageRoles')) };
   }).filter(item => item.missing.length);
@@ -1677,6 +1689,8 @@ function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
     '**Goliath deployment baseline — ' + action + '**',
     '**Assigned roles:** ' + (scan.assigned.map(role => '<@&' + role.id + '>').join(', ') || 'None beyond @everyone'),
     '**Missing guild permissions:** ' + (scan.missing.join(', ') || 'None'),
+    '**Recommended invite permission bitfield:** '+aiGoliathInvitePermissions(),
+    '**Profile:** All-module installation baseline (no Administrator).',
     '**Manageable existing roles:** ' + scan.candidates.length,
     '**Channels/categories inspected:** ' + scan.targets.length,
     '**Access gaps:** ' + scan.gaps.length,
