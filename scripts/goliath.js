@@ -5658,6 +5658,44 @@ for (const guard of [
 ]) assert(renameRecoverySource.includes(guard), 'Missing DEV reconciliation guard: ' + guard);
 assert(!/\.setName\(|\.edit\(|\.delete\(|\.create\(/.test(renameRecoverySource),
   'Reconciliation must not mutate Discord');
+// Exercise real journal serialization/validation using an isolated in-memory filesystem.
+const journalSource = aiRouterSource.slice(aiRouterSource.indexOf('function readRenameJournal()'), aiRouterSource.indexOf("router.get('/category-rename-journal'"));
+assert(journalSource.startsWith('function readRenameJournal()'), 'Rename journal helpers missing');
+const journalFiles = new Map();
+const journalFs = {
+  existsSync: file => journalFiles.has(file),
+  statSync: file => ({ size: Buffer.byteLength(journalFiles.get(file)) }),
+  readFileSync: file => journalFiles.get(file),
+  mkdirSync() {},
+  writeFileSync(file, raw, options) { assert.equal(options.flag, 'wx'); assert.equal(options.mode, 0o600); journalFiles.set(file, raw); },
+  renameSync(from, to) { journalFiles.set(to, journalFiles.get(from)); journalFiles.delete(from); },
+  chmodSync(file, mode) { assert.equal(mode, 0o600); },
+  unlinkSync: file => journalFiles.delete(file)
+};
+const journal = new Function('fs', 'require', 'Buffer', 'renameJournalPath', 'SNOWFLAKE',
+  journalSource + '\nreturn { readRenameJournal, writeRenameJournal };')(
+  journalFs, id => {
+    if (id === 'node:path') return { dirname: () => '/isolated' };
+    if (id === 'node:crypto') return { randomUUID: () => 'temporary' };
+    throw new Error('Unexpected journal dependency: ' + id);
+  }, Buffer, () => '/isolated/journal.json', /^\d{16,20}$/);
+const journalFile = '/isolated/journal.json';
+const journalEntry = { id: '12345678-1234-1234-1234-123456789012',
+  guildId: '123456789012345678', categoryId: '223456789012345678',
+  ownerId: '323456789012345678', previousName: 'Before', proposedName: 'After', status: 'pending' };
+assert.deepEqual(journal.readRenameJournal(), []);
+journal.writeRenameJournal([journalEntry]);
+assert.deepEqual(journal.readRenameJournal(), [journalEntry]);
+assert.equal(journalFiles.size, 1, 'Temporary journal must be removed');
+journal.writeRenameJournal([{ ...journalEntry, status: 'verified' }]);
+assert.equal(journal.readRenameJournal()[0].status, 'verified');
+journalFiles.set(journalFile, '{broken');
+assert.throws(() => journal.readRenameJournal());
+journalFiles.set(journalFile, JSON.stringify([{ ...journalEntry, status: 'unknown' }]));
+assert.throws(() => journal.readRenameJournal());
+journalFiles.set(journalFile, JSON.stringify([{ ...journalEntry, categoryId: 'invalid' }]));
+assert.throws(() => journal.readRenameJournal());
+assert.throws(() => journal.writeRenameJournal(Array(201).fill(journalEntry)));
 const aiHealthSource = aiRouterSource.split(
   "router.get('/health', requirePrivateAI, async (_req, res) => {")[1]?.split(
   "const SNOWFLAKE =")[0];
