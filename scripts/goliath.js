@@ -3239,6 +3239,7 @@ function load(file, mocks, testExport = '') {
   const loaded = { exports: {} };
   const fixtureRequire = id => {
     if (Object.hasOwn(mocks, id)) return mocks[id];
+    if (file === 'src/core/administration/mod/investigationAccess.js' && id === '../../guild/goliathNavigation') return localRequire(id);
     if ((file === base + 'investigationRooms.js' && id === '../../../guild/goliathNavigation')
       || (file === 'src/events/client/sentinelControlCenter.js' && id === '../../core/guild/goliathNavigation')
       || (file === 'src/core/administration/mod/quarantineInteractions.js' && id === '../../../core/guild/goliathNavigation')) return localRequire(id);
