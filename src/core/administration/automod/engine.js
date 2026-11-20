@@ -74,7 +74,7 @@ async function safeDelete(message) {
     await message.delete();
     return true;
   } catch (error) {
-    console.error(`${EMOJIS.ERROR} Punishment engine delete failed:', error);
+    console.error(`${EMOJIS.ERROR} Punishment engine delete failed:`, error);
     return false;
   }
 }
@@ -85,7 +85,7 @@ async function safeTimeout(member, durationMs, reason) {
     await member.timeout(durationMs, reason);
     return true;
   } catch (error) {
-    console.error(`${EMOJIS.ERROR} Punishment engine timeout failed:', error);
+    console.error(`${EMOJIS.ERROR} Punishment engine timeout failed:`, error);
     return false;
   }
 }
@@ -96,7 +96,7 @@ async function safeKick(member, reason) {
     await member.kick(reason);
     return true;
   } catch (error) {
-    console.error(`${EMOJIS.ERROR} Punishment engine kick failed:', error);
+    console.error(`${EMOJIS.ERROR} Punishment engine kick failed:`, error);
     return false;
   }
 }
@@ -117,7 +117,7 @@ async function safeBan(context, reason, deleteDays = 0) {
     await context.guild.members.ban(String(context.targetId), options);
     return true;
   } catch (error) {
-    console.error(`${EMOJIS.ERROR} Punishment engine ban failed:', error);
+    console.error(`${EMOJIS.ERROR} Punishment engine ban failed:`, error);
     return false;
   }
 }
@@ -134,7 +134,7 @@ async function safeWarnChannel(message, reason) {
     cleanup.unref?.();
     return true;
   } catch (error) {
-    console.error(`${EMOJIS.ERROR} Punishment engine channel warn failed:', error);
+    console.error(`${EMOJIS.ERROR} Punishment engine channel warn failed:`, error);
     return false;
   }
 }
