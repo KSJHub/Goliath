@@ -1245,7 +1245,7 @@ function aiGoliathDeploymentScan(guild) {
   const profile=aiGoliathGuildProfile(guild.id);
   const missing = profile.permissions.filter(permission => !bot.permissions.has(permission));
   const optionalPermissions=[{permission:'MentionEveryone',modules:['Welcome','Games'],guidance:'Only grant in configured announcement channels when non-mentionable role alerts are required; otherwise use mentionable roles.'}];
-  const candidates = [...guild.roles.cache.values()].filter(role => !role.managed && role.id !== guild.id && bot.roles.highest.comparePositionTo(role) > 0);
+  const candidates = [...guild.roles.cache.values()].filter(role => !role.managed && role.id !== guild.id && (bot.roles.cache.has(role.id) || bot.roles.highest.comparePositionTo(role) > 0));
   const targets = [...guild.channels.cache.values()].filter(channel => channel.permissionOverwrites?.cache && typeof channel.permissionsFor === 'function');
   const gaps = targets.map(channel => {
     const effective = channel.permissionsFor(bot);
@@ -1653,7 +1653,7 @@ function aiGoliathRolePayload(interaction, guild, page = 0) {
   return {content:null,embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Configure Roles').setDescription([
     '**Operational role:** '+describe(draft.operational),'**Display role:** '+describe(draft.display),
     'Choose separate roles. Operational roles should not be hoisted; display roles should be hoisted. Existing shared roles are not modified by this selection.',
-    'Only unmanaged roles below Goliath are selectable. Higher roles require manual owner assignment.',
+    'Already-assigned unmanaged roles are selectable, including the highest role. New assignments must be below Goliath.',
     'Selections are temporary previews; no roles are created or assigned yet.'
   ].join('\n'))],components:rows};
 }
