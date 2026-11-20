@@ -28,56 +28,56 @@ const CUSTOM_PANEL_KEYS = new Set([
 
 const MODULE_CATALOG = [
   // Community Studio
-  { key: 'birthdays', studio: 'communityStudio', route: 'admin:birthdays', label: '🎂 Birthdays', title: '🎂 Birthdays', summary: 'Birthday registration, celebrations and member birthday tools.' },
-  { key: 'counting', studio: 'communityStudio', route: 'admin:module:counting:main:0', label: '🔢 Counting', title: '🔢 Counting', summary: 'Sequential community counting with configurable rules, hints and milestones.' },
-  { key: 'giveaways', studio: 'communityStudio', route: 'admin:giveaways', label: '🎉 Giveaways', title: '🎉 Giveaways', summary: 'Giveaway creation, entries, winners and rerolls.' },
-  { key: 'invites', studio: 'communityStudio', route: 'admin:invites', label: '📨 Invites', title: '📨 Invite Studio', summary: 'Create invite links, attach roles and track member joins.' },
-  { key: 'leveling', studio: 'communityStudio', route: 'admin:leveling', label: '🏆 Leveling', title: '🏆 Leveling', summary: 'XP, levels, leaderboards and level roles.' },
-  { key: 'polls', studio: 'communityStudio', route: 'admin:polls', label: '📊 Polls', title: '📊 Polls', summary: 'Poll creation, voting and results.' },
+  { key: 'birthdays', studio: 'communityStudio', route: 'admin:birthdays', label: `${EMOJIS.BIRTHDAY} Birthdays`, title: `${EMOJIS.BIRTHDAY} Birthdays`, summary: 'Birthday registration, celebrations and member birthday tools.' },
+  { key: 'counting', studio: 'communityStudio', route: 'admin:module:counting:main:0', label: `${EMOJIS.COUNTING_NUMBERS} Counting`, title: `${EMOJIS.COUNTING_NUMBERS} Counting`, summary: 'Sequential community counting with configurable rules, hints and milestones.' },
+  { key: 'giveaways', studio: 'communityStudio', route: 'admin:giveaways', label: `${EMOJIS.USER_GIVEAWAYS} Giveaways`, title: `${EMOJIS.USER_GIVEAWAYS} Giveaways`, summary: 'Giveaway creation, entries, winners and rerolls.' },
+  { key: 'invites', studio: 'communityStudio', route: 'admin:invites', label: `${EMOJIS.DIRECT_MESSAGE} Invites`, title: `${EMOJIS.DIRECT_MESSAGE} Invite Studio`, summary: 'Create invite links, attach roles and track member joins.' },
+  { key: 'leveling', studio: 'communityStudio', route: 'admin:leveling', label: `${EMOJIS.TROPHY} Leveling`, title: `${EMOJIS.TROPHY} Leveling`, summary: 'XP, levels, leaderboards and level roles.' },
+  { key: 'polls', studio: 'communityStudio', route: 'admin:polls', label: `${EMOJIS.CHART} Polls`, title: `${EMOJIS.CHART} Polls`, summary: 'Poll creation, voting and results.' },
 
   // Feedback Studio
-  { key: 'faq', studio: 'feedbackStudio', route: 'admin:faq', label: '❓ FAQ', title: '❓ FAQ', summary: 'Frequently asked questions, categories and self-service support.' },
-  { key: 'forms', studio: 'feedbackStudio', route: 'admin:forms', label: '📝 Forms', title: '📝 Forms', summary: 'Forms, submissions, review and response storage.' },
-  { key: 'suggestions', studio: 'feedbackStudio', route: 'admin:suggestions', label: '💡 Suggestions', title: '💡 Suggestions', summary: 'Suggestion intake, voting and review workflow.' },
-  { key: 'tickets', studio: 'feedbackStudio', route: 'admin:tickets', label: '🎟️ Tickets', title: '🎟️ Tickets', summary: 'Support tickets and private help channels.' },
+  { key: 'faq', studio: 'feedbackStudio', route: 'admin:faq', label: `${EMOJIS.HELP_QUESTION} FAQ`, title: `${EMOJIS.HELP_QUESTION} FAQ`, summary: 'Frequently asked questions, categories and self-service support.' },
+  { key: 'forms', studio: 'feedbackStudio', route: 'admin:forms', label: `${EMOJIS.NOTE} Forms`, title: `${EMOJIS.NOTE} Forms`, summary: 'Forms, submissions, review and response storage.' },
+  { key: 'suggestions', studio: 'feedbackStudio', route: 'admin:suggestions', label: `${EMOJIS.SUGGESTIONS} Suggestions`, title: `${EMOJIS.SUGGESTIONS} Suggestions`, summary: 'Suggestion intake, voting and review workflow.' },
+  { key: 'tickets', studio: 'feedbackStudio', route: 'admin:tickets', label: `${EMOJIS.PREMIUM_TICKET} Tickets`, title: `${EMOJIS.PREMIUM_TICKET} Tickets`, summary: 'Support tickets and private help channels.' },
 
   // Message Studio
-  { key: 'goodbye', studio: 'messageStudio', route: 'admin:goodbye', label: '👋 Goodbye', title: '👋 Goodbye', summary: 'Public farewell messages and Embed Studio templates.' },
-  { key: 'embed', studio: 'messageStudio', route: 'admin:embed', label: '✨ Embed Studio', title: '✨ Embed Studio', summary: 'Build and manage Discord embeds.' },
-  { key: 'starboard', studio: 'messageStudio', route: 'admin:starboard', label: '⭐ Starboard', title: '⭐ Starboard', summary: 'Highlight popular server messages.' },
-  { key: 'sticky', studio: 'messageStudio', route: 'admin:sticky', label: '💬 Sticky Messages', title: '💬 Sticky Messages', summary: 'Keep important messages at the bottom of chat.' },
-  { key: 'welcome', studio: 'messageStudio', route: 'admin:welcome', label: '👋 Welcome', title: '👋 Welcome', summary: 'Welcome messages, member DMs and Embed Studio templates.' },
+  { key: 'goodbye', studio: 'messageStudio', route: 'admin:goodbye', label: `${EMOJIS.GOODBYE} Goodbye`, title: `${EMOJIS.GOODBYE} Goodbye`, summary: 'Public farewell messages and Embed Studio templates.' },
+  { key: 'embed', studio: 'messageStudio', route: 'admin:embed', label: `${EMOJIS.SPARKLES} Embed Studio`, title: `${EMOJIS.SPARKLES} Embed Studio`, summary: 'Build and manage Discord embeds.' },
+  { key: 'starboard', studio: 'messageStudio', route: 'admin:starboard', label: `${EMOJIS.USER_STARBOARD} Starboard`, title: `${EMOJIS.USER_STARBOARD} Starboard`, summary: 'Highlight popular server messages.' },
+  { key: 'sticky', studio: 'messageStudio', route: 'admin:sticky', label: `${EMOJIS.MESSAGES} Sticky Messages`, title: `${EMOJIS.MESSAGES} Sticky Messages`, summary: 'Keep important messages at the bottom of chat.' },
+  { key: 'welcome', studio: 'messageStudio', route: 'admin:welcome', label: `${EMOJIS.GOODBYE} Welcome`, title: `${EMOJIS.GOODBYE} Welcome`, summary: 'Welcome messages, member DMs and Embed Studio templates.' },
 
   // Role Studio
-  { key: 'autoRoles', studio: 'roleStudio', route: 'admin:autoRoles', label: '👥 Auto Roles', title: '👥 Auto Roles', summary: 'Assign roles automatically when members join.' },
-  { key: 'reactionRoles', studio: 'roleStudio', route: 'admin:reactionRoles', label: '🎭 Reaction Roles', title: '🎭 Reaction Roles', summary: 'Reaction-role panels, emoji mappings and deployments.' },
-  { key: 'temporaryRoles', studio: 'roleStudio', route: 'admin:temporaryRoles', label: '⏳ Temporary Roles', title: '⏳ Temporary Roles', summary: 'Assign roles that expire after a configured duration.' },
-  { key: 'timedRoles', studio: 'roleStudio', route: 'admin:timedRoles', label: '🕒 Timed Roles', title: '🕒 Timed Roles', summary: 'Progress members through role milestones over time.' },
+  { key: 'autoRoles', studio: 'roleStudio', route: 'admin:autoRoles', label: `${EMOJIS.MEMBERS} Auto Roles`, title: `${EMOJIS.MEMBERS} Auto Roles`, summary: 'Assign roles automatically when members join.' },
+  { key: 'reactionRoles', studio: 'roleStudio', route: 'admin:reactionRoles', label: `${EMOJIS.ROLES} Reaction Roles`, title: `${EMOJIS.ROLES} Reaction Roles`, summary: 'Reaction-role panels, emoji mappings and deployments.' },
+  { key: 'temporaryRoles', studio: 'roleStudio', route: 'admin:temporaryRoles', label: `${EMOJIS.TIMER} Temporary Roles`, title: `${EMOJIS.TIMER} Temporary Roles`, summary: 'Assign roles that expire after a configured duration.' },
+  { key: 'timedRoles', studio: 'roleStudio', route: 'admin:timedRoles', label: `${EMOJIS.ROLE_CLOCK} Timed Roles`, title: `${EMOJIS.ROLE_CLOCK} Timed Roles`, summary: 'Progress members through role milestones over time.' },
 
   // Security Studio
   { key: 'verification', studio: 'securityStudio', route: 'admin:verification', label: emojiLabel('SUCCESS', 'Verification'), title: emojiLabel('SUCCESS', 'Verification'), summary: 'Member verification and onboarding protection.' },
 
   // Social Studio
-  { key: 'social', studio: 'socialStudio', route: 'admin:social', label: '📣 Social Alerts', title: '📣 Social Alerts', summary: 'Creator alerts for Twitch, YouTube, TikTok, Kick and more.' },
+  { key: 'social', studio: 'socialStudio', route: 'admin:social', label: `${EMOJIS.SOCIAL} Social Alerts`, title: `${EMOJIS.SOCIAL} Social Alerts`, summary: 'Creator alerts for Twitch, YouTube, TikTok, Kick and more.' },
 
   // Utility Studio
-  { key: 'freeGames', studio: 'utilityStudio', route: 'admin:module:freeGames:home', label: '🎮 Games', title: '🎮 Games', summary: 'Game updates, publisher announcements, free offers and configurable notifications.' },
-  { key: 'emojis', studio: 'utilityStudio', route: 'admin:module:emojis:panel', label: '😀 Emoji Studio', title: '😀 Emoji Studio', summary: 'Discord-hosted application emojis from Emoji.gg with up to 100 selected per server.' },
-  { key: 'privateRooms', studio: 'utilityStudio', route: 'admin:privateRooms', label: '🔒 Private Rooms', title: '🔒 Private Rooms', summary: 'Temporary private conversation rooms, requests, approvals and transcripts.' },
-  { key: 'schedule', studio: 'utilityStudio', route: 'admin:schedule', label: '📅 Schedule', title: '📅 Schedule', summary: 'Scheduled messages, recurring tasks and timezone-aware automation.' },
-  { key: 'stats', studio: 'utilityStudio', route: 'admin:stats', label: '📊 Server Stats', title: '📊 Server Stats', summary: 'Server activity, growth and member statistics.' },
-  { key: 'tempVoice', studio: 'utilityStudio', route: 'admin:tempVoice', label: '🔊 Temp Voice', title: '🔊 Temp Voice', summary: 'Temporary voice channels and room automation.' },
-  { key: 'translation', studio: 'utilityStudio', route: 'admin:translation', label: '🌐 Translation', title: '🌐 Translation', summary: 'Language preferences and translation controls.' },
+  { key: 'freeGames', studio: 'utilityStudio', route: 'admin:module:freeGames:home', label: `${EMOJIS.GAMEPAD} Games`, title: `${EMOJIS.GAMEPAD} Games`, summary: 'Game updates, publisher announcements, free offers and configurable notifications.' },
+  { key: 'emojis', studio: 'utilityStudio', route: 'admin:module:emojis:panel', label: `${EMOJIS.EMOJI} Emoji Studio`, title: `${EMOJIS.EMOJI} Emoji Studio`, summary: 'Discord-hosted application emojis from Emoji.gg with up to 100 selected per server.' },
+  { key: 'privateRooms', studio: 'utilityStudio', route: 'admin:privateRooms', label: `${EMOJIS.LOCK} Private Rooms`, title: `${EMOJIS.LOCK} Private Rooms`, summary: 'Temporary private conversation rooms, requests, approvals and transcripts.' },
+  { key: 'schedule', studio: 'utilityStudio', route: 'admin:schedule', label: `${EMOJIS.DATE} Schedule`, title: `${EMOJIS.DATE} Schedule`, summary: 'Scheduled messages, recurring tasks and timezone-aware automation.' },
+  { key: 'stats', studio: 'utilityStudio', route: 'admin:stats', label: `${EMOJIS.CHART} Server Stats`, title: `${EMOJIS.CHART} Server Stats`, summary: 'Server activity, growth and member statistics.' },
+  { key: 'tempVoice', studio: 'utilityStudio', route: 'admin:tempVoice', label: `${EMOJIS.VOICE} Temp Voice`, title: `${EMOJIS.VOICE} Temp Voice`, summary: 'Temporary voice channels and room automation.' },
+  { key: 'translation', studio: 'utilityStudio', route: 'admin:translation', label: `${EMOJIS.AUTOMOD_DOMAINS} Translation`, title: `${EMOJIS.AUTOMOD_DOMAINS} Translation`, summary: 'Language preferences and translation controls.' },
 ];
 
 const STUDIO_CATALOG = [
-  { key: 'communityStudio', label: '🏘️ Community', title: '🏘️ Community Studio', summary: 'Community engagement, growth and participation modules.' },
-  { key: 'feedbackStudio', label: '💬 Feedback', title: '💬 Feedback Studio', summary: 'FAQs, forms, suggestions and support workflows.' },
-  { key: 'messageStudio', label: '✉️ Messages', title: '✉️ Message Studio', summary: 'Server messages, embeds, highlights and member greetings.' },
-  { key: 'roleStudio', label: '🎭 Roles', title: '🎭 Role Studio', summary: 'Automatic, reaction, temporary and timed role management.' },
-  { key: 'securityStudio', label: '🛡️ Security', title: '🛡️ Security Studio', summary: 'Verification and member protection controls.' },
-  { key: 'socialStudio', label: '📣 Social', title: '📣 Social Studio', summary: 'Creator and social-platform alerting.' },
-  { key: 'utilityStudio', label: '🧰 Utility', title: '🧰 Utility Studio', summary: 'Private rooms, scheduling, statistics, translation, temporary voice and Emoji Studio tools.' },
+  { key: 'communityStudio', label: `${EMOJIS.COMMUNITIES} Community`, title: `${EMOJIS.COMMUNITIES} Community Studio`, summary: 'Community engagement, growth and participation modules.' },
+  { key: 'feedbackStudio', label: `${EMOJIS.MESSAGES} Feedback`, title: `${EMOJIS.MESSAGES} Feedback Studio`, summary: 'FAQs, forms, suggestions and support workflows.' },
+  { key: 'messageStudio', label: `${EMOJIS.AUTOMOD_INVITES} Messages`, title: `${EMOJIS.AUTOMOD_INVITES} Message Studio`, summary: 'Server messages, embeds, highlights and member greetings.' },
+  { key: 'roleStudio', label: `${EMOJIS.ROLES} Roles`, title: `${EMOJIS.ROLES} Role Studio`, summary: 'Automatic, reaction, temporary and timed role management.' },
+  { key: 'securityStudio', label: `${EMOJIS.SECURITY} Security`, title: `${EMOJIS.SECURITY} Security Studio`, summary: 'Verification and member protection controls.' },
+  { key: 'socialStudio', label: `${EMOJIS.SOCIAL} Social`, title: `${EMOJIS.SOCIAL} Social Studio`, summary: 'Creator and social-platform alerting.' },
+  { key: 'utilityStudio', label: `${EMOJIS.TOOLS} Utility`, title: `${EMOJIS.TOOLS} Utility Studio`, summary: 'Private rooms, scheduling, statistics, translation, temporary voice and Emoji Studio tools.' },
 ];
 
 const MODULE_BY_KEY = Object.fromEntries(MODULE_CATALOG.map((module) => [module.key, module]));
@@ -88,39 +88,39 @@ function genericModule(config) {
 }
 
 const MODULE_PANEL_REGISTRY = {
-  forms: genericModule({ key: 'forms', title: '📝 Forms', summary: 'Forms, submissions, review and response storage.', defaults: { submitChannelId: null, logChannelId: null, managerRoleIds: [], requireReview: true, anonymousSubmissions: false, storeResponses: true }, fields: ['submitChannel', 'logChannel', 'managerRoles', ['requireReview', 'Require Review'], ['anonymousSubmissions', 'Anonymous Submissions'], ['storeResponses', 'Store Responses']], selectMenus: ['submitChannel', 'logChannel', 'managerRoles'], toggles: [['requireReview', '🔎 Require Review'], ['anonymousSubmissions', '👤 Anonymous'], ['storeResponses', '💾 Store Responses']] }),
-  giveaways: genericModule({ key: 'giveaways', title: '🎉 Giveaways', summary: 'Giveaway creation, entries, winners and rerolls.', defaults: { announcementChannelId: null, logChannelId: null, managerRoleIds: [], allowMultipleEntries: false, requireRole: false, pingWinners: true }, fields: ['announcementChannel', 'logChannel', 'managerRoles', ['allowMultipleEntries', 'Multiple Entries'], ['requireRole', 'Require Role'], ['pingWinners', 'Ping Winners']], selectMenus: ['announcementChannel', 'logChannel', 'managerRoles'], toggles: [['allowMultipleEntries', '🎟️ Multiple Entries'], ['requireRole', '🔒 Require Role'], ['pingWinners', '📣 Ping Winners']] }),
-  leveling: genericModule({ key: 'leveling', title: '🏆 Leveling', summary: 'XP, levels, leaderboards and level roles.', defaults: { announceChannelId: null, managerRoleIds: [], levelRoleIds: [], trackMessages: true, trackVoice: true, announceLevelUps: true }, fields: ['announceChannel', 'managerRoles', 'levelRoles', ['trackMessages', 'Message XP'], ['trackVoice', 'Voice XP'], ['announceLevelUps', 'Announce Level Ups']], selectMenus: ['announceChannel', 'managerRoles', 'levelRoles'], toggles: [['trackMessages', '💬 Message XP'], ['trackVoice', '🔊 Voice XP'], ['announceLevelUps', '📣 Level Ups']] }),
-  polls: genericModule({ key: 'polls', title: '📊 Polls', summary: 'Poll creation, voting and results.', defaults: { defaultChannelId: null, resultsChannelId: null, managerRoleIds: [], anonymousVoting: false, allowMultipleChoice: true, showResultsLive: true }, fields: ['defaultChannel', 'resultsChannel', 'managerRoles', ['anonymousVoting', 'Anonymous Voting'], ['allowMultipleChoice', 'Multiple Choice'], ['showResultsLive', 'Live Results']], selectMenus: ['defaultChannel', 'resultsChannel', 'managerRoles'], toggles: [['anonymousVoting', '👤 Anonymous Voting'], ['allowMultipleChoice', '☑️ Multiple Choice'], ['showResultsLive', '📈 Live Results']] }),
-  social: genericModule({ key: 'social', title: '📣 Social Alerts', summary: 'Creator alerts for Twitch, YouTube, TikTok, Kick and more.', defaults: { alertsChannelId: null, logChannelId: null, managerRoleIds: [], twitch: true, youtube: true, tiktok: true, kick: true }, fields: ['alertsChannel', 'logChannel', 'managerRoles', ['twitch', 'Twitch'], ['youtube', 'YouTube'], ['tiktok', 'TikTok'], ['kick', 'Kick']], selectMenus: ['alertsChannel', 'logChannel', 'managerRoles'], toggles: [['twitch', '🟣 Twitch'], ['youtube', '▶️ YouTube'], ['tiktok', '🎵 TikTok'], ['kick', '🟢 Kick']] }),
-  starboard: genericModule({ key: 'starboard', title: '⭐ Starboard', summary: 'Highlight popular server messages.', defaults: { starboardChannelId: null, logChannelId: null, managerRoleIds: [], allowSelfStar: false, requireUniqueUsers: true }, fields: ['starboardChannel', 'logChannel', 'managerRoles', ['allowSelfStar', 'Self Star'], ['requireUniqueUsers', 'Unique Users']], selectMenus: ['starboardChannel', 'logChannel', 'managerRoles'], toggles: [['allowSelfStar', '⭐ Self Star'], ['requireUniqueUsers', '👥 Unique Users']] }),
-  sticky: genericModule({ key: 'sticky', title: '💬 Sticky Messages', summary: 'Keep important messages at the bottom of chat.', defaults: { channels: [], managerRoleIds: [], mode: 'per-channel', cleanupPrevious: true, allowEmbeds: true }, fields: ['channels', 'managerRoles', ['mode', 'Mode'], ['cleanupPrevious', 'Cleanup Previous'], ['allowEmbeds', 'Allow Embeds']], selectMenus: ['channels', 'managerRoles'], optionMenus: [{ id: 'mode', placeholder: 'Sticky mode', options: [['per-channel', 'Per Channel', 'One sticky note per selected channel'], ['manual', 'Manual', 'Only management-triggered sticky notes']] }], toggles: [['cleanupPrevious', '🧹 Cleanup Previous'], ['allowEmbeds', '🎨 Allow Embeds']] }),
-  suggestions: genericModule({ key: 'suggestions', title: '💡 Suggestions', summary: 'Suggestion intake, voting and review workflow.', defaults: { submitChannelId: null, reviewChannelId: null, approvedChannelId: null, deniedChannelId: null, reviewerRoleIds: [], anonymous: false, voting: true, requireReview: true }, fields: ['submitChannel', 'reviewChannel', 'approvedChannel', 'deniedChannel', 'reviewerRoles', ['voting', 'Voting'], ['requireReview', 'Require Review'], ['anonymous', 'Anonymous']], selectMenus: ['submitChannel', 'reviewChannel', 'approvedChannel', 'deniedChannel', 'reviewerRoles'], toggles: [['voting', '🗳️ Voting'], ['requireReview', '🔎 Require Review'], ['anonymous', '👤 Anonymous']] }),
-  temporaryRoles: genericModule({ key: 'temporaryRoles', title: '⏳ Temporary Roles', summary: 'Assign roles that expire after a configured duration.', defaults: { managerRoleIds: [], logChannelId: null }, fields: ['logChannel', 'managerRoles'], selectMenus: ['logChannel', 'managerRoles'] }),
-  translation: genericModule({ key: 'translation', title: '🌐 Translation', summary: 'Language preferences and translation controls.', defaults: { logChannelId: null, managerRoleIds: [], autoDetect: true, allowUserPreferences: true, ephemeralReplies: true }, fields: ['logChannel', 'managerRoles', ['autoDetect', 'Auto Detect'], ['allowUserPreferences', 'User Preferences'], ['ephemeralReplies', 'Ephemeral Replies']], selectMenus: ['logChannel', 'managerRoles'], toggles: [['autoDetect', '🔎 Auto Detect'], ['allowUserPreferences', '👤 User Preferences'], ['ephemeralReplies', '🙈 Ephemeral']] }),
+  forms: genericModule({ key: 'forms', title: `${EMOJIS.NOTE} Forms`, summary: 'Forms, submissions, review and response storage.', defaults: { submitChannelId: null, logChannelId: null, managerRoleIds: [], requireReview: true, anonymousSubmissions: false, storeResponses: true }, fields: ['submitChannel', 'logChannel', 'managerRoles', ['requireReview', 'Require Review'], ['anonymousSubmissions', 'Anonymous Submissions'], ['storeResponses', 'Store Responses']], selectMenus: ['submitChannel', 'logChannel', 'managerRoles'], toggles: [['requireReview', `${EMOJIS.INVESTIGATE} Require Review`], ['anonymousSubmissions', `${EMOJIS.USER} Anonymous`], ['storeResponses', `${EMOJIS.SAVE} Store Responses`]] }),
+  giveaways: genericModule({ key: 'giveaways', title: `${EMOJIS.USER_GIVEAWAYS} Giveaways`, summary: 'Giveaway creation, entries, winners and rerolls.', defaults: { announcementChannelId: null, logChannelId: null, managerRoleIds: [], allowMultipleEntries: false, requireRole: false, pingWinners: true }, fields: ['announcementChannel', 'logChannel', 'managerRoles', ['allowMultipleEntries', 'Multiple Entries'], ['requireRole', 'Require Role'], ['pingWinners', 'Ping Winners']], selectMenus: ['announcementChannel', 'logChannel', 'managerRoles'], toggles: [['allowMultipleEntries', `${EMOJIS.PREMIUM_TICKET} Multiple Entries`], ['requireRole', `${EMOJIS.LOCK} Require Role`], ['pingWinners', `${EMOJIS.SOCIAL} Ping Winners`]] }),
+  leveling: genericModule({ key: 'leveling', title: `${EMOJIS.TROPHY} Leveling`, summary: 'XP, levels, leaderboards and level roles.', defaults: { announceChannelId: null, managerRoleIds: [], levelRoleIds: [], trackMessages: true, trackVoice: true, announceLevelUps: true }, fields: ['announceChannel', 'managerRoles', 'levelRoles', ['trackMessages', 'Message XP'], ['trackVoice', 'Voice XP'], ['announceLevelUps', 'Announce Level Ups']], selectMenus: ['announceChannel', 'managerRoles', 'levelRoles'], toggles: [['trackMessages', `${EMOJIS.MESSAGES} Message XP`], ['trackVoice', `${EMOJIS.VOICE} Voice XP`], ['announceLevelUps', `${EMOJIS.SOCIAL} Level Ups`]] }),
+  polls: genericModule({ key: 'polls', title: `${EMOJIS.CHART} Polls`, summary: 'Poll creation, voting and results.', defaults: { defaultChannelId: null, resultsChannelId: null, managerRoleIds: [], anonymousVoting: false, allowMultipleChoice: true, showResultsLive: true }, fields: ['defaultChannel', 'resultsChannel', 'managerRoles', ['anonymousVoting', 'Anonymous Voting'], ['allowMultipleChoice', 'Multiple Choice'], ['showResultsLive', 'Live Results']], selectMenus: ['defaultChannel', 'resultsChannel', 'managerRoles'], toggles: [['anonymousVoting', `${EMOJIS.USER} Anonymous Voting`], ['allowMultipleChoice', `${EMOJIS.CHECKBOX} Multiple Choice`], ['showResultsLive', `${EMOJIS.TREND} Live Results`]] }),
+  social: genericModule({ key: 'social', title: `${EMOJIS.SOCIAL} Social Alerts`, summary: 'Creator alerts for Twitch, YouTube, TikTok, Kick and more.', defaults: { alertsChannelId: null, logChannelId: null, managerRoleIds: [], twitch: true, youtube: true, tiktok: true, kick: true }, fields: ['alertsChannel', 'logChannel', 'managerRoles', ['twitch', 'Twitch'], ['youtube', 'YouTube'], ['tiktok', 'TikTok'], ['kick', 'Kick']], selectMenus: ['alertsChannel', 'logChannel', 'managerRoles'], toggles: [['twitch', `${EMOJIS.SOCIAL_PLATFORM_TWITCH} Twitch`], ['youtube', `${EMOJIS.PLAY} YouTube`], ['tiktok', '🎵 TikTok'], ['kick', `${EMOJIS.ENV_PRODUCTION} Kick`]] }),
+  starboard: genericModule({ key: 'starboard', title: `${EMOJIS.USER_STARBOARD} Starboard`, summary: 'Highlight popular server messages.', defaults: { starboardChannelId: null, logChannelId: null, managerRoleIds: [], allowSelfStar: false, requireUniqueUsers: true }, fields: ['starboardChannel', 'logChannel', 'managerRoles', ['allowSelfStar', 'Self Star'], ['requireUniqueUsers', 'Unique Users']], selectMenus: ['starboardChannel', 'logChannel', 'managerRoles'], toggles: [['allowSelfStar', `${EMOJIS.USER_STARBOARD} Self Star`], ['requireUniqueUsers', `${EMOJIS.MEMBERS} Unique Users`]] }),
+  sticky: genericModule({ key: 'sticky', title: `${EMOJIS.MESSAGES} Sticky Messages`, summary: 'Keep important messages at the bottom of chat.', defaults: { channels: [], managerRoleIds: [], mode: 'per-channel', cleanupPrevious: true, allowEmbeds: true }, fields: ['channels', 'managerRoles', ['mode', 'Mode'], ['cleanupPrevious', 'Cleanup Previous'], ['allowEmbeds', 'Allow Embeds']], selectMenus: ['channels', 'managerRoles'], optionMenus: [{ id: 'mode', placeholder: 'Sticky mode', options: [['per-channel', 'Per Channel', 'One sticky note per selected channel'], ['manual', 'Manual', 'Only management-triggered sticky notes']] }], toggles: [['cleanupPrevious', `${EMOJIS.WELCOME_CLEANUP} Cleanup Previous`], ['allowEmbeds', `${EMOJIS.DESIGN} Allow Embeds`]] }),
+  suggestions: genericModule({ key: 'suggestions', title: `${EMOJIS.SUGGESTIONS} Suggestions`, summary: 'Suggestion intake, voting and review workflow.', defaults: { submitChannelId: null, reviewChannelId: null, approvedChannelId: null, deniedChannelId: null, reviewerRoleIds: [], anonymous: false, voting: true, requireReview: true }, fields: ['submitChannel', 'reviewChannel', 'approvedChannel', 'deniedChannel', 'reviewerRoles', ['voting', 'Voting'], ['requireReview', 'Require Review'], ['anonymous', 'Anonymous']], selectMenus: ['submitChannel', 'reviewChannel', 'approvedChannel', 'deniedChannel', 'reviewerRoles'], toggles: [['voting', `${EMOJIS.VOTE} Voting`], ['requireReview', `${EMOJIS.INVESTIGATE} Require Review`], ['anonymous', `${EMOJIS.USER} Anonymous`]] }),
+  temporaryRoles: genericModule({ key: 'temporaryRoles', title: `${EMOJIS.TIMER} Temporary Roles`, summary: 'Assign roles that expire after a configured duration.', defaults: { managerRoleIds: [], logChannelId: null }, fields: ['logChannel', 'managerRoles'], selectMenus: ['logChannel', 'managerRoles'] }),
+  translation: genericModule({ key: 'translation', title: `${EMOJIS.AUTOMOD_DOMAINS} Translation`, summary: 'Language preferences and translation controls.', defaults: { logChannelId: null, managerRoleIds: [], autoDetect: true, allowUserPreferences: true, ephemeralReplies: true }, fields: ['logChannel', 'managerRoles', ['autoDetect', 'Auto Detect'], ['allowUserPreferences', 'User Preferences'], ['ephemeralReplies', 'Ephemeral Replies']], selectMenus: ['logChannel', 'managerRoles'], toggles: [['autoDetect', `${EMOJIS.INVESTIGATE} Auto Detect`], ['allowUserPreferences', `${EMOJIS.USER} User Preferences`], ['ephemeralReplies', `${EMOJIS.EMBED_SPOILER} Ephemeral`]] }),
 };
 
 const SERVER_MODULES = MODULE_CATALOG.map((module) => [module.route, module.label, module.title.replace(/^\S+\s*/, ''), module.summary]);
 
 const CHANNEL_FIELDS = {
-  alertsChannel: { prop: 'alertsChannelId', label: '📣 Alerts Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  announcementChannel: { prop: 'announcementChannelId', label: '🎉 Announcement Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  alertsChannel: { prop: 'alertsChannelId', label: `${EMOJIS.SOCIAL} Alerts Channel`, max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  announcementChannel: { prop: 'announcementChannelId', label: `${EMOJIS.USER_GIVEAWAYS} Announcement Channel`, max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
   approvedChannel: { prop: 'approvedChannelId', label: emojiLabel('SUCCESS', 'Approved Channel'), max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  channels: { prop: 'channels', label: '💬 Sticky Channels', max: 10, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  defaultChannel: { prop: 'defaultChannelId', label: '📊 Default Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  channels: { prop: 'channels', label: `${EMOJIS.MESSAGES} Sticky Channels`, max: 10, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  defaultChannel: { prop: 'defaultChannelId', label: `${EMOJIS.CHART} Default Channel`, max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
   deniedChannel: { prop: 'deniedChannelId', label: emojiLabel('ERROR', 'Denied Channel'), max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  logChannel: { prop: 'logChannelId', label: '📋 Log Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  announceChannel: { prop: 'announceChannelId', label: '📣 Announce Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  resultsChannel: { prop: 'resultsChannelId', label: '📈 Results Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  reviewChannel: { prop: 'reviewChannelId', label: '🔎 Review Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  starboardChannel: { prop: 'starboardChannelId', label: '⭐ Starboard Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
-  submitChannel: { prop: 'submitChannelId', label: '📝 Submit Channel', max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  logChannel: { prop: 'logChannelId', label: `${EMOJIS.CLIPBOARD} Log Channel`, max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  announceChannel: { prop: 'announceChannelId', label: `${EMOJIS.SOCIAL} Announce Channel`, max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  resultsChannel: { prop: 'resultsChannelId', label: `${EMOJIS.TREND} Results Channel`, max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  reviewChannel: { prop: 'reviewChannelId', label: `${EMOJIS.INVESTIGATE} Review Channel`, max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  starboardChannel: { prop: 'starboardChannelId', label: `${EMOJIS.USER_STARBOARD} Starboard Channel`, max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
+  submitChannel: { prop: 'submitChannelId', label: `${EMOJIS.NOTE} Submit Channel`, max: 1, types: [ChannelType.GuildText, ChannelType.GuildAnnouncement] },
 };
 
 const ROLE_FIELDS = {
-  managerRoles: { prop: 'managerRoleIds', label: '🛡️ Manager Roles', max: 10 },
-  levelRoles: { prop: 'levelRoleIds', label: '🏆 Level Roles', max: 10 },
-  reviewerRoles: { prop: 'reviewerRoleIds', label: '🔎 Reviewer Roles', max: 10 },
+  managerRoles: { prop: 'managerRoleIds', label: `${EMOJIS.SECURITY} Manager Roles`, max: 10 },
+  levelRoles: { prop: 'levelRoleIds', label: `${EMOJIS.TROPHY} Level Roles`, max: 10 },
+  reviewerRoles: { prop: 'reviewerRoleIds', label: `${EMOJIS.INVESTIGATE} Reviewer Roles`, max: 10 },
 };
 
 function row(...components) { return new ActionRowBuilder().addComponents(...components); }
@@ -180,7 +180,7 @@ function buildFieldList(module, config, scope) {
 function buildModuleListPanel(memberDisplayName = 'Unknown User') {
   const embed = new EmbedBuilder()
     .setColor(PANEL_COLOR)
-    .setTitle('🧩 Goliath Studios')
+    .setTitle(`${EMOJIS.SYSTEM} Goliath Studios`)
     .setDescription('\n🧩 Select a category to manage its modules.')
     .setFooter({ text: `Requested by ${memberDisplayName}` })
     .setTimestamp();
@@ -218,8 +218,8 @@ function buildControlRows(moduleKey, scope) {
 
 function buildPager(previousId, nextId, page, totalPages) {
   const items = [];
-  if (page > 0) items.push(button(previousId, '◀ Previous', ButtonStyle.Secondary));
-  if (page < totalPages - 1) items.push(button(nextId, 'Next ▶', ButtonStyle.Secondary));
+  if (page > 0) items.push(button(previousId, `${EMOJIS.CHANNEL_PREVIOUS} Previous`, ButtonStyle.Secondary));
+  if (page < totalPages - 1) items.push(button(nextId, `Next ${EMOJIS.CHANNEL_NEXT}`, ButtonStyle.Secondary));
   return items.length ? row(...items) : null;
 }
 
@@ -237,7 +237,7 @@ function buildModuleMainPanel(guild, moduleKey, memberDisplayName = 'Unknown Use
   const pager = buildPager(`admin:module:${moduleKey}:main:${page - 1}`, `admin:module:${moduleKey}:main:${page + 1}`, page, totalPages);
   const components = [
     ...controls,
-    row(button(`admin:module:${moduleKey}:configure:0`, '⚙️ Configure')),
+    row(button(`admin:module:${moduleKey}:configure:0`, `${EMOJIS.SETTINGS} Configure`)),
     ...(pager ? [pager] : []),
     navigationRow(`admin:studio:${catalogModule.studio}`, emojiLabel('BACK', 'Back')),
   ];
@@ -255,10 +255,10 @@ function buildModuleConfigurePanel(guild, moduleKey, memberDisplayName = 'Unknow
   const controls = allControls.slice(page * CONTROLS_PER_PAGE, (page + 1) * CONTROLS_PER_PAGE);
   const embed = new EmbedBuilder().setColor(enabled ? 0x57f287 : PANEL_COLOR).setTitle(`${module.title} · Configure`).setDescription([module.summary, '', `**Status:** ${enabled ? `Enabled ${EMOJIS.SUCCESS}` : `Disabled ${EMOJIS.ERROR}`}`, `**Module Key:** \`${moduleKey}\``, `**Configure Page:** ${page + 1}/${totalPages}`, '', 'Administrative settings and maintenance controls.'].join('\n')).addFields({ name: 'Administration', value: buildFieldList(module, config, 'configure'), inline: false }).setFooter({ text: `Requested by ${memberDisplayName}` }).setTimestamp();
   const actions = row(
-    button(`admin:module:${moduleKey}:${enabled ? 'disable' : 'enable'}`, enabled ? '⏸️ Disable' : '▶️ Enable', enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
-    button(`admin:module:${moduleKey}:health`, '🩺 Health', ButtonStyle.Secondary),
-    button(`admin:module:${moduleKey}:repair`, '🛠️ Repair', ButtonStyle.Secondary),
-    button(`admin:module:${moduleKey}:reset`, '♻️ Reset', ButtonStyle.Danger),
+    button(`admin:module:${moduleKey}:${enabled ? 'disable' : 'enable'}`, enabled ? `${EMOJIS.PAUSE} Disable` : `${EMOJIS.PLAY} Enable`, enabled ? ButtonStyle.Secondary : ButtonStyle.Success),
+    button(`admin:module:${moduleKey}:health`, `${EMOJIS.HEALTH} Health`, ButtonStyle.Secondary),
+    button(`admin:module:${moduleKey}:repair`, `${EMOJIS.BUILDER} Repair`, ButtonStyle.Secondary),
+    button(`admin:module:${moduleKey}:reset`, `${EMOJIS.RESTORE} Reset`, ButtonStyle.Danger),
   );
   const pager = buildPager(`admin:module:${moduleKey}:configure:${page - 1}`, `admin:module:${moduleKey}:configure:${page + 1}`, page, totalPages);
   const components = [actions, ...controls, ...(pager ? [pager] : []), navigationRow(`admin:module:${moduleKey}:main:0`, emojiLabel('BACK', 'Back'))];
