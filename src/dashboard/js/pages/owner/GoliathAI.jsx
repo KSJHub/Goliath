@@ -47,6 +47,21 @@ export default function GoliathAI({ theme }) {
   const [deployment,setDeployment]=useState(null);
   const [deploymentBusy,setDeploymentBusy]=useState(false);
   const [deploymentError,setDeploymentError]=useState('');
+  const [roleSelection,setRoleSelection]=useState({operational:'',display:''});
+  const [roleApproval,setRoleApproval]=useState(null);
+  const [roleResult,setRoleResult]=useState(null);
+  async function deployRoles(confirm=false){
+    const target=selectedGuild;
+    if(deploymentBusy||!target.startsWith('DEV:')||(confirm&&(!roleApproval||roleApproval.guildId!==target.slice(4)||roleApproval.blockers.length||!roleApproval.steps.length)))return;
+    setDeploymentBusy(true);setDeploymentError('');setRoleApproval(null);setRoleResult(null);
+    try{
+      const base='/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4));
+      const result=await api.request(base+'/roles/'+(confirm?'confirm':'preview'),{method:'POST',body:JSON.stringify(confirm?{token:roleApproval.token,confirm:true}:{selected:roleSelection})});
+      if(selectedGuildRef.current===target){if(confirm)setRoleResult({...result,guildId:target.slice(4)});else setRoleApproval(result);}
+      if(confirm){const report=await api.request(base);if(selectedGuildRef.current===target)setDeployment(report);}
+    }catch(error){if(selectedGuildRef.current===target){setDeploymentError(error.message);if(confirm)setDeployment(null);}}
+    finally{setDeploymentBusy(false);}
+  }
   const [syncApproval,setSyncApproval]=useState(null);
   const [syncResult,setSyncResult]=useState(null);
   const [syncAcknowledged,setSyncAcknowledged]=useState(false);
@@ -757,7 +772,7 @@ export default function GoliathAI({ theme }) {
 
     {selectedGuild.startsWith('DEV:') && <section style={panel}>
       <h2>Goliath Deployment Centre</h2>
-      <p>Scan the selected DEV guild using the same permission template as Discord. Bulk Sync requires explicit approval; role deployment remains in /owner.</p>
+      <p>Scan the selected DEV guild using the same permission template as Discord. Role deployment and Bulk Sync require separate explicit approvals.</p>
       <button type="button" disabled={deploymentBusy} onClick={scanDeployment}>{deploymentBusy?'Scanning…':'Scan deployment permissions'}</button>
       {deploymentError && <p role="alert">{deploymentError}</p>}
       {deployment && selectedGuild==='DEV:'+deployment.guildId && <div>
@@ -790,7 +805,22 @@ export default function GoliathAI({ theme }) {
           <button type="button" disabled={deploymentBusy} onClick={()=>{setSyncApproval(null);setSyncAcknowledged(false);}}>Cancel</button>
         </div>}
         {syncResult && selectedGuild==='DEV:'+syncResult.guildId && <p role="status">{syncResult.status==='verified'?'Verified '+syncResult.changed+' changes.':'Sync stopped; inspect recovery.'} Transaction: {syncResult.transactionId}</p>}
-        <p>To deploy roles, open Discord /owner and select Goliath Deploy / Sync.</p>
+        <h3>Deploy Goliath roles</h3>
+        <p>Choose separate operational and display roles. Existing role permissions will not be changed. Owner intervention may be needed for hierarchy.</p>
+        {['operational','display'].map(kind=><label key={kind} style={{display:'block',margin:'8px 0'}}>{kind==='operational'?'Operational role':'Visible display role'}
+          <select disabled={deploymentBusy} value={roleSelection[kind]} onChange={event=>{setRoleSelection(previous=>({...previous,[kind]:event.target.value}));setRoleApproval(null);}}>
+            <option value="">Select role</option><option value="create">Create recommended role</option>
+            {deployment.candidates.filter(role=>role.hoist===(kind==='display')).map(role=><option key={role.id} value={role.id}>{role.name}</option>)}
+          </select>
+        </label>)}
+        <button type="button" disabled={deploymentBusy||deployment.recoveryRequired||!roleSelection.operational||!roleSelection.display||(roleSelection.operational!=='create'&&roleSelection.operational===roleSelection.display)} onClick={()=>deployRoles()}>Preview Role Deployment</button>
+        {roleApproval&&roleApproval.guildId===deployment.guildId&&<div>
+          <ul>{roleApproval.steps.map((step,index)=><li key={index}>{step.action==='create'?'Create and assign ':'Assign '}{step.name}{step.permissions?' — '+(step.permissions.join(', ')||'No guild permissions'):''}</li>)}</ul>
+          {roleApproval.blockers.map((blocker,index)=><p role="alert" key={index}>{blocker}</p>)}
+          <button type="button" disabled={deploymentBusy||roleApproval.blockers.length>0||!roleApproval.steps.length} onClick={()=>deployRoles(true)}>Confirm Role Deployment</button>
+          <button type="button" disabled={deploymentBusy} onClick={()=>setRoleApproval(null)}>Cancel</button>
+        </div>}
+        {roleResult&&roleResult.guildId===deployment.guildId&&<p role="status">{roleResult.status==='verified'?'Role deployment verified. Prepare Bulk Sync to update channels.':'Role deployment stopped. Inspect recovery.'} Transaction: {roleResult.transactionId}</p>}
         <a href={'https://discord.com/channels/'+deployment.guildId} target="_blank" rel="noopener noreferrer">Open selected guild in Discord</a>
         <p>Dashboard previews are read-only and do not constitute approval.</p>
         <ul>{deployment.gaps.slice(0,50).map(gap=><li key={gap.id}>{gap.id}: {gap.missing.join(', ')} {gap.synced?'(category synced)':''} {!gap.editable?'(owner intervention needed)':''}</li>)}</ul>
@@ -808,7 +838,7 @@ export default function GoliathAI({ theme }) {
           <option value="connected">Goliath-connected servers</option>
           <option value="mine">Servers I own or manage</option>
         </select>
-        <select aria-label="Discord server" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setSyncApproval(null); setSyncAcknowledged(false); setSyncResult(null); setDeploymentError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
+        <select aria-label="Discord server" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setRoleSelection({operational:'',display:''}); setRoleApproval(null); setRoleResult(null); setSyncApproval(null); setSyncAcknowledged(false); setSyncResult(null); setDeploymentError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
           {availableOptions.length ? availableOptions.map((guild) => <option key={guild.value} value={guild.value}>{guild.label}</option>) : <option value="">No servers available in this filter</option>}
         </select>
         <button type="button" onClick={refreshGuilds} style={{ border: '1px solid #64748b', borderRadius: 10, padding: '10px 16px', color: '#e5e7eb', background: '#1e293b' }}>Refresh servers</button>
