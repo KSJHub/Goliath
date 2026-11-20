@@ -414,6 +414,19 @@ router.get('/capabilities/local/:guildId', requireLocalInternal, async (req, res
   } catch { return res.status(503).json({ error: 'Cannot inspect bot permissions.' }); }
 });
 
+router.post('/deployment/:guildId/sync/preview', requirePrivateAI, async (req,res)=>{
+  if(localMode()!=='DEV')return res.status(403).json({error:'DEV only.'});
+  if(!SNOWFLAKE.test(req.params.guildId))return res.status(400).json({error:'Invalid guild ID.'});
+  const guild=req.client?.guilds?.cache?.get(req.params.guildId);
+  if(!guild)return res.status(404).json({error:'Guild not connected to DEV.'});
+  try{
+    const plan=await require('../command').prepareDashboardSync(guild,String(req.session.user.id));
+    return res.json(plan);
+  }catch(error){
+    console.error('[Deployment sync preview]',error?.message);
+    return res.status(409).json({error:'Unable to prepare sync. Check recovery status and refresh the guild scan.'});
+  }
+});
 router.get('/deployment/:guildId', requirePrivateAI, async (req,res)=>{
   if(localMode()!=='DEV')return res.status(403).json({error:'DEV only.'});
   if(!SNOWFLAKE.test(req.params.guildId))return res.status(400).json({error:'Invalid guild ID.'});
