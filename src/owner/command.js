@@ -1213,14 +1213,15 @@ const AI_GOLIATH_MODULE_REQUIREMENTS = Object.freeze({
   suggestions: ['ViewChannel','SendMessages','EmbedLinks','ReadMessageHistory'],
   privateRooms: ['ViewChannel','SendMessages','ReadMessageHistory','ManageChannels','ManageMessages','AttachFiles','EmbedLinks'],
   moderation: ['ManageMessages','ManageThreads','KickMembers','BanMembers','ModerateMembers'],
-  voice: ['Connect','Speak']
+  voice: ['Connect','Speak'],
+  tempVoice: ['ViewChannel','Connect','ManageChannels','MoveMembers']
 });
 const AI_GOLIATH_BASELINE = Object.freeze([...new Set(Object.values(AI_GOLIATH_MODULE_REQUIREMENTS).flat())]);
 const AI_GOLIATH_TEXT = Object.freeze([...new Set([...AI_GOLIATH_MODULE_REQUIREMENTS.embed,...AI_GOLIATH_MODULE_REQUIREMENTS.suggestions,'AddReactions'])]);
 // Only filter groups with confirmed module keys. Unmapped capabilities remain conservative.
 function aiGoliathGuildProfile(guildId){
   const manager=require('../core/guild/guildManager');
-  const keys={suggestions:'suggestions',privateRooms:'privateRooms'};
+  const keys={suggestions:'suggestions',tempVoice:'tempVoice'};
   const groups=Object.keys(AI_GOLIATH_MODULE_REQUIREMENTS).filter(group=>!keys[group]||manager.isModuleEnabled(guildId,keys[group]));
   return {groups,permissions:[...new Set(groups.flatMap(group=>AI_GOLIATH_MODULE_REQUIREMENTS[group]))]};
 }
@@ -1228,7 +1229,7 @@ function aiGoliathInvitePermissions(guildId){
   return new PermissionsBitField(guildId?aiGoliathGuildProfile(guildId).permissions:AI_GOLIATH_BASELINE).bitfield.toString();
 }
 function aiGoliathChannelRequirements(channel,profile){
-  const required=[2,13].includes(channel.type)?['ViewChannel','Connect',...(channel.type===2?['Speak']:[])]:
+  const required=[2,13].includes(channel.type)?['ViewChannel','Connect',...(channel.type===2?['Speak',...(profile.groups?.includes('tempVoice')?['ManageChannels','MoveMembers']:[])]:[])]:
     channel.type===4?['ViewChannel','ManageChannels']:AI_GOLIATH_TEXT;
   return required.filter(permission=>profile.permissions.includes(permission));
 }
