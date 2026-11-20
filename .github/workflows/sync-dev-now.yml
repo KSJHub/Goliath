@@ -8,15 +8,17 @@ on:
 permissions:
   contents: read
 
+# Keep separate commits from evicting one another from GitHub's pending slot.
+# The VPS flock below remains the authoritative cross-run deployment lock.
 concurrency:
-  group: sync-goliath-dev
+  group: sync-goliath-dev-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
   sync-dev:
     name: Validate, build and sync DEV
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - name: Sync and verify DEV
         uses: appleboy/ssh-action@v1
@@ -29,7 +31,7 @@ jobs:
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
           timeout: 60s
-          command_timeout: 15m
+          command_timeout: 40m
           envs: EXPECTED_SHA,GITHUB_DEPLOY_TOKEN
           script: |
             set -euo pipefail
@@ -41,11 +43,11 @@ jobs:
             BACKUP_DIR=/home/goliath/.goliath-dev-runtime-sync-backup
             LOCK_FILE=/home/goliath/.goliath-dev-sync.lock
 
-            # Serialize on the VPS as well as in GitHub Actions. This protects the
+            # Serialize all deployment runs on the VPS. This protects the
             # shared DEV worktree/node_modules even if an SSH runner disconnects.
             exec 9>"$LOCK_FILE"
             echo "🔒 Waiting for DEV deployment lock"
-            flock -w 900 9 || { echo "Timed out waiting for DEV deployment lock." >&2; exit 1; }
+            flock -w 1200 9 || { echo "Timed out waiting for DEV deployment lock." >&2; exit 1; }
             echo "🔒 DEV deployment lock acquired"
 
             cd "$APP_DIR"
