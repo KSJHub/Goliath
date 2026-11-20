@@ -1711,6 +1711,17 @@ async function aiExecuteApprovedSync(guild,ownerId,plan){
       const verified=await guild.channels.fetch(channel.id,{force:true});
       const actual=verified?.permissionOverwrites?.cache?.get(bot.id);
       if(!actual||String(actual.allow.bitfield)!==step.after.allow||String(actual.deny.bitfield)!==step.after.deny||!step.grants.every(p=>verified.permissionsFor(bot)?.has(p))) throw new Error('Overwrite verification failed');
+      if(verified.type===4){
+        await guild.channels.fetch();
+        const children=aiGoliathInheritedChildren(guild,verified.id);
+        if(JSON.stringify(children.map(child=>child.id))!==JSON.stringify(step.inheritedChildren))throw new Error('Category inheritance changed during verification');
+        const profile=aiGoliathGuildProfile(guild.id);
+        const freshBot=await guild.members.fetchMe({force:true});
+        for(const child of children){
+          const relevant=aiGoliathChannelRequirements(child,profile).filter(permission=>step.grants.includes(permission));
+          if(!relevant.every(permission=>child.permissionsFor(freshBot)?.has(permission)))throw new Error('Inherited channel verification failed: '+child.id);
+        }
+      }
       update(record=>{record.steps[index].phase='verified';});
     }
     await guild.channels.fetch();
