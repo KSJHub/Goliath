@@ -1309,15 +1309,62 @@ function aiGoliathRolePlan(interaction,guild) {
   if (scan.missing.length) blockers.push('Owner must grant missing guild permissions: '+scan.missing.join(', '));
   return {steps,blockers,scan};
 }
+const aiDeployApprovals = new Map();
+async function aiDeployApplyRoles(interaction,guildId,token) {
+  await interaction.deferUpdate();
+  const key=interaction.user.id+':'+guildId;
+  const approval=aiDeployApprovals.get(key);
+  if(mode()!=='DEV'||!approval||approval.token!==token||approval.expiresAt<Date.now()) return interaction.editReply({content:'Approval expired. Prepare a new preview.',embeds:[],components:[]});
+  aiDeployApprovals.delete(key);
+  const {guild}=await resolveInteractionGuild(interaction,guildId);
+  if(!guild||guild.id!==guildId) throw new Error('Guild mismatch');
+  await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
+  const plan=aiGoliathRolePlan(interaction,guild);
+  if(plan.blockers.length||JSON.stringify(plan.steps)!==approval.steps||!plan.steps.length) return interaction.editReply({content:'Plan changed, blocked or empty. Prepare a fresh preview.',embeds:[],components:[]});
+  const tx=aiDeployJournalBegin(guildId,interaction.user.id,plan.steps);
+  const update=mutate=>aiDeployJournalUpdate(guildId,records=>{
+    const record=records.find(item=>item.id===tx);
+    if(!record||record.status!=='pending') throw new Error('Journal unavailable');
+    mutate(record);
+  });
+  try {
+    for(let index=0;index<plan.steps.length;index++){
+      const step=plan.steps[index];
+      const bot=await guild.members.fetchMe({force:true});
+      let role;
+      if(step.action==='create'){
+        if(!bot.permissions.has('ManageRoles')||!step.permissions.every(permission=>bot.permissions.has(permission))) throw new Error('Creation prerequisites changed');
+        update(record=>{record.steps[index].phase='creating';});
+        role=await guild.roles.create({name:step.name,hoist:step.hoist,permissions:step.permissions,reason:'Goliath DEV deployment '+tx});
+        update(record=>{record.steps[index].createdRoleId=role.id;record.steps[index].phase='created';});
+      }else role=await guild.roles.fetch(step.id,{force:true});
+      if(!role||role.managed||role.id===guild.id||!bot.permissions.has('ManageRoles')||bot.roles.highest.comparePositionTo(role)<=0||!bot.permissions.has(role.permissions.bitfield)||role.permissions.has('Administrator',false)) throw new Error('Assignment prerequisites changed');
+      const before=bot.roles.cache.has(role.id);
+      update(record=>{Object.assign(record.steps[index],{roleId:role.id,previouslyAssigned:before,phase:'assigning'});});
+      if(!before) await bot.roles.add(role.id,'Goliath DEV deployment '+tx);
+      const verified=await guild.members.fetchMe({force:true});
+      if(!verified.roles.cache.has(role.id)) throw new Error('Assignment verification failed');
+      update(record=>{record.steps[index].phase='verified';});
+    }
+    update(record=>{record.status='verified';record.completedAt=new Date().toISOString();});
+    return interaction.editReply({content:'Role assignments applied and verified. Channel permissions unchanged. Transaction '+tx,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Sync Scan',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+  } catch(error){
+    update(record=>{record.status='failed';record.error=String(error.message).slice(0,500);});
+    return interaction.editReply({content:'Deployment stopped. Partial changes may exist; inspect transaction '+tx+' before retrying.',embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+  }
+}
 function aiGoliathRolePlanPayload(interaction,guild) {
   const plan=aiGoliathRolePlan(interaction,guild);
+  const token=randomUUID().replace(/-/g,'').slice(0,16);
+  aiDeployApprovals.set(interaction.user.id+':'+guild.id,{token,steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
   return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath • Deployment Preview').setDescription([
     '**Role operations:** '+plan.steps.length,
     ...plan.steps.map(step=>step.action==='create'?'Create and assign '+step.name+' • '+(step.hoist?'displayed':'not displayed')+' • '+(step.permissions.join(', ')||'No guild permissions'):'Assign existing role '+step.name+' (<@&'+step.id+'>)'),
     '**Channel/category gaps:** '+plan.scan.gaps.length,
     '**Preflight blockers:** '+(plan.blockers.length?plan.blockers.join('\n'):'None'),
-    'Existing shared role permissions will not be modified. This is a preview only; execution and durable bulk recovery are not enabled.'
+    'Existing shared role permissions will not be modified. Confirm to deploy roles only. Channel sync and automated recovery are not enabled.'
   ].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-deploy-apply-'+token,guild.id),'Confirm Role Deployment',ButtonStyle.Danger,Boolean(plan.blockers.length||!plan.steps.length)),
     navigationButton(contextualOwnerId('ai-deploy-roles',guild.id),'Configure Roles',ButtonStyle.Secondary),
       navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'History',ButtonStyle.Secondary),
     navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary))]};
@@ -1727,6 +1774,10 @@ async function handleOwnerPanelInteraction(interaction) {
     const template = String(interaction.values?.[0] || '');
     if (!Object.hasOwn(AI_ROLE_TEMPLATES, template)) return true;
     await handleOwnerAI(interaction, 'channel-plan', contextGuildId, { channelId: match[1], roleId: match[2], template });
+    return true;
+  }
+  if (/^ownerpanel:ai-deploy-apply-[a-f0-9]{16}$/.test(id)) {
+    await aiDeployApplyRoles(interaction,contextGuildId,id.slice('ownerpanel:ai-deploy-apply-'.length));
     return true;
   }
   if (id === 'ownerpanel:ai-deploy-history') {
