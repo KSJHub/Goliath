@@ -921,7 +921,7 @@ router.post('/category-rename-journal/:id/reconcile', requirePrivateAI, async (r
     if (entry.status !== 'pending') return res.status(409).json({ error: 'Only pending entries may be reconciled.' });
     const guild = req.client?.guilds?.cache?.get(entry.guildId);
     if (!guild) return res.status(503).json({ error: 'DEV guild is not connected.' });
-    const category = await guild.channels.fetch(entry.categoryId);
+    const category = await guild.channels.fetch(entry.categoryId, { force: true });
     if (!category || category.type !== 4)
       return res.status(409).json({ error: 'Category missing or changed type. Manual recovery required.' });
     if (category.name !== entry.proposedName && category.name !== entry.previousName)
@@ -993,10 +993,10 @@ router.post('/drafts/:id/apply-category-rename', requirePrivateAI, async (req, r
         !review.reviews.some(item => item.reviewerId === ownerId && item.decision === 'acknowledged'))
       return res.status(409).json({ error: 'Owner operation acknowledgement is missing.' });
     const guild = req.client?.guilds?.cache?.get(draft.guildId);
-    const channel = await guild?.channels?.fetch(operation.target.id);
+    const channel = await guild?.channels?.fetch(operation.target.id, { force: true });
     if (!channel || channel.type !== 4 || channel.name !== operation.before.name)
       return res.status(409).json({ error: 'Category changed before execution.' });
-    const me = await guild.members.fetchMe();
+    const me = await guild.members.fetchMe({ force: true });
     const { PermissionsBitField } = require('discord.js');
     if (!me.permissions.has(PermissionsBitField.Flags.ManageChannels))
       return res.status(403).json({ error: 'Manage Channels permission is missing.' });
@@ -1022,8 +1022,8 @@ router.post('/drafts/:id/apply-category-rename', requirePrivateAI, async (req, r
       // Keep the journal pending rather than assuming a safe rollback.
       throw error;
     }
-    const updated = await guild.channels.fetch(operation.target.id);
-    if (updated?.name !== operation.after.name)
+    const updated = await guild.channels.fetch(operation.target.id, { force: true });
+    if (!updated || updated.type !== 4 || updated.id !== channel.id || updated.name !== operation.after.name)
       return res.status(502).json({ error: 'Discord did not confirm the new category name; pending journal requires manual inspection.' });
     const verifiedHistory = readRenameJournal();
     const record = verifiedHistory.find(entry => entry.id === journalId && entry.status === 'pending');
