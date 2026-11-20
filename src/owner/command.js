@@ -1217,14 +1217,22 @@ const AI_GOLIATH_MODULE_REQUIREMENTS = Object.freeze({
 });
 const AI_GOLIATH_BASELINE = Object.freeze([...new Set(Object.values(AI_GOLIATH_MODULE_REQUIREMENTS).flat())]);
 const AI_GOLIATH_TEXT = Object.freeze([...new Set([...AI_GOLIATH_MODULE_REQUIREMENTS.embed,...AI_GOLIATH_MODULE_REQUIREMENTS.suggestions,'AddReactions'])]);
-function aiGoliathInvitePermissions(){
-  return new PermissionsBitField(AI_GOLIATH_BASELINE).bitfield.toString();
+// Only filter groups with confirmed module keys. Unmapped capabilities remain conservative.
+function aiGoliathGuildProfile(guildId){
+  const manager=require('../core/guild/guildManager');
+  const keys={suggestions:'suggestions',privateRooms:'privateRooms'};
+  const groups=Object.keys(AI_GOLIATH_MODULE_REQUIREMENTS).filter(group=>!keys[group]||manager.isModuleEnabled(guildId,keys[group]));
+  return {groups,permissions:[...new Set(groups.flatMap(group=>AI_GOLIATH_MODULE_REQUIREMENTS[group]))]};
+}
+function aiGoliathInvitePermissions(guildId){
+  return new PermissionsBitField(guildId?aiGoliathGuildProfile(guildId).permissions:AI_GOLIATH_BASELINE).bitfield.toString();
 }
 function aiGoliathDeploymentScan(guild) {
   const bot = guild.members.me;
   if (!bot) throw new Error('Bot membership unavailable');
   const assigned = [...bot.roles.cache.values()].filter(role => role.id !== guild.id);
-  const missing = AI_GOLIATH_BASELINE.filter(permission => !bot.permissions.has(permission));
+  const profile=aiGoliathGuildProfile(guild.id);
+  const missing = profile.permissions.filter(permission => !bot.permissions.has(permission));
   const candidates = [...guild.roles.cache.values()].filter(role => !role.managed && role.id !== guild.id && bot.roles.highest.comparePositionTo(role) > 0);
   const targets = [...guild.channels.cache.values()].filter(channel => channel.permissionOverwrites?.cache && typeof channel.permissionsFor === 'function');
   const gaps = targets.map(channel => {
@@ -1234,7 +1242,7 @@ function aiGoliathDeploymentScan(guild) {
     return { id: channel.id, category: channel.type === 4, missing: required.filter(permission => !effective?.has(permission)),
       synced: channel.permissionsLocked === true, editable: Boolean(effective?.has('ManageRoles')) };
   }).filter(item => item.missing.length);
-  return { assigned, missing, candidates, targets, gaps };
+  return { assigned, missing, candidates, targets, gaps, profile };
 }
 // Separate per-guild write-ahead deployment history. Never overwrite unresolved work.
 function aiDeployJournalFile(guildId) {
@@ -1494,7 +1502,7 @@ function aiGoliathRolePlan(interaction,guild) {
     const value = draft[kind];
     if (!value) { blockers.push('Select a '+kind+' role.'); continue; }
     if (value === 'create') {
-      steps.push({kind,action:'create',name:kind==='operational'?'Goliath Operations':'Goliath Bots',hoist:kind==='display',permissions:kind==='operational'?AI_GOLIATH_BASELINE:[]});
+      steps.push({kind,action:'create',name:kind==='operational'?'Goliath Operations':'Goliath Bots',hoist:kind==='display',permissions:kind==='operational'?scan.profile.permissions:[]});
       continue;
     }
     const role = guild.roles.cache.get(value);
@@ -1685,7 +1693,7 @@ function aiDeploySyncPreview(interaction,guild,page=0){
 }
 function aiGoliathDevInviteUrl(client,guildId){
   if(mode()!=='DEV'||!validGuildId(client?.user?.id))throw new Error('DEV bot identity unavailable');
-  const params=new URLSearchParams({client_id:client.user.id,scope:'bot applications.commands',permissions:aiGoliathInvitePermissions()});
+  const params=new URLSearchParams({client_id:client.user.id,scope:'bot applications.commands',permissions:aiGoliathInvitePermissions(guildId)});
   if(validGuildId(guildId)){params.set('guild_id',guildId);params.set('disable_guild_select','true');}
   return 'https://discord.com/oauth2/authorize?'+params.toString();
 }
@@ -1695,8 +1703,8 @@ function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
     '**Goliath deployment baseline — ' + action + '**',
     '**Assigned roles:** ' + (scan.assigned.map(role => '<@&' + role.id + '>').join(', ') || 'None beyond @everyone'),
     '**Missing guild permissions:** ' + (scan.missing.join(', ') || 'None'),
-    '**Recommended invite permission bitfield:** '+aiGoliathInvitePermissions(),
-    '**Profile:** All-module installation baseline (no Administrator).',
+    '**Recommended invite permission bitfield:** '+aiGoliathInvitePermissions(guild.id),
+    '**Active permission groups:** '+scan.profile.groups.join(', ')+' (no Administrator).',
     '**Manageable existing roles:** ' + scan.candidates.length,
     '**Channels/categories inspected:** ' + scan.targets.length,
     '**Access gaps:** ' + scan.gaps.length,
