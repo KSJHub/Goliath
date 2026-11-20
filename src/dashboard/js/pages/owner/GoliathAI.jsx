@@ -47,10 +47,37 @@ export default function GoliathAI({ theme }) {
   const [deployment,setDeployment]=useState(null);
   const [deploymentBusy,setDeploymentBusy]=useState(false);
   const [deploymentError,setDeploymentError]=useState('');
+  const [syncApproval,setSyncApproval]=useState(null);
+  const [syncResult,setSyncResult]=useState(null);
+  const [syncAcknowledged,setSyncAcknowledged]=useState(false);
+  async function prepareSync(){
+    const target=selectedGuild;
+    if(!target.startsWith('DEV:')||deploymentBusy)return;
+    setDeploymentBusy(true);setSyncApproval(null);setSyncResult(null);setSyncAcknowledged(false);setDeploymentError('');
+    try{
+      const result=await api.request('/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4))+'/sync/preview',{method:'POST',body:JSON.stringify({})});
+      if(selectedGuildRef.current===target)setSyncApproval(result);
+    }catch(error){if(selectedGuildRef.current===target)setDeploymentError(error.message);}
+    finally{setDeploymentBusy(false);}
+  }
+  async function confirmSync(){
+    const target=selectedGuild;
+    if(deploymentBusy||!syncAcknowledged||!syncApproval?.steps?.length||target!=='DEV:'+syncApproval.guildId)return;
+    const token=syncApproval.token;
+    setDeploymentBusy(true);setSyncApproval(null);setSyncAcknowledged(false);setDeploymentError('');
+    try{
+      const base='/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4));
+      const result=await api.request(base+'/sync/confirm',{method:'POST',body:JSON.stringify({token,confirm:true})});
+      if(selectedGuildRef.current===target)setSyncResult({...result,guildId:target.slice(4)});
+      const report=await api.request(base);
+      if(selectedGuildRef.current===target)setDeployment(report);
+    }catch(error){if(selectedGuildRef.current===target){setDeployment(null);setDeploymentError(error.message+' Refresh and inspect recovery before retrying.');}}
+    finally{setDeploymentBusy(false);}
+  }
   async function scanDeployment(){
     const target=selectedGuild;
     if(!target.startsWith('DEV:'))return;
-    setDeploymentBusy(true);setDeployment(null);setDeploymentError('');
+    setDeploymentBusy(true);setDeployment(null);setDeploymentError('');setSyncApproval(null);setSyncAcknowledged(false);
     try{
       const report=await api.request('/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4)));
       if(selectedGuildRef.current===target)setDeployment(report);
@@ -730,7 +757,7 @@ export default function GoliathAI({ theme }) {
 
     {selectedGuild.startsWith('DEV:') && <section style={panel}>
       <h2>Goliath Deployment Centre</h2>
-      <p>Scan the selected DEV guild using the same permission template as Discord. Changes require separate approval in /owner.</p>
+      <p>Scan the selected DEV guild using the same permission template as Discord. Bulk Sync requires explicit approval; role deployment remains in /owner.</p>
       <button type="button" disabled={deploymentBusy} onClick={scanDeployment}>{deploymentBusy?'Scanning…':'Scan deployment permissions'}</button>
       {deploymentError && <p role="alert">{deploymentError}</p>}
       {deployment && selectedGuild==='DEV:'+deployment.guildId && <div>
@@ -753,7 +780,17 @@ export default function GoliathAI({ theme }) {
           </div>)}
           {deployment.sync.blocked.length>0 && <details><summary>Skipped channel IDs</summary><ul>{deployment.sync.blocked.map(id=><li key={id}>{id}</li>)}</ul></details>}
         </details>}
-        <p>To apply this template, open Discord /owner, select this guild, then Goliath Deploy / Sync. Review and confirm the fresh plan there.</p>
+        <button type="button" disabled={deploymentBusy||deployment.recoveryRequired} onClick={prepareSync}>Prepare Bulk Sync</button>
+        {syncApproval && selectedGuild==='DEV:'+syncApproval.guildId && <div>
+          <h3>Confirm fresh Sync plan</h3>
+          <p>{syncApproval.steps.length} overwrite changes; {syncApproval.blocked.length} skipped. Approval expires after ten minutes.</p>
+          <ul>{syncApproval.steps.map(step=><li key={step.channelId}>{step.channelId}: {step.grants.join(', ')}{step.inheritedChildren.length>0 && <ul>{step.inheritedChildren.map(id=><li key={id}>Inherited: {id}</li>)}</ul>}</li>)}</ul>
+          <label><input type="checkbox" checked={syncAcknowledged} onChange={event=>setSyncAcknowledged(event.target.checked)} /> I approve access for Goliath to all listed channels, including private and inherited channels.</label>
+          <button type="button" disabled={deploymentBusy||!syncAcknowledged||!syncApproval.steps.length} onClick={confirmSync}>Confirm Bulk Sync</button>
+          <button type="button" disabled={deploymentBusy} onClick={()=>{setSyncApproval(null);setSyncAcknowledged(false);}}>Cancel</button>
+        </div>}
+        {syncResult && selectedGuild==='DEV:'+syncResult.guildId && <p role="status">{syncResult.status==='verified'?'Verified '+syncResult.changed+' changes.':'Sync stopped; inspect recovery.'} Transaction: {syncResult.transactionId}</p>}
+        <p>To deploy roles, open Discord /owner and select Goliath Deploy / Sync.</p>
         <a href={'https://discord.com/channels/'+deployment.guildId} target="_blank" rel="noopener noreferrer">Open selected guild in Discord</a>
         <p>Dashboard previews are read-only and do not constitute approval.</p>
         <ul>{deployment.gaps.slice(0,50).map(gap=><li key={gap.id}>{gap.id}: {gap.missing.join(', ')} {gap.synced?'(category synced)':''} {!gap.editable?'(owner intervention needed)':''}</li>)}</ul>
@@ -771,7 +808,7 @@ export default function GoliathAI({ theme }) {
           <option value="connected">Goliath-connected servers</option>
           <option value="mine">Servers I own or manage</option>
         </select>
-        <select aria-label="Discord server" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
+        <select aria-label="Discord server" value={selectedGuild} onChange={(event) => { setSelectedGuild(event.target.value); setSyncApproval(null); setSyncAcknowledged(false); setSyncResult(null); setDeploymentError(''); setAudit(null); setPreview(null); setBlueprintPlan(null); replaceBlueprintText(''); setReadiness(null); setOperationReviews(null); }} style={{ padding: 10, borderRadius: 10, color: '#e5e7eb', background: '#111827', flex: '1 1 220px' }}>
           {availableOptions.length ? availableOptions.map((guild) => <option key={guild.value} value={guild.value}>{guild.label}</option>) : <option value="">No servers available in this filter</option>}
         </select>
         <button type="button" onClick={refreshGuilds} style={{ border: '1px solid #64748b', borderRadius: 10, padding: '10px 16px', color: '#e5e7eb', background: '#1e293b' }}>Refresh servers</button>
