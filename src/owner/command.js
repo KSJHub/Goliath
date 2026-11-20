@@ -2291,7 +2291,11 @@ module.exports = {
     if(mode()!=='DEV'||!guild)throw new Error('DEV guild required');
     await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
     const scan=aiGoliathDeploymentScan(guild);
+    const sync=aiDeploySyncPlan(guild);
+    const history=aiDeployJournalRead(guild.id);
     return {guildId:guild.id,readOnly:true,timestamp:new Date().toISOString(),profile:scan.profile,
+      sync:{steps:sync.steps.map(step=>({channelId:step.channelId,grants:step.grants,inheritedChildren:step.inheritedChildren})),blocked:sync.blocked},
+      recoveryRequired:history.some(record=>record.status==='failed'||record.status==='pending'),
       assigned:scan.assigned.map(role=>({id:role.id,name:role.name,hoist:role.hoist})),
       candidates:scan.candidates.map(role=>({id:role.id,name:role.name,hoist:role.hoist})),
       missing:scan.missing,channelCount:scan.targets.length,gaps:scan.gaps,
