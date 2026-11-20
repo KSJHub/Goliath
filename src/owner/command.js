@@ -1265,10 +1265,36 @@ function aiDeployJournalBegin(guildId,ownerId,steps) {
     return id;
   });
 }
+function aiDeployRecoveryPayload(guild) {
+  const records=aiDeployJournalRead(guild.id);
+  const record=records.filter(item=>item.status!=='verified').at(-1);
+  const lines=[];
+  if(record){
+    for(const step of record.steps){
+      let state='Manual investigation required';
+      if(step.action==='member-overwrite'){
+        const channel=guild.channels.cache.get(step.channelId);
+        const ow=channel?.permissionOverwrites?.cache?.get(step.memberId);
+        const actual={exists:Boolean(ow),allow:String(ow?.allow?.bitfield||0n),deny:String(ow?.deny?.bitfield||0n)};
+        if(!channel) state='Channel missing';
+        else if(JSON.stringify(actual)===JSON.stringify(step.before)) state='Original state';
+        else if(actual.exists&&actual.allow===step.after?.allow&&actual.deny===step.after?.deny) state='Applied state';
+        else state='External change or conflict';
+      }else if(step.action==='assign'||step.action==='create'){
+        const id=step.roleId||step.createdRoleId||step.id;
+        if(!id) state=step.phase==='creating'?'Creation outcome unknown; inspect audit log':'Not started';
+        else if(!guild.roles.cache.has(id)) state='Role absent';
+        else state=guild.members.me?.roles.cache.has(id)?'Role exists and is assigned':'Role exists and is not assigned';
+      }
+      lines.push((step.channelId?'<#'+step.channelId+'>':step.name||step.action)+' — '+state);
+    }
+  }
+  return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath • Recovery Inspection').setDescription(record?('Transaction '+record.id+'\n'+lines.slice(0,30).join('\n')+'\n'+(lines.length>30?'Additional steps are retained in journal.\n':'')+'Read-only inspection. Unresolved operations remain blocked.'): 'No unresolved deployment transactions.')],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Refresh',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'Back',ButtonStyle.Secondary))]};
+}
 function aiDeployJournalHistoryPayload(guild) {
   const history=aiDeployJournalRead(guild.id);
   const lines=history.slice(-10).reverse().map(record=>record.status.toUpperCase()+' • '+record.createdAt+' • '+record.steps.length+' steps • '+record.id);
-  return {content:null,embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Deployment History').setDescription((lines.join('\n')||'No deployment transactions recorded yet.')+'\n\nUnresolved transactions block new deployments. Execution and recovery controls are still under development.')],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary))]};
+  return {content:null,embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Deployment History').setDescription((lines.join('\n')||'No deployment transactions recorded yet.')+'\n\nUnresolved transactions block new deployments. Execution and recovery controls are still under development.')],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Inspect Recovery',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary))]};
 }
 const aiGoliathRoleDrafts = new Map();
 function aiDeploySavedRoles(guildId) {
@@ -1682,6 +1708,7 @@ async function handleOwnerAI(interaction, action, guildId, selectedId = null, pa
     }
   }
   if (guild && action === 'ai-sync-preview') return interaction.editReply(aiDeploySyncPreview(interaction,guild,page));
+  if (guild && action === 'ai-deploy-recovery') return interaction.editReply(aiDeployRecoveryPayload(guild));
   if (guild && action === 'ai-deploy-history') return interaction.editReply(aiDeployJournalHistoryPayload(guild));
   if (guild && action === 'ai-deploy-preview') return interaction.editReply(aiGoliathRolePlanPayload(interaction,guild));
   if (guild && action === 'ai-deploy-roles') return interaction.editReply(aiGoliathRolePayload(interaction,guild,page));
@@ -1876,6 +1903,10 @@ async function handleOwnerPanelInteraction(interaction) {
   }
   if (/^ownerpanel:ai-sync-preview-\d+$/.test(id)) {
     await handleOwnerAI(interaction,'ai-sync-preview',contextGuildId,null,Number(id.match(/\d+$/)[0]));
+    return true;
+  }
+  if (id === 'ownerpanel:ai-deploy-recovery') {
+    await handleOwnerAI(interaction,'ai-deploy-recovery',contextGuildId);
     return true;
   }
   if (id === 'ownerpanel:ai-deploy-history') {
