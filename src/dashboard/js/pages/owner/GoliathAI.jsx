@@ -813,6 +813,11 @@ export default function GoliathAI({ theme }) {
           <button type="button" disabled={deploymentBusy} onClick={()=>{setSyncApproval(null);setSyncAcknowledged(false);}}>Cancel</button>
         </div>}
         {syncResult && selectedGuild==='DEV:'+syncResult.guildId && <p role="status">{syncResult.status==='verified'?'Verified '+syncResult.changed+' changes.':'Sync stopped; inspect recovery.'} Transaction: {syncResult.transactionId}</p>}
+        {deployment.hierarchy && <div>
+          <h3>Role hierarchy</h3>
+          <p>Current highest Goliath role: {deployment.hierarchy.highestBotRole} (position {deployment.hierarchy.highestBotPosition}).</p>
+          <p>New dedicated operational roles are placed below Goliath's current highest role when possible. To manage higher roles, the server owner must move Goliath's operational role above those roles in Server Settings → Roles. Keep the operational role unhoisted and the separate display role hoisted. Existing shared roles are never repositioned.</p>
+        </div>}
         <h3>Deploy Goliath roles</h3>
         <p>Choose separate operational and display roles. Existing role permissions will not be changed. Owner intervention may be needed for hierarchy.</p>
         {['operational','display'].map(kind=><label key={kind} style={{display:'block',margin:'8px 0'}}>{kind==='operational'?'Operational role':'Visible display role'}
