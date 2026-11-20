@@ -1265,6 +1265,79 @@ function aiDeployJournalBegin(guildId,ownerId,steps) {
     return id;
   });
 }
+const aiDeployRecoveryApprovals=new Map();
+function aiDeployRollbackPlan(guild,record){
+  const steps=[], blockers=[];
+  for(const step of [...record.steps].reverse()){
+    if(step.action!=='member-overwrite'){blockers.push('Role operations require manual review');continue;}
+    const channel=guild.channels.cache.get(step.channelId);
+    const bot=guild.members.me;
+    const ow=channel?.permissionOverwrites?.cache?.get(step.memberId);
+    const actual={exists:Boolean(ow),allow:String(ow?.allow?.bitfield||0n),deny:String(ow?.deny?.bitfield||0n)};
+    if(!channel||bot.id!==step.memberId){blockers.push(step.channelId+' unavailable');continue;}
+    if(JSON.stringify(actual)===JSON.stringify(step.before))continue;
+    if(!actual.exists||actual.allow!==step.after?.allow||actual.deny!==step.after?.deny||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles')){blockers.push(step.channelId+' conflict or inaccessible');continue;}
+    steps.push(step);
+  }
+  return {steps,blockers};
+}
+function aiDeployRollbackPreview(interaction,guild){
+  const record=aiDeployJournalRead(guild.id).filter(item=>item.status==='failed'||item.status==='pending').at(-1);
+  if(!record)return aiDeployRecoveryPayload(guild);
+  const plan=aiDeployRollbackPlan(guild,record);
+  const token=randomUUID().replace(/-/g,'').slice(0,16);
+  aiDeployRecoveryApprovals.set(interaction.user.id+':'+guild.id,{token,id:record.id,steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
+  return {content:null,embeds:[new EmbedBuilder().setTitle('Goliath • Rollback Preview').setColor(0xF0B232).setDescription(['Transaction '+record.id,'Restorable member overwrites: '+plan.steps.length,...plan.steps.slice(0,25).map(step=>'<#'+step.channelId+'>'), 'Blockers: '+(plan.blockers.join('; ')||'None'),'Only matching deployment changes will be restored. Role recovery remains manual. Active pending transactions require operator investigation before rollback.'].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-rollback-'+token,guild.id),'Confirm Restoration',ButtonStyle.Danger,Boolean(plan.blockers.length||record.status!=='failed')),navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Back',ButtonStyle.Secondary))]};
+}
+async function aiDeployRollback(interaction,guildId,token){
+  await interaction.deferUpdate();
+  const key=interaction.user.id+':'+guildId;
+  const approval=aiDeployRecoveryApprovals.get(key);
+  if(mode()!=='DEV'||!approval||approval.token!==token||approval.expiresAt<Date.now())return interaction.editReply({content:'Restoration approval expired.',embeds:[],components:[]});
+  aiDeployRecoveryApprovals.delete(key);
+  const {guild}=await resolveInteractionGuild(interaction,guildId);
+  if(!guild||guild.id!==guildId)throw new Error('Guild mismatch');
+  await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
+  const record=aiDeployJournalRead(guildId).find(item=>item.id===approval.id);
+  if(!record||record.status!=='failed')throw new Error('Transaction not eligible for restoration');
+  const plan=aiDeployRollbackPlan(guild,record);
+  if(plan.blockers.length||JSON.stringify(plan.steps)!==approval.steps)throw new Error('Restoration plan changed');
+  const update=mutate=>aiDeployJournalUpdate(guildId,records=>{
+    const current=records.find(item=>item.id===record.id);
+    if(!current||current.status!=='pending')throw new Error('Restoration transaction unavailable');
+    mutate(current);
+  });
+  aiDeployJournalUpdate(guildId,records=>{
+    const current=records.find(item=>item.id===record.id);
+    if(!current||current.status!=='failed')throw new Error('Transaction busy');
+    current.status='pending';current.recoveryStartedAt=new Date().toISOString();
+  });
+  try{
+    for(const step of plan.steps){
+      const channel=await guild.channels.fetch(step.channelId,{force:true});
+      const bot=await guild.members.fetchMe({force:true});
+      const ow=channel?.permissionOverwrites?.cache?.get(bot.id);
+      if(!ow||bot.id!==step.memberId||String(ow.allow.bitfield)!==step.after.allow||String(ow.deny.bitfield)!==step.after.deny||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles'))throw new Error('Restoration conflict');
+      update(current=>{current.steps.find(s=>s.channelId===step.channelId).recoveryPhase='restoring';});
+      if(!step.before.exists)await channel.permissionOverwrites.delete(bot,'Goliath DEV rollback '+record.id);
+      else {
+        const changes={};
+        const allow=new PermissionsBitField(BigInt(step.before.allow)),deny=new PermissionsBitField(BigInt(step.before.deny));
+        for(const p of step.grants)changes[p]=allow.has(p,false)?true:deny.has(p,false)?false:null;
+        await channel.permissionOverwrites.edit(bot,changes,{reason:'Goliath DEV rollback '+record.id});
+      }
+      const fresh=await guild.channels.fetch(channel.id,{force:true});
+      const restored=fresh?.permissionOverwrites?.cache?.get(bot.id);
+      if(!fresh||JSON.stringify({exists:Boolean(restored),allow:String(restored?.allow?.bitfield||0n),deny:String(restored?.deny?.bitfield||0n)})!==JSON.stringify(step.before))throw new Error('Restoration verification failed');
+      update(current=>{current.steps.find(s=>s.channelId===step.channelId).recoveryPhase='restored';});
+    }
+    update(current=>{current.status='verified';current.outcome='rolled-back';current.recoveredAt=new Date().toISOString();});
+    return interaction.editReply({content:'Original permission states verified. Transaction '+record.id,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+  }catch(error){
+    update(current=>{current.status='failed';current.recoveryError=String(error.message).slice(0,500);});
+    return interaction.editReply({content:'Restoration stopped. Inspect recovery before retrying.',embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-recovery',guildId),'Inspect Recovery',ButtonStyle.Secondary))]});
+  }
+}
 function aiDeployRecoveryPayload(guild) {
   const records=aiDeployJournalRead(guild.id);
   const record=records.filter(item=>item.status!=='verified').at(-1);
@@ -1289,7 +1362,7 @@ function aiDeployRecoveryPayload(guild) {
       lines.push((step.channelId?'<#'+step.channelId+'>':step.name||step.action)+' — '+state);
     }
   }
-  return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath • Recovery Inspection').setDescription(record?('Transaction '+record.id+'\n'+lines.slice(0,30).join('\n')+'\n'+(lines.length>30?'Additional steps are retained in journal.\n':'')+'Read-only inspection. Unresolved operations remain blocked.'): 'No unresolved deployment transactions.')],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Refresh',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'Back',ButtonStyle.Secondary))]};
+  return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath • Recovery Inspection').setDescription(record?('Transaction '+record.id+'\n'+lines.slice(0,30).join('\n')+'\n'+(lines.length>30?'Additional steps are retained in journal.\n':'')+'Read-only inspection. Unresolved operations remain blocked.'): 'No unresolved deployment transactions.')],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Refresh',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-rollback-preview',guild.id),'Preview Restoration',ButtonStyle.Secondary,!record),navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'Back',ButtonStyle.Secondary))]};
 }
 function aiDeployJournalHistoryPayload(guild) {
   const history=aiDeployJournalRead(guild.id);
@@ -1708,6 +1781,7 @@ async function handleOwnerAI(interaction, action, guildId, selectedId = null, pa
     }
   }
   if (guild && action === 'ai-sync-preview') return interaction.editReply(aiDeploySyncPreview(interaction,guild,page));
+  if (guild && action === 'ai-deploy-rollback-preview') return interaction.editReply(aiDeployRollbackPreview(interaction,guild));
   if (guild && action === 'ai-deploy-recovery') return interaction.editReply(aiDeployRecoveryPayload(guild));
   if (guild && action === 'ai-deploy-history') return interaction.editReply(aiDeployJournalHistoryPayload(guild));
   if (guild && action === 'ai-deploy-preview') return interaction.editReply(aiGoliathRolePlanPayload(interaction,guild));
@@ -1903,6 +1977,14 @@ async function handleOwnerPanelInteraction(interaction) {
   }
   if (/^ownerpanel:ai-sync-preview-\d+$/.test(id)) {
     await handleOwnerAI(interaction,'ai-sync-preview',contextGuildId,null,Number(id.match(/\d+$/)[0]));
+    return true;
+  }
+  if (id === 'ownerpanel:ai-deploy-rollback-preview') {
+    await handleOwnerAI(interaction,'ai-deploy-rollback-preview',contextGuildId);
+    return true;
+  }
+  if (/^ownerpanel:ai-deploy-rollback-[a-f0-9]{16}$/.test(id)) {
+    await aiDeployRollback(interaction,contextGuildId,id.slice('ownerpanel:ai-deploy-rollback-'.length));
     return true;
   }
   if (id === 'ownerpanel:ai-deploy-recovery') {
