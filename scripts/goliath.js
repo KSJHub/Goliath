@@ -6134,10 +6134,27 @@ console.log('✅ Goliath AI blueprint, draft, readiness, review and permission-p
   return true;
 }
 
+function goliathDeploymentRegression(source, assert, vm) {
+  const start=source.indexOf('function aiGoliathChannelRequirements(');
+  const end=source.indexOf('function aiGoliathDeploymentScan(',start);
+  assert(start>=0 && end>start);
+  const helpers=vm.runInNewContext(source.slice(start,end)+'; ({required:aiGoliathChannelRequirements,children:aiGoliathInheritedChildren})',{AI_GOLIATH_TEXT:['ViewChannel','SendMessages','EmbedLinks']});
+  const profile={permissions:['ViewChannel','ManageChannels','Connect','Speak','SendMessages']};
+  const check=(a,b)=>assert.equal(JSON.stringify(a),JSON.stringify(b));
+  check(helpers.required({type:2},profile),['ViewChannel','Connect','Speak']);
+  check(helpers.required({type:13},profile),['ViewChannel','Connect']);
+  check(helpers.required({type:4},profile),['ViewChannel','ManageChannels']);
+  check(helpers.required({type:0},profile),['ViewChannel','SendMessages']);
+  const channels=[{id:'3',parentId:'c',permissionsLocked:true},{id:'2',parentId:'c',permissionsLocked:false},{id:'1',parentId:'c',permissionsLocked:true},{id:'4',parentId:'d',permissionsLocked:true}];
+  const guild={channels:{cache:new Map(channels.map(c=>[c.id,c]))}};
+  check(helpers.children(guild,'c').map(c=>c.id),['1','3']);
+  check(helpers.children(guild,'missing'),[]);
+}
 function goliathAiRecoveryAudit() {
   const assert = require('node:assert/strict');
   const vm = require('node:vm');
   const source = fs.readFileSync(absolute('src/owner/command.js'), 'utf8');
+  goliathDeploymentRegression(source, assert, vm);
   const start = source.indexOf('function aiRecoverySnapshotValid(');
   const end = source.indexOf('function aiRecoveryGet(', start);
   assert(start >= 0 && end > start, 'Recovery validator missing');
