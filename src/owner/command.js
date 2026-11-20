@@ -1300,7 +1300,7 @@ function aiDeployRollbackPlan(guild,record){
       const role=guild.roles.cache.get(step.roleId||step.id);
       const bot=guild.members.me;
       if(step.previouslyAssigned===true || !role || !bot.roles.cache.has(role.id)) continue;
-      if(step.previouslyAssigned!==false || role.managed || bot.roles.highest.comparePositionTo(role)<=0 || !bot.permissions.has('ManageRoles')) {blockers.push('Role assignment requires manual review: '+step.name);continue;}
+      if(step.previouslyAssigned!==false || String(role.permissions.bitfield)!==step.expectedPermissions || role.hoist!==step.expectedHoist || role.name!==step.name || role.managed || bot.roles.highest.comparePositionTo(role)<=0 || !bot.permissions.has('ManageRoles')) {blockers.push('Role assignment requires manual review: '+step.name);continue;}
       steps.push({...step,action:'remove-assignment',roleId:role.id,expectedPermissions:String(role.permissions.bitfield)});
       continue;
     }
@@ -1317,6 +1317,7 @@ function aiDeployRollbackPlan(guild,record){
     if(!channel||bot.id!==step.memberId){blockers.push(step.channelId+' unavailable');continue;}
     if(JSON.stringify(actual)===JSON.stringify(step.before))continue;
     if(!actual.exists||actual.allow!==step.after?.allow||actual.deny!==step.after?.deny||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles')){blockers.push(step.channelId+' conflict or inaccessible');continue;}
+    if(channel.type===4&&JSON.stringify(aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id))!==JSON.stringify(step.inheritedChildren)){blockers.push(step.channelId+' category inheritance changed');continue;}
     steps.push(step);
   }
   return {steps,blockers};
@@ -1368,6 +1369,8 @@ async function aiDeployRollback(interaction,guildId,token){
       const channel=await guild.channels.fetch(step.channelId,{force:true});
       const bot=await guild.members.fetchMe({force:true});
       const ow=channel?.permissionOverwrites?.cache?.get(bot.id);
+      await guild.channels.fetch();
+      if(channel?.type===4&&JSON.stringify(aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id))!==JSON.stringify(step.inheritedChildren))throw new Error('Restoration inheritance conflict');
       if(!ow||bot.id!==step.memberId||String(ow.allow.bitfield)!==step.after.allow||String(ow.deny.bitfield)!==step.after.deny||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles'))throw new Error('Restoration conflict');
       update(current=>{current.steps.find(s=>s.channelId===step.channelId).recoveryPhase='restoring';});
       if(!step.before.exists)await channel.permissionOverwrites.delete(bot,'Goliath DEV rollback '+record.id);
@@ -1558,7 +1561,10 @@ async function aiDeployApplyRoles(interaction,guildId,token) {
         update(record=>{record.steps[index].phase='creating';});
         role=await guild.roles.create({name:step.name,hoist:step.hoist,permissions:step.permissions,reason:'Goliath DEV deployment '+tx});
         update(record=>{record.steps[index].createdRoleId=role.id;record.steps[index].phase='created';});
-      }else role=await guild.roles.fetch(step.id,{force:true});
+      }else {
+        role=await guild.roles.fetch(step.id,{force:true});
+        if(!role||String(role.permissions.bitfield)!==step.expectedPermissions||role.hoist!==step.expectedHoist||role.position!==step.expectedPosition||role.name!==step.name)throw new Error('Approved role changed');
+      }
       if(!role||role.managed||role.id===guild.id||!bot.permissions.has('ManageRoles')||bot.roles.highest.comparePositionTo(role)<=0||!bot.permissions.has(role.permissions.bitfield)||role.permissions.has('Administrator',false)) throw new Error('Assignment prerequisites changed');
       const before=bot.roles.cache.has(role.id);
       update(record=>{Object.assign(record.steps[index],{roleId:role.id,previouslyAssigned:before,phase:'assigning'});});
