@@ -53,8 +53,8 @@ export default function GoliathAI({ theme }) {
     setDeploymentBusy(true);setDeployment(null);setDeploymentError('');
     try{
       const report=await api.request('/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4)));
-      setDeployment(report);
-    }catch(error){setDeploymentError(error?.message||'Deployment scan failed.');}
+      if(selectedGuildRef.current===target)setDeployment(report);
+    }catch(error){if(selectedGuildRef.current===target)setDeploymentError(error?.message||'Deployment scan failed.');}
     finally{setDeploymentBusy(false);}
   }
 
@@ -739,6 +739,23 @@ export default function GoliathAI({ theme }) {
         <p>Missing server permissions: {deployment.missing.join(', ')||'None'}</p>
         <p>Assigned roles: {deployment.assigned.map(role=>role.name).join(', ')||'None'}</p>
         <p>Manageable roles: {deployment.candidates.length}</p>
+        <details>
+          <summary>Available existing roles</summary>
+          <ul>{deployment.candidates.map(role=><li key={role.id}>{role.name} — {role.hoist?'Visible display role':'Unhoisted operational role'} (ID: {role.id})</li>)}</ul>
+        </details>
+        {deployment.recoveryRequired && <p role="alert">Unresolved deployment transaction. Review recovery in Discord /owner before applying further changes.</p>}
+        {deployment.sync && <details>
+          <summary>Bulk Sync preview — {deployment.sync.steps.length} changes, {deployment.sync.blocked.length} skipped</summary>
+          <p>Only Goliath member overwrites are changed by this plan. Private channels may be included. Synced children inherit category changes.</p>
+          {deployment.sync.steps.map(step=><div key={step.channelId} style={{padding:'8px 0',overflowWrap:'anywhere'}}>
+            <strong>{step.channelId}</strong>: {step.grants.join(', ')}
+            {step.inheritedChildren?.length>0 && <details><summary>{step.inheritedChildren.length} inherited channels</summary><ul>{step.inheritedChildren.map(id=><li key={id}>{id}</li>)}</ul></details>}
+          </div>)}
+          {deployment.sync.blocked.length>0 && <details><summary>Skipped channel IDs</summary><ul>{deployment.sync.blocked.map(id=><li key={id}>{id}</li>)}</ul></details>}
+        </details>}
+        <p>To apply this template, open Discord /owner, select this guild, then Goliath Deploy / Sync. Review and confirm the fresh plan there.</p>
+        <a href={'https://discord.com/channels/'+deployment.guildId} target="_blank" rel="noopener noreferrer">Open selected guild in Discord</a>
+        <p>Dashboard previews are read-only and do not constitute approval.</p>
         <ul>{deployment.gaps.slice(0,50).map(gap=><li key={gap.id}>{gap.id}: {gap.missing.join(', ')} {gap.synced?'(category synced)':''} {!gap.editable?'(owner intervention needed)':''}</li>)}</ul>
         {deployment.gaps.length>50 && <p>Showing first 50 gaps.</p>}
         <a href={deployment.inviteUrl} target="_blank" rel="noopener noreferrer">Update DEV guild authorisation</a>
