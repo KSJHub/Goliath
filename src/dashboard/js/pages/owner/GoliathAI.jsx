@@ -53,12 +53,20 @@ export default function GoliathAI({ theme }) {
   async function deployRoles(confirm=false){
     const target=selectedGuild;
     if(deploymentBusy||!target.startsWith('DEV:')||(confirm&&(!roleApproval||roleApproval.guildId!==target.slice(4)||roleApproval.blockers.length||!roleApproval.steps.length)))return;
-    setDeploymentBusy(true);setDeploymentError('');setRoleApproval(null);setRoleResult(null);
+    setDeploymentBusy(true);setDeploymentError('');setRoleApproval(null);setRoleResult(null);setSyncApproval(null);setSyncAcknowledged(false);
     try{
       const base='/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4));
       const result=await api.request(base+'/roles/'+(confirm?'confirm':'preview'),{method:'POST',body:JSON.stringify(confirm?{token:roleApproval.token,confirm:true}:{selected:roleSelection})});
       if(selectedGuildRef.current===target){if(confirm)setRoleResult({...result,guildId:target.slice(4)});else setRoleApproval(result);}
-      if(confirm){const report=await api.request(base);if(selectedGuildRef.current===target)setDeployment(report);}
+      if(confirm){
+        const report=await api.request(base);
+        if(selectedGuildRef.current!==target)return;
+        setDeployment(report);
+        if(result.status==='verified'&&!report.recoveryRequired&&report.sync?.steps?.length){
+          const next=await api.request(base+'/sync/preview',{method:'POST',body:JSON.stringify({})});
+          if(selectedGuildRef.current===target)setSyncApproval(next);
+        }
+      }
     }catch(error){if(selectedGuildRef.current===target){setDeploymentError(error.message);if(confirm)setDeployment(null);}}
     finally{setDeploymentBusy(false);}
   }
@@ -68,7 +76,7 @@ export default function GoliathAI({ theme }) {
   async function prepareSync(){
     const target=selectedGuild;
     if(!target.startsWith('DEV:')||deploymentBusy)return;
-    setDeploymentBusy(true);setSyncApproval(null);setSyncResult(null);setSyncAcknowledged(false);setDeploymentError('');
+    setDeploymentBusy(true);setSyncApproval(null);setRoleApproval(null);setSyncResult(null);setSyncAcknowledged(false);setDeploymentError('');
     try{
       const result=await api.request('/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4))+'/sync/preview',{method:'POST',body:JSON.stringify({})});
       if(selectedGuildRef.current===target)setSyncApproval(result);
@@ -92,7 +100,7 @@ export default function GoliathAI({ theme }) {
   async function scanDeployment(){
     const target=selectedGuild;
     if(!target.startsWith('DEV:'))return;
-    setDeploymentBusy(true);setDeployment(null);setDeploymentError('');setSyncApproval(null);setSyncAcknowledged(false);
+    setDeploymentBusy(true);setDeployment(null);setDeploymentError('');setRoleApproval(null);setSyncApproval(null);setSyncAcknowledged(false);
     try{
       const report=await api.request('/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4)));
       if(selectedGuildRef.current===target)setDeployment(report);
@@ -772,7 +780,7 @@ export default function GoliathAI({ theme }) {
 
     {selectedGuild.startsWith('DEV:') && <section style={panel}>
       <h2>Goliath Deployment Centre</h2>
-      <p>Scan the selected DEV guild using the same permission template as Discord. Role deployment and Bulk Sync require separate explicit approvals.</p>
+      <p>Scan the selected DEV guild using the same permission template as Discord. Guided installation: scan, select roles, confirm role deployment, then review and confirm Bulk Sync. Existing installations can use Bulk Sync directly.</p>
       <button type="button" disabled={deploymentBusy} onClick={scanDeployment}>{deploymentBusy?'Scanning…':'Scan deployment permissions'}</button>
       {deploymentError && <p role="alert">{deploymentError}</p>}
       {deployment && selectedGuild==='DEV:'+deployment.guildId && <div>
@@ -820,7 +828,7 @@ export default function GoliathAI({ theme }) {
           <button type="button" disabled={deploymentBusy||roleApproval.blockers.length>0||!roleApproval.steps.length} onClick={()=>deployRoles(true)}>Confirm Role Deployment</button>
           <button type="button" disabled={deploymentBusy} onClick={()=>setRoleApproval(null)}>Cancel</button>
         </div>}
-        {roleResult&&roleResult.guildId===deployment.guildId&&<p role="status">{roleResult.status==='verified'?'Role deployment verified. Prepare Bulk Sync to update channels.':'Role deployment stopped. Inspect recovery.'} Transaction: {roleResult.transactionId}</p>}
+        {roleResult&&roleResult.guildId===deployment.guildId&&<p role="status">{roleResult.status==='verified'?'Role deployment verified. Review the fresh Bulk Sync preview above if channel changes are required.':'Role deployment stopped. Inspect recovery.'} Transaction: {roleResult.transactionId}</p>}
         <a href={'https://discord.com/channels/'+deployment.guildId} target="_blank" rel="noopener noreferrer">Open selected guild in Discord</a>
         <p>Dashboard previews are read-only and do not constitute approval.</p>
         <ul>{deployment.gaps.slice(0,50).map(gap=><li key={gap.id}>{gap.id}: {gap.missing.join(', ')} {gap.synced?'(category synced)':''} {!gap.editable?'(owner intervention needed)':''}</li>)}</ul>
