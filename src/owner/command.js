@@ -1521,11 +1521,11 @@ function aiGoliathRolePlan(interaction,guild) {
     }
     const role = guild.roles.cache.get(value);
     if (!role || role.managed || role.id===guild.id) { blockers.push('Invalid '+kind+' role.'); continue; }
+    if(role.permissions.has('Administrator',false))blockers.push('Administrator roles are not supported by this template.');
     if (!bot.roles.cache.has(role.id)) {
       if (bot.roles.highest.comparePositionTo(role)<=0) blockers.push('Owner must assign '+role.name+' manually.');
       // Assigning a role can escalate the bot; only propose roles within its current permissions.
       if (!bot.permissions.has(role.permissions.bitfield)) blockers.push('Owner must assign '+role.name+' because it contains permissions Goliath lacks.');
-      if(role.permissions.has('Administrator',false))blockers.push('Administrator roles are not supported by this template.');
       steps.push({kind,action:'assign',id:role.id,name:role.name,expectedPermissions:String(role.permissions.bitfield),expectedHoist:role.hoist,expectedPosition:role.position});
     }
     if (kind==='operational' && role.hoist) blockers.push('Operational role is displayed separately; review role settings manually.');
