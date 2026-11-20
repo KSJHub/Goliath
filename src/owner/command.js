@@ -1546,7 +1546,13 @@ async function aiDeployApplyRoles(interaction,guildId,token) {
   const plan=aiGoliathRolePlan(interaction,guild);
   if(plan.blockers.length||JSON.stringify(plan.steps)!==approval.steps||!plan.steps.length) return interaction.editReply({content:'Plan changed, blocked or empty. Prepare a fresh preview.',embeds:[],components:[]});
   const selected={...aiGoliathRoleDraft(interaction,guild)};
-  const tx=aiDeployJournalBegin(guildId,interaction.user.id,plan.steps);
+  const result=await aiExecuteApprovedRoles(guild,interaction.user.id,plan,selected);
+  if(result.status==='verified')aiGoliathRoleDrafts.delete(key);
+  return interaction.editReply({content:result.status==='verified'?'Role assignments applied and verified. Channel permissions unchanged. Transaction '+result.transactionId:'Deployment stopped. Inspect recovery transaction '+result.transactionId,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Sync Scan',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+}
+async function aiExecuteApprovedRoles(guild,ownerId,plan,selected){
+  const guildId=guild.id;
+  const tx=aiDeployJournalBegin(guildId,ownerId,plan.steps);
   const update=mutate=>aiDeployJournalUpdate(guildId,records=>{
     const record=records.find(item=>item.id===tx);
     if(!record||record.status!=='pending') throw new Error('Journal unavailable');
@@ -1581,13 +1587,14 @@ async function aiDeployApplyRoles(interaction,guildId,token) {
       record.roles=roles;
       record.status='verified';record.completedAt=new Date().toISOString();
     });
-    aiGoliathRoleDrafts.delete(key);
-    return interaction.editReply({content:'Role assignments applied and verified. Channel permissions unchanged. Transaction '+tx,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Sync Scan',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+
+    return {status:'verified',transactionId:tx,roles};
   } catch(error){
     update(record=>{record.status='failed';record.error=String(error.message).slice(0,500);});
-    return interaction.editReply({content:'Deployment stopped. Partial changes may exist; inspect transaction '+tx+' before retrying.',embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+    return {status:'failed',transactionId:tx,recoveryRequired:true};
   }
 }
+
 function aiGoliathRolePlanPayload(interaction,guild) {
   const plan=aiGoliathRolePlan(interaction,guild);
   const token=randomUUID().replace(/-/g,'').slice(0,16);
@@ -2294,6 +2301,35 @@ module.exports = {
 
   wireClient,
   handleOwnerPanelInteraction,
+  async prepareDashboardRoles(guild,ownerId,selected){
+    if(mode()!=='DEV'||!validGuildId(ownerId)||!guild)throw new Error('DEV owner context required');
+    if(!selected||!['operational','display'].every(kind=>selected[kind]==='create'||validGuildId(selected[kind]))||(selected.operational!=='create'&&selected.operational===selected.display))throw new Error('Invalid role selection');
+    await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
+    if(aiDeployJournalRead(guild.id).some(record=>record.status==='pending'||record.status==='failed'))throw new Error('Recovery required');
+    const identity={user:{id:'dashboard:'+ownerId}};
+    const draft=aiGoliathRoleDraft(identity,guild);
+    Object.assign(draft,{operational:selected.operational,display:selected.display,expiresAt:Date.now()+600000});
+    const plan=aiGoliathRolePlan(identity,guild);
+    const token=randomUUID();
+    aiDeployApprovals.set('dashboard-roles:'+ownerId+':'+guild.id,{token,steps:JSON.stringify(plan.steps),selected:{operational:draft.operational,display:draft.display},expiresAt:Date.now()+600000});
+    return {guildId:guild.id,steps:plan.steps,blockers:plan.blockers,token};
+  },
+  async confirmDashboardRoles(guild,ownerId,token){
+    if(mode()!=='DEV'||!validGuildId(ownerId)||!guild)throw new Error('DEV owner context required');
+    const key='dashboard-roles:'+ownerId+':'+guild.id;
+    const approval=aiDeployApprovals.get(key);
+    if(!approval||approval.token!==token||approval.expiresAt<Date.now())throw new Error('Approval expired');
+    aiDeployApprovals.delete(key);
+    await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
+    const identity={user:{id:'dashboard:'+ownerId}};
+    const draft=aiGoliathRoleDraft(identity,guild);
+    Object.assign(draft,approval.selected);
+    const plan=aiGoliathRolePlan(identity,guild);
+    if(plan.blockers.length||!plan.steps.length||JSON.stringify(plan.steps)!==approval.steps)throw new Error('Plan changed, blocked or empty');
+    const result=await aiExecuteApprovedRoles(guild,ownerId,plan,approval.selected);
+    if(result.status==='verified')aiGoliathRoleDrafts.delete(identity.user.id+':'+guild.id);
+    return result;
+  },
   async prepareDashboardSync(guild,ownerId){
     if(mode()!=='DEV'||!validGuildId(ownerId)||!guild)throw new Error('DEV owner context required');
     await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
