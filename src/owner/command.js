@@ -1269,7 +1269,20 @@ const aiDeployRecoveryApprovals=new Map();
 function aiDeployRollbackPlan(guild,record){
   const steps=[], blockers=[];
   for(const step of [...record.steps].reverse()){
-    if(step.action!=='member-overwrite'){blockers.push('Role operations require manual review');continue;}
+    if(step.action==='assign'){
+      const role=guild.roles.cache.get(step.roleId||step.id);
+      const bot=guild.members.me;
+      if(step.previouslyAssigned===true || !role || !bot.roles.cache.has(role.id)) continue;
+      if(step.previouslyAssigned!==false || role.managed || bot.roles.highest.comparePositionTo(role)<=0 || !bot.permissions.has('ManageRoles')) {blockers.push('Role assignment requires manual review: '+step.name);continue;}
+      steps.push({...step,action:'remove-assignment',roleId:role.id,expectedPermissions:String(role.permissions.bitfield)});
+      continue;
+    }
+    if(step.action==='create'){
+      // Never delete a potentially reused role or guess the result of a lost API response.
+      if(!step.createdRoleId && !step.roleId && !step.phase)continue;
+      blockers.push('Created role requires manual review: '+step.name);continue;
+    }
+    if(step.action!=='member-overwrite'){blockers.push('Unknown operation requires manual review');continue;}
     const channel=guild.channels.cache.get(step.channelId);
     const bot=guild.members.me;
     const ow=channel?.permissionOverwrites?.cache?.get(step.memberId);
@@ -1287,7 +1300,7 @@ function aiDeployRollbackPreview(interaction,guild){
   const plan=aiDeployRollbackPlan(guild,record);
   const token=randomUUID().replace(/-/g,'').slice(0,16);
   aiDeployRecoveryApprovals.set(interaction.user.id+':'+guild.id,{token,id:record.id,steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
-  return {content:null,embeds:[new EmbedBuilder().setTitle('Goliath • Rollback Preview').setColor(0xF0B232).setDescription(['Transaction '+record.id,'Restorable member overwrites: '+plan.steps.length,...plan.steps.slice(0,25).map(step=>'<#'+step.channelId+'>'), 'Blockers: '+(plan.blockers.join('; ')||'None'),'Only matching deployment changes will be restored. Role recovery remains manual. Active pending transactions require operator investigation before rollback.'].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-rollback-'+token,guild.id),'Confirm Restoration',ButtonStyle.Danger,Boolean(plan.blockers.length||record.status!=='failed')),navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Back',ButtonStyle.Secondary))]};
+  return {content:null,embeds:[new EmbedBuilder().setTitle('Goliath • Rollback Preview').setColor(0xF0B232).setDescription(['Transaction '+record.id,'Restorable operations: '+plan.steps.length,...plan.steps.slice(0,25).map(step=>step.channelId?'<#'+step.channelId+'>':'Remove Goliath assignment: <@&'+step.roleId+'>'), 'Blockers: '+(plan.blockers.join('; ')||'None'),'Only matching deployment changes will be restored. Created role recovery remains manual. Existing roles are never deleted. Active pending transactions require operator investigation before rollback.'].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-rollback-'+token,guild.id),'Confirm Restoration',ButtonStyle.Danger,Boolean(plan.blockers.length||record.status!=='failed')),navigationButton(contextualOwnerId('ai-deploy-recovery',guild.id),'Back',ButtonStyle.Secondary))]};
 }
 async function aiDeployRollback(interaction,guildId,token){
   await interaction.deferUpdate();
@@ -1314,6 +1327,17 @@ async function aiDeployRollback(interaction,guildId,token){
   });
   try{
     for(const step of plan.steps){
+      if(step.action==='remove-assignment'){
+        const role=await guild.roles.fetch(step.roleId,{force:true});
+        const bot=await guild.members.fetchMe({force:true});
+        if(!role||role.managed||!bot.roles.cache.has(role.id)||!bot.permissions.has('ManageRoles')||bot.roles.highest.comparePositionTo(role)<=0||String(role.permissions.bitfield)!==step.expectedPermissions)throw new Error('Role restoration conflict');
+        update(current=>{current.steps.find(s=>(s.roleId||s.id)===step.roleId).recoveryPhase='removing-assignment';});
+        await bot.roles.remove(role.id,'Goliath DEV rollback '+record.id);
+        const fresh=await guild.members.fetchMe({force:true});
+        if(fresh.roles.cache.has(role.id))throw new Error('Role restoration verification failed');
+        update(current=>{current.steps.find(s=>(s.roleId||s.id)===step.roleId).recoveryPhase='restored';});
+        continue;
+      }
       const channel=await guild.channels.fetch(step.channelId,{force:true});
       const bot=await guild.members.fetchMe({force:true});
       const ow=channel?.permissionOverwrites?.cache?.get(bot.id);
