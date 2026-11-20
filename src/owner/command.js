@@ -1204,6 +1204,50 @@ function aiSelectRow(guild, kind, page) {
   return new ActionRowBuilder().addComponents(select);
 }
 
+// Dedicated installation baseline; intentionally excludes Administrator.
+// Module-specific requirements will extend this baseline as module contracts are registered.
+const AI_GOLIATH_BASELINE = Object.freeze(['ViewChannel','SendMessages','ReadMessageHistory','EmbedLinks','AttachFiles','AddReactions','ManageRoles','ManageChannels','ManageGuild','ManageMessages','ManageThreads','KickMembers','BanMembers','ModerateMembers','ViewAuditLog']);
+const AI_GOLIATH_TEXT = Object.freeze(['ViewChannel','SendMessages','ReadMessageHistory','EmbedLinks','AttachFiles','AddReactions']);
+function aiGoliathDeploymentScan(guild) {
+  const bot = guild.members.me;
+  if (!bot) throw new Error('Bot membership unavailable');
+  const assigned = [...bot.roles.cache.values()].filter(role => role.id !== guild.id);
+  const missing = AI_GOLIATH_BASELINE.filter(permission => !bot.permissions.has(permission));
+  const candidates = [...guild.roles.cache.values()].filter(role => !role.managed && role.id !== guild.id && bot.roles.highest.comparePositionTo(role) > 0);
+  const targets = [...guild.channels.cache.values()].filter(channel => channel.permissionOverwrites?.cache && typeof channel.permissionsFor === 'function');
+  const gaps = targets.map(channel => {
+    const effective = channel.permissionsFor(bot);
+    const required = [2,13].includes(channel.type) ? ['ViewChannel','Connect','Speak'] :
+      channel.type === 4 ? ['ViewChannel'] : AI_GOLIATH_TEXT;
+    return { id: channel.id, category: channel.type === 4, missing: required.filter(permission => !effective?.has(permission)),
+      synced: channel.permissionsLocked === true, editable: Boolean(effective?.has('ManageRoles')) };
+  }).filter(item => item.missing.length);
+  return { assigned, missing, candidates, targets, gaps };
+}
+function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
+  const scan = aiGoliathDeploymentScan(guild);
+  const lines = [
+    '**Goliath deployment baseline — ' + action + '**',
+    '**Assigned roles:** ' + (scan.assigned.map(role => '<@&' + role.id + '>').join(', ') || 'None beyond @everyone'),
+    '**Missing guild permissions:** ' + (scan.missing.join(', ') || 'None'),
+    '**Manageable existing roles:** ' + scan.candidates.length,
+    '**Channels/categories inspected:** ' + scan.targets.length,
+    '**Access gaps:** ' + scan.gaps.length,
+    ...scan.gaps.slice(page * 10, page * 10 + 10).map(item => '<#' + item.id + '> — ' + item.missing.join(', ') + (item.synced ? ' (category synced)' : '') + (item.editable ? '' : ' (owner intervention required)')),
+    '',
+    'Recommended: assign an unhoisted operational role above managed community roles, and a separate hoisted display role. Avoid changing shared role permissions unintentionally.',
+    scan.missing.length ? 'Server owner must supply missing guild permissions before deployment.' : 'Guild baseline satisfied.',
+    'This scan is read-only. Private channel access requires explicit approval. Deployment execution is not enabled yet.'
+  ];
+  return { content: null, embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Deployment & Sync').setDescription(lines.join('\n').slice(0,3900))],
+    components: [new ActionRowBuilder().addComponents(
+      navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Deployment Scan',ButtonStyle.Primary),
+      navigationButton(contextualOwnerId('ai-sync-scan',guild.id),'Sync Scan',ButtonStyle.Primary),
+      navigationButton(contextualOwnerId('ai-home',guild.id),'Back',ButtonStyle.Secondary)),
+      new ActionRowBuilder().addComponents(
+        navigationButton(contextualOwnerId('ai-deploy-page-' + Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
+        navigationButton(contextualOwnerId('ai-deploy-page-' + (page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=scan.gaps.length))] };
+}
 function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = null, page = 0) {
   const guildId = validGuildId(guild?.id) || interactionGuildId(interaction);
   const roles = guild?.roles?.cache;
@@ -1302,7 +1346,8 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
   const rows = [controls];
   if (guild && mode() === 'DEV') rows.push(new ActionRowBuilder().addComponents(
     navigationButton(contextualOwnerId('ai-reconcile', guild.id), 'Reconcile Pending', ButtonStyle.Secondary),
-    navigationButton(contextualOwnerId('ai-audit', guild.id), 'Permission Audit', ButtonStyle.Primary)
+    navigationButton(contextualOwnerId('ai-audit', guild.id), 'Permission Audit', ButtonStyle.Primary),
+    navigationButton(contextualOwnerId('ai-deploy-scan', guild.id), 'Goliath Deploy / Sync', ButtonStyle.Primary)
   ));
   if (guild && detail === 'audit') {
     const roleSelector = aiSelectRow(guild, 'role', 0);
@@ -1373,6 +1418,7 @@ async function handleOwnerAI(interaction, action, guildId, selectedId = null, pa
       });
     }
   }
+  if (guild && ['ai-deploy-scan','ai-sync-scan'].includes(action)) return interaction.editReply(aiGoliathDeploymentPayload(interaction,guild,action === 'ai-sync-scan' ? 'Sync' : 'Deploy',page));
   const detail = action === 'ai-audit' ? 'audit' : action === 'ai-scan' ? 'bot' : action === 'ai-templates' ? 'templates' :
     action === 'ai-roles' ? 'role' : action === 'ai-channels' ? 'channel' : action;
   await interaction.editReply(aiPanelPayload(interaction, guild, detail, selectedId, page));
@@ -1551,6 +1597,10 @@ async function handleOwnerPanelInteraction(interaction) {
     const template = String(interaction.values?.[0] || '');
     if (!Object.hasOwn(AI_ROLE_TEMPLATES, template)) return true;
     await handleOwnerAI(interaction, 'channel-plan', contextGuildId, { channelId: match[1], roleId: match[2], template });
+    return true;
+  }
+  if (id === 'ownerpanel:ai-deploy-scan' || id === 'ownerpanel:ai-sync-scan' || /^ownerpanel:ai-deploy-page-\d+$/.test(id)) {
+    await handleOwnerAI(interaction, id === 'ownerpanel:ai-sync-scan' ? 'ai-sync-scan' : 'ai-deploy-scan', contextGuildId, null, Number(id.match(/page-(\d+)$/)?.[1] || 0));
     return true;
   }
   if (id.startsWith(`${OWNER_PREFIX}ai-custom-role:`)) {
