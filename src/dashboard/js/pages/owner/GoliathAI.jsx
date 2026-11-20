@@ -787,6 +787,7 @@ export default function GoliathAI({ theme }) {
         <p>Channels and categories: {deployment.channelCount} · Permission gaps: {deployment.gaps.length}</p>
         <p>Active groups: {deployment.profile.groups.join(', ')}</p>
         <p>Missing server permissions: {deployment.missing.join(', ')||'None'}</p>
+        {deployment.optionalPermissions?.length>0&&<details><summary>Optional feature-specific permissions</summary><ul>{deployment.optionalPermissions.map(item=><li key={item.permission}>{item.permission} ({item.modules.join(', ')}): {item.guidance}</li>)}</ul></details>}
         <p>Assigned roles: {deployment.assigned.map(role=>role.name).join(', ')||'None'}</p>
         <p>Manageable roles: {deployment.candidates.length}</p>
         <details>
