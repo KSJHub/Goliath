@@ -1227,6 +1227,14 @@ function aiGoliathGuildProfile(guildId){
 function aiGoliathInvitePermissions(guildId){
   return new PermissionsBitField(guildId?aiGoliathGuildProfile(guildId).permissions:AI_GOLIATH_BASELINE).bitfield.toString();
 }
+function aiGoliathChannelRequirements(channel,profile){
+  const required=[2,13].includes(channel.type)?['ViewChannel','Connect',...(channel.type===2?['Speak']:[])]:
+    channel.type===4?['ViewChannel','ManageChannels']:AI_GOLIATH_TEXT;
+  return required.filter(permission=>profile.permissions.includes(permission));
+}
+function aiGoliathInheritedChildren(guild,categoryId){
+  return [...guild.channels.cache.values()].filter(channel=>channel.parentId===categoryId&&channel.permissionsLocked===true).sort((a,b)=>a.id.localeCompare(b.id));
+}
 function aiGoliathDeploymentScan(guild) {
   const bot = guild.members.me;
   if (!bot) throw new Error('Bot membership unavailable');
@@ -1237,8 +1245,7 @@ function aiGoliathDeploymentScan(guild) {
   const targets = [...guild.channels.cache.values()].filter(channel => channel.permissionOverwrites?.cache && typeof channel.permissionsFor === 'function');
   const gaps = targets.map(channel => {
     const effective = channel.permissionsFor(bot);
-    const required = [2,13].includes(channel.type) ? ['ViewChannel','Connect','Speak'] :
-      channel.type === 4 ? ['ViewChannel','ManageChannels'] : AI_GOLIATH_TEXT;
+    const required = [...new Set([...aiGoliathChannelRequirements(channel,profile),...(channel.type===4?aiGoliathInheritedChildren(guild,channel.id).flatMap(child=>aiGoliathChannelRequirements(child,profile)):[])])];
     return { id: channel.id, category: channel.type === 4, missing: required.filter(permission => !effective?.has(permission)),
       synced: channel.permissionsLocked === true, editable: Boolean(effective?.has('ManageRoles')) };
   }).filter(item => item.missing.length);
@@ -1511,7 +1518,8 @@ function aiGoliathRolePlan(interaction,guild) {
       if (bot.roles.highest.comparePositionTo(role)<=0) blockers.push('Owner must assign '+role.name+' manually.');
       // Assigning a role can escalate the bot; only propose roles within its current permissions.
       if (!bot.permissions.has(role.permissions.bitfield)) blockers.push('Owner must assign '+role.name+' because it contains permissions Goliath lacks.');
-      steps.push({kind,action:'assign',id:role.id,name:role.name});
+      if(role.permissions.has('Administrator',false))blockers.push('Administrator roles are not supported by this template.');
+      steps.push({kind,action:'assign',id:role.id,name:role.name,expectedPermissions:String(role.permissions.bitfield),expectedHoist:role.hoist,expectedPosition:role.position});
     }
     if (kind==='operational' && role.hoist) blockers.push('Operational role is displayed separately; review role settings manually.');
     if (kind==='display' && !role.hoist) blockers.push('Display role is not hoisted; review role settings manually.');
@@ -1631,7 +1639,7 @@ function aiDeploySyncPlan(guild) {
     const overwrite=channel.permissionOverwrites.cache.get(bot.id);
     const before={exists:Boolean(overwrite),allow:String(overwrite?.allow?.bitfield||0n),deny:String(overwrite?.deny?.bitfield||0n)};
     const after={allow:new PermissionsBitField(BigInt(before.allow)).add(...gap.missing).bitfield.toString(),deny:new PermissionsBitField(BigInt(before.deny)).remove(...gap.missing).bitfield.toString()};
-    steps.push({action:'member-overwrite',channelId:channel.id,memberId:bot.id,grants:gap.missing,before,after});
+    steps.push({action:'member-overwrite',channelId:channel.id,memberId:bot.id,grants:gap.missing,before,after,inheritedChildren:gap.category?aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id):[]});
   }
   return {steps,blocked};
 }
@@ -1655,8 +1663,10 @@ async function aiDeployApplySync(interaction,guildId,token){
   try{
     for(let index=0;index<plan.steps.length;index++){
       const step=plan.steps[index];
+      await guild.channels.fetch();
       const channel=await guild.channels.fetch(step.channelId,{force:true});
       const bot=await guild.members.fetchMe({force:true});
+      if(JSON.stringify(channel?.type===4?aiGoliathInheritedChildren(guild,channel.id).map(child=>child.id):[])!==JSON.stringify(step.inheritedChildren))throw new Error('Category inheritance changed');
       const ow=channel?.permissionOverwrites?.cache?.get(bot.id);
       const before={exists:Boolean(ow),allow:String(ow?.allow?.bitfield||0n),deny:String(ow?.deny?.bitfield||0n)};
       if(!channel||bot.id!==step.memberId||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles')||!step.grants.every(p=>bot.permissions.has(p))||JSON.stringify(before)!==JSON.stringify(step.before)) throw new Error('Channel prerequisites changed');
@@ -1683,7 +1693,7 @@ function aiDeploySyncPreview(interaction,guild,page=0){
   return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath • Bulk Sync Preview').setDescription([
     'Grant access to Goliath alone, including private channels listed here. Other member and role overwrites are retained.',
     '**Proposed changes:** '+plan.steps.length,'**Skipped (inherited or blocked):** '+plan.blocked.length,
-    ...plan.steps.slice(page*10,page*10+10).map(step=>'<#'+step.channelId+'> — '+step.grants.join(', ')),
+    ...plan.steps.slice(page*10,page*10+10).map(step=>'<#'+step.channelId+'> — '+step.grants.join(', ')+(step.inheritedChildren.length?' (also affects '+step.inheritedChildren.length+' synced children)':'')),
     'Inspect all pages before confirming. Synced children are not edited separately. Confirmation grants Goliath access to listed private channels as well.'
   ].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(
     navigationButton(contextualOwnerId('ai-sync-apply-'+token,guild.id),'Confirm Bulk Sync',ButtonStyle.Danger,!plan.steps.length),
