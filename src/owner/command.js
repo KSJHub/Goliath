@@ -1224,6 +1224,43 @@ function aiGoliathDeploymentScan(guild) {
   }).filter(item => item.missing.length);
   return { assigned, missing, candidates, targets, gaps };
 }
+const aiGoliathRoleDrafts = new Map();
+function aiGoliathRoleDraft(interaction, guild) {
+  const key = interaction.user.id + ':' + guild.id;
+  let draft = aiGoliathRoleDrafts.get(key);
+  if (!draft || draft.expiresAt < Date.now()) {
+    draft = { operational: null, display: null, expiresAt: Date.now() + 600000 };
+    aiGoliathRoleDrafts.set(key, draft);
+  }
+  return draft;
+}
+function aiGoliathRolePayload(interaction, guild, page = 0) {
+  const draft = aiGoliathRoleDraft(interaction, guild);
+  const scan = aiGoliathDeploymentScan(guild);
+  const candidates = scan.candidates.sort((a,b) => b.position-a.position);
+  page = Math.max(0,Math.min(page,Math.ceil(candidates.length/24)-1));
+  const options = candidates.slice(page*24,page*24+24).map(role => ({
+    label: role.name.slice(0,100), value: role.id,
+    description: (guild.members.me.roles.cache.has(role.id) ? 'Assigned to Goliath' : 'Not assigned') + (role.hoist ? ' • Displayed separately' : '')
+  }));
+  const rows = [];
+  for (const kind of ['operational','display']) {
+    const select = new StringSelectMenuBuilder().setCustomId(contextualOwnerId('ai-deploy-role-'+kind,guild.id))
+      .setPlaceholder('Select '+kind+' role').addOptions([{label:'Recommend creating a dedicated role',value:'create'},...options]);
+    rows.push(new ActionRowBuilder().addComponents(select));
+  }
+  rows.push(new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-deploy-roles-page-'+Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
+    navigationButton(contextualOwnerId('ai-deploy-roles-page-'+(page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*24>=candidates.length),
+    navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary)));
+  const describe = value => value === 'create' ? 'Create dedicated role (proposed)' : value ? '<@&'+value+'>' : 'Not selected';
+  return {content:null,embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Configure Roles').setDescription([
+    '**Operational role:** '+describe(draft.operational),'**Display role:** '+describe(draft.display),
+    'Choose separate roles. Operational roles should not be hoisted; display roles should be hoisted. Existing shared roles are not modified by this selection.',
+    'Only unmanaged roles below Goliath are selectable. Higher roles require manual owner assignment.',
+    'Selections are temporary previews; no roles are created or assigned yet.'
+  ].join('\n'))],components:rows};
+}
 function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
   const scan = aiGoliathDeploymentScan(guild);
   const lines = [
@@ -1243,6 +1280,7 @@ function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
     components: [new ActionRowBuilder().addComponents(
       navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Deployment Scan',ButtonStyle.Primary),
       navigationButton(contextualOwnerId('ai-sync-scan',guild.id),'Sync Scan',ButtonStyle.Primary),
+      navigationButton(contextualOwnerId('ai-deploy-roles',guild.id),'Configure Roles',ButtonStyle.Secondary),
       navigationButton(contextualOwnerId('ai-home',guild.id),'Back',ButtonStyle.Secondary)),
       new ActionRowBuilder().addComponents(
         navigationButton(contextualOwnerId('ai-deploy-page-' + Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
@@ -1418,6 +1456,7 @@ async function handleOwnerAI(interaction, action, guildId, selectedId = null, pa
       });
     }
   }
+  if (guild && action === 'ai-deploy-roles') return interaction.editReply(aiGoliathRolePayload(interaction,guild,page));
   if (guild && ['ai-deploy-scan','ai-sync-scan'].includes(action)) return interaction.editReply(aiGoliathDeploymentPayload(interaction,guild,action === 'ai-sync-scan' ? 'Sync' : 'Deploy',page));
   const detail = action === 'ai-audit' ? 'audit' : action === 'ai-scan' ? 'bot' : action === 'ai-templates' ? 'templates' :
     action === 'ai-roles' ? 'role' : action === 'ai-channels' ? 'channel' : action;
@@ -1598,6 +1637,23 @@ async function handleOwnerPanelInteraction(interaction) {
     if (!Object.hasOwn(AI_ROLE_TEMPLATES, template)) return true;
     await handleOwnerAI(interaction, 'channel-plan', contextGuildId, { channelId: match[1], roleId: match[2], template });
     return true;
+  }
+  if (id === 'ownerpanel:ai-deploy-roles' || /^ownerpanel:ai-deploy-roles-page-\d+$/.test(id)) {
+    await handleOwnerAI(interaction,'ai-deploy-roles',contextGuildId,null,Number(id.match(/page-(\d+)$/)?.[1] || 0));
+    return true;
+  }
+  if (/^ownerpanel:ai-deploy-role-(operational|display)$/.test(id)) {
+    await interaction.deferUpdate();
+    const {guild} = await resolveInteractionGuild(interaction,contextGuildId);
+    if (mode() !== 'DEV' || !guild || guild.id !== contextGuildId || !interaction.isStringSelectMenu?.()) return interaction.editReply({content:'Invalid guild or role selection.',embeds:[],components:[]});
+    await Promise.all([guild.roles.fetch(),guild.members.fetchMe({force:true})]);
+    const value = interaction.values[0];
+    const kind = id.endsWith('operational') ? 'operational' : 'display';
+    const draft = aiGoliathRoleDraft(interaction,guild);
+    const other = kind === 'operational' ? 'display' : 'operational';
+    if ((value !== 'create' && !aiGoliathDeploymentScan(guild).candidates.some(role => role.id === value)) || (value !== 'create' && draft[other] === value)) return interaction.editReply({...aiGoliathRolePayload(interaction,guild),content:'Choose a distinct manageable role.'});
+    draft[kind] = value;
+    return interaction.editReply(aiGoliathRolePayload(interaction,guild));
   }
   if (id === 'ownerpanel:ai-deploy-scan' || id === 'ownerpanel:ai-sync-scan' || /^ownerpanel:ai-deploy-page-\d+$/.test(id)) {
     await handleOwnerAI(interaction, id === 'ownerpanel:ai-sync-scan' ? 'ai-sync-scan' : 'ai-deploy-scan', contextGuildId, null, Number(id.match(/page-(\d+)$/)?.[1] || 0));
