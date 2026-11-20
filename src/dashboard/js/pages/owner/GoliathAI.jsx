@@ -44,6 +44,20 @@ export default function GoliathAI({ theme }) {
   const [personalGuildsStatus, setPersonalGuildsStatus] = useState('loading');
   const [guildFilter, setGuildFilter] = useState('all');
   const [selectedGuild, setSelectedGuild] = useState('');
+  const [deployment,setDeployment]=useState(null);
+  const [deploymentBusy,setDeploymentBusy]=useState(false);
+  const [deploymentError,setDeploymentError]=useState('');
+  async function scanDeployment(){
+    const target=selectedGuild;
+    if(!target.startsWith('DEV:'))return;
+    setDeploymentBusy(true);setDeployment(null);setDeploymentError('');
+    try{
+      const report=await api.request('/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4)));
+      setDeployment(report);
+    }catch(error){setDeploymentError(error?.message||'Deployment scan failed.');}
+    finally{setDeploymentBusy(false);}
+  }
+
   const [environments, setEnvironments] = useState([]);
   const [audit, setAudit] = useState(null);
   const [auditing, setAuditing] = useState(false);
@@ -714,6 +728,22 @@ export default function GoliathAI({ theme }) {
           </div>))}
     </details>
 
+    {selectedGuild.startsWith('DEV:') && <section style={panel}>
+      <h2>Goliath Deployment Centre</h2>
+      <p>Scan the selected DEV guild using the same permission template as Discord. Changes require separate approval in /owner.</p>
+      <button type="button" disabled={deploymentBusy} onClick={scanDeployment}>{deploymentBusy?'Scanning…':'Scan deployment permissions'}</button>
+      {deploymentError && <p role="alert">{deploymentError}</p>}
+      {deployment && selectedGuild==='DEV:'+deployment.guildId && <div>
+        <p>Channels and categories: {deployment.channelCount} · Permission gaps: {deployment.gaps.length}</p>
+        <p>Active groups: {deployment.profile.groups.join(', ')}</p>
+        <p>Missing server permissions: {deployment.missing.join(', ')||'None'}</p>
+        <p>Assigned roles: {deployment.assigned.map(role=>role.name).join(', ')||'None'}</p>
+        <p>Manageable roles: {deployment.candidates.length}</p>
+        <ul>{deployment.gaps.slice(0,50).map(gap=><li key={gap.id}>{gap.id}: {gap.missing.join(', ')} {gap.synced?'(category synced)':''} {!gap.editable?'(owner intervention needed)':''}</li>)}</ul>
+        {deployment.gaps.length>50 && <p>Showing first 50 gaps.</p>}
+        <a href={deployment.inviteUrl} target="_blank" rel="noopener noreferrer">Update DEV guild authorisation</a>
+      </div>}
+    </section>}
     <section style={panel}>
       <h2 style={{ marginTop: 0, fontSize: 20 }}>Discord Server Audit</h2>
       <p style={{ color: theme?.mutedText || '#94a3b8' }}>Read-only inventory of roles, categories, channels and permission overwrites. Available before AI chat is enabled. Connected servers across DEV, BETA and PRODUCTION can be inspected once the read-only service is deliberately deployed to each environment.</p>
