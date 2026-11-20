@@ -1165,7 +1165,7 @@ function aiPermissionDetails(guild, kind, id) {
   }
   const channel = guild.channels.cache.get(id);
   if (!channel) return ['Channel not found. Refresh the scan.'];
-  const entries = [...channel.permissionOverwrites.cache.values()];
+  const entries = [...(channel.permissionOverwrites?.cache?.values() || [])];
   const lines = [
     '**Channel:** <#' + channel.id + '> (ID: ' + channel.id + ')',
     '**Category:** ' + (channel.parent ? channel.parent.name : 'None'),
@@ -1333,7 +1333,17 @@ async function handleOwnerAI(interaction, action, guildId, selectedId = null, pa
   const resolved = await resolveInteractionGuild(interaction, guildId);
   const guild = resolved.guild;
   if (guild) {
-    await Promise.all([guild.roles.fetch(), guild.channels.fetch(), guild.members.fetchMe()]).catch(() => null);
+    const refreshed = await Promise.allSettled([guild.roles.fetch(), guild.channels.fetch(), guild.members.fetchMe({ force: true })]);
+    const unavailable = ['roles', 'channels', 'bot permissions'].filter((label, index) => refreshed[index].status !== 'fulfilled' || !refreshed[index].value);
+    if (unavailable.length) {
+      return interaction.editReply({
+        content: 'Permission scan incomplete: unable to refresh ' + unavailable.join(', ') + '. No changes made.',
+        embeds: [], components: [new ActionRowBuilder().addComponents(
+          navigationButton(contextualOwnerId('ai-home', guildId), 'Retry Permission Architect', ButtonStyle.Primary),
+          navigationButton(contextualOwnerId('home', guildId), 'Back', ButtonStyle.Secondary)
+        )]
+      });
+    }
   }
   const detail = action === 'ai-audit' ? 'audit' : action === 'ai-scan' ? 'bot' : action === 'ai-templates' ? 'templates' :
     action === 'ai-roles' ? 'role' : action === 'ai-channels' ? 'channel' : action;
