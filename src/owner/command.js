@@ -2288,6 +2288,14 @@ module.exports = {
 
   wireClient,
   handleOwnerPanelInteraction,
+  async prepareDashboardSync(guild,ownerId){
+    if(mode()!=='DEV'||!validGuildId(ownerId)||!guild)throw new Error('DEV owner context required');
+    await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
+    if(aiDeployJournalRead(guild.id).some(record=>record.status==='pending'||record.status==='failed'))throw new Error('Recovery required');
+    const plan=aiDeploySyncPlan(guild);
+    return {guildId:guild.id,readOnly:true,steps:plan.steps,blocked:plan.blocked};
+  },
+
   async readDeploymentReport(guild){
     if(mode()!=='DEV'||!guild)throw new Error('DEV guild required');
     await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
