@@ -1683,6 +1683,12 @@ function aiDeploySyncPreview(interaction,guild,page=0){
     navigationButton(contextualOwnerId('ai-sync-preview-'+(page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=plan.steps.length),
     navigationButton(contextualOwnerId('ai-sync-scan',guild.id),'Back',ButtonStyle.Secondary))]};
 }
+function aiGoliathDevInviteUrl(client,guildId){
+  if(mode()!=='DEV'||!validGuildId(client?.user?.id))throw new Error('DEV bot identity unavailable');
+  const params=new URLSearchParams({client_id:client.user.id,scope:'bot applications.commands',permissions:aiGoliathInvitePermissions()});
+  if(validGuildId(guildId)){params.set('guild_id',guildId);params.set('disable_guild_select','true');}
+  return 'https://discord.com/oauth2/authorize?'+params.toString();
+}
 function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
   const scan = aiGoliathDeploymentScan(guild);
   const lines = [
@@ -1698,18 +1704,20 @@ function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
     '',
     'Recommended: assign an unhoisted operational role above managed community roles, and a separate hoisted display role. Avoid changing shared role permissions unintentionally.',
     scan.missing.length ? 'Server owner must supply missing guild permissions before deployment.' : 'Guild baseline satisfied.',
-    'This scan is read-only. Private channel access requires explicit approval. Deployment execution is not enabled yet.'
+    'This scan is read-only. Private channel access requires explicit approval. Use the separate confirmation controls to apply changes.'
   ];
   return { content: null, embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Deployment & Sync').setDescription(lines.join('\n').slice(0,3900))],
     components: [new ActionRowBuilder().addComponents(
       navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Deployment Scan',ButtonStyle.Primary),
       navigationButton(contextualOwnerId('ai-sync-scan',guild.id),'Sync Scan',ButtonStyle.Primary),
       navigationButton(contextualOwnerId('ai-deploy-roles',guild.id),'Configure Roles',ButtonStyle.Secondary),
+      navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'History',ButtonStyle.Secondary),
       navigationButton(contextualOwnerId('ai-home',guild.id),'Back',ButtonStyle.Secondary)),
       new ActionRowBuilder().addComponents(
         navigationButton(contextualOwnerId('ai-sync-preview-0',guild.id),'Preview Bulk Sync',ButtonStyle.Primary),
         navigationButton(contextualOwnerId('ai-deploy-page-' + Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
-        navigationButton(contextualOwnerId('ai-deploy-page-' + (page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=scan.gaps.length))] };
+        navigationButton(contextualOwnerId('ai-deploy-page-' + (page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=scan.gaps.length)),
+      new ActionRowBuilder().addComponents(linkButton('Invite DEV to a Server',aiGoliathDevInviteUrl(interaction.client)),linkButton('Update DEV Guild Permissions',aiGoliathDevInviteUrl(interaction.client,guild.id)))] };
 }
 function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = null, page = 0) {
   const guildId = validGuildId(guild?.id) || interactionGuildId(interaction);
