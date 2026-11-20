@@ -688,11 +688,15 @@ function aiRecoveryResolvePending(ownerId, kind, resolution, expectedSnapshot) {
 async function aiReconcilePending(interaction, guildId) {
   await interaction.deferUpdate();
   if (mode() !== 'DEV') return interaction.editReply({ content: 'DEV only.', embeds: [], components: [] });
+  const returnControls = [new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-home', guildId), 'Permission Architect', ButtonStyle.Primary),
+    navigationButton(contextualOwnerId('home', guildId), 'Back', ButtonStyle.Secondary)
+  )];
   const entries = aiRecoveryRead().filter(item => item.ownerId === interaction.user.id &&
     item.guildId === guildId && item.status === 'pending');
-  if (!entries.length) return interaction.editReply({ content: 'No pending permission transactions for this guild.', embeds: [], components: [] });
+  if (!entries.length) return interaction.editReply({ content: 'No pending permission transactions for this guild.', embeds: [], components: returnControls });
   const { guild } = await resolveInteractionGuild(interaction, guildId);
-  if (!guild) return interaction.editReply({ content: 'Guild unavailable; pending transactions retained.', embeds: [], components: [] });
+  if (!guild) return interaction.editReply({ content: 'Guild unavailable; pending transactions retained.', embeds: [], components: returnControls });
   const results = [];
   for (const item of entries) {
     try {
@@ -718,7 +722,7 @@ async function aiReconcilePending(interaction, guildId) {
     }
   }
   return interaction.editReply({ content: 'Goliath AI • DEV transaction reconciliation\n' +
-    results.join('\n'), embeds: [], components: [] });
+    results.join('\n'), embeds: [], components: returnControls });
 }
 function aiRecoveryDelete(ownerId, kind) {
   return aiRecoveryLocked(() => {
@@ -1290,7 +1294,7 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
       navigationButton(contextualOwnerId('ai-page-' + detail + '-' + (page + 1), guildId), 'Next', ButtonStyle.Secondary, (page + 1) * 25 >= total)
     ));
   }
-  return { embeds: [embed], components: rows };
+  return { content: null, embeds: [embed], components: rows };
 }
 
 async function handleOwnerAI(interaction, action, guildId, selectedId = null, page = 0) {
@@ -1477,7 +1481,7 @@ async function handleOwnerPanelInteraction(interaction) {
     return true;
   }
   if (id.startsWith(`${OWNER_PREFIX}ai-channel-template:`)) {
-    const match = id.match(/^ownerpanel:ai-channel-template:(\\d{16,25}):(\d{16,25})$/);
+    const match = id.match(/^ownerpanel:ai-channel-template:(\d{16,25}):(\d{16,25})$/);
     if (!match || !interaction.isStringSelectMenu?.()) return true;
     const template = String(interaction.values?.[0] || '');
     if (!Object.hasOwn(AI_ROLE_TEMPLATES, template)) return true;
