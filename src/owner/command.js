@@ -759,16 +759,18 @@ function aiPlanPayload(guild, plan, message) {
   );
   return { embeds: [embed], components: [row] };
 }
-async function aiStageRolePlan(interaction, guildId, roleId, templateName) {
+const AI_CUSTOM_ROLE_GRANTS = Object.freeze([...new Set(Object.values(AI_ROLE_TEMPLATES).flat())].filter(permission => permission !== 'Administrator'));
+async function aiStageRolePlan(interaction, guildId, roleId, templateName, customGrants = null) {
   if (mode() !== 'DEV') return interaction.reply({ content: 'DEV only.', flags: MessageFlags.Ephemeral });
   await interaction.deferUpdate();
   const { guild } = await resolveInteractionGuild(interaction, guildId);
   if (!guild) return interaction.editReply({ content: 'Guild unavailable.', embeds: [], components: [] });
   await Promise.all([guild.roles.fetch(), guild.members.fetchMe()]);
   const role = guild.roles.cache.get(roleId);
-  const template = AI_ROLE_TEMPLATES[templateName];
-  if (!role || !template) return interaction.editReply({ content: 'Invalid role or template.', embeds: [], components: [] });
-  const grants = template.filter(permission => !role.permissions.has(permission));
+  const template = templateName === 'custom' && Array.isArray(customGrants) && customGrants.length > 0 && customGrants.every(permission => AI_CUSTOM_ROLE_GRANTS.includes(permission))
+    ? [...new Set(customGrants)] : AI_ROLE_TEMPLATES[templateName];
+  if (!role || !Array.isArray(template)) return interaction.editReply({ content: 'Invalid role or template.', embeds: [], components: [] });
+  const grants = template.filter(permission => !role.permissions.has(permission, false));
   if (grants.includes('Administrator'))
     return interaction.editReply({ content: 'Administrator cannot be granted through AI plans.', embeds: [], components: [] });
   if (!aiRoleCanEdit(guild, role, guild.members.me, grants))
@@ -1261,6 +1263,8 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
     lines.push(...aiChannelPermissionPlan(guild, selectedId?.channelId, selectedId?.roleId, selectedId?.template));
   } else if (detail === 'channel-target') {
     lines.push('**Selected channel:** <#' + selectedId?.channelId + '>', 'Choose a role below, then select the template to preview the exact channel overwrite differences.');
+  } else if (detail === 'custom-role') {
+    lines.push('**Custom grants for:** <@&' + selectedId + '>', 'Select individual permissions below. Existing permissions are retained. Review and confirm the exact grants before applying.');
   } else if (detail === 'comparison') {
     lines.push(...aiRoleTemplateComparison(guild, selectedId?.roleId, selectedId?.template));
   } else if (detail === 'role' || detail === 'channel') {
@@ -1318,6 +1322,14 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
       navigationButton(contextualOwnerId('acs:' + selectedId.channelId + ':' + selectedId.roleId + ':' + selectedId.template, guild.id), 'Prepare Channel Plan', ButtonStyle.Primary)
     ));
   }
+  if (guild && detail === 'custom-role' && selectedId && guild.roles.cache.has(selectedId)) {
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(contextualOwnerId('ai-custom-grants:' + selectedId, guild.id))
+      .setPlaceholder('Choose individual permission grants')
+      .setMinValues(1).setMaxValues(AI_CUSTOM_ROLE_GRANTS.length)
+      .addOptions(AI_CUSTOM_ROLE_GRANTS.map(permission => ({ label: permission, value: permission })));
+    rows.push(new ActionRowBuilder().addComponents(select));
+  }
   if (guild && detail === 'comparison' && selectedId?.roleId && selectedId?.template) {
     rows.push(new ActionRowBuilder().addComponents(
       navigationButton(contextualOwnerId('ai-stage-' + selectedId.roleId + '-' + selectedId.template, guild.id), 'Prepare Grant Plan', ButtonStyle.Primary)
@@ -1325,6 +1337,8 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
   }
   if (guild && detail === 'role' && selectedId && typeof selectedId === 'string') {
     rows.push(aiTemplateSelectRow(guild.id, selectedId));
+    // Keep the five-row Discord limit by displaying custom editing on its own screen.
+    rows[1].addComponents(navigationButton(contextualOwnerId('ai-custom-role:' + selectedId, guild.id), 'Custom Grants', ButtonStyle.Primary));
   }
   if (guild && (detail === 'role' || detail === 'channel')) {
     const selector = aiSelectRow(guild, detail, page);
@@ -1537,6 +1551,17 @@ async function handleOwnerPanelInteraction(interaction) {
     const template = String(interaction.values?.[0] || '');
     if (!Object.hasOwn(AI_ROLE_TEMPLATES, template)) return true;
     await handleOwnerAI(interaction, 'channel-plan', contextGuildId, { channelId: match[1], roleId: match[2], template });
+    return true;
+  }
+  if (id.startsWith(`${OWNER_PREFIX}ai-custom-role:`)) {
+    const roleId = validGuildId(id.slice('ownerpanel:ai-custom-role:'.length));
+    if (roleId) await handleOwnerAI(interaction, 'custom-role', contextGuildId, roleId);
+    return true;
+  }
+  if (id.startsWith(`${OWNER_PREFIX}ai-custom-grants:`)) {
+    const roleId = validGuildId(id.slice('ownerpanel:ai-custom-grants:'.length));
+    if (roleId && interaction.isStringSelectMenu?.())
+      await aiStageRolePlan(interaction, contextGuildId, roleId, 'custom', interaction.values);
     return true;
   }
   if (id.startsWith(`${OWNER_PREFIX}ai-compare:`)) {
