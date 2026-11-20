@@ -1661,7 +1661,12 @@ async function aiDeployApplySync(interaction,guildId,token){
   await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
   const plan=aiDeploySyncPlan(guild);
   if(!plan.steps.length||JSON.stringify(plan.steps)!==approval.steps) return interaction.editReply({content:'Sync plan changed or empty. Prepare a fresh preview.',embeds:[],components:[]});
-  const tx=aiDeployJournalBegin(guildId,interaction.user.id,plan.steps);
+  const result=await aiExecuteApprovedSync(guild,interaction.user.id,plan);
+  return interaction.editReply({content:result.status==='verified'?'Verified '+result.changed+' overwrite changes. Remaining editable gaps: '+result.remaining+'; inherited or blocked gaps: '+result.blocked+'. Transaction '+result.transactionId:'Sync stopped; partial changes may exist. Review transaction '+result.transactionId,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+}
+async function aiExecuteApprovedSync(guild,ownerId,plan){
+  const guildId=guild.id;
+  const tx=aiDeployJournalBegin(guildId,ownerId,plan.steps);
   const update=mutate=>aiDeployJournalUpdate(guildId,records=>{
     const record=records.find(item=>item.id===tx);
     if(!record||record.status!=='pending') throw new Error('Sync journal unavailable');
@@ -1687,12 +1692,13 @@ async function aiDeployApplySync(interaction,guildId,token){
     await guild.channels.fetch();
     const remaining=aiDeploySyncPlan(guild);
     update(record=>{record.status='verified';record.completedAt=new Date().toISOString();});
-    return interaction.editReply({content:'Verified '+plan.steps.length+' overwrite changes. Remaining editable gaps: '+remaining.steps.length+'; inherited or blocked gaps: '+remaining.blocked.length+'. Transaction '+tx,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Rescan',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+    return {status:'verified',transactionId:tx,changed:plan.steps.length,remaining:remaining.steps.length,blocked:remaining.blocked.length};
   }catch(error){
     update(record=>{record.status='failed';record.error=String(error.message).slice(0,500);});
-    return interaction.editReply({content:'Sync stopped; partial changes may exist. Review transaction '+tx,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+    return {status:'failed',transactionId:tx,recoveryRequired:true};
   }
 }
+
 function aiDeploySyncPreview(interaction,guild,page=0){
   const plan=aiDeploySyncPlan(guild);
   const token=randomUUID().replace(/-/g,'').slice(0,16);
@@ -2293,7 +2299,21 @@ module.exports = {
     await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
     if(aiDeployJournalRead(guild.id).some(record=>record.status==='pending'||record.status==='failed'))throw new Error('Recovery required');
     const plan=aiDeploySyncPlan(guild);
-    return {guildId:guild.id,readOnly:true,steps:plan.steps,blocked:plan.blocked};
+    const token=randomUUID();
+    aiDeployApprovals.set('dashboard:'+ownerId+':'+guild.id,{token,kind:'sync',steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
+    return {guildId:guild.id,readOnly:true,steps:plan.steps,blocked:plan.blocked,token};
+  },
+
+  async confirmDashboardSync(guild,ownerId,token){
+    if(mode()!=='DEV'||!validGuildId(ownerId)||!guild)throw new Error('DEV owner context required');
+    const key='dashboard:'+ownerId+':'+guild.id;
+    const approval=aiDeployApprovals.get(key);
+    if(!approval||approval.token!==token||approval.expiresAt<Date.now())throw new Error('Approval expired');
+    aiDeployApprovals.delete(key);
+    await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
+    const plan=aiDeploySyncPlan(guild);
+    if(!plan.steps.length||JSON.stringify(plan.steps)!==approval.steps)throw new Error('Plan changed or empty');
+    return aiExecuteApprovedSync(guild,ownerId,plan);
   },
 
   async readDeploymentReport(guild){
