@@ -414,6 +414,15 @@ router.get('/capabilities/local/:guildId', requireLocalInternal, async (req, res
   } catch { return res.status(503).json({ error: 'Cannot inspect bot permissions.' }); }
 });
 
+router.post('/deployment/:guildId/sync/confirm', requirePrivateAI, async (req,res)=>{
+  if(localMode()!=='DEV')return res.status(403).json({error:'DEV only.'});
+  if(!SNOWFLAKE.test(req.params.guildId))return res.status(400).json({error:'Invalid guild ID.'});
+  const guild=req.client?.guilds?.cache?.get(req.params.guildId);
+  if(!guild)return res.status(404).json({error:'Guild not connected to DEV.'});
+  if(req.body?.confirm!==true||typeof req.body.token!=='string')return res.status(400).json({error:'Explicit confirmation required.'});
+  try{return res.json(await require('../command').confirmDashboardSync(guild,String(req.session.user.id),req.body.token));}
+  catch(error){console.error('[Deployment sync confirm]',error?.message);return res.status(409).json({error:'Sync could not complete. Refresh the scan and inspect recovery before retrying.'});}
+});
 router.post('/deployment/:guildId/sync/preview', requirePrivateAI, async (req,res)=>{
   if(localMode()!=='DEV')return res.status(403).json({error:'DEV only.'});
   if(!SNOWFLAKE.test(req.params.guildId))return res.status(400).json({error:'Invalid guild ID.'});
