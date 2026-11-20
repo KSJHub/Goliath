@@ -1224,6 +1224,52 @@ function aiGoliathDeploymentScan(guild) {
   }).filter(item => item.missing.length);
   return { assigned, missing, candidates, targets, gaps };
 }
+// Separate per-guild write-ahead deployment history. Never overwrite unresolved work.
+function aiDeployJournalFile(guildId) {
+  if (mode() !== 'DEV' || !validGuildId(guildId)) throw new Error('Invalid DEV deployment guild');
+  return path.join(getRuntimePaths('DEV').data,'goliath-deployment-'+guildId+'.json');
+}
+function aiDeployJournalRead(guildId) {
+  const file=aiDeployJournalFile(guildId);
+  if (!fs.existsSync(file)) return [];
+  if (fs.statSync(file).size>4194304) throw new Error('Deployment journal size limit');
+  const records=JSON.parse(fs.readFileSync(file,'utf8'));
+  if (!Array.isArray(records) || records.length>100 || records.some(record=>!record || record.guildId!==guildId || !validGuildId(record.ownerId) || typeof record.id!=='string' || !['pending','verified','failed'].includes(record.status) || !Array.isArray(record.steps))) throw new Error('Invalid deployment journal');
+  return records;
+}
+function aiDeployJournalUpdate(guildId,mutate) {
+  const file=aiDeployJournalFile(guildId);
+  fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});
+  const lock=file+'.lock';
+  fs.mkdirSync(lock,{mode:0o700});
+  const tmp=file+'.'+randomUUID()+'.tmp';
+  try {
+    const records=aiDeployJournalRead(guildId);
+    const result=mutate(records);
+    const raw=JSON.stringify(records);
+    if(records.length>100 || Buffer.byteLength(raw)>4194304) throw new Error('Deployment journal capacity reached; archive verified history before continuing');
+    const fd=fs.openSync(tmp,'wx',0o600);
+    try { fs.writeFileSync(fd,raw,'utf8'); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    fs.renameSync(tmp,file);
+    const dir=fs.openSync(path.dirname(file),'r');
+    try {fs.fsyncSync(dir);} finally {fs.closeSync(dir);}
+    return result;
+  } finally {try {if(fs.existsSync(tmp)) fs.unlinkSync(tmp);} finally {fs.rmdirSync(lock);}}
+}
+function aiDeployJournalBegin(guildId,ownerId,steps) {
+  if(!validGuildId(ownerId)||!Array.isArray(steps)||!steps.length) throw new Error('Invalid deployment operation');
+  return aiDeployJournalUpdate(guildId,records=>{
+    if(records.some(record=>record.status!=='verified')) throw new Error('Previous deployment requires reconciliation');
+    const id=randomUUID();
+    records.push({id,guildId,ownerId,status:'pending',createdAt:new Date().toISOString(),steps:JSON.parse(JSON.stringify(steps))});
+    return id;
+  });
+}
+function aiDeployJournalHistoryPayload(guild) {
+  const history=aiDeployJournalRead(guild.id);
+  const lines=history.slice(-10).reverse().map(record=>record.status.toUpperCase()+' • '+record.createdAt+' • '+record.steps.length+' steps • '+record.id);
+  return {content:null,embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Deployment History').setDescription((lines.join('\n')||'No deployment transactions recorded yet.')+'\n\nUnresolved transactions block new deployments. Execution and recovery controls are still under development.')],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary))]};
+}
 const aiGoliathRoleDrafts = new Map();
 function aiGoliathRoleDraft(interaction, guild) {
   const key = interaction.user.id + ':' + guild.id;
@@ -1273,6 +1319,7 @@ function aiGoliathRolePlanPayload(interaction,guild) {
     'Existing shared role permissions will not be modified. This is a preview only; execution and durable bulk recovery are not enabled.'
   ].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(
     navigationButton(contextualOwnerId('ai-deploy-roles',guild.id),'Configure Roles',ButtonStyle.Secondary),
+      navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'History',ButtonStyle.Secondary),
     navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary))]};
 }
 function aiGoliathRolePayload(interaction, guild, page = 0) {
@@ -1498,6 +1545,7 @@ async function handleOwnerAI(interaction, action, guildId, selectedId = null, pa
       });
     }
   }
+  if (guild && action === 'ai-deploy-history') return interaction.editReply(aiDeployJournalHistoryPayload(guild));
   if (guild && action === 'ai-deploy-preview') return interaction.editReply(aiGoliathRolePlanPayload(interaction,guild));
   if (guild && action === 'ai-deploy-roles') return interaction.editReply(aiGoliathRolePayload(interaction,guild,page));
   if (guild && ['ai-deploy-scan','ai-sync-scan'].includes(action)) return interaction.editReply(aiGoliathDeploymentPayload(interaction,guild,action === 'ai-sync-scan' ? 'Sync' : 'Deploy',page));
@@ -1679,6 +1727,10 @@ async function handleOwnerPanelInteraction(interaction) {
     const template = String(interaction.values?.[0] || '');
     if (!Object.hasOwn(AI_ROLE_TEMPLATES, template)) return true;
     await handleOwnerAI(interaction, 'channel-plan', contextGuildId, { channelId: match[1], roleId: match[2], template });
+    return true;
+  }
+  if (id === 'ownerpanel:ai-deploy-history') {
+    await handleOwnerAI(interaction,'ai-deploy-history',contextGuildId);
     return true;
   }
   if (id === 'ownerpanel:ai-deploy-preview') {
