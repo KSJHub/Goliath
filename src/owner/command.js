@@ -1568,6 +1568,21 @@ async function aiExecuteApprovedRoles(guild,ownerId,plan,selected){
         update(record=>{record.steps[index].phase='creating';});
         role=await guild.roles.create({name:step.name,hoist:step.hoist,permissions:step.permissions,reason:'Goliath DEV deployment '+tx});
         update(record=>{record.steps[index].createdRoleId=role.id;record.steps[index].phase='created';});
+        if(step.kind==='operational'){
+          // Position only this newly created dedicated role, never an existing shared role.
+          await guild.roles.fetch();
+          const currentBot=await guild.members.fetchMe({force:true});
+          const ceiling=currentBot.roles.highest.position;
+          if(ceiling>1&&role.position<ceiling-1){
+            update(record=>{record.steps[index].phase='positioning';});
+            role=await role.setPosition(ceiling-1,{reason:'Goliath DEV deployment '+tx});
+            await guild.roles.fetch();
+            role=await guild.roles.fetch(role.id,{force:true});
+            const freshBot=await guild.members.fetchMe({force:true});
+            if(!role||freshBot.roles.highest.comparePositionTo(role)<=0)throw new Error('Operational role hierarchy verification failed');
+            update(record=>{record.steps[index].phase='created';record.steps[index].verifiedPosition=role.position;});
+          }
+        }
       }else {
         role=await guild.roles.fetch(step.id,{force:true});
         if(!role||String(role.permissions.bitfield)!==step.expectedPermissions||role.hoist!==step.expectedHoist||role.position!==step.expectedPosition||role.name!==step.name)throw new Error('Approved role changed');
@@ -2364,6 +2379,7 @@ module.exports = {
       assigned:scan.assigned.map(role=>({id:role.id,name:role.name,hoist:role.hoist})),
       candidates:scan.candidates.map(role=>({id:role.id,name:role.name,hoist:role.hoist})),
       missing:scan.missing,channelCount:scan.targets.length,gaps:scan.gaps,
+      hierarchy:{highestBotRole:guild.members.me.roles.highest.name,highestBotPosition:guild.members.me.roles.highest.position,ownerPlacementRequired:true},
       inviteUrl:aiGoliathDevInviteUrl(guild.client,guild.id)};
   },
 
