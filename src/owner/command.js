@@ -1314,7 +1314,7 @@ async function aiDeployApplyRoles(interaction,guildId,token) {
   await interaction.deferUpdate();
   const key=interaction.user.id+':'+guildId;
   const approval=aiDeployApprovals.get(key);
-  if(mode()!=='DEV'||!approval||approval.token!==token||approval.expiresAt<Date.now()) return interaction.editReply({content:'Approval expired. Prepare a new preview.',embeds:[],components:[]});
+  if(mode()!=='DEV'||!approval||approval.kind==='sync'||approval.token!==token||approval.expiresAt<Date.now()) return interaction.editReply({content:'Approval expired. Prepare a new preview.',embeds:[],components:[]});
   aiDeployApprovals.delete(key);
   const {guild}=await resolveInteractionGuild(interaction,guildId);
   if(!guild||guild.id!==guildId) throw new Error('Guild mismatch');
@@ -1415,6 +1415,47 @@ function aiDeploySyncPlan(guild) {
   }
   return {steps,blocked};
 }
+async function aiDeployApplySync(interaction,guildId,token){
+  await interaction.deferUpdate();
+  const key=interaction.user.id+':'+guildId;
+  const approval=aiDeployApprovals.get(key);
+  if(mode()!=='DEV'||approval?.kind!=='sync'||approval.token!==token||approval.expiresAt<Date.now()) return interaction.editReply({content:'Sync approval expired. Prepare a new preview.',embeds:[],components:[]});
+  aiDeployApprovals.delete(key);
+  const {guild}=await resolveInteractionGuild(interaction,guildId);
+  if(!guild||guild.id!==guildId) throw new Error('Guild mismatch');
+  await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
+  const plan=aiDeploySyncPlan(guild);
+  if(!plan.steps.length||JSON.stringify(plan.steps)!==approval.steps) return interaction.editReply({content:'Sync plan changed or empty. Prepare a fresh preview.',embeds:[],components:[]});
+  const tx=aiDeployJournalBegin(guildId,interaction.user.id,plan.steps);
+  const update=mutate=>aiDeployJournalUpdate(guildId,records=>{
+    const record=records.find(item=>item.id===tx);
+    if(!record||record.status!=='pending') throw new Error('Sync journal unavailable');
+    mutate(record);
+  });
+  try{
+    for(let index=0;index<plan.steps.length;index++){
+      const step=plan.steps[index];
+      const channel=await guild.channels.fetch(step.channelId,{force:true});
+      const bot=await guild.members.fetchMe({force:true});
+      const ow=channel?.permissionOverwrites?.cache?.get(bot.id);
+      const before={exists:Boolean(ow),allow:String(ow?.allow?.bitfield||0n),deny:String(ow?.deny?.bitfield||0n)};
+      if(!channel||bot.id!==step.memberId||channel.permissionsLocked===true||!channel.permissionsFor(bot)?.has('ManageRoles')||!step.grants.every(p=>bot.permissions.has(p))||JSON.stringify(before)!==JSON.stringify(step.before)) throw new Error('Channel prerequisites changed');
+      update(record=>{record.steps[index].phase='applying';});
+      await channel.permissionOverwrites.edit(bot,Object.fromEntries(step.grants.map(p=>[p,true])),{reason:'Goliath DEV sync '+tx});
+      const verified=await guild.channels.fetch(channel.id,{force:true});
+      const actual=verified?.permissionOverwrites?.cache?.get(bot.id);
+      if(!actual||String(actual.allow.bitfield)!==step.after.allow||String(actual.deny.bitfield)!==step.after.deny||!step.grants.every(p=>verified.permissionsFor(bot)?.has(p))) throw new Error('Overwrite verification failed');
+      update(record=>{record.steps[index].phase='verified';});
+    }
+    await guild.channels.fetch();
+    const remaining=aiDeploySyncPlan(guild);
+    update(record=>{record.status='verified';record.completedAt=new Date().toISOString();});
+    return interaction.editReply({content:'Verified '+plan.steps.length+' overwrite changes. Remaining editable gaps: '+remaining.steps.length+'; inherited or blocked gaps: '+remaining.blocked.length+'. Transaction '+tx,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Rescan',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+  }catch(error){
+    update(record=>{record.status='failed';record.error=String(error.message).slice(0,500);});
+    return interaction.editReply({content:'Sync stopped; partial changes may exist. Review transaction '+tx,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+  }
+}
 function aiDeploySyncPreview(interaction,guild,page=0){
   const plan=aiDeploySyncPlan(guild);
   const token=randomUUID().replace(/-/g,'').slice(0,16);
@@ -1423,8 +1464,9 @@ function aiDeploySyncPreview(interaction,guild,page=0){
     'Grant access to Goliath alone, including private channels listed here. Other member and role overwrites are retained.',
     '**Proposed changes:** '+plan.steps.length,'**Skipped (inherited or blocked):** '+plan.blocked.length,
     ...plan.steps.slice(page*10,page*10+10).map(step=>'<#'+step.channelId+'> — '+step.grants.join(', ')),
-    'Inspect all pages before confirming. Synced children are not edited separately. Execution is not yet enabled.'
+    'Inspect all pages before confirming. Synced children are not edited separately. Confirmation grants Goliath access to listed private channels as well.'
   ].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-sync-apply-'+token,guild.id),'Confirm Bulk Sync',ButtonStyle.Danger,!plan.steps.length),
     navigationButton(contextualOwnerId('ai-sync-preview-'+Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
     navigationButton(contextualOwnerId('ai-sync-preview-'+(page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=plan.steps.length),
     navigationButton(contextualOwnerId('ai-sync-scan',guild.id),'Back',ButtonStyle.Secondary))]};
@@ -1812,6 +1854,10 @@ async function handleOwnerPanelInteraction(interaction) {
   }
   if (/^ownerpanel:ai-deploy-apply-[a-f0-9]{16}$/.test(id)) {
     await aiDeployApplyRoles(interaction,contextGuildId,id.slice('ownerpanel:ai-deploy-apply-'.length));
+    return true;
+  }
+  if (/^ownerpanel:ai-sync-apply-[a-f0-9]{16}$/.test(id)) {
+    await aiDeployApplySync(interaction,contextGuildId,id.slice('ownerpanel:ai-sync-apply-'.length));
     return true;
   }
   if (/^ownerpanel:ai-sync-preview-\d+$/.test(id)) {
