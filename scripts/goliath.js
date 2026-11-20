@@ -6149,6 +6149,37 @@ function goliathDeploymentRegression(source, assert, vm) {
   const guild={channels:{cache:new Map(channels.map(c=>[c.id,c]))}};
   check(helpers.children(guild,'c').map(c=>c.id),['1','3']);
   check(helpers.children(guild,'missing'),[]);
+  // Exercise the production sync planner with isolated Discord-shaped fixtures.
+  const syncStart=source.indexOf('function aiDeploySyncPlan(');
+  const syncEnd=source.indexOf('async function aiDeployApplySync(',syncStart);
+  assert(syncStart>=0 && syncEnd>syncStart);
+  const bits={ViewChannel:1n,SendMessages:2n,EmbedLinks:4n};
+  class BitField {
+    constructor(value){this.bitfield=value;}
+    add(...names){for(const name of names)this.bitfield|=bits[name];return this;}
+    remove(...names){for(const name of names)this.bitfield&=~bits[name];return this;}
+  }
+  const bot={id:'bot',permissions:{has:name=>name!=='EmbedLinks'}};
+  const fixtures=[
+    {id:'c',category:true,editable:true,missing:['SendMessages']},
+    {id:'1',synced:true,editable:true,missing:['SendMessages']},
+    {id:'2',editable:false,missing:['ViewChannel']},
+    {id:'4',editable:true,missing:['EmbedLinks']}
+  ];
+  guild.members={me:bot};
+  guild.channels.cache.set('c',{id:'c',permissionOverwrites:{cache:new Map([['bot',{allow:{bitfield:1n},deny:{bitfield:6n}}]])}});
+  const planSync=vm.runInNewContext(source.slice(syncStart,syncEnd)+'; aiDeploySyncPlan',{
+    aiGoliathDeploymentScan:()=>({gaps:fixtures}), PermissionsBitField:BitField,
+    aiGoliathInheritedChildren:helpers.children
+  });
+  const plan=planSync(guild);
+  check(plan.blocked,['1','2','4']);
+  assert.equal(plan.steps.length,1);
+  check(plan.steps[0].inheritedChildren,['1','3']);
+  check(plan.steps[0].before,{exists:true,allow:'1',deny:'6'});
+  check(plan.steps[0].after,{allow:'3',deny:'4'});
+  fixtures.length=0;
+  check(planSync(guild),{steps:[],blocked:[]});
 }
 function goliathAiRecoveryAudit() {
   const assert = require('node:assert/strict');
