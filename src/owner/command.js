@@ -1234,6 +1234,47 @@ function aiGoliathRoleDraft(interaction, guild) {
   }
   return draft;
 }
+function aiGoliathRolePlan(interaction,guild) {
+  const draft = aiGoliathRoleDraft(interaction,guild);
+  const scan = aiGoliathDeploymentScan(guild);
+  const bot = guild.members.me;
+  const steps = [];
+  const blockers = [];
+  for (const kind of ['operational','display']) {
+    const value = draft[kind];
+    if (!value) { blockers.push('Select a '+kind+' role.'); continue; }
+    if (value === 'create') {
+      steps.push({kind,action:'create',name:kind==='operational'?'Goliath Operations':'Goliath Bots',hoist:kind==='display',permissions:kind==='operational'?AI_GOLIATH_BASELINE:[]});
+      continue;
+    }
+    const role = guild.roles.cache.get(value);
+    if (!role || role.managed || role.id===guild.id) { blockers.push('Invalid '+kind+' role.'); continue; }
+    if (!bot.roles.cache.has(role.id)) {
+      if (bot.roles.highest.comparePositionTo(role)<=0) blockers.push('Owner must assign '+role.name+' manually.');
+      // Assigning a role can escalate the bot; only propose roles within its current permissions.
+      if (!bot.permissions.has(role.permissions.bitfield)) blockers.push('Owner must assign '+role.name+' because it contains permissions Goliath lacks.');
+      steps.push({kind,action:'assign',id:role.id,name:role.name});
+    }
+    if (kind==='operational' && role.hoist) blockers.push('Operational role is displayed separately; review role settings manually.');
+    if (kind==='display' && !role.hoist) blockers.push('Display role is not hoisted; review role settings manually.');
+  }
+  if (draft.operational===draft.display && draft.operational!=='create') blockers.push('Select distinct roles.');
+  if (steps.length && !bot.permissions.has('ManageRoles')) blockers.push('Manage Roles is required.');
+  if (scan.missing.length) blockers.push('Owner must grant missing guild permissions: '+scan.missing.join(', '));
+  return {steps,blockers,scan};
+}
+function aiGoliathRolePlanPayload(interaction,guild) {
+  const plan=aiGoliathRolePlan(interaction,guild);
+  return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath • Deployment Preview').setDescription([
+    '**Role operations:** '+plan.steps.length,
+    ...plan.steps.map(step=>step.action==='create'?'Create and assign '+step.name+' • '+(step.hoist?'displayed':'not displayed')+' • '+(step.permissions.join(', ')||'No guild permissions'):'Assign existing role '+step.name+' (<@&'+step.id+'>)'),
+    '**Channel/category gaps:** '+plan.scan.gaps.length,
+    '**Preflight blockers:** '+(plan.blockers.length?plan.blockers.join('\n'):'None'),
+    'Existing shared role permissions will not be modified. This is a preview only; execution and durable bulk recovery are not enabled.'
+  ].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-deploy-roles',guild.id),'Configure Roles',ButtonStyle.Secondary),
+    navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary))]};
+}
 function aiGoliathRolePayload(interaction, guild, page = 0) {
   const draft = aiGoliathRoleDraft(interaction, guild);
   const scan = aiGoliathDeploymentScan(guild);
@@ -1252,6 +1293,7 @@ function aiGoliathRolePayload(interaction, guild, page = 0) {
   rows.push(new ActionRowBuilder().addComponents(
     navigationButton(contextualOwnerId('ai-deploy-roles-page-'+Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
     navigationButton(contextualOwnerId('ai-deploy-roles-page-'+(page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*24>=candidates.length),
+    navigationButton(contextualOwnerId('ai-deploy-preview',guild.id),'Preview Deployment',ButtonStyle.Primary),
     navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Back',ButtonStyle.Secondary)));
   const describe = value => value === 'create' ? 'Create dedicated role (proposed)' : value ? '<@&'+value+'>' : 'Not selected';
   return {content:null,embeds:[new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Configure Roles').setDescription([
@@ -1456,6 +1498,7 @@ async function handleOwnerAI(interaction, action, guildId, selectedId = null, pa
       });
     }
   }
+  if (guild && action === 'ai-deploy-preview') return interaction.editReply(aiGoliathRolePlanPayload(interaction,guild));
   if (guild && action === 'ai-deploy-roles') return interaction.editReply(aiGoliathRolePayload(interaction,guild,page));
   if (guild && ['ai-deploy-scan','ai-sync-scan'].includes(action)) return interaction.editReply(aiGoliathDeploymentPayload(interaction,guild,action === 'ai-sync-scan' ? 'Sync' : 'Deploy',page));
   const detail = action === 'ai-audit' ? 'audit' : action === 'ai-scan' ? 'bot' : action === 'ai-templates' ? 'templates' :
@@ -1636,6 +1679,10 @@ async function handleOwnerPanelInteraction(interaction) {
     const template = String(interaction.values?.[0] || '');
     if (!Object.hasOwn(AI_ROLE_TEMPLATES, template)) return true;
     await handleOwnerAI(interaction, 'channel-plan', contextGuildId, { channelId: match[1], roleId: match[2], template });
+    return true;
+  }
+  if (id === 'ownerpanel:ai-deploy-preview') {
+    await handleOwnerAI(interaction,'ai-deploy-preview',contextGuildId);
     return true;
   }
   if (id === 'ownerpanel:ai-deploy-roles' || /^ownerpanel:ai-deploy-roles-page-\d+$/.test(id)) {
