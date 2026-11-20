@@ -1573,6 +1573,8 @@ function wireClient(client) {
   wiredClients.add(client);
 
   client.on(Events.InteractionCreate, async (interaction) => {
+    // AI controls are dispatched centrally before generic component fallback.
+    if (/^ownerpanel:(?:ai-|acs:)/.test(String(interaction?.customId || ''))) return;
     try {
       await handleOwnerPanelInteraction(interaction);
     } catch (error) {
