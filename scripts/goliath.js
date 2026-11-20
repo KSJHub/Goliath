@@ -5632,6 +5632,32 @@ assert(aiStatusSource && /verified:\s*false/.test(aiStatusSource) &&
   aiStatusSource.includes("verificationRequired: 'POST /self-test'") &&
   !/verified:\s*true/.test(aiStatusSource),
   'Configuration status must not claim live inference verification');
+const renameApplySource = aiRouterSource.split("router.post('/drafts/:id/apply-category-rename', requirePrivateAI,")[1]?.split("// Owner confirmation is recorded")[0];
+const renameRecoverySource = aiRouterSource.split("router.post('/category-rename-journal/:id/reconcile', requirePrivateAI,")[1]?.split("router.post('/drafts/:id/apply-category-rename'")[0];
+assert(renameApplySource && renameRecoverySource, 'DEV rename and recovery routes must remain private');
+for (const guard of [
+  "localMode() !== 'DEV'", "GOLIATH_AI_DEV_RENAME_ENABLED !== 'true'",
+  "APPLY DEV CATEGORY RENAME", "draft.createdBy !== ownerId",
+  "draft.auditDigest !== currentDigest", "preview.operations.length !== 1",
+  "item.reviewerId === ownerId", "preflight.permissionsVerified",
+  "history.some(entry => entry.status === 'pending')",
+  "status: 'pending'", "categoryRenameInProgress = false"
+]) assert(renameApplySource.includes(guard), 'Missing DEV rename safety guard: ' + guard);
+assert(renameApplySource.indexOf('writeRenameJournal(history)') >= 0 &&
+  renameApplySource.indexOf('writeRenameJournal(history)') < renameApplySource.indexOf('await channel.setName('),
+  'Rename must persist recovery intent before Discord mutation');
+assert.equal((renameApplySource.match(/\{ force: true \}/g) || []).length >= 3, true,
+  'Rename must refresh category and permission state');
+assert(renameApplySource.indexOf('await channel.setName(') < renameApplySource.indexOf("record.status = 'verified'") &&
+  renameApplySource.includes('updated.type !== 4') && renameApplySource.includes('updated.id !== channel.id'),
+  'Rename verification must validate the returned category identity');
+for (const guard of [
+  "localMode() !== 'DEV'", "VERIFY DEV RENAME STATE", "item.ownerId === ownerId",
+  "entry.status !== 'pending'", "guild.channels.fetch(entry.categoryId, { force: true })",
+  "category.name !== entry.proposedName && category.name !== entry.previousName"
+]) assert(renameRecoverySource.includes(guard), 'Missing DEV reconciliation guard: ' + guard);
+assert(!/\.setName\(|\.edit\(|\.delete\(|\.create\(/.test(renameRecoverySource),
+  'Reconciliation must not mutate Discord');
 const aiHealthSource = aiRouterSource.split(
   "router.get('/health', requirePrivateAI, async (_req, res) => {")[1]?.split(
   "const SNOWFLAKE =")[0];
