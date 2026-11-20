@@ -1223,6 +1223,32 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
       '',
       'Discord role hierarchy limits which roles Goliath can edit. Category and channel overwrites may further restrict access.'
     );
+  } else if (detail === 'audit') {
+    const roleList = [...roles.values()];
+    const channelList = [...channels.values()];
+    const administrators = roleList.filter(role => role.permissions.has('Administrator'));
+    const elevated = roleList.filter(role => !role.permissions.has('Administrator') &&
+      ['ManageRoles', 'ManageChannels', 'ManageGuild', 'BanMembers'].some(permission => role.permissions.has(permission)));
+    const blocked = roleList.filter(role => !role.managed && role.id !== guild.id &&
+      botRole && role.comparePositionTo(botRole) >= 0);
+    const unsynced = channelList.filter(channel => channel.parentId && channel.permissionsLocked === false);
+    const publicOverrides = channelList.filter(channel =>
+      channel.permissionOverwrites?.cache?.get(guild.id)?.allow?.has('ViewChannel'));
+    const stale = channelList.flatMap(channel => [...(channel.permissionOverwrites?.cache?.values() || [])]
+      .filter(overwrite => overwrite.type === 0 && !roles.has(overwrite.id))
+      .map(overwrite => '<#' + channel.id + '> / ' + overwrite.id));
+    const show = (label, items, format) => {
+      lines.push('**' + label + ' (' + items.length + ')**');
+      lines.push(items.length ? items.slice(0, 8).map(format).join(', ') : 'None detected');
+      if (items.length > 8) lines.push('… and ' + (items.length - 8) + ' more');
+    };
+    show('Administrator roles', administrators, role => '<@&' + role.id + '>');
+    show('Other elevated roles', elevated, role => '<@&' + role.id + '>');
+    show('Roles above or equal to Goliath', blocked, role => '<@&' + role.id + '>');
+    show('Channels not synced to category', unsynced, channel => '<#' + channel.id + '>');
+    show('Explicit everyone visibility grants', publicOverrides, channel => '<#' + channel.id + '>');
+    show('Unresolved role overwrites', stale, value => value);
+    lines.push('', 'Review findings in context. Elevated roles, public channels and unsynced overrides may be intentional. No permissions changed.');
   } else if (detail === 'channel-plan') {
     lines.push(...aiChannelPermissionPlan(guild, selectedId?.channelId, selectedId?.roleId, selectedId?.template));
   } else if (detail === 'channel-target') {
@@ -1263,7 +1289,8 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
   );
   const rows = [controls];
   if (guild && mode() === 'DEV') rows.push(new ActionRowBuilder().addComponents(
-    navigationButton(contextualOwnerId('ai-reconcile', guild.id), 'Reconcile Pending', ButtonStyle.Secondary)
+    navigationButton(contextualOwnerId('ai-reconcile', guild.id), 'Reconcile Pending', ButtonStyle.Secondary),
+    navigationButton(contextualOwnerId('ai-audit', guild.id), 'Permission Audit', ButtonStyle.Primary)
   ));
   if (guild && detail === 'channel' && typeof selectedId === 'string') {
     const selector = aiChannelRoleSelectRow(guild, selectedId);
@@ -1308,7 +1335,7 @@ async function handleOwnerAI(interaction, action, guildId, selectedId = null, pa
   if (guild) {
     await Promise.all([guild.roles.fetch(), guild.channels.fetch(), guild.members.fetchMe()]).catch(() => null);
   }
-  const detail = action === 'ai-scan' ? 'bot' : action === 'ai-templates' ? 'templates' :
+  const detail = action === 'ai-audit' ? 'audit' : action === 'ai-scan' ? 'bot' : action === 'ai-templates' ? 'templates' :
     action === 'ai-roles' ? 'role' : action === 'ai-channels' ? 'channel' : action;
   await interaction.editReply(aiPanelPayload(interaction, guild, detail, selectedId, page));
 }
@@ -1510,7 +1537,7 @@ async function handleOwnerPanelInteraction(interaction) {
     return true;
   }
   if ([`${OWNER_PREFIX}ai-home`, `${OWNER_PREFIX}ai-scan`, `${OWNER_PREFIX}ai-templates`,
-       `${OWNER_PREFIX}ai-roles`, `${OWNER_PREFIX}ai-channels`].includes(id)) {
+       `${OWNER_PREFIX}ai-roles`, `${OWNER_PREFIX}ai-channels`, `${OWNER_PREFIX}ai-audit`].includes(id)) {
     await handleOwnerAI(interaction, id.slice(OWNER_PREFIX.length), contextGuildId);
     return true;
   }
