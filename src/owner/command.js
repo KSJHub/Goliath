@@ -1397,6 +1397,38 @@ function aiGoliathRolePayload(interaction, guild, page = 0) {
     'Selections are temporary previews; no roles are created or assigned yet.'
   ].join('\n'))],components:rows};
 }
+function aiDeploySyncPlan(guild) {
+  const scan=aiGoliathDeploymentScan(guild);
+  const bot=guild.members.me;
+  const steps=[];
+  const blocked=[];
+  for(const gap of scan.gaps){
+    const channel=guild.channels.cache.get(gap.id);
+    // Do not silently desynchronise children or expose shared roles.
+    if(gap.synced || !gap.editable || !gap.missing.every(p=>bot.permissions.has(p))){
+      blocked.push(gap.id);continue;
+    }
+    const overwrite=channel.permissionOverwrites.cache.get(bot.id);
+    const before={exists:Boolean(overwrite),allow:String(overwrite?.allow?.bitfield||0n),deny:String(overwrite?.deny?.bitfield||0n)};
+    const after={allow:new PermissionsBitField(BigInt(before.allow)).add(...gap.missing).bitfield.toString(),deny:new PermissionsBitField(BigInt(before.deny)).remove(...gap.missing).bitfield.toString()};
+    steps.push({action:'member-overwrite',channelId:channel.id,memberId:bot.id,grants:gap.missing,before,after});
+  }
+  return {steps,blocked};
+}
+function aiDeploySyncPreview(interaction,guild,page=0){
+  const plan=aiDeploySyncPlan(guild);
+  const token=randomUUID().replace(/-/g,'').slice(0,16);
+  aiDeployApprovals.set(interaction.user.id+':'+guild.id,{token,kind:'sync',steps:JSON.stringify(plan.steps),expiresAt:Date.now()+600000});
+  return {content:null,embeds:[new EmbedBuilder().setColor(0xF0B232).setTitle('Goliath • Bulk Sync Preview').setDescription([
+    'Grant access to Goliath alone, including private channels listed here. Other member and role overwrites are retained.',
+    '**Proposed changes:** '+plan.steps.length,'**Skipped (inherited or blocked):** '+plan.blocked.length,
+    ...plan.steps.slice(page*10,page*10+10).map(step=>'<#'+step.channelId+'> — '+step.grants.join(', ')),
+    'Inspect all pages before confirming. Synced children are not edited separately. Execution is not yet enabled.'
+  ].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-sync-preview-'+Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
+    navigationButton(contextualOwnerId('ai-sync-preview-'+(page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=plan.steps.length),
+    navigationButton(contextualOwnerId('ai-sync-scan',guild.id),'Back',ButtonStyle.Secondary))]};
+}
 function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
   const scan = aiGoliathDeploymentScan(guild);
   const lines = [
@@ -1419,6 +1451,7 @@ function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
       navigationButton(contextualOwnerId('ai-deploy-roles',guild.id),'Configure Roles',ButtonStyle.Secondary),
       navigationButton(contextualOwnerId('ai-home',guild.id),'Back',ButtonStyle.Secondary)),
       new ActionRowBuilder().addComponents(
+        navigationButton(contextualOwnerId('ai-sync-preview-0',guild.id),'Preview Bulk Sync',ButtonStyle.Primary),
         navigationButton(contextualOwnerId('ai-deploy-page-' + Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
         navigationButton(contextualOwnerId('ai-deploy-page-' + (page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=scan.gaps.length))] };
 }
@@ -1592,6 +1625,7 @@ async function handleOwnerAI(interaction, action, guildId, selectedId = null, pa
       });
     }
   }
+  if (guild && action === 'ai-sync-preview') return interaction.editReply(aiDeploySyncPreview(interaction,guild,page));
   if (guild && action === 'ai-deploy-history') return interaction.editReply(aiDeployJournalHistoryPayload(guild));
   if (guild && action === 'ai-deploy-preview') return interaction.editReply(aiGoliathRolePlanPayload(interaction,guild));
   if (guild && action === 'ai-deploy-roles') return interaction.editReply(aiGoliathRolePayload(interaction,guild,page));
@@ -1778,6 +1812,10 @@ async function handleOwnerPanelInteraction(interaction) {
   }
   if (/^ownerpanel:ai-deploy-apply-[a-f0-9]{16}$/.test(id)) {
     await aiDeployApplyRoles(interaction,contextGuildId,id.slice('ownerpanel:ai-deploy-apply-'.length));
+    return true;
+  }
+  if (/^ownerpanel:ai-sync-preview-\d+$/.test(id)) {
+    await handleOwnerAI(interaction,'ai-sync-preview',contextGuildId,null,Number(id.match(/\d+$/)[0]));
     return true;
   }
   if (id === 'ownerpanel:ai-deploy-history') {
