@@ -5415,7 +5415,7 @@ function dashboardRoutingAudit() {
 }
 
 
-function goliathAiBlueprintAudit() {
+async function goliathAiBlueprintAudit() {
 const assert = require('node:assert/strict');
 const { parseBlueprint, toBlueprint, planBlueprint } = require('../src/owner/dev/goliathBlueprint');
 
@@ -5696,6 +5696,46 @@ assert.throws(() => journal.readRenameJournal());
 journalFiles.set(journalFile, JSON.stringify([{ ...journalEntry, categoryId: 'invalid' }]));
 assert.throws(() => journal.readRenameJournal());
 assert.throws(() => journal.writeRenameJournal(Array(201).fill(journalEntry)));
+// Run the actual async reconciliation handler with an isolated Discord fixture.
+const recoveryHandlerFactory = new Function('localMode', 'readRenameJournal', 'writeRenameJournal', 'console',
+  'let categoryRenameInProgress = false; return (' + renameRecoverySource.trim().replace(/\);\s*$/, '') + ');');
+let recoveryRecords = [];
+let recoveryWrites = 0;
+let recoveryFetches = 0;
+let recoveryMode = 'DEV';
+const recoveryHandler = recoveryHandlerFactory(() => recoveryMode,
+  () => JSON.parse(JSON.stringify(recoveryRecords)),
+  entries => { recoveryWrites++; recoveryRecords = entries; }, { error() {} });
+async function exerciseRenameRecovery(name, expectedCode, expectedStatus, options = {}) {
+  recoveryRecords = [{ ...journalEntry }];
+  recoveryWrites = 0;
+  recoveryFetches = 0;
+  recoveryMode = options.mode || 'DEV';
+  const req = { session: { user: { id: options.owner || journalEntry.ownerId } },
+    params: { id: journalEntry.id }, body: { confirmation: options.confirmation || 'VERIFY DEV RENAME STATE' },
+    client: { guilds: { cache: { get: () => ({ channels: { fetch: async (id, opts) => {
+      recoveryFetches++;
+      assert.equal(id, journalEntry.categoryId);
+      assert.equal(opts.force, true);
+      if (options.fetchError) throw new Error('Simulated Discord outage');
+      return name === null ? null : { type: options.type ?? 4, name };
+    } } }) } } } };
+  const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+  await recoveryHandler(req, res);
+  assert.equal(res.code, expectedCode);
+  assert.equal(recoveryRecords[0].status, expectedStatus);
+  assert.equal(recoveryWrites, expectedStatus === 'pending' ? 0 : 1);
+  if (options.mode || options.owner || options.confirmation) assert.equal(recoveryFetches, 0);
+}
+await exerciseRenameRecovery('After', 200, 'verified');
+await exerciseRenameRecovery('Before', 200, 'failed');
+await exerciseRenameRecovery('Unexpected', 409, 'pending');
+await exerciseRenameRecovery(null, 409, 'pending');
+await exerciseRenameRecovery('After', 409, 'pending', { type: 0 });
+await exerciseRenameRecovery('After', 503, 'pending', { fetchError: true });
+await exerciseRenameRecovery('After', 503, 'pending', { mode: 'PRODUCTION' });
+await exerciseRenameRecovery('After', 404, 'pending', { owner: '423456789012345678' });
+await exerciseRenameRecovery('After', 422, 'pending', { confirmation: 'incorrect' });
 const aiHealthSource = aiRouterSource.split(
   "router.get('/health', requirePrivateAI, async (_req, res) => {")[1]?.split(
   "const SNOWFLAKE =")[0];
