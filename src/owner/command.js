@@ -1103,6 +1103,7 @@ function aiChannelPermissionPlan(guild, channelId, roleId, templateName) {
   const role = guild?.roles?.cache?.get(roleId);
   const template = AI_ROLE_TEMPLATES[templateName];
   if (!channel || !role || !template) return ['Channel, role or template unavailable.'];
+  if (!channel.permissionOverwrites?.cache || typeof channel.permissionsFor !== 'function') return ['This channel does not support direct permission overwrites. Inspect its parent channel instead.'];
   const overwrite = channel.permissionOverwrites.cache.get(role.id);
   const currentAllow = new Set(overwrite?.allow?.toArray() || []);
   const currentDeny = new Set(overwrite?.deny?.toArray() || []);
@@ -1110,7 +1111,7 @@ function aiChannelPermissionPlan(guild, channelId, roleId, templateName) {
   const grants = channelTemplate.filter(permission => !currentAllow.has(permission));
   const conflicting = channelTemplate.filter(permission => currentDeny.has(permission));
   const bot = guild.members.me;
-  const botAccess = channel.permissionsFor(bot);
+  const botAccess = bot ? channel.permissionsFor(bot) : null;
   const canEdit = Boolean(bot?.permissions?.has('ManageRoles') &&
     botAccess?.has('ManageRoles') && bot.roles.highest.comparePositionTo(role) > 0 &&
     !role.managed && role.id !== guild.id);
@@ -1248,7 +1249,14 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
     show('Channels not synced to category', unsynced, channel => '<#' + channel.id + '>');
     show('Explicit everyone visibility grants', publicOverrides, channel => '<#' + channel.id + '>');
     show('Unresolved role overwrites', stale, value => value);
-    lines.push('', 'Review findings in context. Elevated roles, public channels and unsynced overrides may be intentional. No permissions changed.');
+    lines.push('', '**Recommended next actions**');
+    if (administrators.length) lines.push('Review Administrator roles individually; this permission bypasses channel restrictions.');
+    if (elevated.length) lines.push('Compare elevated roles against their intended staff or bot duties; do not remove required permissions blindly.');
+    if (blocked.length) lines.push('Review Goliath’s role position before preparing changes to otherwise manageable roles.');
+    if (unsynced.length) lines.push('Inspect unsynced channels against their parent category; preserve intentional exceptions.');
+    if (publicOverrides.length) lines.push('Check explicit everyone visibility against the intended public/private channel policy.');
+    if (stale.length) lines.push('Refresh and inspect unresolved overwrite targets before considering removal.');
+    lines.push('Findings may be intentional. No permissions changed.');
   } else if (detail === 'channel-plan') {
     lines.push(...aiChannelPermissionPlan(guild, selectedId?.channelId, selectedId?.roleId, selectedId?.template));
   } else if (detail === 'channel-target') {
@@ -1292,7 +1300,13 @@ function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = nu
     navigationButton(contextualOwnerId('ai-reconcile', guild.id), 'Reconcile Pending', ButtonStyle.Secondary),
     navigationButton(contextualOwnerId('ai-audit', guild.id), 'Permission Audit', ButtonStyle.Primary)
   ));
-  if (guild && detail === 'channel' && typeof selectedId === 'string') {
+  if (guild && detail === 'audit') {
+    const roleSelector = aiSelectRow(guild, 'role', 0);
+    const channelSelector = aiSelectRow(guild, 'channel', 0);
+    if (roleSelector) rows.push(roleSelector);
+    if (channelSelector) rows.push(channelSelector);
+  }
+  if (guild && detail === 'channel' && typeof selectedId === 'string' && guild.channels.cache.get(selectedId)?.permissionOverwrites?.cache) {
     const selector = aiChannelRoleSelectRow(guild, selectedId);
     if (selector) rows.push(selector);
   }
