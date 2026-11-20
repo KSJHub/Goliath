@@ -1244,6 +1244,7 @@ function aiGoliathDeploymentScan(guild) {
   const assigned = [...bot.roles.cache.values()].filter(role => role.id !== guild.id);
   const profile=aiGoliathGuildProfile(guild.id);
   const missing = profile.permissions.filter(permission => !bot.permissions.has(permission));
+  const optionalPermissions=[{permission:'MentionEveryone',modules:['Welcome','Games'],guidance:'Only grant in configured announcement channels when non-mentionable role alerts are required; otherwise use mentionable roles.'}];
   const candidates = [...guild.roles.cache.values()].filter(role => !role.managed && role.id !== guild.id && bot.roles.highest.comparePositionTo(role) > 0);
   const targets = [...guild.channels.cache.values()].filter(channel => channel.permissionOverwrites?.cache && typeof channel.permissionsFor === 'function');
   const gaps = targets.map(channel => {
@@ -1252,7 +1253,7 @@ function aiGoliathDeploymentScan(guild) {
     return { id: channel.id, category: channel.type === 4, missing: required.filter(permission => !effective?.has(permission)),
       synced: channel.permissionsLocked === true, editable: Boolean(effective?.has('ManageRoles')) };
   }).filter(item => item.missing.length);
-  return { assigned, missing, candidates, targets, gaps, profile };
+  return { assigned, missing, candidates, targets, gaps, profile, optionalPermissions };
 }
 // Separate per-guild write-ahead deployment history. Never overwrite unresolved work.
 function aiDeployJournalFile(guildId) {
@@ -2392,6 +2393,7 @@ module.exports = {
       assigned:scan.assigned.map(role=>({id:role.id,name:role.name,hoist:role.hoist})),
       candidates:scan.candidates.map(role=>({id:role.id,name:role.name,hoist:role.hoist})),
       missing:scan.missing,channelCount:scan.targets.length,gaps:scan.gaps,
+      optionalPermissions:scan.optionalPermissions,
       hierarchy:{highestBotRole:guild.members.me.roles.highest.name,highestBotPosition:guild.members.me.roles.highest.position,ownerPlacementRequired:true},
       inviteUrl:aiGoliathDevInviteUrl(guild.client,guild.id)};
   },
