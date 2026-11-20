@@ -2271,6 +2271,16 @@ module.exports = {
 
   wireClient,
   handleOwnerPanelInteraction,
+  async readDeploymentReport(guild){
+    if(mode()!=='DEV'||!guild)throw new Error('DEV guild required');
+    await Promise.all([guild.roles.fetch(),guild.channels.fetch(),guild.members.fetchMe({force:true})]);
+    const scan=aiGoliathDeploymentScan(guild);
+    return {guildId:guild.id,readOnly:true,timestamp:new Date().toISOString(),profile:scan.profile,
+      assigned:scan.assigned.map(role=>({id:role.id,name:role.name,hoist:role.hoist})),
+      candidates:scan.candidates.map(role=>({id:role.id,name:role.name,hoist:role.hoist})),
+      missing:scan.missing,channelCount:scan.targets.length,gaps:scan.gaps,
+      inviteUrl:aiGoliathDevInviteUrl(guild.client,guild.id)};
+  },
 
   async execute(interaction, client) {
     wireClient(client || interaction.client);
