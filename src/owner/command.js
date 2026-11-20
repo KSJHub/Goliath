@@ -1245,7 +1245,9 @@ function aiGoliathDeploymentScan(guild) {
   const profile=aiGoliathGuildProfile(guild.id);
   const missing = profile.permissions.filter(permission => !bot.permissions.has(permission));
   const optionalPermissions=[{permission:'MentionEveryone',modules:['Welcome','Games'],guidance:'Only grant in configured announcement channels when non-mentionable role alerts are required; otherwise use mentionable roles.'}];
-  const candidates = [...guild.roles.cache.values()].filter(role => !role.managed && role.id !== guild.id && (bot.roles.cache.has(role.id) || bot.roles.highest.comparePositionTo(role) > 0));
+  const candidates = [...new Map([...guild.roles.cache.values(), ...assigned].map(role=>[role.id,role])).values()]
+    .filter(role=>role.id!==guild.id && !role.managed && (assigned.some(held=>held.id===role.id)||bot.roles.highest.comparePositionTo(role)>0))
+    .sort((a,b)=>Number(bot.roles.cache.has(b.id))-Number(bot.roles.cache.has(a.id))||b.position-a.position);
   const targets = [...guild.channels.cache.values()].filter(channel => channel.permissionOverwrites?.cache && typeof channel.permissionsFor === 'function');
   const gaps = targets.map(channel => {
     const effective = channel.permissionsFor(bot);
@@ -1632,7 +1634,7 @@ function aiGoliathRolePlanPayload(interaction,guild) {
 function aiGoliathRolePayload(interaction, guild, page = 0) {
   const draft = aiGoliathRoleDraft(interaction, guild);
   const scan = aiGoliathDeploymentScan(guild);
-  const candidates = scan.candidates.sort((a,b) => b.position-a.position);
+  const candidates = scan.candidates;
   page = Math.max(0,Math.min(page,Math.ceil(candidates.length/24)-1));
   const options = candidates.slice(page*24,page*24+24).map(role => ({
     label: role.name.slice(0,100), value: role.id,
@@ -1764,7 +1766,7 @@ function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
     '**Missing guild permissions:** ' + (scan.missing.join(', ') || 'None'),
     '**Recommended invite permission bitfield:** '+aiGoliathInvitePermissions(guild.id),
     '**Active permission groups:** '+scan.profile.groups.join(', ')+' (no Administrator).',
-    '**Manageable existing roles:** ' + scan.candidates.length,
+    '**Selectable existing roles:** ' + scan.candidates.length,
     '**Channels/categories inspected:** ' + scan.targets.length,
     '**Access gaps:** ' + scan.gaps.length,
     ...scan.gaps.slice(page * 10, page * 10 + 10).map(item => '<#' + item.id + '> — ' + item.missing.join(', ') + (item.synced ? ' (category synced)' : '') + (item.editable ? '' : ' (owner intervention required)')),
