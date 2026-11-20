@@ -414,6 +414,22 @@ router.get('/capabilities/local/:guildId', requireLocalInternal, async (req, res
   } catch { return res.status(503).json({ error: 'Cannot inspect bot permissions.' }); }
 });
 
+router.post('/deployment/:guildId/roles/:action', requirePrivateAI, async (req,res)=>{
+  if(localMode()!=='DEV')return res.status(403).json({error:'DEV only.'});
+  if(!SNOWFLAKE.test(req.params.guildId))return res.status(400).json({error:'Invalid guild ID.'});
+  const guild=req.client?.guilds?.cache?.get(req.params.guildId);
+  if(!guild)return res.status(404).json({error:'Guild not connected to DEV.'});
+  const ownerId=String(req.session.user.id);
+  const command=require('../command');
+  try{
+    if(req.params.action==='preview')return res.json(await command.prepareDashboardRoles(guild,ownerId,req.body?.selected));
+    if(req.params.action==='confirm'){
+      if(req.body?.confirm!==true||typeof req.body.token!=='string')return res.status(400).json({error:'Explicit confirmation required.'});
+      return res.json(await command.confirmDashboardRoles(guild,ownerId,req.body.token));
+    }
+    return res.status(404).json({error:'Unknown deployment action.'});
+  }catch(error){console.error('[Deployment roles]',error?.message);return res.status(409).json({error:'Role deployment unavailable. Refresh the scan and inspect recovery before retrying.'});}
+});
 router.post('/deployment/:guildId/sync/confirm', requirePrivateAI, async (req,res)=>{
   if(localMode()!=='DEV')return res.status(403).json({error:'DEV only.'});
   if(!SNOWFLAKE.test(req.params.guildId))return res.status(400).json({error:'Invalid guild ID.'});
