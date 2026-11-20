@@ -6207,6 +6207,13 @@ function goliathDeploymentRegression(source, assert, vm) {
   scan.missing=[];
   draft.operational='missing';
   assert(rolePlan({},guild).blockers.length>0);
+  const adminRole={id:'admin',name:'Admin',managed:false,hoist:false,position:1,permissions:{bitfield:8n,has:name=>name==='Administrator'}};
+  guild.roles.cache.set(adminRole.id,adminRole);
+  draft.operational=adminRole.id;
+  assert(rolePlan({},guild).blockers.some(message=>message.includes('Administrator')));
+  bot.roles.cache.set(adminRole.id,adminRole);
+  assert(rolePlan({},guild).blockers.some(message=>message.includes('Administrator')));
+  bot.roles.cache.delete(adminRole.id);
   const rollbackStart=source.indexOf('function aiDeployRollbackPlan(');
   const rollbackEnd=source.indexOf('function aiDeployRollbackPreview(',rollbackStart);
   assert(rollbackStart>=0 && rollbackEnd>rollbackStart);
