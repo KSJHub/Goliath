@@ -68,7 +68,7 @@ function isStaff(member, settings = {}) {
 async function maybeResumeFlow(interaction, result, manager, targetUserId = null) {
   if (!result?.resumeFlow || typeof manager?.resumeVerification !== 'function') return null;
   const userId = clean(targetUserId || interaction.user?.id);
-  const member = await interaction.guild.members.fetch(userId).catch(() => userId === clean(interaction.user?.id) ? interaction.member : null);
+  const member = await interaction.guild.members.fetch({ user: userId, force: true }).catch(() => null);
   if (!member) return { ok: false, message: 'Verification member is no longer available.' };
   return manager.resumeVerification({ guild: interaction.guild, guildId: interaction.guildId, member, user: member.user, completedSecurity: result.completedSecurity });
 }
@@ -147,7 +147,7 @@ async function handleStaffAction(interaction, parsed, manager) {
     await interaction.reply({ content: 'Verification action service is unavailable. Contact an administrator.', flags: MessageFlags.Ephemeral });
     return true;
   }
-  const targetMember = await interaction.guild?.members?.fetch(parsed.userId).catch(() => null);
+  const targetMember = await interaction.guild?.members?.fetch({ user: parsed.userId, force: true }).catch(() => null);
   if (!targetMember) {
     await interaction.reply({ content: 'Verification member is unavailable. Staff action was not recorded; check whether the member has left the server.', flags: MessageFlags.Ephemeral });
     return true;
