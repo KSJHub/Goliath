@@ -1553,7 +1553,23 @@ async function aiDeployApplyRoles(interaction,guildId,token) {
   const selected={...aiGoliathRoleDraft(interaction,guild)};
   const result=await aiExecuteApprovedRoles(guild,interaction.user.id,plan,selected);
   if(result.status==='verified')aiGoliathRoleDrafts.delete(key);
-  return interaction.editReply({content:result.status==='verified'?'Role assignments applied and verified. Channel permissions unchanged. Transaction '+result.transactionId:'Deployment stopped. Inspect recovery transaction '+result.transactionId,embeds:[],components:[new ActionRowBuilder().addComponents(navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Sync Scan',ButtonStyle.Primary),navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary))]});
+  const success=result.status==='verified';
+  const embed=new EmbedBuilder()
+    .setColor(success?0x57F287:0xED4245)
+    .setTitle(success?'Goliath • Role Deployment Complete':'Goliath • Role Deployment Stopped')
+    .setDescription(success?'Role assignments verified successfully. Your existing shared role permissions have been preserved.':'Deployment could not be verified. Review the recovery history before attempting further changes.')
+    .addFields(...(success?[
+      {name:'Operational role',value:'<@&'+result.roles.operational+'>',inline:true},
+      {name:'Display role',value:'<@&'+result.roles.display+'>',inline:true},
+      {name:'Role operations',value:String(plan.steps.length)+' verified',inline:true},
+      {name:'Channel & category permissions',value:'Unchanged • Run Sync Scan to check access.'}
+    ]:[{name:'Recovery',value:'Review History to inspect the transaction.'}]),
+    {name:'Transaction ID',value:'`'+result.transactionId+'`'})
+    .setFooter({text:'Goliath • Deployment & Sync'}).setTimestamp();
+  return interaction.editReply({content:null,embeds:[embed],components:[new ActionRowBuilder().addComponents(
+    navigationButton(contextualOwnerId('ai-sync-scan',guildId),'Sync Scan',ButtonStyle.Primary,!success),
+    navigationButton(contextualOwnerId('ai-deploy-history',guildId),'History',ButtonStyle.Secondary),
+    navigationButton(contextualOwnerId('ai-deploy-scan',guildId),'Back',ButtonStyle.Secondary))]});
 }
 async function aiExecuteApprovedRoles(guild,ownerId,plan,selected){
   const guildId=guild.id;
@@ -1624,7 +1640,7 @@ function aiGoliathRolePlanPayload(interaction,guild) {
     ...plan.steps.map(step=>step.action==='create'?'Create and assign '+step.name+' • '+(step.hoist?'displayed':'not displayed')+' • '+(step.permissions.join(', ')||'No guild permissions'):'Assign existing role '+step.name+' (<@&'+step.id+'>)'),
     '**Channel/category gaps:** '+plan.scan.gaps.length,
     '**Preflight blockers:** '+(plan.blockers.length?plan.blockers.join('\n'):'None'),
-    'Existing shared role permissions will not be modified. Confirm to deploy roles only. Channel sync and automated recovery are not enabled.'
+    'Existing shared role permissions will not be modified. Confirm to deploy roles only. Channel permissions can be reviewed separately using Bulk Sync.'
   ].join('\n').slice(0,3900))],components:[new ActionRowBuilder().addComponents(
     navigationButton(contextualOwnerId('ai-deploy-apply-'+token,guild.id),'Confirm Role Deployment',ButtonStyle.Danger,Boolean(plan.blockers.length||!plan.steps.length)),
     navigationButton(contextualOwnerId('ai-deploy-roles',guild.id),'Configure Roles',ButtonStyle.Secondary),
