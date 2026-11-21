@@ -1783,35 +1783,43 @@ function aiGoliathDevInviteUrl(client,guildId){
   return 'https://discord.com/oauth2/authorize?'+params.toString();
 }
 function aiGoliathDeploymentPayload(interaction, guild, action, page = 0) {
-  const scan = aiGoliathDeploymentScan(guild);
-  const lines = [
-    '**Goliath deployment baseline — ' + action + '**',
-    '**Assigned roles:** ' + (scan.assigned.map(role => '<@&' + role.id + '>').join(', ') || 'None beyond @everyone'),
-    '**Missing guild permissions:** ' + (scan.missing.join(', ') || 'None'),
-    '**Recommended invite permission bitfield:** '+aiGoliathInvitePermissions(guild.id),
-    '**Active permission groups:** '+scan.profile.groups.join(', ')+' (no Administrator).',
-    '**Selectable existing roles:** ' + scan.candidates.length,
-    '**Channels/categories inspected:** ' + scan.targets.length,
-    '**Access gaps:** ' + scan.gaps.length,
-    ...scan.gaps.slice(page * 10, page * 10 + 10).map(item => '<#' + item.id + '> — ' + item.missing.join(', ') + (item.synced ? ' (category synced)' : '') + (item.editable ? '' : ' (owner intervention required)')),
-    '',
-    'Recommended: assign an unhoisted operational role above managed community roles, and a separate hoisted display role. Avoid changing shared role permissions unintentionally.',
-    scan.missing.length ? 'Server owner must supply missing guild permissions before deployment.' : 'Guild baseline satisfied.',
-    'This scan is read-only. Private channel access requires explicit approval. Use the separate confirmation controls to apply changes.'
-  ];
-  return { content: null, embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle('Goliath • Deployment & Sync').setDescription(lines.join('\n').slice(0,3900))],
-    components: [new ActionRowBuilder().addComponents(
+  const scan=aiGoliathDeploymentScan(guild);
+  const full=aiDeploySyncPlan(guild,true);
+  const saved=aiDeploySavedRoles(guild.id);
+  const roleLabel=id=>id&&guild.members.me.roles.cache.has(id)?'<@&'+id+'>':'Not configured';
+  const healthy=!scan.missing.length&&!scan.gaps.length;
+  const categories=scan.targets.filter(channel=>channel.type===4).length;
+  const embed=new EmbedBuilder().setColor(healthy?0x57F287:0xF0B232)
+    .setTitle('Goliath • Deployment & Sync')
+    .setDescription('**'+guild.name+'** • '+(action==='Sync'?'Sync scan':'Deployment scan')+'\n'+(healthy?'Guild permission baseline satisfied.':'Permission gaps detected. Review the available actions below.'))
+    .addFields(
+      {name:'Server permissions',value:scan.missing.length?scan.missing.join(', ').slice(0,1024):'All required permissions available',inline:true},
+      {name:'Access gaps',value:String(scan.gaps.length),inline:true},
+      {name:'Template changes',value:String(full.steps.length)+' pending • '+full.blocked.length+' blocked',inline:true},
+      {name:'Operational role',value:roleLabel(saved.operational),inline:true},
+      {name:'Display role',value:roleLabel(saved.display),inline:true},
+      {name:'Highest bot role',value:'<@&'+guild.members.me.roles.highest.id+'>',inline:true},
+      {name:'Guild coverage',value:(scan.targets.length-categories)+' channels • '+categories+' categories • '+scan.candidates.length+' selectable roles'},
+      {name:'Active permission groups',value:scan.profile.groups.join(', ').slice(0,1024)+'\nAdministrator is not requested by the template.'},
+      {name:'Next steps',value:'1. Configure roles if needed.\n2. Smart Sync repairs missing access.\n3. Full Template Sync applies explicit permissions.\nBoth modes require approval before changing private channel access.'}
+    ).setFooter({text:'Goliath • Deployment & Sync • Read-only scan'}).setTimestamp();
+  if(scan.gaps.length)embed.addFields({name:'Access gaps • Page '+(page+1)+'/'+Math.ceil(scan.gaps.length/10),value:scan.gaps.slice(page*10,page*10+10).map(item=>'<#'+item.id+'> — '+item.missing.join(', ')+(item.synced?' (inherited)':'')+(item.editable?'':' (blocked)')).join('\n').slice(0,1024)});
+  return {content:null,embeds:[embed],components:[
+    new ActionRowBuilder().addComponents(
       navigationButton(contextualOwnerId('ai-deploy-scan',guild.id),'Deployment Scan',ButtonStyle.Primary),
       navigationButton(contextualOwnerId('ai-sync-scan',guild.id),'Sync Scan',ButtonStyle.Primary),
-      navigationButton(contextualOwnerId('ai-deploy-roles',guild.id),'Configure Roles',ButtonStyle.Secondary),
+      navigationButton(contextualOwnerId('ai-deploy-roles',guild.id),'Configure Roles',ButtonStyle.Secondary)),
+    new ActionRowBuilder().addComponents(
+      navigationButton(contextualOwnerId('ai-sync-preview-0',guild.id),'Smart Sync',ButtonStyle.Primary),
+      navigationButton(contextualOwnerId('ai-full-sync-preview-0',guild.id),'Full Template Sync',ButtonStyle.Primary)),
+    new ActionRowBuilder().addComponents(linkButton('Invite DEV to a Server',aiGoliathDevInviteUrl(interaction.client)),linkButton('Update DEV Guild Permissions',aiGoliathDevInviteUrl(interaction.client,guild.id))),
+    ...(scan.gaps.length>10?[new ActionRowBuilder().addComponents(
+      navigationButton(contextualOwnerId('ai-deploy-page-'+Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
+      navigationButton(contextualOwnerId('ai-deploy-page-'+(page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=scan.gaps.length))]:[]),
+    new ActionRowBuilder().addComponents(
       navigationButton(contextualOwnerId('ai-deploy-history',guild.id),'History',ButtonStyle.Secondary),
-      navigationButton(contextualOwnerId('ai-home',guild.id),'Back',ButtonStyle.Secondary)),
-      new ActionRowBuilder().addComponents(
-        navigationButton(contextualOwnerId('ai-sync-preview-0',guild.id),'Smart Sync',ButtonStyle.Primary),
-        navigationButton(contextualOwnerId('ai-full-sync-preview-0',guild.id),'Full Template Sync',ButtonStyle.Primary),
-        navigationButton(contextualOwnerId('ai-deploy-page-' + Math.max(0,page-1),guild.id),'Previous',ButtonStyle.Secondary,page===0),
-        navigationButton(contextualOwnerId('ai-deploy-page-' + (page+1),guild.id),'Next',ButtonStyle.Secondary,(page+1)*10>=scan.gaps.length)),
-      new ActionRowBuilder().addComponents(linkButton('Invite DEV to a Server',aiGoliathDevInviteUrl(interaction.client)),linkButton('Update DEV Guild Permissions',aiGoliathDevInviteUrl(interaction.client,guild.id)))] };
+      navigationButton(contextualOwnerId('ai-home',guild.id),'Back',ButtonStyle.Secondary))
+  ]};
 }
 function aiPanelPayload(interaction, guild, detail = 'overview', selectedId = null, page = 0) {
   const guildId = validGuildId(guild?.id) || interactionGuildId(interaction);
