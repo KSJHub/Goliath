@@ -212,6 +212,7 @@ function buildExport(guildId) {
 }
 
 function resetVerification(guildId, meta = {}) {
+  if (meta.expectedConfigRevision != null && Number(meta.expectedConfigRevision) !== Number(verificationStore.getVerificationSection(guildId).configRevision)) throw new Error('Verification configuration changed. Reload before resetting.');
   const section = verificationStore.saveVerificationSection(
     guildId,
     verificationStore.defaultVerificationSection(),
