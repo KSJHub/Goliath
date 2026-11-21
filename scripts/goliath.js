@@ -1310,9 +1310,9 @@ async function verificationLifecycleAudit() {
       const requiredSecurity=()=>({steps:[]});
       const section=()=>config;
       let state='verifying',transitions=0,mode='normal',release,entered,completedSecurity=[],activeChallenge=null;
-      let wait,started;
+      let wait,started,revoked;
       function reset(){
-        state='verifying';transitions=0;mode='normal';completedSecurity=[];activeChallenge=null;
+        state='verifying';transitions=0;mode='normal';completedSecurity=[];activeChallenge=null;config.configRevision=1;revoked=[];
         wait=new Promise(resolve=>{release=resolve;});
         started=new Promise(resolve=>{entered=resolve;});
       }
@@ -1328,10 +1328,10 @@ async function verificationLifecycleAudit() {
         ensureQuarantineCase:async()=>({ok:true,channel:{id:'case'}})
       };
       const guild={id:'guild',members:{fetch:async()=>({
-        id:'member',guild,roles:{cache:{has:id=>mode==='mismatch'?false:mode==='quarantine'?id==='quarantine':id==='verified'}}
+        id:'member',guild,roles:{remove:async role=>{revoked.push(role.id);},cache:{has:id=>mode==='mismatch'?false:mode==='quarantine'?id==='quarantine':id==='verified'}}
       })}};
       const member={id:'member',guild,roles:{cache:{has:()=>false}}};
-      const transitionRoles=async()=>{transitions++;entered();await wait;if(mode==='throw')throw Error('simulated Discord role failure');return{added:[],removed:[]};};
+      const transitionRoles=async()=>{transitions++;entered();await wait;if(mode==='throw')throw Error('simulated Discord role failure');return{added:[{id:'verified'}],removed:[]};};
       // Resolve the extracted module's local dependency explicitly; never load live storage.
       const sharedQuarantine={
         QUARANTINE_MODES:{INVESTIGATION:'investigation'},
@@ -1366,6 +1366,20 @@ async function verificationLifecycleAudit() {
         assert.equal(finished.complete,true);
         assert.equal(state,'verified');
         assert.equal(transitions,1);
+        reset();
+        config.configRevision=2;
+        const stale=await complete(member,config);
+        assert.equal(stale.ok,false);
+        assert.equal(transitions,0);
+        reset();
+        const changing=complete(member,config);
+        await started;
+        config.configRevision=2;
+        release();
+        const changed=await changing;
+        assert.equal(changed.review,true);
+        assert.equal(state,'review');
+        assert.deepEqual(revoked,['verified']);
         reset();mode='quarantine';
         const quarantining=quarantineVerificationMember(guild,'member');
         await started;
