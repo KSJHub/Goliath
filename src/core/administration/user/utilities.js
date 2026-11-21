@@ -178,7 +178,7 @@ function buildTranslateModal(interaction) {
 
 async function showTranslate(interaction) {
   if (!guildManager.isModuleEnabled(interaction.guildId, 'translation')) {
-    return replaceComponent(interaction, { embeds: [new EmbedBuilder().setColor(0xFEE75C).setTitle('🌐 Translation Unavailable').setDescription('Translation is not enabled for this server. An administrator can enable it from the Admin panel.')] });
+    return replaceComponent(interaction, { embeds: [new EmbedBuilder().setColor(0xFEE75C).setTitle(`${EMOJIS.USER_TRANSLATE} Translation Unavailable`).setDescription('Translation is not enabled for this server. An administrator can enable it from the Admin panel.')] });
   }
   await interaction.showModal(buildTranslateModal(interaction));
   return true;
@@ -200,7 +200,7 @@ async function submitTranslate(interaction) {
     await interaction.editReply({ embeds: [translation.buildProviderNotConnectedEmbed({ text, targetLanguage, sourceLanguage, result })] });
     return true;
   }
-  await interaction.editReply({ content: [`🌐 **${translation.languageLabel(result.sourceLanguage)} → ${translation.languageLabel(result.targetLanguage)}**`, '', result.translatedText].join('\n') });
+  await interaction.editReply({ content: [`${EMOJIS.USER_TRANSLATE} **${translation.languageLabel(result.sourceLanguage)} → ${translation.languageLabel(result.targetLanguage)}**`, '', result.translatedText].join('\n') });
   return true;
 }
 
