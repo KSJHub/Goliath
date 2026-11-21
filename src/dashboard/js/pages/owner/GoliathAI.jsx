@@ -73,12 +73,12 @@ export default function GoliathAI({ theme }) {
   const [syncApproval,setSyncApproval]=useState(null);
   const [syncResult,setSyncResult]=useState(null);
   const [syncAcknowledged,setSyncAcknowledged]=useState(false);
-  async function prepareSync(){
+  async function prepareSync(full=false){
     const target=selectedGuild;
     if(!target.startsWith('DEV:')||deploymentBusy)return;
     setDeploymentBusy(true);setSyncApproval(null);setRoleApproval(null);setSyncResult(null);setSyncAcknowledged(false);setDeploymentError('');
     try{
-      const result=await api.request('/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4))+'/sync/preview',{method:'POST',body:JSON.stringify({})});
+      const result=await api.request('/api/owner/ai/deployment/'+encodeURIComponent(target.slice(4))+'/sync/preview',{method:'POST',body:JSON.stringify({full:full===true})});
       if(selectedGuildRef.current===target)setSyncApproval(result);
     }catch(error){if(selectedGuildRef.current===target)setDeploymentError(error.message);}
     finally{setDeploymentBusy(false);}
@@ -804,7 +804,8 @@ export default function GoliathAI({ theme }) {
           </div>)}
           {deployment.sync.blocked.length>0 && <details><summary>Skipped channel IDs</summary><ul>{deployment.sync.blocked.map(id=><li key={id}>{id}</li>)}</ul></details>}
         </details>}
-        <button type="button" disabled={deploymentBusy||deployment.recoveryRequired} onClick={prepareSync}>Prepare Bulk Sync</button>
+        <button type="button" disabled={deploymentBusy||deployment.recoveryRequired} onClick={()=>prepareSync(false)}>Smart Sync</button>
+        <button type="button" disabled={deploymentBusy||deployment.recoveryRequired} onClick={()=>prepareSync(true)}>Full Template Sync</button>
         {syncApproval && selectedGuild==='DEV:'+syncApproval.guildId && <div>
           <h3>Confirm fresh Sync plan</h3>
           <p>{syncApproval.steps.length} overwrite changes; {syncApproval.blocked.length} skipped. Approval expires after ten minutes.</p>
