@@ -6156,7 +6156,7 @@ function goliathDeploymentRegression(source, assert, vm) {
   check(helpers.children(guild,'c').map(c=>c.id),['1','3']);
   check(helpers.children(guild,'missing'),[]);
   // Exercise the production sync planner with isolated Discord-shaped fixtures.
-  const syncStart=source.indexOf('function aiDeploySyncPlan(');
+  const syncStart=source.indexOf('function aiDeployOperationalTarget(');
   const syncEnd=source.indexOf('async function aiDeployApplySync(',syncStart);
   assert(syncStart>=0 && syncEnd>syncStart);
   const bits={ViewChannel:1n,SendMessages:2n,EmbedLinks:4n};
@@ -6175,8 +6175,11 @@ function goliathDeploymentRegression(source, assert, vm) {
   guild.members={me:bot};
   guild.channels.cache.set('c',{id:'c',permissionOverwrites:{cache:new Map([['bot',{allow:{bitfield:1n},deny:{bitfield:6n}}]])}});
   const fullTargets=[];
+  const operational={id:'bot',managed:false,hoist:false,permissions:{has:()=>false},members:new Map([['bot',bot]])};
+  guild.roles={cache:new Map([['bot',operational]])};
+  bot.roles={cache:new Map([['bot',operational]])};
   const planSync=vm.runInNewContext(source.slice(syncStart,syncEnd)+'; aiDeploySyncPlan',{
-    aiGoliathDeploymentScan:()=>({gaps:fixtures,targets:fullTargets,profile}), PermissionsBitField:BitField,
+    aiDeploySavedRoles:()=>({operational:'bot'}),aiGoliathDeploymentScan:()=>({gaps:fixtures,targets:fullTargets,profile}), PermissionsBitField:BitField,
     aiGoliathChannelRequirements:helpers.required,
     aiGoliathInheritedChildren:helpers.children
   });
@@ -6184,6 +6187,8 @@ function goliathDeploymentRegression(source, assert, vm) {
   check(plan.blocked,['1','2','4']);
   assert.equal(plan.steps.length,1);
   check(plan.steps[0].inheritedChildren,['1','3']);
+  assert.equal(plan.steps[0].action,'role-overwrite');
+  assert.equal(plan.steps[0].roleId,'bot');
   check(plan.steps[0].before,{exists:true,allow:'1',deny:'6'});
   check(plan.steps[0].after,{allow:'3',deny:'4'});
   fixtures.length=0;
@@ -6197,6 +6202,9 @@ function goliathDeploymentRegression(source, assert, vm) {
   check(full.steps[0].grants,['ViewChannel','SendMessages']);
   check(full.steps[1].after,{allow:'7',deny:'0'});
   check(planSync(guild),{steps:[],blocked:[]});
+  operational.members.set('other',{});
+  assert.equal(planSync(guild,true).steps.length,0);
+  operational.members.delete('other');
   const roleStart=source.indexOf('function aiGoliathRolePlan(');
   const roleEnd=source.indexOf('const aiDeployApprovals',roleStart);
   assert(roleStart>=0 && roleEnd>roleStart);
